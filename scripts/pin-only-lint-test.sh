@@ -5,7 +5,7 @@
 #
 # Every expected verdict below is derived in its comment FROM the rule in pin-only-lint.sh's
 # header ((a) grammar, (b) pairing, (c) first-party, (d) upstream SHA, (e)–(h) the four revert
-# memories) and the two older shapes' PIN_LINE — never from running the script. A failing case must fail for ITS rule: the check
+# memories, (j) the box flake re-resolve) and the two older shapes' PIN_LINE — never from running the script. A failing case must fail for ITS rule: the check
 # greps the script's stderr for the rule's own keyword, so a case that reds for the wrong reason
 # is a FAIL here too.
 set -uo pipefail
@@ -25,6 +25,9 @@ cat >"$PIN_ONLY_GH" <<'EOF'
 #!/usr/bin/env bash
 [ "$1" = api ] && [ "$3" = --jq ] || { echo "stub: unexpected call: $*" >&2; exit 64; }
 f="$STUB/$2"
+# a path that is ALSO a prefix of deeper paths (repos/<o>/<r> beside repos/<o>/<r>/compare/…) keeps
+# its own body in <dir>/.self — additive, for check (j)'s default-branch read
+[ -d "$f" ] && f="$f/.self"
 [ -f "$f" ] || { echo "gh: HTTP 404: Not Found (https://api.github.com/$2)" >&2; exit 1; }
 jq -r "$4" <"$f"
 EOF
@@ -97,6 +100,27 @@ printf 'provider "registry.opentofu.org/hashicorp/kubernetes" {\n  version     =
 # check (i)'s home: a devbox.lock with two packages (the version line alone does not say whose it is).
 printf '{"packages":{"jq@latest":{"version":"1.8.1"},"curl@latest":{"version":"8.17.0"}}}\n' >"$R/devbox.lock"
 printf 'resource "kubernetes_deployment" "x" {\n  spec {\n    template {\n      spec {\n        container {\n          name  = "dind"\n          image = "docker:27-dind"\n        }\n      }\n    }\n  }\n}\n' >"$R/tofu/x.tf"
+# check (j)'s home: the box flake lock — nixpkgs (github, with a ref) + disko following it, the real
+# mgmt/nixos/flake.lock's shape (narHash values shortened; the lint never reads them).
+mkdir -p "$R/mgmt/nixos"
+cat >"$R/mgmt/nixos/flake.lock" <<'EOF2'
+{
+  "nodes": {
+    "disko": {
+      "inputs": { "nixpkgs": ["nixpkgs"] },
+      "locked": { "lastModified": 1781152676, "narHash": "sha256-AAA=", "owner": "nix-community", "repo": "disko", "rev": "ff8702b4de27f72b4c78573dfb89ec74e36abdf1", "type": "github" },
+      "original": { "owner": "nix-community", "repo": "disko", "type": "github" }
+    },
+    "nixpkgs": {
+      "locked": { "lastModified": 1789114715, "narHash": "sha256-BBB=", "owner": "NixOS", "repo": "nixpkgs", "rev": "21a67dc470149f337cecafbe965d8d252a390518", "type": "github" },
+      "original": { "owner": "NixOS", "ref": "nixos-26.05", "repo": "nixpkgs", "type": "github" }
+    },
+    "root": { "inputs": { "disko": "disko", "nixpkgs": "nixpkgs" } }
+  },
+  "root": "root",
+  "version": 7
+}
+EOF2
 git -C "$R" add -A && git -C "$R" commit -q -m base
 BASE="$(git -C "$R" rev-parse HEAD)"
 
@@ -105,7 +129,7 @@ pass=0; fail=0
 # The stub tree is rebuilt per case so a canned answer never leaks between cases.
 case_() {
   local name="$1" want="$2" stubs="$3" edit="$4" out rc
-  rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""; eval "$stubs"
+  rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""; unset PIN_ONLY_PR_AUTHOR PIN_ONLY_PR_BRANCH; eval "$stubs"
   git -C "$R" checkout -q -b "c-$name" "$BASE"
   ( cd "$R" && eval "$edit" ) >/dev/null 2>&1
   git -C "$R" add -A && git -C "$R" commit -q -m "$name"
@@ -245,6 +269,61 @@ case_ lock-other-name-same-version ok "reverts_lock_ jq@8.22.0" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 case_ lock-memory-unreadable 'cannot read the merged revert-lock-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
+# (j) the box flake lock — the owner replacement (pin-only-lint.sh header (j)). Expected verdicts from
+# the header's rules: the devbox-update App's re-resolve to a rev its branch CONTAINS passes; a rev the
+# compare API cannot place (404 — a fork commit served under the parent's URL), an off-branch rev
+# (`diverged`) and a rev AHEAD of the branch are refused; a locked owner swap, an `original` edit, an
+# added input and a rewired follows are refused (shape); a non-App author is refused (the file stays
+# owned); an unknown author fails closed (rc 2); the revert App on revert-lock-* passes only when it
+# restores master's previous file byte-for-byte; a PR that also changes flake.nix defers to the owner.
+FL=mgmt/nixos/flake.lock
+APP='homelab-renovate-1234[bot]'; REV_APP='homelab-agents-1234[bot]'
+NP_OLD=21a67dc470149f337cecafbe965d8d252a390518; NP_NEW=7c8764b7c7b09b34f632464276218ef9090eaa11
+DK=ff8702b4de27f72b4c78573dfb89ec74e36abdf1; FORK=9999999999999999999999999999999999999999
+cmp_() { mkdir -p "$STUB/repos/$1/compare"; printf '{"status":"%s"}\n' "$4" >"$STUB/repos/$1/compare/$2...$3"; }
+# disko has no ref → (j) reads its default branch from repos/nix-community/disko (the stub's .self body)
+onbranch_() {  # every case's baseline: disko on master, nixpkgs NEW and OLD both on nixos-26.05
+  mkdir -p "$STUB/repos/nix-community/disko"; printf '{"default_branch":"master"}\n' >"$STUB/repos/nix-community/disko/.self"
+  cmp_ NixOS/nixpkgs nixos-26.05 "$NP_NEW" behind; cmp_ NixOS/nixpkgs nixos-26.05 "$NP_OLD" behind
+  cmp_ nix-community/disko master "$DK" identical
+}
+relock_to() { echo "jq '.nodes.nixpkgs.locked |= (.rev = \"$1\" | .narHash = \"sha256-CCC=\" | .lastModified = 1791600000)' $FL > x && mv x $FL"; }
+case_ flake-relock ok "export PIN_ONLY_PR_AUTHOR='$APP'; onbranch_" "$(relock_to $NP_NEW)"
+case_ flake-fork-commit-refused 'not comparable with branch nixos-26.05' "export PIN_ONLY_PR_AUTHOR='$APP'; onbranch_" "$(relock_to $FORK)"
+case_ flake-off-branch-refused "is NOT on branch nixos-26.05 (compare status 'diverged'" \
+  "export PIN_ONLY_PR_AUTHOR='$APP'; onbranch_; cmp_ NixOS/nixpkgs nixos-26.05 $OTHER diverged" "$(relock_to $OTHER)"
+case_ flake-ahead-refused "compare status 'ahead'" \
+  "export PIN_ONLY_PR_AUTHOR='$APP'; onbranch_; cmp_ NixOS/nixpkgs nixos-26.05 $OTHER ahead" "$(relock_to $OTHER)"
+case_ flake-fork-owner-refused 'is not its original' "export PIN_ONLY_PR_AUTHOR='$APP'; onbranch_" \
+  "jq '.nodes.nixpkgs.locked.owner = \"evil\"' $FL > x && mv x $FL"
+case_ flake-original-ref-refused 'only locked may move' "export PIN_ONLY_PR_AUTHOR='$APP'; onbranch_" \
+  "jq '.nodes.nixpkgs.original.ref = \"nixos-unstable\"' $FL > x && mv x $FL"
+case_ flake-input-added-refused 'only locked may move' "export PIN_ONLY_PR_AUTHOR='$APP'; onbranch_" \
+  "jq '.nodes.extra = .nodes.disko | .nodes.root.inputs.extra = \"extra\"' $FL > x && mv x $FL"
+case_ flake-follows-rewired-refused 'only locked may move' "export PIN_ONLY_PR_AUTHOR='$APP'; onbranch_" \
+  "jq '.nodes.disko.inputs = {}' $FL > x && mv x $FL"
+case_ flake-non-app-author-refused "author '$REV_APP' may not change it via a PR" \
+  "export PIN_ONLY_PR_AUTHOR='$REV_APP' PIN_ONLY_PR_BRANCH=fix/x; onbranch_" "$(relock_to $NP_NEW)"
+case_ flake-unknown-author-fails-closed 'the PR author is unknown' "onbranch_" "$(relock_to $NP_NEW)"
+case_ flake-unparseable 'cannot parse' "export PIN_ONLY_PR_AUTHOR='$APP'" "echo '{not json' > $FL"
+# the revert App: master's previous file (served by the commits+contents API stub) is the NEW-rev lock;
+# restoring it exactly passes, restoring anything else (the OLD-rev... here: a third rev) is refused.
+PREV=7777777777777777777777777777777777777777
+prev_() {  # <rev the previous master file locked nixpkgs to>
+  mkdir -p "$(dirname "$STUB/repos/$PIN_ONLY_SLUG/commits?path=$FL")" "$STUB/repos/$PIN_ONLY_SLUG/contents/mgmt/nixos"
+  printf '[{"sha":"%s","parents":[{"sha":"%s"}]}]\n' "$BASE" "$PREV" >"$STUB/repos/$PIN_ONLY_SLUG/commits?path=$FL&sha=$BASE&per_page=1"
+  printf '{"content":"%s"}\n' "$(git -C "$R" show "$BASE:$FL" | jq --arg r "$1" '.nodes.nixpkgs.locked |= (.rev = $r | .narHash = "sha256-CCC=" | .lastModified = 1791600000)' | base64 -w0)" \
+    >"$STUB/repos/$PIN_ONLY_SLUG/contents/$FL?ref=$PREV"
+}
+case_ flake-revert-restores-ok ok \
+  "export PIN_ONLY_PR_AUTHOR='$REV_APP' PIN_ONLY_PR_BRANCH=revert-lock-abcd1234; onbranch_; prev_ $NP_NEW" "$(relock_to $NP_NEW)"
+case_ flake-revert-invents-refused 'must restore master' \
+  "export PIN_ONLY_PR_AUTHOR='$REV_APP' PIN_ONLY_PR_BRANCH=revert-lock-abcd1234; onbranch_; prev_ $NP_NEW; cmp_ NixOS/nixpkgs nixos-26.05 $OTHER behind" "$(relock_to $OTHER)"
+case_ flake-revert-history-unreadable "cannot read master's previous version" \
+  "export PIN_ONLY_PR_AUTHOR='$REV_APP' PIN_ONLY_PR_BRANCH=revert-lock-abcd1234; onbranch_" "$(relock_to $NP_NEW)"
+# beside flake.nix (an owned /mgmt/ path) the code owner reads the PR — (j) defers even for a fork owner
+case_ flake-beside-flake-nix-defers ok "export PIN_ONLY_PR_AUTHOR='$REV_APP' PIN_ONLY_PR_BRANCH=fix/x" \
+  "jq '.nodes.nixpkgs.locked.owner = \"evil\"' $FL > x && mv x $FL && echo '# x' >> mgmt/nixos/flake.nix"
 # (h) the reverted-chart memory: an unguarded chart Application's targetRevision bump passes on an
 # empty memory, is REFUSED when a merged revert-chart-* PR names that chart@version, passes when
 # the memory names the same chart at ANOTHER version or ANOTHER chart at the same version (the key

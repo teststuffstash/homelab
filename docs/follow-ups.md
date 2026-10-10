@@ -528,7 +528,8 @@ the block needs pruning, not more headings.
       LIVE 10-10 16:53Z. The in-cluster iac-sentinel (required) runs the runner image's BAKED lock (ruling 10-10:
       `/opt/baked/homelab`, warm-one bakes only a realised pair — §Two pins). **Next:** the class-7 lock revert
       drill once the baked image is pinned (dependency-upgrades §Last proven);
-      a flake.lock proposer (class 13 ⚠, `.github/` operator-direct); `MgmtSentinelLoopStale` (+ replay 10-07
+      the flake.lock proposer = the weekly devbox-update PR (ruling 10-10; pin-only-lint (j), CODEOWNERS carve-out
+      operator-direct); `MgmtSentinelLoopStale` (+ replay 10-07
       20:15–21:10Z).
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
       GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex

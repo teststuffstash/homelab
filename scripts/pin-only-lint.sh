@@ -80,6 +80,25 @@
 #       The refusal holds the WHOLE weekly PR red (one lock, all packages) — the lever out is a
 #       `devbox.json` pin of the one package (docs/renovate.md §devbox). Needs jq (fail-closed without
 #       it); runs only when a lock file changed.
+#   (j) 2026-10-10 (class 13 — the box flake joins the weekly devbox-update PR, operator ruling;
+#       FU-305): `mgmt/nixos/flake.lock` is carved out of the `/mgmt/` CODEOWNERS row, and this check
+#       stands in for the owner. CODEOWNERS cannot say "un-owned for one author", so (j) says it:
+#         - a PR that ALSO changes another `mgmt/` path keeps its human read (those paths are owned) —
+#           (j) defers to the code owner and checks nothing else;
+#         - otherwise the PR author must be the devbox-update App ($FLAKE_LOCK_AUTHOR), OR the revert
+#           chain's App ($FLAKE_REVERT_AUTHOR) on a `revert-lock-*` branch whose head file is
+#           BYTE-FOR-BYTE the version master carried before its last change (a revert restores, never
+#           invents); any other author is refused — the file stays owned for them;
+#         - the diff is a lock RE-RESOLVE: the node set, every `original` and every `inputs`/`follows`
+#           wiring unchanged (only `locked` moves), each input's `locked` naming its original source;
+#         - every locked rev is REACHABLE from its declared branch upstream — GitHub's compare
+#           `<owner>/<repo>/compare/<ref>...<rev>` must say `behind` or `identical` (`original.ref`, or the
+#           repo's default branch when there is none). GitHub serves a FORK's commits under the parent's
+#           URL, so owner/repo alone proves nothing (the seat's review, 2026-10-10); 404, `ahead` or
+#           `diverged` is refused. Non-github inputs are refused (none exist).
+#       Every read fails closed. The author comes from the Actions event payload
+#       (`.pull_request.user.login` / `.head.ref`), else PIN_ONLY_PR_AUTHOR / PIN_ONLY_PR_BRANCH; unknown = FAIL.
+#       Proof after merge: the box's own `mgmt-confirm` gate + `mgmt-tools-test` (docs/management-box.md §Two pins).
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
 #   PIN_ONLY_GH     the `gh` to call for (d) (default: `gh`)
@@ -240,6 +259,97 @@ for lf in $(grep -E '(^|/)devbox\.lock$' <<< "$all_changed" || true); do
   added_locks="$added_locks $(printf '%s\n' "$moved" | tr '\n' ' ')"
 done
 added_locks="$(printf '%s\n' $added_locks | grep . | sort -u || true)"
+# (j): the box flake lock — owner replacement (header). Each helper prints the offending reasons.
+FLAKE_LOCK="mgmt/nixos/flake.lock"
+FLAKE_LOCK_AUTHOR="${FLAKE_LOCK_AUTHOR:-homelab-renovate-1234[bot]}"   # devbox-update.yaml's App
+FLAKE_REVERT_AUTHOR="${FLAKE_REVERT_AUTHOR:-homelab-agents-1234[bot]}" # deploy-revert-argo.yaml's App
+flake_relock_violations() {  # <old-json> <new-json>
+  jq -rn --argjson o "$1" --argjson n "$2" '
+    def shape: .nodes | with_entries(.value |= del(.locked));
+    def src: if .type == "github" or .type == "gitlab" or .type == "sourcehut"
+               then {type, owner: ((.owner // "") | ascii_downcase), repo: ((.repo // "") | ascii_downcase), host}
+             else {type, url} end;
+    ( if ($o | shape) != ($n | shape)
+        then ["the node set, an original, an inputs/follows wiring or a flag changed (only locked may move — that is a flake.nix edit)"]
+        else [] end )
+    + [ $n.nodes | to_entries[] | select(.key != "root" and .value.locked != null)
+        | select((.value.locked | src) != (.value.original | src))
+        | "input \(.key): locked source \(.value.locked | src | tojson) is not its original \(.value.original | src | tojson)" ]
+    | .[]'
+}
+# flake_reachability <new-json>: every locked github rev must sit ON its declared branch upstream.
+flake_reachability() {
+  local node t o r ref rev st
+  # '|' not a tab: IFS whitespace (a tab) collapses an EMPTY field (a ref-less input) into the next one
+  while IFS='|' read -r node t o r ref rev; do
+    [ -n "$node" ] || continue
+    if [ "$t" != github ]; then echo "input $node: locked type '$t' — only github inputs can be proven on-branch"; continue; fi
+    if [ -z "$ref" ]; then
+      if ! ref="$("$GH" api "repos/$o/$r" --jq '.default_branch' 2>/dev/null)" || [ -z "$ref" ]; then
+        echo "input $node: cannot read the default branch of $o/$r (unreadable = refused)"; continue
+      fi
+    fi
+    if ! st="$("$GH" api "repos/$o/$r/compare/$ref...$rev" --jq '.status' 2>/dev/null)"; then
+      echo "input $node: $o/$r@$rev is not comparable with branch $ref upstream (404 — a fork commit or no such rev)"; continue
+    fi
+    case "$st" in
+      behind|identical) ;;
+      *) echo "input $node: $o/$r@$rev is NOT on branch $ref (compare status '$st' — off-branch or fork commit)" ;;
+    esac
+  done < <(jq -r '.nodes | to_entries[] | select(.key != "root" and .value.locked != null)
+                  | [.key, .value.locked.type, (.value.locked.owner // ""), (.value.locked.repo // ""),
+                     (.value.original.ref // ""), (.value.locked.rev // "")] | map(gsub("[|]"; "")) | join("|")' <<< "$1")
+}
+if grep -qxF "$FLAKE_LOCK" <<< "$all_changed"; then
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "pin-only-lint: FAIL — jq not on PATH, cannot read the $FLAKE_LOCK diff (check (j)); refusing to report success." >&2; exit 2
+  fi
+  if grep -v -xF "$FLAKE_LOCK" <<< "$all_changed" | grep -q '^mgmt/'; then
+    echo "pin-only-lint: $FLAKE_LOCK changed beside other mgmt/ paths — the /mgmt/ code owner reads this PR; check (j) defers."
+  else
+    fj_author="${PIN_ONLY_PR_AUTHOR:-}"; fj_branch="${PIN_ONLY_PR_BRANCH:-}"
+    if [ -z "$fj_author" ] && [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -r "$GITHUB_EVENT_PATH" ]; then
+      fj_author="$(jq -r '.pull_request.user.login // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+      fj_branch="$(jq -r '.pull_request.head.ref // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
+    fi
+    new_fl="$(git show "$TO:$FLAKE_LOCK" 2>/dev/null || echo '{"nodes":{}}')"
+    old_fl="$(git show "$FROM:$FLAKE_LOCK" 2>/dev/null || echo '{"nodes":{}}')"
+    if ! jq -e . >/dev/null 2>&1 <<< "$new_fl" || ! jq -e . >/dev/null 2>&1 <<< "$old_fl"; then
+      echo "pin-only-lint: FAIL — cannot parse $FLAKE_LOCK at base/head (check (j)); refusing to report success." >&2; exit 2
+    fi
+    fj_bad=""
+    if [ -z "$fj_author" ]; then
+      echo "pin-only-lint: FAIL — $FLAKE_LOCK: the PR author is unknown (no event payload, no PIN_ONLY_PR_AUTHOR) — check (j) cannot admit an unknown author; refusing to report success." >&2; exit 2
+    elif [ "$fj_author" = "$FLAKE_LOCK_AUTHOR" ]; then
+      :
+    elif [ "$fj_author" = "$FLAKE_REVERT_AUTHOR" ] && [ "${fj_branch#revert-lock-}" != "$fj_branch" ]; then
+      # a revert restores master's PREVIOUS file exactly: the parent of the newest commit (≤ base) that touched it
+      slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+      [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+      if ! prev="$("$GH" api "repos/$slug/commits?path=$FLAKE_LOCK&sha=$FROM&per_page=1" --jq '.[0].parents[0].sha' 2>/dev/null)" || [ -z "$prev" ] \
+         || ! prev_fl="$("$GH" api "repos/$slug/contents/$FLAKE_LOCK?ref=$prev" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null)" \
+         || [ -z "$prev_fl" ]; then
+        echo "pin-only-lint: FAIL — $FLAKE_LOCK: cannot read master's previous version (the revert-lock proof, check (j)); refusing to report success." >&2; exit 2
+      fi
+      [ "$(jq -S . <<< "$prev_fl")" = "$(jq -S . <<< "$new_fl")" ] \
+        || fj_bad="a revert-lock-* PR must restore master's previous $FLAKE_LOCK exactly (the version before its last change, at ${prev:0:8}) — this head differs"
+    else
+      fj_bad="author '$fj_author' may not change it via a PR — only the devbox-update App ($FLAKE_LOCK_AUTHOR) or the lock revert chain ($FLAKE_REVERT_AUTHOR on revert-lock-*); for anyone else the file stays OWNED: change it beside flake.nix (the /mgmt/ owner reads it) or on the operator path"
+    fi
+    if [ -z "$fj_bad" ]; then
+      if ! fj_bad="$(flake_relock_violations "$old_fl" "$new_fl" 2>&1)"; then
+        echo "pin-only-lint: FAIL — cannot parse $FLAKE_LOCK at base/head (check (j)): $fj_bad; refusing to report success." >&2; exit 2
+      fi
+      [ -n "$fj_bad" ] || fj_bad="$(flake_reachability "$new_fl")"
+    fi
+    if [ -n "$fj_bad" ]; then
+      while IFS= read -r why; do echo "pin-only-lint: FAIL — $FLAKE_LOCK: $why" >&2; done <<< "$fj_bad"
+      echo "  $FLAKE_LOCK is carved out of /mgmt/ for the weekly re-resolve and its revert only (check (j))." >&2
+      exit 1
+    fi
+    echo "pin-only-lint: $FLAKE_LOCK — author $fj_author, re-resolve only, every rev on its branch upstream — check (j) ok."
+  fi
+fi
 if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ] && [ -z "$added_charts" ] && [ -z "$added_locks" ]; then
   echo "pin-only-lint: OK — no guarded file touched."
   exit 0
