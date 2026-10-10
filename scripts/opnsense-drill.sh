@@ -485,10 +485,10 @@ SH
   else
   igb="$(vm_ssh 'ifconfig igb0' 2>/dev/null || true)"
   probe wan_dark "$(grep -q 'status: no carrier' <<< "$igb" && echo 1 || echo 0)" \
-    "igb0 (nx-02 $WAN_PCI): \`$(echo "$igb" | sed -n 's/^[[:space:]]*status: //p' | head -1)\` (want no carrier)"
+    "igb0 (nx-02 $WAN_PCI): \`$(echo "$igb" | sed -n 's/^[[:space:]]*status: //p' | sed -n 1p)\` (want no carrier)"
   fi
   probe wan_mac "$(grep -qi "ether $WAN_MAC" <<< "$igb" && echo 1 || echo 0)" \
-    "$([ "$WAN_MODE" = bridged ] && echo vtnet2 || echo igb0) ether \`$(echo "$igb" | sed -n 's/^[[:space:]]*ether //p' | head -1)\` (want machines.yaml opnsense.wan_mac)"
+    "$([ "$WAN_MODE" = bridged ] && echo vtnet2 || echo igb0) ether \`$(echo "$igb" | sed -n 's/^[[:space:]]*ether //p' | sed -n 1p)\` (want machines.yaml opnsense.wan_mac)"
   _kpw() { keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
              "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
   for u in root:opnsense-api:core/firmware/info backup-puller:opnsense-backup-puller-api:core/backup/backups/this \
