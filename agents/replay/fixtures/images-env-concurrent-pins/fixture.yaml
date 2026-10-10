@@ -1,0 +1,21 @@
+# images-env-concurrent-pins — two deploy-pin PRs forked from the SAME master must both land
+# without a human, whichever merges first.
+#
+# CONDITION UNDER REPLAY (2026-10-10, homelab#2014's version-set dispatch): a stamp change rebuilds
+# agent-base and agent-coordinator together, so their deploy-pin jobs open `deploy/agent-base` and
+# `deploy/agent-coordinator` concurrently, each rewriting ONE line of agents/images.env (the
+# coordinator also rewrites agents/coordinator/kustomization.yaml `newTag`). With the two pin lines
+# adjacent, git conflicts on the second one (#2454 merged → #2455 DIRTY → `merge-conflict` label,
+# seat hand-merge). The fix is layout: no two pin lines adjacent (images.env header), so the second
+# PR is only BEHIND and the updater's update-branch merge goes through.
+#
+# mode: suite — replays the REAL committed images.env + kustomization.yaml through the producers'
+# own sed edits for every pair of pins, in both merge orders, with real git merges. Registered
+# HERE so the replay run every agents/ PR (incl. every deploy-pin PR) already executes carries it
+# — no workflow edit.
+name: images-env-concurrent-pins
+mode: suite
+source: agents/images.env
+entrypoint: agents/replay/fixtures/images-env-concurrent-pins/suite.sh
+requires:
+  - git
