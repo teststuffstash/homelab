@@ -442,7 +442,7 @@ differential() {
 # The box verdict (FU-302): rc 0 ok · 2 degraded · 3 down · anything else = could not run.
 verdict() {
   if [ -n "${RECONCILE_VERDICT_CMD:-}" ]; then $RECONCILE_VERDICT_CMD; return; fi
-  ( cd "$REPO" && devbox run --quiet -- bash mgmt/scripts/mgmt-verdict.sh 2>/dev/null )
+  ( cd "$REPO" && bash mgmt/scripts/mgmt-verdict.sh 2>/dev/null )   # tools from PATH + mgmt_tree_path above (FU-305)
 }
 # ── FU-278: the workload-health hold ────────────────────────────────────────────────────────────
 # The READ is node-maintenance.sh's (generic, no service named); the baseline and the rule are here.

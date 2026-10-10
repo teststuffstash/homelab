@@ -664,7 +664,8 @@ the router carries: the reads go blind exactly when the cluster or the router ha
 operator's ruling (2026-10-02, reframing "the second alert path"): **no out-of-band notification** —
 "if I am home I will notice, otherwise it burns until I get home" — but the box needs its OWN verdict
 for its OWN gates. That is [⚓ the box verdict](glossary.md): `mgmt/scripts/mgmt-verdict.sh`
-(`devbox run mgmt-verdict [-- --format text] [-- --prom <url>]`), one JSON object —
+(jail: `devbox run mgmt-verdict [-- --format text] [-- --prom <url>]`; box, FU-305's tool rule — no devbox:
+`MGMT_BOX=1 bash /var/lib/homelab/mgmt/scripts/mgmt-verdict.sh --format text`), one JSON object —
 `{verdict: ok|degraded|down, reasons[], checks[{check, status, reason, detail, items}], sources}` —
 and exit 0 ok · 2 degraded · 3 down · 1 could not run. The script's header is the rule table (one
 home); in short, worst read wins and "could not look" is never ok:
@@ -699,7 +700,7 @@ A kube-dependent read is `skip` (`kube-api-down`) while the API is down: the cau
 FU-301 lane, which is mid-drill and has just scoped its compare, #2459): at begin `vbase=0;
 mgmt_verdict >"$d/box-verdict-before.json" || vbase=$?` (DOWN/unrunnable = no apply), at the end
 `mgmt_verdict_poll "$vbase" "$d/box-verdict-after.json"` — rc 0 no worse within
-`MGMT_POSTCHECK_TIMEOUT`, rc 2 + one finding line. From a shell: `devbox run --quiet mgmt-verdict`,
+`MGMT_POSTCHECK_TIMEOUT`, rc 2 + one finding line. From a shell: the CLI above,
 exit ranked by `mgmt_verdict_rank` (`mgmt-lib.sh`).
 
 **Proved live 2026-10-10 on the box** (PR #2452, run from a copy of the box checkout before the

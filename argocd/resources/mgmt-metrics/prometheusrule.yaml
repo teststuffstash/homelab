@@ -135,7 +135,7 @@ spec:
               verdict (mgmt/scripts/mgmt-verdict.sh — Talos API, kube API via the CP VIP, cilium BGP,
               the BGP VIPs from the LAN, node Ready, ArgoCD health) reads the cluster DOWN, or could
               not run. Prometheus is evidently scraping the box, so compare: `ssh root@192.168.2.53
-              'cd /var/lib/homelab && devbox run --quiet mgmt-verdict -- --format text'` names the
+              MGMT_BOX=1 bash /var/lib/homelab/mgmt/scripts/mgmt-verdict.sh --format text` names the
               failing read; the DEFERRED line in `journalctl -u mgmt-apply -n 20` carries the reasons.
         # S9 #1988 (2026-10-04) — the provider-bump failure signal. A provider pin plans EMPTY at
         # merge (the sentinel's gate), so its create/update/delete code first runs on a LATER,

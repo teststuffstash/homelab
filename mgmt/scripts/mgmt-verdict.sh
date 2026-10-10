@@ -41,7 +41,10 @@
 #   mgmt-reconcile.sh a DOWN (or unrunnable) verdict refuses the sync (ANDed with MgmtRolloutDifferential)
 #   FU-301            brackets a helm apply: verdict before, verdict after, worse = stop
 #
-# Usage:
+# Tools (FU-305, mgmt/scripts/mgmt-tools.sh): kubectl/jq/curl/yq from PATH — the box closure, or the jail's
+# devbox shell; talosctl as the checkout's devbox.lock pins it (mgmt_tree_path, a no-op in the jail). This
+# script never runs devbox. On the box: `ssh root@192.168.2.53 MGMT_BOX=1 bash /var/lib/homelab/mgmt/scripts/mgmt-verdict.sh --format text`.
+# Usage (jail):
 #   devbox run mgmt-verdict                                   # JSON
 #   devbox run mgmt-verdict -- --format text
 #   devbox run mgmt-verdict -- --prom http://127.0.0.1:1      # Prometheus "unreachable", the rest direct
@@ -68,6 +71,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# shellcheck source=mgmt-tools.sh
+. "$HERE/mgmt-tools.sh"
+mgmt_tree_path "$REPO" 2>/dev/null || :   # talosctl from the lock on the box; a miss shows as `talos: unreadable`
 # Probes 3–4 and the kubeconfig/talosconfig resolution: SOURCED from their one home. The script returns
 # before its verb dispatch when sourced; it sets -e, which this read-everything script must not run under.
 # A missing kubeconfig exits it with 1 — the verdict's own "could not run".
@@ -113,7 +119,7 @@ v_talos() {
   skipping talos && return
   local mj rows name ip cp n=0 up=0 cpn=0 cpup=0 silent=() vers ver
   if [ -n "${VERDICT_MACHINES_JSON:-}" ]; then mj="$(cat "$VERDICT_MACHINES_JSON" 2>/dev/null)"
-  else mj="$(yq -o=json "$REPO/machines/machines.yaml" 2>/dev/null)"; fi
+  else mj="$(mgmt_x yq -o=json "$REPO/machines/machines.yaml" 2>/dev/null)"; fi
   rows="$(jq -r '.machines[] | select(.reconcile != null)
             | [.name, .ip, ((.controlplane == true) or ((.role // "") | test("^k8s control plane")))] | @tsv' <<<"$mj" 2>/dev/null)"
   [ -n "$rows" ] || { add talos unreadable unreadable "machines.yaml declares no Talos node (or did not parse)"; return; }
