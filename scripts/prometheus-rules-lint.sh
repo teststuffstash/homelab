@@ -181,6 +181,47 @@ else
   echo "  FAIL triage map or upstream list missing ($tmap, $tlist)" >&2; rc=1
 fi
 
+# KMSG PATTERN fixture (S9, 2026-10-10): KernelOopsCaptured's counter is fed by an Alloy stage.regex, so
+# the rule's promtool fixture cannot see WHICH lines count — the 10-01/10-02/10-06 firings were memcg
+# OOM-kill dumps matched by the old `Call Trace:` marker. argocd/resources/loki/kernel-oops.kmsg-test holds
+# real kmsg records with the contract's verdict per line; the regex is EXTRACTED from the ConfigMap (no
+# copy to drift) and applied per record, as Alloy does. Python `re` stands in for RE2: the set is plain
+# literals + one named group, which both engines read identically.
+kf=argocd/resources/loki/kernel-oops.kmsg-test; kc=argocd/resources/loki/alloy-config.yaml
+if [ -f "$kf" ] && [ -f "$kc" ]; then
+  yq '.data["config.alloy"]' "$kc" > "$tmp/config.alloy"
+  if out=$(python3 - "$tmp/config.alloy" "$kf" <<'PY' 2>&1
+import re, sys
+cfg = open(sys.argv[1]).read()
+m = re.findall(r'expression\s*=\s*"(\(\?P<kernel_oops>[^"]*)"', cfg)
+if len(m) != 1:
+    sys.exit(f"expected exactly one kernel_oops stage.regex in config.alloy, found {len(m)}")
+rx = re.compile(m[0].replace('\\\\', '\\'))
+bad, n = [], 0
+for i, line in enumerate(open(sys.argv[2]).read().split("\n"), 1):
+    if not line.strip() or line.startswith("#"):
+        continue
+    want, _, rec = line.partition("\t")
+    if want not in ("0", "1"):
+        sys.exit(f"line {i}: first column must be 0 or 1")
+    got = "1" if rx.search(rec) else "0"
+    n += 1
+    if got != want:
+        bad.append(f"line {i}: want {want} got {got}: {rec[:120]}")
+if bad:
+    sys.exit("\n".join(bad))
+print(f"{n} record(s)")
+PY
+  ); then
+    echo "  ok  $kf ($out)"
+  else
+    echo "  FAIL $kf:"; printf '%s\n' "$out" | sed 's/^/    /'
+    rc=1
+  fi
+else
+  echo "  FAIL kernel-oops pattern fixture or alloy-config missing ($kf, $kc)" >&2; rc=1
+fi
+
 # FU-158 behaviour half (PR#310's deferred codeowner hook): run every promtool BEHAVIOUR fixture.
 # Fixture pairs live beside their PrometheusRule as <name>.promtool-{rules,test} (deliberately not
 # *.yaml — manifest-lint kubeconforms every yaml under argocd/resources/). `promtool test rules`
