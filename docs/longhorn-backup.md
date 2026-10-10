@@ -12,7 +12,10 @@ downgraded, so **restore is the only rollback** a bad Longhorn upgrade has.
 
 A **single-node Garage v2.3.0** in an unprivileged LXC, **CT 220 `backup-garage` @ `192.168.2.73`
 on nx-02**. Its rootfs is 400 G thin on nx-02's 700 G SA400 `local-lvm` pool. S3 is on `:3900`,
-`/health` and `/metrics` are on `:3903`. One bucket (`longhorn-backup`) and one key (`longhorn-backup`, RW).
+`/health` and `/metrics` are on `:3903`. One bucket + one key of the same name per consumer
+(`ansible/group_vars/garage_backup.yml`): `longhorn-backup`, the `cnpg-<ns>` stores, and
+`helm-evidence` — the management box's helm-apply records (FU-301, [`management-box.md`](management-box.md)
+§MB3 "Helm release applies"), kept here because a record of a broken substrate must outlive it.
 
 | Piece | Home |
 |---|---|

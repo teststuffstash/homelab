@@ -574,6 +574,68 @@ root still stamps. Mechanism and fixtures: `mgmt_apply_window_gate` in `mgmt/scr
 status and completes its tick, so neither `MgmtApplyResidueStanding` nor `MgmtApplyLoopStale` sees
 it; an unreadable record also trips `MgmtApplyLoopStale`.
 
+### Helm release applies — forward only, evidence-bracketed (FU-301, 2026-10-10)
+
+The main root still owns four substrate `helm_release`s (Cilium, Longhorn, argo-cd, argocd-apps;
+[`dependency-upgrades.md`](dependency-upgrades.md) class 4). Until this change every one refused to a
+human `mgmt-tf apply` run under `scripts/helm-release-evidence.sh`, by the 2026-10-02 ruling (memory
+of it: nothing acts on a substrate failure until breakage data exists — FU-301). Ruled 2026-10-10
+("for now"): **the box MAY apply a reviewed helm bump — forward only, evidence-bracketed, stop and alert
+on a bad verdict, never revert / retry / remediate.** Cilium stays class 6 and attended by ruling: it is
+simply not a row.
+
+**What admits a release.** `policy/mgmt/plan-input.yaml` `apply_helm.main` — one row per release
+(`address`, `cap_min` = the ⚓ lease's deadline, Longhorn's `engine_order`), codeowner-gated like the
+rest of the file; the rows widen `mgmt_apply_allowed`, and `mgmt_helm_gate` (`mgmt/scripts/mgmt-lib.sh`)
+narrows it again: the change must be an in-place `update` (`helm-action` — an install or uninstall of a
+substrate release is human) and the ONLY change in the plan (`helm-not-alone` — two changes in one
+window make both records worthless, and a second release would need its own lease). Plan side channel
+`$out.helm`: address, release, namespace, from/to chart version — never values.
+
+**The bracket** (`mgmt/scripts/mgmt-helm.sh`, sourced by `mgmt-apply.sh`):
+
+1. **Preflight refusals** — a refusal posts `failure` and waits for a new commit or a human, like any
+   other (`refused-rev`): `helm-live-drift` — the running release is not what the box last applied
+   (status not `deployed`, revision, chart or user values ≠ the STATE FILE's `metadata`, compared as a
+   hash; the refreshed plan cannot answer this, its `before` already reads live); for Longhorn also
+   `lh-settings-drift` (a declared `defaultSettings` key ≠ its live Setting; a per-engine value
+   `{"v1":"2","v2":"2"}` matches a scalar 2), `lh-volume-unhealthy` (faulted/degraded, or attached and
+   not healthy) and `lh-backup` — **a fresh restore point** (Longhorn refuses downgrades, so restore IS
+   its rollback, [`longhorn-backup.md`](longhorn-backup.md)): an on-demand Backup of every daily-class
+   volume on the backup Garage (the §Restore recipe; label `homelab.io/restore-point: fu301`) plus
+   `scripts/pg-backup.sh now`. The long half runs off the loops' shared lock; the saved plan is the
+   guard (tofu refuses it if the state serial moved).
+2. **Begin** — a declared window (`agents/seat-window.sh`, by `mgmt-apply`: the reconciler waits it out,
+   the responder graces the roll's alert names), the ⚓ upgrade lease `agent-coordinator/upgrade-lease-tofu-helm-<release>`
+   (subject `tofu/helm_release.<name>` — here the BOX is the ADR-150 actor: it arms, verifies and
+   deletes), the health baseline (`maintenance-window.sh snapshot`), the evidence `before` + timeline.
+3. The apply — the loop's own `tofu apply <plan>`.
+4. **Longhorn engines.** `concurrent-automatic-engine-upgrade-per-node-limit` is 0, so a chart upgrade
+   moves no volume. The box moves them one at a time to the manager's `--engine-image`, least valuable
+   disk class first (`engine_order`: fast → none → bulk → slow-bulk → std; an unnamed class last),
+   each waited to the new image and back to its old robustness; the first that does not come back stops it.
+5. **Verdict** (`helm_cluster_verdict` — **the FU-302 swap point**: today the evidence `verdict` verb,
+   Prometheus-free, plus the maintenance-window `compare`; FU-302's box verdict replaces the compare).
+   The evidence rules compare after against before: every release `deployed`; the applied release
+   rolled (observed = generation, ready = updated = desired) with every pod Ready; BGP established ≥
+   before; no Longhorn volume newly faulted or more degraded; Healthy Applications ≥ before and none
+   newly Degraded/Missing. **Good** → lease deleted, window closed, `management-apply` success
+   "helm verdict clean". **Bad** (or an errored apply) → **STOP**: the lease and the window are KEPT,
+   `/var/lib/mgmt/apply/helm-stopped` refuses every later helm apply, `mgmt_apply_helm_stopped` →
+   **`MgmtHelmApplyStopped`** (critical, triage none — no agent acts on a substrate failure). The sha
+   is still stamped (the apply happened). Nothing reverts.
+
+**The record** leaves the box for the **backup Garage LXC** (`s3://helm-evidence/<utc>-box-<release>-<version>/`,
+192.168.2.73, the bucket's own key in the env file — [`longhorn-backup.md`](longhorn-backup.md) §The
+target), never the in-cluster Garage: a record of a broken substrate must outlive the substrate.
+`helm-release-evidence.sh upload` is the one writer (the jail's attended `run` uploads the same way).
+
+**The lease loop** reads a `tofu/` subject past its deadline as outcome **`forward_only`** (§MB5): no
+revert PR, ever; counted each tick → the second arm of `MgmtHelmApplyStopped` (the box that died
+mid-bracket and never wrote a verdict). **Clearing a stop**: read `summary.txt`, then `rm
+/var/lib/mgmt/apply/helm-stopped`, `kubectl -n agent-coordinator delete cm upgrade-lease-tofu-helm-<release>`,
+`devbox run maint -- close --id <window>`. The unit's `TimeoutStartSec` is 5 h for this bracket.
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
@@ -1042,7 +1104,8 @@ commit, the `regen` files (the upstream alert list + triage map, rendered from t
 `automerge` + `dependencies`, auto-merge armed — the reflex approves, CI gates, never a direct push), its
 LAST body line `reverted-charts: <chart>@<to>` = `pin-only-lint` check (h)'s 30-day memory, so Renovate's
 re-proposal of the reverted version stays red until a newer one exists. Outcomes: `reverted` · `already` ·
-`no_policy` · `not_pin_only` · `conflict` (never forced) · `error` (push/PR/label/arm failed — the lease stays,
+`no_policy` · `not_pin_only` · `conflict` (never forced) · `forward_only` (a box helm apply's lease,
+subject `tofu/…` — never reverted, §MB3 "Helm release applies") · `error` (push/PR/label/arm failed — the lease stays,
 and the next tick RESUMES where it stopped: a branch already on origin → the PR step, an open PR missing
 its labels or arm → labels + arm; never a rebuild, whose new sha could not be pushed over the branch). Metrics via the textfile (job `mgmt-node`): `mgmt_lease_active`,
 `mgmt_lease_expired`, `mgmt_lease_revert_total{outcome}` (every outcome pre-initialised at 0),

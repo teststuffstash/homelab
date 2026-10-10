@@ -87,6 +87,52 @@ tests:
         alertname: MgmtApplyPostCheckFailed
         exp_alerts: []
 
+  # ── FU-301: a box helm apply STOPPED on its verdict (the marker gauge) ─────────────────────────
+  # 0 for 10m, the marker for 20m (a human clears it), 0 again: fires once `for: 5m` has held, clears
+  # when the marker goes. A box whose marker never rose stays quiet.
+  - interval: 1m
+    name: "a stopped helm apply fires after 5m and clears with the marker"
+    input_series:
+      - series: 'mgmt_apply_helm_stopped{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x10 1x20 0x10"
+      - series: 'mgmt_apply_helm_stopped{job="mgmt-node",instance="192.168.2.99:9100"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MgmtHelmApplyStopped
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: MgmtHelmApplyStopped
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: MgmtHelmApplyStopped
+        exp_alerts:
+          - exp_labels: { severity: critical, job: mgmt-node, instance: "192.168.2.53:9100", triage: none }
+      - eval_time: 38m
+        alertname: MgmtHelmApplyStopped
+        exp_alerts: []
+
+  # ── FU-301: the second arm — the lease loop counts a box helm lease past its deadline every tick
+  # (outcome forward_only; the counter rises by 1 per 5-min tick from t=10m). increase over 30m > 0 from
+  # the first step, `for: 5m` → firing by t=16m. The other outcomes rising (a kps revert) never fire it.
+  - interval: 1m
+    name: "an expired box helm lease fires; a reverted kps lease does not"
+    input_series:
+      - series: 'mgmt_lease_revert_total{job="mgmt-node",instance="192.168.2.53:9100",outcome="forward_only"}'
+        values: "0x10 1x4 2x5 3x5 4x5"
+      - series: 'mgmt_lease_revert_total{job="mgmt-node",instance="192.168.2.98:9100",outcome="reverted"}'
+        values: "0x10 1x4 2x5 3x5 4x5"
+      - series: 'mgmt_apply_helm_stopped{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: MgmtHelmApplyStopped
+        exp_alerts: []
+      - eval_time: 18m
+        alertname: MgmtHelmApplyStopped
+        exp_alerts:
+          - exp_labels: { severity: critical, job: mgmt-node, instance: "192.168.2.53:9100", outcome: forward_only, triage: none }
+
   # ── S9 #1988: an apply errors on a provider version no apply had run ───────────────────────────
   # The box publishes the series only while the refusal stands (absent otherwise): a blip shorter
   # than `for` stays quiet; a standing one fires with the provider attribution the revert chain keys on.
