@@ -23,7 +23,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export NIX_CONFIG="experimental-features = nix-command flakes" DEVBOX_QUIET=1
-k() { devbox run --quiet -- kubectl --kubeconfig "${KUBECONFIG:-$PWD/tofu/kubeconfig}" "$@"; }
+# kubectl from PATH (the box closure / the jail's devbox shell — never master's devbox on the box, FU-305)
+k() { if command -v kubectl >/dev/null 2>&1; then kubectl --kubeconfig "${KUBECONFIG:-$PWD/tofu/kubeconfig}" "$@"
+      else devbox run --quiet -- kubectl --kubeconfig "${KUBECONFIG:-$PWD/tofu/kubeconfig}" "$@"; fi; }   # jail-only fallback (FU-305)
 C=cluster.postgresql.cnpg.io
 log() { echo "pg-backup: $(date -u +%T) $*" >&2; }
 

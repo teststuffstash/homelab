@@ -128,7 +128,8 @@ if [ "$out" = "rc=0 same=y" ]; then ok "tree-path in the jail: a no-op (devbox s
 # the shared verbs the loops call. A comment may name devbox; a command may not.
 JAIL_SIDE=" mgmt-state-pull.sh mgmt-provision-secrets.sh mgmt-usb.sh mgmt-human-plan.sh "
 hits=""
-for f in "$REPO"/mgmt/scripts/mgmt-*.sh "$REPO/scripts/maintenance-window.sh" "$REPO/scripts/controlplane-upgrade.sh" "$REPO/scripts/node-maintenance.sh"; do
+for f in "$REPO"/mgmt/scripts/mgmt-*.sh "$REPO/scripts/maintenance-window.sh" "$REPO/scripts/controlplane-upgrade.sh" "$REPO/scripts/node-maintenance.sh" \
+         "$REPO/scripts/helm-release-evidence.sh" "$REPO/scripts/pg-backup.sh" "$REPO/agents/seat-window.sh"; do
   b="$(basename "$f")"
   case "$b" in *-test.sh) continue ;; esac
   case "$JAIL_SIDE" in *" $b "*) continue ;; esac
@@ -136,7 +137,7 @@ for f in "$REPO"/mgmt/scripts/mgmt-*.sh "$REPO/scripts/maintenance-window.sh" "$
   # mgmt-tf.sh: only its `remote='…'` half runs on the box (the rest is the jail's ssh wrapper + usage)
   if [ "$b" = mgmt-tf.sh ]; then src="$T/mgmt-tf.remote"; awk "/^remote='/{f=1} f{print} f && /^   exit \\\$rc'/{exit}" "$f" >"$src"
     [ -s "$src" ] || { bad "lint: mgmt-tf.sh's remote block not found"; continue; }; fi
-  h="$(grep -nE '^[^#]*\bdevbox[[:space:]]+(run|shellenv)\b' "$src" | grep -v 'jail-only fallback (FU-305)' | grep -vE "['\`]devbox[[:space:]]+run|^[0-9]+:[[:space:]]*(echo|printf|log|fail|warn|die)[[:space:]]" || true)"   # advice in a message: not a call
+  h="$(grep -nE '^[^#]*\bdevbox[[:space:]]+(run|shellenv)\b' "$src" | grep -v 'jail-only fallback (FU-305)' | grep -vE "['\`]devbox[[:space:]]+run|(echo|printf|log|fail|warn|die)[[:space:]]+\"[^\"]*devbox[[:space:]]+run" || true)"   # advice in a message: not a call
   [ -n "$h" ] && hits="$hits$b: $h"$'\n'
 done
 if [ -z "$hits" ]; then ok "lint: no \`devbox run\` in a box-executed script"

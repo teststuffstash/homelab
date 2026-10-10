@@ -49,17 +49,18 @@ HELM_DECLARED_ALERTS="${MGMT_HELM_DECLARED_ALERTS:-KubePodNotReady,KubeDeploymen
 
 # ── seams (mgmt-helm-test.sh overrides these) ───────────────────────────────────────────────────
 _hkc() { local kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig; printf '%s' "$kc"; }
-_hk()    { ( cd "$REPO" && devbox run --quiet -- kubectl --kubeconfig "$(_hkc)" --request-timeout=30s "$@" ); }
-_hhelm() { ( cd "$REPO" && devbox run --quiet -- helm --kubeconfig "$(_hkc)" "$@" ); }
+# Tools (FU-305, mgmt-tools.sh): kubectl from the box's closure, helm as master's devbox.lock pins it
+# (mgmt_tree_path in mgmt-apply.sh) — never `devbox run`, which a bad lock on master wedges.
+_hk()    { ( cd "$REPO" && mgmt_x kubectl --kubeconfig "$(_hkc)" --request-timeout=30s "$@" ); }
+_hhelm() { ( cd "$REPO" && mgmt_x helm --kubeconfig "$(_hkc)" "$@" ); }
 # the evidence verbs run from the TRUSTED tree (master, like maintenance-window.sh); their own fallback
-# finds /var/lib/mgmt/kubeconfig when devbox points KUBECONFIG at the checkout's absent tofu/kubeconfig
-_hev()   { ( cd "$REPO" && devbox run --quiet -- bash "$REPO/scripts/helm-release-evidence.sh" "$@" ); }
-# seat-window.sh OUTSIDE devbox: devbox.json would point KUBECONFIG at the absent checkout copy, and the
-# script finds kubectl in the checkout's .devbox profile on its own (agents/seat-window.sh header)
+# finds /var/lib/mgmt/kubeconfig when KUBECONFIG names an absent file
+_hev()   { ( cd "$REPO" && bash "$REPO/scripts/helm-release-evidence.sh" "$@" ); }
+# seat-window.sh finds kubectl on PATH (the box closure) on its own (agents/seat-window.sh header)
 _hwin()  { KUBECONFIG="$(_hkc)" SEAT_WINDOW_BY=mgmt-apply bash "$REPO/agents/seat-window.sh" "$@"; }
 _hpg()   { ( cd "$REPO" && KUBECONFIG="$(_hkc)" bash "$REPO/scripts/pg-backup.sh" now ); }
 _hnow()  { date +%s; }
-# the timeline watcher is a subshell → devbox → bash → kubectl: kill the whole tree (no procps on the
+# the timeline watcher is a subshell → bash → kubectl: kill the whole tree (no procps on the
 # box's unit path — /proc is)
 _hkilltree() { local c; for c in $(cat /proc/"$1"/task/*/children 2>/dev/null); do _hkilltree "$c"; done; kill "$1" 2>/dev/null || true; }
 _hsleep() { sleep "$1"; }
