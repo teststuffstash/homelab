@@ -23,12 +23,21 @@
 #               provider's locked version is not the exercised one publishes
 #               mgmt_apply_errored_unexercised{root,provider,exercised,locked} (S9 #1988) — a provider
 #               bump plans empty, so this is the first moment its apply path runs
+#   helm       a helm_release change (FU-301) must be an `apply_helm` row of the policy and pass
+#               mgmt_helm_gate (in-place update, the only change in the plan), and is bracketed by
+#               mgmt/scripts/mgmt-helm.sh: preflight refusals (declared-vs-live; longhorn: volumes healthy +
+#               a fresh restore point) → window + ⚓ lease + evidence → apply → (longhorn engines, ordered)
+#               → verdict. Good = lease deleted, status success. Bad = STOP: lease + window kept,
+#               $ADIR/helm-stopped (→ MgmtHelmApplyStopped) refuses every later helm apply until a human
+#               removes it. Never a revert. The record goes to s3://helm-evidence on the backup Garage.
 #   MGMT_SHADOW=1  plan + check, log the would-be apply, no apply, no status, no stamp
 # Usage: mgmt/scripts/mgmt-apply.sh   (the timer's unit). Env: mgmt/scripts/mgmt-lib.sh + MGMT_APPLY_DIR.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=mgmt-lib.sh
 . "$HERE/mgmt-lib.sh"
+# shellcheck source=mgmt-helm.sh
+. "$HERE/mgmt-helm.sh"
 
 ORG="${ORG:-teststuffstash}"; MGMT_REPO="${MGMT_REPO:-homelab}"
 REPO_URL="${MGMT_REPO_URL:-https://github.com/${ORG}/${MGMT_REPO}.git}"
@@ -76,6 +85,7 @@ emit_metrics() {
   [ -n "$r" ] && { isref=1; addrs="$(cat "$ADIR/refused-addresses" 2>/dev/null)"; addrs="${addrs:-0}"; }
   okt="$(cat "$ADIR/last-ok-tick" 2>/dev/null)"; okt="${okt:-0}"
   [ -s "$ADIR/post-check-failed" ] && pcf=1
+  hstop=0; [ -s "$ADIR/helm-stopped" ] && hstop=1
   if [ -n "$a" ] && [ -n "${sha:-}" ] && [ "$a" != "$sha" ]; then
     n="$(git -C "$REPO" rev-list --count "$a..$sha" 2>/dev/null)" || n=0
     oldest="$(git -C "$REPO" log --reverse --format=%ct "$a..$sha" 2>/dev/null | sed -n 1p)"
@@ -100,6 +110,9 @@ mgmt_apply_unapplied_oldest_timestamp_seconds ${oldest:-0}
 # HELP mgmt_apply_post_check_failed 1 while the last Talos config apply's post-apply health check regressed (cleared by the next clean one, or by hand).
 # TYPE mgmt_apply_post_check_failed gauge
 mgmt_apply_post_check_failed $pcf
+# HELP mgmt_apply_helm_stopped 1 while the box's helm applies are STOPPED after a bad verdict (FU-301; cleared by hand: rm \$ADIR/helm-stopped).
+# TYPE mgmt_apply_helm_stopped gauge
+mgmt_apply_helm_stopped ${hstop:-0}
 # HELP mgmt_apply_deferred_window 1 while the last tick DEFERRED a plan because a declared window held it (or the window registry was unreadable).
 # TYPE mgmt_apply_deferred_window gauge
 mgmt_apply_deferred_window $deferred
@@ -219,6 +232,17 @@ for root in "${apply_roots[@]}"; do
       refuse "$sha" "$root: $trule — $n Talos config change(s) fail the auto-apply precondition — human apply" "$thits"; exit 0
     fi
   fi
+  # FU-301 — a helm_release change: the gate, the STOP marker, then (below) the bracket.
+  helm_n=0; [ -s "$out.helm" ] && helm_n=$(grep -c . "$out.helm")
+  if [ "$helm_n" -gt 0 ]; then
+    hhits="$(printf '%s\n' "$changes" | mgmt_helm_gate "$POL" "$root" "$out")" || { refuse "$sha" "$root: helm precondition unreadable — human apply"; exit 0; }
+    if [ -n "$hhits" ]; then
+      refuse "$sha" "$root: $(head -1 <<<"$hhits" | cut -f1) — the helm change fails the auto-apply precondition — human apply" "$hhits"; exit 0
+    fi
+    if [ -s "$ADIR/helm-stopped" ]; then
+      refuse "$sha" "$root: helm applies STOPPED since a bad verdict ($(cut -f2,3 "$ADIR/helm-stopped" | tr '\t' ' ')) — a human reads the record, then rm $ADIR/helm-stopped"; exit 0
+    fi
+  fi
   # Talos config applies ride the post-apply health gate; nothing else in the residue does.
   talos_n=0; [ -s "$out.talos" ] && talos_n=$(grep -c . "$out.talos")
   log "$root: +$a ~$c -$d ${rs}${osuf} — all inside the apply allowlist"
@@ -226,6 +250,7 @@ for root in "${apply_roots[@]}"; do
   [ -n "$outs" ] && printf '%s\n' "$outs" | sed 's/^/    output /'
   if [ "${MGMT_SHADOW:-0}" = 1 ]; then
     tsuf=""; [ "$talos_n" -gt 0 ] && tsuf=" ($talos_n Talos config apply(s) — health baseline + post-check)"
+    [ "$helm_n" -gt 0 ] && tsuf=" ($(cut -f1,5,6 "$out.helm" | tr '\t' ' ') — helm preflight + window + lease + evidence + verdict)"
     log "[shadow] would apply $root now$tsuf"; continue
   fi
   # The health BASELINE, before any Talos config apply (the /maintenance-window `open`, unattended).
@@ -238,6 +263,27 @@ for root in "${apply_roots[@]}"; do
       sed 's/^/    /' "$hbase.err"; exit 1
     fi
     log "$root: health baseline taken ($(jq -r '"alerts=\(.alerts|length) up=\(.up) pods_bad=\(.pods_bad) cilium_have=\(.cilium_have) nodes=\(.nodes)"' "$hbase"))"
+  fi
+  # FU-301 — the helm bracket's first half: preflight refusals, then window + lease + evidence. A
+  # preflight REFUSAL waits for a new commit or a human (refused-rev: a failed restore point must not
+  # re-run a backup every tick); an unreadable read is a PROBE-FAIL the next tick retries.
+  hdir=""; horder=""
+  if [ "$helm_n" -gt 0 ]; then
+    IFS=$'\t' read -r haddr _ hrel hns hfrom hto <"$out.helm"; hname="${haddr#helm_release.}"
+    hrow="$(mgmt_helm_row "$POL" "$root" "$haddr")" && [ -n "$hrow" ] || { refuse "$sha" "$root: apply_helm row for $haddr unreadable — human apply"; exit 0; }
+    hcap="$(jq -r '.cap_min // 120' <<<"$hrow")"; horder="$(jq -r '(.engine_order // []) | join(",")' <<<"$hrow")"
+    hdir="$HELM_EVIDENCE_ROOT/$(date -u +%Y%m%dT%H%M%SZ)-box-$hrel-$hto"
+    # The long half (a longhorn restore point can take an hour) runs WITHOUT the loops' shared lock, so
+    # the sentinel and the lease loop keep their cadence; the saved plan is the guard — tofu refuses
+    # it if the state serial moved meanwhile. The unit itself is a oneshot: no second apply tick.
+    flock -u 9
+    pre="$(helm_preflight "$hname" "$hrel" "$hns" "$hdir/preflight")"; prc=$?
+    flock -w 600 9 || { log "PROBE-FAIL: lock busy for 10 min after the helm preflight"; exit 1; }
+    if [ "$prc" = 1 ]; then log "PROBE-FAIL: helm preflight could not read: $pre — not applying, not stamping; next run retries"; exit 1; fi
+    if [ "$prc" = 2 ]; then refuse "$sha" "$root: helm preflight refused $haddr: $(head -1 <<<"$pre" | cut -f1) — human" "$pre"; exit 0; fi
+    log "$root: helm preflight clean for $haddr ($hfrom → $hto)"
+    helm_begin "$hdir" "$hname" "$hrel" "$hns" "$sha" "$hfrom" "$hto" "$hcap" \
+      || { log "PROBE-FAIL: helm bracket could not begin — not applying, not stamping; next run retries"; exit 1; }
   fi
   # ⚠ a saved plan does NOT carry the -state= override (found on the box, 2026-09-13: apply read
   # the default path, an empty state, "Saved plan does not match the given state") — repeat it.
@@ -255,7 +301,17 @@ for root in "${apply_roots[@]}"; do
     # logged, never allowed to turn a successful apply into a refusal.
     snap="${MGMT_SNAPSHOT:-/var/lib/homelab/mgmt/scripts/mgmt-state-snapshot.sh}"
     if [ -x "$snap" ]; then "$snap" --lock-held "$root" || log "$root: WARN snapshot failed — the apply itself succeeded"; fi
-    if [ "$talos_n" -gt 0 ]; then
+    if [ -n "$hdir" ]; then
+      # the bracket's second half, off the lock (the settle alone is minutes). Forward only: the sha is
+      # stamped below either way, because the apply HAPPENED.
+      flock -u 9
+      if helm_end "$hdir" 0 "$horder"; then
+        mgmt_post_status "$sha" "$CTX" success "$root: $haddr $hfrom → $hto applied by the management box · helm verdict clean"
+      else
+        mgmt_post_status "$sha" "$CTX" failure "$root: $haddr $hfrom → $hto applied, STOPPED on the verdict: $(tr '\n' ';' <"$hdir/verdict.txt" | sed 's/;$//; s/;/; /g' | head -c 300)"
+      fi
+      flock -w 600 9 || log "WARN: lock busy re-taking it after the helm verdict"
+    elif [ "$talos_n" -gt 0 ]; then
       # The post-apply health gate. A regression reports — status failure naming it, the
       # post-check-failed marker (→ mgmt_apply_post_check_failed → MgmtApplyPostCheckFailed) — and
       # does NOT revert (FU-273: default forward; a revert is a human commit). The apply HAPPENED,
@@ -273,6 +329,9 @@ for root in "${apply_roots[@]}"; do
     fi
   else
     tail -5 "$out.apply.log" | sed 's/^/    /'
+    # FU-301: an errored helm apply still gets its record and its STOP (never a retry) — the refusal
+    # below says "half-applied? human", the marker keeps every later helm apply out until one reads it
+    if [ -n "$hdir" ]; then flock -u 9; helm_end "$hdir" 1 "$horder" || true; flock -w 600 9 || true; fi
     # Was a provider in this apply NEW to applies? (S9 #1988) — the attribution the revert chain
     # keys on. Unreadable lock, or no record yet (a box that has not completed a changing apply
     # since this landed — seed it by hand, §MB3), = no attribution: never a guessed one.

@@ -199,5 +199,21 @@ run pr-merged 0
 expect merged-already "lease l8: already — PR #78 exists for $BR \(closed\)" "$OUT"
 GH_MODE=none
 
+# 14. a box helm apply's lease (FU-301: subject tofu/helm_release.*) past its deadline → forward_only:
+#     no revert branch, no PR call, NOT in mgmt_lease_expired, counted for MgmtHelmApplyStopped — even
+#     though the subject is not in the policy (the policy's subjects are ArgoCD pins; this one never reverts)
+GH_MODE=none; BEFORE="$(git -C "$ORIGIN" show-ref | sha256sum)"
+LEASES="$(jq -nc --argjson l "$(lease upgrade-lease-tofu-helm-argocd-apps tofu/helm_release.argocd_apps "$A" 2.0.5 2.0.6 "$PAST")" '{items:[$l]}')"
+run helm-forward-only 0
+expect helm-forward-only-outcome "lease upgrade-lease-tofu-helm-argocd-apps: forward_only — tofu/helm_release.argocd_apps 2.0.5 → 2.0.6 unconfirmed since $PAST" "$OUT"
+expect helm-forward-only-counter '^1$' "$(metric mgmt_lease_revert_total 'outcome="forward_only"')"
+expect helm-forward-only-not-expired '^0$' "$(metric mgmt_lease_expired .)"
+expect helm-forward-only-origin-untouched "^$BEFORE\$" "$(git -C "$ORIGIN" show-ref | sha256sum)"
+expect_empty helm-forward-only-no-pr "$(grep -v 'GET branches/master' "$GH_LOG" || true)"
+# …and a LIVE one (inside its deadline) is just in flight
+LEASES="$(jq -nc --argjson l "$(lease upgrade-lease-tofu-helm-argocd-apps tofu/helm_release.argocd_apps "$A" 2.0.5 2.0.6 "$FUTURE")" '{items:[$l]}')"
+run helm-live 0
+expect helm-live-active '1 in flight, 0 expired' "$OUT"
+
 echo "mgmt-lease-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

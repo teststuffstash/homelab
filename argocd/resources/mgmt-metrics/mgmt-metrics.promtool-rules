@@ -29,6 +29,14 @@ groups:
         labels:
           severity: warning
           triage: now
+      - alert: MgmtHelmApplyStopped
+        expr: |
+          mgmt_apply_helm_stopped == 1
+            or on (instance) (increase(mgmt_lease_revert_total{outcome="forward_only"}[30m]) > 0)
+        for: 5m
+        labels:
+          severity: critical
+          triage: none
       - alert: MgmtApplyDeferredByWindow
         expr: |
           mgmt_apply_deferred_window == 1
