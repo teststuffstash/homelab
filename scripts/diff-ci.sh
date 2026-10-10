@@ -114,6 +114,30 @@ MAP=(
 # coverage belt below, with the reason on the record.
 PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 
+# Rows that githooks/pre-push's push-time gate (--push-gates below) must NEVER select, even
+# when their path matches — too slow or network-dependent for a hook that runs on every direct
+# master push, from anywhere, in well under the ~2 minute budget. CI is unaffected: these still
+# run there under the ordinary skip map above. Keyed to the FIRST WORD of a MAP task (matches
+# the coverage-belt's own convention below); re-measure before adding a row — this is a cutoff
+# call, not a guess. Measured 2026-10-10 in a jail clone, warm .devbox, no docker daemon, LAN
+# reachable:
+#   argocd-validate-pins    `helm pull` straight from ghcr.io — real WAN on every run.
+#   manifest-lint           kubeconform's `default` schema-location falls back to a network
+#                           fetch for any CRD this repo hasn't vendored a schema for (the FU-197
+#                           flake class) — a WAN risk, not a timing call (it was 1-2s here).
+#   mgmt-policy-test        >40s locally with no network at all — just too slow for this gate
+#                           (its own fixture suite; mgmt/ changes are rare on the direct lane).
+#   prometheus-rules-lint   33s here, 112-126s in ci.yaml's own wall-time accounting — the exact
+#                           class CI backgrounds instead of running inline (#518).
+#   publicroute-tf-validate  \
+#   xr-render                } both pull pinned Crossplane/Cilium function binaries through the
+#                           ADR-091 LAN pull-through mirror (192.168.40.21/.20) by digest — fast
+#                           and WAN-free when it hits (3-8s measured), but curl's own worst case
+#                           (`--connect-timeout 10 -m 300`) is a 5-MINUTE hang per blob on a dead
+#                           mirror or an off-LAN push, which blows the budget and the "works from
+#                           anywhere" requirement outright.
+PUSH_HEAVY="argocd-validate-pins manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render"
+
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
 COVERAGE_ONLY=false
@@ -129,6 +153,26 @@ if [ "${1:-}" = "--ci-outputs" ]; then
     task="${entry%%:*}"; regex="${entry#*:}"; v=false
     if $all || grep -qE "$regex" "$list"; then v=true; fi
     echo "$(ci_key "$task")=$v"
+  done
+  exit 0
+fi
+# --push-gates <changed-files-file>: prints the MAP tasks (one per line) whose path regex
+# matches the given changed-file list, MINUS PUSH_HEAVY above — the set githooks/pre-push's
+# generic step runs on a direct master push. Same fail-open rule as --ci-outputs for a MISSING
+# or UNREADABLE list (selects every non-heavy row); an EMPTY-but-present list (e.g. the hook's
+# own bookkeeping-file filter dropped everything) selects NOTHING instead — the hook, not this
+# script, decides what "nothing left to check" means for its own budget. ONE HOME: a path that
+# feeds a CI gate feeds the push gate too unless it's named in PUSH_HEAVY above — the hook
+# itself carries no path regex of its own.
+if [ "${1:-}" = "--push-gates" ]; then
+  list="${2:-}"; all=false
+  if [ -z "$list" ] || [ ! -e "$list" ]; then all=true
+  elif [ -s "$list" ] && grep -qE '^(devbox\.(json|lock)|\.github/workflows/ci\.yaml|scripts/diff-ci\.sh)$' "$list"; then all=true; fi
+  if ! $all && [ ! -s "$list" ]; then exit 0; fi
+  for entry in "${MAP[@]}"; do
+    task="${entry%%:*}"; regex="${entry#*:}"
+    case " $PUSH_HEAVY " in *" ${task%% *} "*) continue ;; esac
+    if $all || grep -qE "$regex" "$list"; then printf '%s\n' "$task"; fi
   done
   exit 0
 fi

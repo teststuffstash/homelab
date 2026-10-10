@@ -144,7 +144,11 @@ The exception keeps the old rule: **anything a CLUSTER consumer clones master fo
 incident pins (the FU-188 shape), agents/ script fixes — still pushes immediately.** The class
 test: does any pod need to see this? A master push runs the doc lints + `tofu fmt -check` via the committed
 `githooks/pre-push` (wired by `core.hooksPath` — the direct lane's only lint gate, since
-OrgAdmin pushes bypass CI); never `--no-verify` past it.
+OrgAdmin pushes bypass CI); never `--no-verify` past it. Since 2026-10-10 that hook also runs every
+other cheap/local/no-WAN `ci` gate the pushed range's paths select (bookkeeping paths above
+excluded), via `scripts/diff-ci.sh -- --push-gates` — one home with `ci`'s own skip map
+(`githooks/pre-push --dry-run <rev>` previews the selection) — closing the #2456 class (docs/
+github-apps.yaml edited direct, `github-apps-lint` never ran).
 
 **The codeowner gate on machine PRs runs per SESSION, not per PR (ADR-110, 2026-08-18).** For
 the maintenance stream — no Goal, reacting to alerts/board items — the human codeowner read is
