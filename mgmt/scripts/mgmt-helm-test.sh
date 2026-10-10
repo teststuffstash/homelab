@@ -106,7 +106,7 @@ _hev() {
     verdict) if [ "$VERDICT_RC" = 0 ]; then echo '{"ok":true,"findings":[]}'; else echo '{"ok":false,"findings":["bgp: established 13 → 12"]}'; return 2; fi ;;
   esac
 }
-mgmt_health() { [ "$HEALTH_RC" = 0 ] && return 0; echo "  ⚠ NEW firing alerts: X"; return 2; }
+mgmt_health() { [ "$HEALTH_RC" = 0 ] && return 0; echo "  ⚠ NEW firing alerts: KubeAPIDown"; return 2; }
 mkd() {  # a begun bracket's dir
   local d="$T/rec-$1"; mkdir -p "$d"
   printf 'argocd_apps\targocd-apps\targocd\tabc123\t2.0.5\t2.0.6\n' >"$d/meta.tsv"
@@ -133,11 +133,26 @@ eq end-stop-no-revert 0 "$(grep -ciE 'rollback|revert|apply|patch' "$T/calls")"
 # (3) clean evidence, regressed health compare → STOP (the compare is half of the verdict)
 : >"$T/calls"; rm -f "$ADIR/helm-stopped"; d="$(mkd health)"; VERDICT_RC=0; HEALTH_RC=2
 helm_end "$d" 0 "" >/dev/null 2>&1; eq end-health-stop-rc 2 "$?"
-eq end-health-finding 1 "$(grep -c 'health: NEW firing alerts: X' "$d/verdict.txt")"
+eq end-health-finding 1 "$(grep -c 'health: NEW firing alerts: KubeAPIDown' "$d/verdict.txt")"
 # (4) an apply that ERRORED is a STOP even when the cluster reads clean (never a retry)
 : >"$T/calls"; rm -f "$ADIR/helm-stopped"; d="$(mkd applyerr)"; HEALTH_RC=0
 helm_end "$d" 1 "" >/dev/null 2>&1; eq end-apply-error-rc 2 "$?"
 eq end-apply-error-line 1 "$(grep -c '^apply: tofu apply exited 1' "$d/verdict.txt")"
+
+# (5) drill 1 (2026-10-10): a clean roll + a NEW alert outside the cone (GithubRateLimitLow — GitHub's
+#     quota) → CONFIRM, the alert noted in the record; a cone alert beside it (KubePodNotReady) → STOP
+#     naming only the cone one. mgmt_post_check prints the compare's ⚠ lines stripped of the marker.
+mgmt_health() { echo "  ⚠ NEW firing alerts: $HEALTH_ALERTS"; return 2; }
+: >"$T/calls"; rm -f "$ADIR/helm-stopped"; d="$(mkd outside)"; HEALTH_ALERTS="GithubRateLimitLow"
+helm_end "$d" 0 "" >/dev/null 2>&1; eq end-outside-cone-confirms 0 "$?"
+eq end-outside-cone-noted "outside the cone: GithubRateLimitLow" "$(cat "$d/verdict-noted.txt")"
+eq end-outside-cone-lease-deleted 1 "$(grep -c 'delete cm' "$T/calls")"
+: >"$T/calls"; rm -f "$ADIR/helm-stopped"; d="$(mkd cone)"; HEALTH_ALERTS="GithubRateLimitLow, KubePodNotReady, LonghornVolumeDegraded"
+helm_end "$d" 0 "" >/dev/null 2>&1; eq end-cone-stops 2 "$?"
+eq end-cone-finding "health: NEW firing alerts: KubePodNotReady, LonghornVolumeDegraded" "$(cat "$d/verdict.txt")"
+# a non-alert probe line (scrape targets lost) always counts
+printf 'scrape targets: 192 -> 150\nNEW firing alerts: GithubRateLimitLow\n' >"$T/hc.txt"; : >"$T/noted"
+eq scope-probe-kept "scrape targets: 192 -> 150" "$(helm_scope_health "$T/hc.txt" "$T/noted")"
 
 echo "mgmt-helm-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
