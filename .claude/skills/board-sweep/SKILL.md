@@ -22,13 +22,16 @@ deliberately deferred (§Graduation).
 
 ## Hard rules
 
-- **Intent, not guesswork — read the SLICE that owns the item.** The core judgment here —
-  STUCK-MACHINE vs HANDLED — is "did the machinery behave as *intended*", and intent lives in
-  the corpus. The full corpus load is operator-typed only (`/design-agents`, 2026-09-27 — see
-  the seat card §Design questions); do NOT read `docs/agents/` wholesale. For each unclear item
-  grep the corpus for its label/clause name and read that section (the coordinator brief
-  §State machine owns the label semantics; `docs/agents/issue-lifecycle-fsm.md` the
-  transitions). Guessing is actively harmful (clearing `agent/error` un-latches a breaker); so
+- **Intent, not guesswork — island first, then the SLICE that owns the item.** The core
+  judgment here — STUCK-MACHINE vs HANDLED — is "did the machinery behave as *intended*", and
+  intent lives in the owning island's docs. The agent loop is one island (the heaviest); the
+  platform has others with their own owning docs — dependency upgrades, the management box, the
+  router pair, the cluster substrate (spike `context-and-autonomy.md` §C2). Classify each item
+  to its island, then read THAT island's slice. For the loop: the full corpus load is
+  operator-typed only (`/design-agents`, 2026-09-27 — see the seat card §Design questions); do
+  NOT read `docs/agents/` wholesale; grep the corpus for the item's label/clause name and read
+  that section (the coordinator brief §State machine owns the label semantics;
+  `docs/agents/issue-lifecycle-fsm.md` the transitions). Guessing is actively harmful (clearing `agent/error` un-latches a breaker); so
   is a 300k-token preload for a sweep — an item you cannot classify from its slice goes to the
   OPERATOR bucket with the question written down.
 - **Live-verify every status claim** (GAPS design-agents-G1): transient docs — `meta-state.md`,
@@ -51,7 +54,10 @@ deliberately deferred (§Graduation).
    markers across the claim universe; Alertmanager's firing set vs the responder-seen ledger
    (`bash agents/meta-alert-crosscheck.sh` — its UNTRIAGED diff is bucket 5's input); merged +
    open PRs in the window; `AGENT_STRIKE:` / `<!-- agent-summary -->` evidence on touched
-   items; janitor-tick reports from the transcripts bucket when a stack looks quiet.
+   items; janitor-tick reports from the transcripts bucket when a stack looks quiet; and the
+   seat's DECLARED state — `docs/agents/meta-state.md` + the window's TICK-LOG entries — for the
+   parks, rulings and open windows that make a wait deliberate (CORRECTLY-WAITING's named gate
+   usually lives there; live-verify each before leaning on it).
 3. **Classify every item**:
 
    | bucket | test | action |
