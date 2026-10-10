@@ -1,0 +1,25 @@
+# version-sets — the version-set drift belt (homelab#2014): a 6-hourly probe CronWorkflow that
+# runs each pinned first-party image and pushes what it ships, plus the PrometheusRule comparing
+# those versions to each other, to the stamp on master and to the fleet's Kubernetes minor.
+# Raw manifests in argocd/resources/version-sets/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: version-sets
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/version-sets
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-coordinator
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

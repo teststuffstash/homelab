@@ -1,0 +1,117 @@
+# Version-set drift belt (homelab#2014, S9 #1985) — the verdict half; probe.py + probe-argo.yaml
+# beside this file are the measurement. docs/dependency-upgrades.md §Version SETS owns the sets.
+#
+# Built BEFORE the stamp mechanism (detection before fix, operator 2026-09-09): on the day it
+# landed the claude-code set was already split three ways — coordinator+reviewer 2.1.289 (npm at
+# the Monday rebuild), worker 2.1.291 (nixpkgs via agent-base's devbox.lock), the seat 2.1.281
+# (npm at a hand rebuild) — so VersionSetMembersDisagree is expected to FIRE on first data; the
+# stamp + the consumers reading it is what clears it.
+#
+# ONE series family, two sources:
+#   version_set_running_info{consumer,tool,version}   pushed by the probe (the cluster images, and
+#                                                     the seat's kubectl from homelab devbox.lock)
+#   claude_code_*{role="jail"}                         the seat's claude-code, from its own OTLP
+#                                                     sessions (`otel_scope_version`) — the seat is
+#                                                     host-built, its telemetry is how it is read
+# both recorded into version_set:running_info{consumer,tool,version} below.
+#
+# triage: none on the drift verdicts — the remedy is a rebuild / the stamp, which no in-cluster
+# investigation changes; the probe-health alerts are `dig` (a failing workflow is diagnosable here).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: version-sets
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: version-sets
+      rules:
+        - record: version_set:running_info
+          expr: max by (consumer, tool, version) (version_set_running_info{job="version_set_probe"})
+        # The seat: per jail, the version of its NEWEST session in the last 3 days (an upgrade
+        # leaves the old version's series around for the window; picking by last-seen time keeps
+        # one version per jail, so a rebuild clears the verdict at once instead of 3 days later).
+        - record: version_set:running_info
+          expr: |
+            max by (consumer, tool, version) (
+              label_replace(label_replace(label_replace(
+                (
+                  max by (jail_name, otel_scope_version) (max_over_time(timestamp(max by (jail_name, otel_scope_version) ({__name__=~"claude_code_.+", role="jail", otel_scope_version!=""}))[3d:5m]))
+                    == on (jail_name) group_left
+                  max by (jail_name) (max_over_time(timestamp(max by (jail_name, otel_scope_version) ({__name__=~"claude_code_.+", role="jail", otel_scope_version!=""}))[3d:5m]))
+                ) * 0 + 1,
+              "consumer", "jail/$1", "jail_name", "(.*)"),
+              "version", "$1", "otel_scope_version", "(.*)"),
+              "tool", "claude-code", "", "")
+            )
+
+        # The claude-code set must be ONE version across every member (operator ruling 2026-09-27:
+        # jail, worker and coordinator/reviewer claude are a set). 1 d absorbs a normal rollout (the
+        # Monday rebuilds' deploy-pins land hours apart); a split that outlives a day is drift.
+        - alert: VersionSetMembersDisagree
+          expr: count by (tool) (count by (tool, version) (version_set:running_info{tool="claude-code"})) > 1
+          for: 1d
+          labels:
+            severity: warning
+            triage: none
+          annotations:
+            summary: 'The {{ $labels.tool }} version set is split: {{ $value }} different versions are running'
+            description: 'Members of the {{ $labels.tool }} set (the worker image, the coordinator+reviewer image, the seat) run {{ $value }} different versions for over a day. Which member runs what: `version_set:running_info{tool="{{ $labels.tool }}"}`. Cluster images re-align when they rebuild from the stamp (homelab#2014, docs/dependency-upgrades.md §Version SETS); a jail/* member is the host-built seat — rebuild claude-jail on the host.'
+
+        # A member is not on the stamped version. Silent until the stamp exists (the `and on (tool)`
+        # guard), and the seat's kubectl is excluded: it is homelab's own devbox `@latest`, a set
+        # member only through the skew rule below, never bounded to the stamp.
+        - alert: VersionSetBehindPin
+          expr: |
+            (
+              version_set:running_info
+                unless on (consumer, tool) version_set:running_info{consumer="jail", tool="kubectl"}
+            )
+              unless on (tool, version) version_set_pin_info{job="version_set_probe"}
+              and on (tool) version_set_pin_info{job="version_set_probe"}
+          for: 2d
+          labels:
+            severity: warning
+            triage: none
+          annotations:
+            summary: '{{ $labels.consumer }} ships {{ $labels.tool }} {{ $labels.version }}, not the stamped version'
+            description: '{{ $labels.consumer }} runs {{ $labels.tool }} {{ $labels.version }} for over two days while homelab master stamps a different version (`version_set_pin_info{tool="{{ $labels.tool }}"}`, from version-sets/devbox.lock). A cluster consumer has not rebuilt from the stamp (check its build-image run and deploy-pin PR); a jail/* consumer is the host-built seat — rebuild it.'
+
+        # kubectl within ONE minor of the apiserver (the upstream skew policy) — the rule nobody
+        # enforced before (§Version SETS kubectl row). The fleet minor is the LIVE apiserver's.
+        - alert: VersionSetKubectlSkew
+          expr: |
+            abs(
+              max by (consumer) (version_set_kubectl_minor{job="version_set_probe"})
+                - on () group_left max(version_set_fleet_kubernetes_minor{job="version_set_probe"})
+            ) > 1
+          for: 1h
+          labels:
+            severity: warning
+            triage: none
+          annotations:
+            summary: '{{ $labels.consumer }} kubectl is {{ $value }} minors away from the fleet'
+            description: 'The kubectl {{ $labels.consumer }} ships is {{ $value }} minors from the live apiserver — outside the supported ±1 skew. Cluster images take kubectl from the version-set stamp bounded by the fleet minor (homelab#2014); `jail` is homelab devbox.lock''s kubectl@latest.'
+
+        # Probe health. The gateway re-serves the last push forever, so freshness is the only
+        # signal the verdicts above are current (docs/patterns/observability.md §Batch jobs push).
+        - alert: VersionSetProbeStale
+          expr: time() - max by (consumer) (version_set_probe_generated_timestamp_seconds{job="version_set_probe"}) > 86400
+          for: 30m
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'version-set-probe has not pushed consumer={{ $labels.consumer }} for {{ $value | humanizeDuration }}'
+            description: 'The 6-hourly CronWorkflow agent-coordinator/version-set-probe stopped refreshing this group, so the version-set verdicts are stale. `kubectl -n agent-coordinator get wf -l workflows.argoproj.io/cron-workflow=version-set-probe` and the newest pod log. A consumer REMOVED from agents/images.env leaves its group behind (the gateway has no TTL) — delete it: `curl -X DELETE http://prometheus-pushgateway.monitoring.svc:9091/metrics/job/version_set_probe/consumer/{{ $labels.consumer }}`.'
+        - alert: VersionSetProbeAbsent
+          expr: absent(version_set_probe_generated_timestamp_seconds{job="version_set_probe", consumer="pins"})
+          for: 1d
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: version-set-probe has never pushed its pins group
+            description: 'No `pins` group from agent-coordinator/version-set-probe for a day — the belt is blind. Check that the version-sets ArgoCD Application synced and the CronWorkflow ran.'

@@ -938,7 +938,8 @@
         "argocd/resources/github-exporter/deployment.yaml",
         "argocd/resources/openrouter-proxy/deployment.yaml",
         "argocd/resources/opnsense-config-backup/cronjob.yaml",
-        "argocd/resources/pg-backup/cronjob.yaml"
+        "argocd/resources/pg-backup/cronjob.yaml",
+        "argocd/resources/version-sets/probe-argo.yaml"
       ]
     },
     {

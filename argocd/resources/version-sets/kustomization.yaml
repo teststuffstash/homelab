@@ -1,0 +1,20 @@
+# version-sets — the drift belt for the cross-repo version SETS (homelab#2014;
+# docs/dependency-upgrades.md §Version SETS). The probe workflow runs in agent-coordinator, the rule
+# in monitoring — each manifest names its own namespace, so NO kustomize `namespace:` here (it would
+# rewrite both into one).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - probe-argo.yaml
+  - prometheusrule.yaml
+
+configMapGenerator:
+  - name: version-set-probe
+    namespace: agent-coordinator
+    files:
+      - probe.py
+    # The WorkflowTemplate mounts it by NAME (kustomize does not rewrite Argo volume refs); every
+    # run is a fresh pod, so an edit reaches the next run without a hash roll.
+    options:
+      disableNameSuffixHash: true

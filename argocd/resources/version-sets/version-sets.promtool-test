@@ -1,0 +1,205 @@
+rule_files:
+  - version-sets.promtool-rules
+
+# Coarse clock: the verdicts are day-scale (`for: 1d` / `2d`). Samples every 4m stay inside the 5m
+# lookback, so a pushed group reads as continuously present — the gateway's real behaviour.
+evaluation_interval: 5m
+
+tests:
+  # ── THE CONDITION THIS BELT EXISTS FOR — the claude-code set as measured on 2026-10-10 ─────────
+  # Live data that day (Prometheus, last 24 h of OTLP sessions by role): coordinator + reviewer
+  # sessions on 2.1.289 (agent-coordinator image, npm latest at the Monday rebuild), worker
+  # sessions on 2.1.291 (agent-base, nixpkgs via devbox.lock), the seat on 2.1.281 (claude-jail,
+  # npm at a hand rebuild). No stamp yet. Three versions in one set → fires once it stands a day;
+  # VersionSetBehindPin stays silent because there is no pin to be behind.
+  - interval: 4m
+    name: "the 2026-10-10 three-way claude-code split fires after a day, never before"
+    input_series:
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="coordinator",tool="claude-code",version="2.1.289"}'
+        values: "1x400"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="worker",tool="claude-code",version="2.1.291"}'
+        values: "1x400"
+      - series: 'version_set_pin_present{job="version_set_probe",instance="",consumer="pins"}'
+        values: "0x400"
+      # the seat's own OTLP session counter (role=jail; the jail_name label comes from JAIL_NAME)
+      - series: 'claude_code_active_time_seconds_total{job="otel-collector",role="jail",jail_name="homelab",otel_scope_version="2.1.281",session_id="s1"}'
+        values: "0+30x400"
+    promql_expr_test:
+      # the seat is recorded into the same family as the probed images
+      - expr: version_set:running_info{consumer="jail/homelab"}
+        eval_time: 2h
+        exp_samples:
+          - labels: 'version_set:running_info{consumer="jail/homelab",tool="claude-code",version="2.1.281"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: VersionSetMembersDisagree
+        exp_alerts: []
+      # 2.1.289 + 2.1.291 + 2.1.281 = 3 distinct versions
+      - eval_time: 25h
+        alertname: VersionSetMembersDisagree
+        exp_alerts:
+          - exp_labels: { tool: claude-code, severity: warning, triage: none }
+            exp_annotations:
+              summary: 'The claude-code version set is split: 3 different versions are running'
+              description: 'Members of the claude-code set (the worker image, the coordinator+reviewer image, the seat) run 3 different versions for over a day. Which member runs what: `version_set:running_info{tool="claude-code"}`. Cluster images re-align when they rebuild from the stamp (homelab#2014, docs/dependency-upgrades.md §Version SETS); a jail/* member is the host-built seat — rebuild claude-jail on the host.'
+      - eval_time: 25h
+        alertname: VersionSetBehindPin
+        exp_alerts: []
+
+  # ── The aligned set is silent — the state the stamp + consumers produce ─────────────────────────
+  # Every member on the stamped 2.1.291, kubectl on the stamped 1.36.3 in both images, the seat's
+  # devbox kubectl on 1.37.1 (unbounded @latest — NOT compared to the pin, only to the skew rule).
+  - interval: 4m
+    name: "an aligned set on the stamp raises nothing"
+    input_series:
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="coordinator",tool="claude-code",version="2.1.291"}'
+        values: "1x800"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="worker",tool="claude-code",version="2.1.291"}'
+        values: "1x800"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="coordinator",tool="kubectl",version="1.36.3"}'
+        values: "1x800"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="worker",tool="kubectl",version="1.36.3"}'
+        values: "1x800"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="jail",tool="kubectl",version="1.37.1"}'
+        values: "1x800"
+      - series: 'version_set_pin_info{job="version_set_probe",instance="",consumer="pins",tool="claude-code",version="2.1.291"}'
+        values: "1x800"
+      - series: 'version_set_pin_info{job="version_set_probe",instance="",consumer="pins",tool="kubectl",version="1.36.3"}'
+        values: "1x800"
+      - series: 'version_set_pin_info{job="version_set_probe",instance="",consumer="pins",tool="kind",version="0.31.0"}'
+        values: "1x800"
+      - series: 'claude_code_active_time_seconds_total{job="otel-collector",role="jail",jail_name="homelab",otel_scope_version="2.1.291",session_id="s1"}'
+        values: "0+30x800"
+    alert_rule_test:
+      - eval_time: 50h
+        alertname: VersionSetMembersDisagree
+        exp_alerts: []
+      - eval_time: 50h
+        alertname: VersionSetBehindPin
+        exp_alerts: []
+
+  # ── Behind the stamp: the coordinator image did not rebuild after the stamp moved ──────────────
+  # Stamp = claude-code 2.1.291 / kubectl 1.36.3. The coordinator ships 2.1.289 / 1.36.1 (its old
+  # hand ARG) → two firing rows after 2 d; the worker is on the stamp → nothing; the seat's devbox
+  # kubectl (1.37.1) is excluded by design.
+  - interval: 4m
+    name: "a consumer off the stamp fires per tool after two days; the seat's devbox kubectl never does"
+    input_series:
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="coordinator",tool="claude-code",version="2.1.289"}'
+        values: "1x800"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="coordinator",tool="kubectl",version="1.36.1"}'
+        values: "1x800"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="worker",tool="claude-code",version="2.1.291"}'
+        values: "1x800"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="worker",tool="kubectl",version="1.36.3"}'
+        values: "1x800"
+      - series: 'version_set_running_info{job="version_set_probe",instance="",consumer="jail",tool="kubectl",version="1.37.1"}'
+        values: "1x800"
+      - series: 'version_set_pin_info{job="version_set_probe",instance="",consumer="pins",tool="claude-code",version="2.1.291"}'
+        values: "1x800"
+      - series: 'version_set_pin_info{job="version_set_probe",instance="",consumer="pins",tool="kubectl",version="1.36.3"}'
+        values: "1x800"
+    alert_rule_test:
+      - eval_time: 47h
+        alertname: VersionSetBehindPin
+        exp_alerts: []
+      - eval_time: 49h
+        alertname: VersionSetBehindPin
+        exp_alerts:
+          - exp_labels: { consumer: coordinator, tool: claude-code, version: 2.1.289, severity: warning, triage: none }
+            exp_annotations:
+              summary: 'coordinator ships claude-code 2.1.289, not the stamped version'
+              description: 'coordinator runs claude-code 2.1.289 for over two days while homelab master stamps a different version (`version_set_pin_info{tool="claude-code"}`, from version-sets/devbox.lock). A cluster consumer has not rebuilt from the stamp (check its build-image run and deploy-pin PR); a jail/* consumer is the host-built seat — rebuild it.'
+          - exp_labels: { consumer: coordinator, tool: kubectl, version: 1.36.1, severity: warning, triage: none }
+            exp_annotations:
+              summary: 'coordinator ships kubectl 1.36.1, not the stamped version'
+              description: 'coordinator runs kubectl 1.36.1 for over two days while homelab master stamps a different version (`version_set_pin_info{tool="kubectl"}`, from version-sets/devbox.lock). A cluster consumer has not rebuilt from the stamp (check its build-image run and deploy-pin PR); a jail/* consumer is the host-built seat — rebuild it.'
+
+  # ── The seat upgrades mid-window: the newest session's version wins at once ─────────────────────
+  # 2.1.281 sessions until 2h, then 2.1.291 sessions. A plain last_over_time[3d] would report BOTH
+  # for three days (a false split); the last-seen pick reports only 2.1.291 from the first new
+  # session on.
+  - interval: 4m
+    name: "a rebuilt seat reads as its new version immediately, not after the 3 d window"
+    input_series:
+      - series: 'claude_code_active_time_seconds_total{job="otel-collector",role="jail",jail_name="homelab",otel_scope_version="2.1.281",session_id="old"}'
+        values: "0+30x30"
+      - series: 'claude_code_active_time_seconds_total{job="otel-collector",role="jail",jail_name="homelab",otel_scope_version="2.1.291",session_id="new"}'
+        values: "_x31 0+30x60"
+    promql_expr_test:
+      - expr: version_set:running_info{consumer="jail/homelab"}
+        eval_time: 1h
+        exp_samples:
+          - labels: 'version_set:running_info{consumer="jail/homelab",tool="claude-code",version="2.1.281"}'
+            value: 1
+      - expr: version_set:running_info{consumer="jail/homelab"}
+        eval_time: 3h
+        exp_samples:
+          - labels: 'version_set:running_info{consumer="jail/homelab",tool="claude-code",version="2.1.291"}'
+            value: 1
+
+  # ── kubectl skew vs the LIVE fleet minor ──────────────────────────────────────────────────────
+  # Fleet 36. worker 37 (+1, inside the policy) silent; coordinator 34 (−2) fires after 1h.
+  - interval: 4m
+    name: "kubectl two minors from the fleet fires; one minor does not"
+    input_series:
+      - series: 'version_set_fleet_kubernetes_minor{job="version_set_probe",instance="",consumer="pins"}'
+        values: "36x40"
+      - series: 'version_set_kubectl_minor{job="version_set_probe",instance="",consumer="worker"}'
+        values: "37x40"
+      - series: 'version_set_kubectl_minor{job="version_set_probe",instance="",consumer="coordinator"}'
+        values: "34x40"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: VersionSetKubectlSkew
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: VersionSetKubectlSkew
+        exp_alerts:
+          - exp_labels: { consumer: coordinator, severity: warning, triage: none }
+            exp_annotations:
+              summary: 'coordinator kubectl is 2 minors away from the fleet'
+              description: 'The kubectl coordinator ships is 2 minors from the live apiserver — outside the supported ±1 skew. Cluster images take kubectl from the version-set stamp bounded by the fleet minor (homelab#2014); `jail` is homelab devbox.lock''s kubectl@latest.'
+
+  # ── Probe health: a frozen freshness gauge, and a probe that never pushed ──────────────────────
+  # The worker group's timestamp stops advancing at t=0 (value 0 = epoch start; promtool time()
+  # starts at 0 too, so age = eval time). >1d + for 30m → fires at 24h30m, not at 24h.
+  - interval: 4m
+    name: "a group that stops refreshing goes stale after a day"
+    input_series:
+      - series: 'version_set_probe_generated_timestamp_seconds{job="version_set_probe",instance="",consumer="worker"}'
+        values: "0x400"
+      - series: 'version_set_probe_generated_timestamp_seconds{job="version_set_probe",instance="",consumer="pins"}'
+        values: "0+240x400"
+    alert_rule_test:
+      - eval_time: 24h
+        alertname: VersionSetProbeStale
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: VersionSetProbeStale
+        exp_alerts:
+          - exp_labels: { consumer: worker, severity: warning, triage: dig }
+            exp_annotations:
+              summary: 'version-set-probe has not pushed consumer=worker for 1d 1h 0m 0s'
+              description: 'The 6-hourly CronWorkflow agent-coordinator/version-set-probe stopped refreshing this group, so the version-set verdicts are stale. `kubectl -n agent-coordinator get wf -l workflows.argoproj.io/cron-workflow=version-set-probe` and the newest pod log. A consumer REMOVED from agents/images.env leaves its group behind (the gateway has no TTL) — delete it: `curl -X DELETE http://prometheus-pushgateway.monitoring.svc:9091/metrics/job/version_set_probe/consumer/worker`.'
+      - eval_time: 25h
+        alertname: VersionSetProbeAbsent
+        exp_alerts: []
+
+  - interval: 4m
+    name: "no pins group at all is a blind belt after a day"
+    input_series:
+      - series: 'up{job="unrelated"}'
+        values: "1x400"
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: VersionSetProbeAbsent
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: VersionSetProbeAbsent
+        exp_alerts:
+          - exp_labels: { job: version_set_probe, consumer: pins, severity: warning, triage: dig }
+            exp_annotations:
+              summary: version-set-probe has never pushed its pins group
+              description: 'No `pins` group from agent-coordinator/version-set-probe for a day — the belt is blind. Check that the version-sets ArgoCD Application synced and the CronWorkflow ran.'
