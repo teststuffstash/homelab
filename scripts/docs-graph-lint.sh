@@ -97,7 +97,7 @@ if [ -f "$GLOSS" ]; then
   while IFS= read -r row; do
     [ -n "$row" ] || continue
     term=$(printf '%s' "$row" | awk -F'|' '{print $2}' | sed 's/\*\*//g; s/⚓//g; s/^ *//; s/ *(.*//; s/ *$//')
-    homerel=$(printf '%s' "$row" | awk -F'|' '{print $4}' | grep -oE '\]\([^)#]*\.md' | head -1 | sed 's/^](//')
+    homerel=$(printf '%s' "$row" | awk -F'|' '{print $4}' | grep -oE '\]\([^)#]*\.md' | sed -n 1p | sed 's/^](//')
     [ -n "$term" ] || continue
     [ -n "$homerel" ] || continue
     home=$(realpath -m "$ROOT/docs/$homerel"); home=${home#"$ROOT"/}

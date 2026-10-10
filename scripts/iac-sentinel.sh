@@ -228,7 +228,7 @@ evaluate() {
     fi
     krc=$?
     if [ $krc -ne 0 ]; then
-      nfail="$(printf '%s' "$kout" | grep -oE 'fail: [0-9]+' | grep -oE '[0-9]+' | head -1)"
+      nfail="$(printf '%s' "$kout" | grep -oE 'fail: [0-9]+' | grep -oE '[0-9]+' | sed -n 1p)"
       if [ -z "$nfail" ]; then
         # homelab#1134 — the gitleaks discrimination, ported: kyverno exiting non-zero WITHOUT a
         # `fail: N` summary is the ENGINE erroring (a broken binary, a flag change, a loader
@@ -243,11 +243,11 @@ evaluate() {
       else
         VIOLATIONS=$((VIOLATIONS + nfail))
         log "[$repo#$pr@$ref] VIOLATION kyverno (${nfail} failing):"
-        printf '%s\n' "$kout" | grep -E "fail|→|message" | grep -v "as audit warning" | head -20 | sed 's/^/    /'
+        printf '%s\n' "$kout" | grep -E "fail|→|message" | grep -v "as audit warning" | sed -n 1,20p | sed 's/^/    /'
         metric "iac_sentinel_violations{repo=\"$repo\",pr=\"$pr\",rule=\"kyverno\"} ${nfail}"
       fi
     fi
-    nwarn="$(printf '%s' "$kout" | grep -oE 'warn: [0-9]+' | grep -oE '[0-9]+' | head -1)"
+    nwarn="$(printf '%s' "$kout" | grep -oE 'warn: [0-9]+' | grep -oE '[0-9]+' | sed -n 1p)"
     [ "${nwarn:-0}" -gt 0 ] 2>/dev/null && log "[$repo#$pr@$ref] kyverno AUDIT warnings: ${nwarn} (Audit policies — reported, not counted as violations)"
   fi
   t_kyverno=$(( $(now_ms) - t0 ))

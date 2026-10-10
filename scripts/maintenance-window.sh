@@ -334,7 +334,7 @@ cmd_open() {
   local out id
   out="$(bash "$ROOT/agents/seat-window.sh" "${args[@]}")" || { rm -rf "$pend"; exit 1; }
   printf '%s\n' "$out"
-  id="$(printf '%s' "$out" | sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' | head -1)"
+  id="$(printf '%s' "$out" | sed -n 's/^✓ window \([^ ]*\) open.*/\1/p' | sed -n 1p)"
   # No id means no slot key and nothing close could target: say so loudly rather than bank an
   # anonymous slot that every later no-`--id` call would have to guess about.
   if [ -z "$id" ] || [ -e "$STATE_DIR/$id" ]; then

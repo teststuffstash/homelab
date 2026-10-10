@@ -12,7 +12,7 @@ ADVICE="$(awk '/Re-grade the budget label if needed/{f=1} f{print} f&&/This RESE
           | tr '\n' ' ' | sed 's/  */ /g')"
 
 # The floor the advice declares for the row's label — the `floors at` clause naming it.
-README_FLOOR="$(printf '%s\n' "$ADVICE" | sed -n "s/.*\`${LABEL}\` floors at \`\([a-z]*\)\`.*/\1/p" | head -1)"
+README_FLOOR="$(printf '%s\n' "$ADVICE" | sed -n "s/.*\`${LABEL}\` floors at \`\([a-z]*\)\`.*/\1/p" | sed -n 1p)"
 
 # The floor `label_map` declares (the one home) — the round-trip's producer side.
 MAP_FLOOR="$(jq -r --arg l "agent-budget/${LABEL}" '.label_map[$l].tier_floor // "none"' "$LABEL_MAP")"
