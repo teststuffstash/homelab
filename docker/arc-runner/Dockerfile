@@ -12,6 +12,7 @@
 # iac-sentinel WorkflowTemplate, and the runner-image-prepull DaemonSet (every worker holds the 4.9 GiB
 # image before a pod asks — a first pull cost 429–909 s and failed a sentinel run, 2026-09-03).
 # Phase 2 (FU-015): a warm /nix store layer per devbox.lock closure.
+# The baked lock (FU-305, 2026-10-10): /opt/baked/<repo>/devbox.{json,lock} = the pair that realised.
 FROM ghcr.io/actions/actions-runner:2.338.0
 
 USER root
@@ -39,8 +40,9 @@ RUN curl -fsSL "https://github.com/jetify-com/devbox/releases/download/${DEVBOX_
       | tar -xz -C /usr/local/bin devbox \
  && chmod 0755 /usr/local/bin/devbox
 
-# /nix owned by runner (uid 1001) — required for the single-user install below
-RUN install -d -m 0755 -o runner -g runner /nix
+# /nix owned by runner (uid 1001) — required for the single-user install below; /opt/baked holds
+# each warmed closure's realised devbox.{json,lock} (warm-one — the baked lock, see the homelab layer)
+RUN install -d -m 0755 -o runner -g runner /nix /opt/baked
 
 USER runner
 ENV HOME=/home/runner
@@ -89,8 +91,14 @@ COPY --chown=runner:runner warm/sleep-iac/ /tmp/warm/sleep-iac/
 RUN warm-one sleep-iac
 COPY --chown=runner:runner warm/sleep-tracking/ /tmp/warm/sleep-tracking/
 RUN warm-one sleep-tracking
+# The homelab closure is REQUIRED (operator ruling 2026-10-10, FU-305 — the class-7 lock revert
+# wedge, #1991): the iac-sentinel pod runs its tools from /opt/baked/homelab/devbox.{json,lock}, never
+# master's, so a bad lock on master cannot stop the required `iac-sentinel` context from posting on
+# the PR that reverts it. A homelab lock that fails to realise reds THIS build (warm-one), and a
+# homelab fetch that staged nothing fails the `test` — no image ships without a realised homelab
+# lock. Accepted cost: the sentinel's tool versions lag master's lock until the next build+pin.
 COPY --chown=runner:runner warm/homelab/ /tmp/warm/homelab/
-RUN warm-one homelab && rm -rf /tmp/warm
+RUN warm-one homelab && test -f /opt/baked/homelab/devbox.lock && rm -rf /tmp/warm
 
 # Phase 3 (FU-015 / #518): warm the GitHub Actions archive cache so Set-up-job resolves
 # actions from the local tarballs instead of downloading from GitHub on every job.
