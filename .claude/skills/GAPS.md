@@ -30,6 +30,9 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       skill into a mechanical stage (no corpus, any seat) and a corpus-gated judgment stage
       (STUCK-MACHINE / agent/* ESCALATED-UNSEEN / agents FUs); the 2026-10-03 fu-sweep's
       "no-judgement scope" is the first sample of the split. Sighted 2026-10-10 (operator).
+      In flight: PR#2219 (a spike PR) carries the per-item SLICE rule in both skills, which
+      closes (a) and the wholesale preload; still open after it: the corpus-free mechanical
+      classes (Renovate et al.) named as such, and (b).
 
 ## handoff
 
