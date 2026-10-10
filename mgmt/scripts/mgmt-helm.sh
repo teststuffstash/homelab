@@ -42,7 +42,15 @@ HELM_EVIDENCE_ROOT="${MGMT_HELM_EVIDENCE_DIR:-/var/lib/mgmt/helm-evidence}"
 HELM_LEASE_NS="${MGMT_LEASE_NS:-agent-coordinator}"
 HELM_LEASE_LABEL="${MGMT_LEASE_LABEL:-homelab.teststuff.net/upgrade-lease}"
 HELM_SETTLE="${MGMT_HELM_SETTLE:-600}"          # after the apply (and the engine moves) before `after` is read
-HELM_ENGINE_TIMEOUT="${MGMT_HELM_ENGINE_TIMEOUT:-900}"   # per volume
+# Per engine move: how long the box WAITS for Longhorn's own convergence (currentImage == spec.image,
+# back to its old robustness) before it stops. Waiting is not acting: the box never retries, reverts or
+# touches the volume again — Longhorn's controllers do their own retrying, the box only reads. The datum
+# (the first substrate breakage record, docs/management-box.md §Helm release applies, 2026-10-10):
+# meta-garage-2 (1 replica, attached) was patched 17:47Z; its new replica failed `bind: address already
+# in use` on the volume's unix socket, Longhorn replaced it at 18:18:23Z and the volume converged by
+# itself ≈31 min after the patch — the old 900 s bound stopped the box at 15 min. 3600 s ≈ 2× the datum.
+HELM_ENGINE_TIMEOUT="${MGMT_HELM_ENGINE_TIMEOUT:-3600}"
+HELM_ENGINE_IMAGE_TIMEOUT="${MGMT_HELM_ENGINE_IMAGE_TIMEOUT:-900}"   # the new EngineImage reaching `deployed`
 HELM_BACKUP_TIMEOUT="${MGMT_HELM_BACKUP_TIMEOUT:-1800}"  # the Longhorn on-demand backups, all together
 # The names a helm roll of these releases structurally produces (the window graces them, silences nothing).
 HELM_DECLARED_ALERTS="${MGMT_HELM_DECLARED_ALERTS:-KubePodNotReady,KubeDeploymentReplicasMismatch,KubeDeploymentRolloutStuck,KubeDaemonSetRolloutStuck,KubeStatefulSetReplicasMismatch,KubeStatefulSetUpdateNotRolledOut,ArgoCDAppDegraded,ArgoCDAppOutOfSync,LonghornVolumeDegraded,TargetDown}"
@@ -238,16 +246,18 @@ helm_begin() {
 
 # ── 4 engines (longhorn) ─────────────────────────────────────────────────────────────────────────
 # helm_lh_engines <dir> <ns> <order csv> → rc 0 every v1 volume on the manager's engine image; rc 2 the
-# first volume that did not come back (its line in $d/engines.log) — the rest are left where they are.
+# first volume that did not come back within HELM_ENGINE_TIMEOUT (its line in $d/engines.log) — the rest
+# are left where they are. One patch per volume, then READS only: a transient failure Longhorn recovers
+# from inside the bound is a pass (logged with its wait), never a second patch.
 helm_lh_engines() {
-  local d="$1" ns="$2" order="$3" img v cls st t0 cur rob was
+  local d="$1" ns="$2" order="$3" img v cls st t0 cur rob was seen
   _hk -n "$ns" get ds longhorn-manager -o json >"$d/manager-ds.json" 2>/dev/null || { echo "manager DaemonSet unreadable" >>"$d/engines.log"; return 2; }
   img="$(lh_engine_image "$d/manager-ds.json")"
   [ -n "$img" ] || { echo "engine image unreadable from longhorn-manager" >>"$d/engines.log"; return 2; }
   # the new EngineImage must be deployed before a volume may move to it
   t0="$(_hnow)"
   until [ "$(_hk -n "$ns" get engineimages.longhorn.io -o json 2>/dev/null | jq -r --arg i "$img" '[.items[] | select(.spec.image == $i) | .status.state][0] // ""')" = deployed ]; do
-    [ $(( $(_hnow) - t0 )) -lt "$HELM_ENGINE_TIMEOUT" ] || { echo "engine image $img not deployed within ${HELM_ENGINE_TIMEOUT}s" >>"$d/engines.log"; return 2; }
+    [ $(( $(_hnow) - t0 )) -lt "$HELM_ENGINE_IMAGE_TIMEOUT" ] || { echo "engine image $img not deployed within ${HELM_ENGINE_IMAGE_TIMEOUT}s" >>"$d/engines.log"; return 2; }
     _hsleep 15
   done
   _hk -n "$ns" get volumes.longhorn.io -o json >"$d/engines-volumes.json" 2>/dev/null || { echo "volumes unreadable" >>"$d/engines.log"; return 2; }
@@ -258,20 +268,52 @@ helm_lh_engines() {
     was="$(jq -r --arg v "$v" '.items[] | select(.metadata.name == $v) | .status.robustness // "?"' "$d/engines-volumes.json")"
     _hk -n "$ns" patch volumes.longhorn.io "$v" --type merge -p "{\"spec\":{\"image\":\"$img\"}}" >/dev/null 2>&1 \
       || { echo "FAIL $v ($cls, $st): patch refused" >>"$d/engines.log"; return 2; }
-    t0="$(_hnow)"
+    t0="$(_hnow)"; seen=""
     while :; do
       cur="$(_hk -n "$ns" get volumes.longhorn.io "$v" -o jsonpath='{.status.currentImage}|{.status.robustness}' 2>/dev/null)"
       rob="${cur#*|}"; cur="${cur%%|*}"
+      # a read that is not yet there is recorded once per distinct shape (the breakage data), never acted on
+      case " $seen " in *" ${cur##*:}/${rob:-?} "*) ;; *) [ "$cur" = "$img" ] && [ "$rob" = healthy ] || seen="${seen:+$seen }${cur##*:}/${rob:-?}" ;; esac
       # back where it was: on the new image, and healthy again if it was healthy (a detached volume
       # reads `unknown` before and after)
       if [ "$cur" = "$img" ] && { [ "$was" != healthy ] || [ "$rob" = healthy ]; }; then
-        echo "ok   $v ($cls, $st) → $img [$was → $rob] $(( $(_hnow) - t0 ))s" >>"$d/engines.log"; break
+        echo "ok   $v ($cls, $st) → $img [$was → $rob] $(( $(_hnow) - t0 ))s${seen:+ (converged by itself after: $seen)}" >>"$d/engines.log"; break
       fi
       [ $(( $(_hnow) - t0 )) -lt "$HELM_ENGINE_TIMEOUT" ] || { echo "FAIL $v ($cls, $st): image=$cur robustness=$rob after ${HELM_ENGINE_TIMEOUT}s" >>"$d/engines.log"; return 2; }
       _hsleep 10
     done
   done <"$d/engines.plan"
   return 0
+}
+
+# ── resume: a chart already applied, engines left behind (FU-301, operator 2026-10-10) ───────────
+# helm_lh_resume <policy> <root> <sha> → rc 0 nothing to resume / the bracket ran and CONFIRMED; rc 2 it
+# STOPPED; rc 1 a read failed (the caller logs it, the next tick re-reads). Called by mgmt-apply on a tick
+# whose master is already applied. When the longhorn row exists, no STOP marker stands and some v1 volume
+# is not on the manager's `--engine-image`, the box runs the SAME bracket with no apply: window, lease,
+# verdict baseline, before → the ordered engine moves → verdict. This is how a STOP is resumed once a human
+# has read it and cleared it (§Helm release applies "Clearing a stop") — the box itself never retries: a
+# STOP marker keeps this path shut until a person removes it.
+helm_lh_resume() {
+  local pol="$1" root="$2" sha="$3" row cap order ns ver img n d st
+  row="$(mgmt_helm_row "$pol" "$root" helm_release.longhorn)" || return 1
+  [ -n "$row" ] || return 0
+  [ -s "$ADIR/helm-stopped" ] && return 0
+  st="$(_hstate)"
+  ns="$(jq -r '.resources[]? | select(.type == "helm_release" and .name == "longhorn") | .instances[0].attributes.namespace // empty' "$st" 2>/dev/null)"
+  ver="$(jq -r '.resources[]? | select(.type == "helm_release" and .name == "longhorn") | .instances[0].attributes.metadata.version // empty' "$st" 2>/dev/null)"
+  [ -n "$ns" ] && [ -n "$ver" ] || return 1
+  d="$(mktemp -d)"
+  _hk -n "$ns" get ds longhorn-manager -o json >"$d/ds.json" 2>/dev/null && _hk -n "$ns" get volumes.longhorn.io -o json >"$d/v.json" 2>/dev/null \
+    || { rm -rf "$d"; return 1; }
+  img="$(lh_engine_image "$d/ds.json")"; [ -n "$img" ] || { rm -rf "$d"; return 1; }
+  n="$(lh_engine_plan "$d/v.json" "$img" "x" | grep -c .)"; rm -rf "$d"
+  [ "$n" -gt 0 ] || return 0
+  cap="$(jq -r '.cap_min // 120' <<<"$row")"; order="$(jq -r '(.engine_order // []) | join(",")' <<<"$row")"
+  d="$HELM_EVIDENCE_ROOT/$(date -u +%Y%m%dT%H%M%SZ)-box-longhorn-engines-$ver"
+  log "helm: resume — $n v1 volume(s) not on ${img##*:} under longhorn $ver; engine moves only, no apply"
+  helm_begin "$d" longhorn longhorn "$ns" "$sha" "$ver" "$ver" "$cap" || return 1
+  helm_end "$d" 0 "$order"
 }
 
 # ── 5 end ────────────────────────────────────────────────────────────────────────────────────────

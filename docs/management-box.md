@@ -644,6 +644,9 @@ window make both records worthless, and a second release would need its own leas
    moves no volume. The box moves them one at a time to the manager's `--engine-image`, least valuable
    disk class first (`engine_order`: fast → none → bulk → slow-bulk → std; an unnamed class last),
    each waited to the new image and back to its old robustness; the first that does not come back stops it.
+   **The wait is bounded at 60 min per volume** (`HELM_ENGINE_TIMEOUT`, ≈2× the first breakage record
+   below): one patch, then reads only — Longhorn's own retry converging inside the bound is a pass,
+   logged with what the box saw meanwhile; waiting on the substrate is not the box acting on it.
 5. **Verdict** (`helm_cluster_verdict`): the evidence `verdict` verb AND the box verdict (FU-302),
    both Prometheus-free. The evidence rules compare after against before: every release `deployed`;
    the applied release rolled (observed = generation, ready = updated = desired) with every pod Ready;
@@ -667,6 +670,21 @@ revert PR, ever; counted each tick → the second arm of `MgmtHelmApplyStopped` 
 mid-bracket and never wrote a verdict). **Clearing a stop**: read `summary.txt`, then `rm
 /var/lib/mgmt/apply/helm-stopped`, `kubectl -n agent-coordinator delete cm upgrade-lease-tofu-helm-<release>`,
 `devbox run maint -- close --id <window>`. The unit's `TimeoutStartSec` is 5 h for this bracket.
+**Resume.** A STOP inside the engine moves leaves the chart applied and volumes on the old engine. On a
+tick whose master is already applied, with the longhorn row present, no marker and no window holding it,
+the loop runs the same bracket with no apply (`helm_lh_resume`: window, lease, verdict baseline, the
+remaining moves in order, verdict) — so clearing the stop IS the resume. The box never resumes itself
+while the marker stands.
+
+**Breakage records — the data the 2026-10-02 ruling waits for** (one dated line each; the record is the
+detail):
+
+- **2026-10-10, longhorn 1.12.0 → 1.12.1, first engine move** — `meta-garage-2` (garage ns, 1 replica,
+  attached, no disk selector) patched 17:47Z; its new replica died at 17:48:23Z with `bind: address
+  already in use` on the volume's unix socket; the box's 900 s bound STOPPED it (18:28Z verdict, nothing
+  reverted); Longhorn replaced the replica at 18:18:23Z and converged by itself (≈31 min) — read at
+  19:10Z: engine + replica v1.12.1, healthy. Result: the bound became 60 min (this section, item 4).
+  Record: `s3://helm-evidence/20261010T174318Z-box-longhorn-1.12.1/` (`breakage.txt` beside it).
 
 ### The box verdict — the box's own read of the cluster (FU-302, 2026-10-10)
 
@@ -745,6 +763,8 @@ even when every check is green.
 | Plan-on-PR sentinel, external roots read-only (github, cloudflare) | plan only, `apply: false` | 2026-09-13 | FU-237/FU-238; cloudflare plans with the read-only `cloudflare-mgmt-read` (verified on the box 2026-09-22) |
 | Talos PKI (rotate-ca) | human | — (seat-run FROM the box, 2026-09-22) | FU-264; not a box capability |
 | ci-runner VM replace (`runner-maintenance`) | human | not yet tested | attended verb only — §Non-Talos VMs below |
+| Helm release apply, argo-cd + argocd-apps (`apply_helm`, forward only — §Helm release applies) | policy rows (operator, #2450) | 2026-10-10 | argocd-apps 2.0.6 (#2458): applied, STOPPED on an out-of-cone alert (→ #2459, then the FU-302 swap #2474); argo-cd 9.5.22 (#2461): 7/7 rolled, CONFIRMED (verdict half finished by hand after an activation killed the tick → #2466); **argo-cd 9.7.1 (#2464, Renovate): unattended end to end, CONFIRMED 17:30Z**. Records `s3://helm-evidence/` |
+| Helm release apply, longhorn (restore point + ordered engine moves) | policy row (#2467) | 2026-10-10 (STOP path) | longhorn 1.12.1 (#2463, Renovate): restore point (3 Backups + 4 CNPG) → chart applied, 12/12 pods rolled, BGP/ArgoCD/robustness clean → the FIRST engine move (`meta-garage-2`, 1 replica, attached) never left v1.12.0 in 900 s (replica `bind: address already in use` on its unix socket) → **STOPPED**, nothing reverted; Longhorn converged by itself in ≈31 min — the first breakage record (§Helm release applies) → the 60-min bounded wait + resume (#2479). CONFIRM not yet seen on this release |
 | The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
 
 ### Non-Talos VMs: the runner verb (2026-10-08)

@@ -143,7 +143,20 @@ PROM
 if [ -z "$last" ]; then
   log "first run — baseline set at ${sha:0:8}, nothing applied"; stamp "$sha"; exit 0
 fi
-[ "$sha" = "$last" ] && { log "master at ${sha:0:8} = applied — nothing to do"; exit 0; }
+if [ "$sha" = "$last" ]; then
+  # FU-301 — a longhorn chart applied with engines left behind (a cleared STOP): resume the engine moves
+  # under the same bracket (mgmt_helm.sh helm_lh_resume). Windows hold it like any apply; off the lock.
+  if [ "${MGMT_SHADOW:-0}" != 1 ] && POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")"; then
+    if [ -n "$(mgmt_helm_row "$POL" main helm_release.longhorn 2>/dev/null)" ] && [ ! -s "$ADIR/helm-stopped" ]; then
+      if held="$(mgmt_apply_window_gate)"; then
+        flock -u 9; helm_lh_resume "$POL" main "$sha"; hr=$?; flock -w 600 9 || true
+        case $hr in 1) log "helm: resume read failed — next tick re-reads" ;; 2) log "helm: resume STOPPED (marker written)" ;; esac
+      fi
+    fi
+    rm -f "$POL"
+  fi
+  log "master at ${sha:0:8} = applied — nothing to do"; exit 0
+fi
 [ "$sha" = "$refused" ] && { log "master at ${sha:0:8} was REFUSED — waiting for a new commit or a human apply"; exit 0; }
 
 [ "${MGMT_SHADOW:-0}" = 1 ] || rm -f "$ADIR/apply-unexercised"   # a new master sha re-judges; the old verdict's attribution goes with it
