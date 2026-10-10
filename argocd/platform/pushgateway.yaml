@@ -1,5 +1,7 @@
 # prometheus-pushgateway — the sink for goose-worker run metrics (FU-057 §B1: worker cost+outcome
-# → Prometheus, since goose has no OTLP rail like the claude-code roles). Wave 6, same as
+# → Prometheus, since goose has no OTLP rail like the claude-code roles), and since 2026-10-10 a
+# catalogued push target for stack batch jobs (SERVICES.md; consumer rules in
+# docs/patterns/observability.md §Batch jobs push). Wave 6, same as
 # otel-collector/github-exporter: the monitoring CRDs/namespace come from tofu's
 # kube-prometheus-stack, outside ArgoCD. No image/chart to release — the deployable unit is these
 # manifests, so this repo's sync IS the deploy.

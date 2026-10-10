@@ -41,6 +41,39 @@ subscription's worth of TSDB), set `honorLabels: true` only when the app emits l
 platform's relabeling would otherwise overwrite, and name the job after the app (the `job`
 label is what dashboards and rules key on).
 
+### Batch jobs push to the Pushgateway instead
+
+A pod that lives for seconds (a CronWorkflow step, a nightly job) is rarely caught by a
+scrape, so it **pushes** its gauges to the platform Pushgateway, and Prometheus scrapes the
+gateway (`honorLabels: true`, so the pushed `job` and grouping labels survive):
+`http://prometheus-pushgateway.monitoring.svc.cluster.local:9091`, in-cluster only. The
+gateway persists to a Longhorn PVC and **serves the last push forever**: there is no TTL.
+That shapes every rule below.
+
+- **Fixed grouping key, PUT to replace.** `PUT /metrics/job/<job>/<key>/<value>` with a key
+  that names the thing measured (a bucket, a pipeline), never the run. A per-run key is a group
+  that never goes away: FU-182 is the platform's own per-ride groups piling up.
+- **`job` starts with the stack's name** (`oracle_retention_ledger`). `agent_*` belongs to the
+  platform. Nothing enforces this; see the integrity note below.
+- **Byte-identical `# HELP`/`# TYPE` on every push.** Two groups with different HELP text for
+  one metric make the gateway log on every scrape (homelab#811: 48.7 GiB/day of Loki ingest).
+- **Push a freshness gauge in the group** (`<job>_generated_timestamp_seconds`) and alert on
+  its age. The gateway re-serves the last value, so a job that stopped running still looks
+  healthy without one.
+- **Push every label combination, zeros included**, so "absent" means "not pushed" and is
+  never confused with zero.
+- **Measurements only.** Digests, run ids and other identities stay in the job's own record (an
+  S3 object, a database row). Each would create a new series.
+- **Write-only for the stack.** Read the numbers through Prometheus, never by GETting the
+  gateway, and never let a dispatch, gating or routing decision depend on them (ADR-108).
+- **Egress is the stack's.** The job's network policy needs a rule to `monitoring` /
+  `app: prometheus-pushgateway` on 9091/TCP. Like any egress, it is declared in the stack's `-iac`.
+
+**Integrity: the gateway has no auth.** Anything that can reach port 9091 can overwrite or delete
+any group, including the platform's `agent_run*` groups, which `agents/goal-budget.sh` reads
+as the goal-budget spend ledger. Treat pushed series as best-effort observability, and do not
+push anything you would not want a neighbour to be able to overwrite.
+
 ## 2. Dashboards — a labelled ConfigMap, in your folder
 
 The Grafana sidecar watches **every namespace** (`sidecar.dashboards.searchNamespace: ALL`) for
@@ -127,8 +160,17 @@ Prometheus read; a LAN VIP is a `world` destination under the egress policy).
 
 ## What this page does not promise
 
+- **Retention is best-effort, about one month.** The config says `retention: 31d` *or*
+  `retentionSize: 45GB` (`argocd/platform/values/kube-prometheus-stack.yaml`), and the size
+  cap is what binds: on 2026-10-10 the oldest sample was 25 days old, with ~42 GB of blocks
+  and ~500k head series. The window shrinks whenever series grow, so read the live
+  `(time() - prometheus_tsdb_lowest_timestamp_seconds) / 86400`, never the `31d`.
+- **There is no long-term metrics store.** Anything that must outlive that window (a business
+  number, a ledger, a yearly trend) keeps its record in the stack's own storage (S3, Postgres),
+  and Prometheus holds only the recent copy. ADR-108 names the shape if one is ever built: a
+  *separate* Prometheus for selected series, never the observability instance.
 - Retention, scrape-interval floors and TSDB sizing are platform capacity, not a stack
-  contract — a stack that needs more asks through the capability-request lane
+  contract. A stack that needs more asks through the capability-request lane
   ([`../agents/platform-and-stacks.md`](../agents/platform-and-stacks.md) §Cross-stack demand).
 - The AgentStack claim renders only the SLO probe; monitors, rules and dashboards stay chart
   content on purpose (they must deploy where homelab is absent).
