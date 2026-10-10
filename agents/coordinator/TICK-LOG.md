@@ -13001,3 +13001,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Operator rulings:** window ownership by SILENCE (claim/hand-off, leases, close tail, responder grace; HA muting
   accepted — operator watches Alertmanager in windows) → FU-230, subagent `feat/window-claims-by-silence`; dig
   dedup shape fix → FU-249 (a), subagent `fix/deep-dig-prior-shape`; reader = `/board-sweep` now (#2416), a retro-like batch reader later.
+
+## 2026-10-10 midday — nix-registry fix pinned, Pushgateway catalogued, homelab key cap read (seat)
+
+- sleep-tracking#67 chain: agent-base 2026.10.9-g4bd7c9b9b57d (contains agent-runtime ea009fca) pinned by
+  #2422; launcher pin #2420 live. Proof NOT taken — zero homelab worker rides since 10-07 18:27Z, so zero
+  nixos.org drops since is vacuous. Pickup in meta-state.
+- oracle-fleet#835 precondition: #2425 merged — SERVICES.md Pushgateway row + observability pattern §Batch
+  jobs push (consumer rules, no-auth caveat: goal-budget.sh reads agent_run* from it) + Prometheus retention
+  stated (best-effort ~1 month, size-capped: 25.2 d / 42 GB of 45 GB on 10-10; no long-term store — operator
+  will bump the disk when needed, nothing filed).
+- OpenRouterKeyBudgetLow = homelab/homelab-openrouter, $5 weekly cap spent 10-05 18:48Z→10-06 07:00Z by ~19
+  worker rides (Goal #2273 children + requeues); resets 2026-10-12 00:00Z. Operator: rail falls over to the
+  subscription — not chased.
