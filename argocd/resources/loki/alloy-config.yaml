@@ -114,18 +114,31 @@ data:
         //     that PRECEDE the `Oops:` line (#GP, and the NULL-deref/paging class). Kept separately
         //     because the stream is batched and the LAST line shipped before a panic-reboot is
         //     often the only one that arrives.
-        //   • `Call Trace:`   — the backtrace marker, i.e. the line AFTER the header. Same reason,
-        //     from the other side: the incident shipped the oops only 3 times out of 7 because the
-        //     box rebooted mid-batch. This is the NOISIEST entry — a non-fatal WARN_ON(), a lockdep
-        //     splat or a hung-task dump also prints it — and that is accepted deliberately: the
-        //     alert says "the kernel printed a fault dump", and the annotation sends the reader to
-        //     the lines. A missed oops costs six days (it did); a WARN_ON costs one read.
+        //   • `RIP: 0010:`    — the KERNEL-mode instruction pointer of the faulting frame, i.e. a
+        //     line AFTER the header (the incident's own third line: "RIP: 0010:__page_table_check_
+        //     zero+0xfb/0x130"). Same reason, from the other side: the incident shipped the oops
+        //     only 3 times out of 7 because the box rebooted mid-batch. It also catches a non-fatal
+        //     WARN_ON() and a soft-lockup dump (both print kernel-mode regs) — accepted
+        //     deliberately: the alert says "the kernel printed a fault dump", and the annotation
+        //     sends the reader to the lines. A missed oops costs six days (it did); a WARN_ON costs
+        //     one read. x86-64 only (`0010` is __KERNEL_CS), which is every node in machines.yaml.
+        //     ⚠ It REPLACED `Call Trace:` (2026-10-10, S9): every memcg OOM-kill prints a full
+        //     dump_stack() with `Call Trace:` and the firings of 10-01 (wk-04), 10-02 (nx-01) and
+        //     10-06 (wk-04, a PostSync Job's kubectl at its 128 Mi limit) were all that — not
+        //     oopses. Lines are stateless here (no "the line 3 above said invoked oom-killer"), so
+        //     the marker itself had to change: an OOM dump taken on a USER page fault prints
+        //     `RIP: 0033:` (user CS) and one from a kthread prints no RIP at all (the user-fault
+        //     case is the real 10-06 dump, pinned in kernel-oops.kmsg-test). Residual: an OOM charged inside
+        //     a KERNEL-mode fault (copy_to_user faulting a page in) prints `RIP: 0010:` and still
+        //     counts. OOM kills are not this belt's to report — PodSigkilled (exit 137) is.
+        //     Also lost with `Call Trace:`: hung-task and lockdep dumps (no regs), which this belt
+        //     never meant to page on.
         // DELIBERATELY ABSENT: `Kernel panic - not syncing`. A userspace reader can never ship the
         // panic itself (panic_on_oops=1 + panic=10 → the box is in POST), so matching it would
         // advertise a coverage this path does not have — the console half of FU-247 is what covers
         // panics, install-time.
         stage.regex {
-          expression = "(?P<kernel_oops>kernel BUG at |Oops: |general protection fault|BUG: unable to handle kernel|Call Trace:)"
+          expression = "(?P<kernel_oops>kernel BUG at |Oops: |general protection fault|BUG: unable to handle kernel|RIP: 0010:)"
         }
 
         // `source` gates the increment on the regex having matched (no extracted key → no
