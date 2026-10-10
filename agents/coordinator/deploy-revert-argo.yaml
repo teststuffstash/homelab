@@ -454,7 +454,7 @@ spec:
             CUTOFF="${CUTOFF:-$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)}"
             CAND="$(gh pr list --repo "$SLUG" --state merged --limit 10 \
               --json number,title,headRefName,mergedAt,mergeCommit,files \
-              --jq "[.[] | select((.headRefName | startswith(\"revert-\")) | not) | select(.mergedAt >= \"$CUTOFF\") | select(any(.files[]?.path; startswith(\".github/workflows/\")) or ((.files | length) > 0 and all(.files[].path; endswith(\"devbox.lock\"))))] | sort_by(.mergedAt) | last | select(.)" 2>/dev/null || true)"
+              --jq "[.[] | select((.headRefName | startswith(\"revert-\")) | not) | select(.mergedAt >= \"$CUTOFF\") | select(any(.files[]?.path; startswith(\".github/workflows/\")) or ((.files | length) > 0 and all(.files[].path; endswith(\"devbox.lock\") or . == \"mgmt/nixos/flake.lock\")))] | sort_by(.mergedAt) | last | select(.)" 2>/dev/null || true)"
             [ -n "$CAND" ] || { echo "→ $SLUG: NO workflow-touching or lock-only merge in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
 
             PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
@@ -462,9 +462,11 @@ spec:
             TITLE="$(printf '%s' "$CAND" | jq -r .title)"
             echo "→ candidate: $SLUG#$PRNUM @ ${SHA:0:8} ($TITLE)"
             # <<<REPLAY:workflow-pin-revert-candidate<<<
-            # The lock shape: every file a devbox.lock → pin-only by construction (header). Decided
+            # The lock shape: every file a devbox.lock — or the box flake's lock, which the weekly
+            # devbox-update PR carries since 2026-10-10 (class 13, operator ruling; pin-only-lint (j)
+            # holds it to a re-resolve) → pin-only by construction (header). Decided
             # from the candidate's own file list, never inferred from the branch name.
-            IS_LOCK="$(printf '%s' "$CAND" | jq -r 'if (.files | length) > 0 and all(.files[].path; endswith("devbox.lock")) then 1 else 0 end')"
+            IS_LOCK="$(printf '%s' "$CAND" | jq -r 'if (.files | length) > 0 and all(.files[].path; endswith("devbox.lock") or . == "mgmt/nixos/flake.lock") then 1 else 0 end')"
             LOCK_FILES="$(printf '%s' "$CAND" | jq -r '[.files[].path] | join(" ")')"
 
             # Ledger check (now that we have the SHA).
@@ -551,7 +553,9 @@ spec:
                 REVERTED_LOCKS="$REVERTED_LOCKS $_moved"
               done
               REVERTED_LOCKS="$(printf '%s\n' $REVERTED_LOCKS | grep . | sort -u | tr '\n' ' ' | sed 's/ $//' || true)"
-              [ -n "$REVERTED_LOCKS" ] || { echo "→ $SLUG#$PRNUM moved no package version — nothing to revert (report-only)"; exit 0; }
+              # the box flake's lock carries no `packages` (no memory key) but IS a move worth reverting
+              case " $LOCK_FILES " in *" mgmt/nixos/flake.lock "*) _flake=1 ;; *) _flake=0 ;; esac
+              [ -n "$REVERTED_LOCKS" ] || [ "$_flake" = 1 ] || { echo "→ $SLUG#$PRNUM moved no package version — nothing to revert (report-only)"; exit 0; }
               echo "→ reverted lock versions: $REVERTED_LOCKS"
             fi
             git checkout -b "$BR"

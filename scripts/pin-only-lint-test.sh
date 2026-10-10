@@ -5,7 +5,7 @@
 #
 # Every expected verdict below is derived in its comment FROM the rule in pin-only-lint.sh's
 # header ((a) grammar, (b) pairing, (c) first-party, (d) upstream SHA, (e)–(h) the four revert
-# memories) and the two older shapes' PIN_LINE — never from running the script. A failing case must fail for ITS rule: the check
+# memories, (j) the box flake re-resolve) and the two older shapes' PIN_LINE — never from running the script. A failing case must fail for ITS rule: the check
 # greps the script's stderr for the rule's own keyword, so a case that reds for the wrong reason
 # is a FAIL here too.
 set -uo pipefail
@@ -97,6 +97,27 @@ printf 'provider "registry.opentofu.org/hashicorp/kubernetes" {\n  version     =
 # check (i)'s home: a devbox.lock with two packages (the version line alone does not say whose it is).
 printf '{"packages":{"jq@latest":{"version":"1.8.1"},"curl@latest":{"version":"8.17.0"}}}\n' >"$R/devbox.lock"
 printf 'resource "kubernetes_deployment" "x" {\n  spec {\n    template {\n      spec {\n        container {\n          name  = "dind"\n          image = "docker:27-dind"\n        }\n      }\n    }\n  }\n}\n' >"$R/tofu/x.tf"
+# check (j)'s home: the box flake lock — nixpkgs (github, with a ref) + disko following it, the real
+# mgmt/nixos/flake.lock's shape (narHash values shortened; the lint never reads them).
+mkdir -p "$R/mgmt/nixos"
+cat >"$R/mgmt/nixos/flake.lock" <<'EOF2'
+{
+  "nodes": {
+    "disko": {
+      "inputs": { "nixpkgs": ["nixpkgs"] },
+      "locked": { "lastModified": 1781152676, "narHash": "sha256-AAA=", "owner": "nix-community", "repo": "disko", "rev": "ff8702b4de27f72b4c78573dfb89ec74e36abdf1", "type": "github" },
+      "original": { "owner": "nix-community", "repo": "disko", "type": "github" }
+    },
+    "nixpkgs": {
+      "locked": { "lastModified": 1789114715, "narHash": "sha256-BBB=", "owner": "NixOS", "repo": "nixpkgs", "rev": "21a67dc470149f337cecafbe965d8d252a390518", "type": "github" },
+      "original": { "owner": "NixOS", "ref": "nixos-26.05", "repo": "nixpkgs", "type": "github" }
+    },
+    "root": { "inputs": { "disko": "disko", "nixpkgs": "nixpkgs" } }
+  },
+  "root": "root",
+  "version": 7
+}
+EOF2
 git -C "$R" add -A && git -C "$R" commit -q -m base
 BASE="$(git -C "$R" rev-parse HEAD)"
 
@@ -245,6 +266,22 @@ case_ lock-other-name-same-version ok "reverts_lock_ jq@8.22.0" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 case_ lock-memory-unreadable 'cannot read the merged revert-lock-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
+# (j) the box flake lock may only RE-RESOLVE (pin-only-lint.sh header (j)): moving nixpkgs' locked
+# rev/narHash/lastModified on the SAME owner/repo passes; a locked owner swapped to a fork is refused
+# (locked source ≠ original); an `original` edit (the ref) and an added input are refused (the node
+# shape moved — a flake.nix edit); an unparseable head fails closed (rc 2).
+FL=mgmt/nixos/flake.lock
+case_ flake-relock ok "" \
+  "jq '.nodes.nixpkgs.locked |= (.rev = \"7c8764b7c7b09b34f632464276218ef9090eaa11\" | .narHash = \"sha256-CCC=\" | .lastModified = 1791600000)' $FL > x && mv x $FL"
+case_ flake-fork-refused 'is not its original' "" \
+  "jq '.nodes.nixpkgs.locked.owner = \"evil\"' $FL > x && mv x $FL"
+case_ flake-original-ref-refused 'only locked may move' "" \
+  "jq '.nodes.nixpkgs.original.ref = \"nixos-unstable\"' $FL > x && mv x $FL"
+case_ flake-input-added-refused 'only locked may move' "" \
+  "jq '.nodes.extra = .nodes.disko | .nodes.root.inputs.extra = \"extra\"' $FL > x && mv x $FL"
+case_ flake-follows-rewired-refused 'only locked may move' "" \
+  "jq '.nodes.disko.inputs = {}' $FL > x && mv x $FL"
+case_ flake-unparseable 'cannot parse' "" "echo '{not json' > $FL"
 # (h) the reverted-chart memory: an unguarded chart Application's targetRevision bump passes on an
 # empty memory, is REFUSED when a merged revert-chart-* PR names that chart@version, passes when
 # the memory names the same chart at ANOTHER version or ANOTHER chart at the same version (the key

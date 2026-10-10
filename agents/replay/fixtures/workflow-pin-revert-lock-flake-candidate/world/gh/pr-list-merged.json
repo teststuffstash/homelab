@@ -1,0 +1,50 @@
+[
+{
+"number": 2502,
+"title": "mgmt: flake input rewire",
+"headRefName": "fix/mgmt-flake",
+"mergedAt": "2026-10-12T03:50:00Z",
+"mergeCommit": {
+"oid": "dddddddddddddddddddddddddddddddddddddddd"
+},
+"files": [
+{
+"path": "mgmt/nixos/flake.lock"
+},
+{
+"path": "mgmt/nixos/flake.nix"
+}
+]
+},
+{
+"number": 2501,
+"title": "chore: devbox update (align toolchain lock)",
+"headRefName": "devbox-update",
+"mergedAt": "2026-10-12T03:30:00Z",
+"mergeCommit": {
+"oid": "fedcba9876543210fedcba9876543210fedcba98"
+},
+"files": [
+{
+"path": "devbox.lock"
+},
+{
+"path": "mgmt/nixos/flake.lock"
+}
+]
+},
+{
+"number": 2500,
+"title": "chore: devbox update (sleep-iac shape, lock only)",
+"headRefName": "devbox-update-old",
+"mergedAt": "2026-10-12T03:10:00Z",
+"mergeCommit": {
+"oid": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+},
+"files": [
+{
+"path": "devbox.lock"
+}
+]
+}
+]

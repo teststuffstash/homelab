@@ -41,8 +41,8 @@
       ],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-10-10T16:05:50Z",
-      "last_proven_pr": 2454,
+      "last_proven": "2026-10-10T17:34:14Z",
+      "last_proven_pr": 2455,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 4
@@ -58,8 +58,8 @@
       ],
       "human_rows": 0,
       "id": 4,
-      "last_proven": "2026-10-10T17:16:53Z",
-      "last_proven_pr": 2464,
+      "last_proven": "2026-10-10T17:38:28Z",
+      "last_proven_pr": 2463,
       "name": "Helm charts, tofu-managed",
       "owner_may_leave": false,
       "rows": 3
@@ -193,13 +193,10 @@
     },
     {
       "complete": false,
-      "gap_cells": [
-        "proposer"
-      ],
-      "gap_rows": 2,
+      "gap_cells": [],
+      "gap_rows": 0,
       "human_cells": [
-        "canary",
-        "merge_gate"
+        "canary"
       ],
       "human_rows": 0,
       "id": 13,
@@ -230,14 +227,14 @@
         "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.29.0"
       },
       "3": {
-        "merged_at": "2026-10-10T16:05:50Z",
-        "pr": 2454,
-        "title": "deploy: agent-coordinator 2026.10.10-gef55ef1372b6"
+        "merged_at": "2026-10-10T17:34:14Z",
+        "pr": 2455,
+        "title": "deploy: agent-base 2026.10.10-g5d8d18d24ebb"
       },
       "4": {
-        "merged_at": "2026-10-10T17:16:53Z",
-        "pr": 2464,
-        "title": "Update Helm release argo-cd to v9.7.1"
+        "merged_at": "2026-10-10T17:38:28Z",
+        "pr": 2463,
+        "title": "Update Helm release longhorn to v1.12.1"
       },
       "5": {
         "merged_at": "2026-10-10T11:52:34Z",
@@ -382,9 +379,9 @@
         "title": "chore(deps): update registry docker tag to v3.1.2"
       },
       "3:agent-base": {
-        "merged_at": "2026-10-10T14:46:19Z",
-        "pr": 2448,
-        "title": "deploy: agent-base 2026.10.10-gecc27ef3a872"
+        "merged_at": "2026-10-10T17:34:14Z",
+        "pr": 2455,
+        "title": "deploy: agent-base 2026.10.10-g5d8d18d24ebb"
       },
       "3:agent-coordinator": {
         "merged_at": "2026-10-10T16:05:50Z",
@@ -400,6 +397,11 @@
         "merged_at": "2026-10-10T17:16:53Z",
         "pr": 2464,
         "title": "Update Helm release argo-cd to v9.7.1"
+      },
+      "4:longhorn": {
+        "merged_at": "2026-10-10T17:38:28Z",
+        "pr": 2463,
+        "title": "Update Helm release longhorn to v1.12.1"
       },
       "5:Infisical/infisical@tofu/infisical": {
         "merged_at": "2026-09-27T12:28:32Z",
@@ -1012,9 +1014,9 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:agent-base",
-      "last_proven": "2026-10-10T14:46:19Z",
+      "last_proven": "2026-10-10T17:34:14Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.10.10-gecc27ef3a872",
+      "version": "`AGENT_BASE_IMAGE`=2026.10.10-g5d8d18d24ebb",
       "where": [
         "agents/images.env"
       ]
@@ -1103,9 +1105,9 @@
       "class": 4,
       "gap_columns": [],
       "key": "4:longhorn",
-      "last_proven": null,
+      "last_proven": "2026-10-10T17:38:28Z",
       "name": "longhorn",
-      "version": "1.12.0",
+      "version": "1.12.1",
       "where": [
         "tofu/longhorn.tf"
       ]
@@ -1998,9 +2000,7 @@
     },
     {
       "class": 13,
-      "gap_columns": [
-        "proposer"
-      ],
+      "gap_columns": [],
       "key": "13:nix-community/disko",
       "last_proven": null,
       "name": "nix-community/disko",
@@ -2011,9 +2011,7 @@
     },
     {
       "class": 13,
-      "gap_columns": [
-        "proposer"
-      ],
+      "gap_columns": [],
       "key": "13:NixOS/nixpkgs",
       "last_proven": null,
       "name": "NixOS/nixpkgs",

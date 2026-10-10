@@ -101,5 +101,22 @@ check "stamp: merged majors carry the stamp's claude-code major" "claude-code: 2
 check "stamp: a rebound kubectl (1.36 → 1.37 spec) is a line move keyed by base name" "kubectl: 1.36.3 → 1.37.1" "$(jq -r '.lines | join(";")' <<<"$merged")"
 check "stamp: merging with an empty repo diff loses nothing" 0 "$(jq -r '.downgrades | length' <<<"$merged")"
 
+# THE BOX FLAKE (class 13, 2026-10-10): flake_moves over two synthetic flake locks. Expected values
+# are computed from the inputs by the header's rule: a move = a non-root input present in both whose
+# locked rev changed, printed "<input>: <rev7> (<UTC date of lastModified>) → …"; a downgrade = a move
+# whose lastModified decreased. 1789114715 = 2026-09-11T08:18:35Z, 1791600000 = 2026-10-10T02:40:00Z.
+fl_old='{"nodes":{"root":{"inputs":{"nixpkgs":"nixpkgs","disko":"disko"}},
+  "nixpkgs":{"locked":{"type":"github","owner":"NixOS","repo":"nixpkgs","rev":"21a67dc470149f337cecafbe965d8d252a390518","lastModified":1789114715}},
+  "disko":{"locked":{"type":"github","owner":"nix-community","repo":"disko","rev":"ff8702b4de27f72b4c78573dfb89ec74e36abdf1","lastModified":1781152676}}}}'
+fl_new="$(jq -c '.nodes.nixpkgs.locked.rev = "abcdef0123456789abcdef0123456789abcdef01" | .nodes.nixpkgs.locked.lastModified = 1791600000' <<<"$fl_old")"
+fm="$(flake_moves "$fl_old" "$fl_new")"
+check "flake: nixpkgs moved forward — one move, rev7 + dates" "nixpkgs: 21a67dc (2026-09-11) → abcdef0 (2026-10-10)" "$(jq -r '.moves | join(";")' <<<"$fm")"
+check "flake: a forward move is no downgrade (disko unchanged → no row)" 0 "$(jq -r '.downgrades | length' <<<"$fm")"
+fm="$(flake_moves "$fl_new" "$fl_old")"
+check "flake: lastModified went backwards → the move is ALSO a downgrade" "nixpkgs: abcdef0 (2026-10-10) → 21a67dc (2026-09-11)" "$(jq -r '.downgrades | join(";")' <<<"$fm")"
+check "flake: no change → no moves" 0 "$(jq -r '.moves | length' <<<"$(flake_moves "$fl_old" "$fl_old")")"
+check "flake: the real mgmt/nixos/flake.lock parses (no-move against itself)" 0 \
+      "$(jq -r '.moves | length' <<<"$(flake_moves "$(cat "$HERE/../mgmt/nixos/flake.lock")" "$(cat "$HERE/../mgmt/nixos/flake.lock")")")"
+
 echo "devbox-update-test: $n check(s), $fails failure(s)"
 [ "$fails" -eq 0 ]

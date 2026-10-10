@@ -42,6 +42,17 @@
 # major/downgrade/line lists) and resolves with `--no-install` — nothing in this job runs those tools.
 # `fleet_minor` + `bound_kubectl` below are the self-test's seams.
 #
+# THE BOX FLAKE (class 13, operator ruling 2026-10-10, FU-305). In the homelab leg only (the clone
+# carries `mgmt/nixos/flake.lock`), the same pass runs `nix flake update` in `mgmt/nixos` — the
+# management box's system closure AND its gate loops' own tools (`boxTools`) — into the SAME weekly
+# PR, so nixpkgs moves with the toolchain instead of never (it sat on the install-day rev for a month).
+# Its moves (`flake_moves`: per input, rev + lastModified date) get their own body section; an input
+# whose `lastModified` went BACKWARDS (a branch re-pointed, the openssl-alias shape) joins the G17
+# downgrade list. The lane does not change: the proof is the box's own post-activation gate
+# (`mgmt-pull` → `nixos-rebuild test` → `mgmt-confirm`, which boots back on a failure) + `mgmt-tools-test`
+# in ci, and the PR's flake.lock diff must pass pin-only-lint check (j) (only `locked` revs move).
+# `flake_moves` is the self-test's seam.
+#
 # Env: GH_TOKEN (contents + pull_requests write on $REPO — a homelab-renovate App token),
 #      REPO (owner/name), DEVBOX_DIR (subdir holding devbox.json; default ".", agent-runtime = "agent-base").
 # Needs: devbox (on PATH — the workflow sets up single-user Nix), git, gh (the workflow adds it via
@@ -128,6 +139,20 @@ bound_kubectl() {
   jq --arg v "$2" '.packages.kubectl = {version: $v}' "$1" > "$tmp" && mv "$tmp" "$1"
   echo "moved ${cur:-<none>} → $2"
 }
+# flake_moves <old-flake-lock-json> <new-flake-lock-json> → one JSON object {moves, downgrades}, each a
+# list of "<input>: <rev7> (<YYYY-MM-DD>) → <rev7> (<YYYY-MM-DD>)" over the inputs present in BOTH locks
+# whose locked rev changed; a downgrade is a move whose `lastModified` decreased (dates in UTC).
+flake_moves() {
+  jq -n --argjson old "$1" --argjson new "$2" '
+    def d: if . == null then "?" else (todate | .[0:10]) end;
+    def short: (. // "?") | .[0:7];
+    [ ($new.nodes // {}) | to_entries[] | select(.key != "root") | .key as $k | .value.locked as $n
+      | (($old.nodes // {})[$k].locked) as $o
+      | select($o != null and $n != null and $o.rev != $n.rev)
+      | { line: "\($k): \($o.rev | short) (\($o.lastModified | d)) → \($n.rev | short) (\($n.lastModified | d))",
+          down: (($n.lastModified // 0) < ($o.lastModified // 0)) } ] as $m
+    | { moves: [ $m[].line ], downgrades: [ $m[] | select(.down) | .line ] }'
+}
 # merge_moves <moves-json>… → one {majors, downgrades, lines} (the stamp lock's moves join the repo lock's)
 merge_moves() {
   jq -s '{majors: (map(.majors) | add), downgrades: (map(.downgrades) | add), lines: (map(.lines) | add)}' <<<"$(printf '%s\n' "$@")"
@@ -158,8 +183,19 @@ if [ "$DIR" = "." ] && [ -f version-sets/devbox.json ]; then
   ( cd "$VS_DIR" && devbox update --no-install )
 fi
 
+# The box flake (header): homelab leg only — the clone carries mgmt/nixos/flake.lock. The App token
+# rides `access-tokens` so the GitHub input lookups are authenticated (the anonymous per-IP throttle
+# — memory git-preemptive-auth); scoped to this one nix call, never exported to the rest of the run.
+FLAKE_DIR=""
+if [ "$DIR" = "." ] && [ -f mgmt/nixos/flake.lock ]; then
+  FLAKE_DIR="mgmt/nixos"
+  echo "[$REPO] nix flake update ($FLAKE_DIR — the management box closure, class 13)…"
+  NIX_CONFIG="experimental-features = nix-command flakes
+access-tokens = github.com=$GH_TOKEN" nix flake update --flake "./$FLAKE_DIR"
+fi
+
 # porcelain, not `git diff`: the stamp's lock may be NEW (untracked) on its first run
-if [ -z "$(git status --porcelain -- "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR"})" ]; then
+if [ -z "$(git status --porcelain -- "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"})" ]; then
   echo "[$REPO] devbox.lock already current — nothing to do"; exit 0
 fi
 
@@ -174,12 +210,23 @@ if [ -n "$VS_DIR" ]; then
 fi
 MAJORS="$(jq -r '.majors[]' <<<"$MOVES")"
 DOWNGRADES="$(jq -r '.downgrades[]' <<<"$MOVES")"
+FLAKE_SECTION=""
+if [ -n "$FLAKE_DIR" ]; then
+  FMOVES="$(flake_moves "$(git show "HEAD:$FLAKE_DIR/flake.lock" 2>/dev/null || echo '{}')" "$(cat "$FLAKE_DIR/flake.lock")")"
+  FD="$(jq -r '.downgrades[]' <<<"$FMOVES")"
+  # a flake input that went backwards is a G17 downgrade like any other (the lens reads it there)
+  [ -z "$FD" ] || DOWNGRADES="$(printf '%s\n%s' "$DOWNGRADES" "$(sed "s|^|$FLAKE_DIR/flake.lock |" <<<"$FD")" | grep . || true)"
+  FM="$(jq -r '.moves[]' <<<"$FMOVES")"
+  FLAKE_SECTION="$(printf '### Management box closure — `%s/flake.lock` (class 13)\n\n' "$FLAKE_DIR"
+    if [ -n "$FM" ]; then printf '%s\n' "$FM" | sed 's/^/- /'; else printf -- '- unchanged\n'; fi
+    printf '\nThe box re-activates on merge (`mgmt-pull` → `nixos-rebuild test` → the `mgmt-confirm` gate, which boots the previous generation back on a failure); `mgmt-tools-test` in ci holds the loops to the closure'"'"'s tools; pin-only-lint check (j) holds the diff to `locked` revs. A revert is `git revert` of this file (docs/management-box.md §Rollback).\n')"
+fi
 LINES="$(jq -r '.lines[]' <<<"$MOVES")"
 
 git config user.name "homelab-renovate[bot]"
 git config user.email "homelab-renovate[bot]@users.noreply.github.com"
 git checkout -q -B "$BRANCH"
-git add "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR/devbox.lock" "$VS_DIR/devbox.json"}
+git add "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR/devbox.lock" "$VS_DIR/devbox.json"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"}
 git commit -q -m "chore: devbox update — align the toolchain lock (FU-022)" \
   -m "Weekly synchronized devbox.lock bump so shared tools resolve to the same version across repos (nix cache + agent-base bake hits)."
 git push -q --force origin "$BRANCH"
@@ -194,6 +241,7 @@ gh label create major        --repo "$REPO" --color b60205 --force >/dev/null 2>
 BASE_BODY="Weekly synchronized \`devbox update\` (FU-022): keeps \`@latest\` pins but re-resolves the lock so shared tools stay on ONE version across repos → nix cache + agent-base bake hits."
 # The second section rides BOTH bodies — it informs the lens, never the lane (G17).
 G17_SECTION="$(lock_moves_section "$DOWNGRADES" "$LINES")"
+[ -z "$FLAKE_SECTION" ] || G17_SECTION="$(printf '%s\n\n%s' "$G17_SECTION" "$FLAKE_SECTION")"
 LANE="$(lock_lane "$MOVES")"   # arm | human <pkg: old → new …>
 if [ -n "$MAJORS" ] && [ "$LANE" != arm ]; then
   TITLE="chore: devbox update — MAJOR bump, human review (align toolchain lock)"

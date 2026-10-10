@@ -80,6 +80,15 @@
 #       The refusal holds the WHOLE weekly PR red (one lock, all packages) — the lever out is a
 #       `devbox.json` pin of the one package (docs/renovate.md §devbox). Needs jq (fail-closed without
 #       it); runs only when a lock file changed.
+#   (j) 2026-10-10 (class 13 — the box flake joins the weekly devbox-update PR, operator ruling;
+#       FU-305): `mgmt/nixos/flake.lock` is carved out of the `/mgmt/` CODEOWNERS row, so its diff
+#       is held to a lock RE-RESOLVE: the node set, every node's `original` and `inputs` (and flags)
+#       are unchanged from the merge base — only `locked` may move — and every non-root node's
+#       `locked` names the SAME source as its `original` (type, and owner/repo for github; url for
+#       the rest). A lock that points nixpkgs at a fork, adds an input, or rewires `follows` is
+#       refused: those are flake.nix edits, owned and human-read. Fail-closed on a parse error.
+#       Runs only when that file changed. (This rule replaces the owner; the box's own
+#       `mgmt-confirm` gate + `mgmt-tools-test` prove the closure — docs/management-box.md §Two pins.)
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
 #   PIN_ONLY_GH     the `gh` to call for (d) (default: `gh`)
@@ -240,6 +249,38 @@ for lf in $(grep -E '(^|/)devbox\.lock$' <<< "$all_changed" || true); do
   added_locks="$added_locks $(printf '%s\n' "$moved" | tr '\n' ' ')"
 done
 added_locks="$(printf '%s\n' $added_locks | grep . | sort -u || true)"
+# (j): the box flake lock may only RE-RESOLVE (header). Returns the offending reasons, one per line.
+FLAKE_LOCK="mgmt/nixos/flake.lock"
+flake_relock_violations() {  # <old-json> <new-json>
+  jq -rn --argjson o "$1" --argjson n "$2" '
+    def shape: .nodes | with_entries(.value |= del(.locked));
+    def src: if .type == "github" or .type == "gitlab" or .type == "sourcehut"
+               then {type, owner: ((.owner // "") | ascii_downcase), repo: ((.repo // "") | ascii_downcase), host}
+             else {type, url} end;
+    ( if ($o | shape) != ($n | shape)
+        then ["the node set, an original, an inputs/follows wiring or a flag changed (only locked may move — that is a flake.nix edit)"]
+        else [] end )
+    + [ $n.nodes | to_entries[] | select(.key != "root" and .value.locked != null)
+        | select((.value.locked | src) != (.value.original | src))
+        | "input \(.key): locked source \(.value.locked | src | tojson) is not its original \(.value.original | src | tojson)" ]
+    | .[]'
+}
+flake_bad=""
+if grep -qxF "$FLAKE_LOCK" <<< "$all_changed"; then
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "pin-only-lint: FAIL — jq not on PATH, cannot read the $FLAKE_LOCK diff (check (j)); refusing to report success." >&2; exit 2
+  fi
+  if ! flake_bad="$(flake_relock_violations "$(git show "$FROM:$FLAKE_LOCK" 2>/dev/null || echo '{"nodes":{}}')" \
+                                            "$(git show "$TO:$FLAKE_LOCK" 2>/dev/null || echo '{"nodes":{}}')" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot parse $FLAKE_LOCK at base/head (check (j)): $flake_bad; refusing to report success." >&2; exit 2
+  fi
+  if [ -n "$flake_bad" ]; then
+    while IFS= read -r why; do echo "pin-only-lint: FAIL — $FLAKE_LOCK: $why" >&2; done <<< "$flake_bad"
+    echo "  $FLAKE_LOCK is carved out of /mgmt/ for the weekly re-resolve only; any other change goes through flake.nix (owned) or the operator path." >&2
+    exit 1
+  fi
+  echo "pin-only-lint: $FLAKE_LOCK — re-resolve only (every input still locks its original source) — check (j) ok."
+fi
 if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ] && [ -z "$added_charts" ] && [ -z "$added_locks" ]; then
   echo "pin-only-lint: OK — no guarded file touched."
   exit 0
