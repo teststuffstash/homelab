@@ -145,6 +145,48 @@ mc_slug_from_url() {   # mc_slug_from_url <pr-url>
   printf '%s' "$1" | sed -n 's#^https\{0,1\}://[^/]*/\([^/]\{1,\}/[^/]\{1,\}\)/\(pull\|issues\)/[0-9]\{1,\}.*#\1#p'
 }
 
+# ── gh_label_add / gh_label_rm — the ONE label-write transport (FU-290, homelab#2476) ─────────────
+# Label writes live here for the same reason the comments do: REST only, never the GraphQL pool.
+# `gh pr edit|issue edit --add-label/--remove-label` are GraphQL MUTATIONS, and the homelab-agents
+# App installation's GraphQL pool drains under load (FU-290; drained 2026-10-10 19:00Z) while its
+# REST pool still serves — every porcelain label write then failed, and `>/dev/null 2>&1` at the
+# call sites hid why. `scripts/label-write-lint.py` refuses the porcelain form in agents/ shell.
+#
+# Same call shape for a PR and an issue: a PR's labels ARE its issue's labels on this endpoint.
+# Both print nothing on success. On failure they print gh's REAL stderr on stderr (call sites keep
+# their own fail-closed / warn semantics on the return code — only the transport and the error text
+# are this file's business) and return gh's status.
+#
+# gh_label_rm treats `Label does not exist (HTTP 404)` as SUCCESS: REST answers it both for "not on
+# this issue" and "no such label in the repo", and either way the end state the caller asked for
+# (label absent) holds. The porcelain it replaces succeeded on the first and failed on the second;
+# no caller depended on the latter (every rm site re-reads the end state or removes a label it just
+# saw present). Any OTHER 404 (`Not Found` — wrong issue/repo, token cannot see it) stays a failure.
+_gh_label_uri() {   # _gh_label_uri <label> → the label as one URL path segment (agent/error → agent%2Ferror)
+  local s="$1"
+  s="${s//\%/%25}"; s="${s//\//%2F}"; s="${s// /%20}"; s="${s//\#/%23}"; s="${s//\?/%3F}"
+  printf '%s' "$s"
+}
+
+gh_label_add() {   # gh_label_add <slug> <number> <label> [<label>…] — one POST, all labels
+  local slug="$1" num="$2" err rc=0 l; shift 2
+  local -a args=()
+  for l in "$@"; do args+=(-f "labels[]=$l"); done
+  err="$(gh api -X POST "repos/$slug/issues/$num/labels" "${args[@]}" 2>&1 >/dev/null)" || rc=$?
+  [ "$rc" = 0 ] && return 0
+  printf 'gh_label_add: %s#%s +%s FAILED (rc=%s): %s\n' "$slug" "$num" "$*" "$rc" "${err:-gh gave no output}" >&2
+  return "$rc"
+}
+
+gh_label_rm() {   # gh_label_rm <slug> <number> <label> — one DELETE; already absent = success
+  local slug="$1" num="$2" label="$3" err rc=0
+  err="$(gh api -X DELETE "repos/$slug/issues/$num/labels/$(_gh_label_uri "$label")" 2>&1 >/dev/null)" || rc=$?
+  [ "$rc" = 0 ] && return 0
+  case "$err" in *"Label does not exist"*"(HTTP 404)"*) return 0 ;; esac
+  printf 'gh_label_rm: %s#%s -%s FAILED (rc=%s): %s\n' "$slug" "$num" "$label" "$rc" "${err:-gh gave no output}" >&2
+  return "$rc"
+}
+
 # ── CLI ─────────────────────────────────────────────────────────────────────────────────────────
 # Sourceable AND runnable. The coordinator brief's dispatch notice is followed by a session driving
 # a shell, not by a script that can source a library, so the same find-or-create has to be one

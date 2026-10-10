@@ -1,3 +1,5 @@
+# gh_label_add / gh_label_rm — the shipped REST label transport the clause calls (FU-290); sourced, never stubbed.
+. "$REPLAY_ROOT/agents/machine-comment.sh"
 # ── bridge ── the per-repo loop variables the agent/review phantom belt holds by the time the
 # block runs. Every name is a SCAN name (`slug`, `repo`, `BODIES`, `review_only`, `dispatchable`,
 # `c4c5_cleared`, `infeas_done`, `orphans`, `units`) — a bridge that invents one pins a different

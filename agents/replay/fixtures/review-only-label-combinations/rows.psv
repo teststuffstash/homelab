@@ -8,3 +8,8 @@ with-fix       | with-fix    |       |     | with-fix
 #                  On base, the issue is NOT in review_only (invisible to phantom belt).
 #                  After fix, it IS detected. Red on base (defect), green after.
 without-fix    | without-fix |       |     | without-fix
+# ── FU-290 GraphQL drain (STUB_GH_GRAPHQL=drained — agents/replay/stubs/gh): every GraphQL mutation
+# fails "API rate limit already exceeded for installation ID 142724430" while REST serves. The label
+# writes ride REST (gh_label_add/gh_label_rm, agents/machine-comment.sh), so they still LAND; RED on
+# the pre-REST source, whose `gh pr|issue edit --add-label/--remove-label` hit the drain.
+with-fix-graphql-drained | with-fix | | STUB_GH_GRAPHQL=drained | with-fix

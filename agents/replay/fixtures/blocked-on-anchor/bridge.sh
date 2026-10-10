@@ -1,3 +1,5 @@
+# gh_label_add / gh_label_rm — the shipped REST label transport the clause calls (FU-290); sourced, never stubbed.
+. "$REPLAY_ROOT/agents/machine-comment.sh"
 # ── bridge ── the per-repo loop variables the arbitrate gate and the ordinary-path belt read.
 # Both readers run in one pass over the same `prsjson`: #240 is the GATE leg (unarmed, so the
 # gate's selector takes it) and #241 is the BELT leg (armed + green, so the belt's selector takes

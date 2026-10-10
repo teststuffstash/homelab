@@ -1,3 +1,5 @@
+# gh_label_add / gh_label_rm — the shipped REST label transport the clause calls (FU-290); sourced, never stubbed.
+. "$REPLAY_ROOT/agents/machine-comment.sh"
 # ── bridge ── the per-repo loop variables the fleet reader holds by the time the block runs.
 # Every name is a SCAN name (`slug`, `repo`, `dispatchable`, `openall`, `orphans`).
 #

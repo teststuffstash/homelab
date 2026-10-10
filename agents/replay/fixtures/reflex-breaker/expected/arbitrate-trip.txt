@@ -1,0 +1,7 @@
+CALL gh label create agent/arbitrate --repo teststuffstash/oracle-fleet --color d93f0b --force --description rounds exhausted / flip-flop — coordinator tie-break (merge-path escalation table)
+CALL gh api -X POST repos/teststuffstash/oracle-fleet/issues/500/labels -f labels[]=agent/arbitrate
+CALL gh api repos/teststuffstash/oracle-fleet/issues/500/comments --paginate
+CALL gh api --method POST repos/teststuffstash/oracle-fleet/issues/500/comments -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-10-10T20:00:00Z` · ARBITRATE: 12 bot review verdicts counted on issue #77 (2 PRs) (cap 12) — a worker↔reviewer loop that will not converge on its own. Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. Review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with clarified instructions / close as not-mergeable / escalate to a human). <!-- agent-event kind=arbitrate ts=2026-10-10T20:00:00Z -->
+OUT [oracle-fleet] ROUNDS EXHAUSTED on #500 (12 bot verdicts on issue #77 (2 PRs) ≥ cap 12) — agent/arbitrate (coordinator tie-break), NOT dispatching
+OUT REACHED: end
+RC 0

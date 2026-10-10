@@ -1,0 +1,8 @@
+# provenance — family world `base` (agents/replay/fixtures/reflex-breaker)
+#
+# WHAT THIS WORLD IS. The one READ the breakers make: mc_event's find-or-create lists PR #500's
+# issue comments (REST, `repos/<slug>/issues/500/comments`) and finds NO agent-summary comment, so
+# the arbitrate event CREATES one. Everything else the blocks consume is the bridge's loop state.
+#
+# PROVENANCE CLASS: constructed (README §S6) — an empty comment list is the shape GitHub returns
+# for a PR with no conversation comments.

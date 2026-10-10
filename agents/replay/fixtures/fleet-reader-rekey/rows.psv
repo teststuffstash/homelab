@@ -21,3 +21,8 @@ key-class-excluded    | keyclass |     |                                        
 serving-no-provider   | noprovider |     |                                                                                                                                  | serving-no-provider | 
 mixed-provider-latch  | mixed-provider | | ROUTER_STATUS_JSON={"serving_classes":["auth-storm","provider-5xx","timeout","tool-loop"],"pair_cooldowns":[{"model":"deepseek/deepseek-v4-flash","provider":"open-inference","until":1788290000,"remaining_s":4400,"streak":1}],"generations_24h":[]} | provider-latch      |
 mixed-model-nomination| mixed-model | |                                                                                                                                  | mixed-model-nomination |
+# ── FU-290 GraphQL drain (STUB_GH_GRAPHQL=drained — agents/replay/stubs/gh): every GraphQL mutation
+# fails "API rate limit already exceeded for installation ID 142724430" while REST serves. The label
+# writes ride REST (gh_label_add/gh_label_rm, agents/machine-comment.sh), so they still LAND; RED on
+# the pre-REST source, whose `gh pr|issue edit --add-label/--remove-label` hit the drain.
+us-case-labels-graphql-drained | spread | | STUB_GH_GRAPHQL=drained | us-case-labels |

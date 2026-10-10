@@ -6,3 +6,8 @@ red-in-footprint-approved         |       | gh/pr-view-1515.json @ patches/pr-ap
 red-outside-footprint-approved    |       | gh/api-repos-teststuffstash-oracle-fleet-check-runs-9001-annotations.json @ patches/annotations-outside.jq |     | hold-approved  |
 red-generic-annotation-escalates  |       | gh/api-repos-teststuffstash-oracle-fleet-check-runs-9001-annotations.json @ patches/annotations-generic.jq |     | escalate       |
 red-replay-annotation-escalates   |       | gh/api-repos-teststuffstash-oracle-fleet-check-runs-9001-annotations.json @ patches/annotations-replay.jq  |     | escalate       |
+# ── FU-290 GraphQL drain (STUB_GH_GRAPHQL=drained — agents/replay/stubs/gh): every GraphQL mutation
+# fails "API rate limit already exceeded for installation ID 142724430" while REST serves. The label
+# writes ride REST (gh_label_add/gh_label_rm, agents/machine-comment.sh), so they still LAND; RED on
+# the pre-REST source, whose `gh pr|issue edit --add-label/--remove-label` hit the drain.
+red-in-footprint-unapproved-graphql-drained |  |  | STUB_GH_GRAPHQL=drained | escalate |

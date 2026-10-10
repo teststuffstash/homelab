@@ -34,6 +34,7 @@
 set -euo pipefail
 
 REPO="${1:?usage: update-pr-branch.sh <owner/repo>}"
+. "$(cd "$(dirname "$0")" && pwd)/machine-comment.sh"   # gh_label_add / gh_label_rm — the REST label transport
 
 # The reviewer bot's login, normalized: GitHub's REST surface says `homelab-reviewer[bot]` where
 # GraphQL says `homelab-reviewer` (the [bot]-suffix mismatch, review-reflex.sh). Compare stripped.
@@ -89,7 +90,8 @@ renovate_untouched() {   # renovate_untouched <pr-view-json with commits> → 0 
            | .authors[]? | .login ] | all(renovate_login)' <<<"$1" >/dev/null 2>&1
 }
 
-# Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently first
+# Defensive: create the label idempotently first (the porcelain add FAILED on a missing label; the
+# REST add would auto-create it grey — this keeps the colour + description)
 # (the AgentStack claim provisions it via IssueLabels, but this survives a not-yet-claimed repo or
 # a deleted label — the reflex must never hard-fail and block the merge path).
 #
@@ -116,8 +118,8 @@ label_conflict() {
     -f description="PR branch conflicts with master — updater can't auto-resolve" 2>&1 >/dev/null)" || true
   # A create failure is expected and fine once the label exists (422 "already_exists") — the add
   # below is what actually matters, and it reports create's real error too if that one is why it fails.
-  if ! add_err="$(GH_TOKEN="$tok" gh api -X POST "repos/$REPO/issues/$1/labels" \
-      -f 'labels[]=merge-conflict' 2>&1 >/dev/null)"; then
+  # gh_label_add (machine-comment.sh) is the one REST label transport; its stderr IS gh's error.
+  if ! add_err="$(GH_TOKEN="$tok" gh_label_add "$REPO" "$1" merge-conflict 2>&1)"; then
     echo "updater[$REPO]: could not label #$1 merge-conflict — ${add_err:-gh gave no output}${create_err:+ (label create: $create_err)} — the */15 pass retries"
   fi
 }
@@ -358,8 +360,8 @@ jq -c '.[]' <<<"$PRS" | while read -r pr; do
   if [ "$armed" = "true" ] && [ "$dirty" = "true" ]; then
     [ "$has" = "true" ] || label_conflict "$n"
   elif [ "$has" = "true" ]; then
-    # REST, not `gh pr edit --remove-label` (same #2476/FU-290 class as label_conflict above) — a
-    # 404 (already gone) is fine, any other failure is swallowed same as before (best-effort clear).
-    GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh api -X DELETE "repos/$REPO/issues/$n/labels/merge-conflict" >/dev/null 2>&1 || true
+    # REST via gh_label_rm, not `gh pr edit --remove-label` (same #2476/FU-290 class as label_conflict
+    # above) — already gone is fine, any other failure is swallowed same as before (best-effort clear).
+    GH_TOKEN="${UPDATER_LABEL_TOKEN:-${GH_TOKEN:-}}" gh_label_rm "$REPO" "$n" merge-conflict 2>/dev/null || true
   fi
 done

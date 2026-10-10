@@ -3051,7 +3051,7 @@ EOF_GOVERNANCE
       else
         _bucktxt="the \`post-launch:\` bucket, which the next closeout or review creates under this goal"
       fi
-      if gh issue edit "$_g" --repo "$_slug" --add-label "goal/post-launch" >/dev/null 2>&1; then
+      if gh_label_add "$_slug" "$_g" "goal/post-launch"; then
         gh issue comment "$_g" --repo "$_slug" --body "$(printf '%s\n' \
           "$_lede" \
           "" \
@@ -3221,7 +3221,7 @@ EOF_GOVERNANCE
                   case " $dlabels " in
                     *" agent/queued "*)
                       if [ "$gdone" -lt "$gcap" ]; then
-                        if gh issue edit "$dn" --repo "$dslug" --remove-label "agent/queued" >/dev/null 2>&1 \
+                        if gh_label_rm "$dslug" "$dn" "agent/queued" \
                            && gh issue comment "$dn" --repo "$dslug" --body "🤖 de-queued: goal #${g} was ABANDONED (ADR-102 terminal — budget exhausted before a verdict). The issue is left OPEN and inert on purpose; the work may still be worth doing, but it may not spend a budget that is gone. Re-queue it under a refilled or different goal. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
                           gdone=$((gdone+1))
                         else
@@ -3962,7 +3962,7 @@ EOF_GTHEMES_OPEN
         cr_noop="$(printf '%s' "$cr_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || cr_noop=""
       fi
       if [ -n "$cr_noop" ]; then
-        gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+        gh_label_add "$slug" "$u" agent/arbitrate \
           && mc_event "$slug" "$u" arbitrate "ARBITRATE (changes-requested no-op round, FU-147): the last completed fix round posted its run stats without pushing a commit, so the reviewer findings are untouched and another identical round cannot converge. The coordinator arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ⚠ changes-requested NO-OP round → agent/arbitrate: PR #${u} (a completed round pushed nothing)\n" \
           || orphans="${orphans}[$repo] ⚠ changes-requested no-op arbitrate FAILED to label PR #${u} — human check\n"
@@ -4124,7 +4124,7 @@ EOF_GTHEMES_OPEN
           && ss_what="dismissed the reflex's rubber stamp (review ${ss_rid})" || ss_ok=0
       fi
       if [ "$ss_leaked" = 1 ]; then
-        gh pr edit "$u" --repo "$slug" --remove-label automerge >/dev/null 2>&1 \
+        gh_label_rm "$slug" "$u" automerge \
           && ss_what="${ss_what:+$ss_what; }stripped the leaked \`automerge\` label" || ss_ok=0
       fi
       if [ $ss_ok = 1 ]; then
@@ -4252,8 +4252,8 @@ EOF_GTHEMES_OPEN
           # IL-T16 write discipline: add agent/review FIRST, remove agent/in-progress SECOND,
           # then RE-READ and prove the end state — the audit comment is posted only against a
           # state we verified.
-          if gh issue edit "$fcn" --repo "$slug" --add-label agent/review >/dev/null 2>&1; then
-            gh issue edit "$fcn" --repo "$slug" --remove-label agent/in-progress >/dev/null 2>&1 || true
+          if gh_label_add "$slug" "$fcn" agent/review; then
+            gh_label_rm "$slug" "$fcn" agent/in-progress || true
           fi
           fend="$(gh issue view "$fcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
           case ",${fend}," in
@@ -4407,9 +4407,9 @@ EOF_GTHEMES_OPEN
               # latch, and an `agent/error` left on a parked issue reads as "a human must un-latch
               # this crash" — the wrong next-mover for a verdict. Best-effort like the in-progress
               # removal, and the re-read below proves it.
-              if gh issue edit "$icand" --repo "$slug" --add-label agent/blocked >/dev/null 2>&1; then
-                gh issue edit "$icand" --repo "$slug" --remove-label agent/in-progress >/dev/null 2>&1 || true
-                gh issue edit "$icand" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 || true
+              if gh_label_add "$slug" "$icand" agent/blocked; then
+                gh_label_rm "$slug" "$icand" agent/in-progress || true
+                gh_label_rm "$slug" "$icand" agent/error || true
               fi
               iend="$(gh issue view "$icand" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
               iok=""
@@ -4532,8 +4532,8 @@ EOF_GTHEMES_OPEN
                   # (Caught in the fixture harness, exit 1 right after the failing edit.) The `if`
                   # and the `|| true` are what keep a refused write a REPORTED write.
                   cok=""
-                  if gh issue edit "$cn" --repo "$slug" --add-label agent/queued >/dev/null 2>&1; then
-                    gh issue edit "$cn" --repo "$slug" --remove-label agent/in-progress >/dev/null 2>&1 || true
+                  if gh_label_add "$slug" "$cn" agent/queued; then
+                    gh_label_rm "$slug" "$cn" agent/in-progress || true
                   fi
                   cend="$(gh issue view "$cn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
                   case ",${cend}," in
@@ -4629,8 +4629,8 @@ EOF_GTHEMES_OPEN
                   # condition context and would ABORT THE WHOLE SCAN mid-write. The `if` and the
                   # `|| true` are what keep a refused write a REPORTED write.
                   rok=""
-                  if gh issue edit "$rcn" --repo "$slug" --add-label agent/queued >/dev/null 2>&1; then
-                    gh issue edit "$rcn" --repo "$slug" --remove-label agent/review >/dev/null 2>&1 || true
+                  if gh_label_add "$slug" "$rcn" agent/queued; then
+                    gh_label_rm "$slug" "$rcn" agent/review || true
                   fi
                   rend="$(gh issue view "$rcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
                   case ",${rend}," in
@@ -4948,9 +4948,9 @@ EOF_GTHEMES_OPEN
           # one of them is present. Try removing both; the one that doesn't exist fails
           # harmlessly under `|| true`.
           dok=""
-          if gh issue edit "$dcn" --repo "$slug" --add-label agent/done >/dev/null 2>&1; then
-            gh issue edit "$dcn" --repo "$slug" --remove-label agent/blocked >/dev/null 2>&1 || true
-            gh issue edit "$dcn" --repo "$slug" --remove-label agent/review >/dev/null 2>&1 || true
+          if gh_label_add "$slug" "$dcn" agent/done; then
+            gh_label_rm "$slug" "$dcn" agent/blocked || true
+            gh_label_rm "$slug" "$dcn" agent/review || true
           fi
           dend="$(gh issue view "$dcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
           case ",${dend}," in
@@ -5260,7 +5260,7 @@ EOF_GTHEMES_OPEN
           has_error="$(printf '%s' "$openall" | jq -r --argjson n "$fn" \
             '[.[] | select(.number == $n) | (.labels|map(.name)) | index("agent/error")] | first // false' 2>/dev/null || false)"
           if [ "$has_error" = "false" ]; then
-            gh issue edit "$fn" --repo "$slug" --add-label agent/error >/dev/null 2>&1 || true
+            gh_label_add "$slug" "$fn" agent/error || true
           fi
         done
         sorted_nums="$(printf '%s' "$nums" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')"
@@ -5476,7 +5476,7 @@ EOF_GTHEMES_OPEN
       # is read through the SAME grammar as the suppression predicate (homelab#1566): one reader,
       # never a second regex.
       if [ -z "$(printf '%s' "$ruling_body" | jq -Rsr "$BLOCKED_ON_DEF"'blocked_on_kind' 2>/dev/null)" ]; then
-        gh pr edit "$u" --repo "$slug" --remove-label agent/arbitrate >/dev/null 2>&1 \
+        gh_label_rm "$slug" "$u" agent/arbitrate \
           && orphans="${orphans}[$repo] ✓ arbitrate ordinary-path: PR #${u} — removed agent/arbitrate (ruling returned to ordinary path, reflex will pick it)\n" \
           || orphans="${orphans}[$repo] ⚠ arbitrate ordinary-path label FAILED on PR #${u} — human check\n"
       fi
@@ -5561,12 +5561,12 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
       fi
       # All conditions met: remove agent/error label and post a removal comment
       if [ "$ff_kind" = "pr" ]; then
-        gh pr edit "$ff_n" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
+        gh_label_rm "$slug" "$ff_n" agent/error \
           && gh pr comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: PR #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
           || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on PR #${ff_n} — human check\n"
       else
-        gh issue edit "$ff_n" --repo "$slug" --remove-label agent/error >/dev/null 2>&1 \
+        gh_label_rm "$slug" "$ff_n" agent/error \
           && gh issue comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: issue #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
           || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on issue #${ff_n} — human check\n"
@@ -5881,7 +5881,7 @@ EOF_BELT
         # >>>REPLAY:ci-red-arbitrate>>>
         if [ -n "$noop_round" ]; then
           if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
-            gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+            gh_label_add "$slug" "$u" agent/arbitrate \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
@@ -5958,7 +5958,7 @@ EOF_BELT
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
 # Apply the same sha check as the noop case (FU-1529).
           if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
-            gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+            gh_label_add "$slug" "$u" agent/arbitrate \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
               || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
