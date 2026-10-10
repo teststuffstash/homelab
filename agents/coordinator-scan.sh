@@ -508,7 +508,7 @@ item_class_flush() {   # batch-push all accumulated rows, carrying first-transit
       # the item as having been in its new lane since before it moved (ADR-125 per-lane rows).
       ts_line="$(printf '%s' "$metrics_before" | grep -F "agent_item_class_since_timestamp_seconds" \
         | grep "repo=\"${repo}\"" | grep "item=\"${item}\"" | grep "class=\"${class}\"" \
-        | grep "who=\"${who}\"" | grep "base=\"${base}\"" | sed 's/.*} //' | head -1 || true)"
+        | grep "who=\"${who}\"" | grep "base=\"${base}\"" | sed 's/.*} //' | sed -n 1p || true)"
     else
       ts_line=""
     fi
@@ -3953,7 +3953,7 @@ EOF_GTHEMES_OPEN
         continue
       fi
       if [ -n "$cr_reviews" ]; then
-        head8="$(printf '%s' "$cr_probe" | jq -r 'def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request ")); ([.commits[]? | select(is_merge | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | head -c8)"
+        head8="$(printf '%s' "$cr_probe" | jq -r 'def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request ")); ([.commits[]? | select(is_merge | not)] | sort_by(.committedDate) | last | .oid) // ""' 2>/dev/null | cut -c1-8)"
         orphans="${orphans}[$repo] ⏳ changes-requested held (re-review pending — round pushed ${head8}):\n  PR #${u}\n"
         continue
       fi
@@ -4041,7 +4041,7 @@ EOF_GTHEMES_OPEN
       orphans="${orphans}[$repo] ⚠ merge-conflict PR #${u} has a NULL author (deleted/suspended GitHub account) — the account's lane is unknowable, so no machine fix-round is dispatched; a human owns the next mover (homelab#602)\n"
     done
     # Fetch PR JSON ONCE for merge-conflict clause to share between pr_blocked_on_check and pr_state_fp_pair (homelab#1211).
-    mfp_prjson="$(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author.login==$wa)) | @json' | head -1)" || mfp_prjson=''
+    mfp_prjson="$(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author.login==$wa)) | @json' | sed -n 1p)" || mfp_prjson=''
     for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED") and (.author.login==$wa))|.number'); do
       # Fetch PR JSON for this specific PR with all needed fields for state-fp and blocked-on checks
       pr_json_mf="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_mf=''
@@ -6352,7 +6352,7 @@ EOF
     # coordinator-session.sh. The comment above is left as a historical marker (ADR-094).
     # ADR-097: the launcher-owned AGENT_WIP_LIMIT for this repo (live workers + 1, ceiling-capped;
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
-    uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
+    uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | sed -n 1p)"
     case "${uwip:-}" in ''|*[!0-9]*) uwip=1;; esac
     # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the clauses
     # whose emission is gated on it (arbitrate, ci-red, merge-conflict since homelab#595, and
