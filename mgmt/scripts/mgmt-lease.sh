@@ -74,6 +74,10 @@ LEASE_LABEL="${MGMT_LEASE_LABEL:-homelab.teststuff.net/upgrade-lease}"
 POLICY_PATH="policy/mgmt/upgrade-leases.yaml"
 BRANCH_PREFIX="revert-chart-lease-"
 OUTCOMES="reverted already no_policy not_pin_only conflict error"
+# The revert commit's identity, passed per call (the mgmt-sentinel merge precedent): the box's root has
+# NO git identity, and `git revert` then stages the revert and dies at the commit — read as `conflict`
+# on every tick (S9 drill 2026-10-10, the first live expiry). Never rely on the host's git config.
+GIT_ID=(-c user.name=management-lease -c user.email=management-lease@homelab.invalid)
 
 # ── seams (the fixture test overrides these) ───────────────────────────────────────────────────
 # raw ConfigMap LIST JSON on stdout — the responder-window read path (_mgmt_windows_get), by label
@@ -217,13 +221,13 @@ revert_lease() {  # <lease-json> <policy-file>
   fi
   # build the revert on a fresh branch off origin/master (the clone is this loop's own)
   git -C "$REPO" checkout -q -B "$branch" origin/master 2>/dev/null || { outcome error "$name" "cannot branch $branch off origin/master"; return; }
-  if ! git -C "$REPO" revert --no-edit "$sha" >/dev/null 2>&1; then
-    git -C "$REPO" revert --abort >/dev/null 2>&1; git -C "$REPO" checkout -q --detach origin/master; git -C "$REPO" branch -q -D "$branch" 2>/dev/null
-    outcome conflict "$name" "git revert $sha8 conflicted — nothing pushed"; return
+  if ! why="$(git "${GIT_ID[@]}" -C "$REPO" revert --no-edit "$sha" 2>&1)"; then
+    git -C "$REPO" revert --abort >/dev/null 2>&1; git -C "$REPO" reset -q --hard; git -C "$REPO" checkout -q --detach origin/master; git -C "$REPO" branch -q -D "$branch" 2>/dev/null
+    outcome conflict "$name" "git revert $sha8 failed — nothing pushed: $(printf '%s' "$why" | tr '\n' ' ' | tail -c 200)"; return
   fi
   for f in $keep; do git -C "$REPO" cat-file -e "$sha:$f" 2>/dev/null && git -C "$REPO" checkout -q "$sha" -- "$f"; done
-  git -C "$REPO" diff --cached --quiet || git -C "$REPO" commit -q --amend --no-edit
-  git -C "$REPO" commit -q --amend -m "revert: $chart chart $to → $from (upgrade lease $name expired)" \
+  git -C "$REPO" diff --cached --quiet || git "${GIT_ID[@]}" -C "$REPO" commit -q --amend --no-edit
+  git "${GIT_ID[@]}" -C "$REPO" commit -q --amend -m "revert: $chart chart $to → $from (upgrade lease $name expired)" \
     -m "The ⚓ upgrade lease on $subject (commit $sha, $from → $to) passed its deadline $exp unconfirmed; the management box reverts the pin (ADR-150). keep: ${keep:-—}; regen: ${regen:-—}." >/dev/null 2>&1
   if [ "${MGMT_SHADOW:-0}" = 1 ]; then
     log "[shadow] lease $name: would push $branch ($(git -C "$REPO" rev-parse --short HEAD)) and open 'revert: $chart chart $to → $from' (automerge+dependencies, armed)"

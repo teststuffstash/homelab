@@ -61,6 +61,33 @@ spec:
               --show-operation` for the operation message (helm render error, missing value, CRD/schema
               refusal). A chart bump merged into its Application file is the first suspect — a render
               failure there has no CI gate (`argocd-validate-pins.sh` renders first-party OCI charts only).
+        - alert: ArgoCDAppOutOfSync
+          # Gap register G4 (docs/dependency-upgrades.md): an AUTOSYNC app that stays OutOfSync is
+          # selfHeal NOT converging — a live-stamped field git does not declare (the 2026-10-10 five:
+          # XRD defaults inside AgentStack repos[], StatefulSet volumeClaimTemplates apiVersion/kind),
+          # a mutating controller, or a sync that "succeeds" without changing anything. Not an error,
+          # so ArgoCDAppSyncFailed never sees it. 1h absorbs every real sync (a new revision is
+          # OutOfSync for seconds to minutes). Manual-sync apps are excluded: OutOfSync is their
+          # normal state between human syncs. Replay: this expr matched exactly the five on
+          # 2026-10-10 12:35Z (OutOfSync for the whole preceding hour, re-syncing every ~5 min).
+          expr: |
+            max by (name, dest_namespace) (argocd_app_info{autosync_enabled="true", sync_status="OutOfSync"}) == 1
+          for: 1h
+          labels:
+            severity: warning
+            # triage: the controller's live-vs-predicted diff names the field
+            triage: dig
+          annotations:
+            summary: "ArgoCD Application {{ $labels.name }} (autosync) has been OutOfSync for 1h"
+            description: >-
+              Application {{ $labels.name }} has automated sync + selfHeal and has still been OutOfSync
+              for an hour, so the sync loop is not converging. Get the controller's own diff with
+              `argocd app diff {{ $labels.name }}`, or the API's
+              /api/v1/applications/{{ $labels.name }}/managed-resources (normalizedLiveState vs
+              predictedLiveState). Check whether that diff shows a field the API server or a
+              controller stamps into the live object that git does not declare. See
+              docs/dependency-upgrades.md gap register G4 for the 2026-10-10 cases and the
+              declare-in-git rule.
         - alert: ArgoCDNotificationDeliveryFailing
           # The FU-044 revert chain's first hop. 150 failures / 0 successes over 2026-07-27 → 10-04
           # went unseen because this counter was never scraped.
