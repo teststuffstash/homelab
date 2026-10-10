@@ -20,19 +20,17 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
 
 ## board-sweep
 
-- [ ] board-sweep-G1 — the sweep pipeline (board-sweep, fu-sweep) gates its WHOLE pass on the
-      design-agents corpus, but most of it is mechanical: gather (crosscheck, `gh search`, S3
-      lane listings), and Renovate/dependency PRs, whose lanes are deterministic (ADR-141,
-      ADR-143, `classes.yaml`) and need no corpus (operator 2026-10-10). Also: (a) "run the
-      design-agents read plan" predates the typed-only rule, so it reads as if the skill could
-      load the corpus itself; (b) `meta-state.md` is named only as a staleness risk, never as the
-      input for the seat's declared parks/rulings that CORRECTLY-WAITING needs. Fix: split each
-      skill into a mechanical stage (no corpus, any seat) and a corpus-gated judgment stage
-      (STUCK-MACHINE / agent/* ESCALATED-UNSEEN / agents FUs); the 2026-10-03 fu-sweep's
-      "no-judgement scope" is the first sample of the split. Sighted 2026-10-10 (operator).
-      In flight: PR#2219 (a spike PR) carries the per-item SLICE rule in both skills, which
-      closes (a) and the wholesale preload; still open after it: the corpus-free mechanical
-      classes (Renovate et al.) named as such, and (b).
+- [ ] board-sweep-G1 — the sweep pipeline (board-sweep, fu-sweep) knows ONE context: the
+      design-agents corpus. The platform outside the loop is growing islands of its own —
+      dependency upgrades / Renovate, the management box, the OPNsense CARP pair, the cluster
+      substrate (3 CPs, disks, Garage, the services) — each with its own owning docs, and the
+      sweeps' items now split across them (operator 2026-10-10: the loop stays the heaviest, the
+      rest is catching up). Also: (a) "run the design-agents read plan" predates the typed-only
+      rule; (b) `meta-state.md` is named only as a staleness risk, never as the input for the
+      seat's declared parks/rulings that CORRECTLY-WAITING needs. Fix: classify each item to its
+      island first, then read THAT island's slice. PR#2219 carries the per-item slice rule
+      (closes (a)); its island cut is loop-internal — the platform islands and (b) stay open.
+      Sighted 2026-10-10 (operator).
 
 ## handoff
 
