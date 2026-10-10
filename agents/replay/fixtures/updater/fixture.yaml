@@ -44,7 +44,14 @@
 #      breaker labels excluded, updated ONLY when the newest NON-merge commit post-dates the
 #      newest homelab-reviewer verdict; unreadable commit/review data HOLDS (rule #6).
 #   3. conflict labeler: armed ∧ DIRTY gains merge-conflict (idempotent create first); the label
-#      is removed once the PR is no longer armed-and-DIRTY.
+#      is removed once the PR is no longer armed-and-DIRTY. ⚠ homelab#2476 / FU-290 (2026-10-10
+#      19:00Z): both the create+add and the remove ride REST (`gh api -X POST/DELETE
+#      .../labels`), never `gh pr edit --add-label|--remove-label` — those are GraphQL mutations,
+#      and a drained App-installation GraphQL pool (FU-290) failed them while REST still served,
+#      with a wrong "token lacks issues:write?" diagnosis on top (#2476: PR sat armed+DIRTY,
+#      unlabeled, invisible to the scan's merge-conflict clause). `conflict-dirty`/`conflict-clear`
+#      now pin the REST call shape; `conflict-dirty-graphql-drained`/`conflict-clear-graphql-drained`
+#      additionally pin that a simulated GraphQL-only drain cannot touch this leg at all.
 # The script under test is INVOKED BY PATH (bridge.sh), never transcribed — arg handling included.
 # Ratchet disposition (#744, 2026-08-23): the /update-pr EventSource endpoint (review-argo.yaml)
 # and the Sensor/WorkflowTemplate/cron around this script (update-pr-argo.yaml) are ACTIVATION
