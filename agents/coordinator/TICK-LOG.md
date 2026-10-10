@@ -13014,3 +13014,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - OpenRouterKeyBudgetLow = homelab/homelab-openrouter, $5 weekly cap spent 10-05 18:48Z→10-06 07:00Z by ~19
   worker rides (Goal #2273 children + requeues); resets 2026-10-12 00:00Z. Operator: rail falls over to the
   subscription — not chased.
+
+## 2026-10-10 15:17–15:28Z — wk-04 disk 80→110G (#2453), seat window seat-1791645451-45
+
+- Handed off by the second session (oracle what-if needed the space; oracle-fleet runs paused for it). nx-02
+  thin pool read first: 233.6G, 48% data; wk-04 disk 88% full; post-resize allocation 262G (≈12% overcommit,
+  worst case ~61% if wk-04 fills) — accepted, `PveThinPool*` belts watch it.
+- `node-maintenance down wk-04` refused at preflight (exit 2: a running `coordinate-perstack` ride + 3 expected
+  WARNs) → `FORCE=1 … down` (settle waited the ride, drain, shutdown 15:21Z) → `mgmt-tf plan`
+  20261010T152125Z-060d6168 = exactly `size 80 -> 110` in-place → apply (29 s; the provider started the VM,
+  a fresh QEMU start) → `up wk-04` Ready 15:22:57Z; Talos sda 118 GB, EPHEMERAL 114 GB; full plan "No changes".
+- Fallout claimed: `NodeRebooted` (silence on instance .64), `PodSigkilled` ×4 wk-04 DaemonSet pods (covered by
+  node-maintenance's pod silence). Two stale-IP targets cleared by 15:27Z. Closed `--force` (GAPS G5 shape:
+  only the claimed expected alerts remained). FU-301/box-flake lanes held off the main root for the window.
