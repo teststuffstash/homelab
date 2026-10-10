@@ -101,7 +101,7 @@
       "gap_cells": [
         "detector"
       ],
-      "gap_rows": 38,
+      "gap_rows": 42,
       "human_cells": [
         "canary"
       ],
@@ -111,7 +111,7 @@
       "last_proven_pr": 2362,
       "name": "devbox/nix toolchain",
       "owner_may_leave": false,
-      "rows": 38
+      "rows": 42
     },
     {
       "complete": true,
@@ -1396,6 +1396,19 @@
       "gap_columns": [
         "detector"
       ],
+      "key": "7:claude-code@version-sets",
+      "last_proven": null,
+      "name": "claude-code",
+      "version": "2.1.291",
+      "where": [
+        "version-sets/devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "detector"
+      ],
       "key": "7:cloudflared",
       "last_proven": "2026-10-07T20:11:25Z",
       "name": "cloudflared",
@@ -1539,6 +1552,19 @@
       "gap_columns": [
         "detector"
       ],
+      "key": "7:kind@version-sets",
+      "last_proven": null,
+      "name": "kind",
+      "version": "0.32.0",
+      "where": [
+        "version-sets/devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "detector"
+      ],
       "key": "7:kubeconform",
       "last_proven": "2026-10-07T20:11:25Z",
       "name": "kubeconform",
@@ -1558,6 +1584,19 @@
       "version": "1.37.1",
       "where": [
         "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "detector"
+      ],
+      "key": "7:kubectl@version-sets",
+      "last_proven": null,
+      "name": "kubectl",
+      "version": "1.36.3",
+      "where": [
+        "version-sets/devbox.lock"
       ]
     },
     {
@@ -1610,6 +1649,19 @@
       "version": "nixpkgs@7dd199b0e299",
       "where": [
         "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [
+        "detector"
+      ],
+      "key": "7:nixpkgs-unstable@version-sets",
+      "last_proven": null,
+      "name": "nixpkgs-unstable",
+      "version": "nixpkgs@8edc0c72e3a3",
+      "where": [
+        "version-sets/devbox.lock"
       ]
     },
     {

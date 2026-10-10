@@ -309,8 +309,28 @@ def extract_substrate():
     return rows
 
 
+# The repo toolchain lock + the version-set STAMP (homelab#2014): `version-sets/devbox.lock` is the one
+# source the first-party images read their claude-code / kubectl / kind from, resolved by the same
+# weekly devbox-update pass — its members are class-7 rows of their own (a kubectl here is the
+# fleet-bounded one, not the repo's @latest).
+DEVBOX_LOCKS = ["devbox.lock", "version-sets/devbox.lock"]
+
+
 def extract_devbox():
-    lock = json.loads(read(os.path.join(ROOT, "devbox.lock")))
+    rows = []
+    for lockfile in DEVBOX_LOCKS:
+        if lockfile != "devbox.lock" and not os.path.exists(os.path.join(ROOT, lockfile)):
+            continue
+        found = extract_devbox_lock(lockfile)
+        if lockfile != "devbox.lock":  # a name may sit in both locks (kubectl) — key the stamp's rows by file
+            for r in found:
+                r["key"] = f"{r['name']}@{os.path.dirname(lockfile)}"
+        rows += found
+    return rows
+
+
+def extract_devbox_lock(lockfile):
+    lock = json.loads(read(os.path.join(ROOT, lockfile)))
     rows = []
     for key, pkg in sorted((lock.get("packages") or {}).items()):
         if key.startswith("github:"):
@@ -319,11 +339,11 @@ def extract_devbox():
             rev = re.search(r"/([0-9a-f]{40})(?:\?|#|$)", pkg.get("resolved", "") + "#") or re.search(r"/([0-9a-f]{40})$", ref)
             name = attr or ref.rsplit("/", 1)[-1]
             version = f"{ref.split('/')[1]}@{rev.group(1)[:12]}" if rev else "unpinned"
-            rows.append({"name": name, "version": version, "where": ["devbox.lock"],
+            rows.append({"name": name, "version": version, "where": [lockfile],
                          "match": [f'"{key}"'] + ([rev.group(1)[:12]] if rev else [])})
             continue
         name = key.split("@", 1)[0]
-        rows.append({"name": name, "version": pkg.get("version", "?"), "where": ["devbox.lock"],
+        rows.append({"name": name, "version": pkg.get("version", "?"), "where": [lockfile],
                      "match": [f'"{key}"', f"-{name}-{pkg.get('version', '')}"]})
     return rows
 
