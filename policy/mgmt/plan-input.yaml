@@ -134,3 +134,21 @@ apply_addresses:            # resource addresses (globs) the box may APPLY unatt
     # gate (docs/management-box.md §MB3 "Talos config applies"). `\[` = a literal `[` (case glob).
     - 'talos_machine_configuration_apply.node\[*'
     - 'talos_machine_configuration_apply.metal\[*'
+apply_helm:                 # helm_release addresses the box may APPLY unattended (FU-301; operator ruling 2026-10-10, "for now")
+  # FORWARD ONLY, evidence-bracketed: mgmt/scripts/mgmt-helm.sh (docs/management-box.md §MB3 "Helm
+  # release applies"). A row widens the apply allowlist for exactly that address; mgmt_helm_gate then
+  # demands an in-place `update` and NOTHING else in the plan; the bracket refuses on declared-vs-live
+  # drift (and for longhorn: unhealthy volumes, settings drift, a failed fresh restore point), arms a
+  # ⚓ upgrade lease, applies, judges, and on a bad verdict STOPS (lease + window kept,
+  # MgmtHelmApplyStopped) — it never reverts, retries or remediates.
+  #   cap_min       the lease's deadline from the bracket's start (ADR-150 `max-end`): it must outlast
+  #                 apply + settle (10 m) + the polled compare (≤15 m); a healthy roll that outlives it
+  #                 reads `forward_only` and STOPS — the fix is the number here, never a smarter box
+  # Order: argocd-apps (the app-of-apps root — least valuable) is drilled first, then argo-cd; longhorn
+  # (engine_order, the fresh restore point) lands as its own row AFTER both drills. Cilium is class 6,
+  # attended by ruling (operator 2026-10-10) — never a row here.
+  main:
+    - address: helm_release.argocd_apps
+      cap_min: 60
+    - address: helm_release.argocd
+      cap_min: 90
