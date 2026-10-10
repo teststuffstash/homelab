@@ -1515,101 +1515,101 @@
     },
     "qrencode@latest": {
       "last_modified": "2026-10-07T01:26:01Z",
-      "resolved": "github:NixOS/nixpkgs/00000000000000000000000000000000deadbeef#qrencode",
+      "resolved": "github:NixOS/nixpkgs/7dd199b0e2993e37b4775ed66b1c291699608c9f#qrencode",
       "source": "devbox-search",
-      "version": "4.1.99",
+      "version": "4.1.1",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "bin",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-bin",
+              "path": "/nix/store/56dc7x0c1amm8qjh1305wz62ab2kd0r7-qrencode-4.1.1-bin",
               "default": true
             },
             {
               "name": "man",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-man",
+              "path": "/nix/store/riq5kdaydfcaxdg613zkxr9vqd1lm6i1-qrencode-4.1.1-man",
               "default": true
             },
             {
               "name": "dev",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-dev"
+              "path": "/nix/store/8z8w8ak4v9cnqra74vn4yz5ji7ngrb40-qrencode-4.1.1-dev"
             },
             {
               "name": "out",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1"
+              "path": "/nix/store/pvfv04mx6z7bnn74l2x9na57apj4mpsc-qrencode-4.1.1"
             }
           ],
-          "store_path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-bin"
+          "store_path": "/nix/store/56dc7x0c1amm8qjh1305wz62ab2kd0r7-qrencode-4.1.1-bin"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "bin",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-bin",
+              "path": "/nix/store/ij69npsfzw9zwm0vmsmycg12nskd5zyp-qrencode-4.1.1-bin",
               "default": true
             },
             {
               "name": "man",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-man",
+              "path": "/nix/store/08f332f1cbx88pq9wm9fbhmrxj4pf7x4-qrencode-4.1.1-man",
               "default": true
             },
             {
               "name": "dev",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-dev"
+              "path": "/nix/store/p6xhzpfah7sl4xb5nfld9l2am5pj3nqq-qrencode-4.1.1-dev"
             },
             {
               "name": "out",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1"
+              "path": "/nix/store/222cbsq222qs0f9dx027izxyj3cs60wz-qrencode-4.1.1"
             }
           ],
-          "store_path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-bin"
+          "store_path": "/nix/store/ij69npsfzw9zwm0vmsmycg12nskd5zyp-qrencode-4.1.1-bin"
         },
         "x86_64-darwin": {
           "outputs": [
             {
               "name": "bin",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-bin",
+              "path": "/nix/store/irpryqzb46z8nfrzrm8vvaf7cwycajin-qrencode-4.1.1-bin",
               "default": true
             },
             {
               "name": "man",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-man",
+              "path": "/nix/store/isih4g6vmvk5pxfy37nyz03hiwakzflb-qrencode-4.1.1-man",
               "default": true
             },
             {
               "name": "dev",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-dev"
+              "path": "/nix/store/anwigvmwwm6g01cy8hhxj76l6f9fqhal-qrencode-4.1.1-dev"
             },
             {
               "name": "out",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1"
+              "path": "/nix/store/0ssjz4x4akh0czk5qdiimbbd65immd2x-qrencode-4.1.1"
             }
           ],
-          "store_path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-bin"
+          "store_path": "/nix/store/irpryqzb46z8nfrzrm8vvaf7cwycajin-qrencode-4.1.1-bin"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "bin",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-bin",
+              "path": "/nix/store/9xr2iac1ds1aq7if1bh9f7xvvjzfpz0r-qrencode-4.1.1-bin",
               "default": true
             },
             {
               "name": "man",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-man",
+              "path": "/nix/store/7csvpqk3baghvsmr8xyr212562q5w4ks-qrencode-4.1.1-man",
               "default": true
             },
             {
               "name": "dev",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-dev"
+              "path": "/nix/store/kgk9pc8yqxfrg96622crsm2zxpdhqgx4-qrencode-4.1.1-dev"
             },
             {
               "name": "out",
-              "path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1"
+              "path": "/nix/store/gckp2y92mdfny4cydahvgghxxm968l1n-qrencode-4.1.1"
             }
           ],
-          "store_path": "/nix/store/0000000000000000000000000000000z-qrencode-4.1.1-bin"
+          "store_path": "/nix/store/9xr2iac1ds1aq7if1bh9f7xvvjzfpz0r-qrencode-4.1.1-bin"
         }
       }
     },
