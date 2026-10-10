@@ -11,8 +11,8 @@
       ],
       "human_rows": 0,
       "id": 1,
-      "last_proven": "2026-10-05T07:12:33Z",
-      "last_proven_pr": 2240,
+      "last_proven": "2026-10-09T22:20:55Z",
+      "last_proven_pr": 2423,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
       "rows": 15
@@ -28,8 +28,8 @@
       ],
       "human_rows": 0,
       "id": 2,
-      "last_proven": "2026-10-05T07:58:26Z",
-      "last_proven_pr": 2253,
+      "last_proven": "2026-10-07T12:45:18Z",
+      "last_proven_pr": 2361,
       "name": "In-cluster images, GitOps",
       "owner_may_leave": false,
       "rows": 16
@@ -43,8 +43,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-10-02T21:59:33Z",
-      "last_proven_pr": 2187,
+      "last_proven": "2026-10-09T20:07:36Z",
+      "last_proven_pr": 2422,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 4
@@ -78,8 +78,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 5,
-      "last_proven": "2026-10-04T19:00:20Z",
-      "last_proven_pr": 2191,
+      "last_proven": "2026-10-10T11:52:34Z",
+      "last_proven_pr": 2426,
       "name": "Tofu providers",
       "owner_may_leave": false,
       "rows": 14
@@ -111,8 +111,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 7,
-      "last_proven": "2026-09-07T07:51:27Z",
-      "last_proven_pr": 1488,
+      "last_proven": "2026-10-07T20:11:25Z",
+      "last_proven_pr": 2362,
       "name": "devbox/nix toolchain",
       "owner_may_leave": false,
       "rows": 38
@@ -124,8 +124,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 8,
-      "last_proven": "2026-10-05T03:36:53Z",
-      "last_proven_pr": 2235,
+      "last_proven": "2026-10-06T22:18:21Z",
+      "last_proven_pr": 2352,
       "name": "GitHub Actions",
       "owner_may_leave": true,
       "rows": 5
@@ -158,8 +158,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 10,
-      "last_proven": "2026-10-02T21:45:42Z",
-      "last_proven_pr": 2186,
+      "last_proven": "2026-10-06T22:26:00Z",
+      "last_proven_pr": 2353,
       "name": "arc-runner image inputs",
       "owner_may_leave": false,
       "rows": 3
@@ -200,29 +200,29 @@
   "proofs": {
     "classes": {
       "1": {
-        "merged_at": "2026-10-05T07:12:33Z",
-        "pr": 2240,
-        "title": "chore(deps): update crossplane to v2.4.2"
+        "merged_at": "2026-10-09T22:20:55Z",
+        "pr": 2423,
+        "title": "chore(deps): update helm release kube-prometheus-stack to v91.9.0"
       },
       "10": {
-        "merged_at": "2026-10-02T21:45:42Z",
-        "pr": 2186,
-        "title": "Update dependency jetify-com/devbox to v0.18.4"
+        "merged_at": "2026-10-06T22:26:00Z",
+        "pr": 2353,
+        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.338.0"
       },
       "2": {
-        "merged_at": "2026-10-05T07:58:26Z",
-        "pr": 2253,
-        "title": "chore(deps): update registry docker tag to v3.1.1"
+        "merged_at": "2026-10-07T12:45:18Z",
+        "pr": 2361,
+        "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.29.0"
       },
       "3": {
-        "merged_at": "2026-10-02T21:59:33Z",
-        "pr": 2187,
-        "title": "arc-runners: pin runner image 2026.10.2-gd0b15ed85110"
+        "merged_at": "2026-10-09T20:07:36Z",
+        "pr": 2422,
+        "title": "deploy: agent-base 2026.10.9-g4bd7c9b9b57d"
       },
       "5": {
-        "merged_at": "2026-10-04T19:00:20Z",
-        "pr": 2191,
-        "title": "Update Terraform cloudflare to v5.26.0"
+        "merged_at": "2026-10-10T11:52:34Z",
+        "pr": 2426,
+        "title": "chore(deps): update terraform cloudflare to v5.27.0"
       },
       "6": {
         "merged_at": "2026-09-22T00:00:00Z",
@@ -230,21 +230,21 @@
         "title": "capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last"
       },
       "7": {
-        "merged_at": "2026-09-07T07:51:27Z",
-        "pr": 1488,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "8": {
-        "merged_at": "2026-10-05T03:36:53Z",
-        "pr": 2235,
-        "title": "chore(deps): update renovatebot/github-action action to v46.3.5"
+        "merged_at": "2026-10-06T22:18:21Z",
+        "pr": 2352,
+        "title": "chore(deps): update renovatebot/github-action action to v46.3.6"
       }
     },
     "rows": {
       "10:ghcr.io/actions/actions-runner": {
-        "merged_at": "2026-09-27T11:39:05Z",
-        "pr": 2022,
-        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.337.0"
+        "merged_at": "2026-10-06T22:26:00Z",
+        "pr": 2353,
+        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.338.0"
       },
       "10:jetify-com/devbox": {
         "merged_at": "2026-10-02T21:45:42Z",
@@ -257,9 +257,9 @@
         "title": "Update Helm release argo-events to v2.4.27"
       },
       "1:argo-workflows": {
-        "merged_at": "2026-10-05T04:21:26Z",
-        "pr": 2238,
-        "title": "chore(deps): update helm release argo-workflows to v1.1.1"
+        "merged_at": "2026-10-08T04:10:21Z",
+        "pr": 2378,
+        "title": "chore(deps): update helm release argo-workflows to v2.0.9"
       },
       "1:cloudnative-pg": {
         "merged_at": "2026-10-05T03:59:42Z",
@@ -277,9 +277,9 @@
         "title": "chore(deps): update helm release external-secrets to v2.11.0"
       },
       "1:forgejo": {
-        "merged_at": "2026-10-04T22:02:16Z",
-        "pr": 2221,
-        "title": "Update code.forgejo.org/forgejo-helm/forgejo Docker tag to v17.1.7"
+        "merged_at": "2026-10-05T23:55:01Z",
+        "pr": 2296,
+        "title": "chore(deps): update code.forgejo.org/forgejo-helm/forgejo docker tag to v17.2.0"
       },
       "1:infisical-standalone": {
         "merged_at": "2026-10-05T07:00:22Z",
@@ -287,9 +287,14 @@
         "title": "chore(deps): update helm release infisical-standalone to v1.11.0"
       },
       "1:kube-prometheus-stack": {
-        "merged_at": "2026-10-05T06:41:36Z",
-        "pr": 2245,
-        "title": "chore(deps): update helm release kube-prometheus-stack to v86.3.2"
+        "merged_at": "2026-10-09T22:20:55Z",
+        "pr": 2423,
+        "title": "chore(deps): update helm release kube-prometheus-stack to v91.9.0"
+      },
+      "1:metrics-server": {
+        "merged_at": "2026-10-09T05:28:58Z",
+        "pr": 2396,
+        "title": "Update Helm release metrics-server to v3.14.0"
       },
       "2:alpine": {
         "merged_at": "2026-10-04T22:50:54Z",
@@ -297,9 +302,9 @@
         "title": "Update alpine Docker tag to v3.24"
       },
       "2:cloudflare/cloudflared": {
-        "merged_at": "2026-10-05T05:16:18Z",
-        "pr": 2232,
-        "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.9.3"
+        "merged_at": "2026-10-06T20:36:15Z",
+        "pr": 2295,
+        "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.10.0"
       },
       "2:docker.io/library/busybox": {
         "merged_at": "2026-10-04T22:57:06Z",
@@ -307,9 +312,9 @@
         "title": "Update docker.io/library/busybox Docker tag to v1.38.0"
       },
       "2:grafana/alloy": {
-        "merged_at": "2026-10-05T04:12:48Z",
-        "pr": 2236,
-        "title": "chore(deps): update grafana/alloy docker tag to v1.20.0"
+        "merged_at": "2026-10-05T23:44:00Z",
+        "pr": 2294,
+        "title": "chore(deps): update grafana/alloy docker tag to v1.20.1"
       },
       "2:grafana/loki": {
         "merged_at": "2026-10-05T03:52:17Z",
@@ -327,9 +332,9 @@
         "title": "chore(deps): update nginxinc/nginx-unprivileged docker tag to v1.31"
       },
       "2:otel/opentelemetry-collector-contrib": {
-        "merged_at": "2026-10-05T07:32:58Z",
-        "pr": 2249,
-        "title": "chore(deps): update otel/opentelemetry-collector-contrib docker tag to v0.161.0"
+        "merged_at": "2026-10-06T04:28:09Z",
+        "pr": 2298,
+        "title": "chore(deps): update otel/opentelemetry-collector-contrib docker tag to v0.162.0"
       },
       "2:prom/pushgateway": {
         "merged_at": "2026-10-04T22:43:22Z",
@@ -337,9 +342,9 @@
         "title": "Update prom/pushgateway Docker tag to v1.11.3"
       },
       "2:python": {
-        "merged_at": "2026-10-05T07:27:28Z",
-        "pr": 2250,
-        "title": "chore(deps): update python docker tag to v3.14"
+        "merged_at": "2026-10-06T12:42:11Z",
+        "pr": 2323,
+        "title": "chore(deps): update python:3.14-slim docker digest to cfe2e24"
       },
       "2:quay.io/brancz/kube-rbac-proxy": {
         "merged_at": "2026-10-05T07:20:40Z",
@@ -347,29 +352,29 @@
         "title": "chore(deps): update quay.io/brancz/kube-rbac-proxy docker tag to v0.23.0"
       },
       "2:quay.io/prometheus/blackbox-exporter": {
-        "merged_at": "2026-10-05T07:42:47Z",
-        "pr": 2252,
-        "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.28.0"
+        "merged_at": "2026-10-07T12:45:18Z",
+        "pr": 2361,
+        "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.29.0"
       },
       "2:registry": {
-        "merged_at": "2026-10-05T07:58:26Z",
-        "pr": 2253,
-        "title": "chore(deps): update registry docker tag to v3.1.1"
+        "merged_at": "2026-10-06T04:35:41Z",
+        "pr": 2297,
+        "title": "chore(deps): update registry docker tag to v3.1.2"
       },
       "3:agent-base": {
-        "merged_at": "2026-09-28T13:49:47Z",
-        "pr": 2083,
-        "title": "deploy: agent-base 2026.9.28-g3df151221c3d.92"
+        "merged_at": "2026-10-09T20:07:36Z",
+        "pr": 2422,
+        "title": "deploy: agent-base 2026.10.9-g4bd7c9b9b57d"
       },
       "3:agent-coordinator": {
-        "merged_at": "2026-09-28T13:29:19Z",
-        "pr": 2081,
-        "title": "deploy: agent-coordinator 2026.9.28-gca94f4a2dd99"
+        "merged_at": "2026-10-05T14:14:12Z",
+        "pr": 2265,
+        "title": "deploy: agent-coordinator 2026.10.5-gca94f4a2dd99"
       },
       "3:homelab/arc-runner": {
-        "merged_at": "2026-10-02T21:59:33Z",
-        "pr": 2187,
-        "title": "arc-runners: pin runner image 2026.10.2-gd0b15ed85110"
+        "merged_at": "2026-10-07T20:56:11Z",
+        "pr": 2375,
+        "title": "arc-runners: pin runner image 2026.10.7-g44d3e2f9a6d6"
       },
       "5:Infisical/infisical@tofu/infisical": {
         "merged_at": "2026-09-27T12:28:32Z",
@@ -377,19 +382,19 @@
         "title": "chore(deps): update terraform infisical to ~> 0.19"
       },
       "5:bpg/proxmox@tofu": {
-        "merged_at": "2026-09-28T12:49:13Z",
-        "pr": 2075,
-        "title": "Update Terraform proxmox to ~> 0.114"
+        "merged_at": "2026-10-09T22:12:34Z",
+        "pr": 2424,
+        "title": "chore(deps): update terraform proxmox to ~> 0.115"
       },
       "5:bpg/proxmox@tofu/provisioning": {
-        "merged_at": "2026-09-28T12:49:13Z",
-        "pr": 2075,
-        "title": "Update Terraform proxmox to ~> 0.114"
+        "merged_at": "2026-10-09T22:12:34Z",
+        "pr": 2424,
+        "title": "chore(deps): update terraform proxmox to ~> 0.115"
       },
       "5:cloudflare/cloudflare@tofu/cloudflare": {
-        "merged_at": "2026-10-04T19:00:20Z",
-        "pr": 2191,
-        "title": "Update Terraform cloudflare to v5.26.0"
+        "merged_at": "2026-10-10T11:52:34Z",
+        "pr": 2426,
+        "title": "chore(deps): update terraform cloudflare to v5.27.0"
       },
       "5:hashicorp/helm@tofu": {
         "merged_at": "2026-10-02T19:55:23Z",
@@ -397,14 +402,14 @@
         "title": "Update Terraform helm to v3"
       },
       "5:hashicorp/kubernetes@tofu": {
-        "merged_at": "2026-10-04T08:51:42Z",
-        "pr": 2047,
-        "title": "chore(deps): update terraform kubernetes to v3"
+        "merged_at": "2026-10-09T05:49:09Z",
+        "pr": 2397,
+        "title": "Update Terraform kubernetes to v3.3.0"
       },
       "5:hashicorp/kubernetes@tofu/cloudflare": {
-        "merged_at": "2026-10-04T08:51:42Z",
-        "pr": 2047,
-        "title": "chore(deps): update terraform kubernetes to v3"
+        "merged_at": "2026-10-09T05:49:09Z",
+        "pr": 2397,
+        "title": "Update Terraform kubernetes to v3.3.0"
       },
       "5:hashicorp/random@tofu": {
         "merged_at": "2026-10-04T16:23:38Z",
@@ -427,139 +432,164 @@
         "title": "chore(deps): update terraform talos to ~> 0.12"
       },
       "7:age": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:argo-workflows": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:argocd": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:awscli2": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:bind": {
-        "merged_at": "2026-09-07T07:51:27Z",
-        "pr": 1488,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:cilium-cli": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:cloudflared": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+      },
+      "7:curl": {
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+      },
+      "7:deno": {
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:gh": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:gitleaks": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:hubble": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:infisical": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:jq": {
-        "merged_at": "2026-09-07T07:51:27Z",
-        "pr": 1488,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:k9s": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:keepassxc": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:kubeconform": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:kubectl": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:kubernetes-helm": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:kyverno": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:netcat-gnu": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:nmap": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+      },
+      "7:openssl": {
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:opentofu": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:prometheus": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+      },
+      "7:python3": {
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:qrencode": {
-        "merged_at": "2026-09-07T07:51:27Z",
-        "pr": 1488,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+      },
+      "7:renovate": {
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:sops": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:tea": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:wireguard-tools": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:yq-go": {
-        "merged_at": "2026-08-31T09:50:54Z",
-        "pr": 1131,
-        "title": "chore: devbox update (align toolchain lock)"
+        "merged_at": "2026-10-07T20:11:25Z",
+        "pr": 2362,
+        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "8:actions/checkout": {
         "merged_at": "2026-09-27T17:20:35Z",
@@ -582,9 +612,9 @@
         "title": "Update github-actions (major)"
       },
       "8:renovatebot/github-action": {
-        "merged_at": "2026-10-05T03:36:53Z",
-        "pr": 2235,
-        "title": "chore(deps): update renovatebot/github-action action to v46.3.5"
+        "merged_at": "2026-10-06T22:18:21Z",
+        "pr": 2352,
+        "title": "chore(deps): update renovatebot/github-action action to v46.3.6"
       }
     }
   },
@@ -608,9 +638,9 @@
         "canary"
       ],
       "key": "1:argo-workflows",
-      "last_proven": "2026-10-05T04:21:26Z",
+      "last_proven": "2026-10-08T04:10:21Z",
       "name": "argo-workflows",
-      "version": "2.0.8",
+      "version": "2.0.9",
       "where": [
         "argocd/platform/argo-workflows.yaml"
       ]
@@ -673,7 +703,7 @@
         "canary"
       ],
       "key": "1:forgejo",
-      "last_proven": "2026-10-04T22:02:16Z",
+      "last_proven": "2026-10-05T23:55:01Z",
       "name": "forgejo",
       "version": "17.2.0",
       "where": [
@@ -739,9 +769,9 @@
         "canary"
       ],
       "key": "1:kube-prometheus-stack",
-      "last_proven": "2026-10-05T06:41:36Z",
+      "last_proven": "2026-10-09T22:20:55Z",
       "name": "kube-prometheus-stack",
-      "version": "91.8.2",
+      "version": "91.9.0",
       "where": [
         "argocd/platform/kube-prometheus-stack.yaml"
       ]
@@ -752,9 +782,9 @@
         "canary"
       ],
       "key": "1:metrics-server",
-      "last_proven": null,
+      "last_proven": "2026-10-09T05:28:58Z",
       "name": "metrics-server",
-      "version": "3.12.2",
+      "version": "3.14.0",
       "where": [
         "argocd/platform/metrics-server.yaml"
       ]
@@ -804,7 +834,7 @@
         "canary"
       ],
       "key": "2:cloudflare/cloudflared",
-      "last_proven": "2026-10-05T05:16:18Z",
+      "last_proven": "2026-10-06T20:36:15Z",
       "name": "cloudflare/cloudflared",
       "version": "2026.10.0@sha256:9b49eed8f628",
       "where": [
@@ -871,7 +901,7 @@
         "canary"
       ],
       "key": "2:grafana/alloy",
-      "last_proven": "2026-10-05T04:12:48Z",
+      "last_proven": "2026-10-05T23:44:00Z",
       "name": "grafana/alloy",
       "version": "v1.20.1",
       "where": [
@@ -928,7 +958,7 @@
         "canary"
       ],
       "key": "2:otel/opentelemetry-collector-contrib",
-      "last_proven": "2026-10-05T07:32:58Z",
+      "last_proven": "2026-10-06T04:28:09Z",
       "name": "otel/opentelemetry-collector-contrib",
       "version": "0.162.0",
       "where": [
@@ -954,7 +984,7 @@
         "canary"
       ],
       "key": "2:python",
-      "last_proven": "2026-10-05T07:27:28Z",
+      "last_proven": "2026-10-06T12:42:11Z",
       "name": "python",
       "version": "3.14-slim, 3.14-slim@sha256:cfe2e24a7530",
       "where": [
@@ -988,7 +1018,7 @@
         "canary"
       ],
       "key": "2:quay.io/prometheus/blackbox-exporter",
-      "last_proven": "2026-10-05T07:42:47Z",
+      "last_proven": "2026-10-07T12:45:18Z",
       "name": "quay.io/prometheus/blackbox-exporter",
       "version": "v0.29.0",
       "where": [
@@ -1001,7 +1031,7 @@
         "canary"
       ],
       "key": "2:registry",
-      "last_proven": "2026-10-05T07:58:26Z",
+      "last_proven": "2026-10-06T04:35:41Z",
       "name": "registry",
       "version": "3.1.2",
       "where": [
@@ -1019,9 +1049,9 @@
         "canary"
       ],
       "key": "3:agent-base",
-      "last_proven": "2026-09-28T13:49:47Z",
+      "last_proven": "2026-10-09T20:07:36Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.10.7-g28045f8d3a1c",
+      "version": "`AGENT_BASE_IMAGE`=2026.10.9-g4bd7c9b9b57d",
       "where": [
         "agents/images.env"
       ]
@@ -1033,9 +1063,9 @@
         "deploy_edge"
       ],
       "key": "3:agent-coordinator",
-      "last_proven": "2026-09-28T13:29:19Z",
+      "last_proven": "2026-10-05T14:14:12Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.5-gca94f4a2dd99; 31 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.5-gca94f4a2dd99; 32 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1078,9 +1108,9 @@
         "canary"
       ],
       "key": "3:homelab/arc-runner",
-      "last_proven": "2026-10-02T21:59:33Z",
+      "last_proven": "2026-10-07T20:56:11Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.6-gf17a6d8c3767 (×3)",
+      "version": "2026.10.7-g44d3e2f9a6d6 (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1136,9 +1166,9 @@
         "canary"
       ],
       "key": "5:bpg/proxmox@tofu",
-      "last_proven": "2026-09-28T12:49:13Z",
+      "last_proven": "2026-10-09T22:12:34Z",
       "name": "bpg/proxmox",
-      "version": "0.114.0 (`~> 0.114`)",
+      "version": "0.115.0 (`~> 0.115`)",
       "where": [
         "tofu/versions.tf",
         "tofu/.terraform.lock.hcl"
@@ -1150,9 +1180,9 @@
         "canary"
       ],
       "key": "5:bpg/proxmox@tofu/provisioning",
-      "last_proven": "2026-09-28T12:49:13Z",
+      "last_proven": "2026-10-09T22:12:34Z",
       "name": "bpg/proxmox",
-      "version": "0.114.0 (`~> 0.114`)",
+      "version": "0.115.0 (`~> 0.115`)",
       "where": [
         "tofu/provisioning/versions.tf",
         "tofu/provisioning/.terraform.lock.hcl"
@@ -1164,7 +1194,7 @@
         "canary"
       ],
       "key": "5:cloudflare/cloudflare@tofu/cloudflare",
-      "last_proven": "2026-10-04T19:00:20Z",
+      "last_proven": "2026-10-10T11:52:34Z",
       "name": "cloudflare/cloudflare",
       "version": "5.26.0 (`~> 5.0`)",
       "where": [
@@ -1207,9 +1237,9 @@
         "canary"
       ],
       "key": "5:hashicorp/kubernetes@tofu",
-      "last_proven": "2026-10-04T08:51:42Z",
+      "last_proven": "2026-10-09T05:49:09Z",
       "name": "hashicorp/kubernetes",
-      "version": "3.2.1 (`~> 3.0`)",
+      "version": "3.3.0 (`~> 3.0`)",
       "where": [
         "tofu/versions.tf",
         "tofu/.terraform.lock.hcl"
@@ -1221,9 +1251,9 @@
         "canary"
       ],
       "key": "5:hashicorp/kubernetes@tofu/cloudflare",
-      "last_proven": "2026-10-04T08:51:42Z",
+      "last_proven": "2026-10-09T05:49:09Z",
       "name": "hashicorp/kubernetes",
-      "version": "3.2.1 (`~> 3.0`)",
+      "version": "3.3.0 (`~> 3.0`)",
       "where": [
         "tofu/cloudflare/versions.tf",
         "tofu/cloudflare/.terraform.lock.hcl"
@@ -1380,9 +1410,9 @@
         "detector"
       ],
       "key": "7:age",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "age",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "where": [
         "devbox.lock"
       ]
@@ -1396,7 +1426,7 @@
       "key": "7:ansible",
       "last_proven": null,
       "name": "ansible",
-      "version": "2.21.3",
+      "version": "2.21.4",
       "where": [
         "devbox.lock"
       ]
@@ -1408,9 +1438,9 @@
         "detector"
       ],
       "key": "7:argo-workflows",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "argo-workflows",
-      "version": "3.6.10",
+      "version": "4.0.5",
       "where": [
         "devbox.lock"
       ]
@@ -1422,7 +1452,7 @@
         "detector"
       ],
       "key": "7:argocd",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "argocd",
       "version": "3.4.6",
       "where": [
@@ -1436,7 +1466,7 @@
         "detector"
       ],
       "key": "7:awscli2",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "awscli2",
       "version": "2.35.11",
       "where": [
@@ -1450,9 +1480,9 @@
         "detector"
       ],
       "key": "7:bind",
-      "last_proven": "2026-09-07T07:51:27Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "bind",
-      "version": "9.20.26",
+      "version": "9.20.29",
       "where": [
         "devbox.lock"
       ]
@@ -1464,7 +1494,7 @@
         "detector"
       ],
       "key": "7:cilium-cli",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "cilium-cli",
       "version": "0.19.7",
       "where": [
@@ -1478,9 +1508,9 @@
         "detector"
       ],
       "key": "7:cloudflared",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "cloudflared",
-      "version": "2026.8.2",
+      "version": "2026.9.3",
       "where": [
         "devbox.lock"
       ]
@@ -1506,9 +1536,9 @@
         "detector"
       ],
       "key": "7:curl",
-      "last_proven": null,
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "curl",
-      "version": "8.17.0",
+      "version": "8.22.0",
       "where": [
         "devbox.lock"
       ]
@@ -1520,9 +1550,9 @@
         "detector"
       ],
       "key": "7:deno",
-      "last_proven": null,
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "deno",
-      "version": "2.9.5",
+      "version": "2.9.7",
       "where": [
         "devbox.lock"
       ]
@@ -1534,9 +1564,9 @@
         "detector"
       ],
       "key": "7:gh",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "gh",
-      "version": "2.98.0",
+      "version": "2.102.0",
       "where": [
         "devbox.lock"
       ]
@@ -1548,7 +1578,7 @@
         "detector"
       ],
       "key": "7:gitleaks",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "gitleaks",
       "version": "8.30.1",
       "where": [
@@ -1562,7 +1592,7 @@
         "detector"
       ],
       "key": "7:hubble",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "hubble",
       "version": "1.19.4",
       "where": [
@@ -1576,9 +1606,9 @@
         "detector"
       ],
       "key": "7:infisical",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "infisical",
-      "version": "0.43.123",
+      "version": "0.43.132",
       "where": [
         "devbox.lock"
       ]
@@ -1590,7 +1620,7 @@
         "detector"
       ],
       "key": "7:jq",
-      "last_proven": "2026-09-07T07:51:27Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "jq",
       "version": "1.8.2",
       "where": [
@@ -1604,7 +1634,7 @@
         "detector"
       ],
       "key": "7:k9s",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "k9s",
       "version": "0.51.0",
       "where": [
@@ -1618,7 +1648,7 @@
         "detector"
       ],
       "key": "7:keepassxc",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "keepassxc",
       "version": "2.7.12",
       "where": [
@@ -1632,7 +1662,7 @@
         "detector"
       ],
       "key": "7:kubeconform",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "kubeconform",
       "version": "0.8.0",
       "where": [
@@ -1646,9 +1676,9 @@
         "detector"
       ],
       "key": "7:kubectl",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "kubectl",
-      "version": "1.36.3",
+      "version": "1.37.1",
       "where": [
         "devbox.lock"
       ]
@@ -1660,9 +1690,9 @@
         "detector"
       ],
       "key": "7:kubernetes-helm",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "kubernetes-helm",
-      "version": "4.2.4",
+      "version": "4.3.0",
       "where": [
         "devbox.lock"
       ]
@@ -1674,9 +1704,9 @@
         "detector"
       ],
       "key": "7:kyverno",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "kyverno",
-      "version": "1.19.0",
+      "version": "1.19.1",
       "where": [
         "devbox.lock"
       ]
@@ -1688,7 +1718,7 @@
         "detector"
       ],
       "key": "7:netcat-gnu",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "netcat-gnu",
       "version": "0.7.1",
       "where": [
@@ -1704,7 +1734,7 @@
       "key": "7:nixpkgs-unstable",
       "last_proven": null,
       "name": "nixpkgs-unstable",
-      "version": "nixpkgs@3181085bfd08",
+      "version": "nixpkgs@7dd199b0e299",
       "where": [
         "devbox.lock"
       ]
@@ -1716,7 +1746,7 @@
         "detector"
       ],
       "key": "7:nmap",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "nmap",
       "version": "7.991",
       "where": [
@@ -1732,7 +1762,7 @@
       "key": "7:nodejs_22",
       "last_proven": null,
       "name": "nodejs_22",
-      "version": "22.23.2",
+      "version": "22.23.3",
       "where": [
         "devbox.lock"
       ]
@@ -1744,9 +1774,9 @@
         "detector"
       ],
       "key": "7:openssl",
-      "last_proven": null,
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "openssl",
-      "version": "3.6.0",
+      "version": "3.5.8",
       "where": [
         "devbox.lock"
       ]
@@ -1758,9 +1788,9 @@
         "detector"
       ],
       "key": "7:opentofu",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "opentofu",
-      "version": "1.12.5",
+      "version": "1.13.1",
       "where": [
         "devbox.lock"
       ]
@@ -1772,9 +1802,9 @@
         "detector"
       ],
       "key": "7:prometheus",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "prometheus",
-      "version": "3.14.0",
+      "version": "3.15.0",
       "where": [
         "devbox.lock"
       ]
@@ -1786,9 +1816,9 @@
         "detector"
       ],
       "key": "7:python3",
-      "last_proven": null,
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "python3",
-      "version": "3.12.8",
+      "version": "3.14.7",
       "where": [
         "devbox.lock"
       ]
@@ -1800,7 +1830,7 @@
         "detector"
       ],
       "key": "7:qrencode",
-      "last_proven": "2026-09-07T07:51:27Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "qrencode",
       "version": "4.1.1",
       "where": [
@@ -1814,9 +1844,9 @@
         "detector"
       ],
       "key": "7:renovate",
-      "last_proven": null,
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "renovate",
-      "version": "44.37.1",
+      "version": "44.126.1",
       "where": [
         "devbox.lock"
       ]
@@ -1828,7 +1858,7 @@
         "detector"
       ],
       "key": "7:sops",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "sops",
       "version": "3.13.3",
       "where": [
@@ -1856,9 +1886,9 @@
         "detector"
       ],
       "key": "7:tea",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "tea",
-      "version": "0.15.1",
+      "version": "0.16.0",
       "where": [
         "devbox.lock"
       ]
@@ -1884,7 +1914,7 @@
         "detector"
       ],
       "key": "7:wireguard-tools",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "wireguard-tools",
       "version": "1.0.20260223",
       "where": [
@@ -1898,9 +1928,9 @@
         "detector"
       ],
       "key": "7:yq-go",
-      "last_proven": "2026-08-31T09:50:54Z",
+      "last_proven": "2026-10-07T20:11:25Z",
       "name": "yq-go",
-      "version": "4.53.3",
+      "version": "4.54.1",
       "where": [
         "devbox.lock"
       ]
@@ -1962,7 +1992,7 @@
       "class": 8,
       "gap_columns": [],
       "key": "8:renovatebot/github-action",
-      "last_proven": "2026-10-05T03:36:53Z",
+      "last_proven": "2026-10-06T22:18:21Z",
       "name": "renovatebot/github-action",
       "version": "6d26fcf0275dc65624cbc3d51fe78bc773f98321 (v46.3.6)",
       "where": [
@@ -1975,7 +2005,7 @@
         "canary"
       ],
       "key": "10:ghcr.io/actions/actions-runner",
-      "last_proven": "2026-09-27T11:39:05Z",
+      "last_proven": "2026-10-06T22:26:00Z",
       "name": "ghcr.io/actions/actions-runner",
       "version": "2.338.0",
       "where": [

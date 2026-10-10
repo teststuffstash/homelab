@@ -160,7 +160,7 @@ classes:
     proof_head_prefixes: ["renovate/"]
     proof_paths: ["docker/arc-runner/Dockerfile"]
     proposer: {status: ok, text: "Renovate `dockerfile` + `custom.regex` — #2022 (actions-runner 2.337.0, `deps-review`) merged 2026-09-27"}
-    merge_gate: {status: ok, text: "FROM minor → `deps-review`; ARG patch/minor → `automerge` (custom.regex rule, 2026-09-27); majors → un-armed"}
+    merge_gate: {status: ok, text: "FROM minor → `deps-review`, FROM patch → `automerge` (2026-10-10, the fail-closed pass); ARG patch/minor → `automerge` (custom.regex rule, 2026-09-27); majors → un-armed"}
     deploy_edge: {status: ok, text: "`runner-image.yaml` builds on the merge and opens the `runner-image-pin` PR (class 3 lands it)"}
     detector: {status: ok, text: "the image build in `ci` (push: false) fails the PR; `GithubWorkflowRunFailed` covers the master build"}
     revert: {status: ok, text: "the cluster pin is the revert (the previous `arc-runner:` tag stays pullable); the FU-1990 chain covers the workflow half"}
