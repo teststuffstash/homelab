@@ -7,6 +7,8 @@
 #   bash scripts/helm-release-evidence.sh snapshot                         # JSON on stdout
 #   bash scripts/helm-release-evidence.sh watch <seconds> [<interval>]     # JSONL timeline on stdout
 #   bash scripts/helm-release-evidence.sh diff <before.json> <after.json>  # human summary
+#   bash scripts/helm-release-evidence.sh verdict <before> <after> <release>  # machine verdict JSON; exit 2 = bad
+#   bash scripts/helm-release-evidence.sh upload <evidence-dir>             # → s3://helm-evidence on the backup Garage
 #
 # WHY DATA, NOT A GATE (operator, 2026-10-02): the box's helm releases are the cluster's network,
 # storage and GitOps layers (Cilium, Longhorn, ArgoCD); a bad upgrade there has no clean rollback
@@ -31,6 +33,9 @@
 # Evidence lands in $HELM_EVIDENCE_DIR (default ~/.claude/helm-evidence)/<utc>-<label>/:
 #   before.json after.json timeline.jsonl health-before.json health-compare.txt apply.log summary.txt
 #   window-open.log window-close.log
+# and is then copied OUT of the cluster to s3://helm-evidence/<utc>-<label>/ on the backup Garage LXC
+# (`upload`; needs HELM_EVIDENCE_S3_KEY_ID/_SECRET — on the management box they are in its env file).
+# The box's own unattended bracket (FU-301, mgmt/scripts/mgmt-helm.sh) writes the same files there.
 # Exit (run): the apply's rc; 2 if it applied but the window could not close clean; 3 = refused
 # before applying (another live window, unreadable registry, the window did not open).
 # Env: HELM_RELEASES ("<release>:<namespace> …"), WATCH_SECS (900), WATCH_INTERVAL (20), KUBECONFIG.
@@ -41,7 +46,8 @@ export KUBECONFIG="${KUBECONFIG:-$ROOT/tofu/kubeconfig}"
 # Same fallback as maintenance-window.sh / node-maintenance.sh: on the management box the client
 # config lives in /var/lib/mgmt/, and devbox exports the checkout path regardless.
 [ -f "$KUBECONFIG" ] || { [ -f /var/lib/mgmt/kubeconfig ] && export KUBECONFIG=/var/lib/mgmt/kubeconfig; }
-[ -f "$KUBECONFIG" ] || { echo "helm-release-evidence: no kubeconfig at $KUBECONFIG" >&2; exit 1; }
+# Only the verbs that READ the cluster need it — diff/verdict/upload work on files (and run in CI).
+need_kube() { [ -f "$KUBECONFIG" ] || { echo "helm-release-evidence: no kubeconfig at $KUBECONFIG" >&2; exit 1; }; }
 RELEASES="${HELM_RELEASES:-cilium:kube-system longhorn:longhorn-system argocd:argocd argocd-apps:argocd}"
 # stderr goes to $EVIDENCE_ERRLOG (default: discarded), never into a captured JSON read — kubectl
 # warnings on stderr would otherwise be parsed as the object.
@@ -204,6 +210,76 @@ cmd_diff() { # <before> <after>
     "== argocd: \($A.argocd | group_by("\(.health)/\(.sync)") | map({("\(.[0].health)/\(.[0].sync)"): length}) | add) → \($B.argocd | group_by("\(.health)/\(.sync)") | map({("\(.[0].health)/\(.[0].sync)"): length}) | add)"'
 }
 
+# verdict <before.json> <after.json> <release> — the MACHINE reading of a snapshot pair (FU-301): one
+# JSON object {release, ok, findings[]} on stdout; exit 0 = ok, 2 = a finding, 1 = unusable input.
+# What "bad" means here is deliberately coarse — the operator's 2026-10-02 ruling is that nothing
+# DIAGNOSES a substrate failure yet; this only answers "is the cluster at least where it was, and did
+# the release finish rolling", which is what a forward-only applier needs to know before it does
+# anything else. Every rule compares AFTER against BEFORE (a baseline that was already degraded is
+# not the apply's fault), and an unreadable read is a finding, never a pass:
+#   status       every release reads helm status `deployed`
+#   rolled       the applied release's workloads: observed == generation, ready == updated == desired
+#   pods         the applied release's pods all Ready
+#   bgp          cilium BGP sessions established ≥ before
+#   longhorn     no volume newly `faulted`, `degraded` count ≤ before
+#   argocd       Applications Healthy ≥ before; no Application newly Degraded/Missing
+# The management box calls this through its verdict seam (mgmt/scripts/mgmt-helm.sh, the FU-302 swap
+# point) beside the maintenance-window compare; the jail's `run` prints it into summary.txt.
+cmd_verdict() {
+  local b="$1" a="$2" rel="$3"
+  jq -e '.releases' "$b" >/dev/null 2>&1 && jq -e '.releases' "$a" >/dev/null 2>&1 \
+    || { echo "verdict: unreadable snapshot(s): $b $a" >&2; return 1; }
+  jq -n --slurpfile b "$b" --slurpfile a "$a" --arg rel "$rel" '
+    ($b[0]) as $B | ($a[0]) as $A |
+    def arr(x): if (x | type) == "array" then x else null end;
+    def est(x): [x[]? | select(.state == "established")] | length;
+    def rob(x; r): [x[]? | select(.robustness == r)] | length;
+    def bad(x): [x[]? | select(.health == "Degraded" or .health == "Missing") | .name];
+    [
+      ( $A.releases | to_entries[] | select((.value.helm.status // "unreadable") != "deployed")
+        | "status: \(.key) is \(.value.helm.status // (.value.helm.error // "unreadable"))" ),
+      ( if ($A.releases[$rel] // null) == null then "rolled: release \($rel) absent from the after snapshot"
+        elif arr($A.releases[$rel].workloads) == null then "rolled: \($rel) workloads unreadable"
+        else ( $A.releases[$rel].workloads[]
+               | select(.observed != .generation or .ready != .desired or .updated != .desired)
+               | "rolled: \(.kind)/\(.name) ready \(.ready)/\(.desired) updated \(.updated) gen \(.observed)/\(.generation)" )
+        end ),
+      ( if ($A.releases[$rel] // null) == null then empty
+        elif arr($A.releases[$rel].pods) == null then "pods: \($rel) pods unreadable"
+        else ( $A.releases[$rel].pods[] | select(.ready | not) | "pods: \(.name) not Ready on \(.node // "?")" ) end ),
+      ( if arr($A.cilium_bgp) == null or arr($B.cilium_bgp) == null then "bgp: unreadable"
+        elif est($A.cilium_bgp) < est($B.cilium_bgp) then "bgp: established \(est($B.cilium_bgp)) → \(est($A.cilium_bgp))"
+        else empty end ),
+      ( if arr($A.longhorn.volumes) == null or arr($B.longhorn.volumes) == null then "longhorn: volumes unreadable"
+        else ( if rob($A.longhorn.volumes; "faulted") > rob($B.longhorn.volumes; "faulted") then "longhorn: faulted \(rob($B.longhorn.volumes; "faulted")) → \(rob($A.longhorn.volumes; "faulted"))" else empty end ),
+             ( if rob($A.longhorn.volumes; "degraded") > rob($B.longhorn.volumes; "degraded") then "longhorn: degraded \(rob($B.longhorn.volumes; "degraded")) → \(rob($A.longhorn.volumes; "degraded"))" else empty end )
+        end ),
+      ( if arr($A.argocd) == null or arr($B.argocd) == null then "argocd: unreadable"
+        else ( ([$A.argocd[] | select(.health == "Healthy")] | length) as $ha | ([$B.argocd[] | select(.health == "Healthy")] | length) as $hb
+               | if $ha < $hb then "argocd: Healthy \($hb) → \($ha)" else empty end ),
+             ( bad($B.argocd) as $old | bad($A.argocd)[] | select(. as $n | $old | index($n) | not) | "argocd: \(.) newly Degraded/Missing" )
+        end )
+    ] as $f | {release: $rel, ok: ($f | length == 0), findings: $f}' | tee "$T/verdict.json"
+  jq -e '.ok' "$T/verdict.json" >/dev/null && return 0 || return 2
+}
+
+# upload <dir> — the record leaves the jail/box for the BACKUP Garage (the Longhorn backup target's LXC,
+# docs/longhorn-backup.md), never the in-cluster one: a record of a broken substrate must survive the
+# substrate (FU-301). s3://$HELM_EVIDENCE_BUCKET/<dir basename>/… with the bucket's own key
+# (HELM_EVIDENCE_S3_KEY_ID / _SECRET — the box's env file, wallet `helm-evidence-key-id` / `-secret`).
+# rc 1 = no credentials or the copy failed; a caller logs it and keeps the local copy.
+cmd_upload() {
+  local d="${1:?upload <evidence-dir>}"
+  [ -d "$d" ] || { echo "upload: no such dir $d" >&2; return 1; }
+  [ -n "${HELM_EVIDENCE_S3_KEY_ID:-}" ] && [ -n "${HELM_EVIDENCE_S3_SECRET:-}" ] \
+    || { echo "upload: HELM_EVIDENCE_S3_KEY_ID/_SECRET unset — record kept only at $d" >&2; return 1; }
+  AWS_ACCESS_KEY_ID="$HELM_EVIDENCE_S3_KEY_ID" AWS_SECRET_ACCESS_KEY="$HELM_EVIDENCE_S3_SECRET" \
+  AWS_DEFAULT_REGION=garage AWS_EC2_METADATA_DISABLED=true \
+    aws --endpoint-url "${HELM_EVIDENCE_S3_ENDPOINT:-http://192.168.2.73:3900}" s3 cp --recursive --only-show-errors \
+      "$d" "s3://${HELM_EVIDENCE_BUCKET:-helm-evidence}/$(basename "$d")/" \
+    && echo "  record → s3://${HELM_EVIDENCE_BUCKET:-helm-evidence}/$(basename "$d")/ (backup Garage)"
+}
+
 cmd_run() { # <plan-id> [--label <slug>]
   local plan="${1:-}" label="helm-apply"; shift || true
   [ -n "$plan" ] || { echo "run: <plan-id> required (devbox run mgmt-tf -- plan prints it)" >&2; exit 64; }
@@ -250,6 +326,7 @@ cmd_run() { # <plan-id> [--label <slug>]
   { echo "plan $plan  apply rc=$rc  $t0 → $t1  window $wid"; cmd_diff "$dir/before.json" "$dir/after.json"
     echo "== health compare (maintenance-window check, rc=$crc)"; cat "$dir/health-compare.txt"; } > "$dir/summary.txt"
   cat "$dir/summary.txt"
+  cmd_upload "$dir" || echo "  ⚠ the record was NOT copied to the backup Garage — upload it by hand: $0 upload $dir"
   # Close only on a clean check: `close` refuses otherwise and the window STAYS OPEN for a human —
   # report-only means this verb never forces it shut over a regression it just recorded.
   if bash "$W" close --id "$wid" > "$dir/window-close.log" 2>&1; then
@@ -262,9 +339,11 @@ cmd_run() { # <plan-id> [--label <slug>]
 }
 
 case "${1:-}" in
-  snapshot) shift; cmd_snapshot ;;
-  watch)    shift; cmd_watch "$@" ;;
+  snapshot) shift; need_kube; cmd_snapshot ;;
+  watch)    shift; need_kube; cmd_watch "$@" ;;
   diff)     shift; cmd_diff "$@" ;;
-  run)      shift; cmd_run "$@" ;;
-  *) echo "usage: helm-release-evidence.sh run <plan-id> [--label s] | snapshot | watch <secs> [<interval>] | diff <before> <after>" >&2; exit 64 ;;
+  run)      shift; need_kube; cmd_run "$@" ;;
+  verdict)  shift; cmd_verdict "$@" ;;
+  upload)   shift; cmd_upload "$@" ;;
+  *) echo "usage: helm-release-evidence.sh run <plan-id> [--label s] | snapshot | watch <secs> [<interval>] | diff <before> <after> | verdict <before> <after> <release> | upload <dir>" >&2; exit 64 ;;
 esac

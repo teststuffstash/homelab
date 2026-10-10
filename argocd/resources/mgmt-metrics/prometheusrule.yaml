@@ -69,6 +69,32 @@ spec:
               cilium signature's fix: `kubectl -n kube-system rollout restart ds/cilium`. Clears on
               the next Talos config apply whose post-check is clean, or by hand once the cluster is
               whole: `rm /var/lib/mgmt/apply/post-check-failed` on the box.
+        # FU-301 — a box helm apply (mgmt/scripts/mgmt-helm.sh) STOPPED on its verdict: forward only, so
+        # nothing reverted — the box kept the ⚓ lease and the window, and refuses every later helm apply
+        # until a human clears the marker. Second arm: the lease loop finds such a lease past its
+        # deadline (`forward_only`) — also the box that died mid-bracket and never wrote a verdict.
+        - alert: MgmtHelmApplyStopped
+          expr: |
+            mgmt_apply_helm_stopped == 1
+              or on (instance) (increase(mgmt_lease_revert_total{outcome="forward_only"}[30m]) > 0)
+          for: 5m
+          # triage none: no agent acts on a substrate (ArgoCD/Longhorn) failure — operator 2026-10-02; the record is the read
+          labels: { severity: critical, triage: none }
+          annotations:
+            summary: "The management box stopped after a helm_release apply — nothing was reverted"
+            description: >-
+              A box-run helm_release apply (FU-301 — argocd-apps, argo-cd or longhorn) read a bad
+              verdict (a release not deployed or not rolled, BGP sessions or Healthy Applications
+              fewer than before, a Longhorn volume newly degraded/faulted, an engine move that did not
+              come back, or a regressed health compare), or its ⚓ upgrade lease outlived its deadline
+              unconfirmed. The box is FORWARD ONLY: it did not revert, retry or remediate. It kept the
+              lease and the declared window and refuses every later helm apply. Read the record —
+              `/var/lib/mgmt/apply/helm-stopped` on 192.168.2.53 names it; the files are in
+              s3://helm-evidence/<utc>-box-<release>-<version>/ on the backup Garage (192.168.2.73,
+              summary.txt first) — and the `management-apply` status on the commit. Once the cluster
+              is whole: `rm /var/lib/mgmt/apply/helm-stopped`, delete the lease
+              (`kubectl -n agent-coordinator delete cm upgrade-lease-tofu-helm-<release>`), close the
+              window. docs/management-box.md §MB3 "Helm release applies".
         # FU-300 — the apply loop DEFERS while a declared window holds it (docs/management-box.md §MB3
         # "Declared windows hold the apply loop"). A deferral posts no status and completes its tick,
         # so neither MgmtApplyResidueStanding (reads a failure status) nor MgmtApplyLoopStale (reads

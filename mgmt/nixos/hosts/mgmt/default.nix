@@ -428,7 +428,11 @@ in
     path = with pkgs; [ bash git devbox nix curl jq openssl util-linux coreutils gnugrep gawk gnused ];
     serviceConfig = {
       Type = "oneshot";
-      TimeoutStartSec = "40m";
+      # 5h, was 40m: a box helm apply (FU-301, mgmt/scripts/mgmt-helm.sh) runs its whole bracket inside
+      # this tick — a longhorn restore point (on-demand backups ≤30m + pg-backup.sh now ≤90m), the
+      # apply (argo-cd's helm timeout 15m), one-at-a-time engine moves (≤15m each, stops at the first
+      # failure) and the settle. Plain ticks still take a minute; the timer never stacks a oneshot.
+      TimeoutStartSec = "5h";
       Environment = [ "HOME=/root" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
