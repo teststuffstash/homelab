@@ -68,5 +68,38 @@ check "lane: no majors at all → arm (the body writer makes it the mechanical l
 check "lane: a HUMAN_PACKAGES member that only moved a minor does not park" arm \
       "$(lock_lane "$(lock_moves '{"packages":{"opentofu@latest":{"version":"1.12.5"}}}' '{"packages":{"opentofu@latest":{"version":"1.13.1"}}}')")"
 
+
+# the version-set stamp's seams (homelab#2014): the fleet minor bound + the stamp's moves joining the lane
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+cat > "$T/variables.tf" <<'TF'
+variable "talos_version" {
+  default = "v1.14.1"
+}
+variable "kubernetes_version" {
+  description = "Kubernetes version to install."
+  type        = string
+  default     = "v1.36.1"
+}
+TF
+# the kubernetes_version block's default, NOT the first default in the file (talos v1.14.1 → 1.14 would be wrong)
+check "stamp: fleet minor from the kubernetes_version default" "1.36" "$(fleet_minor "$T/variables.tf")"
+check "stamp: the real tofu/variables.tf yields a major.minor (fails loud when the variable moves)" 1 \
+      "$(fleet_minor "$HERE/../tofu/variables.tf" | grep -cE '^[0-9]+\.[0-9]+$')"
+printf 'variable "x" {\n  default = "1"\n}\n' > "$T/none.tf"
+check "stamp: no kubernetes_version → empty (the caller refuses to stamp)" "" "$(fleet_minor "$T/none.tf")"
+printf '{"packages":{"claude-code":{"version":"latest"},"kubectl":{"version":"1.36"}}}\n' > "$T/devbox.json"
+check "stamp: kubectl already on the fleet minor → no move, file unchanged" "|1.36" \
+      "$(bound_kubectl "$T/devbox.json" 1.36)|$(jq -r '.packages.kubectl.version' "$T/devbox.json")"
+check "stamp: the fleet moved a minor → kubectl rebound, other packages untouched" "moved 1.36 → 1.37|1.37|latest" \
+      "$(bound_kubectl "$T/devbox.json" 1.37)|$(jq -r '.packages.kubectl.version' "$T/devbox.json")|$(jq -r '.packages["claude-code"].version' "$T/devbox.json")"
+# the stamp lock's moves JOIN the repo lock's: a claude-code major in the stamp makes the whole PR a major
+repo_m="$(lock_moves "$same" "$same")"
+stamp_m="$(lock_moves '{"packages":{"claude-code@latest":{"version":"2.1.291"},"kubectl@1.36":{"version":"1.36.3"}}}' \
+                      '{"packages":{"claude-code@latest":{"version":"3.0.1"},"kubectl@1.37":{"version":"1.37.1"}}}')"
+merged="$(merge_moves "$repo_m" "$stamp_m")"
+check "stamp: merged majors carry the stamp's claude-code major" "claude-code: 2.1.291 → 3.0.1" "$(jq -r '.majors | join(";")' <<<"$merged")"
+check "stamp: a rebound kubectl (1.36 → 1.37 spec) is a line move keyed by base name" "kubectl: 1.36.3 → 1.37.1" "$(jq -r '.lines | join(";")' <<<"$merged")"
+check "stamp: merging with an empty repo diff loses nothing" 0 "$(jq -r '.downgrades | length' <<<"$merged")"
+
 echo "devbox-update-test: $n check(s), $fails failure(s)"
 [ "$fails" -eq 0 ]

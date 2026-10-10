@@ -31,6 +31,17 @@
 # `DEVBOX_UPDATE_LIB=1 . scripts/devbox-update.sh` loads only `lock_moves` (the self-test's seam —
 # scripts/devbox-update-test.sh runs it over #2260's recorded lock diff).
 #
+# THE VERSION-SET STAMP (homelab#2014 shape (a), operator ruling 2026-10-10). In the homelab leg only
+# (the clone carries `version-sets/devbox.json`), the same pass also re-resolves the VERSION SETS —
+# claude-code, kind, and kubectl BOUNDED to the fleet's Kubernetes minor (`kubernetes_version` in
+# tofu/variables.tf, the one home machines/machines.yaml reads it from) — into ONE file,
+# `version-sets/devbox.lock`. Every first-party image that bundles those tools reads it at build time
+# (a sparse fetch of homelab master) and pins its installs to it, so the worker, the coordinator +
+# reviewer and the seat agree by construction; the drift belt (argocd/resources/version-sets/) checks
+# that they do. The stamp rides THIS repo's PR (one PR per repo, same lane rules: its moves join the
+# major/downgrade/line lists) and resolves with `--no-install` — nothing in this job runs those tools.
+# `fleet_minor` + `bound_kubectl` below are the self-test's seams.
+#
 # Env: GH_TOKEN (contents + pull_requests write on $REPO — a homelab-renovate App token),
 #      REPO (owner/name), DEVBOX_DIR (subdir holding devbox.json; default ".", agent-runtime = "agent-base").
 # Needs: devbox (on PATH — the workflow sets up single-user Nix), git, gh (the workflow adds it via
@@ -101,6 +112,26 @@ lock_moves_section() {
   printf '\n**Compatibility-line moves** (`major.minor` moved, major unchanged; set: %s):\n' "$LINE_PACKAGES"
   if [ -n "$l" ]; then printf '%s\n' "$l" | sed 's/^/- /'; else printf -- '- none\n'; fi
 }
+# fleet_minor <variables.tf> → "1.36" from `variable "kubernetes_version" { … default = "v1.36.1" }`;
+# empty when absent/unparseable (the caller fails loud — never stamp an unbounded kubectl).
+fleet_minor() {
+  awk '/^variable "kubernetes_version"/ { f = 1 } f && /default/ { print; exit }' "$1" \
+    | sed -nE 's/.*"v?([0-9]+)\.([0-9]+)(\.[0-9]+)?".*/\1.\2/p'
+}
+# bound_kubectl <devbox.json> <major.minor> → rewrites the kubectl spec to `<major.minor>` in place
+# (object-form packages, homelab style); prints "moved <old> → <new>" when it changed, nothing otherwise.
+bound_kubectl() {
+  local cur tmp
+  cur="$(jq -r '.packages.kubectl.version // empty' "$1")"
+  [ "$cur" = "$2" ] && return 0
+  tmp="$(mktemp)"
+  jq --arg v "$2" '.packages.kubectl = {version: $v}' "$1" > "$tmp" && mv "$tmp" "$1"
+  echo "moved ${cur:-<none>} → $2"
+}
+# merge_moves <moves-json>… → one {majors, downgrades, lines} (the stamp lock's moves join the repo lock's)
+merge_moves() {
+  jq -s '{majors: (map(.majors) | add), downgrades: (map(.downgrades) | add), lines: (map(.lines) | add)}' <<<"$(printf '%s\n' "$@")"
+}
 [ "${DEVBOX_UPDATE_LIB:-0}" = 1 ] && return 0
 
 REPO="${REPO:?set REPO=owner/name}"
@@ -115,7 +146,20 @@ cd "$WORK/r"
 echo "[$REPO] devbox update ($DIR)…"
 ( cd "$DIR" && devbox update )
 
-if git diff --quiet -- "$DIR/devbox.lock"; then
+# The version-set stamp (header): homelab leg only — the clone carries version-sets/devbox.json.
+VS_DIR=""
+if [ "$DIR" = "." ] && [ -f version-sets/devbox.json ]; then
+  VS_DIR="version-sets"
+  MINOR="$(fleet_minor tofu/variables.tf)"
+  [ -n "$MINOR" ] || { echo "::error::[$REPO] no kubernetes_version default in tofu/variables.tf — refusing to stamp an unbounded kubectl"; exit 1; }
+  BOUND="$(bound_kubectl "$VS_DIR/devbox.json" "$MINOR")"
+  [ -z "$BOUND" ] || echo "[$REPO] version-set kubectl bound to the fleet minor: $BOUND"
+  echo "[$REPO] devbox update --no-install ($VS_DIR — the version-set stamp, kubectl@$MINOR)…"
+  ( cd "$VS_DIR" && devbox update --no-install )
+fi
+
+# porcelain, not `git diff`: the stamp's lock may be NEW (untracked) on its first run
+if [ -z "$(git status --porcelain -- "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR"})" ]; then
   echo "[$REPO] devbox.lock already current — nothing to do"; exit 0
 fi
 
@@ -125,6 +169,9 @@ LOCK="devbox.lock"; [ "$DIR" = "." ] || LOCK="$DIR/devbox.lock"
 OLD_LOCK="$(git show "HEAD:$LOCK" 2>/dev/null || echo '{}')"
 NEW_LOCK="$(cat "$LOCK")"
 MOVES="$(lock_moves "$OLD_LOCK" "$NEW_LOCK")"
+if [ -n "$VS_DIR" ]; then
+  MOVES="$(merge_moves "$MOVES" "$(lock_moves "$(git show "HEAD:$VS_DIR/devbox.lock" 2>/dev/null || echo '{}')" "$(cat "$VS_DIR/devbox.lock")")")"
+fi
 MAJORS="$(jq -r '.majors[]' <<<"$MOVES")"
 DOWNGRADES="$(jq -r '.downgrades[]' <<<"$MOVES")"
 LINES="$(jq -r '.lines[]' <<<"$MOVES")"
@@ -132,7 +179,7 @@ LINES="$(jq -r '.lines[]' <<<"$MOVES")"
 git config user.name "homelab-renovate[bot]"
 git config user.email "homelab-renovate[bot]@users.noreply.github.com"
 git checkout -q -B "$BRANCH"
-git add "$DIR/devbox.lock"
+git add "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR/devbox.lock" "$VS_DIR/devbox.json"}
 git commit -q -m "chore: devbox update — align the toolchain lock (FU-022)" \
   -m "Weekly synchronized devbox.lock bump so shared tools resolve to the same version across repos (nix cache + agent-base bake hits)."
 git push -q --force origin "$BRANCH"

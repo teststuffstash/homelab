@@ -113,7 +113,7 @@ classes:
   - id: 7
     name: devbox/nix toolchain
     extract: devbox
-    where: "`devbox.json` (all `@latest`) → `devbox.lock` (the resolved version)"
+    where: "`devbox.json` (all `@latest`) → `devbox.lock` (the resolved version); + the version-set stamp `version-sets/devbox.{json,lock}` (claude-code, kind `@latest`, kubectl bounded to the fleet minor — #2014)"
     manager: "nix/devbox DISABLED on purpose (an `@latest` pin is untrackable — docs/renovate.md §Gotchas)"
     proof_head_prefixes: ["devbox-update"]
     proof_paths: ["devbox.lock"]
@@ -170,10 +170,10 @@ classes:
     name: Harness + tool versions baked into first-party images
     extract: none
     where: "three Dockerfiles in three repos (agent-runtime, agent-coordinator, claude-jail) — NOT extractable from this repo; the in-repo half is class 7/10. Members + sync state: §Version SETS below"
-    manager: "devbox-update (agent-base only); custom.regex for s5cmd; none for claude-code (npm), gh, KUBECTL_VERSION"
+    manager: "devbox-update (agent-base's lock; the version-set stamp `version-sets/devbox.lock` for claude-code/kubectl/kind — #2014); custom.regex for s5cmd; none for gh"
     proof_head_prefixes: []
     proof_paths: []
-    proposer: {status: gap, text: "claude-code floats to npm latest in two images and rides nixpkgs in the third; kubectl in the coordinator image is a hand ARG — owner of the fix: #2014 (version sets)"}
+    proposer: {status: gap, text: "ONE source since 2026-10-10 (#2014 shape (a)): the weekly devbox-update's homelab leg stamps claude-code + kind `@latest` and kubectl bounded to the fleet minor (tofu/variables.tf `kubernetes_version`) into `version-sets/devbox.lock`; the gap that remains is the CONSUMERS — agent-coordinator (npm `@anthropic-ai/claude-code`, the hand `ARG KUBECTL_VERSION`) and agent-base (its own devbox.lock) read it only once their build PRs + the operator-direct `build-image.yaml` edits land; claude-jail (the seat) is host-built and only WATCHED (the drift belt), never fed"}
     merge_gate: {status: ok, text: "the weekly `build-image` rebuild + the class 3 deploy-pin lanes"}
     deploy_edge: {status: ok, text: "a rebuild is a new build-date tag → deploy-pin rolls it (weekly `schedule` since 2026-09-27)"}
     detector: {status: gap, text: "BUILT 2026-10-10 (#2014, detection before fix): `version-set-probe` (argocd/resources/version-sets/, 6-hourly) runs each pinned image's own `claude`/`kubectl`/`kind` and pushes what it ships; the seat's claude-code comes from its OTLP sessions; `VersionSetMembersDisagree` (claude-code split > 1 d), `VersionSetBehindPin` (a member off the stamp > 2 d, silent until the stamp exists), `VersionSetKubectlSkew` (> 1 minor from the live apiserver) + probe freshness. Turns ok on its first live firing on the measured split (coordinator 2.1.289 / worker 2.1.291 / seat 2.1.281)"}
