@@ -299,7 +299,11 @@ step (the sentinel covering homelab), not a separate errand. _2026-09-03 (#1315)
 kinds now get `argo lint --offline` in `ci` (`devbox run argo-lint` — template references, not
 just schema); the Sensors/EventSources remain the sentinel's. The same PR closed a fourth residue
 of this class: the PublicRoute Composition's **templated Terraform** (a string no schema gate
-reads) is rendered + `tofu validate`d by `devbox run publicroute-tf-validate`.
+reads) is rendered + `tofu validate`d by `devbox run publicroute-tf-validate`. _2026-10-10 (G4, S9
+#1985):_ **what** every Composition renders is diffed too — `devbox run xr-render` renders every
+committed XR/claim at the cluster-pinned engine + functions, docker-free (`scripts/xr-render-lib.sh`,
+which `publicroute-tf-validate` now shares), and `-- --diff <base>` fails a PR whose render changed
+unless its body declares `Render-change: <reason>`.
 
 **The one thing still outstanding** is the IAC-G04 sentinel covering homelab so tier 1 can go back
 to being unowned — a FU-106 next-action. Until then tier 1 is owned as a scaffold and says so.

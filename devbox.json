@@ -278,6 +278,9 @@
       "publicroute-tf-validate": [
         "bash scripts/publicroute-tf-validate.sh"
       ],
+      "xr-render": [
+        "bash scripts/xr-render.sh \"$@\""
+      ],
       "argo-lint": [
         "argo lint --offline $(grep -lE '^kind: (Cron)?Workflow(Template)?$' agents/coordinator/*.yaml)"
       ],
