@@ -644,6 +644,9 @@ window make both records worthless, and a second release would need its own leas
    moves no volume. The box moves them one at a time to the manager's `--engine-image`, least valuable
    disk class first (`engine_order`: fast → none → bulk → slow-bulk → std; an unnamed class last),
    each waited to the new image and back to its old robustness; the first that does not come back stops it.
+   **The wait is bounded at 60 min per volume** (`HELM_ENGINE_TIMEOUT`, ≈2× the first breakage record
+   below): one patch, then reads only — Longhorn's own retry converging inside the bound is a pass,
+   logged with what the box saw meanwhile; waiting on the substrate is not the box acting on it.
 5. **Verdict** (`helm_cluster_verdict`): the evidence `verdict` verb AND the box verdict (FU-302),
    both Prometheus-free. The evidence rules compare after against before: every release `deployed`;
    the applied release rolled (observed = generation, ready = updated = desired) with every pod Ready;
@@ -667,6 +670,21 @@ revert PR, ever; counted each tick → the second arm of `MgmtHelmApplyStopped` 
 mid-bracket and never wrote a verdict). **Clearing a stop**: read `summary.txt`, then `rm
 /var/lib/mgmt/apply/helm-stopped`, `kubectl -n agent-coordinator delete cm upgrade-lease-tofu-helm-<release>`,
 `devbox run maint -- close --id <window>`. The unit's `TimeoutStartSec` is 5 h for this bracket.
+**Resume.** A STOP inside the engine moves leaves the chart applied and volumes on the old engine. On a
+tick whose master is already applied, with the longhorn row present, no marker and no window holding it,
+the loop runs the same bracket with no apply (`helm_lh_resume`: window, lease, verdict baseline, the
+remaining moves in order, verdict) — so clearing the stop IS the resume. The box never resumes itself
+while the marker stands.
+
+**Breakage records — the data the 2026-10-02 ruling waits for** (one dated line each; the record is the
+detail):
+
+- **2026-10-10, longhorn 1.12.0 → 1.12.1, first engine move** — `meta-garage-2` (garage ns, 1 replica,
+  attached, no disk selector) patched 17:47Z; its new replica died at 17:48:23Z with `bind: address
+  already in use` on the volume's unix socket; the box's 900 s bound STOPPED it (18:28Z verdict, nothing
+  reverted); Longhorn replaced the replica at 18:18:23Z and converged by itself (≈31 min) — read at
+  19:10Z: engine + replica v1.12.1, healthy. Result: the bound became 60 min (this section, item 4).
+  Record: `s3://helm-evidence/20261010T174318Z-box-longhorn-1.12.1/` (`breakage.txt` beside it).
 
 ### The box verdict — the box's own read of the cluster (FU-302, 2026-10-10)
 

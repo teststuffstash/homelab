@@ -201,7 +201,10 @@ cmd_diff() { # <before> <after>
           | select($o.generation != $w.generation) | "   rolled: \($w.kind)/\($w.name) gen \($o.generation) → \($w.generation), ready \($w.ready)/\($w.desired)"] | .[] ),
       ( ([$x.pods[]?.uid]) as $old | [$y.pods[]? | select(.uid as $u | $old | index($u) | not)] | length |
           "   pods replaced: \(.) of \($y.pods | length)" ),
-      ( (([$y.pods[]?.restarts] | add // 0) - ([$x.pods[]?.restarts] | add // 0)) | "   container restarts during: \(.)" ),
+      # restarts DURING: a surviving pod (same uid) counts its delta, a new pod its whole count — a
+      # replaced pod takes its old count with it (the plain sum read -137 on longhorn 1.12.1, 12/12 replaced)
+      ( ([$x.pods[]? | {key: .uid, value: (.restarts // 0)}] | from_entries) as $old
+        | [$y.pods[]? | (.restarts // 0) - ($old[.uid] // 0)] | add // 0 | "   container restarts during: \(.)" ),
       ( [$y.secrets[]? | . as $s | ($x.secrets[]? | select(.name == $s.name)) as $o
           | select($o.data_sha != $s.data_sha) | "   secret rotated: \($s.name)"] | .[] ) ),
     "== cilium BGP: \([$A.cilium_bgp[] | select(.state == "established")] | length)/\($A.cilium_bgp | length) → \([$B.cilium_bgp[] | select(.state == "established")] | length)/\($B.cilium_bgp | length) established; sessions reset: \([$B.cilium_bgp[] | . as $s | ($A.cilium_bgp[] | select(.node == $s.node and .peer == $s.peer)) as $o | select(($s.uptime_s // 0) < ($o.uptime_s // 0))] | length)",

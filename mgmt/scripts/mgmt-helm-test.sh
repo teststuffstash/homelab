@@ -153,5 +153,48 @@ for vr in 3 1; do
 done
 BOXV_RC=0
 
+# (6) the ENGINE WAIT — a replay of the first substrate breakage record (meta-garage-2, longhorn 1.12.1,
+#     2026-10-10): patched to v1.12.1, the volume reads v1.12.0/healthy while its new replica fails, then
+#     Longhorn converges by itself (~31 min). Fake clock: every _hsleep advances it; reads come from a
+#     sequence file (one line per read, the last line repeats). Contract (mgmt-helm.sh, HELM_ENGINE_TIMEOUT):
+#     converged inside the bound → `ok` and the next volume moves; never converged → FAIL, rc 2, the rest
+#     untouched; ONE patch per volume, never a second (waiting is not retrying).
+CLOCK="$T/clock"
+_hnow() { cat "$CLOCK"; }
+_hsleep() { echo $(( $(cat "$CLOCK") + $1 )) >"$CLOCK"; }
+jq -n '{spec:{template:{spec:{containers:[{command:["longhorn-manager","--engine-image","longhornio/longhorn-engine:v1.12.1"]}]}}}}' >"$T/eng-ds.json"
+jq -n '{items:[{metadata:{name:"meta-garage-2"}, spec:{diskSelector:[]}, status:{currentImage:"longhornio/longhorn-engine:v1.12.0", state:"attached", robustness:"healthy"}},
+               {metadata:{name:"std-1"}, spec:{diskSelector:["std"]}, status:{currentImage:"longhornio/longhorn-engine:v1.12.0", state:"attached", robustness:"healthy"}}]}' >"$T/eng-vols.json"
+_hk() {
+  echo "k $*" >>"$T/calls"
+  case "$*" in
+    *"get ds longhorn-manager"*) cat "$T/eng-ds.json" ;;
+    *"get engineimages.longhorn.io"*) echo '{"items":[{"spec":{"image":"longhornio/longhorn-engine:v1.12.1"},"status":{"state":"deployed"}}]}' ;;
+    *"get volumes.longhorn.io -o json"*) cat "$T/eng-vols.json" ;;
+    *"patch volumes.longhorn.io"*) return 0 ;;
+    *"get volumes.longhorn.io "*" -o jsonpath"*)
+      local v; v="$(awk '{for(i=1;i<=NF;i++) if($i=="volumes.longhorn.io") print $(i+1)}' <<<"$*")"
+      local f="$T/seq-$v"; local line; line="$(head -1 "$f")"; [ "$(wc -l <"$f")" -gt 1 ] && sed -i 1d "$f"; echo -n "$line" ;;
+  esac
+}
+OLD="longhornio/longhorn-engine:v1.12.0|healthy"; NEW="longhornio/longhorn-engine:v1.12.1|healthy"
+eng_case() {  # <name> <want-rc> <meta-garage-2 seq: N old reads then NEW|never> <want ok/FAIL lines>
+  local d="$T/eng-$1"; mkdir -p "$d"; : >"$T/calls"; echo 0 >"$CLOCK"
+  { for _ in $(seq 1 "$3"); do echo "$OLD"; done; [ "$4" = never ] || echo "$NEW"; } >"$T/seq-meta-garage-2"
+  [ "$4" = never ] && echo "$OLD" >>"$T/seq-meta-garage-2"
+  echo "$NEW" >"$T/seq-std-1"
+  helm_lh_engines "$d" longhorn-system fast,none,bulk,std; eq "engines-$1-rc" "$2" "$?"
+  eq "engines-$1-lines" "$5" "$(grep -oE '^(ok  |FAIL) [a-z0-9-]+' "$d/engines.log" | tr -s ' ' | tr '\n' ';')"
+  eq "engines-$1-one-patch-each" "$6" "$(grep -c 'patch volumes.longhorn.io meta-garage-2' "$T/calls")"
+}
+# 186 old reads × 10 s ≈ 31 min (the datum) then converged: inside the 3600 s bound → ok, std-1 moves next
+eng_case datum-converges 0 186 converge "ok meta-garage-2;ok std-1;" 1
+# never converges: FAIL after the bound, std-1 never patched (the rest left where they are)
+eng_case never-converges 2 0 never "FAIL meta-garage-2;" 1
+eq engines-never-std-untouched 0 "$(grep -c 'patch volumes.longhorn.io std-1' "$T/calls")"
+eq engines-datum-wait-recorded 1 "$(grep -c 'converged by itself after: v1.12.0/healthy' "$T/eng-datum-converges/engines.log")"
+# the default bound is the datum's ≈2× (contract value, stated in mgmt-helm.sh)
+eq engine-timeout-default 3600 "$HELM_ENGINE_TIMEOUT"
+
 echo "mgmt-helm-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
