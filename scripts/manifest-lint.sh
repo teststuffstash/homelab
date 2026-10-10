@@ -71,6 +71,31 @@ echo "  AgentStacks, PrometheusRules…). Skipped resources are NOT checked — 
 echo "  schemas is what would close the gap (CiliumNetworkPolicy/CiliumClusterwideNetworkPolicy"
 echo "  left this class 2026-09-05, homelab#1200 — see scripts/schemas/README.md)."
 
+# ── XRD claim-spec defaults (G4 class fix, 2026-10-10) ───────────────────────────────────────
+# A schema `default:` under an XRD's spec is stamped by the API server into every STORED XR that
+# omits the field; the XR in git lacks it, so each ArgoCD app applying one sits OutOfSync — and
+# `ignoreDifferences` cannot hide it under RespectIgnoreDifferences=true (it would never apply
+# from git). Bitten each time a defaulted AgentStack field landed (#1688, #2184: every stack's
+# agent-fixer app, docs/dependency-upgrades.md §Gap register G4). The rule: a field's default
+# lives where it is READ (the Composition's template fallback), never in the schema. Allowlist
+# only with an inline reason on the default line: `default: x # xrd-default-ok: <reason>`.
+XRD_DEFAULTS_Q='select(.kind == "CompositeResourceDefinition") | .spec.versions[].schema.openAPIV3Schema.properties.spec
+  | .. | select(tag == "!!map" and has("default") and (path | .[-1]) != "properties") | .default
+  | select((line_comment | test("xrd-default-ok: *[^ ]")) | not) | path | join(".")'
+xrd_bad=""
+for f in $(printf '%s\n' "$files" | xargs grep -l '^kind: CompositeResourceDefinition' || true); do
+  hits="$(yq -r "$XRD_DEFAULTS_Q" "$f")" || { echo "manifest-lint: FAIL — yq could not read XRD $f" >&2; exit 1; }
+  [ -n "$hits" ] && xrd_bad="${xrd_bad}$(printf '%s\n' "$hits" | sed "s|^|    $f: |")"$'\n'
+done
+if [ -n "$xrd_bad" ]; then
+  echo "manifest-lint: FAIL — schema default(s) under an XRD's spec (the G4 OutOfSync class). Move" >&2
+  echo "  the default into the Composition where the field is read, or allowlist it inline with" >&2
+  echo "  '# xrd-default-ok: <reason>' (docs/dependency-upgrades.md §Gap register G4):" >&2
+  printf '%s' "$xrd_bad" >&2
+  exit 1
+fi
+echo "manifest-lint: XRD claim-spec defaults OK (none un-allowlisted)"
+
 # ── kustomization completeness (homelab#694, 2026-08-20) ─────────────────────────────────────
 # The agent-coordinator app is kustomize-rendered (FU-152): a manifest present in the directory
 # but absent from `resources:` produces the WORST drift shape — ArgoCD reads Synced+Healthy while

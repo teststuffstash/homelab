@@ -323,8 +323,8 @@ lanes (`dependencies`/`automerge`/`deps-review`). **COMPLETE 2026-08-04** (FU-06
 last holdout, joined the platform claim via `devbox run labels-handoff` (16 resources forgotten, 27
 labels intact), and `tofu/github/labels.tf` was deleted — the claim is now the only label source, so
 there is nothing left to keep in sync. Migration gotchas, found live: QUOTE label colors (`5319e7` parses as scientific
-notation), write `labels: { extra: [] }` not `labels: {}` (server-default stamping → ArgoCD
-drift), and the tofu handoff is **`tofu state rm`** — a destroy apply deletes the labels on
+notation), write `labels: { extra: [] }` (the `labels: {}` stamping drift this warned about is gone with
+the XRD's schema defaults, 2026-10-10 — either form renders now), and the tofu handoff is **`tofu state rm`** — a destroy apply deletes the labels on
 GitHub and the authoritative claim fights it back.
 
 ## Operational notes
@@ -369,8 +369,14 @@ GitHub and the authoritative claim fights it back.
   use `.+` to mean "present and non-empty" (this is how the graduated-loop routing selects on
   `body.loop_ns`).
 - **⚠ Bare hex colors in claim label values parse as YAML scientific notation** (`5319e7` →
-  5.319e10) — quote them. The XRD description warns. Also, `labels: {}` gets server-stamped to
-  `{extra: []}`, so write `extra: []` explicitly per the drift convention.
+  5.319e10) — quote them. The XRD description warns.
+- **No schema defaults on the XRD** (since 2026-10-10, the G4 class fix in
+  [`dependency-upgrades.md`](../dependency-upgrades.md) §Gap register): a `default:` under the
+  spec is stamped into every stored claim that omits the field, which ArgoCD (owning `repos[]`
+  atomically) reads as permanent OutOfSync. Each field's default lives where it is read — the
+  Composition's `default <v> (get …)` / `hasKey` and the script readers' jq `//` — and
+  `devbox run manifest-lint` fails on a schema default without an inline `xrd-default-ok:` reason.
+  Claims therefore declare only what differs from those fallbacks.
 - **The credential airlock** (why the loop home can hold pod-create at all) is written up in
   [`platform-and-stacks.md`](platform-and-stacks.md) §"The credential-airlock pattern": pods in
   `<stack>-agents` hold only `ref:` creds, so a stack's workbench SA can control its whole loop

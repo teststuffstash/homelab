@@ -73,10 +73,18 @@ spec:
                     belt AND the per-stack loop dispatch the same issue (double-run);
                     graduated=true without them leaves nothing scanning the stack at all.
                     Flip coordinator.enabled and loop.graduated together.
+              # NO schema `default:` anywhere under spec (G4 class fix, docs/dependency-upgrades.md
+              # §Gap register G4). The API server stamps a schema default into the STORED claim;
+              # ArgoCD owns spec.repos[] atomically under SSA and git lacks the stamped field, so
+              # every claim went OutOfSync each time a new defaulted field landed (#2184 rideSize,
+              # #1688 readOnlyGrants). A field's default lives where it is READ: the Composition's
+              # template fallback (`default <v> (get ...)`) and each script reader's jq `//`. The
+              # "(default X)" in a description below documents THAT fallback, not a schema default.
+              # Enforced by `devbox run manifest-lint` (an allowlist needs an inline
+              # `# xrd-default-ok: <reason>` on the default line).
               properties:
                 mainRepo:
                   type: string
-                  default: homelab
                   description: >-
                     The coordinator's cwd — the repo whose CLAUDE.md and specs load as the
                     session's natural context (the stack's home of coordination knowledge).
@@ -84,13 +92,11 @@ spec:
                     out of the platform docs yet.
                 coordinatorModel:
                   type: string
-                  default: sonnet
                   description: >-
                     Claude model alias for the stack's coordinator sessions (sonnet/opus).
                     The coordinator is subscription-run; workers use OpenRouter (workerModel).
                 coordinator:
                   type: object
-                  default: {}
                   description: >-
                     The stack's coordinator loop — dispatches workers, spends budget (FU-080).
                     Rendered as a PER-STACK coordinator CronWorkflow (ADR-093) in <stack>-agents,
@@ -100,13 +106,11 @@ spec:
                   properties:
                     enabled:
                       type: boolean
-                      default: false
                       description: >-
                         Opt THIS stack in to autonomous coordination. Default OFF — the
                         CronWorkflow renders suspended; flip per stack when you trust its loop.
                 reviewer:
                   type: object
-                  default: {}
                   description: >-
                     The stack's PR review (the ADR-093 edge-trigger + backstop). Default ON —
                     reviewing green, unapproved PRs is SAFE (it never dispatches new work or
@@ -114,11 +118,9 @@ spec:
                   properties:
                     enabled:
                       type: boolean
-                      default: true
                       description: Auto-review this stack's PRs. Default on.
                     goalModel:
                       type: string
-                      default: sonnet
                       description: >-
                         Claude model alias for the ASSEMBLY review only — a PR whose head is
                         goal/** (the goal→master shape, review-goal.md). Rendered into the
@@ -143,11 +145,9 @@ spec:
                       description: "The probed URL (e.g. https://mcp.oracle.teststuff.net/mcp)."
                     module:
                       type: string
-                      default: http_2xx_lan
                       description: "Blackbox module (argocd/resources/blackbox: http_2xx_lan | mcp_post)."
                     availability:
                       type: number
-                      default: 0.99
                       description: "30-day availability target; 1 - this = the error budget."
                   required: [endpoint]
                 mcp:
@@ -177,7 +177,6 @@ spec:
                       type: array
                       items:
                         type: string
-                      default: []
                       description: "Tool names this MCP endpoint exposes (statute, search, give_feedback, etc.). Informational — the Composition does not consume this field."
                   required: [endpoint]
                 prober:
@@ -201,11 +200,9 @@ spec:
                       description: Render the probe cron. Omit the whole block to keep the stack prober-free.
                     schedule:
                       type: string
-                      default: "41 */6 * * *"
                       description: Cron for the scheduled leg (Argo CronWorkflow syntax, UTC).
                     model:
                       type: string
-                      default: haiku
                       description: Claude model alias for the probe session (subscription rail).
                 lenses:
                   type: object
@@ -275,7 +272,6 @@ spec:
                             description: "Kubernetes verb (e.g. get, list, patch, delete). One verb — no lists."
                 loop:
                   type: object
-                  default: {}
                   description: >-
                     FU-080 per-stack loop isolation. perStack:true renders the stack's OWN
                     coordinate CronWorkflow in <stack>-agents (running as agentstack-loop,
@@ -287,11 +283,9 @@ spec:
                   properties:
                     perStack:
                       type: boolean
-                      default: false
                       description: Render the per-stack loop machinery. Default off.
                     graduated:
                       type: boolean
-                      default: false
                       description: >-
                         FU-080 cutover. graduated:true RETIRES the migration belt for this stack:
                         the GLOBAL coordinator scan skips it (coordinator-scan.sh) and the
@@ -318,7 +312,6 @@ spec:
                   type: array
                   items:
                     type: string
-                  default: []
                   description: >-
                     Per-stack model deny list (ADR-096): ids here are excluded from every
                     /route decision for this stack (skip reason claim-deny) — the launcher
@@ -327,7 +320,6 @@ spec:
                 routerMode:
                   type: string
                   enum: [shadow, authoritative, "off"]
-                  default: shadow
                   description: >-
                     ADR-096 P4 knob, per stack: shadow = consult /route + log divergence,
                     dispatch the static chain (fleet default during the soak); authoritative =
@@ -338,7 +330,6 @@ spec:
                   type: array
                   items:
                     type: string
-                  default: []
                   description: >-
                     Ordered fallback models tried when the primary fails a round. Same
                     format as workerModel without the "openrouter/" prefix requirement.
@@ -374,25 +365,21 @@ spec:
                         properties:
                           standard:
                             type: string
-                            default: "0"
                             description: >-
                               Cap for StorageClass `longhorn` (the default; replicated across
                               the small always-on disks), e.g. "10Gi". "0" = none provisionable.
                           bulk:
                             type: string
-                            default: "0"
                             description: >-
                               Cap for StorageClass `longhorn-bulk` (large 2-replica volumes on
                               the big-disk tier; S3 data, backups, datasets), e.g. "150Gi".
                           fast:
                             type: string
-                            default: "0"
                             description: >-
                               Cap for StorageClass `longhorn-fast` (Optane scratch, replica=1,
                               pinned to one node), e.g. "5Gi".
                           scratch:
                             type: string
-                            default: "0"
                             description: >-
                               Cap for StorageClass `longhorn-scratch` (per-ride throwaway
                               volumes, replica=1 on the bulk disks; the docker-mode dind
@@ -413,7 +400,6 @@ spec:
                         properties:
                           enabled:
                             type: boolean
-                            default: false
                             description: Render the workflow SA + workflowtaskresults RBAC into this namespace.
                           artifacts:
                             type: object
@@ -430,11 +416,9 @@ spec:
                             properties:
                               enabled:
                                 type: boolean
-                                default: false
                                 description: Render the bucket + key + configmap.
                               capGi:
                                 type: integer
-                                default: 2
                                 minimum: 1
                                 description: >-
                                   Bucket max_size in Gi (ADR-089 quota-as-contract — every bucket
@@ -458,7 +442,6 @@ spec:
                         properties:
                           extra:
                             type: array
-                            default: []
                             description: >-
                               Stack-specific labels beyond the platform taxonomy (e.g. the
                               oracle track/* lane labels). name + 6-hex color (no '#') +
@@ -488,18 +471,15 @@ spec:
                         properties:
                           budgetUSD:
                             type: number
-                            default: 5
                             description: >-
                               Standing weekly/monthly funding ceiling (USD) for the repo's
                               agents — the per-session ephemeral keys budget underneath it.
                           resetInterval:
                             type: string
-                            default: weekly
                             enum: [daily, weekly, monthly]
                             description: Budget reset cadence for budgetUSD.
                           guardrail:
                             type: string
-                            default: only-free
                             enum: [only-free, none]
                             description: >-
                               only-free = the egress proxy 403s paid-model completions on
@@ -507,7 +487,6 @@ spec:
                               their own guardrail; this is the standing key's.
                           claudeTier:
                             type: boolean
-                            default: false
                             description: >-
                               true = this repo's workers may run the SUBSCRIPTION
                               claude-code harness (FU-066): renders the `claude-session`
@@ -523,7 +502,6 @@ spec:
                               agent-runtime#14).
                           docker:
                             type: boolean
-                            default: false
                             description: >-
                               true = this repo's workers need a real Docker daemon (its CI
                               gate runs kind/k3d/testcontainers, e.g. `devbox run ci` with a
@@ -539,7 +517,6 @@ spec:
                               egress for every ride — homelab#520 — not gated by docker=true).
                           rideSize:
                             type: string
-                            default: standard
                             enum: [standard, large]
                             description: >-
                               The worker ride's size class — the pod envelope its own gates
@@ -567,7 +544,6 @@ spec:
                             properties:
                               profile:
                                 type: string
-                                default: none
                                 enum: [none, python, node]
                                 description: >-
                                   Ecosystem FQDN set added to the baseline. python =
@@ -577,7 +553,6 @@ spec:
                                 type: array
                                 items:
                                   type: string
-                                default: []
                                 description: >-
                                   Stack-specific additional FQDNs (port 443), exact names
                                   (no wildcards; a wildcard need = extend the Composition).
@@ -620,7 +595,6 @@ spec:
                                       description: TCP port on the target pods.
                               enforce:
                                 type: boolean
-                                default: false
                                 description: >-
                                   false = MONITOR: the policy attaches with
                                   enableDefaultDeny.egress=false — DNS visibility + the
@@ -678,7 +652,6 @@ spec:
                                     path the ride itself lives on (/work, /nix, /home, /stack-cache).
                           readOnlyGrants:
                             type: array
-                            default: []
                             description: >-
                               Downscoped READ-ONLY GitHub App installation tokens (homelab-agents)
                               delivered as a Secret in THIS namespace — for a stack workload that
