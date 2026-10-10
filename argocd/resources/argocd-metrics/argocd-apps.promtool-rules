@@ -20,6 +20,13 @@ groups:
         labels:
           severity: warning
           triage: dig
+      - alert: ArgoCDAppOutOfSync
+        expr: |
+          max by (name, dest_namespace) (argocd_app_info{autosync_enabled="true", sync_status="OutOfSync"}) == 1
+        for: 1h
+        labels:
+          severity: warning
+          triage: dig
       - alert: ArgoCDNotificationDeliveryFailing
         expr: |
           sum by (service, trigger) (increase(argocd_notifications_deliveries_total{succeeded="false"}[1h])) > 0

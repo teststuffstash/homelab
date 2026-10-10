@@ -82,3 +82,31 @@ tests:
         alertname: ArgoCDMetricsAbsent
         exp_alerts:
           - exp_labels: { severity: warning, triage: dig }
+
+  - interval: 1m
+    name: "OutOfSync fires after 1h on an autosync app; a 20-minute OutOfSync (a slow sync) and a manual-sync app never fire"
+    input_series:
+      # agent-fixer-sleep-tracking: the G4 shape, OutOfSync and never converging
+      - series: 'argocd_app_info{name="agent-fixer-sleep-tracking",dest_namespace="sleep-tracking",autosync_enabled="true",health_status="Healthy",sync_status="OutOfSync"}'
+        values: "1x90"
+      # registry: a merged bump that took 20 minutes to sync, then Synced
+      - series: 'argocd_app_info{name="registry",dest_namespace="registry",autosync_enabled="true",health_status="Healthy",sync_status="Synced"}'
+        values: "1x10 stale _x19 1x60"
+      - series: 'argocd_app_info{name="registry",dest_namespace="registry",autosync_enabled="true",health_status="Healthy",sync_status="OutOfSync"}'
+        values: "_x10 1x20 stale _x59"
+      # manual: no automated policy, OutOfSync is its resting state between human syncs
+      - series: 'argocd_app_info{name="manual",dest_namespace="manual",autosync_enabled="false",health_status="Healthy",sync_status="OutOfSync"}'
+        values: "1x90"
+    alert_rule_test:
+      # pending from minute 0; `for: 1h` → firing from minute 60, never before
+      - eval_time: 59m
+        alertname: ArgoCDAppOutOfSync
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: ArgoCDAppOutOfSync
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, name: agent-fixer-sleep-tracking, dest_namespace: sleep-tracking }
+      - eval_time: 89m
+        alertname: ArgoCDAppOutOfSync
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, name: agent-fixer-sleep-tracking, dest_namespace: sleep-tracking }
