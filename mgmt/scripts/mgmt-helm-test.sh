@@ -95,7 +95,7 @@ eq lh-engine-image "docker.io/longhornio/longhorn-engine:v1.12.1" "$(lh_engine_i
 ADIR="$T/adir"; mkdir -p "$ADIR"
 HELM_SETTLE=0; export MGMT_POSTCHECK_TIMEOUT=0   # the polled compare reads once, no wall-clock wait
 _hsleep() { :; }
-_hk() { echo "k $*" >>"$T/calls"; return 0; }
+_hk() { echo "k $*" >>"$T/calls"; case "$*" in *"get cm upgrade-lease-"*) echo "Error from server (NotFound): configmaps not found"; return 1 ;; esac; return 0; }
 _hwin() { echo "win $*" >>"$T/calls"; [ "$1" = open ] && echo '✓ window w-test open until x — r'; return 0; }
 VERDICT_RC=0; BOXV_RC=0   # BOXV_RC: what mgmt_verdict (FU-302) answers AFTER the apply; the baseline is in the record
 _hev() {
@@ -171,7 +171,7 @@ _hk() {
     *"get ds longhorn-manager"*) cat "$T/eng-ds.json" ;;
     *"get engineimages.longhorn.io"*) echo '{"items":[{"spec":{"image":"longhornio/longhorn-engine:v1.12.1"},"status":{"state":"deployed"}}]}' ;;
     *"get volumes.longhorn.io -o json"*) cat "$T/eng-vols.json" ;;
-    *"patch volumes.longhorn.io"*) return 0 ;;
+    *"patch volumes.longhorn.io"*|*"patch cm upgrade-lease-"*) return 0 ;;
     *"get volumes.longhorn.io "*" -o jsonpath"*)
       local v; v="$(awk '{for(i=1;i<=NF;i++) if($i=="volumes.longhorn.io") print $(i+1)}' <<<"$*")"
       local f="$T/seq-$v"; local line; line="$(head -1 "$f")"; [ "$(wc -l <"$f")" -gt 1 ] && sed -i 1d "$f"; echo -n "$line" ;;
@@ -180,6 +180,7 @@ _hk() {
 OLD="longhornio/longhorn-engine:v1.12.0|healthy"; NEW="longhornio/longhorn-engine:v1.12.1|healthy"
 eng_case() {  # <name> <want-rc> <meta-garage-2 seq: N old reads then NEW|never> <want ok/FAIL lines>
   local d="$T/eng-$1"; mkdir -p "$d"; : >"$T/calls"; echo 0 >"$CLOCK"
+  printf 'upgrade-lease-tofu-helm-longhorn' >"$d/lease-name"; printf 'w-eng' >"$d/window-id"; printf '%s' "${MAXEND:-1970-01-02T00:00:00Z}" >"$d/max-end"
   { for _ in $(seq 1 "$3"); do echo "$OLD"; done; [ "$4" = never ] || echo "$NEW"; } >"$T/seq-meta-garage-2"
   [ "$4" = never ] && echo "$OLD" >>"$T/seq-meta-garage-2"
   echo "$NEW" >"$T/seq-std-1"
@@ -187,6 +188,9 @@ eng_case() {  # <name> <want-rc> <meta-garage-2 seq: N old reads then NEW|never>
   eq "engines-$1-lines" "$5" "$(grep -oE '^(ok  |FAIL) [a-z0-9-]+' "$d/engines.log" | tr -s ' ' | tr '\n' ';')"
   eq "engines-$1-one-patch-each" "$6" "$(grep -c 'patch volumes.longhorn.io meta-garage-2' "$T/calls")"
 }
+# the fake clock's dates (epoch + the clock), for the lease arithmetic
+_hdate() { case "$1" in now) date -u -d "@$(cat "$CLOCK")" +%Y-%m-%dT%H:%M:%SZ ;; *) date -u -d "@$(( $(cat "$CLOCK") + $(sed 's/^+\([0-9]*\) seconds$/\1/' <<<"$1") ))" +%Y-%m-%dT%H:%M:%SZ ;; esac; }
+renewals() { grep 'patch cm upgrade-lease-tofu-helm-longhorn' "$T/calls" | grep -oE '[0-9]{4}-[0-9-]+T[0-9:]+Z' | tr '\n' ' ' | sed 's/ $//'; }
 # 186 old reads × 10 s ≈ 31 min (the datum) then converged: inside the 3600 s bound → ok, std-1 moves next
 eng_case datum-converges 0 186 converge "ok meta-garage-2;ok std-1;" 1
 # never converges: FAIL after the bound, std-1 never patched (the rest left where they are)
@@ -195,6 +199,55 @@ eq engines-never-std-untouched 0 "$(grep -c 'patch volumes.longhorn.io std-1' "$
 eq engines-datum-wait-recorded 1 "$(grep -c 'converged by itself after: v1.12.0/healthy' "$T/eng-datum-converges/engines.log")"
 # the default bound is the datum's ≈2× (contract value, stated in mgmt-helm.sh)
 eq engine-timeout-default 3600 "$HELM_ENGINE_TIMEOUT"
+
+# (7) RENEW ON PROGRESS (operator 2026-10-10). Budget = HELM_ENGINE_TIMEOUT + HELM_TAIL; in this test
+#     HELM_SETTLE=0 and MGMT_POSTCHECK_TIMEOUT=0 → HELM_TAIL = 0 + 0 + 300 → budget 3900 s.
+#     datum case: meta-garage-2 converges at clock 186×10 = 1860 s → renew to 1860+3900 = 5760 s
+#     (01:36:00); std-1 converges at its first read, clock still 1860 → renew 5760 again. max-end
+#     1970-01-02 (86400 s) does not clamp.
+HELM_TAIL=300
+eq budget 3900 "$(helm_move_budget)"
+eq renew-on-progress "1970-01-01T01:36:00Z 1970-01-01T01:36:00Z" "$(MAXEND=1970-01-02T00:00:00Z eng_case renew-datum 0 186 converge "ok meta-garage-2;ok std-1;" 1 >/dev/null; renewals)"
+#     the cap: max-end 01:00:00 (3600 s) < 5760 → both renewals clamp to max-end, never past it
+eq renew-capped-at-max-end "1970-01-01T01:00:00Z 1970-01-01T01:00:00Z" "$(MAXEND=1970-01-01T01:00:00Z eng_case renew-cap 0 186 converge "ok meta-garage-2;ok std-1;" 1 >/dev/null; renewals)"
+#     a HUNG move (never converges) renews NOTHING → the lease runs out on its own (the dead-man)
+eq hung-no-renewal "" "$(eng_case renew-hung 2 0 never "FAIL meta-garage-2;" 1 >/dev/null; renewals)"
+eq renew-moves-window 2 "$(MAXEND=1970-01-02T00:00:00Z eng_case renew-win 0 0 converge "ok meta-garage-2;ok std-1;" 1 >/dev/null; grep -c '^win renew --id w-eng' "$T/calls")"
+
+# (8) a KILLED run, then resume: the dead run's lease is still there. helm_lease_check: NotFound → 0;
+#     live (expected-end ahead of the clock) → 1, no marker; PAST DUE → 2, the STOP marker names it —
+#     never a quiet refusal every tick. Clock 7200 s = 02:00:00.
+LEASE_JSON=""
+_hk() { echo "k $*" >>"$T/calls"; case "$*" in *"get cm upgrade-lease-"*) [ -n "$LEASE_JSON" ] || { echo "(NotFound)"; return 1; }; echo "$LEASE_JSON" ;; esac; return 0; }
+echo 7200 >"$CLOCK"; rm -f "$ADIR/helm-stopped"
+helm_lease_check longhorn >/dev/null; eq lease-none 0 "$?"
+LEASE_JSON='{"data":{"expected-end":"1970-01-01T02:30:00Z","max-end":"1970-01-01T09:00:00Z","by":"mgmt-helm-engines","sha":"abc","subject":"tofu/helm_release.longhorn","from":"1.12.1","to":"1.12.1"}}'
+helm_lease_check longhorn >/dev/null; eq lease-live 1 "$?"
+eq lease-live-no-marker "" "$(cat "$ADIR/helm-stopped" 2>/dev/null)"
+LEASE_JSON='{"data":{"expected-end":"1970-01-01T01:30:00Z","max-end":"1970-01-01T09:00:00Z","by":"mgmt-apply","sha":"abc","subject":"tofu/helm_release.longhorn","from":"1.12.0","to":"1.12.1"}}'
+helm_lease_check longhorn >/dev/null; eq lease-stale-stop 2 "$?"
+eq lease-stale-marker 1 "$(grep -c 'stale lease upgrade-lease-tofu-helm-longhorn by mgmt-apply, expected-end 1970-01-01T01:30:00Z passed' "$ADIR/helm-stopped")"
+#     expected-end past max-end reads as max-end (ADR-150 (2)): renewed to 10:00 but max-end 01:00 → stale
+rm -f "$ADIR/helm-stopped"
+LEASE_JSON='{"data":{"expected-end":"1970-01-01T10:00:00Z","max-end":"1970-01-01T01:00:00Z","by":"mgmt-helm-engines"}}'
+helm_lease_check longhorn >/dev/null; eq lease-maxend-caps 2 "$?"
+#     and the resume path itself: a stale lease → helm_lh_engines_run returns 2 (STOP), opens no window
+rm -f "$ADIR/helm-stopped"; : >"$T/calls"
+helm_lh_drift() { printf '41\tlonghorn-system\t1.12.1\tfast,none,bulk,std\t240\n'; }
+helm_lh_engines_run /dev/null main abc >/dev/null 2>&1; eq resume-stale-stops 2 "$?"
+eq resume-stale-no-window 0 "$(grep -c '^win open' "$T/calls")"
+#     with the marker standing, the next start does nothing at all (no reads beyond the marker)
+: >"$T/calls"; helm_lh_engines_run /dev/null main abc >/dev/null 2>&1; eq resume-marker-shut 0 "$?"
+eq resume-marker-no-calls 0 "$(grep -c . "$T/calls")"
+# (9) engines-mode begin: max-end fixed up front = now + moves × HELM_ENGINE_TIMEOUT + HELM_TAIL;
+#     expected-end = now + one budget. Clock 0, 41 moves → 41×3600+300 = 147900 s = 1970-01-02T17:05:00Z;
+#     expected-end 3900 s = 01:05:00.
+rm -f "$ADIR/helm-stopped"; LEASE_JSON=""; echo 0 >"$CLOCK"; : >"$T/calls"
+helm_begin "$T/rec-eng-begin" longhorn longhorn longhorn-system abc 1.12.1 1.12.1 240 engines 41 >/dev/null 2>&1; eq begin-engines-rc 0 "$?"
+eq begin-engines-max-end "1970-01-02T17:05:00Z" "$(cat "$T/rec-eng-begin/max-end")"
+eq begin-engines-lease "1970-01-01T01:05:00Z|1970-01-02T17:05:00Z|mgmt-helm-engines" "$(jq -r '.data | "\(.["expected-end"])|\(.["max-end"])|\(.by)"' "$T/rec-eng-begin/lease.json")"
+eq begin-engines-mode engines "$(cut -f7 "$T/rec-eng-begin/meta.tsv")"
+_hkilltree "$(cat "$T/rec-eng-begin/watch.pid")" 2>/dev/null
 
 echo "mgmt-helm-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
