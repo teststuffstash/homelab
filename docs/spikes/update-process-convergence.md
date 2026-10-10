@@ -33,7 +33,7 @@ missing.
 | Update class | Proposer | Test surface (pre-merge / pre-apply) | Merge gate | Deploy edge | Detector | Revert | Canary |
 |---|---|---|---|---|---|---|---|
 | **Renovate lanes**: charts/images (1/2), providers (5), lock (7), Actions (8), runner inputs (10) | ✅ Renovate, or the `devbox-update` job for class 7 | ✅ CI on the head. Class 5 also gets the sentinel's plan, which must be empty | ✅ the reflex, the migration lens, or the sentinel's green, depending on the lane (ADR-141) | ✅ ArgoCD sync for 1/2, the box apply loop for 5, self-deploying for 7/8 | ✅ Argo alerts, `MgmtApplyErroredOnNewProvider`, `GithubWorkflowRunFailed` | ✅ revert chains (`workflow-pin-revert`, `tofu-provider-revert`, `tofu-image-revert`, `chart-revert`). Class 1/2 non-reversible bumps are 👤 | ⚠ none except Actions (CI on the head) |
-| **kps chart** (the cone that holds its own detector) | ✅ Renovate | ✅ CI plus the re-render (G12) | ✅ the lens | ✅ ArgoCD, with a PreSync lease | ✅ PostSync confirms the lease | ✅ the box lease loop (MB5). ⚠ The credential click is still pending | ⚠ |
+| **kps chart** (the cone that holds its own detector) | ✅ Renovate | ✅ CI plus the re-render (G12) | ✅ the lens | ✅ ArgoCD, with a PreSync lease | ✅ PostSync confirms the lease | ✅ the box lease loop (MB5). Drilled 2026-10-10 (#2441: tick → synced ~8 min; fixes #2429/#2437) | ⚠ |
 | **Substrate** (6): Talos, Kubernetes, Cilium | 👤 a hand bump. The currency belt raises it | ✅ the sentinel plan plus the install-impact line | 👤 codeowner | ✅ `mgmt-reconcile` (WIP 1, CPs last) | ✅ node drift, the workload-health hold, `MgmtRolloutDifferential` | 👤 forward by default; a revert is a human commit | ✅ a canary node per type |
 | **OPNsense firmware** | ⚠ none. The router's own `firmware/check` is the authority, by ruling | 👤 a seat trial on test VM 9110 | none: not in git | 👤 seat API calls (check → update → upgrade) | ⚠ no `firmware/status` belt (it was discussed but never built) | ⚠ none written down. The nodes are now VMs, so a `qm snapshot` is available | 👤 the BACKUP node first (rolling drill R1) |
 | **Router config** (`ansible/opnsense-*`, `opnsense/*.py`). Class 9's real pin is the `oxlorg.opnsense` collection | ✅ humans write the config. Renovate proposed the collection pin (#2033) | 👤 the test VM harness, run by the seat; it posts no status (the jail PAT gets a 403) | 👤 codeowner | ⚠ none. `router-node.sh converge` per node is a seat act | ⚠ partial. The belt's `ansible --check` cannot see raw-post drift; the weekly drill score (red since 10-04) and the pair belts cover part of it | 👤 `git revert` plus a re-converge. FU-308's dead-man covers only CARP maintenance | ⚠ in the table. The live answer is the BACKUP node |
@@ -116,9 +116,9 @@ new FUs").
    drill. Owner: **FU-297** (its own Next).
 2. **No belt fires when the MASTER has no WAN.** This blocks any unattended MASTER-side step.
    Owner: **FU-307**.
-3. **The lease credential click** (`homelab-sentinel` `contents: write`). Until it happens, every
-   lease revert lands as `error`, so the lease cannot become the shared revert. Owner: **ADR-150 /
-   S9 #1985**.
+3. ~~**The lease credential click**~~ — done 2026-10-07; the revert half drilled 2026-10-10 (#2441,
+   after #2429/#2437 fixed the box's pin read and git identity). Remaining lease latency: a lease-script
+   fix waits for the box's hourly pull. Owner: **ADR-150 / S9 #1985**.
 4. **The box loops wedge silently on a toolchain bump.** The shared applier must not fail quietly.
    Owner: **FU-305**.
 5. **The box's view of the cluster bypasses nothing.** Its reads ride the router it would be
