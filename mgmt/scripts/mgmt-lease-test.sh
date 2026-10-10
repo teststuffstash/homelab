@@ -14,7 +14,9 @@ export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER
 SRC="$T/src"; git -C "$T" init -q -b master "$SRC"
 mkdir -p "$SRC/argocd/platform/values" "$SRC/policy/mgmt"
 cp "$WT/policy/mgmt/upgrade-leases.yaml" "$SRC/policy/mgmt/upgrade-leases.yaml"
-app() { printf '# kps\nspec:\n  sources:\n    - chart: kube-prometheus-stack\n      targetRevision: %s\n      helm:\n        skipCrds: true\n%s' "$1" "${2:-}"; }
+# multi-source, as live: the chart pin + the `$values` git source's own targetRevision (the pin read
+# must key on the chart — a count-every-line read errored on the real file, S9 drill 2026-10-10)
+app() { printf '# kps\nspec:\n  sources:\n    - chart: kube-prometheus-stack\n      targetRevision: %s\n      helm:\n        skipCrds: true\n%b    - repoURL: https://github.com/teststuffstash/homelab.git\n      targetRevision: master\n      ref: values\n' "$1" "${2:-}"; }
 crds() { printf 'spec:\n  source:\n    chart: prometheus-operator-crds\n    targetRevision: %s\n' "$1"; }
 app 86.3.2 >"$SRC/argocd/platform/kube-prometheus-stack.yaml"
 crds 29.0.0 >"$SRC/argocd/platform/prometheus-operator-crds.yaml"

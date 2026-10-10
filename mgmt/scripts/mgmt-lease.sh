@@ -135,8 +135,17 @@ leases_live() {
 }
 # policy_subject <policy-file> <subject> → JSON row or rc 1
 policy_subject() { local row; row="$(_yq -o=json ".subjects[] | select(.file == \"$2\")" "$1" 2>/dev/null)"; [ -n "$row" ] && [ "$row" != "null" ] || return 1; printf '%s' "$row"; }
-# pin_at <ref> <file> → the file's one targetRevision value (rc 1 if not exactly one)
-pin_at() { local pins; pins="$(git -C "$REPO" show "$1:$2" 2>/dev/null | sed -n -E 's/^[[:space:]]*targetRevision:[[:space:]]*"?([^[:space:]"#]+)"?.*$/\1/p')" || return 1; [ "$(printf '%s\n' "$pins" | grep -c .)" = 1 ] || return 1; printf '%s' "$pins"; }
+# pin_at <ref> <file> <chart> → the targetRevision of the ONE source whose `chart:` is <chart> (rc 1 if
+# not exactly one). Keyed by chart, never "the file's only targetRevision": the live kps Application
+# is multi-source — the chart pin AND the `$values` git source (`targetRevision: master`) — and the
+# count-every-line read refused it on the first live expiry (S9 drill 2026-10-10, outcome `error`).
+pin_at() {
+  local body pins
+  body="$(git -C "$REPO" show "$1:$2" 2>/dev/null)" || return 1
+  pins="$(printf '%s\n' "$body" | CHART="$3" _yq -r '[.spec.source, (.spec.sources // [])[]] | map(select(. != null and .chart == strenv(CHART))) | .[].targetRevision' 2>/dev/null)" || return 1
+  [ "$(printf '%s\n' "$pins" | grep -c .)" = 1 ] || return 1
+  printf '%s' "$pins"
+}
 # pin_only_commit <sha> <file> <keep…(space-sep)> <regen…(space-sep)> <from> <to> → 0, or 1 with the reason on stdout
 pin_only_commit() {
   local sha="$1" file="$2" keep="$3" regen="$4" from="$5" to="$6" names n allowed f diffl bad removed added
@@ -194,7 +203,7 @@ revert_lease() {  # <lease-json> <policy-file>
     fi
   fi
   # ledger 2: master's pin is no longer the lease's `to` → reverted or bumped again, a stale lease
-  if ! mpin="$(pin_at origin/master "$subject")"; then outcome error "$name" "cannot read the pin of $subject at origin/master"; return; fi
+  if ! mpin="$(pin_at origin/master "$subject" "$chart")"; then outcome error "$name" "cannot read the $chart pin of $subject at origin/master"; return; fi
   if [ "$mpin" != "$to" ]; then outcome already "$name" "master's $subject pin is $mpin, not the lease's $to — stale lease"; return; fi
   git -C "$REPO" cat-file -e "${sha}^{commit}" 2>/dev/null || { outcome error "$name" "commit $sha is not in the clone (fetch depth?)"; return; }
   if ! why="$(pin_only_commit "$sha" "$subject" "$keep" "$regen" "$from" "$to")"; then outcome not_pin_only "$name" "$why"; return; fi
