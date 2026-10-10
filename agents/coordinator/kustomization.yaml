@@ -61,4 +61,4 @@ configurations:
 
 images:
   - name: ghcr.io/teststuffstash/agent-coordinator
-    newTag: 2026.10.10-g56f8197a03de
+    newTag: 2026.10.10-gef55ef1372b6
