@@ -17,7 +17,9 @@ never the session's arc — that is TICK-LOG's.)
   PR) for a NEXT session. In flight as seat subagents: kps lease revert drill → arm kps majors (step 5); lock revert drill;
   class-4 + helm install-tool proposers; KernelOops OOM + pr-wait SIGPIPE; hygiene (dashboards, deps-pin-guard,
   dead update-pr-branch callers) + G4; #2014; canary ruling. Stack-side residue handed to sleep-tracking (redundant
-  rules, frser double-label).
+  rules, frser double-label). **Scope widened (operator 10-10): S9 ends with the LONG-TERM fixes — box + router
+  working, no residual FUs to resurface** → FU-301 (box applies helm, never acts on failure — ruled), FU-302, and
+  #2431's waves 0–4 are S9 work. Class-4 chart PRs un-armed until FU-301's allowlist lands.
 - **⚑ PICKUP (2026-10-10 — seat): nix flake-registry fix LIVE, proof pending a ride.** Launcher pin
   `flake-registry =` (#2420) + agent-runtime #168 (ea009fca, entrypoint APPENDS to NIX_CONFIG) are
   both live — agent-base `2026.10.9-g4bd7c9b9b57d` pinned (#2422). **But no worker ride has run since

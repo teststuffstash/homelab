@@ -159,7 +159,9 @@ six OVERSIZE items pointer-ized into
       Every attended helm apply runs `devbox run helm-evidence -- run` (PR#2179); first record #2046 (helm
       provider 3.x: 4 revisions, manifests unchanged, 0 restarts, 0 BGP resets). Unattended scope OPEN —
       candidates: a no-chart/version/values-change gate, a declared-vs-live settings check, Cilium
-      `OnDelete` via `mgmt-reconcile`, Longhorn engines ordered by disk type. ⚠ `dependency-upgrades.md`'s
+      `OnDelete` via `mgmt-reconcile`, Longhorn engines ordered by disk type. **Ruled 2026-10-10 (operator, for
+      now): the box MAY apply a reviewed helm bump — forward only, evidence-bracketed, stop + alert on a bad
+      verdict, never revert/retry/remediate; in S9 scope (#1985).** ⚠ `dependency-upgrades.md`'s
       Cilium canary cell is inherited from class 6 — Cilium never had one. **Next:** evidence storage the box can
       reach (it lives in the jail's `~/.claude/helm-evidence/`), then the box brackets helm applies with it.
 - [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router — one defect left.**
