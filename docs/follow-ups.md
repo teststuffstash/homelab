@@ -525,9 +525,10 @@ the block needs pruning, not more headings.
       revert PR wedged the same way. **Class fix PR#2457 (2026-10-10):** no gate loop runs devbox — tools from the
       box's closure (`boxTools`), tofu/talosctl/helm read from the clone's devbox.lock as data (split:
       docs/management-box.md §Two pins); `mgmt-tools-test` drives the no-plan verdict past a poisoned devbox.
-      **Next:** activate + live proof, then the class-7 lock revert drill (dependency-upgrades §Next steps 10(b));
+      LIVE 10-10 16:53Z. **Next:** the in-cluster iac-sentinel (required) still `devbox run`s master — fix it,
+      then the class-7 lock revert drill (dependency-upgrades §Last proven);
       a flake.lock proposer (class 13 ⚠, `.github/` operator-direct); `MgmtSentinelLoopStale` (+ replay 10-07
-      20:15–21:10Z); the in-cluster iac-sentinel still `devbox run`s master (the box's tick is its fallback).
+      20:15–21:10Z).
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
       GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex
       failed "rate limit already exceeded for installation 142724430". In 08:31–09:31 oracle+sleep ran
