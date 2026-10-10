@@ -440,6 +440,11 @@ in
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
     path = boxTools;
+    # restartIfChanged = false — the reconciler's/drill's rule, for the same reason: a mgmt-pull activation
+    # that changes this unit must never kill a running tick. FU-301 drill 2 (2026-10-10): a closure
+    # activation at 16:53:21Z SIGTERMed the tick 10 min after it applied argo-cd 9.5.22, mid-settle — no
+    # verdict, the lease left to expire, the window left open. The timer's next tick picks up the new unit.
+    restartIfChanged = false;
     serviceConfig = {
       Type = "oneshot";
       # 5h, was 40m: a box helm apply (FU-301, mgmt/scripts/mgmt-helm.sh) runs its whole bracket inside
