@@ -16,4 +16,10 @@ cd "$d"
 # here; runtime keeps the baked nix.conf order (LAN mirror first).
 export NIX_CONFIG="substituters = https://cache.nixos.org"
 devbox install
+# THE BAKED LOCK (operator ruling 2026-10-10, FU-305): keep the pair that just REALISED — after the
+# install, so any plugin rewrite devbox made is in it. In-image consumers that must not depend on
+# master's lock (the iac-sentinel pod, agents/coordinator/sentinel-argo.yaml) copy it over their
+# clone's: a lock that fails to realise fails THIS step, so no image ever carries an unrealisable one.
+mkdir -p "/opt/baked/$1"
+cp devbox.json devbox.lock "/opt/baked/$1/"
 du -sh /nix /home/runner/.cache 2>/dev/null || true
