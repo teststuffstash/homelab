@@ -1,0 +1,182 @@
+# Pattern fixture for the kernel_oops stage.regex in alloy-config.yaml (the counter KernelOopsCaptured
+# reads). `devbox run prometheus-rules-lint` runs it: the regex is EXTRACTED from the ConfigMap (not
+# copied here), applied per line exactly as Alloy does (one kmsg record = one entry, no context), and
+# the per-line verdict must equal the first column. Format: `<1|0><TAB><raw kmsg record>`; `#` and
+# blank lines are skipped. Expectations come from the CONTRACT (the pattern-set comment in
+# alloy-config.yaml: count kernel fault dumps; an OOM-kill dump is not one), never from running it.
+#
+# ── A. The REAL 2026-10-06 22:22:59Z wk-04 memcg OOM-kill (the PostSync Job's kubectl at 128 Mi)
+# that fired KernelOopsCaptured at ~23:25 local. Pulled verbatim from Loki ({namespace="loki",
+# container="kmsg-reader",node="wk-04"}, 22:22:50→22:23:10Z). EVERY line 0: it carries `Call Trace:`
+# (the old pattern's only hit) and `RIP: 0033:` (USER CS — the fault was a user page fault), and
+# neither may count.
+0	4,25659,446289572450,-;kubectl invoked oom-killer: gfp_mask=0xcc0(GFP_KERNEL), order=0, oom_score_adj=999
+0	4,25660,446289579519,-;CPU: 13 UID: 1000 PID: 109285 Comm: kubectl Not tainted 6.18.51-talos #1 PREEMPT(none)
+0	4,25661,446289579523,-;Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS rel-1.17.0-0-gb52ca86e094d-prebuilt.qemu.org 04/01/2014
+0	4,25662,446289579528,-;Call Trace:
+0	4,25663,446289579531,-; <TASK>
+0	4,25664,446289579537,-; dump_stack_lvl+0x63/0x80
+0	4,25665,446289579548,-; dump_header+0x4a/0x140
+0	4,25666,446289579551,-; oom_kill_process+0x20f/0x320
+0	4,25667,446289579557,-; out_of_memory+0x3eb/0x5a0
+0	4,25668,446289579560,-; try_charge_memcg+0x571/0x7d0
+0	4,25669,446289579565,-; charge_memcg+0x35/0x80
+0	4,25670,446289579570,-; __mem_cgroup_charge+0x2a/0x80
+0	4,25671,446289579573,-; do_pte_missing+0xbc9/0x1040
+0	4,25672,446289579582,-; ? ___pte_offset_map+0x1d/0x120
+0	4,25673,446289579586,-; handle_mm_fault+0x849/0xb60
+0	4,25674,446289579591,-; do_user_addr_fault+0x275/0x690
+0	4,25675,446289579597,-; exc_page_fault+0x69/0xc0
+0	4,25676,446289579603,-; asm_exc_page_fault+0x26/0x30
+0	4,25677,446289579609,-;RIP: 0033:0x43703e
+0	4,25678,446289579619,-;Code: c9 74 27 44 0f 11 38 44 0f 11 78 10 44 0f 11 78 20 44 0f 11 78 30 44 0f 11 78 40 44 0f 11 78 50 44 0f 11 78 60 44 0f 11 78 70 <88> 58 7f 48 83 c4 10 5d c3 48 8d 05 fc fe f8 01 bb 23 00 00 00 e8
+0	4,25679,446289579623,-;RSP: 002b:00003dd166cf4c28 EFLAGS: 00010246
+0	4,25680,446289579630,-;RAX: 00003dd16c893f80 RBX: 0000000000000013 RCX: 00003dd165200000
+0	4,25681,446289579632,-;RDX: 00003dd16c893f80 RSI: 00007f20314c0089 RDI: 0000000000000002
+0	4,25682,446289579635,-;RBP: 00003dd166cf4c38 R08: 0000000000000001 R09: 00003dd16c892000
+0	4,25683,446289579637,-;R10: 0000000000000001 R11: 00007f20314b0000 R12: 00003dd165200008
+0	4,25684,446289579639,-;R13: 0000000000000048 R14: 00003dd16516a1e0 R15: ffffffffffffffff
+0	4,25685,446289579644,-; </TASK>
+0	6,25686,446289579649,-;memory: usage 131072kB, limit 131072kB, failcnt 26
+0	6,25687,446289624880,-;swap: usage 0kB, limit 9007199254740988kB, failcnt 0
+0	6,25688,446289626441,-;Memory cgroup stats for /kubepods/burstable/pod5cef1fc1-f284-4455-960a-e7015dda4ad5:
+0	6,25689,446289626711,-;anon 132263936
+0	6,25690,446289629727,-;file 0
+0	6,25691,446289630277,-;kernel 1953792
+0	6,25692,446289631015,-;kernel_stack 360448
+0	6,25693,446289631834,-;pagetables 688128
+0	6,25694,446289632730,-;sec_pagetables 0
+0	6,25695,446289633561,-;percpu 81936
+0	6,25696,446289634312,-;sock 0
+0	6,25697,446289634851,-;vmalloc 73728
+0	6,25698,446289635538,-;shmem 0
+0	6,25699,446289636124,-;zswap 0
+0	6,25700,446289636726,-;zswapped 0
+0	6,25701,446289637390,-;file_mapped 0
+0	6,25702,446289638065,-;file_dirty 0
+0	6,25703,446289638729,-;file_writeback 0
+0	6,25704,446289639471,-;swapcached 0
+0	6,25705,446289640160,-;anon_thp 0
+0	6,25706,446289640830,-;file_thp 0
+0	6,25707,446289641488,-;shmem_thp 0
+0	6,25708,446289642122,-;inactive_anon 51982336
+0	6,25709,446289642990,-;active_anon 80281600
+0	6,25710,446289643819,-;inactive_file 0
+0	6,25711,446289644568,-;active_file 0
+0	6,25712,446289645323,-;unevictable 0
+0	6,25713,446289646033,-;slab_reclaimable 420480
+0	6,25714,446289646935,-;slab_unreclaimable 317120
+0	6,25715,446289647887,-;slab 737600
+0	6,25716,446289648578,-;workingset_refault_anon 0
+0	6,25717,446289649541,-;workingset_refault_file 0
+0	6,25718,446289650467,-;workingset_activate_anon 0
+0	6,25719,446289651449,-;workingset_activate_file 0
+0	6,25720,446289652452,-;workingset_restore_anon 0
+0	6,25721,446289653452,-;workingset_restore_file 0
+0	6,25722,446289654396,-;workingset_nodereclaim 0
+0	6,25723,446289655332,-;pgdemote_kswapd 0
+0	6,25724,446289656143,-;pgdemote_direct 0
+0	6,25725,446289656958,-;pgdemote_khugepaged 0
+0	6,25726,446289657808,-;pgdemote_proactive 0
+0	6,25727,446289658634,-;pgscan 122
+0	6,25728,446289659257,-;pgsteal 120
+0	6,25729,446289659921,-;pswpin 0
+0	6,25730,446289660573,-;pswpout 0
+0	6,25731,446289661193,-;pgscan_kswapd 0
+0	6,25732,446289661908,-;pgscan_direct 122
+0	6,25733,446289662673,-;pgscan_khugepaged 0
+0	6,25734,446289663494,-;pgscan_proactive 0
+0	6,25735,446289664308,-;pgsteal_kswapd 0
+0	6,25736,446289665115,-;pgsteal_direct 120
+0	6,25737,446289665904,-;pgsteal_khugepaged 0
+0	6,25738,446289666752,-;pgsteal_proactive 0
+0	6,25739,446289667555,-;pgfault 51869
+0	6,25740,446289668261,-;pgmajfault 0
+0	6,25741,446289668980,-;pgrefill 84
+0	6,25742,446289669634,-;pgactivate 1
+0	6,25743,446289670299,-;pgdeactivate 0
+0	6,25744,446289670994,-;pglazyfree 0
+0	6,25745,446289671659,-;pglazyfreed 0
+0	6,25746,446289672375,-;swpin_zero 0
+0	6,25747,446289673110,-;swpout_zero 0
+0	6,25748,446289673794,-;zswpin 0
+0	6,25749,446289674375,-;zswpout 0
+0	6,25750,446289674969,-;zswpwb 0
+0	6,25751,446289675553,-;thp_fault_alloc 0
+0	6,25752,446289676351,-;thp_collapse_alloc 0
+0	6,25753,446289677254,-;thp_swpout 0
+0	6,25754,446289677908,-;thp_swpout_fallback 0
+0	6,25755,446289678795,-;Tasks state (memory values in pages):
+0	6,25756,446289680057,-;[  pid  ]   uid  tgid total_vm      rss rss_anon rss_file rss_shmem pgtables_bytes swapents oom_score_adj name
+0	6,25757,446289682800,-;[ 108969]  1000 108969      257      114        0      114         0    36864        0          -998 pause
+0	6,25758,446289685448,-;[ 109067]  1000 109067     1020      696       64      632         0    49152        0           999 bash
+0	6,25759,446289688179,-;[ 109246]  1000 109246     1020      415       68      347         0    49152        0           999 bash
+0	6,25760,446289690794,-;[ 109276]  1000 109276   364007    40639    31712     8927         0   466944        0           999 kubectl
+0	6,25761,446289693446,-;[ 109277]  1000 109277     1271      752      224      528         0    45056        0           999 jq
+0	6,25762,446289696037,-;oom-kill:constraint=CONSTRAINT_MEMCG,nodemask=(null),cpuset=279fc2e3a956a4c2f614a64f0e8336074a010a1e6e28252c5fd4e7249c066cc9,mems_allowed=0-1,oom_memcg=/kubepods/burstable/pod5cef1fc1-f284-4455-960a-e7015dda4ad5,task_memcg=/kubepods/burstable/pod5cef1fc1-f284-4455-960a-e7015dda4ad5/279fc2e3a956a4c2f614a64f0e8336074a010a1e6e28252c5fd4e7249c066cc9,task=kubectl,pid=109276,uid=1000
+0	3,25763,446289704325,-;Memory cgroup out of memory: Killed process 109276 (kubectl) total-vm:1456028kB, anon-rss:126848kB, file-rss:35708kB, shmem-rss:0kB, UID:1000 pgtables:456kB oom_score_adj:999
+0	6,25764,446289708751,-;Tasks in /kubepods/burstable/pod5cef1fc1-f284-4455-960a-e7015dda4ad5/279fc2e3a956a4c2f614a64f0e8336074a010a1e6e28252c5fd4e7249c066cc9 are going to be killed due to memory.oom.group set
+0	3,25765,446289712993,-;Memory cgroup out of memory: Killed process 109067 (bash) total-vm:4080kB, anon-rss:256kB, file-rss:2528kB, shmem-rss:0kB, UID:1000 pgtables:48kB oom_score_adj:999
+0	3,25766,446289717063,-;Memory cgroup out of memory: Killed process 109246 (bash) total-vm:4080kB, anon-rss:272kB, file-rss:1388kB, shmem-rss:0kB, UID:1000 pgtables:48kB oom_score_adj:999
+0	3,25767,446289721205,-;Memory cgroup out of memory: Killed process 109285 (kubectl) total-vm:1456028kB, anon-rss:126848kB, file-rss:35708kB, shmem-rss:0kB, UID:1000 pgtables:456kB oom_score_adj:999
+0	6,25768,446291157363,-;eth0: renamed from tmp5ece7
+0	6,25769,446291209436,-;eth0: renamed from tmp11e7e
+0	4,25770,446300019705,-;audit: audit_lost=3526806 audit_rate_limit=4096 audit_backlog_limit=8192
+0	3,25771,446300021661,-;audit: rate limit exceeded
+#
+# ── B. The REAL 2026-10-07 17:48:48Z wk-01 WARN_ON (iscsi workqueue flush dependency). A non-fatal
+# warning IS in the contract ("a WARN_ON costs one read"): exactly the `RIP: 0010:` line counts —
+# one per dump, the same count the old `Call Trace:` marker gave it. `CS:  0010` must NOT count.
+0	4,7955,622303202808,-;------------[ cut here ]------------
+0	4,7956,622303203846,-;workqueue: WQ_MEM_RECLAIM iscsi_ctrl_3:3:__iscsi_unbind_session is flushing !WQ_MEM_RECLAIM pm:pm_runtime_work
+0	4,7957,622303203928,-;WARNING: CPU: 3 PID: 213235 at kernel/workqueue.c:3803 check_flush_dependency+0x122/0x130
+0	4,7958,622303208612,-;Modules linked in: usbhid virtio_net virtio_console intel_rapl_msr virtio_scsi intel_rapl_common psmouse uhci_hcd ehci_pci virtio_pci ehci_hcd virtio_pci_legacy_dev virtio_pci_modern_dev ata_piix vmgenid button
+0	4,7959,622303212977,-;CPU: 3 UID: 0 PID: 213235 Comm: kworker/u16:2 Not tainted 6.18.51-talos #1 PREEMPT(none)
+0	4,7960,622303215052,-;Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS rel-1.16.3-0-ga6ed6b701f0a-prebuilt.qemu.org 04/01/2014
+0	4,7961,622303217547,-;Workqueue: iscsi_ctrl_3:3 __iscsi_unbind_session
+1	4,7962,622303218858,-;RIP: 0010:check_flush_dependency+0x122/0x130
+0	4,7963,622303220005,-;Code: 05 ce b5 e1 02 01 48 81 c6 c0 00 00 00 48 8b 50 18 48 81 c7 c0 00 00 00 48 89 f9 48 c7 c7 6c 9f bf ae 49 89 d8 e8 ee 9a dc ff <0f> 0b e9 77 ff ff ff cc cc cc cc cc cc cc 90 90 90 90 90 90 90 90
+0	4,7964,622303224088,-;RSP: 0018:ffffd0644f63fc88 EFLAGS: 00010046
+0	4,7965,622303225251,-;RAX: 0000000000000000 RBX: ffffffffade2c6c0 RCX: 0000000000000000
+0	4,7966,622303226807,-;RDX: 0000000000000000 RSI: 0000000000000000 RDI: 0000000000000000
+0	4,7967,622303228375,-;RBP: ffff8b60c2348e00 R08: 0000000000000000 R09: 0000000000000000
+0	4,7968,622303229954,-;R10: 0000000000000000 R11: 0000000000000000 R12: ffff8b60f816d240
+0	4,7969,622303231493,-;R13: 0000000000000000 R14: ffff8b60da3b85a8 R15: ffff8b63ffdb0480
+0	4,7970,622303233044,-;FS:  0000000000000000(0000) GS:ffff8b644f1f0000(0000) knlGS:0000000000000000
+0	4,7971,622303234883,-;CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+0	4,7972,622303236168,-;CR2: 00007f7804a44bc1 CR3: 00000001613e0003 CR4: 0000000000372ef0
+0	4,7973,622303237728,-;Call Trace:
+0	4,7974,622303238294,-; <TASK>
+0	4,7975,622303238786,-; __flush_work.llvm.15438023469474604638+0xfb/0x310
+0	4,7976,622303240042,-; pm_runtime_remove+0x2c/0xb0
+0	4,7977,622303240912,-; device_pm_remove+0x8d/0xb0
+0	4,7978,622303241812,-; device_del+0x1f5/0x410
+0	4,7979,622303242622,-; ? __pfx_iscsi_session_match+0x10/0x10
+0	4,7980,622303243678,-; ? attribute_container_device_trigger+0xf9/0x130
+0	4,7981,622303244949,-; scsi_target_reap+0x55/0x90
+0	4,7982,622303245802,-; scsi_remove_target+0x1fd/0x250
+0	4,7983,622303246771,-; __iscsi_unbind_session+0xe6/0x240
+0	4,7984,622303247798,-; process_scheduled_works+0x1d7/0x440
+0	4,7985,622303248849,-; worker_thread+0x21a/0x2f0
+0	4,7986,622303249723,-; ? __pfx_worker_thread+0x10/0x10
+0	4,7987,622303250662,-; kthread+0x201/0x260
+0	4,7988,622303251453,-; ? __pfx_kthread+0x10/0x10
+0	4,7989,622303252285,-; ret_from_fork+0x10c/0x190
+0	4,7990,622303253169,-; ? __pfx_kthread+0x10/0x10
+0	4,7991,622303254049,-; ret_from_fork_asm+0x1a/0x30
+0	4,7992,622303254943,-; </TASK>
+0	4,7993,622303255484,-;---[ end trace 0000000000000000 ]---
+#
+# ── C. The page_table_check oops (docs/incidents/2026-09-16-page-table-check-reboots.md §Root cause,
+# the lines Loki held before the resets; record prefixes added). Header, oops line and kernel RIP
+# count; the CPU line and the trace frame do not.
+1	4,1201,90000000001,-;kernel BUG at mm/page_table_check.c:143!
+1	4,1202,90000000002,-;Oops: invalid opcode: 0000 [#1] SMP PTI
+0	4,1203,90000000003,-;CPU: 13 UID: 65532 PID: 58799 Comm: crossplane Not tainted 6.18.29-talos #1
+1	4,1204,90000000004,-;RIP: 0010:__page_table_check_zero+0xfb/0x130
+0	4,1205,90000000005,-; __free_frozen_pages+0x1a/0x30
+#
+# ── D. The two fault headers that precede `Oops:` (kernel source strings, arch/x86/mm/fault.c and
+# arch/x86/kernel/traps.c — synthetic records).
+1	4,1301,90000001001,-;BUG: unable to handle kernel NULL pointer dereference at 0000000000000008
+1	4,1302,90000001002,-;Oops: general protection fault, probably for non-canonical address 0xdead000000000100: 0000 [#1] SMP PTI

@@ -136,9 +136,10 @@ spec:
             description: >-
               The kernel on {{ $labels.node }} printed oops/BUG/fault-dump lines into /dev/kmsg — a
               SYMPTOM, not a diagnosis: this matches a fatal oops, a #GP, a NULL-deref AND a
-              non-fatal WARN_ON backtrace, so read the lines before concluding anything. They are in
+              non-fatal WARN_ON backtrace (a memcg OOM-kill dump is NOT counted — PodSigkilled
+              covers those), so read the lines before concluding anything. They are in
               Loki (Grafana Explore, tenant `loki`):
-              {namespace="loki",container="kmsg-reader",node="{{ $labels.node }}"} |~ "kernel BUG at|Oops:|general protection fault|BUG: unable to handle kernel|Call Trace:"
+              {namespace="loki",container="kmsg-reader",node="{{ $labels.node }}"} |~ "kernel BUG at|Oops:|general protection fault|BUG: unable to handle kernel|RIP: 0010:"
               — widen to the whole stream for the ~20 lines around the dump. If the box also
               rebooted (NodeRebootedTwiceIn24h / NodeRebootingRepeatedly, pve-metrics), the dump is
               the reboot's cause and the panic line itself is NOT here: a userspace reader cannot
