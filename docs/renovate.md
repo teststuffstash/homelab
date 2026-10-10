@@ -109,6 +109,16 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   ArgoCD sync; no post-sync [contract probe](glossary.md) (FU-102); the revert is a human `git revert`, and a
   CRD-carrying chart (Argo, Crossplane, cert-manager, ESO, CNPG) can change schema in a MINOR
   (IAC-G09) — the lens is the only read of that.
+- **Helm charts in tofu (class 4 of [`dependency-upgrades.md`](dependency-upgrades.md), proposer ON
+  since 2026-10-10 — S9 #1988).** The `helm_release` charts pin `version = var.<x>`, which the
+  terraform manager cannot follow, so a `# renovate: datasource=helm depName=<chart> registryUrl=<repo>`
+  comment above each variable's `default` feeds a `custom.regex` manager (argo-cd, argocd-apps,
+  longhorn; `cilium_version` stays un-annotated — class 6, human-proposed). Lanes: patch/minor →
+  `deps-review`, armed; majors → the un-armed catch-all. **A merge is not a deploy here:** a
+  `helm_release` address is outside the [management box](management-box.md)'s apply allowlist, so the
+  box refuses the plan to a human `mgmt-tf apply` run under `helm-evidence` (FU-301), and
+  `MgmtApplyResidueStanding` fires if the merged bump sits unapplied 24 h — the human read of this
+  substrate is at the apply.
 - **JS via the `deno` manager (`scripts/mermaid-lint/deno.json` + `deno.lock`, CI-only dev tooling
   exercised by required `ci`)** rides the mechanical `automerge` lane for patch/minor; majors → the
   catch-all. homelab has no `package.json` since [ADR-143](adr.md): the parser runs under Deno with no
@@ -207,7 +217,11 @@ Safe: no duplication, no churn, nothing auto-acts on it.
   command string must match the global `allowedCommands` exactly (compiled as a Handlebars template
   first), and `fileFilters` is the ONLY way a generated file reaches the commit (never `git add`). The
   one consumer today: the kube-prometheus-stack rule re-rendering the upstream alert list on its branch
-  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). A dry run
+  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). The `install-tool helm`
+  version is Renovate-proposed (2026-10-10): two `customManagers` over `renovate-global.json` itself
+  (depName `helm/helm`) rewrite the command AND its regex-escaped `allowedCommands` entry in one branch
+  (`currentValueTemplate` + `autoReplaceStringTemplate` for the escaped half), so the pair never drifts
+  apart; the PR is codeowner-gated (`/.github/`). A dry run
   (`workflow_dispatch` → `dryRun`) still executes the commands and logs `DRY-RUN: Would commit files`,
   but only when a branch is (re)built — an up-to-date branch runs nothing, so the proof is the next bump.
 - **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
