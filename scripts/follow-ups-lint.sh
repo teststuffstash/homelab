@@ -144,7 +144,7 @@ items=$(awk '
 # A checked-off item still sitting in the tracker: resolution means ARCHIVING in the same commit,
 # not ticking the box (see Conventions).
 grep -n '^- \[x\]' "$TRACKER" | while IFS=: read -r ln rest; do
-  echo "UNARCHIVED line $ln — a checked item in the tracker: move it to $ARCHIVE ($(printf '%s' "$rest" | grep -o 'FU-[0-9][0-9][0-9]' | head -1))"
+  echo "UNARCHIVED line $ln — a checked item in the tracker: move it to $ARCHIVE ($(printf '%s' "$rest" | grep -o 'FU-[0-9][0-9][0-9]' | sed -n 1p))"
 done
 
 # Markers that mean "this leg finished" — history, not deferred work.

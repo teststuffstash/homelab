@@ -167,7 +167,7 @@ if [ "$mode" = arm ]; then
     exit 5
   fi
   armed="${after%% *}"; now_labels="${after#* }"
-  if [ "$armed" != true ] || printf '%s\n' "$now_labels" | tr ',' '\n' | grep -qx -- "$CLAIM_LABEL"; then
+  if [ "$armed" != true ] || printf '%s\n' "$now_labels" | tr ',' '\n' | grep -cx -- "$CLAIM_LABEL" >/dev/null; then
     printf 'major-handoff: END STATE NOT PROVEN — %s#%s after the writes: auto_merge=%s labels=%s\n' "$SLUG" "$PR" "$armed" "$now_labels"
     exit 5
   fi

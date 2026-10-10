@@ -22,8 +22,8 @@ fi
 # Verify reviews.md lists them in newest-first order
 if [ -n "${PF_REVIEWS_MD:-}" ]; then
   # Check that reviewer3 (newest) appears before reviewer2 and reviewer1
-  REVIEWER3_POS="$(printf '%s' "$PF_REVIEWS_MD" | grep -n "reviewer3" | head -1 | cut -d: -f1)"
-  REVIEWER2_POS="$(printf '%s' "$PF_REVIEWS_MD" | grep -n "reviewer2" | head -1 | cut -d: -f1)"
+  REVIEWER3_POS="$(printf '%s' "$PF_REVIEWS_MD" | grep -n "reviewer3" | sed -n 1p | cut -d: -f1)"
+  REVIEWER2_POS="$(printf '%s' "$PF_REVIEWS_MD" | grep -n "reviewer2" | sed -n 1p | cut -d: -f1)"
 
   if [ -n "$REVIEWER3_POS" ] && [ -n "$REVIEWER2_POS" ]; then
     if [ "$REVIEWER3_POS" -lt "$REVIEWER2_POS" ]; then

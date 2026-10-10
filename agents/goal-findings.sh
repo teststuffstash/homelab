@@ -179,7 +179,7 @@ _gf_self_test() {
   # checkpoint: inserted after burn-down: on first stamp, replaced in place on the next, never a second line
   st1="$(printf '%s\n' "$body" | gf_stamp_checkpoint "2026-09-23T06:00:00Z (c) no change")"
   [ "$(printf '%s\n' "$st1" | grep -c '^last-checkpoint:')" = "1" ] || { echo "self-test: checkpoint stamp missing" >&2; return 1; }
-  printf '%s\n' "$st1" | sed -n '4p' | grep -q '^last-checkpoint: 2026-09-23T06:00:00Z (c) no change$' || { echo "self-test: checkpoint line not after burn-down:" >&2; return 1; }
+  printf '%s\n' "$st1" | sed -n '4p' | grep -c '^last-checkpoint: 2026-09-23T06:00:00Z (c) no change$' >/dev/null || { echo "self-test: checkpoint line not after burn-down:" >&2; return 1; }
   st2="$(printf '%s\n' "$st1" | gf_stamp_checkpoint "2026-09-23T07:00:00Z (a) 2 minted")"
   [ "$(printf '%s\n' "$st2" | grep -c '^last-checkpoint:')" = "1" ] || { echo "self-test: checkpoint re-stamp grew a second line" >&2; return 1; }
   grep -q '^last-checkpoint: 2026-09-23T07:00:00Z (a) 2 minted$' <<< "$st2" || { echo "self-test: checkpoint re-stamp did not replace" >&2; return 1; }

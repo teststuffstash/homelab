@@ -733,10 +733,10 @@ check_kps_crds() {
   [ -f "$kc" ] || { skipped kps-crds no-input "no kubeconfig at $kc"; return; }
   local crds img
   crds="$(devbox run --quiet -- kubectl --kubeconfig "$kc" get crd -o json 2>&1)" || {
-    failed kps-crds unreachable "kubectl get crd failed: $(printf '%s' "$crds" | tail -1 | head -c 160)"; return; }
+    failed kps-crds unreachable "kubectl get crd failed: $(printf '%s' "$crds" | tail -1 | cut -c1-160)"; return; }
   img="$(devbox run --quiet -- kubectl --kubeconfig "$kc" -n monitoring get deploy kube-prometheus-stack-operator \
           -o jsonpath='{.spec.template.spec.containers[0].image}' 2>&1)" || {
-    failed kps-crds unreachable "operator Deployment unreadable: $(printf '%s' "$img" | tail -1 | head -c 160)"; return; }
+    failed kps-crds unreachable "operator Deployment unreadable: $(printf '%s' "$img" | tail -1 | cut -c1-160)"; return; }
   kps_crds_verdict "$crds" "$img"
 }
 
@@ -782,7 +782,7 @@ check_creds() {
 gate_sshd() {
   local out
   out="$(ss -ltnH 2>/dev/null || true)"
-  if printf '%s' "$out" | awk '{print $4}' | grep -qE '(^|:)22$'; then
+  if printf '%s' "$out" | awk '{print $4}' | grep -cE '(^|:)22$' >/dev/null; then
     passed gate:sshd "listening on 22"
   else
     failed gate:sshd failed "nothing listening on 22 — an update that breaks sshd is unrecoverable here"

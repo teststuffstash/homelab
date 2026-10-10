@@ -21,9 +21,21 @@ expansion (`${x%%$'\\n'*}`, `${x:0:N}`). Bash writes a here-string in full befor
 starts, so no writer can be left holding a closed pipe. POSIX sh has no `<<<`: use `case` or a
 heredoc redirect (`grep -q x <<EOF` / `$hay` / `EOF`).
 
-SCOPE: every tracked file ending .sh/.bash or whose shebang names sh/bash/dash. The writer is the
-pipeline stage directly before the `|` and must START with printf/echo (after `!`, `if`, `then`,
-…); a stage like `grep -o … | head -1` is a different writer and out of scope. Shell embedded in
+CHAINS (2026-10-10, S9 — the first cut's blind spot). A pipeline that STARTS with printf/echo
+carries the variable's unbounded body through every later stage, so an early-exit reader anywhere
+downstream leaves THAT stage's writer on the closed pipe: `printf "$labels" | tr , '\n' | grep -qx`
+makes `tr` the EPIPE victim, and pipefail reads the present label as missing all the same. The
+first cut only looked at the stage directly after the printf, which is why 25 chained sites survived
+its sweep. A here-string does not fix a chain (the middle stage is still a writer). Instead, end it
+with a reader that consumes everything — `sed -n 1p` / `sed -n 1,Np` for `head -1`/`head -N`,
+`cut -c1-N` for `head -c N` on one line, `grep -c … >/dev/null` for `grep -q` (same exit status) —
+or capture the middle stage into a variable and here-string that.
+agents/replay/fixtures/sigpipe-lint/suite.sh executes the chain shape on a 4 MiB body.
+
+SCOPE: every tracked file ending .sh/.bash or whose shebang names sh/bash/dash. The pipeline must
+START with printf/echo (after `!`, `if`, `then`, …); one led by another writer (`grep -o … file |
+head -1`, `kubectl … | grep -q`) is out of scope, because its output is not a shell variable's
+unbounded body and converting the ~90 such sites is a different, larger sweep. Shell embedded in
 YAML (Argo workflows, .github/workflows) is not scanned — it has no file boundary to lint by.
 """
 import os
@@ -114,11 +126,22 @@ def writer_stage(stage):
 
 
 def scan_line(line):
-    """Return the list of offending pipe offsets in one logical line."""
+    """Return the list of offending pipe offsets in one logical line.
+
+    A frame's `chain` is True once the pipeline it is in STARTED with printf/echo: every later stage
+    carries data derived from that unbounded body (`printf … | tr , '\\n' | grep -qx` — `tr` is the
+    writer left holding the closed pipe), so an early-exit reader ANYWHERE downstream is a hit, not
+    only one directly after the printf (the 2026-10-10 extension; the first cut saw only `printf | grep -q`).
+    """
     hits = []
-    frames = [{"dq": False, "start": 0}]
+    frames = [{"dq": False, "start": 0, "chain": False}]
     i, n = 0, len(line)
     sq = False
+
+    def restart(f, at):
+        f["start"] = at
+        f["chain"] = False
+
     while i < n:
         c = line[i]
         f = frames[-1]
@@ -134,7 +157,7 @@ def scan_line(line):
             if c == '"':
                 f["dq"] = False
             elif line.startswith("$(", i):
-                frames.append({"dq": False, "start": i + 2, "in_dq": True})
+                frames.append({"dq": False, "start": i + 2, "chain": False, "in_dq": True})
                 i += 2
                 continue
             i += 1
@@ -147,29 +170,31 @@ def scan_line(line):
         elif c == '"':
             f["dq"] = True
         elif line.startswith("$(", i):
-            frames.append({"dq": False, "start": i + 2})
+            frames.append({"dq": False, "start": i + 2, "chain": False})
             i += 2
             continue
         elif c == "(":
-            frames.append({"dq": False, "start": i + 1})
+            frames.append({"dq": False, "start": i + 1, "chain": False})
         elif c == ")":
             if len(frames) > 1:
                 frames.pop()
-            frames[-1]["start"] = i + 1 if not frames[-1].get("dq") else frames[-1]["start"]
+            if not frames[-1].get("dq"):
+                restart(frames[-1], i + 1)
         elif c == "`":
-            f["start"] = i + 1
+            restart(f, i + 1)
         elif line.startswith("||", i) or line.startswith("&&", i):
-            f["start"] = i + 2
+            restart(f, i + 2)
             i += 2
             continue
         elif c == ";" or c == "&":
-            f["start"] = i + 1
+            restart(f, i + 1)
         elif c == "|":
             if line.startswith("|&", i):
                 i += 2
-                f["start"] = i
+                restart(f, i)
                 continue
-            if writer_stage(line[f["start"]:i]) and early_exit_reader(line[i + 1:]):
+            f["chain"] = f["chain"] or writer_stage(line[f["start"]:i])
+            if f["chain"] and early_exit_reader(line[i + 1:]):
                 hits.append(i)
             f["start"] = i + 1
         i += 1
@@ -223,6 +248,10 @@ FIXTURES = [
     ("printf 'LOG %s\\n' \"$(printf '%s' \"$T\" | head -1)\"", True),
     ("if printf '%s\\n' \"$c\" \\\n   | grep -qE '^a'; then", True),
     ("x=1\nprintf '%s\\n' \"$c\"\n  | head -2", True),
+    # downstream of a printf/echo head: the intermediate stage is the writer that takes the EPIPE
+    ("printf '%s\\n' \"$labels\" | tr ',' '\\n' | grep -qx -- \"$L\"", True),
+    ("n=$(printf '%s' \"$out\" | grep -oE 'fail: [0-9]+' | grep -oE '[0-9]+' | head -1)", True),
+    ("v=$(echo \"$igb\" | sed -n 's/^ *status: //p' | head -1)", True),
     ("grep -qF -- \"$2\" <<< \"$OUT\" && ok", False),
     ("printf '%s\\n' \"$x\" | grep -c .", False),
     ("printf '%s\\n' \"$x\" | grep -E '^a' | sort", False),
@@ -232,6 +261,9 @@ FIXTURES = [
     ("echo 'printf x | grep -q y'", False),
     ("printf '%s' \"$x\" || grep -q y f", False),
     ("printf '%s\\n' \"$x\" | grep -e -q", False),
+    # the chain ends at a list operator: a NEW pipeline led by a non-printf writer is out of scope
+    ("printf '%s' \"$x\" | grep -c . && kubectl get po | head -1", False),
+    ("t=$(tr ',' '\\n' <<< \"$labels\"); grep -qx -- \"$L\" <<< \"$t\"", False),
 ]
 
 
@@ -270,7 +302,8 @@ def main(argv):
     if total:
         print(f"sigpipe-lint: FAIL — {total} printf/echo pipe(s) into an early-exit reader "
               "(grep -q/-m, head). Read the haystack from a here-string: "
-              "`grep -q -- \"$needle\" <<< \"$hay\"` (POSIX sh: case / heredoc). Why: scripts/sigpipe-lint.py docstring.",
+              "`grep -q -- \"$needle\" <<< \"$hay\"` (POSIX sh: case / heredoc); in a CHAIN end with a full reader "
+              "(sed -n 1p, grep -c … >/dev/null). Why: scripts/sigpipe-lint.py docstring.",
               file=sys.stderr)
         return 1
     print(f"sigpipe-lint: ok ({len(files)} shell files, 0 early-exit pipes"
