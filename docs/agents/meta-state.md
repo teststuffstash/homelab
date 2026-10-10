@@ -104,7 +104,7 @@ never the session's arc — that is TICK-LOG's.)
   first machine-side worker-adapts on a Renovate PR; `major/awaiting-human`, un-armed), **#2256
   kube-prometheus-stack 91.x** (lens pending), #2100 mermaid 12; (2) **#2246 metrics-server 3.14.0 CLOSED
   unmerged** on the lens's catch (app v0.9.0, kubernetes-sigs/metrics-server#1868 — protobuf OpenAPI
-  503, no fix); Renovate re-proposes the next chart only; (3) **FU-304 lever APPLIED** (evening, operator-ordered): GOMEMLIMIT=3200MiB on all three CPs live 15:50Z (PR#2268, windowed); orphaned helm history deleted; `max_history = 3` PR#2267 merged, its 4-release apply ran through `helm-evidence` (evidence dir `~/.claude/helm-evidence/*-max-history`); **#2254 argo-workflows 2.0.8 MERGED 16:48Z** inside a window (hook Job ran, +0.6 GiB spike, heartbeat clean); **`ArgoControllerSilent` live 16:40Z** (PR#2269, step 1 of arming argo-workflows chart majors). Pickup: watch `ControlPlaneNodeMemoryLow` on wk-metal-02 over the week. (The arming chain is DONE — ruled + built + drilled the same evening: ADR-149, `chart-revert` receiver #2271; dependency-upgrades.md §Next steps 9.) (4) **the Renovate cron IS firing** — the morning read was wrong: `schedule` runs land 1–5 h late (10-05 03:29Z, 13:16Z; one slot dropped), `gh run list --workflow renovate.yaml --json event,createdAt` is the check; what remains for the operator is only the ruling on the three serial hand-dispatches (memory `renovate-after-attended-bumps` corrected and waiting on it). **Gap register** =
+  503, no fix); Renovate re-proposes the next chart only; (3) **FU-304 lever APPLIED** (evening, operator-ordered): GOMEMLIMIT=3200MiB on all three CPs live 15:50Z (PR#2268, windowed); orphaned helm history deleted; `max_history = 3` PR#2267 merged, its 4-release apply ran through `helm-evidence` (evidence dir `~/.claude/helm-evidence/*-max-history`); **#2254 argo-workflows 2.0.8 MERGED 16:48Z** inside a window (hook Job ran, +0.6 GiB spike, heartbeat clean); **`ArgoControllerSilent` live 16:40Z** (PR#2269, step 1 of arming argo-workflows chart majors). Pickup: watch `ControlPlaneNodeMemoryLow` on wk-metal-02 over the week. (The arming chain is DONE — ruled + built + drilled the same evening: ADR-149, `chart-revert` receiver #2271; dependency-upgrades.md §Next steps 9.) (4) **the Renovate cron IS firing** — the morning read was wrong: `schedule` runs land 1–5 h late (10-05 03:29Z, 13:16Z; one slot dropped), `gh run list --workflow renovate.yaml --json event,createdAt` is the check; the hand-dispatch question was DROPPED (operator 2026-10-10 — the wave is through). **Gap register** =
   `docs/dependency-upgrades.md` (G1–G13; the 10-05 status rows ride the docs PR named in TICK-LOG).
   Standing from 10-04: G7 (`dig` findings have no reader — FU-249 (c)), G8 (regen that
   rides the merge), G12 (the kps alert-list refresh — second hand sighting, #2245), G12b (red armed PR has
@@ -113,11 +113,8 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ PICKUP (2026-10-04 evening — provider MAJORS ARMED, default-backfill shape live; TICK-LOG 2026-10-04).**
   (1) First real proofs owed: (a) the next CHANGING main apply runs kubernetes 3.2.1 — `exercised-main.tsv`
   moves 2.38.0→3.2.1 on success, or `MgmtApplyErroredOnNewProvider` fires and the chain reverts #2047;
-  (b) the first provider MAJOR merged on the lens's APPROVED alone (rule e1748261). (2) Churn, not yet
-  tracked: a red/BLOCKED Renovate provider PR gets a master-merge from the updater on every master push
-  (#2191: 29 merges, 32 box plans in 30 h) — the terraform rule has no `rebaseWhen: behind-base-branch`
-  and the updater's Renovate skip covers Actions branches only (`update-pr-branch.sh` `renovate_author`);
-  decide: extend the skip + the rule to terraform, or accept. (3) Then S9 next step 7 (class 1/2
+  (b) the first provider MAJOR merged on the lens's APPROVED alone (rule e1748261). (2) Updater churn on red/BLOCKED provider PRs (#2191: 29 master-merges, 32 box plans in 30 h) —
+  ACCEPTED (operator 2026-10-10): the lever is merging them faster, not an updater skip. (3) Then S9 next step 7 (class 1/2
   proposers, `docs/dependency-upgrades.md`).
 - **⚑ PICKUP (2026-10-02 night — helm provider 3.x applied under evidence; TICK-LOG 2026-10-02 evening).**
   (1) **#2183 merged unread by the operator** (author==codeowner waiver) — the box apply loop now DEFERS
