@@ -124,6 +124,18 @@ drill found the same wedge for the revert PR. The split now, per tool
 | tofu **providers** | the planned tree's `.terraform.lock.hcl` — the PR head's for the sentinel | the provider-pin gate (§MB3) plans the head's providers, unchanged |
 | `ansible` (+ its python) | `devbox run` — the belt's `check_ansible` and the weekly rebuild drill only | report-only: a bad lock costs one red belt check, never a wedged gate |
 
+**The in-cluster `iac-sentinel` runs the IMAGE's lock, not master's (operator ruling 2026-10-10,
+FU-305).** The other required context that a bad lock could silence is posted by a pod
+([`sentinel-argo.yaml`](../agents/coordinator/sentinel-argo.yaml)) that clones master — so it copies
+`/opt/baked/homelab/devbox.{json,lock}` over the clone's before `devbox run`. The runner image bakes
+that pair in [`warm-one.sh`](../docker/arc-runner/warm-one.sh) only AFTER it realised, and the build
+fails without it, so the sentinel's lock is always one that realised. **Accepted cost:** the
+sentinel's tool versions (kyverno, gitleaks, yq, gh) lag master's lock until the next
+`runner-image` build + pin PR — the lock merge itself is the build's trigger, so the lag is one build
+(~minutes to an hour). `sentinel-smoke` in `ci` still runs the PR's own lock, so a lock that breaks an
+engine reds its own PR first. The same copy guards `pin-only-lint`'s homelab-master toolchain in
+the platform repos' `ci` (agent-coordinator, openrouter-operator, agent-runtime) and the reusable.
+
 In the jail every tool still resolves from the devbox shell's PATH (a missing one falls back to
 `devbox run`), so the same scripts run in both places. `mgmt-tools-test` (part of
 `mgmt-policy-test`) drives the sentinel's no-plan path with a poisoned `devbox` first on PATH and
