@@ -635,7 +635,11 @@ window make both records worthless, and a second release would need its own leas
    The evidence rules compare after against before: every release `deployed`; the applied release
    rolled (observed = generation, ready = updated = desired) with every pod Ready; BGP established ≥
    before; no Longhorn volume newly faulted or more degraded; Healthy Applications ≥ before and none
-   newly Degraded/Missing. **Good** → lease deleted, window closed, `management-apply` success
+   newly Degraded/Missing. The compare's NEW-alert line counts only names in the roll's cone
+   (`Kube*`, `Cilium*`, `Longhorn*`, `ArgoCD*`, `Etcd*`, `CoreDNS*`, `Prometheus*`, `Alertmanager*`,
+   `TargetDown`, plus the window's declared names); any other new alert is recorded as "noted" and
+   left to the responder — drill 1 (2026-10-10, argocd-apps 2.0.6) stopped a clean roll on
+   `GithubRateLimitLow`, GitHub's API quota. A static scope, not a diagnosis. **Good** → lease deleted, window closed, `management-apply` success
    "helm verdict clean". **Bad** (or an errored apply) → **STOP**: the lease and the window are KEPT,
    `/var/lib/mgmt/apply/helm-stopped` refuses every later helm apply, `mgmt_apply_helm_stopped` →
    **`MgmtHelmApplyStopped`** (critical, triage none — no agent acts on a substrate failure). The sha
