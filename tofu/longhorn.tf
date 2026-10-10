@@ -52,7 +52,8 @@ locals {
 variable "longhorn_version" {
   description = "Longhorn Helm chart version."
   type        = string
-  default     = "1.12.0"
+  # renovate: datasource=helm depName=longhorn registryUrl=https://charts.longhorn.io
+  default = "1.12.0"
 }
 
 # zone per physical box. wk-02 (zone "proxmox") left this map 2026-09-14 (operator): with r=2 a

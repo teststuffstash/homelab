@@ -335,13 +335,15 @@ variable "nodes" {
 variable "argocd_chart_version" {
   description = "argo-cd Helm chart version (argoproj.github.io/argo-helm)."
   type        = string
-  default     = "9.5.21"
+  # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
+  default = "9.5.21"
 }
 
 variable "argocd_apps_chart_version" {
   description = "argocd-apps Helm chart version (root app-of-apps)."
   type        = string
-  default     = "2.0.5"
+  # renovate: datasource=helm depName=argocd-apps registryUrl=https://argoproj.github.io/argo-helm
+  default = "2.0.5"
 }
 
 variable "argocd_repo_url" {

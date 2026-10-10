@@ -71,12 +71,12 @@ classes:
     name: Helm charts, tofu-managed
     extract: helm_tofu
     where: "`helm_release` blocks in `tofu/*.tf`, version from `tofu/variables.tf` defaults"
-    manager: "terraform (a `var.*_version` default — Renovate's helm datasource does not follow it)"
+    manager: "custom.regex — a `# renovate: datasource=helm depName=<chart> registryUrl=<repo>` annotation on the `var.*_version` default (renovate-global.json, 2026-10-10); the terraform manager reads `helm_release.version` literals only"
     proof_head_prefixes: ["renovate/"]
     proof_paths: ["tofu/variables.tf", "tofu/argocd.tf", "tofu/longhorn.tf", "tofu/cilium.tf"]
-    proposer: {status: gap, text: "a hand edit of the variable default — Renovate's terraform manager reads `helm_release.version` literals, not a `var.` indirection (§Ground truth: 0 PRs)"}
-    merge_gate: {status: human, text: "PR + the management sentinel's plan-on-PR (ADR-131) + the codeowner read — these are ADR-005 substrate (ArgoCD, Longhorn) by ruling"}
-    deploy_edge: {status: human, text: "the management box applies only the allowlisted residue; a `helm_release` change refuses to a human `devbox run mgmt-tf -- apply` (docs/management-box.md §The test surface)"}
+    proposer: {status: ok, text: "Renovate `custom.regex` over the `# renovate:` annotations on the chart defaults in `tofu/*.tf` (renovate-global.json, 2026-10-10 — S9 #1988): argo-cd, argocd-apps, longhorn; `cilium_version` stays un-annotated (class 6, human-proposed by ruling). Before it every bump was a hand edit — the terraform manager reads `helm_release.version` literals only (§Ground truth: 0 PRs). Proof pending (§Last proven)"}
+    merge_gate: {status: ok, text: "patch/minor → `deps-review`, armed (the merge-path reviewer + migration lens; the management sentinel's plan-on-PR, ADR-131, posts the changed addresses), majors → the un-armed catch-all (renovate-global.json, 2026-10-10). The human read of this ADR-005 substrate (ArgoCD, Longhorn) sits at the APPLY, not the merge: the codeowner read this cell named lapsed with tier 2's unowning (ADR-128), and a merge deploys nothing here (next cell)"}
+    deploy_edge: {status: human, text: "the management box applies only the allowlisted residue; a `helm_release` change refuses to a human `devbox run mgmt-tf -- apply`, bracketed by `helm-evidence` (docs/management-box.md §The test surface; FU-301 — no unattended helm apply until breakage data exists)"}
     detector: {status: ok, text: "`MgmtApplyResidueStanding` — merged-but-unapplied residue alerts after 24 h (FU-252); plan-on-PR shows the diff before merge"}
     revert: {status: human, text: "`git revert` + a human apply; ArgoCD/Longhorn downgrades carry CRD/schema risk (IAC-G09)"}
     canary: {status: gap, text: "none — one release per chart"}

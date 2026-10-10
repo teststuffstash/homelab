@@ -52,13 +52,11 @@
     {
       "complete": false,
       "gap_cells": [
-        "proposer",
         "canary"
       ],
       "gap_rows": 3,
       "human_cells": [
         "deploy_edge",
-        "merge_gate",
         "revert"
       ],
       "human_rows": 0,
@@ -1119,8 +1117,7 @@
     {
       "class": 4,
       "gap_columns": [
-        "canary",
-        "proposer"
+        "canary"
       ],
       "key": "4:argo-cd",
       "last_proven": null,
@@ -1134,8 +1131,7 @@
     {
       "class": 4,
       "gap_columns": [
-        "canary",
-        "proposer"
+        "canary"
       ],
       "key": "4:argocd-apps",
       "last_proven": null,
@@ -1149,8 +1145,7 @@
     {
       "class": 4,
       "gap_columns": [
-        "canary",
-        "proposer"
+        "canary"
       ],
       "key": "4:longhorn",
       "last_proven": null,
@@ -1196,7 +1191,7 @@
       "key": "5:cloudflare/cloudflare@tofu/cloudflare",
       "last_proven": "2026-10-10T11:52:34Z",
       "name": "cloudflare/cloudflare",
-      "version": "5.26.0 (`~> 5.0`)",
+      "version": "5.27.0 (`~> 5.0`)",
       "where": [
         "tofu/cloudflare/versions.tf",
         "tofu/cloudflare/.terraform.lock.hcl"
