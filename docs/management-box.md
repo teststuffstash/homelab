@@ -692,11 +692,15 @@ A kube-dependent read is `skip` (`kube-api-down`) while the API is down: the cau
 | `mgmt-apply`, every span that would plan | no cluster read at all (only the window gate) | **ADDED, ANDed with the window gate**: DOWN defers exactly like a window (no plan/apply/stamp/status, exit 0, `mgmt_apply_deferred_verdict` → **`MgmtApplyDeferredByVerdict`** after 2 h, `triage: dig` — standing alone it is the box disagreeing with Prometheus); a verdict that cannot run defers as PROBE-FAIL; degraded proceeds |
 | `mgmt-apply`, the Talos bracket's post-check | `maintenance-window.sh compare` (alerts + `sum(up)` from Prometheus, cilium/pods/nodes from kube) | **ANDed**: a clean reading also needs the verdict no worse than its fresh baseline (ok < degraded < down < could not run); a DOWN/unrunnable baseline refuses the apply. Prometheus stays required — a Talos apply with observability blind is not one the box takes alone |
 | `mgmt-reconcile`, before any sync | `MgmtRolloutDifferential` from Prometheus (rollout on only; unreadable = halt) | **ANDed**: DOWN or unrunnable refuses the sync (node pending, retried next tick), switch on or off; degraded proceeds (the verb's floors and the FU-278 hold judge the finer grain); never on a revert rollout (the differential's carve-out). With Prometheus unreadable the differential still halts |
+| FU-301's helm bracket (`mgmt-helm.sh`) | the evidence verdict + the cone-scoped maintenance-window `compare` | **not yet** — FU-301's declared swap point says the box verdict REPLACES the compare; the call is above, the swap is the FU-301 lane's |
 | `mgmt-lease` (ADR-150, §MB5) | none — the box never diagnoses | **not wired, by design**: an expired lease has one meaning, and a verdict would make the dumb box smart. The CONFIRM is the in-cluster PostSync hook, which reads Prometheus `/-/ready` because the subject IS Prometheus |
 
-**FU-301 calls it the same way**: `v0=$(devbox run --quiet mgmt-verdict)`, apply, then
-`v1=$(devbox run --quiet mgmt-verdict)`; stop + alert when the exit ranks worse
-(`mgmt_verdict_rank` in `mgmt-lib.sh`), and diff `.reasons` / the `pods` items for what changed.
+**What FU-301 calls** (its `helm_cluster_verdict` swap point, §Helm release applies — left to the
+FU-301 lane, which is mid-drill and has just scoped its compare, #2459): at begin `vbase=0;
+mgmt_verdict >"$d/box-verdict-before.json" || vbase=$?` (DOWN/unrunnable = no apply), at the end
+`mgmt_verdict_poll "$vbase" "$d/box-verdict-after.json"` — rc 0 no worse within
+`MGMT_POSTCHECK_TIMEOUT`, rc 2 + one finding line. From a shell: `devbox run --quiet mgmt-verdict`,
+exit ranked by `mgmt_verdict_rank` (`mgmt-lib.sh`).
 
 **Proved live 2026-10-10 on the box** (PR #2452, run from a copy of the box checkout before the
 merge): `ok` — 13/13 Talos, 13/13 Ready, 26/26 BGP sessions, 26/26 VIPs, 80 Applications Healthy —

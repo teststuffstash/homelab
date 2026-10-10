@@ -15,7 +15,7 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   the CP VIP, cilium BGP + probe 3 by exec, LAN HTTP to the BGP VIPs, node Ready, ArgoCD health,
   Prometheus/Alertmanager `/-/ready`; ANDed into `mgmt-apply` (DOWN defers, Talos post-check) and
   `mgmt-reconcile` (DOWN refuses a sync), not into the lease loop. Live on the box: `ok` agreeing with
-  Prometheus; `--prom` dead → `degraded`, direct reads intact. FU-301 brackets helm applies with it.
+  Prometheus; `--prom` dead → `degraded`, direct reads intact. FU-301's helm swap point calls `mgmt_verdict` + `mgmt_verdict_poll` (the swap is that lane's).
   [`management-box.md`](management-box.md) §The box verdict.
 - **FU-308** *(archived 2026-10-09)* — **An unattended router proof can sever the seat's own path and nobody
   reverts.** PR#2399: `carp-maintenance <node> enter` arms a sleeper ON the node (pidfile + `kill -0`) that

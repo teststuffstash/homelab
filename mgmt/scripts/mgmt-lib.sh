@@ -879,6 +879,23 @@ mgmt_post_check() {
   [ -n "$(printf '%s\n' "$out" | grep '⚠')" ] || printf '%s\n' "compare failed without a finding: $(printf '%s' "$out" | tail -1)"
   return 2
 }
+# mgmt_verdict_poll <baseline-rc> [<out-json>] → polls mgmt_verdict every MGMT_POSTCHECK_INTERVAL s until it
+# ranks no worse than the baseline, or MGMT_POSTCHECK_TIMEOUT s (no settle — the caller spent it). rc 0 =
+# no worse; rc 2 = still worse at the deadline, one finding line on stdout. The last JSON → <out-json>.
+# A bracket's "after" half (FU-301's helm_cluster_verdict swap point): baseline = mgmt_verdict's rc before.
+mgmt_verdict_poll() {
+  local vbase="$1" outf="${2:-/dev/null}" every="${MGMT_POSTCHECK_INTERVAL:-30}" deadline="${MGMT_POSTCHECK_TIMEOUT:-900}" t0 vj vrc
+  t0="$(_mgmt_now)"
+  while :; do
+    vrc=0; vj="$(mgmt_verdict 2>/dev/null)" || vrc=$?
+    printf '%s\n' "$vj" >"$outf"
+    [ "$(mgmt_verdict_rank "$vrc")" -le "$(mgmt_verdict_rank "$vbase")" ] && return 0
+    [ $(( $(_mgmt_now) - t0 + every )) -le "$deadline" ] || break
+    _mgmt_sleep "$every"
+  done
+  echo "box verdict worse than its baseline: $(mgmt_verdict_name "$vbase") → $(mgmt_verdict_name "$vrc")$(jq -r '.reasons | if length > 0 then " — " + join("; ") else "" end' <<<"$vj" 2>/dev/null)"
+  return 2
+}
 _mgmt_sleep() { sleep "$1"; }   # the fixture test stubs these two with a FAKE clock
 _mgmt_now() { date +%s; }       # (a no-op sleep alone left the deadline on the wall clock: ~60 s of busy loop, #1875)
 
