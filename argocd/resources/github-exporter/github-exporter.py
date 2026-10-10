@@ -1853,14 +1853,39 @@ def _graphql_rate_limit(token):
     return _parse_graphql_rate_limit(headers, body)
 
 
-def _parse_graphql_rate_limit(headers, body):
-    """Pure half of _graphql_rate_limit (self-tested). Headers win: they are present on the
-    exhausted-pool reply where `data.rateLimit` is null."""
+def _core_rate_limit(token):
+    """→ {"limit", "remaining", "reset"} for the token's CORE pool, read off the headers of one
+    COUNTED request (`/zen`, 1 point/poll). REST `/rate_limit` is free and, for the user PAT,
+    blind: 2026-10-10 it answered core `used=0` (reset ever now+1h) while the headers of the same
+    minute said 1072 used, so the jails' shared user pool drained to a 403 at ~13:59Z with this
+    gauge flat at 5000. None when the reply carries no core headers (REST value stands then)."""
+    req = urllib.request.Request(API + "/zen", headers={
+        "Authorization": f"Bearer {token}", "User-Agent": "homelab-github-exporter"})
+    try:
+        resp = urllib.request.urlopen(req, timeout=30)
+        headers = resp.headers
+        resp.read()
+    except urllib.error.HTTPError as exc:  # an exhausted pool answers 403 — the headers still count
+        headers = exc.headers
+    return _parse_header_pool(headers, "core")
+
+
+def _parse_header_pool(headers, resource):
+    """The x-ratelimit-* headers as a pool dict, if they name `resource`; else None."""
     h = {k.lower(): v for k, v in (headers or {}).items()}
-    if h.get("x-ratelimit-resource") == "graphql" and "x-ratelimit-remaining" in h:
+    if h.get("x-ratelimit-resource") == resource and "x-ratelimit-remaining" in h:
         return {"limit": int(h.get("x-ratelimit-limit", 0)),
                 "remaining": int(h["x-ratelimit-remaining"]),
                 "reset": int(h.get("x-ratelimit-reset", 0))}
+    return None
+
+
+def _parse_graphql_rate_limit(headers, body):
+    """Pure half of _graphql_rate_limit (self-tested). Headers win: they are present on the
+    exhausted-pool reply where `data.rateLimit` is null."""
+    pool = _parse_header_pool(headers, "graphql")
+    if pool is not None:
+        return pool
     try:
         rl = (json.loads(body or b"{}").get("data") or {}).get("rateLimit")
     except ValueError:
@@ -1873,16 +1898,19 @@ def _parse_graphql_rate_limit(headers, body):
     return {"limit": rl.get("limit", 0), "remaining": rl.get("remaining", 0), "reset": int(ts)}
 
 
-def rate_limit_lines(name, rest_resources, graphql_pool):
+def rate_limit_lines(name, rest_resources, graphql_pool, core_pool=None):
     """Exposition lines for ONE token. `resources.graphql` from REST `/rate_limit` is DROPPED:
     for installation tokens AND the exporter's PAT it disagrees with the pool the GraphQL endpoint
     enforces (2026-09-25, all eight identities probed side by side: REST said 60 used where
     GraphQL said 1284 on homelab-agents; the PAT read 2 vs 3412) — the gauge sat at ~4884 while
     every loop in four namespaces took "API rate limit already exceeded for installation ID
     142724430" for 12 minutes. The graphql series comes from `graphql_pool` or not at all: a hole
-    (bridged by GithubRateLimitLow's min_over_time) is honest, the REST number is not."""
+    (bridged by GithubRateLimitLow's min_over_time) is honest, the REST number is not.
+    `core_pool` (from _core_rate_limit's counted request) likewise wins over REST core when given."""
     out = []
     pools = {k: v for k, v in (rest_resources or {}).items() if k != "graphql"}
+    if core_pool is not None:
+        pools["core"] = core_pool
     if graphql_pool is not None:
         pools["graphql"] = graphql_pool
     for resource, r in pools.items():
@@ -1924,7 +1952,12 @@ def collect_rate_limits(lines):
         except Exception as exc:
             print(f"graphql rateLimit probe {name} failed: {exc}", flush=True)
             gql = None
-        lines += rate_limit_lines(name, rest, gql)
+        try:
+            core = _core_rate_limit(tok)
+        except Exception as exc:
+            print(f"core rate-limit probe {name} failed: {exc}", flush=True)
+            core = None
+        lines += rate_limit_lines(name, rest, gql, core)
 
 
 GITHUBSTATUS_URL = "https://www.githubstatus.com/api/v2/components.json"
@@ -4014,6 +4047,16 @@ def self_test():
     _rl_hole = "\n".join(rate_limit_lines("coordinator-git", _rest, None))
     assert 'resource="graphql"' not in _rl_hole, "no GraphQL answer ⇒ a hole, never the REST fallback"
     assert 'resource="core"' in _rl_hole
+    # 2026-10-10: the user PAT's REST /rate_limit said core used=0 while a counted request's
+    # headers said 1072 used (remaining 3928) — the header pool wins; non-core headers are ignored.
+    _core = _parse_header_pool({"X-RateLimit-Limit": "5000", "X-RateLimit-Remaining": "3928",
+                                "X-RateLimit-Reset": "1791644408", "X-RateLimit-Resource": "core"}, "core")
+    assert _core == {"limit": 5000, "remaining": 3928, "reset": 1791644408}, _core
+    assert _parse_header_pool(_hdr, "core") is None, "graphql headers must not read as core"
+    _rl_core = "\n".join(rate_limit_lines("exporter-pat", _rest, _pool, _core))
+    assert 'github_rate_limit_remaining{resource="core",token="exporter-pat"} 3928' in _rl_core, _rl_core
+    assert 'github_rate_limit_remaining{resource="core",token="exporter-pat"} 5000' not in _rl_core, \
+        "the REST core number must not be emitted when the header pool answered"
 
     # ── homelab#1992: the dependency coverage gauges + Renovate liveness ────────────────────────
     # Inputs are a hand-written declared file in the generator's JSON shape; every expected value
