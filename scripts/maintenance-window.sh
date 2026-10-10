@@ -554,6 +554,10 @@ cmd_compare() {
   compare_snapshots "$b" "$(snapshot)"
 }
 
+# SOURCED (mgmt/scripts/mgmt-verdict.sh — the box verdict, FU-302) = the probes and the
+# kubeconfig/talosconfig resolution above, no verb. One home for probes 3–4, two readers.
+[ "${BASH_SOURCE[0]}" != "$0" ] && return 0
+
 case "${1:-}" in
   open)  shift; cmd_open "$@" ;;
   check|close|renew|claim)

@@ -141,6 +141,9 @@
       "mgmt-human-plan": [
         "bash mgmt/scripts/mgmt-human-plan.sh \"$@\""
       ],
+      "mgmt-verdict": [
+        "bash mgmt/scripts/mgmt-verdict.sh \"$@\""
+      ],
       "mgmt-policy-test": [
         "bash mgmt/scripts/mgmt-tools-test.sh",
         "bash mgmt/scripts/mgmt-policy-test.sh",
@@ -148,7 +151,8 @@
         "bash mgmt/scripts/mgmt-rollout-evidence-test.sh",
         "bash mgmt/scripts/mgmt-probe-test.sh",
         "bash mgmt/scripts/mgmt-lease-test.sh",
-        "bash mgmt/scripts/mgmt-helm-test.sh"
+        "bash mgmt/scripts/mgmt-helm-test.sh",
+        "bash mgmt/scripts/mgmt-verdict-test.sh"
       ],
       "mgmt-reconcile-test": [
         "bash mgmt/scripts/mgmt-reconcile-test.sh"
