@@ -33,6 +33,12 @@ app 91.8.0 "        valueFiles: [x]\n" >"$SRC/argocd/platform/kube-prometheus-st
 git -C "$SRC" add -A && git -C "$SRC" commit -q -m "values edit"
 B="$(git -C "$SRC" rev-parse HEAD)"
 ORIGIN="$T/origin.git"; git clone -q --bare "$SRC" "$ORIGIN"
+# The box's root has NO git identity — the loop must carry its own (S9 drill 2026-10-10: the revert
+# staged and died at the commit, read as `conflict`). Drop the fixture identity and forbid git's
+# hostname guess, so a loop that leans on the host's config fails here as it did live.
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$T/gitconfig"
+git config --file "$T/gitconfig" user.useConfigOnly true
 
 # ── the loop, sourced; its seams overridden ───────────────────────────────────────────────────
 export MGMT_LEASE_DIR="$T/lease" MGMT_SENTINEL_DIR="$T/sentinel" MGMT_TEXTFILE_DIR="$T/text" MGMT_REPO_URL="$ORIGIN"
