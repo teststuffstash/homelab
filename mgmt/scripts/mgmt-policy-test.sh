@@ -157,6 +157,7 @@ apply_case() {  # <name> <expected: allowed | outside | rule-name> <policy> <res
     || { fail=$((fail+1)); echo "FAIL apply:$name — mgmt_plan_digest rc≠0"; return; }
   outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$pol" main)" || { fail=$((fail+1)); echo "FAIL apply:$name — allowlist unreadable"; return; }
   hits="$(mgmt_talos_gate "$pol" main "$out")" || { fail=$((fail+1)); echo "FAIL apply:$name — talos gate rc≠0"; return; }
+  hits="$hits$(printf '%s\n' "$changes" | mgmt_helm_gate "$pol" main "$out")" || { fail=$((fail+1)); echo "FAIL apply:$name — helm gate rc≠0"; return; }
   if [ -n "$outside" ]; then got=outside
   elif [ -n "$hits" ]; then got="$(cut -f1 <<<"$hits" | sort -u | tr '\n' ' ' | sed 's/ $//')"
   else got=allowed; fi
@@ -201,6 +202,36 @@ apply_case bootstrap-outside    outside            "$POL"    '[{"address":"talos
 apply_case residue-only         allowed            "$POL"    '[{"address":"kubernetes_config_map.x","type":"kubernetes_config_map","change":{"actions":["update"],"after":{},"after_unknown":{}}}]'
 # the side channel is REQUIRED: a missing one is rc 1 (the loop refuses), never "no Talos change"
 fail_ talos-gate-no-channel 'mgmt_talos_gate "$POL" main "$T/never-digested.bin"'
+
+# ── FU-301: helm_release applies — the `apply_helm` rows widen the allowlist, mgmt_helm_gate narrows it.
+# POL_HELM = the committed policy + the three rows the policy PR adds (the committed copy may not carry
+# them yet: the policy lands as its own, codeowner-read change — so the fixture states them).
+POL_HELM="$T/policy-helm.yaml"
+_yq '.apply_helm.main = [{"address":"helm_release.argocd_apps","cap_min":60},{"address":"helm_release.argocd","cap_min":90},{"address":"helm_release.longhorn","cap_min":180,"engine_order":["fast","none","bulk","slow-bulk","std"]}]' "$POL" >"$POL_HELM"
+helm_rc() {  # <tf-name> <release> <actions json> <from> <to>
+  printf '{"address":"helm_release.%s","type":"helm_release","change":{"actions":%s,"before":{"name":"%s","namespace":"argocd","version":"%s"},"after":{"name":"%s","namespace":"argocd","version":"%s"},"after_unknown":{}}}' \
+    "$1" "$3" "$2" "$4" "$2" "$5"
+}
+H_APPS="$(helm_rc argocd_apps argocd-apps '["update"]' 2.0.5 2.0.6)"
+apply_case helm-listed-update   allowed            "$POL_HELM" "[$H_APPS]"
+apply_case helm-argocd-update   allowed            "$POL_HELM" "[$(helm_rc argocd argocd '["update"]' 9.5.21 9.5.22)]"
+apply_case helm-longhorn-update allowed            "$POL_HELM" "[$(helm_rc longhorn longhorn '["update"]' 1.12.0 1.12.1)]"
+# Cilium is class 6 by ruling — never a row, so always outside (a human apply)
+apply_case helm-cilium          outside            "$POL_HELM" "[$(helm_rc cilium cilium '["update"]' 1.19.1 1.19.2)]"
+# without the rows (master before the policy change) a helm change stays outside — the code alone widens nothing
+apply_case helm-no-rows         outside            "$POL" "[$H_APPS]"
+apply_case helm-create          helm-action        "$POL_HELM" "[$(helm_rc argocd_apps argocd-apps '["create"]' - 2.0.6)]"
+apply_case helm-replace         helm-action        "$POL_HELM" "[$(helm_rc argocd_apps argocd-apps '["delete","create"]' 2.0.5 2.0.6)]"
+apply_case helm-plus-residue    helm-not-alone     "$POL_HELM" "[$H_APPS, "'{"address":"kubernetes_config_map.x","type":"kubernetes_config_map","change":{"actions":["update"],"after":{},"after_unknown":{}}}]'
+apply_case helm-two-releases    helm-not-alone     "$POL_HELM" "[$H_APPS, $(helm_rc argocd argocd '["update"]' 9.5.21 9.5.22)]"
+# the side channel carries names + versions (what the lease and the record are keyed on)
+got="$(cut -f1,3,5,6 "$T/plan-helm-listed-update.bin.helm" | tr '\t' '|')"
+if [ "$got" = "helm_release.argocd_apps|argocd-apps|2.0.5|2.0.6" ]; then pass=$((pass+1)); echo "PASS apply:helm-side-channel"
+else fail=$((fail+1)); echo "FAIL apply:helm-side-channel — got '$got'"; fi
+got="$(mgmt_helm_row "$POL_HELM" main helm_release.longhorn | jq -r '"\(.cap_min)|\(.engine_order | join(","))"')"
+if [ "$got" = "180|fast,none,bulk,slow-bulk,std" ]; then pass=$((pass+1)); echo "PASS apply:helm-row"
+else fail=$((fail+1)); echo "FAIL apply:helm-row — got '$got'"; fi
+fail_ helm-gate-no-channel 'echo | mgmt_helm_gate "$POL_HELM" main "$T/never-digested.bin"'
 
 # the post-apply health gate's polling, over a stubbed `compare` (maintenance-window.sh's own verbs
 # are pinned by `devbox run maint-self-test`). HSEQ = one verdict per call: ok | reg (a regression).

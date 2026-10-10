@@ -21,8 +21,11 @@ garage_zone: nx-02
 #   longhorn-backup    Longhorn's BackupTarget (docs/longhorn-backup.md)
 #   cnpg-<namespace>   CNPG backups of every Cluster in that namespace (docs/postgres.md §Backups) —
 #                      the list must match argocd/resources/pg-backup/ (one file per namespace)
+#   helm-evidence      the management box's helm-apply records (FU-301, scripts/helm-release-evidence.sh
+#                      `upload`) — a record of a broken substrate must outlive the substrate
 garage_buckets:
   - longhorn-backup
+  - helm-evidence
   - cnpg-infisical
   - cnpg-forgejo
   - cnpg-monitoring
