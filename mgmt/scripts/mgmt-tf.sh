@@ -115,7 +115,7 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    R=/var/lib/mgmt/apply/homelab
    P=/var/lib/mgmt/plan
    # summary: show the plan with the tofu that WROTE it — a plan file is refused by any other
-   # tofu version (the devbox pin moves under a stale plan), so check out the plan own sha.
+   # tofu version (the devbox.lock pin moves under a stale plan), so check out the plan own sha.
    if [ "$MODE" = summary ]; then
      [ -f "$P/$PLAN_ID.bin" ] && [ -f "$P/$PLAN_ID.meta" ] || { echo "mgmt-tf: no such plan id: $PLAN_ID (ls $P)" >&2; exit 2; }
      . "$P/$PLAN_ID.meta"; REF="$PLAN_SHA"
@@ -124,12 +124,16 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    git -C "$R" fetch -q origin; git -C "$R" reset -q --hard "$REF"
    cd "$R"
    mkdir -p "$P"; chmod 700 "$P"
+   # tofu = the one THIS ref devbox.lock pins, read as data by the box master copy of mgmt-tools.sh
+   # (FU-305): devbox never runs here, so a bad devbox.lock on master cannot take this verb down too.
+   export MGMT_BOX=1; . /var/lib/homelab/mgmt/scripts/mgmt-tools.sh
+   mgmt_tree_path "$R" || { command -v tofu >/dev/null || { echo "mgmt-tf: tofu unresolvable from $R/devbox.lock (above)" >&2; exit 1; }; }
    # init EVERY run, lockfile read-only: a no-op while the cached providers match the lock, and the
    # only thing that heals them when a provider bump lands on master (Renovate moved bpg/proxmox to
    # 0.113.1 and the next human plan died with "Required plugins are not installed", 2026-09-27 —
    # the old `[ -d .terraform ] ||` guard skipped init forever after the first clone).
-   devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null 2>&1 \
-     || devbox run --quiet -- tofu -chdir=tofu init -input=false -lockfile=readonly >&2
+   tofu -chdir=tofu init -input=false -lockfile=readonly >/dev/null 2>&1 \
+     || tofu -chdir=tofu init -input=false -lockfile=readonly >&2
    SHA=$(git rev-parse --short HEAD)
    # A plan id is unique per (when, ref-sha) and names its own artifacts. Nothing but this script
    # writes into $P, and a saved plan holds state values — root-only, 600.
@@ -154,11 +158,10 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
      fi
    fi
    if [ "$MODE" = summary ]; then
-     # No lock: `show` of a saved plan reads the plan file, never the state. The box own jq (not
-     # devbox run, whose shell re-expands the filter). One marker line, so a caller can pick it
-     # out of whatever else the session interleaves.
+     # No lock: `show` of a saved plan reads the plan file, never the state. The box own jq. One
+     # marker line, so a caller can pick it out of whatever else the session interleaves.
      export PLAN_ID PLAN_REF PLAN_SHA SCOPED PLANNED_AT
-     J="$(devbox run --quiet -- tofu -chdir=tofu show -json "$P/$PLAN_ID.bin" | jq -c \
+     J="$(tofu -chdir=tofu show -json "$P/$PLAN_ID.bin" | jq -c \
        "{plan_id:env.PLAN_ID, plan_ref:env.PLAN_REF, plan_sha:env.PLAN_SHA, scoped:(env.SCOPED == \"1\"),
          planned_at:env.PLANNED_AT,
          changes:[.resource_changes[]? | select(.change.actions != [\"no-op\"] and .change.actions != [\"read\"])
@@ -174,7 +177,7 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    # lock (a long-lived fd), so the stamp must not land after the command-form flock released
    # (review finding on PR#1721)
    exec 9>/var/lib/mgmt/sentinel/.lock; flock -w 600 9 || { echo "mgmt-tf: lock busy for 10 min" >&2; exit 1; }
-   rc=0; devbox run --quiet -- tofu -chdir=tofu "$@" || rc=$?
+   rc=0; tofu -chdir=tofu "$@" || rc=$?
    # State snapshots (docs/tofu-state.md section Snapshots): any subcommand that can WRITE main
    # state gets one, inside THIS lock span, hence --lock-held. The script is taken from the box
    # own master checkout, so a run from a PR-branch REF that predates it still snapshots. It is
@@ -185,7 +188,7 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    ;; esac; fi
    if [ "$MODE" = plan ] && [ $rc -le 2 ] && [ -f "$P/$PLAN_ID.bin" ]; then
      chmod 600 "$P/$PLAN_ID.bin"
-     devbox run --quiet -- tofu -chdir=tofu show -no-color "$P/$PLAN_ID.bin" > "$P/$PLAN_ID.txt" 2>/dev/null || true
+     tofu -chdir=tofu show -no-color "$P/$PLAN_ID.bin" > "$P/$PLAN_ID.txt" 2>/dev/null || true
      chmod 600 "$P/$PLAN_ID.txt" 2>/dev/null || true
      { echo "PLAN_REF=$REF"; echo "PLAN_SHA=$(git rev-parse HEAD)"; echo "SCOPED=$SCOPED";
        echo "PLANNED_AT=$(date -u +%FT%TZ)"; } > "$P/$PLAN_ID.meta"
