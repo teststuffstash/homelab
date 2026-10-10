@@ -10,6 +10,14 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-10 — seat): nix flake-registry fix LIVE, proof pending a ride.** Launcher pin
+  `flake-registry =` (#2420) + agent-runtime #168 (ea009fca, entrypoint APPENDS to NIX_CONFIG) are
+  both live — agent-base `2026.10.9-g4bd7c9b9b57d` pinned (#2422). **But no worker ride has run since
+  2026-10-07 18:27Z** (`OpenRouterKeyBudgetLow` on homelab-openrouter firing since 10-06), so the
+  zero `hubble_drop_total{destination=~".*nixos.org"}` since then proves nothing (30 d drops: source
+  homelab only, 1492). **Next:** after the first post-pin ride, re-query that metric over the ride
+  window; zero → close sleep-tracking#67 citing #2420 + agent-runtime#168.
+
 - **⚑ PICKUP (2026-10-09 11:40Z — seat; TICK-LOG 2026-10-09 midday).** **WINDOW 2 WAN LEG DONE — the
   router pair is complete** (window `seat-1791544351-8289`, closed clean): pve's WAN cable in, the proof
   served WAN from pve 6 min, the FU-308 dead-man (#2399, merged) fired the failback on time; nx-02's gate
