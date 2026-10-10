@@ -28,6 +28,7 @@ metadata:
   namespace: oracle-fleet
 spec:
   profile: api
+  zone: minutark.ee   # product zone (ADR-101) — without it the claim defaults to the platform zone and the subtree guard refuses it
   hostname: mcp.minutark.ee
   backend:
     service: oracle-gateway.oracle-fleet.svc.cluster.local.
