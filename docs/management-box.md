@@ -637,22 +637,21 @@ window make both records worthless, and a second release would need its own leas
 2. **Begin** — a declared window (`agents/seat-window.sh`, by `mgmt-apply`: the reconciler waits it out,
    the responder graces the roll's alert names), the ⚓ upgrade lease `agent-coordinator/upgrade-lease-tofu-helm-<release>`
    (subject `tofu/helm_release.<name>` — here the BOX is the ADR-150 actor: it arms, verifies and
-   deletes), the health baseline (`maintenance-window.sh snapshot`), the evidence `before` + timeline.
+   deletes), the [box verdict](#the-box-verdict--the-boxs-own-read-of-the-cluster-fu-302-2026-10-10)'s
+   baseline (DOWN or unrunnable = no apply), the evidence `before` + timeline.
 3. The apply — the loop's own `tofu apply <plan>`.
 4. **Longhorn engines.** `concurrent-automatic-engine-upgrade-per-node-limit` is 0, so a chart upgrade
    moves no volume. The box moves them one at a time to the manager's `--engine-image`, least valuable
    disk class first (`engine_order`: fast → none → bulk → slow-bulk → std; an unnamed class last),
    each waited to the new image and back to its old robustness; the first that does not come back stops it.
-5. **Verdict** (`helm_cluster_verdict` — **the FU-302 swap point**: today the evidence `verdict` verb,
-   Prometheus-free, plus the maintenance-window `compare`; FU-302's box verdict replaces the compare).
-   The evidence rules compare after against before: every release `deployed`; the applied release
-   rolled (observed = generation, ready = updated = desired) with every pod Ready; BGP established ≥
-   before; no Longhorn volume newly faulted or more degraded; Healthy Applications ≥ before and none
-   newly Degraded/Missing. The compare's NEW-alert line counts only names in the roll's cone
-   (`Kube*`, `Cilium*`, `Longhorn*`, `ArgoCD*`, `Etcd*`, `CoreDNS*`, `Prometheus*`, `Alertmanager*`,
-   `TargetDown`, plus the window's declared names); any other new alert is recorded as "noted" and
-   left to the responder — drill 1 (2026-10-10, argocd-apps 2.0.6) stopped a clean roll on
-   `GithubRateLimitLow`, GitHub's API quota. A static scope, not a diagnosis. **Good** → lease deleted, window closed, `management-apply` success
+5. **Verdict** (`helm_cluster_verdict`): the evidence `verdict` verb AND the box verdict (FU-302),
+   both Prometheus-free. The evidence rules compare after against before: every release `deployed`;
+   the applied release rolled (observed = generation, ready = updated = desired) with every pod Ready;
+   BGP established ≥ before; no Longhorn volume newly faulted or more degraded; Healthy Applications
+   ≥ before and none newly Degraded/Missing. The box verdict is polled (`mgmt_verdict_poll`) until it
+   ranks no worse than its baseline. It REPLACED the maintenance-window `compare` (the declared swap,
+   2026-10-10): drill 1 stopped a clean roll on a Prometheus alert name (`GithubRateLimitLow`, GitHub's
+   API quota), and a cone-scope of alert names (#2459) was the interim. **Good** → lease deleted, window closed, `management-apply` success
    "helm verdict clean". **Bad** (or an errored apply) → **STOP**: the lease and the window are KEPT,
    `/var/lib/mgmt/apply/helm-stopped` refuses every later helm apply, `mgmt_apply_helm_stopped` →
    **`MgmtHelmApplyStopped`** (critical, triage none — no agent acts on a substrate failure). The sha
@@ -705,11 +704,10 @@ A kube-dependent read is `skip` (`kube-api-down`) while the API is down: the cau
 | `mgmt-apply`, every span that would plan | no cluster read at all (only the window gate) | **ADDED, ANDed with the window gate**: DOWN defers exactly like a window (no plan/apply/stamp/status, exit 0, `mgmt_apply_deferred_verdict` → **`MgmtApplyDeferredByVerdict`** after 2 h, `triage: dig` — standing alone it is the box disagreeing with Prometheus); a verdict that cannot run defers as PROBE-FAIL; degraded proceeds |
 | `mgmt-apply`, the Talos bracket's post-check | `maintenance-window.sh compare` (alerts + `sum(up)` from Prometheus, cilium/pods/nodes from kube) | **ANDed**: a clean reading also needs the verdict no worse than its fresh baseline (ok < degraded < down < could not run); a DOWN/unrunnable baseline refuses the apply. Prometheus stays required — a Talos apply with observability blind is not one the box takes alone |
 | `mgmt-reconcile`, before any sync | `MgmtRolloutDifferential` from Prometheus (rollout on only; unreadable = halt) | **ANDed**: DOWN or unrunnable refuses the sync (node pending, retried next tick), switch on or off; degraded proceeds (the verb's floors and the FU-278 hold judge the finer grain); never on a revert rollout (the differential's carve-out). With Prometheus unreadable the differential still halts |
-| FU-301's helm bracket (`mgmt-helm.sh`) | the evidence verdict + the cone-scoped maintenance-window `compare` | **not yet** — FU-301's declared swap point says the box verdict REPLACES the compare; the call is above, the swap is the FU-301 lane's |
+| FU-301's helm bracket (`mgmt-helm.sh`) | the evidence verdict + the cone-scoped maintenance-window `compare` | **REPLACED** (2026-10-10): the evidence verdict + the box verdict polled no worse than its begin baseline; a DOWN/unrunnable baseline refuses the apply (§Helm release applies) |
 | `mgmt-lease` (ADR-150, §MB5) | none — the box never diagnoses | **not wired, by design**: an expired lease has one meaning, and a verdict would make the dumb box smart. The CONFIRM is the in-cluster PostSync hook, which reads Prometheus `/-/ready` because the subject IS Prometheus |
 
-**What FU-301 calls** (its `helm_cluster_verdict` swap point, §Helm release applies — left to the
-FU-301 lane, which is mid-drill and has just scoped its compare, #2459): at begin `vbase=0;
+**What FU-301 calls** (`helm_cluster_verdict`, §Helm release applies): at begin `vbase=0;
 mgmt_verdict >"$d/box-verdict-before.json" || vbase=$?` (DOWN/unrunnable = no apply), at the end
 `mgmt_verdict_poll "$vbase" "$d/box-verdict-after.json"` — rc 0 no worse within
 `MGMT_POSTCHECK_TIMEOUT`, rc 2 + one finding line. From a shell: the CLI above,
