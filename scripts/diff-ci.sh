@@ -40,7 +40,7 @@ PUBLICROUTE_PATHS='^(argocd/resources/publicroute/|argocd/resources/crossplane/(
 # cluster pins it renders with + the tool itself. Claims outside these dirs are the master-push net's.
 XR_RENDER_PATHS='^(argocd/resources/(agentstack|publicroute|crossplane)/|argocd/platform/crossplane\.yaml$|agents/fixer/.*agentstack\.yaml$|scripts/xr-render|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
 # the management box's policy + its readers (ADR-131): the stage-1 fixtures + the fail-closed reads
-MGMT_PATHS='^(policy/mgmt/|mgmt/scripts/mgmt-[a-z-]*\.sh$|mgmt/scripts/mgmt-root-env/|scripts/iac-sentinel\.sh$|devbox\.(json|lock)$)'
+MGMT_PATHS='^(policy/mgmt/|mgmt/scripts/mgmt-[a-z-]*\.sh$|mgmt/scripts/mgmt-root-env/|scripts/iac-sentinel\.sh$|scripts/maintenance-window\.sh$|devbox\.(json|lock)$)'
 
 # task:trigger-regex (first `:` splits; task may carry args and is word-split at run time).
 # Buckets are deliberately COARSE (agents/ runs the whole agents suite, ~10 quick tasks) —

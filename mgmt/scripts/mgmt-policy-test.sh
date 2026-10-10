@@ -255,6 +255,55 @@ left="$(grep -c . "$T/hseq")"
 if [ "$left" = 2 ]; then pass=$((pass+1)); echo "PASS post:deadline-poll-count (4 readings)"
 else fail=$((fail+1)); echo "FAIL post:deadline-poll-count — $((6-left)) readings, want 4"; fi
 
+# FU-302 — with a baseline verdict rc the post-check ANDs the box verdict: a clean `compare` passes only
+# while mgmt_verdict ranks no worse than the baseline (ok < degraded < down < could not run). VSEQ = one
+# verdict rc per call (0 ok · 2 degraded · 3 down · 1 could not run); a missing entry reads 1.
+post_vcase() {  # <name> <want-rc> <health seq> <verdict seq> <baseline rc> [grep -x for the output]
+  local name="$1" want="$2" hseq="$3" vseq="$4" vb="$5" pat="${6:-}" out rc
+  printf '%s\n' $hseq >"$T/hseq"; printf '%s\n' $vseq >"$T/vseq"
+  out="$( mgmt_health() { local v; v="$(head -1 "$T/hseq")"; sed -i 1d "$T/hseq"; [ -n "$v" ] || v=reg
+            case "$v" in ok) echo "  ok  all"; return 0 ;; *) echo "  ⚠ NEW firing alerts: KubeAPIDown"; return 2 ;; esac; }
+          mgmt_verdict() { local v; v="$(head -1 "$T/vseq")"; sed -i 1d "$T/vseq"; [ -n "$v" ] || v=1
+            echo '{"reasons":["bgp: peer-down — wk-02→10.0.0.71"]}'; return "$v"; }
+          echo 0 >"$T/hclock"; _mgmt_now() { cat "$T/hclock"; }
+          _mgmt_sleep() { echo $(( $(cat "$T/hclock") + $1 )) >"$T/hclock"; }
+          MGMT_POSTCHECK_SETTLE=0 MGMT_POSTCHECK_INTERVAL=30 MGMT_POSTCHECK_TIMEOUT=90 mgmt_post_check "$T/base.json" "$vb" )"; rc=$?
+  if [ "$rc" = "$want" ] && { [ -z "$pat" ] || grep -qx -- "$pat" <<<"$out"; }; then pass=$((pass+1)); echo "PASS post-verdict:$name (rc=$rc)"
+  else fail=$((fail+1)); echo "FAIL post-verdict:$name — want rc=$want${pat:+ + '$pat'}, got rc=$rc: $out"; fi
+}
+post_vcase same-ok              0 "ok"          "0"       0
+post_vcase worse-then-recovers  0 "ok ok"       "3 0"     0
+post_vcase degraded-stays       0 "ok"          "2"       2
+post_vcase worse-at-deadline    2 "ok ok ok ok" "2 2 2 2" 0 "box verdict worse than its baseline: ok → degraded — bgp: peer-down — wk-02→10.0.0.71"
+post_vcase unrunnable-after     2 "ok ok ok ok" "1 1 1 1" 2
+post_vcase compare-still-gates  2 "reg reg reg reg" "0 0 0 0" 0 "NEW firing alerts: KubeAPIDown"
+# mgmt_verdict_poll — the bracket's "after" half alone (no compare). Same VSEQ stub, fake clock: interval
+# 30 s, deadline 90 s → at most 4 readings.
+poll_case() {  # <name> <want-rc> <verdict seq> <baseline rc> [grep -x for the output]
+  local name="$1" want="$2" vseq="$3" vb="$4" pat="${5:-}" out rc
+  printf '%s\n' $vseq >"$T/vseq"
+  out="$( mgmt_verdict() { local v; v="$(head -1 "$T/vseq")"; sed -i 1d "$T/vseq"; [ -n "$v" ] || v=1
+            echo '{"reasons":["vips: unreachable — 0/26"]}'; return "$v"; }
+          echo 0 >"$T/hclock"; _mgmt_now() { cat "$T/hclock"; }
+          _mgmt_sleep() { echo $(( $(cat "$T/hclock") + $1 )) >"$T/hclock"; }
+          MGMT_POSTCHECK_INTERVAL=30 MGMT_POSTCHECK_TIMEOUT=90 mgmt_verdict_poll "$vb" "$T/poll.json" )"; rc=$?
+  if [ "$rc" = "$want" ] && { [ -z "$pat" ] || grep -qx -- "$pat" <<<"$out"; }; then pass=$((pass+1)); echo "PASS verdict-poll:$name (rc=$rc)"
+  else fail=$((fail+1)); echo "FAIL verdict-poll:$name — want rc=$want${pat:+ + '$pat'}, got rc=$rc: $out"; fi
+}
+poll_case no-worse          0 "0"           0
+poll_case recovers          0 "3 3 0"       0
+poll_case degraded-stays    0 "2"           2
+poll_case worse-at-deadline 2 "3 3 3 3 3 3" 0 "box verdict worse than its baseline: ok → down — vips: unreachable — 0/26"
+left="$(grep -c . "$T/vseq")"
+if [ "$left" = 2 ]; then pass=$((pass+1)); echo "PASS verdict-poll:deadline-reading-count (4 readings)"
+else fail=$((fail+1)); echo "FAIL verdict-poll:deadline-reading-count — $((6-left)) readings, want 4"; fi
+poll_case unrunnable        2 "1 1 1 1"     2
+
+# no baseline rc (the pre-FU-302 call shape) → the verdict is never read
+printf '0\n' >"$T/vseq"; post_case no-verdict-baseline 0 "ok"
+if [ "$(grep -c . "$T/vseq")" = 1 ]; then pass=$((pass+1)); echo "PASS post-verdict:not-read-without-baseline"
+else fail=$((fail+1)); echo "FAIL post-verdict:not-read-without-baseline — the verdict was read"; fi
+
 # FU-300 — the apply loop's declared-window gate (mgmt_apply_window_gate) over a stubbed ConfigMap
 # read. WCM = the raw `kubectl get cm responder-window -o json` the stub prints; WGET = ok | notfound
 # | fail. rc 0 = proceed, 2 = deferred (the holding windows on stdout), 1 = unreadable (defer too).
