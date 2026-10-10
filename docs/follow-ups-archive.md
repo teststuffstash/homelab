@@ -10,7 +10,7 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
-- **FU-302** *(archived 2026-10-10)* — **The box's own Prometheus-free view of the cluster: built.** PR #FU302PR:
+- **FU-302** *(archived 2026-10-10)* — **The box's own Prometheus-free view of the cluster: built.** PR #2452:
   `mgmt/scripts/mgmt-verdict.sh` (`devbox run mgmt-verdict`, JSON, exit 0/2/3) — Talos API, kube API via
   the CP VIP, cilium BGP + probe 3 by exec, LAN HTTP to the BGP VIPs, node Ready, ArgoCD health,
   Prometheus/Alertmanager `/-/ready`; ANDed into `mgmt-apply` (DOWN defers, Talos post-check) and

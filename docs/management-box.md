@@ -698,7 +698,7 @@ A kube-dependent read is `skip` (`kube-api-down`) while the API is down: the cau
 `v1=$(devbox run --quiet mgmt-verdict)`; stop + alert when the exit ranks worse
 (`mgmt_verdict_rank` in `mgmt-lib.sh`), and diff `.reasons` / the `pods` items for what changed.
 
-**Proved live 2026-10-10 on the box** (PR #FU302PR, run from a copy of the box checkout before the
+**Proved live 2026-10-10 on the box** (PR #2452, run from a copy of the box checkout before the
 merge): `ok` — 13/13 Talos, 13/13 Ready, 26/26 BGP sessions, 26/26 VIPs, 80 Applications Healthy —
 while Prometheus agreed (13 Ready, 80 Healthy, no node/kube/cilium/BGP/ArgoCD alert firing); with
 `--prom`/`--am` pointed at a dead port the verdict read `degraded` naming only those two, every direct
