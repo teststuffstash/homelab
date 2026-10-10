@@ -161,7 +161,7 @@ mgmt_provider_pin_shape() {
   esac
   changed="$(git -C "$repo" diff --no-color --unified=0 "$base" "$head" -- "$f" | grep -E '^[-+]' | grep -Ev '^(\+\+\+|---) ')" || return 1
   [ -n "$changed" ] || return 1
-  if printf '%s\n' "$changed" | sed -E 's/^[-+]//' | grep -Evq -- "$line_re"; then return 1; fi   # any other changed line → not the shape
+  if printf '%s\n' "$changed" | sed -E 's/^[-+]//' | grep -Evc -- "$line_re" >/dev/null; then return 1; fi   # any other changed line → not the shape
   srcs_b="$(git -C "$repo" show "$base:$f" 2>/dev/null | grep -E -- "$src_re" | sort)" || srcs_b=""
   srcs_h="$(git -C "$repo" show "$head:$f" 2>/dev/null | grep -E -- "$src_re" | sort)" || srcs_h=""
   [ "$srcs_b" = "$srcs_h" ] || return 1
@@ -533,7 +533,7 @@ mgmt_plan_changes() {
     fi
     [ -f "$REPO/mgmt/scripts/mgmt-root-env/$root.sh" ] && . "$REPO/mgmt/scripts/mgmt-root-env/$root.sh"
     devbox run --quiet -- tofu -chdir="$dir" show -json "$out" 2>&1
-  )" || { echo "plan summary FAILED for $root: $(printf '%s' "$json" | grep -v '^\s*$' | tail -2 | tr '\n' ' ' | head -c 300)" >&2; return 1; }
+  )" || { echo "plan summary FAILED for $root: $(printf '%s' "$json" | grep -v '^\s*$' | tail -2 | tr '\n' ' ' | cut -c1-300)" >&2; return 1; }
   printf '%s' "$json" | mgmt_plan_digest "$out" \
     || { echo "plan summary FAILED for $root: show -json produced no resource_changes" >&2; return 1; }
 }
