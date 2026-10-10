@@ -50,7 +50,8 @@
 # whose `lastModified` went BACKWARDS (a branch re-pointed, the openssl-alias shape) joins the G17
 # downgrade list. The lane does not change: the proof is the box's own post-activation gate
 # (`mgmt-pull` → `nixos-rebuild test` → `mgmt-confirm`, which boots back on a failure) + `mgmt-tools-test`
-# in ci, and the PR's flake.lock diff must pass pin-only-lint check (j) (only `locked` revs move).
+# in ci, and the PR's flake.lock diff must pass pin-only-lint check (j) (this App as author, only `locked`
+# revs move, each reachable from its declared branch upstream).
 # `flake_moves` is the self-test's seam.
 #
 # Env: GH_TOKEN (contents + pull_requests write on $REPO — a homelab-renovate App token),
@@ -219,7 +220,7 @@ if [ -n "$FLAKE_DIR" ]; then
   FM="$(jq -r '.moves[]' <<<"$FMOVES")"
   FLAKE_SECTION="$(printf '### Management box closure — `%s/flake.lock` (class 13)\n\n' "$FLAKE_DIR"
     if [ -n "$FM" ]; then printf '%s\n' "$FM" | sed 's/^/- /'; else printf -- '- unchanged\n'; fi
-    printf '\nThe box re-activates on merge (`mgmt-pull` → `nixos-rebuild test` → the `mgmt-confirm` gate, which boots the previous generation back on a failure); `mgmt-tools-test` in ci holds the loops to the closure'"'"'s tools; pin-only-lint check (j) holds the diff to `locked` revs. A revert is `git revert` of this file (docs/management-box.md §Rollback).\n')"
+    printf '\nThe box re-activates on merge (`mgmt-pull` → `nixos-rebuild test` → the `mgmt-confirm` gate, which boots the previous generation back on a failure); `mgmt-tools-test` in ci holds the loops to the closure'"'"'s tools; pin-only-lint check (j) holds the diff to on-branch `locked` revs from this App. A revert is `git revert` of this file (docs/management-box.md §Rollback).\n')"
 fi
 LINES="$(jq -r '.lines[]' <<<"$MOVES")"
 
