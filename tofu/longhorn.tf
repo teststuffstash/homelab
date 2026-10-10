@@ -290,6 +290,13 @@ resource "helm_release" "longhorn" {
     # robustness/state, node storage, replica counts). Scraped via the relaxed selector
     # (monitoring.tf); alerts on degraded/faulted volumes + low storage live there.
     metrics = { serviceMonitor = { enabled = true } }
+    # Chart 1.12.1 renders ingress NetworkPolicies for the manager, webhook, instance-manager, backing-
+    # image and recovery-backend pods by DEFAULT (`networkPolicies.restrictInternalTraffic: true`, gated
+    # on that key alone — 1.12.0 gated them on `networkPolicies.enabled`, false here). The manager policy
+    # admits only longhorn-system pods, so Prometheus in `monitoring` would lose the :9500 scrape above
+    # (release notes v1.12.1 "Internal Network Policies", longhorn#13438). Kept OFF = the 1.12.0 shape;
+    # adopting them is its own change with a monitoring-namespace allow rule (review on homelab#2463).
+    networkPolicies = { restrictInternalTraffic = false }
   })]
 }
 
