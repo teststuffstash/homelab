@@ -445,6 +445,13 @@ jobs:
         if: steps.diff.outputs.pin-only-lint-test != 'false'
         run: devbox run pin-only-lint-test
 
+      # FU-296 + the class-7 revert-lock arm (2026-10-10): the governance-lint self-test drives the
+      # REAL lint over synthetic repos (worker login shapes, the #2480 revert shape and its refusals).
+      # It had a diff-ci MAP row but no ci step, so a PR could change the lint without it running.
+      - name: governance-lint self-test (devbox run governance-lint-test)
+        if: steps.diff.outputs.governance-lint-test != 'false'
+        run: devbox run governance-lint-test
+
       # G17 (ADR-141 as amended 2026-10-06): the devbox-update lock-diff gate over #2260's recorded
       # lock diff — the major gate, the downgrade + line-move lists the second body section carries.
       - name: devbox-update self-test (devbox run devbox-update-test)
