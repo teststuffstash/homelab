@@ -13,7 +13,7 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ PICKUP (2026-10-10 — seat): nix flake-registry fix LIVE, proof pending a ride.** Launcher pin
   `flake-registry =` (#2420) + agent-runtime #168 (ea009fca, entrypoint APPENDS to NIX_CONFIG) are
   both live — agent-base `2026.10.9-g4bd7c9b9b57d` pinned (#2422). **But no worker ride has run since
-  2026-10-07 18:27Z** (`OpenRouterKeyBudgetLow` on homelab-openrouter firing since 10-06), so the
+  2026-10-07 18:27Z** (homelab-openrouter spent its $5 WEEKLY cap 10-05/06 on Goal #2273 children — resets Mon 2026-10-12 00:00Z), so the
   zero `hubble_drop_total{destination=~".*nixos.org"}` since then proves nothing (30 d drops: source
   homelab only, 1492). **Next:** after the first post-pin ride, re-query that metric over the ride
   window; zero → close sleep-tracking#67 citing #2420 + agent-runtime#168.
