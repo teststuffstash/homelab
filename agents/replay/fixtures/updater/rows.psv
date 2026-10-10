@@ -17,6 +17,14 @@ unstrand-no           | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  |
 unstrand-unreadable   | board | gh/pr-list.json @ patches/add-cr-behind.jq  |  | unstrand-hold | n=120
 conflict-dirty        | board | gh/pr-list.json @ patches/dirty-90.jq       |  | dirty-label   | n=90
 conflict-clear        | board | gh/pr-list.json @ patches/label-conflict-90.jq | | label-clear | n=90
+# ── homelab#2476 / FU-290 (2026-10-10 19:00Z): label writes ride REST (`gh api -X POST/DELETE
+# .../labels`), never `gh pr edit --add-label|--remove-label` (GraphQL). STUB_GH_pr_edit_90=fail
+# models a drained GraphQL pool: ANY `gh pr edit 90 ...` (add- or remove-label alike — both reduce
+# to the same bare-words slug) now fails. The fixed script never issues that call, so these rows
+# assert the SAME clean stream as conflict-dirty/conflict-clear above; they are RED on the
+# pre-#2476 source, which called `gh pr edit --add-label`/`--remove-label` and hits the drain.
+conflict-dirty-graphql-drained | board | gh/pr-list.json @ patches/dirty-90.jq          | STUB_GH_pr_edit_90=fail | dirty-label | n=90
+conflict-clear-graphql-drained | board | gh/pr-list.json @ patches/label-conflict-90.jq | STUB_GH_pr_edit_90=fail | label-clear | n=90
 update-fail           | board | gh/pr-list.json @ patches/conflict-101.jq  | STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail | update-fail |
 park-skip             | board | gh/pr-list.json @ patches/add-park-skip.jq       |     | noop          |
 human-approved-pick   | board | gh/pr-list.json @ patches/add-human-approved.jq  |     | picks         | n=131 oid=human131oid456
