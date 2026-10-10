@@ -212,7 +212,8 @@ stalled-rollout case from `kube_node_info`, with no transport at all.
 ⚠ **Known hole:** Prometheus is in-cluster, so a cluster-down event blinds the detector. Acceptable
 for freshness-class breakage and irrelevant to the local deadman (which needs no alerting to
 work). The spike's "alerts leave by two independent paths" was reframed 2026-10-02: no human
-notification, the box's own Prometheus-free view instead (FU-302, §Open, and deliberately not built yet).
+notification, the box's own Prometheus-free view for its own gates instead — built 2026-10-10 as
+[the box verdict](#the-box-verdict--the-boxs-own-read-of-the-cluster-fu-302-2026-10-10) (§MB3).
 
 ### A standing refusal is a THIRD verdict shape, and nothing detects it
 
@@ -668,6 +669,62 @@ mid-bracket and never wrote a verdict). **Clearing a stop**: read `summary.txt`,
 /var/lib/mgmt/apply/helm-stopped`, `kubectl -n agent-coordinator delete cm upgrade-lease-tofu-helm-<release>`,
 `devbox run maint -- close --id <window>`. The unit's `TimeoutStartSec` is 5 h for this bracket.
 
+### The box verdict — the box's own read of the cluster (FU-302, 2026-10-10)
+
+Every go/no-go the box took from the cluster rode Prometheus, and Prometheus rides a Cilium BGP VIP
+the router carries: the reads go blind exactly when the cluster or the router has a bad day. The
+operator's ruling (2026-10-02, reframing "the second alert path"): **no out-of-band notification** —
+"if I am home I will notice, otherwise it burns until I get home" — but the box needs its OWN verdict
+for its OWN gates. That is [⚓ the box verdict](glossary.md): `mgmt/scripts/mgmt-verdict.sh`
+(jail: `devbox run mgmt-verdict [-- --format text] [-- --prom <url>]`; box, FU-305's tool rule — no devbox:
+`MGMT_BOX=1 bash /var/lib/homelab/mgmt/scripts/mgmt-verdict.sh --format text`), one JSON object —
+`{verdict: ok|degraded|down, reasons[], checks[{check, status, reason, detail, items}], sources}` —
+and exit 0 ok · 2 degraded · 3 down · 1 could not run. The script's header is the rule table (one
+home); in short, worst read wins and "could not look" is never ok:
+
+| Read | Path | Worst it can say |
+|---|---|---|
+| `kube-api` — `/readyz` through the kubeconfig's server, the CP VIP `192.168.2.50` | L2 | down |
+| `talos` — `talosctl version` to every node `machines.yaml` declares (a `reconcile` key) | L2, no kube | down (CP quorum lost), else degraded |
+| `nodes` — Node Ready | kube API | degraded |
+| `cilium-backend` — [maintenance-window](../scripts/maintenance-window.sh) probe 3, **sourced** (one home) | kube exec | degraded |
+| `bgp` — `cilium-dbg bgp peers` in every agent | kube exec | down (no session anywhere), else degraded |
+| `vips` — LAN HTTP connect to every `bgp=advertise` LoadBalancer VIP; list cached for an API outage | **the router** | down (none answers), else degraded |
+| `prometheus` / `alertmanager` — `/-/ready` | the router | **degraded, never down** — the verdict outlives them |
+| `argocd` — Application health summary (Degraded/Missing) | kube API | degraded |
+| `pods` — probe 4, hard-failed pods | kube API | never judged (`info`; a bracket diffs two verdicts) |
+
+Everything but `vips` and the readiness pair is L2 from the box, so the verdict answers through a
+router outage too — the spike's wave-0 point 5 ([update-process-convergence](spikes/update-process-convergence.md)).
+A kube-dependent read is `skip` (`kube-api-down`) while the API is down: the cause counts once.
+
+**Where it gates — and whether it replaces or ANDs the Prometheus read:**
+
+| Gate | Before | Now |
+|---|---|---|
+| `mgmt-apply`, every span that would plan | no cluster read at all (only the window gate) | **ADDED, ANDed with the window gate**: DOWN defers exactly like a window (no plan/apply/stamp/status, exit 0, `mgmt_apply_deferred_verdict` → **`MgmtApplyDeferredByVerdict`** after 2 h, `triage: dig` — standing alone it is the box disagreeing with Prometheus); a verdict that cannot run defers as PROBE-FAIL; degraded proceeds |
+| `mgmt-apply`, the Talos bracket's post-check | `maintenance-window.sh compare` (alerts + `sum(up)` from Prometheus, cilium/pods/nodes from kube) | **ANDed**: a clean reading also needs the verdict no worse than its fresh baseline (ok < degraded < down < could not run); a DOWN/unrunnable baseline refuses the apply. Prometheus stays required — a Talos apply with observability blind is not one the box takes alone |
+| `mgmt-reconcile`, before any sync | `MgmtRolloutDifferential` from Prometheus (rollout on only; unreadable = halt) | **ANDed**: DOWN or unrunnable refuses the sync (node pending, retried next tick), switch on or off; degraded proceeds (the verb's floors and the FU-278 hold judge the finer grain); never on a revert rollout (the differential's carve-out). With Prometheus unreadable the differential still halts |
+| FU-301's helm bracket (`mgmt-helm.sh`) | the evidence verdict + the cone-scoped maintenance-window `compare` | **not yet** — FU-301's declared swap point says the box verdict REPLACES the compare; the call is above, the swap is the FU-301 lane's |
+| `mgmt-lease` (ADR-150, §MB5) | none — the box never diagnoses | **not wired, by design**: an expired lease has one meaning, and a verdict would make the dumb box smart. The CONFIRM is the in-cluster PostSync hook, which reads Prometheus `/-/ready` because the subject IS Prometheus |
+
+**What FU-301 calls** (its `helm_cluster_verdict` swap point, §Helm release applies — left to the
+FU-301 lane, which is mid-drill and has just scoped its compare, #2459): at begin `vbase=0;
+mgmt_verdict >"$d/box-verdict-before.json" || vbase=$?` (DOWN/unrunnable = no apply), at the end
+`mgmt_verdict_poll "$vbase" "$d/box-verdict-after.json"` — rc 0 no worse within
+`MGMT_POSTCHECK_TIMEOUT`, rc 2 + one finding line. From a shell: the CLI above,
+exit ranked by `mgmt_verdict_rank` (`mgmt-lib.sh`).
+
+**Proved live 2026-10-10 on the box** (PR #2452, run from a copy of the box checkout before the
+merge): `ok` — 13/13 Talos, 13/13 Ready, 26/26 BGP sessions, 26/26 VIPs, 80 Applications Healthy —
+while Prometheus agreed (13 Ready, 80 Healthy, no node/kube/cilium/BGP/ArgoCD alert firing); with
+`--prom`/`--am` pointed at a dead port the verdict read `degraded` naming only those two, every direct
+read still `ok`; with a kubeconfig pointed at a dead port it read `down` (`kube-api`), Talos still
+13/13 and the VIPs still 26/26 from the cache. Fixtures:
+`mgmt-verdict-test` (33 cases against fake kubectl/talosctl/curl, inside `mgmt-policy-test`), the
+reconciler's verdict cases in `mgmt-reconcile-test`, the post-check's in `mgmt-policy-test`, the
+alert in `mgmt-metrics.promtool-test`.
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
@@ -690,6 +747,7 @@ even when every check is green.
 | Plan-on-PR sentinel, external roots read-only (github, cloudflare) | plan only, `apply: false` | 2026-09-13 | FU-237/FU-238; cloudflare plans with the read-only `cloudflare-mgmt-read` (verified on the box 2026-09-22) |
 | Talos PKI (rotate-ca) | human | — (seat-run FROM the box, 2026-09-22) | FU-264; not a box capability |
 | ci-runner VM replace (`runner-maintenance`) | human | not yet tested | attended verb only — §Non-Talos VMs below |
+| The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
 
 ### Non-Talos VMs: the runner verb (2026-10-08)
 
@@ -1253,7 +1311,6 @@ this section.
 | Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review instruction is live in `.agents/review.md` (2026-09-28) |
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
-| The second alert path | **Reframed by the operator 2026-10-02: no out-of-band human notification** ("if I am home I will notice, otherwise it burns until I get home"). The box needs its OWN verdict on the cluster for its gates, one that bypasses Prometheus (whose reads ride a Cilium BGP VIP): Talos API, kube API via the CP VIP, `kubectl exec` into cilium for BGP, LAN HTTP to the BGP VIPs, Prometheus/Alertmanager `/-/ready`. Most reads exist (the maintenance-window probes, the belt's node diff); the missing piece is one verdict function that `mgmt-apply` and `mgmt-reconcile` call — FU-302 |
 | The management network | designed (§MB4 item 7: range, static addressing, the two access verbs); built in the WAN-switch visit — the box's second NIC stanza, the BMC re-address, the verbs, FU-288's rotation |
 | A CI gate on `mgmt/nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 

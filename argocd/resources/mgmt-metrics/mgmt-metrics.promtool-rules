@@ -44,6 +44,13 @@ groups:
         labels:
           severity: warning
           triage: none
+      - alert: MgmtApplyDeferredByVerdict
+        expr: |
+          mgmt_apply_deferred_verdict == 1
+        for: 2h
+        labels:
+          severity: warning
+          triage: dig
       - alert: MgmtApplyErroredOnNewProvider
         expr: |
           mgmt_apply_errored_unexercised == 1

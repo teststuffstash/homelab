@@ -179,6 +179,31 @@ tests:
         alertname: MgmtApplyLoopStale
         exp_alerts: []
 
+  # ── FU-302: the box verdict holds the apply loop ───────────────────────────────────────────────
+  # A 1 h DOWN (a real outage, its own alerts carry it) never fires; a 3 h deferral (from 3h15) fires 2 h in;
+  # the deferring loop is LIVE, so the stale belt stays quiet.
+  - interval: 5m
+    name: "a verdict deferral fires after 2h; a 1h one never does"
+    input_series:
+      - series: 'mgmt_apply_deferred_verdict{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x12 1x12 0x12 1x36"
+      - series: 'mgmt_apply_last_ok_tick_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+300x72"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: MgmtApplyDeferredByVerdict
+        exp_alerts: []
+      - eval_time: 5h10m
+        alertname: MgmtApplyDeferredByVerdict
+        exp_alerts: []
+      - eval_time: 5h20m
+        alertname: MgmtApplyDeferredByVerdict
+        exp_alerts:
+          - exp_labels: { severity: warning, job: mgmt-node, instance: "192.168.2.53:9100", triage: dig }
+      - eval_time: 5h20m
+        alertname: MgmtApplyLoopStale
+        exp_alerts: []
+
   # ── the box stops answering ────────────────────────────────────────────────────────────────────
   - interval: 1m
     name: "a down box fires after 15m"

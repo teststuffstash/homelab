@@ -122,7 +122,8 @@ new FUs").
 4. **The box loops wedge silently on a toolchain bump.** The shared applier must not fail quietly.
    Owner: **FU-305**.
 5. **The box's view of the cluster bypasses nothing.** Its reads ride the router it would be
-   changing. Owner: **FU-302**.
+   changing. Owner: **FU-302** — built 2026-10-10: [the box verdict](../management-box.md#the-box-verdict--the-boxs-own-read-of-the-cluster-fu-302-2026-10-10)
+   reads Talos, the kube API and cilium over L2; only its VIP and `/-/ready` reads ride the router.
 
 **Wave 1: write down what exists.**
 
