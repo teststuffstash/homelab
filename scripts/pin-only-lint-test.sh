@@ -98,7 +98,8 @@ mkdir -p "$R/tofu"
 # check (g)'s home: a lockfile with two providers (the version line alone does not say whose it is).
 printf 'provider "registry.opentofu.org/hashicorp/kubernetes" {\n  version     = "2.38.0"\n  constraints = "~> 2.31"\n}\n\nprovider "registry.opentofu.org/hashicorp/helm" {\n  version = "3.0.2"\n}\n' >"$R/tofu/.terraform.lock.hcl"
 # check (i)'s home: a devbox.lock with two packages (the version line alone does not say whose it is).
-printf '{"packages":{"jq@latest":{"version":"1.8.1"},"curl@latest":{"version":"8.17.0"}}}\n' >"$R/devbox.lock"
+# (+ qrencode at 4.1.1, the pre-plant version of the 2026-10-10 drill — (i)'s window cases below)
+printf '{"packages":{"jq@latest":{"version":"1.8.1"},"curl@latest":{"version":"8.17.0"},"qrencode@latest":{"version":"4.1.1"}}}\n' >"$R/devbox.lock"
 printf 'resource "kubernetes_deployment" "x" {\n  spec {\n    template {\n      spec {\n        container {\n          name  = "dind"\n          image = "docker:27-dind"\n        }\n      }\n    }\n  }\n}\n' >"$R/tofu/x.tf"
 # check (j)'s home: the box flake lock — nixpkgs (github, with a ref) + disko following it, the real
 # mgmt/nixos/flake.lock's shape (narHash values shortened; the lint never reads them).
@@ -269,6 +270,15 @@ case_ lock-other-name-same-version ok "reverts_lock_ jq@8.22.0" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 case_ lock-memory-unreadable 'cannot read the merged revert-lock-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
+# (i)'s 30-day window, in the 2026-10-10 drill's own terms (#2480 reverted qrencode 4.1.99, the
+# body line verbatim): the weekly re-resolve that lands 4.1.99 again is REFUSED while the merged
+# revert is 29 days old, and passes once it is 31 days old — REVERT_MEMORY_DAYS (30) is the only
+# thing between the two (header (i): "merged revert-lock-* PR of the last REVERT_MEMORY_DAYS").
+reverts_lock_aged_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-lock-7d0f77e1"},"body":"Lock revert chain (class 7)\\n\\nreverted-locks: %s"}]\n' "$(date -u -d "-$1 days" +%Y-%m-%dT%H:%M:%SZ)" "$2" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
+case_ lock-reproposal-day29-refused 'qrencode@4.1.99 is a REVERTED lock version' "reverts_lock_aged_ 29 qrencode@4.1.99" \
+  "sed -i 's/\"4.1.1\"/\"4.1.99\"/' devbox.lock"
+case_ lock-reproposal-day31-expired ok "reverts_lock_aged_ 31 qrencode@4.1.99" \
+  "sed -i 's/\"4.1.1\"/\"4.1.99\"/' devbox.lock"
 # (j) the box flake lock — the owner replacement (pin-only-lint.sh header (j)). Expected verdicts from
 # the header's rules: the devbox-update App's re-resolve to a rev its branch CONTAINS passes; a rev the
 # compare API cannot place (404 — a fork commit served under the parent's URL), an off-branch rev
