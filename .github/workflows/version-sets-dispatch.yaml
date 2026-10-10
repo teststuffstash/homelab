@@ -1,0 +1,47 @@
+# version-sets-dispatch.yaml — the version-set DEPLOY EDGE (homelab#2014 shape (a)).
+#
+# The weekly devbox-update stamps claude-code / kubectl / kind into version-sets/devbox.lock; every
+# first-party image that bundles them reads that file at BUILD time. A stamp that changes on master
+# must therefore rebuild those images, or they sit on the old set until their Monday cron. This job
+# rings each consumer's build-image.yaml (`repository_dispatch: types: [version-sets]`); the
+# consumer's own deploy-pin job then opens the homelab pin PR, so the existing class-3 chain rolls
+# the new set out (and the cluster pin stays the revert). The drift belt
+# (argocd/resources/version-sets/) says whether the set converged.
+#
+# Token: the homelab-renovate App (contents: write on both consumers — `POST /dispatches` needs it;
+# docs/github-apps.yaml). The seat (claude-jail) is host-built: not a dispatch target.
+name: version-sets-dispatch
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "version-sets/devbox.lock"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: homelab-ephemeral
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: [agent-coordinator, agent-runtime]
+    steps:
+      - name: Mint homelab-renovate token for ${{ matrix.repo }}
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ secrets.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: teststuffstash
+          repositories: ${{ matrix.repo }}
+      - name: Ring ${{ matrix.repo }} build-image (version-sets)
+        env:
+          TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/teststuffstash/${{ matrix.repo }}/dispatches" \
+            -d '{"event_type":"version-sets","client_payload":{"sha":"${{ github.sha }}"}}'
+          echo "rang ${{ matrix.repo }} for homelab ${{ github.sha }}"
