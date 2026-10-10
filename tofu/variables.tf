@@ -347,7 +347,7 @@ variable "argocd_apps_chart_version" {
   description = "argocd-apps Helm chart version (root app-of-apps)."
   type        = string
   # renovate: datasource=helm depName=argocd-apps registryUrl=https://argoproj.github.io/argo-helm
-  default = "2.0.5"
+  default = "2.0.6"
 }
 
 variable "argocd_repo_url" {
