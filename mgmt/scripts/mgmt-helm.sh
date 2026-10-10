@@ -44,22 +44,29 @@ HELM_LEASE_LABEL="${MGMT_LEASE_LABEL:-homelab.teststuff.net/upgrade-lease}"
 HELM_SETTLE="${MGMT_HELM_SETTLE:-600}"          # after the apply (and the engine moves) before `after` is read
 HELM_ENGINE_TIMEOUT="${MGMT_HELM_ENGINE_TIMEOUT:-900}"   # per volume
 HELM_BACKUP_TIMEOUT="${MGMT_HELM_BACKUP_TIMEOUT:-1800}"  # the Longhorn on-demand backups, all together
+# The verdict's alert SCOPE (drill 1, 2026-10-10: GithubRateLimitLow — GitHub's API quota, fired by the
+# shared App pool mid-compare — STOPPED a clean argocd-apps roll). A new firing alert is a finding only
+# when its name is in the cone a substrate helm roll can reach: this ERE, or a declared name below.
+# Everything else is RECORDED (verdict-noted.txt, summary.txt) and left to the responder — a static
+# scope, not a diagnosis: the box still never reads WHY an alert fires.
+HELM_CONE_ALERTS="${MGMT_HELM_CONE_ALERTS:-^(Kube|Cilium|Longhorn|ArgoCD|Etcd|CoreDNS|Prometheus|Alertmanager|TargetDown$|Watchdog$)}"
 # The names a helm roll of these releases structurally produces (the window graces them, silences nothing).
 HELM_DECLARED_ALERTS="${MGMT_HELM_DECLARED_ALERTS:-KubePodNotReady,KubeDeploymentReplicasMismatch,KubeDeploymentRolloutStuck,KubeDaemonSetRolloutStuck,KubeStatefulSetReplicasMismatch,KubeStatefulSetUpdateNotRolledOut,ArgoCDAppDegraded,ArgoCDAppOutOfSync,LonghornVolumeDegraded,TargetDown}"
 
 # ── seams (mgmt-helm-test.sh overrides these) ───────────────────────────────────────────────────
 _hkc() { local kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig; printf '%s' "$kc"; }
-_hk()    { ( cd "$REPO" && devbox run --quiet -- kubectl --kubeconfig "$(_hkc)" --request-timeout=30s "$@" ); }
-_hhelm() { ( cd "$REPO" && devbox run --quiet -- helm --kubeconfig "$(_hkc)" "$@" ); }
+# Tools (FU-305, mgmt-tools.sh): kubectl from the box's closure, helm as master's devbox.lock pins it
+# (mgmt_tree_path in mgmt-apply.sh) — never `devbox run`, which a bad lock on master wedges.
+_hk()    { ( cd "$REPO" && mgmt_x kubectl --kubeconfig "$(_hkc)" --request-timeout=30s "$@" ); }
+_hhelm() { ( cd "$REPO" && mgmt_x helm --kubeconfig "$(_hkc)" "$@" ); }
 # the evidence verbs run from the TRUSTED tree (master, like maintenance-window.sh); their own fallback
-# finds /var/lib/mgmt/kubeconfig when devbox points KUBECONFIG at the checkout's absent tofu/kubeconfig
-_hev()   { ( cd "$REPO" && devbox run --quiet -- bash "$REPO/scripts/helm-release-evidence.sh" "$@" ); }
-# seat-window.sh OUTSIDE devbox: devbox.json would point KUBECONFIG at the absent checkout copy, and the
-# script finds kubectl in the checkout's .devbox profile on its own (agents/seat-window.sh header)
+# finds /var/lib/mgmt/kubeconfig when KUBECONFIG names an absent file
+_hev()   { ( cd "$REPO" && bash "$REPO/scripts/helm-release-evidence.sh" "$@" ); }
+# seat-window.sh finds kubectl on PATH (the box closure) on its own (agents/seat-window.sh header)
 _hwin()  { KUBECONFIG="$(_hkc)" SEAT_WINDOW_BY=mgmt-apply bash "$REPO/agents/seat-window.sh" "$@"; }
 _hpg()   { ( cd "$REPO" && KUBECONFIG="$(_hkc)" bash "$REPO/scripts/pg-backup.sh" now ); }
 _hnow()  { date +%s; }
-# the timeline watcher is a subshell → devbox → bash → kubectl: kill the whole tree (no procps on the
+# the timeline watcher is a subshell → bash → kubectl: kill the whole tree (no procps on the
 # box's unit path — /proc is)
 _hkilltree() { local c; for c in $(cat /proc/"$1"/task/*/children 2>/dev/null); do _hkilltree "$c"; done; kill "$1" 2>/dev/null || true; }
 _hsleep() { sleep "$1"; }
@@ -229,7 +236,7 @@ helm_begin() {
   _hev snapshot >"$d/before.json" 2>"$d/before.err" || log "helm: WARN before snapshot partial ($(tail -c 160 "$d/before.err"))"
   ( _hev watch "$(( HELM_SETTLE + cap * 60 ))" 20 >"$d/timeline.jsonl" 2>/dev/null ) & printf '%s' "$!" >"$d/watch.pid"
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$rel" "$ns" "$sha" "$from" "$to" >"$d/meta.tsv"
-  log "helm: begun — window $wid, lease $ns/$lease (expected-end $end), record $d"
+  log "helm: begun — window $wid, lease $HELM_LEASE_NS/$lease (expected-end $end), record $d"
 }
 
 # ── 4 engines (longhorn) ─────────────────────────────────────────────────────────────────────────
@@ -285,11 +292,33 @@ helm_cluster_verdict() {
   jq -r '.findings[]?' "$d/verdict.json" 2>/dev/null | sed 's/^/evidence: /' >>"$d/verdict.txt"
   # the compare is POLLED (mgmt_post_check — the Talos post-check's own loop, settle already spent
   # above): a transient roll alert that clears inside MGMT_POSTCHECK_TIMEOUT is not a regression
+  : >"$d/verdict-noted.txt"
   if ! MGMT_POSTCHECK_SETTLE=0 mgmt_post_check "$d/health-before.json" >"$d/health-compare.txt" 2>&1; then
-    rc=2; sed 's/^/health: /' "$d/health-compare.txt" >>"$d/verdict.txt"
+    helm_scope_health "$d/health-compare.txt" "$d/verdict-noted.txt" >"$d/health-findings.txt"
+    if [ -s "$d/health-findings.txt" ]; then rc=2; sed 's/^/health: /' "$d/health-findings.txt" >>"$d/verdict.txt"; fi
   fi
   [ "$rc" = 0 ] && [ ! -s "$d/verdict.txt" ] && return 0
   return 2
+}
+# helm_scope_health <compare-findings> <noted-out> → the findings that COUNT on stdout: every non-alert
+# probe line unchanged; a "NEW firing alerts: a, b" line keeps only the cone's names (HELM_CONE_ALERTS
+# or HELM_DECLARED_ALERTS), the rest go to <noted-out> as "outside the cone: <name>".
+helm_scope_health() {
+  local line names n keep
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      "NEW firing alerts: "*)
+        names="${line#NEW firing alerts: }"; keep=""
+        while IFS= read -r n; do
+          n="$(sed 's/^ *//; s/ *$//' <<<"$n")"; [ -n "$n" ] || continue
+          if grep -qE "$HELM_CONE_ALERTS" <<<"$n" || tr ',' '\n' <<<"$HELM_DECLARED_ALERTS" | grep -qxF "$n"; then keep="$keep${keep:+, }$n"
+          else echo "outside the cone: $n" >>"$2"; fi
+        done < <(tr ',' '\n' <<<"$names")
+        [ -z "$keep" ] || echo "NEW firing alerts: $keep" ;;
+      *) echo "$line" ;;
+    esac
+  done <"$1"
 }
 # helm_end <dir> <apply-rc> <engine-order csv> → rc 0 confirmed / 2 STOPPED. Never reverts anything.
 helm_end() {
@@ -307,6 +336,7 @@ helm_end() {
     _hev diff "$d/before.json" "$d/after.json" 2>/dev/null || echo "(diff unreadable)"
     [ -s "$d/engines.log" ] && { echo "== longhorn engines"; cat "$d/engines.log"; }
     echo "== verdict"; if [ -s "$d/verdict.txt" ]; then cat "$d/verdict.txt"; else echo "ok"; fi
+    [ -s "$d/verdict-noted.txt" ] && { echo "== noted, not findings (new alerts outside the cone — the responder's)"; cat "$d/verdict-noted.txt"; }
   } >"$d/summary.txt"
   _hev upload "$d" >>"$d/upload.log" 2>&1 || log "helm: WARN record not uploaded to the backup Garage — kept at $d"
   if [ "$arc" = 0 ] && [ "$erc" = 0 ] && [ "$vrc" = 0 ] && [ ! -s "$d/verdict.txt" ]; then

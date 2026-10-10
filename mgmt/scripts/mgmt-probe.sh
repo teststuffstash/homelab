@@ -128,8 +128,13 @@ failed()  { local r; r="$(reason_of "$2")"; RESULTS+=("$1 fail $r"); FAIL=$((FAI
 skip_requested() { case " $SKIP " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# devbox is how BOTH the jail and the box reach the pinned toolchain (one devbox.lock, ADR-129).
-tool() { devbox run --quiet -- "$@" 2>&1; }
+# Where a tool comes from (FU-305, mgmt-tools.sh): the box's own closure on PATH (yq, kubectl, jq,
+# curl), tofu/talosctl as this checkout's devbox.lock pins them (read as data, mgmt_tree_path below);
+# the jail's devbox shell. devbox itself runs only under check_ansible (opnsense-playbook.sh) — a
+# report-only check, so a bad devbox.lock costs one red belt check, never a wedged gate.
+# shellcheck source=mgmt-tools.sh
+. "$REPO/mgmt/scripts/mgmt-tools.sh"
+tool() { mgmt_x "$@" 2>&1; }
 
 # ── check: tofu plan is empty on every root that has remote state ────────────────────────────────
 # A non-empty diff means "merged but not applied" or "live drifted from state" — the two things
@@ -166,17 +171,17 @@ check_tofu() {
       # provider bump lands on master (Renovate moved integrations/github to 6.13.0 and every
       # tick from 13:17Z 2026-09-27 failed "Required plugins are not installed"; the old
       # `[ ! -d .terraform ]` guard skipped init forever after the first clone — the #2043 class).
-      devbox run --quiet -- tofu -chdir="tofu/$root" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 || exit 91
+      mgmt_x tofu -chdir="tofu/$root" init -input=false -lockfile=readonly -lock=false >/dev/null 2>&1 || exit 91
       varfile=""
       [ -n "$TOFU_VAR_DIR" ] && [ -f "$TOFU_VAR_DIR/$root.tfvars" ] && varfile="-var-file=$TOFU_VAR_DIR/$root.tfvars"
       # the policy's plan_exclude_types for this root (github: repo settings a read-only token cannot
       # see — policy/mgmt/plan-input.yaml explains); the sentinel applies the same knob via mgmt-lib
       excl=""
-      for t in $(devbox run --quiet -- yq -r ".roots.\"$root\".plan_exclude_types[]?" "$REPO/policy/mgmt/plan-input.yaml" 2>/dev/null); do
-        excl="$excl $(devbox run --quiet -- tofu -chdir="tofu/$root" state list 2>/dev/null | grep "^$t\." | sed 's/^/-exclude=/' | tr '\n' ' ')"
+      for t in $(mgmt_x yq -r ".roots.\"$root\".plan_exclude_types[]?" "$REPO/policy/mgmt/plan-input.yaml" 2>/dev/null); do
+        excl="$excl $(mgmt_x tofu -chdir="tofu/$root" state list 2>/dev/null | grep "^$t\." | sed 's/^/-exclude=/' | tr '\n' ' ')"
       done
       # shellcheck disable=SC2086
-      devbox run --quiet -- tofu -chdir="tofu/$root" plan -detailed-exitcode -input=false -lock=false $varfile $excl 2>&1
+      mgmt_x tofu -chdir="tofu/$root" plan -detailed-exitcode -input=false -lock=false $varfile $excl 2>&1
     )"
     rc=$?
     case $rc in
@@ -397,7 +402,7 @@ node_k8s_axes() {
   # KUBECONFIG=$PWD/tofu/kubeconfig inside `devbox run`, overriding the box's /var/lib/mgmt one —
   # the first box run hit localhost:8080 (2026-09-21; the jail has tofu/kubeconfig, so it passed).
   live="$(mktemp)" || return 0
-  devbox run --quiet -- kubectl --kubeconfig "${KUBECONFIG:-$REPO/tofu/kubeconfig}" get nodes -o json >"$live" 2>/dev/null
+  mgmt_x kubectl --kubeconfig "${KUBECONFIG:-$REPO/tofu/kubeconfig}" get nodes -o json >"$live" 2>/dev/null
   tool jq -e '.items | type == "array"' "$live" >/dev/null 2>&1 || {
     rm -f "$live"; log "nodes: kubectl get nodes failed — registered/labels/taints axes not checked"; return 0; }
   # One row per declared node: name, present|absent, label diff, taint diff ("-" = none — bash
@@ -619,18 +624,12 @@ substrate_upstream_minors() {
   return 1
 }
 
-# curl and jq are in the belt unit's closure (mgmt/nixos/hosts/mgmt/default.nix) but not on the jail's
-# bare PATH; devbox is the other way round. Try the binary, fall back to the pinned one — and NOT
-# through tool(), which merges stderr into stdout and would corrupt the JSON.
+# mgmt_x, NOT tool(): tool() merges stderr into stdout and would corrupt the JSON.
 _substrate_curl() {
-  if have curl; then curl -fsS --max-time 30 -H "Accept: application/vnd.github+json" \
-      -H "X-GitHub-Api-Version: 2022-11-28" "$@" 2>/dev/null
-  else devbox run --quiet -- curl -fsS --max-time 30 -H "Accept: application/vnd.github+json" \
-      -H "X-GitHub-Api-Version: 2022-11-28" "$@" 2>/dev/null; fi
+  mgmt_x curl -fsS --max-time 30 -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" "$@" 2>/dev/null
 }
-_substrate_jq() {
-  if have jq; then jq "$@"; else devbox run --quiet -- jq "$@"; fi
-}
+_substrate_jq() { mgmt_x jq "$@"; }
 
 # ── check: the OPNsense play still parses and connects (--check, no writes) ──────────────────────
 # Class 9 in docs/dependency-upgrades.md is the sharpest FU-097 gap and it is the ROUTER: a merged
@@ -732,9 +731,9 @@ check_kps_crds() {
   local kc="${KUBECONFIG:-$REPO/tofu/kubeconfig}"
   [ -f "$kc" ] || { skipped kps-crds no-input "no kubeconfig at $kc"; return; }
   local crds img
-  crds="$(devbox run --quiet -- kubectl --kubeconfig "$kc" get crd -o json 2>&1)" || {
+  crds="$(mgmt_x kubectl --kubeconfig "$kc" get crd -o json 2>&1)" || {
     failed kps-crds unreachable "kubectl get crd failed: $(printf '%s' "$crds" | tail -1 | cut -c1-160)"; return; }
-  img="$(devbox run --quiet -- kubectl --kubeconfig "$kc" -n monitoring get deploy kube-prometheus-stack-operator \
+  img="$(mgmt_x kubectl --kubeconfig "$kc" -n monitoring get deploy kube-prometheus-stack-operator \
           -o jsonpath='{.spec.template.spec.containers[0].image}' 2>&1)" || {
     failed kps-crds unreachable "operator Deployment unreadable: $(printf '%s' "$img" | tail -1 | cut -c1-160)"; return; }
   kps_crds_verdict "$crds" "$img"
@@ -947,7 +946,7 @@ case "$MODE" in
     [ "$FAIL" -eq 0 ] && [ "$SKIPPED" -eq 0 ]
     ;;
   belt)
-    have devbox || { log "FATAL devbox not on PATH — the toolchain pin is unreachable"; exit 1; }
+    mgmt_tree_path "$REPO" || log "WARN a tree-locked tool is unresolvable from $REPO/devbox.lock (why above) — its checks fail with that reason"
     check_tofu
     check_talos
     check_nodes
@@ -956,9 +955,9 @@ case "$MODE" in
     check_creds
     check_substrate
     check_kps_crds
-    # devbox on the box (nixpkgs' 0.17.2) rewrites devbox.lock's plugin_version fields that the
-    # jail's 0.17.5 wrote — package pins unchanged, but the checkout is left dirty (2026-09-13).
-    # Put it back so the tree stays "what git says".
+    # devbox on the box (nixpkgs' 0.17.2, check_ansible's opnsense-playbook.sh) rewrites devbox.lock's
+    # plugin_version fields that the jail's 0.17.5 wrote — package pins unchanged, but the checkout
+    # is left dirty (2026-09-13). Put it back so the tree stays "what git says".
     git -C "$REPO" checkout -q -- devbox.lock 2>/dev/null || true
     publish
     log "belt: $PASS pass, $FAIL fail, $SKIPPED skip"

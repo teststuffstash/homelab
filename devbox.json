@@ -142,6 +142,7 @@
         "bash mgmt/scripts/mgmt-human-plan.sh \"$@\""
       ],
       "mgmt-policy-test": [
+        "bash mgmt/scripts/mgmt-tools-test.sh",
         "bash mgmt/scripts/mgmt-policy-test.sh",
         "bash mgmt/scripts/mgmt-reconcile-test.sh",
         "bash mgmt/scripts/mgmt-rollout-evidence-test.sh",
@@ -276,6 +277,9 @@
       ],
       "publicroute-tf-validate": [
         "bash scripts/publicroute-tf-validate.sh"
+      ],
+      "xr-render": [
+        "bash scripts/xr-render.sh \"$@\""
       ],
       "argo-lint": [
         "argo lint --offline $(grep -lE '^kind: (Cron)?Workflow(Template)?$' agents/coordinator/*.yaml)"

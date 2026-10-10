@@ -14,6 +14,10 @@
 # way ADR-101's zone classes fan out zone defaults (docs/cloudflare.md §Predicted shape).
 # v1alpha2 is the referenceable (storage) version; v1alpha1 remains served for legacy claims
 # (no profile field — defaults to consumer-class rendering via the composition's fallback).
+# NO schema `default:` (G4, docs/dependency-upgrades.md §Gap register): the API server stamps a
+# default into every stored claim, which drifts the claim's ArgoCD app from git. Every
+# default-when-silent below lives in the Composition, where the field is read; manifest-lint fails
+# on a new one (2026-10-10: the last nine dropped, render-proven identical with `devbox run xr-render`).
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
@@ -40,7 +44,6 @@ spec:
               properties:
                 zone:
                   type: string
-                  default: teststuff.net # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                   description: >-
                     Which zone the route lives in (ADR-101 zone classes). Platform zone
                     (teststuff.net, the default): any namespace may claim inside its delegated
@@ -66,16 +69,13 @@ spec:
                     protocol:
                       type: string
                       enum: [http, https]
-                      default: http # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                     originServerName:
                       type: string
                       description: TLS SNI/verify name when protocol=https.
                     noTLSVerify:
                       type: boolean
-                      default: false # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                 replicas:
                   type: integer
-                  default: 1 # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                   description: cloudflared connector replicas in the claiming namespace.
     - name: v1alpha2
       served: true
@@ -90,7 +90,6 @@ spec:
               properties:
                 zone:
                   type: string
-                  default: teststuff.net # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                   description: >-
                     Which zone the route lives in (ADR-101 zone classes). Platform zone
                     (teststuff.net, the default): any namespace may claim inside its delegated
@@ -125,13 +124,11 @@ spec:
                     protocol:
                       type: string
                       enum: [http, https]
-                      default: http # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                     originServerName:
                       type: string
                       description: TLS SNI/verify name when protocol=https.
                     noTLSVerify:
                       type: boolean
-                      default: false # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                 rateLimit:
                   type: object
                   description: >-
@@ -146,7 +143,6 @@ spec:
                         Bounds: 60-6000.
                       minimum: 60
                       maximum: 6000
-                      default: 1200 # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                 origins:
                   type: array
                   description: >-
@@ -206,5 +202,4 @@ spec:
                         as the sibling `header` field.
                 replicas:
                   type: integer
-                  default: 1 # xrd-default-ok: pre-G4 PublicRoute default, XRs Synced 2026-10-10; drop it with a publicroute-tf-validate render proof
                   description: cloudflared connector replicas in the claiming namespace.

@@ -143,11 +143,28 @@ jobs:
       # CI-green both times (and the merged round still fails validate for every profile). This
       # renders each fixture XR through the real function pipeline and `tofu validate`s the
       # rendered module against the ProviderConfig's pinned provider (nix-packaged, WAN-free —
-      # the FU-130 class; images via the LAN mirrors, docker from the dind sidecar). Skip-mapped
-      # like the heavies: only when the Composition, its pins, or the gate itself changed.
+      # the FU-130 class; engine + function binaries digest-pulled via the LAN mirrors, no docker
+      # since 2026-10-10 — scripts/xr-render-lib.sh). Skip-mapped like the heavies: only when the
+      # Composition, its pins, or the gate itself changed.
       - name: PublicRoute Composition renders valid Terraform (devbox run publicroute-tf-validate)
         if: steps.diff.outputs.publicroute-tf-validate != 'false'
         run: devbox run publicroute-tf-validate
+
+      # G4 (S9 #1985): WHAT every Composition renders, base vs this PR — every committed XR/claim
+      # through the real pipeline at the cluster pins, docker-free (scripts/xr-render.sh). The diff
+      # prints for the reviewer either way; a non-empty one fails unless the PR body carries a line
+      # `Render-change: <reason>` (the body is read live, so edit + re-run counts).
+      - name: XR render diff base↔head (devbox run xr-render)
+        if: github.event_name == 'pull_request' && steps.diff.outputs.xr-render != 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          devbox run -- gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json body --jq .body > /tmp/pr-body
+          allow=""
+          if grep -qE '^Render-change: *[^ ]' /tmp/pr-body; then allow=--allow-change; fi
+          devbox run xr-render -- --diff "$BASE_SHA" $allow
 
       # The loop's own CronWorkflows/WorkflowTemplates (agents/coordinator/, ArgoCD-synced from
       # master) sit outside manifest-lint's glob and kubeconform skips the kinds anyway

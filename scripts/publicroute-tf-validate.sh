@@ -19,15 +19,10 @@
 #
 # WAN-free by construction (the FU-130 class): the provider comes from nixpkgs via devbox.json
 # (`terraform-providers.cloudflare_cloudflare`, served by the LAN nix cache / the runner warm store)
-# through a `filesystem_mirror`; the function images pull through the LAN ghcr mirror (ADR-091,
-# plain http — the ARC dind daemon lists the VIP insecure, 29596cd9); the Crossplane engine image
-# is docker.io, which dockerd mirrors transparently. Docker IS required (render runs the functions
-# as containers) — the jail has none, the ARC runner and ci-runner-01 do.
-#
-# Cost (run 33726331917, ARC runner, 2026-09-03): 136s total — 130s on the FIRST fixture (the
-# fresh per-job dind daemon pulls two function images + the engine image; render + init +
-# validate themselves are seconds), then 2–4s per further fixture. That is why ci.yaml
-# skip-maps this step to PUBLICROUTE_PATHS instead of running it on every PR.
+# through a `filesystem_mirror`. DOCKER-FREE since 2026-10-10 (S9 #1985): the render runs the
+# pinned engine + function BINARIES pulled by digest through the LAN mirrors and hash-verified
+# (scripts/xr-render-lib.sh, shared with `devbox run xr-render`) — no daemon, no per-job image
+# pull (the dind shape cost ~130 s on the first fixture, run 33726331917), and it runs in the jail.
 #
 # Engine caveat: the cluster's provider-terraform v1.1.1 embeds Terraform 1.5.5; this gate
 # validates with OpenTofu. Provider SCHEMA checks are identical (same provider binary), and every
@@ -35,8 +30,7 @@
 # rejects would slip through — don't use tofu-only syntax in the Composition.
 #
 #   devbox run publicroute-tf-validate
-#   REGISTRY_MIRROR_GHCR=http://192.168.40.21   (default; the pod-only env-card contract)
-#   PUBLICROUTE_FUNCTION_REGISTRY=ghcr.io       (override: pull upstream, e.g. off-LAN)
+#   registry/cache env: see scripts/xr-render-lib.sh (REGISTRY_MIRROR_GHCR/_DOCKER_IO, XR_RENDER_UPSTREAM=1)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 
@@ -45,28 +39,19 @@ XRD=argocd/resources/publicroute/xrd.yaml
 FUNCTIONS=argocd/resources/crossplane/functions.yaml
 PROVIDERCONFIG=argocd/resources/crossplane/providerconfig.yaml
 FIXTURES=scripts/fixtures/publicroute
-mirror="${REGISTRY_MIRROR_GHCR:-http://192.168.40.21}"
-FN_REGISTRY="${PUBLICROUTE_FUNCTION_REGISTRY:-${mirror#*://}}"   # bare ref cannot carry a scheme
+# shellcheck source=scripts/xr-render-lib.sh
+. scripts/xr-render-lib.sh
 
-for tool in crossplane tofu yq docker; do
-  command -v "$tool" >/dev/null || { echo "publicroute-tf-validate: FAIL — '$tool' not on PATH (devbox.json / a docker daemon)" >&2; exit 1; }
+for tool in crossplane tofu yq jq curl; do
+  command -v "$tool" >/dev/null || { echo "publicroute-tf-validate: FAIL — '$tool' not on PATH (devbox.json)" >&2; exit 1; }
 done
-docker info >/dev/null 2>&1 || { echo "publicroute-tf-validate: FAIL — no reachable docker daemon (render runs the functions as containers)" >&2; exit 1; }
 
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)"; trap 'xr_stop; rm -rf "$work"' EXIT
 
 # ── the pins, each read from its one home ──────────────────────────────────────────────────────
-xp_ver_raw="$(yq -r '.spec.source.targetRevision' argocd/platform/crossplane.yaml)"
-xp_version="v${xp_ver_raw}"
-# By DIGEST, not the floating tag above (homelab#1739): a tag pull always revalidates live
-# against docker.io (mutable by definition) with no bounded mirror timeout, which intermittently
-# hung/timed out the render's 3m budget. Digest pulls are content-addressed — pure LAN-mirror
-# cache serve, no live check. Keyed by version so a bump with no matching annotation fails loud.
-# Keyed by the engine image TAG (v<chart version>) since 2026-10-04: Renovate's regex manager writes the
-# tag it looked the digest up for, and a bare-version key made that lookup fail ("Could not determine new
-# digest", #2228) — the chart bump then shipped alone and this gate went red with no path to green.
-xp_digest="$(yq -r ".metadata.annotations[\"crossplane.io/engine-image-digest.${xp_version}\"]" argocd/platform/crossplane.yaml)"
-[ -n "$xp_digest" ] && [ "$xp_digest" != "null" ] || { echo "publicroute-tf-validate: FAIL — no crossplane.io/engine-image-digest.${xp_version} annotation in argocd/platform/crossplane.yaml (homelab#1739 — the render must pull the crossplane engine by digest, never a floating tag). Resolve: crane digest docker.io/crossplane/crossplane:${xp_version}, add it as that annotation." >&2; exit 1; }
+# engine + functions: argocd/platform/crossplane.yaml + argocd/resources/crossplane/functions.yaml,
+# read and digest-fetched by xr_start (scripts/xr-render-lib.sh) — the same bytes the cluster runs.
+xr_start "$ROOT" "$work/xr" || exit 1
 cf_pin="$(yq -r '.spec.configuration' "$PROVIDERCONFIG" | awk '/cloudflare = \{/,/\}/' | sed -n 's/.*version *= *"\([^"]*\)".*/\1/p')"
 [ -n "$cf_pin" ] || { echo "publicroute-tf-validate: FAIL — no cloudflare provider version pin in $PROVIDERCONFIG (required_providers.cloudflare.version)" >&2; exit 1; }
 # the nix-packaged provider (devbox profile) — must be the SAME version the cluster pins, or the
@@ -75,14 +60,6 @@ prov_dir="$(ls -d "${DEVBOX_PACKAGES_DIR:?run via devbox}"/libexec/terraform-pro
 [ -n "$prov_dir" ] || { echo "publicroute-tf-validate: FAIL — terraform-providers.cloudflare_cloudflare not in the devbox profile" >&2; exit 1; }
 nix_ver="$(basename "$prov_dir")"
 [ "$nix_ver" = "$cf_pin" ] || { echo "publicroute-tf-validate: FAIL — ProviderConfig pins cloudflare $cf_pin but devbox.json ships $nix_ver; bump both together (one is what the cluster applies, the other is what this gate validates)" >&2; exit 1; }
-
-# ── functions manifest for render: same images/tags as the cluster, pulled via the LAN mirror ──
-# xpkg.crossplane.io fronts ghcr.io/crossplane-contrib; the mirror is a pull-through of ghcr, so
-# rewriting the host is all the redirection there is (kind-ci REGISTRY_MIRROR_GHCR pattern).
-yq "select(.kind == \"Function\")
-    | .spec.package |= sub(\"^xpkg.crossplane.io/\", \"${FN_REGISTRY}/\")
-    | .metadata.annotations[\"render.crossplane.io/runtime-docker-pull-policy\"] = \"IfNotPresent\"" \
-  "$FUNCTIONS" > "$work/functions.yaml"
 
 # ── tofu: provider from the nix filesystem mirror, no registry access ────────────────────────
 # OpenTofu resolves `cloudflare/cloudflare` to registry.opentofu.org; the nix layout is keyed by
@@ -100,11 +77,7 @@ provider_installation {
 EOF
 export TF_CLI_CONFIG_FILE="$work/tofu.rc" TF_IN_AUTOMATION=1
 
-render() { # <xr-file> <out-file>
-  crossplane composition render "$1" "$COMPOSITION" "$work/functions.yaml" \
-    --xrd "$XRD" --crossplane-image "docker.io/crossplane/crossplane@${xp_digest}" \
-    --timeout 3m > "$2" 2> "$2.err"
-}
+render() { xr_render "$1" "$COMPOSITION" "$XRD" "$2"; }   # <xr-file> <out-file>; stderr → <out-file>.err
 
 # Fixtures carry the XRD version they are written for (`*-v1alphaN-*`); only those matching the
 # Composition's compositeTypeRef run — render refuses a mismatch, and the legacy set stays on
@@ -113,7 +86,7 @@ render() { # <xr-file> <out-file>
 xr_version="$(yq -r '.spec.compositeTypeRef.apiVersion' "$COMPOSITION")"
 matches() { [ "$(yq -r '.apiVersion' "$1")" = "$xr_version" ]; }
 
-echo "publicroute-tf-validate: crossplane ${xp_version}, functions via ${FN_REGISTRY}, cloudflare provider ${cf_pin} (nix), XR ${xr_version}"
+echo "publicroute-tf-validate: crossplane ${XR_ENGINE_VERSION} + functions (digest-pinned binaries, docker-free), cloudflare provider ${cf_pin} (nix), XR ${xr_version}"
 validated=0
 for xr in "$FIXTURES"/*-xr.yaml; do
   name="$(basename "$xr" -xr.yaml)"

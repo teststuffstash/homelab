@@ -106,12 +106,28 @@ separately and roll back separately:
 
 | Layer | Pin | Bumped by | Rollback |
 |---|---|---|---|
-| Toolchain — `tofu`, `talosctl`, `ansible`, `openssl` | **`devbox.lock`** (committed, repo root) | the existing weekly [`devbox-update.yaml`](../.github/workflows/devbox-update.yaml) — one synchronized `@latest` re-resolve across repos, auto-merging CI-gated PR. ⚠ Renovate's nix/devbox manager stays disabled on purpose: `@latest` is untrackable ([`renovate.md`](renovate.md) §Gotchas encountered) | `git revert` the lock commit |
-| System closure — kernel, glibc, systemd | `mgmt/nixos/flake.lock` | the same git flow | a generation; automatic on a never-boots, see Rollback |
+| Toolchain — `tofu`, `talosctl`, `helm`, `ansible` (and the jail's everything) | **`devbox.lock`** (committed, repo root) | the existing weekly [`devbox-update.yaml`](../.github/workflows/devbox-update.yaml) — one synchronized `@latest` re-resolve across repos, auto-merging CI-gated PR. ⚠ Renovate's nix/devbox manager stays disabled on purpose: `@latest` is untrackable ([`renovate.md`](renovate.md) §Gotchas encountered) | `git revert` the lock commit |
+| System closure — kernel, glibc, systemd **+ the loops' own tools** (`yq`, `kubectl`, `jq`, `curl`, `openssl`, `awscli2` — `boxTools`) | `mgmt/nixos/flake.lock` | ⚠ nobody yet — class 13 in [`dependency-classes.yaml`](dependency-classes.yaml) (FU-305) | a generation; automatic on a never-boots, see Rollback |
 
-This is why the box runs its tools through `devbox run` from a checkout of this repo rather than
-from the system closure: **one toolchain pin for the jail and the box**, which is the whole
-argument for `devbox.lock` being the pin, and it keeps the system closure tiny.
+**The gate's machinery never runs from master's devbox (FU-305, operator order 2026-10-10).** The
+pilot ran every tool through `devbox run` from a checkout — "one toolchain pin for the jail and the
+box". That made master's `devbox.lock` a single point of failure for the gate itself: on 2026-10-07
+a Python bump's venv prompt failed every `devbox run yq`, the sentinel posted nothing, and every PR
+— the fix included — sat BLOCKED on its required `management-sentinel` check; the 2026-10-10 lock
+drill found the same wedge for the revert PR. The split now, per tool
+([`mgmt/scripts/mgmt-tools.sh`](../mgmt/scripts/mgmt-tools.sh) is the one home):
+
+| Tool | Comes from, on the box | Why |
+|---|---|---|
+| `yq`, `kubectl`, `jq`, `curl`, `openssl`, `git`, `awscli2`, `ssh`, coreutils … | the box's closure (`boxTools`, on every loop unit's `path`) — `mgmt_x` | gate machinery: must not depend on any tree it reads; a missing one fails LOUD (`MGMT_BOX=1`), never a silent devbox fallback |
+| `tofu`, `talosctl`, `helm` | the `devbox.lock` of the tree the loop ACTS from (its own master clone), read as **data**: the store path / `NixOS/nixpkgs@<rev>` entry, shape-validated, realised by nix from the signed cache — `mgmt_tree_path` | the version IS part of the change (tofu's state format, the Talos client↔cluster minor, helm 4 vs 3). devbox never runs: no `devbox.json`, no init_hook, no venv. A PR head's `devbox.lock` is never read |
+| tofu **providers** | the planned tree's `.terraform.lock.hcl` — the PR head's for the sentinel | the provider-pin gate (§MB3) plans the head's providers, unchanged |
+| `ansible` (+ its python) | `devbox run` — the belt's `check_ansible` and the weekly rebuild drill only | report-only: a bad lock costs one red belt check, never a wedged gate |
+
+In the jail every tool still resolves from the devbox shell's PATH (a missing one falls back to
+`devbox run`), so the same scripts run in both places. `mgmt-tools-test` (part of
+`mgmt-policy-test`) drives the sentinel's no-plan path with a poisoned `devbox` first on PATH and
+lints the box scripts + loop units for any `devbox run`.
 
 ## The update loop: pull, and the cluster may poke
 
@@ -307,10 +323,10 @@ pinned to `homelab-sentinel`'s integration id in `tofu/github/repo_rulesets.tf`,
 no-root poster in the same change; (5) the doorbell.
 
 **The execution surface, precisely** (the #1619 review finding): stage 1 judges only the tofu
-tree, so stage 2 must execute NOTHING else from the head — `devbox run` resolves `devbox.json`
-(whose `init_hook` runs) from its cwd, so every tool call runs from the loop's OWN clone reset to
-`origin/master`, tofu is pointed at the worktree by absolute `-chdir`, and the state-env script is
-master's copy. A PR's `devbox.json`, `scripts/`, hooks — never executed. The policy also denies
+tree, so stage 2 must execute NOTHING else from the head — every tool call runs from the loop's
+OWN clone reset to `origin/master` (tofu as that clone's `devbox.lock` pins it, read as data —
+§Two pins), tofu is pointed at the worktree by absolute `-chdir`, and the state-env script is
+master's copy. A PR's `devbox.json`/`devbox.lock`, `scripts/`, hooks — never executed or read. The policy also denies
 the JSON/auto variants of tfvars and config (`*.tfvars.json`, `*.auto.tfvars*`, `*.tf.json`)
 and remote module sources (init would fetch them) — and, since the #1635 review, **new
 `kubernetes_*` data sources and `import` blocks**: a plan READS what those name with the root's
@@ -619,7 +635,11 @@ window make both records worthless, and a second release would need its own leas
    The evidence rules compare after against before: every release `deployed`; the applied release
    rolled (observed = generation, ready = updated = desired) with every pod Ready; BGP established ≥
    before; no Longhorn volume newly faulted or more degraded; Healthy Applications ≥ before and none
-   newly Degraded/Missing. **Good** → lease deleted, window closed, `management-apply` success
+   newly Degraded/Missing. The compare's NEW-alert line counts only names in the roll's cone
+   (`Kube*`, `Cilium*`, `Longhorn*`, `ArgoCD*`, `Etcd*`, `CoreDNS*`, `Prometheus*`, `Alertmanager*`,
+   `TargetDown`, plus the window's declared names); any other new alert is recorded as "noted" and
+   left to the responder — drill 1 (2026-10-10, argocd-apps 2.0.6) stopped a clean roll on
+   `GithubRateLimitLow`, GitHub's API quota. A static scope, not a diagnosis. **Good** → lease deleted, window closed, `management-apply` success
    "helm verdict clean". **Bad** (or an errored apply) → **STOP**: the lease and the window are KEPT,
    `/var/lib/mgmt/apply/helm-stopped` refuses every later helm apply, `mgmt_apply_helm_stopped` →
    **`MgmtHelmApplyStopped`** (critical, triage none — no agent acts on a substrate failure). The sha
@@ -1146,8 +1166,10 @@ locally and logs the would-be push + PR. Activation after the merge is the §Two
    no BMC and no PiKVM nobody can pick a previous entry remotely. Accepted limit of the pilot; it
    is also the strongest argument for the permanent box being UEFI with vPro. Do kernel-class
    bumps while someone can reach the power button.
-3. **A tool version is wrong for the fleet** → `git revert` the `devbox.lock` commit; the next pull
-   returns the old version.
+3. **A tool version is wrong for the fleet** → `git revert` the `devbox.lock` commit (tofu/talosctl/
+   helm) or the `mgmt/nixos/flake.lock` commit (the loops' own tools); the next tick / pull returns
+   the old version. The revert itself can always merge: the sentinel's verdict on a lock-only head
+   needs no tool from the reverted lock (§Two pins).
 
 ⚠ **The one asymmetry: tofu state format.** A newer `tofu` can write a state version an older
 binary refuses to read — **general OpenTofu behaviour, NOT verified against our pin and recorded
