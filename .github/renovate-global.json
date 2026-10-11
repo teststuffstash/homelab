@@ -94,7 +94,7 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
-      "description": "npm packages via the `deno` manager — homelab's only JS surface is scripts/mermaid-lint (deno.json imports + deno.lock: mermaid + linkedom, the docs' mermaid parser; ADR-143 retired its package.json/npm lane 2026-09-29). CI-only dev tooling exercised by required `ci` on every PR (the parse, run with NO Deno permissions). `lock-intake-lint` (ADR-143, a `ci` step) fails any lockfile change bringing in an OSV-flagged, <7-day-old or install-script package version — transitive ones included, which Renovate's osvVulnerabilityAlerts (direct deps only) and minimumReleaseAge (the bumped dep only) never see. Renovate's `deno install --frozen=false` honours deno.json's minimumDependencyAge, so the regenerated lock is floored too. Patch/minor → mechanical automerge; majors → the catch-all. `npm` stays in the list for stack repos that still carry a package.json.",
+      "description": "npm packages via the `deno` manager — homelab's only JS surface is scripts/mermaid-lint (deno.json imports + deno.lock: mermaid + linkedom, the docs' mermaid parser; ADR-143 retired its package.json/npm lane 2026-09-29). CI-only dev tooling exercised by required `ci` on every PR (the parse, run with NO Deno permissions). `lock-intake-lint` (ADR-143, a `ci` step) fails any lockfile change bringing in an OSV-flagged, <7-day-old or install-script package version — transitive ones included, which Renovate's osvVulnerabilityAlerts (direct deps only) and minimumReleaseAge (the bumped dep only) never see. Renovate's `deno install --frozen=false` honours deno.json's minimumDependencyAge, so the regenerated lock is floored too. Patch/minor → mechanical automerge; majors → the two deno rules after the graduated-Actions one (mermaid mechanical since 2026-10-11, the rest un-armed `major`). `npm` stays in the list for stack repos that still carry a package.json.",
       "matchManagers": ["npm", "deno"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
       "addLabels": ["automerge"],
@@ -220,9 +220,9 @@
       "automerge": true
     },
     {
-      "description": "EVERY major bump (all repos, all managers) carries `major` — the MIGRATION LENS marker (semver decides whether the lens runs: the reviewer does upstream research + known issues + platform compatibility before any verdict). The LANE is decided by BLAST CLASS (S9 homelab#1985, 2026-09-25): by default a major is NOT armed = the HUMAN-GATED coordinator lane (investigate while red, worker adapts if in-budget, agents/major-handoff.sh → a human merges — docs/agents/merge-path.md §Reflexes vs judgment; un-armed = invisible to the review reflex, coordinator-scan owns it). GitHub Actions are excluded (`!github-actions`): they ride the grouped mechanical lane above until a dependency graduates into the rule after this one. Order matters: the last matching rule's automerge wins, addLabels merge.",
+      "description": "EVERY major bump (all repos, all managers) carries `major` — the MIGRATION LENS marker (semver decides whether the lens runs: the reviewer does upstream research + known issues + platform compatibility before any verdict). The LANE is decided by BLAST CLASS (S9 homelab#1985, 2026-09-25): by default a major is NOT armed = the HUMAN-GATED coordinator lane (investigate while red, worker adapts if in-budget, agents/major-handoff.sh → a human merges — docs/agents/merge-path.md §Reflexes vs judgment; un-armed = invisible to the review reflex, coordinator-scan owns it). GitHub Actions are excluded (`!github-actions`): they ride the grouped mechanical lane above until a dependency graduates into the rule after this one. The `deno` manager is excluded too (`!deno`, 2026-10-11): its majors are split by the two deno rules after the graduated-Actions one (mermaid → the mechanical lane; the residue → this same un-armed `major` shape, restated there). Order matters: the last matching rule's automerge wins, addLabels merge.",
       "matchUpdateTypes": ["major"],
-      "matchManagers": ["!github-actions"],
+      "matchManagers": ["!github-actions", "!deno"],
       "addLabels": ["major"],
       "automerge": false
     },
@@ -234,6 +234,23 @@
       "addLabels": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true
+    },
+    {
+      "description": "mermaid MAJORS (class 12, the `deno` manager — docs/dependency-upgrades.md) ride the mechanical `automerge` lane, no `major` label, no lens (operator 2026-10-11 on homelab#2100, mermaid 11→12: 'should merge without me — here CI is the only gate needed'). The Actions reasoning (ADR-141 amended) holds verbatim: mermaid is CI-only dev tooling with no runtime consumer, and the required `ci` check's `Mermaid parse lint (devbox run mermaid-lint)` step — selected by scripts/diff-ci.sh whenever `scripts/mermaid-lint/**` or any .md changes, so on EVERY Renovate PR of this dependency — parses every tracked ```mermaid block with the BUMPED parser on the PR head; `lock-intake-lint` (ADR-143) judges the regenerated deno.lock in the same run. A red major is the migration finding itself, in the PR, with nothing a human adds to a green one (#2100 sat two days APPROVED on a human-only label). The catch-all above excludes `!deno` so this rule's branch is born without `major` (the renovate-approve reflex refuses that label; addLabels union and nothing removes one). GRADUATES like an Action: the first evidence a human should care (a red mermaid major whose fix is not a parser-input adaptation, a review filing a follow-up) moves it to the lens-reviewed shape by deleting this rule — the residue rule below then catches it. `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human (#2100 sat BEHIND under the org default `conflicted`).",
+      "matchManagers": ["deno"],
+      "matchPackageNames": ["mermaid"],
+      "matchUpdateTypes": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
+      "description": "deno-manager majors OTHER than mermaid (today: linkedom, the parser's DOM shim) — the `major` catch-all's shape restated, because that rule excludes `!deno` for the mermaid rule above: un-armed, `major`, the coordinator's human-gated lane. Fail-closed by construction: a new deno dependency's major lands here, never in the mechanical lane, until a ruling names it (one `matchPackageNames` entry in the rule above).",
+      "matchManagers": ["deno"],
+      "matchPackageNames": ["!mermaid"],
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["major"],
+      "automerge": false
     },
     {
       "description": "Deployment IMAGE tags in tofu — the docker datasource under the terraform manager (`image = \"<ref>\"` on a kubernetes_deployment) — are ARMED at every update type (ADR-141 amended 2026-09-28, #1988's class row; drilled the same day): non-majors already ride the terraform `automerge` rule above; a MAJOR keeps `major` from the catch-all (this rule only arms it, no `automerge` label) so the migration lens reviews it and its APPROVED completes the merge — the Actions pattern. The management box applies the merge (kubernetes_deployment.* is allowlisted), the tofu-image-revert chain (agents/coordinator/deploy-revert-argo.yaml) reverts a stuck rollout, and scripts/pin-only-lint.sh check (f) refuses the re-proposal for 30 days. Precondition per Deployment: the ADR-140 shape (2 replicas, zero-unavailable rollout, PDB) — an RWO singleton never enters this lane, which is why the rule is scoped by datasource, not by file. `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human.",
