@@ -285,11 +285,11 @@ cvol() {  # <name> <replicas|null> <state> [<pvc>] → one volume on the OLD eng
     status:({currentImage:"longhornio/longhorn-engine:v1.12.0", state:$s, robustness:(if $s == "attached" then "healthy" else "unknown" end)}
       + (if $p == "" then {} else {kubernetesStatus:{namespace:"garage", pvcName:$p}} end))}'
 }
-#   the refusal rule alone: 1-replica attached → refused; unreadable count attached → refused; 1-replica
-#   DETACHED → not refused (offline move); 2 replicas attached → not refused
+#   the refusal rule alone (narrowed 2026-10-11): an unreadable count attached → refused; 1-replica
+#   attached → NOT refused any more (the hold, fixture 10h); 1-replica DETACHED → not refused (offline
+#   move); 2 replicas attached → not refused
 { cvol a1 1 attached; cvol a2 null attached; cvol d1 1 detached; cvol m2 2 attached; } | pods >"$T/rv.json"
-eq refusals "a1	1-replica attached: attended engine move required
-a2	replica count unreadable attached: attended engine move required" "$(lh_engine_refusals "$T/rv.json" longhornio/longhorn-engine:v1.12.1)"
+eq refusals "a2	replica count unreadable attached: attended engine move required" "$(lh_engine_refusals "$T/rv.json" longhornio/longhorn-engine:v1.12.1)"
 _hk() {
   echo "k $*" >>"$T/calls"
   case "$*" in
@@ -335,17 +335,18 @@ eq consumer-healthy-soak 1 "$(grep -c '^consumer-ok meta-garage-1: garage/meta-g
 ccase notready-recovers 0 "$T/p-ok.json" "$T/p-notready.json" "$T/p-notready.json" "$T/p-ok.json"
 ccase notready-forever 2 "$T/p-ok.json" "$T/p-notready.json"
 eq consumer-notready-bound 1 "$(grep -c 'not whole within 900s — pod garage-1 not Ready' "$T/c-notready-forever/engines.log")"
-# (10g) 1-replica attached (the real meta-garage-1) → REFUSED, NOTHING patched — and through helm_end the
+# (10g) an UNREADABLE replica count, attached → REFUSED, NOTHING patched — and through helm_end the
 #       refusal takes the same STOP path as every other: marker written naming it, lease + window kept
-{ cvol meta-garage-1 1 attached meta-garage-1; cvol std-1 3 attached; } | pods >"$T/c-vols.json"
+#       (until 2026-10-11 this was the 1-replica shape too; that one holds now — fixture 10h)
+{ cvol meta-garage-1 null attached meta-garage-1; cvol std-1 3 attached; } | pods >"$T/c-vols.json"
 d="$T/c-refuse"; mkdir -p "$d"; : >"$T/calls"; echo 0 >"$CLOCK"; rm -f "$ADIR/helm-stopped"
 printf 'longhorn\tlonghorn\tlonghorn-system\tabc\t1.12.1\t1.12.1\tengines\n' >"$d/meta.tsv"
 printf 'w-eng' >"$d/window-id"; printf 'upgrade-lease-tofu-helm-longhorn' >"$d/lease-name"; printf 0 >"$d/box-verdict-before.rc"; printf '1970-01-02T00:00:00Z' >"$d/max-end"
 printf '%s\n' "$T/p-ok.json" >"$T/podseq"
 helm_end "$d" 0 fast,none,bulk,std >/dev/null 2>&1; eq refuse-stop-rc 2 "$?"
 eq refuse-nothing-patched 0 "$(grep -c 'patch volumes.longhorn.io' "$T/calls")"
-eq refuse-line 1 "$(grep -c '^REFUSE meta-garage-1: 1-replica attached: attended engine move required' "$d/engines.log")"
-eq refuse-marker 1 "$(grep -c 'engines: REFUSE meta-garage-1: 1-replica attached' "$ADIR/helm-stopped")"
+eq refuse-line 1 "$(grep -c '^REFUSE meta-garage-1: replica count unreadable attached: attended engine move required' "$d/engines.log")"
+eq refuse-marker 1 "$(grep -c 'engines: REFUSE meta-garage-1: replica count unreadable attached' "$ADIR/helm-stopped")"
 eq refuse-lease-kept 0 "$(grep -c 'delete cm' "$T/calls")"
 eq refuse-window-kept 0 "$(grep -c '^win close' "$T/calls")"
 #       and the consumer FAIL through helm_end likewise lands in the marker (the meta-garage-1 shape)
@@ -356,6 +357,103 @@ printf '%s\n' "$T/p-ok.json" "$T/p-cce.json" >"$T/podseq"
 helm_end "$d" 0 fast,none,bulk,std >/dev/null 2>&1; eq consumer-end-stop-rc 2 "$?"
 eq consumer-end-marker 1 "$(grep -c 'engines: FAIL meta-garage-1 (none, attached): consumer of garage/meta-garage-1 broke after the move — pod garage-1 container waiting CreateContainerError' "$ADIR/helm-stopped")"
 eq consumer-end-lease-kept 0 "$(grep -c 'delete cm' "$T/calls")"
+
+# (10h) the OFFLINE move — the HOLD (2026-10-11; the garage-1 recovery the seat ran by hand, step for step).
+#       A readable 1-replica ATTACHED volume is not refused: the box cordons the replica's node, deletes the
+#       consumer pod(s), waits `detached` while no replacement lands elsewhere, patches EVERY plan volume
+#       the held pod mounted (garage-1: data + meta in ONE hold), uncordons on every path after the cordon,
+#       and waits the replacement whole (as many pods as held, Ready, no restart, no crash/create error,
+#       120 s soak, 900 s bound). Plan order puts data-garage-1 first (rank none, by name) — it is the
+#       held volume, meta-garage-1 its sibling, std-1 (3 replicas) moves live after.
+pjn() {  # <name> <uid> <node|-> <ready> <restarts> [<waiting>] → the garage-1 shape: owned, mounts meta + data
+  pj "$1" "$2" "$4" "$5" "${6:-}" | jq --arg n "$3" '.metadata.ownerReferences = [{kind:"StatefulSet", name:"garage"}]
+    | .spec.volumes += [{name:"data", persistentVolumeClaim:{claimName:"data-garage-1"}}]
+    | if $n == "-" then . else .spec.nodeName = $n end'
+}
+pjn garage-1 u1 m70s true 0 | pods >"$T/p-h-base.json"
+pjn garage-1 u2 - false 0 | pods >"$T/p-h-pending.json"
+pjn garage-1 u2 wk-metal-01 false 0 | pods >"$T/p-h-elsewhere.json"
+pjn garage-1 u2 m70s true 0 | pods >"$T/p-h-new-ok.json"
+pjn garage-1 u2 m70s false 0 CrashLoopBackOff | pods >"$T/p-h-new-crash.json"
+pjn garage-1 u1 m70s true 0 | jq '.metadata.ownerReferences = []' | pods >"$T/p-h-unowned.json"
+hvols() {  # <state of the garage volumes> → the plan's volume list (both garage volumes on m70s + std-1)
+  { cvol data-garage-1 1 "$1" data-garage-1 | jq '.status.currentNodeID = "m70s"'
+    cvol meta-garage-1 1 "$1" meta-garage-1 | jq '.status.currentNodeID = "m70s"'
+    cvol std-1 3 attached | jq '.spec.diskSelector = ["std"]'; } | pods
+}
+hvols attached >"$T/h-vols.json"; hvols detached >"$T/h-vols-detached.json"
+HOLD_NODE_CORDONED=false
+_hk() {
+  echo "k $*" >>"$T/calls"
+  case "$*" in
+    *"get ds longhorn-manager"*) cat "$T/eng-ds.json" ;;
+    *"get engineimages.longhorn.io"*) echo '{"items":[{"spec":{"image":"longhornio/longhorn-engine:v1.12.1"},"status":{"state":"deployed"}}]}' ;;
+    *"get volumes.longhorn.io -o json"*) if [ -e "$T/held" ]; then cat "$T/h-vols-detached.json"; else cat "$T/h-vols.json"; fi ;;
+    *"get pods -o json"*) local f; f="$(head -1 "$T/podseq")"; [ "$(wc -l <"$T/podseq")" -gt 1 ] && sed -i 1d "$T/podseq"; cat "$f" ;;
+    *"get node m70s -o jsonpath"*) echo -n "$HOLD_NODE_CORDONED" ;;
+    *"delete pod "*) touch "$T/held" ;;
+    *"cordon m70s"*|*"patch volumes.longhorn.io"*|*"patch cm upgrade-lease-"*) return 0 ;;
+    *"-o jsonpath={.status.state}"*) local f="$T/stateseq"; local line; line="$(head -1 "$f")"; [ "$(wc -l <"$f")" -gt 1 ] && sed -i 1d "$f"; echo -n "$line" ;;
+    *"get volumes.longhorn.io "*" -o jsonpath"*) echo -n "longhornio/longhorn-engine:v1.12.1|healthy" ;;   # every patched volume converges at its first read
+    *"get cm upgrade-lease-"*) echo "(NotFound)"; return 1 ;;
+  esac
+  return 0
+}
+hcase() {  # <name> <want-rc> <state reads, csv (the last repeats)> <pod files, in read order (the last repeats)>
+  local n="$1" w="$2" d="$T/h-$1" states="$3"; shift 3; mkdir -p "$d"; : >"$T/calls"; echo 0 >"$CLOCK"; rm -f "$T/held"
+  printf 'upgrade-lease-tofu-helm-longhorn' >"$d/lease-name"; printf 'w-eng' >"$d/window-id"; printf '1970-01-02T00:00:00Z' >"$d/max-end"
+  tr ',' '\n' <<<"$states" >"$T/stateseq"
+  printf '%s\n' "$@" >"$T/podseq"
+  helm_lh_engines "$d" longhorn-system fast,none,bulk,std; eq "hold-$n-rc" "$w" "$?"
+}
+callno() { grep -n -- "$1" "$T/calls" | head -1 | cut -d: -f1; }
+# (10h-a) the happy path: cordon → delete → detached at the second read (10 s) → BOTH garage volumes patched
+#         once each → uncordon → the replacement Ready for 120 s → std-1 moves live after; meta-garage-1 is
+#         skipped at its own turn (engines.done lists the hold-moved volumes only)
+hcase ok 0 attached,detached "$T/p-h-base.json" "$T/p-h-pending.json" "$T/p-h-new-ok.json"
+eq hold-ok-lines "ok data-garage-1;ok meta-garage-1;ok std-1;" "$(grep -oE '^(ok  |FAIL) [a-z0-9-]+' "$T/h-ok/engines.log" | tr -s ' ' | tr '\n' ';')"
+eq hold-ok-one-patch-each "1 1 1" "$(for v in data-garage-1 meta-garage-1 std-1; do grep -c "patch volumes.longhorn.io $v " "$T/calls"; done | tr '\n' ' ' | sed 's/ $//')"
+eq hold-ok-one-cordon 1 "$(grep -c '^k cordon m70s' "$T/calls")"
+eq hold-ok-one-uncordon 1 "$(grep -c '^k uncordon m70s' "$T/calls")"
+eq hold-ok-one-delete 1 "$(grep -c '^k -n garage delete pod garage-1 --wait=false' "$T/calls")"
+eq hold-ok-order yes "$([ "$(callno '^k cordon m70s')" -lt "$(callno 'delete pod garage-1')" ] && [ "$(callno 'delete pod garage-1')" -lt "$(callno 'patch volumes.longhorn.io data-garage-1')" ] && [ "$(callno 'patch volumes.longhorn.io meta-garage-1')" -lt "$(callno '^k uncordon m70s')" ] && [ "$(callno '^k uncordon m70s')" -lt "$(callno 'patch volumes.longhorn.io std-1')" ] && echo yes)"
+eq hold-ok-detached-line 1 "$(grep -c '^hold data-garage-1: detached 10s after the delete' "$T/h-ok/engines.log")"
+eq hold-ok-sibling-line 1 "$(grep -c '^ok   meta-garage-1 (none, offline — held garage-1) → longhornio/longhorn-engine:v1.12.1 \[detached, healthy\]' "$T/h-ok/engines.log")"
+eq hold-ok-release-line 1 "$(grep -c '^consumer-ok data-garage-1: garage/data-garage-1 — 1 replacement pod(s) whole for 120s after the release' "$T/h-ok/engines.log")"
+eq hold-ok-done "data-garage-1 meta-garage-1" "$(tr '\n' ' ' <"$T/h-ok/engines.done" | sed 's/ $//')"
+# (10h-b) the replacement lands on ANOTHER node (the workload is not zone-pinned) → hold released
+#         (uncordon), NOTHING patched, FAIL naming the pod and node, std-1 untouched
+hcase elsewhere 2 attached "$T/p-h-base.json" "$T/p-h-elsewhere.json"
+eq hold-elsewhere-line 1 "$(grep -c '^FAIL data-garage-1 (none, attached): replacement pod garage-1 on wk-metal-01 — the consumer is not pinned to m70s'"'"'s zone; hold released (uncordoned), nothing patched; attended' "$T/h-elsewhere/engines.log")"
+eq hold-elsewhere-no-patch 0 "$(grep -c 'patch volumes.longhorn.io' "$T/calls")"
+eq hold-elsewhere-uncordon 1 "$(grep -c '^k uncordon m70s' "$T/calls")"
+# (10h-c) never detaches → FAIL at the 300 s bound, released, nothing patched
+hcase stuck 2 attached "$T/p-h-base.json" "$T/p-h-pending.json"
+eq hold-stuck-line 1 "$(grep -c '^FAIL data-garage-1 (none, attached): not detached within 300s (state attached) — hold released (uncordoned), nothing patched' "$T/h-stuck/engines.log")"
+eq hold-stuck-uncordon 1 "$(grep -c '^k uncordon m70s' "$T/calls")"
+eq hold-stuck-no-patch 0 "$(grep -c 'patch volumes.longhorn.io' "$T/calls")"
+# (10h-d) the node is ALREADY cordoned (someone else's hold) → FAIL before any action: no cordon, no delete
+HOLD_NODE_CORDONED=true
+hcase cordoned 2 attached "$T/p-h-base.json"
+eq hold-cordoned-line 1 "$(grep -c '^FAIL data-garage-1 (none, attached): m70s is already cordoned — someone else'"'"'s hold; not touched' "$T/h-cordoned/engines.log")"
+eq hold-cordoned-no-action 0 "$(grep -c 'cordon m70s\|delete pod\|patch volumes' "$T/calls")"
+HOLD_NODE_CORDONED=false
+# (10h-e) the release goes wrong: the replacement comes up CrashLoopBackOff → FAIL after the uncordon,
+#         both garage volumes patched (the engine moved; the consumer did not come back), std-1 untouched
+hcase crash 2 attached,detached "$T/p-h-base.json" "$T/p-h-pending.json" "$T/p-h-new-crash.json"
+eq hold-crash-line 1 "$(grep -c '^FAIL data-garage-1 (none, offline): consumer of garage/data-garage-1 broke after the release — pod garage-1 container waiting CrashLoopBackOff' "$T/h-crash/engines.log")"
+eq hold-crash-patched "1 1 0" "$(for v in data-garage-1 meta-garage-1 std-1; do grep -c "patch volumes.longhorn.io $v " "$T/calls"; done | tr '\n' ' ' | sed 's/ $//')"
+eq hold-crash-uncordon 1 "$(grep -c '^k uncordon m70s' "$T/calls")"
+# (10h-f) a consumer pod nobody owns (nothing would recreate it) → FAIL, no cordon
+hcase unowned 2 attached "$T/p-h-unowned.json"
+eq hold-unowned-line 1 "$(grep -c '^FAIL data-garage-1 (none, attached): consumer pod garage-1 has no controller' "$T/h-unowned/engines.log")"
+eq hold-unowned-no-action 0 "$(grep -c 'cordon m70s\|delete pod\|patch volumes' "$T/calls")"
+# (10h-g) 1-replica attached with NO consumer pod on record (a UI/API attachment) → FAIL, attended
+hcase noconsumer 2 attached "$T/p-gone.json"
+eq hold-noconsumer-line 1 "$(grep -c '^FAIL data-garage-1 (none, attached): 1-replica attached without a consumer pod on record — attended' "$T/h-noconsumer/engines.log")"
+eq hold-noconsumer-no-action 0 "$(grep -c 'cordon m70s\|delete pod\|patch volumes' "$T/calls")"
+# the hold bound is a contract value (stated in mgmt-helm.sh)
+eq hold-timeout-default 300 "$HELM_HOLD_TIMEOUT"
 
 echo "mgmt-helm-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

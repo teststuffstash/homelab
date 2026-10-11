@@ -654,14 +654,30 @@ window make both records worthless, and a second release would need its own leas
    (`HELM_CONSUMER_SOAK`); a restart, a replaced or vanished pod, or a container waiting in
    `CreateContainerError`/`CrashLoopBackOff`/`RunContainerError` is an immediate STOP before the next move,
    and NotReady is waited up to 15 min (`HELM_CONSUMER_TIMEOUT`), reads only. The FAIL line names the
-   volume and the pod. **A 1-replica attached volume is REFUSED** (`REFUSE <vol>: 1-replica attached:
-   attended engine move required`, an unreadable replica count likewise): the check runs on the whole
-   plan BEFORE the first patch, so nothing moves while the set holds one, and the run STOPs through the
-   ordinary path (marker, lease and window kept, `MgmtHelmApplyStopped`). No second replica carries the
-   frontend through a live move, and that is the shape that broke. We chose this refusal over "move them
-   last" because it is the conservative reading of the 2026-10-02 substrate ruling. The attended path:
-   move those volumes offline (consumer stopped, detach, patch, reattach), then clear the stop. A
-   DETACHED 1-replica volume moves offline anyway and is not refused.
+   volume and the pod. **A 1-replica attached volume is never moved live — the box moves it OFFLINE
+   through a HOLD** (`helm_lh_offline_move`, 2026-10-11; until then it was refused — "attended engine
+   move required" — the conservative reading of the 2026-10-02 ruling, replaced by the operator's
+   direction that the box and ArgoCD do these on their own). No second replica carries the frontend
+   through a live move, and that is the shape that broke twice. The hold is the recovery the seat ran
+   by hand on garage-1, step for step: **cordon the replica's node → delete the pod(s) mounting the PVC
+   → wait `detached` (≤ 5 min, `HELM_HOLD_TIMEOUT`) → patch → uncordon → wait the replacement whole.**
+   It works because every 1-replica consumer here is zone-pinned — the garage StatefulSet and the CNPG
+   clusters carry a *required* pod anti-affinity on `topology.kubernetes.io/zone` and each zone is one
+   node — so the replacement pod has nowhere to schedule while the node is cordoned, and the kube
+   attach/detach controller releases the volume (garage-1: detached 10 s after the delete, Ready 33 s
+   after the uncordon). The hold never touches the workload object (no scale, no spec patch): ArgoCD
+   sees nothing to self-heal, and a pod delete is the restart its controller handles anyway (a CNPG
+   primary fails over). Siblings move together: every plan volume the held pod mounted (garage's data +
+   meta) is patched inside the one hold, and skipped at its own turn. Preconditions, each a FAIL with
+   nothing touched: a consumer pod with no controller, a pod not on the replica's node, no consumer pod
+   on record (a UI/API attachment), the node already cordoned (someone else's hold). Two aborts
+   RELEASE the hold (uncordon) with nothing patched: a replacement pod scheduled on another node (the
+   workload is not pinned — attended), or no `detached` inside the bound. After the patch the uncordon
+   runs on every path, then the release wait: as many pods mounting the PVC as were held, all Ready, no
+   restart, no crash/create error, for the 2-min soak, bounded at 15 min — a FAIL there is the pod
+   named, the engine already moved. An unreadable replica count is still REFUSED before the first
+   patch (`REFUSE <vol>: replica count unreadable attached`) — the box cannot tell live from offline. A
+   DETACHED 1-replica volume moves offline without a hold, as it always did.
    **The moves run in their OWN bracket and unit** (since 2026-10-10 night — the first run held the apply
    tick for hours and hit the unit's 5 h cap): the apply tick only notices v1 volumes off the manager's
    engine and `systemctl start --no-block mgmt-helm-engines.service` (`mgmt/scripts/mgmt-helm-engines.sh`,
@@ -720,9 +736,19 @@ detail):
   per-move check read only Longhorn's `currentImage`/robustness, so the box kept moving the remaining
   volumes and noticed only at the final verdict (STOPPED 00:23Z 10-11, argocd Healthy 80 → 79, garage
   Progressing). The replica dir was reused (data on disk; a frontend/engine fault, not an empty replica).
-  The recovery is the operator's. Result: the per-move consumer check and the 1-replica-attached
-  refusal (this section, item 4). Record: the run's `s3://helm-evidence/` entry; live state in
-  [`agents/meta-state.md`](agents/meta-state.md).
+  **Read of the fault** (the engine instance-manager log on m70s): the live upgrade replaced the engine
+  process at 21:03:13Z (`InstanceReplace`, "Upgrading frontend" over the volume's unix data socket with
+  the OLD replica process as its only backend), the old replica process was shut down at 21:03:43Z and
+  the old engine hung up — the one-replica live move has no second backend to carry the frontend across
+  that hand-off, and the frontend came out serving ENODATA. **Recovery (seat, 2026-10-11 06:30Z, window
+  `m70s-1791700208-1245`):** cordon m70s + delete the stuck pod → both garage-1 volumes `detached` in
+  10 s (the replacement pod Pending, unschedulable: required zone anti-affinity, one node per zone) → a
+  manual `longhorn-api` attachment ticket + `blkid` and `xfs_repair -n` through the CSI plugin pod on
+  m70s: both XFS superblocks intact, the meta filesystem clean (the kubelet's `mkfs.xfs` attempts had
+  failed on the first write and overwritten nothing) → ticket removed, uncordon → garage-1 Ready 33 s
+  later, `garage status` 3/3 healthy, resync queue draining. Result: the per-move consumer check
+  (#2490), and the HOLD — the box's offline move of a 1-replica attached volume, item 4 (the refusal
+  #2490 added stood for one night). Record: the run's `s3://helm-evidence/` entry.
 
 ### The box verdict — the box's own read of the cluster (FU-302, 2026-10-10)
 
@@ -803,6 +829,7 @@ even when every check is green.
 | ci-runner VM replace (`runner-maintenance`) | human | not yet tested | attended verb only — §Non-Talos VMs below |
 | Helm release apply, argo-cd + argocd-apps (`apply_helm`, forward only — §Helm release applies) | policy rows (operator, #2450) | 2026-10-10 | argocd-apps 2.0.6 (#2458): applied, STOPPED on an out-of-cone alert (→ #2459, then the FU-302 swap #2474); argo-cd 9.5.22 (#2461): 7/7 rolled, CONFIRMED (verdict half finished by hand after an activation killed the tick → #2466); **argo-cd 9.7.1 (#2464, Renovate): unattended end to end, CONFIRMED 17:30Z**. Records `s3://helm-evidence/` |
 | Helm release apply, longhorn (restore point + ordered engine moves) | policy row (#2467) | 2026-10-10 (STOP path) | longhorn 1.12.1 (#2463, Renovate): restore point (3 Backups + 4 CNPG) → chart applied, 12/12 pods rolled, BGP/ArgoCD/robustness clean → the FIRST engine move (`meta-garage-2`, 1 replica, attached) never left v1.12.0 in 900 s (replica `bind: address already in use` on its unix socket) → **STOPPED**, nothing reverted; Longhorn converged by itself in ≈31 min — the first breakage record (§Helm release applies) → the 60-min bounded wait + resume (#2479). CONFIRM not yet seen on this release |
+| Longhorn OFFLINE engine move — the hold (cordon → delete the consumer → detached → patch → uncordon → replacement whole) | engines unit, every 1-replica attached volume | 2026-10-11 (by hand, then the function live) | garage-1 recovery by hand 06:30Z: detached 10 s, Ready 33 s after the uncordon; `helm_lh_offline_move` itself run live from the seat against garage-2 the same morning (image already current — the hold/release half is the whole act) — see §Helm release applies item 4 |
 | The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
 
 ### Non-Talos VMs: the runner verb (2026-10-08)
