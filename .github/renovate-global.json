@@ -145,7 +145,7 @@
       "automerge": true
     },
     {
-      "description": "Class 4 — Helm charts, TOFU-managed (docs/dependency-upgrades.md §The dependency inventory; S9 #1988, 2026-10-10): the `helm_release` charts whose version is a `var.*` default (argo-cd, argocd-apps, longhorn — the `# renovate:` annotation manager below; Cilium is class 6 and carries no annotation, human-proposed by ruling). patch/minor → `deps-review`, armed: the merge-path reviewer + migration lens read the changelog and the management sentinel's plan-on-PR posts the changed addresses — but a MERGE IS NOT A DEPLOY here: a `helm_release` address is outside the box's apply allowlist (docs/management-box.md §The test surface), so the box refuses the plan to a human `devbox run mgmt-tf -- apply`, run under `helm-evidence` (FU-301: no unattended helm apply until breakage data exists), and `MgmtApplyResidueStanding` alerts if it sits 24 h. Majors → the un-armed catch-all (human lane).",
+      "description": "Class 4 — Helm charts, TOFU-managed (docs/dependency-upgrades.md §The dependency inventory; S9 #1988, 2026-10-10): the `helm_release` charts whose version is a `var.*` default (argo-cd, argocd-apps, longhorn — the `# renovate:` annotation manager below; Cilium is class 6 and carries no annotation, human-proposed by ruling). patch/minor → `deps-review`, armed: the merge-path reviewer + migration lens read the changelog and the management sentinel's plan-on-PR posts the changed addresses — and since FU-301 (2026-10-10) a MERGE IS THE DEPLOY for the policy/mgmt/plan-input.yaml apply_helm rows: the management box applies them under its evidence bracket (docs/management-box.md §Helm release applies — forward only, STOP + MgmtHelmApplyStopped on a bad verdict), `MgmtApplyResidueStanding` if a merge sits unapplied 24 h. Majors: argo-cd + argocd-apps ARMED behind the lens (the rule after the chart-major rules below, 2026-10-11); longhorn → the un-armed catch-all (human lane, no downgrade).",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["helm"],
       "matchUpdateTypes": ["patch", "minor"],
@@ -273,6 +273,15 @@
       "matchManagers": ["argocd"],
       "matchDatasources": ["helm"],
       "matchPackageNames": ["argo-workflows", "kube-prometheus-stack", "prometheus-operator-crds"],
+      "matchUpdateTypes": ["major"],
+      "rebaseWhen": "behind-base-branch",
+      "automerge": true
+    },
+    {
+      "description": "argo-cd + argocd-apps chart MAJORS (class 4, tofu-managed — docs/dependency-upgrades.md §The dependency inventory) — ARMED (operator 2026-10-11, \"next time it works without me\": #2488, argo-cd 9.7.1 → 10.9.6 / ArgoCD v3.4.4 → v3.5.3, rode the whole chain with a human only on the rebase — lens APPROVED, Renovate-rebased, merged, the box's FU-301 bracket CONFIRMED). Same shape as the chart-major rule above: the major keeps `major` from the catch-all and gets NO `automerge` label, so the renovate-approve reflex refuses it and the migration lens (agents/lenses/migration.md) is the merge gate — its APPROVED completes the merge (the lens reads appVersion from the chart index: an argo-cd chart major usually carries an ArgoCD app MINOR, as 10.x did). Behind the merge the management box's helm bracket is the deploy edge (docs/management-box.md §Helm release applies: the policy/mgmt/plan-input.yaml apply_helm rows, a declared window + ⚓ lease, evidence + box verdict) — FORWARD ONLY: a bad verdict STOPs with MgmtHelmApplyStopped and leaves lease/window/marker for a human; the box never reverts or retries (operator 2026-10-02/10-10), and the revert stays a human git revert + apply. `longhorn` majors stay on the un-armed human lane ON PURPOSE: Longhorn cannot downgrade and its majors carry migrations (engine images, CRDs), so the preflight restore point (docs/longhorn-backup.md) is the only rollback — a human reads that apply. `behind-base-branch` so an armed major that fell behind master is rebased by Renovate, not left to a human (#2488 needed three hand-ticked rebases on a moving master).",
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["argo-cd", "argocd-apps"],
       "matchUpdateTypes": ["major"],
       "rebaseWhen": "behind-base-branch",
       "automerge": true
