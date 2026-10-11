@@ -13064,3 +13064,43 @@ updates or reverts as much as possible — mechanical revert or a responder."
   nothing to move (42/42 on v1.12.1), so no run starts. CODEOWNERS un-own of `mgmt/nixos/flake.lock` committed
   direct (1d09fc91). FU-301 stays open: archive on the first CONFIRMED longhorn bracket.
 
+## 2026-10-11 07:00–09:30Z — the first unattended Longhorn bracket CONFIRMS; FU-301 closed; cluster-truth belts built (seat + 7 subagents)
+
+- **Reconciled the 10-10 lanes first:** every subagent lane in the S9 bullet had landed (#2428, #2432–#2440, #2444,
+  the lock drill #2478→#2480→#2482, G4 #2436–#2460); the "lock-revert ruling owed" was moot (the wedge = #2457 +
+  #2482). Hygiene residue = inert `:dependencyDashboard` lines in stack repos — stack-side.
+- **Longhorn 1.12.1 → 1.13.0 (#2487), box-run, no hand act:** chart bracket begun 07:04:57Z (window
+  seat-1791702280-8266, lease `upgrade-lease-tofu-helm-longhorn`), tofu APPLIED 07:06:24Z, 15/15 pods rolled
+  (transient `ImagePullBackOff` on wk-01/wk-03/wk-metal-03 — docker.io mirror layer digest mismatch, retries
+  pulled), CONFIRMED 07:17:46Z, verdict `ok`, `management-apply=success`. Then the apply tick started
+  `mgmt-helm-engines.service` 07:22:09Z: 42 v1 volumes, order fast,none,bulk,slow-bulk,std; 9 holds (garage ×3 on
+  wk-metal-01/m70s/wk-metal-04; forgejo-pg-5/-6, infisical-pg-4/-5, grafana-pg-3/-4 — CNPG primaries detach in
+  187–195 s, replicas in 10 s), 24 live moves each watched whole for 120 s, 42 lease renewals, CONFIRMED
+  09:00:14Z (1 h 38 min wall, records on the backup Garage). End state: 42/42 on v1.13.0, robustness
+  {healthy 36, unknown 6} unchanged, Garage 3/3, CNPG 4/4 healthy, 13 Ready, no cordon, no STOP marker.
+  **FU-301 archived.** Ledger row + the ruling: #2496.
+- **Defect found by the run → #2495:** `_mgmt_unit_active` used `systemctl is-active --quiet`, which exits 3 on
+  `activating` — the state a running oneshot holds — so every apply tick logged "starting mgmt-helm-engines"
+  and re-issued a (coalesced) start; fixed to read `ActiveState`; the box pulled it 08:03Z and the tick read
+  "engines unit running (18 left)" from 08:07Z.
+- **Operator ruling (watching the run):** upgrade alerts read CLUSTER truth, never the box's self-reports; the box
+  emits lifecycle + what is in flight, and that must survive the box gone 24 h → two builders, PR lane:
+  #2497 (KSM customResourceState EngineImage/Volume → `kube_longhorn_engineimage_ref_count`,
+  `kube_longhorn_volume_engine_info`, 3 recording rules, `LonghornVolumesOnOldEngine` 2 h,
+  `LonghornEngineMoveStalled` 1 h; replay: silent on today's 1 h 39 m run, fires on the 10-10 STOPPED shape) and
+  #2498 (CronJob `monitoring/upgrade-lease-reader` */2 → pushgateway `upgrade_lease_*`; `UpgradeLeaseInFlight`
+  info, `PastExpectedEnd` warning, `Orphaned` critical on a silent/absent box, `ProbeStale/Absent`). Both
+  Synced/Healthy, series + rules verified in Prometheus; KSM hot-reloaded the CRS config without a restart.
+- **Other S9 work:** #2492 kps check (h) proof recorded (#2486 red on pin-only-lint, closed); #2493 the rebuild
+  drill's 10-11 red = preflight REFUSE (window 2 made both CARP nodes live, the resolver wanted one; prod = the
+  CARP MASTER by advskew) — the 10-04 red was #2386's galaxy cache, not #2166 (FU-297 + spike corrected);
+  #2494 spike wave 1 (class 9 → router config/firmware/Matchbox/Proxmox rows, firmware ruling in
+  opnsense-test-vm.md, 3 ledger rows). sleep-tracking#67 NOT closed: post-pin rides exist but only
+  oracle-fleet, which never queries channels.nixos.org — non-discriminating (meta-state).
+- **Deviation, mine:** #2219 (operator-read spike, "unarmed on purpose") MERGED 07:41Z — my brief said do not
+  arm AND wait with `pr-wait`, which arms by default; content = the clean rebase (§C2 → §C7, two conflict
+  resolutions), the read is still owed. Card clause added (`--no-arm`), GAPS G1 closed with the note.
+- Standing alerts read, none S9: `LonghornDiskBelowSchedulingFloor` ×2 (FU-093), `MgmtSubstrateBehind`,
+  `RegistryMirrorDanglingLinks`, `OpenRouterKeyBudgetLow`; `GarageClusterFlapping` = the overnight incident's
+  1 h window (180 failed probes/h 21:13→06:43Z), cleared ~07:45Z.
+
