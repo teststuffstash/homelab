@@ -57,8 +57,8 @@
       ],
       "human_rows": 0,
       "id": 4,
-      "last_proven": "2026-10-10T17:38:28Z",
-      "last_proven_pr": 2463,
+      "last_proven": "2026-10-10T21:13:14Z",
+      "last_proven_pr": 2487,
       "name": "Helm charts, tofu-managed",
       "owner_may_leave": false,
       "rows": 3
@@ -131,18 +131,19 @@
         "deploy_edge",
         "detector"
       ],
-      "gap_rows": 0,
+      "gap_rows": 1,
       "human_cells": [
         "canary",
+        "merge_gate",
         "revert"
       ],
       "human_rows": 0,
       "id": 9,
-      "last_proven": null,
-      "last_proven_pr": null,
-      "name": "Ansible collections/roles",
+      "last_proven": "2026-09-29T18:49:44Z",
+      "last_proven_pr": 2033,
+      "name": "Router config (ansible + the `oxlorg.opnsense` collection)",
       "owner_may_leave": false,
-      "rows": 0
+      "rows": 1
     },
     {
       "complete": false,
@@ -204,6 +205,67 @@
       "name": "Management box closure (mgmt/nixos flake)",
       "owner_may_leave": false,
       "rows": 2
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "detector",
+        "revert"
+      ],
+      "gap_rows": 2,
+      "human_cells": [
+        "canary",
+        "deploy_edge",
+        "merge_gate",
+        "proposer"
+      ],
+      "human_rows": 0,
+      "id": 14,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Router firmware (OPNsense)",
+      "owner_may_leave": false,
+      "rows": 2
+    },
+    {
+      "complete": false,
+      "gap_cells": [
+        "deploy_edge",
+        "detector"
+      ],
+      "gap_rows": 2,
+      "human_cells": [
+        "canary",
+        "merge_gate",
+        "proposer",
+        "revert"
+      ],
+      "human_rows": 0,
+      "id": 15,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Matchbox (PXE provisioner)",
+      "owner_may_leave": false,
+      "rows": 2
+    },
+    {
+      "complete": false,
+      "gap_cells": [],
+      "gap_rows": 0,
+      "human_cells": [
+        "canary",
+        "deploy_edge",
+        "merge_gate",
+        "proposer",
+        "revert"
+      ],
+      "human_rows": 0,
+      "id": 16,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Proxmox hosts (packages, reboots)",
+      "owner_may_leave": false,
+      "rows": 0
     }
   ],
   "generated_by": "scripts/dependency-coverage.py (devbox run dependency-coverage) — never hand-edit",
@@ -231,9 +293,9 @@
         "title": "arc-runners: pin runner image 2026.10.10-g38f4cd58695b"
       },
       "4": {
-        "merged_at": "2026-10-10T17:38:28Z",
-        "pr": 2463,
-        "title": "Update Helm release longhorn to v1.12.1"
+        "merged_at": "2026-10-10T21:13:14Z",
+        "pr": 2487,
+        "title": "Update Helm release longhorn to v1.13.0"
       },
       "5": {
         "merged_at": "2026-10-10T11:52:34Z",
@@ -254,6 +316,11 @@
         "merged_at": "2026-10-06T22:18:21Z",
         "pr": 2352,
         "title": "chore(deps): update renovatebot/github-action action to v46.3.6"
+      },
+      "9": {
+        "merged_at": "2026-09-29T18:49:44Z",
+        "pr": 2033,
+        "title": "Update dependency oxlorg.opnsense to v26"
       }
     },
     "rows": {
@@ -398,9 +465,9 @@
         "title": "Update Helm release argo-cd to v9.7.1"
       },
       "4:longhorn": {
-        "merged_at": "2026-10-10T17:38:28Z",
-        "pr": 2463,
-        "title": "Update Helm release longhorn to v1.12.1"
+        "merged_at": "2026-10-10T21:13:14Z",
+        "pr": 2487,
+        "title": "Update Helm release longhorn to v1.13.0"
       },
       "5:Infisical/infisical@tofu/infisical": {
         "merged_at": "2026-09-27T12:28:32Z",
@@ -641,6 +708,11 @@
         "merged_at": "2026-10-06T22:18:21Z",
         "pr": 2352,
         "title": "chore(deps): update renovatebot/github-action action to v46.3.6"
+      },
+      "9:oxlorg.opnsense": {
+        "merged_at": "2026-09-29T18:49:44Z",
+        "pr": 2033,
+        "title": "Update dependency oxlorg.opnsense to v26"
       }
     }
   },
@@ -1104,9 +1176,9 @@
       "class": 4,
       "gap_columns": [],
       "key": "4:longhorn",
-      "last_proven": "2026-10-10T17:38:28Z",
+      "last_proven": "2026-10-10T21:13:14Z",
       "name": "longhorn",
-      "version": "1.12.1",
+      "version": "1.13.0",
       "where": [
         "tofu/longhorn.tf"
       ]
@@ -1941,6 +2013,20 @@
       ]
     },
     {
+      "class": 9,
+      "gap_columns": [
+        "deploy_edge",
+        "detector"
+      ],
+      "key": "9:oxlorg.opnsense",
+      "last_proven": "2026-09-29T18:49:44Z",
+      "name": "oxlorg.opnsense",
+      "version": "26.1.11",
+      "where": [
+        "ansible/collections/requirements.yml"
+      ]
+    },
+    {
       "class": 10,
       "gap_columns": [],
       "key": "10:ghcr.io/actions/actions-runner",
@@ -2017,6 +2103,63 @@
       "version": "nixos-26.05@21a67dc47014",
       "where": [
         "mgmt/nixos/flake.lock"
+      ]
+    },
+    {
+      "class": 14,
+      "gap_columns": [
+        "detector",
+        "revert"
+      ],
+      "key": "14:OPNsense NANO_VERSION (birth image)",
+      "last_proven": null,
+      "name": "OPNsense NANO_VERSION (birth image)",
+      "version": "26.7",
+      "where": [
+        "scripts/opnsense-test-vm-bootstrap.sh",
+        "tofu/opnsense-test.tf"
+      ]
+    },
+    {
+      "class": 14,
+      "gap_columns": [
+        "detector",
+        "revert"
+      ],
+      "key": "14:OPNsense SERIES (series head)",
+      "last_proven": null,
+      "name": "OPNsense SERIES (series head)",
+      "version": "26.7.5",
+      "where": [
+        "scripts/opnsense-test-vm-bootstrap.sh"
+      ]
+    },
+    {
+      "class": 15,
+      "gap_columns": [
+        "deploy_edge",
+        "detector"
+      ],
+      "key": "15:poseidon/matchbox",
+      "last_proven": null,
+      "name": "poseidon/matchbox",
+      "version": "v0.11.0",
+      "where": [
+        "ansible/group_vars/matchbox.yml"
+      ]
+    },
+    {
+      "class": 15,
+      "gap_columns": [
+        "deploy_edge",
+        "detector"
+      ],
+      "key": "15:siderolabs/talos (PXE assets)",
+      "last_proven": null,
+      "name": "siderolabs/talos (PXE assets)",
+      "version": "v1.14.1",
+      "where": [
+        "ansible/group_vars/matchbox.yml"
       ]
     }
   ]

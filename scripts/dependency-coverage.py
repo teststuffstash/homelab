@@ -11,7 +11,8 @@ Two inputs, never hand-merged:
     docs/dependency-classes.yaml   the RULINGS — per class, the six mechanism columns (ok/human/gap)
     the repo's own files            the DEPENDENCIES — extracted per class the way Renovate's managers
                                     read them (argocd/platform charts, image: refs, tofu lockfiles and
-                                    variable defaults, devbox.lock, .github/workflows uses:, …)
+                                    variable defaults, devbox.lock, .github/workflows uses:, the ansible
+                                    requirements files, the OPNsense SERIES pins, …)
 
 and one external source for the seventh column: GitHub, read with `gh api` — the newest MERGED PR
 from the class's proposer (head prefix `renovate/`, `deploy/`, `runner-image-pin`, `devbox-update`)
@@ -366,19 +367,92 @@ def extract_github_actions():
             for n, e in found.items()]
 
 
+ANSIBLE_PIN_FILES = ("ansible/collections/requirements.yml",  # the real pin: the `oxlorg.opnsense` collection (#2033)
+                     "ansible/requirements.yml")               # roles — in-repo today, the extraction seam
+
+
 def extract_ansible():
+    """Class 9 — router config: the collection + role pins the way Renovate's `ansible-galaxy`
+    manager reads them (every `requirements.ya?ml`, not only the top-level one — the generator read
+    `ansible/requirements.yml` alone until 2026-10-11 and printed an empty class while #2033 had
+    already moved the collection pin in `ansible/collections/requirements.yml`; convergence spike
+    §3 wave 1 item 7)."""
     rows = []
-    path = os.path.join(ROOT, "ansible", "requirements.yml")
+    for relpath in ANSIBLE_PIN_FILES:
+        path = os.path.join(ROOT, *relpath.split("/"))
+        if not os.path.exists(path):
+            continue
+        for doc in yaml_docs(path):
+            if not isinstance(doc, dict):
+                continue
+            for kind in ("roles", "collections"):
+                for item in doc.get(kind) or []:
+                    if isinstance(item, dict) and item.get("name"):
+                        rows.append({"name": item["name"], "version": str(item.get("version", "unpinned")),
+                                     "where": [relpath], "match": [item["name"]]})
+    return rows
+
+
+SHELL_ASSIGN_RE = r"^(?:export\s+)?%s=([^\s#]+)"
+
+
+def shell_assignments(src, names):
+    """`NAME=value` at line start (a bootstrap script's pins — `SERIES=26.7.5   # comment`), value
+    unquoted, per name; None when the script does not declare it."""
+    out = {}
+    for name in names:
+        m = re.search(SHELL_ASSIGN_RE % re.escape(name), src, re.M)
+        out[name] = m.group(1).strip("\"'") if m else None
+    return out
+
+
+def extract_opnsense_firmware():
+    """Class 14 — router firmware: git declares the SERIES, never a build (the mirror serves only
+    each series' head — docs/opnsense-test-vm.md §The official update path): the test VM bootstrap's
+    `SERIES` (prod's series head = the baseline) and `NANO_VERSION` (the birth image, = the tofu
+    default `opnsense_test_nano_version` — both printed so a split between them shows)."""
+    bootstrap = os.path.join(ROOT, "scripts", "opnsense-test-vm-bootstrap.sh")
+    if not os.path.exists(bootstrap):
+        return []
+    pins = shell_assignments(read(bootstrap), ("SERIES", "NANO_VERSION"))
+    rows = []
+    if pins["SERIES"]:
+        rows.append({"name": "OPNsense SERIES (series head)", "version": pins["SERIES"],
+                     "where": [rel(bootstrap)], "match": ["SERIES="]})
+    nano_versions, nano_where = [], []
+    if pins["NANO_VERSION"]:
+        nano_versions.append(pins["NANO_VERSION"])
+        nano_where.append(rel(bootstrap))
+    test_tf = os.path.join(ROOT, "tofu", "opnsense-test.tf")
+    if os.path.exists(test_tf):
+        tofu_nano = tofu_default(read(test_tf), "opnsense_test_nano_version")
+        if tofu_nano:
+            nano_versions.append(tofu_nano)
+            nano_where.append(rel(test_tf))
+    if nano_versions:
+        rows.append({"name": "OPNsense NANO_VERSION (birth image)",
+                     "version": ", ".join(sorted(set(nano_versions))),  # two values = the script and tofu disagree
+                     "where": nano_where, "match": ["NANO_VERSION=", "opnsense_test_nano_version"]})
+    return rows
+
+
+def extract_matchbox():
+    """Class 15 — the Matchbox PXE provisioner: `matchbox_version` (the server release) and the
+    PXE assets' `talos_version` (held in lockstep with the fleet by scripts/machines-lint.sh), both
+    literals in ansible/group_vars/matchbox.yml."""
+    path = os.path.join(ROOT, "ansible", "group_vars", "matchbox.yml")
     if not os.path.exists(path):
-        return rows
+        return []
+    rows = []
     for doc in yaml_docs(path):
         if not isinstance(doc, dict):
             continue
-        for kind in ("roles", "collections"):
-            for item in doc.get(kind) or []:
-                if isinstance(item, dict) and item.get("name"):
-                    rows.append({"name": item["name"], "version": str(item.get("version", "unpinned")),
-                                 "where": ["ansible/requirements.yml"], "match": [item["name"]]})
+        if doc.get("matchbox_version"):
+            rows.append({"name": "poseidon/matchbox", "version": str(doc["matchbox_version"]),
+                         "where": [rel(path)], "match": ["matchbox_version"]})
+        if doc.get("talos_version"):
+            rows.append({"name": "siderolabs/talos (PXE assets)", "version": str(doc["talos_version"]),
+                         "where": [rel(path)], "match": ["talos_version"]})
     return rows
 
 
@@ -439,6 +513,8 @@ def extract_all(registry):
         "devbox": extract_devbox,
         "github_actions": extract_github_actions,
         "ansible": extract_ansible,
+        "opnsense_firmware": extract_opnsense_firmware,
+        "matchbox": extract_matchbox,
         "arc_runner": extract_arc_runner,
         "deno": extract_deno,
         "mgmt_flake": extract_mgmt_flake,
@@ -743,6 +819,11 @@ def self_test():
     assert names_dependency('  "jq@latest": {', ['"jq@latest"'])
     # case-insensitive, like Renovate's lower-cased branch names vs `Infisical/infisical`
     assert names_dependency("renovate/infisical-0.x", ["Infisical/infisical", "infisical"])
+    # shell_assignments(): the bootstrap's pin lines — a trailing comment, an `export`, a quoted
+    # value, and a name that is only mentioned (never assigned) must read None, not the mention
+    pins = shell_assignments("#!/bin/sh\nSERIES=26.7.5   # prod = the series head\n"
+                             "export NANO_VERSION=\"26.7\"\necho the SERIES=head\n", ("SERIES", "NANO_VERSION", "PLUGINS"))
+    assert pins == {"SERIES": "26.7.5", "NANO_VERSION": "26.7", "PLUGINS": None}, pins
     # summarize(): a ROW-level `human` override keeps the owner exactly like a class-level 👤 cell
     # (the owner rule: "no column is 👤"); a class of all-ok cells with one such row must read
     # complete=True, owner_may_leave=False — and complete=False if that override were a gap.
@@ -760,7 +841,7 @@ def self_test():
     rows[1]["overrides"] = {}
     (s,) = summarize(reg, rows, proofs)
     assert s["complete"] and s["owner_may_leave"], s
-    print("dependency-coverage self-test: OK (token-boundary proof matcher, row-override verdicts)")
+    print("dependency-coverage self-test: OK (token-boundary proof matcher, shell pin parser, row-override verdicts)")
 
 
 def main():
