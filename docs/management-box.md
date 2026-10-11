@@ -1292,6 +1292,28 @@ guess, a person finishes), `MgmtLeaseExpiredUnreverted` (`dig` — the PR exists
 `mgmt/scripts/mgmt-lease-test.sh` (a bare fixture origin; the real clone/revert/push path; every GitHub
 call recorded).
 
+**The cluster-side reader (operator ruling 2026-10-11; S9 stint, FU-301).** Alerts about a box-run upgrade
+are built on CLUSTER truth, never on this box's self-reported metrics: the box's only useful signals are
+lifecycle — started, working, stopped on something — and above all WHICH applies are in flight when several
+PRs merged close together, and those must survive the box disappearing for a day. The record already does
+(the lease ConfigMaps above); its evaluation did not — `mgmt_lease_active` / `mgmt_lease_expired` are
+computed here, so a box that vanished mid-bracket left a lease nobody expired and no alert naming the
+unconfirmed upgrade. `argocd/resources/upgrade-lease-reader/` closes that: a 2-minute CronJob in
+`monitoring` (its own ServiceAccount; `get`/`list` on ConfigMaps in `agent-coordinator` and no write verb)
+reads the label and PUTs one Pushgateway group, job `upgrade_lease_probe` —
+`upgrade_lease_info{lease,subject,by,chart,sha,from,to}`,
+`upgrade_lease_{started,expected_end,max_end}_timestamp_seconds{lease,subject}`, `upgrade_lease_standing`,
+`upgrade_lease_probe_generated_timestamp_seconds` — so a confirmed lease leaves the group on the next run
+and an unconfirmed one keeps a name with or without the box. Detector only (detection before fix,
+2026-09-09): it acts on nothing, the revert stays `mgmt-lease`'s. Belts (`prometheusrule.yaml` there):
+`UpgradeLeaseInFlight` (info, dashboard/API-only — the what-is-in-flight read a seat takes from the alert
+list), `UpgradeLeasePastExpectedEnd` (warning — standing past its deadline, unconfirmed whether the box is
+alive or not), `UpgradeLeaseOrphaned` (critical, `now` — a lease stands while `mgmt-lease` has not ticked for
+15 min or its series are gone with the box: nothing will expire it, the deadline is a person's),
+`UpgradeLeaseProbeStale` / `UpgradeLeaseProbeAbsent` (the reader itself). Replay of 2026-10-11's two
+brackets (chart 07:04:57→07:17:46Z; engines 07:22:33→~08:50Z, expected-end renewed on progress): InFlight
+only — the fixture's first two cases.
+
 **Credential — the one operator click (ADR-150 (5)).** The loop pushes and opens PRs as the box's own
 identity, the `homelab-sentinel` App (§Credentials), which needs `contents: write` (it has `pull_requests:
 write`); the `docs/github-apps.yaml` declaration lands first (FU-098 flow), the operator clicks,

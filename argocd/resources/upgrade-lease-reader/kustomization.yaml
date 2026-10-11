@@ -1,0 +1,28 @@
+# upgrade-lease-reader — the CLUSTER-side read of the ⚓ upgrade leases (ADR-150; operator ruling
+# 2026-10-11, docs/management-box.md §MB5 "The cluster-side reader"): a 2-minute CronJob in
+# `monitoring` lists the lease ConfigMaps in `agent-coordinator` and pushes them as series, so an
+# unconfirmed upgrade has a name in Prometheus whether or not the management box is alive. The
+# CronJob runs in monitoring, its Role in agent-coordinator — each manifest names its own
+# namespace, so NO kustomize `namespace:` here (it would rewrite both into one; the version-sets
+# pattern). Detector only: reader.sh never writes a lease and never reverts anything.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - rbac.yaml
+  - cronjob.yaml
+  - prometheusrule.yaml
+
+configMapGenerator:
+  - name: upgrade-lease-reader
+    namespace: monitoring
+    files:
+      - reader.sh
+
+# The tool image the lease chain already runs (kube-prometheus-stack-lease/hooks): bash + kubectl +
+# curl + jq + GNU date under the restricted security context. Pinned by hand to the tag
+# agents/coordinator/kustomization.yaml pins today; the deploy-pin job does not know this file, and a
+# stable tool image makes the drift harmless.
+images:
+  - name: ghcr.io/teststuffstash/agent-coordinator
+    newTag: 2026.10.10-gd303a3b5bd8d

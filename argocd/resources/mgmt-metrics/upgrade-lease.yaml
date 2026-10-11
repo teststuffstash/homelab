@@ -8,6 +8,8 @@
 # Series: mgmt-lease.sh's emit_metrics, through the box's node_exporter textfile (job mgmt-node).
 # Deliberately NOT here: "the upgrade broke X" — that is the lease's own PostSync verdict, and an
 # alert-shaped detector is exactly what ADR-150 ruled out for this class.
+# Also not here: the LEASES themselves — those are read from the cluster, with or without this box,
+# by argocd/resources/upgrade-lease-reader/ (UpgradeLease*; operator ruling 2026-10-11, §MB5).
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:

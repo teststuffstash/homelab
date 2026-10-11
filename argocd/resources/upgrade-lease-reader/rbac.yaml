@@ -1,0 +1,28 @@
+# The reader's identity: one ServiceAccount in `monitoring` (where the CronJob runs) with exactly
+# the reads it makes — the lease ConfigMaps in `agent-coordinator`. A label `list` cannot be scoped
+# by resourceName, so `get`/`list` on configmaps are namespace-wide; no write verb exists here by
+# design (ADR-150's actor side is the kps-lease hooks, the revert side is the management box).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: upgrade-lease-reader
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: upgrade-lease-reader
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: upgrade-lease-reader
+  namespace: agent-coordinator
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: upgrade-lease-reader }
+subjects:
+  - { kind: ServiceAccount, name: upgrade-lease-reader, namespace: monitoring }

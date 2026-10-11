@@ -1,0 +1,55 @@
+# The reader's schedule. Every 2 minutes: the box's lease loop ticks every 5 (§MB5), the PostSync
+# confirm of a 20-minute bracket lands within a run or two, and UpgradeLeaseProbeStale reads a
+# freshness gap of 10 minutes — five missed runs. concurrencyPolicy Forbid + backoffLimit 0: a run
+# that fails is a failed Job (CronJobNotSucceeding, job-health), never a retry storm against the
+# apiserver.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: upgrade-lease-reader
+  namespace: monitoring
+spec:
+  schedule: "*/2 * * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 100
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 90
+      ttlSecondsAfterFinished: 1200
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: upgrade-lease-reader
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: reader
+              image: ghcr.io/teststuffstash/agent-coordinator
+              command: ["bash", "/scripts/reader.sh"]
+              env:
+                - { name: LEASE_NS, value: agent-coordinator }
+                - { name: PUSHGATEWAY_URL, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+                - { name: PUSH_JOB, value: upgrade_lease_probe }
+                - { name: HOME, value: /tmp }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: scripts, mountPath: /scripts, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: scripts
+              configMap: { name: upgrade-lease-reader }
+            - name: tmp
+              emptyDir: {}
