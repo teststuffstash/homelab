@@ -79,9 +79,11 @@ never the session's arc — that is TICK-LOG's.)
   #2432–#2440, #2444, #2478→#2482, G4 #2436–#2460; #2488 + #2100 rode through 10-11 midday, see the PICKUP
   above).** Operator-side: (1) **the one-update-process spike** `docs/spikes/update-process-convergence.md` §4
   D1–D9 — an operator design pass; wave 0 item 1 (the drill) is fixed pending its first green run, wave 1 DONE
-  (#2494), waves 2–4 wait on D3–D5. (2) the claude-jail host rebuild — the seat is on 2.1.296, the two stack jails
-  on 2.1.281, images on 2.1.291 (`VersionSetMembersDisagree` fires after 1 d of the split) + the 3 operator-direct
-  workflow patches (stamp→rebuild dispatch). (3) the Argo-half ruling (Garage `appVersion` customManager shape in
+  (#2494), waves 2–4 wait on D3–D5. (2) the claude-jail host rebuild + the 3 operator-direct workflow patches (stamp→rebuild dispatch)
+  — **DEFERRED a couple of days (operator 2026-10-11 evening: too many claude-jail PRs in flight)**. The set
+  cannot converge until the jail Dockerfile installs the STAMP's claude-code (`version-sets/devbox.lock`, 2.1.291)
+  instead of npm's latest (seat 2.1.296, stack jails 2.1.281): `VersionSetMembersDisagree` stands meanwhile and
+  `VersionSetBehindPin` joins it after 2 d — both expected, not S9. (3) the Argo-half ruling (Garage `appVersion` customManager shape in
   the 09:30Z PICKUP — arms unattended restarts of the one unrecoverable release). (4) the #2219 read (merged by
   mistake; `git revert 42ad3aec` if unwanted). Seat-side residue (re-read 18:45Z): the kps lane's first lens-armed 92.x merge (no
   92.x upstream yet; check (h) PROVEN, #2492); FU-297's first green drill (class fix #2501 landed 10-11 evening —
