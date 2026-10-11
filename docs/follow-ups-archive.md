@@ -272,22 +272,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   its 2026-09-07 onboarding: 2 % used, 3 051 h, 0 media errors, PCIe 3.0 ×4. The onboarding skill now
   calls it as step 10, so the next disk is read at onboarding rather than when it is already suspect.
 
-- **FU-207** *(archived 2026-09-04)* — **ci-runner-01 recreated from tofu** (`tofu apply`: the
-  cloud-init snippet replaced + VM 9001 created, 1m57s), after FU-093's pool meter existed and the
-  pool had ~120 GB headroom (66 %). Cloud-init re-registered both runner slots (`--replace`, "√
-  Successfully replaced the runner" ×2), docker 29.8 up, `fstrim.timer` enabled+active, discard
-  honoured (DISC-GRAN 4K). Pool 67 → 71 % once the guest had its images. ADR-082's lane is back.
-- **FU-011** *(archived 2026-09-03)* — **provider-terraform pinned to a digest** (the running
-  revision's resolved digest, `argocd/resources/crossplane/provider.yaml`), in the #1315 gate PR
-  that also pinned the three Terraform provider versions in the ProviderConfig. Evidence: the
-  digest is the pod's `imageID`; ArgoCD sync leaves the revision unchanged.
-- **FU-196** *(archived 2026-09-02)* — **ghcr single-point-of-dependence for the oracle corpus:
-  RESOLVED by ADR-121.** v0 (mirror creds) 2026-08-30; v1 (first-party push-mode registry on
-  Garage, `registry.teststuff.net`) built + cut over in one operator-attended session 2026-09-02
-  after the #1282 recurrence: PR#1296+quickfixes, oracle-fleet#352 dual-publish, oracle-iac#490
-  pin flip, `REGISTRY_PUSH_TOKEN` via the new secrets-sync single-value row (PR#1298).
-  Acceptance evidence: wk-01 pulled the 6.4GB corpus from the LAN registry in 6m31s in
-  production; dispatch proof run released BOTH targets digest-verified. Residuals live on:
-  FU-203 (retention), #1297 (per-blob detection), ingester-image migration = optional later
-  (ADR-121 notes it). Gotcha trail in the ADR + the registry manifest headers (debug-port
-  collision, ping-must-challenge, RELATIVEURLS, s3 redirect-disable).
