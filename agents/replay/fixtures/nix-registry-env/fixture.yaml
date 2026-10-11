@@ -4,7 +4,9 @@
 # 7 d, each a timed-out connect + retries). `flake-registry =` turns the global registry off;
 # direct `github:` refs (all devbox needs — measured in the jail, see the launcher note) still
 # resolve. This row pins the EXACT fragment spliced into the pod env: one NIX_CONFIG entry whose
-# value is the empty-registry line, so a later edit cannot drop it or mangle the quoting.
+# value is the feature line + the empty-registry line (the feature line FIRST — without it nix drops
+# `flake-registry` as a flakes-only setting, seen on the 2026-10-11 probe ride), so a later edit
+# cannot drop either or mangle the quoting.
 name: nix-registry-env
 mode: actions
 source: agents/agent-session.sh

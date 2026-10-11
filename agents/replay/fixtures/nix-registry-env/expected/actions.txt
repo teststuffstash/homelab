@@ -1,4 +1,4 @@
 OUT NIX_ENV:
 OUT         - name: NIX_CONFIG
-OUT           value: "flake-registry ="
+OUT           value: "experimental-features = nix-command flakes\nflake-registry ="
 RC 0

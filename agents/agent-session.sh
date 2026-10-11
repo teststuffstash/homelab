@@ -2187,8 +2187,15 @@ NPM_CACHE_URL="${AGENT_NPM_CACHE_URL-http://npm-cache.teststuff.net/}"
 # of a hang; the env card names the direct form. Kill at the tool, not the allowlist (PR #503).
 # NIX_CONFIG is ONE env var: the agent-base entrypoint APPENDS its substituters lines to it
 # (agent-runtime entrypoint.sh, the NIX_CACHE_URL block) — it must never replace this value.
+# `experimental-features` comes FIRST (2026-10-11, the first homelab-namespace probe ride on the
+# pinned image): nix parses NIX_CONFIG before any command-line `--extra-experimental-features`, and
+# a `flake-registry` setting read while flakes are off is DROPPED with "Ignoring setting
+# 'flake-registry' because experimental feature 'flakes' is not enabled" — the ride still fetched
+# channels.nixos.org/flake-registry.json five times. The jail measurement that proved the empty
+# registry had the feature line in its own NIX_CONFIG (CLAUDE.md); the pod did not. Measured both
+# ways in the jail on 2026-10-11: line absent → the warning; line first → honoured, no warning.
 # >>>REPLAY:nix-registry-env>>>
-NIX_ENV=$'        - name: NIX_CONFIG\n          value: "flake-registry ="'
+NIX_ENV=$'        - name: NIX_CONFIG\n          value: "experimental-features = nix-command flakes\\nflake-registry ="'
 # <<<REPLAY:nix-registry-env<<<
 
 # FU-096: the stack's CI-published devbox cache (eval seed + file:// store), mounted read-only
