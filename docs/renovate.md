@@ -43,9 +43,9 @@ reviewer-approve reflex (per repo)        homelab-reviewer bot approves `automer
 "Add a repo to Renovate" = install the `homelab-renovate` App on it (autodiscover does the rest).
 Bootstrap: `scripts/github-app-bootstrap.sh homelab-renovate`.
 
-The 2026-08-01 → 09-25 silent zero-PR stretch (every repo aborting on a permission the App never
-had) is recorded in [`dependency-upgrades.md`](dependency-upgrades.md) §Ground truth; a lane is
-trusted only once that doc's §"Last proven end to end" carries a merge for it.
+A lane is trusted only once [`dependency-upgrades.md`](dependency-upgrades.md) §"Last proven end to
+end" carries a merge for it; liveness is the `RenovateSilent` gauge (the 2026-07 → 09-25 silent
+stretch, §Ground truth there, is why the workflow's own green is never the signal).
 
 ## Threat model — mitigate a Trivy-style compromise
 
@@ -67,111 +67,31 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 
 ## The automerge vs review split — "is there anything a human can actually review?"
 
-- **Digest bumps automerge** (base-image `@sha256`, SHA-pinned Actions). A human comparing two hashes
-  is security theatre; the real gates are the **cooldown + CI + the reviewer reflex**, not eyeballs.
-  Dockerfile tag **patch** bumps ride the same mechanical lane — the image build in CI is the gate
-  (minor stays `deps-review`).
-- **Reviewable bumps go to the LLM reviewer, not a human** — runtime dep *version* bumps (changelogs
-  exist; they run in prod), major base-image changes. These carry `deps-review`, arm
-  auto-merge, and flow through the **merge-path review reflex** (FU-046): the reviewer approves the
-  harmless ones (→ auto-merge) and requests changes on the rest (→ a worker adapts the code). No human.
-- **devbox lock majors (class 7) are ARMED with the `major` label kept (2026-10-07,
-  [`dependency-upgrades.md`](dependency-upgrades.md) §2 Review).** CI on the PR proves the toolchain
-  before the merge, the reflex's reviewer runs the migration lens and its APPROVED completes the merge;
-  the post-merge half is the `workflow-pin-revert` lock shape + `pin-only-lint` check (i). The one
-  lock major left un-armed for a human is a `HUMAN_PACKAGES` crossing (opentofu — the state-format
-  owner a lock revert cannot read back); the body's `lock-lane:` line names the lane.
-- **GitHub Actions bumps — every type, majors included — ride the grouped mechanical lane (ADR-141,
-  amended 2026-09-27).** One `github-actions` PR per repo per wave, `automerge` label, the reflex
-  approves, CI on the bumped head is the proof (a `pull_request` workflow runs the PR's own file);
-  push-only workflows (`build-image`, deploy jobs) are covered after the merge by the FU-1990 revert
-  chain: `GithubWorkflowRunFailed` on master → `workflow-pin-revert` reverts the pin PR as an
-  `automerge`+`dependencies` PR the reflex approves → the re-proposed version is refused by
-  `pin-only-lint` check (e) in `ci` (the revert body's `reverted-pins:` line, 30 days) until a newer
-  release. An Actions major is not a "major major" until evidence says so: a dependency GRADUATES to
-  the ungrouped, `major`-labelled, lens-reviewed lane (one PR per dependency — precise revert, precise
-  refusal) the first time a revert names it, its major PR goes red, or a review asks for an in-PR
-  adaptation or files a follow-up — one `matchPackageNames` line in `renovate-global.json`. Every
-  other major stays un-armed on the human lane until its class row is complete (#1988).
-- **Helm charts in `argocd/platform/*.yaml` and in-cluster images in `argocd/resources/**` (classes 1/2
-  of [`dependency-upgrades.md`](dependency-upgrades.md), proposers ON since 2026-10-04 — S9 next step 7).**
-  Neither the `argocd` nor the `kubernetes` manager has a default file match; `renovate-global.json`
-  gives each its pattern. Lanes: digest → `automerge`; patch/minor → `deps-review` (the merge-path
-  review reflex + the migration lens read the changelog, APPROVED merges, ArgoCD auto-sync is the
-  deploy); majors → the un-armed catch-all (human lane). First-party `ghcr.io/teststuffstash/**` images
-  and charts are disabled (class 3 — the deploy-pin PR owns them); the ARC controller + two runner scale
-  sets are one grouped PR (`arc`, lockstep); `prHourlyLimit: 6` (root-only, every repo; temporarily 6 for the watched first wave, 3 after —
-  operator 2026-10-04) paces the backlog per 6-hourly run. **What holds this lane, honestly:** the 7-day cooldown
-  (helm-repo charts; OCI charts and images are timestamp-optional = no cooldown), the LLM review, and
-  after the merge ArgoCD's sync/health (`/deploy-degraded` on Degraded — never fired by a real one,
-  FU-044) plus the per-service alert belts. **What it lacks** (the register's ⚠ cells): `ci` renders
-  only OUR OCI charts (`argocd-validate-pins.sh`) — a third-party chart bump has no render gate before
-  ArgoCD sync; no post-sync [contract probe](glossary.md) (FU-102); the revert is a human `git revert`, and a
-  CRD-carrying chart (Argo, Crossplane, cert-manager, ESO, CNPG) can change schema in a MINOR
-  (IAC-G09) — the lens is the only read of that.
-- **Helm charts in tofu (class 4 of [`dependency-upgrades.md`](dependency-upgrades.md), proposer ON
-  since 2026-10-10 — S9 #1988).** The `helm_release` charts pin `version = var.<x>`, which the
-  terraform manager cannot follow, so a `# renovate: datasource=helm depName=<chart> registryUrl=<repo>`
-  comment above each variable's `default` feeds a `custom.regex` manager (argo-cd, argocd-apps,
-  longhorn; `cilium_version` stays un-annotated — class 6, human-proposed). Lanes: patch/minor →
-  `deps-review`, armed; majors → the un-armed catch-all. **A merge is not a deploy here:** a
-  `helm_release` address is outside the [management box](management-box.md)'s apply allowlist, so the
-  box refuses the plan to a human `mgmt-tf apply` run under `helm-evidence` (FU-301), and
-  `MgmtApplyResidueStanding` fires if the merged bump sits unapplied 24 h — the human read of this
-  substrate is at the apply.
-- **JS via the `deno` manager (`scripts/mermaid-lint/deno.json` + `deno.lock`, CI-only dev tooling
-  exercised by required `ci`)** rides the mechanical `automerge` lane for patch/minor — and for
-  **mermaid majors** (operator 2026-10-11 on #2100: "CI is the only gate needed" — the `mermaid-lint`
-  step of `ci` parses every tracked diagram with the bumped parser; graduates to the lens on first
-  evidence, exactly like an Action); other deno majors → the un-armed catch-all shape. homelab has no `package.json` since [ADR-143](adr.md): the parser runs under Deno with no
-  permissions, and `lock-intake-lint` in `ci` judges every lock change. A red intake WAITS for upstream — no
-  local pin or override (ADR-143).
-- **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1
-  of the sentinel admits the `provider-pin` diff shape (only version / constraint / hash lines, every
-  source unchanged — ADR-131 amended 2026-09-27), stage 2 plans the head with the new provider
-  (registry-signed, hash-verified), and **a bump must plan empty** — relative to master's own pending
-  plan, or be a default backfill (null→default attributes a release adds, #2191; ADR-131 amended
-  2026-10-04): `management-sentinel` is green on those and red — `provider bump changes the plan:
-  <root>(…) — human read` — otherwise. With
-  `ci` + the sentinels green the renovate-approve reflex approves and auto-merge lands it; the red
-  ones are the only provider PRs a human ever sees (`mgmt-human-plan` if the change is wanted). Roots
-  the box does not plan (`tofu/infisical`, `tofu/cloudflare-token`) are excluded from the manager
-  (`matchFileNames`) rather than merged unplanned. Six PRs on 2026-09-27 planned `+0` under human
-  orders — the evidence that a human read adds nothing here (S9 #1988).
-  **Terraform PROVIDER majors are ARMED since 2026-10-04** (operator, S9 #1988; the rule after the
-  Deployment-image one): `major` kept, no `automerge` label, so the reflex refuses it and the
-  migration lens is the merge gate — its APPROVED completes the merge. Behind it: the same
-  sentinel gate (empty plan relative to master's own, no stored schema/identity version raised —
-  PR#2205), `MgmtApplyErroredOnNewProvider` on the first changing apply (PR#2206) and the
-  `tofu-provider-revert` chain (PR#2207, drilled as #2209). A major that needs an in-PR adaptation
-  (helm 3 turned the provider's `kubernetes {}` block into an attribute, #2046) is red on the
-  sentinel and never auto-merges — the adaptation is no longer a pin-only diff. Until this flip a
-  provider major took the un-armed catch-all (2026-09-28..10-04: #2046, #2047 merged by hand).
-  **Deployment IMAGE tags in tofu are their own armed lane** (ADR-141 amended 2026-09-28, #1988's
-  class row): an `image = "<ref>"` line Renovate rewrites on a `kubernetes_deployment` is armed at
-  every update type — non-majors on the terraform `automerge` rule, majors armed + `major` (the
-  lens reviews). The box applies the merge, and the `tofu-image-revert` chain
-  ([design](designs/fu-1990-workflow-pin-revert.md) Part 3) reverts an image-line-only merge whose
-  Deployment rollout sticks (`KubeDeploymentRolloutStuck`), records `reverted-images:`, and
-  `pin-only-lint` check (f) refuses the re-proposal for 30 days. Precondition per Deployment:
-  the ADR-140 shape (2 replicas, zero-unavailable rollout, PDB — the forgejo runner first).
-  The lane's marker must not leak: the terraform rule is restricted to non-major update types
-  (Renovate MERGES `addLabels` across rules and nothing removes a label — three majors were born
-  `automerge`+`major` on 2026-09-27, #2037/#2046/#2047), `renovate-approve` refuses any
-  `major`-labelled PR (its stamp shares the migration lens's identity, so it deadlocked the lens
-  at STEP 0(a)), and the coordinator scan's **stale-stamp repair** dismisses a stamp that landed
-  anyway and strips the label. What a merged major then applies is the box's, inside its allowlist
-  (`kubernetes_deployment.*` since the same day — the #2037 image bump was "1 address outside").
-  **Chart majors on the human lane arm themselves when they are packaging only** (ADR-141 as
-  amended 2026-10-06, later): the lens opens `## Upstream` with `appVersion: unchanged (<v>)` /
-  `appVersion: A → B` read from the chart index, and `agents/major-handoff.sh` ARMS a `major` chart
-  PR on the former (the lens's APPROVED completes the merge) and parks it `major/awaiting-human`
-  on the latter — the kube-prometheus-stack 89/90 shape ([`dependency-upgrades.md`](dependency-upgrades.md)
-  §Worked case).
+The principles, which every lane applies; **the per-class rulings themselves live in ONE place,
+[`dependency-classes.yaml`](dependency-classes.yaml) (rendered as the register in
+[`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory) — this doc does not
+restate them, and a lane question is answered there, cell by cell.**
+
+- **Digest bumps are mechanical** (`@sha256`, SHA-pinned Actions): a human comparing two hashes is
+  theatre; the gates are the cooldown, CI on the head and the reviewer reflex (`automerge` label →
+  reflex approval → CI-green auto-merge).
+- **Reviewable bumps go to the LLM reviewer, not a human** (`deps-review`): the merge-path review
+  reflex + the migration lens read the changelog; APPROVED merges, CHANGES_REQUESTED parks the PR for
+  a worker to adapt the code on the Renovate branch (FU-046).
+- **Majors are un-armed by default and ARM per class on evidence** (ADR-141): the `major` label is
+  kept and no `automerge` label is added, so the reflex refuses it and the lens's APPROVED completes
+  the merge — behind that class's own detector + revert pair (the register's columns). An Actions major
+  graduates to its own ungrouped `major` PR the first time a revert names it, its PR goes red, or a
+  review asks for an adaptation. A chart major arms itself when it is packaging-only
+  (`appVersion: unchanged`, `agents/major-handoff.sh`). The marker must not leak: Renovate MERGES
+  `addLabels` across rules, so every mechanical rule is restricted to non-major update types.
+- **The management box is the gate where a merge is an apply** (tofu providers, tofu-managed charts):
+  the sentinel's plan-on-PR must be empty or a default backfill (ADR-131); the lens is the merge gate
+  for majors; the box's bracket is the deploy edge, forward only (FU-301).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
-Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy
-(ADR-084), so a hands-off dep bump reaches prod on its own.
+Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated
+deploy (ADR-084), so a hands-off dep bump reaches prod on its own.
 
 ## Coordinator × Renovate PRs — "close" is NOT a terminal action
 
