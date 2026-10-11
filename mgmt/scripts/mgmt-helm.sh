@@ -28,7 +28,10 @@
 #   4 engines     longhorn only: `concurrent-automatic-engine-upgrade-per-node-limit` is 0 here, so a
 #                 chart upgrade leaves every volume on the old engine. The box moves them ONE AT A TIME,
 #                 least valuable disk class first (the policy row's `engine_order`), each waited to the new
-#                 image AND back to its old robustness before the next; the first that does not stops it
+#                 image AND back to its old robustness before the next; the first that does not stops it.
+#                 An attached volume's CONSUMER pods must also stay whole (Ready, same pod, no restart)
+#                 before the next move; a 1-replica attached volume is REFUSED before anything moves
+#                 (attended engine move required — the second breakage record, 2026-10-10)
 #   5 end         settle, `after`, the VERDICT (the evidence verdict + the box verdict, FU-302), the health
 #                 compare; the record goes to the backup Garage. Good → the lease is deleted (confirmed)
 #                 and the window closed. Bad → STOP: the lease STAYS (the lease loop reads a `tofu/` subject
@@ -51,6 +54,14 @@ HELM_SETTLE="${MGMT_HELM_SETTLE:-600}"          # after the apply (and the engin
 # itself ≈31 min after the patch — the old 900 s bound stopped the box at 15 min. 3600 s ≈ 2× the datum.
 HELM_ENGINE_TIMEOUT="${MGMT_HELM_ENGINE_TIMEOUT:-3600}"
 HELM_ENGINE_IMAGE_TIMEOUT="${MGMT_HELM_ENGINE_IMAGE_TIMEOUT:-900}"   # the new EngineImage reaching `deployed`
+# Per ATTACHED engine move, after Longhorn reads converged: the CONSUMER check (the second breakage record,
+# 2026-10-10 21:03Z — meta-garage-1 read converged/healthy while its frontend served ENODATA and garage-1
+# segfaulted; the box moved the rest and only noticed at the final verdict). Every pod mounting the PVC
+# must stay Ready, same pod, no restart since the move began, for HELM_CONSUMER_SOAK s; a restart, a
+# replaced/gone pod or a container waiting in a crash/create error is an immediate STOP, NotReady is
+# waited up to HELM_CONSUMER_TIMEOUT. Reads only — like the convergence wait, waiting is not acting.
+HELM_CONSUMER_TIMEOUT="${MGMT_HELM_CONSUMER_TIMEOUT:-900}"
+HELM_CONSUMER_SOAK="${MGMT_HELM_CONSUMER_SOAK:-120}"
 HELM_BACKUP_TIMEOUT="${MGMT_HELM_BACKUP_TIMEOUT:-1800}"  # the Longhorn on-demand backups, all together
 # The names a helm roll of these releases structurally produces (the window graces them, silences nothing).
 HELM_DECLARED_ALERTS="${MGMT_HELM_DECLARED_ALERTS:-KubePodNotReady,KubeDeploymentReplicasMismatch,KubeDeploymentRolloutStuck,KubeDaemonSetRolloutStuck,KubeStatefulSetReplicasMismatch,KubeStatefulSetUpdateNotRolledOut,ArgoCDAppDegraded,ArgoCDAppOutOfSync,LonghornVolumeDegraded,TargetDown}"
@@ -166,6 +177,49 @@ lh_engine_plan() {
      | ([$tags[] | . as $t | $o | index($t) | select(. != null)] | min // 999) as $rank
      | {n: .metadata.name, rank: $rank, cls: ($tags | join("+")), st: (.status.state // "?")}]
     | sort_by(.rank, .n)[] | "\(.n)\t\(.cls)\t\(.st)"' "$1"
+}
+# lh_engine_refusals <volumes.json> <new-image> → "<vol><TAB><why>" for every v1 volume still to move that
+# is ATTACHED with one replica (or an unreadable replica count): the box refuses a LIVE engine move of it —
+# a 1-replica attached volume has no second replica to carry its frontend through the move, and the
+# second breakage record (meta-garage-1, 2026-10-10) is exactly that shape. Attended path only (offline:
+# detach, move, reattach). A DETACHED 1-replica volume moves offline and is not refused.
+lh_engine_refusals() {
+  jq -r --arg img "$2" '.items[]? | select((.spec.dataEngine // "v1") == "v1" and (.status.currentImage // "") != $img
+         and (.status.state // "") == "attached" and ((.spec.numberOfReplicas // 0) | tonumber? // 0) < 2)
+       | "\(.metadata.name)\t\(if (.spec.numberOfReplicas // null) == null then "replica count unreadable" else "1-replica" end) attached: attended engine move required"' "$1"
+}
+# lh_consumers <pods.json> <pvc> → "<pod><TAB><uid><TAB><phase><TAB>ready|notready<TAB><restarts><TAB><waiting reasons|->"
+# for every pod whose spec mounts <pvc>. Restarts = the sum over its containers.
+lh_consumers() {
+  jq -r --arg c "$2" '.items[]? | select(any(.spec.volumes[]?; .persistentVolumeClaim.claimName? == $c))
+    | [.metadata.name, (.metadata.uid // "?"), (.status.phase // "?"),
+       (if any(.status.conditions[]?; .type == "Ready" and .status == "True") then "ready" else "notready" end),
+       ([.status.containerStatuses[]?.restartCount // 0] | add // 0 | tostring),
+       ([.status.containerStatuses[]?.state.waiting.reason? // empty] | join(",") | if . == "" then "-" else . end)] | @tsv' "$1"
+}
+# lh_consumer_verdict <base.tsv> <now.tsv> → rc 0 every consumer whole; rc 1 "wait<TAB>…" (a pod Ready before
+# is NotReady now — waited, bounded); rc 2 "bad<TAB>…" (immediate STOP): a baseline pod gone or replaced
+# (uid), restarted, Failed, or any consumer container waiting in a crash/create error. A pod already
+# NotReady at baseline is not required to turn Ready (the move did not cause that), only to not get worse.
+lh_consumer_verdict() {
+  awk -F'\t' '
+    function badreason(r,  n, a, i) { n = split(r, a, ","); for (i = 1; i <= n; i++) if (a[i] ~ /^(CreateContainerError|CreateContainerConfigError|CrashLoopBackOff|RunContainerError|Error)$/) return a[i]; return "" }
+    FNR == NR { bu[$1] = $2; br[$1] = $5; bready[$1] = $4; next }
+    { seen[$1] = 1; r = badreason($6)
+      if (r != "") { bad = bad "pod " $1 " container waiting " r "; "; next }
+      if ($3 == "Failed") { bad = bad "pod " $1 " Failed; "; next }
+      if ($1 in bu) {
+        if ($2 != bu[$1]) { bad = bad "pod " $1 " replaced (uid changed); "; next }
+        if ($5 + 0 > br[$1] + 0) { bad = bad "pod " $1 " restarted (" br[$1] " → " $5 "); "; next }
+        if ($3 == "Succeeded") next
+        if (bready[$1] == "ready" && $4 != "ready") wait = wait "pod " $1 " not Ready; "
+      } else if ($4 != "ready" && $3 != "Succeeded") wait = wait "pod " $1 " (new) not Ready; "
+    }
+    END {
+      for (p in bu) if (!(p in seen)) bad = bad "pod " p " gone; "
+      if (bad != "") { sub(/; $/, "", bad); print "bad\t" bad; exit 2 }
+      if (wait != "") { sub(/; $/, "", wait); print "wait\t" wait; exit 1 }
+    }' "$1" "$2"
 }
 # lh_engine_image <manager-ds.json> → the `--engine-image` the longhorn-manager DaemonSet runs with
 lh_engine_image() {
@@ -296,11 +350,13 @@ helm_begin() {
 
 # ── 4 engines (longhorn) ─────────────────────────────────────────────────────────────────────────
 # helm_lh_engines <dir> <ns> <order csv> → rc 0 every v1 volume on the manager's engine image; rc 2 the
-# first volume that did not come back within HELM_ENGINE_TIMEOUT (its line in $d/engines.log) — the rest
-# are left where they are. One patch per volume, then READS only: a transient failure Longhorn recovers
-# from inside the bound is a pass (logged with its wait), never a second patch.
+# first volume that did not come back within HELM_ENGINE_TIMEOUT, or whose CONSUMER did not stay whole
+# (helm_lh_consumer_wait), or a REFUSE before any move (lh_engine_refusals: a 1-replica attached volume
+# wants the attended path) — its line in $d/engines.log; the rest are left where they are. One patch per
+# volume, then READS only: a transient failure Longhorn recovers from inside the bound is a pass (logged
+# with its wait), never a second patch.
 helm_lh_engines() {
-  local d="$1" ns="$2" order="$3" img v cls st t0 cur rob was seen
+  local d="$1" ns="$2" order="$3" img v cls st t0 cur rob was seen pvc pns ref
   _hk -n "$ns" get ds longhorn-manager -o json >"$d/manager-ds.json" 2>/dev/null || { echo "manager DaemonSet unreadable" >>"$d/engines.log"; return 2; }
   img="$(lh_engine_image "$d/manager-ds.json")"
   [ -n "$img" ] || { echo "engine image unreadable from longhorn-manager" >>"$d/engines.log"; return 2; }
@@ -313,9 +369,30 @@ helm_lh_engines() {
   _hk -n "$ns" get volumes.longhorn.io -o json >"$d/engines-volumes.json" 2>/dev/null || { echo "volumes unreadable" >>"$d/engines.log"; return 2; }
   lh_engine_plan "$d/engines-volumes.json" "$img" "$order" >"$d/engines.plan"
   echo "engine image $img — $(grep -c . "$d/engines.plan") volume(s) to move, order $order" >>"$d/engines.log"
+  # the refusal comes BEFORE the first patch: nothing moves while the set holds a volume the box may not
+  # move live — the operator decides the whole run (the conservative reading of the 2026-10-02 ruling)
+  ref="$(lh_engine_refusals "$d/engines-volumes.json" "$img")"
+  if [ -n "$ref" ]; then
+    printf '%s\n' "$ref" | sed -E 's/^([^\t]*)\t/REFUSE \1: /' >>"$d/engines.log"
+    echo "nothing moved — move the refused volume(s) attended (offline), then clear the stop" >>"$d/engines.log"
+    return 2
+  fi
   while IFS=$'\t' read -r v cls st; do
     [ -n "$v" ] || continue
     was="$(jq -r --arg v "$v" '.items[] | select(.metadata.name == $v) | .status.robustness // "?"' "$d/engines-volumes.json")"
+    # the consumer's baseline BEFORE the patch (attached volumes only — a detached one has no consumer):
+    # Longhorn's own record of the PVC, then the pods mounting it, read from the kube API
+    pvc=""; pns=""; rm -f "$d/consumers-$v.base"
+    if [ "$st" = attached ]; then
+      IFS=$'\t' read -r pns pvc < <(jq -r --arg v "$v" '.items[] | select(.metadata.name == $v) | .status.kubernetesStatus // {} | "\(.namespace // "")\t\(.pvcName // "")"' "$d/engines-volumes.json")
+      if [ -n "$pvc" ] && [ -n "$pns" ]; then
+        _hk -n "$pns" get pods -o json >"$d/consumers-$v.json" 2>/dev/null \
+          || { echo "FAIL $v ($cls, $st): consumer pods of $pns/$pvc unreadable before the move — not moved" >>"$d/engines.log"; return 2; }
+        lh_consumers "$d/consumers-$v.json" "$pvc" | awk -F'\t' '$3 != "Succeeded" && $3 != "Failed"' >"$d/consumers-$v.base"
+      else
+        echo "note $v: attached, no PVC on Longhorn's record — consumer not checked" >>"$d/engines.log"
+      fi
+    fi
     _hk -n "$ns" patch volumes.longhorn.io "$v" --type merge -p "{\"spec\":{\"image\":\"$img\"}}" >/dev/null 2>&1 \
       || { echo "FAIL $v ($cls, $st): patch refused" >>"$d/engines.log"; return 2; }
     t0="$(_hnow)"; seen=""
@@ -329,6 +406,7 @@ helm_lh_engines() {
       if [ "$cur" = "$img" ] && { [ "$was" != healthy ] || [ "$rob" = healthy ]; }; then
         echo "ok   $v ($cls, $st) → $img [$was → $rob] $(( $(_hnow) - t0 ))s${seen:+ (converged by itself after: $seen)}" >>"$d/engines.log"
         helm_lease_renew "$d" || echo "WARN lease renewal after $v failed — the lease may expire (a STOP, the safe side)" >>"$d/engines.log"
+        if [ -s "$d/consumers-$v.base" ]; then helm_lh_consumer_wait "$d" "$v" "$cls" "$st" "$pns" "$pvc" || return 2; fi
         break
       fi
       [ $(( $(_hnow) - t0 )) -lt "$HELM_ENGINE_TIMEOUT" ] || { echo "FAIL $v ($cls, $st): image=$cur robustness=$rob after ${HELM_ENGINE_TIMEOUT}s" >>"$d/engines.log"; return 2; }
@@ -336,6 +414,30 @@ helm_lh_engines() {
     done
   done <"$d/engines.plan"
   return 0
+}
+
+# helm_lh_consumer_wait <dir> <vol> <class> <state> <pod-ns> <pvc> → rc 0 every pod that mounted <pvc> before
+# the move stayed whole for HELM_CONSUMER_SOAK s; rc 2 (a FAIL line naming the volume and the pod) on the
+# first bad read (restart, replaced/gone, crash/create error) or NotReady past HELM_CONSUMER_TIMEOUT.
+# Reads only. An unreadable pod list is waited like NotReady (and is a FAIL at the bound).
+helm_lh_consumer_wait() {
+  local d="$1" v="$2" cls="$3" st="$4" pns="$5" pvc="$6" t0 out rc el
+  t0="$(_hnow)"
+  while :; do
+    el=$(( $(_hnow) - t0 ))
+    if _hk -n "$pns" get pods -o json >"$d/consumers-$v.now.json" 2>/dev/null; then
+      lh_consumers "$d/consumers-$v.now.json" "$pvc" >"$d/consumers-$v.now"
+      out="$(lh_consumer_verdict "$d/consumers-$v.base" "$d/consumers-$v.now")"; rc=$?
+    else out="wait"$'\t'"pods of $pns unreadable"; rc=1; fi
+    if [ "$rc" = 2 ]; then
+      echo "FAIL $v ($cls, $st): consumer of $pns/$pvc broke after the move — ${out#*$'\t'} (Longhorn read converged; ${el}s after)" >>"$d/engines.log"; return 2
+    fi
+    if [ "$rc" = 0 ] && [ "$el" -ge "$HELM_CONSUMER_SOAK" ]; then
+      echo "consumer-ok $v: $pns/$pvc — $(cut -f1 "$d/consumers-$v.base" | tr '\n' ' ' | sed 's/ $//') whole for ${el}s" >>"$d/engines.log"; return 0
+    fi
+    [ "$el" -lt "$HELM_CONSUMER_TIMEOUT" ] || { echo "FAIL $v ($cls, $st): consumer of $pns/$pvc not whole within ${HELM_CONSUMER_TIMEOUT}s — ${out#*$'\t'}" >>"$d/engines.log"; return 2; }
+    _hsleep 10
+  done
 }
 
 # ── the engine moves: their own unit (FU-301, operator 2026-10-10) ───────────────────────────────
@@ -406,7 +508,7 @@ helm_end() {
   _hev snapshot >"$d/after.json" 2>"$d/after.err" || true
   helm_cluster_verdict "$d" "$rel" || vrc=2
   [ "$arc" = 0 ] || echo "apply: tofu apply exited $arc" >>"$d/verdict.txt"
-  [ "$erc" = 0 ] || grep '^FAIL\|unreadable\|not deployed' "$d/engines.log" | sed 's/^/engines: /' >>"$d/verdict.txt"
+  [ "$erc" = 0 ] || grep '^FAIL\|^REFUSE\|unreadable\|not deployed' "$d/engines.log" | sed 's/^/engines: /' >>"$d/verdict.txt"
   { echo "box helm apply helm_release.$name ($rel) $from → $to  sha $sha  apply rc=$arc  window $wid  lease $lease"
     _hev diff "$d/before.json" "$d/after.json" 2>/dev/null || echo "(diff unreadable)"
     [ -s "$d/engines.log" ] && { echo "== longhorn engines"; cat "$d/engines.log"; }
