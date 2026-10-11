@@ -344,6 +344,11 @@ Two boundaries are DELIBERATE and stay:
   anomalies, transcript audits, acceptance-probe failures). End state: meta reads PRs, not the
   world.
 
+The 2026-10-04 reading of why this lane stalls anyway — admission is human, the human's session
+is where the context lives, the records grow by narrative — with measurements and the ranked
+proposals P0–P7 (re-framed 2026-10-05 around the defect census and the island cut):
+[`docs/spikes/context-and-autonomy.md`](docs/spikes/context-and-autonomy.md).
+
 Next legs when commissioned (not yet FU'd — the operator shapes the order): per-platform-repo
 review rubrics (`.agents/review.md`) + fixer-facing context files; the detector-per-catch
 intake doctrine written into the meta skill. Retro/ledger harvest as issue sources DELIVERED
