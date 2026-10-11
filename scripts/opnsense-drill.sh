@@ -104,7 +104,7 @@ die() { log "REFUSED: $*"; exit 2; }
 # The drill scores against the MASTER (lowest `router_carp_advskew` — the node serving `.1`), so
 # the score stays comparable run over run whichever node the file lists first.
 # NODES = every router node, live or standing: never a drill host.
-LIVE="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | "\(.router_carp_advskew // 0) \(.ansible_host)"' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml" | grep -E '^[0-9]+ ' | sort -n -k1,1)"
+LIVE="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | "\(.router_carp_advskew // 0) \(.ansible_host)"' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml" | grep -E '^[0-9]+ ' | sort -n -k1,1 || true)"   # `|| true`: no live node → empty, so the die below names it (pipefail)
 PROD="$(sed -n '1s/^[^ ]* //p' <<< "$LIVE")"
 NODES="$(yq -r '.all.children.opnsense.hosts[]?.ansible_host' "$ROOT/ansible/router-nodes/inventory.yml" | tr '\n' ' ')"
 grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$PROD" || die "could not read a live prod router address from the ansible inventories (got: $(echo $LIVE))"

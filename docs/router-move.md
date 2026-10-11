@@ -53,8 +53,9 @@ and `ansible/ansible.cfg` loads `router-nodes/inventory.yml` beside it, so a pla
 VIP with prod's defaults (router-id `.1`, HAProxy VIPs on `lan`, which would break the live node).
 The inventory consumers (the drill's `PROD`, the test VM's guard, `scripts/wireguard-client.sh`)
 read the live hosts (no `opnsense_standby: true`) across both files — two since window 2: the
-test VM's guard and `wireguard-client.sh` take the first (either node answers the API), the drill
-scores against the MASTER (lowest `router_carp_advskew`); the guards also refuse every node. The literals above stay right: each reaches the router at `.1`, now the CARP VIP.
+test VM's guard and `wireguard-client.sh` take the first (either node answers the API), the
+drill scores against the MASTER (lowest `router_carp_advskew`); the guards also refuse every
+node. The literals above stay right: each reaches the router at `.1`, now the CARP VIP.
 
 **(C) identity — must come across, or a consumer breaks.** The next section.
 
