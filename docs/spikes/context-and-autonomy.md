@@ -94,7 +94,7 @@ build-order history (spikes); `merge-path.md` narrative (42) is incident history
 leave the read plan since the YAML is the source. **≈520 KB leaves; ≈250–300 KB stays** —
 about 70k tokens, a routine load instead of a 300k exception.
 
-### C2. The platform outside the loop is growing islands too (operator, 2026-10-10)
+### C7. The platform outside the loop is growing islands too (operator, 2026-10-10)
 
 §C cuts the agent loop only. The rest of the platform is catching up: until now the loop held
 most of the heavy context, and it will stay the heaviest, but each of these now has its own
@@ -248,7 +248,7 @@ grows on the intake and fix sides, never the approval side). *Settles:* days fro
 coordinator island's own context, loaded per clause; the first draft's hygiene items ride along
 as one-liners — `session-ctx --startup` thresholds as lints, the Agents block of the tracker back
 to issues, containers and `agent/done` issues closing on date predicates, meta-state as a
-machine-readable pickup list; the platform islands of §C2 each get an owning-docs index the
+machine-readable pickup list; the platform islands of §C7 each get an owning-docs index the
 sweeps and `/design` route through (the loop's is the design-agents read plan). *Settles:* `--startup` ≤ 40 KB; the design-agents read plan
 ≤ 300 KB.
 
@@ -265,7 +265,7 @@ template for the coordinator's; P4 and P5 are what make P6 safe; P7 falls out of
 - `board-sweep` + `fu-sweep` — the "run the design-agents read plan first" rule (forbidden since
   2026-09-27) replaced by the slice rule; fu-sweep's and design-agents' descriptions reduced to
   when-to-use; a stale "34 of 57" figure replaced by "read the lint output". 2026-10-10: the
-  slice rule became island-first (§C2), and board-sweep's gather reads `meta-state.md` + the
+  slice rule became island-first (§C7), and board-sweep's gather reads `meta-state.md` + the
   window's TICK-LOG for declared parks.
 
 ## Loose ends found, not filed (second jail — the primary mints)

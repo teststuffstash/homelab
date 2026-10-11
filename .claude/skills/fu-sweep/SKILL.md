@@ -22,7 +22,7 @@ prints the live open count and the oversize items — read those, never a rememb
 
 - **Island first, then the slice — never a whole corpus.** Route each item to its island (the
   agent loop, dependency upgrades, the management box, the router pair, the cluster substrate —
-  spike `context-and-autonomy.md` §C2) and classify it from that island's owning docs: the
+  spike `context-and-autonomy.md` §C7) and classify it from that island's owning docs: the
   section its text links or names (grep by the item's keywords). Agent-loop items are still the
   most; the full [`design-agents`](../design-agents/SKILL.md) read is operator-typed only
   (2026-09-27) — do NOT read `docs/agents/` wholesale as the workaround. An item whose verdict
