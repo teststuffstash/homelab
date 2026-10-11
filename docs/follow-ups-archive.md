@@ -10,6 +10,18 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-301** *(archived 2026-10-11)* — **`helm_release` applies on the box: evidence first → the box applies them on its own.**
+  Ruled 2026-10-10 (forward only, evidence-bracketed, stop + alert, never revert); the 1-replica refusal became the
+  HOLD (#2490 → #2491, operator 2026-10-11: "box + Argo do it on their own"). **Closed by the first CONFIRMED Longhorn
+  bracket, unattended end to end, 2026-10-11:** chart 1.12.1 → 1.13.0 applied 07:04:57→07:17:46Z (15/15 rolled, BGP
+  26/26, robustness unchanged, verdict `ok`), then `mgmt-helm-engines` 07:22:33→09:00:14Z: 42/42 engine moves, 9 holds
+  (garage ×3, CNPG ×5 incl. primaries failing over — 187–195 s detaches, forgejo/infisical/grafana), 33 consumer checks
+  whole, 42 lease renewals, CONFIRMED, lease deleted, window closed, no STOP marker. Records
+  `s3://helm-evidence/20261011T070302Z-box-longhorn-1.13.0/` + `…T072216Z-box-longhorn-engines-1.13.0/`. Defect found
+  by the run: the apply loop misread the running oneshot (#2495). Ruling the run produced (operator 2026-10-11, recorded
+  in management-box.md §Helm release applies): progress/outcome alerts read CLUSTER truth, the box emits lifecycle only —
+  built as the EngineImage/Volume KSM belt + the cluster-side lease reader (S9). Ledger row: management-box.md §The
+  capability ledger.
 - **FU-302** *(archived 2026-10-10)* — **The box's own Prometheus-free view of the cluster: built.** PR #2452:
   `mgmt/scripts/mgmt-verdict.sh` (`devbox run mgmt-verdict`, JSON, exit 0/2/3) — Talos API, kube API via
   the CP VIP, cilium BGP + probe 3 by exec, LAN HTTP to the BGP VIPs, node Ready, ArgoCD health,

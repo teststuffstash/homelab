@@ -154,20 +154,6 @@ six OVERSIZE items pointer-ized into
       UniFi schedule as code (init container) + `UnifiAutobackupStale` belt = PR#2197, live 2026-10-03.
       **Next:** off-site copy — PARKED by the operator (2026-10-03: AWS-class target needs IAM + billing
       limits first; no cluster write access to an unbounded store yet) → a periodic restore drill.
-- [ ] **FU-301** — **`helm_release` applies: evidence first, autonomy later.** Operator 2026-10-02: no box
-      action, revert or agent autonomy on a Cilium/Longhorn/ArgoCD failure until breakage data exists.
-      Every attended helm apply runs `devbox run helm-evidence -- run` (PR#2179); first record #2046 (helm
-      provider 3.x: 4 revisions, manifests unchanged, 0 restarts, 0 BGP resets). Unattended scope OPEN —
-      candidates: a no-chart/version/values-change gate, a declared-vs-live settings check, Cilium
-      `OnDelete` via `mgmt-reconcile`, Longhorn engines ordered by disk type. **Ruled 2026-10-10 (operator, for
-      now): the box MAY apply a reviewed helm bump — forward only, evidence-bracketed, stop + alert on a bad
-      verdict, never revert/retry/remediate; in S9 scope (#1985).** ⚠ `dependency-upgrades.md`'s
-      Cilium canary cell is inherited from class 6 — Cilium never had one. **2026-10-11 (operator): the box and
-      ArgoCD do these on their own in the end** — the 1-replica refusal (#2490) became the HOLD, the box's offline
-      move (#2491: cordon → delete the consumer → detached → patch → uncordon → replacement whole; run live on
-      garage-2, `management-box.md` §Helm release applies item 4). **Next:** archive on the first CONFIRMED
-      longhorn bracket on the box (the next Longhorn bump — 1.12.1's two runs both STOPPED; the stop and lease
-      were cleared 2026-10-11 06:55Z with Garage 3/3). Evidence storage: the box uploads to the backup Garage already.
 - [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router — one defect left.**
       Upstream `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register`
       without the uuid → 404 (identical in 25.7.8 and 26.1.11; the controller wants
