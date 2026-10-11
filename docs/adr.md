@@ -2817,3 +2817,28 @@ comparing the CRDs' `operator.prometheus.io/version` with the running operator i
 exporter or the box belt); #2256 (91.x) waits for this; the kps lease (ADR-150) rides the stack chart, not
 the CRD app — a CRD revert never downgrades. Tracked: G16 in
 [`dependency-upgrades.md`](dependency-upgrades.md); build: stint S9 (#1985).
+
+### ADR-152 — One update process: the upgrade lease is every class's in-flight record, the management box is the single applier outside ArgoCD, and the router joins with four named differences (2026-10-11)
+**Status:** Accepted (operator, 2026-10-11 — closes the 2026-10-10 convergence spike: waves 0–1 done, the
+decided forks recorded here, the program in `ROADMAP.md` §Deploy paths, the spike deleted). **Decision:**
+every update — the Renovate lanes, the substrate, router config and firmware, Matchbox — is one pass
+through propose → prove → gate → apply → confirm → revert; the ⚓ [upgrade lease](glossary.md) (ADR-150) is
+the ONE record of an update in flight for every class the box applies, the [management box](management-box.md)
+is the ONE applier outside ArgoCD, and the register in [`dependency-upgrades.md`](dependency-upgrades.md)
+answers for every class, the non-Renovate ones included (9, 14, 15, 16). The router differs in exactly four
+ways: **(1)** firmware is a SERIES in git, never a point — the bootstrap converges on the mirror's head
+(#2501), latest inside a series, no Renovate (operator 2026-09-29; `opnsense-test-vm.md` §The official
+update path); **(2)** its revert is LOCAL to the target — a node-local config-revision restore armed before
+the apply with the box lease as the outer timer, a VM snapshot for firmware — because the box's PR path and
+its Prometheus read ride the router it would change; **(3)** its canary is the BACKUP node under real load
+(`carp-maintenance enter` + the FU-308 dead-man; soak = evidence, never wall time); **(4)** the security
+boundary stays human (WAN firewall, port forwards, WireGuard, ACME/DNS creds — a path policy). ONE box-run
+infrastructure lease at a time. Proxmox hosts stay attended until FU-306 + compute HA.
+**Considered:** a new owning doc (rejected — lane detail is the register's, box mechanics are
+`management-box.md`'s; an ADR is a pointer); leaving it in the spike (rejected — decided things do not live
+in a spike); a per-build firmware pin (cannot be installed); the box re-converging the previous revision as
+the router revert (depends on the box's path being intact); BACKUP-only forever (the BACKUP is the canary,
+not the scope). **Why:** each side had built the half the other lacked (proposer + revert vs canary + test
+surface), and both conditions that kept the router human were met on 2026-10-09. **Consequences:** the
+program (ROADMAP §Deploy paths) carries the open forks — firmware majors box-run after one attended drill
+(no major before 27.1), the test-VM verdict required once box-posted, the firmware currency belt. Record only.

@@ -290,9 +290,34 @@ ruling plus a drift belt:
   an out-of-cone copy, `github` is host-only — `docs/tofu-state.md`). The roots differ in owner/credential/blast
   radius and need per-root rulings: `docs/dependency-upgrades.md` §"'Tofu' is not one class".
 
-First deliverable is a per-surface ruling table (automate / human-applied + belt), then implement
-the automated ones one surface at a time. ADR-093 makes Argo the candidate runner for the ansible
-Jobs.
+The per-surface ruling table EXISTS since 2026-10-11: classes 9, 14, 15 and 16 of the register in
+`docs/dependency-upgrades.md` (rulings in `docs/dependency-classes.yaml`). The applier is the
+management box, not an Argo Job (ADR-152 supersedes the ADR-093 candidate for these surfaces).
+
+**The box applies ansible — the program (ADR-152, 2026-10-11; the convergence spike's waves 2–4).**
+Order, lowest blast first; each step is a lease-wrapped box run and a capability-ledger row
+(`docs/management-box.md`):
+
+1. **Test surfaces post a verdict.** The box runs the test-VM harness on router-path PR heads and
+   posts an `opnsense-test-vm` status (the sentinel already judges heads touching box-held surfaces;
+   FU-295's base-pass covers the rest) — then the verdict becomes REQUIRED on router-path PRs (spike
+   D8, ruled "once box-posted"). A firmware currency belt: the box reads `firmware/status` per node
+   and on the test VM (the `check_substrate` pattern, FU-254) — the class-14 detector gap.
+2. **Matchbox, box-applied** — near-zero cone, the first ansible applier: shadow (`--check` diff)
+   first, then on. Rides FU-297 until it outgrows it.
+3. **Router config reconcile** — shadow (the per-node `--check`, as today) → BACKUP-only (converge,
+   `check`, lease confirm) → full rolling (MASTER through `carp-maintenance` with the dead-man and a
+   node-local config-restore timer armed before the apply). Respects declared windows (FU-300) and
+   the security-boundary path policy (ADR-152 (4)). The one open fork: whether that policy is the
+   sentinel's `deny_paths` shape or a role-level list.
+4. **Firmware along the same rolling path** — test VM (roll back to baseline, update, harness, move
+   the baseline) → BACKUP (snapshot, update, `check`) → MASTER (maintenance, update, `check`, leave),
+   one lease renewed per node. Majors: box-run after ONE attended drill along this path (the ADR-149
+   shape); the next major is 27.1, so nothing is pending.
+
+Not in the program: Proxmox hosts (attended until FU-306 + compute HA), substrate through Renovate
+(#1988's row). FU-298's ACME register 404 stays a drill workaround.
+
 
 ### Onboard every app repo to the agentic loop by default (FU-070; FU-052 archived 2026-08-30 — every repo is on)
 

@@ -99,8 +99,7 @@ VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate i
 ## The official update path — observed on this VM (2026-09-29)
 
 **The ruling (operator, 2026-09-29; written down 2026-10-11 from
-[`spikes/update-process-convergence.md`](spikes/update-process-convergence.md) §2/§4 D2 — it lived
-only in seat memory before):** router firmware follows **the official update path** — the router's
+ADR-152 (1) — it lived only in seat memory before):** router firmware follows **the official update path** — the router's
 own `firmware/check` is the authority, applied as the `check` → `update` → `upgrade` calls below,
 trialled on this VM first — and **no Renovate pin**: the package mirror serves only the head of
 each series, so a per-build pin cannot be installed on demand; `opnsense/core` tags include

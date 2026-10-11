@@ -375,8 +375,8 @@ def extract_ansible():
     """Class 9 — router config: the collection + role pins the way Renovate's `ansible-galaxy`
     manager reads them (every `requirements.ya?ml`, not only the top-level one — the generator read
     `ansible/requirements.yml` alone until 2026-10-11 and printed an empty class while #2033 had
-    already moved the collection pin in `ansible/collections/requirements.yml`; convergence spike
-    §3 wave 1 item 7)."""
+    already moved the collection pin in `ansible/collections/requirements.yml`; ADR-152's
+    register rows, 2026-10-11)."""
     rows = []
     for relpath in ANSIBLE_PIN_FILES:
         path = os.path.join(ROOT, *relpath.split("/"))
