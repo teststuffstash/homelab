@@ -77,9 +77,10 @@ never the session's arc — that is TICK-LOG's.)
   release — a ruling, not a seat call.
 - **⚑ S9 — what is left (re-verified 2026-10-11 12:30Z against merged PRs; every 10-10 subagent lane LANDED: #2428,
   #2432–#2440, #2444, #2478→#2482, G4 #2436–#2460; #2488 + #2100 rode through 10-11 midday, see the PICKUP
-  above).** Operator-side: (1) **the one-update-process spike** `docs/spikes/update-process-convergence.md` §4
-  D1–D9 — an operator design pass; wave 0 item 1 (the drill) is fixed pending its first green run, wave 1 DONE
-  (#2494), waves 2–4 wait on D3–D5. (2) the claude-jail host rebuild + the 3 operator-direct workflow patches (stamp→rebuild dispatch)
+  above).** Operator-side: (1) ✅ **the one-update-process spike CLOSED 2026-10-11 evening** — ADR-152 (#2510) records the
+  decision + the router's four differences; the build program (the box applies ansible) is ROADMAP §Deploy paths with
+  D3/D4/D8 as its own forks; the docs were trimmed first (#2508 dependency-upgrades 817→627, #2509 renovate 254→174,
+  #2507 register rulings current). (2) the claude-jail host rebuild + the 3 operator-direct workflow patches (stamp→rebuild dispatch)
   — **DEFERRED a couple of days (operator 2026-10-11 evening: too many claude-jail PRs in flight)**. The set
   cannot converge until the jail Dockerfile installs the STAMP's claude-code (`version-sets/devbox.lock`, 2.1.291)
   instead of npm's latest (seat 2.1.296, stack jails 2.1.281): `VersionSetMembersDisagree` stands meanwhile and

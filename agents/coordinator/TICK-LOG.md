@@ -13177,3 +13177,34 @@ updates or reverts as much as possible — mechanical revert or a responder."
   nix's full command line including `--option access-tokens github.com=<the read-only mgmt PAT>` on an
   internal error — root-only journal, not shipped; one line on FU-305. **Drill run 3** started 18:21Z after a
   hand `mgmt-pull` (HEAD `ad4dfdbc`): **PASS 18:34:54Z** (826 s: build 328 s at 26.7.6_3 — the #2501 head convergence — converge 440 s, every router-code unit applied, 3 config scripts rc=0; realism score **56** vs previous 117, `MgmtOpnsenseDrillFailed` CLEARED). The 56 click-ops rows are the PAIR's prod config vs the single-router rehearsal: `OPNsense/Kea` 36, `virtualip` 17, `hasync` 2 (+1) — FU-297's next read, not a drill defect.
+
+
+## 2026-10-11 19:00–20:00Z — the register's rulings brought current; docs trimmed; ADR-152 closes the convergence spike (seat, no subagents)
+
+- **Operator: "is the register up to date? the non-version columns matter in S9."** `dependency-coverage --check`
+  was stale only on #2501's SERIES cell — the GENERATED half was current; the RULINGS file was not: class-1 revert
+  still 👤 on the 2026-08-04 "no chart revert" ruling that ADR-149/150 superseded; class-1 merge-gate text said
+  majors un-armed (three are armed); class-7 + class-11 detectors ⚠ with their own flip condition met (the
+  version-set belt fired 13:25Z on the real split); class 14 described `SERIES` as a point. **#2507** recorded
+  all of it; ⚠ rows 54 → 12, 6 classes complete, no owner-may-leave change (class 1 keeps canary 👤). Lesson
+  for the register: `--check` sees files + the yaml, never a ruling that landed as an ADR, a Renovate rule or
+  an alert firing — those cells rot silently.
+- **Operator: VersionSetMembersDisagree after the jail rebuild.** The seat rows come from each jail session's
+  OTLP `otel_scope_version`, newest session per jail in 3 d; images from the version-set probe. Three versions
+  = this jail 2.1.296 (rebuilt from npm's latest), stack jails 2.1.281 (sessions 10-09/10-10), images 2.1.291
+  (the stamp). Convergence is designed to be cadence-independent via the stamp, and the jail is the member that
+  does not consume it (`/workspace/Dockerfile` installs `@anthropic-ai/claude-code` unpinned) — the class-11
+  consumer gap. **DEFERRED a couple of days (operator: too many claude-jail PRs in flight)**; `VersionSetBehindPin`
+  joins after 2 d, both expected.
+- **Operator: D1–D9 — "a lot of docs cover them; the docs need a cleanup first; how long do we work with the spike
+  doc?"** Read: D2/D7/D9 ruled and recorded (#2501 + the firmware ruling; drill R1 + FU-308; class 16), D6 de
+  facto, D3/D4/D5/D8 only matter once the box applies ansible. Ruling: trim first, then ADR, all tonight.
+  **#2508** dependency-upgrades.md 817 → 627 (§Ground truth, the 2026-08-04 migration prose, the ✅ gap rows and
+  ✅ next steps to one line each; every G-id and step number kept — G1/G2/G4 and steps 9/10 are referenced).
+  **#2509** renovate.md 254 → 174 (§The automerge vs review split restated every class's gate cell; now five
+  principles + a pointer to dependency-classes.yaml — the one home). **#2510 ADR-152** (auto-merge armed at
+  19:58Z): the lease = every class's in-flight record, the box = the applier outside ArgoCD, the router's four
+  differences; the program in ROADMAP §Deploy paths (test surfaces post a verdict → Matchbox → router config →
+  firmware; D3/D4/D8 carried as its forks); the spike deleted, 11 yaml cells + management-box.md + the
+  generator's docstring re-pointed. Reviewer round on #2505 (the lock-rollback row owed the run it recorded) fixed
+  in-PR, merged 18:50Z.
