@@ -1,0 +1,109 @@
+# Belts on the ⚓ upgrade leases READ FROM THE CLUSTER (ADR-150; operator ruling 2026-10-11,
+# docs/management-box.md §MB5 "The cluster-side reader"): an alert about a box-run upgrade is built
+# on cluster truth, never on the management box's self-reported metrics. The lease ConfigMaps
+# survive the box; mgmt_lease_active / mgmt_lease_expired (computed on the box, the
+# mgmt-metrics/upgrade-lease.yaml belts) do not — so these four read reader.sh's push instead.
+#   InFlight        WHICH upgrade is in flight (info: dashboard/API-only by InfoInhibitor, the
+#                   indicator a seat reads in the alert list — nothing to do)
+#   PastExpectedEnd a lease still standing past its deadline — unconfirmed, box alive or not
+#   Orphaned        a lease standing while the box's lease loop is silent / gone — the box
+#                   vanished mid-bracket; nothing will expire this lease (the 24-hour case)
+#   ProbeStale/Absent  the reader itself
+# Detector only — nothing here acts (detection before fix, operator 2026-09-09); the revert stays
+# the box's (`mgmt-lease`), and the box's own loop belts stay in mgmt-metrics/upgrade-lease.yaml.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: upgrade-lease-reader
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: upgrade-lease-reader
+      rules:
+        # value = expected-end (joined on the lease), so the summary can say WHEN it is due.
+        - alert: UpgradeLeaseInFlight
+          expr: |
+            upgrade_lease_info{job="upgrade_lease_probe"}
+              * on (lease, subject) group_left
+            upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe"}
+          # triage none: an indicator, not a fault — the in-flight set a seat reads before acting
+          labels: { severity: info, triage: none }
+          annotations:
+            summary: "Upgrade in flight: {{ $labels.chart }} {{ $labels.from }} → {{ $labels.to }} (sha {{ $labels.sha }}, by {{ $labels.by }}, expected end {{ $value | humanizeTimestamp }})"
+            description: >-
+              Lease {{ $labels.lease }} stands for {{ $labels.subject }}: commit {{ $labels.sha }}
+              moves {{ $labels.chart }} {{ $labels.from }} → {{ $labels.to }}, opened by
+              {{ $labels.by }}, expected to confirm by {{ $value | humanizeTimestamp }}. Read, do not
+              act: the subject's PostSync hook confirms (deletes the record) and the management box
+              reverts whatever is still declared past its deadline (docs/management-box.md §MB5).
+              Several of these at once = several merges in flight — the set this alert exists to show.
+            info_suppressed_ack: "Deliberately dashboard/API-only: InfoInhibitor suppresses severity:info from every dispatch path. A standing lease is the normal state of an upgrade in progress, not a page; the pageable forms are UpgradeLeasePastExpectedEnd and UpgradeLeaseOrphaned beside it. This rule gives the seat/responder the what-is-in-flight read in the alert list (operator ruling 2026-10-11)."
+        - alert: UpgradeLeasePastExpectedEnd
+          expr: |
+            upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe"} < time()
+          for: 5m
+          # triage dig: the subject's sync state, its PostSync hook log and the box's revert PR are all readable in-cluster/on GitHub
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "Upgrade lease {{ $labels.lease }} is past its expected end ({{ $value | humanizeTimestamp }}) and still stands"
+            description: >-
+              The lease for {{ $labels.subject }} was expected to confirm by {{ $value | humanizeTimestamp }}
+              and its record is still in agent-coordinator: the upgrade is UNCONFIRMED. If the box is
+              alive its lease loop reverts it on the next tick (MgmtLease* in mgmt-metrics says how that
+              went); if not, UpgradeLeaseOrphaned fires beside this. Read the lease:
+              `kubectl -n agent-coordinator get cm {{ $labels.lease }} -o yaml`; the subject's last
+              PostSync Job log (monitoring/kps-lease-postsync for kube-prometheus-stack) says what the
+              confirm was waiting on. docs/management-box.md §MB5.
+        # The box is alive when its lease loop ticks (every 5 min) — silence of 15 min, or the series
+        # gone with the box (MgmtBoxDown's absent() shape), means nothing will expire this lease.
+        - alert: UpgradeLeaseOrphaned
+          expr: |
+            upgrade_lease_info{job="upgrade_lease_probe"}
+              and on ()
+            (
+              (time() - max(mgmt_lease_last_run_timestamp_seconds{job="mgmt-node"})) > 900
+                or absent(mgmt_lease_last_run_timestamp_seconds{job="mgmt-node"})
+            )
+          for: 5m
+          # triage now: an upgrade in flight with no actor left to revert it — a person takes the lease's deadline
+          labels: { severity: critical, triage: now }
+          annotations:
+            summary: "Upgrade lease {{ $labels.lease }} stands but the management box's lease loop is silent"
+            description: >-
+              {{ $labels.chart }} {{ $labels.from }} → {{ $labels.to }} (sha {{ $labels.sha }}) is in
+              flight and the management box has not completed a lease tick for 15 minutes — or its
+              metrics are gone with it. Nobody will expire this lease: the box is the only reverter
+              (ADR-150). While the box is down the deadline is a person's: watch the subject's
+              PostSync confirm, and if it does not land by the lease's expected-end, revert the pin
+              by hand (branch `revert-chart-lease-<sha8>`, the §MB5 revert shape). Box side:
+              MgmtBoxDown / MgmtLeaseLoopStale say which. docs/management-box.md §MB5.
+        # Probe health. The gateway re-serves the last push forever, so freshness is the only signal
+        # the verdicts above are current (docs/patterns/observability.md §Batch jobs push).
+        - alert: UpgradeLeaseProbeStale
+          expr: |
+            (time() - max(upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"})) > 600
+          for: 5m
+          # triage dig: the failing Job pod's log in monitoring names it (RBAC, apiserver, pushgateway)
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "upgrade-lease-reader has not pushed for {{ $value | humanizeDuration }}"
+            description: >-
+              The 2-minute CronJob monitoring/upgrade-lease-reader stopped refreshing the
+              upgrade_lease_probe group, so UpgradeLeaseInFlight / PastExpectedEnd / Orphaned read a
+              stale picture of what is in flight. `kubectl -n monitoring get jobs -l
+              batch.kubernetes.io/cronjob-name=upgrade-lease-reader` and the newest pod's log.
+              docs/management-box.md §MB5.
+        - alert: UpgradeLeaseProbeAbsent
+          expr: |
+            absent(upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"})
+          for: 1h
+          # triage dig: the Application synced? the CronJob exists and ran?
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: upgrade-lease-reader has never pushed its group
+            description: >-
+              No upgrade_lease_probe group on the Pushgateway for an hour — the cluster-side lease
+              belts are blind. Check that the upgrade-lease-reader ArgoCD Application synced and the
+              CronJob monitoring/upgrade-lease-reader ran. docs/management-box.md §MB5.

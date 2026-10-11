@@ -1,0 +1,206 @@
+# Behaviour fixture for the cluster-side upgrade-lease belts (ADR-150; operator ruling 2026-10-11).
+#
+#   devbox run -- promtool test rules argocd/resources/upgrade-lease-reader/upgrade-lease-reader.promtool-test
+#
+# The series are what reader.sh pushes (one group, job upgrade_lease_probe) plus the box's own
+# mgmt_lease_last_run_timestamp_seconds (mgmt/scripts/mgmt-lease.sh, job mgmt-node). Every expected
+# value below is computed from the inputs and the contract (upgrade-lease.sh's header + the hook's
+# EXPECT_MIN 20 / MAX_MIN 60): the fixture clock starts at 0 = the lease's `started`, so
+# expected-end = 0 + 20 min = 1200 and max-end = 3600.
+#
+# REPLAY of the two 2026-10-11 brackets (chart 07:04:57→07:17:46Z, ~13 min; engines 07:22:33→~08:50Z
+# with expected-end renewed on progress), box alive both times: InFlight only — never
+# PastExpectedEnd (confirmed before the deadline / renewed ahead of it), never Orphaned (the box
+# ticked every 5 min). The first two cases below are those shapes.
+rule_files:
+  - upgrade-lease-reader.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── the chart bracket: armed at 0, confirmed at minute 13 (the record deleted → series gone) ───
+  - interval: 1m
+    name: "a lease confirmed before its expected-end shows InFlight only, and nothing once the record is gone"
+    input_series:
+      - series: 'upgrade_lease_info{job="upgrade_lease_probe",lease="upgrade-lease-kube-prometheus-stack",subject="argocd/platform/kube-prometheus-stack.yaml",chart="kube-prometheus-stack",sha="3a9c1f0e",from="91.8.2",to="91.9.0",by="kps-lease-presync"}'
+        values: "1x12 stale"
+      - series: 'upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe",lease="upgrade-lease-kube-prometheus-stack",subject="argocd/platform/kube-prometheus-stack.yaml"}'
+        values: "1200x12 stale"
+      - series: 'upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"}'
+        values: "0+60x42"
+      - series: 'mgmt_lease_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+60x42"
+    alert_rule_test:
+      # minute 10: the lease stands, 10 min before its deadline — the indicator, with its identity
+      # (the left side's labels survive the group_left join; value = expected-end 1200)
+      - eval_time: 10m
+        alertname: UpgradeLeaseInFlight
+        exp_alerts:
+          - exp_labels: { severity: info, triage: none, job: upgrade_lease_probe, lease: upgrade-lease-kube-prometheus-stack, subject: argocd/platform/kube-prometheus-stack.yaml, chart: kube-prometheus-stack, sha: 3a9c1f0e, from: "91.8.2", to: "91.9.0", by: kps-lease-presync }
+      - eval_time: 10m
+        alertname: UpgradeLeasePastExpectedEnd
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts: []
+      # minute 15: confirmed at 13 — the PUT dropped the series, the gateway scrape marks it stale
+      # (not a 5-min lookback fade): no record, no indicator
+      - eval_time: 15m
+        alertname: UpgradeLeaseInFlight
+        exp_alerts: []
+      # minute 30: past the deadline the lease WOULD have had — a confirmed lease never fires
+      - eval_time: 30m
+        alertname: UpgradeLeasePastExpectedEnd
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts: []
+
+  # ── the engines bracket: a long roll whose expected-end is renewed ahead of the deadline ───────
+  - interval: 1m
+    name: "a renewal moves expected-end before it passes: no PastExpectedEnd until the renewed deadline is missed"
+    input_series:
+      - series: 'upgrade_lease_info{job="upgrade_lease_probe",lease="upgrade-lease-talos-substrate",subject="argocd/platform/talos-substrate.yaml",chart="",sha="7b1d4e22",from="v1.14.0",to="v1.14.1",by="reconcile-rollout"}'
+        values: "1x70"
+      # 1200 until a renew at minute 11 (`renew --expect-min 20` → now + 20 min = 660 + 1200 = 1860,
+      # capped by max-end 3600 → 1860); then renewed again at minute 25 → 1500 + 1200 = 2700
+      - series: 'upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe",lease="upgrade-lease-talos-substrate",subject="argocd/platform/talos-substrate.yaml"}'
+        values: "1200x10 1860x14 2700x46"
+      - series: 'upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"}'
+        values: "0+60x70"
+      - series: 'mgmt_lease_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+60x70"
+    alert_rule_test:
+      # minute 26: the ORIGINAL deadline (1200) is 6 min past, but expected-end reads 1860 — quiet
+      - eval_time: 26m
+        alertname: UpgradeLeasePastExpectedEnd
+        exp_alerts: []
+      # minute 50: expected-end 2700 < time() from minute 46 (2760), for 5m → firing at 51
+      - eval_time: 50m
+        alertname: UpgradeLeasePastExpectedEnd
+        exp_alerts: []
+      - eval_time: 52m
+        alertname: UpgradeLeasePastExpectedEnd
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, job: upgrade_lease_probe, lease: upgrade-lease-talos-substrate, subject: argocd/platform/talos-substrate.yaml }
+      # the box is alive the whole time: never Orphaned
+      - eval_time: 52m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts: []
+
+  # ── an unconfirmed lease, box alive: PastExpectedEnd 5 min after the deadline, nothing else ────
+  - interval: 1m
+    name: "a lease that outlives its expected-end fires PastExpectedEnd after 5m; the box alive keeps Orphaned quiet"
+    input_series:
+      - series: 'upgrade_lease_info{job="upgrade_lease_probe",lease="upgrade-lease-kube-prometheus-stack",subject="argocd/platform/kube-prometheus-stack.yaml",chart="kube-prometheus-stack",sha="3a9c1f0e",from="91.8.2",to="91.9.0",by="kps-lease-presync"}'
+        values: "1x40"
+      - series: 'upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe",lease="upgrade-lease-kube-prometheus-stack",subject="argocd/platform/kube-prometheus-stack.yaml"}'
+        values: "1200x40"
+      - series: 'upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"}'
+        values: "0+60x40"
+      - series: 'mgmt_lease_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+60x40"
+    alert_rule_test:
+      # 1200 < time() first holds at minute 21 (1260); for 5m → firing at 26
+      - eval_time: 25m
+        alertname: UpgradeLeasePastExpectedEnd
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: UpgradeLeasePastExpectedEnd
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, job: upgrade_lease_probe, lease: upgrade-lease-kube-prometheus-stack, subject: argocd/platform/kube-prometheus-stack.yaml }
+      - eval_time: 30m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts: []
+
+  # ── the box goes silent under a standing lease (the 24-hour-box-gone case) ─────────────────────
+  - interval: 1m
+    name: "a lease standing while the box's lease loop stops ticking fires Orphaned 15m + 5m after its last tick"
+    input_series:
+      - series: 'upgrade_lease_info{job="upgrade_lease_probe",lease="upgrade-lease-kube-prometheus-stack",subject="argocd/platform/kube-prometheus-stack.yaml",chart="kube-prometheus-stack",sha="3a9c1f0e",from="91.8.2",to="91.9.0",by="kps-lease-presync"}'
+        values: "1x60"
+      - series: 'upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe",lease="upgrade-lease-kube-prometheus-stack",subject="argocd/platform/kube-prometheus-stack.yaml"}'
+        values: "6000x60"
+      - series: 'upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"}'
+        values: "0+60x60"
+      # ticks until minute 30 (last tick stamp 1800), then frozen: time() - 1800 > 900 from minute 46
+      - series: 'mgmt_lease_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+60x30 1800x30"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts: []
+      # minute 46 + for 5m = firing at 51; the lease's identity rides the alert (the left side's labels)
+      - eval_time: 52m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts:
+          - exp_labels: { severity: critical, triage: now, job: upgrade_lease_probe, lease: upgrade-lease-kube-prometheus-stack, subject: argocd/platform/kube-prometheus-stack.yaml, chart: kube-prometheus-stack, sha: 3a9c1f0e, from: "91.8.2", to: "91.9.0", by: kps-lease-presync }
+      # the deadline (6000) is not reached: PastExpectedEnd stays quiet — Orphaned is the only name
+      - eval_time: 52m
+        alertname: UpgradeLeasePastExpectedEnd
+        exp_alerts: []
+  - interval: 1m
+    name: "a lease standing with NO box series at all (the box gone with its scrape) fires Orphaned after 5m"
+    input_series:
+      - series: 'upgrade_lease_info{job="upgrade_lease_probe",lease="upgrade-lease-kube-prometheus-stack",subject="argocd/platform/kube-prometheus-stack.yaml",chart="kube-prometheus-stack",sha="3a9c1f0e",from="91.8.2",to="91.9.0",by="kps-lease-presync"}'
+        values: "1x20"
+      - series: 'upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe",lease="upgrade-lease-kube-prometheus-stack",subject="argocd/platform/kube-prometheus-stack.yaml"}'
+        values: "6000x20"
+      - series: 'upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"}'
+        values: "0+60x20"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts:
+          - exp_labels: { severity: critical, triage: now, job: upgrade_lease_probe, lease: upgrade-lease-kube-prometheus-stack, subject: argocd/platform/kube-prometheus-stack.yaml, chart: kube-prometheus-stack, sha: 3a9c1f0e, from: "91.8.2", to: "91.9.0", by: kps-lease-presync }
+  - interval: 1m
+    name: "no lease + a silent box is NOT orphaned (nothing in flight) — zero leases means nothing to expire"
+    input_series:
+      - series: 'upgrade_lease_standing{job="upgrade_lease_probe"}'
+        values: "0x60"
+      - series: 'upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"}'
+        values: "0+60x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: UpgradeLeaseOrphaned
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: UpgradeLeaseInFlight
+        exp_alerts: []
+
+  # ── the reader itself ───────────────────────────────────────────────────────────────────────────
+  - interval: 1m
+    name: "a reader whose freshness stops advancing fires ProbeStale 10m + 5m after its last push"
+    input_series:
+      # pushes until minute 10 (stamp 600), then frozen: time() - 600 > 600 from minute 21; for 5m → 26
+      - series: 'upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"}'
+        values: "0+60x10 600x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: UpgradeLeaseProbeStale
+        exp_alerts: []
+      - eval_time: 27m
+        alertname: UpgradeLeaseProbeStale
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }
+      - eval_time: 27m
+        alertname: UpgradeLeaseProbeAbsent
+        exp_alerts: []
+  - interval: 1m
+    name: "no push ever fires ProbeAbsent after 1h and never ProbeStale"
+    input_series: []
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: UpgradeLeaseProbeAbsent
+        exp_alerts: []
+      # absent() carries the equality matcher's label (job) into the alert
+      - eval_time: 61m
+        alertname: UpgradeLeaseProbeAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, job: upgrade_lease_probe }
+      - eval_time: 61m
+        alertname: UpgradeLeaseProbeStale
+        exp_alerts: []
