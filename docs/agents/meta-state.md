@@ -10,6 +10,22 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-11 18:45Z — seat; TICK-LOG 2026-10-11 17:30–18:45Z): three seat-residue items closed,
+  one drill verdict pending.** **sleep-tracking#67 CLOSED** on a discriminating homelab-namespace probe ride —
+  the first ride was NEGATIVE (nix dropped `flake-registry` with flakes off) → **#2502** (feature line first in
+  NIX_CONFIG) → ride 2 clean (0 drops, 0 `channels.nixos.org` queries, `cache.nixos.org` > 0).
+  **FU-305 lock-revert RERUN hands-off** (#2503 → #2504, 12 min, zero hand acts; register row #2505).
+  **FU-297 drill:** the 17:36Z hand start FAILED (build) on the exact `SERIES=26.7.5` point vs the mirror's
+  26.7.6_3 head → class fix **#2501** (series declared, converge on the head); run 2 died on my own lock plant
+  (the box pulled both at once); **run 3 (18:21Z, HEAD `ad4dfdbc`): **PASS 18:34:54Z** (826 s: build 328 s at 26.7.6_3 — the #2501 head convergence — converge 440 s, every router-code unit applied, 3 config scripts rc=0; realism score **56** vs previous 117, `MgmtOpnsenseDrillFailed` CLEARED). The 56 click-ops rows are the PAIR's prod config vs the single-router rehearsal: `OPNsense/Kea` 36, `virtualip` 17, `hasync` 2 (+1) — FU-297's next read, not a drill defect.**.
+  **OPERATOR:** prod routers read 26.7.5 with 26.7.6 pending on the official path (39 packages, no reboot) —
+  an attended window (the D2/D3 shape); the probe-ride shape fires `RouterRunModelUnverifiable` (an ad-hoc
+  `--run` needs `--model` to pass the chainless guard yet calls no LLM) — a launcher no-LLM probe flag is
+  unbuilt, not filed. Board: `GithubCiWallTimeDrift` since 10-09 23:23Z is NOT transient (homelab `CI` push
+  median 9m56s; one job `ci`, so the read is step-level — the sweep's, no responder issue). Standing, none S9:
+  `LonghornDiskBelowSchedulingFloor` ×2 (FU-093), `MgmtSubstrateBehind`, `RegistryMirrorDanglingLinks`,
+  `OpenRouterKeyBudgetLow` (resets Mon 00:00Z), `HomeAssistantPowerSensorStale` ×6, `AgentAttentionStanding`
+  oracle-fleet issue-820, `VersionSetMembersDisagree` (the claude-jail host rebuild, operator-side).
 - **⚑ PICKUP (2026-10-11 12:30Z — seat; TICK-LOG 2026-10-11 midday): the two parked majors rode through
   without a hand act; argo-cd chart majors ARMED.** **#2488 argo-cd 9.7.1 → 10.9.6 (ArgoCD v3.4.4 → v3.5.3)
   MERGED `061287a0`** by the Renovate rebase box (three rounds on a moving master; the lens APPROVED survived each,
@@ -67,28 +83,11 @@ never the session's arc — that is TICK-LOG's.)
   on 2.1.281, images on 2.1.291 (`VersionSetMembersDisagree` fires after 1 d of the split) + the 3 operator-direct
   workflow patches (stamp→rebuild dispatch). (3) the Argo-half ruling (Garage `appVersion` customManager shape in
   the 09:30Z PICKUP — arms unattended restarts of the one unrecoverable release). (4) the #2219 read (merged by
-  mistake; `git revert 42ad3aec` if unwanted). Seat-side residue: the kps lane's first lens-armed 92.x merge (check
-  (h) PROVEN, #2492); FU-305's hands-off lock-revert rerun; FU-297's first green drill; sleep-tracking#67's proof
-  needs the first `homelab`-namespace fixer ride on tag ≥ `2026.10.9-g4bd7c9b9b57d` (expect
-  `hubble_drop_total{source="homelab",destination="channels.nixos.org"}` AND the matching
-  `hubble_dns_queries_total` both 0 over its window while cache.nixos.org queries > 0 — oracle-fleet rides never
-  query that host, so they prove nothing). The lock-revert "ruling owed" of 10-10 is MOOT — the drill ran that
+  mistake; `git revert 42ad3aec` if unwanted). Seat-side residue (re-read 18:45Z): the kps lane's first lens-armed 92.x merge (no
+  92.x upstream yet; check (h) PROVEN, #2492); FU-297's first green drill (class fix #2501 landed 10-11 evening —
+  see the 18:45Z PICKUP for run 3). DONE 10-11 evening: FU-305's hands-off rerun (#2503→#2504), sleep-tracking#67
+  (closed on ride 2 after #2502). The lock-revert "ruling owed" of 10-10 is MOOT — the drill ran that
   evening (#2478→#2480), the wedge was the box's devbox closure (#2457) + governance-lint (#2482), both fixed.
-- **⚑ PICKUP (2026-10-10 — seat): nix flake-registry fix LIVE, proof pending a ride.** Launcher pin
-  `flake-registry =` (#2420) + agent-runtime #168 (ea009fca, entrypoint APPENDS to NIX_CONFIG) are
-  both live — agent-base `2026.10.9-g4bd7c9b9b57d` pinned (#2422). **But no worker ride has run since
-  2026-10-07 18:27Z** (cause unread — homelab-openrouter spent its $5 weekly cap 10-05/06, resets
-  Mon 2026-10-12 00:00Z, but the operator says the rail falls over to the subscription), so the
-  zero `hubble_drop_total{destination=~".*nixos.org"}` since then proves nothing (30 d drops: source
-  homelab only, 1492). **Re-read 2026-10-11 (seat subagent):** rides DID run on the pinned tag (oracle-fleet
-  829-r2, 833-r1) with zero drops — but oracle-fleet rides never query `channels.nixos.org` at all (30 d DNS:
-  homelab 270 queries ↔ 1492 drops, oracle-fleet 0), so they are non-discriminating; NOT closed. **Next:** the
-  first `homelab`-namespace fixer ride on tag ≥ `2026.10.9-g4bd7c9b9b57d` — expect `hubble_drop_total{source=
-  "homelab",destination="channels.nixos.org"}` AND `hubble_dns_queries_total{source="homelab",query=
-  "channels.nixos.org."}` both 0 over its window while `cache.nixos.org` queries > 0; then close
-  sleep-tracking#67 citing #2420 + agent-runtime#168 (a seat-dispatched probe ride running `devbox install`
-  in ns homelab would settle it without waiting).
-
 - **⚑ PICKUP (2026-10-09 11:40Z — seat; TICK-LOG 2026-10-09 midday).** **WINDOW 2 WAN LEG DONE — the
   router pair is complete** (window `seat-1791544351-8289`, closed clean): pve's WAN cable in, the proof
   served WAN from pve 6 min, the FU-308 dead-man (#2399, merged) fired the failback on time; nx-02's gate

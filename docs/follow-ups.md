@@ -174,12 +174,11 @@ six OVERSIZE items pointer-ized into
       ([incident](incidents/2026-10-08-carp-maintenance-not-left.md) → #2395 `carp-maintenance` verb).
       **2026-10-09: WAN LEG DONE — the pair is complete** (cable in, gate held pve dark; proof with the
       FU-308 dead-man, pve served WAN 6 min at 378 Mbit/s, dead-man failed back; nx-02 gate restarted while
-      BACKUP; router-move §Status). **Next:** the weekly rebuild drill is RED — two reds, both read 2026-10-11: 10-04 the galaxy-cache
-      corruption (fixed #2386), 10-11 03:30Z a preflight REFUSE (window 2 made both CARP nodes live; the drill's
-      resolver wanted ONE — fixed #2493: prod = the CARP MASTER by `router_carp_advskew`). `MgmtOpnsenseDrillFailed`
-      clears on the first PASSING run (timer Sun 10-18 03:34Z, or `systemctl start mgmt-opnsense-drill` on the box
-      after the hourly pull) — that run is also the first full converge/probe/compare against the window-2 code;
-      no CI exercises `scripts/opnsense-drill.sh` (reviewer note, #2493). Then the nx-02 DIMM window (FU-289).
+      BACKUP; router-move §Status). **2026-10-11: the drill is GREEN again** after three reds read the same day
+       (10-04 galaxy cache #2386; 10-11 03:30Z preflight REFUSE #2493; 17:36Z build at an exact `SERIES` point the
+       mirror had moved past — #2501 declares the series): PASS 18:35Z, score 56 vs 117. **Next:** read the 55
+       click-ops rows the pair left in prod vs the single-router rehearsal (`OPNsense/Kea` 36, `virtualip` 17,
+       `hasync` 2) — code them or accept them; no CI exercises `scripts/opnsense-drill.sh` (reviewer note, #2493).
       Kea's two offers per DISCOVER: a finding in router-move.md §Status, not tracked. Relates FU-097,
       FU-013, FU-298, FU-307, FU-308.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
@@ -516,13 +515,14 @@ the block needs pruning, not more headings.
       the box must then run) or install `latest` at boot (the runner self-updates anyway).
 - [ ] **FU-305** — **A devbox toolchain bump wedged the management box's loops; the sentinel failed SILENT.**
       2026-10-07: #2362's Python bump hit devbox's venv prompt → every box `devbox run` exited 1 → no
-      `management-sentinel` verdict, apply/lease PROBE-FAILed. **Class fix PR#2457 (LIVE 10-10 16:53Z):** no gate
-      loop runs devbox (box closure `boxTools`; the lock read as data); the required iac-sentinel runs the runner
-      image's BAKED lock (ruling 10-10) — both halves: docs/management-box.md §Two pins. Class-7 lock revert
-      DRILLED 10-10 (#2478→#2480, both sentinels green; governance-lint red the chain's own revert → its
-      revert-lock arm, PR#2482 — dependency-upgrades §Last proven). **Next:** a hands-off rerun; the flake.lock
-      proposer = the weekly devbox-update PR (ruling 10-10; pin-only-lint (j), CODEOWNERS carve-out
-      operator-direct); `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z).
+      `management-sentinel` verdict, apply/lease PROBE-FAILed. **Class fix PR#2457 (LIVE 10-10):** no gate loop
+      runs devbox (box closure `boxTools`; the lock read as data); the required iac-sentinel runs the runner image's
+      BAKED lock — docs/management-box.md §Two pins. Class-7 lock revert DRILLED 10-10 (#2478→#2480, one hand
+      merge; fix #2482) and **RERUN HANDS-OFF 2026-10-11** (#2503 plant → #2504 revert, 12 min, zero hand acts —
+      dependency-upgrades §Last proven; a bad lock still costs the box's two `devbox run` consumers one red run, the
+      accepted class). Found by the rerun: devbox logs nix's full command line incl. `--option access-tokens
+      github.com=<mgmt PAT>` into the unit's journal on an internal error (root-only, not shipped — redact before any box log ships).
+      **Next:** the flake.lock proposer = the weekly devbox-update PR (ruling 10-10); `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z).
 - [ ] **FU-290** — **Doorbell-driven scans + coordinator sessions exhaust the shared homelab-agents
       GraphQL pool under PR churn.** 2026-09-25 09:19–09:31Z every stack's review/coordinate reflex
       failed "rate limit already exceeded for installation 142724430". In 08:31–09:31 oracle+sleep ran

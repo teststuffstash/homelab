@@ -13136,3 +13136,44 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Wind-down:** meta-state PICKUP 12:30Z + the S9 what-is-left bullet rewritten (operator-side = spike D1–D9,
   claude-jail host rebuild + 3 workflow patches, the Argo-half ruling, the #2219 read); subagent clones deleted;
   one push.
+
+
+## 2026-10-11 17:30–18:45Z — S9 seat residue: drill class fix, sleep-tracking#67 CLOSED on a discriminating ride, lock revert rerun hands-off (seat, no subagents)
+
+- **Pickup from the 12:30Z meta-state.** No open PRs, no kps 92.x upstream yet (nothing to merge). New on
+  the board since the wind-down: `VersionSetMembersDisagree` (claude-code set, the claude-jail host rebuild —
+  operator-side), `GithubCiWallTimeDrift` (homelab `CI`, push median 9m56s vs 1.5× the 3-weeks-ago window;
+  `triage: dig`, no responder issue filed; the workflow is ONE job `ci`, so a per-job split says nothing —
+  the step-level read is the sweep's).
+- **FU-297 drill, hand-started 17:36Z on the box (HEAD cd4d06e2 carries #2493): preflight PASSED (the #2493
+  resolver: prod = the CARP MASTER), build FAILED** — `still at 26.7.6_3 after 3 update passes`: the bootstrap
+  pinned the exact point `SERIES=26.7.5` and the mirror's 26.7 head had moved (second sighting of the
+  2026-09-30 class). Prod reads 26.7.5 on both nodes, 26.7.6 pending on the official path (39 packages, no
+  reboot — an attended window, the operator's). **Class fix #2501 (merged 17:45Z):** `SERIES=26.7`, update
+  passes until the version stops moving, out-of-series dies loudly; doc §Version row + caveat.
+- **sleep-tracking#67 — the first discriminating proof ride was NEGATIVE, and that found fix #3.** Ride 1
+  (`agents/agent-session.sh homelab --model … --run "devbox install"`, pod `agent-homelab-173847`,
+  17:39–17:43Z; the launcher's chainless guard needs an explicit `--model` for an ad-hoc run): 51
+  `POLICY_DENIED` drops to `channels.nixos.org`, 2 DNS queries, and nix's own line — `Ignoring setting
+  'flake-registry' because experimental feature 'flakes' is not enabled`. NIX_CONFIG is parsed before devbox's
+  `--extra-experimental-features`; the 10-09 jail measurement passed only because the jail's NIX_CONFIG
+  carries the feature line. Measured both ways in the jail. **#2502 (merged 18:05Z):** the env value is two
+  lines, feature line first; replay fixture `nix-registry-env` updated. **Ride 2** (`agent-homelab-180559`,
+  18:06–18:07Z): drops **0**, `channels.nixos.org.` queries **0**, `cache.nixos.org.` **2**, `registry is
+  downloaded: Success` with no registry attempt → **#67 CLOSED** citing #2420 + agent-runtime#168 + #2502.
+  Artefact of the probe shape: `RouterRunModelUnverifiable` fired 18:14Z (2 platform rides requested
+  `opencode-go/deepseek-v4-flash`, no served-side record — they never called an LLM); clears on its 30 m.
+- **FU-305 class-7 lock revert RERUN — HANDS-OFF, 12 min.** Window `seat-1791742073-6840` (alerts
+  `GithubWorkflowRunFailed`). Plant #2503 (`d5048fbc`, qrencode 4.1.99 at deadbeef) admin-merged 18:08:23Z →
+  `runner-image` red 18:11Z (+ master's own `CI` red 18:14Z) → `GithubWorkflowRunFailed` 18:12Z → #2504
+  `revert-lock-d5048fbc` opened 18:13Z by the agents App, reflex APPROVED, `ci` GREEN (the #2482 arm),
+  `iac-sentinel` + `management-sentinel` SUCCESS, auto-merged 18:20:14Z (`ad4dfdbc`, lock byte-identical to the
+  plant's parent). Zero hand acts after the plant. Register row PR #2505. Window closed `--force` 18:22Z
+  (the declared alert + the probe artefact left to age).
+- **Sequencing error, mine:** the box's hourly pull (18:08:53Z) took #2501 AND the plant in one reset, and the
+  drill unit runs `devbox run` from the checkout — drill run 2 died in devbox on the deadbeef rev
+  (`HTTP error 404`) before its own stages. The accepted class (management-box.md §Two pins: ansible + the
+  drill are the box's two devbox consumers, a bad lock costs one red run). Seen in that journal: devbox prints
+  nix's full command line including `--option access-tokens github.com=<the read-only mgmt PAT>` on an
+  internal error — root-only journal, not shipped; one line on FU-305. **Drill run 3** started 18:21Z after a
+  hand `mgmt-pull` (HEAD `ad4dfdbc`): **PASS 18:34:54Z** (826 s: build 328 s at 26.7.6_3 — the #2501 head convergence — converge 440 s, every router-code unit applied, 3 config scripts rc=0; realism score **56** vs previous 117, `MgmtOpnsenseDrillFailed` CLEARED). The 56 click-ops rows are the PAIR's prod config vs the single-router rehearsal: `OPNsense/Kea` 36, `virtualip` 17, `hasync` 2 (+1) — FU-297's next read, not a drill defect.
