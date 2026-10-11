@@ -120,8 +120,10 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
   `MgmtApplyResidueStanding` fires if the merged bump sits unapplied 24 h — the human read of this
   substrate is at the apply.
 - **JS via the `deno` manager (`scripts/mermaid-lint/deno.json` + `deno.lock`, CI-only dev tooling
-  exercised by required `ci`)** rides the mechanical `automerge` lane for patch/minor; majors → the
-  catch-all. homelab has no `package.json` since [ADR-143](adr.md): the parser runs under Deno with no
+  exercised by required `ci`)** rides the mechanical `automerge` lane for patch/minor — and for
+  **mermaid majors** (operator 2026-10-11 on #2100: "CI is the only gate needed" — the `mermaid-lint`
+  step of `ci` parses every tracked diagram with the bumped parser; graduates to the lens on first
+  evidence, exactly like an Action); other deno majors → the un-armed catch-all shape. homelab has no `package.json` since [ADR-143](adr.md): the parser runs under Deno with no
   permissions, and `lock-intake-lint` in `ci` judges every lock change. A red intake WAITS for upstream — no
   local pin or override (ADR-143).
 - **Terraform providers ride the mechanical `automerge` lane; the [management box](management-box.md) is the gate** (rule flipped 779f40fa, 2026-09-27; drill #2030 passed the same day). Stage 1

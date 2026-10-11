@@ -1100,7 +1100,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-10-10T18:32:28Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.10-gd303a3b5bd8d; 32 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.10-gd303a3b5bd8d; 33 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1120,7 +1120,8 @@
         "argocd/resources/chart-revert/deployment.yaml",
         "argocd/resources/kube-prometheus-stack-lease/hooks/postsync-job.yaml",
         "argocd/resources/kube-prometheus-stack-lease/hooks/presync-job.yaml",
-        "argocd/resources/registry-cache/gc-mirrors.yaml"
+        "argocd/resources/registry-cache/gc-mirrors.yaml",
+        "argocd/resources/upgrade-lease-reader/cronjob.yaml"
       ]
     },
     {
