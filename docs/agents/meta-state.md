@@ -25,8 +25,8 @@ never the session's arc — that is TICK-LOG's.)
   same live move; garage-2 serves fine but has not remounted since. Box: engines 42/42 on v1.12.1, verdict STOPPED
   00:23Z (correct), marker+lease `upgrade-lease-tofu-helm-longhorn` kept; clear-down AFTER garage-1 is whole: rm
   `/var/lib/mgmt/apply/helm-stopped`, delete the lease cm, (window lapsed). #2485 (progress-renewed lease + own unit)
-  merged+active. Owed (FU-301): a per-move consumer check (pods Ready / mount stat) that STOPs before the next move;
-  second breakage record. Alerts firing for this: GarageClusterDegraded/ZoneDegraded/DisruptionBlocked, PDB, STS,
+  merged+active. #2490 (01:14Z) adds the per-move CONSUMER check (pods Ready/same uid/no restart, 120 s soak) and
+  REFUSES live engine moves on 1-replica attached volumes ("attended engine move required"); breakage record #2 written. Alerts firing for this: GarageClusterDegraded/ZoneDegraded/DisruptionBlocked, PDB, STS,
   KubePodNotReady, KubeContainerWaiting, TargetDown, MgmtHelmApplyStopped (left to the responder + this note).
 - **⚑ OPERATOR ASLEEP — seat autonomous (2026-10-10 ~19:30Z →).** The temporary 0.99 subscription latch (0cdb1cdc) is
   RESTORED to 0.95 (82a14a34, live 00:1xZ 10-11, after the 7d reset). Class-7 LOCK DRILL ran: plant #2478 19:08Z → alert 19:19:13Z → chain PR #2480 19:19:54Z
