@@ -98,11 +98,16 @@ MEM_MIN_MB="${OPN_DRILL_MEM_MIN_MB:-4096}"
 log() { printf '[opnsense-drill] %s\n' "$*" >&2; }
 die() { log "REFUSED: $*"; exit 2; }
 # The prod router's API address: the ansible inventories are its one home (docs/router-move.md (B))
-# — the one LIVE `opnsense` host (no `opnsense_standby: true`): Big Data's `opnsense-fw` before
-# window 1, the nx-02 node after (ADR-145). NODES = every router node, live or standing: never a drill host.
-PROD="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | .ansible_host' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml")"
+# — the LIVE `opnsense` hosts (`opnsense_standby` not true): Big Data's `opnsense-fw` before
+# window 1, the nx-02 node alone after window 1, BOTH pair nodes since window 2 (ADR-145, #2390 —
+# the strict "exactly one" read refused the 2026-10-11 run: `got: 192.168.2.70 192.168.2.71`).
+# The drill scores against the MASTER (lowest `router_carp_advskew` — the node serving `.1`), so
+# the score stays comparable run over run whichever node the file lists first.
+# NODES = every router node, live or standing: never a drill host.
+LIVE="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != true) | "\(.router_carp_advskew // 0) \(.ansible_host)"' "$ROOT/ansible/inventory.yml" "$ROOT/ansible/router-nodes/inventory.yml" | grep -E '^[0-9]+ ' | sort -n -k1,1)"
+PROD="$(sed -n '1s/^[^ ]* //p' <<< "$LIVE")"
 NODES="$(yq -r '.all.children.opnsense.hosts[]?.ansible_host' "$ROOT/ansible/router-nodes/inventory.yml" | tr '\n' ' ')"
-[ "$(printf '%s\n' "$PROD" | grep -c .)" = 1 ] && grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$PROD" || die "could not read ONE live prod router address from the ansible inventories (got: $(echo $PROD))"
+grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$PROD" || die "could not read a live prod router address from the ansible inventories (got: $(echo $LIVE))"
 pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
 # fetch_backup <out> — the newest FU-013 object, decrypted (scripts/opnsense-backup-fetch.sh).
 fetch_backup() { OPN_BACKUP_KUBECONFIG="$KUBECONFIG_DRILL" bash "$ROOT/scripts/opnsense-backup-fetch.sh" "$1"; }
