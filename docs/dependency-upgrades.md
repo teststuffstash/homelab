@@ -23,67 +23,16 @@ must not break), ADR-141 (blast class picks the lane). The §Ground truth findin
 
 ## Ground truth first: what Renovate has actually done in homelab
 
-Measured 2026-08-01 from run #115 of `.github/workflows/renovate.yaml` (job logs) and the repo's
-PR/branch/issue history. **This section is evidence, not design** — the design below exists because
-of it.
-
-**Renovate has never opened a single dependency PR in homelab — and org-wide this is a
-REGRESSION, not a never-worked.** FU-014's rollout evidence (archived 2026-07-12; preserved here
-because that archive entry expires ~2026-08-16) records real bumps flowing on 2026-07-05/06: a
-sleep-tracking docker-digest PR that produced a sleep-iac deploy PR 8 minutes later, plus
-devbox-update bumps. sleep-tracking is now one of the four `integration-unauthorized` repos. So
-the write path **worked** and then broke somewhere in the 2026-07-06 → 08-01 window. The cause
-turned out to be a permission the App never had, not a change to the App — diagnosed below.
-
-| Observation | Evidence |
-|---|---|
-| Renovate runs every ~6h and has for weeks | 115 workflow runs, **every one `success`** |
-| homelab *is* autodiscovered and *is* extracted | run #115: `homelab` first of 10 repos, **97 deps across 36 files** |
-| …and then aborts | `result: "repository-changed"` after 43.9s — "Repository has changed during renovation - aborting" |
-| **Every other repo aborted too, in the same run** | 6 × `repository-changed`, **4 × `integration-unauthorized`** (sleep-tracking, snore-recorder, oracle-fleet, oracle-iac) |
-| Net PRs opened by that run | **zero**, across all ten repos |
-| No Dependency Dashboard exists | the global config extends `:dependencyDashboard`; there is no such issue on homelab |
-| One orphaned branch | `renovate/pin-dependencies`, pushed **2026-07-27**, SHA-pinning 7 workflow files — **no PR was ever opened for it** |
-| The only "renovate" PRs here aren't Renovate's | `runner-image-pin` and `devbox-update` branches — first-party workflows using the App as an author identity |
-| Onboarding PR | #2 "Configure Renovate", closed 2026-07-06 — correct, the policy is the global file (`onboarding: false`) |
-
-Two more findings from the same log:
-
-- **Config validation warning, silently tolerated:** `"prPriority" can't be used in
-  "vulnerabilityAlerts". Allowed objects: packageRules.` The security fast-track's `prPriority: 10`
-  is **dropped**. The rest of the `vulnerabilityAlerts` block is fine.
-- **A custom manager resolves nothing:** `Found no results from datasource that look like a version
-  (dependency=NixOS/nix)` — the `NIX_VERSION` pin in `docker/arc-runner/Dockerfile` has never been
-  updatable (NixOS/nix releases don't match the `github-releases` version shape being asked for).
-
-### Why this matters more than the individual bugs
-
-The workflow is **green**. Nothing anywhere says "Renovate did nothing again." This is the same
-failure class as FU-108 (the exporter's Search API silently omitting private repos) and FU-113 (a
-deferral that reads as silence): **a probe that reports success while doing nothing is worse than
-one that fails**, because it buys false confidence in a supply-chain control that
-[`renovate.md`](renovate.md) describes as the first line of defence against a Trivy-style
-compromise. The cooldown, the SHA-pinning and the OSV alerts are all real policy — and none of them
-have been *applied* to homelab.
-
-**Diagnosed 2026-09-25 (debug run 36107468534): both halves are ONE missing permission —
-`statuses`.** Renovate reads each branch's commit statuses and writes `renovate/stability-days`
-(the `minimumReleaseAge` cooldown's status). The App was never granted `statuses`, so every repo
-403s after extraction: `x-accepted-github-permissions: statuses=read` surfaces as
-`integration-unauthorized`, `statuses=write` as `repository-changed`. The two earlier hypotheses —
-an App permission/installation regression since 2026-07-06, and the ~6h schedule racing the loop's
-push traffic — are both ruled out (the live declared-vs-live page matched on every other permission
-and all ten installs). The fix is the declaration in [`github-apps.yaml`](github-apps.yaml) plus the
-grant in the App settings (the `GithubAppPermissionDrift` belt rings until it lands).
-
-> **Acceptance for "Renovate works in homelab":** at least one `renovate/*` PR has been opened,
-> gated and merged. **MET 2026-09-27** — #2008 (an Actions minor through the grouped mechanical
-> lane), #2021 (the SHA-pinning PR, rebuilt under the first-party exclusion), #2012 (npm),
-> #1983/#1996/#1997 (terraform providers through the human plan); the per-class record is
-> §"Last proven end to end" below. (The dashboard-issue-exists half of this acceptance was
-> RETIRED 2026-08-18: `dependencyDashboard` is now `false` in the global config by operator
-> ruling — the dashboard is an interactive click-ops surface nothing here reads; liveness is the
-> gauge, next-step 2.)
+Renovate opened **no PR in homelab between 2026-07-06 and 2026-09-25** while its workflow stayed green
+on every run — a probe reporting success while doing nothing (the FU-108/FU-113 class). The cause was
+one permission the App never had (`statuses`: every repo 403'd after extraction as
+`integration-unauthorized` / `repository-changed`); fixed by the declaration in
+[`github-apps.yaml`](github-apps.yaml) + the grant (FU-125, archived 2026-09-27). **Acceptance MET
+2026-09-27** — `renovate/*` PRs opened, gated and merged on every lane (§Last proven end to end). Two
+residues from the 2026-08-01 log read stand: the `NIX_VERSION` custom manager resolves nothing (the
+register's class-10 override) and the `vulnerabilityAlerts.prPriority` key is invalid and dropped.
+Liveness is the `github_renovate_last_pr_timestamp` gauge → `RenovateSilent`, never the workflow's
+own verdict.
 
 ---
 
@@ -364,111 +313,15 @@ Two consequences the table above glosses over:
   proven itself and Renovate rides through it: [`management-box.md`](management-box.md) §The
   test surface (operator, 2026-09-13).
 
-### Executing the lever — the migration order and the one unverified fact
+### The tofu → ArgoCD migration of the four helm releases — DONE 2026-08-04
 
-Written 2026-08-04 for a fresh session; the design above is already cleared (ADR-005: none of these
-four are things ArgoCD needs in order to run — Longhorn is, which is why it is not on the list).
-What remains is mechanical, and dangerous in a specific way: each release is a `tofu state rm` +
-an ArgoCD Application that must **adopt** the live Helm release. Get adoption wrong on garage and
-you do not get a failed apply, you get an empty bucket.
-
-**The gating fact — SETTLED on metrics-server, 2026-08-04: ArgoCD adopts, and it adopts silently.**
-It does not install alongside, because it never installs at all: ArgoCD `helm template`s the chart
-and applies the rendered objects, so there is no second Helm release to collide with the first. The
-two ownership systems agree *by construction*, not by luck, as long as the **Application name equals
-the Helm release name** — the chart renders `app.kubernetes.io/instance: {{ .Release.Name }}`, and
-ArgoCD's default `label` tracking wants that same key set to the Application name. Keep those names
-equal for every remaining release; that equality is the whole mechanism.
-
-Two consequences worth carrying forward:
-
-- **The live Helm metadata survives and is harmless.** `meta.helm.sh/release-*` annotations and
-  `app.kubernetes.io/managed-by: Helm` stay on the objects — ArgoCD's rendered output doesn't
-  contain them, so the 3-way merge leaves them alone and they don't show as OutOfSync.
-- **The pre-flight is free and it is the real gate.** `helm template <release> <chart> --version
-  <same> -n <ns>` piped into `kubectl diff -f -` answers "will adoption change anything?" *before*
-  any `state rm`. On metrics-server it came back empty, and the subsequent adoption changed nothing
-  (Synced/Healthy, one ReplicaSet, pod start time unmoved). Run it per release; an empty diff is the
-  green light, a non-empty one is the whole reason the order is least-valuable-first.
-
-⚠ **Rollback works but does not plan clean** (measured, not assumed). `tofu import` restores
-ownership with **0 to destroy** — but the helm provider cannot read `repository` or `values` back
-out of a release, so the next plan shows **1 to change, in place**: it re-attaches those two
-attributes and recomputes `metadata`. Applying it is a no-op Helm upgrade (revision bump), not a
-recreate. Do not read that diff as "the import was wrong" — and do not let step 1's "plan clean
-first" rule block a rollback.
-
-**Order, least-valuable first:**
-
-| # | release | why here |
-|---|---|---|
-| 1 | `metrics-server` | the adoption canary — stateless, instantly rebuildable, nothing depends on its history. **DONE 2026-08-04** (`argocd/platform/metrics-server.yaml`) |
-| 2 | `forgejo` (+ runner) | stateful but mirrored from GitHub; recoverable. **DONE 2026-08-04** (`argocd/platform/forgejo.yaml`) — needed TWO conversions (admin + DB) and an ArgoCD OCI repo registration |
-| 3 | `kube-prometheus-stack` | losing it blinds every alert built this month, incl. the Longhorn metering. **DONE 2026-08-04** (`argocd/platform/kube-prometheus-stack.yaml` + `values/`) — the release that moves alert rules out of the tofu class |
-| 4 | `garage` | LAST, and it needed THREE gates rather than one: a backup (FU-137), *two* secrets behind references (`rpcSecret` comes from `random_id` — invisible to a `random_password` grep), and the vendored chart moved out of `tofu/` to `argocd/charts/garage`. **DONE 2026-08-04** (`argocd/platform/garage.yaml`) |
-
-### The secret-in-values gate — why release 1 was free and 2-4 are not
-
-**Discovered while executing 2026-08-04, and it changes the shape of the remaining work: all three
-remaining releases inject a secret into the chart through tofu-rendered Helm values.** The
-destination (`argocd/platform/`) is a **public git repo**, so a literal lift-and-shift of the values
-block publishes a live credential. metrics-server was the only release with no secret in its values
-— which is *also* why it was the free canary, a coincidence worth naming rather than trusting again.
-
-| release | the secret in values | tofu source |
-|---|---|---|
-| `forgejo` | `gitea.admin.password` **and** `gitea.config.database.PASSWD` | `random_password.forgejo_admin` / `random_password.forgejo_db` |
-| `kube-prometheus-stack` | `grafana.adminPassword` | `var.grafana_admin_password` (KeePass wallet via `keepass-env.sh`) |
-| `garage` | `GARAGE_ADMIN_TOKEN` as a literal env `value` | `random_password.garage_admin_token` |
-
-So each of 2-4 needs a **preparatory step that release 1 didn't have**: convert the value into a
-*reference* to a k8s Secret **while tofu still owns the release**, verify the workload is happy
-reading it that way, and only then run the migration sequence. Reference-not-value is the
-repo's standing rule for the public repo; this is the same rule arriving at a new surface.
-
-Two consequences:
-
-- **The empty-diff pre-flight is what proves the conversion**, not just the migration. Flipping
-  `adminPassword: <literal>` → `admin.existingSecret` re-renders the Deployment (env source
-  changes), so that diff will NOT be empty — it is a real, intended change that must go through
-  tofu apply first. Only once the release is on the reference does the migration diff go empty
-  again. Two separate changes, two separate verifications; collapsing them is how a canary stops
-  being a canary.
-- **The `random_password` resources outlive the `helm_release`.** They stay in tofu state, feeding
-  the k8s Secret the chart now reads — so for forgejo and garage, tofu keeps owning the *secret*
-  after it stops owning the *release*. That is fine, and it's the ESO/Infisical migration's
-  natural next target (`minimize-tofu` direction), not something the lever has to solve first.
-
-**All three conversions landed 2026-08-04** (FU-136 archived) — the mechanism each chart actually
-supported, verified rather than trusted from its docs:
-
-| release | how the secret left the values |
-|---|---|
-| `forgejo` | `gitea.admin.existingSecret: forgejo-admin-creds` (`-creds` because the CHART owns the name `forgejo-admin`) + `gitea.additionalConfigFromEnvs` carrying `FORGEJO__DATABASE__PASSWD` out of the CNPG `forgejo-pg-app` Secret into init-app-ini |
-| `kube-prometheus-stack` | `grafana.admin.existingSecret: grafana-admin` |
-| `garage` | the `environment` list took a `valueFrom.secretKeyRef` (`garage-admin-token`) — the mechanism that was least certain, on the one release that is unrecoverable |
-
-The `random_password` resources stayed in tofu state as predicted: tofu still owns the *secrets* for
-forgejo and garage after it stopped owning the *releases*.
-
-**Per release, the sequence is the labels-handoff shape** (`scripts/labels-handoff.sh` is the worked
-example — dry-run by default, refuses to report success when it cannot see state):
-
-1. `devbox run tf-plan` clean first — never migrate on top of unrelated drift.
-2. `tofu state list | grep '^helm_release\.<name>$'` — scoped exactly, never a bare name grep.
-2b. The **empty-diff pre-flight** above (`helm template` → `kubectl diff -f -`), while tofu still
-   owns the release. Nothing is committed to until it comes back empty.
-3. `tofu state rm 'helm_release.<name>'` — tofu FORGETS; Helm and the workload are untouched.
-4. Add `argocd/platform/<name>.yaml` pinning the SAME chart version and values, `syncPolicy` with
-   `selfHeal` but **`prune: false` on the first sync** — a stray prune is the destructive path.
-5. Verify: `kubectl get helmrelease/secret -l owner=helm` still shows ONE release, the workload
-   never restarted, and the ArgoCD app reports Synced/Healthy without having recreated anything.
-6. Only then flip `prune: true`, and only then start the next release.
-7. Remove the `helm_release` block from `tofu/*.tf` in the same commit as step 4, so git never
-   claims two owners for one release.
-
-**Rollback at any step:** `tofu import 'helm_release.<name>' <ns>/<name>` puts it back under tofu.
-Establish that this works on metrics-server too, before it is needed under pressure.
+metrics-server, forgejo, kube-prometheus-stack and garage left tofu for `argocd/platform/` on
+2026-08-04 (least-valuable first; FU-136 archived). The two facts worth keeping: ArgoCD **adopts a live
+Helm release silently** as long as the Application name equals the release name (it renders the chart
+and applies the objects — no second release), and the empty-diff pre-flight (`helm template` →
+`kubectl diff -f -`) is the gate that proves both the secret-to-reference conversion the public repo
+requires and the adoption itself. What stays in tofu is class 4 (argo-cd, argocd-apps, longhorn) and
+cilium (class 6) — by ADR-005, the pieces ArgoCD needs in order to run.
 
 ---
 
@@ -715,21 +568,21 @@ mechanism lives in the linked places.
 
 | # | Observed | What would catch it | What should act / revert | Status |
 |---|---|---|---|---|
-| G1 | ArgoCD app health/sync state reached nothing but the UI — `argocd_app_info` never scraped in 109 days; `registry` Degraded since 2026-10-04 04:00Z, unseen (a failed `registry-garbage-collect` Job — health aggregates over CHILD resources, `.status.resources` lists managed ones only) | `ArgoCDAppDegraded` (15 m) + `ArgoCDAppSyncFailed` (10 m) in `argocd/resources/argocd-metrics/`, `triage: dig` → responder | class 3: the FU-044 `deploy-revert` chain; classes 1/2: a human `git revert` (IAC-G09 — CRD/schema downgrades are not mechanically reversible); the responder's dig names the merge | ✅ detector landed; live proof = `registry` firing within 15 m of the first scrape |
-| G2 | FU-044's first hop was DEAD since 2026-07-27: the subscription recipient `webhook:agent-loop` → `notification service 'webhook' is not supported`; 150 failed / 0 succeeded deliveries on the controller's own counter — "never fired by a real Degraded app" was this, not the predicate | `ArgoCDNotificationDeliveryFailing` (same directory) — would have fired at the first Degraded transition in July | #2217 fixed the recipient (one line, `tofu/argocd.tf`; applied attended, `helm-evidence run 20261004T203336Z-972cff9d`); the chain reverts class-3 pins mechanically and declines (report-only) for chart/image apps | ✅ #2217 merged + applied 2026-10-04 20:35Z — the chain RANG on `registry` one minute later (`deploy-revert-hzqw7`, correctly report-only: not a `-iac` deploy) |
+| G1 | ArgoCD app health/sync reached nothing but the UI (`argocd_app_info` never scraped in 109 days; `registry` Degraded unseen 2026-10-04) | `ArgoCDAppDegraded` (15 m) / `ArgoCDAppSyncFailed` (10 m), `triage: dig` | the responder | ✅ landed 2026-10-04; fired on `registry` within 15 m of the first scrape |
+| G2 | FU-044's first hop was DEAD since 2026-07-27 (`webhook:agent-loop` unsupported; 150 failed deliveries) | `ArgoCDNotificationDeliveryFailing` | #2217 (recipient fixed) | ✅ 2026-10-04 — the chain RANG on `registry` a minute after the fix |
 | G3 | A third-party chart bump has NO render gate before ArgoCD sync — `ci`'s `argocd-validate-pins.sh` renders only `ghcr.io/teststuffstash/charts`; a new required value or a CRD skew fails at sync time | post-merge: `ArgoCDAppSyncFailed`; pre-merge: extend `argocd-validate-pins.sh` to every chart pin in `argocd/platform/` (`helm template` at the proposed version with the repo's `$values` files) | `git revert` of the chart bump — the reflex-approved `deps-review` PR is the revert target | ⚠ open — next deliverable after the wave's first failures say how often it bites |
-| G4 | Five `autosync` Applications were chronically OutOfSync (`agent-fixer-{circles,openrouter-operator,oracle-fleet,sleep-tracking}`, `logging`), with selfHeal re-syncing every ~5 min and never converging, and nothing said so. The controller's own diff (`managed-resources`, live vs predicted) showed only fields the API server stamps inside a list ArgoCD owns ATOMICALLY under SSA: the AgentStack XRD defaults `repos[].fixer.rideSize` + `readOnlyGrants` (#2184, #1688), and `StatefulSet/loki` `volumeClaimTemplates[].apiVersion/kind` | `ArgoCDAppOutOfSync` (autosync ∧ OutOfSync for 1 h, `triage: dig`) in `argocd/resources/argocd-metrics/`; the replay at 2026-10-10 12:35Z matched exactly the five | symptom: declare the stamped field in git, not `ignoreDifferences` (with `RespectIgnoreDifferences=true` an ignored field never applies from git). CLASS (#2445): the AgentStack XRD carries NO schema `default:` — each field defaults where it is read (Composition `default`/`hasKey`, script jq `//`), and `devbox run manifest-lint` fails on any XRD spec default without an inline `xrd-default-ok:` reason (zero allowlisted since PublicRoute's nine were dropped the same way, render-proven by `devbox run xr-render` — the base↔head render diff `ci` runs on XRD/Composition/claim PRs). Claims declare only what differs (`agent-fixer.yaml` header) | ✅ symptom 2026-10-10 13:10Z (#2430 + circles-iac#112, oracle-iac#1080, sleep-iac#115); ✅ class 2026-10-10: #2445 live (render-proven identical for all four stacks, as committed and default-stripped), 80/80 apps Synced after; the echo lines dropped by this row's PR + the three -iac follow-ups; `ArgoCDAppOutOfSync` landed with this row |
+| G4 | Five `autosync` Applications chronically OutOfSync with selfHeal looping every ~5 min (XRD defaults the API server rewrites), nothing said so | `ArgoCDAppNeverSynced`-class belt + `manifest-lint`'s `xrd-default-ok` rule (`scripts/manifest-lint.sh`, `scripts/xr-render.sh`) | fix the defaults at the source | ✅ symptom + class fixed 2026-10-10 (#2430 + the three `-iac` PRs) |
 | G5 | 11 of the 30 class-1/2 dependencies have only the generic rollout belt (cert-manager, forgejo, infisical, metrics-server, busybox, alloy, nginx, nginx-unprivileged, otel-collector, kube-rbac-proxy, blackbox-exporter itself — no `absent(probe_success)`): a bump that starts clean and serves wrong is invisible | a per-service alert or blackbox probe per row; `absent(probe_success)` for the prober | — | ⚠ open; the FU-102 contract probe is the general answer |
 | G6 | Renovate opens up to THREE PRs per chart (`separateMinorPatch` + major): `argo-workflows` sits at 1.0.20 with 2.0.11 upstream — patch, minor and major lanes all have work | by design: patch/minor → `deps-review`, major → the un-armed lens lane | — | ℹ confirm the shape in the first run; `prHourlyLimit` is the pacing |
 | G7 | The "responder" leg has no live reader today: the responder is REPLACED-NOT-UNPAUSED (ADR-148 / FU-249, Sensor filter kept), and none of 2026-10-04's firing `triage: dig` alerts (`CronJobNotSucceeding` since 10-02, `LonghornDiskBelowSchedulingFloor`, `AgentDispatchCronWoken`) has a responder issue or workflow — a chart bump that crashloops fires `KubePodCrashLooping` to nobody | the alerts exist; the reader is FU-249's next step (route `triage="now"` with the crosscheck, then delete the filter) | mechanical revert where one exists (class 3), otherwise the responder's dig once it reads `dig` | ⚠ open — the S9 end state's second leg |
 | G8 | The dependency register is hand-regenerated (`devbox run dependency-coverage`); no workflow regenerates it on a pin merge and no CI check gates its currency — every Renovate merge in the wave leaves `dependency-upgrades.md` + the github-exporter JSON stale, and any two concurrent PRs that both regenerate it conflict (#2200 ↔ #2216 ↔ #2218 today, three rebases) | a `--check` in `ci` would only turn staleness into red PRs; the fix is a regen that RIDES the merge (a master-push job committing the regenerated pair, or the exporter reading the proof column live) | — | ⚠ open |
-| G9 | `pin-only-lint` guarded `arc-runners.yaml` with a `targetRevision` shape that only matched our CalVer-githash charts and refused trailing comments — the first Renovate `arc` bump would have been permanently CI-red on that member (reviewer finding on #2216) | the lint's own self-test now carries the SemVer-with-comment case | — | ✅ fixed in #2216 (PIN_LINE widened, 3 self-test cases) |
+| G9 | `pin-only-lint` refused SemVer-with-comment `targetRevision` lines (reviewer finding, #2216) | the lint's self-test | — | ✅ fixed in #2216 |
 | G10 | The `deploy-revert` chain's "report-only" branch reports to NOBODY: it echoes to the workflow pod's log and exits 0; the pod is gone minutes later. `registry`'s first real ring (20:35Z) left no issue, no meta-event, no alert of its own | `ArgoCDAppDegraded` (G1) is the durable report for this class; the chain's own verdict should still land as a meta-event (the `triage` source, FU-2xx-shaped — not filed here) | — | ⚠ open |
-| G11 | A chart whose pin has a hand-maintained SIBLING artifact cannot merge mechanically: `publicroute-tf-validate` requires `crossplane.io/engine-image-digest.<chart version>` next to the crossplane pin (render by digest, homelab#1779) — Renovate's first crossplane PR (#2224, 2.3.2 → 2.3.6) was CI-red on the missing key with no path to green | the gate caught it (CI red, by design); the register's §Version SETS now lists the set | a regex customManager moves the annotation with the chart, grouped into one PR (`crossplane`); #2224 is superseded by the grouped branch | ✅ PROVEN 2026-10-05: the rewritten grouped PRs #2228 (2.3.6) and #2240 (2.4.2) carried `targetRevision` + `engine-image-digest.v<tag>`, `publicroute-tf-validate` green, merged mechanically (Renovate rebased #2240 itself after #2228) |
+| G11 | A chart pin with a hand-maintained SIBLING artifact (crossplane's `engine-image-digest.<version>`) cannot merge mechanically | CI red by design | a regex customManager moves the sibling with the chart in one grouped PR | ✅ PROVEN 2026-10-05 (#2228, #2240 merged mechanically) — §Version SETS |
 | G12 | A kube-prometheus-stack chart bump reds `prometheus-rules-lint` until `scripts/upstream-alerts-refresh.sh` re-renders the upstream alert-name list for the pinned chart (network — the lint never runs it) and any NEW name gets a `triage` entry; #2225 (86.1.0 → 86.1.1) sat red until the seat ran it by hand (header-only change, no new name) | the lint (CI red, by design) | for a patch/minor with no new names the refresh is mechanical and could ride the PR (a `pull_request` job on `renovate/kube-prometheus-stack-*` that commits the re-render); a new name needs the judgment the `deps-review` worker-adapts leg is for (FU-046) | ⚠ BUILT 2026-10-07 (the S9 night session): a `postUpgradeTasks` rule on `kube-prometheus-stack` in `renovate-global.json` runs the refresh on the Renovate branch (`install-tool helm` first — the action runs the SLIM image; the script went yq-free for it, and the `defaultRules` fingerprint became a text hash twinned in `prometheus-rules-lint.sh`); `fileFilters` commits only the list. PROOF = the next kps bump's first CI run is green with the re-rendered list, or red naming only a NEW alert (G12b stays: that classification is the worker-adapts leg's) |
 | G12b | A CI-RED **armed** Renovate PR has NO actor: the review reflex reviews green heads only, the orphan backstop counts `deps-review` as owned, the coordinator's investigate-while-red covers un-armed majors — #2224 and #2225 would have sat red until a human looked | a scan clause: armed Renovate PR ∧ CI red at head ∧ older than N h → dispatch the fixer with the failing step's log as the brief (the FU-046 worker-adapts trigger, red CI instead of CHANGES_REQUESTED) | the worker adapts in-PR; a hopeless one is closed and the gap filed | ⚠ open for CI-RED heads — but the CHANGES_REQUESTED leg FIRED: #2254 (argo-workflows 2.x, 2026-10-05) got a worker commit after the lens's request and the lens approved; red-CI armed PRs still have no actor |
-| G13 | A pin whose SIBLING lives in a terraform variable DEFAULT is invisible to Renovate: `tofu/cloudflare/variables.tf` `cloudflared_image` is declared "the same pin" as the publicroute composition's connector image, but the terraform manager extracts only `image = "…"` literals — #2232 (cloudflared 2026.5.2 → 2026.9.3) moved the composition alone, Renovate never touched the variable (git log) | the `deps-review` reviewer's version-set read (CHANGES_REQUESTED on #2232 — a read, not a gate: nothing mechanical would have refused the half-bump) | a regex customManager over the variable default + a `cloudflared` group rule, the G11 shape; the seat adapted #2232 in-PR (the FU-046 worker-adapts leg, done by hand) | ✅ fixed 2026-10-05 (#2241); PROVEN 2026-10-05 — #2295 (2026.10.0) carries both files; its arming is G15 |
-| G14 | An Argo chart bump can break the ENGINE the revert chain runs on (`deploy-revert` is an Argo Events Sensor + WorkflowTemplates), and chart semver hid the app major: 1.0.24→1.1.1 (#2238, `deps-review`, 04:21Z, no lens) was app 4.0→4.1 — its CRD re-apply triggered the wk-metal-02 apiserver kill (FU-304) — while #2254 (two lens rounds, 9 h on the human lane) was packaging + a patch | `ArgoControllerSilent` (`now`, fails closed, #2269) + `ControlPlaneNodeMemoryLow` (#2264); the lens reading appVersion from the chart index | the `chart-revert` webhook receiver outside Argo's cone (ADR-149), `reverted-charts:` memory in `pin-only-lint` (h), then one armed `matchPackageNames` rule | ✅ live + DRILLED 2026-10-05 (#2271/#2272/#2276→#2279, 10 min 12 s, no human) — §Next steps 9; lens brief updated the same evening (`agents/lenses/migration.md` §Charts) |
+| G13 | A pin whose SIBLING lives in a terraform variable default is invisible to Renovate (cloudflared) | — | the `cloudflared` version-set group (#2241) | ✅ PROVEN 2026-10-05 (#2295 carried both files; its arming was G15) |
+| G14 | An Argo chart bump can break the ENGINE the revert chain runs on, and chart semver hid the app major (#2238: 1.0.24→1.1.1 was app 4.0→4.1) | `ArgoControllerSilent` | the `chart-revert` receiver outside Argo's cone (ADR-149) | ✅ live + DRILLED 2026-10-05 (10 min 12 s, no human) — §Next steps 9; the lens brief states the appVersion delta first |
 | G15 | A grouped VERSION-SET PR is born UN-ARMED: Renovate arms a branch only when every upgrade in it has `automerge: true`, and the regex members of the `crossplane` / `cloudflared` groups had no automerge rule (rule 12 excludes them, rule 19 matches the argocd/kubernetes managers only) — #2295 (cloudflared 2026.10.0, the first PR born as a group) reads `Automerge: Disabled by config`, carries both files (the G13 proof) and sat 16 h green with no reader: the review reflex admits armed PRs only, the coordinator's un-armed clause admits `major` only. #2228/#2240 "proved" G11 on a branch GitHub had armed while it was still a single-member PR | nothing today — an un-armed non-major Renovate PR is invisible to every reader (the G12b shape, un-armed instead of red); a `RenovatePrUnowned`-style gauge (open `dependencies` PR ∧ no `automerge`/`major` arm ∧ > N h) would | a `deps-review` + `automerge: true` rule for the two regex members (the group then arms as every member agrees); the parked #2295 needs one hand arm (or a Renovate re-run after the rule lands, if Renovate re-enables platform automerge on an existing PR) | ⚠ rule landed (#2335); `devbox run renovate-lane-lint` now asserts the invariant on every computed branch (Renovate itself, local lookup — the config file's description points at it); proof = the next cloudflared/crossplane grouped PR's body reads `Automerge: Enabled` and the reflex reviews it |
 | G16 | The prometheus-operator CRDs have NO owner: `kube-prometheus-stack` syncs with `skipCrds: true` (the 2026-08-04 adoption, one change at a time — the Application header says why), Helm never upgrades `crds/`, and nothing else applies them — live 2026-10-06 all ten `monitoring.coreos.com` CRDs read operator `0.91.0` (created 2026-06-02, untracked by ArgoCD). The register's class-1 row shows a ✅ deploy edge for the chart while the chart's CRD half has none; #2256 (91.x, operator v0.94.1) would run the operator against CRDs three minors older — §Worked case | nothing — no alert compares the CRDs' `operator.prometheus.io/version` with the running operator image (a one-expression rule once both are scraped: kube-state-metrics does not export CRD annotations, so the read is a small exporter or a `kubectl` probe on the box belt) | a second Application for upstream's `prometheus-operator-crds` chart (server-side apply, `Delete=false`), grouped with the stack chart in Renovate so one PR moves both (the G11/G13 shape); the first sync is the FU-304 memory event, windowed | ⚠ BUILT 2026-10-07 (#2348): `argocd/platform/prometheus-operator-crds.yaml` (29.0.0 = the live v0.91.0; SSA, `Delete=false`, prune off, wave 0) + the `kube-prometheus-stack` Renovate group (lane-lint clean) + the box belt `check_kps_crds` (CRD annotation vs operator image, `skew`); first sync = the seat's window; #2256 then takes the CRD pin 32.0.1 on its branch (update-branch + a commit, never Renovate's rebase box) |
 | G17 | The weekly `devbox-update` gate (`scripts/devbox-update.sh`, deterministic jq over the lock diff) flags only a change of the LEADING integer, so a same-major DOWNGRADE or a compatibility-line move is part of the mechanical bump and the lens reviews only the one tool the gate named: #2260 moved 18 tools — argo-workflows 3.6→4.0 flagged; **openssl 3.6.0 → 3.5.8** (nixpkgs re-pointed the default alias to the 3.5 LTS, PR NixOS/nixpkgs#564262, 2026-09-17 — deliberate upstream, harmless for `make-client-p12.sh`'s explicit algorithms), python3 3.12 → 3.14 and opentofu 1.12 → 1.13 (the box runs the same lock, so no skew — but the first apply stamps state 1.13 and a later revert of the lock cannot read it) all silent | the same jq: a numeric-tuple compare flags any downgrade; a per-package list (`python3`, `opentofu`, `kubectl`, `openssl`) flags a `major.minor` line move; both land as a second section in the PR body | **⚖ ruling (operator, 2026-10-06): rely on the lens.** The PR STAYS ARMED; the body section is what the lens reads (the lock-bump brief reads the whole move list, not the flagged line). Un-arming is earned per class the ADR-141 way — the first time the lens finds a downgrade/line move that mattered, that class joins the `major` gate | ⚠ built 2026-10-07 (#2344): `lock_moves` (numeric-tuple downgrades + the `LINE_PACKAGES` line moves) renders the second body section on every bump, major or not; fixture = #2260's recorded lock diff (`scripts/fixtures/devbox-update/`, `devbox run devbox-update-test`, a `ci` step since the seat's direct commit the same night — `.github/workflows/**` is pin-only via PR); the lens brief's §Lock bumps answers the list line by line. ✅ PROVEN 2026-10-07 (#2362, the seat's re-dispatch after closing #2260): the body carried the openssl downgrade row + the kubectl/opentofu/python3 line rows on real data, the lens answered each under `## Platform compatibility` (kubectl +1 skew, opentofu state stamp, openssl = the LTS re-point), round 1 asked for a wording-tolerant pin (fixture `scrub:` seam, `expected/` untouched), major-handoff parked it; graduation rule stands |
@@ -738,49 +591,18 @@ mechanism lives in the linked places.
 
 ## Next steps, in dependency order
 
-1. ✅ **Renovate runs again** — the cause was the missing `statuses` permission (§Ground truth,
-   diagnosed and granted 2026-09-25); the invalid `vulnerabilityAlerts.prPriority` is dropped
-   (validator-clean). ✅ The Actions SHA-pinning landed 2026-09-27 as #2021, rebuilt by Renovate
-   under the first-party exclusion (the first cut, #1970, froze
-   `teststuffstash/homelab/…reusable.yml@master` at one SHA and was closed — §Gotchas in
-   [`renovate.md`](renovate.md)). Remaining: either fix or remove the `NIX_VERSION` custom manager
-   (it still resolves nothing).
-2. ✅ **Renovate-liveness signal landed (homelab#1992)** — `github_renovate_last_pr_timestamp` on the
-   github-exporter + `RenovateSilent`, and the generated coverage table's own rot detector beside it.
-   (The dashboard-issue-exists option is gone — `dependencyDashboard: false` by ruling, 2026-08-18.)
-3. ✅ **CI gaps closed 2026-08-04** — `manifest-lint` (kubeconform `-strict`) over
-   `argocd/resources/*` and `tofu fmt -check -recursive` are both required checks. Two residues by
-   decision, not omission: `tofu validate` stays the local `devbox run tf-validate` gate (a provider
-   download per PR, the FU-130 WAN class), and **87 of 154 resources are SKIPPED** for want of a
-   local CRD schema — `manifest-lint` prints that count every run and fails if it ever validates
-   nothing ([`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane).
+1. ✅ **Renovate runs again** (the missing `statuses` grant, 2026-09-25 — §Ground truth) and the Actions SHA-pinning landed as #2021 (2026-09-27, first-party reusable workflows excluded). Remaining: fix or remove the `NIX_VERSION` custom manager.
+2. ✅ **Renovate-liveness signal** — `github_renovate_last_pr_timestamp` → `RenovateSilent` (homelab#1992), plus the register's own rot detector.
+3. ✅ **CI gaps closed 2026-08-04** — `manifest-lint` (kubeconform `-strict`, 87 of 154 resources skipped for want of a CRD schema, counted every run) and `tofu fmt -check` required; `tofu validate` stays the local gate ([`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane).
 4. **Extend the FU-044 deterministic revert** to homelab's own ArgoCD apps **for the reversible
    class only** (first-party image pins — no CRD/schema migration, no data-layer coupling); the
    rest stay responder + report-only, per the ruling in §4 above. Half wired 2026-08-04 (pin-only
    predicate in `deploy-revert-argo.yaml`, unit-exercised, never fired by a real Degraded app).
-4b. ✅ **Platform lane's path gate landed 2026-08-04/05** — repo-root `CODEOWNERS` + homelab
-   flipped to `require_approval` + `require_code_owner_review` (FU-068), then `.agents/fix.yaml`
-   made the lane dispatchable (FU-142): [`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane.
+4b. ✅ **The platform lane's path gate** — repo-root `CODEOWNERS` + `require_code_owner_review` (FU-068) + the dispatchable `.agents/fix.yaml` (FU-142), 2026-08-04/05.
 5. **FU-097's ruling table**, with ansible/OPNsense first — it is the only class where a merged
    change reaches a *live network device* by hand or not at all.
 6. **The prober (FU-102)** is what turns "it synced" into "it works".
-7. ✅ **Class 1/2 proposers ON (#2216, 2026-10-04, after #2047 merged that morning — operator's ordering).**
-   Until then neither class had a proposer: Renovate's `argocd` and `kubernetes` managers have no
-   default `managerFilePatterns`, so every chart bump was hand-proposed (homelab#2200, Argo Workflows
-   1.0.20 → 1.0.24, 2026-10-03, was found by an FU sweep, not by a proposer). What landed in
-   [`renovate-global.json`](../.github/renovate-global.json): `argocd` over `argocd/platform/*.yaml`
-   (the Application files; `values/` excluded) + `kubernetes` over `argocd/resources/**`; first-party
-   `ghcr.io/teststuffstash/**` images AND charts disabled (class 3 — the deploy-pin PR owns them); one
-   `arc` group for the ARC controller + two runner scale sets (three files, one version — row 1's
-   canary cell); patch/minor → `deps-review`, digest → `automerge`, majors → the un-armed catch-all;
-   `prHourlyLimit: 6` (root-only option, every repo — ≤6 new PRs per 6-hourly run; TEMPORARILY 6, operator 2026-10-04, to drain the first wave under the seat's watch — back to 3 after) so the backlog of
-   14 charts + 16 images drains over days instead of landing as one wave on the reviewer and the shared
-   App GraphQL pool (FU-290 — the 2026-09-25 wave drained it); `prConcurrentLimit` left at 10 because a
-   lower ceiling is eaten by PRs parked on a human. Not in the pattern: `agents/coordinator/*.yaml`
-   (`/agents/` is codeowner-gated — a PR there parks on the human the lane removes). Verified by a
-   local `renovate --platform=local --dry-run=extract` on the branch before merge; `pin-only-lint`'s
-   guard admits the arc member's SemVer pin (gap register G9). CRD-carrying charts (Argo, Crossplane, cert-manager, ESO, CNPG) still
-   reach the `major` lane by update type.
+7. ✅ **Class 1/2 proposers ON (#2216, 2026-10-04)** — `argocd` over `argocd/platform/*.yaml`, `kubernetes` over `argocd/resources/**`, first-party refs disabled (class 3), the `arc` group, `prHourlyLimit` pacing (6 for the first wave, 3 after); `agents/coordinator/*.yaml` stays outside the pattern (codeowner-gated). Lanes per class: the register.
 8. **agent-coordinator is the first repo through, but not done-done (read 2026-10-04).** Proven with
    no human: base-image patch/minor, every Actions update type + the pin-revert drill, s5cmd, the
    Monday rebuild → deploy-pin → auto-merged homelab PR (§Last proven). Open: (a) 25 manifest refs the
@@ -798,19 +620,7 @@ mechanism lives in the linked places.
    flips its merge-gate cell on (a) and keeps revert ✅ on (b).
    (b) ✅ DRILLED 2026-10-10 and RERUN HANDS-OFF 2026-10-11 (§Last proven): plant → red bake → alert →
    `revert-lock-<sha8>` → reflex + both sentinels + `ci` green (the #2482 arm) → auto-merged, 12 min, no hand act.
-9. ✅ **argo-workflows chart majors ARMED (ADR-149, operator 2026-10-05) — all five steps landed and
-   drilled the same evening:** (1) `ArgoControllerSilent` (#2269, replayed on the 2026-09-20 storm, live
-   16:40Z); (2) the `chart-revert` receiver (#2271) — a Deployment in agent-coordinator outside Argo's
-   cone, Alertmanager route on the heartbeat, metrics `chart_revert_alerts_total{outcome}`; (3)
-   `pin-only-lint` check (h), the 30-day `reverted-charts:` memory (#2272); (4) **the drill**: #2276
-   (2.0.8 → 2.0.11, pin-only) merged 18:45Z, synthetic `ArgoControllerSilent{drill="true", drill_pr=2276}`
-   injected 18:47:08Z → the receiver opened #2279 in 16 s → reflex-approved, merged 18:55:33Z → ArgoCD back
-   on 2.0.8 at 18:57:20Z — **10 min 12 s, no human**; (5) rule 24 in
-   [`renovate-global.json`](../.github/renovate-global.json) (argocd + helm + `argo-workflows` + major,
-   armed, `major` kept, no `automerge` label). Residue: Renovate's own 2.0.11 proposal (cooldown ends
-   2026-10-10) will sit red on check (h) until 2.0.12+; the lens brief now states the
-   **appVersion** delta from the chart index first (`agents/lenses/migration.md` §Charts, operator-direct the
-   same evening — the #2238 miss).
+9. ✅ **argo-workflows chart majors ARMED (ADR-149, 2026-10-05)** — `ArgoControllerSilent` (#2269), the `chart-revert` receiver (#2271), `pin-only-lint` check (h) + the 30-day `reverted-charts:` memory (#2272), the drill (#2276 → #2279: 10 min 12 s, no human), the arming rule. The lens brief states the appVersion delta first (the #2238 miss).
 11. **Converge with the router's update path (operator, 2026-10-10)**: the lanes above and the router
    build (FU-297) become one process. The box is the single applier outside ArgoCD, and the upgrade
    lease is the shared in-flight record. The direction, its gaps and the open decisions are in
