@@ -43,7 +43,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/mgmt-lib.sh"
 # shellcheck source=mgmt-helm.sh
 . "$HERE/mgmt-helm.sh"
-_mgmt_unit_active() { systemctl is-active --quiet "$1"; }        # seams: mgmt-helm-test stubs them
+# A Type=oneshot unit is `activating` for the whole run of its script (`is-active` exits 3 on it), so
+# the engines unit read as NOT running on every tick of its first live run (2026-10-11 07:22→, 42 moves)
+# and was "started" again each minute — a coalesced no-op in systemd, but a lying log line.
+_mgmt_unit_active() { case "$(systemctl show -p ActiveState --value "$1" 2>/dev/null)" in active|activating|reloading) return 0 ;; *) return 1 ;; esac; }   # seam
 _mgmt_unit_start()  { systemctl start --no-block "$1"; }
 
 ORG="${ORG:-teststuffstash}"; MGMT_REPO="${MGMT_REPO:-homelab}"
