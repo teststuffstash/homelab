@@ -111,9 +111,9 @@ new FUs").
 
 **Wave 0: preconditions (detectors and reds first, per the detection-before-fix rule).**
 
-1. **The rebuild drill has been red since 10-04** (converge rc=2; probably the #2166 inventory
-   flip). The drill is the router's realism gate, and none of the later steps should run on a red
-   drill. Owner: **FU-297** (its own Next).
+1. **The rebuild drill has been red since 10-04** (two reds, read 2026-10-11: the galaxy-cache
+   corruption, #2386; then a preflight refuse once window 2 made both CARP nodes live, #2493). The
+   drill is the router's realism gate, and none of the later steps should run on a red drill. Owner: **FU-297** (its own Next).
 2. **No belt fires when the MASTER has no WAN.** This blocks any unattended MASTER-side step.
    Owner: **FU-307**.
 3. ~~**The lease credential click**~~ — done 2026-10-07; the revert half drilled 2026-10-10 (#2441,

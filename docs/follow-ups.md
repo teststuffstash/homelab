@@ -188,9 +188,12 @@ six OVERSIZE items pointer-ized into
       ([incident](incidents/2026-10-08-carp-maintenance-not-left.md) → #2395 `carp-maintenance` verb).
       **2026-10-09: WAN LEG DONE — the pair is complete** (cable in, gate held pve dark; proof with the
       FU-308 dead-man, pve served WAN 6 min at 378 Mbit/s, dead-man failed back; nx-02 gate restarted while
-      BACKUP; router-move §Status). **Next:** the weekly rebuild drill is RED since 10-04 (converge, harness
-      rc=2 after 9 s, `MgmtOpnsenseDrillFailed`; next run Sun 10-11 03:37Z) — read the box's drill log, likely
-      the #2166 inventory flip; then the nx-02 DIMM window (FU-289).
+      BACKUP; router-move §Status). **Next:** the weekly rebuild drill is RED — two reds, both read 2026-10-11: 10-04 the galaxy-cache
+      corruption (fixed #2386), 10-11 03:30Z a preflight REFUSE (window 2 made both CARP nodes live; the drill's
+      resolver wanted ONE — fixed #2493: prod = the CARP MASTER by `router_carp_advskew`). `MgmtOpnsenseDrillFailed`
+      clears on the first PASSING run (timer Sun 10-18 03:34Z, or `systemctl start mgmt-opnsense-drill` on the box
+      after the hourly pull) — that run is also the first full converge/probe/compare against the window-2 code;
+      no CI exercises `scripts/opnsense-drill.sh` (reviewer note, #2493). Then the nx-02 DIMM window (FU-289).
       Kea's two offers per DISCOVER: a finding in router-move.md §Status, not tracked. Relates FU-097,
       FU-013, FU-298, FU-307, FU-308.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
