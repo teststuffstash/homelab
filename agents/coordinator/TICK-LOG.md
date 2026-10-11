@@ -13104,3 +13104,35 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `RegistryMirrorDanglingLinks`, `OpenRouterKeyBudgetLow`; `GarageClusterFlapping` = the overnight incident's
   1 h window (180 failed probes/h 21:13→06:43Z), cleared ~07:45Z.
 
+
+## 2026-10-11 09:30–12:30Z — #2100 + #2488 ride through without a hand act; argo-cd chart majors armed; wind-down (seat + 2 subagents)
+
+- **Operator, 2026-10-11:** "#2100 — it should merge without me, here CI is the only gate" and "#2488 — next
+  time it works without me? Do the rebase and watch it go through." Both reads taken as lane rulings, recorded
+  in dependency-upgrades.md / dependency-classes.yaml / renovate.md (never the ADR — ADR-141 is a pointer).
+- **#2100 mermaid 11.17.2 → 12.1.0:** Renovate rebase (checkbox + `gh workflow run renovate.yaml`, run
+  38129372900), the 10-09 approval survived, auto-merge landed it 09:51Z (`743f52d6`) behind the Mermaid parse
+  lint (run 38129584588). **#2499** (merged 09:57Z): the `major` catch-all excludes `deno` as it excludes
+  `github-actions`; `deno`+`mermaid`+major → automerge, `deno`+`!mermaid`+major → un-armed major (linkedom);
+  `renovate-lane-lint` OK.
+- **#2488 argo-cd chart 9.7.1 → 10.9.6 (ArgoCD v3.4.4 → v3.5.3):** three Renovate rebase rounds while master
+  kept moving (#2499, #2493/#2494 landings); the lens APPROVED held through each (diff = `tofu/variables.tf`
+  only); merged `061287a0`. Box bracket, unattended: lease 10:13:00Z, `argo-cd-10.9.6` rev 13 deployed
+  10:13:22Z, ArgoCD v3.5.3, 81/81 Applications Healthy+Synced, argocd-metrics PodMonitor targets up;
+  **CONFIRMED — `management-apply` success 10:25:30Z, helm verdict clean**, lease released. **`UpgradeLeaseInFlight`
+  fired on the real lease at 10:15Z** — the #2498 cluster-side reader is proven on its first live bracket.
+- **#2500 (`renovate/arm-argocd-chart-majors`): MERGED `216dfbad` 12:40Z (reviewer APPROVED 12:38Z, CI green, auto-merge; lane lint OK).** argo-cd + argocd-apps majors armed in the
+  kps-major shape (#2444): `major` kept, no `automerge` label → the renovate-approve reflex refuses, the
+  migration lens's APPROVED completes the merge, `rebaseWhen: behind-base-branch` owns the rebase; the box
+  bracket is the deploy edge, forward only (STOP + `MgmtHelmApplyStopped` on a bad verdict). longhorn majors
+  stay on the un-armed human lane (no downgrade; the preflight restore point is the only rollback). Class-4
+  lane cell + §Last proven row. The subagent that drafted it ran out before opening it; the seat finished the
+  placeholder (CONFIRMED time), regenerated the coverage table, re-ran `renovate-lane-lint`, opened + armed it.
+- **Alerts at wind-down:** nothing S9. New in the read since the morning: `HomeAssistantPowerSensorStale` ×6
+  (plugs laptop3/laptop4/pve stale since 10-03 — the Tuya plugs, not the platform), `AgentAttentionStanding`
+  oracle-fleet issue-820 (since 10-08, stack-side), a transient `GithubCiWallTimeDrift` that cleared within the
+  read. Standing: `LonghornDiskBelowSchedulingFloor` ×2 (FU-093), `MgmtSubstrateBehind`,
+  `MgmtOpnsenseDrillFailed` (first PASSING drill clears it), `RegistryMirrorDanglingLinks`, `OpenRouterKeyBudgetLow`.
+- **Wind-down:** meta-state PICKUP 12:30Z + the S9 what-is-left bullet rewritten (operator-side = spike D1–D9,
+  claude-jail host rebuild + 3 workflow patches, the Argo-half ruling, the #2219 read); subagent clones deleted;
+  one push.

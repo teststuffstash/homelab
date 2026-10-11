@@ -10,6 +10,25 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-11 12:30Z — seat; TICK-LOG 2026-10-11 midday): the two parked majors rode through
+  without a hand act; argo-cd chart majors ARMED.** **#2488 argo-cd 9.7.1 → 10.9.6 (ArgoCD v3.4.4 → v3.5.3)
+  MERGED `061287a0`** by the Renovate rebase box (three rounds on a moving master; the lens APPROVED survived each,
+  diff = `tofu/variables.tf` only) and the box applied it through the FU-301 bracket: lease
+  `upgrade-lease-tofu-helm-argocd` 10:13:00Z, helm rev 13 deployed 10:13:22Z, **CONFIRMED — `management-apply`
+  success 10:25:30Z** ("helm verdict clean"), 81/81 Applications Healthy+Synced, both argocd-metrics targets up.
+  **`UpgradeLeaseInFlight` FIRED on that real lease 10:15Z** — the #2498 belt is proven live, not just loaded.
+  **#2100 mermaid 11.17.2 → 12.1.0 MERGED `743f52d6`** (Renovate rebase + auto-merge; the parse lint was the gate)
+  and **#2499** put mermaid majors on the mechanical automerge lane (`deno`+`mermaid`+major → automerge,
+  `deno`+`!mermaid`+major stays un-armed: linkedom) — operator 2026-10-11: "here CI is the only gate needed".
+  **#2500 `renovate/arm-argocd-chart-majors`: MERGED `216dfbad` 12:40Z (reviewer APPROVED 12:38Z, CI green, auto-merge; lane lint OK)** — argo-cd + argocd-apps chart majors keep `major`
+  with no `automerge` label (the lens's APPROVED completes the merge), `rebaseWhen: behind-base-branch` so Renovate
+  owns the rebase #2488 needed three hand ticks for; the box bracket is the deploy edge, forward only; longhorn
+  majors stay human (no downgrade). Class-4 lane cell + a §Last proven row in dependency-upgrades.md. Standing
+  alerts at wind-down, none S9: `LonghornDiskBelowSchedulingFloor` ×2 (FU-093), `MgmtSubstrateBehind`,
+  `MgmtOpnsenseDrillFailed` (clears on the first PASSING drill — timer Sun 10-18 03:34Z), `RegistryMirrorDanglingLinks`,
+  `OpenRouterKeyBudgetLow` (resets Mon 00:00Z), `HomeAssistantPowerSensorStale` ×6 (plugs laptop3/laptop4/pve,
+  since 10-03 — Tuya plugs offline, not platform), `AgentAttentionStanding` oracle-fleet issue-820 (since 10-08,
+  stack-side). Subagent clones under the seat scratchpad were deleted at wind-down.
 - **⚑ PICKUP (2026-10-11 09:30Z — seat; TICK-LOG 2026-10-11 morning): FU-301 CLOSED by the first unattended
   Longhorn bracket; the cluster-truth belts are LIVE.** longhorn 1.12.1 → 1.13.0 (#2487) ran on the box with no
   hand act: chart bracket CONFIRMED 07:17:46Z, `mgmt-helm-engines` 42/42 moves + 9 holds CONFIRMED 09:00:14Z
@@ -19,7 +38,7 @@ never the session's arc — that is TICK-LOG's.)
   what is in flight, survives the box gone 24 h** → built: the Longhorn engine belt (#2497, KSM EngineImage/Volume
   series, `LonghornVolumesOnOldEngine`/`LonghornEngineMoveStalled`) + the cluster-side lease reader (#2498, CronJob
   → pushgateway, `UpgradeLeaseInFlight/PastExpectedEnd/Orphaned/ProbeStale/ProbeAbsent`) — both verified in
-  Prometheus. **Not yet seen live:** `UpgradeLeaseInFlight` on a real lease (the next box bracket shows it).
+  Prometheus. **Seen live 10:15Z the same day:** `UpgradeLeaseInFlight` on #2488's argo-cd lease.
   **Also landed:** #2492 (kps check (h) proof; #2486 closed), #2493 (the rebuild drill's preflight refuse — prod =
   the CARP MASTER; `MgmtOpnsenseDrillFailed` clears on the first PASSING run, timer Sun 10-18 03:34Z or a hand
   `systemctl start mgmt-opnsense-drill` on the box), #2494 (spike wave 1: class 9 split + ledger rows), #2495
@@ -40,20 +59,21 @@ never the session's arc — that is TICK-LOG's.)
   majors carry migrations) — the re-vendor of the chart templates stays a hand step. Not filed:
   `.github/renovate-global.json` is operator-gated and this arms unattended restarts of the one unrecoverable
   release — a ruling, not a seat call.
-- **⚑ S9 — what is left (re-verified 2026-10-11 against merged PRs; every 10-10 subagent lane LANDED: #2428,
-  #2432–#2440, #2444, #2478→#2482, G4 #2436–#2460).** Operator-side: (1) **#2488 argo-cd chart v10**
-  (app v3.4.4 → v3.5.3, class 4 major, `major/awaiting-human`): the migration lens APPROVED at `de1c525f` with
-  the four sections; branch BEHIND — merging needs the Renovate rebase box (never `update-branch`) + a
-  re-approval ride, or the OrgAdmin override; on merge the box applies it through the helm bracket (policy row
-  #2450; the lease reader now shows it in flight). (2) **#2100 mermaid v12** (`major/awaiting-human`, reviewer
-  APPROVED 10-09). (3) **the one-update-process spike** `docs/spikes/update-process-convergence.md` §4 D1–D9 —
-  an operator design pass; wave 0 item 1 (the drill) is fixed pending its first green run, wave 1 DONE (#2494),
-  waves 2–4 wait on D3–D5. (4) the claude-jail host rebuild — the seat is on 2.1.296 now, the two stack jails on
-  2.1.281, images on 2.1.291 (`VersionSetMembersDisagree` fires after 1 d of the split) + the 3 operator-direct
-  workflow patches (stamp→rebuild dispatch). (5) the Argo-half ruling above. Seat-side residue: the kps lane's
-  first lens-armed 92.x merge (check (h) PROVEN, #2492); FU-305's hands-off lock-revert rerun; FU-297's first green
-  drill. The lock-revert "ruling owed" of 10-10 is MOOT — the drill ran that evening (#2478→#2480), the wedge was
-  the box's devbox closure (#2457) + governance-lint (#2482), both fixed.
+- **⚑ S9 — what is left (re-verified 2026-10-11 12:30Z against merged PRs; every 10-10 subagent lane LANDED: #2428,
+  #2432–#2440, #2444, #2478→#2482, G4 #2436–#2460; #2488 + #2100 rode through 10-11 midday, see the PICKUP
+  above).** Operator-side: (1) **the one-update-process spike** `docs/spikes/update-process-convergence.md` §4
+  D1–D9 — an operator design pass; wave 0 item 1 (the drill) is fixed pending its first green run, wave 1 DONE
+  (#2494), waves 2–4 wait on D3–D5. (2) the claude-jail host rebuild — the seat is on 2.1.296, the two stack jails
+  on 2.1.281, images on 2.1.291 (`VersionSetMembersDisagree` fires after 1 d of the split) + the 3 operator-direct
+  workflow patches (stamp→rebuild dispatch). (3) the Argo-half ruling (Garage `appVersion` customManager shape in
+  the 09:30Z PICKUP — arms unattended restarts of the one unrecoverable release). (4) the #2219 read (merged by
+  mistake; `git revert 42ad3aec` if unwanted). Seat-side residue: the kps lane's first lens-armed 92.x merge (check
+  (h) PROVEN, #2492); FU-305's hands-off lock-revert rerun; FU-297's first green drill; sleep-tracking#67's proof
+  needs the first `homelab`-namespace fixer ride on tag ≥ `2026.10.9-g4bd7c9b9b57d` (expect
+  `hubble_drop_total{source="homelab",destination="channels.nixos.org"}` AND the matching
+  `hubble_dns_queries_total` both 0 over its window while cache.nixos.org queries > 0 — oracle-fleet rides never
+  query that host, so they prove nothing). The lock-revert "ruling owed" of 10-10 is MOOT — the drill ran that
+  evening (#2478→#2480), the wedge was the box's devbox closure (#2457) + governance-lint (#2482), both fixed.
 - **⚑ PICKUP (2026-10-10 — seat): nix flake-registry fix LIVE, proof pending a ride.** Launcher pin
   `flake-registry =` (#2420) + agent-runtime #168 (ea009fca, entrypoint APPENDS to NIX_CONFIG) are
   both live — agent-base `2026.10.9-g4bd7c9b9b57d` pinned (#2422). **But no worker ride has run since
