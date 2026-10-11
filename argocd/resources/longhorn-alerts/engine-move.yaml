@@ -66,12 +66,16 @@ spec:
           annotations:
             summary: "{{ $value }} Longhorn volume(s) still run an engine image other than the manager's default after 2h — the engine move has not finished"
             description: >-
-              Cluster truth (FU-301): status.currentImage on the Volume CRs, not the management
-              box's view of its own run. Images in use:
-              `kube_longhorn_engineimage_ref_count > 0`. The volumes:
+              Symptom: Volume CRs whose status.currentImage tag is not the longhorn-manager's
+              tag, 2h after the manager ran it (cluster truth, FU-301 — not the management box's
+              view of its own run). Images in use: `kube_longhorn_engineimage_ref_count > 0`.
+              The volumes:
               `label_replace(kube_longhorn_volume_engine_info, "tag", "$1", "current_image", ".*:([^:]+)$") unless on (tag) longhorn:default_engine_tag:info`.
-              A STOPPED box run (docs/management-box.md §Helm release applies, item 4 + §Resume)
-              leaves exactly this; so does a volume the box refuses (unreadable replica count).
+              Check the Volume/EngineImage CRs (`kubectl -n longhorn-system get volumes.longhorn.io
+              -o custom-columns=NAME:.metadata.name,CUR:.status.currentImage,SPEC:.spec.image`) and
+              the box's engines-unit journal (docs/management-box.md §Helm release applies, item 4
+              + §Resume). To rule out: a STOPPED or never-resumed box run, a volume the box refused
+              (unreadable replica count), a 1-replica volume on HOLD.
         # The move is not PROGRESSING: two images are in use, and an in-use non-default image's
         # refCount has not changed in 1 h — the box's own per-move bound is 60 min (the first
         # 1.12.1 move, one 1-replica volume, took 31 min), so 30 m would false-fire on a healthy
@@ -97,8 +101,12 @@ spec:
           annotations:
             summary: "Longhorn engine move stalled — two engine images in use and the old image's refCount has not moved in 1h"
             description: >-
-              Cluster truth (FU-301): EngineImage .status.refCount (engines + replicas). The box's
-              moves run one volume at a time with a 60-min bound; an hour without a single
-              reference leaving the old image means the run stopped, holds, or the box is gone.
-              `kube_longhorn_engineimage_ref_count` names the images; the volumes left are
-              `longhorn:volumes_off_default_engine:count` (listing PromQL in LonghornVolumesOnOldEngine).
+              Symptom: two engine images carry references and a non-default image's
+              .status.refCount (engines + replicas) has not changed for 1h — the box's per-move
+              bound is 60 min, so no volume finished a move in that time (cluster truth, FU-301).
+              `kube_longhorn_engineimage_ref_count` names the images; the volumes still to move
+              are `longhorn:volumes_off_default_engine:count` (listing PromQL in
+              LonghornVolumesOnOldEngine). Check the Longhorn Volume/EngineImage CRs for the
+              volume mid-move and the box's engines-unit journal (docs/management-box.md §Helm
+              release applies, item 4). To rule out: a STOPPED run, a HOLD on a 1-replica volume,
+              a refused move, the box itself unreachable.
