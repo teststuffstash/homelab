@@ -57,8 +57,8 @@
       ],
       "human_rows": 0,
       "id": 4,
-      "last_proven": "2026-10-10T21:13:14Z",
-      "last_proven_pr": 2487,
+      "last_proven": "2026-10-11T10:11:11Z",
+      "last_proven_pr": 2488,
       "name": "Helm charts, tofu-managed",
       "owner_may_leave": false,
       "rows": 3
@@ -179,16 +179,16 @@
       "rows": 0
     },
     {
-      "complete": false,
+      "complete": true,
       "gap_cells": [],
       "gap_rows": 0,
       "human_cells": [],
       "human_rows": 0,
       "id": 12,
-      "last_proven": null,
-      "last_proven_pr": null,
+      "last_proven": "2026-10-11T09:51:27Z",
+      "last_proven_pr": 2100,
       "name": "JS CI tooling (Deno)",
-      "owner_may_leave": false,
+      "owner_may_leave": true,
       "rows": 2
     },
     {
@@ -282,6 +282,11 @@
         "pr": 2353,
         "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.338.0"
       },
+      "12": {
+        "merged_at": "2026-10-11T09:51:27Z",
+        "pr": 2100,
+        "title": "chore(deps): update dependency mermaid to v12"
+      },
       "2": {
         "merged_at": "2026-10-07T12:45:18Z",
         "pr": 2361,
@@ -293,9 +298,9 @@
         "title": "arc-runners: pin runner image 2026.10.10-g38f4cd58695b"
       },
       "4": {
-        "merged_at": "2026-10-10T21:13:14Z",
-        "pr": 2487,
-        "title": "Update Helm release longhorn to v1.13.0"
+        "merged_at": "2026-10-11T10:11:11Z",
+        "pr": 2488,
+        "title": "chore(deps): update helm release argo-cd to v10"
       },
       "5": {
         "merged_at": "2026-10-10T11:52:34Z",
@@ -333,6 +338,11 @@
         "merged_at": "2026-10-02T21:45:42Z",
         "pr": 2186,
         "title": "Update dependency jetify-com/devbox to v0.18.4"
+      },
+      "12:mermaid": {
+        "merged_at": "2026-10-11T09:51:27Z",
+        "pr": 2100,
+        "title": "chore(deps): update dependency mermaid to v12"
       },
       "1:argo-events": {
         "merged_at": "2026-10-04T21:46:07Z",
@@ -460,9 +470,9 @@
         "title": "arc-runners: pin runner image 2026.10.10-g38f4cd58695b"
       },
       "4:argo-cd": {
-        "merged_at": "2026-10-10T17:16:53Z",
-        "pr": 2464,
-        "title": "Update Helm release argo-cd to v9.7.1"
+        "merged_at": "2026-10-11T10:11:11Z",
+        "pr": 2488,
+        "title": "chore(deps): update helm release argo-cd to v10"
       },
       "4:longhorn": {
         "merged_at": "2026-10-10T21:13:14Z",
@@ -1153,9 +1163,9 @@
       "class": 4,
       "gap_columns": [],
       "key": "4:argo-cd",
-      "last_proven": "2026-10-10T17:16:53Z",
+      "last_proven": "2026-10-11T10:11:11Z",
       "name": "argo-cd",
-      "version": "9.7.1",
+      "version": "10.9.6",
       "where": [
         "tofu/argocd.tf",
         "tofu/variables.tf"
@@ -2077,9 +2087,9 @@
       "class": 12,
       "gap_columns": [],
       "key": "12:mermaid",
-      "last_proven": null,
+      "last_proven": "2026-10-11T09:51:27Z",
       "name": "mermaid",
-      "version": "11.17.2",
+      "version": "12.1.0",
       "where": [
         "scripts/mermaid-lint/deno.json"
       ]
