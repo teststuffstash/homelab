@@ -1,0 +1,65 @@
+# The longhorn-engine-move group lifted out of engine-move.yaml with annotations stripped (they are
+# runbooks; their one home is the manifest) — the rules file engine-move.promtool-test loads.
+# Named .promtool-rules so manifest-lint does not kubeconform it. Re-copy after editing an expr:
+#   yq -o=yaml '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/longhorn-alerts/engine-move.yaml
+groups:
+  - name: longhorn-engine-move
+    rules:
+      # How many engine images carry at least one engine or replica. 1 at rest; 2 from the first
+      # moved volume until the last one (a freshly deployed image sits at refCount 0 until then).
+      - record: longhorn:engine_images_in_use:count
+        expr: |
+          count(kube_longhorn_engineimage_ref_count > 0)
+      # The manager's tag, as a 1-valued series labelled {tag}; two tags for the length of a
+      # manager rollout.
+      - record: longhorn:default_engine_tag:info
+        expr: |
+          max by (tag) (
+            label_replace(
+              kube_pod_container_info{namespace="longhorn-system", container="longhorn-manager"},
+              "tag", "$1", "image_spec", ".*:([^:]+)$")
+          )
+      # Volumes whose RUNNING engine (status.currentImage) is not the manager's. The `or` leg
+      # yields 0 when every volume is on the default and stays ABSENT when KSM is blind (a 0
+      # from `vector(0)` would read as "all moved" during a KSM outage). 42 at the chart
+      # upgrade, counting down as the box moves them; 0 at the end.
+      - record: longhorn:volumes_off_default_engine:count
+        expr: |
+          count(
+            label_replace(kube_longhorn_volume_engine_info, "tag", "$1", "current_image", ".*:([^:]+)$")
+              unless on (tag) longhorn:default_engine_tag:info
+          )
+          or (count(kube_longhorn_volume_engine_info) * 0)
+      # The whole move, end to end: the clock starts when the manager runs the new tag (every
+      # volume is "off default" from that moment), so 2 h bounds chart apply → last volume moved.
+      # 2026-10-11's 1.13.0 run took 07:06Z (EngineImage created) → 08:45Z (old refCount 0) = 1 h 39 m
+      # and would NOT have fired; 1.12.1's two STOPPED runs (2026-10-10) left volumes on the old
+      # engine overnight and would have.
+      - alert: LonghornVolumesOnOldEngine
+        expr: |
+          longhorn:volumes_off_default_engine:count > 0
+        for: 2h
+        # triage dig: the Volume/EngineImage CRs and the box's engines-unit journal say which volume stopped the move and why
+        labels: {severity: warning, triage: dig}
+      # The move is not PROGRESSING: two images are in use, and an in-use non-default image's
+      # refCount has not changed in 1 h — the box's own per-move bound is 60 min (the first
+      # 1.12.1 move, one 1-replica volume, took 31 min), so 30 m would false-fire on a healthy
+      # slow move. The `for` only rides out an evaluation gap; the window IS the threshold.
+      # 2026-10-11: the old refCount fell 160 → 0 continuously over 83 min — never flat for an
+      # hour while both images were in use — so this stayed silent across the run.
+      - alert: LonghornEngineMoveStalled
+        expr: |
+          (longhorn:engine_images_in_use:count > 1)
+          and on ()
+          (
+            count(
+              label_replace(
+                (delta(kube_longhorn_engineimage_ref_count[1h]) == 0)
+                  and (kube_longhorn_engineimage_ref_count > 0),
+                "tag", "$1", "image", ".*:([^:]+)$")
+              unless on (tag) longhorn:default_engine_tag:info
+            ) > 0
+          )
+        for: 15m
+        # triage dig: a stalled move is a per-volume fault (a HOLD on a 1-replica volume, a refused move) readable in the Longhorn CRs and the box's journal
+        labels: {severity: warning, triage: dig}

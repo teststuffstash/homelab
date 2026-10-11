@@ -1,0 +1,177 @@
+# Behaviour fixture for the Longhorn engine-move belt (FU-301, operator ruling 2026-10-11: progress
+# of a box-run engine move is read from CLUSTER truth — Volume/EngineImage CRs via kube-state-metrics
+# customResourceState — never from the management box's own metrics).
+#
+#   devbox run -- promtool test rules argocd/resources/longhorn-alerts/engine-move.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs every *.promtool-test in CI. Series shapes come from the
+# live read of 2026-10-11: 42 volumes, EngineImage refCount 160 (engines + replicas), the manager's
+# tag = the engine tag of the same chart version. Three volumes stand in for 42; a volume changing
+# engine is its old-image series going stale and its new-image series appearing.
+rule_files:
+  - engine-move.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # REPLAY of the 2026-10-11 1.13.0 run: EngineImage for 1.13.0 created 07:06Z (t=0 here, the
+  # manager already on v1.13.0), first volume moved 07:22Z (t=16), old refCount 160 → 0 by 08:45Z
+  # (t=97, 2 refs/min). The whole move is 1 h 39 m < the 2 h `for`, and the old refCount was never
+  # flat for an hour while two images were in use: NEITHER alert fires at any point.
+  - interval: 1m
+    name: "Replay 2026-10-11: a 1h39m move with continuous progress fires nothing"
+    input_series:
+      - series: 'kube_pod_container_info{namespace="longhorn-system",container="longhorn-manager",pod="longhorn-manager-a",image_spec="docker.io/longhornio/longhorn-manager:v1.13.0",job="kube-state-metrics"}'
+        values: "1x300"
+      - series: 'kube_longhorn_engineimage_ref_count{name="ei-493e04e7",image="docker.io/longhornio/longhorn-engine:v1.12.1",state="deployed",job="kube-state-metrics"}'
+        values: "160x16 160-2x80 0x204"
+      - series: 'kube_longhorn_engineimage_ref_count{name="ei-2f3240cb",image="docker.io/longhornio/longhorn-engine:v1.13.0",state="deployed",job="kube-state-metrics"}'
+        values: "0x16 0+2x80 160x204"
+      # three volumes move at t=30, t=60, t=95
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v1",current_image="docker.io/longhornio/longhorn-engine:v1.12.1",spec_image="docker.io/longhornio/longhorn-engine:v1.13.0",robustness="healthy",state="attached",replicas="2",job="kube-state-metrics"}'
+        values: "1x29 stale"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v1",current_image="docker.io/longhornio/longhorn-engine:v1.13.0",spec_image="docker.io/longhornio/longhorn-engine:v1.13.0",robustness="healthy",state="attached",replicas="2",job="kube-state-metrics"}'
+        values: "_x30 1x271"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v2",current_image="docker.io/longhornio/longhorn-engine:v1.12.1",spec_image="docker.io/longhornio/longhorn-engine:v1.12.1",robustness="healthy",state="detached",replicas="3",job="kube-state-metrics"}'
+        values: "1x59 stale"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v2",current_image="docker.io/longhornio/longhorn-engine:v1.13.0",spec_image="docker.io/longhornio/longhorn-engine:v1.13.0",robustness="healthy",state="detached",replicas="3",job="kube-state-metrics"}'
+        values: "_x60 1x241"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v3",current_image="docker.io/longhornio/longhorn-engine:v1.12.1",spec_image="docker.io/longhornio/longhorn-engine:v1.12.1",robustness="healthy",state="attached",replicas="1",job="kube-state-metrics"}'
+        values: "1x94 stale"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v3",current_image="docker.io/longhornio/longhorn-engine:v1.13.0",spec_image="docker.io/longhornio/longhorn-engine:v1.13.0",robustness="healthy",state="attached",replicas="1",job="kube-state-metrics"}'
+        values: "_x95 1x206"
+    promql_expr_test:
+      # before the first move: all three volumes are off the (new) default, one image in use
+      - eval_time: 10m
+        expr: longhorn:volumes_off_default_engine:count
+        exp_samples: [{ labels: '{__name__="longhorn:volumes_off_default_engine:count"}', value: 3 }]
+      - eval_time: 10m
+        expr: longhorn:engine_images_in_use:count
+        exp_samples: [{ labels: '{__name__="longhorn:engine_images_in_use:count"}', value: 1 }]
+      # mid-move: v1 moved, two images in use
+      - eval_time: 50m
+        expr: longhorn:volumes_off_default_engine:count
+        exp_samples: [{ labels: '{__name__="longhorn:volumes_off_default_engine:count"}', value: 2 }]
+      - eval_time: 50m
+        expr: longhorn:engine_images_in_use:count
+        exp_samples: [{ labels: '{__name__="longhorn:engine_images_in_use:count"}', value: 2 }]
+      # done: 0 (the `or` leg — a real 0, not absent), one image in use again
+      - eval_time: 2h
+        expr: longhorn:volumes_off_default_engine:count
+        exp_samples: [{ labels: '{__name__="longhorn:volumes_off_default_engine:count"}', value: 0 }]
+      - eval_time: 2h
+        expr: longhorn:engine_images_in_use:count
+        exp_samples: [{ labels: '{__name__="longhorn:engine_images_in_use:count"}', value: 1 }]
+    alert_rule_test:
+      - { eval_time: 1h39m, alertname: LonghornVolumesOnOldEngine, exp_alerts: [] }
+      - { eval_time: 1h39m, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
+      - { eval_time: 2h5m, alertname: LonghornVolumesOnOldEngine, exp_alerts: [] }
+      - { eval_time: 2h5m, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
+      - { eval_time: 4h, alertname: LonghornVolumesOnOldEngine, exp_alerts: [] }
+      - { eval_time: 4h, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
+
+  # A STOPPED run (the 2026-10-10 1.12.1 shape): two volumes move in the first 30 min, the box stops,
+  # the third stays on the old engine. Expected from the contract: Stalled = old refCount flat for
+  # 1 h (window all-flat from t=30+60=90) + `for: 15m` → fires at t=105; OldEngine = count > 0 since
+  # t=0 (the manager runs the new tag) + `for: 2h` → fires at t=120, with value 1 (v3).
+  - interval: 1m
+    name: "STOPPED run: Stalled at 1h15m after the last move, OldEngine at 2h"
+    input_series:
+      - series: 'kube_pod_container_info{namespace="longhorn-system",container="longhorn-manager",pod="longhorn-manager-a",image_spec="docker.io/longhornio/longhorn-manager:v1.12.1",job="kube-state-metrics"}'
+        values: "1x300"
+      - series: 'kube_longhorn_engineimage_ref_count{name="ei-old",image="docker.io/longhornio/longhorn-engine:v1.12.0",state="deployed",job="kube-state-metrics"}'
+        values: "160-2x30 100x270"
+      - series: 'kube_longhorn_engineimage_ref_count{name="ei-new",image="docker.io/longhornio/longhorn-engine:v1.12.1",state="deployed",job="kube-state-metrics"}'
+        values: "0+2x30 60x270"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v1",current_image="docker.io/longhornio/longhorn-engine:v1.12.0",spec_image="docker.io/longhornio/longhorn-engine:v1.12.1",robustness="healthy",state="attached",replicas="2",job="kube-state-metrics"}'
+        values: "1x9 stale"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v1",current_image="docker.io/longhornio/longhorn-engine:v1.12.1",spec_image="docker.io/longhornio/longhorn-engine:v1.12.1",robustness="healthy",state="attached",replicas="2",job="kube-state-metrics"}'
+        values: "_x10 1x291"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v2",current_image="docker.io/longhornio/longhorn-engine:v1.12.0",spec_image="docker.io/longhornio/longhorn-engine:v1.12.0",robustness="healthy",state="attached",replicas="2",job="kube-state-metrics"}'
+        values: "1x19 stale"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v2",current_image="docker.io/longhornio/longhorn-engine:v1.12.1",spec_image="docker.io/longhornio/longhorn-engine:v1.12.1",robustness="healthy",state="attached",replicas="2",job="kube-state-metrics"}'
+        values: "_x20 1x281"
+      # the 1-replica garage volume the box stopped on: never moves
+      - series: 'kube_longhorn_volume_engine_info{namespace="garage",volume="v3",current_image="docker.io/longhornio/longhorn-engine:v1.12.0",spec_image="docker.io/longhornio/longhorn-engine:v1.12.0",robustness="healthy",state="attached",replicas="1",job="kube-state-metrics"}'
+        values: "1x300"
+    promql_expr_test:
+      - eval_time: 2h
+        expr: longhorn:volumes_off_default_engine:count
+        exp_samples: [{ labels: '{__name__="longhorn:volumes_off_default_engine:count"}', value: 1 }]
+    alert_rule_test:
+      # t=80: the 1h window still holds the moving samples (t=20..30) → not flat
+      - { eval_time: 1h20m, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
+      # t=95: flat since t=90, pending, `for: 15m` not yet served
+      - { eval_time: 1h35m, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
+      - eval_time: 1h50m
+        alertname: LonghornEngineMoveStalled
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }
+      - { eval_time: 1h55m, alertname: LonghornVolumesOnOldEngine, exp_alerts: [] }
+      - eval_time: 2h5m
+        alertname: LonghornVolumesOnOldEngine
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }
+
+  # A healthy SLOW move: the first 1.12.1 move (2026-10-10) converged one volume in 31 min, and the
+  # box's per-move bound is 60 min. A 50-min flat stretch between two moves, with both images in
+  # use, must stay silent — the 1 h window (not 30 m) is what makes it so.
+  - interval: 1m
+    name: "Slow move: a 50-min pause between volumes is not a stall"
+    input_series:
+      - series: 'kube_pod_container_info{namespace="longhorn-system",container="longhorn-manager",pod="longhorn-manager-a",image_spec="docker.io/longhornio/longhorn-manager:v1.13.0",job="kube-state-metrics"}'
+        values: "1x200"
+      # one volume (3 refs) moves at t=10, the next at t=65 — 54 flat minutes between; the flat
+      # stretch from t=65 reaches 1 h at t=125 and `for: 15m` makes the stall real at t=140.
+      - series: 'kube_longhorn_engineimage_ref_count{name="ei-old",image="docker.io/longhornio/longhorn-engine:v1.12.1",state="deployed",job="kube-state-metrics"}'
+        values: "160x10 157x55 154x135"
+      - series: 'kube_longhorn_engineimage_ref_count{name="ei-new",image="docker.io/longhornio/longhorn-engine:v1.13.0",state="deployed",job="kube-state-metrics"}'
+        values: "0x10 3x55 6x135"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v1",current_image="docker.io/longhornio/longhorn-engine:v1.12.1",spec_image="docker.io/longhornio/longhorn-engine:v1.12.1",robustness="healthy",state="attached",replicas="2",job="kube-state-metrics"}'
+        values: "1x200"
+    alert_rule_test:
+      # t=60: the window [0,60m] holds the t=10 step → not flat; 50 min of pause is not a stall
+      - { eval_time: 1h, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
+      # t=80: the window [20m,80m] holds the t=65 step → not flat
+      - { eval_time: 1h20m, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
+      # t=145: flat since t=65 — an hour without a reference leaving the old image, plus the `for`
+      - eval_time: 2h25m
+        alertname: LonghornEngineMoveStalled
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }
+
+  # At rest: one image, every volume on the manager's tag — the count is a real 0, nothing fires.
+  - interval: 1m
+    name: "At rest: count is 0 (not absent), one image in use, silent"
+    input_series:
+      - series: 'kube_pod_container_info{namespace="longhorn-system",container="longhorn-manager",pod="longhorn-manager-a",image_spec="docker.io/longhornio/longhorn-manager:v1.13.0",job="kube-state-metrics"}'
+        values: "1x200"
+      - series: 'kube_longhorn_engineimage_ref_count{name="ei-2f3240cb",image="docker.io/longhornio/longhorn-engine:v1.13.0",state="deployed",job="kube-state-metrics"}'
+        values: "160x200"
+      - series: 'kube_longhorn_volume_engine_info{namespace="longhorn-system",volume="v1",current_image="docker.io/longhornio/longhorn-engine:v1.13.0",spec_image="docker.io/longhornio/longhorn-engine:v1.13.0",robustness="healthy",state="attached",replicas="2",job="kube-state-metrics"}'
+        values: "1x200"
+    promql_expr_test:
+      - eval_time: 10m
+        expr: longhorn:volumes_off_default_engine:count
+        exp_samples: [{ labels: '{__name__="longhorn:volumes_off_default_engine:count"}', value: 0 }]
+      - eval_time: 10m
+        expr: longhorn:engine_images_in_use:count
+        exp_samples: [{ labels: '{__name__="longhorn:engine_images_in_use:count"}', value: 1 }]
+    alert_rule_test:
+      - { eval_time: 3h, alertname: LonghornVolumesOnOldEngine, exp_alerts: [] }
+      - { eval_time: 3h, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
+
+  # KSM blind (no custom-resource series at all): the count is ABSENT, never 0 — a 0 here would
+  # read as "every volume moved" during a KSM outage (the 2026-09-14 OOM loop class).
+  - interval: 1m
+    name: "KSM blind: the count is absent, nothing fires"
+    input_series:
+      - series: 'kube_pod_container_info{namespace="longhorn-system",container="longhorn-manager",pod="longhorn-manager-a",image_spec="docker.io/longhornio/longhorn-manager:v1.13.0",job="kube-state-metrics"}'
+        values: "1x200"
+    promql_expr_test:
+      - eval_time: 10m
+        expr: longhorn:volumes_off_default_engine:count
+        exp_samples: []
+    alert_rule_test:
+      - { eval_time: 3h, alertname: LonghornVolumesOnOldEngine, exp_alerts: [] }
+      - { eval_time: 3h, alertname: LonghornEngineMoveStalled, exp_alerts: [] }
