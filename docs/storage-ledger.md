@@ -744,6 +744,18 @@ rather than for buying more drives.
   provisioning rule is node-scoped — exact for the one-disk nodes, pessimistic for the
   multi-disk ones (hp-01's three std disks and m70s's std + Garage spindle each sum together;
   it was thinkcentre's std disk + its two Optanes until 2026-09-12).
+- **Longhorn engine-move belt — BUILT 2026-10-11** (`argocd/resources/longhorn-alerts/engine-move.yaml`,
+  FU-301 S9). Operator ruling 2026-10-11: the progress and outcome of a box-run engine move are read
+  from CLUSTER truth, never from the management box's own metrics (the box can be mistaken about
+  itself, and a box gone for a day must leave belts that still work). Two kube-state-metrics
+  customResourceState series — `kube_longhorn_engineimage_ref_count` (EngineImage `refCount`, engines +
+  replicas; 160 at 42 volumes) and `kube_longhorn_volume_engine_info` (per-volume `currentImage` /
+  `spec.image` / robustness / state / replicas) — feed `LonghornVolumesOnOldEngine` (volumes still off
+  the manager's engine tag 2 h after the chart ran it) and `LonghornEngineMoveStalled` (two images in
+  use and the old one's refCount flat for 1 h — the box's per-move bound), plus the recording rules
+  `longhorn:volumes_off_default_engine:count` and `longhorn:engine_images_in_use:count`. Longhorn's own
+  exporter has no image label on `longhorn_volume_*`, which is why the CRs are the source. The move
+  mechanism itself: [`management-box.md`](management-box.md) §Helm release applies, item 4.
 - **The quota half of ADR-089 — ARMED 2026-08-07, and it had never been armed before.** The XRD
   carried `spec.repos[].storage` from day one, no claim in any stack ever set it, so the
   Composition's `{{- if $r.storage }}` never fired and `kubectl get resourcequota -A` returned

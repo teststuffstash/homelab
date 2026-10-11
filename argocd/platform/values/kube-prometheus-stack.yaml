@@ -594,6 +594,8 @@ kube-state-metrics:
   # alone carries hundreds), so the pod OOM-looped at the old limit within 13 s of start and
   # every kube_* belt went blind for ~15 min. Measured under a 1Gi limit: plateau 204Mi, no
   # growth — this is headroom over the plateau, not a leak allowance (oversize caches lesson).
+  # 2026-10-11: the two Longhorn resources below add a Volume cache (42 objects) and an
+  # EngineImage cache (2) — object-count noise next to the CRD-discovery plateau; not re-sized.
   resources:
     limits:
       memory: 384Mi
@@ -614,6 +616,9 @@ kube-state-metrics:
         verbs: [list, watch]
       - apiGroups: [external-secrets.io]
         resources: [externalsecrets]
+        verbs: [list, watch]
+      - apiGroups: [longhorn.io]
+        resources: [engineimages, volumes]
         verbs: [list, watch]
   customResourceState:
     enabled: true
@@ -662,6 +667,50 @@ kube-state-metrics:
                   type: Gauge
                   gauge:
                     path: [status, refreshTime]
+          # Longhorn engine-move progress from CLUSTER truth (operator ruling 2026-10-11, FU-301):
+          # a box-run engine move is judged by what the cluster says about its volumes, never by
+          # the box's own metrics (the box can be mistaken about itself, and a box gone for a day
+          # must leave belts that still work). Longhorn's exporter puts NO image label on
+          # `longhorn_volume_*` (verified 2026-10-11: node/pod/pvc/pvc_namespace/state/volume), so
+          # the CRs are the source. `refCount` counts engines AND replicas (160 at 42 volumes).
+          # Rules: argocd/resources/longhorn-alerts/engine-move.yaml.
+          - groupVersionKind:
+              group: longhorn.io
+              version: v1beta2
+              kind: EngineImage
+            metricNamePrefix: kube_longhorn_engineimage
+            labelsFromPath:
+              name: [metadata, name]
+              image: [spec, image]
+              state: [status, state]
+            metrics:
+              - name: ref_count
+                help: "EngineImage .status.refCount — engines + replicas running this engine image"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, refCount]
+                    nilIsZero: true
+          - groupVersionKind:
+              group: longhorn.io
+              version: v1beta2
+              kind: Volume
+            metricNamePrefix: kube_longhorn_volume
+            labelsFromPath:
+              namespace: [metadata, namespace]
+              volume: [metadata, name]
+            metrics:
+              - name: engine_info
+                help: "Longhorn Volume engine image — 1 per volume; current_image is what runs, spec_image what is asked for"
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      current_image: [status, currentImage]
+                      spec_image: [spec, image]
+                      robustness: [status, robustness]
+                      state: [status, state]
+                      replicas: [spec, numberOfReplicas]
 kubeControllerManager:
   endpoints:
     - 192.168.2.51
