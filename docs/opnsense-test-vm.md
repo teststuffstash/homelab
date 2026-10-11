@@ -95,6 +95,21 @@ VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate i
 
 ## The official update path — observed on this VM (2026-09-29)
 
+**The ruling (operator, 2026-09-29; written down 2026-10-11 from
+[`spikes/update-process-convergence.md`](spikes/update-process-convergence.md) §2/§4 D2 — it lived
+only in seat memory before):** router firmware follows **the official update path** — the router's
+own `firmware/check` is the authority, applied as the `check` → `update` → `upgrade` calls below,
+trialled on this VM first — and **no Renovate pin**: the package mirror serves only the head of
+each series, so a per-build pin cannot be installed on demand; `opnsense/core` tags include
+pre-releases that can precede the packages, and hotfix `_N` builds have no tag at all. What git
+declares is the **series**: the bootstrap's `SERIES` (prod's series head = this VM's `baseline`,
+§Version caveat) and `NANO_VERSION` = tofu's `var.opnsense_test_nano_version` (the birth image).
+Inside a series the policy is latest, and the live build is a reading, not a pin — the same
+pattern as devbox `@latest` plus the lock. Majors are **attended** "until the router is a VM
+pair" — a condition met 2026-10-09 ([`router-move.md`](router-move.md) §Status); re-reading it is
+the spike's decision D3, not this doc's. The class row is 14 in
+[`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory.
+
 The firmware path the GUI drives ([upstream: major upgrades](https://docs.opnsense.org/manual/updates.html#major-upgrades)),
 run through the API against `9110` from `baseline` (26.1.11_10). Each row is what one call did; "revisions" are
 new entries in `GET core/backup/backups/this` (all written by `(root)`, none by the API user).
@@ -181,8 +196,9 @@ at that head (2026-09-29): all six probes pass, `bgp_session` `Established`.
 
 ### The realism score — prod's config.xml vs the from-git build
 
-After the converge, both `config.xml`s are downloaded (prod: `GET /api/core/backup/download/this`,
-the only call the drill makes to `192.168.2.1`) into a 0600 file, compared, and deleted.
+After the converge, both `config.xml`s are downloaded (prod: `GET /api/core/backup/download/this` on the
+CARP MASTER — the live node with the lowest `router_carp_advskew` in the inventories, the only
+prod node the drill talks to) into a 0600 file, compared, and deleted.
 [`opnsense/drill/config-compare.py`](../opnsense/drill/config-compare.py) aligns the trees (list
 items by natural key — name/description/address — never by the per-box uuids; uuid references by
 the item they name) and sorts every difference into:
