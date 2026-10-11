@@ -33,6 +33,15 @@
 # re-activates only when mgmt/nixos/ changed, and every file it executes from its checkout is owned here.
 # /mgmt/ (2026-09-28, PR#2088) = the closure (mgmt/nixos/) + the box scripts (mgmt/scripts/).
 /mgmt/              @RasmusSoot
+# …except the closure's LOCK (2026-10-11, operator): the weekly box flake re-resolve
+# (`scripts/devbox-update.sh`, Monday 03:00Z) is a PR whose only diff is `locked` revs on this
+# file, and the human read it needed each week is a codeowner tax the gates already pay —
+# pin-only-lint check (j) holds that diff to on-branch `locked` revs authored by the update App
+# (byte-exact, hardened #2471), `mgmt-tools-test` in ci holds the loops to the closure's tools,
+# the box's `mgmt-confirm` gate boots the previous generation back on a failed rebuild, and the
+# revert-lock arm (#2482) returns a bad lock on master. Ownership is REPLACED by those four, not
+# dropped (the same shape as /.github/workflows/ below). One-line revert: delete this row.
+/mgmt/nixos/flake.lock
 /.github/           @RasmusSoot
 
 # ── Renovate's action-pin lane (homelab ADR-100 addendum / ADR-141, S9 #1990). Ownership is
