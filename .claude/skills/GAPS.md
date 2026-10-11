@@ -22,7 +22,7 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
 
 - [ ] board-sweep-G1 — the sweep pipeline (board-sweep, fu-sweep) knows ONE context: the
       design-agents corpus. The platform outside the loop is growing islands of its own —
-      dependency upgrades / Renovate, the management box, the OPNsense CARP pair, the cluster
+      dependency upgrades / Renovate, the [management box](../../docs/management-box.md), the OPNsense CARP pair, the cluster
       substrate (3 CPs, disks, Garage, the services) — each with its own owning docs, and the
       sweeps' items now split across them (operator 2026-10-10: the loop stays the heaviest, the
       rest is catching up). Also: (a) "run the design-agents read plan" predates the typed-only
