@@ -196,8 +196,9 @@ at that head (2026-09-29): all six probes pass, `bgp_session` `Established`.
 
 ### The realism score — prod's config.xml vs the from-git build
 
-After the converge, both `config.xml`s are downloaded (prod: `GET /api/core/backup/download/this`,
-the only call the drill makes to `192.168.2.1`) into a 0600 file, compared, and deleted.
+After the converge, both `config.xml`s are downloaded (prod: `GET /api/core/backup/download/this` on the
+CARP MASTER — the live node with the lowest `router_carp_advskew` in the inventories, the only
+prod node the drill talks to) into a 0600 file, compared, and deleted.
 [`opnsense/drill/config-compare.py`](../opnsense/drill/config-compare.py) aligns the trees (list
 items by natural key — name/description/address — never by the per-box uuids; uuid references by
 the item they name) and sorts every difference into:
