@@ -13027,3 +13027,19 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Fallout claimed: `NodeRebooted` (silence on instance .64), `PodSigkilled` ×4 wk-04 DaemonSet pods (covered by
   node-maintenance's pod silence). Two stale-IP targets cleared by 15:27Z. Closed `--force` (GAPS G5 shape:
   only the claimed expected alerts remained). FU-301/box-flake lanes held off the main root for the window.
+
+## 2026-10-10 evening → 10-11 01:00Z — operator asleep, seat autonomous: S9 lanes, lock drill, Longhorn engines → garage-1 down (seat)
+
+- Latch 0.95→0.99 (0cdb1cdc, operator order) for reviewed S9 PRs; restored 0.95 at 00:09Z 10-11 (82a14a34) after the
+  7d reset (proxy treats a past reset epoch as dead data — stale headers can't wedge).
+- Class-7 lock drill: plant #2478 19:08Z → alert 19:19:13Z → chain #2480 19:19:54Z, BOTH sentinels green on the baked
+  lock (FU-305 proven) → governance-lint refused the worker-authored revert → seat admin-merged 19:40:41Z. Fixed #2482
+  (revert-lock arm, byte-exact + not-changed-since) + governance-lint-test ci step ce3fcfb3 (operator-direct, seat-read).
+- Label writes → REST (#2483/#2484, `label-write-lint`) after the 19:00Z homelab-agents GraphQL drain (FU-290).
+- Box env re-provisioned by script (values identical to the hand-appended ones; staged tree diffed key-by-key first).
+- FU-301: #2479 (bounded wait 3600 s, resume, breakage record #1) + #2485 (progress-renewed lease, own engines unit,
+  stale lease = STOP). Engine run (old in-tick code) moved 41/41 `ok`; final verdict STOPPED 00:23Z on garage
+  Progressing. Cause: garage-1's meta-garage-1 serves ENODATA since 21:03Z (container segfault 21:03:58Z) — the
+  per-move check never looked at the consumer. Seat read: replica dir reused (data on disk), deleted pod garage-1
+  (hand act) → CSI mkfs attempts fail on ENODATA (no overwrite). STOPPED: substrate remediation is the operator's.
+  Full state + recovery options: meta-state top bullet.

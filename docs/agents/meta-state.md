@@ -10,6 +10,24 @@ never the session's arc — that is TICK-LOG's.)
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑⚑ OPERATOR FIRST READ (2026-10-11 ~01:00Z) — GARAGE 2/3: `garage-1` DOWN since 21:03:58Z 10-10, caused by the box's
+  Longhorn 1.12.1 live engine moves (FU-301 drill).** `meta-garage-1` (pvc-55869afd, 1 replica, m70s) serves **ENODATA**
+  (err 61) on every read/write while Longhorn reads it attached/healthy; the container segfaulted at 21:03:58Z. The
+  engine move logged `ok` (converged 1839 s) because the per-volume check reads only Longhorn image+robustness, not the
+  consumer's mount. **Data looks intact**: the replica dir `pm961/replicas/pvc-55869afd-…-5d0a6acc` was REUSED (head
+  `.img.meta` dated Sep 12, 30 GiB head, not Rebuilding) — a frontend/engine fault, not an empty replica. Seat hand act
+  (window seat-1791679220-4896): deleted pod garage-1 00:4xZ hoping for a remount → new pod Pending at MountDevice,
+  CSI `mkfs.xfs` attempts FAIL on the first write (ENODATA, so nothing is overwritten; kubelet retries). STOPPED there:
+  remediation is the operator's (substrate ruling 10-02). **Likely recovery:** detach/reattach meta-garage-1 so a
+  fresh engine starts (the pod must not hold it: e.g. scale is not possible per-ordinal — cordon m70s won't pin it
+  either, zone affinity allows all three; consider Longhorn UI detach once the pod is deleted), then let garage-1
+  resync. **Do NOT restart garage-0/garage-2** until understood: data-garage-2/meta-garage-2/data-garage-1 took the
+  same live move; garage-2 serves fine but has not remounted since. Box: engines 42/42 on v1.12.1, verdict STOPPED
+  00:23Z (correct), marker+lease `upgrade-lease-tofu-helm-longhorn` kept; clear-down AFTER garage-1 is whole: rm
+  `/var/lib/mgmt/apply/helm-stopped`, delete the lease cm, (window lapsed). #2485 (progress-renewed lease + own unit)
+  merged+active. Owed (FU-301): a per-move consumer check (pods Ready / mount stat) that STOPs before the next move;
+  second breakage record. Alerts firing for this: GarageClusterDegraded/ZoneDegraded/DisruptionBlocked, PDB, STS,
+  KubePodNotReady, KubeContainerWaiting, TargetDown, MgmtHelmApplyStopped (left to the responder + this note).
 - **⚑ OPERATOR ASLEEP — seat autonomous (2026-10-10 ~19:30Z →).** The temporary 0.99 subscription latch (0cdb1cdc) is
   RESTORED to 0.95 (82a14a34, live 00:1xZ 10-11, after the 7d reset). Class-7 LOCK DRILL ran: plant #2478 19:08Z → alert 19:19:13Z → chain PR #2480 19:19:54Z
   (both sentinels GREEN on the baked lock = FU-305 proven) → **`governance-lint` refused the worker-authored lock
