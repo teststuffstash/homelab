@@ -20,7 +20,7 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
 
 ## board-sweep
 
-- [ ] board-sweep-G1 — the sweep pipeline (board-sweep, fu-sweep) knows ONE context: the
+- [x] board-sweep-G1 — the sweep pipeline (board-sweep, fu-sweep) knows ONE context: the
       design-agents corpus. The platform outside the loop is growing islands of its own —
       dependency upgrades / Renovate, the [management box](../../docs/management-box.md), the OPNsense CARP pair, the cluster
       substrate (3 CPs, disks, Garage, the services) — each with its own owning docs, and the
@@ -32,7 +32,10 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       (closes (a)); 2026-10-10 the island-first rule, the platform-island table (spike §C2)
       and (b) were added there too — the operator gathers the platform refactor in that PR;
       close this entry when it merges.
-      Sighted 2026-10-10 (operator).
+      Sighted 2026-10-10 (operator). **Merged 2026-10-11 (#2219, `42ad3aec`) — by a seat subagent's
+      rebase whose plain `pr-wait` armed auto-merge (card clause added the same day); the operator's
+      read of the spike (now §C7, `docs/spikes/context-and-autonomy.md`) is still owed, revert one
+      `git revert 42ad3aec` away.** Closed with the merge.
 
 ## handoff
 

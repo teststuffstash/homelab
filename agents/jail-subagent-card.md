@@ -83,5 +83,8 @@
   context and re-wait (max 2 rounds); exit 6 (merge conflict) → rebase onto the base, push,
   re-wait; exit 3/4/5 or a repeated finding → stop and **report the terminal to the seat**.
   Several PRs = ONE call (`pr-wait -- A B`, first actionable outcome exits) — never chained single
-  waits — and never behind `| tail` (the poll lines are the liveness signal). The seat hears terminals only; the standing session watches are the
+  waits — and never behind `| tail` (the poll lines are the liveness signal). **`pr-wait` ARMS
+  auto-merge by default** — a PR that must stay unarmed (an operator-read spike, a drill plant) is
+  waited on with `pr-wait -- <n> --no-arm`; an "arm nothing" brief plus a plain `pr-wait` merged
+  the operator-read #2219 on 2026-10-11. The seat hears terminals only; the standing session watches are the
   belt behind you, not your primary reader (meta-state §Re-arm).
