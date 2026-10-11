@@ -30,8 +30,11 @@
 #                 least valuable disk class first (the policy row's `engine_order`), each waited to the new
 #                 image AND back to its old robustness before the next; the first that does not stops it.
 #                 An attached volume's CONSUMER pods must also stay whole (Ready, same pod, no restart)
-#                 before the next move; a 1-replica attached volume is REFUSED before anything moves
-#                 (attended engine move required — the second breakage record, 2026-10-10)
+#                 before the next move. A 1-replica attached volume (both breakage records, 2026-10-10)
+#                 is never moved live: the box HOLDS its consumer (cordon the replica's node, delete the
+#                 pod — a zone-pinned workload cannot reschedule, so the volume detaches), patches the
+#                 detached volume, releases the hold (uncordon) and waits the replacement pod whole —
+#                 the offline move the operator ran by hand on garage-1, 2026-10-11 (helm_lh_offline_move)
 #   5 end         settle, `after`, the VERDICT (the evidence verdict + the box verdict, FU-302), the health
 #                 compare; the record goes to the backup Garage. Good → the lease is deleted (confirmed)
 #                 and the window closed. Bad → STOP: the lease STAYS (the lease loop reads a `tofu/` subject
@@ -62,6 +65,16 @@ HELM_ENGINE_IMAGE_TIMEOUT="${MGMT_HELM_ENGINE_IMAGE_TIMEOUT:-900}"   # the new E
 # waited up to HELM_CONSUMER_TIMEOUT. Reads only — like the convergence wait, waiting is not acting.
 HELM_CONSUMER_TIMEOUT="${MGMT_HELM_CONSUMER_TIMEOUT:-900}"
 HELM_CONSUMER_SOAK="${MGMT_HELM_CONSUMER_SOAK:-120}"
+# Per OFFLINE move (a 1-replica attached volume): the HOLD — cordon the replica's node, delete the pod(s)
+# mounting the PVC, wait for the volume to read `detached`. Every 1-replica consumer here (the garage
+# StatefulSet, the CNPG clusters) is zone-pinned — required anti-affinity on `topology.kubernetes.io/zone`,
+# one node per zone — so the replacement pod has nowhere to go while the node is cordoned, and the kube
+# attach/detach controller releases the volume (garage-1, 2026-10-11 06:30Z: detached in 10 s; Ready 33 s
+# after the uncordon). A replacement that DOES land on another node means the workload is not pinned:
+# the hold is released (uncordon) and the move FAILs — that volume is attended. The hold never touches
+# the workload object (no scale, no patch): ArgoCD sees nothing to self-heal, the pod delete is a
+# StatefulSet/operator restart like any other.
+HELM_HOLD_TIMEOUT="${MGMT_HELM_HOLD_TIMEOUT:-300}"
 HELM_BACKUP_TIMEOUT="${MGMT_HELM_BACKUP_TIMEOUT:-1800}"  # the Longhorn on-demand backups, all together
 # The names a helm roll of these releases structurally produces (the window graces them, silences nothing).
 HELM_DECLARED_ALERTS="${MGMT_HELM_DECLARED_ALERTS:-KubePodNotReady,KubeDeploymentReplicasMismatch,KubeDeploymentRolloutStuck,KubeDaemonSetRolloutStuck,KubeStatefulSetReplicasMismatch,KubeStatefulSetUpdateNotRolledOut,ArgoCDAppDegraded,ArgoCDAppOutOfSync,LonghornVolumeDegraded,TargetDown}"
@@ -179,14 +192,26 @@ lh_engine_plan() {
     | sort_by(.rank, .n)[] | "\(.n)\t\(.cls)\t\(.st)"' "$1"
 }
 # lh_engine_refusals <volumes.json> <new-image> → "<vol><TAB><why>" for every v1 volume still to move that
-# is ATTACHED with one replica (or an unreadable replica count): the box refuses a LIVE engine move of it —
-# a 1-replica attached volume has no second replica to carry its frontend through the move, and the
-# second breakage record (meta-garage-1, 2026-10-10) is exactly that shape. Attended path only (offline:
-# detach, move, reattach). A DETACHED 1-replica volume moves offline and is not refused.
+# is ATTACHED with an UNREADABLE replica count: the box cannot tell a live move (≥2 replicas carry the
+# frontend) from an offline one (1 replica: the hold, helm_lh_offline_move), so it moves nothing. A
+# readable 1-replica attached volume is not refused any more — it takes the hold path (2026-10-11); a
+# DETACHED one moves offline as it always did.
 lh_engine_refusals() {
   jq -r --arg img "$2" '.items[]? | select((.spec.dataEngine // "v1") == "v1" and (.status.currentImage // "") != $img
-         and (.status.state // "") == "attached" and ((.spec.numberOfReplicas // 0) | tonumber? // 0) < 2)
-       | "\(.metadata.name)\t\(if (.spec.numberOfReplicas // null) == null then "replica count unreadable" else "1-replica" end) attached: attended engine move required"' "$1"
+         and (.status.state // "") == "attached" and (.spec.numberOfReplicas // null) == null)
+       | "\(.metadata.name)\treplica count unreadable attached: attended engine move required"' "$1"
+}
+# lh_consumer_pins <pods.json> <pvc> → "<pod><TAB><node|->"<TAB><owned|unowned>" for every pod mounting <pvc>:
+# the node it is scheduled on and whether a controller owns it (a bare pod is never recreated — no hold).
+lh_consumer_pins() {
+  jq -r --arg c "$2" '.items[]? | select(any(.spec.volumes[]?; .persistentVolumeClaim.claimName? == $c))
+    | [.metadata.name, (.spec.nodeName // "-"), (if ((.metadata.ownerReferences // []) | length) > 0 then "owned" else "unowned" end)] | @tsv' "$1"
+}
+# lh_pod_pvcs <pods.json> <pod>… → the PVC names the named pods mount (one per line, unique): the siblings
+# a hold releases together (garage-1 mounts meta-garage-1 AND data-garage-1 — one hold moves both).
+lh_pod_pvcs() {
+  local f="$1"; shift
+  jq -r --argjson names "$(printf '%s\n' "$@" | jq -R . | jq -s .)" '[.items[]? | select(.metadata.name as $n | $names | index($n)) | .spec.volumes[]?.persistentVolumeClaim.claimName? // empty] | unique[]' "$f"
 }
 # lh_consumers <pods.json> <pvc> → "<pod><TAB><uid><TAB><phase><TAB>ready|notready<TAB><restarts><TAB><waiting reasons|->"
 # for every pod whose spec mounts <pvc>. Restarts = the sum over its containers.
@@ -369,17 +394,19 @@ helm_lh_engines() {
   _hk -n "$ns" get volumes.longhorn.io -o json >"$d/engines-volumes.json" 2>/dev/null || { echo "volumes unreadable" >>"$d/engines.log"; return 2; }
   lh_engine_plan "$d/engines-volumes.json" "$img" "$order" >"$d/engines.plan"
   echo "engine image $img — $(grep -c . "$d/engines.plan") volume(s) to move, order $order" >>"$d/engines.log"
-  # the refusal comes BEFORE the first patch: nothing moves while the set holds a volume the box may not
-  # move live — the operator decides the whole run (the conservative reading of the 2026-10-02 ruling)
+  # the refusal comes BEFORE the first patch: nothing moves while the set holds a volume the box cannot
+  # classify — the operator decides the whole run (the conservative reading of the 2026-10-02 ruling)
   ref="$(lh_engine_refusals "$d/engines-volumes.json" "$img")"
   if [ -n "$ref" ]; then
     printf '%s\n' "$ref" | sed -E 's/^([^\t]*)\t/REFUSE \1: /' >>"$d/engines.log"
     echo "nothing moved — move the refused volume(s) attended (offline), then clear the stop" >>"$d/engines.log"
     return 2
   fi
+  : >"$d/engines.done"   # volumes a hold moved as siblings — skipped at their own turn
   while IFS=$'\t' read -r v cls st; do
     [ -n "$v" ] || continue
-    was="$(jq -r --arg v "$v" '.items[] | select(.metadata.name == $v) | .status.robustness // "?"' "$d/engines-volumes.json")"
+    grep -qx "$v" "$d/engines.done" && continue
+    IFS=$'\t' read -r was rep node < <(jq -r --arg v "$v" '.items[] | select(.metadata.name == $v) | "\(.status.robustness // "?")\t\(.spec.numberOfReplicas // 0)\t\(.status.currentNodeID // "")"' "$d/engines-volumes.json")
     # the consumer's baseline BEFORE the patch (attached volumes only — a detached one has no consumer):
     # Longhorn's own record of the PVC, then the pods mounting it, read from the kube API
     pvc=""; pns=""; rm -f "$d/consumers-$v.base"
@@ -391,6 +418,13 @@ helm_lh_engines() {
         lh_consumers "$d/consumers-$v.json" "$pvc" | awk -F'\t' '$3 != "Succeeded" && $3 != "Failed"' >"$d/consumers-$v.base"
       else
         echo "note $v: attached, no PVC on Longhorn's record — consumer not checked" >>"$d/engines.log"
+      fi
+      # one replica: never a live move — the hold (offline) path, siblings included; then the next volume
+      if [ "$rep" -lt 2 ]; then
+        [ -n "$pvc" ] && [ -s "$d/consumers-$v.base" ] \
+          || { echo "FAIL $v ($cls, $st): 1-replica attached without a consumer pod on record — attended (a UI/API attachment?)" >>"$d/engines.log"; return 2; }
+        helm_lh_offline_move "$d" "$v" "$cls" "$node" "$ns" "$img" "$pns" "$pvc" || return 2
+        continue
       fi
     fi
     _hk -n "$ns" patch volumes.longhorn.io "$v" --type merge -p "{\"spec\":{\"image\":\"$img\"}}" >/dev/null 2>&1 \
@@ -414,6 +448,121 @@ helm_lh_engines() {
     done
   done <"$d/engines.plan"
   return 0
+}
+
+# helm_lh_offline_move <dir> <vol> <class> <node> <lh-ns> <image> <pod-ns> <pvc> → rc 0 the volume (and every
+# plan volume the same pod(s) mount, appended to $d/engines.done) is on <image> and the replacement pod(s)
+# are whole; rc 2 a FAIL line. The HOLD: preconditions (every consumer pod controller-owned and on <node>,
+# <node> not already cordoned — someone else's hold), `cordon <node>`, delete the pod(s), wait ≤
+# HELM_HOLD_TIMEOUT for the volume to read `detached` while NO replacement lands on another node; then the
+# patches (detached volumes converge at once — waited like any other, reads only); then `uncordon` on
+# EVERY path after the cordon (a released hold is the pre-move state), and the release wait: at least as
+# many pods mounting <pvc> as were held, all Ready, no restart, no crash/create error, for HELM_CONSUMER_SOAK,
+# bounded by HELM_CONSUMER_TIMEOUT. One cordon, one delete per pod, one patch per volume — never a second.
+helm_lh_offline_move() {
+  local d="$1" v="$2" cls="$3" node="$4" ns="$5" img="$6" pns="$7" pvc="$8"
+  local pins p pn own held=0 t0 el st cur rob sib sibs out n rc
+  [ -n "$node" ] || { echo "FAIL $v ($cls, attached): replica node unreadable — not held" >>"$d/engines.log"; return 2; }
+  pins="$(lh_consumer_pins "$d/consumers-$v.json" "$pvc")"
+  while IFS=$'\t' read -r p pn own; do
+    [ -n "$p" ] || continue
+    [ "$own" = owned ] || { echo "FAIL $v ($cls, attached): consumer pod $p has no controller — nothing would recreate it; attended" >>"$d/engines.log"; return 2; }
+    [ "$pn" = "$node" ] || { echo "FAIL $v ($cls, attached): consumer pod $p on $pn, the replica on $node — attended" >>"$d/engines.log"; return 2; }
+    held=$(( held + 1 ))
+  done <<<"$pins"
+  [ "$held" -gt 0 ] || { echo "FAIL $v ($cls, attached): no consumer pod mounts $pns/$pvc — attended" >>"$d/engines.log"; return 2; }
+  if [ "$(_hk get node "$node" -o jsonpath='{.spec.unschedulable}' 2>/dev/null)" = true ]; then
+    echo "FAIL $v ($cls, attached): $node is already cordoned — someone else's hold; not touched" >>"$d/engines.log"; return 2
+  fi
+  _hk cordon "$node" >/dev/null 2>&1 || { echo "FAIL $v ($cls, attached): cordon $node refused" >>"$d/engines.log"; return 2; }
+  echo "hold $v: cordoned $node, deleting $(cut -f1 <<<"$pins" | tr '\n' ' ' | sed 's/ $//') ($pns)" >>"$d/engines.log"
+  while IFS=$'\t' read -r p pn own; do
+    [ -n "$p" ] || continue
+    _hk -n "$pns" delete pod "$p" --wait=false >/dev/null 2>&1 || { echo "WARN hold $v: delete pod $p refused (it may be gone already)" >>"$d/engines.log"; }
+  done <<<"$pins"
+  # the volume must detach, and no replacement may land elsewhere meanwhile
+  t0="$(_hnow)"
+  while :; do
+    el=$(( $(_hnow) - t0 ))
+    if _hk -n "$pns" get pods -o json >"$d/consumers-$v.hold.json" 2>/dev/null; then
+      out="$(lh_consumer_pins "$d/consumers-$v.hold.json" "$pvc" | awk -F'\t' -v n="$node" '$2 != "-" && $2 != n {print $1 " on " $2; exit}')"
+      if [ -n "$out" ]; then
+        _hk uncordon "$node" >/dev/null 2>&1 || true
+        echo "FAIL $v ($cls, attached): replacement pod $out — the consumer is not pinned to $node's zone; hold released (uncordoned), nothing patched; attended" >>"$d/engines.log"; return 2
+      fi
+    fi
+    st="$(_hk -n "$ns" get volumes.longhorn.io "$v" -o jsonpath='{.status.state}' 2>/dev/null)"
+    [ "$st" = detached ] && break
+    if [ "$el" -ge "$HELM_HOLD_TIMEOUT" ]; then
+      _hk uncordon "$node" >/dev/null 2>&1 || true
+      echo "FAIL $v ($cls, attached): not detached within ${HELM_HOLD_TIMEOUT}s (state $st) — hold released (uncordoned), nothing patched" >>"$d/engines.log"; return 2
+    fi
+    _hsleep 10
+  done
+  echo "hold $v: detached ${el}s after the delete" >>"$d/engines.log"
+  # the siblings: every plan volume the held pod(s) mounted, detached now and still on the old engine
+  sibs="$v"
+  if _hk -n "$ns" get volumes.longhorn.io -o json >"$d/engines-volumes.hold-$v.json" 2>/dev/null; then
+    for sib in $(lh_pod_pvcs "$d/consumers-$v.json" $(cut -f1 <<<"$pins")); do
+      n="$(jq -r --arg ns "$pns" --arg c "$sib" --arg img "$img" '.items[] | select((.status.kubernetesStatus.namespace // "") == $ns and (.status.kubernetesStatus.pvcName // "") == $c and (.status.state // "") == "detached" and (.status.currentImage // "") != $img) | .metadata.name' "$d/engines-volumes.hold-$v.json")"
+      [ -n "$n" ] && [ "$n" != "$v" ] || continue
+      grep -q "^$n"$'\t' "$d/engines.plan" || continue   # only a volume this run was going to move
+      case " $sibs " in *" $n "*) ;; *) sibs="$sibs $n" ;; esac
+    done
+  fi
+  rc=0
+  for sib in $sibs; do
+    if ! _hk -n "$ns" patch volumes.longhorn.io "$sib" --type merge -p "{\"spec\":{\"image\":\"$img\"}}" >/dev/null 2>&1; then
+      echo "FAIL $sib ($cls, offline via $v's hold): patch refused" >>"$d/engines.log"; rc=2; break
+    fi
+    t0="$(_hnow)"
+    while :; do
+      cur="$(_hk -n "$ns" get volumes.longhorn.io "$sib" -o jsonpath='{.status.currentImage}|{.status.robustness}' 2>/dev/null)"
+      rob="${cur#*|}"; cur="${cur%%|*}"
+      if [ "$cur" = "$img" ]; then
+        echo "ok   $sib ($cls, offline — held $(cut -f1 <<<"$pins" | tr '\n' ' ' | sed 's/ $//')) → $img [detached, $rob] $(( $(_hnow) - t0 ))s" >>"$d/engines.log"
+        echo "$sib" >>"$d/engines.done"
+        helm_lease_renew "$d" || echo "WARN lease renewal after $sib failed — the lease may expire (a STOP, the safe side)" >>"$d/engines.log"
+        break
+      fi
+      if [ $(( $(_hnow) - t0 )) -ge "$HELM_ENGINE_TIMEOUT" ]; then
+        echo "FAIL $sib ($cls, offline via $v's hold): image=$cur after ${HELM_ENGINE_TIMEOUT}s" >>"$d/engines.log"; rc=2; break 2
+      fi
+      _hsleep 10
+    done
+  done
+  # release — on every path: the replacement pod attaches whatever engine the volume is on now
+  _hk uncordon "$node" >/dev/null 2>&1 || { echo "FAIL $v ($cls, attached): uncordon $node refused — the hold STANDS, a human releases it" >>"$d/engines.log"; return 2; }
+  echo "hold $v: released (uncordoned $node)" >>"$d/engines.log"
+  [ "$rc" = 0 ] || return 2
+  t0="$(_hnow)"
+  while :; do
+    el=$(( $(_hnow) - t0 ))
+    out="wait	pods of $pns unreadable"; rc=1
+    if _hk -n "$pns" get pods -o json >"$d/consumers-$v.now.json" 2>/dev/null; then
+      out="$(lh_consumers "$d/consumers-$v.now.json" "$pvc" | awk -F'\t' -v want="$held" '
+        function badreason(r,  n, a, i) { n = split(r, a, ","); for (i = 1; i <= n; i++) if (a[i] ~ /^(CreateContainerError|CreateContainerConfigError|CrashLoopBackOff|RunContainerError|Error)$/) return a[i]; return "" }
+        $3 == "Succeeded" { next }
+        { seen++; r = badreason($6)
+          if (r != "") { bad = bad "pod " $1 " container waiting " r "; "; next }
+          if ($3 == "Failed") { bad = bad "pod " $1 " Failed; "; next }
+          if ($5 + 0 > 0) { bad = bad "pod " $1 " restarted (" $5 "); "; next }
+          if ($4 != "ready") wait = wait "pod " $1 " not Ready; " }
+        END {
+          if (seen < want) wait = wait "only " seen+0 " of " want " replacement pod(s) present; "
+          if (bad != "") { sub(/; $/, "", bad); print "bad\t" bad; exit 2 }
+          if (wait != "") { sub(/; $/, "", wait); print "wait\t" wait; exit 1 }
+          print "ok\t" }')"; rc=$?
+    fi
+    if [ "$rc" = 2 ]; then
+      echo "FAIL $v ($cls, offline): consumer of $pns/$pvc broke after the release — ${out#*$'\t'} (${el}s after the uncordon)" >>"$d/engines.log"; return 2
+    fi
+    if [ "$rc" = 0 ] && [ "$el" -ge "$HELM_CONSUMER_SOAK" ]; then
+      echo "consumer-ok $v: $pns/$pvc — $held replacement pod(s) whole for ${el}s after the release" >>"$d/engines.log"; return 0
+    fi
+    [ "$el" -lt "$HELM_CONSUMER_TIMEOUT" ] || { echo "FAIL $v ($cls, offline): consumer of $pns/$pvc not whole within ${HELM_CONSUMER_TIMEOUT}s of the release — ${out#*$'\t'}" >>"$d/engines.log"; return 2; }
+    _hsleep 10
+  done
 }
 
 # helm_lh_consumer_wait <dir> <vol> <class> <state> <pod-ns> <pvc> → rc 0 every pod that mounted <pvc> before
