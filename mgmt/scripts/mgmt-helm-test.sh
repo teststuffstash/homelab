@@ -163,8 +163,11 @@ CLOCK="$T/clock"
 _hnow() { cat "$CLOCK"; }
 _hsleep() { echo $(( $(cat "$CLOCK") + $1 )) >"$CLOCK"; }
 jq -n '{spec:{template:{spec:{containers:[{command:["longhorn-manager","--engine-image","longhornio/longhorn-engine:v1.12.1"]}]}}}}' >"$T/eng-ds.json"
-jq -n '{items:[{metadata:{name:"meta-garage-2"}, spec:{diskSelector:[]}, status:{currentImage:"longhornio/longhorn-engine:v1.12.0", state:"attached", robustness:"healthy"}},
-               {metadata:{name:"std-1"}, spec:{diskSelector:["std"]}, status:{currentImage:"longhornio/longhorn-engine:v1.12.0", state:"attached", robustness:"healthy"}}]}' >"$T/eng-vols.json"
+#     (numberOfReplicas 3 on both: the real meta-garage-2 had ONE replica, which the box now REFUSES before
+#     any move — fixture (10); 3 replicas keeps this replay on the wait path it tests. No PVC on record →
+#     no consumer check here, that is fixture (10) too.)
+jq -n '{items:[{metadata:{name:"meta-garage-2"}, spec:{diskSelector:[], numberOfReplicas:3}, status:{currentImage:"longhornio/longhorn-engine:v1.12.0", state:"attached", robustness:"healthy"}},
+               {metadata:{name:"std-1"}, spec:{diskSelector:["std"], numberOfReplicas:3}, status:{currentImage:"longhornio/longhorn-engine:v1.12.0", state:"attached", robustness:"healthy"}}]}' >"$T/eng-vols.json"
 _hk() {
   echo "k $*" >>"$T/calls"
   case "$*" in
@@ -248,6 +251,111 @@ eq begin-engines-max-end "1970-01-02T17:05:00Z" "$(cat "$T/rec-eng-begin/max-end
 eq begin-engines-lease "1970-01-01T01:05:00Z|1970-01-02T17:05:00Z|mgmt-helm-engines" "$(jq -r '.data | "\(.["expected-end"])|\(.["max-end"])|\(.by)"' "$T/rec-eng-begin/lease.json")"
 eq begin-engines-mode engines "$(cut -f7 "$T/rec-eng-begin/meta.tsv")"
 _hkilltree "$(cat "$T/rec-eng-begin/watch.pid")" 2>/dev/null
+
+# (10) the CONSUMER check + the 1-replica refusal — the second breakage record (meta-garage-1, longhorn
+#      1.12.1, 2026-10-10 21:03Z): Longhorn read the moved volume converged/healthy while its frontend
+#      served ENODATA and garage-1 went down; the box moved on. Contract (mgmt-helm.sh, HELM_CONSUMER_*):
+#      after an ATTACHED volume converges, every pod mounting its PVC must stay Ready, same uid, no
+#      restart, for HELM_CONSUMER_SOAK (120) s — a restart / gone / crash-or-create error is an immediate
+#      FAIL (rc 2, the next volume untouched); NotReady is waited to HELM_CONSUMER_TIMEOUT (900). A
+#      1-replica attached volume (or an unreadable count) is REFUSED before ANY patch.
+pj() {  # <name> <uid> <ready true|false> <restarts> [<waiting reason>] → a pod JSON mounting PVC meta-garage-1
+  jq -n --arg n "$1" --arg u "$2" --arg r "$3" --argjson c "$4" --arg w "${5:-}" '{metadata:{name:$n, uid:$u},
+    spec:{volumes:[{name:"meta", persistentVolumeClaim:{claimName:"meta-garage-1"}}]},
+    status:{phase:"Running", conditions:[{type:"Ready", status:(if $r == "true" then "True" else "False" end)}],
+      containerStatuses:[{name:"garage", restartCount:$c, state:(if $w == "" then {running:{}} else {waiting:{reason:$w}} end)}]}}'
+}
+pods() { jq -s '{items:.}'; }   # stdin: pod JSONs → a pod list
+pj other u9 true 0 | jq '.spec.volumes[0].persistentVolumeClaim.claimName = "data-garage-1"' | pods >"$T/p-other.json"
+#   a pod on another PVC is no consumer: lh_consumers lists only the pods mounting meta-garage-1
+{ pj garage-1 u1 true 0; jq '.items[0]' "$T/p-other.json"; } | pods >"$T/p-mixed.json"
+eq consumers-filter "garage-1	u1	Running	ready	0	-" "$(lh_consumers "$T/p-mixed.json" meta-garage-1)"
+#   a pod already NotReady at baseline need not turn Ready (the move did not cause it) → rc 0
+printf 'garage-1\tu1\tRunning\tnotready\t0\t-\n' >"$T/cb-nr"
+lh_consumer_verdict "$T/cb-nr" "$T/cb-nr" >/dev/null; eq consumer-baseline-notready-ok 0 "$?"
+pj garage-1 u1 true 0 | pods >"$T/p-ok.json"
+pj garage-1 u1 false 0 CreateContainerError | pods >"$T/p-cce.json"
+pj garage-1 u1 true 1 | pods >"$T/p-restart.json"
+pj garage-1 u1 false 0 | pods >"$T/p-notready.json"
+pj garage-1 u2 true 0 | pods >"$T/p-replaced.json"
+echo '{"items":[]}' >"$T/p-gone.json"
+cvol() {  # <name> <replicas|null> <state> [<pvc>] → one volume on the OLD engine
+  jq -n --arg n "$1" --argjson r "$2" --arg s "$3" --arg p "${4:-}" '{metadata:{name:$n},
+    spec:({diskSelector:[]} + (if $r == null then {} else {numberOfReplicas:$r} end)),
+    status:({currentImage:"longhornio/longhorn-engine:v1.12.0", state:$s, robustness:(if $s == "attached" then "healthy" else "unknown" end)}
+      + (if $p == "" then {} else {kubernetesStatus:{namespace:"garage", pvcName:$p}} end))}'
+}
+#   the refusal rule alone: 1-replica attached → refused; unreadable count attached → refused; 1-replica
+#   DETACHED → not refused (offline move); 2 replicas attached → not refused
+{ cvol a1 1 attached; cvol a2 null attached; cvol d1 1 detached; cvol m2 2 attached; } | pods >"$T/rv.json"
+eq refusals "a1	1-replica attached: attended engine move required
+a2	replica count unreadable attached: attended engine move required" "$(lh_engine_refusals "$T/rv.json" longhornio/longhorn-engine:v1.12.1)"
+_hk() {
+  echo "k $*" >>"$T/calls"
+  case "$*" in
+    *"get ds longhorn-manager"*) cat "$T/eng-ds.json" ;;
+    *"get engineimages.longhorn.io"*) echo '{"items":[{"spec":{"image":"longhornio/longhorn-engine:v1.12.1"},"status":{"state":"deployed"}}]}' ;;
+    *"get volumes.longhorn.io -o json"*) cat "$T/c-vols.json" ;;
+    *"get pods -o json"*) local f; f="$(head -1 "$T/podseq")"; [ "$(wc -l <"$T/podseq")" -gt 1 ] && sed -i 1d "$T/podseq"; cat "$f" ;;
+    *"get volumes.longhorn.io "*" -o jsonpath"*) echo -n "$NEW" ;;   # every move converges at its first read
+    *"get cm upgrade-lease-"*) echo "(NotFound)"; return 1 ;;
+  esac
+  return 0
+}
+ccase() {  # <name> <want-rc> <pod files, in read order: the baseline first, the last repeats> → runs helm_lh_engines
+  local n="$1" w="$2" d="$T/c-$1"; shift 2; mkdir -p "$d"; : >"$T/calls"; echo 0 >"$CLOCK"
+  printf 'upgrade-lease-tofu-helm-longhorn' >"$d/lease-name"; printf 'w-eng' >"$d/window-id"; printf '1970-01-02T00:00:00Z' >"$d/max-end"
+  printf '%s\n' "$@" >"$T/podseq"
+  helm_lh_engines "$d" longhorn-system fast,none,bulk,std; eq "consumer-$n-rc" "$w" "$?"
+}
+#   the moved volume carries 2 replicas so it passes the refusal; std-1 (no PVC on record) would move next
+{ cvol meta-garage-1 2 attached meta-garage-1; cvol std-1 3 attached | jq '.spec.diskSelector = ["std"]'; } | pods >"$T/c-vols.json"
+# (10a) the meta-garage-1 shape: converged healthy, the consumer goes CreateContainerError → FAIL naming
+#       the volume AND the pod, std-1 never patched
+ccase cce 2 "$T/p-ok.json" "$T/p-cce.json"
+eq consumer-cce-line 1 "$(grep -c '^FAIL meta-garage-1 (none, attached): consumer of garage/meta-garage-1 broke after the move — pod garage-1 container waiting CreateContainerError' "$T/c-cce/engines.log")"
+eq consumer-cce-next-untouched 0 "$(grep -c 'patch volumes.longhorn.io std-1' "$T/calls")"
+eq consumer-cce-one-patch 1 "$(grep -c 'patch volumes.longhorn.io meta-garage-1' "$T/calls")"
+# (10b) restarted since the move began (Ready again by the read) → FAIL; (10c) the pod replaced (new uid)
+#       → FAIL; (10d) the pod gone → FAIL — each before std-1
+ccase restart 2 "$T/p-ok.json" "$T/p-restart.json"
+eq consumer-restart-line 1 "$(grep -c 'pod garage-1 restarted (0 → 1)' "$T/c-restart/engines.log")"
+ccase replaced 2 "$T/p-ok.json" "$T/p-replaced.json"
+eq consumer-replaced-line 1 "$(grep -c 'pod garage-1 replaced (uid changed)' "$T/c-replaced/engines.log")"
+ccase gone 2 "$T/p-ok.json" "$T/p-gone.json"
+eq consumer-gone-line 1 "$(grep -c 'pod garage-1 gone' "$T/c-gone/engines.log")"
+eq consumer-gone-next-untouched 0 "$(grep -c 'patch volumes.longhorn.io std-1' "$T/calls")"
+# (10e) multi-replica with a healthy consumer → continues: both move; the consumer is read at 0,10,…,120 s
+#       of the fake clock (every _hsleep 10) and passes at the first read ≥ the 120 s soak
+ccase healthy 0 "$T/p-ok.json"
+eq consumer-healthy-lines "ok meta-garage-1;ok std-1;" "$(grep -oE '^(ok  |FAIL) [a-z0-9-]+' "$T/c-healthy/engines.log" | tr -s ' ' | tr '\n' ';')"
+eq consumer-healthy-soak 1 "$(grep -c '^consumer-ok meta-garage-1: garage/meta-garage-1 — garage-1 whole for 120s' "$T/c-healthy/engines.log")"
+# (10f) NotReady for a while, Ready again (same pod, no restart) inside the bound → continues; NotReady
+#       forever → FAIL at the 900 s bound
+ccase notready-recovers 0 "$T/p-ok.json" "$T/p-notready.json" "$T/p-notready.json" "$T/p-ok.json"
+ccase notready-forever 2 "$T/p-ok.json" "$T/p-notready.json"
+eq consumer-notready-bound 1 "$(grep -c 'not whole within 900s — pod garage-1 not Ready' "$T/c-notready-forever/engines.log")"
+# (10g) 1-replica attached (the real meta-garage-1) → REFUSED, NOTHING patched — and through helm_end the
+#       refusal takes the same STOP path as every other: marker written naming it, lease + window kept
+{ cvol meta-garage-1 1 attached meta-garage-1; cvol std-1 3 attached; } | pods >"$T/c-vols.json"
+d="$T/c-refuse"; mkdir -p "$d"; : >"$T/calls"; echo 0 >"$CLOCK"; rm -f "$ADIR/helm-stopped"
+printf 'longhorn\tlonghorn\tlonghorn-system\tabc\t1.12.1\t1.12.1\tengines\n' >"$d/meta.tsv"
+printf 'w-eng' >"$d/window-id"; printf 'upgrade-lease-tofu-helm-longhorn' >"$d/lease-name"; printf 0 >"$d/box-verdict-before.rc"; printf '1970-01-02T00:00:00Z' >"$d/max-end"
+printf '%s\n' "$T/p-ok.json" >"$T/podseq"
+helm_end "$d" 0 fast,none,bulk,std >/dev/null 2>&1; eq refuse-stop-rc 2 "$?"
+eq refuse-nothing-patched 0 "$(grep -c 'patch volumes.longhorn.io' "$T/calls")"
+eq refuse-line 1 "$(grep -c '^REFUSE meta-garage-1: 1-replica attached: attended engine move required' "$d/engines.log")"
+eq refuse-marker 1 "$(grep -c 'engines: REFUSE meta-garage-1: 1-replica attached' "$ADIR/helm-stopped")"
+eq refuse-lease-kept 0 "$(grep -c 'delete cm' "$T/calls")"
+eq refuse-window-kept 0 "$(grep -c '^win close' "$T/calls")"
+#       and the consumer FAIL through helm_end likewise lands in the marker (the meta-garage-1 shape)
+{ cvol meta-garage-1 2 attached meta-garage-1; cvol std-1 3 attached; } | pods >"$T/c-vols.json"
+d="$T/c-cce-end"; mkdir -p "$d"; : >"$T/calls"; echo 0 >"$CLOCK"; rm -f "$ADIR/helm-stopped"
+cp "$T/c-refuse/meta.tsv" "$T/c-refuse/window-id" "$T/c-refuse/lease-name" "$T/c-refuse/box-verdict-before.rc" "$T/c-refuse/max-end" "$d/"
+printf '%s\n' "$T/p-ok.json" "$T/p-cce.json" >"$T/podseq"
+helm_end "$d" 0 fast,none,bulk,std >/dev/null 2>&1; eq consumer-end-stop-rc 2 "$?"
+eq consumer-end-marker 1 "$(grep -c 'engines: FAIL meta-garage-1 (none, attached): consumer of garage/meta-garage-1 broke after the move — pod garage-1 container waiting CreateContainerError' "$ADIR/helm-stopped")"
+eq consumer-end-lease-kept 0 "$(grep -c 'delete cm' "$T/calls")"
 
 echo "mgmt-helm-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

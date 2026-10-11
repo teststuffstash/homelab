@@ -647,6 +647,21 @@ window make both records worthless, and a second release would need its own leas
    **The wait is bounded at 60 min per volume** (`HELM_ENGINE_TIMEOUT`, ≈2× the first breakage record
    below): one patch, then reads only — Longhorn's own retry converging inside the bound is a pass,
    logged with what the box saw meanwhile; waiting on the substrate is not the box acting on it.
+   **Longhorn's read is not the consumer's** (the second breakage record below): after an ATTACHED
+   volume converges, the box reads the pods mounting its PVC (Longhorn's `kubernetesStatus` names it;
+   the pod list comes from the kube API with the box's own kubectl) against a baseline taken just before
+   the patch. Every pod must stay Ready, the same pod (uid), with no restart, for 2 min
+   (`HELM_CONSUMER_SOAK`); a restart, a replaced or vanished pod, or a container waiting in
+   `CreateContainerError`/`CrashLoopBackOff`/`RunContainerError` is an immediate STOP before the next move,
+   and NotReady is waited up to 15 min (`HELM_CONSUMER_TIMEOUT`), reads only. The FAIL line names the
+   volume and the pod. **A 1-replica attached volume is REFUSED** (`REFUSE <vol>: 1-replica attached:
+   attended engine move required`, an unreadable replica count likewise): the check runs on the whole
+   plan BEFORE the first patch, so nothing moves while the set holds one, and the run STOPs through the
+   ordinary path (marker, lease and window kept, `MgmtHelmApplyStopped`). No second replica carries the
+   frontend through a live move, and that is the shape that broke. We chose this refusal over "move them
+   last" because it is the conservative reading of the 2026-10-02 substrate ruling. The attended path:
+   move those volumes offline (consumer stopped, detach, patch, reattach), then clear the stop. A
+   DETACHED 1-replica volume moves offline anyway and is not refused.
    **The moves run in their OWN bracket and unit** (since 2026-10-10 night — the first run held the apply
    tick for hours and hit the unit's 5 h cap): the apply tick only notices v1 volumes off the manager's
    engine and `systemctl start --no-block mgmt-helm-engines.service` (`mgmt/scripts/mgmt-helm-engines.sh`,
@@ -698,6 +713,16 @@ detail):
   reverted); Longhorn replaced the replica at 18:18:23Z and converged by itself (≈31 min) — read at
   19:10Z: engine + replica v1.12.1, healthy. Result: the bound became 60 min (this section, item 4).
   Record: `s3://helm-evidence/20261010T174318Z-box-longhorn-1.12.1/` (`breakage.txt` beside it).
+- **2026-10-10/11, longhorn 1.12.1, the resumed engine moves: a CONSUMER outage behind a converged read**:
+  `meta-garage-1` (garage ns, pvc-55869afd, 1 replica on m70s, attached, consumed by `garage-1`) logged
+  `ok` (converged in 1839 s, healthy). Its frontend nevertheless served ENODATA (err 61) on every read and
+  write, and the `garage-1` container segfaulted at 21:03:58Z. Garage has been at 2/3 since. The
+  per-move check read only Longhorn's `currentImage`/robustness, so the box kept moving the remaining
+  volumes and noticed only at the final verdict (STOPPED 00:23Z 10-11, argocd Healthy 80 → 79, garage
+  Progressing). The replica dir was reused (data on disk; a frontend/engine fault, not an empty replica).
+  The recovery is the operator's. Result: the per-move consumer check and the 1-replica-attached
+  refusal (this section, item 4). Record: the run's `s3://helm-evidence/` entry; live state in
+  [`agents/meta-state.md`](agents/meta-state.md).
 
 ### The box verdict — the box's own read of the cluster (FU-302, 2026-10-10)
 
