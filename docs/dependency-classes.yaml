@@ -139,18 +139,21 @@ classes:
     canary: {status: ok, text: "the PR's own `pull_request` run on the bumped head is the pre-merge proof; push-only workflows are canaried by the revert chain instead"}
 
   - id: 9
-    name: Ansible collections/roles
+    # Split 2026-10-11 (convergence spike §3 wave 1 item 7, S9 #1992): class 9 was "Ansible
+    # collections/roles" reading the EMPTY ansible/requirements.yml; the router config keeps the id,
+    # router firmware is 14, Matchbox 15, the Proxmox hosts 16 — one row per reconciliation shape.
+    name: Router config (ansible + the `oxlorg.opnsense` collection)
     extract: ansible
-    where: "`ansible/requirements.yml` (roles live in-repo today — the file is the extraction seam)"
+    where: "`ansible/collections/requirements.yml` (the real pin — `oxlorg.opnsense`, aligned with the router's os-frr series) + `ansible/requirements.yml` (roles: in-repo today, the extraction seam); the config itself is `ansible/opnsense-*.yml` + `opnsense/*.py`"
     manager: ansible-galaxy
     proof_head_prefixes: ["renovate/"]
-    proof_paths: ["ansible/requirements.yml"]
-    proposer: {status: ok, text: "Renovate `ansible-galaxy` reads `requirements.yml` by default — nothing is pinned there yet, so nothing to propose"}
-    merge_gate: {status: ok, text: "the standard lanes (minor → `deps-review`, major → un-armed)"}
-    deploy_edge: {status: gap, text: "NONE — a merge deploys nothing until a human runs `scripts/opnsense-playbook.sh`; the FU-097 gap, sharpest here (this is the router)"}
-    detector: {status: gap, text: "no nightly `--check` diff; a merged OPNsense change sits until a human remembers"}
-    revert: {status: human, text: "`git revert` + a human playbook run; an in-cluster applier would sit inside its own blast radius (the dependency-cone rule)"}
-    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here; natural first target once a second instance exists — Matchbox (near-zero cone) before OPNsense"}
+    proof_paths: ["ansible/collections/requirements.yml", "ansible/requirements.yml"]
+    proposer: {status: ok, text: "humans write the config; Renovate `ansible-galaxy` proposes the collection pin — #2033 (`oxlorg.opnsense` 25.7.8 → 26.1.11, the `major` lane) merged 2026-09-29 after the test VM harness passed it (docs/opnsense-test-vm.md, `--pr 2033`)"}
+    merge_gate: {status: human, text: "codeowner read + the test VM harness run by the seat (`scripts/opnsense-test-vm.sh`, FU-297 — the router's pre-merge test surface, in the role CI/the sentinel play elsewhere): it posts no status (the jail PAT gets a 403; the box-posted `opnsense-test-vm` status is the convergence spike's wave-2 step 9). The collection pin rides the standard lanes (minor → `deps-review`, major → un-armed)"}
+    deploy_edge: {status: gap, text: "NONE — a merge deploys nothing; `scripts/opnsense-router-node.sh converge <node>` per node is a seat act (the FU-097 gap, sharpest here: this is the router). The box as the ansible applier is the spike's wave 3 — Matchbox (class 15) first, then shadow → BACKUP-only → rolling here"}
+    detector: {status: gap, text: "PARTIAL — the box belt's `ansible --check` (`mgmt-probe` `check_ansible` → `MgmtBeltCheckFailing` reason `drift`, judged per router node; docs/management-box.md §MB2) reads the recap's `changed=` but `oxlorg.opnsense.raw` `action: post` tasks return unchanged in check mode, so advanced-settings drift stays invisible; the weekly rebuild drill's realism score (`MgmtOpnsenseDrillScoreRegressed`; the drill itself red since 2026-10-04 — FU-297's Next) and the pair belts (`RouterPairMasterCount`, `RouterWanGateSilent`) cover part of the rest"}
+    revert: {status: human, text: "`git revert` + a human re-converge per node; FU-308's dead-man covers only CARP maintenance. A box-run revert must be NODE-LOCAL (the commit-confirm shape, dependency-upgrades.md §4 / spike D5): the box's PR path and its Prometheus read both ride the router it would be changing"}
+    canary: {status: human, text: "the BACKUP node — a real second instance since the pair completed 2026-10-09 (docs/router-move.md §Status; the one-cluster canary ruling's revisit condition is met): converge the BACKUP, `check`, then the MASTER through `carp-maintenance enter` with the FU-308 dead-man armed so the BACKUP serves under real load (drill R1 2026-09-30: failover 0.62 s, failback 3.1 s, flows kept). A seat act today; box-run with a lease is the spike's wave 3 step 12"}
 
   - id: 10
     name: arc-runner image inputs
@@ -207,6 +210,48 @@ classes:
     detector: {status: ok, text: "the `mgmt-confirm` gate (sshd, keys, network, systemd, store — box-local by design) + the loops' own staleness belts (`MgmtApplyLoopStale`, `MgmtLeaseLoopStale`, `MgmtReconcileLoopStale`, `MgmtBeltStale`) + `mgmt-tools-test` in CI (a loop that reaches for a tool the closure lacks fails `mgmt_x` loud)"}
     revert: {status: ok, text: "`git revert` of the flake.lock commit — the next pull re-activates the previous closure; a never-boots kernel needs hands (§Rollback layer 2)"}
     canary: {status: human, text: "one box, by the one-cluster canary ruling (operator 2026-10-10): `nixos-rebuild test` + the deadman gate substitute for a canary"}
+
+  - id: 14
+    name: Router firmware (OPNsense)
+    extract: opnsense_firmware
+    where: "nothing pinnable — the mirror serves only each series' head; git declares the SERIES: `scripts/opnsense-test-vm-bootstrap.sh` `SERIES` (prod's series head = the test VM baseline) and `NANO_VERSION` = `tofu/opnsense-test.tf` `var.opnsense_test_nano_version` (the birth image, one nano per major). Inside a series the policy is latest; the live build is a reading, not a pin (docs/opnsense-test-vm.md §The official update path)"
+    manager: "none — no Renovate, by ruling (operator 2026-09-29: the official update path; `opnsense/core` tags precede packages and hotfix `_N` builds have no tag)"
+    proof_head_prefixes: []
+    proof_paths: []
+    proposer: {status: human, text: "none in git — the router's own `firmware/check` is the authority, by ruling (2026-09-29); a belt-raised record (the box reading `firmware/status` per node, the `check_substrate` pattern) was discussed, never built — the convergence spike's wave-2 step 10"}
+    merge_gate: {status: human, text: "nothing merges — a series move is a `SERIES` edit under the codeowner read; MAJORS attended (ruling 2026-09-29, 'until the router is a VM pair' — met 2026-10-09; the re-read is spike D3: one attended drill along the rolling path, then arm)"}
+    deploy_edge: {status: human, text: "seat API calls per node — `core/firmware/check` → `update` (hotfix/minor, cumulative in a series) → `upgrade` (major: offline, three automatic reboots) — trialled on test VM 9110 from `baseline` first (docs/opnsense-test-vm.md §The official update path); prod followed the same path the same day on 2026-09-29 and 2026-09-30"}
+    detector: {status: gap, text: "no `firmware/status` belt (behind-series / EOL) — the pair belts and the weekly drill only see the aftermath; the test VM reports its own build on every bootstrap (`every build failed at the old SERIES` is how the 2026-09-30 mirror move was found)"}
+    revert: {status: gap, text: "none written down — the nodes are VMs (ADR-144), so a `qm snapshot` rollback exists and the loader keeps the previous kernel as `kernel (1 of 2)`; spike D5 recommends the snapshot for firmware, local to the target because the box's path rides the router"}
+    canary: {status: human, text: "the BACKUP node first (snapshot, update, `check`), then the MASTER through `carp-maintenance enter` → update → `check` → `leave` with the FU-308 dead-man armed (drill R1 2026-09-30: three reboots, flows kept, failover 0.62 s / failback 3.1 s) — a seat act; the lease-wrapped box run is the spike's wave 4"}
+
+  - id: 15
+    name: Matchbox (PXE provisioner)
+    extract: matchbox
+    where: "`ansible/group_vars/matchbox.yml` — `matchbox_version` (the server release, sha-pinned) + `talos_version` (the PXE boot assets; `scripts/machines-lint.sh` holds it in lockstep with `tofu/provisioning` and the fleet)"
+    manager: "none — a hand bump; no Renovate manager reads these group_vars literals"
+    proof_head_prefixes: []
+    proof_paths: []
+    proposer: {status: human, text: "a hand edit; `machines-lint` holds the Talos asset pin in lockstep with the fleet's declaration (a substrate bump drags it)"}
+    merge_gate: {status: human, text: "codeowner read; `machines-lint` in `ci` is the only mechanical check"}
+    deploy_edge: {status: gap, text: "a human playbook re-run (`ansible/matchbox*.yml`; `matchbox-talos-assets.yml` for the assets) — a merge deploys nothing. The FIRST box ansible applier candidate (convergence spike wave 3 step 11): shadow `--check` diff first, then on"}
+    detector: {status: gap, text: "none — nothing reads Matchbox until the next netboot, so a stale provisioner shows up as the next node's failed PXE install"}
+    revert: {status: human, text: "`git revert` + the playbook re-run"}
+    canary: {status: human, text: "the cone is near zero (nothing depends on Matchbox until the next PXE boot — dependency-upgrades.md §4 Rollout), so Matchbox IS the ansible classes' canary: the first box-applied surface by the spike's order, ahead of the router (class 9)"}
+
+  - id: 16
+    name: Proxmox hosts (packages, reboots)
+    extract: none
+    where: "nothing pinned in git — in-major `apt dist-upgrade` through `ansible/pve-upgrade.yml` (never reboots; a major is a separate sources edit — docs/runbook.md §Proxmox host maintenance); reboots through `scripts/host-maintenance.sh` (`devbox run host-maint -- preflight|down|up <nx-02|pve>`)"
+    manager: "none"
+    proof_head_prefixes: []
+    proof_paths: []
+    proposer: {status: human, text: "a human runs `pve-upgrade.yml` — no git-visible intent, nothing proposes"}
+    merge_gate: {status: human, text: "nothing merges — the host verb is attended (docs/management-box.md §Hypervisor: the host verb)"}
+    deploy_edge: {status: human, text: "`pve-upgrade.yml` (in-major, reports REBOOT-PENDING, never reboots) + `host-maint` composing the per-guest verbs — ATTENDED until FU-306 proves the verb-on-box wiring on the runners and compute HA (ROADMAP §HA layer 3) exists (spike §3 'Not in this program', D9)"}
+    detector: {status: ok, text: "`PveThinPool*` / `PveVmIoError` / `PveHost*` / `PveMetricsStale` (the host's textfile exporter going quiet) in `argocd/resources/pve-metrics/` (FU-093), plus the per-guest belts the guests carry"}
+    revert: {status: human, text: "no package-level revert path written down; the play snapshots `/etc/pve` before it runs (runbook §Proxmox host maintenance)"}
+    canary: {status: human, text: "the other hypervisor — a real second instance since ADR-133 (nx-02 beside pve); one host per `host-maint` window, attended"}
 
 overrides:
   # keyed by the printed dependency name, or by the FULL row key (`<class>:<name>@<where>`) when the
