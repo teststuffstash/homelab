@@ -13043,3 +13043,24 @@ updates or reverts as much as possible — mechanical revert or a responder."
   per-move check never looked at the consumer. Seat read: replica dir reused (data on disk), deleted pod garage-1
   (hand act) → CSI mkfs attempts fail on ENODATA (no overwrite). STOPPED: substrate remediation is the operator's.
   Full state + recovery options: meta-state top bullet.
+
+## 2026-10-11 06:20–07:00Z — garage-1 recovered by the hold; the hold becomes the box's offline engine move (seat)
+
+- **Read first:** meta-garage-1 + data-garage-1 attached/healthy on m70s, garage-1 Pending at MountDevice (kubelet
+  `mkfs.xfs` failing on ENODATA), the m70s instance-manager log: the 21:03:13Z live `InstanceReplace` upgraded the
+  frontend over the unix data socket with the OLD replica process as its only backend, the old replica shut down
+  21:03:43Z — no second backend to carry the hand-off. The garage StatefulSet and every CNPG cluster carry a
+  REQUIRED zone anti-affinity with one node per zone → a cordoned node + a deleted pod = a per-ordinal hold
+  (yesterday's "cordon won't pin it" read was wrong).
+- **Recovery (window m70s-1791700208-1245):** cordon m70s, delete garage-1 06:30:28Z → both volumes `detached`
+  by 06:30:40Z, replacement Pending/unscheduled → manual `longhorn-api` tickets, `blkid` both XFS, `xfs_repair -n`
+  meta clean (the data pass was OOM-killed in the CSI container; superblock intact, Garage hashes blocks) →
+  tickets removed, uncordon 06:32:17Z → Ready 06:32:50Z; `garage status` 3/3; resync queue 1010 → 49 by 06:51Z.
+- **The verb (operator: "scripted for the box and Argo to do it on their own"):** #2491 — `helm_lh_offline_move`
+  replaces the #2490 refusal for readable 1-replica attached volumes (unreadable count still refuses); siblings
+  of one pod move in one hold; 7 fixture cases; `mgmt-policy-test` 0 failed. Run LIVE from the seat against
+  garage-2 06:51:48Z: detached 32 s after the delete, replacement whole 125 s, rc 0 in 162 s.
+- **Clear-down 06:55Z:** `/var/lib/mgmt/apply/helm-stopped` removed (copy beside the record), lease cm deleted;
+  nothing to move (42/42 on v1.12.1), so no run starts. CODEOWNERS un-own of `mgmt/nixos/flake.lock` committed
+  direct (1d09fc91). FU-301 stays open: archive on the first CONFIRMED longhorn bracket.
+

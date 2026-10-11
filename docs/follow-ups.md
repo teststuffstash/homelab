@@ -162,8 +162,12 @@ six OVERSIZE items pointer-ized into
       `OnDelete` via `mgmt-reconcile`, Longhorn engines ordered by disk type. **Ruled 2026-10-10 (operator, for
       now): the box MAY apply a reviewed helm bump — forward only, evidence-bracketed, stop + alert on a bad
       verdict, never revert/retry/remediate; in S9 scope (#1985).** ⚠ `dependency-upgrades.md`'s
-      Cilium canary cell is inherited from class 6 — Cilium never had one. **Next:** evidence storage the box can
-      reach (it lives in the jail's `~/.claude/helm-evidence/`), then the box brackets helm applies with it.
+      Cilium canary cell is inherited from class 6 — Cilium never had one. **2026-10-11 (operator): the box and
+      ArgoCD do these on their own in the end** — the 1-replica refusal (#2490) became the HOLD, the box's offline
+      move (#2491: cordon → delete the consumer → detached → patch → uncordon → replacement whole; run live on
+      garage-2, `management-box.md` §Helm release applies item 4). **Next:** archive on the first CONFIRMED
+      longhorn bracket on the box (the next Longhorn bump — 1.12.1's two runs both STOPPED; the stop and lease
+      were cleared 2026-10-11 06:55Z with Garage 3/3). Evidence storage: the box uploads to the backup Garage already.
 - [ ] **FU-298** — **The OPNsense plays do not converge a FRESH router — one defect left.**
       Upstream `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register`
       without the uuid → 404 (identical in 25.7.8 and 26.1.11; the controller wants
