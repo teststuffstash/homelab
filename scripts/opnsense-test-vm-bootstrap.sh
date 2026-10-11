@@ -39,7 +39,7 @@ LAN_IP=192.168.1.1                                 # docs/ip-plan.md: 1.0/24, is
 LAN_BITS=24
 LAN_DHCP_START=192.168.1.100
 LAN_DHCP_END=192.168.1.199
-SERIES=26.7.5                                      # prod's version = the series head the mirror serves (= 9110's baseline)
+SERIES=26.7                                        # prod's SERIES (docs/opnsense-test-vm.md §Version): the build converges on whatever head the mirror serves today, never an exact point (26.7.5 → 26.7.6_3 broke every build twice)
 NANO_VERSION=26.7                                  # = tofu var.opnsense_test_nano_version (the birth image)
 PLUGINS="os-frr os-haproxy os-acme-client"         # what the ansible/opnsense-*.yml plays drive
 SNAP="${OPN_TEST_SNAPSHOT:-baseline}"      # the harness default (OPN_TEST_SNAPSHOT)
@@ -294,18 +294,21 @@ wait_firmware_job() {
   done
 }
 
-firmware_update() {  # minor updates within the series until the version reads $SERIES
-  local v i
-  for i in 1 2 3; do
+firmware_update() {  # the official path: `update` passes until the version stops moving = the series head
+  # The mirror serves only a series' HEAD, so an exact target point here is a build that breaks the
+  # day the head moves (26.7.4_1 → 26.7.5 on 2026-09-30, 26.7.5 → 26.7.6_3 on 2026-10-11 — both took
+  # every bootstrap + the weekly drill down). Git declares the SERIES; the head is a reading.
+  local v prev="" i
+  for i in 1 2 3 4; do
     v="$(api GET core/firmware/info | jq -r .product.product_version)"
-    case "$v" in "$SERIES"|"$SERIES"_*) log "at $v"; return 0 ;; esac
+    case "$v" in "$SERIES"|"$SERIES".*) ;; *) die "at $v — not the $SERIES series (NANO_VERSION birth image vs SERIES, doc §Version)";; esac
+    if [ "$v" = "$prev" ]; then log "at $v — the $SERIES head, nothing further to update"; return 0; fi
+    prev="$v"
     log "update pass $i from $v"
     api POST core/firmware/update >/dev/null
     wait_firmware_job || { sleep 30; wait_api 900; }
   done
-  v="$(api GET core/firmware/info | jq -r .product.product_version)"
-  case "$v" in "$SERIES"|"$SERIES"_*) return 0 ;; esac
-  die "still at $v after 3 update passes — the mirror's ${SERIES%.*} head moved past $SERIES? (doc §Version)"
+  die "version still moving after $i update passes (last $v) — judge by hand (doc §Version)"
 }
 
 cmd_status() {

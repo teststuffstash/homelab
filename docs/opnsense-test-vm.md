@@ -19,7 +19,7 @@ A throwaway OPNsense router at prod's version, so a router-config PR (`ansible/o
 | WAN = `vtnet1` = net1 | `vmbr0`, **`192.168.2.67/24`**, gateway `192.168.2.1` — the management path (API `:443` + SSH `:22` from `192.168.2.0/24` only) and the egress for firmware/plugins. "Block private networks" is off (WAN *is* private here) |
 | LAN = `vtnet0` = net0 | **`vmbr1`**, a bridge with **no port and no host address** — `192.168.1.1/24` ([`ip-plan.md`](ip-plan.md) carve). DHCP, HAProxy VIPs and Unbound on this side serve nobody |
 | BGP | a floating rule blocks **outbound TCP 179 on WAN**, so the box's FRR can never peer with the real Cilium nodes, whatever a playbook configures |
-| Version | 26.7.5 + `os-frr`, `os-haproxy`, `os-acme-client` (prod's three config plugins) — the 26.7 series (prod's since 2026-09-29) |
+| Version | the **26.7 series head** the mirror serves at build time (`SERIES=26.7` in the bootstrap — a series, never a point; 26.7.6_3 on 2026-10-11 with prod on 26.7.5) + `os-frr`, `os-haproxy`, `os-acme-client` (prod's three config plugins) — prod's series since 2026-09-29 |
 | Baseline | snapshot **`baseline`** (the harness's default `OPN_TEST_SNAPSHOT`) — after firmware + plugins + API/SSH, before any homelab playbook |
 | Secrets | wallet only: `opnsense-test-root-password`, `opnsense-test-api-key`, `opnsense-test-api-secret`. Root SSH = key login with the pve seed key (`~/.claude/homelab-pve-ssh/id_ed25519`); no password auth |
 
@@ -27,7 +27,10 @@ Version caveat: a series' package mirror serves only its head, so a box built la
 newer core hotfix than prod (26.1: `26.1.11_10` built vs prod's `26.1.11_6`). On 2026-09-29 both
 read `26.7.4_1`; on 2026-09-30 the mirror moved to `26.7.5` (every build failed at the old `SERIES`),
 so `baseline` took the official check → update (12 packages, no reboot), and prod followed the same
-path the same morning in window seat-1790760478-4482 (14 packages, 16 s, no reboot). Prod's other
+path the same morning in window seat-1790760478-4482 (14 packages, 16 s, no reboot). On 2026-10-11 the
+head moved again (`26.7.6_3`) and the hand-started drill failed its build the same way — the bootstrap
+now declares the SERIES and runs `update` passes until the version stops moving, so a head move is
+never a build failure again; prod (26.7.5) follows on its own attended window. Prod's other
 plugins (`os-ddclient`, `os-isc-dhcp`, `os-tftp`) are not installed: no play touches them.
 
 ## Why this bootstrap mechanism
