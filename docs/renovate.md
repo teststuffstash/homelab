@@ -85,7 +85,7 @@ restate them, and a lane question is answered there, cell by cell.**
   review asks for an adaptation. A chart major arms itself when it is packaging-only
   (`appVersion: unchanged`, `agents/major-handoff.sh`). The marker must not leak: Renovate MERGES
   `addLabels` across rules, so every mechanical rule is restricted to non-major update types.
-- **The management box is the gate where a merge is an apply** (tofu providers, tofu-managed charts):
+- **The [management box](management-box.md) is the gate where a merge is an apply** (tofu providers, tofu-managed charts):
   the sentinel's plan-on-PR must be empty or a default backfill (ADR-131); the lens is the merge gate
   for majors; the box's bracket is the deploy edge, forward only (FU-301).
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
