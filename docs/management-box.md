@@ -750,6 +750,17 @@ detail):
   (#2490), and the HOLD — the box's offline move of a 1-replica attached volume, item 4 (the refusal
   #2490 added stood for one night). Record: the run's `s3://helm-evidence/` entry.
 
+**Observability ruling (operator, 2026-10-11, after the first unattended Longhorn bracket).** Progress and
+outcome of a box-run apply are read from **cluster truth** — Longhorn's EngineImage reference counts and each
+Volume's current vs declared engine image (kube-state-metrics customResourceState), helm release secrets,
+Application health — never from the box's own metrics: the box can be mistaken about itself (the apply loop
+logged "starting" the engines unit every tick while it was running, #2495), and a box that disappears for
+24 h must leave alerts that still work. The box's `mgmt_*` series carry **lifecycle only** — started,
+working, stopped on something — and, above all, WHICH applies are in flight when several PRs merged close
+together. The in-flight record already lives in the cluster (the ⚓ leases, MB5); what did not survive the
+box was their evaluation (`mgmt_lease_active`/`_expired` are box textfile metrics) — hence the cluster-side
+lease reader (MB5). The record stays off the box (the backup Garage + the `management-apply` commit status).
+
 ### The box verdict — the box's own read of the cluster (FU-302, 2026-10-10)
 
 Every go/no-go the box took from the cluster rode Prometheus, and Prometheus rides a Cilium BGP VIP
@@ -828,7 +839,7 @@ even when every check is green.
 | Talos PKI (rotate-ca) | human | — (seat-run FROM the box, 2026-09-22) | FU-264; not a box capability |
 | ci-runner VM replace (`runner-maintenance`) | human | not yet tested | attended verb only — §Non-Talos VMs below |
 | Helm release apply, argo-cd + argocd-apps (`apply_helm`, forward only — §Helm release applies) | policy rows (operator, #2450) | 2026-10-10 | argocd-apps 2.0.6 (#2458): applied, STOPPED on an out-of-cone alert (→ #2459, then the FU-302 swap #2474); argo-cd 9.5.22 (#2461): 7/7 rolled, CONFIRMED (verdict half finished by hand after an activation killed the tick → #2466); **argo-cd 9.7.1 (#2464, Renovate): unattended end to end, CONFIRMED 17:30Z**. Records `s3://helm-evidence/` |
-| Helm release apply, longhorn (restore point + ordered engine moves) | policy row (#2467) | 2026-10-10 (STOP path) | longhorn 1.12.1 (#2463, Renovate): restore point (3 Backups + 4 CNPG) → chart applied, 12/12 pods rolled, BGP/ArgoCD/robustness clean → the FIRST engine move (`meta-garage-2`, 1 replica, attached) never left v1.12.0 in 900 s (replica `bind: address already in use` on its unix socket) → **STOPPED**, nothing reverted; Longhorn converged by itself in ≈31 min — the first breakage record (§Helm release applies) → the 60-min bounded wait + resume (#2479). CONFIRM not yet seen on this release |
+| Helm release apply, longhorn (restore point + ordered engine moves + the HOLD for 1-replica volumes) | policy row (#2467, #2491) | **2026-10-11 (CONFIRMED, unattended)** | longhorn 1.12.1 (#2463): first engine move STOPPED (replica socket `bind: address already in use`; converged by itself in ≈31 min — breakage record #1 → the 60-min bounded wait + resume #2479); the live 1-replica move broke garage-1 (ENODATA, incident 2026-10-10) → the HOLD (#2491). **longhorn 1.13.0 (#2487, Renovate): chart bracket 07:04:57→07:17:46Z CONFIRMED (15/15 rolled, BGP 26/26, robustness unchanged); `mgmt-helm-engines` 07:22:33→09:00:14Z: 42/42 moves, 9 holds (garage ×3, CNPG ×5 — primaries fail over first, 187–195 s detaches), 33 consumer checks whole, 42 lease renewals, CONFIRMED.** Records `s3://helm-evidence/20261011T07*-box-longhorn-*`; defect found by the run: #2495 (a running oneshot is `activating`) |
 | Longhorn OFFLINE engine move — the hold (cordon → delete the consumer → detached → patch → uncordon → replacement whole) | engines unit, every 1-replica attached volume | 2026-10-11 (by hand, then the function live) | garage-1 recovery by hand 06:30Z: detached 10 s, Ready 33 s after the uncordon; `helm_lh_offline_move` itself run live from the seat against garage-2 the same morning (image already current — the hold/release half is the whole act) — see §Helm release applies item 4 |
 | The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
 | Router config converge (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is the convergence spike's wave 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded ([`spikes/update-process-convergence.md`](spikes/update-process-convergence.md)) |
@@ -1291,6 +1302,28 @@ guess, a person finishes), `MgmtLeaseExpiredUnreverted` (`dig` — the PR exists
 `MgmtLeaseLoopStale`, `MgmtLeaseMetricsAbsent`. Tests: `devbox run mgmt-policy-test` →
 `mgmt/scripts/mgmt-lease-test.sh` (a bare fixture origin; the real clone/revert/push path; every GitHub
 call recorded).
+
+**The cluster-side reader (operator ruling 2026-10-11; S9 stint, FU-301).** Alerts about a box-run upgrade
+are built on CLUSTER truth, never on this box's self-reported metrics: the box's only useful signals are
+lifecycle — started, working, stopped on something — and above all WHICH applies are in flight when several
+PRs merged close together, and those must survive the box disappearing for a day. The record already does
+(the lease ConfigMaps above); its evaluation did not — `mgmt_lease_active` / `mgmt_lease_expired` are
+computed here, so a box that vanished mid-bracket left a lease nobody expired and no alert naming the
+unconfirmed upgrade. `argocd/resources/upgrade-lease-reader/` closes that: a 2-minute CronJob in
+`monitoring` (its own ServiceAccount; `get`/`list` on ConfigMaps in `agent-coordinator` and no write verb)
+reads the label and PUTs one Pushgateway group, job `upgrade_lease_probe` —
+`upgrade_lease_info{lease,subject,by,chart,sha,from,to}`,
+`upgrade_lease_{started,expected_end,max_end}_timestamp_seconds{lease,subject}`, `upgrade_lease_standing`,
+`upgrade_lease_probe_generated_timestamp_seconds` — so a confirmed lease leaves the group on the next run
+and an unconfirmed one keeps a name with or without the box. Detector only (detection before fix,
+2026-09-09): it acts on nothing, the revert stays `mgmt-lease`'s. Belts (`prometheusrule.yaml` there):
+`UpgradeLeaseInFlight` (info, dashboard/API-only — the what-is-in-flight read a seat takes from the alert
+list), `UpgradeLeasePastExpectedEnd` (warning — standing past its deadline, unconfirmed whether the box is
+alive or not), `UpgradeLeaseOrphaned` (critical, `now` — a lease stands while `mgmt-lease` has not ticked for
+15 min or its series are gone with the box: nothing will expire it, the deadline is a person's),
+`UpgradeLeaseProbeStale` / `UpgradeLeaseProbeAbsent` (the reader itself). Replay of 2026-10-11's two
+brackets (chart 07:04:57→07:17:46Z; engines 07:22:33→~08:50Z, expected-end renewed on progress): InFlight
+only — the fixture's first two cases.
 
 **Credential — the one operator click (ADR-150 (5)).** The loop pushes and opens PRs as the box's own
 identity, the `homelab-sentinel` App (§Credentials), which needs `contents: write` (it has `pull_requests:

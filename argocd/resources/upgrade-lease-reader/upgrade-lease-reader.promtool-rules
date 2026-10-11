@@ -1,0 +1,52 @@
+# Hand copy of the upgrade-lease-reader group from prometheusrule.yaml (annotations stripped — the
+# manifest is their one home) — the rules file upgrade-lease-reader.promtool-test loads. DRIFT-PINNED
+# by scripts/prometheus-rules-lint.sh (expr+for equality per alert name). Regenerate after every
+# expr edit with:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/upgrade-lease-reader/prometheusrule.yaml | yq -P '.'
+#
+# ⚠ THE RECIPE DOES NOT ROUND-TRIP COMMENTS — re-add this header BY HAND after every regenerate.
+groups:
+  - name: upgrade-lease-reader
+    rules:
+      - alert: UpgradeLeaseInFlight
+        expr: |
+          upgrade_lease_info{job="upgrade_lease_probe"}
+            * on (lease, subject) group_left
+          upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe"}
+        labels:
+          severity: info
+          triage: none
+      - alert: UpgradeLeasePastExpectedEnd
+        expr: |
+          upgrade_lease_expected_end_timestamp_seconds{job="upgrade_lease_probe"} < time()
+        for: 5m
+        labels:
+          severity: warning
+          triage: dig
+      - alert: UpgradeLeaseOrphaned
+        expr: |
+          upgrade_lease_info{job="upgrade_lease_probe"}
+            and on ()
+          (
+            (time() - max(mgmt_lease_last_run_timestamp_seconds{job="mgmt-node"})) > 900
+              or absent(mgmt_lease_last_run_timestamp_seconds{job="mgmt-node"})
+          )
+        for: 5m
+        labels:
+          severity: critical
+          triage: now
+      - alert: UpgradeLeaseProbeStale
+        expr: |
+          (time() - max(upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"})) > 600
+        for: 5m
+        labels:
+          severity: warning
+          triage: dig
+      - alert: UpgradeLeaseProbeAbsent
+        expr: |
+          absent(upgrade_lease_probe_generated_timestamp_seconds{job="upgrade_lease_probe"})
+        for: 1h
+        labels:
+          severity: warning
+          triage: dig
