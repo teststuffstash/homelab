@@ -13,12 +13,21 @@ never the session's arc — that is TICK-LOG's.)
 - **⚑ PICKUP (2026-10-11 07:00Z — seat): garage-1 RECOVERED, the box's HOLD verb in flight.** garage-1 back
   06:32Z (cordon m70s + delete the stuck pod → both volumes detached in 10 s → XFS intact (`blkid`/`xfs_repair
   -n` via the CSI plugin pod under a manual ticket) → uncordon → Ready 33 s; `garage status` 3/3, resync
-  drained). Box stop + lease cleared 06:55Z (marker copy beside the record). **#2491** (auto-merge armed):
+  drained). Box stop + lease cleared 06:55Z (marker copy beside the record). **#2491 MERGED 07:0xZ**:
   1-replica attached volumes move OFFLINE through the hold instead of refusing (operator: box + Argo do it on
-  their own); `helm_lh_offline_move` run LIVE against garage-2 06:51Z rc 0 (162 s). **Next:** #2491 merge →
+  their own); `helm_lh_offline_move` run LIVE against garage-2 06:51Z rc 0 (162 s). **Next:**
   FU-301 archives on the first CONFIRMED longhorn bracket (the next Longhorn bump). `GarageClusterFlapping`
   (3) + `GarageDisruptionBlocked` were still firing at 06:55Z — expected to clear on their own windows; a
-  read by the next session. `MgmtHelmApplyStopped` clears on the box's next textfile tick.
+  read by the next session. `MgmtHelmApplyStopped` cleared 06:57Z. **OPERATOR READ — the Argo half of the
+  10-11 direction ("box + Argo do it on their own"):** Garage's OWN updates have no Renovate lane — the image comes
+  from the vendored chart's `appVersion` (`argocd/charts/garage/Chart.yaml`, v2.3.0), which no manager watches
+  (`argocd` = Application chart pins, `kubernetes` = argocd/resources images; `docs/garage.md` §Updating = re-vendor
+  by hand). ArgoCD auto-syncs (prune+selfHeal) once a bump lands, and a pod restart remounts on the same engine
+  (no hold needed). Shape, if ruled: a regex customManager on that `appVersion` → docker `dxflrs/amd64_garage`,
+  patch/minor through the existing `custom.regex` mechanical rule (Garage belts + the PDB controller are the net),
+  majors human (Garage majors carry migrations) — the re-vendor of the chart templates stays a hand step. Not
+  filed: `.github/renovate-global.json` is operator-gated and this arms unattended restarts of the one
+  unrecoverable release — a ruling, not a seat call.
 - **⚑ OPERATOR ASLEEP — seat autonomous (2026-10-10 ~19:30Z →).** The temporary 0.99 subscription latch (0cdb1cdc) is
   RESTORED to 0.95 (82a14a34, live 00:1xZ 10-11, after the 7d reset). Class-7 LOCK DRILL ran: plant #2478 19:08Z → alert 19:19:13Z → chain PR #2480 19:19:54Z
   (both sentinels GREEN on the baked lock = FU-305 proven) → **`governance-lint` refused the worker-authored lock
