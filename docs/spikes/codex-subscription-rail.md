@@ -1,7 +1,8 @@
 # Spike — Codex as a ChatGPT-subscription rail
 
-**Status:** investigation, 2026-09-21. No architecture decision has been taken. This records the
-facts learned while bringing native Codex into the jail, the OpenCode Go precedent, and the first
+**Status:** investigation, 2026-09-21 (consumer-surrogate use case added 2026-09-22). No
+architecture decision has been taken. This records the facts learned while bringing native Codex
+into the jail, the OpenCode Go precedent, and the first
 implementation slices. The question is: how can cluster agents use the operator's ChatGPT
 subscription without placing its refreshable credential in worker pods, while exposing account
 headroom in the existing subscription dashboard?
@@ -125,9 +126,15 @@ own persisted state supplies the verdict and Prometheus merely observes it.
 
 ## Build order
 
-1. **Runtime foundation (`agent-runtime`, first queued issue).** Pin native Codex in the shared
+1. **Runtime foundation (`agent-runtime`) — landed 2026-09-22.** Pin native Codex in the shared
    image and add a deterministic, credential-free headless harness contract. This proves the
    executable and run/finalization interface without prematurely coupling runtime CI to live OAuth.
+   Done as agent-runtime#145/PR#147 (Codex pinned in `agent-base`) and #146/PR#148 (`agent-codex`,
+   the `codex exec --json` seam, entrypoint provenance, the `agent-finalize` JSONL adapter). A
+   disposable restricted pod verified, as uid/gid 1000, that `codex` and `agent-codex` resolve and
+   no `auth.json` exists. That proves the image/runtime boundary only: there is still no Codex arm
+   in `agents/agent-session.sh`, no credential/proxy leg, no headroom accounting and no live
+   in-cluster model call.
 2. **Credential/proxy leg (`homelab`).** Add `codex-session`, opaque-reference authorization,
    refresh ownership, ChatGPT request rewrite, explicit egress, and fixture tests with a fake
    upstream. Never log bearer, refresh, id token, or the full auth record.
@@ -142,6 +149,83 @@ own persisted state supplies the verdict and Prometheus merely observes it.
 The runtime issue is intentionally first because `agent-runtime` owns the artifact and harness
 binary; proxy and platform configuration do not belong in that repository. Each later slice should
 be its own issue when its prerequisite lands, not one cross-repository mega-change.
+
+## Use case: approximating a ChatGPT consumer (2026-09-22)
+
+Design input for a full `design-agents` session, not a decision. It came out of the Codex jail
+work, in a session that could not load the whole agents corpus (see the context finding below).
+
+**The workload.** [oracle-fleet#562](https://github.com/teststuffstash/oracle-fleet/issues/562),
+the class-2 oracle prober (routing: FU-102, the Prober role). Its successor is meant to ask real
+consumer questions and exercise the oracle across models and harnesses. The target is not a pure
+model benchmark but, approximately, "a normal ChatGPT subscriber asks this and gets this answer";
+most consumers neither pick model IDs nor know the tiers.
+
+That makes native Codex relevant: it is probably the closest legitimate, automatable, headless
+client of an OpenAI subscription (ChatGPT auth, OpenAI's subscription backend, model policy and
+orchestration). It is **not** the ChatGPT app and must not be labelled equivalent without
+evidence: it has a coding-agent system prompt, terminal/repository assumptions, its own tool loop,
+explicit model controls, its own context/compaction policy, and none of ChatGPT's UI, memory or
+personalization.
+
+**Candidate experiment.** Three arms over the same frozen missions, each cell a fresh session so
+accumulated context is not a confounder:
+
+1. *Real ChatGPT calibration* — a small manual gold set run through the actual consumer ChatGPT
+   connection flow (not oracle output pasted into chat). Record normalized answer, citations,
+   tool outcome and pass/fail — never credentials or user data.
+2. *Codex subscription canary (`chatgpt-surrogate`)* — the same missions as isolated in-cluster
+   Codex sessions, with native context/compaction left as is. Codex earns "surrogate" only from
+   measured correlation with arm 1, not from architectural resemblance.
+3. *Controlled OpenRouter matrix* — Luna, Terra, Sol and Astra through one fixed harness/provider
+   path ([`opencode-model-matrix.md`](opencode-model-matrix.md) is the existing matrix): diagnostic
+   model+harness coverage, not a stand-in for the consumer product.
+
+Reading it: all OpenRouter cells fail → suspect the oracle/query contract; API cells pass and
+Codex fails → suspect the product/harness path; ChatGPT passes and Codex fails → Codex is not a
+faithful surrogate for that behavior. Each cell records requested and actually served
+model/provider, token and cache usage, MCP result sizes, tool sequence, elapsed time and cost, the
+exposed context limit, any compaction/truncation, deterministic oracle assertions, answer and
+citations.
+
+**Context-window finding.** The local Codex model catalog gives the same values for
+`gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna`: `context_window = 272000`,
+`effective_context_window_percent = 95` (258,400 usable in session telemetry),
+`max_context_window = 872000`. API listings advertise far larger windows for these families (Sol
+around 1.05M), so 272k is a Codex product/runtime choice, not an intrinsic model limit, and it is
+independent of reasoning effort. Upstream:
+[openai/codex#28852](https://github.com/openai/codex/issues/28852) asks for 1M effective context
+(open); [#27522](https://github.com/openai/codex/issues/27522) (an API-provider session asks for
+1M and gets ~258k), [#27743](https://github.com/openai/codex/issues/27743) (catalog knows a larger
+max; one user reports a CLI override worked on an API provider) and
+[#27275](https://github.com/openai/codex/issues/27275) (frequent compaction at the smaller window)
+are user reports, not maintainer explanations. That 272k matches the long-prompt price threshold
+is plausible but **unconfirmed**; no official page found says Plus is capped at 272k or why Codex
+picks it. Do not repeat it as fact, and do not assume an API-provider override works on the
+subscription rail. For one fresh consumer question 272k may suffice, but large MCP results can
+cross it (#562 already recorded one three-hit search response of 140,119 characters). Crossing
+the cap is evidence about suitability: report it, never let compaction hide it in a comparison.
+Context overrides do not belong in the surrogate arm unless the real ChatGPT product behaves the
+same way: they would improve a benchmark while making it less representative.
+
+**Open questions this adds** (to the list at the end):
+
+- Build the credential/proxy leg narrowly for the prober first, or as a general rail straight
+  away? Current recommendation: a prober-only canary first.
+- What correlation with arm 1 lets Codex graduate from candidate surrogate to a useful automated
+  proxy for ChatGPT behavior?
+- Is the real ChatGPT consumer connection's MCP/tool surface close enough to the oracle's for the
+  calibration to mean anything?
+
+**For delegation.** The design session must hand workers exact model IDs, the provider/harness
+choice, the endpoint and opaque-ref contract, limits, a report schema, fixtures and live-canary
+acceptance. Cluster agents can implement matrix expansion, launcher/composition wiring,
+deterministic assertions, reports, fixtures and metrics; they must not be asked to invent OAuth
+semantics, choose representative models, or decide what counts as ChatGPT-product equivalence
+from an underspecified issue. Per [author at the last moment](../agents/issue-authoring.md) (§Author at
+the last moment, queue at once), the successor Goal is not
+minted just to park this: the corpus-loaded session judges the design first and authors the Goal
+when #562 reaches its verdict.
 
 ## What would settle the spike
 
