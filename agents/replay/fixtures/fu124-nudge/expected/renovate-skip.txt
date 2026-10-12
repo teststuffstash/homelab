@@ -1,3 +1,3 @@
-CALL gh pr view {{n}} --repo teststuffstash/testrepo --json commits
-OUT   [testrepo] FU-124: #{{n}} Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-141); skipping
+CALL gh pr view {{n}} --repo teststuffstash/testrepo --json commits,statusCheckRollup
+OUT   [testrepo] FU-124: #{{n}} Renovate-authored, untouched and not green — Renovate's to rebase (rebaseWhen behind-base-branch, ADR-153); skipping
 RC 0

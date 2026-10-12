@@ -14,5 +14,9 @@ unreviewed-noop | board | gh/pr-list.json @ patches/add-unreviewed-behind.jq | |
 # source the untouched row was nudged (red on base), the worker-pushed one still is.
 renovate-untouched-noop      | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-skip  | n=150
 renovate-worker-pushed-nudge | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-nudge | n=150 oid=ren150oid789
-renovate-other-class-nudge   | board | gh/pr-list.json @ patches/add-renovate-other-class.jq | | success | n=152 oid=ren152oid789
+renovate-other-class-noop    | board | gh/pr-list.json @ patches/add-renovate-other-class.jq | | renovate-skip | n=152
+# ── ADR-153 (2026-10-12): every Renovate branch is Renovate's (the `-other-class` row flipped from a
+# nudge to a skip — red on the pre-ADR-153 source), EXCEPT the merge-ready one: untouched + GREEN
+# rollup on an armed+APPROVED candidate is nudged (currency is the only gap). Axis = the row's rollup.
+renovate-untouched-green-nudge | board | gh/pr-list.json @ patches/add-renovate-behind.jq | | renovate-ready-nudge | n=150 oid=ren150oid789
 # Login shape (homelab#2007): the rows carry the REAL `app/homelab-renovate-1234` list shape the raw test missed.
