@@ -219,6 +219,13 @@ jobs:
         if: steps.diff.outputs.deep-dig-test != 'false'
         run: devbox run deep-dig-test
 
+      # The retro collector/pipeline contract tests (FU-058). They existed without a CI task since
+      # #2130, so the state growth that OOMKilled the 2026-10-12 guard (#2519) shipped with green
+      # checks — the tests could not have caught it either, but a gate that never runs catches nothing.
+      - name: Retro contract tests (devbox run retro-test)
+        if: steps.diff.outputs.retro-test != 'false'
+        run: devbox run retro-test
+
       # The ConfigMap-shipped Python (exporters, the proxy/router) is the other thing manifest-lint
       # can't see — it validates the YAML wrapper, never the script inside, so a syntax error only
       # surfaced when ArgoCD rolled the pod (#173, found landing the #153 fix). Parse-only: no
