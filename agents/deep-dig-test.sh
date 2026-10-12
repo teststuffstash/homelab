@@ -215,9 +215,23 @@ rm -f "$REPO_SNAP/docs/follow-ups.md"
 
 scenario explained-meta-state
 am "[$(alert MgmtBeltCheckFailing $((NOW - 30*3600)) '{"check":"talos","job":"mgmt-node","triage":"dig"}')]"
-printf -- '- ⚑ PICKUP: MgmtBeltCheckFailing{check="talos"} clears when PR#1963 merges.\n' > "$REPO_SNAP/docs/agents/meta-state.md"
+printf -- '- `dig-explained: MgmtBeltCheckFailing` — clears when PR#1963 merges.\n' > "$REPO_SNAP/docs/agents/meta-state.md"
 go
-jqok "the seat's meta-state naming the alert explains it" '.explained[0].explained_by == "meta-state"'
+jqok "an explicit dig-explained marker in meta-state explains it, reason carried" '.explained[0].explained_by == "meta-state: clears when PR#1963 merges."'
+rm -f "$REPO_SNAP/docs/agents/meta-state.md"
+
+# 2026-10-12: the seat's wind-down lists every standing alert in meta-state; a bare grep read that
+# list as an explanation, so RegistryMirrorDanglingLinks hid from the dig by standing. A mention —
+# even in a "Standing, not S9" list — explains nothing; neither does a marker naming another alert
+# whose name merely CONTAINS this one.
+scenario meta-state-mention-only
+am "[$(alert MgmtBeltCheckFailing $((NOW - 30*3600)) '{"check":"talos","job":"mgmt-node","triage":"dig"}')]"
+cat > "$REPO_SNAP/docs/agents/meta-state.md" <<'EOF'
+  **Standing, not S9:** `LonghornDiskBelowSchedulingFloor` ×2 (FU-093), `MgmtBeltCheckFailing`,
+- dig-explained: MgmtBeltCheckFailingX, OtherAlert — a different alert
+EOF
+go
+jqok "a bare meta-state mention (and a marker for a longer name) explains nothing" '.counts.unexplained == 1 and .counts.explained == 0'
 rm -f "$REPO_SNAP/docs/agents/meta-state.md"
 
 # The prior findings are what `harvest` REALLY writes: run select, wrap a session block for the
