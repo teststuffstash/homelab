@@ -64,13 +64,18 @@ PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
 # PR author is Renovate AND every non-merge commit is Renovate-authored — then this updater keeps
 # its hands off. A Renovate PR a worker has pushed to (the FU-046 deps-review shape) is NOT
 # skipped: Renovate has already stopped maintaining it, and this belt is its only currency.
-# ⚠ SCOPED TO THE GROUPED ACTIONS BRANCHES (PR#2004 review): `rebaseWhen: behind-base-branch` is
-# set ONLY on the two `matchManagers: ["github-actions"]` rules in .github/renovate-global.json —
-# every other class (python runtime/dev deps, dockerfile minors, pre-commit) inherits the global
-# `conflicted`, so Renovate never rebases those for plain staleness and this updater IS their
-# currency. Renovate names a grouped rule's branch `renovate/<groupSlug>`; the two groupNames
-# there are `github-actions` and `github-actions (major)` → `^renovate/github-actions(-major)?$`.
-# That file is the ONE HOME of the group names — a groupName change there changes this regex.
+# EVERY Renovate PR, since 2026-10-12 (ADR-153 — operator ruling after sleep-tracking#185):
+# `rebaseWhen: behind-base-branch` is the ORG DEFAULT in .github/renovate-global.json (it was the two
+# grouped Actions rules' alone, PR#2004 review, and this skip was scoped to `^renovate/github-actions
+# (-major)?$`), so Renovate keeps every untouched PR current, rebases it on conflict and autocloses it
+# when superseded — and this updater's merge is exactly what used to take those three abilities away
+# (#185: one update-branch → "Edited/Blocked" → neither rebase nor autoclose, a zombie). ONE EXCEPTION,
+# the merge-ready one: an untouched Renovate PR that is armed, APPROVED and GREEN has nothing but
+# currency between it and the merge; the updater takes it (minutes to merge, no zombie possible — a
+# zombie needs a PR that cannot merge) so the fast path keeps its 15-min currency instead of Renovate's
+# 6-h cron. Not green, not approved, conflicted: Renovate's. `renovate_green` reads the per-candidate
+# probe (`--json commits,statusCheckRollup`); an absent or unreadable rollup is NOT green (fail toward
+# leaving it to Renovate).
 # `author` and `headRefName` are scalar list fields (no node cost); commit authorship comes from
 # the per-candidate `gh pr view --json commits` probe leg 1 already pays for bot-approved candidates.
 # ⚠ LOGIN SHAPE (homelab#2007, 2026-09-27): `gh pr list --json author` reports an App as
@@ -81,9 +86,11 @@ PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
 # branch as edited — the exact defect this skip exists to prevent. Normalize BOTH affixes before
 # the prefix test, the same `sub("\\[bot\\]$"; "")` idiom the reviewer-identity reads below use.
 RENOVATE_LOGIN_JQ='def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate");'
-renovate_author() {   # renovate_author <pr-json> → 0 when the PR author is Renovate AND the branch is a grouped Actions one
-  jq -e "$RENOVATE_LOGIN_JQ"' (.author.login | renovate_login)
-         and ((.headRefName // "") | test("^renovate/github-actions(-major)?$"))' <<<"$1" >/dev/null 2>&1
+renovate_author() {   # renovate_author <pr-json> → 0 when the PR author is Renovate (every branch, ADR-153)
+  jq -e "$RENOVATE_LOGIN_JQ"' (.author.login | renovate_login)' <<<"$1" >/dev/null 2>&1
+}
+renovate_green() {   # renovate_green <pr-view-json with statusCheckRollup> → 0 when every check concluded clean (absent = not green)
+  jq -e '([ .statusCheckRollup[]? | ((.conclusion // .state) // "") ]) as $c | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0' <<<"$1" >/dev/null 2>&1
 }
 renovate_untouched() {   # renovate_untouched <pr-view-json with commits> → 0 when no foreign non-merge commit
   jq -e "$RENOVATE_LOGIN_JQ"' [ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
@@ -194,13 +201,15 @@ while read -r pr; do
   n="$(jq -r '.number' <<<"$pr")"
   cj=""
   if renovate_author "$pr"; then
-    cj="$(gh pr view "$n" --repo "$REPO" --json commits 2>/dev/null)" && jq -e '.commits' <<<"$cj" >/dev/null 2>&1 || cj=""
+    cj="$(gh pr view "$n" --repo "$REPO" --json commits,statusCheckRollup 2>/dev/null)" && jq -e '.commits' <<<"$cj" >/dev/null 2>&1 || cj=""
     if [ -z "$cj" ]; then
       echo "updater[$REPO]: #$n commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)"
       continue
     fi
-    if renovate_untouched "$cj"; then
-      echo "updater[$REPO]: #$n Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-141); skipping"
+    # The merge-ready exception (ADR-153): untouched + green falls through to the admission below
+    # (APPROVED / bot-approved / automerge) — currency is the only gap, this updater closes it.
+    if renovate_untouched "$cj" && ! renovate_green "$cj"; then
+      echo "updater[$REPO]: #$n Renovate-authored, untouched and not green — Renovate's to rebase (rebaseWhen behind-base-branch, ADR-153); skipping"
       continue
     fi
   fi
@@ -319,9 +328,10 @@ jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
                     and (([.labels[].name] | index("agent/arbitrate")) == null)) | .number' <<<"$PRS" \
 | while read -r n; do
     pj="$(gh pr view "$n" --repo "$REPO" --json commits,reviews 2>/dev/null)" || pj=""
-    # Same rule as leg 1: an untouched Renovate PR on a grouped Actions branch is Renovate's to rebase (ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences)).
+    # Same rule as leg 1, minus the exception: a CHANGES_REQUESTED PR is not merge-ready, so an untouched
+    # Renovate PR here is always Renovate's to rebase (ADR-153; every Renovate branch since 2026-10-12).
     if [ -n "$pj" ] && renovate_author "$(jq -c --argjson n "$n" '.[] | select(.number == $n)' <<<"$PRS")" && renovate_untouched "$pj"; then
-      echo "unstrand: #$n Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-141); skipping"
+      echo "unstrand: #$n Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-153); skipping"
       continue
     fi
     verdict_ok=""

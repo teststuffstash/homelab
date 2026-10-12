@@ -103,13 +103,18 @@ not the coordinator, owns whether an update should exist:
   on the renovate branch** — since 2026-10-12 the scan's `unarmed-major` unit owns this for an ARMED
   `deps-review` PR too, in its red or changes-requested state (the reflex is green-only; FU-046): five
   rides, then `agent/arbitrate` for a human — never close. **Not on the GitHub Actions lane** (ADR-141):
-  those PRs are grouped per repo per wave and ride `rebaseWhen: behind-base-branch` — Renovate keeps its
-  own branch current and re-extracts master on every rebase (a call site added on master after the PR
-  opened gets bumped on the next rebase, never by a request-changes), and it stops maintaining a branch
-  the moment anyone else pushes to it (its edited-PR rule — the operator's update-branch on
-  agent-coordinator#14 is why the third `actions/checkout` site there was never bumped). The reviewer
-  reads such a PR as a batch member with no fixer behind it; the in-cluster updater leaves untouched
-  Renovate PRs to Renovate.
+  those PRs are grouped per repo per wave, and the reviewer reads one as a batch member with no fixer
+  behind it.
+- **Renovate owns its PRs' currency, conflicts and autoclose (ADR-153, 2026-10-12).**
+  `rebaseWhen: behind-base-branch` is the org default: Renovate keeps every UNTOUCHED PR current,
+  re-extracts master on each rebase (a call site added after the PR opened is bumped on the next
+  rebase), rebases on conflict and autocloses a superseded PR — and it stops maintaining a branch
+  the moment anyone else pushes to it (its edited-PR rule). The in-cluster updater therefore keeps
+  its hands off an untouched Renovate PR, with ONE exception: merge-ready (armed + approved + green,
+  currency the only gap) it updates, so the fast path keeps 15-minute currency instead of Renovate's
+  6-hour cron and no zombie can be born (a zombie needs a PR that cannot merge — sleep-tracking#185:
+  one updater merge onto an approved-but-red PR → "Edited/Blocked" → neither rebase nor autoclose,
+  abandoned by Renovate yet unclosable). A worker-adapted branch is the updater's as before.
 - **Closing a Renovate PR is not "done."** With Renovate's default `recreateWhen: auto`, a manually
   closed PR is *not* recreated for the **same** version (close = "reject this version"), but Renovate
   DOES open a fresh PR when a **newer** version lands → a reject→close→new-version→reject **churn**; and

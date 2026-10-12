@@ -2842,3 +2842,23 @@ not the scope). **Why:** each side had built the half the other lacked (proposer
 surface), and both conditions that kept the router human were met on 2026-10-09. **Consequences:** the
 program (ROADMAP §Deploy paths) carries the open forks — firmware majors box-run after one attended drill
 (no major before 27.1), the test-VM verdict required once box-posted, the firmware currency belt. Record only.
+
+### ADR-153 — Renovate owns its PRs' currency: `rebaseWhen: behind-base-branch` is the org default, the updater touches an untouched Renovate PR only when it is merge-ready (2026-10-12)
+**Status:** Accepted (operator, 2026-10-12 — after the sleep-tracking#185 read: one updater merge onto an
+approved-but-red Renovate PR made it "Edited/Blocked", after which Renovate could neither rebase it on
+conflict nor autoclose it once #188 superseded it — a zombie no lane could move). **Decision:** the org
+default in `.github/renovate-global.json` is `rebaseWhen: behind-base-branch` (it was ADR-141's two grouped
+Actions rules' alone); the in-cluster updater (`agents/update-pr-branch.sh`) and the scan's FU-124 nudge
+leave every UNTOUCHED Renovate PR to Renovate, except a MERGE-READY one — armed + approved + green, currency
+the only gap — which the updater takes. A branch a worker has pushed to stays the updater's (Renovate has
+let go). Mechanism and effects: [`renovate.md`](renovate.md) §Coordinator × Renovate PRs. **Considered:**
+the ruling without the exception (rejected — every Renovate PR takes one currency step before merging,
+measured 0.98–1.06 updater merges per PR over 14 days, so the fast path's 0.1–0.4 h medians would wait on
+Renovate's 6-h cron); hourly Renovate (unneeded with the exception; stays an option); a scan repair that
+closes an "Autoclosing Skipped" PR (treats the symptom). **Why:** approvals survive Renovate's rebases
+(#2488: one approval across three) and a rebase costs CI only, so Renovate's ownership is cheap; the
+exception keeps the measured fast path; the zombie needs a PR that cannot merge, which the exception never
+touches. **Consequences:** a lingering Renovate PR on a busy repo gets at most 4 rebases a day instead of up
+to 21 updater merges; if Renovate's workflow is down, untouched PRs sit BEHIND with no updater belt (FU-046's
+proof-of-flight carried the adapted-branch path on #191 the same day); the scan's rebase-box repair and the
+merge-conflict Renovate clause become retirable once a quiet week shows them idle.

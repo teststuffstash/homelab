@@ -3758,33 +3758,34 @@ EOF_GTHEMES_OPEN
     # `bot_approved_head` arm needs `reviews` + a per-candidate commits probe this fetch does not
     # carry, and duplicating it here would be a second reader of one predicate). A park
     # (REVIEW_REQUIRED) is therefore never nudged: it waits for its human, as leg 1 intends.
-    # RENOVATE OWNS ITS OWN CURRENCY (ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences), 2026-09-27) — the same predicate as
-    # agents/update-pr-branch.sh legs 1+2, at this third call site: Renovate stops maintaining a
-    # branch the moment a commit it did not author lands on it (agent-coordinator#14 went
-    # "Edited/Blocked" after ONE update-branch and its third actions/checkout call site, added on
-    # master later, was never bumped), and the GitHub Actions rules ride rebaseWhen
-    # behind-base-branch, so an UNTOUCHED Renovate PR is Renovate's to rebase — ONLY on those two
-    # rules (PR#2004 review): every other class inherits the global `conflicted` and needs this
-    # nudge for currency, so the skip is scoped to Renovate's grouped-rule branches
-    # `renovate/<groupSlug>` for the two groupNames in .github/renovate-global.json (`github-actions`,
-    # `github-actions (major)` → `^renovate/github-actions(-major)?$`; that file is the one home).
-    # `author` + `headRefName` are in the snapshot; commit authorship needs a per-PR `gh pr view --json commits` probe (the field is
+    # RENOVATE OWNS ITS OWN CURRENCY (ADR-153, 2026-10-12 — `rebaseWhen: behind-base-branch` is the org
+    # default; it was ADR-141's two grouped Actions rules alone). The same predicate as
+    # agents/update-pr-branch.sh leg 1, at this third call site: an UNTOUCHED Renovate PR (every
+    # non-merge commit Renovate's) is Renovate's to rebase — a foreign merge flips it "Edited/Blocked"
+    # and Renovate can then neither rebase nor autoclose it (sleep-tracking#185) — EXCEPT when it is
+    # merge-ready: this loop's candidates are armed + BEHIND + APPROVED already, so GREEN is the one
+    # test left, read from the same per-PR probe (`--json commits,statusCheckRollup`; the fields are
     # not listable — the 500k-node cap, 2026-09-08), paid only for Renovate-authored candidates.
+    # Green → nudge (currency is the only gap, the updater's); not green or no rollup → skip.
     # Unreadable probe = HOLD (rule #6), never a nudge on unknown authorship.
     # >>>REPLAY:fu124-nudge>>>
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND") and (.reviewDecision=="APPROVED"))|.number'); do
       u_oid="$(printf '%s' "$prsjson" | jq -r --argjson u "$u" '.[]|select(.number==$u)|.headRefOid//""')"
       # Login shape (homelab#2007): `app/<slug>` from pr list, `<slug>[bot]` from the commits probe —
       # strip both before the prefix test (the update-pr-branch.sh RENOVATE_LOGIN_JQ def, inlined).
-      if printf '%s' "$prsjson" | jq -e --argjson u "$u" 'def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate"); .[]|select(.number==$u)|((.author.login|renovate_login) and ((.headRefName//"")|test("^renovate/github-actions(-major)?$")))' >/dev/null 2>&1; then
-        u_cj="$(gh pr view "$u" --repo "$slug" --json commits 2>/dev/null)" && jq -e '.commits' <<<"$u_cj" >/dev/null 2>&1 || u_cj=""
+      if printf '%s' "$prsjson" | jq -e --argjson u "$u" 'def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate"); .[]|select(.number==$u)|(.author.login|renovate_login)' >/dev/null 2>&1; then
+        u_cj="$(gh pr view "$u" --repo "$slug" --json commits,statusCheckRollup 2>/dev/null)" && jq -e '.commits' <<<"$u_cj" >/dev/null 2>&1 || u_cj=""
         if [ -z "$u_cj" ]; then
           echo "  [$repo] FU-124: #${u} commit probe unreadable — HOLDING, not nudging (rule #6; the updater cron retries)"
           continue
         fi
         if jq -e 'def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate"); [ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .authors[]? | .login ] | all(renovate_login)' <<<"$u_cj" >/dev/null 2>&1; then
-          echo "  [$repo] FU-124: #${u} Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-141); skipping"
-          continue
+          if jq -e '([ .statusCheckRollup[]? | ((.conclusion // .state) // "") ]) as $c | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0' <<<"$u_cj" >/dev/null 2>&1; then
+            echo "  [$repo] FU-124: #${u} Renovate-authored, untouched and MERGE-READY (armed, APPROVED, green) — currency is the only gap, the updater's (ADR-153); nudging"
+          else
+            echo "  [$repo] FU-124: #${u} Renovate-authored, untouched and not green — Renovate's to rebase (rebaseWhen behind-base-branch, ADR-153); skipping"
+            continue
+          fi
         fi
       fi
       if gh api -X PUT "repos/${slug}/pulls/${u}/update-branch" \
