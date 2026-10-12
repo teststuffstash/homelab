@@ -13255,8 +13255,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `deps-review` rule carries `automerge: true` + `platformAutomerge`, stability passed 09-27, Renovate's latest log says
   nothing. The platform half — the FU-079 un-owned-PR backstop skips `deps-review` on the premise its reflex arms it —
   is a bounded fix, dispatched to a subagent → **#2527** (report an un-armed `deps-review`/`automerge` PR older than
-  24 h; `unowned-pr-backstop` replay family, three rows) — reviewer APPROVED, auto-merge armed, CI finishing at
-  wind-down (the first dispatch was cancelled by a stray Ctrl+C; the second finished from the same clone). The cause (why
+  24 h; `unowned-pr-backstop` replay family, three rows) — **MERGED 20:31Z, 531f51c0**, one clean review round (the first dispatch was cancelled by a stray Ctrl+C; the second finished from the same clone). The cause (why
   Renovate never enabled auto-merge there) is the stack jails' — recorded here and in the pickup, not minted.
 - Standing at wind-down, none S9: `LonghornDiskBelowSchedulingFloor` ×2 (FU-093), `MgmtSubstrateBehind`,
   `RegistryMirrorDanglingLinks`, `OpenRouterKeyBudgetLow`, `HomeAssistantPowerSensorStale` ×6, `AgentAttentionStanding`
