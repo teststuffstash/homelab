@@ -850,21 +850,6 @@ the block needs pruning, not more headings.
       which-environment-is-right reveal remain. **Operator direction
       2026-08-07:** give each stack coordinator both levers, and make the lever REVEAL which
       environment is telling the truth. Relates FU-148, FU-072 (kata networking), ADR-097.
-- [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E: an armed `deps-review` PR → review
-      reflex → CHANGES_REQUESTED → a worker adapting on the `renovate/*` branch → merge.** Built:
-      the split by class ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
-      [`docs/renovate.md`](renovate.md) §"Coordinator × Renovate PRs"; ADR-141 — the arm decides the owner).
-      **Status 2026-09-27 (S9 #1985):** majors HAVE flown, not through this path — agent-coordinator#22
-      (Actions major, grouped mechanical lane, no review) and #23 (node 24: migration lens + a human
-      merge) prove the lens and the human lane; no `deps-review` PR has drawn a CHANGES_REQUESTED yet.
-      **2026-10-12: the non-major path FLEW** (operator ruling "it should just work until it cannot"):
-      #2521 widened the scan's `unarmed-major` unit to an armed `deps-review` PR that is red or
-      changes-requested (the reflex is green-only, the ci-red dispatcher loop-author-only), five rides
-      then `agent/arbitrate`; sleep-tracking#191 (lock refresh carrying ruff 0.17, 33 findings, red for
-      days) was ridden at the 19:00Z tick — the worker pushed the fix to `renovate/lock-file-maintenance`
-      in 155 s, CI green, reflex APPROVED 19:13Z, updater current 19:14Z, merge on the rerun. Both
-      "still to verify" clauses held (Renovate let the edited branch go; the worker pushed to
-      `renovate/*`). **Next:** archive on #191's merge. Relates FU-041, FU-044, #1988, ADR-153.
 - [ ] **FU-130** — **CI-gate WAN fetches: FIXED, all three merged 2026-08-05.** helm-unittest now comes
       from devbox (`kubernetes-helmPlugins.helm-unittest`, `$HELM_PLUGINS`) instead of a 23 MB
       GitHub-release pull per run — circles#15 (the `new-stack --from` donor) + sleep-tracking#115,

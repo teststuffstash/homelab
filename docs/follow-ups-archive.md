@@ -10,6 +10,16 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-046** *(archived 2026-10-12)* — **The reviewable-dep-bump path, end to end: PROVEN on both lanes.**
+  Majors rode the `unarmed-major` unit since 09-28 (~30 PRs through `major/awaiting-human`; #2033 adapted on its
+  Renovate branch). The non-major lane flew 2026-10-12 after the operator's ruling ("it should just work until it
+  cannot — worker fixes like a major, five rounds then a human"): #2521 widened the unit to an armed `deps-review` PR
+  that is red or changes-requested (the reflex is green-only, the ci-red dispatcher loop-author-only), five
+  `state-fp:unarmed-major:` markers → `agent/arbitrate` (the budget re-opens on a ruling). sleep-tracking#191 (lock
+  refresh carrying ruff 0.17, red for days): ridden at the 19:00Z tick, the worker pushed the fix to
+  `renovate/lock-file-maintenance` in 155 s, reflex APPROVED 19:13Z, updater current 19:14Z, MERGED 20:01Z (the one
+  red in between was the #184 render-gate flake, fixed in sleep-tracking#193). Both open clauses held: Renovate let
+  the edited branch go, the worker pushed to `renovate/*`. Relates ADR-141, ADR-153, FU-058's retro lane.
 - **FU-301** *(archived 2026-10-11)* — **`helm_release` applies on the box: evidence first → the box applies them on its own.**
   Ruled 2026-10-10 (forward only, evidence-bracketed, stop + alert, never revert); the 1-replica refusal became the
   HOLD (#2490 → #2491, operator 2026-10-11: "box + Argo do it on their own"). **Closed by the first CONFIRMED Longhorn

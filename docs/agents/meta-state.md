@@ -24,8 +24,7 @@ dig for days by being listed). Write the marker only when the cause is known; th
   `deps-review` Renovate PRs never armed (allure-behavior-snippets#11/#12/#25/#26, oracle-fleet#758/#759) — why Renovate
   never enabled auto-merge there is theirs; the homelab backstop fix is a subagent PR (TICK-LOG). **Watch next Renovate
   run (cron */6h):** every untouched Renovate PR gets rebased by Renovate for the first time under the new default;
-  expect one CI run per open Renovate PR per master-moving period, approvals surviving. **FU-046:** archive on
-  sleep-tracking#191's merge (integration rerun queued at 19:45Z). Standing alerts unchanged from the 10-11 pickup;
+  expect one CI run per open Renovate PR per master-moving period, approvals surviving. **FU-046 ARCHIVED** (sleep-tracking#191 merged 20:01Z). Standing alerts unchanged from the 10-11 pickup;
   `RetroReportOverdue` did not fire.
 - **⚑ PICKUP (2026-10-11 18:45Z — seat; TICK-LOG 2026-10-11 17:30–18:45Z): three seat-residue items closed,
   one drill verdict pending.** **sleep-tracking#67 CLOSED** on a discriminating homelab-namespace probe ride —
