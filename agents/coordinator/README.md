@@ -1538,7 +1538,8 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    reflex's APPROVED completes the merge — step 5 never applies to it), and the bound is the scan's:
    it counts the `state-fp:unarmed-major:` markers and at five refuses the sixth ride — the PR gets
    `agent/arbitrate` + an event line, and a human adapts by hand, re-proposes, or abandons it through
-   the Renovate config (removing the label buys five more). Both classes share that cap.
+   the Renovate config. Removing the label buys five more: the count is the markers NEWER than the
+   last arbitrate event line, so the ruling re-opens the budget. Both classes share that cap.
 2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
    **reviewer directly** — even while red (the reflex won't, but you can; a major review is an
    *investigation* whose whole job is to explain the red — the reviewer's STEP 0 treats a concluded

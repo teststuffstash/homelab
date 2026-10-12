@@ -4192,8 +4192,13 @@ EOF_GTHEMES_OPEN
       # `state-fp:unarmed-major:` marker on the PR, so the marker count IS the ride count — the sixth is
       # churn, not progress. Escalate: `agent/arbitrate` (the rounds-exhausted vocabulary; no clause
       # re-dispatches a Renovate PR wearing it, and the selector above excludes it) + one event line.
+      # The budget RE-OPENS on a ruling: only markers newer than the newest `kind=arbitrate` event line
+      # count, so a human who removes the label (after adapting, re-proposing, or deciding the ride is
+      # worth another five) gets five more — the markers are permanent, the window is not (#2521 review).
       # A failed write is reported and the PR skipped — never ridden past the bound.
-      um_rides="$(printf '%s' "$pr_json_um" | jq -r '[ .comments[]? | select((.body // "") | test("state-fp:unarmed-major:[0-9a-f]{6,64}")) ] | length' 2>/dev/null)" || um_rides=0
+      um_rides="$(printf '%s' "$pr_json_um" | jq -r '
+          ([ .comments[]? | (.body // "") | scan("<!-- agent-event kind=arbitrate ts=([^ ]+) -->") | .[0] ] | max // "") as $since
+          | [ .comments[]? | select((.body // "") | test("state-fp:unarmed-major:[0-9a-f]{6,64}")) | select($since == "" or ((.createdAt // "") > $since)) ] | length' 2>/dev/null)" || um_rides=0
       case "$um_rides" in ''|*[!0-9]*) um_rides=0 ;; esac
       if [ "$um_rides" -ge "$UM_MAX_RIDES" ]; then
         if gh_label_add "$slug" "$u" agent/arbitrate \
