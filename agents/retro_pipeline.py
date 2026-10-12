@@ -271,7 +271,9 @@ def publish(args, store, temp):
         reports[model] = Path(path).read_text()
         command += ['--report', entry]
     run(*command)
-    # Parsing is strict before coverage moves; a report without findings metadata needs repair.
+    # Parsing is strict before coverage moves — per report. A report without findings metadata is
+    # excluded and recorded (`findings.report_defects`), not repaired or inferred; the publication
+    # refuses only when NO report parsed (retro_findings.py main).
     publication = {'bundle_id': bundle['bundle_id'], 'window': bundle['window'],
                    'report_pr': args.pr, 'published_at': args.now, 'reports': reports,
                    'findings': json.loads((temp / 'findings.json').read_text())}

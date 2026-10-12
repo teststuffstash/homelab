@@ -67,6 +67,23 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'already published'):
             p.prepare(self.args, self.store, self.root)
 
+    def test_block_less_report_is_a_recorded_partial(self):
+        # r8 (2026-10-12): the goose cell wrote every section and no retro-findings-json block; the
+        # harvest refused the whole publication and the week's coverage stalled. One valid report
+        # publishes; the defective one is recorded, never repaired or inferred.
+        p.prepare(self.args, self.store, self.root)
+        good, bad = self.root / 'opus.md', self.root / 'goose.md'
+        good.write_text(REPORT); bad.write_text('# report\n## Findings\nprose only, no block\n')
+        self.args.bundle = self.args.output
+        self.args.pr = 'https://github.com/o/r/pull/1'
+        self.args.report = ['opus=' + str(good), 'goose=' + str(bad)]
+        p.publish(self.args, self.store, self.root)
+        self.assertEqual(self.store.get('platform/checkpoint.json')['until'], '2026-09-28T00:00:00Z')
+        publication = self.store.publications('platform')[0]
+        self.assertEqual([d['model'] for d in publication['findings']['report_defects']], ['goose'])
+        self.assertIn('exactly one retro-findings-json block', publication['findings']['report_defects'][0]['error'])
+        self.assertEqual(sorted(publication['reports']), ['goose', 'opus'])   # the markdown still lands
+
     def write_ledger(self, rows):
         path = self.root / 'store' / '_ledger.jsonl'
         path.write_text(''.join(json.dumps(r) + '\n' for r in rows))
