@@ -7,9 +7,26 @@ meant to avoid — and every design-agents corpus load pays it too: at 75 KB thi
 ~20k tokens per corpus session before the 2026-09-05 prune. A wind-down writes the PICKUP,
 never the session's arc — that is TICK-LOG's.)
 
+**`dig-explained: <Alert>[, <Alert>…] — <reason>`** is the ONLY line here the deep dig (ADR-148,
+`agents/deep-dig-select.sh`) reads as "this alert is explained"; a bare mention — the standing-alerts
+list every wind-down writes — does NOT count (#2526, 2026-10-12: `RegistryMirrorDanglingLinks` hid from the
+dig for days by being listed). Write the marker only when the cause is known; the reason rides into the dig's record.
+
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-12 20:00Z — seat; TICK-LOG 2026-10-12 17:00–20:00Z): r8 published after two class fixes;
+  FU-046's non-major path flew; ADR-153 half landed.** **OPERATOR:** (1) **#2522** (r8 reports) auto-merged though its
+  body says HUMAN-GATED — read it (`docs/agents/retros/2026-10-12-platform-r8-*.md`; the goose one has no findings
+  block, recorded as a defect); (2) sleep-tracking#185 (the zombie) CLOSED by the seat 19:55Z with the reason, branch
+  deleted — Renovate's own flagged intent; (3) **ADR-153 fully landed** — #2524 (updater + nudge: Renovate owns untouched PRs' currency,
+  merge-ready exception) MERGED 19:48Z, 2bf9c792a. **Stack jails:** six
+  `deps-review` Renovate PRs never armed (allure-behavior-snippets#11/#12/#25/#26, oracle-fleet#758/#759) — why Renovate
+  never enabled auto-merge there is theirs; the homelab backstop fix is a subagent PR (TICK-LOG). **Watch next Renovate
+  run (cron */6h):** every untouched Renovate PR gets rebased by Renovate for the first time under the new default;
+  expect one CI run per open Renovate PR per master-moving period, approvals surviving. **FU-046:** archive on
+  sleep-tracking#191's merge (integration rerun queued at 19:45Z). Standing alerts unchanged from the 10-11 pickup;
+  `RetroReportOverdue` did not fire.
 - **⚑ PICKUP (2026-10-11 18:45Z — seat; TICK-LOG 2026-10-11 17:30–18:45Z): three seat-residue items closed,
   one drill verdict pending.** **sleep-tracking#67 CLOSED** on a discriminating homelab-namespace probe ride —
   the first ride was NEGATIVE (nix dropped `flake-registry` with flakes off) → **#2502** (feature line first in

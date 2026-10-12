@@ -13208,3 +13208,55 @@ updates or reverts as much as possible — mechanical revert or a responder."
   firmware; D3/D4/D8 carried as its forks); the spike deleted, 11 yaml cells + management-box.md + the
   generator's docstring re-pointed. Reviewer round on #2505 (the lock-rollback row owed the run it recorded) fixed
   in-PR, merged 18:50Z.
+
+## 2026-10-12 17:00–20:00Z — no r8: the retro guard OOMKilled on a 102 MiB state; FU-046's non-major path flies on sleep-tracking#191; the #185 read becomes ADR-153 (seat + 1 subagent)
+
+- **"No retro?"** `retro-session-1791781200` (Mon 05:00Z): guard `main: OOMKilled (exit 137)` at 21 s, cells + harvest
+  Omitted, no PR. Cause: `_retro/activity.json` 102.8 MiB — 6,646 `cross-referenced` events carried 90.6 MiB (each the
+  raw timeline `source`, the ENTIRE referencing issue, up to 71 KB), 59 MiB occurred before the r7 checkpoint, nothing
+  ever pruned; the collect pods (1Gi) climbed 357 → 820 MiB in ten days. **#2519** (merged 17:49Z): `compact_reference()`
+  + `prune(until, covered_at)` below the OLDEST series checkpoint — rehearsed on the real state 102.8 → 15.4 → 6.5 MiB
+  with the owed window's bundle IDENTICAL; the 18:00Z collect compacted the live object (6.8 MB, 6.5 MiB at 18:30Z).
+  `retro-test` devbox task + MAP row (#2519) + its ci.yaml step (381e1df2 direct, governance class): the two contract
+  tests had never run in CI. **Re-fire** `retro-session-55pzb` 18:16Z: guard OK, cell-a 21 min, cell-b 12 min, harvest
+  pushed #2522 then FAILED in publish — the goose report had no `retro-findings-json` block (r7's did) → **#2523** (a
+  block-less report = recorded partial, as a dead cell is; refuse only when NO report parses; rehearsed on the real r8
+  pair) → `argo retry` 19:31Z: **r8 PUBLISHED** (checkpoint 10-12, 5 opus findings, goose defect recorded, belt fed).
+  ⚠ #2522 is marked HUMAN-GATED in its body and was auto-merged by the reflex at 19:06Z — the operator read is owed.
+- **"Do stacks get agents fixing a red Renovate PR?" → no, nor homelab** (reflex green-only; ci-red dispatcher
+  loop-author-only; changes-requested clause WORKER_AUTHOR-scoped; FU-046's worker-adapts path never flown on the
+  non-major lane; majors HAVE ridden — ~30 PRs carry `major/awaiting-human`, #2033 was adapted once). **Operator
+  ruling: "it is FU-046 and S9 stint call — it should just work until it cannot — worker fixes like a major and then
+  after 5 rounds escalate to a human."** **#2521** (merged after one review round — the reviewer caught that removing
+  `agent/arbitrate` did not re-open the budget; fixed: only markers newer than the last arbitrate event count): armed
+  `deps-review` ∧ (red ∨ CHANGES_REQUESTED) rides `unarmed-major`; five `state-fp:unarmed-major:` markers →
+  `agent/arbitrate` + event line; five fixtures. **First flight the same hour:** `coordinate-sleep-1791831600` (19:00Z)
+  emitted `unarmed-major|sleep-tracking|pr-191`, the coordinator dispatched a fix round on the PR branch kept armed,
+  `agent-sleep-tracking-issue-191-r1` (sonnet, 24 turns, 155 s) pushed `fix(lint): satisfy ruff's wider defaults`,
+  CI green, reflex APPROVED 19:13Z, updater merged master 19:14Z, merge on the integration rerun — which went RED on the #184 render-gate flake (the updater's merge
+  pulled in #192's lock; the gate took a first-sighting "No data" as a verdict), the operator's sleep-tracking#193
+  fixes the gate, the job re-ran 19:42Z; the flight itself was clean at a4d72d1.
+- **"What happened on sleep-tracking#185?"** Opened 10-09 22:11Z (grafana 13.0.1 → 13.0.10 patch, deps-review, armed),
+  lens APPROVED 22:16Z, the updater merged master at 22:17Z (its job under the org `rebaseWhen: conflicted`), CI red on
+  the #184 render gate; Renovate declared it Edited/Blocked 03:52Z; #188 (13.2.3) merged 04:00Z and superseded it →
+  DIRTY → scan `merge-conflict` + rebase box 04:15Z; Renovate flagged autoclose 11:47Z and SKIPPED it ("branch already
+  modified"), title "- abandoned". A zombie no lane can move; closed by hand 19:55Z (operator: "what do I do with this one now?") with the
+  reason + branch deleted — Renovate's own flagged intent, superseded by #188.
+  **Fleet read for the ruling (12 repos, 30 days):** 183 merged / 45 closed (47 autoclosed cleanly, 2 abandoned-stuck);
+  homelab 14 days: automerge 31 PRs median 0.1 h, deps-review 40 PRs median 0.4 h, ~1 updater merge + ~1 approval per
+  PR; majors 9 PRs median 39 h; the behind-base lanes: 8 CI runs per merged grouped-Actions PR, #2488 7 CI runs with ONE
+  approval surviving three rebases. Master rates: homelab 21/day, oracles 3/day, sleep 2/day. **Operator: "put it all
+  in — config to master, the other with a PR."** → `.github/renovate-global.json` default `rebaseWhen:
+  behind-base-branch`, the seven per-rule copies dropped (2aad6bbb direct, lane lint OK); **#2524** (MERGED 19:48Z, 2bf9c792a, one clean review round):
+  updater + FU-124 nudge hands off every untouched Renovate PR except a MERGE-READY one (armed + approved + GREEN rollup —
+  currency the only gap); 756 fixtures; **ADR-153** in the PR; renovate.md §Coordinator × Renovate PRs current.
+- **Side finding (no FU — the mint gate held it, correctly):** six `deps-review` PRs in allure-behavior-snippets
+  (#11/#12/#25/#26) + oracle-fleet (#758/#759) never got auto-merge armed, 15–17 days, never reviewed: every
+  `deps-review` rule carries `automerge: true` + `platformAutomerge`, stability passed 09-27, Renovate's latest log says
+  nothing. The platform half — the FU-079 un-owned-PR backstop skips `deps-review` on the premise its reflex arms it —
+  is a bounded fix, dispatched to a subagent (report an un-armed reviewable bump older than a day). The cause (why
+  Renovate never enabled auto-merge there) is the stack jails' — recorded here and in the pickup, not minted.
+- Standing at wind-down, none S9: `LonghornDiskBelowSchedulingFloor` ×2 (FU-093), `MgmtSubstrateBehind`,
+  `RegistryMirrorDanglingLinks`, `OpenRouterKeyBudgetLow`, `HomeAssistantPowerSensorStale` ×6, `AgentAttentionStanding`
+  oracle-fleet issue-820, `VersionSetMembersDisagree` (claude-jail, operator-side). `RetroReportOverdue` never fired
+  (fed 19:31Z, 2.5 h before its 21:54Z edge).
