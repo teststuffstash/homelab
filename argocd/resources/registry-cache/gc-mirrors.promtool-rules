@@ -10,11 +10,11 @@
 # schedule; copying them here would give the runbook two homes and make every wording fix a
 # fixture edit.
 #
-# COVERAGE — the file's other three alerts (RegistryMirrorCacheAlmostFull, RegistryMirrorDanglingLinks,
+# COVERAGE — the file's other alerts (RegistryMirrorCacheAlmostFull,
 # RegistryMirrorWipedRepeatedly) are NOT here, and the omission is budget, not design: none of them
 # reads kube-state-metrics (they read kubelet volume stats and the mirror's own pushed counters), so
 # homelab#333 had no reason to touch them and no fixture existed to extend. Named here so it is a
-# known hole rather than an assumed pass.
+# known hole rather than an assumed pass. (RegistryMirrorDanglingLinks has its own: dangling-links.promtool-test.)
 #
 # ⚠ THIS COPY IS NOT DRIFT-PINNED — same standing caveat as
 # argocd/resources/pushgateway/agent-runs.promtool-rules. A stale copy tests the OLD expr and

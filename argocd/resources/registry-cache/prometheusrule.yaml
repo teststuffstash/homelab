@@ -104,20 +104,30 @@ spec:
         # evidence: "If the repair COUNT ever jumps by an order of magnitude, that is a new
         # investigation, not this one." Baseline 1, observed routine max 9 → an order-of-magnitude
         # jump is the ≥10 region, so this fires only at `> 9`.
+        # COUNT DISTINCT BLOBS, NOT LINKS (2026-10-11): mirror-ghcr repaired 15 links and fired, but
+        # 14 of them were the same 7 base layers linked from two repositories (cloudnative-pg +
+        # gha-runner-scale-set-controller) — one vacuum of shared layers, every blob re-served 200
+        # with full bytes on the next read, no wipe, no pull failures. The link count grows with how
+        # many cached images share a layer, which is not what #241's "order of magnitude" meant; the
+        # #479 baseline still holds on blobs (08-16's 9 were all in one repo, so 9 links = 9 blobs).
+        # store-maintenance.yaml pushes both; the links gauge stays for the repair-work view.
+        # Until a mirror's next restart pushes the blob gauge (weekly via gc-mirrors) its series is
+        # absent and this alert is silent for it — the old link reading is not carried over.
         # ⚠ THE GAUGE IS LATCHED, NOT A RATE: store-maintenance.yaml pushes
-        # registry_mirror_dangling_links_repaired once per mirror restart and it only resets at the
+        # registry_mirror_dangling_blobs_missing once per mirror restart and it only resets at the
         # next rollout, so the threshold is a comparison on the latched value (`> 9`), never
-        # increase()/rate() over a window — a rate would be a different alert.
+        # increase()/rate() over a window — a rate would be a different alert. Behaviour pinned in
+        # dangling-links.promtool-test.
         - alert: RegistryMirrorDanglingLinks
-          expr: registry_mirror_dangling_links_repaired > 9
+          expr: registry_mirror_dangling_blobs_missing > 9
           for: 5m
           labels:
             severity: warning
             # triage: repaired at restart; why links dangled is readable from mirror logs
             triage: dig
           annotations:
-            summary: "{{ $labels.mirror }} had {{ $value }} dangling layer link(s) repaired at last restart"
-            description: "A repository layer link pointed at a blob that was missing or zero-length — the homelab#116 failure, where the mirror answers HTTP 200 with 0 bytes for a live layer and BuildKit reports 'short read: expected N bytes but got 0'. The links were unlinked so the next pull re-fetches from upstream. The producer is IDENTIFIED as of homelab#240: the REGISTRY_PROXY_TTL scheduler vacuums an expiring blob out of the global content-addressed store without a cross-repo refcount, so any OTHER repository sharing that blob is left holding a link to nothing. Since #240 disabled the in-memory blob-descriptor cache, such a link is self-healing (the Stat misses on disk and the proxy re-fetches), so counts of 1–9 here are now EXPECTED HOUSEKEEPING rather than an outage and stay silent — this alert fires only at ≥10 (the order-of-magnitude jump #241 reserved for a new investigation), and even then check first whether it is paired with actual pull failures. Still check the store-maintenance init log for a wipe, which produces no dangling links at all and would mean a different cause."
+            summary: "{{ $labels.mirror }} had {{ $value }} distinct missing layer blob(s) behind dangling links repaired at last restart"
+            description: "A repository layer link pointed at a blob that was missing or zero-length — the homelab#116 failure, where the mirror answers HTTP 200 with 0 bytes for a live layer and BuildKit reports 'short read: expected N bytes but got 0'. The links were unlinked so the next pull re-fetches from upstream. The producer is IDENTIFIED as of homelab#240: the REGISTRY_PROXY_TTL scheduler vacuums an expiring blob out of the global content-addressed store without a cross-repo refcount, so any OTHER repository sharing that blob is left holding a link to nothing. Since #240 disabled the in-memory blob-descriptor cache, such a link is self-healing (the Stat misses on disk and the proxy re-fetches), so counts of 1–9 distinct blobs here are now EXPECTED HOUSEKEEPING rather than an outage and stay silent — this alert fires only at ≥10 (the order-of-magnitude jump #241 reserved for a new investigation), and even then check first whether it is paired with actual pull failures (registry_http_requests_total{code=~\"5..\",handler=\"blob\"} — a WAN outage produces those without any dangling link). The init log's DANGLING lines name repository + digest; registry_mirror_dangling_links_repaired is the per-repository repair count. Still check the store-maintenance init log for a wipe, which produces no dangling links at all and would mean a different cause."
         # The store now reclaims by WIPING when full rather than by selective deletion. A wipe is
         # correct but not free — it forces a cold re-pull herd, which is what left the abandoned
         # _uploads debris in #80. Frequent wipes therefore mean the PVC is undersized, not that
