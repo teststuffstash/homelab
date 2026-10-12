@@ -81,6 +81,12 @@ def collect(state, repos, since, until, observed=None):
     result = json.loads(json.dumps(state))
     events = {e['id']: e for e in result.get('events', [])}
     items = result.setdefault('items', {})
+    # A state written before compact_reference() carries the raw timeline `source` per
+    # reference (the 2026-10-12 OOM: 90 of 102 MiB). Slim it in place — same event, same
+    # observation, NOT a correction — so the add() comparison below matches the compact form.
+    for event in events.values():
+        if event['kind'] in REFERENCES and 'source' in (event.get('payload') or {}):
+            event['payload']['source'] = compact_reference(event['payload']['source'])
 
     def add(repo, number, kind, identity, when, url, payload):
         if not when or timestamp(when) >= timestamp(until):
@@ -151,6 +157,8 @@ def collect(state, repos, since, until, observed=None):
                 else:
                     identity = event.get('id') or hashlib.sha256(json.dumps(event, sort_keys=True).encode()).hexdigest()[:20]
                     payload = {k: event[k] for k in ('state', 'commit_id', 'label', 'source') if k in event}
+                    if 'source' in payload:
+                        payload['source'] = compact_reference(payload['source'])
                 if kind in ('commented', 'closed', 'reopened', 'labeled', 'unlabeled', 'cross-referenced', 'referenced', 'committed'):
                     add(repo, number, kind, identity, when, event.get('html_url') or url, payload)
             if 'pull_request' in row:
@@ -198,6 +206,82 @@ def collect(state, repos, since, until, observed=None):
 
 
 REFERENCES = {'cross-referenced', 'referenced'}
+LIFECYCLE = {'opened', 'closed', 'reopened', 'merged'}
+
+
+def compact_reference(source):
+    """What bundle() reads from a timeline cross-reference: the referencing item's repo +
+    number (+ type, + link). The raw `source` embeds the ENTIRE referencing issue — body,
+    user, labels, reactions — up to 71 KB each: 6,646 of them were 90 of the 102 MiB state
+    the 2026-10-12 retro guard parsed under its 512Mi limit (OOMKilled, no r8)."""
+    if not isinstance(source, dict):
+        return source
+    slim = {}
+    if source.get('type') is not None:
+        slim['type'] = source['type']
+    issue = source.get('issue')
+    if isinstance(issue, dict):
+        kept = {}
+        if issue.get('number') is not None:
+            kept['number'] = issue['number']
+        repo = (issue.get('repository') or {}).get('full_name')
+        if repo:
+            kept['repository'] = {'full_name': repo}
+        if issue.get('html_url'):
+            kept['html_url'] = issue['html_url']
+        slim['issue'] = kept
+    return slim
+
+
+def prune(state, until, covered_at):
+    """Drop what a published window already accounted for: events that occurred before `until`
+    and were observed by `covered_at` (that publication's collector read). Kept regardless —
+    bundle() still reads them across windows: anything observed later (a late arrival the next
+    report lists); lifecycle events of every item still in the state (they reconstruct the open
+    intervals); a reference while either endpoint lives (PR→issue failure roll-up). An item
+    closed before `until` with no pending checks and nothing left to say leaves with its
+    lifecycle. Returns the number of events dropped. Without this the state grew ~50 MiB a week."""
+    end, seen = timestamp(until), timestamp(covered_at)
+    items = state.get('items', {})
+
+    def key_of(event):
+        return f"{event['repo']}#{event['item']}"
+
+    def source_key(event):
+        issue = ((event.get('payload') or {}).get('source') or {}).get('issue') or {}
+        if issue.get('number') is None:
+            return None
+        return f"{(issue.get('repository') or {}).get('full_name', event['repo'])}#{issue['number']}"
+
+    def retired(key):
+        # Unknown to the state = nothing to link or measure (bundle() needs the item row for both).
+        item = items.get(key)
+        if item is None:
+            return True
+        return (item.get('state') == 'closed' and bool(item.get('closed_at'))
+                and timestamp(item['closed_at']) < end and not item.get('pending_check_shas'))
+
+    kept, lifecycle = [], []
+    for event in state.get('events', []):
+        accounted = timestamp(event['occurred_at']) < end and timestamp(event['observed_at']) <= seen
+        if event['kind'] in LIFECYCLE:
+            lifecycle.append((event, accounted))
+        elif not accounted:
+            kept.append(event)
+        elif event['kind'] in REFERENCES:
+            source = source_key(event)
+            if not (retired(key_of(event)) and (source is None or retired(source))):
+                kept.append(event)
+    live = {key_of(e) for e in kept}
+    for event, accounted in lifecycle:
+        if not accounted or not retired(key_of(event)) or key_of(event) in live:
+            kept.append(event)
+            live.add(key_of(event))
+    dropped = len(state.get('events', [])) - len(kept)
+    state['events'] = sorted(kept, key=lambda e: (e['occurred_at'], e['id']))
+    for key in [k for k in items if k not in live and retired(k)]:
+        del items[key]
+    return dropped
 
 
 def compact(event):
@@ -473,6 +557,8 @@ def main():
         if command == 'collect':
             p.add_argument('--repo', action='append')
             p.add_argument('--stacks', default=str(Path(__file__).with_name('stacks.json')))
+            p.add_argument('--prune-until', help='drop events a published window accounted for (with --prune-covered-at)')
+            p.add_argument('--prune-covered-at')
         else:
             p.add_argument('--keep', type=int, default=40)
             p.add_argument('--covered-at')
@@ -485,6 +571,8 @@ def main():
         repos, scope = (args.repo, 'explicit repo scope') if args.repo else repository_scope(args.stacks)
         result = collect(state, repos, since, until)
         result['scope_source'] = scope
+        if args.prune_until and args.prune_covered_at:
+            print('pruned %d accounted event(s) before %s' % (prune(result, args.prune_until, args.prune_covered_at), args.prune_until))
         atomic(args.output, result)
         if Path(args.output) != Path(args.state):
             atomic(args.state, result)

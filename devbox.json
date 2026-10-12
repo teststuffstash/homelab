@@ -234,6 +234,10 @@
       "prometheus-rules-lint": [
         "bash scripts/prometheus-rules-lint.sh"
       ],
+      "retro-test": [
+        "python3 agents/retro-activity-test.py",
+        "python3 agents/retro-pipeline-test.py"
+      ],
       "responder-behaviour-test": [
         "bash agents/coordinator/responder-behaviour-test.sh \"$@\""
       ],
