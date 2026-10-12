@@ -13235,7 +13235,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `agent-sleep-tracking-issue-191-r1` (sonnet, 24 turns, 155 s) pushed `fix(lint): satisfy ruff's wider defaults`,
   CI green, reflex APPROVED 19:13Z, updater merged master 19:14Z, merge on the integration rerun — which went RED on the #184 render-gate flake (the updater's merge
   pulled in #192's lock; the gate took a first-sighting "No data" as a verdict), the operator's sleep-tracking#193
-  fixes the gate, the job re-ran 19:42Z; the flight itself was clean at a4d72d1.
+  fixes the gate, the job re-ran 19:42Z, green 19:57Z, **MERGED 20:01Z — FU-046 archived**; the flight itself was clean at a4d72d1.
 - **"What happened on sleep-tracking#185?"** Opened 10-09 22:11Z (grafana 13.0.1 → 13.0.10 patch, deps-review, armed),
   lens APPROVED 22:16Z, the updater merged master at 22:17Z (its job under the org `rebaseWhen: conflicted`), CI red on
   the #184 render gate; Renovate declared it Edited/Blocked 03:52Z; #188 (13.2.3) merged 04:00Z and superseded it →
@@ -13254,7 +13254,9 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (#11/#12/#25/#26) + oracle-fleet (#758/#759) never got auto-merge armed, 15–17 days, never reviewed: every
   `deps-review` rule carries `automerge: true` + `platformAutomerge`, stability passed 09-27, Renovate's latest log says
   nothing. The platform half — the FU-079 un-owned-PR backstop skips `deps-review` on the premise its reflex arms it —
-  is a bounded fix, dispatched to a subagent (report an un-armed reviewable bump older than a day). The cause (why
+  is a bounded fix, dispatched to a subagent → **#2527** (report an un-armed `deps-review`/`automerge` PR older than
+  24 h; `unowned-pr-backstop` replay family, three rows) — reviewer APPROVED, auto-merge armed, CI finishing at
+  wind-down (the first dispatch was cancelled by a stray Ctrl+C; the second finished from the same clone). The cause (why
   Renovate never enabled auto-merge there) is the stack jails' — recorded here and in the pickup, not minted.
 - Standing at wind-down, none S9: `LonghornDiskBelowSchedulingFloor` ×2 (FU-093), `MgmtSubstrateBehind`,
   `RegistryMirrorDanglingLinks`, `OpenRouterKeyBudgetLow`, `HomeAssistantPowerSensorStale` ×6, `AgentAttentionStanding`
