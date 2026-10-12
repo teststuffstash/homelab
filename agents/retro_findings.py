@@ -9,6 +9,7 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import sys
 import re
 import subprocess
 from pathlib import Path
@@ -160,13 +161,25 @@ def main():
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     previous = json.loads(Path(args.previous).read_text()) if args.previous else None
     decisions = json.loads(Path(args.decisions).read_text()) if args.decisions else {}
-    reports = []
+    reports, defects = [], []
     for spec in args.report:
         model, path = spec.split('=', 1)
         text = Path(path).read_text()
         report_id = hashlib.sha256(text.encode()).hexdigest()
-        reports.append((model, report_id, extract(text)))
+        try:
+            reports.append((model, report_id, extract(text)))
+        except ValueError as exc:
+            # A cell that broke the findings contract (r8, 2026-10-12: the goose report had every
+            # section and no retro-findings-json block) is a PARTIAL run, exactly as a dead cell is
+            # in the harvest: its markdown still lands for the human read, its findings are not
+            # inferred on its behalf, and the publication records the defect. Only a run with NO
+            # parseable report refuses — one model's format miss must not hold the week's coverage.
+            defects.append({'model': model, 'report': report_id, 'error': str(exc)})
+            print('WARN: report %s (%s) excluded from findings — %s' % (model, path, exc), file=sys.stderr)
+    if args.report and not reports:
+        raise ValueError('no report carries a valid retro-findings-json block: ' + '; '.join(d['model'] + ': ' + d['error'] for d in defects))
     state = combine(previous, reports, now)
+    state['report_defects'] = defects
     fetch = github_get if args.github else lambda url: {'error': 'live GitHub reads disabled'}
     reconcile(state, decisions, fetch, now)
     Path(args.output).write_text(json.dumps(state, indent=2) + '\n')
