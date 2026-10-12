@@ -1,0 +1,16 @@
+# unarmed-major/deps-review-rides-exhausted (2026-10-12, FU-046, ADR-127): five `state-fp:unarmed-major:` markers
+# already sit on the red armed `deps-review` PR — the sixth ride is refused: `agent/arbitrate` + one event
+# line, no unit. Expected: the label POST and the comment write, the ⚠ line, no UNIT.
+name: unarmed-major-deps-review-rides-exhausted
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/sleep-tracking
+  - IN_REPO=sleep-tracking
+  - IN_NOW=2026-10-12T18:00:00Z

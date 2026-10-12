@@ -1,0 +1,17 @@
+# unarmed-major/deps-review-rides-reset-after-arbitrate (2026-10-12, #2521 review): the same five markers as
+# rides-exhausted, then the escalation's own `kind=arbitrate` event line (09:00Z) — and a human removed
+# `agent/arbitrate`. Only markers newer than the ruling count (0 of 5), so the budget is open again.
+# Expected: the unit is emitted; no label write, no second event line.
+name: unarmed-major-deps-review-rides-reset-after-arbitrate
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/sleep-tracking
+  - IN_REPO=sleep-tracking
+  - IN_NOW=2026-10-12T18:00:00Z

@@ -1,4 +1,8 @@
 # ── bridge ── the per-repo scan variables the unarmed-major clause reads (shared by the family rows)
+# the rides-exhausted escalation writes a label + an event line through the real helpers
+. "$REPLAY_ROOT/agents/machine-comment.sh"
+mc_now() { printf '%s\n' "${IN_NOW:-2026-09-28T12:00:00Z}"; }
+
 slug="$IN_SLUG"
 repo="$IN_REPO"
 prsjson="$(cat "$REPLAY_WORLD/gh/pr-list.json")"

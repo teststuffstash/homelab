@@ -1530,6 +1530,16 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    APPROVED — debounced on the homelab#198 state fingerprint, so the ride you are on is the one this
    state gets: rule the step below that matches, and never re-derive a state a `state-fp:unarmed-major:`
    marker already carries (2026-09-28, #2051).
+   **The same unit also brings an ARMED `deps-review` bump in its RED or `CHANGES_REQUESTED` state
+   (FU-046, operator ruling 2026-10-12: "it should just work until it cannot").** The reflex reviews
+   green PRs only and the changes-requested clause never sees a Renovate author, so a reviewable bump
+   whose lock refresh broke CI (sleep-tracking#191: ruff 0.17's wider defaults) had no owner for days.
+   Same play, two differences: the worker round keeps the PR **armed** (no `--no-arm`; green + the
+   reflex's APPROVED completes the merge — step 5 never applies to it), and the bound is the scan's:
+   it counts the `state-fp:unarmed-major:` markers and at five refuses the sixth ride — the PR gets
+   `agent/arbitrate` + an event line, and a human adapts by hand, re-proposes, or abandons it through
+   the Renovate config. Removing the label buys five more: the count is the markers NEWER than the
+   last arbitrate event line, so the ruling re-opens the budget. Both classes share that cap.
 2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
    **reviewer directly** — even while red (the reflex won't, but you can; a major review is an
    *investigation* whose whole job is to explain the red — the reviewer's STEP 0 treats a concluded
@@ -1557,7 +1567,8 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    `--no-arm` for an un-armed `major` branch itself since 2026-09-28, #2033 — say it anyway). If
    the estimator says `⚠ ESCALATE` → `agent/blocked` + comment, stop.
 4. **Loop to green.** Worker pushes → CI re-runs → re-dispatch the reviewer. Repeat within the round
-   bound (max 5, ADR-127). Green + `APPROVED` is the target.
+   bound (max 5, ADR-127 — enforced by the scan since 2026-10-12: five `state-fp:unarmed-major:`
+   markers → `agent/arbitrate`, no sixth ride). Green + `APPROVED` is the target.
 5. **Hand off to the human — do NOT merge, do NOT relabel by hand.** The PR is un-armed by design; your
    approval does not merge it. The handoff is launcher-owned (ADR-094 — you judge, shell acts; homelab S9 #1987):
    ```sh

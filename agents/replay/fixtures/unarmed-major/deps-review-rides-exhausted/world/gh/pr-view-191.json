@@ -1,0 +1,67 @@
+{
+  "number": 191,
+  "headRefOid": "a1b2c3d4eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    {
+      "name": "CI",
+      "conclusion": "FAILURE",
+      "startedAt": "2026-10-12T03:49:08Z"
+    },
+    {
+      "name": "integration",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-10-12T03:49:08Z"
+    },
+    {
+      "name": "renovate-approve",
+      "conclusion": "SKIPPED",
+      "startedAt": "2026-10-12T03:49:09Z"
+    }
+  ],
+  "reviews": [],
+  "commits": [
+    {
+      "oid": "a1b2c3d4eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "messageHeadline": "chore(deps): lock file maintenance",
+      "committedDate": "2026-10-12T03:49:05Z"
+    }
+  ],
+  "comments": [
+    {
+      "body": "\ud83e\udd16 `state-fp:unarmed-major:000000000000` \u2014 deterministic scan dispatching a `unarmed-major` unit at 2026-10-12T04:00:00Z.",
+      "createdAt": "2026-10-12T04:00:00Z",
+      "author": {
+        "login": "homelab-agents-1234"
+      }
+    },
+    {
+      "body": "\ud83e\udd16 `state-fp:unarmed-major:000000000001` \u2014 deterministic scan dispatching a `unarmed-major` unit at 2026-10-12T05:00:00Z.",
+      "createdAt": "2026-10-12T05:00:00Z",
+      "author": {
+        "login": "homelab-agents-1234"
+      }
+    },
+    {
+      "body": "\ud83e\udd16 `state-fp:unarmed-major:000000000002` \u2014 deterministic scan dispatching a `unarmed-major` unit at 2026-10-12T06:00:00Z.",
+      "createdAt": "2026-10-12T06:00:00Z",
+      "author": {
+        "login": "homelab-agents-1234"
+      }
+    },
+    {
+      "body": "\ud83e\udd16 `state-fp:unarmed-major:000000000003` \u2014 deterministic scan dispatching a `unarmed-major` unit at 2026-10-12T07:00:00Z.",
+      "createdAt": "2026-10-12T07:00:00Z",
+      "author": {
+        "login": "homelab-agents-1234"
+      }
+    },
+    {
+      "body": "\ud83e\udd16 `state-fp:unarmed-major:000000000004` \u2014 deterministic scan dispatching a `unarmed-major` unit at 2026-10-12T08:00:00Z.",
+      "createdAt": "2026-10-12T08:00:00Z",
+      "author": {
+        "login": "homelab-agents-1234"
+      }
+    }
+  ]
+}

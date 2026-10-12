@@ -1,0 +1,16 @@
+# unarmed-major/deps-review-red-emits (2026-10-12, FU-046 — sleep-tracking#191): an ARMED `deps-review` bump
+# whose CI is red (ruff 0.17 rode in on a lock refresh) and that no lane owned — the reflex reviews green
+# only, the changes-requested clause never sees a Renovate author. Expected: the unit is emitted.
+name: unarmed-major-deps-review-red-emits
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/sleep-tracking
+  - IN_REPO=sleep-tracking
+  - IN_NOW=2026-10-12T18:00:00Z
