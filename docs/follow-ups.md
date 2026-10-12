@@ -857,9 +857,14 @@ the block needs pruning, not more headings.
       **Status 2026-09-27 (S9 #1985):** majors HAVE flown, not through this path — agent-coordinator#22
       (Actions major, grouped mechanical lane, no review) and #23 (node 24: migration lens + a human
       merge) prove the lens and the human lane; no `deps-review` PR has drawn a CHANGES_REQUESTED yet.
-      Still to verify: Renovate leaves the worker-edited branch alone, the worker pushes to `renovate/*`
-      (never `agent/*`). Keep open until one flies — the per-class ledger is
-      [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Last proven end to end". Relates FU-041, FU-044, #1988.
+      **2026-10-12: the non-major path FLEW** (operator ruling "it should just work until it cannot"):
+      #2521 widened the scan's `unarmed-major` unit to an armed `deps-review` PR that is red or
+      changes-requested (the reflex is green-only, the ci-red dispatcher loop-author-only), five rides
+      then `agent/arbitrate`; sleep-tracking#191 (lock refresh carrying ruff 0.17, 33 findings, red for
+      days) was ridden at the 19:00Z tick — the worker pushed the fix to `renovate/lock-file-maintenance`
+      in 155 s, CI green, reflex APPROVED 19:13Z, updater current 19:14Z, merge on the rerun. Both
+      "still to verify" clauses held (Renovate let the edited branch go; the worker pushed to
+      `renovate/*`). **Next:** archive on #191's merge. Relates FU-041, FU-044, #1988, ADR-153.
 - [ ] **FU-130** — **CI-gate WAN fetches: FIXED, all three merged 2026-08-05.** helm-unittest now comes
       from devbox (`kubernetes-helmPlugins.helm-unittest`, `$HELM_PLUGINS`) instead of a 23 MB
       GitHub-release pull per run — circles#15 (the `new-stack --from` donor) + sleep-tracking#115,
@@ -1081,13 +1086,14 @@ the block needs pruning, not more headings.
       filed as #927–#931 (3 queued, #930 seat, #931 operator), plus the silent success-push
       belt defect #932 (queued; fact hand-recorded). Design + history:
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2.
-      2026-10-02: activity windows LIVE (#2130 + #2165; collector 51 min cold, ~2 min warm).
-      **Next:** PR#2173 (rank fix #2170 + the seat's round 5: SHA fallback, issue-only credit,
-      latches/rounds weigh — rehearsed on the live store, #753 samples) and PR#2215 (#2171: the
-      gh wrapper overrode the retro token — file mount, no broker) both need the codeowner click
-      before the Mon 10-05 05:00Z fire; then the stack-retro split — ADR-146 PR#2172 (Proposed,
-      rebased, operator read; sized 2026-10-04 in TICK-LOG: ~3 pieces, an evening).
-      Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
+      2026-10-02: activity windows LIVE (#2130 + #2165). **2026-10-12: r8 nearly lost twice** — the
+      05:00Z guard OOMKilled on a 102.8 MiB activity state (90 MiB = raw cross-reference payloads,
+      nothing pruned) → #2519 (slim references + prune below the published floor: 6.5 MiB, bundle
+      identical); the re-fire's harvest then refused the week because the goose report had no
+      `retro-findings-json` block → #2523 (a block-less report is a recorded partial). **r8 PUBLISHED
+      19:31Z** (#2522, 5 opus findings, the goose defect recorded). **Next:** the goose cell's block
+      compliance (one sighting; r7's had it — watch r9, then the brief); the stack-retro split (ADR-146
+      PR#2172). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
