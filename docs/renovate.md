@@ -99,8 +99,10 @@ A Renovate PR is **not** an agent PR, so the coordinator's usual escalation verb
 not the coordinator, owns whether an update should exist:
 
 - **Reviewer requests changes** → the PR stays OPEN (changes-requested doesn't close it), Renovate
-  won't duplicate it, and `rebaseWhen: conflicted` keeps it stable. Action: **dispatch a worker to adapt
-  the code on the renovate branch** (FU-046) — never close. **Not on the GitHub Actions lane** (ADR-141):
+  won't duplicate it, and `rebaseWhen: conflicted` keeps it stable. Action: **a worker adapts the code
+  on the renovate branch** — since 2026-10-12 the scan's `unarmed-major` unit owns this for an ARMED
+  `deps-review` PR too, in its red or changes-requested state (the reflex is green-only; FU-046): five
+  rides, then `agent/arbitrate` for a human — never close. **Not on the GitHub Actions lane** (ADR-141):
   those PRs are grouped per repo per wave and ride `rebaseWhen: behind-base-branch` — Renovate keeps its
   own branch current and re-extracts master on every rebase (a call site added on master after the PR
   opened gets bumped on the next rebase, never by a request-changes), and it stops maintaining a branch

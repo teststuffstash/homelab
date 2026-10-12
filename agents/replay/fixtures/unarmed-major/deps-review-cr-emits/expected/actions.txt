@@ -1,0 +1,5 @@
+CALL gh pr view 191 --repo teststuffstash/sleep-tracking --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh api repos/teststuffstash/sleep-tracking/pulls/191/files --paginate
+OUT UNIT unarmed-major|sleep-tracking|pr-191
+OUT REACHED: end
+RC 0

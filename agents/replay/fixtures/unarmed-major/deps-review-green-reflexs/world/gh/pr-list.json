@@ -1,0 +1,26 @@
+[
+  {
+    "number": 191,
+    "title": "chore(deps): lock file maintenance",
+    "labels": [
+      {
+        "name": "dependencies"
+      },
+      {
+        "name": "deps-review"
+      }
+    ],
+    "reviewDecision": "REVIEW_REQUIRED",
+    "autoMergeRequest": {
+      "enabledAt": "2026-10-12T03:49:08Z"
+    },
+    "mergeStateStatus": "BEHIND",
+    "author": {
+      "login": "app/homelab-renovate-1234"
+    },
+    "headRefName": "renovate/lock-file-maintenance",
+    "body": "This PR contains the following updates",
+    "baseRefName": "master",
+    "headRefOid": "a1b2c3d4eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  }
+]

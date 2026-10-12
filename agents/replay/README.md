@@ -546,6 +546,11 @@ is stale, so it cannot drift the way the prose register did.
 | `unarmed-major/content-push-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/cr-emits` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/deps-review-cr-emits` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/deps-review-green-reflexs` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/deps-review-red-emits` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/deps-review-rides-exhausted` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/deps-review-rides-reset-after-arbitrate` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/files-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/heartbeat-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/rebase-debounced` | actions | - | `agents/coordinator-scan.sh` | - |

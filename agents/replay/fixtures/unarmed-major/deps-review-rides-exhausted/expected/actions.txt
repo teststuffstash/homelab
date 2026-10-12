@@ -1,0 +1,7 @@
+CALL gh pr view 191 --repo teststuffstash/sleep-tracking --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh api -X POST repos/teststuffstash/sleep-tracking/issues/191/labels -f labels[]=agent/arbitrate
+CALL gh api repos/teststuffstash/sleep-tracking/issues/191/comments --paginate
+CALL gh api --method POST repos/teststuffstash/sleep-tracking/issues/191/comments -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-10-12T18:00:00Z` · ARBITRATE (rides exhausted, FU-046): 5 `unarmed-major` rides on this deps-review PR and it is still not green + approved — the bound is 5 (ADR-127). A human decides: adapt by hand, re-propose, or abandon via the Renovate config (docs/renovate.md §Coordinator × Renovate PRs); removing `agent/arbitrate` buys another 5. <!-- agent-event kind=arbitrate ts=2026-10-12T18:00:00Z -->
+OUT ORPHAN [sleep-tracking] ⚠ unarmed-major RIDES EXHAUSTED → agent/arbitrate: PR #191 (5 rides, deps-review) — a human decides
+OUT REACHED: end
+RC 0
