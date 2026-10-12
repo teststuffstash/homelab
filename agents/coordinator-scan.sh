@@ -7,7 +7,9 @@
 # Actionability predicate (MUST track agents/coordinator/README.md §State machine — keep in sync):
 #   issue: open ∧ `agent/queued`                                      (ready to dispatch — the
 #          ONE dispatch precondition, ADR-122 (2), S8 #1432; `agent-fix` is never re-tested here)
-#   PR:    open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-conflict` ∨ reviewDecision=CHANGES_REQUESTED)
+#   PR:    open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-conflict` ∨ reviewDecision=CHANGES_REQUESTED
+#          ∨ (`deps-review` ∧ armed ∧ (red ∨ CHANGES_REQUESTED)))   (FU-046, 2026-10-12: the reviewable
+#          bump the green-only reflex cannot own rides the `unarmed-major` unit — five rides, then a human)
 #   v2:    issue open ∧ `agent-fix` ∧ `agent/in-progress` ∧ no Running worker pod ∧ no open PR
 #          referencing it (C4/C5 — a worker went terminal and nothing re-ticked; pod read via
 #          kubectl, probe failures skip the clause rather than fail into a wake). Once that state
@@ -4158,7 +4160,14 @@ EOF_GTHEMES_OPEN
     # counts as settling (this file's `fromdateiso8601? // null` → recent idiom — holding is the safe
     # side of this guard). The content probe fails open to the old behaviour.
     UM_SETTLE_S="${UM_SETTLE_S:-1800}"
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (($L|index("merge-conflict"))|not))|.number'); do
+    # Two classes ride this unit (FU-046, operator ruling 2026-10-12 — "it should just work until it
+    # cannot"): the UN-ARMED `major` (every state, below) and the ARMED `deps-review` bump in the two
+    # states the reflex cannot own — RED (the reflex reviews green PRs only) and CHANGES_REQUESTED (the
+    # changes-requested clause is WORKER_AUTHOR-scoped and never sees a Renovate author). Green = the
+    # reflex's, decided per PR from the view below. `agent/arbitrate` = rides exhausted, a human's.
+    UM_MAX_RIDES="${UM_MAX_RIDES:-5}"
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("merge-conflict"))|not) and (((($L|index("major"))) and (.autoMergeRequest==null)) or ((($L|index("deps-review"))) and (.autoMergeRequest!=null) and (($L|index("major"))|not))))|.number'); do
+      um_lane="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name)) as $L|if ($L|index("deps-review")) and (.autoMergeRequest!=null) then "deps-review" else "unarmed-major" end' 2>/dev/null)" || um_lane="unarmed-major"
       pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
       um_boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_um")"
       case "$um_boc" in
@@ -4168,6 +4177,33 @@ EOF_GTHEMES_OPEN
           continue
           ;;
       esac
+      # The deps-review class gate: only RED or CHANGES_REQUESTED is this unit's; anything else is the
+      # reflex's track (a worker push lands it there) — silent, it is the normal state. A rollup that
+      # cannot be read is NOT red (fail-open to the reflex: a ride is the expensive side here).
+      # sleep-tracking#191 (2026-10-12): a lock refresh carrying ruff 0.17 went red at birth and every
+      # lane stepped around it for days — this is the owner.
+      if [ "$um_lane" = "deps-review" ]; then
+        um_red="$(printf '%s' "$pr_json_um" | jq -r '
+          ([ .statusCheckRollup[]? | ((.conclusion // .state) // "") | select(. == "FAILURE" or . == "TIMED_OUT" or . == "ERROR") ] | length > 0) as $red
+          | if $red or (.reviewDecision == "CHANGES_REQUESTED") then "yes" else "no" end' 2>/dev/null)" || um_red="no"
+        [ "$um_red" = "yes" ] || continue
+      fi
+      # Bounded rides (ADR-127's max-5 made deterministic, operator 2026-10-12): every dispatch leaves a
+      # `state-fp:unarmed-major:` marker on the PR, so the marker count IS the ride count — the sixth is
+      # churn, not progress. Escalate: `agent/arbitrate` (the rounds-exhausted vocabulary; no clause
+      # re-dispatches a Renovate PR wearing it, and the selector above excludes it) + one event line.
+      # A failed write is reported and the PR skipped — never ridden past the bound.
+      um_rides="$(printf '%s' "$pr_json_um" | jq -r '[ .comments[]? | select((.body // "") | test("state-fp:unarmed-major:[0-9a-f]{6,64}")) ] | length' 2>/dev/null)" || um_rides=0
+      case "$um_rides" in ''|*[!0-9]*) um_rides=0 ;; esac
+      if [ "$um_rides" -ge "$UM_MAX_RIDES" ]; then
+        if gh_label_add "$slug" "$u" agent/arbitrate \
+           && mc_event "$slug" "$u" arbitrate "ARBITRATE (rides exhausted, FU-046): ${um_rides} \`unarmed-major\` rides on this ${um_lane} PR and it is still not green + approved — the bound is ${UM_MAX_RIDES} (ADR-127). A human decides: adapt by hand, re-propose, or abandon via the Renovate config (docs/renovate.md §Coordinator × Renovate PRs); removing \`agent/arbitrate\` buys another ${UM_MAX_RIDES}."; then
+          orphans="${orphans}[$repo] ⚠ unarmed-major RIDES EXHAUSTED → agent/arbitrate: PR #${u} (${um_rides} rides, ${um_lane}) — a human decides\n"
+        else
+          orphans="${orphans}[$repo] ⚠ unarmed-major rides exhausted on PR #${u} (${um_rides}) but the agent/arbitrate write FAILED — human check\n"
+        fi
+        continue
+      fi
       um_pending="$(printf '%s' "$pr_json_um" | jq -r --argjson now "$(um_now)" --argjson win "$UM_SETTLE_S" '
           ([ .commits[]? | .committedDate // empty ] | max // "") as $hc
           | [ .statusCheckRollup[]?

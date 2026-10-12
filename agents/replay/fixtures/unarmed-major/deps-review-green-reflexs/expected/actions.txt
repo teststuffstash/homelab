@@ -1,0 +1,3 @@
+CALL gh pr view 191 --repo teststuffstash/sleep-tracking --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT REACHED: end
+RC 0

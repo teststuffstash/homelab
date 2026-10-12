@@ -1,0 +1,16 @@
+# unarmed-major/deps-review-green-reflexs (2026-10-12, FU-046): the same armed `deps-review` PR, CI green and
+# not changes-requested — the reflex's track (a worker push lands it here). Expected: NO unit, no report
+# line (the normal state is silent); the view is read, the files probe never happens.
+name: unarmed-major-deps-review-green-reflexs
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/sleep-tracking
+  - IN_REPO=sleep-tracking
+  - IN_NOW=2026-10-12T18:00:00Z

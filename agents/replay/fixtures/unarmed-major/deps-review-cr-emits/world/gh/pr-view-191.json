@@ -1,0 +1,31 @@
+{
+  "number": 191,
+  "headRefOid": "a1b2c3d4eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {
+      "name": "CI",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-10-12T03:49:08Z"
+    },
+    {
+      "name": "integration",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-10-12T03:49:08Z"
+    },
+    {
+      "name": "renovate-approve",
+      "conclusion": "SKIPPED",
+      "startedAt": "2026-10-12T03:49:09Z"
+    }
+  ],
+  "reviews": [],
+  "commits": [
+    {
+      "oid": "a1b2c3d4eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "messageHeadline": "chore(deps): lock file maintenance",
+      "committedDate": "2026-10-12T03:49:05Z"
+    }
+  ],
+  "comments": []
+}
