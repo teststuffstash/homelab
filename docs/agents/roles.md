@@ -422,7 +422,9 @@ never harder posture on quiet ones.
   ≥ 3 of the last 7 days (Prometheus's `ALERTS` series, one instant read per day — a stock-chart
   name carries no `triage` there, so it is resolved from the relabel map as Alertmanager would), and
   that NOTHING already explains — a declared window naming it, an OPEN issue anywhere in the org
-  whose title names it, an open follow-up item or the seat's meta-state naming it, or a dig finding
+  whose title names it, an open follow-up item, an explicit `dig-explained: <Alert> — <reason>` line
+  in the seat's meta-state (a bare mention — a wind-down's standing-alerts list — explains nothing,
+  2026-10-12), or a dig finding
   for the same (alert, subject) within 7 d (keyed on the `members` the harvest stamps on each
   finding from the run's own digest — never on the session's free-text `alerts`). The explained set is RECORDED in the digest with its
   reason, so the session reads the record instead of re-deriving it. The subject is the responder's
