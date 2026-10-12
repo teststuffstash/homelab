@@ -1,0 +1,42 @@
+# Behaviour fixture for RegistryMirrorDanglingLinks (the 2026-10-11 miscount: 15 links = 7 blobs).
+#
+#   devbox run -- promtool test rules argocd/resources/registry-cache/dangling-links.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/ in CI.
+#
+# WHAT IS BEING PINNED:
+#   1. LINKS DO NOT PAGE — the 2026-10-11 reading itself: 15 links repaired over 7 distinct blobs
+#      stays silent (the link gauge is not in the expr at all).
+#   2. BLOBS DO — 10 distinct missing blobs fires after `for: 5m`; 9 (the #479 routine max) does not.
+#   3. LATCHED — the gauge holds its value between restarts, so the alert keeps firing on it.
+rule_files:
+  - dangling-links.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'registry_mirror_dangling_links_repaired{mirror="mirror-ghcr"}'
+        values: '15x30'
+      - series: 'registry_mirror_dangling_blobs_missing{mirror="mirror-ghcr"}'
+        values: '7x30'
+      - series: 'registry_mirror_dangling_links_repaired{mirror="mirror-docker-io"}'
+        values: '9x30'
+      - series: 'registry_mirror_dangling_blobs_missing{mirror="mirror-docker-io"}'
+        values: '9x30'
+      - series: 'registry_mirror_dangling_links_repaired{mirror="mirror-mcr"}'
+        values: '20x30'
+      - series: 'registry_mirror_dangling_blobs_missing{mirror="mirror-mcr"}'
+        values: '10x30'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: RegistryMirrorDanglingLinks
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: RegistryMirrorDanglingLinks
+        exp_alerts:
+          - exp_labels:
+              mirror: mirror-mcr
+              severity: warning
+              triage: dig

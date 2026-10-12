@@ -1,0 +1,15 @@
+# RegistryMirrorDanglingLinks, lifted VERBATIM out of prometheusrule.yaml (annotations stripped —
+# the manifest is their one home) — the rules file dangling-links.promtool-test loads. Not a
+# manifest: named .promtool-rules so manifest-lint does not kubeconform it. prometheus-rules-lint
+# drift-pins expr+for against the CR; re-copy after editing the alert:
+#
+#   yq -o=json '{"groups": [{"name": "registry-cache", "rules": [.spec.groups[].rules[] | select(.alert == "RegistryMirrorDanglingLinks") | del(.annotations)]}]}' argocd/resources/registry-cache/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: registry-cache
+    rules:
+      - alert: RegistryMirrorDanglingLinks
+        expr: registry_mirror_dangling_blobs_missing > 9
+        for: 5m
+        labels:
+          severity: warning
+          triage: dig
