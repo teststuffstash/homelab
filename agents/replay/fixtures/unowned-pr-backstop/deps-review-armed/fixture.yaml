@@ -1,0 +1,14 @@
+# unowned-pr-backstop/deps-review-armed (2026-10-12, FU-079): the same `deps-review` PR, 17 days old
+# but ARMED — the review reflex's track (and, red or changes-requested, the unarmed-major unit's).
+# Expected: NO report line from either backstop line.
+name: unowned-pr-backstop-deps-review-armed
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:../bridge.sh
+  - block:unowned-pr-backstop
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/allure-behavior-snippets
+  - IN_REPO=allure-behavior-snippets
+  - IN_NOW=2026-10-12T12:00:00Z

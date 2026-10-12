@@ -1,0 +1,17 @@
+# unowned-pr-backstop/deps-review-unarmed-old (2026-10-12, FU-079): a Renovate `deps-review` PR that its
+# reflex never armed — allure-behavior-snippets#11 as recorded live, 17 days old, autoMergeRequest null,
+# no human/parked label. The first backstop line excludes the label by name ("their reflexes arm");
+# the review reflex picks armed PRs only; the unarmed-major unit takes `deps-review` only when armed —
+# nothing saw it for 17 days. Expected: the ⚠ un-armed reviewable bump line; the label-free line
+# stays empty.
+name: unowned-pr-backstop-deps-review-unarmed-old
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:../bridge.sh
+  - block:unowned-pr-backstop
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/allure-behavior-snippets
+  - IN_REPO=allure-behavior-snippets
+  - IN_NOW=2026-10-12T12:00:00Z

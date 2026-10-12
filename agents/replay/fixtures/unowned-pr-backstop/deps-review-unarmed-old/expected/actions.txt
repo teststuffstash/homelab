@@ -1,0 +1,4 @@
+CALL gh pr list --repo teststuffstash/allure-behavior-snippets --state open --limit 100 --json number,title,labels,reviewDecision,autoMergeRequest,createdAt
+OUT ORPHAN [allure-behavior-snippets] ⚠ un-armed reviewable bump — its reflex never armed it, no lane sees it (FU-079 premise false; allure-behavior-snippets#11 class, 2026-10-12): PR #11 — chore(deps): update dependency playwright to v1.63.0
+OUT REACHED: end
+RC 0

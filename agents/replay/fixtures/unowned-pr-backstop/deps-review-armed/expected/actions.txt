@@ -1,0 +1,3 @@
+CALL gh pr list --repo teststuffstash/allure-behavior-snippets --state open --limit 100 --json number,title,labels,reviewDecision,autoMergeRequest,createdAt
+OUT REACHED: end
+RC 0

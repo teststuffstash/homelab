@@ -1,0 +1,14 @@
+# unowned-pr-backstop/deps-review-unarmed-fresh (2026-10-12, FU-079): the same un-armed `deps-review`
+# PR opened 2 h ago — inside the 24 h arming grace, still Renovate's to arm on its next run
+# (platformAutomerge arms at creation or on the run after stability passes). Expected: NO report line.
+name: unowned-pr-backstop-deps-review-unarmed-fresh
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:../bridge.sh
+  - block:unowned-pr-backstop
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/allure-behavior-snippets
+  - IN_REPO=allure-behavior-snippets
+  - IN_NOW=2026-10-12T12:00:00Z

@@ -1,0 +1,13 @@
+[
+  {
+    "number": 11,
+    "title": "chore(deps): update dependency playwright to v1.63.0",
+    "labels": [
+      { "name": "dependencies" },
+      { "name": "deps-review" }
+    ],
+    "reviewDecision": "",
+    "autoMergeRequest": null,
+    "createdAt": "2026-09-25T09:22:30Z"
+  }
+]
