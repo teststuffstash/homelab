@@ -4235,14 +4235,34 @@ EOF_GTHEMES_OPEN
     # is invisible to the ENTIRE merge path — the updater, review reflex, and auto-merge all key on
     # armed PRs (by design), so it stalls silently (live: oracle-fleet#16, a stacked PR born
     # un-armed, stuck at ci "Expected" then BEHIND). Owned lanes excluded: automerge/deps-review
-    # (their reflexes arm), un-armed `major` + merge-conflict + CHANGES_REQUESTED (coordinator
+    # (their reflexes arm — when they do; the second line below catches the ones they did not),
+    # un-armed `major` + merge-conflict + CHANGES_REQUESTED (coordinator
     # actionable, above), major/awaiting-human (parked on a human by design), agent/error
     # (human-first). Report-only: the fix is `gh pr merge --auto` or an explicit parking label —
     # arm-at-open is operator discipline (merge-path.md).
-    orph="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest \
-      --jq '[.[]|(.labels|map(.name)) as $L|select((.autoMergeRequest==null)
+    bk_now() { date -u +%s; }   # replay seam: the wall clock (the un-armed reviewable bump's grace below)
+    # >>>REPLAY:unowned-pr-backstop>>>
+    bk_prs="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,createdAt 2>/dev/null || true)"
+    orph="$(printf '%s' "$bk_prs" | jq -r '[.[]|(.labels|map(.name)) as $L|select((.autoMergeRequest==null)
         and (([$L[]|select(.=="automerge" or .=="deps-review" or .=="major" or .=="major/awaiting-human" or .=="merge-conflict" or .=="agent/error")]|length)==0)
         and (.reviewDecision!="CHANGES_REQUESTED"))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    # The "their reflexes arm" premise above is FALSE in practice (2026-10-12): six Renovate PRs wearing
+    # `deps-review` (allure-behavior-snippets#11/#12/#25/#26, oracle-fleet#758/#759) sat un-armed for
+    # 15–17 days — the review reflex picks ARMED PRs only, the unarmed-major unit takes `deps-review`
+    # only when it is armed, and the line above excludes the label by name — so no lane saw them and
+    # nothing reported them. This second line reports an open `automerge`/`deps-review` PR that is
+    # NOT armed, wears no human/parked label and is older than the arming grace. Report-only, no
+    # label: the fix is `gh pr merge --auto` (or Renovate's own re-arm). Un-armed `major` stays the
+    # unarmed-major unit's (above) whatever else it wears.
+    BK_ARM_GRACE_S=86400   # 24 h: a freshly opened PR is still Renovate's to arm on its next run (platformAutomerge arms at creation or on the run after stability passes)
+    for bk_n in $(printf '%s' "$bk_prs" | jq -r --argjson now "$(bk_now)" --argjson grace "$BK_ARM_GRACE_S" '.[]|(.labels|map(.name)) as $L|select((.autoMergeRequest==null)
+        and (([$L[]|select(.=="automerge" or .=="deps-review")]|length)>0)
+        and (([$L[]|select(.=="major" or .=="major/awaiting-human" or .=="agent/error" or .=="agent/arbitrate" or .=="merge-conflict")]|length)==0)
+        and (((.createdAt // "")|fromdateiso8601? // $now) < ($now - $grace)))|.number' 2>/dev/null || true); do
+      bk_t="$(printf '%s' "$bk_prs" | jq -r --argjson n "$bk_n" '.[]|select(.number==$n)|.title' 2>/dev/null)" || bk_t=''
+      orphans="${orphans}[$repo] ⚠ un-armed reviewable bump — its reflex never armed it, no lane sees it (FU-079 premise false; allure-behavior-snippets#11 class, 2026-10-12): PR #${bk_n} — ${bk_t}\n"
+    done
+    # <<<REPLAY:unowned-pr-backstop<<<
     # v2 (FU-050, C4/C5): an `agent/in-progress` issue whose worker went TERMINAL is a silent stall
     # until someone re-ticks — this was meta-only work all through meta-session 2. actionable =
     # in-progress ∧ no Running worker pod in the project ns ∧ no OPEN PR referencing the issue (an
