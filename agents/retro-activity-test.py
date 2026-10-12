@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline contract tests for retro activity collection/window accounting."""
 import copy
+import json
 import importlib.util
 from pathlib import Path
 import unittest
@@ -210,6 +211,77 @@ def make_event(kind, payload=None, occurred_at='2026-09-22T12:00:00Z', repo='o/r
     return {'id': f'{repo}:{item}:{kind}:x', 'kind': kind, 'occurred_at': occurred_at,
             'observed_at': '2026-09-29T00:00:00Z', 'repo': repo, 'item': item,
             'url': f'https://example/issues/{item}', 'payload': payload or {}}
+
+
+class StateBoundsTests(unittest.TestCase):
+    """The 2026-10-12 OOM class: the state must stay bounded — a reference carries only what
+    bundle() reads, and a published window's accounted evidence leaves on the next collect."""
+
+    def collect(self, rows, state=None, observed='2026-09-29T00:00:00Z'):
+        with patch.object(a, 'pages', side_effect=fake_pages(rows)):
+            return a.collect(state or {}, ['o/r'], '2026-09-01T00:00:00Z', '2026-09-29T00:00:00Z', observed)
+
+    FAT = {'type': 'issue', 'issue': {'number': 2, 'html_url': 'https://example/pull/2', 'body': 'x' * 70000,
+                                      'user': {'login': 'bot'}, 'labels': [{'name': 'agent/in-progress'}],
+                                      'repository': {'full_name': 'o/r', 'description': 'y' * 2000}}}
+    SLIM = {'type': 'issue', 'issue': {'number': 2, 'repository': {'full_name': 'o/r'}, 'html_url': 'https://example/pull/2'}}
+
+    def test_reference_payload_keeps_only_what_bundle_reads(self):
+        state = self.collect([dict(id=12, event='cross-referenced', created_at='2026-09-25T00:00:00Z', source=self.FAT)])
+        ref = next(e for e in state['events'] if e['kind'] == 'cross-referenced')
+        self.assertEqual(ref['payload'], {'source': self.SLIM})
+        self.assertLess(len(json.dumps(ref)), 400)
+
+    def test_fat_stored_reference_is_slimmed_without_a_new_observation(self):
+        state = self.collect([dict(id=12, event='cross-referenced', created_at='2026-09-25T00:00:00Z', source=self.FAT)])
+        ref = next(e for e in state['events'] if e['kind'] == 'cross-referenced')
+        ref['payload']['source'] = copy.deepcopy(self.FAT)   # a state written before compaction
+        later = self.collect([dict(id=12, event='cross-referenced', created_at='2026-09-25T00:00:00Z', source=self.FAT)],
+                             state, observed='2026-09-30T00:00:00Z')
+        ref = next(e for e in later['events'] if e['kind'] == 'cross-referenced')
+        self.assertEqual(ref['payload'], {'source': self.SLIM})
+        self.assertEqual(ref['observed_at'], '2026-09-29T00:00:00Z')   # slimming is not a correction
+        self.assertEqual(len([e for e in later['events'] if e['kind'] == 'cross-referenced']), 1)
+
+    def test_prune_keeps_late_arrivals_live_lifecycle_and_open_links(self):
+        def ev(kind, item, occurred, observed='2026-09-22T00:00:00Z', payload=None, suffix=''):
+            return {'id': f'o/r:{item}:{kind}:{occurred}{suffix}', 'kind': kind, 'occurred_at': occurred,
+                    'observed_at': observed, 'repo': 'o/r', 'item': item, 'url': 'https://example', 'payload': payload or {}}
+        link = {'source': {'type': 'issue', 'issue': {'number': 2, 'repository': {'full_name': 'o/r'}}}}
+        row = lambda n, state, closed=None, is_pr=False: dict(repo='o/r', item=n, title='t', url='u', state=state,
+                                                               created_at='2026-09-10T00:00:00Z', updated_at='2026-09-20T00:00:00Z',
+                                                               closed_at=closed, labels=[], is_pr=is_pr, observed_at='2026-09-22T00:00:00Z')
+        state = {'version': 1, 'collected_until': '2026-10-05T00:00:00Z', 'observed_at': '2026-09-29T00:00:00Z', 'repos': ['o/r'],
+                 'items': {'o/r#1': row(1, 'open'), 'o/r#2': row(2, 'closed', '2026-09-20T12:00:00Z', True),
+                           'o/r#3': row(3, 'closed', '2026-09-20T12:00:00Z')},
+                 'events': [
+                     ev('check', 2, '2026-09-20T01:00:00Z', payload={'conclusion': 'failure', 'sha': 'a'}),             # accounted → gone
+                     ev('check', 2, '2026-09-20T02:00:00Z', observed='2026-09-30T00:00:00Z', payload={'sha': 'b'}),      # late arrival → kept
+                     ev('cross-referenced', 1, '2026-09-20T03:00:00Z', payload=link),                                  # target open → kept
+                     ev('cross-referenced', 3, '2026-09-20T03:00:00Z', payload=link),                                  # both retired → gone
+                     ev('opened', 1, '2026-09-10T00:00:00Z'), ev('opened', 2, '2026-09-10T00:00:00Z'),
+                     ev('merged', 2, '2026-09-20T12:00:00Z'), ev('opened', 3, '2026-09-10T00:00:00Z'),
+                     ev('closed', 3, '2026-09-20T12:00:00Z'),
+                     ev('check', 1, '2026-09-29T01:00:00Z', payload={'sha': 'c'}),                                     # after the floor → kept
+                 ]}
+        dropped = a.prune(state, '2026-09-28T00:00:00Z', '2026-09-29T00:00:00Z')
+        kinds = sorted((e['kind'], e['item']) for e in state['events'])
+        self.assertEqual(dropped, 4)
+        self.assertEqual(kinds, [('check', 1), ('check', 2), ('cross-referenced', 1), ('merged', 2), ('opened', 1), ('opened', 2)])
+        self.assertEqual(sorted(state['items']), ['o/r#1', 'o/r#2'])   # #3 said everything it had
+        out = a.bundle(state, '2026-09-28T00:00:00Z', '2026-10-05T00:00:00Z')
+        self.assertEqual(out['late_arrival_count'], 1)
+        self.assertEqual(a.prune(state, '2026-09-28T00:00:00Z', '2026-09-29T00:00:00Z'), 0)   # idempotent
+
+    def test_prune_keeps_a_retired_item_with_pending_checks(self):
+        state = {'version': 1, 'collected_until': '2026-09-29T00:00:00Z', 'observed_at': '2026-09-29T00:00:00Z', 'repos': ['o/r'],
+                 'items': {'o/r#2': dict(repo='o/r', item=2, title='t', url='u', state='closed', created_at='2026-09-10T00:00:00Z',
+                                         updated_at='2026-09-20T00:00:00Z', closed_at='2026-09-20T12:00:00Z', labels=[], is_pr=True,
+                                         observed_at='2026-09-22T00:00:00Z', pending_check_shas=['a'])},
+                 'events': [{'id': 'o/r:2:merged:2', 'kind': 'merged', 'occurred_at': '2026-09-20T12:00:00Z',
+                             'observed_at': '2026-09-22T00:00:00Z', 'repo': 'o/r', 'item': 2, 'url': 'u', 'payload': {}}]}
+        self.assertEqual(a.prune(state, '2026-09-28T00:00:00Z', '2026-09-29T00:00:00Z'), 0)
+        self.assertIn('o/r#2', state['items'])
 
 
 class ClassificationTests(unittest.TestCase):

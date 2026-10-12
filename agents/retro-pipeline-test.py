@@ -245,6 +245,34 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(env['GH_TOKEN']['valueFrom']['secretKeyRef'].get('optional'))
 
 
+class CollectPruneTests(unittest.TestCase):
+    """collect prunes below the OLDEST published floor across series (the state is shared)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.store = p.Store(str(self.root / 'store'))
+        self.store.put('activity.json', {'version': 1, 'events': [], 'items': {}, 'collected_until': NOW, 'observed_at': NOW})
+        self.args = argparse.Namespace(now=NOW, repo=[])
+
+    def commands(self):
+        calls = []
+        with patch.object(p, 'run', side_effect=lambda *a, **k: calls.append(a) or ''):
+            p.collect(self.args, self.store, self.root)
+        return calls[0]
+
+    def test_no_publication_keeps_everything(self):
+        self.assertNotIn('--prune-until', self.commands())
+
+    def test_oldest_floor_wins(self):
+        self.store.put('platform/checkpoint.json', {'until': '2026-10-05T00:00:00Z', 'covered_at': '2026-10-05T05:00:07Z'})
+        self.store.put('oracle/checkpoint.json', {'until': '2026-09-28T00:00:00Z', 'covered_at': '2026-09-28T05:00:00Z'})
+        cmd = list(self.commands())
+        self.assertEqual(cmd[cmd.index('--prune-until') + 1], '2026-09-28T00:00:00Z')
+        self.assertEqual(cmd[cmd.index('--prune-covered-at') + 1], '2026-09-28T05:00:00Z')
+
+
 class QueueTests(unittest.TestCase):
     def setUp(self):
         candidate = {'mechanism':'empty-provider','surface':'agents/foo.sh','summary':'fails open',

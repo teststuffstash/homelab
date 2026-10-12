@@ -94,6 +94,19 @@ class Store:
         keys = [runs + line.split()[-1] for line in listing.splitlines() if line.strip()]
         return [self.get(k) for k in sorted(keys)]
 
+    def checkpoints(self):
+        """Every series' published checkpoint (`<series>/checkpoint.json`), oldest floor first."""
+        if self.local:
+            return [json.loads(p.read_text()) for p in sorted(self.local.glob('*/checkpoint.json'))]
+        try:
+            listing = self.command('ls', self.prefix + '*/checkpoint.json')
+        except subprocess.CalledProcessError as exc:
+            if missing(exc) or 'no object found' in (exc.stderr or '').lower():
+                return []
+            raise
+        # keys print relative to the wildcard-free prefix (`_retro/`) — see publications()
+        return [self.get(line.split()[-1]) for line in listing.splitlines() if line.strip()]
+
     def ledger(self):
         """The FU-057 task ledger (bucket root, beside `_retro/`): one JSON row per line."""
         if self.local:
@@ -176,6 +189,12 @@ def collect(args, store, temp):
         command += ['--since', iso(utc(cutoff(args.now)) - timedelta(days=7))]
     for repo in args.repo:
         command += ['--repo', repo]
+    # The state is shared by every series: prune only below the OLDEST published floor, so a
+    # series still owed a window keeps its evidence (and a state without a publication keeps all).
+    floors = [c for c in store.checkpoints() if c and c.get('until') and c.get('covered_at')]
+    if floors:
+        command += ['--prune-until', min(c['until'] for c in floors),
+                    '--prune-covered-at', min(c['covered_at'] for c in floors)]
     run(*command)
     result = json.loads(path.read_text())
     store.put('activity.json', result)

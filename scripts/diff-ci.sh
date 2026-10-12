@@ -64,6 +64,8 @@ MAP=(
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
   "responder-behaviour-test:^agents/"
+  # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
+  "retro-test:^agents/retro[_-](activity|pipeline)"
   "deep-dig-test:^agents/"
   "estimate-budget -- --self-test:^agents/"
   "rail-degrade-replay:^agents/"
