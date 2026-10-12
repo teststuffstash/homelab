@@ -22,7 +22,7 @@
   "internalChecksFilter": "strict",
   "separateMinorPatch": true,
   "platformAutomerge": true,
-  "rebaseWhen": "conflicted",
+  "rebaseWhen": "behind-base-branch",
   "allowedCommands": ["^install-tool helm v4\\.3\\.0$", "^bash scripts/upstream-alerts-refresh\\.sh$"],
   "prHourlyLimit": 3,
 
@@ -56,7 +56,6 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin", "pinDigest", "major"],
       "groupName": "github-actions",
-      "rebaseWhen": "behind-base-branch",
       "addLabels": ["automerge"],
       "automerge": true
     },
@@ -232,7 +231,6 @@
       "matchUpdateTypes": ["major"],
       "matchPackageNames": ["graduated-majors/none-yet"],
       "addLabels": ["major"],
-      "rebaseWhen": "behind-base-branch",
       "automerge": true
     },
     {
@@ -240,7 +238,6 @@
       "matchManagers": ["deno"],
       "matchPackageNames": ["mermaid"],
       "matchUpdateTypes": ["major"],
-      "rebaseWhen": "behind-base-branch",
       "addLabels": ["automerge"],
       "automerge": true
     },
@@ -257,7 +254,6 @@
       "matchManagers": ["terraform"],
       "matchDatasources": ["docker"],
       "matchUpdateTypes": ["major"],
-      "rebaseWhen": "behind-base-branch",
       "automerge": true
     },
     {
@@ -265,7 +261,6 @@
       "matchManagers": ["terraform"],
       "matchDatasources": ["terraform-provider"],
       "matchUpdateTypes": ["major"],
-      "rebaseWhen": "behind-base-branch",
       "automerge": true
     },
     {
@@ -274,7 +269,6 @@
       "matchDatasources": ["helm"],
       "matchPackageNames": ["argo-workflows", "kube-prometheus-stack", "prometheus-operator-crds"],
       "matchUpdateTypes": ["major"],
-      "rebaseWhen": "behind-base-branch",
       "automerge": true
     },
     {
@@ -283,7 +277,6 @@
       "matchDatasources": ["helm"],
       "matchPackageNames": ["argo-cd", "argocd-apps"],
       "matchUpdateTypes": ["major"],
-      "rebaseWhen": "behind-base-branch",
       "automerge": true
     },
     {
