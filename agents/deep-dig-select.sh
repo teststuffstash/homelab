@@ -25,8 +25,9 @@
 #      about", and the responder's fixtures pin it.
 #   3. EXPLAINED — a candidate is dropped (and RECORDED as dropped, with the reason) when something
 #      already owns it: a declared seat window naming the alert (FU-230 leg b), an OPEN issue in the
-#      org whose title names the alert, an OPEN follow-up item (docs/follow-ups.md) or the seat's
-#      meta-state naming it, or a dig finding for the same (alert, subject) within DIG_REDIG_DAYS.
+#      org whose title names the alert, an OPEN follow-up item (docs/follow-ups.md), an explicit
+#      `dig-explained: <Alert> — <reason>` line in the seat's meta-state (a bare mention does NOT
+#      count — see explain_meta), or a dig finding for the same (alert, subject) within DIG_REDIG_DAYS.
 #      "Not explained by an FU/issue/meta-state" is the ADR's own wording.
 #   4. GROUPED by ONSET and HOST — the two correlation keys the audit named: alerts that started in
 #      the same DIG_ONSET_BUCKET_MIN window on the same node/instance are one story. A recurring,
@@ -151,9 +152,26 @@ explain_fu() { # <alertname> — an OPEN follow-up item mentioning the alert by 
     /^- \[x\] / || /^## / { id = "" }
     id != "" && index($0, n) { print "follow-up " id; exit }' "$DIG_REPO/docs/follow-ups.md"
 }
-explain_meta() { # <alertname>
+explain_meta() { # <alertname> — only an explicit `dig-explained:` marker line, never a bare mention
+  # Grammar (one line, optional leading list dash / backticks):
+  #   dig-explained: <Alert>[, <Alert>…] — <reason>
+  # A plain mention used to count, and the seat lists every standing alert in meta-state at each
+  # wind-down — so a standing alert hid itself from the dig by being standing (2026-10-12:
+  # RegistryMirrorDanglingLinks "explained ← meta-state" by a list, diagnosed by nobody). A
+  # forgotten marker now costs one dig, never a silently skipped alert. The reason rides into
+  # explained_by so the session reads WHY instead of re-deriving it.
   [ -f "$DIG_REPO/docs/agents/meta-state.md" ] || return 0
-  grep -qF "$1" "$DIG_REPO/docs/agents/meta-state.md" 2>/dev/null && printf 'meta-state'
+  awk -v n="$1" '
+    { line = $0; gsub(/`/, "", line) }
+    line !~ /^[[:space:]]*(-[[:space:]]+)?dig-explained:/ { next }
+    {
+      sub(/^[[:space:]]*(-[[:space:]]+)?dig-explained:[[:space:]]*/, "", line)
+      names = line; reason = ""
+      i = index(line, " — "); if (i == 0) i = index(line, " - ")
+      if (i > 0) { names = substr(line, 1, i - 1); reason = substr(line, i); sub(/^ (—|-) /, "", reason) }
+      k = split(names, a, /[,[:space:]]+/)
+      for (j = 1; j <= k; j++) if (a[j] == n) { print "meta-state: " (reason == "" ? "dig-explained" : reason); exit }
+    }' "$DIG_REPO/docs/agents/meta-state.md" 2>/dev/null
 }
 explain_prior() { # <alertname> <subject>
   # The key is the finding's `members` — [{alertname, subject}], stamped by `harvest` from the
