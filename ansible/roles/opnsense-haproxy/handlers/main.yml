@@ -1,3 +1,5 @@
 ---
 - name: reconfigure haproxy
   oxlorg.opnsense.raw: { module: haproxy, controller: service, command: reconfigure, action: post }
+- name: apply firewall
+  oxlorg.opnsense.raw: { module: firewall, controller: filter, command: apply, action: post }
