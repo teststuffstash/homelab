@@ -87,8 +87,9 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
 8. **Peer it with OPNsense BGP** — add the node IP to `bgp_node_ips` in
    `ansible/group_vars/opnsense.yml` and run
    `bash scripts/opnsense-playbook.sh ansible/opnsense-bgp.yml`. Cilium's BGP nodeSelector is
-   all-nodes, but OPNsense/FRR only accepts explicit neighbors — a node missing from that list
-   sits BGP `idle` forever and advertises no VIPs (the `state != established` Prometheus alert).
+   every non-control-plane node, but OPNsense/FRR only accepts explicit neighbors — a worker
+   missing from that list sits BGP `idle` forever and advertises no VIPs (the
+   `state != established` Prometheus alert). A control plane is never listed ([`bgp.md`](bgp.md)).
    ⚠ **This step applies to EVERY new node, VM workers included** — it is not PXE/metal-specific.
    Missed twice now: the metal nodes at their 2026-06-11 onboarding, then the wk-03 VM at its
    2026-08-18 capacity-day onboarding (caught by the alert the same day).

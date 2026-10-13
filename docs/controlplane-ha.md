@@ -164,12 +164,10 @@ the [`onboard-metal-node`](../.claude/skills/onboard-metal-node/SKILL.md) skill'
    the router hands it `.183`, and a config that claims its interface can take that away silently
    (§CP6). `dnsmasq/leases/search` on OPNsense is the check that does not need the node.
 9. **Post-install, none of which `Ready` gates:** re-apply the zone label
-   (`kubernetes_labels.node_zone` — the Node object is new); **add the node IP to `bgp_node_ips`
-   and run the BGP play** ([`provisioning.md`](provisioning.md) step 8) *before* confirming
-   `cilium bgp peers` is `established` — a new address peers with nothing until OPNsense lists it,
-   and this list has now been the miss four times (wk-03, wk-metal-04, nx-01, cp-02 — the last
-   caught 2026-09-21 an hour after creation, `idle` with 0 routes); and confirm etcd membership
-   grew by exactly one.
+   (`kubernetes_labels.node_zone` — the Node object is new); **do NOT add a control plane to
+   `bgp_node_ips`** — since 2026-10-13 the control planes do not peer at all, so VIP ingress never
+   lands on one ([`bgp.md`](bgp.md); a CP neighbour would sit `active` forever); and confirm etcd
+   membership grew by exactly one.
 10. Finish with a **full, unscoped** plan of master applied by its id: a scoped plan does not stamp
     the box's apply-loop baseline, and the plan's own `.meta` is what decides that now.
 

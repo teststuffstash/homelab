@@ -76,7 +76,14 @@ resource "kubernetes_manifest" "bgp_cluster_config" {
     kind       = "CiliumBGPClusterConfig"
     metadata   = { name = "cilium-bgp" }
     spec = {
-      nodeSelector = { matchLabels = {} } # all nodes peer
+      # Every node EXCEPT the control planes peers (2026-10-13). The router installs ONE nexthop per
+      # VIP (FreeBSD multipath off — docs/bgp.md §Which node a VIP's traffic enters), and it was
+      # cp-01 for every VIP: all LAN ingress landed on a control plane. A node that does not peer
+      # advertises nothing; the CPs still run backends via the tunnel like any node. The selector
+      # is the whole mechanism: a new worker peers on join, a new CP never does (Talos labels it).
+      nodeSelector = {
+        matchExpressions = [{ key = "node-role.kubernetes.io/control-plane", operator = "DoesNotExist" }]
+      }
       bgpInstances = [{
         name     = "instance-${local.cluster_asn}"
         localASN = local.cluster_asn
