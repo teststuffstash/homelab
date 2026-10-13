@@ -19,21 +19,67 @@ installs a route.
 | | Cluster (Cilium) | Router (OPNsense + os-frr) |
 |---|---|---|
 | ASN | **64513** | **64512** (different ASNs → eBGP) |
-| Who speaks | every node's cilium-agent (`CiliumBGPClusterConfig`, empty `nodeSelector` = all nodes) | FRR's `bgpd`, router-id `192.168.2.1` |
-| Peers | one: `192.168.2.1` (`opnsense_ip`) | one neighbour per node, listed by hand in `bgp_node_ips` |
+| Who speaks | every **non-control-plane** node's cilium-agent (`CiliumBGPClusterConfig` `nodeSelector`: `node-role.kubernetes.io/control-plane` DoesNotExist — §Which node a VIP's traffic enters) | FRR's `bgpd` on each router node, router-id = the node's own address (§With the router pair) |
+| Peers | each router node's own address, `.70` and `.71` (`opnsense_peers`) — never the `.1` CARP VIP | one neighbour per peering node, listed by hand in `bgp_node_ips` (no control planes) |
 | Sends | the LB IPs of Services labelled **`bgp=advertise`** only (`CiliumBGPAdvertisement`) | nothing — it originates no routes |
 | Receives | nothing it uses (Cilium installs no received routes) | every advertised `/32`, accepted by the permit-all inbound route-map `CILIUM-ALLOW-ALL` (FRR's `ebgp-requires-policy` drops everything without one) |
 | Code | [`tofu/cilium-bgp.tf`](../tofu/cilium-bgp.tf) (main root, applied via [the management box](management-box.md)); `bgpControlPlane.enabled` in [`tofu/cilium.tf`](../tofu/cilium.tf) | [`ansible/roles/opnsense-bgp/`](../ansible/roles/opnsense-bgp/), values in [`group_vars/opnsense.yml`](../ansible/group_vars/opnsense.yml); `bash scripts/opnsense-playbook.sh ansible/opnsense-bgp.yml` |
 
 The packet path: a LAN (or WireGuard) client sends to `192.168.40.16` → its default gateway
-`.1` → the router's kernel route (installed by FRR's `zebra`) forwards to an announcing node →
-Cilium's eBPF datapath delivers to a backing pod. LAN HTTPS names add one hop in front: the
-HAProxy VIP on `192.168.3.0/24` proxies to the `40.x` backend ([`runbook.md`](runbook.md)).
+`.1` → the router's kernel route (installed by FRR's `zebra`) forwards to ONE announcing node
+(§Which node a VIP's traffic enters) → Cilium's eBPF datapath delivers to a backing pod, on that
+node or across the vxlan tunnel (Services are `externalTrafficPolicy: Cluster`; a remote backend
+sees the ingress node's address, SNAT). LAN HTTPS names add one hop in front: the HAProxy VIP on
+`192.168.3.0/24` proxies to the `40.x` backend ([`runbook.md`](runbook.md)) — that hop is a
+connection the ROUTER originates.
+
+## Which node a VIP's traffic enters
+
+FRR learns every VIP from every peering node and selects them all as equal-cost paths
+(`show ip route 192.168.40.33/32` lists each), but the router's **kernel** holds one: OPNsense pins
+`net.route.multipath=0` as a platform default (`system_sysctl_defaults()` in
+`/usr/local/etc/inc/system.inc`, written to `/boot/loader.conf`). `zebra` writes one `RTM_ADD` per
+nexthop; with multipath off the first succeeds and the rest fail `EEXIST`, which zebra ignores
+by design (`zebra/rt_socket.c`). So every VIP rides the first nexthop zebra writes — in practice
+the lowest-addressed peer. Measured 2026-10-13 on both router nodes: all 26 VIP routes via
+`192.168.2.51`, **cp-01** — every LAN request to the cluster entered through a control plane.
+
+The fix (2026-10-13): **control planes do not peer.** The `CiliumBGPClusterConfig` selects nodes
+without the `node-role.kubernetes.io/control-plane` label (cp-01, cp-02, wk-metal-02 carry it,
+set by Talos), and `bgp_node_ips` lists no control plane. A CP still runs backends — traffic just
+never enters there. With the kernel still single-path, the ingress node is expected to be the
+lowest-addressed peering worker (hp-01 `.54`), and it moves — resetting the flows it carried —
+whenever that node stops announcing (the same class as before, on a worker instead of a CP).
+
+### Kernel ECMP — not enabled (2026-10-13)
+
+`net.route.multipath=1` (runtime-writable; OPNsense System > Tunables, `core/tunables` API) would
+let the kernel hold every nexthop, after a real FRR stop + start so zebra re-writes the routes it
+was refused. What it would buy on these routers, read from the FreeBSD 15 source they run:
+
+- **Forwarded traffic** (LAN/WireGuard clients straight to a `40.x`) picks
+  `nhops[flowid % size]`, with `flowid` from the RECEIVING NIC (`ip_fastfwd.c`). The router nodes'
+  NICs are `vtnet`, which stamps `flowid` = the RX queue number (`if_vtnet.c`), and they run 2
+  queue pairs: at most **two** nexthops ever carry forwarded traffic, not all of them.
+  `net.inet.rss.enabled` (0 here) is the knob that would replace it with a software 4-tuple hash —
+  untested, reboot-time.
+- **Router-originated traffic** — HAProxy's connections to the `40.x` backends, i.e. every LAN
+  HTTPS name — is hashed on (source, destination, destination port) once the first multipath
+  route exists (`net.route.hash_outbound` is read-only and flips to 1 by itself, `route_ctl.c`):
+  per backend VIP, spread over all nexthops.
+- **The cost:** a nexthop-set change (a node reboots, joins, leaves) re-indexes the group, and
+  `hash % size` moves flows to another node. Cilium there has no conntrack entry; with SNAT
+  (vxlan tunnel, `etp=Cluster`) the backend would see a new source address anyway, so the
+  connection resets. **Maglev does not fix this here**: it makes every node pick the same backend
+  for a 5-tuple, which only preserves a connection when the backend sees the client's address —
+  DSR, and DSR in tunnel mode needs Geneve (`loadBalancer.dsrDispatch=geneve`,
+  `tunnelProtocol=geneve`; vxlan supports no DSR dispatch) — a datapath change, not a values
+  line ([Cilium kube-proxy-free docs](https://docs.cilium.io/en/v1.19/network/kubernetes/kubeproxy-free/)).
 
 ## Failure modes worth knowing
 
-- **A node missing from `bgp_node_ips`.** The cluster side is all-nodes, the router side is an
-  explicit list, so a new node peers with nobody until it is added and the play run. Missed
+- **A node missing from `bgp_node_ips`.** The cluster side is a label selector (every non-CP
+  node), the router side is an explicit list, so a new node peers with nobody until it is added and the play run. Missed
   repeatedly at onboarding (each miss is annotated in the list itself);
   `CiliumBGPNodeSessionDown` is what catches it. A
   retired node's neighbour must be deleted live too — the role is create-if-absent
@@ -67,8 +113,8 @@ The pair shape instead:
 
 - **Cilium peers each node's own address** (`.70` and `.71`), so both routers hold every route
   all the time and whichever is MASTER forwards from a warm table.
-- **Each node has its own router-id** (its LAN address) — today's single `bgp_router_id` moves
-  per node.
+- **Each node has its own router-id** (its LAN address) — `bgp_router_id` is a host var in
+  `ansible/router-nodes/inventory.yml`.
 - **The alerts are per peer** (done 2026-10-01): with two peers a "sum of sessions = 0" would
   stay silent while one router has none — and if that router is MASTER every VIP is down.
 - **Standing nodes are inert until the window** (router-move §The standing nodes): neighbours

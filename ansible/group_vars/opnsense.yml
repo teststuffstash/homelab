@@ -23,20 +23,24 @@ haproxy_vip_interface: "{{ 'lo0' if opnsense_standby else 'lan' }}"
 opnsense_asn: 64512
 cluster_asn: 64513
 bgp_router_id: "192.168.2.1"
-bgp_node_ips:                                # Talos nodes that peer (BGP neighbors)
-  - 192.168.2.51   # cp-01
+# Talos nodes that peer (BGP neighbors) = every node WITHOUT the control-plane label — the cluster
+# side's nodeSelector (tofu/cilium-bgp.tf) excludes the control planes since 2026-10-13, so VIP
+# ingress never lands on one (docs/bgp.md). A CP is NEVER listed: a neighbour with no session sits
+# `active` forever. cp-01 (.51), wk-metal-02 (.183), cp-02 (.65) left the list then; their live
+# neighbours are deleted by hand (role is create-if-absent — runbook §Retire a node, step 5).
+bgp_node_ips:
   - 192.168.2.61   # wk-01
   - 192.168.2.62   # wk-02
   - 192.168.2.63   # wk-03 (VM, ephemeral/CI tier — missed at capacity-day onboarding 2026-08-18)
   # Bare-metal nodes — were never added when onboarded, so they sat BGP `idle` (never peered,
   # never advertised VIPs); the Cilium BGP metrics caught it (2026-06-11). Cilium's nodeSelector
-  # is all-nodes, so OPNsense must list every node here (explicit neighbors, not a listen-range).
+  # is every non-CP node, so OPNsense must list each of them here (explicit neighbors, not a
+  # listen-range).
   - 192.168.2.54   # hp-01
   # 192.168.2.53 (thinkcentre) REMOVED 2026-09-12 — left cluster duty (→ the R12 management-box
   # pilot). A neighbour with no cilium-agent behind it sits `active`/`connect` forever, which is
   # indistinguishable from the onboarding miss this list exists to prevent.
   - 192.168.2.182  # wk-metal-01
-  - 192.168.2.183  # wk-metal-02
   - 192.168.2.184  # wk-metal-03 (kata node, onboarded 2026-07-13)
   - 192.168.2.186  # wk-metal-04 (kata desktop i5-3570K/16GB, onboarded 2026-07-28)
   - 192.168.2.56   # m70s (ThinkCentre M70s SFF, third physical Garage zone, onboarded 2026-09-07)
@@ -44,10 +48,6 @@ bgp_node_ips:                                # Talos nodes that peer (BGP neighb
                    # found 2026-09-15 by review: its CiliumBGPNodeConfig peer sat `idle` for 8 h.
                    # Third time this list was the miss (wk-03, wk-metal-04, now nx-01).
   - 192.168.2.64   # wk-04 (VM on nx-02, the second hypervisor, onboarded 2026-09-15)
-  - 192.168.2.65   # cp-02 (VM on nx-02, the THIRD control plane, ADR-133, created 2026-09-21)
-                   # — MISSED at creation, found the same hour: peer `idle`, 0 routes. FOURTH
-                   # miss on this list (wk-03, wk-metal-04, nx-01, now cp-02). A control plane
-                   # needs it exactly like a worker: the BGP nodeSelector is all-nodes.
 
 # --- opnsense-acme : Let's Encrypt certs (DNS-01 via Cloudflare) ---
 acme_account_name: "TestStuff OPNSense"

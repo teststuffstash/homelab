@@ -103,8 +103,9 @@ as prose, and add to it every time a round finds a new one.
    is how replicas quietly land in one domain. Missed on m70s, 2026-09-07, on the very box bought to
    BE a third zone.
 
-8. **Add the node as a BGP neighbor in OPNsense** — Cilium's BGP nodeSelector is all-nodes, so a
-   node not listed in FRR sits `active`/`idle` (never peers, never advertises VIPs) →
+8. **Add the node as a BGP neighbor in OPNsense** (a WORKER only — control planes never peer,
+   `docs/bgp.md`) — Cilium's BGP nodeSelector is every non-CP node, so a
+   worker not listed in FRR sits `active`/`idle` (never peers, never advertises VIPs) →
    `CiliumBGPNodeSessionDown`. Add its IP to `bgp_node_ips` in `ansible/group_vars/opnsense.yml`,
    then apply and verify the session goes `established`:
    ```bash

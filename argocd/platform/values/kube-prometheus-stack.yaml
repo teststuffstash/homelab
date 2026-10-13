@@ -70,7 +70,7 @@ additionalPrometheusRulesMap:
               triage: dig
           - alert: CiliumBGPNodeSessionDown
             annotations:
-              description: '{{ $labels.instance }} is not peering with {{ $labels.neighbor }} for 15m (state != established) — it advertises no VIPs (reduced redundancy/ECMP). A new node must be added to bgp_node_ips in ansible/group_vars/opnsense.yml + run opnsense-bgp.yml.'
+              description: '{{ $labels.instance }} is not peering with {{ $labels.neighbor }} for 15m (state != established) — it advertises no VIPs (one fewer candidate ingress node, docs/bgp.md). A new worker must be added to bgp_node_ips in ansible/group_vars/opnsense.yml + run opnsense-bgp.yml (control planes never peer).'
               summary: Cilium BGP session down on a node
             expr: cilium_bgp_control_plane_session_state != 1
             for: 15m
