@@ -13359,4 +13359,12 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `deploy-revert-preexisting` (3 arms), harness 762/762. **#2538 MERGED 18:01Z**: multi-source apps' `oncePer` was
   `<nil>` (notified once ever — the ingester's 17:05Z Degraded was "already sent"); keyed on `join(revisions)`;
   box-applied, acceptance = the controller log after apply. Handoff answered → done/. The ingester went 2/2 at 17:22Z.
+- **18:12–18:29Z INCIDENT (self-inflicted, caught by the planned acceptance read): #2538's `oncePer` ternary, unquoted,
+  is a YAML mapping indicator — the box applied it 18:04–18:15Z (`success`, "helm verdict clean"), and from the
+  18:12Z cm change the notifications controller failed to unmarshal `on-health-degraded` for EVERY app: the FU-044
+  hop was dead cluster-wide for 17 min. `tofu validate` and the helm verdict both pass a bad trigger. Hand-patched
+  the live cm with the quoted three-line trigger 18:29Z (two false starts: a shell mangled the JSON; `--patch-file`
+  worked); log clean within 30 s (0 unmarshal errors, 102 evaluations/30 s); git made to match live (direct quickfix,
+  pushed). No app read Degraded inside the gap, so nothing was missed. The class's detector: the controller's own
+  `argocd_notifications_trigger_eval_total` rate sat at 0 from 18:09 to 18:30Z — building `ArgoCDNotificationTriggerStalled`.
 
