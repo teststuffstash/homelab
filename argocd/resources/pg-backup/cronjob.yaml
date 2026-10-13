@@ -55,7 +55,7 @@ spec:
           containers:
             - name: pg-backup
               # Stdlib-only Python, the same pinned image as garage-meta-rotation (already pulled).
-              image: python:3.14-slim@sha256:cfe2e24a75302a15934d37c2d86412893c0aa934dc3a97cbb439d04c01890ca9
+              image: python:3.15-slim@sha256:6ea0540b2837a9a285e64f59a2e8eb7e85defc4bb7c8cea52742821f50217deb
               command: ["python3", "-u", "/job/pg-backup.py"]
               env:
                 - { name: TRIGGER, value: scheduled }
