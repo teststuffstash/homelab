@@ -1,8 +1,7 @@
 ---
 # OPNsense router-wide settings that no service role owns (FU-297: the rebuild drill's realism
 # score counted them as prod config not in code). Values in group_vars/opnsense.yml
-# (opnsense_interface_settings, opnsense_netflow, opnsense_system_health) — prod's CURRENT values, so a run against prod
-# changes nothing.
+# (opnsense_interface_settings, opnsense_netflow, opnsense_system_health, opnsense_tunables).
 #
 # Every page: read → compare (filter_plugins/opn_settings.py) → POST only the drifted keys →
 # apply. A steady-state run POSTs nothing. Check mode: raw never POSTs in check mode and never
@@ -93,3 +92,47 @@
 - name: Apply system-health settings
   oxlorg.opnsense.raw: { module: diagnostics, controller: systemhealth, command: reconfigure, action: post }
   when: sys_sh_set is changed
+
+# --- System > Settings > Tunables (sysctl) -------------------------------------------------------
+# core/tunables/searchItem lists every tunable OPNsense knows. A row whose uuid is a real config
+# uuid (dashed) is a value in config.xml; any other row is a STATIC default (uuid = md5 of the
+# name) whose `value` column is only display — the effective value is OPNsense's default. So a
+# pinned key is in sync only when a CONFIG row holds the wanted value. setItem/<id> updates a
+# config row, and on a static id creates one (TunablesController::setItemAction). reconfigure
+# re-runs `service sysctl` (+ `login`), which writes the runtime sysctl and the next boot's
+# loader.conf.
+- name: Read tunables
+  oxlorg.opnsense.raw: { module: core, controller: tunables, command: searchItem }
+  register: sys_tun_get
+  when: opnsense_tunables | length > 0
+
+- name: Plan tunables
+  ansible.builtin.set_fact:
+    sys_tun_plan: >-
+      {%- set out = [] -%}
+      {%- for name, want in opnsense_tunables.items() -%}
+      {%-   set rows = sys_tun_get.response.rows | selectattr('tunable', 'equalto', name) | list -%}
+      {%-   set cfg = rows | selectattr('uuid', 'search', '-') | list -%}
+      {%-   if not (cfg and (cfg[0].value | string) == (want | string)) -%}
+      {%-     set id = (cfg[0].uuid if cfg else (rows[0].uuid if rows else 'new')) -%}
+      {%-     set _ = out.append({'name': name, 'value': want | string, 'id': id,
+                                 'descr': (rows[0].descr if rows else '')}) -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ out }}
+  when: opnsense_tunables | length > 0
+
+- name: "Tunables (drift: {{ sys_tun_plan | default([]) | map(attribute='name') | join(', ') }})"
+  oxlorg.opnsense.raw:
+    module: core
+    controller: tunables
+    command: "{{ 'addItem' if item.id == 'new' else 'setItem/' ~ item.id }}"
+    action: post
+    data: { sysctl: { tunable: "{{ item.name }}", value: "{{ item.value }}", descr: "{{ item.descr }}" } }
+  loop: "{{ sys_tun_plan | default([]) }}"
+  loop_control: { label: "{{ item.name }}" }
+  register: sys_tun_set
+
+- name: Apply tunables
+  oxlorg.opnsense.raw: { module: core, controller: tunables, command: reconfigure, action: post }
+  when: sys_tun_set is changed

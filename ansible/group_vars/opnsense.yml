@@ -268,7 +268,7 @@ opnsense_api_users:
 
 # --- opnsense-system : router-wide settings no service role owns (FU-297) -----------------
 # Prod's CURRENT values (read 2026-09-29), so the play is a no-op against prod; the rebuild drill
-# counted each as config not in code. Keys = the `get` response's field names; select fields take
+# counted each as config not in code — except opnsense_tunables below, a deliberate change. Keys = the `get` response's field names; select fields take
 # the stored value (disablevlanhwfilter: 0 enable / 1 disable / 2 leave default).
 opnsense_interface_settings:
   disablechecksumoffloading: "1"
@@ -294,3 +294,13 @@ opnsense_netflow:
 # fresh build; prod reads 1, migrated from its old <rrd><enable/> (the drill's last (a) row, FU-297).
 opnsense_system_health:
   enabled: "1"
+# System > Settings > Tunables: sysctls pinned AWAY from OPNsense's own defaults
+# (system_sysctl_defaults() in /usr/local/etc/inc/system.inc). The role creates a config row only
+# where none holds the value; a key absent here keeps OPNsense's default.
+# net.route.multipath: OPNsense pins 0, so the kernel held ONE nexthop per cluster VIP although
+# FRR selects every peer (docs/bgp.md §Which node a VIP's traffic enters). 1 = kernel ECMP — what
+# it does and does not spread on these vtnet routers, and the reset cost: docs/bgp.md §Kernel ECMP.
+# Takes effect for routes zebra writes AFTER it: the apply needs a real FRR stop + start (runbook).
+# (net.route.hash_outbound is read-only — the kernel flips it on the first multipath route.)
+opnsense_tunables:
+  net.route.multipath: "1"
