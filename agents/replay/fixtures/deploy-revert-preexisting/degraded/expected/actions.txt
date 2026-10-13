@@ -1,0 +1,5 @@
+CALL curl -fsS --max-time 20 -G http://prometheus.replay.invalid:9090/api/v1/query_range --data-urlencode query=argocd_app_info{name="oracle-fleet"} --data-urlencode start=1791880586 --data-urlencode end=1791881186 --data-urlencode step=30
+CALL curl -fsS --max-time 20 -G http://prometheus.replay.invalid:9090/api/v1/query_range --data-urlencode query=argocd_app_info{name="oracle-fleet",health_status="Degraded"} --data-urlencode start=1791880586 --data-urlencode end=1791881186 --data-urlencode step=30
+CALL gh pr comment 1093 --repo teststuffstash/oracle-iac --body FU-044 auto-rollback: **not reverting** — ArgoCD app `oracle-fleet` was already Degraded before this PR merged (21 of 21 Prometheus samples Degraded in the 10 min before 2026-10-13T08:46:26Z), so the Degraded it read on revision `4ea2ea85` is not this deploy's. The pre-existing condition is the responder/operator lane's.
+OUT → oracle-fleet was ALREADY Degraded before teststuffstash/oracle-iac#1093 merged (21 of 21 samples in the 10m before 2026-10-13T08:46:26Z) — not this deploy's Degraded, not a rollback case (report-only; responder/operator lane owns the pre-existing condition)
+RC 0

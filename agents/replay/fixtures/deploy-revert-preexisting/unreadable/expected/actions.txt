@@ -1,0 +1,4 @@
+CALL curl -fsS --max-time 20 -G http://prometheus.replay.invalid:9090/api/v1/query_range --data-urlencode query=argocd_app_info{name="oracle-fleet"} --data-urlencode start=1791880586 --data-urlencode end=1791881186 --data-urlencode step=30
+CALL curl -fsS --max-time 20 -G http://prometheus.replay.invalid:9090/api/v1/query_range --data-urlencode query=argocd_app_info{name="oracle-fleet",health_status="Degraded"} --data-urlencode start=1791880586 --data-urlencode end=1791881186 --data-urlencode step=30
+OUT → cannot read oracle-fleet's health for the 10m before 2026-10-13T08:46:26Z (Prometheus samples: ?) — unknown pre-state, refusing to revert on it (report-only)
+RC 0

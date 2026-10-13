@@ -496,6 +496,22 @@ it reverts the newest `deploy/*` bump merged ≤120m that touches the app's path
 PR (branch + cm-ledger idempotency). Non-`-iac`, no-recent-bump and revert-conflict all fail closed
 to report-only.
 
+**⚠ A Degraded notification is "Degraded READ at a new revision", not "Degraded CAUSED by it"
+(oracle handoff, 2026-10-13).** `oncePer` resets on every sync, so an app already Degraded before a
+deploy re-fires on the deploy's own sync and the chain reverted a bump that changed nothing:
+oracle-fleet Degraded 06:15–08:45Z (cause unrecovered — no failed Job, container, Deployment or
+workflow in the window; the controller logs had rotated), oracle-iac#1093 merged 08:46:26Z, the
+workflow fired 9 s later, the app read Healthy at 08:48Z, the revert #1094 merged 08:51Z and the
+stack found it eight hours later. The fix is in the chain, not the trigger: before reverting, the
+workflow reads the app's `argocd_app_info` health from Prometheus for `PRE_MERGE_WINDOW_MIN`
+(10 min) before the candidate's merge — any Degraded sample is a pre-existing condition
+(report-only, a comment on the deploy PR naming it), NO samples is an unknown pre-state (report-only,
+fail-closed), only a clean window reverts. A landed revert now also comments on the deploy PR the
+stack is actually watching. Replay: `agents/replay/fixtures/deploy-revert-preexisting/` (degraded /
+healthy / unreadable). The second finding of the same read: a MULTI-source app has no
+`status.sync.revision`, so its `oncePer` key was `<nil>` and it notified once in its life —
+`tofu/argocd.tf` keys on `revisions` for those.
+
 **⚠ The first hop never delivered until 2026-10-04.** The subscription named the recipient
 `webhook:agent-loop`; a webhook service is addressed by its own name, so every delivery since
 2026-07-27 failed (`notification service 'webhook' is not supported` — 150 failed / 0 succeeded on

@@ -204,6 +204,11 @@ spec:
           # Only bumps merged within this window are revert candidates — an app that degrades a
           # day after a deploy is an incident (responder lane), not a rollback.
           - { name: REVERT_WINDOW_MIN, value: "120" }
+          # The Degraded must be THIS deploy's: the app must have read Healthy for this many minutes
+          # before the candidate merged (Prometheus `argocd_app_info`), else report-only. See the
+          # pre-existing-Degraded block below (oracle-iac#1093 → #1094, 2026-10-13).
+          - { name: PRE_MERGE_WINDOW_MIN, value: "10" }
+          - { name: PROM_URL, value: "http://kube-prometheus-stack-prometheus.monitoring.svc:9090" }
         volumeMounts:
           - { name: work, mountPath: /work }
           - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
@@ -260,6 +265,41 @@ spec:
             if [ -n "$APP_PATH" ] && ! gh pr view "$PRNUM" --repo "$SLUG" --json files --jq '.files[].path' 2>/dev/null | grep -q "^${APP_PATH}/"; then
               echo "→ bump PR #$PRNUM does not touch ${APP_PATH}/ — not this app's deploy (report-only)"; exit 0
             fi
+
+            # ── The Degraded must be THIS deploy's (oracle handoff 2026-10-13: oracle-iac#1093 → #1094) ──
+            # argocd-notifications fires `oncePer: app.status.sync.revision` whenever the app READS
+            # Degraded at a new revision — a notification after a sync, not a transition the sync caused.
+            # An app already Degraded before the merge therefore re-fires on the deploy's own sync, and
+            # this chain reverted a bump that changed nothing: oracle-fleet Degraded since 06:15Z, #1093
+            # merged 08:46Z, this workflow fired 08:46:35Z, the app read Healthy 08:48Z, the revert #1094
+            # merged 08:51Z — and the stack found out eight hours later. So: read the app's health for
+            # PRE_MERGE_WINDOW_MIN before the merge from Prometheus. Any Degraded sample = not this
+            # deploy's → report-only, with a comment on the deploy PR so the stack sees the decision.
+            # Fail-closed both ways: NO samples (dead Prometheus, wrong app name, an app younger than the
+            # window) is an unknown pre-state, and this chain never reverts on unknown data.
+            # >>>REPLAY:deploy-revert-preexisting>>>
+            MERGED_AT="$(printf '%s' "$CAND" | jq -r .mergedAt)"
+            PROM="${PROM_URL:-http://kube-prometheus-stack-prometheus.monitoring.svc:9090}"
+            _end="$(date -u -d "$MERGED_AT" +%s)"; _start=$((_end - PRE_MERGE_WINDOW_MIN * 60))
+            # sample count of a query over [merge - window, merge]; "?" when the read itself failed
+            _samples() {
+              curl -fsS --max-time 20 -G "$PROM/api/v1/query_range" --data-urlencode "query=$1" \
+                --data-urlencode "start=$_start" --data-urlencode "end=$_end" --data-urlencode "step=30" 2>/dev/null \
+                | jq -r '[.data.result[].values[]] | length' 2>/dev/null || echo "?"
+            }
+            SEEN="$(_samples "argocd_app_info{name=\"$APP\"}")"
+            DEGRADED="$(_samples "argocd_app_info{name=\"$APP\",health_status=\"Degraded\"}")"
+            if ! [ "$SEEN" -gt 0 ] 2>/dev/null; then
+              echo "→ cannot read $APP's health for the ${PRE_MERGE_WINDOW_MIN}m before $MERGED_AT (Prometheus samples: ${SEEN:-none}) — unknown pre-state, refusing to revert on it (report-only)"; exit 0
+            fi
+            if [ "$DEGRADED" -gt 0 ] 2>/dev/null; then
+              echo "→ $APP was ALREADY Degraded before $SLUG#$PRNUM merged ($DEGRADED of $SEEN samples in the ${PRE_MERGE_WINDOW_MIN}m before $MERGED_AT) — not this deploy's Degraded, not a rollback case (report-only; responder/operator lane owns the pre-existing condition)"
+              gh pr comment "$PRNUM" --repo "$SLUG" --body "FU-044 auto-rollback: **not reverting** — ArgoCD app \`${APP}\` was already Degraded before this PR merged (${DEGRADED} of ${SEEN} Prometheus samples Degraded in the ${PRE_MERGE_WINDOW_MIN} min before ${MERGED_AT}), so the Degraded it read on revision \`${REVISION:0:8}\` is not this deploy's. The pre-existing condition is the responder/operator lane's." >/dev/null 2>&1 \
+                || echo "WARN: could not comment on $SLUG#$PRNUM (the decision above stands)"
+              exit 0
+            fi
+            echo "→ $APP read Healthy for the ${PRE_MERGE_WINDOW_MIN}m before $SLUG#$PRNUM merged ($SEEN samples, 0 Degraded) — the Degraded on ${REVISION:0:8} is this deploy's"
+            # <<<REPLAY:deploy-revert-preexisting<<<
 
             # ── IAC-G09: the reversible-class predicate (homelab only) ────────────────────────
             # The ruling is a PRECONDITION, not an app list, so it survives new apps: revert
@@ -319,6 +359,10 @@ spec:
               | grep -oE '[0-9]+$')"
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
             echo "→ revert PR $SLUG#$PR armed (auto-merges on CI green)"
+            # The stack reads its own deploy PR, not the -iac revert queue (oracle-iac#1094 went unseen
+            # for eight hours): say it where the deploy was.
+            gh pr comment "$PRNUM" --repo "$SLUG" --body "FU-044 auto-rollback: **reverted by #${PR}** — ArgoCD app \`${APP}\` went Degraded on revision \`${REVISION:0:8}\` within ${REVERT_WINDOW_MIN} min of this merge, after reading Healthy for the ${PRE_MERGE_WINDOW_MIN} min before it. Roll-forward (a fix in the app repo) composes on top." >/dev/null 2>&1 \
+              || echo "WARN: could not comment on $SLUG#$PRNUM (the revert PR stands)"
         resources:
           requests: { cpu: "50m", memory: "128Mi" }
           limits: { memory: "512Mi" }
