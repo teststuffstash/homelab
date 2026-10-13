@@ -181,16 +181,13 @@ six OVERSIZE items pointer-ized into
        `hasync` 2) — code them or accept them; no CI exercises `scripts/opnsense-drill.sh` (reviewer note, #2493).
       Kea's two offers per DISCOVER: a finding in router-move.md §Status, not tracked. Relates FU-097,
       FU-013, FU-298, FU-307, FU-308.
-- [ ] **FU-312** — **In-cluster pulls of `registry.teststuff.net` stall mid-stream on the router hairpin.**
-      Nodes resolve the name to HAProxy `3.33` on the router, which proxies back to LB `40.33`. The 10-13
-      ert-corpus roll (8.5 GB layer) hit `read: connection timed out` every 10–15 min for ~1–2 h per pod;
-      containerd resumed partial ingests and both pods were Ready by 12:58Z. Probe 13:30Z, curl pod on wk-04 with the
-      registry otherwise idle: 2 of 6 range GETs via the hostname froze partway (22 MB of 128 MiB, 194 MB of 256 MiB);
-      0 of 5 via `http://192.168.40.33` froze. Otherwise both paths ran at the same ~9–10 MB/s, the volume's speed (FU-280).
-      Symptom belts fired (`KubeDeploymentRolloutStuck`, `KubePodNotReady`); no cause-level detector exists (no HAProxy metrics).
-      ADR-135 foresaw this ("stagger if it ever shows"). **Next (operator's call):** first a detector for a
-      stalled bulk transfer through the hairpin, then either a Talos mirror `registry.teststuff.net → http://192.168.40.33`
-      (the FU-073a `registry_mirrors_patch` shape, a fleet config apply in a window) or a fix on the router side. Relates FU-280, FU-310.
+- [ ] **FU-312** — **In-cluster pulls of `registry.teststuff.net` stalled mid-stream on the router hairpin.**
+      Cause found 2026-10-13: pfsync updates from the BACKUP corrupt the MASTER's tracking of states that
+      end on HAProxy's lo0 VIPs. pf then drops the client's ACKs as `BAD state` (ackskew beyond MAXACKWINDOW).
+      A/B with the BACKUP's pfsync off: stalls 5/32 → 0/32, `state-mismatch` +500 → +0. Mechanism + reasoning
+      land in router-move.md §pfsync with the fix. **Next:** PR #2532 (VIP rule with `nopfsync` +
+      anti-lockout off): merge, then apply `ansible/opnsense-haproxy.yml` to both nodes in a window and
+      re-run the pod A/B. Relates FU-280 (the volume's ~10 MB/s), FU-310.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80
