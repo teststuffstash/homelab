@@ -181,13 +181,13 @@ six OVERSIZE items pointer-ized into
        `hasync` 2) — code them or accept them; no CI exercises `scripts/opnsense-drill.sh` (reviewer note, #2493).
       Kea's two offers per DISCOVER: a finding in router-move.md §Status, not tracked. Relates FU-097,
       FU-013, FU-298, FU-307, FU-308.
-- [ ] **FU-312** — **In-cluster pulls of `registry.teststuff.net` stalled mid-stream on the router hairpin.**
-      Cause found 2026-10-13: pfsync updates from the BACKUP corrupt the MASTER's tracking of states that
-      end on HAProxy's lo0 VIPs. pf then drops the client's ACKs as `BAD state` (ackskew beyond MAXACKWINDOW).
-      A/B with the BACKUP's pfsync off: stalls 5/32 → 0/32, `state-mismatch` +500 → +0. Mechanism + reasoning
-      land in router-move.md §pfsync with the fix. **Next:** PR #2532 (VIP rule with `nopfsync` +
-      anti-lockout off): merge, then apply `ansible/opnsense-haproxy.yml` to both nodes in a window and
-      re-run the pod A/B. Relates FU-280 (the volume's ~10 MB/s), FU-310.
+- [ ] **FU-312** — **Bulk transfers through HAProxy stall mid-stream; pfsync was only part of it.** pf on the
+      MASTER drops the client's ACKs as `BAD state` (the client acks data pf never recorded the router sending).
+      #2532 (applied to both nodes 2026-10-13: VIP rule with `nopfsync` + anti-lockout off) cut pod stalls from
+      ~8/76 to 1/48, but that 1 stall was on a `no-sync` state. Evidence + reasoning: [`router-move.md`](router-move.md)
+      §pfsync. **Next:** catch a residual stall under `pfctl -x loud` plus a vtnet0 capture to name the
+      second mechanism. The alternative is a Talos mirror `registry.teststuff.net → http://192.168.40.33`,
+      which takes cluster pulls off the router. Relates FU-280 (the volume's ~10 MB/s), FU-310.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80
