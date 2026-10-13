@@ -13351,4 +13351,12 @@ updates or reverts as much as possible — mechanical revert or a responder."
   16:43Z transfer had completed in full (8.51 GB on the one connection, FIN_WAIT_2 on the router) despite the
   kubelet's 17:06Z cancel; the 17:19Z retry re-read ~1 GB and finished. One attempt of this pull = the volume's
   ~10 MB/s × 8.5 GB ≈ 15 min (FU-280). Window seat-1791909319-922 closed.
+- **17:40–18:05Z — oracle handoff (FU-044 reverted oracle-iac#1093 over a pre-existing Degraded).** Confirmed the trigger
+  is "Degraded READ at a new revision" (`oncePer: sync.revision`); the chain fired 9 s after the merge on a Degraded
+  that began 2.5 h earlier (cause unrecovered — nothing failed in kube-state-metrics, logs rotated). Read the owning
+  slice (iac-lane.md §ArgoCD health / §Auto-revert does NOT generalize). **#2539 MERGED 17:59Z**: pre-merge health
+  read from Prometheus (10 min, fail-closed both ways) + comments on the deploy PR either way; replay family
+  `deploy-revert-preexisting` (3 arms), harness 762/762. **#2538 MERGED 18:01Z**: multi-source apps' `oncePer` was
+  `<nil>` (notified once ever — the ingester's 17:05Z Degraded was "already sent"); keyed on `join(revisions)`;
+  box-applied, acceptance = the controller log after apply. Handoff answered → done/. The ingester went 2/2 at 17:22Z.
 
