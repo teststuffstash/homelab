@@ -334,10 +334,13 @@ because every one of its rides was `claude/haiku` on the subscription rail, whic
 `agent_run_total` but no `agent_run_cost_usd`. An `or vector(0)` default would render that as 0%
 burn, and this rule cannot tell a subscription-rail goal from one whose cost pushes were **lost**
 (the FU-131 harvest gap) — while [`agents/goal-budget.sh`](../../agents/goal-budget.sh), the
-arithmetic that actually gates a dispatch, prices that same state *fail-conservatively* at the
-child's full cap. A panel printing 0% for precisely the state the gate prices at maximum would put
-the two in contradiction on one screen. The goal still appears in the registry **table** (that
-reads `goal_budget_usd` directly); it is only the derived gauge that has nothing to say.
+arithmetic that actually gates a dispatch, prices the LOST-push state *fail-conservatively* at
+the child's full cap. (Since retro r8 F2, 2026-10-12, the gate itself does tell the two apart:
+a ride that pushed `agent_run_turns`/`agent_run_tokens_in` and no cost series is a subscription
+ride, settled at $0; only a ridden child with nothing in the ledger is cap-charged.) A panel
+printing 0% for a state the gate may price at maximum would put the two in contradiction on one
+screen. The goal still appears in the registry **table** (that reads `goal_budget_usd`
+directly); it is only the derived gauge that has nothing to say.
 
 **Panel:** `agent-goals` (Grafana uid `agent-goals`), shipped as a ConfigMap beside the collector
 in `argocd/resources/github-exporter/` — not in `tofu/dashboards/`, which needs a `for_each` entry
