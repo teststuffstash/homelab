@@ -271,6 +271,31 @@
               {
                 "id": "custom.width",
                 "value": 110
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "commit on GitHub",
+                    "url": "https://github.com/teststuffstash/homelab/commit/${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "^([0-9a-f]{8})[0-9a-f]{32}$",
+                      "result": {
+                        "text": "$1",
+                        "index": 0
+                      }
+                    }
+                  }
+                ]
               }
             ]
           }
