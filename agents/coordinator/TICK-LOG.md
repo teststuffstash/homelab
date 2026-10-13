@@ -13367,4 +13367,13 @@ updates or reverts as much as possible — mechanical revert or a responder."
   worked); log clean within 30 s (0 unmarshal errors, 102 evaluations/30 s); git made to match live (direct quickfix,
   pushed). No app read Degraded inside the gap, so nothing was missed. The class's detector: the controller's own
   `argocd_notifications_trigger_eval_total` rate sat at 0 from 18:09 to 18:30Z — building `ArgoCDNotificationTriggerStalled`.
+- **18:30–19:00Z — closure.** **#2541 MERGED 18:58Z**: `ArgoCDNotificationTriggerStalled` (`sum(rate(trigger_eval_total[10m])) == 0
+  or absent(...)`, 15m; replay: rate 0 from 18:09 to 18:30Z → would have fired ~18:34Z; promtool stall + absent cases);
+  review round 1 fixed in-PR (description = symptom + three checks, not a cause). **Operator: "a quick Grafana dashboard
+  with a subagent — progress and 'is it currently doing something'"** → subagent PR **#2540 MERGED 18:36Z**: "Management
+  box — now" (`mgmt-box-now`, 23 panels, three rows: box lifecycle / cluster truth / 7-day history; no metric invented —
+  no `mgmt_sentinel_*`, no cluster-side helm state, no EngineImage kube-state series, each said on its panel); live in
+  Grafana. **#2542 MERGED 18:51Z**: the lease table's `sha` links to the GitHub commit and shows 8 chars (operator
+  request). The box converged the quoted trigger (lease on b184b9f0). Operator question answered: the Longhorn rebuild
+  loop (Prometheus volume, m70s → hp-01) began 06:10Z and runs pod-to-pod over vxlan — not today's router changes.
 
