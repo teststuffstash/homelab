@@ -354,6 +354,8 @@ transitions:
       - agents/replay/fixtures/arbitrate/fu147-refire-blocked
       - agents/replay/fixtures/arbitrate/fu147-refire-blocked-agent-summary
       - agents/replay/fixtures/arbitrate/no-op-after-directive
+      - agents/replay/fixtures/arbitrate/deferred-capacity-rearm
+      - agents/replay/fixtures/arbitrate/deferred-capacity-stale
       - agents/replay/fixtures/arbitrate/ordinary-path-removal
       - agents/replay/fixtures/arbitrate/escalate-keeps-label
       - agents/replay/fixtures/arbitrate/belt-probe-fail

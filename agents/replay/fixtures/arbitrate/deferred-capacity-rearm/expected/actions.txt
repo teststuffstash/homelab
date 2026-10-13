@@ -1,0 +1,5 @@
+CALL gh pr view 234 --repo teststuffstash/oracle-fleet --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh api repos/teststuffstash/oracle-fleet/issues/200/comments?per_page=100
+OUT UNIT arbitrate|oracle-fleet|pr-234
+OUT REACHED: end
+RC 0
