@@ -181,13 +181,16 @@ six OVERSIZE items pointer-ized into
        `hasync` 2) — code them or accept them; no CI exercises `scripts/opnsense-drill.sh` (reviewer note, #2493).
       Kea's two offers per DISCOVER: a finding in router-move.md §Status, not tracked. Relates FU-097,
       FU-013, FU-298, FU-307, FU-308.
-- [ ] **FU-312** — **Bulk transfers through HAProxy stall mid-stream; pfsync was only part of it.** pf on the
-      MASTER drops the client's ACKs as `BAD state` (the client acks data pf never recorded the router sending).
-      #2532 (applied to both nodes 2026-10-13: VIP rule with `nopfsync` + anti-lockout off) cut pod stalls from
-      ~8/76 to 1/48, but that 1 stall was on a `no-sync` state. Evidence + reasoning: [`router-move.md`](router-move.md)
-      §pfsync. **Next:** catch a residual stall under `pfctl -x loud` plus a vtnet0 capture to name the
-      second mechanism. The alternative is a Talos mirror `registry.teststuff.net → http://192.168.40.33`,
-      which takes cluster pulls off the router. Relates FU-280 (the volume's ~10 MB/s), FU-310.
+- [ ] **FU-312** — **Bulk transfers through HAProxy stall; pfsync is confirmed, the fix covers one of two legs,
+      and the stall COUNTS were mostly FU-280.** Rechecked 2026-10-13 evening: the mechanism is in FreeBSD 15.1's
+      `pfsync_in_upd_c` (a peer update stale in ONE direction still overwrites `dst`, and the receiver echoes its own
+      copy — the ping-pong). Reproduced live: 2×16 parallel pod GETs raised `stale states` on both nodes and
+      logged 28 `BAD state` drops, `ackskew=-177590`, on the **backend leg** `192.168.2.70 → 192.168.40.33:80`
+      (rule `pass out log all`, still synced — the BACKUP holds copies); the VIP leg is `no-sync` (#2532 holds).
+      But the same stall detector trips **22/32 with the router out of the path** (pods → `http://192.168.40.33`):
+      the registry volume serves ~8–10 MB/s in 4 MiB IOs at 0.5–8 s latency, so parallel readers starve.
+      Evidence: [`router-move.md`](router-move.md) §pfsync. **Next:** `nopfsync` the router-originated leg too
+      (`pass out` from `(self)` ahead of the generated rule, same role); the slowness itself is FU-280's.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80

@@ -196,13 +196,35 @@ question (only NAT'd flows through the pair make it meaningful).
 **HAProxy's own connections are NOT synced** (2026-10-13, FU-312). Bulk pulls through HAProxy froze
 mid-stream (the 8.5 GB ert-corpus roll). pf on the MASTER dropped the client's ACKs as `BAD state`:
 the client acknowledged data pf had not recorded the router sending (`ackskew` beyond
-±MAXACKWINDOW). The suspect was pfsync updates from the BACKUP. One run with the BACKUP's pfsync off
-went 0/32 stalled vs 5/32 with it on, and the `opnsense-haproxy` role now passes LAN →
-`192.168.3.0/24` with `nopfsync` and turns the anti-lockout rule off (it precedes every automation
-rule and matched the VIPs as `(self)`). These states cannot survive a failover anyway, since the
-socket lives in the master's HAProxy, so not syncing them costs nothing. **But pfsync is not the
-whole cause.** After the change, 1 of 48 transfers still stalled, and on a `no-sync` state. Before
-the change it was ~8 of 76 across uneven runs. The residual mechanism is open (FU-312).
+±MAXACKWINDOW). The `opnsense-haproxy` role now passes LAN → `192.168.3.0/24` with `nopfsync` and
+turns the anti-lockout rule off (it precedes every automation rule and matched the VIPs as
+`(self)`). These states cannot survive a failover anyway, since the socket lives in the master's
+HAProxy, so not syncing them costs nothing.
+
+*Rechecked the same evening — three corrections.* (1) **The mechanism is real and is in the code.**
+FreeBSD 15.1 `sys/netpfil/pf/if_pfsync.c`, `pfsync_in_upd_c`: when a received update is stale in
+exactly one direction (`sync == 1`), the `sync < 2` branch still copies the peer's `dst` over the
+live state, then `pfsyncs_stale++` and the receiver sends its own copy back. The BACKUP never
+processes a packet on these states (`0:0 pkts` on every copy), so the only way it emits an update is
+that echo — a MASTER update it deemed stale (two vtnet queues, four pfsync buckets: consecutive
+update packets can reorder). The echo lands on the MASTER with `dst.seqlo` behind the data sender's
+true edge, and the next ACK from the other side is `BAD state`. (2) **#2532 covers only the client
+leg.** Every HAProxy connection has two pf states: `LAN → 192.168.3.x:443` (now `no-sync`, verified
+on a fresh connection: rule `7c739348…`, no copy on the BACKUP) and the router-originated
+`192.168.2.70 → 192.168.40.x` backend leg, created by the generated `pass out log all` rule and
+still synced (the BACKUP holds copies). A 2×16 parallel pod pull raised `stale states` on both
+nodes (+33/+47 in 30 s) and the MASTER logged 28 `BAD state` drops with `ackskew=-177590` on
+`192.168.2.70:14285 → 192.168.40.33:80` — the router's own ACKs to the registry — coincident with
+one more stale update. That is the "stall on a no-sync state": the frozen leg was the other one.
+A single sequential client at 5–7 MB/s never triggered it (0/12, counters flat). (3) **The stall
+counts measured FU-280, not pf.** With the router out of the path entirely (pods →
+`http://192.168.40.33`), the same detector (<20 KB/s for 30 s) tripped 22 of 32; via the router,
+51 of 64, with pf dropping packets for ~2 s in one of the two rounds. The registry volume reads at
+~8–10 MB/s in 4 MiB IOs with 0.5–8.4 s per read (`longhorn_volume_read_*`, 16:07–16:10Z), so 32
+parallel readers starve each other past any 30-s window. The earlier A/B (5/32 vs 0/32, ~8/76 vs
+1/48) ran the same shape and is noise-dominated; it cannot measure pfsync's share. Next for the pf
+class: `nopfsync` on the router-originated leg too (`pass out` from `(self)`, ahead of the generated
+rule). A Talos mirror to `http://192.168.40.33` would remove the pf class but not the slowness.
 
 **WAN follows the master** (2026-09-30). The ISP gives ONE lease to ONE MAC and both nodes wear
 Big Data's `em0` MAC, so only the CARP MASTER may be on the WAN — two holders flap the MAC on the
