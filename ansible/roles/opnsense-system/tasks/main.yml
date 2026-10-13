@@ -93,3 +93,37 @@
 - name: Apply system-health settings
   oxlorg.opnsense.raw: { module: diagnostics, controller: systemhealth, command: reconfigure, action: post }
   when: sys_sh_set is changed
+
+# --- identity: hostname + GUI alternate hostnames (ssh — no API, 2026-10-13) --------------------
+# Both router nodes came up as `opnsense-test` (the drill image's name) and the GUI name
+# `opnsense.teststuff.net` resolves to the CARP VIP, so the DNS-rebind check refused it. The
+# legacy config layer owns both settings: write_config() keeps a backup revision,
+# system_hostname_configure() applies the hostname live (resolv.conf and the dns plugins follow),
+# and the rebind check reads the saved config per request, so no service restart is needed.
+- name: Read identity (ssh — no API)
+  ansible.builtin.command:
+    argv: [ssh, -i, "{{ opnsense_ssh_key }}", -o, BatchMode=yes, -o, ConnectTimeout=10,
+           -o, StrictHostKeyChecking=no, -o, UserKnownHostsFile=/dev/null, -o, LogLevel=ERROR,
+           "root@{{ ansible_host }}",
+           "php -r 'require_once \"config.inc\"; global \$config; echo \$config[\"system\"][\"hostname\"], \"|\", (\$config[\"system\"][\"webgui\"][\"althostnames\"] ?? \"\");'"]
+  register: sys_identity
+  changed_when: false
+  check_mode: false
+- name: "Hostname -> {{ opnsense_hostname | default('(unmanaged)') }}"
+  ansible.builtin.command:
+    argv: [ssh, -i, "{{ opnsense_ssh_key }}", -o, BatchMode=yes, -o, ConnectTimeout=10,
+           -o, StrictHostKeyChecking=no, -o, UserKnownHostsFile=/dev/null, -o, LogLevel=ERROR,
+           "root@{{ ansible_host }}",
+           "php -r 'require_once \"config.inc\"; require_once \"system.inc\"; global \$config; \$config[\"system\"][\"hostname\"] = \"{{ opnsense_hostname | default('') }}\"; write_config(\"ansible: hostname\"); system_hostname_configure(); system_resolvconf_generate(); plugins_configure(\"dns\");'"]
+  when:
+    - opnsense_hostname is defined
+    - (sys_identity.stdout | trim).split('|')[0] != opnsense_hostname
+- name: "GUI alternate hostnames -> {{ opnsense_webgui_althostnames }}"
+  ansible.builtin.command:
+    argv: [ssh, -i, "{{ opnsense_ssh_key }}", -o, BatchMode=yes, -o, ConnectTimeout=10,
+           -o, StrictHostKeyChecking=no, -o, UserKnownHostsFile=/dev/null, -o, LogLevel=ERROR,
+           "root@{{ ansible_host }}",
+           "php -r 'require_once \"config.inc\"; global \$config; \$config[\"system\"][\"webgui\"][\"althostnames\"] = \"{{ opnsense_webgui_althostnames }}\"; write_config(\"ansible: webgui althostnames\");'"]
+  when:
+    - opnsense_webgui_althostnames | length > 0
+    - (sys_identity.stdout | trim).split('|')[1] != opnsense_webgui_althostnames
