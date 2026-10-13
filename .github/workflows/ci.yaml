@@ -415,7 +415,7 @@ jobs:
                 # PRs, homelab#1225 face 2), so until 2026-10-13 a pass-on-base only WARNED here,
                 # and the reviewer then enforced vacuity by hand one round at a time (17 of 22
                 # goal-base CHANGES_REQUESTED verdicts in retro r8's window, 0 on master —
-                # docs/agents/retros/2026-10-12-platform-r8-opus.md §F1; Goal #2273's child rule
+                # docs/agents/retros/2026-10-12-platform-r8-opus.md, finding F1; Goal #2273's child rule
                 # even points at this gate). Prove it against the PR's OWN change instead: in a
                 # copy of the PR checkout, revert every non-fixture file THIS PR touches to its
                 # merge-base version and run the changed fixtures there. A fix that predates the
