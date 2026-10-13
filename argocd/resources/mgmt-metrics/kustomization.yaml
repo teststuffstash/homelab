@@ -11,3 +11,15 @@ resources:
   - reconcile-rollout.yaml   # the fleet rollout's own belts (FU-273) — a file of its own
   - opnsense-drill.yaml      # the weekly OPNsense rebuild drill (FU-297)
   - upgrade-lease.yaml       # the ⚓ upgrade-lease loop's belts (ADR-150)
+
+# The operator's progress view — "Management box — now" (uid mgmt-box-now): in-flight leases +
+# the box's lifecycle stats, progress from cluster truth, the Mgmt*/UpgradeLease* alerts as a 7-day
+# timeline. Same sidecar-discovery vehicle as github-exporter's dashboards (ConfigMap beside the
+# rules that emit the series; an edit lands via merge, no tofu apply).
+configMapGenerator:
+  - name: grafana-dashboard-mgmt-box
+    files:
+      - mgmt-box.json=dashboard-mgmt-box.json
+    options:
+      labels:
+        grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces
