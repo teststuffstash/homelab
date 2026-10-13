@@ -1,0 +1,18 @@
+# deploy-revert-preexisting/degraded — THE CONTRACT: the app was Degraded in the 10 min before the candidate
+# merged (oracle-iac#1093, 2026-10-13: Degraded since 06:15Z, merged 08:46:26Z). The clause must NOT fall
+# through to the revert: report-only, one comment on the deploy PR, exit 0. Both Prometheus reads recorded.
+name: deploy-revert-preexisting/degraded
+source: agents/coordinator/deploy-revert-argo.yaml
+mode: actions
+env:
+  - SLUG=teststuffstash/oracle-iac
+  - APP=oracle-fleet
+  - PRNUM=1093
+  - REVISION=4ea2ea85abcdef
+  - CAND={"number":1093,"mergedAt":"2026-10-13T08:46:26Z"}
+  - PRE_MERGE_WINDOW_MIN=10
+  - PROM_URL=http://prometheus.replay.invalid:9090
+parts:
+  - file:../bridge.sh
+  - block:deploy-revert-preexisting
+  - file:../post.sh

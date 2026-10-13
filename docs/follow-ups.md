@@ -880,6 +880,10 @@ the block needs pruning, not more headings.
       FOUND 2026-10-04: the notifications recipient `webhook:agent-loop` never delivered (150 failed /
       0 ok since 07-27), fixed by PR#2217, hop now alerted (`ArgoCDNotificationDeliveryFailing`, PR#2218);
       its candidate query was dead until PR#2006 — `gh --jq` takes no `--arg` — now replay-pinned).
+      **2026-10-13 (oracle handoff):** it reverted oracle-iac#1093 over a Degraded that predated the deploy
+      by 2.5 h — the trigger is "Degraded read at a new revision"; the chain now reads the app's pre-merge
+      health from Prometheus (10 min, fail-closed) and comments on the deploy PR either way; multi-source
+      apps' `oncePer` keyed on `<nil>` (notified once ever) — fixed in `tofu/argocd.tf`.
       Design + rulings: [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the
       post-deploy gate" + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
 

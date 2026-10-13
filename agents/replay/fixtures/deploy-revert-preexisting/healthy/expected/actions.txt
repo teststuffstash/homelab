@@ -1,0 +1,5 @@
+CALL curl -fsS --max-time 20 -G http://prometheus.replay.invalid:9090/api/v1/query_range --data-urlencode query=argocd_app_info{name="oracle-fleet"} --data-urlencode start=1791880586 --data-urlencode end=1791881186 --data-urlencode step=30
+CALL curl -fsS --max-time 20 -G http://prometheus.replay.invalid:9090/api/v1/query_range --data-urlencode query=argocd_app_info{name="oracle-fleet",health_status="Degraded"} --data-urlencode start=1791880586 --data-urlencode end=1791881186 --data-urlencode step=30
+OUT → oracle-fleet read Healthy for the 10m before teststuffstash/oracle-iac#1093 merged (21 samples, 0 Degraded) — the Degraded on 4ea2ea85 is this deploy's
+OUT PREEXISTING_CHECK=passed
+RC 0
