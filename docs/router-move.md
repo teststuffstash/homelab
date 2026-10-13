@@ -193,6 +193,16 @@ two TCP sessions to the trial VIP on the MASTER appear on the BACKUP as `ESTABLI
 `check` reads the setting. Whether a *routed* flow survives a failover is the fake-ISP drill's
 question (only NAT'd flows through the pair make it meaningful).
 
+**HAProxy's own connections are NOT synced** (2026-10-13, FU-312). On the live pair, pfsync updates
+from the BACKUP corrupted the MASTER's sequence tracking for states that terminate on a node's lo0
+VIP. pf then dropped the client's ACKs as `BAD state` (`ackskew` beyond ±MAXACKWINDOW), and bulk
+pulls through HAProxy froze mid-stream (the 8.5 GB ert-corpus roll). A/B, 2 × 16 range GETs from
+pods per run: BACKUP pfsync on, 5 of 32 stalled and `state-mismatch` rose by ~500; off, 0 of 32
+and +0. The mechanism inside pfsync is not pinned down. These states cannot survive a failover
+anyway (the socket lives in the master's HAProxy), so the `opnsense-haproxy` role passes LAN →
+`192.168.3.0/24` with `nopfsync` and turns the anti-lockout rule off (it precedes every
+automation rule and matched the VIPs as `(self)`). Forwarded and NAT states keep syncing.
+
 **WAN follows the master** (2026-09-30). The ISP gives ONE lease to ONE MAC and both nodes wear
 Big Data's `em0` MAC, so only the CARP MASTER may be on the WAN — two holders flap the MAC on the
 ISP side and split return traffic. The authority is the hypervisor's **WAN gate**,
