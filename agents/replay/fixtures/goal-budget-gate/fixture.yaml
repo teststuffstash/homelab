@@ -41,6 +41,18 @@
 #                       GB_LEDGER_DEGRADED flag is asserted through the changed comment text.
 #   open-within         the `within` arm said and passing — the pass-through a budget-respecting
 #                       ride sees, and the log line that makes the gate legible to a human.
+#   subscription-ride-within   retro r8 F2 (2026-10-12): #1001 rode on the SUBSCRIPTION rail —
+#                       the recorded scrape (rows/<id>/pushgateway-metrics.txt, the raw `/metrics`
+#                       shape, parsed by the SHIPPED gb_ledger) carries its turns/tokens/duration
+#                       and NO `agent_run_cost_usd`. Budget dropped to $1 (one cap is $2): the
+#                       pre-fix parser emitted no ledger line for it and the loop charged the cap
+#                       — `$2.0 > $1`, a refusal on spend that never happened (goal #2273: nine
+#                       haiku rides, $15 of a $30.32 Σ). Must pass at `Σ $0.0`.
+#   subscription-ride-rows     the same scrape on the cross-repo tree, with agent-runtime#81's
+#                       paid cost ($1.5) alongside, so the refusal that follows PRINTS the rows:
+#                       #1001 is `$0.0000 (settled, subscription ride …)`, #81 is actual spend,
+#                       Σ $1.5 — the per-row note a human reads, and the proof that the parser
+#                       still sums the paid series beside the $0 line. Pre-fix: Σ $3.5.
 #
 # The harvest's reading of a terminal goal is NOT replayed here: since ADR-106 the harvest reads the
 # goal's issue STATE (dead goal ⇒ findings land inert, harvest-goal-closed pins it), not this

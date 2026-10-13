@@ -50,6 +50,18 @@ GB_HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # the record; one GET, parsed to `<project> <issue> <usd>` lines (all projects, not filtered —
 # #917: cross-repo children need their own project's spend). Empty output = unreachable, and the
 # caller degrades to the conservative cap-sum (see the charge loop).
+#
+# A SUBSCRIPTION ride is a `0.0000` line, not a missing one (retro r8 F2, 2026-10-12). The finalize
+# leg pushes `agent_run_cost_usd` only for a paid-rail ride; a claude-harness ride on the operator's
+# subscription pushes `agent_run_turns` / `agent_run_tokens_in` / `agent_run_tokens_out` under the
+# same grouping key and no cost series at all (FU-066b). Before this, such a child had NO ledger
+# line and the charge loop priced it at full cap as if its cost push had been LOST (the FU-131
+# gap) — nine haiku rides charged $15 of a $30.32 Σ on goal #2273, a refusal on spend that never
+# happened. So: every (project, issue) that recorded tokens or turns but no cost is emitted at
+# $0 — it rode, it is settled, and nothing was billed against `Budget:`. The cap-charge survives
+# for the state it was built for: ridden by the label walk, NOTHING in the ledger — a paid ride
+# whose finalize push never landed. `agent_run_cost_usd_equiv` is deliberately NOT read: it is the
+# API-equivalent figure the dashboards use, not money the goal spent.
 gb_ledger() {   # gb_ledger
   _gb_pgw="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
   _gb_raw="$(curl -m 30 -fsS "${_gb_pgw}/metrics" 2>&1)" || {
@@ -65,7 +77,12 @@ gb_ledger() {   # gb_ledger
         if (match($0, /project="([^"]+)"/)) { proj=substr($0, RSTART+9, RLENGTH-10) }
         if (match($0, /issue="([0-9]+)"/)) { iss=substr($0, RSTART+7, RLENGTH-8);
           sum[proj, iss] += $NF } }
-      END { for (k in sum) { split(k, a, SUBSEP); printf "%s %s %.4f\n", a[1], a[2], sum[k] } }'
+      /^agent_run_(tokens_in|turns)\{/ {
+        if (match($0, /project="([^"]+)"/)) { proj=substr($0, RSTART+9, RLENGTH-10) }
+        if (match($0, /issue="([0-9]+)"/)) { iss=substr($0, RSTART+7, RLENGTH-8);
+          rode[proj, iss] = 1 } }
+      END { for (k in sum) { split(k, a, SUBSEP); printf "%s %s %.4f\n", a[1], a[2], sum[k] }
+            for (k in rode) if (!(k in sum)) { split(k, a, SUBSEP); printf "%s %s 0.0000\n", a[1], a[2] } }'
 }
 
 # What a minted key for this child would ALLOW (cap_usd) — the reservation unit.
@@ -331,6 +348,8 @@ print(json.dumps(result))
   #                pushes to is the ledger; one GET, parsed here)
   #   + its cap  IF the child is LIVE (a minted key can still spend to cap) or IS this
   #              dispatch (the key about to be minted)
+  #   = $0       IF it rode on the subscription rail: tokens/turns in the ledger, no cost series
+  #              (gb_ledger emits the 0.0000 line; retro r8 F2 — nothing was billed)
   #   = its cap  IF it has ridden but the ledger has nothing (FU-131 harvest gap, killed
   #              pods — fail-CONSERVATIVE per child, never fail-open)
   #   = spent($0) for a never-ridden sibling: it gets its own gate when it dispatches.
@@ -383,6 +402,8 @@ print(json.dumps(result))
     elif [ "$_gb_live" = "true" ] || { [ -n "$_gb_dispatch" ] && [ "$_gb_n" = "$_gb_dispatch" ] && [ "$_gb_repo" = "$_gb_slug" ]; }; then
       _gb_charge="$(gb_add "${_gb_spent:-0}" "$_gb_c_cap")"
       _gb_why="\$${_gb_spent:-0} spent + \$${_gb_c_cap} live/dispatch reservation"
+    elif [ -n "$_gb_spent" ] && [ "$_gb_spent" = "0.0000" ]; then
+      _gb_charge="$_gb_spent"; _gb_why="settled, subscription ride — \$0 against Budget: (tokens recorded, no cost series)"
     elif [ -n "$_gb_spent" ]; then
       _gb_charge="$_gb_spent"; _gb_why="settled, actual spend"
     elif [ "$_gb_ridden" = "true" ]; then
