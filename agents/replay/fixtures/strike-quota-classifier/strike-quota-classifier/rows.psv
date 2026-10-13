@@ -22,3 +22,12 @@ rawlog-budget-403-residual      |       |       |     | rawlog-budget-403-residu
 # claude ride cannot die of it even in the real shape (claude row); neither is harness-death.
 rawlog-32602-content-echo-goose |       |       |     | rawlog-32602-content-echo-goose |
 rawlog-32602-claude-harness     |       |       |     | rawlog-32602-claude-harness     |
+# Retro r8 F3 (docs/agents/retros/2026-10-12-platform-r8-opus.md): the two cap signatures that used
+# to file as a deliberate stop. The forced-final-output pair is goose-gated and matched as a PAIR
+# (the phrase alone is content — #1705); goose's 402 line is owner-ambiguous, hence the residual arm.
+rawlog-output-token-cap               |       |       |     | rawlog-output-token-cap               |
+rawlog-output-token-cap-with-pr       |       |       |     | rawlog-output-token-cap-with-pr       |
+rawlog-output-token-content-echo      |       |       |     | rawlog-output-token-content-echo      |
+rawlog-output-token-cap-claude-harness |       |       |     | rawlog-output-token-cap-claude-harness |
+rawlog-add-more-credits               |       |       |     | rawlog-add-more-credits               |
+stats-turn-cap                        |       |       |     | stats-turn-cap                        |
