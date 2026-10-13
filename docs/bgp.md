@@ -58,7 +58,14 @@ address order. Today: wk-04 `.64` (VM on nx-02, beside the primary router node, 
 200, wk-02 `.62` (VM on pve) at 100, everyone else unweighted. Ingress moves — resetting the flows
 it carried — only when the current node stops announcing.
 
-### Kernel ECMP — not enabled (2026-10-13)
+### Kernel ECMP — not enabled (2026-10-13); #2534 CLOSED on the operator's ruling the same evening
+
+**Ruling (operator, 2026-10-13):** not worth its reset class. Forwarded traffic would spread over
+at most two nodes (below), every peer-set change — any worker reboot, every step of a Talos
+rollout — would reset most HAProxy backend connections where today only the single ingress node's
+own reboot does, and the one bulk workload (registry pulls) is disk-bound at 8–10 MB/s (FU-280),
+so there is no throughput to win. The Tunables-as-code role change in #2534 returns when something
+needs a tunable. Ingress is one worker (hp-01 since #2533's apply, 2026-10-13 16:37Z).
 
 `net.route.multipath=1` (runtime-writable; OPNsense System > Tunables, `core/tunables` API) would
 let the kernel hold every nexthop, after a real FRR stop + start so zebra re-writes the routes it

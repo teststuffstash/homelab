@@ -380,3 +380,16 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       2026-10-09: the dead-man half is BUILT + drilled (#2399, FU-308 archived) and the WAN-leg window ran
       with the mgmt-box probe; the skill text still asks nothing — this entry now covers only that question.
 
+## opnsense-as-code
+
+- [ ] opnsense-as-code-G1 — **the test-VM gate is invisible from the skill, and it does not cover every play.**
+      Sighted 2026-10-13 (seat, FU-312 / #2535–#2537). (a) The skill never names `scripts/opnsense-test-vm.sh`
+      as the validation step for a router-role PR, nor its two required inputs — two runs died on
+      `OPN_TEST_HOST`/`OPN_TEST_VMID` unset before the seat found the one runbook line (§OPNsense test VM, line
+      ~131) that exports them. (b) Steps 2/3/5 run acme, bgp, unbound, haproxy only: a PR changing the
+      `opnsense-system` role (#2537, identity over ssh) got a fully green report that never executed the changed
+      code; the real failure (`write_config()` → `shell_safe()` undefined, `util.inc` not included) surfaced on
+      the production BACKUP. Next: the skill routes every `ansible/opnsense-*`/`roles/opnsense-*` PR through the
+      script with the env line quoted; the script's play set follows the PR's touched roles (or `--steps all` is
+      the default for a role outside the four).
+

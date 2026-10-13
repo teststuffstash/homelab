@@ -225,6 +225,11 @@ parallel readers starve each other past any 30-s window. The earlier A/B (5/32 v
 1/48) ran the same shape and is noise-dominated; it cannot measure pfsync's share. Next for the pf
 class: `nopfsync` on the router-originated leg too (`pass out` from `(self)`, ahead of the generated
 rule). A Talos mirror to `http://192.168.40.33` would remove the pf class but not the slowness.
+**Done the same evening (#2535, applied both nodes ~16:50Z):** the `opnsense-haproxy` role's second
+rule — `pass out quick on lan proto tcp to 192.168.32.0/19 nopfsync`, after the generated non-quick
+pass-out rule — and the same 2×16 pull then ran with `stale`/`state-mismatch` flat on both nodes and
+zero `BAD state` lines (28 before). Every HAProxy connection is now unsynced on both legs; the
+forwarded and NAT states still sync.
 
 **WAN follows the master** (2026-09-30). The ISP gives ONE lease to ONE MAC and both nodes wear
 Big Data's `em0` MAC, so only the CARP MASTER may be on the WAN — two holders flap the MAC on the

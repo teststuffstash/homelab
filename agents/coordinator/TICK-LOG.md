@@ -13298,3 +13298,53 @@ updates or reverts as much as possible — mechanical revert or a responder."
   Renovate PRs stay open fleet-wide (those two + oracle-fleet#742 abandoned) — the 10-12 six-PR un-armed set drained.
 - **06:26Z addendum:** agent-runtime#172 MERGED 06:25:52Z on the bot approval; the `ci.yaml` comment pushed direct
   (15c30b1, fetch-compared). All three platform repos carry the narrowed CODEOWNERS on master.
+
+## 2026-10-13 15:45–17:15Z — FU-312 rechecked: pfsync confirmed in the code, the fix was half a connection, the stall counts were FU-280; #2533 applied, #2534 closed, ingress becomes a choice, the router nodes get their names (seat, no subagents)
+
+- **The recheck (operator: "recheck if the diagnosis is right")**: FreeBSD 15.1 `pfsync_in_upd_c` applies a peer
+  update's `dst` when only ONE direction is stale and echoes its own copy back — the ping-pong; the BACKUP processes
+  no packets on these states (`0:0 pkts` on every copy), so the echo is its only update path. Reproduced: a 2×16
+  parallel pod pull raised `stale states` on both nodes and the MASTER logged **28 `BAD state`, `ackskew=-177590`,
+  all on the BACKEND leg** `192.168.2.70:14285 → 192.168.40.33:80` (the router's own ACKs), which #2532 never
+  covered (`pass out log all`, synced; the BACKUP held copies). A fresh VIP-leg state was `no-sync` (#2532 holds).
+  A single sequential client never triggered it (0/12). **The stall COUNTS were the registry volume**: the same
+  detector (<20 KB/s for 30 s) tripped 22/32 with the router OUT of the path (pods → `http://192.168.40.33`);
+  `longhorn_volume_read_*`: 4 MiB reads at 0.5–8.4 s, ~8–10 MB/s. FU-312 + router-move.md §pfsync corrected
+  (940435a4, pushed).
+- **#2535** (backend leg `pass out quick … to 192.168.32.0/19 nopfsync`, after the generated non-quick pass-out):
+  test VM green (rule at index 69 after `pass out log all` at 65; run2 changed=0), MERGED 16:41Z, applied
+  opnsense-pve → opnsense-nx02 ~16:50Z (changed=2 each); a fresh backend state on the MASTER reads `no-sync`, no
+  copy on the BACKUP. **Proof, same 2×16 pull: `stale`/`state-mismatch` flat on both nodes, 0 `BAD state`.**
+- **#2533 APPLIED** (window seat-1791909319-922, opened 16:35Z): plan `20261013T163523Z-940435a4` (1 change,
+  `MGMT_YES=1`), all 26 VIP routes moved `.51` → `.54` (hp-01) on both nodes; the three CP neighbours deleted by a
+  one-shot play (config rows gone, FRR running config NOT — `configctl quagga reload` on each node, BACKUP first,
+  applies the diff hitlessly: 10 peers, 10 established, 26 routes). **#2534 CLOSED** on the operator's ruling (≤2
+  forwarded nexthops, every peer-set change resets HAProxy backend flows, the bulk workload is disk-bound);
+  recorded in docs/bgp.md §Kernel ECMP.
+- **Operator: "hp-01 is the worst worker for this; wk-04 would make the most sense"** → **#2536** (MERGED 17:04Z
+  after a group_vars rebase on #2537): `bgp_neighbor_weight` + `weight:` on the role's neighbour — wk-04 200,
+  wk-02 100. Test VM: bgp head play rc=0 changed=6 (the field is accepted). Apply: pending its idempotency pass
+  (addendum below).
+- **Operator: `https://opnsense.teststuff.net/` = "A potential DNS Rebind attack"** → both nodes still carried the
+  drill image's hostname `opnsense-test` and no alternate hostnames (untracked). **#2537** (MERGED 16:56Z): the
+  system role writes `hostname` (host var per node) + `webgui/althostnames` over ssh through the legacy config
+  layer. First apply on the BACKUP died in `write_config()` (`shell_safe()` undefined — `util.inc` missing); fixed
+  direct (bd57ba5d, quickfix, verified on the BACKUP first), then both nodes: `opnsense-pve`/`opnsense-nx02`, the
+  GUI serves the login page by name and via the VIP, DNS/CARP unchanged, rerun changed=0. ⚠ the test-VM steps
+  never run `opnsense-system.yml`, so #2537's green report proved nothing (GAPS sighting).
+- **Alerts in the window**: `InfoInhibitor` (meta, handed off); `ErtPipelineStepFailed` (oracle's own
+  `argo stop`, handed off); `KubePodNotReady`/`KubeDeploymentReplicasMismatch`/`KubeDeploymentRolloutStuck`/
+  `ArgoCDAppDegraded` on `oracle-fleet-ingester-riigiteataja-mcp` — the 8.5 GB ert-corpus pull from
+  `registry.teststuff.net` (FU-312's real case): first pull 16:43Z, cancelled by the kubelet 17:06Z (no progress
+  5 min — my proof pulls starved the volume 16:54–16:58), retry 17:06:22Z on unsynced legs — CLAIMED under the
+  window; `CPUThrottlingHigh` longhorn-csi-plugin (handed off). The responder's `window-grace` pod exits 1 after
+  "named by declared window" and shows as a hard-failed pod in `maint check` — noted, not chased.
+- **17:20Z addendum — #2536 APPLIED.** The test VM could not render the weights (its inventory substitutes
+  `192.0.2.x` peers, so the map keyed by prod addresses matched nothing — the run proved only that the play runs);
+  the prod `--check --diff` showed exactly four changes (weight ""→100 on `.62`, ""→200 on `.64`, both nodes).
+  BACKUP applied and verified (weights in FRR's running config, 10/10 established, 26 VIP routes via `.64`, best
+  path `.64`); my gate's grep tripped on a double space and the idempotency rerun then applied the MASTER
+  un-limited — same end state, verified after: weights live, 10/10, 26 routes via `192.168.2.64`, CARP MASTER,
+  probes green, rerun changed=0. `TargetDown` 17:17Z = the same ingester deployment's pending pod — claimed.
+  **VIP ingress is wk-04 now, by weight, not by address order.**
+
