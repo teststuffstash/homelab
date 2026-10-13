@@ -53,7 +53,7 @@ spec:
       priorityClassName: system-node-critical
       containers:
         - name: smartctl-exporter
-          image: docker.io/prometheuscommunity/smartctl-exporter:v0.14.0@sha256:cfe22c36d7d2fac48ebf619707305acb65eb0fb670656eb80f356e606d782bc1
+          image: docker.io/prometheuscommunity/smartctl-exporter:v0.15.0@sha256:a76e08dbf5db4781fefd1ed81c65ad46ae8d2849dae6b6d3acebcde2fc4e59d6
           args:
             # SMART polling is not free and media health does not move in a minute. 10m rescan for
             # new/disappeared devices; the scrape interval (servicemonitor.yaml) is what paces the
