@@ -13261,3 +13261,38 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `RegistryMirrorDanglingLinks`, `OpenRouterKeyBudgetLow`, `HomeAssistantPowerSensorStale` ×6, `AgentAttentionStanding`
   oracle-fleet issue-820, `VersionSetMembersDisagree` (claude-jail, operator-side). `RetroReportOverdue` never fired
   (fed 19:31Z, 2.5 h before its 21:54Z edge).
+
+## 2026-10-13 05:45–06:25Z — S9: the platform repos' codeowner gate narrows (ADR-154); openrouter-operator#90's 3.15 image fails on an sdist, fixed forward (seat, no subagents)
+
+- **Pickup + openrouter-operator#90** (Renovate python 3.14 → 3.15 image; the #2521 class's first STACK-repo flight:
+  CHANGES_REQUESTED → `unarmed-major` fix round r1 (deepseek v4.1-flash, $0.018, 745 s) refreshed uv.lock to pydantic-core
+  2.50.1 (cp315 wheels), moved devbox/mypy to 3.15; reviewer APPROVED at 85d8ff5, `ci` green; parked REVIEW_REQUIRED on
+  `* @RasmusSoot`). **Operator mid-session: "homelab repo has had a lot of work regarding rules so codeowner is no
+  longer a blocker, now the other platform repos are blocking."**
+- **#90 got the codeowner read + admin merge 05:56Z** (10717d30) — its own `[tool.mypy] python_version` edit is a tool-table
+  edit `deps_pin_shape` refuses, so no guard shape would have let it ride; the read noted the slim-image build is not in
+  PR CI. **Its `deploy` run FAILED 05:56Z**: `aiohttp==3.14.1` (via the kubernetes client) ships no cp315 wheel → sdist
+  → no gcc in `python:3.15-slim`. Both reviews and the worker checked pydantic-core + pyyaml only. **Belts fired on their
+  own**: `GithubWorkflowRunFailed openrouter-operator deploy`, `CodeownerParkWaiting openrouter-operator`. Lock scan over
+  every `[[package]]`'s wheels: aiohttp (3.14.4+ has cp315), librt + ruff (dev-only), pyyaml (no cp315 anywhere; its
+  sdist falls back to pure Python). **#93** (`uv lock --upgrade-package aiohttp` → 3.14.5 + yarl 1.25.1, pin-shaped,
+  `deps-review`) opened 06:08Z, reviewer APPROVED, auto-merged 06:13Z; **deploy 2bf9c414 SUCCESS 06:16Z**; deploy-pin
+  **#2529** opened 06:15Z, merged 06:22Z; ArgoCD Synced/Healthy; pod `openrouter-operator-55c84d4857-bf7vf` Running on
+  `2026.10.13-g2bf9c414aa89`, 0 restarts, handlers succeeding, 0 errors in 200 lines. ⚠ oracle-fleet#759 is the same
+  python 3.15 bump — the stack jail's, the same wheel trap awaits its image build.
+- **The narrowing — ADR-154 (ecf815f7 local):** homelab's ADR-128/FU-233 shape extended to the platform repos.
+  **openrouter-operator#92** (merged 06:19Z, 12b59866): owned = `/scripts/` (the checks' home; the ADR-142 gate-change
+  lens selects on `scripts/gate-drift.sh`, not ported), `/.github/` minus the pin-only-lint'd workflows, `/.agents/`,
+  `/CODEOWNERS`; src/, tests/, chart/, Dockerfile, dep files, pre-commit un-owned. **deps-pin-guard** took
+  agent-runtime's last-match-wins classifier (no `*` catch-all needed) and a mix with UN-owned paths now runs the
+  pin-shape test instead of #83's refusal — the invariant (no guarded change without a human read OR a pin shape)
+  holds; 26 guard tests rewritten, `devbox run ci` green. **agent-coordinator#26** (merged 06:13Z): owned = `/.github/`
+  (minus workflows), `/scripts/` (build-image.sh, the publish path), `/CODEOWNERS`; `coordinator/` un-owned.
+  **agent-runtime#172** (pending at 06:25Z): `agent-base/Dockerfile` + root `devbox.json` un-owned, root
+  `devbox.{json,lock}` join GUARD_SET, the same mixed-PR rule; 454 tests green. First push went RED on pin-only-lint —
+  my comment edit in `ci.yaml` is a workflow edit (correctly refused); dropped from the PR, goes direct after merge.
+  **Finding on the lane**: the seat's own PRs merge on the bot approval alone (author == sole codeowner waiver), so the
+  three CODEOWNERS PRs needed no admin merge — #26 landed by auto-merge while its wait still expected a park.
+- **Pickup read — "watch the next Renovate run"**: Renovate's 00:07Z run rebased the untouched PRs under
+  `rebaseWhen: behind-base-branch` (allure-behavior-snippets#11 u=00:13Z, oracle-fleet#759 u=00:31Z); only three
+  Renovate PRs stay open fleet-wide (those two + oracle-fleet#742 abandoned) — the 10-12 six-PR un-armed set drained.
