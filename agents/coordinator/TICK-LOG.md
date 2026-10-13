@@ -13347,4 +13347,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   un-limited — same end state, verified after: weights live, 10/10, 26 routes via `192.168.2.64`, CARP MASTER,
   probes green, rerun changed=0. `TargetDown` 17:17Z = the same ingester deployment's pending pod — claimed.
   **VIP ingress is wk-04 now, by weight, not by address order.**
+- **17:22Z — the ingester's second replica is Running (2/2).** containerd: image "already present on machine" — the
+  16:43Z transfer had completed in full (8.51 GB on the one connection, FIN_WAIT_2 on the router) despite the
+  kubelet's 17:06Z cancel; the 17:19Z retry re-read ~1 GB and finished. One attempt of this pull = the volume's
+  ~10 MB/s × 8.5 GB ≈ 15 min (FU-280). Window seat-1791909319-922 closed.
 

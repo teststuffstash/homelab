@@ -18,11 +18,10 @@ dig for days by being listed). Write the marker only when the cause is known; th
 - **⚑ PICKUP (2026-10-13 17:20Z — seat; TICK-LOG 2026-10-13 15:45–17:20Z): FU-312's pf class CLOSED on both legs
   (#2532 + #2535), #2533 applied, #2534 closed, VIP ingress = wk-04 by FRR weight (#2536), router nodes named
   (#2537 + bd57ba5d).** The stall COUNTS of every A/B were FU-280's volume (4 MiB reads at 0.5–8 s, ~8–10 MB/s; 22/32
-  trip with the router out of the path). **OPERATOR:** (1) the oracle ingester's 8.5 GB ert-corpus pull
-  (`oracle-fleet-ingester-riigiteataja-mcp`, wk-01) was cancelled by the kubelet once at 17:06Z (no progress 5 min while
-  the seat's proof pulls starved the volume) and retried on unsynced legs — if it is still `ImagePullBackOff` at the
-  next pickup, that is FU-280 (the volume), no longer pf; its four alerts were claimed under window
-  seat-1791909319-922 (silences end ~17:45Z). (2) FU-280's next step is now the registry's real bottleneck — the pull
+  trip with the router out of the path). **OPERATOR:** (1) the oracle ingester's 8.5 GB ert-corpus pull (`oracle-fleet-ingester-riigiteataja-mcp`, wk-01)
+  finished at 17:22Z (2/2) after one kubelet cancel at 17:06Z (no progress 5 min while the seat's proof pulls starved
+  the volume); one attempt ≈ 15 min at the volume's ~10 MB/s — FU-280, no longer pf. The four claimed alerts resolve
+  with it. (2) FU-280's next step is now the registry's real bottleneck — the pull
   takes ≥15 min a node at the volume's ~9 MB/s. (3) GAPS `opnsense-as-code-G1`: the test-VM script's env line + its
   play set (opnsense-system never runs there; #2537's green report proved nothing). Standing alerts: unchanged from
   the 06:25Z pickup plus `CPUThrottlingHigh` longhorn-csi-plugin (handed off), `ErtPipelineStepFailed` (oracle's own
