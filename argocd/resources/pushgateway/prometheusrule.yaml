@@ -142,7 +142,7 @@ spec:
           annotations:
             summary: "3+ non-clean agent runs in 1h on {{ $labels.project }}"
             description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
-        # Retro r8 F4 as RULED (docs/agents/retros/2026-10-12-platform-r8-opus.md §F4; the sibling
+        # Retro r8 F4 as RULED (docs/agents/retros/2026-10-12-platform-r8-opus.md, finding F4; the sibling
         # change raised `DEFAULT_CONTEXT_TOKENS` 20k → 50k in agents/estimate_budget.py): nothing
         # watched BUDGET-CAP hits before this. A `budget-403` round is a session key that hit its
         # enforced cap (or an account with no credit — see below) and committed nothing, and the
