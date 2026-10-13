@@ -13296,3 +13296,5 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Pickup read — "watch the next Renovate run"**: Renovate's 00:07Z run rebased the untouched PRs under
   `rebaseWhen: behind-base-branch` (allure-behavior-snippets#11 u=00:13Z, oracle-fleet#759 u=00:31Z); only three
   Renovate PRs stay open fleet-wide (those two + oracle-fleet#742 abandoned) — the 10-12 six-PR un-armed set drained.
+- **06:26Z addendum:** agent-runtime#172 MERGED 06:25:52Z on the bot approval; the `ci.yaml` comment pushed direct
+  (15c30b1, fetch-compared). All three platform repos carry the narrowed CODEOWNERS on master.

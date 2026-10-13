@@ -16,10 +16,9 @@ dig for days by being listed). Write the marker only when the cause is known; th
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-10-13 06:25Z — seat; TICK-LOG 2026-10-13 05:45–06:25Z): the platform repos' codeowner gate
-  narrowed (ADR-154); #90's 3.15 image fixed forward and LIVE.** openrouter-operator#92 + agent-coordinator#26 MERGED,
-  **agent-runtime#172 was pending at wind-down** (CI rerun after the pin-only-lint red; the seat's PRs merge on the bot
-  approval — author == sole codeowner — so no admin act is owed; after it lands push the `ci.yaml` comment currency
-  direct, it is a workflow edit). **Proof owed (ADR-154 / dependency-upgrades §Last proven):** the next Renovate PR on
+  narrowed (ADR-154); #90's 3.15 image fixed forward and LIVE.** openrouter-operator#92, agent-coordinator#26 and
+  agent-runtime#172 all MERGED on the bot approval (author == sole codeowner waiver, no admin act); agent-runtime's
+  `ci.yaml` comment currency pushed direct (15c30b1, a workflow edit). **Proof owed (ADR-154 / dependency-upgrades §Last proven):** the next Renovate PR on
   each of the three repos merging unattended — openrouter-operator's deploy run after a Dockerfile bump is the real
   image test (PR CI builds no image). **OPERATOR:** (1) the ADR-154 known cost — the census's 4 src/ catches in 10 reads
   on openrouter-operator — is accepted by the ruling, not re-measured; (2) oracle-fleet#759 (python 3.15) will hit the
