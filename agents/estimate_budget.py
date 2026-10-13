@@ -56,7 +56,7 @@ from model_id import lookup_ids, routing_suffix  # noqa: E402
 CHARS_PER_TOKEN = 4  # rough English/code average; we only need order-of-magnitude
 # Context re-sent each request — the whole accumulated conversation, not the issue. Was 20_000
 # (the 2026-06 autopsy saw ~27K); raised to 50_000 on retro r8 F4 as RULED (docs/agents/retros/
-# 2026-10-12-platform-r8-opus.md §F4): seven r8-window worker transcripts measured a per-request
+# 2026-10-12-platform-r8-opus.md, finding F4): seven r8-window worker transcripts measured a per-request
 # mean of 63k–103k and a max of 79k–214k (goose/deepseek and claude/haiku rides), 93–100 % of
 # requests above 20k — with 90–97 % of those prompt tokens cache READS at the cache-read price,
 # which is why the constant is sized at ~50k and not the raw mean: at the registry's blended
