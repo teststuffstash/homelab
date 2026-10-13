@@ -1,0 +1,4 @@
+# HAND COPY of the node-nic group in prometheusrule.yaml (this dir) — the drift pin in
+# scripts/prometheus-rules-lint.sh asserts expr+for equality per alert name against the CR.
+# Re-render with:  devbox run -- yq '.spec.groups[] | select(.name == "node-nic")' prometheusrule.yaml
+# Loaded by node-nic.promtool-test.

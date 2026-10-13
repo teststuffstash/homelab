@@ -1,0 +1,64 @@
+# Behaviour fixture for node-nic.promtool-rules — `devbox run prometheus-rules-lint` runs it.
+# The drop counters are REAL samples read from Prometheus at 5-minute steps the day the rules were
+# written: m70s eno1 from 2026-10-13 06:00Z (t=0) through the PAUSE storm, and the two worst
+# healthy bursts of the week before as controls — hp-01 eno1 2026-10-07 17:25Z (a 10-minute rate
+# of 1,163/s, the fleet's highest outside the storm) and wk-metal-01 enp0s25 2026-10-10 16:55Z.
+rule_files:
+  - node-nic.promtool-rules
+evaluation_interval: 1m
+
+tests:
+  # ── the 2026-10-13 shape: m70s fires ~06:55Z, the bursty controls never do ─────────────────────
+  - interval: 5m
+    name: "the m70s PAUSE storm fires; the week's worst healthy bursts do not"
+    input_series:
+      - series: 'node_network_receive_drop_total{instance="192.168.2.56:9100",job="node-exporter",device="eno1"}'
+        values: "6684655 6685007 6685360 6759806 6788141 7185047 7357037 7894225 8643351 9378520 10124914 10920543 11715163 12502635 13257319 13995710 14742432 15491524 16291863"
+      - series: 'node_network_receive_drop_total{instance="192.168.2.54:9100",job="node-exporter",device="eno1"}'
+        values: "11253154 11253744 11254206 11254568 11328658 11553861 11957402 11987811 11994168 11994508 11994847 11995203 11995902 12000023 12016784 12025880 12026253 12026606 12026956"
+      - series: 'node_network_receive_drop_total{instance="192.168.2.182:9100",job="node-exporter",device="enp0s25"}'
+        values: "11535129 11535471 11535930 11536404 11540488 11908681 11909017 11909354 11909740 11910096 11910484 11951436 11951788 11958000 12001567 12043858 12044212 12085743 12131940"
+    alert_rule_test:
+      # 06:45Z: the storm's 30-minute rate crossed 1,000/s at ~06:40 — pending, not firing
+      - eval_time: 45m
+        alertname: NodeNetworkReceiveDropStorm
+        exp_alerts: []
+      # 07:00Z: past the 15-minute hold — m70s alone
+      - eval_time: 60m
+        alertname: NodeNetworkReceiveDropStorm
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, instance: "192.168.2.56:9100", job: node-exporter, device: eno1 }
+      - eval_time: 90m
+        alertname: NodeNetworkReceiveDropStorm
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, instance: "192.168.2.56:9100", job: node-exporter, device: eno1 }
+
+  # ── link speed: only a carrier-up physical NIC below gigabit, held 10 minutes ─────────────────
+  - interval: 1m
+    name: "a 100 Mbit link with carrier fires; gigabit, virtio (-1) and a dark port do not"
+    input_series:
+      - series: 'node_network_speed_bytes{instance="192.168.2.53:9100",job="node-exporter",device="enp3s0"}'
+        values: "125000000x5 12500000x20"
+      - series: 'node_network_carrier{instance="192.168.2.53:9100",job="node-exporter",device="enp3s0"}'
+        values: "1x25"
+      - series: 'node_network_speed_bytes{instance="192.168.2.56:9100",job="node-exporter",device="eno1"}'
+        values: "125000000x25"
+      - series: 'node_network_carrier{instance="192.168.2.56:9100",job="node-exporter",device="eno1"}'
+        values: "1x25"
+      - series: 'node_network_speed_bytes{instance="192.168.2.61:9100",job="node-exporter",device="eth0"}'
+        values: "-1x25"
+      - series: 'node_network_carrier{instance="192.168.2.61:9100",job="node-exporter",device="eth0"}'
+        values: "1x25"
+      # an uncabled second port that still reports a speed — carrier 0 keeps it out
+      - series: 'node_network_speed_bytes{instance="192.168.2.58:9100",job="node-exporter",device="eno2"}'
+        values: "1250000x25"
+      - series: 'node_network_carrier{instance="192.168.2.58:9100",job="node-exporter",device="eno2"}'
+        values: "0x25"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: NodeLinkSpeedDegraded
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: NodeLinkSpeedDegraded
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, instance: "192.168.2.53:9100", job: node-exporter, device: enp3s0 }
