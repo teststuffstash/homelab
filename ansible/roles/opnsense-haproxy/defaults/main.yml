@@ -4,6 +4,9 @@ haproxy_proxied_services: []
 haproxy_tcp_services: []
 # The VIP range every HAProxy frontend binds in (ADR-088). Its pass rule carries `nopfsync`.
 haproxy_vip_network: 192.168.3.0/24
+# The cluster LoadBalancer VIP range every HAProxy backend lives in (docs/ip-plan.md). The
+# router-originated backend connections get the same `nopfsync` (FU-312, the second leg).
+haproxy_backend_network: 192.168.32.0/19
 # The node's root ssh key, for the one setting the API cannot write (anti-lockout, below).
 opnsense_ssh_key: >-
   {{ lookup('env', 'OPN_SSH_KEY') or lookup('env', 'OPN_TEST_SSH_KEY') or lookup('env', 'OPN_TEST_PVE_KEY')
