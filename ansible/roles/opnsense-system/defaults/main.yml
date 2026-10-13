@@ -2,3 +2,12 @@
 # Defaults — real values live in group_vars/opnsense.yml. Empty = pin nothing on that page.
 opnsense_interface_settings: {}
 opnsense_netflow: {}
+# Identity: the node's hostname (a HOST var — each router node has its own) and the GUI's
+# alternate hostnames (group var). Neither has an API in 26.7 (legacy system_general.php /
+# system_advanced_admin.php), so both go over ssh through the legacy config layer, like the
+# haproxy role's anti-lockout write: read in check mode, write only on drift.
+# opnsense_hostname: <unset = leave the node's hostname alone>
+opnsense_webgui_althostnames: ""
+opnsense_ssh_key: >-
+  {{ lookup('env', 'OPN_SSH_KEY') or lookup('env', 'OPN_TEST_SSH_KEY') or lookup('env', 'OPN_TEST_PVE_KEY')
+     or (lookup('env', 'HOME') ~ '/.claude/homelab-pve-ssh/id_ed25519') }}

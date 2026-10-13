@@ -49,6 +49,13 @@ bgp_node_ips:
                    # Third time this list was the miss (wk-03, wk-metal-04, now nx-01).
   - 192.168.2.64   # wk-04 (VM on nx-02, the second hypervisor, onboarded 2026-09-15)
 
+# --- opnsense-system : identity ---
+# Names the web GUI accepts in the Host header besides the node's own (System > Settings >
+# Administration > Alternate Hostnames). The GUI name resolves to the `.1` CARP VIP, which either
+# node answers; without this entry the node's DNS-rebind check serves "A potential DNS Rebind
+# attack has been detected" instead of the login page (operator, 2026-10-13).
+opnsense_webgui_althostnames: opnsense.teststuff.net
+
 # --- opnsense-acme : Let's Encrypt certs (DNS-01 via Cloudflare) ---
 acme_account_name: "TestStuff OPNSense"
 acme_account_email: "teststuffou@protonmail.com"
