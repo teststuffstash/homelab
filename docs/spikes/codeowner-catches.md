@@ -2,7 +2,9 @@
 
 **Origin:** FU-233 (archived 2026-09-18) — the ADR-128 trial week. The re-read landed below; the
 operator ruled the trial state stays as is, so this doc is now the standing baseline for the NEXT
-codeowner-scope question rather than a tracked item.
+codeowner-scope question rather than a tracked item. Used once: ADR-154 (2026-10-13) extended the
+narrowing to openrouter-operator, agent-runtime and agent-coordinator with the per-repo rows below as
+the known cost.
 
 **Question (operator, verbatim):** "find how many times have we found problems in codeowner
 review and what types of problems they were. I'm thinking of ways to reduce their amount anyway,

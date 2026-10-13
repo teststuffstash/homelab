@@ -96,7 +96,9 @@ variable "protected_repos" {
     # — the 2026-08-08 "codeowner gate guards the governor paths" record was wrong at the
     # enforcement layer; this flip makes it true. openrouter-operator + agent-coordinator got
     # whole-repo CODEOWNERS the same day (their gate = human on everything, bot review as input;
-    # relax per-path later via carve-outs, never by dropping the flag).
+    # relax per-path later via carve-outs, never by dropping the flag) — relaxed 2026-10-13 to the
+    # governance core (ADR-154: .github/ minus workflows, .agents/, CODEOWNERS, scripts/ where the
+    # checks live); the flag stays, it is what makes the owned paths a gate at all.
     agent-coordinator   = { required_checks = ["ci"], require_code_owner_review = true }
     agent-runtime       = { required_checks = ["ci"], require_code_owner_review = true }
     openrouter-operator = { required_checks = ["ci"], require_code_owner_review = true }

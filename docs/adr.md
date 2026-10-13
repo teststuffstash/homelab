@@ -2862,3 +2862,28 @@ touches. **Consequences:** a lingering Renovate PR on a busy repo gets at most 4
 to 21 updater merges; if Renovate's workflow is down, untouched PRs sit BEHIND with no updater belt (FU-046's
 proof-of-flight carried the adapted-branch path on #191 the same day); the scan's rebase-box repair and the
 merge-conflict Renovate clause become retirable once a quiet week shows them idle.
+
+### ADR-154 — The platform repos' CODEOWNERS narrow to the governance core; a dep-guard mix with un-owned paths gets the shape test, not a refusal (2026-10-13)
+**Status:** Accepted (operator, 2026-10-13: "homelab repo has had a lot of work regarding rules so
+codeowner is no longer a blocker, now the other platform repos are blocking" — openrouter-operator#90
+sat REVIEW_REQUIRED with the reviewer's APPROVED at head and CI green on the 3.15 interpreter).
+**Decision:** [ADR-128](#adr-128--trial-week-the-human-codeowner-gate-narrows-to-the-governance-core-the-rest-merges-on-ci--bot-review-2026-09-11--2026-09-18)'s
+shape, promoted by FU-233, extends to openrouter-operator (#92), agent-runtime (#172) and
+agent-coordinator (#26): owned = `/.github/` (minus the pin-only-lint'd `workflows/`), `/.agents/`,
+`/CODEOWNERS`, and `/scripts/` where the repo's checks live without the ADR-142 lens (agent-runtime's
+`scripts/` stays un-owned as it was); `src/`, `coordinator/`, `chart/`, the Dockerfiles and the root
+`devbox.json` merge on CI + the reviewer bot. The dep files keep `deps-pin-guard` as their replacement
+owner, and the guard's classifier no longer needs a `*` catch-all: a PR mixing guarded files with
+UN-owned paths runs the pin-shape test (the other paths ride their own gate) instead of being refused
+(openrouter-operator#83's fileset rule); an OWNED path still hands the whole read to the code owner.
+**Considered:** keep the whole-repo gates (rejected — every PR there parked on the operator, the
+cost ADR-128 measured); drop `require_code_owner_review` (rejected — the flag is what makes the
+owned paths a gate at all); keep refusing the mixed shape (rejected — with src/ un-owned the mix is a
+worker adapting a bump, #90's lock-refresh + Dockerfile, and the refusal re-parks it). **Why:**
+operator-minutes first; the gate's remaining reads buy what the rubric + CI already read. **Known
+cost, accepted:** the census ([codeowner-catches](spikes/codeowner-catches.md)) found 4 `src/`
+catches in 10 human reads on openrouter-operator, 2 outage-class (#55, #65). **Consequences:** a
+structural dep edit (new package, a tool table — #90's own mypy line) still parks, now on the
+operator's admin merge, since no owned route remains; porting `scripts/gate-drift.sh` is the
+un-gating path for `scripts/`; revert = `git revert` per repo. Proof: the next Renovate PR on each
+repo merging unattended (dependency-upgrades.md §Last proven).
