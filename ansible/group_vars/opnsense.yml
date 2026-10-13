@@ -49,6 +49,15 @@ bgp_node_ips:
                    # Third time this list was the miss (wk-03, wk-metal-04, now nx-01).
   - 192.168.2.64   # wk-04 (VM on nx-02, the second hypervisor, onboarded 2026-09-15)
 
+# Preferred VIP ingress node (operator, 2026-10-13). With kernel multipath off (docs/bgp.md
+# §Kernel ECMP) each VIP keeps ONE nexthop: zebra's first write, i.e. the lowest peer address —
+# cp-01 by accident, then hp-01 (a Longhorn storage node) after #2533. FRR `weight` makes it a
+# choice: highest wins the best path, the rest stay in the table as failover. wk-04 (VM on nx-02,
+# beside the primary router node, no Longhorn) first, wk-02 (VM on pve) second; everyone else
+# keeps FRR's default. Nodes not listed here get no weight.
+bgp_neighbor_weight:
+  192.168.2.64: 200   # wk-04
+  192.168.2.62: 100   # wk-02
 # --- opnsense-system : identity ---
 # Names the web GUI accepts in the Host header besides the node's own (System > Settings >
 # Administration > Alternate Hostnames). The GUI name resolves to the `.1` CARP VIP, which either
