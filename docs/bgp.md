@@ -47,9 +47,16 @@ the lowest-addressed peer. Measured 2026-10-13 on both router nodes: all 26 VIP 
 The fix (2026-10-13): **control planes do not peer.** The `CiliumBGPClusterConfig` selects nodes
 without the `node-role.kubernetes.io/control-plane` label (cp-01, cp-02, wk-metal-02 carry it,
 set by Talos), and `bgp_node_ips` lists no control plane. A CP still runs backends — traffic just
-never enters there. With the kernel still single-path, the ingress node is expected to be the
-lowest-addressed peering worker (hp-01 `.54`), and it moves — resetting the flows it carried —
-whenever that node stops announcing (the same class as before, on a worker instead of a CP).
+never enters there. Applied 2026-10-13 16:37Z: all 26 VIP routes moved to the lowest-addressed
+peering worker, hp-01 `.54` — a Longhorn storage node, by accident of address order.
+
+**The ingress node is a choice, not an address order** (operator, 2026-10-13): the router side
+sets FRR `weight` per neighbour (`bgp_neighbor_weight` in `ansible/group_vars/opnsense.yml`, the
+`opnsense-bgp` role). FRR's best path is the highest weight, and with the kernel single-path that
+is the one nexthop it holds; the others stay in FRR's table as failover, in weight order, then
+address order. Today: wk-04 `.64` (VM on nx-02, beside the primary router node, no Longhorn) at
+200, wk-02 `.62` (VM on pve) at 100, everyone else unweighted. Ingress moves — resetting the flows
+it carried — only when the current node stops announcing.
 
 ### Kernel ECMP — not enabled (2026-10-13)
 

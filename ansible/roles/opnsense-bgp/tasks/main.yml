@@ -51,6 +51,9 @@
         peer_ip: "{{ item }}"
         remote_as: "{{ cluster_asn }}"
         route_map_in: CILIUM-ALLOW-ALL
+        # Preferred ingress (group_vars `bgp_neighbor_weight`): FRR picks the highest weight as the
+        # best path, and with kernel multipath off that is the one nexthop the kernel holds.
+        weight: "{{ bgp_neighbor_weight[item] | default(omit) }}"
         # Standby: configured but disabled — no session to the cluster (router-move.md).
         enabled: "{{ not (opnsense_standby | default(false) | bool) }}"
         # Match existing neighbors on peer IP alone. The default ['ip','description']
