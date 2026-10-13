@@ -3083,6 +3083,7 @@ if [ -n "$RUN_CMD" ]; then
         (.exit_status // "") as $s
         | if $s == "no-artifact" then (.error_class // "no-pr")
           elif $s == "budget-403" then ({"budget-exhausted-key":"budget-403-key","budget-exhausted-account":"budget-403-account","http-403-other":"http-403-other"}[.error_class // ""] // "budget-403")
+          elif $s == "harness-death" and (.error_class // "") == "turn-cap" then "turn-cap"
           elif (["harness-death","auth-storm","timeout"] | index($s)) then $s
           else "unknown" end' \
         2>/dev/null || echo unknown)"
@@ -3127,8 +3128,25 @@ if [ -n "$RUN_CMD" ]; then
         ERR_CLASS="budget-403-key"
       elif BUDGET_MATCH="$(grep -iE 'insufficient (credit|fund)|402 payment|payment required|out of credit' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
         ERR_CLASS="budget-403-account"
-      elif BUDGET_MATCH="$(grep -iE 'insufficient quota|quota exceeded|budget exceeded' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
+      # Retro r8 F3: `check your account with your provider to add more credits` is goose's rendering
+      # of ANY provider 402 — no code, envelope or URL on the line, so a per-session key at its cap
+      # and an empty account read the same: the residual arm, as agent-finalize files it.
+      elif BUDGET_MATCH="$(grep -iE 'insufficient quota|quota exceeded|budget exceeded|check your account with your provider to add more credits' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
         ERR_CLASS="budget-403"
+      # Retro r8 F3 (docs/agents/retros/2026-10-12-platform-r8-opus.md): goose's forced-final-output
+      # pair — the model hit its per-response OUTPUT-token cap and goose ordered the recipe's
+      # `final_output` call, so the contract JSON that follows is goose's finish line, not the
+      # worker's. A cap death: `turn-cap` (router.py:STRIKE_CLASSES, the goose turn cap's family;
+      # agent-finalize's `_goose_output_cap_reached` is the authoritative twin), which the
+      # strike-retry predicate below admits for one automatic re-route. Goose-gated like `-32602`
+      # (`final_output` is goose's recipe tool) and matched as the TWO-line pair at column 0, never
+      # the phrase alone — the words ride issue comments a worker reads into its log (issue-2286 r1
+      # quoted "OUTPUT-token cap" from a coordinator comment), the homelab#1705 content-echo class.
+      # Below the budget arms on purpose: a dead key dooms the run, the cap is only how it ended.
+      elif [ "${HARNESS:-}" = "goose" ] \
+           && grep -A1 -E '^Warning: Response reached the model.s output-token limit' "$RUNLOG" 2>/dev/null \
+              | grep -qE '^You MUST call the .final_output. tool NOW'; then
+        ERR_CLASS="turn-cap"
       elif [ "$(grep -ciE 'authentication failed|401 unauthorized|403 forbidden|invalid api key|no auth credentials' "$RUNLOG")" -ge 3 ]; then
         ERR_CLASS="auth-storm"
       elif grep -qiE 'context deadline exceeded|request timed out|operation timed out' "$RUNLOG"; then
@@ -3150,7 +3168,7 @@ if [ -n "$RUN_CMD" ]; then
     EMIT_STRIKE=""
     EMIT_KEY_RETRY=""
     case "$ERR_CLASS" in
-      harness-death|auth-storm|timeout|quota|budget-403-account|http-403-other) EMIT_STRIKE=1;;
+      harness-death|auth-storm|timeout|quota|budget-403-account|http-403-other|turn-cap) EMIT_STRIKE=1;;
       budget-403-key|budget-exhausted-key) EMIT_KEY_RETRY=1;;
       budget-403) ;;  # residual — estimator/cap problem → escalate (neither strike nor key-retry)
     esac
