@@ -128,3 +128,18 @@ tests:
         alertname: ArgoCDNotificationTriggerStalled
         exp_alerts:
           - exp_labels: { severity: warning, triage: dig }
+
+  - interval: 1m
+    name: "TriggerStalled: the counter is not scraped at all (controller down / target gone) → fires after 15m"
+    input_series:
+      - series: 'argocd_app_info{name="x",dest_namespace="x",health_status="Healthy",sync_status="Synced"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ArgoCDNotificationTriggerStalled
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: ArgoCDNotificationTriggerStalled
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }
+

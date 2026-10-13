@@ -37,6 +37,7 @@ groups:
       - alert: ArgoCDNotificationTriggerStalled
         expr: |
           sum(rate(argocd_notifications_trigger_eval_total[10m])) == 0
+            or absent(argocd_notifications_trigger_eval_total)
         for: 15m
         labels:
           severity: warning
