@@ -364,7 +364,8 @@ jobs:
           # that also PASSES against the PRE-FIX source pins nothing (PR#1074 claimed the bar and
           # shipped a pin that no longer reproduced its bug; 4 blocking verdicts in one retro
           # window). When a clause changed AND fixtures changed, each changed fixture dir is run
-          # by the BASE tree's harness (base sources, base worlds).
+          # by a PRE-FIX tree's harness: the base tree on master; on a stacked base, a copy of
+          # the PR with its own non-fixture changes reverted (the two shapes, below).
           # THE UNIT IS THE PR, NOT THE FIXTURE (ADR-103 addendum 2026-09-08, homelab#1489): the
           # PR must carry AT LEAST ONE changed fixture that reds on base. Fixtures that pass on
           # base beside a real pin are reported, never a verdict — a PR legitimately touches
@@ -401,28 +402,79 @@ jobs:
             done <<< "$changed"
             fxdirs=$(printf '%s' "$fxdirs" | sort -u)
             if [ -n "$fxdirs" ]; then
-              git fetch -q --no-tags --depth=1 origin "$GITHUB_BASE_REF"
-              rm -rf /tmp/ratchet-base; git worktree add -q /tmp/ratchet-base FETCH_HEAD
+              # THE PRE-FIX TREE comes in two shapes, one per base class; the fixture loop below
+              # is shared and the verdict is the same on both.
+              tree=""
+              if [ "$GITHUB_BASE_REF" = "master" ]; then
+                # master: the base tree IS the pre-fix tree (base sources, base worlds).
+                git fetch -q --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+                tree=/tmp/ratchet-base; rm -rf "$tree"; git worktree add -q "$tree" FETCH_HEAD
+              else
+                # STACKED base (goal/** theme/assembly branches): the base tree is NOT a usable
+                # pre-fix tree — it may already carry the fix (pin and fix ship in different
+                # PRs, homelab#1225 face 2), so until 2026-10-13 a pass-on-base only WARNED here,
+                # and the reviewer then enforced vacuity by hand one round at a time (17 of 22
+                # goal-base CHANGES_REQUESTED verdicts in retro r8's window, 0 on master —
+                # docs/agents/retros/2026-10-12-platform-r8-opus.md, finding F1; Goal #2273's child rule
+                # even points at this gate). Prove it against the PR's OWN change instead: in a
+                # copy of the PR checkout, revert every non-fixture file THIS PR touches to its
+                # merge-base version and run the changed fixtures there. A fix that predates the
+                # PR in the base is not among the reverted files, so face 2 is no longer a
+                # concern, and a fixture that still passes with the PR's own change gone pins
+                # nothing — the same `::error` as on master. (A PR that re-edits a file whose fix
+                # already sits at its merge-base is ruled vacuous here exactly as master would
+                # rule it; one that branched BEFORE that fix landed loses the fix with the revert
+                # and reads "pins" — false-OK, the safe direction, like the world caveat above.)
+                revert=$(printf '%s\n' "$changed" | grep -v '^agents/replay/fixtures/' || true)
+                if [ -z "$revert" ]; then
+                  # Nothing of the PR's own to revert. Unreachable while the block's precondition
+                  # is "a clause file changed" (every clause path is a non-fixture path), kept as
+                  # the explicit fixtures-only shape: a warning, never a red (PR#1216 argued around
+                  # a hard red in PR-body prose, which is worse than a visible unknown).
+                  echo "::warning::ADR-103 pin-vacuity: stacked base '$GITHUB_BASE_REF' and this PR changes only fixtures — nothing of its own to revert, so vacuity cannot be proven here (the fix, if any, lives in the base: homelab#1225 face 2). Unproven, not vacuous:"
+                  printf '  %s\n' $fxdirs
+                else
+                  # The merge-base via the API: the checkout is depth 1 on both sides, so git has
+                  # no history to compute it from (the #214 lesson); the merge-base COMMIT fetched
+                  # by sha at depth 1 carries its whole tree, which is all `checkout <sha> -- f`
+                  # reads. Pseudo-refs are per-worktree, hence the sha, never FETCH_HEAD, inside
+                  # the copy.
+                  mb=$(devbox run -- gh api "repos/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}?per_page=1" --jq '.merge_base_commit.sha' || true)
+                  if ! printf '%s' "$mb" | grep -qE '^[0-9a-f]{40}$'; then
+                    # Fail LOUDLY: an empty sha would revert nothing (or rm every file) and the
+                    # fixture would red for the wrong reason — a false "pins something".
+                    echo "::error::ADR-103 pin-vacuity: could not resolve the merge-base of this PR against '$GITHUB_BASE_REF' (compare API returned '${mb}') — the stacked-base vacuity proof needs it; re-run, or check the API read."
+                    exit 1
+                  fi
+                  git fetch -q --no-tags --depth=1 origin "$mb"
+                  tree=/tmp/ratchet-pr; rm -rf "$tree"; git worktree add -q "$tree" HEAD
+                  while IFS= read -r f; do
+                    [ -n "$f" ] || continue
+                    if git cat-file -e "$mb:$f" 2>/dev/null; then
+                      git -C "$tree" checkout -q "$mb" -- "$f"
+                    else
+                      rm -f "$tree/$f"   # new in this PR — absent at the merge-base
+                    fi
+                  done <<< "$revert"
+                  echo "ratchet: pin-vacuity — stacked base '$GITHUB_BASE_REF': this PR's own non-fixture change(s) reverted to merge-base ${mb:0:8} in a copy of the PR checkout:"
+                  printf '  %s\n' $revert
+                fi
+              fi
+            fi
+            if [ -n "${tree:-}" ]; then   # the fixtures-only shape above leaves no tree to run
               vacuous=""; pinned=""
               while IFS= read -r d; do
                 [ -n "$d" ] || continue
-                if ( source /tmp/devbox-env.sh && bash /tmp/ratchet-base/agents/replay/run.sh "$PWD/$d" ) > /tmp/ratchet-base.log 2>&1; then
+                if ( source /tmp/devbox-env.sh && bash "$tree/agents/replay/run.sh" "$PWD/$d" ) > /tmp/ratchet-base.log 2>&1; then
                   vacuous="${vacuous}${d}"$'\n'
                 else
                   pinned="${pinned}${d}"$'\n'
                   echo "ratchet: pin-vacuity — $d fails against the pre-fix source (pins something)"
                 fi
               done <<< "$fxdirs"
-              git worktree remove --force /tmp/ratchet-base
+              git worktree remove --force "$tree"
               if [ -n "$vacuous" ]; then
-                # homelab#1225 face 2: on a STACKED base (goal/** theme/assembly branches) the
-                # base tree may already carry the fix (pin and fix ship in different PRs), so a
-                # pass-on-base proves nothing either way — warn, never a verdict (PR#1216 argued
-                # around a hard red in PR-body prose, which is worse than a visible unknown).
-                if [ "$GITHUB_BASE_REF" != "master" ]; then
-                  echo "::warning::ADR-103 pin-vacuity: cannot prove vacuity against stacked base '$GITHUB_BASE_REF' — the fix may predate this PR there (homelab#1225 face 2). Unproven, not vacuous:"
-                  printf '  %s\n' $vacuous
-                elif [ -n "$pinned" ]; then
+                if [ -n "$pinned" ]; then
                   # The PR pins (a changed fixture reds on base); the rest are touched for
                   # non-pin reasons and are listed so the reviewer sees them — the rubric's
                   # per-fixture vacuous-pin bullet stays the human-side read (homelab#1489).
@@ -431,7 +483,7 @@ jobs:
                 else
                   echo "::error::ADR-103 pin-vacuity (homelab#1107): NO changed fixture reds against the PRE-FIX source — a pin that passes without the fix pins nothing. Changed fixtures, all vacuous:"
                   printf '  %s\n' $vacuous
-                  echo "Add or extend a fixture whose world exercises this PR's change so it reds on the base tree and greens on this PR (a fixture touched for another reason is fine beside it)."
+                  echo "Add or extend a fixture whose world exercises this PR's change so it reds on the pre-fix tree (master: the base; a stacked base: this PR with its own non-fixture changes reverted) and greens on this PR (a fixture touched for another reason is fine beside it)."
                   exit 1
                 fi
               fi

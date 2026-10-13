@@ -284,13 +284,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   a behaviour fixture, because the host now commits 65 GB on 62.7 GiB and lives on KSM (~11 GB
   shared, 7-day minimum 3.8 GiB available) with nothing watching. Supply side stays in the hardware
   repo (R8: the Micron RDIMM lot fits either box).
-
-- **FU-222** *(archived 2026-09-07)* — **the fleet-disk probe is a recipe now**:
-  `docs/runbook.md` §"Reading a fleet disk's identity and health" — an ephemeral privileged pod
-  (`nodeName` + `tolerations: Exists` + `/dev` and `/sys` hostPaths, alpine + nvme-cli/smartmontools),
-  with the fields that actually decide something (standardized `percentage_used` over Kingston's
-  `SSD_Life_Left`; link speed/width + CRC count = cable, not drive; `oacs` says Opal-capable, not
-  Opal-locked). Captured **from a live run, not reconstructed** — read the M70s's OEM Micron 2300 at
-  its 2026-09-07 onboarding: 2 % used, 3 051 h, 0 media errors, PCIe 3.0 ×4. The onboarding skill now
-  calls it as step 10, so the next disk is read at onboarding rather than when it is already suspect.
-
