@@ -1,0 +1,26 @@
+# FU-199 rule 2, the arbitrate half (retro r8 F5 — homelab#2305 / PR#2319): a capacity deferral
+# posted AFTER the newest `state-fp:arbitrate` marker means the dispatched round never ran, so the
+# marker is stale and the gate must re-arm — the way the ci-red gate already does — instead of
+# reporting DEBOUNCED until a human applies the directive by hand (68 min on #2305).
+#
+# CONDITION UNDER REPLAY. oracle-fleet PR #234 carries `agent/arbitrate`, its fingerprint is
+# unchanged since the marker (01:40Z) and no stats comment followed it. The PR thread holds no
+# deferral note; the ISSUE the round was dispatched against (#200, the PR body's `Closes #200`)
+# carries the session's "Round deferred (capacity)" comment at 01:42Z — newer than the marker.
+# The gate reads the issue (one REST call, would-debounce path only) and emits the unit.
+pins:
+  - MP-T11
+name: arbitrate-deferred-capacity-rearm
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet

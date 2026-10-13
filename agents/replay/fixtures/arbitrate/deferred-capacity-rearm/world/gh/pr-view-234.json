@@ -1,0 +1,20 @@
+{
+  "headRefOid": "aaaaaaaa11111111111111111111111111111111",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"e2e","status":"COMPLETED","conclusion":"FAILURE"},
+    {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"},
+    {"__typename":"CheckRun","name":"manifest-lint","status":"COMPLETED","conclusion":"SUCCESS"}
+  ],
+  "reviews": [
+    {"state":"CHANGES_REQUESTED","submittedAt":"2026-08-08T22:10:00Z"},
+    {"state":"COMMENTED","submittedAt":"2026-08-09T01:00:00Z"}
+  ],
+  "comments": [
+    {"body":"ARBITRATE (changes-requested on #234, round 8 — one blocking defect left): re-run on `fix/issue-200-c4c5-selector` with the one-line fix.","createdAt":"2026-08-09T01:39:00Z"},
+    {"body":"🤖 `state-fp:arbitrate:cf0afcf67790` — deterministic scan dispatching a `arbitrate` unit at 2026-08-09T01:40:00Z.\n\nMachine-readable debounce marker (homelab#198), written by `agents/coordinator-scan.sh`, not by the session that follows.","createdAt":"2026-08-09T01:40:00Z"}
+  ],
+  "commits": [
+    {"oid":"aaaaaaaa11111111111111111111111111111111","messageHeadline":"fix: resolve the actual issue"}
+  ]
+}
