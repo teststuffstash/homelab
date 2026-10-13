@@ -246,7 +246,7 @@ the LAN only), `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the clus
 scrapes it as the static job `mgmt-node`. **The residue-age belt is `MgmtApplyResidueStanding`**
 (github-exporter, from master's commit status, since 2026-09-18). The box-side belts in
 `argocd/resources/mgmt-metrics/` cover what a status cannot show — a loop or box that stopped
-posting: `MgmtApplyLoopStale`, `MgmtApplyMetricsAbsent`, `MgmtBoxDown`.
+posting: `MgmtApplyLoopStale`, `MgmtApplyMetricsAbsent`, `MgmtBoxDown`. The operator's at-a-glance PROGRESS view is the Grafana dashboard **"Management box — now"** (`https://grafana.teststuff.net`, `argocd/resources/mgmt-metrics/dashboard-mgmt-box.json`): in-flight leases and the box's lifecycle stats on top, progress from cluster truth below (ArgoCD app health, running versions, the `management-apply` status on master), the Mgmt*/UpgradeLease* alerts as a 7-day timeline — not a belt, a read.
 
 ## MB3. The management sentinel — plan-on-PR (ADR-131)
 
