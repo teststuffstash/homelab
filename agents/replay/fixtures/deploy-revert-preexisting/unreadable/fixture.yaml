@@ -1,0 +1,19 @@
+# deploy-revert-preexisting/unreadable — THE CONTRACT: Prometheus unreadable (every curl fails) = an unknown
+# pre-state, and the chain never reverts on unknown data: report-only, exit 0, NO comment (nothing is known
+# to say). The read/write split of the harness: a dead probe is loud in the log, never "0 Degraded".
+name: deploy-revert-preexisting/unreadable
+source: agents/coordinator/deploy-revert-argo.yaml
+mode: actions
+env:
+  - SLUG=teststuffstash/oracle-iac
+  - APP=oracle-fleet
+  - PRNUM=1093
+  - REVISION=4ea2ea85abcdef
+  - CAND={"number":1093,"mergedAt":"2026-10-13T08:46:26Z"}
+  - PRE_MERGE_WINDOW_MIN=10
+  - PROM_URL=http://prometheus.replay.invalid:9090
+  - CURL_FAIL=1
+parts:
+  - file:../bridge.sh
+  - block:deploy-revert-preexisting
+  - file:../post.sh

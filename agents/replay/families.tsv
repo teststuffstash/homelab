@@ -47,6 +47,9 @@ coordinator-pick-rail-go	coordinator-pick-rail
 coordinator-pick-rail-go-goal-lane	coordinator-pick-rail
 depends-on-retired-format	depends-on-retired-format
 deploy-revert-candidate	deploy-revert-candidate
+deploy-revert-preexisting/degraded	deploy-revert-preexisting
+deploy-revert-preexisting/healthy	deploy-revert-preexisting
+deploy-revert-preexisting/unreadable	deploy-revert-preexisting
 deploy-revert-token-clone/set	deploy-revert-token-clone
 deploy-revert-token-clone/unset	deploy-revert-token-clone
 dispatch-phase-scan	dispatch-phase

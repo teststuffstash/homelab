@@ -250,6 +250,9 @@ is stale, so it cannot drift the way the prose register did.
 | `decorrelate-resolution/served-model` | actions | - | `agents/review-reflex.sh` | - |
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `deploy-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `deploy-revert-preexisting/degraded` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `deploy-revert-preexisting/healthy` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `deploy-revert-preexisting/unreadable` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `deploy-revert-token-clone/set` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `deploy-revert-token-clone/unset` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |

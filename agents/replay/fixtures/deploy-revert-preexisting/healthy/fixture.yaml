@@ -1,0 +1,18 @@
+# deploy-revert-preexisting/healthy — THE CONTRACT: the app read Healthy for the whole window before the merge
+# (21 samples, none Degraded): the Degraded is this deploy's, the clause falls through to the revert
+# (post.sh marks the fall-through; the revert itself is outside this pin). No comment.
+name: deploy-revert-preexisting/healthy
+source: agents/coordinator/deploy-revert-argo.yaml
+mode: actions
+env:
+  - SLUG=teststuffstash/oracle-iac
+  - APP=oracle-fleet
+  - PRNUM=1093
+  - REVISION=4ea2ea85abcdef
+  - CAND={"number":1093,"mergedAt":"2026-10-13T08:46:26Z"}
+  - PRE_MERGE_WINDOW_MIN=10
+  - PROM_URL=http://prometheus.replay.invalid:9090
+parts:
+  - file:../bridge.sh
+  - block:deploy-revert-preexisting
+  - file:../post.sh
