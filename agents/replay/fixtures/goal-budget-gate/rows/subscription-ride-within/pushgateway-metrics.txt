@@ -1,0 +1,18 @@
+# HELP agent_run_duration_s 
+# TYPE agent_run_duration_s gauge
+agent_run_duration_s{model="claude/haiku",node="nx-01",harness="claude",exit_status="clean",error_class="",job="agent_run",role="worker",project="homelab",issue="1001",round="1"} 412
+# HELP agent_run_tokens_in 
+# TYPE agent_run_tokens_in gauge
+agent_run_tokens_in{model="claude/haiku",node="nx-01",harness="claude",exit_status="clean",error_class="",job="agent_run",role="worker",project="homelab",issue="1001",round="1"} 183420
+# HELP agent_run_tokens_out 
+# TYPE agent_run_tokens_out gauge
+agent_run_tokens_out{model="claude/haiku",node="nx-01",harness="claude",exit_status="clean",error_class="",job="agent_run",role="worker",project="homelab",issue="1001",round="1"} 9120
+# HELP agent_run_total 
+# TYPE agent_run_total gauge
+agent_run_total{model="claude/haiku",node="nx-01",harness="claude",exit_status="clean",error_class="",job="agent_run",role="worker",project="homelab",issue="1001",round="1"} 1
+# HELP agent_run_turns 
+# TYPE agent_run_turns gauge
+agent_run_turns{model="claude/haiku",node="nx-01",harness="claude",exit_status="clean",error_class="",job="agent_run",role="worker",project="homelab",issue="1001",round="1"} 37
+# HELP push_time_seconds Last Unix time when changing this group in the Pushgateway succeeded.
+# TYPE push_time_seconds gauge
+push_time_seconds{instance="",job="agent_run",role="worker",project="homelab",issue="1001",round="1"} 1.7602e+09
