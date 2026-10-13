@@ -6,7 +6,9 @@ service exposure / BGP rationale: [`adr.md`](adr.md) ADR-021._
 
 Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; re-captured
 2026-08-12 (operator cabling + live guest-agent reads: the wk-metal fleet, hp-01, ci-runner-01).
-⚠ **Stale since 2026-09-07** — `m70s` (.56) was onboarded after that capture and is missing below.
+Operator corrections 2026-10-13: `m70s` (.56) is on the office 5-port; `wk-metal-03` (.184) moved to
+the basement (which switch is not recorded, so it is off both diagrams). The nx-01/nx-02 twin is
+not captured either.
 
 ```
                          Internet (fibre)
@@ -33,7 +35,7 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; 
      │  wk-01 .61     │   │   │   │        └─► Office: 5-port (UNMANAGED)
      │  wk-02 .62     │   │   │   │             ├─► Office AP (UAP-AC-Lite, .14)
      │  wk-03 .63     │   │   │   │             ├─► pop-os (.57)
-     ├ ci-runner-01   │   │   │   │             ├─► wk-metal-03 (.184)
+     ├ ci-runner-01   │   │   │   │             ├─► m70s (.56)
      │  (VM 9001, .55)│   │   │   │             └─► wk-metal-04 (.186)
      └ Matchbox .30   │   │   │   │
                       │   │   │   └─► hp-01 (.54)
@@ -49,11 +51,14 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; 
   is a change to this map, not just to the box; update both the ASCII tree and the mermaid graph in
   the same edit.
 
-- ⚠ **`m70s` (.56) is NOT on the map — uncaptured.** Onboarded 2026-09-07; which switch it hangs
-  off was never recorded, and this file is the only place that would say. It PXE-booted and peers
-  BGP, so it is somewhere in the flat L2 below — but "somewhere" is exactly what this document
-  exists to replace. **Needs the operator at the cabling**; add it to both the ASCII tree and the
-  mermaid graph in the same edit, and move this bullet's content into them.
+- **The office 5-port's `m70s` port wedged into a PAUSE storm (2026-10-13).** After a ~6 min
+  m70s-only blackout at 06:10Z (no carrier change), the switch sent m70s ~2,600 802.3x PAUSE
+  frames/s (XOFF 0xffff / XON alternating, src 00:00:00:00:00:00) — counted in `rx_dropped`, not
+  `rx_errs` — capping its egress at ~100 Mbit while the link still read 1000. The Prometheus
+  volume's replica rebuild to hp-01 hit Longhorn's 8 s engine-replica timeout on every attempt
+  (`LokiNamespaceLogVolumeHigh` on longhorn-system was the only alert). Moving the cable to
+  another port cleared it instantly. Diagnose: `talosctl read /sys/class/net/<if>/statistics/rx_dropped`
+  rate vs the neighbours, then `talosctl pcap` and count ethertype `0x8808`.
 - **Everything above is ONE flat L2 domain** (every switch unmanaged or L2-only; no VLANs), so
   DHCP/PXE broadcasts reach Matchbox (LXC on Proxmox `vmbr0`) from EVERY port — including
   wk-metal-03/-04 two switch hops away in the office. Verified in practice: all four wk-metal
@@ -82,7 +87,7 @@ graph TD
   UBNT --> SW5[Office 5-port unmanaged]
   SW5 --> APO["Office AP (.14)"]
   SW5 --> POP["pop-os (.57)"]
-  SW5 --> WM3["wk-metal-03 (.184)"]
+  SW5 --> M70S["m70s (.56)"]
   SW5 --> WM4["wk-metal-04 (.186)"]
   PVE --- VMS["Talos VMs .51/.61/.62/.63 + ci-runner-01 .55 + Matchbox LXC .30 (vmbr0)"]
 ```
