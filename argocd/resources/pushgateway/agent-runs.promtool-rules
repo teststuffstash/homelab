@@ -6,8 +6,8 @@
 # purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest
 # there would fail it. (Same shape as github-exporter/queued-age.promtool-rules, FU-150/#284.)
 #
-# COVERAGE — this copy holds FOUR of the file's seven alerts, and the three it omits are omitted
-# on purpose, not by oversight:
+# COVERAGE — this copy holds FIVE of the file's agent-runs alerts (AgentRunBudgetCapHits joined
+# with the retro r8 F4 belt), and the ones it omits are omitted on purpose, not by oversight:
 #   - AgentCoordinateScanWedged is already pinned as an executed test by
 #     `agents/scan-wedge-alert-test.sh` (a clause-replay fixture, FU-145/#283); duplicating it
 #     here would give it two homes and one of them would rot.
@@ -24,7 +24,7 @@
 # lives in `scripts/**` + `.github/**` — CI-invoked paths outside the fixer lane's tier, so it is
 # the codeowner's follow-on. Until then: re-copy after editing an alert.
 #
-#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "AgentRunNegativeCost" or .alert == "AgentRunInfraDeathBurst" or .alert == "AgentRunPhaseSlow" or .alert == "AgentEventInfraSpinning")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "AgentRunNegativeCost" or .alert == "AgentRunInfraDeathBurst" or .alert == "AgentRunBudgetCapHits" or .alert == "AgentRunPhaseSlow" or .alert == "AgentEventInfraSpinning")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
 #
 # ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression ("lexer: invalid
 # input text"), so the pretty-wrapped form this header carried until homelab#344 did not run as
@@ -54,6 +54,21 @@ groups:
         annotations:
           summary: 3+ non-clean agent runs in 1h on {{ $labels.project }}
           description: Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this.
+      - alert: AgentRunBudgetCapHits
+        expr: |
+          count by (project) (
+            count by (project, issue, round) (
+                agent_run_total{exit_status="budget-403", issue!~"scout-.*"}
+              and on (project, issue, role, round)
+                (time() - push_time_seconds{job="agent_run"}) < 7 * 86400
+            )
+          ) >= 2
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: '{{ $value }} budget-403 rounds in 7d on {{ $labels.project }} — session caps are undersized or the account is dry'
+          description: 'Two or more distinct (issue, round) rides on {{ $labels.project }} ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator''s context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account. Model-scout canaries (issue=scout-*) are excluded by design.'
       - alert: AgentRunPhaseSlow
         expr: |
           (
