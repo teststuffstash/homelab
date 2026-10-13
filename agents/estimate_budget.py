@@ -54,7 +54,17 @@ from model_id import lookup_ids, routing_suffix  # noqa: E402
 
 # ── Tunable assumptions (documented so the numbers aren't magic) ─────────────────────────────────
 CHARS_PER_TOKEN = 4  # rough English/code average; we only need order-of-magnitude
-DEFAULT_CONTEXT_TOKENS = 20_000  # context re-sent each request (autopsy saw ~27K); the cache lever
+# Context re-sent each request — the whole accumulated conversation, not the issue. Was 20_000
+# (the 2026-06 autopsy saw ~27K); raised to 50_000 on retro r8 F4 as RULED (docs/agents/retros/
+# 2026-10-12-platform-r8-opus.md §F4): seven r8-window worker transcripts measured a per-request
+# mean of 63k–103k and a max of 79k–214k (goose/deepseek and claude/haiku rides), 93–100 % of
+# requests above 20k — with 90–97 % of those prompt tokens cache READS at the cache-read price,
+# which is why the constant is sized at ~50k and not the raw mean: at the registry's blended
+# price 50k lands a typical 3-round issue on `md` ($2 cap, provider-reported rounds cost $0.30–1.03,
+# the one genuine `sm` overrun was homelab#1855 at $1.03), while 100k would land everything on
+# `lg` and inflate the goal-budget pre-flight's cap reservations. Still the cache lever: the
+# estimate scales with (1 − cache_hit), so a measured hit rate is the other knob.
+DEFAULT_CONTEXT_TOKENS = 50_000
 DEFAULT_ROUNDS = 3  # max review rounds before escalating to a human (workflow.md hazard)
 DEFAULT_CACHE_HIT = 0.0  # size for the WORST case (no caching) — the cap is a safety bound
 # Headroom over the point estimate before choosing a tier. Raised 1.5 → 2.0 (retro r3 F5,
@@ -824,12 +834,13 @@ def _self_test() -> None:
 
     # the autopsy scenario: paid qwen, looping, no cache → a real (capped) cost
     paid = estimate(issue_tokens=1000, model="qwen/qwen3-coder", price_override=1.15)
-    # 90 req × 3 rounds × 20k tok × $1.15/M = ~$6.21 → above top tier → escalate, capped at lg
+    # 90 req × 3 rounds × 50k tok × $1.15/M = ~$15.5 → above top tier → escalate, capped at lg
     assert paid.estimate_usd > 2.0 and paid.escalate and paid.cap_usd == 4.00
 
-    # caching crushes the bill: same run at 90% cache hit drops below a tier boundary
+    # caching crushes the bill: the same run at the r8-measured 95% cache-read share (retro r8 F4:
+    # 90–97% of prompt tokens were cache reads) drops from ~$15.5 to ~$0.78 → inside the ladder
     cached = estimate(
-        issue_tokens=1000, model="qwen/qwen3-coder", price_override=1.15, cache_hit=0.9
+        issue_tokens=1000, model="qwen/qwen3-coder", price_override=1.15, cache_hit=0.95
     )
     assert cached.estimate_usd < paid.estimate_usd and not cached.escalate
 

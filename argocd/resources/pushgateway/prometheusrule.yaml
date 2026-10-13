@@ -142,6 +142,48 @@ spec:
           annotations:
             summary: "3+ non-clean agent runs in 1h on {{ $labels.project }}"
             description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+        # Retro r8 F4 as RULED (docs/agents/retros/2026-10-12-platform-r8-opus.md §F4; the sibling
+        # change raised `DEFAULT_CONTEXT_TOKENS` 20k → 50k in agents/estimate_budget.py): nothing
+        # watched BUDGET-CAP hits before this. A `budget-403` round is a session key that hit its
+        # enforced cap (or an account with no credit — see below) and committed nothing, and the
+        # burst above only sees it when three non-clean terminals land inside one hour; a cap that
+        # is undersized by a steady 2× shows up as one such round every other day, which no hourly
+        # window can count. This is the SLOW belt: DISTINCT (project, issue, round) budget-403 hits
+        # over 7 days, ≥2 on one project. `count by (project, issue, round)` collapses a worker and a
+        # reviewer pod of the same round into one hit — the key is minted per SESSION, so two roles
+        # dying on one key is one event, not two. The freshness join on `push_time_seconds` is the
+        # same FU-021 shape as the burst: Pushgateway serves every group forever, so "in 7 days" must
+        # be a property of the expr; 7d sits inside Prometheus's 8d retention, so the matched rows
+        # are also replayable by hand. `issue!~"scout-.*"` keeps the model-scout canaries out for the
+        # burst's reason (a canary budget-403 is scout data, not an estimator datum) and fails OPEN
+        # the same way (no `issue` label ≠ `scout-.*`).
+        # KNOWN BLIND SPOT, stated rather than hidden: this metric CANNOT tell a key-cap 403 from an
+        # account-credit 403. `exit_status` is pushed by agent-finalize (agent-runtime), whose
+        # classifier returns ONE `budget-exhausted` class for both; the -key/-account split exists
+        # only in the raw-log classifier behind the AGENT_STRIKE comment (homelab#871), which the
+        # ledger reads and this rule cannot. So a firing is "the cap lever or the credit lever" —
+        # the strike comments on the matched issues say which. The lever for the key-cap half is the
+        # estimator's context constant (and `BUFFER`), not the TIERS ladder: the retro-r8 measurement
+        # found per-request context of 63k–103k mean against the old 20k, and the tier picks follow
+        # the constant (20k → sm, 50k → md, 100k → everything on lg). Two in a week is the bar: one
+        # overrun is a long tail (homelab#1855 at $1.03 on a $1 cap was the only genuine one in the
+        # r8 window); two says the constant is wrong again, or the account is dry.
+        - alert: AgentRunBudgetCapHits
+          expr: |
+            count by (project) (
+              count by (project, issue, round) (
+                  agent_run_total{exit_status="budget-403", issue!~"scout-.*"}
+                and on (project, issue, role, round)
+                  (time() - push_time_seconds{job="agent_run"}) < 7 * 86400
+              )
+            ) >= 2
+          labels:
+            severity: warning
+            # triage: the matched rounds' strike comments name key-cap vs account-credit; the fix is a constant
+            triage: dig
+          annotations:
+            summary: "{{ $value }} budget-403 rounds in 7d on {{ $labels.project }} — session caps are undersized or the account is dry"
+            description: "Two or more distinct (issue, round) rides on {{ $labels.project }} ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator's context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account. Model-scout canaries (issue=scout-*) are excluded by design."
         # FU-160 (homelab#287; spike: docs/spikes/ride-latency-breakdown.md): ride phase timings
         # stopped being archaeology. `agents/agent-session.sh` pushes
         # `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup}` per ride, and this is the belt
