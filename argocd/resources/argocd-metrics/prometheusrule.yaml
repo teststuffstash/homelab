@@ -107,6 +107,33 @@ spec:
               this is the deploy-revert chain (agents/coordinator/deploy-revert-argo.yaml) NOT being
               rung — a Degraded app goes un-reverted and un-reported until this is fixed. Config lives
               in tofu/argocd.tf (notifications block), applied by `devbox run mgmt-tf`.
+        - alert: ArgoCDNotificationTriggerStalled
+          # The hop's OTHER failure: no trigger EVALUATED at all. 2026-10-13 18:12–18:29Z: #2538's
+          # unquoted `oncePer` ternary made the trigger YAML unparseable, the controller failed to
+          # unmarshal `on-health-degraded` for every app, and deliveries_total saw nothing (nothing
+          # reached a delivery). `tofu validate` and the box's helm verdict both passed it; only a
+          # log read caught it. The controller's own trigger_eval_total rate sat at 0 from 18:09
+          # to 18:30Z — that counter is the detector. With ~80 apps reconciling every few minutes
+          # a healthy controller never idles 10m.
+          # `or absent(...)`: a counter that is not scraped at all (controller down, target gone) is
+          # the same dead hop — ArgoCDMetricsAbsent watches argocd_app_info, not this counter.
+          expr: |
+            sum(rate(argocd_notifications_trigger_eval_total[10m])) == 0
+              or absent(argocd_notifications_trigger_eval_total)
+          for: 15m
+          labels:
+            severity: warning
+            # triage: the controller's log, pod and scrape target are the three reads
+            triage: dig
+          annotations:
+            summary: "argocd-notifications: no trigger evaluated for 15m — the FU-044 hop is dead"
+            description: >-
+              The notifications controller has evaluated no trigger for 15 minutes (or its counter
+              is not being scraped) — a Degraded app would notify nobody (the deploy-revert chain's
+              first hop). Check: the controller log (`kubectl -n argocd logs
+              deploy/argocd-notifications-controller`, e.g. `grep -i unmarshal` for a trigger that
+              failed to parse), the pod's state and restarts, and the `argocd-notifications`
+              scrape target in Prometheus.
         - alert: ArgoCDMetricsAbsent
           # The belt's own blindness: no argocd_app_info means the controller is down or the scrape
           # broke — either way every rule above is silent while it looks green.
