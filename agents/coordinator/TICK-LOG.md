@@ -13398,3 +13398,42 @@ updates or reverts as much as possible — mechanical revert or a responder."
   5-port, wk-metal-03 moved to the basement, switch unrecorded) in `docs/network-physical.md` (9ba521e2).
 - **FU-093 corrected** in the same commit: the 57 GB object on hp-01/hg5d is a rebuild snapshot Longhorn recreates and
   merges away by itself, not a stale leftover to clear.
+
+## 2026-10-13 19:00–20:05Z — retro r8 read and executed: F1–F5 landed (4 PRs + 1 direct + agent-runtime#174), F4 re-grounded on the transcripts (no ride reads the file whole; the "sm overruns" were shared-key deltas → agent-runtime#173), one anchor quickfix (seat + 5 subagents; began as a second jail)
+
+- **The read (second jail, read-only).** r8 = two reports under #2522: the opus report's 5 findings are the substance; the
+  goose cell's is a defective partial (wrong window, no bundle, no findings block — #2523). Nothing had been dispositioned:
+  no cross-review legs, no decisions file, no open `retro-batch` but platform-r2 (#1101).
+- **F4 checked against the transcripts (operator: "does a ride really read the whole file?").** Seven worker rides
+  (`s3://agent-transcripts/homelab/issue-{1896,2181,2282,2308}`): NO — the most any ride pulled from the 514 KB scan
+  was 83 KB in 14 slices (16 %); the big tool results are the replay runner, fixtures, `gh` output, CI tails. What the
+  20k constant mis-sizes is the accumulated per-request CONTEXT: mean 63k–103k, max 79k–214k, 93–100 % of requests
+  over 20k, 90–97 % cache reads. Goose's per-request `usage_ledger` (sessions.db) and claude's jsonl usage exist per
+  ride; claude rides' tokens reach the manifest, NOTHING reaches the run ledger or Prometheus. **Side find:** every
+  "sm overrun" r8 cites rode the STANDING key, and agent-finalize prices a ride as the key's cumulative delta — concurrent
+  siblings' spend lands on each ride (ledger $2.09/1.44/1.30/1.21/1.02 vs goose-reported $0.61/0.55/0.42/0.43/0.32,
+  2.6–3.3×; per-session keys agree to cents; the one real $1-cap overrun was #1855) → **agent-runtime#173** (inert,
+  `agent-fix`, no queue label — operator decides). **Operator rulings:** hard-coded constant + detection, no dynamic /
+  story-point estimator ("more complexity than we can handle"), never kill rides on new math; subscription rail out
+  of scope; subscription rides charge $0 (F2). Memory `budget-estimator-direction` written.
+- **Execution (after the primary exited; 5 subagents in clones).** **F4 #2544 MERGED 19:27Z** (e506ca98): `DEFAULT_CONTEXT_TOKENS`
+  20k→50k with the measured basis, retro-key fixture rows moved $0.3→$0.75, `AgentRunBudgetCapHits` (≥2 distinct
+  budget-403 rounds per project in 7d, 4 promtool cases). **F3: agent-runtime#174 MERGED 19:35Z, #2547 MERGED 19:48Z**
+  — goose's output-token pair → `turn-cap` (existing class, one automatic re-route); the "add more credits" 402 line →
+  the RESIDUAL budget arm, not `-account` as briefed (goose renders any provider 402 as that one line, so a capped
+  session key and an empty account are indistinguishable — for the operator to re-rule). **F2 #2545 MERGED 19:56Z**:
+  `gb_ledger` emits `0.0000` for (project, issue) with token series and no cost series; the fixture now feeds the real
+  awk a raw /metrics scrape (the old `ledger.txt` shape bypassed it). **F5 #2546 MERGED 20:03Z**: a `Round deferred
+  (capacity)` comment newer than the `state-fp:arbitrate` marker re-arms the gate (reads the issue when the PR thread
+  lacks it; fail-closed); rows `deferred-capacity-{rearm,stale}` under MP-T11. **F1 direct 0aaa6898** (operator-lane
+  ci.yaml): on a non-master base the ratchet reverts the PR's OWN non-fixture files to the merge-base (compare API —
+  depth-1 checkout) in a worktree copy and `::error`s a vacuous pin like master; fixtures-only = explicit warning; empty
+  merge-base fails loudly (seat's guard). Verified by the subagent on a synthetic 3-branch harness with the real
+  `ride-size` family (pins / fixtures-only / vacuous / master unchanged). First real exercise = the next goal-base PR.
+- **Quickfix 0070bbe0 (pushed 19:45Z):** #2544's `§F4` (and F1's `§F1`) references hit docs-graph-lint check #4 (retro
+  headings are not "living") and redded every open PR's merge commit; `gh pr update-branch` ×3 then auto-merge landed them.
+- **Also recorded this session:** the other jail's close-out (m70s PAUSE-storm TICK-LOG entry above, FU-093 corrected),
+  FU-222 archive expired. **Loose ends (from the subagents, not filed):** agent-finalize's one `budget-exhausted`
+  class hides key-cap vs account-credit (owner agent-runtime; the alert says so); the deferral note is coordinator
+  prose — a launcher marker would make F5's recogniser deterministic; the max-turns stop (#1923) still has no signature;
+  renamed clause files are not restored by F1's revert (false-OK direction).
