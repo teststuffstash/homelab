@@ -1,0 +1,7 @@
+Created /work/repo/agents/replay/fixtures/janitor-run-cmd-surfaces/fixture.yaml (35 lines)
+Warning: Response reached the model's output-token limit and may be incomplete.
+You MUST call the `final_output` tool NOW with the final output for the user. 
+  ────────────────────────────────────────
+  ▸ final_output recipe
+    ci_passed: false
+    branch: agent/20261006-084414

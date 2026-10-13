@@ -217,7 +217,7 @@ scope.
 | `provider-5xx` | **pair** | provider 4xx/5xx response |
 | `no-pr` | model | the ride produced no artifact |
 | `unknown` | model | unclassified death — the FU-200 reader's latch class |
-| `turn-cap` | model | a goose ride that died at the turn cap (homelab#1665) |
+| `turn-cap` | model | a goose ride that died at a cap — the turn cap (homelab#1665), or the per-response output-token cap goose forces into a `final_output` call (retro r8 F3: the launcher's strike-retry predicate admits this class for one automatic re-route) |
 | `tool-loop` | **pair** | a cap death with zero tool-result progress — the same tool call repeated (homelab#1665); a SERVING shape, not a model verdict |
 
 - anchor: `argocd/resources/openrouter-proxy/router.py:STRIKE_CLASSES` and
