@@ -1,0 +1,9 @@
+OUT STRICT yes
+OUT ESCAPES []
+RC 0
+warning: Please check your account with your provider to add more credits, then resend your message to continue.
+You MUST call the `final_output` tool NOW with the final output for the user. 
+  ────────────────────────────────────────
+  ▸ final_output recipe
+    ci_passed: false
+    branch: agent/20261006-101245
