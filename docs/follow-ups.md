@@ -883,7 +883,9 @@ the block needs pruning, not more headings.
       **2026-10-13 (oracle handoff):** it reverted oracle-iac#1093 over a Degraded that predated the deploy
       by 2.5 h — the trigger is "Degraded read at a new revision"; the chain now reads the app's pre-merge
       health from Prometheus (10 min, fail-closed) and comments on the deploy PR either way; multi-source
-      apps' `oncePer` keyed on `<nil>` (notified once ever) — fixed in `tofu/argocd.tf`.
+      apps' `oncePer` keyed on `<nil>` (notified once ever) — fixed in `tofu/argocd.tf` (#2538; its unquoted
+      ternary then broke the trigger YAML for every app 18:12–18:29Z — quoted direct, no Degraded missed; detector
+      `ArgoCDNotificationTriggerStalled` on `trigger_eval_total` rate 0, since the helm verdict cannot see a consumer parse failure).
       Design + rulings: [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the
       post-deploy gate" + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
 
