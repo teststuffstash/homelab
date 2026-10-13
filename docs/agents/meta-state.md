@@ -36,6 +36,12 @@ dig for days by being listed). Write the marker only when the cause is known; th
   same cp315-wheel sdist failure on its image build — stack jail's call. The 10-12 "watch next Renovate run" item is
   DONE (rebases seen 00:13Z/00:31Z, un-armed set drained to two stack PRs). Standing alerts: `GithubWorkflowRunFailed`
   openrouter-operator deploy clears on the 06:16Z success; the rest unchanged from 10-12.
+- **⚑ PICKUP (2026-10-13 20:05Z — seat; TICK-LOG 2026-10-13 19:00–20:05Z): r8 F1–F5 EXECUTED, all merged.**
+  **OPERATOR:** (1) **agent-runtime#173** (standing-key `cost_usd` = siblings' spend; inert, `agent-fix` only) — queue it
+  or not; until fixed, trust ledger cost only on per-session keys. (2) **Re-rule F3's 402 line:** `add more credits` went
+  to the residual `budget-403` arm, not `-account` (goose's one line for every provider 402); (3) **F1 is live on master
+  (0aaa6898) untested on a real goal-base PR** — watch the first `goal/**` PR's ratchet step. Standing alerts: not
+  surveyed this session (the seat ran the retro execution only; the 17:15Z pickup's set stands).
 - **⚑ PICKUP (2026-10-12 20:00Z — seat; TICK-LOG 2026-10-12 17:00–20:00Z): r8 published after two class fixes;
   FU-046's non-major path flew; ADR-153 half landed.** **OPERATOR:** (1) **#2522** (r8 reports) auto-merged though its
   body says HUMAN-GATED — read it (`docs/agents/retros/2026-10-12-platform-r8-*.md`; the goose one has no findings

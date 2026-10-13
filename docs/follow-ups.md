@@ -751,7 +751,8 @@ the block needs pruning, not more headings.
       the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
       retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
       **Next:** the exporter sprout-RATE gauge + the depth-aware harvest gate reading it.
-      **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue`;
+      **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue` (10-13: subscription
+      rides now settle at $0 in the pre-flight — #2545, retro r8 F2);
       the goal lane's PHASE-keyed model/checkpoint design (a `GOAL_MODEL` knob turns the wrong
       axis — [`model-routing-history.md`](spikes/model-routing-history.md) §M10 ⚖, 2026-08-11; design before wiring).
       Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
@@ -762,7 +763,8 @@ the block needs pruning, not more headings.
       completed no-op round after an arbitrate re-dispatch (oracle PR#391, 7.5h silent) and a
       capacity-deferred ci-red dispatch (PR#394) both hash identical, so "DEBOUNCED, a human is
       the next mover" is reported and no human is told. **2026-09-04:** the fingerprint faces
-      FIXED (#1345 → PR#1352); the CAP SPLIT is complete — updater park-skip (#887 → PR#1375,
+      FIXED (#1345 → PR#1352); **2026-10-13:** the arbitrate-side rule-2 face FIXED (#2546, retro r8 F5 — a capacity
+      deferral newer than the marker re-arms; the deferral is still coordinator prose, not a launcher marker); the CAP SPLIT is complete — updater park-skip (#887 → PR#1375,
       measured 39/41 CI runs on unchanged parks before it) + parks counted BLOCKED|BEHIND
       (PR#1376). **+2026-09-08: the RULED-BUT-NEVER-DISPATCHED face** — both arbitrate sessions
       on PR#1513/#1515 posted their re-dispatch ruling, removed `agent/arbitrate`, then died on an
@@ -1092,7 +1094,11 @@ the block needs pruning, not more headings.
       nothing pruned) → #2519 (slim references + prune below the published floor: 6.5 MiB, bundle
       identical); the re-fire's harvest then refused the week because the goose report had no
       `retro-findings-json` block → #2523 (a block-less report is a recorded partial). **r8 PUBLISHED
-      19:31Z** (#2522, 5 opus findings, the goose defect recorded). **Next:** the goose cell's block
+      19:31Z** (#2522, 5 opus findings, the goose defect recorded). **2026-10-13: r8 F1–F5 EXECUTED by the
+      seat** (F1 direct 0aaa6898 ci.yaml; F2 #2545; F3 #2547 + agent-runtime#174; F4 #2544 as RULED — constant
+      50k + `AgentRunBudgetCapHits`, no dynamic estimator; F5 #2546); disposition record = TICK-LOG 10-13 19:00Z
+      (the jail holds no bucket writer key, so `retro_pipeline.py accept` cannot run from the seat — r7 precedent).
+      Side find: standing-key `cost_usd` is sibling-contaminated → agent-runtime#173 (inert). **Next:** the goose cell's block
       compliance (one sighting; r7's had it — watch r9, then the brief); the stack-retro split (ADR-146
       PR#2172). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
