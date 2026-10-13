@@ -123,9 +123,13 @@ resource "helm_release" "argocd" {
         # literal `<nil>` (seen in the app's `notified.notifications.argoproj.io` annotation,
         # 2026-10-13), so such an app notified ONCE in its life and never again — the ingester's
         # Degraded at 17:05Z that day was "already sent". Key on whichever the app has.
+        # The oncePer expression is QUOTED: the ternary's `: ` is a YAML mapping indicator, and unquoted
+        # (#2538 as merged) the trigger failed to unmarshal, so EVERY app lost the hop from the 18:12Z
+        # apply until the live cm was patched ~18:30Z (2026-10-13; caught by the planned acceptance
+        # read of the controller log — `tofu validate` and the helm verdict both pass a bad trigger).
         "trigger.on-health-degraded" = <<-EOT
           - when: app.status.health.status == 'Degraded'
-            oncePer: app.status.sync.revision != nil ? app.status.sync.revision : join(app.status.sync.revisions, ",")
+            oncePer: 'app.status.sync.revision != nil ? app.status.sync.revision : join(app.status.sync.revisions, ",")'
             send: [deploy-degraded]
         EOT
       }
