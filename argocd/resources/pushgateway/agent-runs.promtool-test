@@ -2,7 +2,7 @@
 #
 #   devbox run -- promtool test rules argocd/resources/pushgateway/agent-runs.promtool-test
 #
-# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that these four
+# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that these five
 # fire on the shapes they were written for and stay quiet on the shapes that look like them —
 # (RetroReportOverdue moved to its own retro-report.promtool-rules/-test, homelab#591 — see this
 # directory's agent-runs.promtool-rules header) —
@@ -250,6 +250,109 @@ tests:
             exp_annotations:
               summary: "3+ non-clean agent runs in 1h on sleep-iac"
               description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+
+  # ── AgentRunBudgetCapHits — two cap hits in a week on one project (retro r8 F4) ─────────────
+  # Three budget-403 series: issue 201 round 1 (worker AND reviewer — the same session key, so
+  # ONE hit) and issue 201 round 2. The alert fires with value 2, not 3: the inner
+  # `count by (project, issue, round)` is what collapses the two roles, and this case pins it.
+  - interval: 1m
+    name: two distinct budget-403 rounds fire; a worker and a reviewer on one round count once
+    input_series:
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="201",job="agent_run",model="deepseek/deepseek-v4.1-flash",node="wk-04",project="oracle-fleet",role="worker",round="1"}'
+        values: "1+0x20"
+      - series: 'agent_run_total{exit_status="budget-403",harness="claude",issue="201",job="agent_run",model="anthropic/claude-haiku-4.5",node="wk-04",project="oracle-fleet",role="reviewer",round="1"}'
+        values: "1+0x20"
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="201",job="agent_run",model="deepseek/deepseek-v4.1-flash",node="wk-metal-01",project="oracle-fleet",role="worker",round="2"}'
+        values: "1+0x20"
+      - series: 'push_time_seconds{issue="201",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
+        values: "0+0x20"
+      - series: 'push_time_seconds{issue="201",job="agent_run",project="oracle-fleet",role="reviewer",round="1"}'
+        values: "0+0x20"
+      - series: 'push_time_seconds{issue="201",job="agent_run",project="oracle-fleet",role="worker",round="2"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunBudgetCapHits
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              project: oracle-fleet
+              triage: dig
+            exp_annotations:
+              summary: "2 budget-403 rounds in 7d on oracle-fleet — session caps are undersized or the account is dry"
+              description: "Two or more distinct (issue, round) rides on oracle-fleet ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator's context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account. Model-scout canaries (issue=scout-*) are excluded by design."
+
+  # ── AgentRunBudgetCapHits — one hit is a long tail, not a signal ────────────────────────────
+  # One budget-403 beside an auth-storm on the same project: the auth-storm is not a cap hit and
+  # must not be counted toward it, however non-clean it is.
+  - interval: 1m
+    name: a single budget-403 beside an auth-storm stays silent
+    input_series:
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="301",job="agent_run",model="deepseek/deepseek-v4.1-flash",node="wk-04",project="oracle-fleet",role="worker",round="1"}'
+        values: "1+0x20"
+      - series: 'agent_run_total{exit_status="auth-storm",harness="goose",issue="302",job="agent_run",model="deepseek/deepseek-v4.1-flash",node="wk-04",project="oracle-fleet",role="worker",round="1"}'
+        values: "1+0x20"
+      - series: 'push_time_seconds{issue="301",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
+        values: "0+0x20"
+      - series: 'push_time_seconds{issue="302",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunBudgetCapHits
+        exp_alerts: []
+
+  # ── AgentRunBudgetCapHits — model-scout canaries stay out (the burst's homelab#235 rule) ─────
+  # Two dead canaries on budget-403 plus one genuine cap hit: the matcher must count exactly the
+  # genuine one, which is under the bar.
+  - interval: 1m
+    name: two scout canary budget-403s plus one real hit stay under the bar
+    input_series:
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="scout-acme-new-1",job="agent_run",model="acme/new-1",node="nx-01",project="openrouter-operator",role="worker",round="1"}'
+        values: "1+0x20"
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="scout-acme-new-2",job="agent_run",model="acme/new-2",node="nx-01",project="openrouter-operator",role="worker",round="1"}'
+        values: "1+0x20"
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="7",job="agent_run",model="deepseek/deepseek-v4.1-flash",node="nx-01",project="openrouter-operator",role="worker",round="1"}'
+        values: "1+0x20"
+      - series: 'push_time_seconds{issue="scout-acme-new-1",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
+        values: "0+0x20"
+      - series: 'push_time_seconds{issue="scout-acme-new-2",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
+        values: "0+0x20"
+      - series: 'push_time_seconds{issue="7",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunBudgetCapHits
+        exp_alerts: []
+
+  # ── AgentRunBudgetCapHits — the week-old push ages out (the FU-021 shape, 7d edition) ───────
+  # Two hits pushed 7d minus 10 minutes before t=0: in the window at 5m, out of it at 15m. Same
+  # series, same values — the freshness join is what makes this a weekly rate and not a permanent
+  # statement about two old rides.
+  - interval: 1m
+    name: two budget-403 rounds stop counting a week after their push
+    input_series:
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="401",job="agent_run",model="deepseek/deepseek-v4.1-flash",node="wk-04",project="oracle-fleet",role="worker",round="1"}'
+        values: "1+0x20"
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="402",job="agent_run",model="deepseek/deepseek-v4.1-flash",node="wk-04",project="oracle-fleet",role="worker",round="1"}'
+        values: "1+0x20"
+      - series: 'push_time_seconds{issue="401",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
+        values: "-604200+0x20"
+      - series: 'push_time_seconds{issue="402",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
+        values: "-604200+0x20"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AgentRunBudgetCapHits
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              project: oracle-fleet
+              triage: dig
+            exp_annotations:
+              summary: "2 budget-403 rounds in 7d on oracle-fleet — session caps are undersized or the account is dry"
+              description: "Two or more distinct (issue, round) rides on oracle-fleet ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator's context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account. Model-scout canaries (issue=scout-*) are excluded by design."
+      - eval_time: 15m
+        alertname: AgentRunBudgetCapHits
+        exp_alerts: []
 
   # ── AgentEventInfraSpinning — the 2026-08-05 Sensor spin, and the pods that must stay quiet ──
   # Measured baselines (live, 2026-08-11): the four Argo Events infra pods idle at 0.1-5.3
