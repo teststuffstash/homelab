@@ -34,6 +34,13 @@ groups:
         labels:
           severity: warning
           triage: dig
+      - alert: ArgoCDNotificationTriggerStalled
+        expr: |
+          sum(rate(argocd_notifications_trigger_eval_total[10m])) == 0
+        for: 15m
+        labels:
+          severity: warning
+          triage: dig
       - alert: ArgoCDMetricsAbsent
         expr: |
           absent(argocd_app_info)

@@ -110,3 +110,21 @@ tests:
         alertname: ArgoCDAppOutOfSync
         exp_alerts:
           - exp_labels: { severity: warning, triage: dig, name: agent-fixer-sleep-tracking, dest_namespace: sleep-tracking }
+
+  - interval: 1m
+    name: "TriggerStalled: the counter stops moving (a trigger that fails to parse) → fires after 10m flat + 15m for; a moving counter never fires"
+    input_series:
+      # 2026-10-13 18:12Z shape: evaluations run (100/min), then the trigger YAML breaks and NOTHING is evaluated
+      - series: 'argocd_notifications_trigger_eval_total{trigger="on-health-degraded",triggered="false"}'
+        values: "0+100x25 2500x40"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ArgoCDNotificationTriggerStalled
+        exp_alerts: []
+      - eval_time: 48m
+        alertname: ArgoCDNotificationTriggerStalled
+        exp_alerts: []
+      - eval_time: 52m
+        alertname: ArgoCDNotificationTriggerStalled
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }
