@@ -117,9 +117,15 @@ resource "helm_release" "argocd" {
         EOT
       }
       triggers = {
+        # oncePer keys the dedup on the synced revision — once per DEPLOY, which is the contract the
+        # revert chain relies on. A MULTI-source app (oracle-fleet-ingester: two sources) has no
+        # `status.sync.revision`, only `status.sync.revisions`; with the bare field the key was the
+        # literal `<nil>` (seen in the app's `notified.notifications.argoproj.io` annotation,
+        # 2026-10-13), so such an app notified ONCE in its life and never again — the ingester's
+        # Degraded at 17:05Z that day was "already sent". Key on whichever the app has.
         "trigger.on-health-degraded" = <<-EOT
           - when: app.status.health.status == 'Degraded'
-            oncePer: app.status.sync.revision
+            oncePer: app.status.sync.revision != nil ? app.status.sync.revision : join(app.status.sync.revisions, ",")
             send: [deploy-degraded]
         EOT
       }
