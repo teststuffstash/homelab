@@ -13377,3 +13377,24 @@ updates or reverts as much as possible — mechanical revert or a responder."
   request). The box converged the quoted trigger (lease on b184b9f0). Operator question answered: the Longhorn rebuild
   loop (Prometheus volume, m70s → hp-01) began 06:10Z and runs pod-to-pod over vxlan — not today's router changes.
 
+
+## 2026-10-13 06:10–18:58Z — m70s's switch port wedged into a 12 h PAUSE storm: a 6 min m70s-only blackout, then ~100 Mbit egress with no alert but Loki's log volume; the Prometheus rebuild loop was this, not the router work; fixed by moving the cable; belt #2543 (second jail, recorded by the seat)
+
+- **Timeline (the second jail's dig; the seat records it).** 06:10Z: m70s (.56, the office 5-port unmanaged switch)
+  went dark for ~6 min — m70s only, no carrier change on its NIC. From 06:12Z the switch port sent m70s ~2,600
+  802.3x PAUSE frames/s (XOFF 0xffff / XON alternating, src 00:00:00:00:00:00) for 12 h. The kernel counts an
+  unhandled ethertype as `rx_dropped`, not `rx_errs`, so `NodeNetworkReceiveErrs` stayed 0, `NodeNetworkInterfaceFlapping`
+  saw no flap, and the link still read 1000 Mbit while egress sat at ~12 MB/s. The Prometheus volume's Longhorn
+  replica rebuild to hp-01 (begun 06:10Z) hit the 8 s engine-replica timeout on every attempt and looped all day,
+  re-creating the 57 GB rebuild snapshot each time; the ONLY alert was `LokiNamespaceLogVolumeHigh` on longhorn-system
+  at 17:55Z, 11.7 h in. **Fix:** the cable moved to another port of the same switch at ~18:58Z — cleared at once.
+  **Correction to the 15:45–17:15Z entry above:** the rebuild loop was "not today's router changes" — correct — but it
+  was not benign background either: it was this wedged port.
+- **Belt: #2543 MERGED 19:15Z** (19ab04b7) — `node-nic` group in talos-substrate: `NodeNetworkReceiveDropStorm`
+  (`rate(node_network_receive_drop_total[30m]) > 1000` for 15m, triage dig) and `NodeLinkSpeedDegraded` (carrier-up NIC
+  at 0 < speed < 1 Gbit for 10m, triage none — physical). 7-day replay: only m70s eno1 would have fired, first at
+  06:53Z vs the Loki alert's 17:55Z; healthy controls' worst 30 min drop rates 425/s (hp-01) and 281/s (wk-metal-01).
+  Review round 1 fixed in-PR (a stray scratch file). Diagnosis recipe + the cabling corrections (m70s on the office
+  5-port, wk-metal-03 moved to the basement, switch unrecorded) in `docs/network-physical.md` (9ba521e2).
+- **FU-093 corrected** in the same commit: the 57 GB object on hp-01/hg5d is a rebuild snapshot Longhorn recreates and
+  merges away by itself, not a stale leftover to clear.

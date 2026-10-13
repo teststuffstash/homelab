@@ -1210,7 +1210,10 @@ the block needs pruning, not more headings.
       09-03 fourth) and status detail: [`docs/storage-ledger.md`](storage-ledger.md). ⚠ 2026-10-03:
       hp-01/hg5d under the scheduling floor holds a 57 GB SYSTEM snapshot (markRemoved, 09-29) on the
       Prometheus volume's replica — `LonghornDiskBelowSchedulingFloor`'s text blames the image store (not
-      on that disk); fix the text, clear the snapshot, and (a) below is the class fix. Garage
+      on that disk); fix the text, and (a) below is the class fix. **Corrected 2026-10-13 (second jail):
+      do NOT "clear the snapshot" — the 57 GB object is a REBUILD snapshot Longhorn recreates on every
+      replica rebuild and merges away by itself once the rebuild completes; it is not a stale leftover
+      (the 10-13 rebuild loop kept re-creating it — TICK-LOG 2026-10-13 06:10–18:58Z). Garage
       metrics SHIPPED (#934 → #965); pve fstrim SCHEDULED (PR#925); **pve thin-pool meter BUILT
       2026-09-04 (PR#1367)** — node_exporter textfile on the hypervisor, `PveThinPool*` /
       `PveVmIoError` belts, ci-runner-01's own `fstrim.timer` VERIFIED enabled+active on the
