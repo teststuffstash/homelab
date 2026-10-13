@@ -5489,11 +5489,41 @@ EOF_GTHEMES_OPEN
           # A round completed since the marker — re-arm the gate (don't debounce)
           :
         else
-          # No round completed since the marker — debounce holds, but report as who=operator
-          # so the board shows it (FU-199)
-          orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:arbitrate:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
-          item_class_push "$repo" "pr-${u}" "arbitrate-standing" "operator"
-          continue
+          # FU-199 rule 2, the arbitrate half (retro r8 F5 — #2305/PR#2319: marker 15:28Z, "Round
+          # deferred (capacity)" 15:30Z, DEBOUNCED for 68 min until the seat applied the edit by
+          # hand): a capacity deferral posted AFTER the marker means the dispatched round never ran,
+          # so the marker is stale — re-arm, exactly as the ci-red gate does. The ci-red gate reads
+          # "no stats since the marker" as the deferral; here that same silence is ALSO the genuine
+          # standing escalation (escalate keeps the label, a human is the next mover), so the
+          # deferral has to be read from the thread: the session's `Round deferred (capacity)`
+          # comment (brief §Capacity gates) on the PR, or on the issue the round was dispatched
+          # against — the #2305 note landed on the issue while the PR saw only the marker. The
+          # issue read is one REST call, taken only on the would-debounce path; unreadable or no
+          # issue derivable = no deferral seen = the debounce holds (fail-closed, no churn).
+          afp_defer_def='def defer_ts: [ .[]? | select((.body // "") | test("^\\**Round deferred \\(capacity\\)")) | (.createdAt // .created_at // "") ] | max // "";'
+          afp_defer_ts="$(printf '%s' "$pr_json_ab" | jq -r "${afp_defer_def} .comments | defer_ts" 2>/dev/null)" || afp_defer_ts=''
+          if ! { [ -n "$afp_marker_ts" ] && [ -n "$afp_defer_ts" ] && [[ "$afp_defer_ts" > "$afp_marker_ts" ]]; } 2>/dev/null; then
+            # The issue key: the PR body's closing keyword, else the fix/issue-<n>- branch convention
+            # (the ci-red-rounds sibling rule, homelab#156).
+            afp_issue="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)
+              | (((.body // "") | capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // "") as $b
+              | if $b != "" then $b else (((.headRefName // "") | capture("(^|[^0-9])issue-(?<i>[0-9]+)(-|$)") | .i) // "") end' 2>/dev/null)" || afp_issue=''
+            case "$afp_issue" in ''|*[!0-9]*) afp_issue='';; esac
+            if [ -n "$afp_issue" ]; then
+              afp_issue_cmt="$(gh api "repos/${slug}/issues/${afp_issue}/comments?per_page=100" 2>/dev/null)" || afp_issue_cmt=''
+              afp_defer_ts="$(printf '%s' "$afp_issue_cmt" | jq -r "${afp_defer_def} defer_ts" 2>/dev/null)" || afp_defer_ts=''
+            fi
+          fi
+          if [ -n "$afp_marker_ts" ] && [ -n "$afp_defer_ts" ] && [[ "$afp_defer_ts" > "$afp_marker_ts" ]] 2>/dev/null; then
+            # Deferred since the marker — the round never ran; re-arm the gate (don't debounce)
+            :
+          else
+            # No round completed and no deferral since the marker — debounce holds, but report as
+            # who=operator so the board shows it (FU-199)
+            orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:arbitrate:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
+            item_class_push "$repo" "pr-${u}" "arbitrate-standing" "operator"
+            continue
+          fi
         fi
       fi
       units="${units}arbitrate|${repo}|pr-${u}\n"

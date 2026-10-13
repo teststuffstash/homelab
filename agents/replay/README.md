@@ -167,6 +167,8 @@ is stale, so it cannot drift the way the prose register did.
 | `arbitrate/blocked-on-pr-resolved` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/blocked-on-pr-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/crashed-ruling-keeps-label` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/deferred-capacity-rearm` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/deferred-capacity-stale` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/escalate-keeps-label` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/fu147-refire-blocked-agent-summary` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |

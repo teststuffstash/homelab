@@ -1,0 +1,4 @@
+[
+  {"id":1,"created_at":"2026-08-09T01:10:00Z","user":{"login":"homelab-agents-1234[bot]"},"body":"**Round deferred (capacity), not refused — nothing consumed, no label touched.**\n\nThe fix round could not be dispatched this pass: the launcher's FU-042 WIP pre-flight read 2 agent pods Running in ns `oracle-fleet` ≥ `AGENT_WIP_LIMIT=2`. This is a capacity wait, not a park; the next pass re-probes and dispatches it."},
+  {"id":2,"created_at":"2026-08-09T01:39:30Z","user":{"login":"homelab-agents-1234[bot]"},"body":"ARBITRATE (changes-requested on PR #234, round 8 — one blocking defect left): re-run on `fix/issue-200-c4c5-selector` with the one-line fix."}
+]

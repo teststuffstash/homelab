@@ -1,0 +1,5 @@
+CALL gh pr view 234 --repo teststuffstash/oracle-fleet --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh api repos/teststuffstash/oracle-fleet/issues/200/comments?per_page=100
+OUT ORPHAN [oracle-fleet] ⏳ arbitrate DEBOUNCED — PR #234: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (`state-fp:arbitrate:cf0afcf67790`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.
+OUT REACHED: end
+RC 0

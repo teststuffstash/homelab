@@ -1,0 +1,25 @@
+# The control for `deferred-capacity-rearm` (FU-199 rule 2, arbitrate half — retro r8 F5): a
+# deferral note OLDER than the newest `state-fp:arbitrate` marker is history, not a stale marker.
+# The round dispatched at the marker is the one that superseded it, and with no stats and no newer
+# deferral since, this is the genuine standing escalation — the debounce holds and the board gets
+# its `who=operator` row.
+#
+# CONDITION UNDER REPLAY. Same world as the re-arm case, except the issue's only "Round deferred
+# (capacity)" comment is at 01:10Z, before the 01:40Z marker. The gate reads the issue, finds
+# nothing newer, and reports DEBOUNCED.
+pins:
+  - MP-T11
+name: arbitrate-deferred-capacity-stale
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:arbitrate-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
