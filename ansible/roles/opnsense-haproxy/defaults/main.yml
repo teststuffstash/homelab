@@ -2,3 +2,9 @@
 # Defaults — real values live in group_vars/opnsense.yml.
 haproxy_proxied_services: []
 haproxy_tcp_services: []
+# The VIP range every HAProxy frontend binds in (ADR-088). Its pass rule carries `nopfsync`.
+haproxy_vip_network: 192.168.3.0/24
+# The node's root ssh key, for the one setting the API cannot write (anti-lockout, below).
+opnsense_ssh_key: >-
+  {{ lookup('env', 'OPN_SSH_KEY') or lookup('env', 'OPN_TEST_SSH_KEY') or lookup('env', 'OPN_TEST_PVE_KEY')
+     or (lookup('env', 'HOME') ~ '/.claude/homelab-pve-ssh/id_ed25519') }}

@@ -362,3 +362,66 @@
         match_fields: [hostname, domain, record_type, value]
       loop: "{{ stack_gateways | default([]) }}"
       loop_control: { label: "*.{{ item.wildcard_domain }} -> {{ item.vip }}" }
+
+# --- pfsync: HAProxy's own connections are never synced (FU-312, 2026-10-13) ---------------------
+# A HAProxy connection terminates on this node's lo0 VIP, so it cannot survive a failover: the
+# socket lives in this node's HAProxy. Syncing its pf state therefore buys nothing, and the sync
+# breaks it. On the CARP pair, pfsync updates from the BACKUP corrupted the MASTER's sequence
+# tracking for these states. pf then dropped the client's ACKs as `BAD state` (ackskew beyond
+# ±MAXACKWINDOW), and bulk pulls froze mid-stream. A/B on 2026-10-13, pod clients on wk-02 and
+# wk-04 against registry.teststuff.net, 2 × 16 range GETs per run: pfsync on, 5 of 32 stalled
+# and pf's state-mismatch counter rose by ~500; BACKUP's pfsync off, 0 of 32 stalled and +0.
+# Hence one rule passing LAN → the VIP range with `nopfsync` (pf `no-sync`). Forwarded and NAT
+# states keep syncing.
+- name: Read firewall automation rules
+  oxlorg.opnsense.raw: { module: firewall, controller: filter, command: searchRule }
+  register: hap_fw_rules
+- name: HAProxy VIPs — pass with no pfsync (create-if-absent by description)
+  oxlorg.opnsense.raw:
+    module: firewall
+    controller: filter
+    command: addRule
+    action: post
+    data:
+      rule:
+        enabled: "1"
+        sequence: "90"
+        action: pass
+        quick: "1"
+        interface: lan
+        direction: in
+        ipprotocol: inet
+        protocol: TCP
+        source_net: any
+        destination_net: "{{ haproxy_vip_network }}"
+        nopfsync: "1"
+        description: "haproxy: LAN to the VIPs, states not pfsync'd (ansible, FU-312)"
+  when: >-
+    "haproxy: LAN to the VIPs, states not pfsync'd (ansible, FU-312)"
+    not in (hap_fw_rules.response.rows | map(attribute='description') | list)
+  notify: apply firewall
+
+# ...which only takes effect with the ANTI-LOCKOUT rule off. That rule (`pass in quick on lan
+# to (self) port {22 80 443}`) is generated at priority 5, and every automation rule sits at
+# ≥200000 (FilterRuleField::getPriority), so nothing can precede it. The VIPs are `(self)`
+# (lo0), so it caught every HAProxy connection with a synced state. Off is safe: "Default allow
+# LAN to any" already passes LAN → the GUI and SSH, and WireGuard clients have their own rule.
+# There is no API for the setting (26.7: legacy system_advanced_firewall.php,
+# system/webgui/noantilockout), so it goes over ssh through the config singleton, which keeps a
+# backup revision. Idempotent: the read runs in check mode; the write only on drift.
+- name: Read the anti-lockout setting (ssh — no API)
+  ansible.builtin.command:
+    argv: [ssh, -i, "{{ opnsense_ssh_key }}", -o, BatchMode=yes, -o, ConnectTimeout=10,
+           -o, StrictHostKeyChecking=no, -o, UserKnownHostsFile=/dev/null, -o, LogLevel=ERROR,
+           "root@{{ ansible_host }}",
+           "php -r 'require_once \"config.inc\"; echo isset(\\OPNsense\\Core\\Config::getInstance()->object()->system->webgui->noantilockout) ? \"off\" : \"on\";'"]
+  register: hap_antilockout
+  changed_when: false
+  check_mode: false
+- name: Anti-lockout off (the VIP rule above must win for HAProxy's connections)
+  ansible.builtin.command:
+    argv: [ssh, -i, "{{ opnsense_ssh_key }}", -o, BatchMode=yes, -o, ConnectTimeout=10,
+           -o, StrictHostKeyChecking=no, -o, UserKnownHostsFile=/dev/null, -o, LogLevel=ERROR,
+           "root@{{ ansible_host }}",
+           "php -r 'require_once \"config.inc\"; $c = \\OPNsense\\Core\\Config::getInstance(); $c->object()->system->webgui->addChild(\"noantilockout\", \"1\"); $c->save();' && configctl filter reload"]
+  when: hap_antilockout.stdout | trim == 'on'
