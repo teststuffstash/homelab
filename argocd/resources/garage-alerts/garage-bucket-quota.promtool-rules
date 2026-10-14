@@ -35,5 +35,5 @@ groups:
             gauges with a timestamp, and that timestamp is over an hour old or missing. The
             pushgateway re-serves the last push forever, so the quota belts are reading stale
             numbers, not none. Read the CronJob's last Job log for "WARN bucket gauges" (admin
-            token, ListBuckets) or "WARN pushgateway". Until fixed, GarageBucketQuotaNear and
-            RegistryBucketCommitHeadroomLow reflect the last successful tick, not now.
+            token, ListBuckets) or "WARN pushgateway". Until fixed, GarageBucketQuotaNear reflects
+            the last successful tick, not now.

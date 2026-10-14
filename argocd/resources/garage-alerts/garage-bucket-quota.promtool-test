@@ -67,7 +67,7 @@ tests:
               triage: dig
             exp_annotations:
               summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
-              description: "The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket gauges with a timestamp, and that timestamp is over an hour old or missing. The pushgateway re-serves the last push forever, so the quota belts are reading stale numbers, not none. Read the CronJob's last Job log for \"WARN bucket gauges\" (admin token, ListBuckets) or \"WARN pushgateway\". Until fixed, GarageBucketQuotaNear and RegistryBucketCommitHeadroomLow reflect the last successful tick, not now."
+              description: "The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket gauges with a timestamp, and that timestamp is over an hour old or missing. The pushgateway re-serves the last push forever, so the quota belts are reading stale numbers, not none. Read the CronJob's last Job log for \"WARN bucket gauges\" (admin token, ListBuckets) or \"WARN pushgateway\". Until fixed, GarageBucketQuotaNear reflects the last successful tick, not now."
   - interval: 1m
     name: "GarageBucketGaugesStale fires after 15m when the timestamp never existed"
     input_series:
@@ -85,4 +85,4 @@ tests:
               triage: dig
             exp_annotations:
               summary: "garage_bucket_* gauges are stale or absent — the bucket-quota belts read old numbers"
-              description: "The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket gauges with a timestamp, and that timestamp is over an hour old or missing. The pushgateway re-serves the last push forever, so the quota belts are reading stale numbers, not none. Read the CronJob's last Job log for \"WARN bucket gauges\" (admin token, ListBuckets) or \"WARN pushgateway\". Until fixed, GarageBucketQuotaNear and RegistryBucketCommitHeadroomLow reflect the last successful tick, not now."
+              description: "The garage-meta-rotation CronJob (ns garage, every 15 min) pushes the bucket gauges with a timestamp, and that timestamp is over an hour old or missing. The pushgateway re-serves the last push forever, so the quota belts are reading stale numbers, not none. Read the CronJob's last Job log for \"WARN bucket gauges\" (admin token, ListBuckets) or \"WARN pushgateway\". Until fixed, GarageBucketQuotaNear reflects the last successful tick, not now."

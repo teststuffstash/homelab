@@ -3,8 +3,9 @@
 **Tracked by:** FU-280. **Touches:** [ADR-121](../adr.md) (the registry decision),
 [ADR-089](../adr.md) (quota-as-contract), [`storage-ledger.md`](../storage-ledger.md) (who owns the
 sum). **Status:** **DECIDED + CUT OVER 2026-09-24 14:50Z** ([ADR-121](../adr.md) amended): `registry-fs`
-on the `registry-data` volume serves `registry.teststuff.net`, and the S3 Deployment runs unrouted as
-the rollback. What remains is FU-280's soak and the S3 removal. How it got there: **re-framed 2026-09-24**. The cheap side-question was answered that day —
+on the `registry-data` volume serves `registry.teststuff.net`. Soak done; the S3 Deployment (the
+rollback) and `RegistryBucketCommitHeadroomLow` were **removed 2026-10-14**. The bucket stays until
+FU-279's multipart decision (why: `garage-workspace.yaml` header). How it got there: **re-framed 2026-09-24**. The cheap side-question was answered that day —
 the 2× peak costs **zero disk**, so the quota argument is dead — but the operator's correction the
 same day is that the quota refusal *was always the visible tip*: the case is **contention during the
 release window and the machinery the S3 path drags in**, not capacity (§the real case). Next step is
@@ -259,6 +260,9 @@ the backend sits behind that Service's selector, so the naming trap below never 
    any push that landed on S3 in between. **Rollback** = flip the selector back; the S3 registry
    keeps running.
 3. **After the soak:** remove the S3 Deployment and the Garage bucket, and amend ADR-121.
+   *2026-10-14: the S3 Deployment and its bucket alert are removed — there is no rollback any more.
+   The bucket is not: Garage refuses to delete it while objects remain, and deleting it after
+   emptying would strand FU-279's incomplete uploads, so it waits on that decision.*
 
 **The headline is now read from the other side:** the first real release after the flip goes
 to the volume. Re-run phase 0's queries across that window. The other tenants' p99 should

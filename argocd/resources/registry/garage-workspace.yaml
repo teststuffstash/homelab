@@ -3,6 +3,19 @@
 # registry namespace (no Infisical round-trip; the htpasswd push credential is the one that
 # rides Infisical, see htpasswd-externalsecret.yaml).
 #
+# ⚠ RETIRING — NO CONSUMER since 2026-10-14 (FU-280). The registry serves from the filesystem
+# volume (registry-fs.yaml) since 2026-09-24; the S3 Deployment and RegistryBucketCommitHeadroomLow
+# were removed 2026-10-14. This Workspace STAYS until the bucket can actually go, because deleting
+# it now would wedge: deletionPolicy Delete runs a terraform destroy, the jkossis/garage provider's
+# garage_bucket Delete is a plain admin-API DeleteBucket, and Garage (v2.3.0, is_bucket_empty)
+# refuses BucketNotEmpty while any COMPLETED object remains (16 objects / 21 GB on 2026-10-14) —
+# the key and permission would be destroyed, the bucket kept, the CR stuck on its finalizer.
+# And emptying the objects first is not enough: is_bucket_empty does not see INCOMPLETE multipart
+# uploads (ObjectFilter::IsData), so deleting the bucket with FU-279's 6 MPUs (4.3 GB) still in it
+# strands them under a deleted bucket id, past every cleanup command. ORDER, therefore: (1) FU-279's
+# decision on the MPUs (the ☠ below), (2) delete the completed objects, (3) delete this file and let
+# the Workspace's destroy remove bucket + key, (4) `garage bucket info registry` → not found.
+#
 # Sizing (ADR-089: every bucket claim states max_size) — 48Gi since 2026-09-10 (20Gi → 32Gi on
 # 2026-09-07 → 48Gi). The rule the cap has to satisfy, learned the hard way twice:
 #
@@ -20,7 +33,7 @@
 #     multipart/registry path it does not: it fails slow, at commit, illegibly.
 #   - Garage exports no per-bucket size metric; GarageDiskFillingUp cannot see a CAP. The
 #     garage-meta-rotation controller pushes the admin-API counter every 15 min instead, and
-#     RegistryBucketCommitHeadroomLow (prometheusrule.yaml here) holds the 2× rule as an alert.
+#     RegistryBucketCommitHeadroomLow held the 2× rule as an alert (removed 2026-10-14, FU-280).
 # History: 2026-09-07 — 12.47 GB held + 10.01 GB against 20Gi, refused at the FIRST complete.
 # 2026-09-09 — 16.4 GB held + 2 × 10.64 GB against 32Gi, refused at the COPY's complete
 # (Prometheus: 261 UploadPartCopy + 2 CompleteMultipartUpload in the window, zero S3 errors).
@@ -76,7 +89,7 @@
 #     from 2026-09-02/09-10 was still held on 09-22. It does NOT count against the bucket quota
 #     (garage_bucket_bytes tracks completed objects only — verified: the gauge equalled the object
 #     listing exactly, MPU parts excluded), so it never moves this alert; it is raw disk on every
-#     zone at rf=3. FU-279 carries it — mind the ☠ in docs/incidents/2026-08-24-…-meta-wipe.md
+#     zone at rf=3 (2026-10-14: 6 uploads, 4.3 GB). FU-279 carries it — mind the ☠ in docs/incidents/2026-08-24-…-meta-wipe.md
 #     before running `garage bucket cleanup-incomplete-uploads`.
 apiVersion: tf.upbound.io/v1beta1
 kind: Workspace

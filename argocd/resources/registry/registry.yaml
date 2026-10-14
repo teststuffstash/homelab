@@ -10,15 +10,25 @@
 #   - nginx exists ONLY for per-method auth, which distribution cannot express: GET/HEAD are
 #     anonymous (LAN pull — same accepted consequence as the ADR-091 FU-196 v0 update),
 #     everything else (push, delete) requires basic auth (htpasswd, Infisical→ESO).
-#   - Storage is the Garage bucket `registry` (garage-workspace.yaml) via the s3 driver —
-#     stateless pod, no Longhorn claim, corpus bytes live where data lives (CONTEXT.md #1).
+#   - Storage is a filesystem volume since FU-280's 2026-09-24 cutover: the Deployment
+#     `registry-fs` + claim `registry-data` live in registry-fs.yaml. The S3 Deployment that
+#     ran here (Garage bucket `registry`) was removed 2026-10-14; its s3-driver lessons (part
+#     sizes, the redirect middleware, the 2x commit) are in git history and in
+#     docs/spikes/registry-filesystem-backend.md. THIS file keeps what both shared: the nginx
+#     ConfigMap and the LB Service.
 #   - TLS/hostname is OPNsense HAProxy + ACME (registry.teststuff.net → 3.33 → 40.33), so
 #     containerd trusts it with ZERO node config — no insecure-registries anywhere.
 #
 # Carried lessons from the mirror fleet:
-#   - blob-descriptor cache OFF (#240): deletes exist here too (DELETE_ENABLED for future GC);
+#   - blob-descriptor cache OFF (#240): deletes exist here too (DELETE_ENABLED for the GC);
 #     a stale in-memory descriptor turns one delete into a served lie. Same kill switch.
-#   - upload purging at 1h (#80): abandoned multipart uploads are debris here exactly as there.
+#   - upload purging at 1h (#80): abandoned uploads are debris here exactly as there.
+#   - RELATIVEURLS: behind nginx+HAProxy the registry sees plain HTTP and emitted ABSOLUTE
+#     http:// upload Locations; an https client's next PATCH then hit port 80 on the HAProxy VIP
+#     (the OPNsense GUI redirect listener), which answered the 6GB chunk with an HTML 413 (first
+#     seed push). Relative Locations keep the client on the scheme/host it arrived by.
+#   - DEBUG_ADDR: the image's default debug server binds :5001, nginx's port in the same pod
+#     netns, and the registry fatal-exits (first deploy) — pinned to 127.0.0.1:5002.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -69,127 +79,6 @@ data:
       }
     }
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: registry
-  namespace: registry
-  labels: { app: registry }
-spec:
-  replicas: 1
-  selector:
-    matchLabels: { app: registry }
-  template:
-    metadata:
-      labels: { app: registry }
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
-        seccompProfile: { type: RuntimeDefault }
-      containers:
-        - name: registry
-          image: registry:3.1.2
-          env:
-            - { name: REGISTRY_STORAGE, value: "s3" }
-            - { name: REGISTRY_STORAGE_S3_REGIONENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
-            - { name: REGISTRY_STORAGE_S3_REGION, value: "garage" }
-            - { name: REGISTRY_STORAGE_S3_BUCKET, value: "registry" }
-            - { name: REGISTRY_STORAGE_S3_FORCEPATHSTYLE, value: "true" }
-            - { name: REGISTRY_STORAGE_S3_ENCRYPT, value: "false" }
-            # PART SIZE IS THE PUSH THROUGHPUT (oracle handoff 2026-09-10 07:56, measured on
-            # release run 34450512688): the s3 driver uploads parts SERIALLY, one buffered chunk
-            # at a time, and Garage's cost per UploadPart is per REQUEST, not per byte — mean
-            # 0.6 s on garage-1 (m70s NVMe, the 09-08 push: 15 MB/s), 1.9 s on garage-2 (the
-            # MX500 laptop zone, 09-10: 2.7 MB/s; which pod a push lands on is the registry's
-            # keep-alive connection, i.e. luck). At the 10 MiB default that is 1,064 round trips
-            # for the 10.6 GB corpus layer, 50–65 min; the delta pod pushes the same bytes to
-            # ert-snapshots in 64 MiB parts at ~26 MB/s. So: 64 MiB parts (166 per layer; the
-            # driver buffers ONE chunk per in-flight upload in RAM — the 1Gi limit below holds a
-            # dozen). The commit-time server-side copy (Move → UploadPartCopy, 32 MiB default,
-            # 16–55 s per part on 2026-09-09) gets the same chunk; its concurrency stays at the
-            # driver default — one variable at a time, the next push measures both.
-            - { name: REGISTRY_STORAGE_S3_CHUNKSIZE, value: "67108864" }
-            - { name: REGISTRY_STORAGE_S3_MULTIPARTCOPYCHUNKSIZE, value: "67108864" }
-            # The s3 driver's DEFAULT redirect middleware answers blob GETs with a presigned URL
-            # at the storage endpoint — garage.garage.svc.cluster.local, unreachable for every
-            # actual consumer (Talos containerd, LAN clients). Found live: the seeded blob's GET
-            # died on the redirect while the push had succeeded. Stream blobs through the
-            # registry instead; Garage stays a cluster-internal detail.
-            - { name: REGISTRY_STORAGE_REDIRECT_DISABLE, value: "true" }
-            - name: REGISTRY_STORAGE_S3_ACCESSKEY
-              valueFrom:
-                secretKeyRef: { name: registry-garage-s3, key: access_key_id }
-            - name: REGISTRY_STORAGE_S3_SECRETKEY
-              valueFrom:
-                secretKeyRef: { name: registry-garage-s3, key: secret_access_key }
-            # Future GC needs deletes; the descriptor-cache kill switch makes them safe (#240).
-            - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
-            - { name: REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR, value: "" }
-            # One env var holding the whole map — per-key vars panic the registry (mirror note).
-            - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
-              value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
-            - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
-            # Behind nginx+HAProxy the registry sees plain HTTP and was emitting ABSOLUTE
-            # http:// upload-session Locations — an https client's next PATCH then went to
-            # port 80 on the HAProxy VIP, which is the OPNsense GUI's redirect listener, whose
-            # lighttpd answered the 6GB chunk with an HTML 413 (found live, first seed push).
-            # Relative Locations keep the client on whatever scheme/host it arrived by.
-            - { name: REGISTRY_HTTP_RELATIVEURLS, value: "true" }
-            # The image's default config runs a DEBUG server on :5001 — the nginx front's port,
-            # same pod netns → bind collision, registry fatal-exits (found live, first deploy).
-            # Pin it to localhost:5002; it also serves /metrics there if scraping is ever wanted.
-            - { name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:5002" }
-          ports:
-            - { name: http, containerPort: 5000 }
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-          readinessProbe:
-            httpGet: { path: /v2/, port: 5000 }
-            initialDelaySeconds: 3
-            periodSeconds: 10
-          livenessProbe:
-            httpGet: { path: /v2/, port: 5000 }
-            initialDelaySeconds: 10
-            periodSeconds: 20
-          resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits:   { cpu: "2",    memory: "1Gi" }
-        - name: nginx
-          image: nginx:1.31-alpine
-          ports:
-            - { name: front, containerPort: 5001 }
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-          readinessProbe:
-            httpGet: { path: /healthz, port: 5001 }
-            initialDelaySeconds: 3
-            periodSeconds: 10
-          volumeMounts:
-            - { name: nginx-conf, mountPath: /etc/nginx/conf.d, readOnly: true }
-            - { name: htpasswd, mountPath: /etc/nginx/htpasswd, readOnly: true }
-            - { name: nginx-tmp, mountPath: /tmp }
-            - { name: nginx-cache, mountPath: /var/cache/nginx }
-            - { name: nginx-run, mountPath: /var/run }
-          resources:
-            requests: { cpu: "50m", memory: "64Mi" }
-            limits:   { cpu: "1",   memory: "256Mi" }
-      volumes:
-        - name: nginx-conf
-          configMap: { name: registry-nginx }
-        - name: htpasswd
-          secret: { secretName: registry-htpasswd }
-        - name: nginx-tmp
-          emptyDir: {}
-        - name: nginx-cache
-          emptyDir: {}
-        - name: nginx-run
-          emptyDir: {}
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -203,8 +92,8 @@ metadata:
 spec:
   type: LoadBalancer
   # FU-280 CUTOVER (2026-09-24): registry.teststuff.net is served by the FILESYSTEM registry
-  # (registry-fs.yaml), not the S3 Deployment above. The S3 Deployment keeps running, unrouted,
-  # as the rollback: set this back to `app: registry`. It goes, with its bucket, after the soak.
+  # (registry-fs.yaml). The S3 Deployment that was the rollback was removed 2026-10-14, so
+  # there is no selector to flip back to.
   selector: { app: registry-fs }
   ports:
     - { name: http, port: 80, targetPort: 5001 }
