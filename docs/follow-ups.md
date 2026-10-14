@@ -212,15 +212,11 @@ six OVERSIZE items pointer-ized into
       **Next:** the design pass (VLAN vs router-local, the VM counter leg, the Grafana join). Link:
       the 2026-09-02 loop-outage postmortem §Residuals.
 
-- [ ] **FU-204** — **C4/C5's bare-mention exclusion is a silent-stall limbo** (2026-09-02, first
-      live sighting: fleet#345 — its r1 died on a model rate-limit, the label stayed
-      `agent/in-progress`, and assembly PR#346's coverage-map bare mention excluded it from BOTH
-      the stall wake and the review flip; only a human re-tick recovered it). The exclusion is
-      deliberately conservative (the circles#36 sibling-seam lesson) but has no escape hatch.
-      Needs a design ruling: age-bound the exclusion, or wake-with-marker for coordinator
-      judgment instead of auto-requeue. Evidence:
-      `docs/incidents/2026-09-02-anonymous-git-throttle-loop-outage.md` §Residuals; the clause:
-      `agents/coordinator-scan.sh` C4/C5.
+- [ ] **FU-204** — **C4/C5's bare-mention exclusion is a silent-stall limbo** (2026-09-02, fleet#345: r1 died
+      on a rate-limit, assembly PR#346's coverage-map bare mention held it out of the stall wake AND the review
+      flip). **RULED 2026-10-14** (design-agents sitting): neither age-bound nor wake-with-marker — the #1720
+      precedent: `C4C5_SEL`'s open-PR test reads `STRONG_LINK_JQ` (false hold = indefinite stall, false release =
+      one wasted ride + the launcher's open-PR refusal). **Next:** homelab#2562 (queued); archive when it merges.
 
 - [ ] **FU-223** — **Does Longhorn honour `fsync` end-to-end — and what does it cost in CPU?** The
       2026-09-07 A/B measured a Longhorn replica-1 volume at **1.9× the fsync'd IOPS of raw XFS on the same
@@ -475,13 +471,11 @@ the block needs pruning, not more headings.
       in a design sitting with #2014; until then the lens tells the reviewer to write the bullets anyway.
 - [ ] **FU-306** — **ci-runner VM replaces are still a human apply; the attended verb is proven.**
       `scripts/runner-maintenance.sh run` recreated both runners 2026-10-08 (incident
-      [2026-10-06-ci-runner-disk-full-key-in-plans](incidents/2026-10-06-ci-runner-disk-full-key-in-plans.md)) — the
-      capability-ledger evidence §Non-Talos VMs in `management-box.md` waits for. **Next:** the box wiring —
-      `policy/mgmt/plan-input.yaml` maps `proxmox_virtual_environment_{vm,file}.ci_runner*` replace → the verb (VM
-      name from the plan JSON), `mgmt-apply` re-plans `-exclude`-scoped one VM per tick, the final full apply
-      stamps. **Operator decision first:** `github_runner_version` is an install pin no one bumps (2.323.0 sat
-      below GitHub's 2.329.0 registration floor until a recreate) — Renovate-track it (every bump = a VM replace
-      the box must then run) or install `latest` at boot (the runner self-updates anyway).
+      [2026-10-06-ci-runner-disk-full-key-in-plans](incidents/2026-10-06-ci-runner-disk-full-key-in-plans.md)).
+      **RULED 2026-10-14 (runner pin):** Renovate-track `github_runner_version`, and a pin bump must NOT replace a VM
+      (it lands at the next attended recreate; the runner self-updates in place). Order: homelab#2567 (tofu half,
+      queued) FIRST, then the operator-direct `.github/renovate-global.json` regex manager. **Next** after both:
+      the box wiring — `policy/mgmt/plan-input.yaml` maps a `ci_runner*` replace → the verb, one VM per tick.
 - [ ] **FU-305** — **A devbox toolchain bump wedged the management box's loops; the sentinel failed SILENT.**
       10-07 #2362 → every box `devbox run` exit 1, no sentinel verdict. Class fix #2457 (no gate loop runs devbox;
       iac-sentinel runs the BAKED lock) — docs/management-box.md §Two pins; class-7 lock revert rerun HANDS-OFF
@@ -514,11 +508,10 @@ the block needs pruning, not more headings.
       per finding term appended to the review. Relates ADR-103, FU-046.
 
 - [ ] **FU-281** — **The goal-checkpoint wakes on nothing — the trigger side is the token sink.** 09-23 read:
-      19 rulings on six Goals, 11 on #1640 (4 trigger-(c) fires for ONE new member); (a) rides found ⅔ of
-      findings already handled; each a sonnet session. WRITE side fixed (PR#1933). Operator-owned (#278
-      stalled → too much). Levers: debounce (c) by member age / fold into the next (a)/(e) wake; or the scan
-      pre-rules deterministic findings. **Next:** operator picks; measure rulings-per-Goal before/after on
-      `goal_timeline_comments` + `last-checkpoint:`.
+      19 rulings on six Goals, 11 on #1640 (4 trigger-(c) fires for ONE new member). WRITE side fixed (PR#1933).
+      **RULED 2026-10-14:** one ride per state — the #198 `state-fp` debounce on goal-checkpoint units, trigger by
+      trigger: (b) = homelab#2477, (c) = homelab#2565 (blockedBy #2477), both queued. **Next:** measure
+      rulings-per-Goal before/after on `goal_timeline_comments` + `last-checkpoint:`.
 - [ ] **FU-178** — **Two readers, one mirror: the doorbells read `agents/stacks.json` while the
       scan reads the live cluster claim** — a claim change (chain redirect, knob flip) reaches
       the scan in minutes and the doorbell side only when someone remembers to sync the file
@@ -644,7 +637,8 @@ the block needs pruning, not more headings.
 - [ ] **FU-090** — **Sprout index / issue authoring: POINTER.** All legs, the breaker-#1 gate,
       the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
       retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
-      **Next:** the exporter sprout-RATE gauge + the depth-aware harvest gate reading it.
+      Sprout series shipped (#209 `goal_sprouts_filed_total`; IL-G04 closed 2026-10-14), depth gate in the reviewer
+      (rule 7) — **no machine Next left**; what remains is the operator-deferred list below.
       **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue` (10-13: subscription
       rides now settle at $0 in the pre-flight — #2545, retro r8 F2);
       the goal lane's PHASE-keyed model/checkpoint design (a `GOAL_MODEL` knob turns the wrong
@@ -710,16 +704,12 @@ the block needs pruning, not more headings.
       base images, anything else pulling `docker.io/`/`ghcr.io/` by tag through either VIP) for
       ones sitting on a bounded CI/render timeout the same way `publicroute-tf-validate` was —
       those are the ones actually exposed, not every tag pull equally.
-- [ ] **FU-152** — **One version file for the agent-coordinator image: the kustomize conversion
-      SHIPPED** (landed with #113's arc, verified 2026-08-11: `agents/coordinator/kustomization.yaml`
-      `images:` transformer holds the tag, ZERO literal tags left in the coordinator manifests,
-      the single CODEOWNERS carve-out is in place). **Remaining residue (re-counted 2026-09-28):**
-      the composition (`argocd/resources/agentstack/composition.yaml`, 5 sites, all at `2026.8.7`)
-      and `argocd/resources/registry-cache/gc-mirrors.yaml` (1 site, `2026.7.25`) carry literals
-      the deploy-pin sweep never reaches — the kustomize pin is at `2026.9.27`, so those pods run
-      images two months behind. Needs a small design (feed the composition the tag) before
-      building — NOT an FU-165 goal child for that reason. **Next:** design the composition-side
-      feed (one source for the tag), or accept the drift and archive.
+- [ ] **FU-152** — **One version file for the agent-coordinator image.** The kustomize conversion shipped
+      (`agents/coordinator/kustomization.yaml` `newTag`); residue: 5 literals in the AgentStack Composition (the
+      per-stack scan/review/janitor CronWorkflows, live `2026.8.7`) + 1 in `gc-mirrors.yaml` (`2026.7.25`) vs the pin
+      `2026.10.12`. **RULED 2026-10-14:** two homes held equal by a rule — agent-coordinator#27 (deploy-pin sweeps
+      both files, auto-merge armed) + homelab#2566 (bump + equality check in `manifest-lint.sh`, queued; land AFTER
+      #27). **Next:** archive when both merged and one bump PR rode green.
 - [ ] **FU-153** — **in-pod CI and in-CI CI disagree under kind, and no lever says which is right.**
       circles#19 r2 reported `ci_passed: true` from the ride; Actions failed the SAME gate twice
       (`HTTP 000000`, 4 assertions). Not a missing capability — the claim carries
@@ -828,15 +818,11 @@ the block needs pruning, not more headings.
       creep under a source-named exporter (exporters are named by the system they read, ADR-139).
       **Next:** a small `vendor-status` exporter owning those two (same ConfigMap-script pattern),
       metric names unchanged so dashboards/alerts keep reading. Glossary: pending renames.
-- [ ] **FU-131** — **Cost-ledger undercount: harvest FIXED, the T+1 sweep is what remains.** The
-      `/generation` backoff was (2s, 5s) and gave up at ~7s, losing 49% of a fan-out arm's spend
-      ($2.196 of $4.328 stored, the stored 29 matching OpenRouter's export to the cent). Now
-      2/5/15/45s, and both outcomes are counters — `openrouter_generation_harvest_total{outcome=
-      "stored"|"missed"}` on the proxy's `/metrics` — so the blind spot is a series instead of a
-      hand-diffed export. Measured 2026-10-03: misses are episodic — 3,114 of 30d's 3,151 in one
-      09-18→22 burst, 0 since 09-23. **Next:** the T+1 sweep over `GET /activity?api_key_hash=` for whatever
-      still misses (per-session keys make attribution exact; needs a management key), and the
-      round-2 no-`/report` hole. Relates ADR-096, FU-095.
+- [ ] **FU-131** — **Cost-ledger accuracy: harvest FIXED; the T+1 sweep DROPPED (ruled 2026-10-14).** Harvest backoff
+      2/5/15/45 s + `openrouter_generation_harvest_total{outcome}`; live 10-14: missed 0 vs ~6,840 stored in 21 d.
+      The sweep needed an in-cluster management key (ruled out) — replaced by a belt: homelab#2564 (queued).
+      Remaining ledger-accuracy leg: agent-runtime#173 (standing-key `cost_usd` = siblings' spend; queued 10-14).
+      **Next:** archive when both land. Relates ADR-096, FU-095.
 - [ ] **FU-126** — **Multi-model spec-writer fan-out: same mission → N researcher rides on N
       models → N un-armed `research/*` PRs → operator compares and cherry-picks.** Platform legs
       BUILT 2026-08-02: `agents/research-fanout.sh` (per-model task keys, ephemeral budget keys,
@@ -860,11 +846,10 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** Three instances + belt `ArgoLockPlaneWedged`
       (PR#1722): [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
-      Upstream leak fixes LIVE (controller v4.1.4, chart 2.0.11, 10-05). The belt fired once since, 10-09
-      01:50–04:50Z: the benign twin by design (five `respond-*` in a 4-h retry backoff holding all five
-      `subscription-capacity/claude` slots; `argo stop` ×5). #2418 moved the semaphore to the `respond`
-      template; whether its 15m×2 retry backoff still holds the slot is asserted, not observed.
-      **Next (design):** a retry backoff must release the semaphore, or cap below the belt's 30 m. Relates FU-187, FU-088.
+      Upstream leak fixes LIVE (controller v4.1.4, chart 2.0.11, 10-05). 10-09 01:50–04:50Z: five `respond-*` in
+      retry backoff held all five slots. **RULED 2026-10-14:** the release is made STRUCTURAL — retry on a wrapper
+      template, semaphore on the leaf (the `window-grace` split), proven post-merge by a toy semaphore-1 workflow.
+      **Next:** homelab#2563 (queued), then the seat's toy probe. Relates FU-187, FU-088.
 
 - [ ] **FU-228** — **`agent-transcripts` has no retention — 5Gi → 20Gi bought time, not a policy.**
       The bucket sat at 98 % (5.3 GB, 26.7k objects, ~1 GB/week of ride exhaust) the hour
