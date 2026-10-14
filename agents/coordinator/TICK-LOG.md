@@ -13438,7 +13438,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   prose — a launcher marker would make F5's recogniser deterministic; the max-turns stop (#1923) still has no signature;
   renamed clause files are not restored by F1's revert (false-OK direction).
 
-## 2026-10-14 08:00–09:30Z — /board-sweep (the first since 08-25; slice rule per #2219, no corpus load; 2 read-only subagents) (seat)
+## 2026-10-14 ~17:00–17:50Z — /board-sweep (the first since 08-25; slice rule per #2219, no corpus load; 2 read-only subagents) (seat)
 
 - **Window:** issues/PRs since 10-07 across the 12 claim repos (claims == `agents/stacks.json`); every open
   `agent/*` item; ADR-148 lane records since 10-09 18:00Z (5 `now` triages, digs 10-10…10-14). This entry is the
