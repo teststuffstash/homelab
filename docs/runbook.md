@@ -974,9 +974,9 @@ incident detail are TICK-LOG's.
 The `registry.teststuff.net` registry (ns `registry`, ADR-121) is `registry:3` on a **filesystem
 volume** since FU-280's rollout (2026-09-24): Deployment `registry-fs`, claim `registry-data`
 (150Gi `longhorn-bulk`), behind the unchanged `registry` LB Service
-(`argocd/resources/registry/registry-fs.yaml`). The S3 Deployment `registry` stays up UNROUTED as
-the rollback until the soak ends. **Rollback = set the `registry` Service's selector back to
-`app: registry` in `registry.yaml`.** Pushes made since the flip exist only on the volume.
+(`argocd/resources/registry/registry-fs.yaml`). The S3 Deployment that was the rollback was removed
+2026-10-14 (FU-280), so there is **no backend to roll back to**; the Garage bucket `registry` still
+exists, unread, until FU-279's multipart decision lets it go (`garage-workspace.yaml` header).
 Retention ownership is the ADR-085 split: the stack's IaC decides the keep-set (oracle-iac#664:
 the pinned digest + the newest date tag + the previous pin) and untags/deletes what it no longer
 wants with its push credential (`DELETE /v2/<repo>/manifests/<digest>`). homelab runs the
