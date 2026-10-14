@@ -161,8 +161,14 @@ fi
 # ($GITHUB_EVENT_PATH → .pull_request) — so no caller has to wire them: ci.yaml's step and every
 # repo on pin-only.reusable.yml (which runs THIS file from homelab master) get the arm unchanged,
 # and the local arm never meets a depth-1 merge ref (no merge-base there → it would fail closed).
-# OUT OF SCOPE (stated, #1736's comment): a master-sync PR into goal/** genuinely carries master's
-# content past its merge base, so three-dot ≡ two-dot there — that shape is not fixed here.
+# homelab#2412 — the THIRD shape (#1736's comment), fixed here: a master-sync PR into a `goal/**`
+# base forks from the GOAL tip and merges origin/master, so merge-base(base, head) == goal tip and
+# three-dot ≡ two-dot: master's own guarded edits are in the PR's diff and were attributed to the
+# worker. The predicate is "content NOT reachable from origin/master", so MB = merge-base(master,
+# head) is the reference: a file whose head content is byte-identical to MB's is master's, and a
+# changed line MB also changed relative to FROM is master's (pr_diff below). MB == FROM for a PR
+# based on master — the common case — so both filters are no-ops there, and the two older shapes
+# (#1713 behind-master, #1736 event-gap) keep their three-dot fix unchanged.
 if [ -z "${PR_HEAD_SHA:-}" ] && [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -r "$GITHUB_EVENT_PATH" ]; then
   if ! command -v jq >/dev/null 2>&1; then
     echo "pin-only-lint: FAIL — jq not on PATH, cannot read the PR head from \$GITHUB_EVENT_PATH; refusing to report success." >&2; exit 2
@@ -177,7 +183,15 @@ if [ -n "${PR_HEAD_SHA:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
     exit 2
   fi
   TO="$PR_HEAD_SHA"
-  for rev in "$FROM" "$TO"; do
+  # MB (homelab#2412): the newest master content reachable from the head. `master` is the repo's
+  # default branch — the same literal the BASE_REF default above uses — and the read is
+  # depth-independent like the FROM one.
+  if ! MB="$("$GH" api "repos/${GITHUB_REPOSITORY}/compare/master...${PR_HEAD_SHA}" --jq '.merge_base_commit.sha' 2>&1)" \
+     || ! grep -Eq '^[0-9a-f]{40}$' <<< "$MB"; then
+    echo "pin-only-lint: FAIL — could not read the merge base of master...${PR_HEAD_SHA} from GitHub's compare (${MB:-empty}); refusing to report success." >&2
+    exit 2
+  fi
+  for rev in "$FROM" "$TO" "$MB"; do
     git cat-file -e "${rev}^{commit}" 2>/dev/null && continue
     if ! git fetch -q --no-tags --depth=1 origin "$rev" 2>/dev/null || ! git cat-file -e "${rev}^{commit}" 2>/dev/null; then
       echo "pin-only-lint: FAIL — could not fetch $rev (the three-dot side) from origin; refusing to report success." >&2
@@ -190,11 +204,44 @@ else
     exit 2
   fi
   TO=HEAD
+  # The local arm's master reference: origin/master when the clone has it, else the base itself —
+  # the pre-#2412 behaviour (MB == FROM, both filters below are no-ops). PIN_ONLY_MASTER is the
+  # test seam; CI never reaches this arm (it has no depth-1 merge ref to merge-base against).
+  MASTER_REF="${PIN_ONLY_MASTER:-origin/master}"
+  git rev-parse --verify "$MASTER_REF" >/dev/null 2>&1 || MASTER_REF="$BASE"
+  if ! MB="$(git merge-base "$MASTER_REF" HEAD 2>/dev/null)"; then
+    echo "pin-only-lint: FAIL — no merge-base between '$MASTER_REF' and HEAD (shallow checkout?); refusing to report success." >&2
+    exit 2
+  fi
 fi
 if ! all_changed="$(git diff --name-only "$FROM" "$TO")"; then
   echo "pin-only-lint: FAIL — cannot diff $FROM...$TO; refusing to report success." >&2
   exit 2
 fi
+# homelab#2412: drop every file whose head content is byte-identical to MB's — that content is
+# master's, not the PR's. A file absent at both ends compares equal (a deletion master also made).
+if [ "$MB" != "$FROM" ]; then
+  own=""
+  for f in $all_changed; do
+    mb_blob="$(git rev-parse -q --verify "$MB:$f" 2>/dev/null || echo -)"
+    to_blob="$(git rev-parse -q --verify "$TO:$f" 2>/dev/null || echo -)"
+    [ "$mb_blob" = "$to_blob" ] || own="${own}${f}"$'\n'
+  done
+  all_changed="$(printf '%s' "$own" | grep . || true)"
+fi
+
+# pr_diff <pathspec…> — the PR's OWN changed lines (with signs): the diff FROM..TO minus every
+# line master changed relative to FROM (MB). Content reachable from origin/master is not the
+# PR's (homelab#2412). MB == FROM ⇒ no subtraction (the common master-based PR).
+pr_diff() {
+  local d m
+  d="$(git diff -U0 "$FROM" "$TO" -- "$@" | grep -E '^[-+][^-+]' || true)"
+  [ -n "$d" ] || return 0
+  [ "$MB" != "$FROM" ] || { printf '%s\n' "$d"; return 0; }
+  m="$(git diff -U0 "$FROM" "$MB" -- "$@" | grep -E '^[-+][^-+]' || true)"
+  [ -n "$m" ] || { printf '%s\n' "$d"; return 0; }
+  comm -23 <(printf '%s\n' "$d" | sort) <(printf '%s\n' "$m" | sort)
+}
 
 changed="$(grep -E "$GUARDED" <<< "$all_changed" || true)"
 wf_changed="$(grep -E "$WORKFLOW_GUARDED" <<< "$all_changed" || true)"
@@ -205,7 +252,7 @@ TOFU_IMAGE_ADDED='^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"[A-Za-z0-9._/-]+
 added_images=""
 if [ -n "$tofu_changed" ]; then
   # shellcheck disable=SC2086  # word-splitting the newline list is the point
-  added_images="$(git diff "$FROM" "$TO" -- $tofu_changed | grep -E "$TOFU_IMAGE_ADDED" | sed -E 's/^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"([^"]+)"$/\1/' | sort -u || true)"
+  added_images="$(pr_diff $tofu_changed | grep -E "$TOFU_IMAGE_ADDED" | sed -E 's/^\+[[:space:]]*image[[:space:]]*=[[:space:]]*"([^"]+)"$/\1/' | sort -u || true)"
 fi
 # (g): the lockfiles' ADDED provider versions, as "<name>@<version>" — read from the head's file per
 # provider block (a version line alone does not say whose it is), kept only where the base differs.
@@ -231,7 +278,7 @@ for pf in $(grep -E '^argocd/platform/[^/]+\.ya?ml$' <<< "$all_changed" || true)
   while read -r ver; do
     [ -n "$ver" ] || continue
     added_charts="${added_charts}${pf} ${chart}@${ver}"$'\n'
-  done <<< "$(git diff -U0 "$FROM" "$TO" -- "$pf" | grep -E "$TARGET_REVISION_ADDED" | sed -E "s/$TARGET_REVISION_ADDED/\1/" || true)"
+  done <<< "$(pr_diff "$pf" | grep -E "$TARGET_REVISION_ADDED" | sed -E "s/$TARGET_REVISION_ADDED/\1/" || true)"
 done
 added_charts="$(printf '%s' "$added_charts" | grep . | sort -u || true)"
 # (i): the ADDED lock versions — per changed devbox.lock, "<name>@<new>" for every package whose
@@ -439,10 +486,8 @@ if [ -n "$added_locks" ]; then
   done <<< "$added_locks"
 fi
 for f in $changed; do
-  # Content lines only: strip the +++/--- headers, keep real additions/removals.
-  offending="$(git diff -U0 "$FROM" "$TO" -- "$f" \
-    | grep -E '^[-+][^-+]' \
-    | grep -Ev "$PIN_LINE" || true)"
+  # Content lines only: pr_diff already strips the +++/--- headers and master's own lines.
+  offending="$(pr_diff "$f" | grep -Ev "$PIN_LINE" || true)"
   if [ -n "$offending" ]; then
     echo "pin-only-lint: FAIL — $f may only receive PIN lines via a PR (arc-runner image: / chart targetRevision:):" >&2
     printf '  %s\n' "$offending" >&2
@@ -472,7 +517,7 @@ resolve_tag_commit() {
 }
 
 for f in $wf_changed; do
-  lines="$(git diff -U0 "$FROM" "$TO" -- "$f" | grep -E '^[-+][^-+]' || true)"
+  lines="$(pr_diff "$f")"
   if [ -z "$lines" ]; then  # a rename / mode change / empty patch is not a pin bump
     echo "pin-only-lint: FAIL — $f changed without a single content line; a workflow may only receive action pin bumps via a PR." >&2
     rc=1; continue

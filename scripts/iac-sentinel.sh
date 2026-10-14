@@ -8,7 +8,10 @@
 # the original shadow mode. Engines (operator ruling 2026-08-03: Kyverno is THE rule engine —
 # CLI seat now, admission seat later; no engine sprawl):
 #   path-rule  — bash/gh: worker-authored PRs must not touch .github/workflows/** (the
-#                sleep-iac#28 self-merge hole; belt-of-belt for the planned push ruleset)
+#                sleep-iac#28 self-merge hole; belt-of-belt for the planned push ruleset).
+#                homelab#2412: a master-sync PR into a goal/** base carries master's own
+#                CI-gate edits in its diff against that base, so a touched file counts only
+#                when its head content differs from the default branch's at the merge base.
 #   kyverno    — policy/iac/*.yaml against every k8s doc in the PR TREE (raw-YAML pass; the
 #                hostile PR content is never EXECUTED — no helm, no hooks, tarball extract only)
 #   gitleaks   — secret VALUES in the tree (fleet-standard scanner)
@@ -173,6 +176,33 @@ evaluate() {
   if [ "$pr" != "-" ] && [ "$author" = "$WORKER_AUTHOR" ]; then
     touched="$(gh api "repos/${ORG}/${repo}/pulls/${pr}/files" --paginate \
                  --jq '.[].filename' 2>/dev/null | grep -E '^\.github/workflows/|^scripts/ci' || true)"
+    if [ -n "$touched" ]; then
+      # homelab#2412 — a master-sync PR into a goal/** base forks from the goal tip, so its diff
+      # against that base IS master's content: master's own CI-gate edits were attributed to the
+      # worker. The predicate is "content NOT reachable from origin/master", so keep only the
+      # files whose head content differs from the default branch's at MB = merge-base(default,
+      # head). For a PR based on the default branch MB is the base, so this is a no-op there.
+      # Fail CLOSED: a read that cannot see does not clear the head.
+      def="$(gh api "repos/${ORG}/${repo}" --jq '.default_branch' 2>/dev/null)" || def=""
+      mb=""
+      if [ -n "$def" ]; then
+        mb="$(gh api "repos/${ORG}/${repo}/compare/${def}...${ref}" --jq '.merge_base_commit.sha' 2>/dev/null)" || mb=""
+      fi
+      if [ -z "$def" ] || ! grep -Eq '^[0-9a-f]{40}$' <<< "$mb"; then
+        log "[$repo#$pr] path-rule: master-reachability read FAILED (default branch '${def:-?}', merge base '${mb:-?}') — refusing to clear the head (homelab#2412)"
+        metric "iac_sentinel_probe_failed{repo=\"$repo\",pr=\"$pr\"} 1"
+        VIOLATIONS=$((VIOLATIONS + 1))
+        touched=""
+      else
+        own=""
+        for f in $touched; do
+          head_blob="$(gh api "repos/${ORG}/${repo}/contents/${f}?ref=${ref}" --jq '.sha' 2>/dev/null || echo -)"
+          mb_blob="$(gh api "repos/${ORG}/${repo}/contents/${f}?ref=${mb}" --jq '.sha' 2>/dev/null || echo -)"
+          [ "$head_blob" = "$mb_blob" ] || own="${own}${f}"$'\n'
+        done
+        touched="$(printf '%s' "$own" | grep . || true)"
+      fi
+    fi
     if [ -n "$touched" ]; then
       VIOLATIONS=$((VIOLATIONS + 1))
       log "[$repo#$pr] VIOLATION path-rule: worker PR touches CI-gate files:"

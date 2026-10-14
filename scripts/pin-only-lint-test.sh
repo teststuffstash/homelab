@@ -477,5 +477,59 @@ else
   fail=$((fail+1)); echo "FAIL three-dot-compare-unreadable — wanted rc 2 'could not read the merge base', rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'
 fi
 
+# ── homelab#2412 — the THIRD shape (#1736's comment): a master-sync PR into a goal/** base. The
+# PR forks from the GOAL tip and merges origin/master, so merge-base(base, head) == goal tip and
+# three-dot ≡ two-dot: master's own guarded edit IS the PR's diff. The predicate is "content NOT
+# reachable from origin/master" (MB = merge-base(master, head)), so master's file is dropped and
+# the PR's own guarded line stays red. Three arms, as above; the local arm sets PIN_ONLY_MASTER
+# (the seam) because the synthetic repo has no origin.
+rm -rf "$STUB"; mkdir -p "$STUB"; reverts_ ""
+GOAL=goal/2412-rails
+sync_case_() {  # <name> <want: ok | stderr keyword> <must-not-name> <edit shell on the PR branch>
+  local name="$1" want="$2" absent="$3" edit="$4" gtip head arm out rc ok
+  git -C "$R" checkout -q -B "$GOAL" "$BASE"
+  echo x >"$R/GOAL.md"; git -C "$R" add -A && git -C "$R" commit -q -m "goal: own commit"
+  gtip="$(git -C "$R" rev-parse HEAD)"
+  git -C "$R" checkout -q -b "sync-$name" "$gtip"
+  git -C "$R" merge -q --no-ff --no-edit master >/dev/null   # the sync: master's content onto the branch
+  ( cd "$R" && eval "$edit" ) >/dev/null 2>&1                # the PR's own commit, on top of the sync
+  git -C "$R" add -A && git -C "$R" commit -q -m "$name"
+  head="$(git -C "$R" rev-parse HEAD)"
+  mkdir -p "$STUB/repos/$PIN_ONLY_SLUG/compare/$GOAL"
+  printf '{"merge_base_commit":{"sha":"%s"}}\n' "$gtip" >"$STUB/repos/$PIN_ONLY_SLUG/compare/$GOAL...$head"
+  printf '{"merge_base_commit":{"sha":"%s"}}\n' "$MASTER_TIP" >"$STUB/repos/$PIN_ONLY_SLUG/compare/master...$head"
+  for arm in local ci shallow; do
+    if [ "$arm" = local ]; then
+      out="$(PIN_ONLY_MASTER=master bash "$LINT" "$gtip" 2>&1)"; rc=$?
+    elif [ "$arm" = ci ]; then
+      out="$(PR_HEAD_SHA="$head" BASE_REF="$GOAL" GITHUB_REPOSITORY="$PIN_ONLY_SLUG" bash "$LINT" "$gtip" 2>&1)"; rc=$?
+    else
+      git -C "$R" branch -f "sync-merge-$name" HEAD
+      rm -rf "$T/shallow"; git clone -q --depth 1 --branch "sync-merge-$name" "file://$R" "$T/shallow"
+      git -C "$T/shallow" fetch -q --no-tags --depth=1 origin "$gtip" "$MASTER_TIP"
+      printf '{"pull_request":{"head":{"sha":"%s"},"base":{"ref":"%s"}}}\n' "$head" "$GOAL" >"$T/event.json"
+      out="$(PIN_ONLY_REPO="$T/shallow" GITHUB_EVENT_PATH="$T/event.json" GITHUB_REPOSITORY="$PIN_ONLY_SLUG" bash "$LINT" "$gtip" 2>&1)"; rc=$?
+    fi
+    if [ "$want" = ok ]; then
+      [ $rc = 0 ] && grep -q '^pin-only-lint: OK' <<< "$out" && ok=1 || ok=0
+    else
+      [ $rc != 0 ] && grep -qF -- "$want" <<< "$out" && ok=1 || ok=0
+    fi
+    [ -n "$absent" ] && grep -qF -- "$absent" <<< "$out" && ok=0
+    if [ "$ok" = 1 ]; then pass=$((pass+1)); echo "PASS master-sync-$name [$arm] (rc $rc)"
+    else fail=$((fail+1)); echo "FAIL master-sync-$name [$arm] — wanted ${want}${absent:+, never naming $absent}, rc=$rc:"; printf '%s\n' "$out" | sed 's/^/     /'; fi
+  done
+  git -C "$R" checkout -q master
+}
+# master's own non-pin edit of a guarded file (the operator path) rides the sync → never the PR's.
+sync_case_ master-guarded-edit ok openrouter-operator "echo y > PR.md"
+# The PR's OWN non-pin line in a guarded file stays red, while master's file is still dropped.
+sync_case_ own-guarded-edit 'may only receive PIN lines' openrouter-operator \
+  "echo '      privileged: true' >> argocd/platform/arc-runners.yaml"
+# The PR's own PIN line in the file master ALSO edited: master's `chart:` line is subtracted
+# (line-level, not file-level) and the pin passes — without the subtraction this reds on master's line.
+sync_case_ own-pin-beside-master-edit ok "" \
+  "sed -i 's|targetRevision: 2026.9.1-gaaaa|targetRevision: 2026.9.25-gbbbb|' argocd/platform/openrouter-operator.yaml"
+
 echo "pin-only-lint-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
