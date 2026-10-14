@@ -1319,14 +1319,6 @@ finding is the terminal ride (pod, launcher, budget), not another fix round.
 >    comment exists newer than the marker, the gate re-arms — the marker is stale.
 > 3. **Both**: a DEBOUNCED report line for a PR with no completed round since its marker now
 >    publishes a `who=operator` board row, so the board shows it instead of being invisible.
->
-> **Open face (2026-09-08, moved from the FU-199 tracker item): RULED-BUT-NEVER-DISPATCHED.** Both
-> arbitrate sessions on PR#1513/#1515 posted their re-dispatch ruling, removed `agent/arbitrate`,
-> then died on an Anthropic-side 522 (13:14Z, `coordinator-homelab-pr-1513` exit 1) before the
-> round-4 `agent-session.sh` call. The ci-red cap re-labelled both PRs at 13:20Z, and the arbitrate
-> fingerprint then read "ruled" for 5 h, until the seat ran both rounds by hand. The ci-red clause has
-> the rule-2 re-arm. The arbitrate clause has none for a ruling with no round behind it. The fix is
-> either that re-arm or a play that dispatches BEFORE it comments.
 
 ### One fleet fault, not N parks (retro r3 F3)
 

@@ -660,7 +660,7 @@ the block needs pruning, not more headings.
       axis — [`model-routing-history.md`](spikes/model-routing-history.md) §M10 ⚖, 2026-08-11; design before wiring).
       Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
 - [ ] **FU-199** — **Silent holds freeze whole lanes invisibly: POINTER.** Faces + fixes:
-      [`agents/coordinator/README.md`](../agents/coordinator/README.md) §"FU-199 (2026-09-03)". Fixed: state-fp
+      [`agents/coordinator/README.md`](../agents/coordinator/README.md) §"FU-199 (2026-09-03)" (the 09-08 face: TICK-LOG 2026-09-08). Fixed: state-fp
       fingerprint faces (PR#1352), cap split (PR#1375/#1376), arbitrate rule-2 capacity re-arm (#2546, r8 F5 —
       the deferral is still coordinator prose, not a launcher marker). Open: the RULED-BUT-NEVER-DISPATCHED
       arbitrate face (09-08, PR#1513/#1515 — no re-arm for a ruling with no round behind it, or dispatch BEFORE
