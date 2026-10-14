@@ -129,7 +129,7 @@ balance is available (unreachable proxy, dead credit leg, or a value held past t
 **The Argo-native layer (2026-07-17):** the three subscription-holding workflows (review-reflex
 tick, coordinator tick, the Sensor-submitted `review` Workflow — each holds its container for
 the session's whole duration) also declare a native Argo `synchronization` semaphore
-(`subscription-capacity` ConfigMap, key `claude: "3"`). An over-cap submission **queues**
+(`subscription-capacity` ConfigMap, key `claude` — mirrors the proxy's `SUBSCRIPTION_MAX_RUNNING`, `"5"` live 2026-10-14). An over-cap submission **queues**
 ("waiting for lock" in the Argo UI, priority-ordered) instead of being deferred-and-rediscovered
 — work waits in line rather than relying on the next level-triggered pass. Deliberate layering,
 not redundancy: Argo counts only Argo-run *workflows* (interactive rides and jail launches are

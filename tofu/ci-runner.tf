@@ -11,11 +11,18 @@
 # (same single-user-nix flow as the ARC runners, see homelab docs/ci.md).
 #
 # SAFETY: this hits live Proxmox. `devbox run -- tofu -chdir=tofu plan` and review before apply.
-# ⚠ ANY edit to templates/ci-runner-cloud-init.yaml.tftpl REPLACES the runner VM(s) on apply (the
-# snippet is re-created, and the VM's user_data_file_id goes with it — measured 2026-09-08: three
-# merged template commits applied as one destroy+create of VM 9001, 1m39s). The runner is
-# stateless (boot-minted registration, fresh disk), so a replace is a short CI-capacity window:
-# do one runner at a time, with no job in flight on its slots.
+# ⚠ A template edit RE-RENDERS the snippet but no longer REPLACES the runner VM(s) (FU-306 ruling,
+# 2026-10-14): both VMs carry `lifecycle { ignore_changes = [initialization[0].user_data_file_id] }`,
+# so the re-created snippet's id is not a VM diff. Before that, ANY edit to
+# templates/ci-runner-cloud-init.yaml.tftpl replaced the VM on apply (the snippet is re-created, and
+# the VM's user_data_file_id went with it — measured 2026-09-08: three merged template commits
+# applied as one destroy+create of VM 9001, 1m39s), which made every `github_runner_version` bump a
+# box-run VM replace. THE TRADE: a cloud-init edit now lands at the next ATTENDED recreate, never by
+# itself. A deliberate recreate is a scoped `plan -replace='proxmox_virtual_environment_vm.<name>[0]'`
+# (that flag overrides ignore_changes; never beside `-exclude`), then `scripts/runner-maintenance.sh
+# run <plan-id> <vm>` checks that plan's scope and applies it. The runner is stateless (boot-minted
+# registration, fresh disk), so a replace is a short CI-capacity window: do one runner at a time,
+# with no job in flight on its slots.
 # HOST PREREQUISITE (not tofu-managed — Proxmox storage config): 'snippets' must be enabled on
 # var.datastore_images on EACH hypervisor that hosts a runner, or the cloud-init upload fails:
 #   pvesm set local --content import,backup,vztmpl,iso,snippets   # = the existing list + snippets
@@ -104,6 +111,15 @@ variable "github_runner_labels" {
 # 2.323.0 pin). But GitHub refuses to REGISTER a runner below its enforced minimum, so a stale pin
 # breaks exactly one thing: every fresh VM (2026-10-08, the recreate window: "minimum runner version
 # required to register … is now 2.329.0", cloud-init runcmd failed, both slots offline).
+#
+# RENOVATE-TRACKED (FU-306 ruling, 2026-10-14) — the default stays a LITERAL string, which is the
+# regex manager's target. A bump re-renders the cloud-init snippet and NOTHING else: both VMs ignore
+# `initialization[0].user_data_file_id`, so the new snippet lands at the next ATTENDED recreate —
+# which the OPERATOR plans with `-replace` (header above); `scripts/runner-maintenance.sh run
+# <plan-id> <vm>` only checks that plan's scope and applies it — never by itself. THE TRADE:
+# a cloud-init edit no longer reaches a RUNNING runner on its own. The pin's only
+# job is to sit above GitHub's registration floor at that recreate; a running runner self-updates in
+# place, so a bump that has not landed yet is not a stale runner.
 variable "github_runner_version" {
   description = "actions/runner release (check github.com/actions/runner/releases)."
   type        = string
@@ -227,6 +243,18 @@ resource "proxmox_virtual_environment_vm" "ci_runner" {
       servers = var.nameservers
     }
   }
+
+  # FU-306 (2026-10-14): a `github_runner_version` bump re-renders the snippet, which re-creates
+  # proxmox_virtual_environment_file.ci_runner_cloud_init — and the re-created file's id is unknown
+  # at plan time, so this VM's `user_data_file_id` read as a change and the whole VM was replaced
+  # (measured 2026-09-08). Ignore it: the snippet is a BOOT SEED, not a declaration of what the
+  # running VM has — the same shape as nx02.tf's `disk[0].file_id`. The new snippet lands at the next
+  # attended recreate, which the operator plans with `-replace` (header above); the script applies
+  # that plan. ⚠ The cost: a template edit no longer reaches a RUNNING runner by itself (the
+  # header's THE TRADE).
+  lifecycle {
+    ignore_changes = [initialization[0].user_data_file_id]
+  }
 }
 
 # ---- ci-runner-02 on nx-02 (FU-266) — same shape, the nx02 provider ---------------------------
@@ -324,5 +352,11 @@ resource "proxmox_virtual_environment_vm" "ci_runner_02" {
     dns {
       servers = var.nameservers
     }
+  }
+
+  # Same FU-306 ignore as ci-runner-01 above — the nx-02 half of the pair, and the reason the two
+  # blocks are a literal near-copy (a provider cannot be chosen per for_each key).
+  lifecycle {
+    ignore_changes = [initialization[0].user_data_file_id]
   }
 }

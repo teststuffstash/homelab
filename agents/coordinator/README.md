@@ -297,7 +297,7 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    `agents/subscription-latch.sh` pre-spawn and exits 0 with a `deferred — subscription
    rate-limited` line when the egress proxy reports a 429 latch, window utilization past its
    per-window/per-tier threshold (FU-088/FU-109 — dispatch units pass `SUBSCRIPTION_TIER=dispatch`
-   and defer later), or ≥3 subscription pods already Running (counted server-side since ADR-096 P2;
+   and defer later), or ≥ `SUBSCRIPTION_MAX_RUNNING` subscription pods already Running (5 live, the proxy Deployment's env — workflow.md §Capacity gates) (counted server-side since ADR-096 P2;
    OpenRouter workers: the account-credit floor). Deferrals
    need NO operator action — the next cron/backstop pass re-probes and resumes once the window
    resets; flow walkthrough in docs/agents/workflow.md §Capacity gates. Terminal bookkeeping (auto-merge arming, the stats
@@ -1418,9 +1418,9 @@ the resource named on the thread. Either re-scope it so the deliverable is insid
 worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue. **Re-queueing
 it unchanged reaches the same verdict** — and unlike a strike, this one is free.
 
-> ⚠ **The producer half is per-repo — installed: homelab ✅ (`566fe38`, 2026-08-11); outstanding:
-> every stack repo** (oracle-fleet, sleep-tracking, circles, snore-recorder — each picks it up at
-> its next `.agents/fix.yaml` touch; this banner is the tracking list, update it per install). The
+> ⚠ **The producer half is per-repo — installed everywhere** (homelab `566fe38` 2026-08-11;
+> oracle-fleet, sleep-tracking, circles, snore-recorder verified 2026-10-14). A NEW stack repo
+> needs it in its `.agents/fix.yaml` at bootstrap. The
 > paragraph below belongs in each repo's `.agents/fix.yaml` `instructions:`, beside the existing
 > `AGENT_ERROR:` breaker; a repo whose recipe lacks it simply never reaches IL-T26. `.agents/**` is
 > a banned path for the fixer lane (a fix round resumes on the PR's own branch, so a worker editing
@@ -1616,10 +1616,10 @@ devbox run coordinator-session -- --run-tick
 
 > **Tick prompt = one source of truth.** The reconcile instruction lives once in
 > `coordinator-session.sh` as `TICK_PROMPT`; `--tick` (interactive) and `--run-tick` (headless) inject
-> the *same* string. So the first runs are hand-supervised with exactly the prompt the autonomous
-> **coordinator-reflex** (the LLM sibling of the review reflex, now an Argo **CronWorkflow** doing
-> `--run-tick` on a schedule — ADR-093) uses — graduating to autonomy was a **scheduler swap, not a
-> behavior change**. Edit the wording in one place and both follow.
+> the *same* string. So the first runs were hand-supervised with exactly the prompt the autonomous
+> loop used — graduating to autonomy was a **scheduler swap, not a behavior change**. (The global
+> `coordinator-reflex` cron retired with ADR-120; the per-stack `coordinate-<stack>` CronWorkflows
+> dispatch item-scoped units, ADR-094.) Edit the wording in one place and both follow.
 
 > **Scope note.** A coordinator instance is scoped to a **stack**: the
 > platform (homelab) **plus that stack's repos**. Since ADR-084 a stack's deploy truth lives in its own
@@ -1643,9 +1643,9 @@ and injects the ~1y oauth token + beta header; the pod never holds it (do **not*
 **skipped by default** (`--permission-mode bypassPermissions`) for both interactive and headless —
 the security boundary is the pod (scoped tokens + RBAC + pre-trusted `/work/homelab`), not
 per-command approval, exactly like the jail. Pass `--permission-mode default` for a supervised
-session. Model defaults to **`opus`** (needs a Max plan) — coordination is judgment-heavy and the tasks
-have gotten messier, so it runs on the strong reasoning model; pass `--model sonnet` to economize (or on
-Pro). The reviewer stays on `sonnet` by design (decorrelated from the worker; see `reviewer-session.sh`).
+session. The model is ROUTED (`/route`, class policy in `model-classes.json` — ADR-107 "every role routes");
+a claim's `coordinatorModel` is a fail-open constraint and `--model` an explicit override
+(model-routing.md §The carriers). The reviewer stays decorrelated from the worker by class policy.
 
 **In-pod, call the scripts directly** (the image has no devbox): `python3 agents/estimate_budget.py …`
 and `bash agents/agent-session.sh …` (it falls back to the pod's in-cluster ServiceAccount). Mint the

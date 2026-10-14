@@ -40,7 +40,7 @@ machine has a post-merge half, and that half is the primary gate, not a belt.
 |---|---|---|---|
 | `deploy_bump` | deploy App | CI-only, instant (ADR-084) | `require_approval=false` is deliberate: App bypass can't waive an approval, so it was dropped, not bypassed |
 | `infra_enrich` | coordinator unit | rides the bump PR (atomic pin+claim) | mechanical (schema-valid, FU-093 quota) = CI lane; judgment parks (roles.md §infra-fixer) |
-| `fixer_issue` | worker | **the gap** (IAC-G01) — closes via the policy sentinel, not review | sleep-iac#28: 38s self-merge incl. `.github/workflows/` |
+| `fixer_issue` | worker | the iac-sentinel required check (IAC-G01, closed by the 2026-08-18 enforcement flip) — not review | sleep-iac#28: 38s self-merge incl. `.github/workflows/` |
 | `pin_follow` | deploy workflow (**IAC-G07 SHIPPED 2026-08-02**, oracle-fleet#167) | CI-only (pure mechanical) | cross-repo image-ref propagation: workflow tags ride the bump commit, pin-hold opt-out. Was the single most frequent human commit in oracle-iac history (7 of the last 120). |
 | `data_roll` | operator (oracle corpus rolls) | paired-roll contract (fleet#159 schema gate) | 4 of the last 120 oracle-iac commits; semi-mechanical since the schema gate — WHICH corpus stays judgment, the paired pin+digest commit is workflow-shaped |
 | `operator` | operator/meta session | CI-only | the directing human IS the review |
@@ -305,8 +305,9 @@ committed XR/claim at the cluster-pinned engine + functions, docker-free (`scrip
 which `publicroute-tf-validate` now shares), and `-- --diff <base>` fails a PR whose render changed
 unless its body declares `Render-change: <reason>`.
 
-**The one thing still outstanding** is the IAC-G04 sentinel covering homelab so tier 1 can go back
-to being unowned — a FU-106 next-action. Until then tier 1 is owned as a scaffold and says so.
+The sentinel covers homelab since the 2026-08-18 enforcement flip (the `policy/iac/exceptions/homelab.yaml`
+baseline, §L0b), so tier 1's return to unowned is now the operator's trust call on the governance
+pile above, not a missing mechanism.
 
 ### ⚖ Auto-revert does NOT generalize to the platform (operator ruling, 2026-08-04)
 
@@ -351,7 +352,7 @@ stack's `-iac`, which *is* this lane's revert path. Undefined ownership means a 
 **Rule: inside an open observation window for a recent deploy, the -iac lane owns the symptom** —
 the alert lane attaches evidence to that unit and dispatches nothing. Outside a window, the alert
 lane owns it. Modelled as IAC-G10; the correlation half — filing-side `group_by = ["alertname"]`, one delivery per storm —
-is FU-133 leg (a), QUEUED as homelab#252.
+shipped with FU-133 (filing-side `group_by` PR#263, queue-time currency gate PR#274); the window-ownership rule itself stays un-encoded (IAC-G10, accepted).
 
 ## The infra-delta rollout matrix — what an upstream chart change costs the wrapper
 

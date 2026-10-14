@@ -14,10 +14,13 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 
 ## The role (standing delegations — operator-granted, revoke = operator says so)
 
-- **Codeowner gate, delegated**: when the bot APPROVEs a PR that touches `specs/`, READ the spec
-  diff and judge it (consistency with existing requirements, ⚖ flags on judgment, no fabricated
-  facts/evidence). Approve with a substantive review comment, or comment concerns. Never
-  rubber-stamp; never approve without reading.
+- **Codeowner gate, delegated — STACK `specs/` reads only**: when the bot APPROVEs a stack PR that
+  touches `specs/`, READ the spec diff and judge it (consistency with existing requirements, ⚖ flags
+  on judgment, no fabricated facts/evidence). Approve with a substantive review comment, or comment
+  concerns. Never rubber-stamp; never approve without reading. ⚠ The ADR-110 maintenance-stream
+  gate (merging parked master-bound PRs) is a CORPUS session's act (seat card §How changes land) —
+  a `/meta-coordinate` session that has not loaded the corpus records such parks for the next
+  corpus session and merges nothing.
 - **Issue authoring from specs/failures**: file well-formed issues (spec anchors, deliverables
   with ⚖ guidance pre-decided where the call is the codeowner's, acceptance criteria, track/*
   label, dependencies as NATIVE blocked-by edges — the `Depends-on:` body-line reader retired
@@ -148,7 +151,7 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 - **Capacity gate deferrals** (FU-088) are level-triggered — never bypass, never poll-loop
   `review-reflex-now` (GraphQL pool!). C4/C5 re-fires deferred claims automatically.
 - **TICK-LOG**: append an entry per arc/incident (what broke, the class fix, the lesson) —
-  it IS the session memory. Push to master directly (operator lane).
+  it IS the session memory. Commit it direct to master (bookkeeping class); the PUSH is batched — once per session at wind-down (seat card §How changes land, the 2026-08-30 rule).
 - **Session hygiene**: monitors + background chains die with the session — before /clear,
   finish or note in-flight chains in `docs/agents/meta-state.md` (create if needed, keep tiny:
   a bullet per pending chain with its next concrete step).

@@ -106,7 +106,15 @@ This pass establishes machine truth; fu-sweep's step-2 machine-lane reconcile co
 HANDLED bucket instead of re-deriving it; docs-cleanup propagates what both changed. One session
 running all three shares the slices already read.
 
-## Graduation (deliberately not built)
+## Graduation — RULED 2026-10-14: no reflex
+
+**Ruled (operator-approved design-agents sitting, 2026-10-14, after 8 hand runs): board-sweep
+stays a seat skill; neither shape below is built.** Option (b)'s escalation digest is carried by the
+attention layer since #892 (observability-and-retro.md §Part C — derived item classes, `board
+--machine`, `AgentAttentionStanding`), and what remains unique to this pass — judging the items
+where nothing was done, scoring REMEDIATION-WOULD rows — is batch judgment, the retro's shape, not a
+reflex's. The original options, kept as the record:
+
 
 Run by hand ≥2–3 times, then decide the reflex shape from what the reports actually contain
 (contracts emerge from patterns): (a) a board slice added to the Monday retro brief

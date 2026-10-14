@@ -62,8 +62,8 @@ Three platform-wide design rules bound every brief (operator, 2026-07-27; the th
 - **brief**: per-repo `.agents/<class>.yaml` recipe (launcher-owned `--recipe`, never LLM-assembled — ADR-094).
   The brief is THREE layers — a platform-generated **environment card** (from the claim knobs) + a stack-owned
   **task-type brief** (`fix`/`build`/…) + **deterministic selection** (a `task/*` label). Design + division of
-  labor: [`fixer-context.md`](fixer-context.md) (FU-114, born from the #48 no-docker autopsy — today only `fix`
-  exists and the environment is unadvertised, which primed a `fixer.docker:true` ride to assume "no docker")
+  labor: [`fixer-context.md`](fixer-context.md) (FU-114, born from the #48 no-docker autopsy, where a `fix`-only recipe and an unadvertised
+  environment primed a `fixer.docker:true` ride to assume "no docker" — all three layers built since)
 - **boundary**: fixer ns == repo; branch-scoped ~1h git token, budget-capped OpenRouterKey; per-stack egress CNP
 - **machinery**: predicate = `coordinator-scan.sh` clauses (queued-dispatch, c4c5, changes-requested,
   merge-conflict, unarmed-major; deps-closed FU-087, footprint-free (ADR-097 Touches: intersection)
@@ -145,7 +145,7 @@ incident-evidenced in merge-path-fsm.yaml style — the retro role maintains it.
 | k8s-prod | k8s production checklist class | `chart*/templates/` or manifest dirs touched, or diff adds a workload `kind:` | advisory | **LIVE 2026-07-27** (`agents/lenses/k8s-prod.md`) |
 | helm | helm-best-practices | `chart*/` touched | advisory | **LIVE 2026-07-27** (`agents/lenses/helm.md`) |
 | ASVS | OWASP ASVS v5.0 (May 2025, [asvs.dev](https://asvs.dev/)) | `gh pr diff` grep for auth/input/session/signature code and new route registrations (Go/Python/TS) | advisory | **LIVE 2026-08-24** (`agents/lenses/asvs.md`) — code-class predicate via diff grep, not paths; prefers quiet miss over false alarm |
-| e-ITS | RIA e-ITS baseline | stack-level, scheduled audit-pass | audit report | pending (seeded by FU-105's IdP research output) |
+| e-ITS | RIA e-ITS baseline | stack-level, scheduled audit-pass | audit report | banked, no owner (FU-101/FU-105 expired from the tracker; revisit with the IdP stack — 2026-10-14 ruling) |
 
 Mechanism (built with FU-101's first two lenses): `reviewer-session.sh` computes the diff class
 in-pod (deterministic — changed paths + `gh pr diff` grep), fetches matching
