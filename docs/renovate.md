@@ -124,10 +124,10 @@ not the coordinator, owns whether an update should exist:
   the coordinator's (or human's) "don't do this bump" verb for Renovate PRs.
 
 The coordinator loop runs in-cluster, unsuspended since 2026-07-28 (`reflexes-argo.yaml`); the
-changes-requested→worker transition exists for `major` PRs (the brief's major play, step 3) but has
-never fired on a `renovate/*` branch (FU-046, unproven as of 2026-09-27) — until it does, a
-reviewer-rejected Renovate PR simply **parks**: open, changes-requested, auto-merge hard-blocked.
-Safe: no duplication, no churn, nothing auto-acts on it.
+changes-requested→worker transition covers un-armed `major` PRs and, since #2521 (2026-10-12), an
+ARMED `deps-review` PR that is red or changes-requested — the worker pushes to the `renovate/*`
+branch, up to five rides, then `agent/arbitrate` (first proven on sleep-tracking#191; FU-046,
+archived). A red ARMED `automerge` PR still simply **parks** (docs/dependency-upgrades.md G12b).
 
 ## Gotchas encountered
 

@@ -83,8 +83,8 @@ sync is the outage above.
 **All three steps restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
 the `10.96.0.1:443` backend fleet-wide and does not re-sync
 ([FU-258](spikes/cilium-apiserver-restart-backend-loss.md) — `devbox run maint cilium-check`;
-`cp-upgrade` gates on it by itself), the Argo Workflows controller hot-loops and floods Loki
-(FU-260), and SA tokens die if the issuer moves (C1). Open a window first:
+`cp-upgrade` gates on it by itself), and SA tokens die if the issuer moves (C1). (The Argo
+controller's configmap hot-loop on a restart is gone since v4.1.4 — FU-260, archived 2026-10-14.) Open a window first:
 [`/maintenance-window`](../.claude/skills/maintenance-window/SKILL.md).
 
 ## CP4. The rehearsal — what a disposable lab control plane settles
