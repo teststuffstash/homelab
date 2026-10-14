@@ -1213,8 +1213,8 @@ the block needs pruning, not more headings.
       wrong system).** Gauge `credential_expiry_timestamp_seconds` + `CredentialExpiringSoon` (<30d) /
       `CredentialExpiryImminent` (<7d), `triage: none` → HA; `CredentialExpiryProbeBlind` for a dead
       poller. Design: [`docs/secrets.md`](secrets.md) §Credential expiry is telemetry. **Cloudflare
-      live-poll leg built 2026-10-14, PR #2559** (`cloudflare-credential-expiry-probe`, inventory-read
-      token). **Next:** the declared-expiry half — `.p12`s (`openssl`), the ghcr classic PAT
+      live-poll leg LIVE 2026-10-14 (PR #2559, verified: 5 series = the 5 expiring tokens, earliest 2027-01-01;
+      probe_ok 1; rules loaded)** (`cloudflare-credential-expiry-probe`). **Next:** the declared-expiry half — `.p12`s (`openssl`), the ghcr classic PAT
       (`GHCR_MIRROR_PULL_EXPIRY`), GitHub PATs — emitting the same gauge under their own `provider`.
       Relates FU-150 (silent-expiry class), FU-039.
 - [ ] **FU-036** — AWS cleanup: delete the orphaned Route53 hosted zone `ZCGRPARGVE3CW` (+ the
