@@ -1,0 +1,10 @@
+# workflow-pin-revert-coupling — the decision table (family contract in fixture.yaml). The axis is
+# the alert's workflow label vs the candidate's changed files. Row state (WF, SLUG, PRNUM, CAND)
+# rides the env column; CAND is the candidate JSON the candidate read hands over, so the row
+# exercises the block's own call site, not a transcription of it.
+# id                    | world | patch | env                                                                                                        | expect      | params
+ci-vs-renovate          |       |       | WF=CI SLUG=teststuffstash/homelab PRNUM=2175 CAND={"files":[{"path":".github/workflows/renovate.yaml"}]}     | report-only | SLUG=teststuffstash/homelab PRNUM=2175 WF=CI
+ci-vs-ci                |       |       | WF=CI SLUG=teststuffstash/homelab PRNUM=2161 CAND={"files":[{"path":".github/workflows/ci.yaml"}]}            | coupled     | SLUG=teststuffstash/homelab PRNUM=2161 WF=CI FILE=.github/workflows/ci.yaml
+ci-vs-ci-among-others   |       |       | WF=CI SLUG=teststuffstash/homelab PRNUM=2352 CAND={"files":[{"path":".github/workflows/renovate.yaml"},{"path":".github/workflows/ci.yaml"}]} | coupled | SLUG=teststuffstash/homelab PRNUM=2352 WF=CI FILE=.github/workflows/ci.yaml
+nameless-workflow       |       |       | WF=ci.yaml SLUG=teststuffstash/homelab PRNUM=2161 CAND={"files":[{"path":".github/workflows/ci.yaml"}]}       | coupled     | SLUG=teststuffstash/homelab PRNUM=2161 WF=ci.yaml FILE=.github/workflows/ci.yaml
+no-workflow-label       |       |       | WF= SLUG=teststuffstash/homelab PRNUM=2161 CAND={"files":[{"path":".github/workflows/ci.yaml"}]}              | no-label    | SLUG=teststuffstash/homelab PRNUM=2161
