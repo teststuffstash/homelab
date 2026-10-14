@@ -28,6 +28,9 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
                       from day one — docs/oracle-iac.md. PRIVATE repo → read via the
                       repo-oracle-iac-github credential. AppProject + namespace in
                       argocd/platform/oracle-{project,namespaces}.yaml.)
+          "circles" ► github.com/teststuffstash/circles-iac//apps  (the circles stack, same three-layer
+                      shape; PUBLIC repo, no credential. AppProject + namespaces in
+                      argocd/platform/circles-{project,namespaces}.yaml.)
 ```
 
 ## Secret flow
@@ -42,7 +45,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
 | `infisical-machine-identity` (ESO→Infisical auth) | `tofu/infisical/` (Infisical TF provider) | not in git |
 | every app secret after that | Infisical → ESO → namespace Secret | — |
 
-(The table is deliberately PARTIAL — the full seeded set incl. `repo-forgejo-oci` and the
+(The table is deliberately PARTIAL — the full seeded set incl. `repo-forgejo-helm-oci` and the
 Infisical bootstrap cred is `tofu/argocd.tf`, the authority the diagram already defers to.)
 
 The CNPG cluster's app password is **supplied** (the `infisical-pg-app` basic-auth secret),
@@ -51,15 +54,16 @@ not generated, so tofu can build a matching `DB_CONNECTION_URI` deterministicall
 ## Apply / observe
 
 ```bash
-source scripts/keepass-env.sh                          # TF_VAR_* from the wallet
-devbox run -- tofu -chdir=tofu apply -target=helm_release.argocd \
+# The main root's state + creds live on the management box (docs/management-box.md): plan there,
+# read it, apply the printed plan id. -target is the bootstrap ORDER only (read the plan — FU-248).
+devbox run mgmt-tf -- plan -target=helm_release.argocd \
   -target=kubernetes_secret.argocd_repo_github \
   -target=kubernetes_namespace.infisical \
   -target=kubernetes_secret.infisical_secrets \
   -target=kubernetes_secret.infisical_db \
   -target=kubernetes_secret.infisical_pg_app \
-  -target=kubernetes_service.argocd_lb                 # ArgoCD + seeds first
-devbox run -- tofu -chdir=tofu apply -target=helm_release.argocd_apps   # then hand off to git
+  -target=kubernetes_service.argocd_lb                 # ArgoCD + seeds first → apply <plan-id>
+devbox run mgmt-tf -- plan -target=helm_release.argocd_apps    # then hand off to git → apply <plan-id>
 KUBECONFIG=tofu/kubeconfig devbox run -- kubectl -n argocd get applications -w
 ```
 

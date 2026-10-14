@@ -70,7 +70,7 @@ File-shaped ones (SSH keys, matchbox certs, App PEMs, the `.p12`, esphome `secre
 
 ## OPNsense as code
 
-OPNsense (router @ .1, currently 26.1.x) is managed with the `oxlorg.opnsense` Ansible collection.
+OPNsense (router @ `.1` — the CARP pair's VIP since 2026-10-09, nodes on 26.7.x) is managed with the `oxlorg.opnsense` Ansible collection.
 Layout is **thin playbooks → roles**, with config values in `ansible/group_vars/` (see
 `ansible/readme.md`): `opnsense-bgp.yml` (FRR/BGP ↔ Cilium), `opnsense-acme.yml` (Let's Encrypt,
 **DNS-01 via Cloudflare** — `ACME_CF_TOKEN`, since `teststuff.net` moved off Route53),

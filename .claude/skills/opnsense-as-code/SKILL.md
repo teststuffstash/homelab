@@ -51,5 +51,5 @@ interpreter as `-e` (required — `devbox run` strips the env var).
   Match on `[hostname, domain, record_type]` (exclude `value`) so a repoint updates in place.
 - Verify DNS bypassing the jail's stale cache: `devbox run -- dig +short <name> @192.168.2.1`.
 - HAProxy frontends must have HTTP/2 disabled (WebSocket upgrade). Each needs its own LAN IP-alias
-  VIP (`.5`–`.8`) since OPNsense owns `.1:443`.
+  VIP from `192.168.3.0/24` (ADR-088, `docs/ip-plan.md`) since OPNsense owns `.1:443`.
 - Never iterate `/firmware/reboot` or `/poweroff` to probe endpoints — they execute.

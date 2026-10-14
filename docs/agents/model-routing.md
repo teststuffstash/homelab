@@ -55,7 +55,7 @@ its anchor and its evidence:
 | rung | what it decides | anchor | evidence |
 |---|---|---|---|
 | **rail** | which billing rails are candidates at all | `model-classes.json` → `classes.<cls>.rails`, read at `router.py:route` | decision row `rail`; `/router-status` → `decisions_24h[].rail`, `router_run_reports_by_rail_total{rail=…}` |
-| **class** | which `classes` row applies | `router.py:route` (`label_map` → `role_defaults`) | decision row `class`; replay `agents/replay/fixtures/route-request-labels` (the caller's assembled body) |
+| **class** | which `classes` row applies | `router.py:route` (`label_map` → `role_defaults`) | decision row `class`; replay `agents/replay/fixtures/route-request/labels` (the caller's assembled body) |
 | **tier** | the class tier + the label-merged floor | `router.py:route` (+ `router.py:_TIER_ORDER`) | decision row `tier`, `skipped[]` reasons `tier-floor:*` / `never-free:*` |
 | **cell** | the `(model × provider)` that is priced and pinned | `router.py:route` (`ctx["price"](m, exclude)`) + `openrouter-proxy.py:pin_for` | decision row `provider` / `price_per_mtok`; `router_generation_cost_usd_total{model,provider}` |
 
@@ -109,7 +109,7 @@ its anchor and its evidence:
   `label_map[label]` → `role_defaults[role]` → `coding`. It happens at authoring/scan time; the
   data plane never infers difficulty per prompt.
   - anchor: `router.py:route`; `model-classes.json` → `label_map`, `role_defaults`.
-  - evidence: decision row `class`; replay `agents/replay/fixtures/route-request-labels` (the
+  - evidence: decision row `class`; replay `agents/replay/fixtures/route-request/labels` (the
     labels the launcher actually sends).
 - **All matching labels merge; the first match does not win alone.** `tier_floor`/`never_free`
   accumulate across every label present (a non-budget label may sort first and carry no tier keys).

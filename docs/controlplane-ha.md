@@ -83,8 +83,8 @@ sync is the outage above.
 **All three steps restart apiservers, and on this fleet that has three known fallouts:** Cilium drops
 the `10.96.0.1:443` backend fleet-wide and does not re-sync
 ([FU-258](spikes/cilium-apiserver-restart-backend-loss.md) — `devbox run maint cilium-check`;
-`cp-upgrade` gates on it by itself), the Argo Workflows controller hot-loops and floods Loki
-(FU-260), and SA tokens die if the issuer moves (C1). Open a window first:
+`cp-upgrade` gates on it by itself), and SA tokens die if the issuer moves (C1). (The Argo
+controller's configmap hot-loop on a restart is gone since v4.1.4 — FU-260, archived 2026-10-14.) Open a window first:
 [`/maintenance-window`](../.claude/skills/maintenance-window/SKILL.md).
 
 ## CP4. The rehearsal — what a disposable lab control plane settles
@@ -235,7 +235,7 @@ etcd 2 members, BGP `established` with 25 routes. cp-02 followed immediately, ta
 ⚠ **One thing this episode is NOT evidence of.** The Matchbox PXE assets were pinned at v1.13.2
 while `var.talos_version_worker` had moved to v1.13.10, and that drift was fixed mid-recovery — but
 it caused none of this. Both kernel versions chainloaded and booted fine; the config on disk was
-the whole story. The lockstep fix stands on [FU-246](follow-ups.md)'s own merits, and the first
+the whole story. The lockstep fix stands on [FU-246](follow-ups-archive.md)'s own merits, and the first
 diagnosis that blamed the kernel was wrong.
 
 ## CP8. The kubeconfig does not follow the endpoint (FU-259)

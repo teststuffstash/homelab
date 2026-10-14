@@ -6,7 +6,7 @@ encrypted remote state in Garage since 2026-08-04 (`backend.tf`; creds/runbook:
 [`docs/tofu-state.md`](../../docs/tofu-state.md)). Design record:
 [`docs/cloudflare.md`](../../docs/cloudflare.md).
 
-Provider: `cloudflare/cloudflare` **v5** (pinned 5.19.x). The v5 rewrite renamed/restructured
+Provider: `cloudflare/cloudflare` **v5** (`~> 5.0`; the exact version is `.terraform.lock.hcl`'s). The v5 rewrite renamed/restructured
 most resources — everything here was validated against the v5 schema.
 
 ## What it builds
@@ -28,7 +28,7 @@ most resources — everything here was validated against the v5 schema.
 |---|---|
 | `tunnel.tf` | remotely-managed tunnel + ingress config + connector token (data source) |
 | `cloudflared.tf` | k8s namespace/secret/deployment running the connector in-cluster |
-| `dns.tf` | `ha` CNAME → tunnel (proxied); `*.local` A → 127.0.0.1 (DNS-only, work envs) |
+| `dns.tf` | `ha` CNAME → tunnel (proxied); `*.local` A → 127.0.0.1 (DNS-only, work envs); `wg` A (WireGuard endpoint — tofu owns existence, ddclient the content) |
 | `mtls.tf` | client key+CSR (`tls`), CF managed-CA signs it, per-host mTLS enable, WAF enforce rule |
 | `outputs.tf` | tunnel id, `ha_url`, client cert/key (sensitive), `make_p12_command` |
 | `minutark.tf` | minutark.ee product-zone bootstrap — hygiene records, TLS 1.2 floor, always-HTTPS, DNSSEC (oracle-iac#351) |
@@ -44,6 +44,7 @@ most resources — everything here was validated against the v5 schema.
 
 ```bash
 source scripts/keepass-env.sh   # exports CLOUDFLARE_API_TOKEN (wallet: cloudflare-write-key)
+TOFU_STATE_ROOT_DIR=$PWD/tofu/cloudflare . scripts/tofu-state-env.sh   # Garage backend creds
 devbox run -- tofu -chdir=tofu/cloudflare init
 devbox run -- tofu -chdir=tofu/cloudflare plan      # review first — always
 devbox run -- tofu -chdir=tofu/cloudflare apply
@@ -63,11 +64,11 @@ with explicit AES-256-CBC/SHA256 (not openssl defaults, which drift and have bro
 imports). The `.p12` isn't byte-reproducible (random salt); diff the cert via the `.der` on
 <https://lapo.it/asn1js>.
 
-## After apply — the ACME side effect
+## The ACME side effect (done)
 
-Moving the zone to Cloudflare breaks the OPNsense DNS-01 (Route53) cert renewals. Swap the
-OPNsense ACME provider to Cloudflare (scoped token) or LAN certs silently lapse — see
-`docs/cloudflare.md` and `ansible/opnsense-acme.yml`. **Not handled by this root.**
+Moving the zone to Cloudflare broke the OPNsense DNS-01 (Route53) cert renewals; OPNsense ACME
+is DNS-01 via Cloudflare now (scoped token — `ansible/opnsense-acme.yml`, `docs/cloudflare.md`).
+**Not handled by this root.**
 
 ## Notes
 

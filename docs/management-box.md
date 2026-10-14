@@ -34,7 +34,7 @@ states for every deadman — local to the target.
 | | Phase | Deliverable | State |
 |---|---|---|---|
 | **A** | the box is maintainable | OS installed declaratively, SSH credentials + a rotation scheme, `main`'s tofu state and the dangerous creds moved here (FU-012's other half), the probe + the local deadman | 🔜 **installed 2026-09-13** (NixOS from the stick, generation 2 promoted by `mgmt-confirm`, the belt 4/4 under its unit on the env-file creds; timers masked by design). **`main`'s state + credential set moved here 2026-09-13** (first plan on the box: init 12 s, plan 17 s, No changes). Remaining: the box-scoped credential swap (FU-012) |
-| **S** | the management sentinel | plan-on-PR: a required `management-sentinel` status on homelab PR heads, evaluated on this box behind an input allowlist — read-only, so it precedes B and is not gated on FU-097's table | 🔜 BUILT 2026-09-13 (`mgmt/scripts/mgmt-sentinel.sh` + `mgmt-sentinel.timer`, `policy/mgmt/plan-input.yaml`); the required-context flip is PR#1617, operator-applied — §MB3 |
+| **S** | the management sentinel | plan-on-PR: a required `management-sentinel` status on homelab PR heads, evaluated on this box behind an input allowlist — read-only, so it precedes B and is not gated on FU-097's table | ✅ BUILT 2026-09-13 (`mgmt/scripts/mgmt-sentinel.sh` + `mgmt-sentinel.timer`, `policy/mgmt/plan-input.yaml`); required since PR#1617 (merged 2026-09-13) — §MB3 |
 | **B** | one trivial apply | a `tofu apply` of something nobody depends on — explicitly NOT an unattended control-plane or router operation. The point of the first rollout is the PATH, not the change. **The surface is named (operator, 2026-09-13): the main root's raw-k8s residue** — §The test surface below | 🔜 BUILT 2026-09-13 as the apply LOOP (`mgmt/scripts/mgmt-apply.sh` + `mgmt-apply.timer`: master moved → plan → every address on the policy's apply allowlist → apply, else refused with a `management-apply` status) — phase C's merge trigger and B's first apply are the same mechanism |
 | **C** | triggers | homelab PR merges (the `ROADMAP.md` §Deploy paths gap: a merged change to an unreconciled surface deploys nothing today) + drift detection (the `tofu plan` cron FU-097 asks for) | ⬜ |
 | — | *then* the management network | recovery path 2 and the rest of the spike's original order, resumed once the box is dull | ⬜ |
@@ -1051,7 +1051,7 @@ metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-control
 (FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
 the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-22):** everything through `reconcile: auto` is built, and the fleet rollout
 (CPs included) has been switched ON since 2026-09-22, when it rolled 13/13 nodes to v1.14.1 (#1879). The three CPs are
-live (FU-243). The CARP pair is what is left.
+live (FU-243). The CARP pair is complete since 2026-10-09 ([`router-move.md`](router-move.md) §Status); next is the management network.
 
 ### The rollout policy — forward by default, less than a day (FU-273, operator 2026-09-22)
 
@@ -1411,7 +1411,7 @@ this section.
   `ci-runner.tf` reads by path + the `homelab-sentinel` App key, plus the file-shaped ones the `provisioning` root reads by path — the
   Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the
   box's first day, 2026-09-13) — and the root's gitignored `terraform.tfvars`. The main root's
-  `TF_VAR_*` set moves only when FU-097's table says the box may touch `main`. ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
+  `TF_VAR_*` set moved with `main` on 2026-09-13 (§The capability ledger). ⚠ Today's entries are the **jail's**, a phase-A shortcut against the
   doctrine's "one consumer, one token, at its tier"; the script's table is one line per credential
   so each swaps for a box-scoped entry as it is minted (FU-012's next). The state passphrase is
   shared by nature — it is the state's key, not a consumer's. The **sentinel's** own env file

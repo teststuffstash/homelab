@@ -318,7 +318,7 @@ Two things worth carrying forward from the build itself:
   leaked classes, silenced by hand for 8 h) and leg (b) shipped 2026-09-17: `agents/seat-window.sh`
   writes a `responder-window` record, `node-maintenance.sh settle/down` opens it and `up` closes it,
   and the responder skips a session for the DECLARED NAMES only. Design home:
-  [`../agents/roles.md`](../agents/roles.md) §responder (the glossary's **declared window**).
+  [`../agents/roles.md`](../agents/roles.md) §Role machinery checklists, the responder bullet (the glossary's **declared window**).
 - ~~**FU-231's bucket**: blocked on FU-210; re-read after #1733 soaks.~~ **FU-210 shipped
   2026-09-17** (per-alert transcript + input alert + manifest under
   `homelab/alert-<fp>/responder-r1-<ts>/`), so the prefix exists and FU-231's PRODUCER half rides

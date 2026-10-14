@@ -370,7 +370,7 @@ PVC); operator call, since the 09-05 pin was operator-approved. Requirement-regi
 
 ## The scratch class rides `bulk`, and that is now the wrong shape (2026-09-24)
 
-**Tracked by:** FU-234 (same concern, other hardware). **Status:** planned, nothing changed yet.
+**Tracked by:** FU-234 (same concern, other hardware) — status lives there.
 
 `longhorn-scratch` is replica-1 with **`diskSelector: bulk`** and `dataLocality: best-effort`
 ([ADR-089](adr.md) addendum, FU-081). That was right when `bulk` was the only tier with room. Two

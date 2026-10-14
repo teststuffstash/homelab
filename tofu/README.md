@@ -29,10 +29,7 @@ Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1�
 |---|---|
 | Talos Linux | `v1.14.1` (Kubernetes `v1.36.1`) |
 | Cilium (CNI) | `1.19.1` |
-| `bpg/proxmox` | `~> 0.107` |
-| `siderolabs/talos` | `~> 0.11` |
-| `hashicorp/helm` | `~> 2.17` |
-| `hashicorp/kubernetes` | `~> 2.31` |
+| providers | constraints in `versions.tf`, exact versions in `.terraform.lock.hcl` (Renovate-bumped — no copy here) |
 
 Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
 
@@ -78,7 +75,8 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
 - `forgejo.tf` / `forgejo-pg.tf` / `forgejo-runner.tf` — Forgejo's namespace/secrets, the CNPG
   cluster and the Tier-B `act_runner` (`../docs/ci.md`). **The Forgejo release itself moved to
   ArgoCD 2026-08-04** (FU-136, `../argocd/platform/forgejo.yaml`).
-- `ci-runner.tf` — the Proxmox VM GitHub Actions runner `ci-runner-01` @ `.2.55` (ADR-082).
+- `ci-runner.tf` — the Proxmox VM GitHub Actions runners, one per hypervisor: `ci-runner-01` @ `.2.55` on pve,
+  `ci-runner-02` @ `.2.66` on nx-02 (ADR-082, FU-266).
 - `outputs.tf` — `talosconfig`, `kubeconfig`, `cluster_endpoint`, service URLs, admin credentials.
 
 **Hardware-specific** — swap these for the DR target; the cluster layer stays put:
@@ -152,10 +150,9 @@ it. ⚠ `hostpci` is not hot-pluggable: the VM needs a full stop/start, so it ri
 ```bash
 devbox shell                                   # toolchain (tofu/talosctl/kubectl/helm) from ../devbox.json
 cp terraform.tfvars.example terraform.tfvars   # edit IPs/specs (must be free IPs)
-tofu init
-tofu validate
-tofu plan
-tofu apply
+devbox run tf-validate                         # syntax-only, from the repo root
+devbox run mgmt-tf -- plan                     # main root state + creds live on the management box
+devbox run mgmt-tf -- apply <plan-id>          # the id the plan printed (.claude/skills/tofu-apply)
 
 # grab credentials (gitignored)
 tofu output -raw talosconfig > talosconfig
@@ -190,7 +187,7 @@ goes in git.
 - **`../tofu/cloudflare/`** + **`../tofu/cloudflare-token/`** — remote access (Cloudflare Tunnel +
   mTLS, **live**); separate roots/state. See `../docs/cloudflare.md`.
 - **`../tofu/provisioning/`** — Matchbox PXE LXC (separate root/state); see `../docs/provisioning.md`.
-- **`../tofu/github/`** — GitHub repos, branch-protection rulesets + agent labels (separate root;
+- **`../tofu/github/`** — GitHub repos, branch-protection rulesets, org Actions secrets, deploy keys (separate root;
   applied outside the jail with an admin PAT — see its README).
 - **`tofu/infisical/`** — Infisical project + `eso-reader` identity (separate state; `apply.sh`).
 

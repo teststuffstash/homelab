@@ -43,6 +43,9 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [github-setup.md](github-setup.md) | **GitHub org manual "required clicks"** — apps installed, tokens/PATs + their gaps, runner-group + fork-PR + public-repo toggles; the click-only bootstrap checklist |
 | [github-runner-bootstrap.md](github-runner-bootstrap.md) | ARC self-hosted runner bootstrap (App → install → secrets → scaleset); the `runs-on: homelab-ephemeral` path |
 | [tofu-state.md](tofu-state.md) | **Where each tofu root's state lives** — the encrypted-Garage backend ruling, the cone table, the migration runbook (FU-012) |
+| [management-box.md](management-box.md) | **The management box (R12)** — the out-of-band applier: main's tofu state + applies, the fleet rollout, helm applies, the sentinel; §The capability ledger says what it may do on its own |
+| [postgres.md](postgres.md) | **Postgres (CloudNativePG) — the consumer card**: how a stack or platform service gets a database |
+| [loki-tenancy.md](loki-tenancy.md) | **Loki tenancy and the scoped read door** — per-tenant log access |
 | [controlplane-ha.md](controlplane-ha.md) | **Control-plane HA mechanism** (ADR-133/-136) — what `cluster_endpoint` decides, why the ServiceAccount issuer is frozen, the pin → join → flip order, and the lab-CP rehearsal |
 | [router-move.md](router-move.md) | **The router move** Big Data → a from-git VM on nx-02 (ROADMAP §HA step 2, FU-297) — the single-router inventory, the identity it carries, the cutover window |
 | [opnsense-test-vm.md](opnsense-test-vm.md) | The OPNsense **test VM** on nx-02 (FU-297) — shape, why the importer-over-serial bootstrap, rollback to the baseline snapshot |

@@ -34,8 +34,8 @@ devbox run mgmt-tf -- plan                            # main root, ON the box, o
 MGMT_REF=origin/fix/foo devbox run mgmt-tf -- plan    # a pushed branch
 devbox run mgmt-human-plan -- <pr>                    # stage-1-REFUSED PR (providers.tf etc.): read the diff,
                                                       # plan on the box, post the required verdict as a human plan
-devbox run mgmt-tf -- apply                           # review the plan first
-devbox run mgmt-tf -- plan -target='kubernetes_deployment.ha'
+devbox run mgmt-tf -- apply <plan-id>                 # the id the plan printed — review the plan first
+devbox run mgmt-tf -- plan -target='kubernetes_deployment.ha'   # read the plan — -target drags whole resources (FU-248)
 devbox run tf-validate                                # syntax-only, no backend/secrets
 devbox run github-tofu plan                           # tofu/github root (repos/rulesets/org secrets)
 ```
@@ -44,6 +44,7 @@ The `tofu/provisioning/` root (Matchbox) has separate state and only needs one v
 
 ```bash
 source scripts/keepass-env.sh   # exports TF_VAR_proxmox_api_token (wallet: pve-api-token-matchbox)
+TOFU_STATE_ROOT_DIR="$PWD/tofu/provisioning" . scripts/tofu-state-env.sh   # encrypted Garage state
 devbox run -- tofu -chdir=tofu/provisioning plan
 ```
 

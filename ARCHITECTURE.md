@@ -75,12 +75,12 @@ _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled
 
 - ✅ GitHub (`teststuffstash`), GHCR/Docker Hub as image sources; releases publish images + OCI
   charts to ghcr.
-- ✅ OpenTofu provisioning (cluster live), Talos + Kubernetes (v1.14.1 / v1.36.1), three control planes behind a Talos VIP (ADR-133).
+- ✅ OpenTofu provisioning (cluster live), Talos + Kubernetes (versions: the generated line in README.md), three control planes behind a Talos VIP (ADR-133).
 - ✅ ArgoCD GitOps front (app-of-apps in `argocd/`, sourced from GitHub; Forgejo cutover = FU-007).
   Reconciles CloudNativePG → Postgres → Infisical → External Secrets Operator and the app layer.
 - ✅ CI: self-hosted two-tier (`docs/ci.md`) — in-cluster **ARC** (`runs-on: homelab-ephemeral`) +
   the **Proxmox VM runner** (ADR-082) for Docker/binfmt builds; Forgejo `act_runner` for Tier-B.
-- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` — docker.io @ .40.20, ghcr @ .40.21, mcr @ .40.31, pypi @ .40.34; npm @ .40.35 in `argocd/resources/npm-cache/`, FU-294) + the first-party `registry.teststuff.net` (ADR-121); the apt leg of ADR-070 stays open.
+- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` + `argocd/resources/npm-cache/` — docker.io, ghcr, mcr, pypi, npm; VIPs in `SERVICES.md`) + the first-party `registry.teststuff.net` (ADR-121); the apt leg of ADR-070 stays open.
 
 ## 3 · Resource Plane
 
@@ -109,8 +109,8 @@ _Fig. 3: Resource Plane — where YAMLs finally meet hardware (and there's no IP
 - ✅ Cloudflare Tunnel (Home Assistant remote access via `ha.teststuff.net` + mTLS, `docs/cloudflare.md`);
   `teststuff.net` DNS now on Cloudflare.
 - ✅ Garage S3 (LAN-only, ADR-031/073) + Postgres via CloudNativePG (ADR-046).
-- 🔜 Off-cluster backups to S3 (FU-013), Civo burst.
-- ⬜ CARP HA pair (needs ≥2 hosts), network Zigbee coordinator (to buy — FU-034).
+- 🟡 Backups: Longhorn + CNPG to the backup Garage LIVE (FU-299, `docs/longhorn-backup.md`); Home Assistant `/config` → S3 (FU-013) and Civo burst 🔜.
+- ✅ CARP router pair nx-02 + pve (ADR-144/145, complete 2026-10-09 — `docs/router-move.md`). ⬜ Network Zigbee coordinator (to buy — FU-034).
 - ⬜ **Time is not served on the LAN, by decision** (operator, 2026-09-22): nothing declares
   `machine.time`, so every Talos node uses Talos's built-in default `time.cloudflare.com` over the
   WAN. The fleet has WAN dependencies everywhere; hosting NTP buys too little for its cost.

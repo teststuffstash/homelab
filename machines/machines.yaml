@@ -152,7 +152,7 @@ machines:
   - name: opnsense
     kind: metal
     label: OPNsense ("Big Data", HP desktop)
-    role: Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME
+    role: the PREVIOUS router — powered off since window 1 (2026-10-02), kept cabled as the fallback; `.1` is now the CARP pair's VIP (docs/router-move.md §Status)
     hardware: HP desktop ("Big Data")
     cpu_cores: 4         # i5-2500
     memory_gb: 8
@@ -618,7 +618,7 @@ machines:
     role: k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — Longhorn SCRATCH only (`fast`)
     hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
     cpu_cores: 40        # 2 sockets × 10C/20T — the largest node in the fleet
-    memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
+    memory_gb: 64        # since the 2026-10-09 DIMM window: 2 × Hynix + 2 × Micron 16 GB 2Rx4 PC4-2133P (pve's old set); 12 of 16 slots FREE
     ip: 192.168.2.58
     reconcile: auto
     plug: null
@@ -716,7 +716,7 @@ machines:
     role: Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04`
     hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
     cpu_cores: 40        # 2 sockets × 10C/20T
-    memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
+    memory_gb: 128       # since the 2026-10-09 DIMM window: 8 × 16GB Samsung M393A2K40BB1-CRC (125 GiB visible, 64 GB per NUMA node, 2133 MT/s); 8 of 16 slots FREE
     ip: 192.168.2.59
     # eno2 = the I350's second port, alone in IOMMU group 104: the future router VM's WAN by
     # PCI passthrough (ROADMAP §HA step 2). Never bridged, never addressed on the host.
@@ -781,7 +781,7 @@ machines:
     kind: vm
     # No `zone:` — not a k8s node (same reason as opnsense-test above).
     label: "`opnsense-nx02` (VM on nx-02)"
-    role: CARP-pair router NODE (ADR-144) — STANDING beside Big Data, inert (standby profile) until the cutover; LAN = this IP on vmbr0, WAN = vmbr3 over the uncabled eno2
+    role: CARP-pair router NODE (ADR-144) — serves `.1` since window 1 (2026-10-02; the MASTER by skew); LAN = this IP on vmbr0, WAN = vmbr3 over eno2
     hardware: OPNsense 26.7 VM on nx-02 (vmid 9170)
     ip: 192.168.2.70
     notes: Hardware tofu/opnsense-router.tf; built + checked by scripts/opnsense-router-node.sh (docs/router-move.md §The standing nodes); inventory ansible/router-nodes/inventory.yml. Never holds .1 until the window.
@@ -790,7 +790,7 @@ machines:
     kind: vm
     # No `zone:` — not a k8s node (same reason as opnsense-test above).
     label: "`opnsense-pve` (VM on pve)"
-    role: CARP-pair router NODE (ADR-144) — STANDING beside Big Data, inert (standby profile) until the cutover; LAN = this IP on vmbr0, WAN = vmbr3 over the uncabled enp6s0 (TG-3468)
+    role: CARP-pair router NODE (ADR-144) — the BACKUP since window 2 (2026-10-08), WAN leg proven 2026-10-09; LAN = this IP on vmbr0, WAN = vmbr3 over enp6s0 (TG-3468)
     hardware: OPNsense 26.7 VM on pve (vmid 9171)
     ip: 192.168.2.71
     notes: Hardware tofu/opnsense-router.tf; built + checked by scripts/opnsense-router-node.sh (docs/router-move.md §The standing nodes); inventory ansible/router-nodes/inventory.yml. Never holds .1 until the window.

@@ -1,9 +1,9 @@
 # Spike — nx-02 NUMA placement and CI swapping
 
 **Tracked by:** [FU-289](../follow-ups.md#hardware--nodes). Investigation dated 2026-09-25,
-counters read 2026-09-27; no NUMA configuration change or controlled placement experiment has
-been performed. The tracker owns current status and the next action, including runner-02's
-parked state.
+counters read 2026-09-27; wk-04's `numa` blocks (`policy=preferred`) were applied 2026-09-27
+(§Evidence and remaining uncertainty) and ci-runner-02 unparked the same day; no controlled placement A/B has been run. The
+tracker owns current status and the next action.
 
 ## Evidence and remaining uncertainty
 
@@ -22,7 +22,7 @@ was enabled, but cannot relocate VFIO-pinned pages in the usual way.
 
 Swap began on September 24 at 22:43Z with approximately 11 GiB globally available. During the
 next morning's failing e2e runs, swap-in, high HDD utilization and I/O pressure coincided with
-the node-preparation stalls. FU-225's global low-memory threshold misses this condition.
+the node-preparation stalls. `PveHostMemoryLow`'s global low-memory threshold (FU-225) misses this condition.
 NUMA imbalance is the leading explanation, not a proven allocation-level root cause:
 historical per-node placement was absent and no A/B experiment has been run. THP allocation/
 compaction may contribute; no evidence establishes a kernel regression.

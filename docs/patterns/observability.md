@@ -149,7 +149,7 @@ oracle-iac's pipeline alerts were shipped.
 
 | surface | LAN address | auth / scope | supported? |
 |---|---|---|---|
-| Prometheus HTTP API | `https://prometheus.teststuff.net/api/v1/query` (HAProxy VIP `192.168.40.13`) | none; **cluster-wide** — every stack's series | **yes**, as a LAN read (the platform's own watch scripts use it). No per-stack scoping exists or is planned: metrics carry no content the way logs do, so the Loki door's tenancy model was not copied |
+| Prometheus HTTP API | `https://prometheus.teststuff.net/api/v1/query` (addresses: [`SERVICES.md`](../../SERVICES.md)) | none; **cluster-wide** — every stack's series | **yes**, as a LAN read (the platform's own watch scripts use it). No per-stack scoping exists or is planned: metrics carry no content the way logs do, so the Loki door's tenancy model was not copied |
 | Grafana | `https://grafana.teststuff.net` | Grafana login | yes |
 | Alertmanager API | `https://alertmanager.teststuff.net` | none, LAN | yes (read; silences are operator-lane) |
 | Loki | `https://192.168.40.32:8443` + `X-Scope-OrgID` | SA token, per-namespace RBAC | yes — [`../loki-tenancy.md`](../loki-tenancy.md) §How a stack jail reads its logs |
