@@ -24,13 +24,13 @@ Two needs, one substrate:
    coordinator's "learned live on #18" notes) becomes a scheduled, evidence-based loop that
    *proposes* process changes through the existing human gates.
 
-## Today's persistence gaps (grounded 2026-07-08)
+## Persistence per role (the 2026-07-08 gap table, current since §A1 shipped)
 
 | Role | Transcript today | Survives pod? |
 |---|---|---|
-| coordinator | Claude Code JSONL on the `coordinator-transcripts` RWX PVC | **yes** (PVC) |
-| worker (goose) | `/tmp/run.log` (tee'd stdout → Loki) + goose's own session file | **no** (Loki keeps stdout only; goose session lost) |
-| reviewer | `--output-format json` single result; its `~/.claude` transcript | **no** |
+| coordinator | Claude Code JSONL on the `coordinator-transcripts` RWX PVC, mirrored to `agent-transcripts` by the exit trap + nightly sync (§A1) | **yes** (PVC + bucket) — 2026-07-08: PVC only |
+| worker (goose/opencode/claude) | `run.log` + the harness session store, uploaded by `agent-finalize` (§A1) | **yes** (bucket) — 2026-07-08: **no**, Loki kept stdout only |
+| reviewer | result JSON + `~/.claude/projects`, uploaded by the `reviewer-session.sh` trap (§A1) | **yes** (bucket) — 2026-07-08: **no** |
 | responder (2026-09-17) | per firing alert: `alert.json` + `triage.log` + the `*.jsonl` + an A1 manifest + a typed `finding.json`, under `homelab/alert-<fp>/responder-r1-<ts>/` (FU-210 / FU-231, `agents/coordinator/responder-argo.yaml`) | **yes** (bucket) — before 2026-09-17 it was the one role with NO capture at all, and a triage that filed no issue therefore left nothing: the 2026-09-03 forgejo-pg-1 session marked the subject triaged, filed nothing, and the probe lane deferred to it as COVERED while the alert stood 8 h |
 | deep dig (2026-10-04) | per daily run: `digest.json` + `brief.md` + `dig.log` + the `*.jsonl` + an A1 manifest + one `finding-N.json` (`dig-finding/v1`) PER GROUP, under `homelab/dig-<date>/dig-r1-<ts>/` (ADR-148, `agents/coordinator/deep-dig-argo.yaml`) | **yes** (bucket) — and, unlike the responder, the pod READS the bucket back with the reader key: a finding for the same (alert, subject) within 7 d is what stops a daily re-dig |
 | jail seat (2026-08-19) | Claude Code JSONL on the host bind-mount (`.claude-data/`), pushed by `scripts/jail-transcripts-sync.sh` (heartbeat + wind-down) to the **separate `jail-transcripts` bucket** | host + bucket — and the bucket is deliberately OUTSIDE the viewer/retro read set: jail transcripts can carry wallet VALUES, so no cluster role reads them (`agents/coordinator/jail-transcripts-workspace.yaml`) |

@@ -23,7 +23,7 @@ diagram: |
       Open --> Red: ci failure
       Red --> Enriched: RED deploy bump → infra-enrich unit (IAC-T02)
       Enriched --> Green: fulfillment commit into the SAME PR (pin+claim atomic)
-      Green --> Merged: CI-only auto-merge (IAC-T01/T03) — ⚠ IAC-G01/G04 fixer-issue lane unpoliced
+      Green --> Merged: CI-only auto-merge (IAC-T01/T03) — fixer-issue lane policed by the iac-sentinel required check (IAC-G01/G04 closed 2026-08-18)
       Merged --> Syncing: ArgoCD selfHeal (IAC-T04)
       Syncing --> Healthy: synced + health — IAC-G05 rung 0 smoke (sleep); window rungs future
       Syncing --> Degraded: health/probe fails
@@ -40,7 +40,7 @@ axes:
   merge: [open, merged]                  # ADR-084: CI-only auto-merge, require_approval=false BY DESIGN
   sync: [syncing, synced, degraded, reverted]   # the post-merge half — where the real evidence lives
   window: [none, observing, promoted]    # progressive-delivery rung (IAC-G05 — future)
-  policy: [unchecked, pass, fail]        # the tamper-proof sentinel (IAC-G04 — v1 SHADOW built 2026-08-03; enforcement flip pending)
+  policy: [unchecked, pass, fail]        # the tamper-proof sentinel (IAC-G04 — v1 shadow 2026-08-03; ENFORCING since 2026-08-18, required `iac-sentinel` status)
 
 events:
   pr_opened: "deploy App / worker / operator / Renovate opens a PR — lane assignment"
@@ -83,7 +83,7 @@ transitions:
   - id: IAC-T03
     name: fixer-issue dispatch (the FU-106 re-opened lane)
     owner: scan queued-dispatch (fixerRepos predicate) → worker → PR
-    when: "agent-fix+queued issue in an -iac repo with a fixer block → normal worker ride; the MERGE side of this lane is IAC-G01"
+    when: "agent-fix+queued issue in an -iac repo with a fixer block → normal worker ride; the MERGE side of this lane is the iac-sentinel required check (IAC-G01, closed 2026-08-18)"
     status: guarded
     unreplayed: "claim-predicate leg of the scan — backfill by fix-density"
     unreplayed: "claim-predicate leg of the scan — backfill by fix-density"
@@ -135,21 +135,13 @@ transitions:
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "its -iac repo" }
 
 gaps:
-  - id: IAC-G01
-    name: fixer-issue merge gate
-    detail: "Nothing stands between a worker's push and master on the fixer-issue lane (38s self-merge, sleep-iac#28) — and the fixer token carries workflows:write (composition, fleet#134 grant), so a worker can edit CI itself. Ruling 2026-07-27: the fix is NOT a human and NOT a blocking LLM review — it is IAC-G04's deterministic policy sentinel + IAC-G06's advisory lens; this gap closes when G04 ENFORCES (v1 shadow built 2026-08-03 — iac-lane.md §L0b)."
-    fu: FU-106
-  - id: IAC-G04
-    name: no tamper-proof policy check
-    detail: "In-repo CI runs the PR's own workflow code — a required check the PR can rewrite (the #28 workflows-edit made this concrete). The platform contract (ip-plan ranges, ADR-076 bucket ownership, tenancy boundaries, secret references-never-values, workflow-path rules, deletionPolicy guards) must be enforced by a CLUSTER-SIDE sentinel the PR cannot touch. V1 SHADOW BUILT 2026-08-03 (policy/iac/ Kyverno + scripts/iac-sentinel.sh + the iac-sentinel CronWorkflow — logs/metrics only); the gap closes at the ENFORCEMENT flip: reviewer-App statuses:write + required check + the workflow-path push ruleset (iac-lane.md §L0b)."
-    fu: FU-106
   - id: IAC-G05
     name: no observation window / progressive rung
     detail: "Healthy is instantaneous — sync-succeeded is treated as done with zero traffic evidence. Rung 0 BUILT 2026-08-03 (sleep-tracking#113: PostSync smoke — real ingest run + freshness-free read asserts; cron-shaped doctrine iac-lane.md §IAC-G05). Rung 1 (in-cluster): Gateway API weighted backendRefs (Cilium) stable/canary split. Rung 2 (edge): Cloudflare in front of all services — key-tier routing, weighted LB, shadow mirroring. Design: iac-lane.md §Progressive delivery."
     fu: FU-106
   - id: IAC-G09
     name: no revert path for platform apps — and a blanket one is REJECTED
-    detail: "FU-044's chain reverts the newest deploy/* bump merged <=120m; homelab's ArgoCD apps are outside it. Operator ruling 2026-08-04: do NOT generalize. The platform barely has the trigger (only first-party image pins move as deploy/* — garage, kube-prometheus-stack, loki, forgejo move by chart bumps and hand edits), and revert is not free for stateful services (CRD/schema downgrade, PVC expectations, data-layer skew) with no second net if the revert also fails. Extension is scoped to the REVERSIBLE class: a first-party image pin, no CRD/schema migration, no data-layer coupling; everything else Degraded goes to the responder report-only. SCOPED HALF WIRED 2026-08-04 (deploy-revert-argo.yaml: homelab passes the source guard, then every content line of the candidate diff must be a ghcr.io/teststuffstash pin — same regex shape as pin-only-lint.sh, unreadable diff fail-closed; unit-exercised on 5 diffs, never fired by a real Degraded homelab app). Ruling: iac-lane.md §Auto-revert does NOT generalize."
+    detail: "FU-044's chain reverts the newest deploy/* bump merged <=120m; homelab's ArgoCD apps are outside it. Operator ruling 2026-08-04: do NOT generalize. The platform barely has the trigger (only first-party image pins move as deploy/* — garage, kube-prometheus-stack, loki, forgejo move by chart bumps and hand edits), and revert is not free for stateful services (CRD/schema downgrade, PVC expectations, data-layer skew) with no second net if the revert also fails. Extension is scoped to the REVERSIBLE class: a first-party image pin, no CRD/schema migration, no data-layer coupling; everything else Degraded goes to the responder report-only. SCOPED HALF WIRED 2026-08-04 (deploy-revert-argo.yaml: homelab passes the source guard, then every content line of the candidate diff must be a ghcr.io/teststuffstash pin — same regex shape as pin-only-lint.sh, unreadable diff fail-closed; unit-exercised on 5 diffs; the notification hop itself was dead 2026-07-27 → 10-04 — #2217 — so never-fired measured the hop, not the predicate). Ruling: iac-lane.md §Auto-revert does NOT generalize."
     fu: FU-044
   - id: IAC-G10
     name: alert lane vs observation window — ownership undefined
