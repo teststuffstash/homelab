@@ -14,6 +14,10 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   Operator ruling 10-14 (the 08-24 ☠ was about a bucket under recovery): 6 MPUs aborted by upload id (S3
   AbortMultipartUpload; one held 410 parts / 4.3 GB), then the 16 objects (21 GB) deleted and the bucket destroyed
   with FU-280. Order matters: Garage's DeleteBucket ignores MPUs. 0 block resync errors on all 3 nodes after.
+- **FU-032** *(archived 2026-10-14)* — **wk-metal-02's flaky wired link: closed — the 10-12 "recurrence" was deliberate.**
+  2026-08-07 (homelab#117): a 4.5 h flap storm (`carrier_changes` 2→3778), bad-cable class. The 2026-10-12
+  16:30–16:52Z flaps (carrier 2→6, kube-controller-manager restart 16:56Z) were the operator moving every laptop to a
+  new switch, power + network pulled with NO declared window, to watch the behaviour: the CP came back at once.
 - **FU-260** *(archived 2026-10-14)* — **Argo controller configmap-watcher hot-loop on an apiserver restart**
   (v4.0.7, 96 % of Loki). Live v4.1.4 (chart 2.0.11). Apiserver restarts 10-07/10-09/10-12 → 0 "invalid config
   map" lines, controller ≤0.03 core over 10 d. The fast-strap question went with the cause.

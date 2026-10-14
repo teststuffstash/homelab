@@ -1118,11 +1118,6 @@ the block needs pruning, not more headings.
       stale silently. The belt's `talos` check cleared 2026-09-24 17:00Z (verified 10-03). **Next:** switch
       back to `"talosctl": {"version": "latest"}` once `devbox search talosctl` lists ≥ 1.14.1 (still
       1.13.8 on 2026-10-03; look at the Monday `devbox-update` run). Relates FU-240.
-- [ ] **FU-032** — **wk-metal-02's flaky wired link — RECURRED, and it is a control plane now.**
-      2026-08-07 (homelab#117): 4.5 h flap storm (`carrier_changes` 2→3778), bad-cable class. 2026-10-12
-      16:30–16:52Z: carrier 2→6 (two flaps, no reboot), kube-controller-manager restarted 16:56Z.
-      Since ADR-133 every flap on this box hits etcd/leader leases. **Next (operator):** replace the cable
-      (and the port if spare), then watch `node_network_carrier_changes_total{device="enp0s25"}`.
 - [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes: POINTER.** Mechanism, evidence
       (incl. the 2026-09-16 FU-246 driver, the 2026-09-28 wk-03 thrash with no kill) and the ⚖ recommendation:
       [`spikes/talos-psi-thresholds.md`](spikes/talos-psi-thresholds.md) §5/§7 (symptom thread homelab#857).
