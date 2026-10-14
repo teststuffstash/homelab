@@ -10,6 +10,9 @@ description: >
 
 # skill-retro — mine the transcripts, feed the ledger
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §skill-retro — unpromoted sightings apply until
+> closed (contract: [`../README.md`](../README.md)).
+
 A session cannot see its own mistakes at invocation time; corrections arrive later, in the
 operator's words. This skill reads FINISHED sessions in hindsight — where attribution is easy —
 and turns corrections into [`../GAPS.md`](../GAPS.md) entries. Filing/extension/promotion rules

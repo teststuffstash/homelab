@@ -40,7 +40,7 @@ follow-up question) — and since 2026-09-27 paid only when the operator types t
      `unreplayed:` fields and the gap registers — the exact miss that once justified reading the
      sources. The YAMLs add only code anchors (file+regex); read one on demand when EDITING a
      guard/transition, never for a design sitting.
-   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — ~30k tokens (107 KB) and
+   - `agents/README.md` (launcher) + `agents/coordinator/README.md` (the brief — its size: `bash scripts/session-ctx.sh --startup` — and
      load-bearing; a docs/agents glob misses it)
    - `agents/replay/README.md` **through the generated index only** (doctrine + cleanup contract
      + index, ≈ the first third). The per-family essays below the index are touch-time reference

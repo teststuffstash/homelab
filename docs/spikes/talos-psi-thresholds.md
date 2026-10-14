@@ -3,7 +3,7 @@
 **Tracked by:** FU-155 (research half dispatched as homelab#157). **Status:** researched, **no
 decision** — the tune-vs-accept call is the operator's (⚖ below). **Nothing was applied**; this
 document is findings only. **2026-09-24: Option A is overtaken.** The fleet has run v1.14.1 since 2026-09-22
-(FU-033's rollout), and FU-246 subsumes the pin. What stays open is the tune-vs-accept ruling on
+(FU-033's rollout), and FU-246 (archived 2026-10-03) subsumed the pin. What stays open is the tune-vs-accept ruling on
 v1.14 (FU-155).
 **Environment (at research time):** Talos **v1.13.2** (now v1.14.1, `tofu/variables.tf`) / Kubernetes v1.36.1; the
 ephemeral/kata tier (`wk-metal-01/02/03` 8GB, `wk-metal-04` 16GB), hardened 2026-07-28 by the

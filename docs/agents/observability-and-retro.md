@@ -397,7 +397,7 @@ fallback converts here, so one PR can legitimately carry rounds in both shapes. 
 comment's `created_at` is frozen at the first machine touch, so the old field would peg every later
 round to the age of round 1 and manufacture a `THROUGHPUT-STALL` on a fleet that is riding fine.
 
-**The gates:** `agents/replay/fixtures/summary-comment-{first-touch,append}` pin the create-vs-edit
+**The gates:** `agents/replay/fixtures/summary-comment` (rows first-touch, append) pin the create-vs-edit
 split and the append-only body; `fixtures/ci-red-rounds-two-channels` pins the mixed-channel round
 count (one old-shape comment + two new-shape markers → `attempts=3`, not 1).
 

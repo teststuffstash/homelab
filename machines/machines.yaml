@@ -618,7 +618,7 @@ machines:
     role: k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — Longhorn SCRATCH only (`fast`)
     hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
     cpu_cores: 40        # 2 sockets × 10C/20T — the largest node in the fleet
-    memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
+    memory_gb: 64        # since the 2026-10-09 DIMM window: 2 × Hynix + 2 × Micron 16 GB 2Rx4 PC4-2133P (pve's old set); 12 of 16 slots FREE
     ip: 192.168.2.58
     reconcile: auto
     plug: null
@@ -716,7 +716,7 @@ machines:
     role: Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04`
     hardware: Supermicro X10DRT-P-G5-NI22 (Nutanix NX-6035-G5, CSE-827HD+ 2U twin), 2 × Xeon E5-2640 v4
     cpu_cores: 40        # 2 sockets × 10C/20T
-    memory_gb: 64        # 4 × 16GB Samsung M393A2K40BB1-CRC DDR4-2400 RDIMM; 12 of 16 slots FREE
+    memory_gb: 128       # since the 2026-10-09 DIMM window: 8 × 16GB Samsung M393A2K40BB1-CRC (125 GiB visible, 64 GB per NUMA node, 2133 MT/s); 8 of 16 slots FREE
     ip: 192.168.2.59
     # eno2 = the I350's second port, alone in IOMMU group 104: the future router VM's WAN by
     # PCI passthrough (ROADMAP §HA step 2). Never bridged, never addressed on the host.

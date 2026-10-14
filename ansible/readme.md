@@ -1,11 +1,13 @@
 # `ansible/` — OPNsense + Matchbox as code (roles layout)
 
-Three control targets, each driven by **thin playbooks that call roles**:
+Four control targets, each driven by **thin playbooks that call roles**:
 - **`opnsense`** — the router, configured via its REST API *from the controller*
   (`connection: local`, the `oxlorg.opnsense` collection). Since window 1 (ADR-145) its hosts are the
   CARP pair's nodes, each at its own address (`router-nodes/inventory.yml`, loaded by `ansible.cfg`
   beside `inventory.yml`); `.1` is their CARP VIP — [`docs/router-move.md`](../docs/router-move.md) (B).
 - **`matchbox`** — the PXE provisioning LXC @ `192.168.2.30`, configured over SSH.
+- **`pve`** — the Proxmox hypervisors (pve, nx-02), over SSH: repos, upgrades, meters, serial capture, the router kill switch.
+- **`garage_backup`** — the Longhorn backup-target Garage LXC @ `192.168.2.73` on nx-02, over SSH (FU-299).
 
 There is no `site.yml`-style "apply everything" — each concern is its own playbook.
 
@@ -14,7 +16,7 @@ There is no `site.yml`-style "apply everything" — each concern is its own play
 ```
 ansible/
   ansible.cfg            # inventory + roles_path (paths relative to this dir)
-  inventory.yml          # the matchbox + pve hosts (the router nodes: router-nodes/inventory.yml)
+  inventory.yml          # the matchbox + pve + garage_backup hosts (the router nodes: router-nodes/inventory.yml)
   group_vars/
     opnsense.yml         # CONFIG values: API conn, BGP/ACME/HAProxy/Unbound settings
     matchbox.yml         # CONFIG values: SSH conn, matchbox + Talos-asset settings
@@ -42,6 +44,7 @@ because their real values are here, not baked in).
 | `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) |
 | `opnsense-system.yml` | `opnsense-system` | router-wide settings no service role owns: Interfaces > Settings (offloading, VLAN hw filter, Allow IPv6) + Reporting > NetFlow (Insight) — prod's values, pinned on drift only (FU-297) |
 | `opnsense-users.yml` | `opnsense-users` | one API user per consumer (`backup-puller`, `automation`) + a key each — run via `bash scripts/opnsense-api-users.sh`, which stores what it mints (FU-013) |
+| `opnsense-carp.yml` | `opnsense-carp` | the router pair's CARP VIPs + pfsync (ADR-144); VIPs in `router-nodes/group_vars/opnsense.yml` (`router_carp_vips`) — a no-op where the list is undefined (prod inventory, test VM, drill); `scripts/opnsense-router-node.sh converge` runs it |
 | `matchbox.yml` | `matchbox` | install Matchbox on the PXE LXC |
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |
 | `matchbox-proxydhcp.yml` | `matchbox-proxydhcp` | dnsmasq proxy-DHCP boot server |
@@ -50,6 +53,8 @@ because their real values are here, not baked in).
 | (role only) | `pve-apt-repos` | the Proxmox repos as code — enterprise entries disabled, no-subscription declared (deb822, PVE ≥ 9); runs first in both pve plays, because a fresh install's enterprise-only apt 401s every cache refresh (nx-02, 2026-09-27) |
 | `pve-upgrade.yml` | — | in-major Proxmox dist-upgrade + `/etc/pve` snapshot (never reboots); `devbox run -- ansible-playbook ansible/pve-upgrade.yml` |
 | `pve-node-exporter.yml` | `pve-node-exporter` | the pve thin-pool meter (FU-093) + the guest memory-placement meter (FU-289): node_exporter (+ meminfo_numa, reclaim vmstat) + textfile timer on the hypervisor; `devbox run -- ansible-playbook ansible/pve-node-exporter.yml` |
+| `pve-router-killswitch.yml` | `pve-router-killswitch` | the standing router nodes' kill switch on their hypervisor (ADR-144), armed before `pve-guests` autostarts a node; `scripts/opnsense-router-node.sh killswitch-arm\|disarm\|status <node>` drives the units |
+| `garage-backup.yml` | `garage-backup` | the Longhorn backup-target Garage on its LXC (FU-299, `docs/longhorn-backup.md`) |
 | `pve-serial-log.yml` | `pve-serial-log` | serial-console capture for the VMs flagged `serial = true` in `tofu/variables.tf` (#882): a `qemu-serial-log@<vmid>` socat unit per vmid → `/var/log/qemu-serial/<vmid>.log`; `devbox run -- ansible-playbook ansible/pve-serial-log.yml` |
 
 ## Running

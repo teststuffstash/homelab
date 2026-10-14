@@ -59,7 +59,7 @@ prints the live open count and the oversize items — read those, never a rememb
    responder-filed homelab#124) shipped the verdict-keyed resolve leg *calling itself* "FU-133
    leg c" while the tracker's leg (c) was a different mechanism entirely — unsynced, the next
    closure sweep would have archived unfinished work on the label alone.
-   - **Gather the delta** since the last sweep (the tracker header's "Previous pass" date):
+   - **Gather the delta** since the last sweep (the tracker header's `_Last updated:` date):
      org-wide CLOSED issues carrying the responder's markers and the fixer's labels, plus MERGED
      PRs that cite an FU id —
      ```sh

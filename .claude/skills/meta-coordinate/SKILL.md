@@ -96,7 +96,7 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
    monitors"; the per-event loop watches produced ~10 routine wakes per real signal once the
    loops proved self-driving):
    - **needs-meta watch (REQUIRED)**: `Monitor` (persistent) running
-     `bash agents/meta-needs-attention.sh` — emits ONLY states no machinery announces: a
+     `bash agents/meta-events.sh` (the one consolidated watch; `meta-needs-attention.sh` is its NEEDSMETA source) — the needs-meta source emits ONLY states no machinery announces: a
      platform-lane PR sitting CI-green with no bot approver coming, and open `agent/blocked`
      issues (each = "re-check the gate this label recorded"; clear stale ones with an audit
      comment). It caught a stale goal-blocking label on its first pass.

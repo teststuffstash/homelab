@@ -1,7 +1,7 @@
 # `agents/replay/` — the clause-replay harness
 
 Recorded world in, expected actions out. The mechanism doc is
-[`docs/agents/workflow.md` §Replay harness](../../docs/agents/workflow.md#replay-harness); this
+[`docs/agents/workflow.md` §Replay harness](../../docs/agents/workflow.md#replay-harness--the-adr-103-ratchet-executed); this
 file is the map of the directory.
 
 ```

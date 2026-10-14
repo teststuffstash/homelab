@@ -3,7 +3,7 @@
 **Origin:** FU-097 (archived 2026-10-03; this is the radical end-state of its capability ledger: the
 "human-applied + belt" column shrinking toward empty). **Status:** thought exercise, 2026-08-02 — except for path 5's pilot, which is DECIDED and
 part-BUILT (ADR-129 + [`../management-box.md`](../management-box.md): the OS, the update loop and
-the rollback layers are ruled, the config evaluates, the probe runs; the box is not installed).
+the rollback layers are ruled, the config evaluates, the probe runs; the box is installed since 2026-09-13 and runs main's applies).
 Everything else here remains a thought exercise.
 **Relates:** FU-012, FU-044, FU-102, ADR-005, ADR-088, ADR-090.
 

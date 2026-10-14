@@ -1,6 +1,6 @@
 # tofu/github — branch protection as code (GitHub rulesets)
 
-Separate OpenTofu root (own local state, like `tofu/cloudflare/`) that manages **branch protection**
+Separate OpenTofu root (own encrypted remote state in Garage — `backend.tf`, `docs/tofu-state.md`) that manages **branch protection**
 for the org via **rulesets** — the "suspenders" of the agent platform: agents can push an `agent/…`
 branch and open a PR, but **cannot reach a default branch** (homelab ADR-079/081, `docs/agents/`).
 
@@ -65,6 +65,7 @@ Manual fallback (export the token yourself):
 
 ```sh
 export GITHUB_TOKEN=github_pat_xxxxx            # the fine-grained token (NOT gh auth token)
+TOFU_STATE_ROOT_DIR=$PWD/tofu/github . scripts/tofu-state-env.sh   # Garage backend creds (the wrapper does this)
 devbox run -- tofu -chdir=tofu/github init
 devbox run -- tofu -chdir=tofu/github plan      # review
 devbox run -- tofu -chdir=tofu/github apply
@@ -107,4 +108,4 @@ whole point.
 sleep-tracking's `build-image` runs on push only; its `ci` job runs on PRs.) The full-stack
 confidence gate becomes a required check here once that workflow exists.
 
-State is local + gitignored (`tofu/.gitignore`); `.terraform.lock.hcl` is committed (pinned provider).
+State is encrypted remote state in Garage (`backend.tf`, `docs/tofu-state.md`); `.terraform.lock.hcl` is committed (pinned provider).
