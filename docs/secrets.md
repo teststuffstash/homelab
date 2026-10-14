@@ -158,6 +158,11 @@ credentials get the same shape:
   2026-06 "Read all resources" token once `homelab-observability-read` exists) is DELETED at its
   review, not renewed on autopilot.
 
+**Where the gauge lives:** the Cloudflare live-poll leg is `cloudflare-credential-expiry-probe` beside the
+Cloudflare exporter ([`argocd/resources/cloudflare-exporter/`](../argocd/resources/cloudflare-exporter/),
+rules = its `prometheusrule.yaml` group `credential-expiry`); the declared-expiry half (p12s, PATs) is
+not built yet (FU-156).
+
 Token inventory + expiries: [`cloudflare.md`](cloudflare.md) §Token matrix — the ONE table (a
 dated copy lived here and had already drifted from it; collapsed 2026-08-11). The one fact that
 is THIS doc's: the mint credential itself ("Create Additional Tokens", → 2027-01-09) renews

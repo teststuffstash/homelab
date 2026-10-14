@@ -14,6 +14,11 @@
 # `cloudflare-edge` rule group — one Cloudflare observability app, two API surfaces (GraphQL
 # analytics vs the zone-settings REST reads). It also covers the zone CF_EXCLUDE_ZONES hides from
 # the exporter above. Design: docs/cloudflare.md §Spend surface (zone classes: §Zone classes).
+#
+# credential-expiry-* (FU-156) rides here too: the credential-expiry belt's Cloudflare leg, polling
+# GET /user/tokens with its OWN user-scoped token (Infisical CLOUDFLARE_INVENTORY_READ) into the
+# provider-generic `credential_expiry_timestamp_seconds` gauge. Rules: the `credential-expiry` group
+# in prometheusrule.yaml. Design: docs/secrets.md §Credential expiry is telemetry.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: monitoring
@@ -31,6 +36,10 @@ resources:
   - edge-probe-deployment.yaml
   - edge-probe-service.yaml
   - edge-probe-servicemonitor.yaml
+  - credential-expiry-externalsecret.yaml
+  - credential-expiry-probe-deployment.yaml
+  - credential-expiry-probe-service.yaml
+  - credential-expiry-probe-servicemonitor.yaml
 
 configMapGenerator:
   # Hash-named, so an edit to the probe script rolls its pod (the github-exporter pattern).
@@ -41,3 +50,7 @@ configMapGenerator:
   - name: cloudflare-edge-probe-script
     files:
       - edge-probe.py
+  # Hash-named, same pattern — the FU-156 credential-expiry belt's Cloudflare leg.
+  - name: cloudflare-credential-expiry-probe-script
+    files:
+      - credential-expiry-probe.py
