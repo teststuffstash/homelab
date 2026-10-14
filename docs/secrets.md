@@ -165,5 +165,5 @@ not built yet (FU-156).
 
 Token inventory + expiries: [`cloudflare.md`](cloudflare.md) §Token matrix — the ONE table (a
 dated copy lived here and had already drifted from it; collapsed 2026-08-11). The one fact that
-is THIS doc's: the mint credential itself ("Create Additional Tokens", → 2027-01-09) renews
+is THIS doc's: the mint credential itself ("Create Additional Tokens"; its date is on the expiry gauge like every other token) renews
 manually in the admin wallet — root of trust.

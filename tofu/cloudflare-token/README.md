@@ -23,8 +23,8 @@ what `cloudflare-token-audit` renders — in parens where it differs):
 | Account → Account Settings → **Read** | `Account Settings Read` |
 
 Resources: Account = Include → the account; Zone = Include → **All zones**. No client-IP
-filter. TTL: end date ≈1y out (current one → 2027-01-09, tracked in the `docs/cloudflare.md`
-matrix). The zone/account **Read** rows are what let the mint resolve the zone/account
+filter. TTL: end date ≈1y out (the live date is the `credential_expiry_timestamp_seconds` gauge — FU-156; the `docs/cloudflare.md`
+matrix holds who owns it). The zone/account **Read** rows are what let the mint resolve the zone/account
 resources it scopes minted tokens to. The value lives in the host
 admin wallet (`~/Documents/homelab-admin.kdbx`) ONLY — never the jail, never the cluster
 (`docs/secrets.md` §Minting doctrine records why this one credential is manual). Renewal =
