@@ -13437,3 +13437,38 @@ updates or reverts as much as possible — mechanical revert or a responder."
   class hides key-cap vs account-credit (owner agent-runtime; the alert says so); the deferral note is coordinator
   prose — a launcher marker would make F5's recogniser deterministic; the max-turns stop (#1923) still has no signature;
   renamed clause files are not restored by F1's revert (false-OK direction).
+
+## 2026-10-14 08:00–09:30Z — /board-sweep (the first since 08-25; slice rule per #2219, no corpus load; 2 read-only subagents) (seat)
+
+- **Window:** issues/PRs since 10-07 across the 12 claim repos (claims == `agents/stacks.json`); every open
+  `agent/*` item; ADR-148 lane records since 10-09 18:00Z (5 `now` triages, digs 10-10…10-14). This entry is the
+  next sweep's watermark.
+- **ESCALATED-UNSEEN → acted:** homelab#2071 CLOSED (#2033 merged 09-29); homelab#1930 CLOSED (assembly #1929
+  merged, theme #1770 closed); **agent-runtime PR#165 UNPARKED**. Its `agent/blocked` PR label outlived its
+  `blocked-on: issue=166` (closed 10-09), so the reviewer's CHANGES_REQUESTED (10-09 19:38Z) had no actor for 5 days.
+  The ci-red ride wrote BOTH the auto-resolving marker and the human-gate label; the README §ci-red play says park
+  = label "when a human must act", which this was not. One sighting; not filed.
+- **STUCK-MACHINE → filed #2555:** `RouterRunModelUnverifiable` (platform/worker) = the two 10-11 ad-hoc probe
+  rides (`adhoc-20261011T173846Z`/`T180558Z`, clean, $0, no LLM call) in the router's 7-day `run_reports` window.
+  It latches until ~10-18 18:06Z; `dig-explained:` marker added to meta-state.
+- **Scoreboard (goal#818):** the first 3 rows: garage-1 delete `unsafe`/no (inside FU-301's engine bracket;
+  the seat's identical hand delete failed), oracle-pg-1 delete `wrong`/yes (self-healed), riigiteataja-mcp delete
+  `unsafe`/yes (the finding's own `observation_window`).
+- **HANDLED:** 203 PRs merged in the window on the 4 platform repos (147 operator/seat, 37 Renovate, 15 deploy,
+  3 worker). FU refs touched: FU-301 (archived), FU-305, FU-290, FU-312, FU-302 (arch), FU-297, FU-044, FU-308
+  (arch), FU-249, FU-230, FU-199, FU-058; this is fu-sweep's step-2 input. Lane findings: 14 of 16 handled; the 10-13
+  `OpnsenseConfigUnattributedRevision` = the seat's 10-13 root-key router work (#2533 delNeighbor ×3, pf addRule,
+  ansible hostname), which is the class FU-013's next step names.
+- **CORRECTLY-WAITING:** #818 (verdict human); #1669 (the exacto re-read, operator evidence 09-22, 22 d);
+  #1621 (`agent/done`, acceptance = the first `/corpus-published` ring — NO in-cluster publisher rings it, and
+  oracle-fleet's release-corpus has run only on schedule/workflow_dispatch since 09-14; stack-side wiring).
+- **ESCALATED-UNSEEN → operator:** wk-metal-04 `intel1` at 75 % (`LonghornDiskBelowSchedulingFloor`, new subject):
+  garage-0 data 161 G + meta 32 G + **registry-data 161 G** on a 255 G disk, while intel0 sits at 1 %. The ledger
+  (storage-ledger.md L121) still places the registry on intel0. FU-093/FU-280 own it. The dig's
+  `GithubCiWallTimeDrift` "~300 s outside the `ci` job" is unexplained, and nobody ran the per-job breakdown.
+  Digest #2512 (model scout) is unread. Admission-waiting, no `agent/queued`: #2477, #2412, #2178, agent-runtime#173.
+- **Lane anomalies (FU-249 material):** dig 10-10 says 5 findings, wrote 2; the dig's windows history starts
+  10-10 (10-07/10-09 bursts dug as "unexplained"); no responder triage 10-11/10-14; dig TOOL_GAPs (nodes/events/
+  deployments; responder: cnpg clusters, box journal, Longhorn CRs). Alertmanager+Prometheus restarted
+  10-13 22:20Z (kps 92, #2550): Prometheus history before that is gone (offset queries empty).
+- **SILENT:** none. The crosscheck exited 0, and the responder Sensor and EventSource are healthy.

@@ -13,6 +13,8 @@ list every wind-down writes — does NOT count (#2526, 2026-10-12: `RegistryMirr
 dig for days by being listed). Write the marker only when the cause is known; the reason rides into the dig's record.
 
 
+dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe rides (adhoc-20261011T173846Z / T180558Z, platform/worker, opencode-go/deepseek-v4-flash, outcome clean, $0, no LLM call) count in the router's 7-day run_reports window; ages out ~2026-10-18 18:06Z (board-sweep 2026-10-14; the class = #2555). Delete this line once it clears.
+
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-10-13 17:20Z — seat; TICK-LOG 2026-10-13 15:45–17:20Z): FU-312's pf class CLOSED on both legs
