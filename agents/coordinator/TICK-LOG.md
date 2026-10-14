@@ -13472,3 +13472,15 @@ updates or reverts as much as possible — mechanical revert or a responder."
   deployments; responder: cnpg clusters, box journal, Longhorn CRs). Alertmanager+Prometheus restarted
   10-13 22:20Z (kps 92, #2550); TSDB history is intact back to 09-22 (an earlier "history gone" read was a malformed `(a/b) offset` query).
 - **SILENT:** none. The crosscheck exited 0, and the responder Sensor and EventSource are healthy.
+
+## 2026-10-14 ~17:55–18:35Z — /fu-sweep + /docs-cleanup (slice rule, no corpus; 3 + 4 read-only subagents) (seat)
+
+- **fu-sweep** (tracker header `_Last updated:` carries the counts): machine lane reconciled since 10-03 (33 open
+  FUs cited by commits); GitOps/Hardware/Secrets/One-time fully classified, the Agents items touched or
+  lint-flagged. Archived FU-304/312/296/260 (live evidence each), FU-225 expired; FU-032 soak FAILED (flap
+  10-12 on a CP). 26 items pointer-ized/trimmed with detail MOVED into their docs; lint 0 OVERSIZE, 136 → 132
+  open. Two hand mistakes caught by gates: the coordinator brief briefly grew a history note (reverted —
+  briefs-rules-only), and a backlink hand-written into the GENERATED issue-lifecycle-fsm.md (pre-push
+  merge-path-lint blocked; moved into the yaml, 300c60c8).
+- **docs-cleanup:** change-set over 47 FU ids archived in 4 weeks + a 4-chunk comb → PR **#2556** (~40 files,
+  fact fixes only, armed). Judgment calls listed on the PR body for the operator.
