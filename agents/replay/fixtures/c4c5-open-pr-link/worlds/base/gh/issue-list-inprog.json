@@ -1,0 +1,9 @@
+[
+  {
+    "number": 100,
+    "title": "scan: the C4/C5 open-PR hold reads the strong link",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-10-14T09:00:00Z"
+  }
+]

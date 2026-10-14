@@ -20,6 +20,7 @@ source: agents/coordinator-scan.sh
 parts:
   - block:review-only-selector
   - file:bridge.sh
+  - block:strong-link-count
   - block:review-phantom-belt
   - file:post.sh
 rows: rows.psv
