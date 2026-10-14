@@ -78,7 +78,7 @@ mission) would drown the check in false positives and stay judgment-lint territo
 | **ride size class** (`fixer.rideSize`) | a worker ride's pod envelope chosen per repo on the AgentStack claim: `standard` (fits an 8G node) or `large` (fewer, faster gate-heavy rides on the ride tier). Not the stint's `Size:` line (session count) | [`agents/agentstack.md`](agents/agentstack.md) §Docker-capable workers |
 | **chart-revert** (the receiver) | the deterministic rollback of a PIN-ONLY chart bump in `argocd/platform/*.yaml`, run by an in-cluster webhook receiver OUTSIDE Argo Workflows' cone: an Alertmanager route → a Deployment in `agent-coordinator` → a `revert-chart-<sha8>` PR with a `reverted-charts: <chart>@<version>` line that `pin-only-lint` check (h) refuses for 30 d. First and only consumer: `argo-workflows` on `ArgoControllerSilent` (ADR-149). Not the `deploy-revert` Sensor, which runs on Argo itself | [`designs/fu-1990-workflow-pin-revert.md`](designs/fu-1990-workflow-pin-revert.md) §Part 4 |
 
-## Pending renames (recorded here, executed by the FU-163 sweep)
+## Pending renames (recorded here, each executed by its own FU — below)
 
 - **`openrouter-proxy` → `agent-gateway`** (ADR-139, executed with the extraction — FU-270): the
   service outgrew its first job (four rails, the ADR-096 router, report/search); named by ROLE.

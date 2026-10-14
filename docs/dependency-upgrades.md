@@ -11,13 +11,12 @@ operator chart, pod image) are `ROADMAP.md` → *Programs in flight* → "Deploy
 surfaces homelab doesn't reconcile at all are FU-097, same section.
 
 The ledger rule this feeds: [`management-box.md`](management-box.md) §The capability ledger
-(FU-097, archived 2026-10-03 — generalized to dependency classes 2026-09-27). **Tracked by:** FU-051 (the app-side sibling), FU-046 (reviewable dep bumps),
-**FU-151** (the `automerge` label — §2's mechanical lane — is not set by the `-iac` deploy
-producers, so those bumps skip LLM review only by timing), FU-016 (SLSA signing/SBOM). ADR-084
+(FU-097, archived 2026-10-03 — generalized to dependency classes 2026-09-27). **Tracked by:** FU-051 (the app-side sibling), FU-016 (SLSA signing/SBOM); FU-046 (reviewable dep
+bumps, archived 2026-10-12) and FU-151 (the `-iac` producers' `automerge` label) are done. ADR-084
 (deploy shape), ADR-093 (Argo as the orchestration engine), ADR-088/089 (the invariants a bump
 must not break), ADR-141 (blast class picks the lane). The §Ground truth finding was FU-125
 (archived 2026-09-27); the lanes and the residue are stint S9, homelab#1985 (open originals:
-#1988 lanes by class, #1992 the generated coverage table + liveness gauges, #2014 version sets).
+#1988 lanes by class, #2014 version sets; #1992 the coverage table + liveness gauges closed 2026-09-27).
 
 ---
 
@@ -43,13 +42,13 @@ register below carries the current count from the repo's own files. The question
 trigger deployment?" has a different answer per class, because homelab runs **three reconciliation
 regimes**:
 
-- **GitOps (ArgoCD)** — 27 of 34 platform Applications have `syncPolicy.automated`, watching
+- **GitOps (ArgoCD)** — most platform Applications have `syncPolicy.automated` (`grep -l automated argocd/platform/*.yaml`), watching
   `argocd/resources/*`, `argocd/platform/*`, `agents/coordinator`, `agents/fixer/*`. A merge here
   **deploys itself**. A path rule is not just possible, it is already the mechanism.
-- **OpenTofu** — plan/apply from the jail is the **deliberate human gate** (FU-097 says keep it). A
+- **OpenTofu** — human-gated, applied via the management box (`docs/management-box.md` §MB3). A
   path rule can only *plan and report*; it must never apply.
 - **Unreconciled** — ansible (OPNsense, Matchbox), Home Assistant config, the Proxmox host. A merge
-  deploys **nothing**. This is the FU-097 gap.
+  deploys **nothing** — the ADR-152 program (ROADMAP §Deploy paths) makes the box their applier.
 
 **Canary, by ruling (operator, 2026-10-10):** in this one-cluster homelab most classes below have
 no second instance to canary against, so the per-class canary cell in `docs/dependency-classes.yaml`
@@ -423,18 +422,16 @@ This is where the three regimes diverge and where the design work is:
   an alert + report-only issue. Ruling + precondition:
   [`agents/iac-lane.md`](agents/iac-lane.md) §"Auto-revert does NOT generalize to the platform"
   (IAC-G09).
-- **Tofu classes (4, 5)** — keep the human gate. Add the belt FU-097 asks for: a **`tofu plan` cron
-  → alert on non-empty diff**, so "merged but not applied" and "live drifted from state" both become
-  visible instead of silent. The prerequisite (FU-012's state move) is met for `main`: the management box plans
+- **Tofu classes (4, 5)** — keep the human gate. The belt exists for `main`: "merged but not applied"
+  and "live drifted from state" are visible, not silent — the management box plans
   every master move and every PR, and `MgmtApplyResidueStanding` alerts on an unapplied plan
   ([`management-box.md`](management-box.md) §MB2/§MB3). (Or shrink the class instead: the ArgoCD lever
   above removes the need for the belt on everything it migrates.)
 - **Substrate (6)** — a deliberate, staged node rollout: one metal node first, `talosctl health`,
   Longhorn rebuild-complete, then the rest. VMs upgrade in place too since ADR-014's 2026-09-18
   amendment, but only with the platform- and schematic-correct factory installer.
-- **Unreconciled (9)** — the FU-097 first deliverable. The candidate shape is already precedented:
-  an **in-cluster ansible Job** (ArgoCD PostSync or CronWorkflow, creds via ESO), with a nightly
-  `--check` diff → alert as the minimum belt even if apply stays manual. ⚠ For **OPNsense**
+- **Unreconciled (9)** — box-applied per ADR-152 (ROADMAP §Deploy paths), not an in-cluster ansible
+  Job; a nightly `--check` diff → alert stays the minimum belt even while apply is manual. ⚠ For **OPNsense**
   specifically the in-cluster Job sits *inside its own blast radius* — see the cone rule below.
 
 **Where the runner sits — the dependency-cone rule.** Belts are read-only (`--check`, `plan`,
@@ -599,8 +596,8 @@ mechanism lives in the linked places.
    rest stay responder + report-only, per the ruling in §4 above. Half wired 2026-08-04 (pin-only
    predicate in `deploy-revert-argo.yaml`, unit-exercised, never fired by a real Degraded app).
 4b. ✅ **The platform lane's path gate** — repo-root `CODEOWNERS` + `require_code_owner_review` (FU-068) + the dispatchable `.agents/fix.yaml` (FU-142), 2026-08-04/05.
-5. **FU-097's ruling table**, with ansible/OPNsense first — it is the only class where a merged
-   change reaches a *live network device* by hand or not at all.
+5. ✅ **The per-surface ruling table** (2026-10-11 — classes 9/14/15/16 of the register, ADR-152); the
+   build program (the box applies ansible, OPNsense first) is ROADMAP §Deploy paths.
 6. **The prober (FU-102)** is what turns "it synced" into "it works".
 7. ✅ **Class 1/2 proposers ON (#2216, 2026-10-04)** — `argocd` over `argocd/platform/*.yaml`, `kubernetes` over `argocd/resources/**`, first-party refs disabled (class 3), the `arc` group, `prHourlyLimit` pacing (6 for the first wave, 3 after); `agents/coordinator/*.yaml` stays outside the pattern (codeowner-gated). Lanes per class: the register.
 8. **agent-coordinator is the first repo through, but not done-done (read 2026-10-04).** Proven with

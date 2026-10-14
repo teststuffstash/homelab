@@ -235,7 +235,7 @@ etcd 2 members, BGP `established` with 25 routes. cp-02 followed immediately, ta
 ⚠ **One thing this episode is NOT evidence of.** The Matchbox PXE assets were pinned at v1.13.2
 while `var.talos_version_worker` had moved to v1.13.10, and that drift was fixed mid-recovery — but
 it caused none of this. Both kernel versions chainloaded and booted fine; the config on disk was
-the whole story. The lockstep fix stands on [FU-246](follow-ups.md)'s own merits, and the first
+the whole story. The lockstep fix stands on [FU-246](follow-ups-archive.md)'s own merits, and the first
 diagnosis that blamed the kernel was wrong.
 
 ## CP8. The kubeconfig does not follow the endpoint (FU-259)

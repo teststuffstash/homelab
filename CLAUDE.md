@@ -38,7 +38,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 <!-- BEGIN GENERATED hosts — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
 | Host | IP | Role |
 |---|---|---|
-| OPNsense ("Big Data", HP desktop) | 192.168.2.1 | Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME |
+| OPNsense ("Big Data", HP desktop) | 192.168.2.1 | the PREVIOUS router — powered off since window 1 (2026-10-02), kept cabled as the fallback; `.1` is now the CARP pair's VIP (docs/router-move.md §Status) |
 | Proxmox `pve` (X99/Xeon, 128GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
 | Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
 | Backup Garage LXC (CTID 220) | 192.168.2.73 | Longhorn backup target — single-node Garage S3 (FU-299) |
@@ -61,8 +61,8 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `ci-runner-02` (VM on nx-02) | 192.168.2.66 | GitHub Actions runner VM — the second, on the other hypervisor (FU-266) |
 | `opnsense-test` (VM on nx-02) | 192.168.2.67 | OPNsense TEST router — validates router-config PRs against a real API; WAN = this IP, LAN = isolated `vmbr1` (FU-297) |
 | `opnsense-drill` (VM on nx-02, EPHEMERAL) | 192.168.2.68 | OPNsense REBUILD DRILL — built from nothing, converged with all router code, probed, scored against prod, destroyed; WAN = this IP, LAN = isolated `vmbr2` (FU-297) |
-| `opnsense-nx02` (VM on nx-02) | 192.168.2.70 | CARP-pair router NODE (ADR-144) — STANDING beside Big Data, inert (standby profile) until the cutover; LAN = this IP on vmbr0, WAN = vmbr3 over the uncabled eno2 |
-| `opnsense-pve` (VM on pve) | 192.168.2.71 | CARP-pair router NODE (ADR-144) — STANDING beside Big Data, inert (standby profile) until the cutover; LAN = this IP on vmbr0, WAN = vmbr3 over the uncabled enp6s0 (TG-3468) |
+| `opnsense-nx02` (VM on nx-02) | 192.168.2.70 | CARP-pair router NODE (ADR-144) — serves `.1` since window 1 (2026-10-02; the MASTER by skew); LAN = this IP on vmbr0, WAN = vmbr3 over eno2 |
+| `opnsense-pve` (VM on pve) | 192.168.2.71 | CARP-pair router NODE (ADR-144) — the BACKUP since window 2 (2026-10-08), WAN leg proven 2026-10-09; LAN = this IP on vmbr0, WAN = vmbr3 over enp6s0 (TG-3468) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
 <!-- END GENERATED hosts -->

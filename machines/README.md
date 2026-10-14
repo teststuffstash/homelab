@@ -8,7 +8,7 @@ Benchmark = stress-ng `matrixprod` bogo-ops/s (synthetic, comparable across thes
 
 | Machine | Role | Hardware | Cores | RAM (GB) | Plug | Idle (W) | Load (W) | 1-core (bogo/s) | Multi (bogo/s) | Perf/W | Remote power |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| opnsense | Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME | HP desktop ("Big Data") | 4 | 8 | opnsense | 57 | — | — | — | — | — |
+| opnsense | the PREVIOUS router — powered off since window 1 (2026-10-02), kept cabled as the fallback; `.1` is now the CARP pair's VIP (docs/router-move.md §Status) | HP desktop ("Big Data") | 4 | 8 | opnsense | 57 | — | — | — | — | — |
 | pve | Hypervisor for the Talos VMs + Matchbox LXC | AliExpress X99 + Intel Xeon E5-2680 v4 | 28 | 128 | pve | 127 | — | — | — | — | — |
 | thinkcentre | R12 out-of-band management-box PILOT — left cluster duty 2026-09-12, NixOS installed 2026-09-13 (ADR-129); holds main's tofu state + applies since 2026-09-13 (ran the 09-22 fleet Talos rollout) | Lenovo ThinkCentre Edge | 2 | 4 | thinkcentre | 27.9 | 54.5 | 1200.4 | 2231.7 | 40.9 | smart-plug (switch.tuyalocal_thinkcentre — entity ids were CROSSED with hp-01's 2026-08-18→09-09, read the incident before trusting an older plug observation); auto-boots on AC restore — NOT WoL |
 | hp-01 | k8s worker + Longhorn (WoL-capable) | HP Compaq Elite 8300 SFF (board 3397), i3-3220 | 4 | 16 | hp | — | — | — | — | — | Wake-on-LAN (PXE-booted); smart plug switch.tuyalocal_hp exists but AC-restore is flaky — prefer WoL |

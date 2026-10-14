@@ -4,6 +4,10 @@ _Part of the [homelab docs](README.md). Logical/IP view: [`/README.md`](../READM
 [`CLAUDE.md`](../CLAUDE.md); **IP allocation rules: [`ip-plan.md`](ip-plan.md)** (ADR-088);
 service exposure / BGP rationale: [`adr.md`](adr.md) ADR-021._
 
+> ⚠ **The router changed after the last capture:** `.1` is the nx-02 + pve CARP pair since 2026-10-09
+> ([`router-move.md`](router-move.md) §Status); Big Data is powered off as the fallback. The diagram
+> below predates the pair and needs a re-capture.
+
 Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; re-captured
 2026-08-12 (operator cabling + live guest-agent reads: the wk-metal fleet, hp-01, ci-runner-01).
 Operator corrections 2026-10-13: `m70s` (.56) is on the office 5-port; `wk-metal-03` (.184) moved to
