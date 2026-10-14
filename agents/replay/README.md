@@ -384,6 +384,7 @@ is stale, so it cannot drift the way the prose register did.
 | `renovate-rebase-tick-unticked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
 | `resolve-model` | table | - | `agents/resolve-model.sh` | - |
+| `responder-behaviour/responder-behaviour` | suite | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-capture/no-key` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-capture/remediation-would` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-capture/uploads` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
