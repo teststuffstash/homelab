@@ -390,6 +390,21 @@ On a PVC the commit is a `rename(2)`, the cap is `df`, the prune is `registry ga
 local files, and an over-cap write fails with `ENOSPC`. **Most of that table stops existing.** That
 is the case, and it is an argument about *complexity and blast radius*, not about capacity.
 
+## 2026-10-13/14 reads: the volume is the bottleneck now (moved from the FU-280 item, 2026-10-14)
+
+- **Placement drift.** Replicas sat on the SN530s by scheduler preference only, and by 2026-10-13 that
+  preference no longer held: `registry-data`'s replicas are on wk-metal-01's mx500 and wk-metal-04
+  (the board sweep of 10-14 found one on `intel1`, next to garage-0's volumes).
+- **Cold reads ~9–10 MB/s, up to 1.6 s latency.** ADR-135 measured 87–110 MB/s, but that was on the
+  S3 backend. An 8.5 GB corpus pull now takes ≥15 min a node: oracle's ert-corpus roll, 2026-10-13,
+  finished 17:22Z after one kubelet cancel. FU-312's pf fix removed the router leg, so what remains is
+  the volume.
+- **GC runs again.** It was unschedulable 10-02 → ~10-11 (podAffinity to registry-fs on hp-01 at 99 %
+  CPU requests). It completed 10-12 and 10-13 ("6 blobs marked, 0 eligible", 16.0 G of 146.6 G); 10-14
+  was DEFERRED on a live write.
+- **The decision this leaves (operator).** Either pin the replicas with a disk tag, which goes against
+  the "tags only exclude" ruling, or move the volume.
+
 ## What this does NOT decide
 
 The failure that triggered it is **not** fixed by any of the above. The bucket blew up holding a

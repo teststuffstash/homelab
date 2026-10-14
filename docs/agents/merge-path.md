@@ -39,6 +39,8 @@ is [`../../.github/renovate-global.json`](../../.github/renovate-global.json).
 > and the `MERGE_GH_APP_*` org Actions secrets went with them. The evidence (91–96 % of updater
 > runs were the GitHub cron backstop; ~4,800 hosted min/mo at the 1-min billing floor, #698) is
 > in ADR-111; the current anchors are the FSM's **MP-T02** (update) and **MP-T06** (conflict).
+>
+> _Tracked by: FU-221 — the updater still burns a CI cycle per pass on a RELATIONAL red (MP-T02); build on a second sighting._
 > Where prose below still says *action* or *reusable workflow*, read it as design-era narrative.
 
 > **The machine itself is MODELED, not just described:** [`merge-path-fsm.yaml`](merge-path-fsm.yaml)

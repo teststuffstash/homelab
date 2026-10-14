@@ -198,6 +198,26 @@ The earlier rough remote-memory latency estimate (about 50–80% more for an ind
 access) is not a benchmark of these machines and is not a whole-CI runtime penalty; it cannot
 explain the observed tens-to-hundreds-fold preparation slowdown by itself.
 
+## 2026-09-28 → 10-09: RAM, the DIMM window (moved from the FU-289 tracker item, 2026-10-14)
+
+- 2026-09-28: the operator pulled the WD spinner, so the SA400 is the only INT13 disk. UEFI boot mode
+  stays the structural fix. Window side-effect, of the documented class (runbook §Single worker
+  maintenance): registry-data's wk-04 replica was rebuilt onto wk-metal-01 after 600 s →
+  `LonghornNodeOverProvisioned` (160 %), moved back to wk-04 by hand.
+- 2026-09-30: `PveNumaNodeMemoryLow` fired again (socket 0 full, ~60 of 62.5 GiB booked after the two
+  OPNsense VMs, no swap). The structural fix is RAM. 2026-10-03 read: 60 of 62.8 GiB dedicated (wk-04 32,
+  cp-02 12, ci-runner-02 12, 2× OPNsense 2); swap 1.2 GiB of cold pages; PSI memory ~0; guest steal
+  <0.02 %. `PveHostSwapUsed`/`PveGuestSwapped` are `triage: none` placement facts (ADR-148).
+- 2026-10-05: a local 4 × 32 GB lot is the buy (hardware `market/2026-10-05-lenovo-32gb-rdimm-2933-lot.md`).
+  2026-10-07: the pve swap is done (125 GiB, 2400 MT/s). The pve window itself fired `PveNumaNodeMemoryLow`
+  on nx-02 node 0 while wk-04 carried pve's pods. Placement REVISED (operator): nx-01's four Samsungs go to
+  nx-02 C1/D1/G1/H1 and pve's Microns go to nx-01, so no node runs a mixed set.
+- 2026-10-09 13:12–13:47Z: one combined window, both sleds dark (nx-01 `node-maintenance down`, nx-02
+  `host-maint down`, #2401's first real run). Result: nx-02 has 8 × Samsung, 125 GiB, 64 GB per NUMA node
+  (2133 MT/s, the E5-2640 v4 ceiling). nx-01 has 64 GB, but as 2 × Hynix + 2 × Micron: pve's set was
+  mixed (register fact, same 2Rx4 PC4-2133P class). Both BMCs powered the sleds on; WoL is dead after AC
+  loss (FU-288).
+
 ## External grounding
 
 - [Linux NUMA memory policies](https://docs.kernel.org/admin-guide/mm/numa_memory_policy.html):

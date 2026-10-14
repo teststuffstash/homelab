@@ -10,6 +10,20 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-260** *(archived 2026-10-14)* — **Argo controller configmap-watcher hot-loop on an apiserver restart**
+  (v4.0.7, 96 % of Loki). Live v4.1.4 (chart 2.0.11). Apiserver restarts 10-07/10-09/10-12 → 0 "invalid config
+  map" lines, controller ≤0.03 core over 10 d. The fast-strap question went with the cause.
+- **FU-296** *(archived 2026-10-14)* — **governance-lint's worker match had no self-test (drill D3 #2092).**
+  Test + task + diff-ci row PR#2201; ci.yaml step ce3fcfb3 (10-10); gate-drift reads BASE ci.yaml + MAP, so
+  legs A/B select `governance-lint-test` for any `scripts/governance-lint*` change. No PR has exercised it yet.
+- **FU-312** *(archived 2026-10-14)* — **Bulk pulls through HAProxy stalled on pf `BAD state` (pfsync echo, FreeBSD 15.1).**
+  Both legs off pfsync: client #2532, router→backend #2535 (applied both nodes 2026-10-13 ~16:50Z). Proof: 0 `BAD state`,
+  stale/state-mismatch flat; oracle's 8.5 GB ert-corpus pull finished on one connection (17:22Z). No cause-level belt
+  (pf counters not exported). Residual slowness = the registry volume (FU-280). Evidence: router-move.md, the **pfsync** paragraph (`nopfsync`).
+- **FU-304** *(archived 2026-10-14)* — **wk-metal-02 holds the apiserver under GOMEMLIMIT; the CP role stays.**
+  2026-10-05 OOM-kill (argo-workflows CRD re-apply) → GOMEMLIMIT=3200MiB on all CPs (PR#2268) + helm
+  `max_history = 3` (PR#2267). Week soak 10-05→10-14: `ControlPlaneNodeMemoryLow` never fired (pending 3×, min
+  MemAvailable 33.7 % vs 35 %), apiserver peak 3.07 GiB. Thin margin — a CRD-heavy chart sync is the trigger.
 - **FU-046** *(archived 2026-10-12)* — **The reviewable-dep-bump path, end to end: PROVEN on both lanes.**
   Majors rode the `unarmed-major` unit since 09-28 (~30 PRs through `major/awaiting-human`; #2033 adapted on its
   Renovate branch). The non-major lane flew 2026-10-12 after the operator's ruling ("it should just work until it
@@ -275,12 +289,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   (#1614). Gotcha: the console un-grant came BEFORE the mint narrowing merged → the reviewer
   mint 422'd at its 11:45 refresh; un-wedged by applying the narrowed generator by hand. For a
   NARROWING: merge first, click second (the reverse of a widening).
-- **FU-225** *(archived 2026-09-08)* — **pve host RAM: no buy, no balloon, one belt.** Filed the
-  same morning as "84 %/94 % used, ballooning off"; by evening the operator had ruled every lever:
-  no RAM in this box (too much of homelab on it — the second hypervisor is the answer, ROADMAP §HA
-  model, ADR pending), ballooning impossible (Talos ships no `virtio_balloon`, verified on wk-03),
-  right-sizing done where it is not page cache (ci-runner-01 16→12 GB, funding wk-03's 16 GB for
-  ARC — FU-218). What shipped: **`PveHostMemoryLow`** (MemAvailable < 3 GiB for 15 m; PR#1520) with
-  a behaviour fixture, because the host now commits 65 GB on 62.7 GiB and lives on KSM (~11 GB
-  shared, 7-day minimum 3.8 GiB available) with nothing watching. Supply side stays in the hardware
-  repo (R8: the Micron RDIMM lot fits either box).

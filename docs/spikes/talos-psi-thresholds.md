@@ -301,6 +301,12 @@ Check 2 in particular converts this whole document from "mechanism that fits the
   on the tier the mitigation does not cover. Evidence: `talosctl -n 192.168.2.62 dmesg | grep
   OOMController` (11 triggers, victim cgroups = pod UIDs), `kube_pod_info{uid=…}` at 09:14Z.
 
+- **2026-09-16 (moved from the FU-155 item, 2026-10-14):** the Option A pin gained a second, harder
+  driver: FU-246, the `page_table_check` reboots.
+- **2026-09-28:** a page-cache thrash on wk-03 (v1.14.1, FU-112 reservations in place) produced NO kill
+  at all. The kubelet starved and the OOMController stayed silent
+  ([incident](../incidents/2026-09-28-wk-03-runner-memory-thrash.md)).
+
 ## Related
 
 FU-155 (tracker), FU-139 / FU-112 / FU-082 (archived — the reservation hardening this builds on),

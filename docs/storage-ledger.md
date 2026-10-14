@@ -14,6 +14,8 @@ jointly blow the tier — which is exactly what happened.
 
 ## Current shape (2026-09-12 19:20Z, post thinkcentre decommission; the 2026-09-10 00:15Z read in parentheses)
 
+_Tracked by: FU-211 (these numbers are hand-typed — the `--render` generator is the fix); FU-093 owns the ledger._
+
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
 | `std` | hp-01 **×3 disks** (default unschedulable), m70s `nvme` — wk-02 left the tier 2026-09-14 (disk evicted + removed; the pve box is compute-only) | 1185G | 1020G | 294G (29%) *(was 310G, 58%)* | 337G (28%) *(was 356G)* |

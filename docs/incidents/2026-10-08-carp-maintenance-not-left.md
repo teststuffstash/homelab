@@ -1,5 +1,7 @@
 # 2026-10-08 — nine hours without WAN: the window-2 failover proof never left CARP maintenance
 
+**Tracked by:** FU-297 (the router-pair item; its residual actions were FU-307/FU-308).
+
 **Impact.** 2026-10-08 19:40:16Z → 2026-10-09 04:46:09Z (9 h 06 min): the LAN had no internet.
 Every LAN-local path stayed up — `.1`, DHCP (Kea HA primary on nx-02), Unbound for LAN names,
 HAProxy names, the BGP LB VIPs, the cluster itself. Everything that needed the WAN failed: GitHub

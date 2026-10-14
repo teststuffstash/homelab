@@ -224,6 +224,14 @@ block, the empty-valued legacy tunables, disabled port-forwards) is accepted **i
 only**, by a map line with a condition (`| prod:value=`, `| prod:disabled=1`, syntax in the map's
 header) — the same path counts again the day it comes alive.
 
+**Drill record, 2026-10-04 → 10-11 (moved from the FU-297 tracker item, 2026-10-14).** Three reds were
+read the same day they happened: 10-04 the galaxy cache (#2386); 10-11 03:30Z the preflight REFUSE, because
+prod is now the CARP MASTER (#2493); 10-11 17:36Z a build at an exact `SERIES` point the mirror had moved
+past, fixed by declaring a series (#2501). The 18:21Z run PASSED (826 s; build 328 s at 26.7.6_3, converge
+440 s), and the score went from 117 to **56**. The 56 rows are the PAIR's prod config read against a
+single-router rehearsal: `OPNsense/Kea` 36, `virtualip` 17, `hasync` 2 (+1). Each one gets coded or accepted
+(FU-297). No CI exercises `scripts/opnsense-drill.sh` (reviewer note on #2493).
+
 ### The router rehearsal — the drill in the future router's shape
 
 `bash scripts/opnsense-drill.sh --router` (jail only: it reads the FU-013 backup) builds the same
