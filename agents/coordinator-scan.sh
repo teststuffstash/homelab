@@ -914,22 +914,28 @@ pr_blocked_on_check() {
 # count to PRs whose `baseRefName` equals it (an open PR on master is not live work on a goal
 # child by construction).
 # >>>REPLAY:strong-link-count>>>
-# The predicate itself, in ONE place. `$n` is the issue number (--argjson n); `$b` the base scope
-# (--arg b; empty = any base). Both readers below interpolate THIS string, so the grammar has one
-# home and the two readers cannot drift.
-STRONG_LINK_JQ='((((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
-  or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))'
+# The predicate itself, in ONE place: a body STRING in, a boolean out. `$n` is the issue number
+# (--argjson n). Every reader interpolates THIS string, so the grammar has one home and the
+# readers cannot drift: the goal-child pair below applies it to a PR's `.body`, and the C4/C5
+# open-PR test (`C4C5_SEL`, plus the IL-T16/IL-T27 belts and the c4c5-derivations report that
+# share that test) applies it to each recorded body. homelab#2562 (FU-204) is the same asymmetry
+# ruling #1720 made for `gref`: a false HOLD is an indefinite silent stall (fleet#345 — r1 died on
+# a rate-limit and assembly PR#346's coverage-map bare mention held the issue out of both the
+# stall wake and the review flip), a false RELEASE is at worst one wasted ride, and the launcher
+# pre-flight already refuses a dispatch when the issue has an open agent PR.
+STRONG_LINK_JQ='((test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i"))
+  or (test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i")))'
 # strong_link_count <issue-n> <prs-json> [base] → how many PRs strongly link the issue.
 strong_link_count() {
   local n="${1:?}" prs="${2:-[]}" base="${3:-}"
   jq -r --argjson n "$n" --arg b "$base" \
-    "[.[] | select(\$b == \"\" or .baseRefName == \$b) | select($STRONG_LINK_JQ)] | length" <<<"$prs"
+    "[.[] | select(\$b == \"\" or .baseRefName == \$b) | select((.body // \"\") | $STRONG_LINK_JQ)] | length" <<<"$prs"
 }
 # strong_link_pr <issue-n> <prs-json> [base] → the NEWEST strongly-linking PR number, or empty.
 strong_link_pr() {
   local n="${1:?}" prs="${2:-[]}" base="${3:-}"
   jq -r --argjson n "$n" --arg b "$base" \
-    "[.[] | select(\$b == \"\" or .baseRefName == \$b) | select($STRONG_LINK_JQ) | .number] | sort | last // \"\"" <<<"$prs"
+    "[.[] | select(\$b == \"\" or .baseRefName == \$b) | select((.body // \"\") | $STRONG_LINK_JQ) | .number] | sort | last // \"\"" <<<"$prs"
 }
 # <<<REPLAY:strong-link-count<<<
 
@@ -4356,10 +4362,13 @@ EOF_GTHEMES_OPEN
             # FU-143 point 2: the merged-into-goal set is NOT abandoned — excluded here (and so in
             # every derivation) or c4c5-redispatch, which outranks merged-closeout, re-rides merged
             # work every tick while the closeout unit starves. Detection block above.
-            # ⚠ Kept SINGLE-quoted and concatenated as `jq "$C4C5_SEL"'|…'`. Pasting it into a
-            # double-quoted jq program would eat one backslash and turn the `\\b` word boundary into
-            # jq's `\b` BACKSPACE — the reference test would then match nothing and every
-            # in-progress issue would read as abandoned. Variable expansion does no such thing.
+            # ⚠ Kept SINGLE-quoted, with the ONE strong-link predicate interpolated as
+            # `'"$STRONG_LINK_JQ"'` — variable expansion copies the value VERBATIM, so the `\\b`
+            # word boundary in the predicate survives. Writing that regex literally inside a
+            # double-quoted jq program would eat one backslash and turn `\\b` into jq's `\b`
+            # BACKSPACE — the reference test would then match nothing and every in-progress issue
+            # would read as abandoned. (The selector is also concatenated as `jq "$C4C5_SEL"'|…'`
+            # at every call site, which is the same verbatim-expansion property.)
             # `agent/blocked` is excluded for the same reason `agent/error` is, and the old comment
             # four lines up ("blocked issues never carry in-progress") is exactly the assumption that
             # made it unnecessary — an assumption, not a guard. A human (or the infeasible terminal
@@ -4376,7 +4385,7 @@ EOF_GTHEMES_OPEN
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($db | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+               | select(([$bodies[] | select('"$STRONG_LINK_JQ"')] | length) == 0)
                | select((($pods | split("\n") | map(select(. != "")) | map(select(contains("issue-\($n)-"))) | length) == 0))'
             # <<<REPLAY:c4c5-selector<<<
             # ── THE INFEASIBLE READ'S OWN PREDICATE (homelab#1797) ───────────────────────────────
@@ -4649,6 +4658,9 @@ EOF_GTHEMES_OPEN
             jq -e . >/dev/null 2>&1 <<<"${review_only:-null}" || review_only='[]'
             # a human gate is never re-dispatched — agent/blocked and agent/error are never re-queued
             # by the belt (mirrors C4C5_SEL); a re-queue would hand a human-held issue back to dispatch.
+            # The open-PR test is the SAME `$STRONG_LINK_JQ` predicate C4C5_SEL reads (homelab#2562,
+            # FU-204): a bare `#N` mention is a sibling citation, not live work, and holding on one
+            # stalls the issue in `agent/review` indefinitely — the expensive direction.
             # Also exclude issues with frozen open PRs (homelab#2281 — extended belt below).
             frozen_pr_fetch="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body 2>/dev/null)" || frozen_pr_fetch=''
             jq -e . >/dev/null 2>&1 <<<"${frozen_pr_fetch:-null}" || frozen_pr_fetch='[]'
@@ -4658,7 +4670,7 @@ EOF_GTHEMES_OPEN
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n
                        | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
-                       | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+                       | select(([$bodies[] | select('"$STRONG_LINK_JQ"')] | length) == 0)
                        | "\($n)|\(.updatedAt // "")"] | .[]')"
             if [ -n "$review_phantom_cands" ]; then
               [ -z "${now_s:-}" ] && now_s="$(date -u +%s)"
@@ -4793,6 +4805,9 @@ EOF_GTHEMES_OPEN
             # is what a cheaper model does with the same wall). The marker is read in ONE place
             # (the terminal above); this derivation keys off its `infeas_done` set rather than
             # re-reading the grammar — no second regex.
+            # ⚠ The open-PR test is the SAME `$STRONG_LINK_JQ` predicate C4C5_SEL reads
+            # (homelab#2562, FU-204): a bare `#N` mention must not silence this report either —
+            # a suppressed report is the same indefinite silent stall, one lane over.
             ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg db "${c6db_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${infeas_done:-}" \
               '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
@@ -4800,7 +4815,7 @@ EOF_GTHEMES_OPEN
                | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))))
                | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-               | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+               | select(([$bodies[] | select('"$STRONG_LINK_JQ"')] | length) == 0)
                | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
             # For each ambiguous issue, check if the newest terminal comment (AGENT_STRIKE: or
             # AGENT_REPORT:) carries a Resumable branch pushed: line — if so, the state IS DECIDABLE.
