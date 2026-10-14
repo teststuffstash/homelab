@@ -29,8 +29,8 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   (4) **Skills**: meta-coordinate's push/codeowner wording vs the seat card + ADR-110; board-sweep's graduation is due
   (8 runs). (5) a CONTENT comb of `docs/agents/` (10-14's was mechanical: links/paths only). Watch: agent-runtime PR#165
   was unparked 10-14 (its fix round on the reviewer's CHANGES_REQUESTED).
-  **Not agent-platform (seat, any session):** FU-280 step (2) — the operator decides the registry volume's placement
-  after the 10-14 network-first re-measure (TICK-LOG); the `intel1` replica (registry-data beside garage-0's volumes on
+  **Not agent-platform (seat, any session):** FU-280 — re-measured 10-14: placement is NOT the bottleneck (~75 MB/s
+  uncontended); a roll from pve VMs saturates pve's 1 GbE via the ingress-VIP hairpin — the operator picks the path fix; the `intel1` replica (registry-data beside garage-0's volumes on
   a 255 GB disk at 75 %) wants moving off in a window either way. Done 10-14: FU-280's S3 half + bucket removed
   (#2558/#2560, FU-279 archived), FU-156 Cloudflare expiry leg LIVE (#2559), homelab#1621 closed on oracle's first ring.
 - **⚑ PICKUP (2026-10-13 17:20Z — seat; TICK-LOG 2026-10-13 15:45–17:20Z): FU-312's pf class CLOSED on both legs

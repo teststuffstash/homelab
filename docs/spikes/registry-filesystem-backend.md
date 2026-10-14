@@ -409,6 +409,21 @@ is the case, and it is an argument about *complexity and blast radius*, not abou
 - **The decision this leaves (operator).** Either pin the replicas with a disk tag, which goes against
   the "tags only exclude" ruling, or move the volume.
 
+### 2026-10-14 re-measure, network first: the 10-13 cap does NOT reproduce
+
+Measured from wired cluster nodes under the live load (Garage resync + oracle's release pipeline; no
+Longhorn rebuild, no CI). **iperf3:** wk-02 ↔ hp-01 900 Mbit/s both ways; wk-02 → wk-metal-04 391 Mbit/s
+(6.4k retransmits; that NIC carried Garage traffic); wk-01 ↔ wk-02 6 Gbit/s (both VMs on pve, never on a
+wire). **Cold pull of one 8.58 GB layer** (ClusterIP, from wk-01): 39 MB/s average, 12–15 MB/s while a
+concurrent push wrote, then **72–79 MB/s uncontended**; replica disks ≤13 % busy, registry-fs ~0.2 cores,
+zero throttling. **The real roll** (two pullers, wk-01 + wk-02, both on pve): 8.5 GB per node in 6m45s ≈
+21 MB/s each. The choke is **pve's single 1 GbE uplink** (nic0 rx 98–105 MB/s): a puller on a pve VM goes
+registry-fs (pve) → the wk-04 ingress VIP hop (nx-02) → router → back into pve, on top of the replica reads
+into wk-02. **10-13 replay:** registry tx capped at ~10 MB/s with nothing saturated (pve nic0 ≤23 MB/s,
+NVMe ≤14 % busy) but Longhorn read latency 3–10× today's, during the m70s PAUSE-storm rebuild loop. That
+fits a latency stall, not bandwidth, but these metrics do not prove the mechanism. **So replica placement
+is not the bottleneck;** the hairpin through the ingress VIP for pve-hosted pullers is.
+
 ## What this does NOT decide
 
 The failure that triggered it is **not** fixed by any of the above. The bucket blew up holding a

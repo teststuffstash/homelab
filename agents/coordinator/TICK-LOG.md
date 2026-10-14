@@ -13484,3 +13484,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
   merge-path-lint blocked; moved into the yaml, 300c60c8).
 - **docs-cleanup:** change-set over 47 FU ids archived in 4 weeks + a 4-chunk comb → PR **#2556** (~40 files,
   fact fixes only, armed). Judgment calls listed on the PR body for the operator.
+
+## 2026-10-14 ~18:40–19:55Z — FU-280 S3 half removed, FU-156 live, the registry re-measured, #1621 closed (seat + 3 subagents)
+
+- **FU-280 / FU-279:** #2558 (rollback Deployment + `RegistryBucketCommitHeadroomLow`) then, on the operator's MPU ruling,
+  6 MPUs aborted by upload id (4.3 GB), 16 objects (21 GB) deleted, #2560 (Workspace + bucket + key gone). Windows
+  seat-1792003585-3597 and seat-1792004526-9492 clean; 0 Garage block errors past the 08-24 ~10-min loss mark. FU-279 archived.
+- **FU-156:** #2559, the Cloudflare expiry poller is LIVE (5 series = the 5 expiring tokens; earliest 2027-01-01). The token
+  docs lost their hand-typed dates (the Tier-0 one was a day off). The eid-demo.com tunnel token is the operator's work token.
+- **FU-032 archived:** the 10-12 flaps were the operator's deliberate, undeclared laptop switch move. Recovery was instant.
+- **Registry re-measure (operator: network first):** ~75 MB/s uncontended; the 10-13 ~10 MB/s does not reproduce.
+  The real two-node roll saturates pve's 1 GbE (the wk-04 ingress-VIP hairpin). Spike §2026-10-14 re-measure; FU-280 re-scoped.
+- **homelab#1621 CLOSED:** oracle-fleet's first `/corpus-published` ring → `corpus-dispatch-n7xwx` → `repository_dispatch` 6 s later.
+- Wind-down: meta-state PICKUP = the next session's `/design-agents` batch.

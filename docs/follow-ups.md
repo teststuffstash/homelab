@@ -242,13 +242,14 @@ six OVERSIZE items pointer-ized into
       `sdb` ~90 % busy → `GarageClusterFlapping`. **Next, in order:** (1) garage-2 off the X240 (third std
       SFF; ledger via FU-137); (2) THEN alerts on `garage:s3_latency_seconds:{p50,p99}_5m` + the 30d burn
       rate; (3) attribute one CI-hour window by bucket (the #499 method). Link: FU-093, FU-137.
-- [ ] **FU-280** — **The first-party registry left Garage S3; the volume is the bottleneck now. POINTER.**
+- [ ] **FU-280** — **The first-party registry left Garage S3; the roll is bound by pve's uplink, not the volume. POINTER.**
       CUT OVER 2026-09-24 (ADR-121 amended): `registry.teststuff.net` = `registry-fs` on the 150Gi `registry-data`
-      volume. Soak done 10-03; **2026-10-14 the whole S3 half is gone** — the rollback Deployment +
-      `RegistryBucketCommitHeadroomLow` (#2558), then the bucket `registry` + its key (FU-279's MPUs aborted first).
-      **Next:** ⚠ OPERATOR: cold reads ~9–10 MB/s off the mx500/wk-metal-04 replicas (an 8.5 GB pull ≈ 15 min a
-      node) — pin via a disk tag (against "tags only exclude") or move the volume. Evidence:
-      [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md) §2026-10-13/14.
+      volume. **2026-10-14 the whole S3 half is gone** (#2558, #2560; FU-279's MPUs aborted first). Re-measured
+      10-14, network first: ~75 MB/s uncontended; the 10-13 ~10 MB/s does not reproduce (a latency stall during
+      the m70s PAUSE storm). A two-node roll from pve VMs saturates pve's 1 GbE (the hairpin through the wk-04
+      ingress VIP). **Next (operator):** shorten the path (registry-fs beside the ingress, or in-cluster pullers
+      off the VIP) vs accept ~21 MB/s per pve node; separately, `intel1` co-location (registry-data beside
+      garage-0). Evidence: [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md) §2026-10-14 re-measure.
 - [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its three biggest
       tenants are ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
       2026-09-22), so our release churn sets the mirror's size. The registry's only size knob is the TTL, and
