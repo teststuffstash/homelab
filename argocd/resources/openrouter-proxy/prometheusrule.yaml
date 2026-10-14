@@ -326,8 +326,8 @@ spec:
         # staleness note is about the INSTANT vector's 5m lookback), and the new pod's climb is
         # added on top. There is therefore NO HOLE TO BRIDGE, and `max_over_time` would be the
         # wrong tool: it would hold a stale reading for 10m and then drop it, strictly worse than
-        # the reset compensation it replaced. Executed, not argued — §H4 replays a roll mid-burst
-        # and asserts the alert neither resolves nor restarts its `for:`.
+        # the reset compensation it replaced. Executed, not argued — H4 in agent-router.promtool-test
+        # replays a roll mid-burst and asserts the alert neither resolves nor restarts its `for:`.
         #
         # What the roll DOES break is IDENTITY (mechanism 1 of the header's two), and that is the
         # half this alert needs: `pod`/`instance` are on the scraped series, so the raw

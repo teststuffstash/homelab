@@ -18,8 +18,9 @@
 # the VM's user_data_file_id went with it — measured 2026-09-08: three merged template commits
 # applied as one destroy+create of VM 9001, 1m39s), which made every `github_runner_version` bump a
 # box-run VM replace. THE TRADE: a cloud-init edit now lands at the next ATTENDED recreate, never by
-# itself. A deliberate recreate is `scripts/runner-maintenance.sh run <plan-id> <vm>`, which plans
-# `-replace` explicitly (that flag overrides ignore_changes). The runner is stateless (boot-minted
+# itself. A deliberate recreate is a scoped `plan -replace='proxmox_virtual_environment_vm.<name>[0]'`
+# (that flag overrides ignore_changes; never beside `-exclude`), then `scripts/runner-maintenance.sh
+# run <plan-id> <vm>` checks that plan's scope and applies it. The runner is stateless (boot-minted
 # registration, fresh disk), so a replace is a short CI-capacity window: do one runner at a time,
 # with no job in flight on its slots.
 # HOST PREREQUISITE (not tofu-managed — Proxmox storage config): 'snippets' must be enabled on
@@ -113,9 +114,10 @@ variable "github_runner_labels" {
 #
 # RENOVATE-TRACKED (FU-306 ruling, 2026-10-14) — the default stays a LITERAL string, which is the
 # regex manager's target. A bump re-renders the cloud-init snippet and NOTHING else: both VMs ignore
-# `initialization[0].user_data_file_id`, so the new snippet lands at the next ATTENDED recreate
-# (`scripts/runner-maintenance.sh run <plan-id> <vm>`, which `-replace`s explicitly) — never by
-# itself. THE TRADE: a cloud-init edit no longer reaches a RUNNING runner on its own. The pin's only
+# `initialization[0].user_data_file_id`, so the new snippet lands at the next ATTENDED recreate —
+# which the OPERATOR plans with `-replace` (header above); `scripts/runner-maintenance.sh run
+# <plan-id> <vm>` only checks that plan's scope and applies it — never by itself. THE TRADE:
+# a cloud-init edit no longer reaches a RUNNING runner on its own. The pin's only
 # job is to sit above GitHub's registration floor at that recreate; a running runner self-updates in
 # place, so a bump that has not landed yet is not a stale runner.
 variable "github_runner_version" {
@@ -247,9 +249,9 @@ resource "proxmox_virtual_environment_vm" "ci_runner" {
   # at plan time, so this VM's `user_data_file_id` read as a change and the whole VM was replaced
   # (measured 2026-09-08). Ignore it: the snippet is a BOOT SEED, not a declaration of what the
   # running VM has — the same shape as nx02.tf's `disk[0].file_id`. The new snippet lands at the next
-  # attended recreate, `scripts/runner-maintenance.sh run <plan-id> <vm>`, whose plan carries
-  # `-replace` and so overrides this. ⚠ The cost: a template edit no longer reaches a RUNNING runner
-  # by itself (the header's THE TRADE).
+  # attended recreate, which the operator plans with `-replace` (header above); the script applies
+  # that plan. ⚠ The cost: a template edit no longer reaches a RUNNING runner by itself (the
+  # header's THE TRADE).
   lifecycle {
     ignore_changes = [initialization[0].user_data_file_id]
   }

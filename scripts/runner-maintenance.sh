@@ -11,11 +11,16 @@
 #                                                                  (a failed `run` leaves them, like its window)
 #   (devbox run runner-maint -- <verb> …)
 #
-# WHY (operator, 2026-10-08): any edit to templates/ci-runner-cloud-init.yaml.tftpl REPLACES the
+# WHY (operator, 2026-10-08): any edit to templates/ci-runner-cloud-init.yaml.tftpl REPLACED the
 # runner VM(s) — #2379 and #2381 both did — and a replace is outside the box's apply allowlist, so it
-# is a human `mgmt-tf apply`. The runner is stateless (boot-minted registration, fresh disk), so a
-# replace is safe exactly when no job is running on it: the job dies with the VM, and its repo reads
-# a red run nobody caused. This verb makes "no job in flight" a computed answer. It is built ATTENDED
+# is a human `mgmt-tf apply`. Since FU-306 (2026-10-14) that is no longer true: both VMs ignore
+# `initialization[0].user_data_file_id` (tofu/ci-runner.tf), so a template edit re-renders the
+# snippet and replaces NO VM. A replace is now always the deliberate
+# `plan -replace='proxmox_virtual_environment_vm.<vm>[0]'` (never beside `-exclude` — silently
+# ignored, docs/runbook.md §Recreating a Talos VM), and this verb consumes that plan. The runner is
+# stateless (boot-minted registration, fresh disk), so a replace is safe exactly when no job is
+# running on it: the job dies with the VM, and its repo reads a red run nobody caused. This verb
+# makes "no job in flight" a computed answer. It is built ATTENDED
 # first and wired into the box later — the shape `scripts/helm-release-evidence.sh` took
 # (docs/management-box.md §"Non-Talos VMs: the runner verb").
 #
@@ -283,7 +288,7 @@ plan_scope() { # <plan-id> <vm> → 0 in scope; prints why not
   j="$(sed -n 's/^MGMT_SUMMARY //p' <<<"$out" | tr -d '\r')"
   jq -e '.changes | type == "array"' >/dev/null 2>&1 <<<"$j" || { echo "plan $1: no readable summary"; return 1; }
   jq -r --arg vm "$2" '[.changes[] | select(.type == "proxmox_virtual_environment_vm")] as $v |
-    if ($v | length) == 0 then "plan replaces no VM"
+    if ($v | length) == 0 then "plan replaces no VM — a template edit no longer replaces one (FU-306); plan it with -replace='"'"'proxmox_virtual_environment_vm.\($vm)[0]'"'"'"
     elif ($v | length) > 1 then "plan changes \($v | length) VMs (\($v | map("\(.name)=\(.actions | join("+"))") | join(", "))) — one VM per run"
     elif $v[0].name != $vm then "plan changes VM \($v[0].name) (\($v[0].address)), not \($vm)"
     elif ($v[0].actions | sort) != ["create", "delete"] then "plan does not REPLACE \($vm) (actions: \($v[0].actions | join("+")))"
