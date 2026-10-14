@@ -24,11 +24,21 @@ under mermaid 12 (homelab#2032, FU-294) — an LLM reviewer did, which is not a 
 Fails CLOSED: a lockfile type with no extractor here, a non-npm entry (jsr:, remote URL), or an
 unreachable OSV/registry is exit 2, never a pass. Only net-new pairs are judged: an advisory
 published against something already on master is not this PR's intake.
+
+homelab#2412 (the FOURTH site of that predicate, after pin-only-lint, governance-lint and
+iac-sentinel): a master-sync PR into a `goal/**` base forks from the goal tip, so the diff against
+that base carries master's own lockfile content and the intake it judges is master's, not the
+worker's — a newly-published advisory against a package master already carries reds the sync PR
+(the remedy is upstream either way, ADR-143). The predicate is "content NOT reachable from
+origin/master": a lockfile whose HEAD content is byte-identical to the default branch's, and a pair
+the default branch already carries, are master's, not this PR's. A PR based on the default branch is
+unchanged — the reference IS its base there, so both filters are no-ops.
 """
 import json
 import os
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -49,6 +59,39 @@ class Closed(Exception):
 def git_show(ref, path):
     r = subprocess.run(["git", "show", f"{ref}:{path}"], capture_output=True, text=True)
     return r.stdout if r.returncode == 0 else None
+
+
+def default_branch_ref():
+    """A tree reference for the default branch's tip — the master-reachability filter (homelab#2412).
+
+    A master-sync PR into a `goal/**` base forks from the goal tip, so the diff against that base
+    carries master's own lockfile content and the intake it judges is master's, not the worker's.
+    The predicate is "content NOT reachable from origin/master", so a pair master already carries is
+    not this PR's intake. MB = merge-base(default, head) is the exact reference, but a depth-1 CI
+    checkout has no merge base and the lock-intake step carries no token for the API read the
+    sibling gates use, so the reference is the default branch's TIP: identical to the base for a PR
+    based on the default branch (the common case, where the filter is a no-op), and identical to MB
+    for the sync PR this fixes (its head has master merged in, so MB IS master's tip). Fails CLOSED.
+    """
+    for ref in ("origin/master", "master"):
+        if subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+                          capture_output=True).returncode == 0:
+            return ref
+    # CI's checkout is depth 1 of the merge ref, so there is no remote-tracking branch: fetch the tip.
+    if subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", "master"],
+                      capture_output=True).returncode == 0:
+        return "FETCH_HEAD"
+    raise Closed("cannot read the default branch (origin/master) — the master-reachability filter "
+                 "(homelab#2412) cannot judge this PR")
+
+
+def master_pairs(ref, path):
+    """The (package, version) pairs the default branch already carries at `path` (homelab#2412)."""
+    fname = os.path.basename(path)
+    if fname not in EXTRACTORS:
+        return set()  # no extractor: the file itself is master's, and is filtered out before this
+    text = git_show(ref, path)
+    return set(EXTRACTORS[fname](text, path)) if text is not None else set()
 
 
 def split_spec(spec):
@@ -104,7 +147,7 @@ def deno_scripts_enabled(ref, lock_path):
     return False
 
 
-def intake(base, path):
+def intake(base, master, path):
     fname = os.path.basename(path)
     if fname in KNOWN_UNSUPPORTED:
         raise Closed(f"{path}: no extractor for {fname} yet — add one here (ADR-143) before this lockfile type lands")
@@ -116,6 +159,11 @@ def intake(base, path):
     head = ext(head_text, path)
     old = ext(base_text, path) if base_text is not None else {}
     new = {k: v for k, v in head.items() if k not in old}
+    # homelab#2412: a pair the default branch already carries is master's, not this PR's intake — a
+    # master-sync PR into a goal/** base carries master's own lockfile content past its merge base.
+    # `master` is the base itself for a PR based on the default branch, so this is a no-op there.
+    already = master_pairs(master, path)
+    new = {k: v for k, v in new.items() if k not in already}
     if fname == "deno.lock" and new and deno_scripts_enabled("HEAD", path):
         for v in new.values():
             v["scripts"] = True
@@ -169,10 +217,20 @@ def run(base):
     if not locks:
         print("lock-intake-lint: no lockfile changed — nothing brought in")
         return 0
+    # homelab#2412: a master-sync PR into a goal/** base carries master's own lockfile edits in its
+    # diff against that base. A lockfile whose HEAD content is byte-identical to the default
+    # branch's is master's, not the PR's — dropped here so it is neither judged nor counted (and so
+    # a lockfile type with no extractor that master added cannot fail this PR closed). The default
+    # branch is read only once a lockfile is in play, so a PR that changes none never reads it.
+    master = default_branch_ref()
+    locks = [p for p in locks if git_show("HEAD", p) != git_show(master, p)]
+    if not locks:
+        print("lock-intake-lint: no lockfile changed by this PR — nothing brought in")
+        return 0
     failures = []
     intake_all = {}
     for path in locks:
-        for pair, meta in intake(base, path).items():
+        for pair, meta in intake(base, master, path).items():
             intake_all.setdefault(pair, {"where": [], **meta})["where"].append(path)
     unsupported = [p for p, m in intake_all.items() if m.get("unsupported")]
     if unsupported:
@@ -228,7 +286,79 @@ def self_test():
         check("unknown deno.lock version fails closed", "passed", "Closed")
     except Closed:
         check("unknown deno.lock version fails closed", "Closed", "Closed")
+    ok &= self_test_master_filter()
     return 0 if ok else 1
+
+
+def self_test_master_filter():
+    """homelab#2412: a master-sync PR into a goal/** base judges nothing master already carries.
+
+    Builds that shape in a throwaway repo (offline — local git only): master = base + its own
+    lockfile edit; goal/2412 = base + its own commit; the PR = the goal tip + the sync merge of
+    master. The reference is the default branch's tip, so master's pair drops out while the PR's own
+    addition on top of the sync stays judged.
+    """
+    ok = True
+
+    def check(name, got, want):
+        nonlocal ok
+        good = got == want
+        ok &= good
+        print(f"{'ok  ' if good else 'FAIL'} {name}" + ("" if good else f": got {got!r}, want {want!r}"))
+
+    def lock(pkgs):
+        return json.dumps({"lockfileVersion": 3, "packages": {"": {"name": "root"}, **pkgs}})
+
+    with tempfile.TemporaryDirectory() as d:
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+
+        def g(*a):
+            return subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, env=env, check=True)
+
+        def write(name, text):
+            with open(os.path.join(d, name), "w") as f:
+                f.write(text)
+
+        g("init", "-q", "-b", "master")
+        write("package-lock.json", lock({"node_modules/old": {"version": "1.0.0"}}))
+        g("add", "-A"); g("commit", "-q", "-m", "base")
+        g("checkout", "-q", "-b", "goal/2412")
+        write("GOAL.md", "goal\n")
+        g("add", "-A"); g("commit", "-q", "-m", "goal: own commit")
+        gtip = g("rev-parse", "HEAD").stdout.strip()
+        g("checkout", "-q", "master")
+        write("package-lock.json", lock({"node_modules/old": {"version": "1.0.0"},
+                                         "node_modules/masterpkg": {"version": "2.0.0"}}))
+        g("add", "-A"); g("commit", "-q", "-m", "master: own lockfile edit")
+        g("checkout", "-q", "goal/2412")
+        g("merge", "-q", "--no-ff", "--no-edit", "master")  # the sync
+        cwd = os.getcwd()
+        os.chdir(d)
+        try:
+            master = default_branch_ref()
+            check("master ref falls back to the local default branch", master, "master")
+            check("the sync's lockfile is in the base diff", changed_lockfiles(gtip), ["package-lock.json"])
+            check("master's own lockfile edit is not the PR's",
+                  [p for p in changed_lockfiles(gtip) if git_show("HEAD", p) != git_show(master, p)], [])
+            check("master's pair is not this PR's intake",
+                  sorted(intake(gtip, master, "package-lock.json")), [])
+            # The pre-#2412 reference (the base itself) DID judge master's pair — the bug this fixes.
+            check("the base reference judges master's pair (the #2412 bug)",
+                  sorted(intake(gtip, gtip, "package-lock.json")), [("masterpkg", "2.0.0")])
+            # The PR's OWN addition on top of the sync is still judged.
+            write("package-lock.json", lock({"node_modules/old": {"version": "1.0.0"},
+                                             "node_modules/masterpkg": {"version": "2.0.0"},
+                                             "node_modules/ownpkg": {"version": "3.0.0"}}))
+            g("add", "-A"); g("commit", "-q", "-m", "pr: own lockfile edit")
+            check("the PR's own lockfile edit is kept",
+                  [p for p in changed_lockfiles(gtip) if git_show("HEAD", p) != git_show(master, p)],
+                  ["package-lock.json"])
+            check("the PR's own pair is still judged",
+                  sorted(intake(gtip, master, "package-lock.json")), [("ownpkg", "3.0.0")])
+        finally:
+            os.chdir(cwd)
+    return ok
 
 
 def main(argv):
