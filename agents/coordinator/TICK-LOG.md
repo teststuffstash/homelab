@@ -13470,5 +13470,5 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Lane anomalies (FU-249 material):** dig 10-10 says 5 findings, wrote 2; the dig's windows history starts
   10-10 (10-07/10-09 bursts dug as "unexplained"); no responder triage 10-11/10-14; dig TOOL_GAPs (nodes/events/
   deployments; responder: cnpg clusters, box journal, Longhorn CRs). Alertmanager+Prometheus restarted
-  10-13 22:20Z (kps 92, #2550): Prometheus history before that is gone (offset queries empty).
+  10-13 22:20Z (kps 92, #2550); TSDB history is intact back to 09-22 (an earlier "history gone" read was a malformed `(a/b) offset` query).
 - **SILENT:** none. The crosscheck exited 0, and the responder Sensor and EventSource are healthy.
