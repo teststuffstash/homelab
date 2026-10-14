@@ -10,6 +10,10 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-279** *(archived 2026-10-14)* — **Garage-side incomplete multipart uploads in the `registry` bucket, uncollected.**
+  Operator ruling 10-14 (the 08-24 ☠ was about a bucket under recovery): 6 MPUs aborted by upload id (S3
+  AbortMultipartUpload; one held 410 parts / 4.3 GB), then the 16 objects (21 GB) deleted and the bucket destroyed
+  with FU-280. Order matters: Garage's DeleteBucket ignores MPUs. 0 block resync errors on all 3 nodes after.
 - **FU-260** *(archived 2026-10-14)* — **Argo controller configmap-watcher hot-loop on an apiserver restart**
   (v4.0.7, 96 % of Loki). Live v4.1.4 (chart 2.0.11). Apiserver restarts 10-07/10-09/10-12 → 0 "invalid config
   map" lines, controller ≤0.03 core over 10 d. The fast-strap question went with the cause.

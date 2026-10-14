@@ -95,7 +95,7 @@ three-zone layout replaced the bulk volume). Read from `garage_bucket_quota_byte
 | bucket | quota | used | owner |
 |---|---|---|---|
 | ert-snapshots | **120Gi** *(97 GB → 129 GB, oracle-iac#800)* | 92 GB | oracle-iac |
-| registry | 52 GB | 27 GB | homelab — retiring, NO consumer: the registry left Garage 2026-09-24, its S3 Deployment went 2026-10-14; the bucket (21 GB + 4.3 GB MPU debris) goes after FU-279's decision (FU-280) |
+| ~~registry~~ | — | — | homelab — REMOVED 2026-10-14 (FU-280; 21 GB + 4.3 GB MPU debris reclaimed). The sums below predate it |
 | agent-transcripts | 21 GB | 6 GB | homelab (FU-228) |
 | jail-transcripts | 21 GB | 1 GB | homelab |
 | loki | 17 GB | 11 GB | homelab |

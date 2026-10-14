@@ -12,9 +12,9 @@
 #     everything else (push, delete) requires basic auth (htpasswd, Infisical→ESO).
 #   - Storage is a filesystem volume since FU-280's 2026-09-24 cutover: the Deployment
 #     `registry-fs` + claim `registry-data` live in registry-fs.yaml. The S3 Deployment that
-#     ran here (Garage bucket `registry`) was removed 2026-10-14; its s3-driver lessons (part
-#     sizes, the redirect middleware, the 2x commit) are in git history and in
-#     docs/spikes/registry-filesystem-backend.md. THIS file keeps what both shared: the nginx
+#     ran here and its Garage bucket `registry` were removed 2026-10-14; the s3-driver lessons
+#     (part sizes, the redirect middleware, the 2x commit, the uncollected multipart debris) are
+#     in git history and in docs/spikes/registry-filesystem-backend.md. THIS file keeps what both shared: the nginx
 #     ConfigMap and the LB Service.
 #   - TLS/hostname is OPNsense HAProxy + ACME (registry.teststuff.net → 3.33 → 40.33), so
 #     containerd trusts it with ZERO node config — no insecure-registries anywhere.

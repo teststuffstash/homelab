@@ -975,8 +975,7 @@ The `registry.teststuff.net` registry (ns `registry`, ADR-121) is `registry:3` o
 volume** since FU-280's rollout (2026-09-24): Deployment `registry-fs`, claim `registry-data`
 (150Gi `longhorn-bulk`), behind the unchanged `registry` LB Service
 (`argocd/resources/registry/registry-fs.yaml`). The S3 Deployment that was the rollback was removed
-2026-10-14 (FU-280), so there is **no backend to roll back to**; the Garage bucket `registry` still
-exists, unread, until FU-279's multipart decision lets it go (`garage-workspace.yaml` header).
+2026-10-14 (FU-280) together with its Garage bucket, so there is **no backend to roll back to**.
 Retention ownership is the ADR-085 split: the stack's IaC decides the keep-set (oracle-iac#664:
 the pinned digest + the newest date tag + the previous pin) and untags/deletes what it no longer
 wants with its push credential (`DELETE /v2/<repo>/manifests/<digest>`). homelab runs the
@@ -1011,5 +1010,5 @@ digest-pinned pulls as untagged manifests, and that flag deletes exactly the ima
 convention produces (homelab#116; the mirrors' `store-maintenance.yaml` runs GC without it).
 
 The S3-era notes (the quota's 2× commit peak, the refused-commit reclaim, the Garage size counter
-drifting from the object listing) are in git history before FU-280's cutover; FU-279's Garage-side
-multipart debris goes with the bucket.
+drifting from the object listing, FU-279's uncollected multipart debris) are in git history; the
+bucket itself was removed 2026-10-14.

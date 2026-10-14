@@ -4,8 +4,7 @@
 [ADR-089](../adr.md) (quota-as-contract), [`storage-ledger.md`](../storage-ledger.md) (who owns the
 sum). **Status:** **DECIDED + CUT OVER 2026-09-24 14:50Z** ([ADR-121](../adr.md) amended): `registry-fs`
 on the `registry-data` volume serves `registry.teststuff.net`. Soak done; the S3 Deployment (the
-rollback) and `RegistryBucketCommitHeadroomLow` were **removed 2026-10-14**. The bucket stays until
-FU-279's multipart decision (why: `garage-workspace.yaml` header). How it got there: **re-framed 2026-09-24**. The cheap side-question was answered that day —
+rollback), `RegistryBucketCommitHeadroomLow` and the Garage bucket were **removed 2026-10-14**. How it got there: **re-framed 2026-09-24**. The cheap side-question was answered that day —
 the 2× peak costs **zero disk**, so the quota argument is dead — but the operator's correction the
 same day is that the quota refusal *was always the visible tip*: the case is **contention during the
 release window and the machinery the S3 path drags in**, not capacity (§the real case). Next step is
@@ -261,8 +260,9 @@ the backend sits behind that Service's selector, so the naming trap below never 
    keeps running.
 3. **After the soak:** remove the S3 Deployment and the Garage bucket, and amend ADR-121.
    *2026-10-14: the S3 Deployment and its bucket alert are removed — there is no rollback any more.
-   The bucket is not: Garage refuses to delete it while objects remain, and deleting it after
-   emptying would strand FU-279's incomplete uploads, so it waits on that decision.*
+   The bucket followed the same day (operator ruling): FU-279's 6 incomplete uploads aborted first
+   (Garage's DeleteBucket ignores MPUs, so the other order strands them), then the 16 objects
+   deleted, then the Workspace's destroy removed bucket + key.*
 
 **The headline is now read from the other side:** the first real release after the flip goes
 to the volume. Re-run phase 0's queries across that window. The other tenants' p99 should
@@ -317,7 +317,7 @@ quota and false of the disk.** Consequences, in both directions:
 
 1. **The 2× peak is not a capacity cost**, so it is not a reason to change backend — and "raise the
    cap" is a legitimate, nearly free way to stop *that* alert firing. A quota is a ceiling, not a
-   reservation ([`garage-workspace.yaml`](../../argocd/resources/registry/garage-workspace.yaml):
+   reservation (the registry bucket's sizing note, in git history since 2026-10-14:
    the 16 buckets' quotas already sum to ~205 GiB against 130 GiB of declared capacity).
 2. **Equally, a PVC backend cannot be justified on disk savings.** The honest first-write comparison
    is ~31.8 GB (rf=3) against ~21.2 GB (replica-2) — **1.5×**, not 3×.
