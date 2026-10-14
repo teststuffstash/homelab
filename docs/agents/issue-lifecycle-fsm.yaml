@@ -424,7 +424,7 @@ transitions:
       - "2026-09-01 oracle-fleet#329: the third C4/C5 ambig sighting in ~24h froze the whole oracle lane ~4h — 0 WIP, 0 PRs, every scan tick green, homelab#1149 was the identical shape the day before. The AGENT_STRIKE: + Resumable branch pushed: evidence was machine-anchored one comment up; the hold just didn't look."
 
   - id: IL-T30
-    name: fleet-strike reader — same error_class on ≥2 issues in 24h, keyed on (class, provider) / (class, model) / neither ⇒ provider latch / model nomination / agent/error + comment + filing
+    name: fleet-strike reader — same error_class on ≥2 issues in 24h, keyed on (class, provider) / (class, model) / neither ⇒ provider latch / model nomination / agent/error + comment + filing (tracked by FU-200)
     owner: coordinator-scan, deterministically — no LLM tick in the path
     when: "≥2 distinct OPEN issues with agent-fix carry an AGENT_STRIKE: comment bearing the same
       `error_class=` value, the newest such comments are all within 24h of each other and the newest
