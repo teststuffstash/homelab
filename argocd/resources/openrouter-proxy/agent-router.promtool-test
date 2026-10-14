@@ -722,3 +722,208 @@ tests:
             exp_annotations:
               summary: "OpenRouter/Go rides have NO served-side evidence (circles/worker)"
               description: "1 OpenRouter/Go ride(s) on circles requested tencent/hy3 with NO served-side record in the router store for 30m — a /generation harvest miss, a Go ledger gap, or a ride that never produced telemetry. Absence never reads as agreement (the FU-108/FU-125 silent-success class): the belt is blind to what served them. Check openrouter_generation_harvest_total{outcome=\"missed\"} (a rising ratio = the harvest is half-blind) before assuming the rides were healthy."
+
+  # ══ OpenRouterGenerationHarvestMissing — the FU-131 belt (homelab#2564) ═══════════════════════
+  # The harvest's own counter, `openrouter_generation_harvest_total{outcome}` (in-memory, resets on
+  # roll), turned into a recurrence detector: >5 misses in a day, or >5% of the day's lookups.
+  # The alert's comment in prometheusrule.yaml carries the restart-gap classification; these rows
+  # EXECUTE it. Two things are being pinned that a `promtool check rules` cannot see: that the
+  # `or`'s second arm is reachable at all (H5 — a count-only fixture would leave it untested), and
+  # that a roll neither resolves the alert nor restarts its `for:` (H4).
+  #
+  # ⚠ THE ONSET IS THE RAW INCREMENT COUNT, not an extrapolated one: `increase()` over a range that
+  # starts before the series does reads exactly the increments inside the window (measured here —
+  # 6 misses in the first 6 minutes crosses `> 5` at 6m, not at 5m), so the eval times below are
+  # `onset + 30m` and the `for:` window is asserted on both sides of it.
+
+  # ── H1 — a miss burst fires, and `for: 30m` is honoured on both sides ────────────────────────
+  # 10 misses in the first 10 minutes against 100 stored/minute: the share arm stays at ~1%, so
+  # this row isolates the COUNT arm. The condition first holds at 6m (the 6th miss), so 35m is
+  # still inside the window and 36m is the first firing instant.
+  - interval: 1m
+    name: H1 harvest — a miss burst fires at onset+30m, and not before
+    input_series:
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="missed",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+1x10 10+0x200"
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="stored",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+100x210"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+      - eval_time: 36m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The /generation harvest is missing lookups (FU-131 ledger undercount)"
+              description: "The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter's /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line \"never appeared after 67s\"."
+      # and it stays up: the 1d window keeps the burst in range for a full day, so this is not a
+      # 30m blip that self-clears.
+      - eval_time: 120m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The /generation harvest is missing lookups (FU-131 ledger undercount)"
+              description: "The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter's /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line \"never appeared after 67s\"."
+
+  # ── H2 — a clean day is silent, and so is a day with a couple of misses ──────────────────────
+  # The live 2026-10-14 shape (missed 0 vs ~6,840 stored over 21d) is the first half; the second
+  # half is the boundary — 2 misses against 100 stored/minute is ~1%, under BOTH arms, and must
+  # not page. A belt that fires on a healthy harvest is worse than no belt.
+  - interval: 1m
+    name: H2 harvest — a clean day, and a below-threshold day, are both silent
+    input_series:
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="missed",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+0x300"
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="stored",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+100x300"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+      - eval_time: 300m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+  - interval: 1m
+    name: H2b harvest — 2 misses against 100 stored/minute is under both arms and stays silent
+    input_series:
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="missed",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+1x2 2+0x300"
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="stored",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+100x300"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+      - eval_time: 300m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+
+  # ── H3 — no traffic is silent, both ways it can happen ───────────────────────────────────────
+  # (a) the proxy is up and idle: both counters exist and are flat at 0, so the share arm is 0/0 —
+  # NaN, which is not `> 0.05`, and the count arm is 0. (b) the proxy is DOWN: the harvest series
+  # does not exist at all, so `increase` is empty and the whole expression is empty. Neither may
+  # page — a harvest that is not running has no misses to report, and the proxy's own absence is
+  # OpenRouterProxyDown's job, not this belt's.
+  - interval: 1m
+    name: H3 harvest — an idle proxy (0/0) is silent
+    input_series:
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="missed",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+0x300"
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="stored",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+0x300"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+      - eval_time: 300m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+  - interval: 1m
+    name: H3b harvest — no harvest series at all (proxy down) is silent
+    input_series:
+      - series: 'up{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+0x300"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+      - eval_time: 300m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+
+  # ── H4 — THE ROLL: the reset is compensated, and the identity churn is collapsed ─────────────
+  # The burst lands under the OLD pod (10 misses by 10m) and the new pod records ZERO misses after
+  # the roll — so nothing but the old generation's pre-roll increments can keep this firing. It
+  # does, because `increase()` reads a decrease as a counter restart and adds the pre-reset value
+  # back, and because the old pod's samples stay in the 1d RANGE for the full window. That is the
+  # whole "no hole to bridge" claim in the alert's comment, executed: a `max_over_time` bridge
+  # would have dropped this at 10m past the roll.
+  # ⚠ The label set is EMPTY apart from severity/triage — `sum(...)` is what removes `pod`/
+  # `instance`, so the new generation cannot mint a second instance and the old one cannot keep
+  # firing against a pod that no longer exists. Exactly one alert at every eval time is the
+  # assertion that stands in for the un-assertable one (promtool has no expect-two-instances).
+  - interval: 1m
+    name: "H4 harvest — a roll mid-burst neither resolves the alert nor restarts its for:"
+    input_series:
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="missed",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+1x10 10+0x30"
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="stored",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+100x40"
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.83:8080",job="openrouter-proxy",namespace="agent-egress",outcome="missed",pod="openrouter-proxy-cdc58fc45-wm8kr",service="openrouter-proxy"}'
+        values: "_x42 0+0x60"
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.83:8080",job="openrouter-proxy",namespace="agent-egress",outcome="stored",pod="openrouter-proxy-cdc58fc45-wm8kr",service="openrouter-proxy"}'
+        values: "_x42 0+100x60"
+    alert_rule_test:
+      # firing before the roll, exactly as in H1
+      - eval_time: 36m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The /generation harvest is missing lookups (FU-131 ledger undercount)"
+              description: "The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter's /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line \"never appeared after 67s\"."
+      # ── THE ROLL: last sample of r42tx at 40m, first of wm8kr at 42m ─────────────────────────
+      # 43m is one minute past the new pod's first sample — the instant a naive per-series reading
+      # would have gone empty. The alert is still up, on the old generation's 10.
+      - eval_time: 43m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The /generation harvest is missing lookups (FU-131 ledger undercount)"
+              description: "The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter's /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line \"never appeared after 67s\"."
+      # 50m and 90m: past the roll by 8m and 48m, still the SAME instance — no resolve/refire, so
+      # the `for:` clock never restarted. (A restart would have shown as silence at 43m+30m.)
+      - eval_time: 50m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The /generation harvest is missing lookups (FU-131 ledger undercount)"
+              description: "The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter's /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line \"never appeared after 67s\"."
+      - eval_time: 90m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The /generation harvest is missing lookups (FU-131 ledger undercount)"
+              description: "The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter's /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line \"never appeared after 67s\"."
+
+  # ── H5 — the SHARE arm alone: 3 misses of 6 lookups is 50%, and the count arm is silent ───────
+  # Without this row the `or`'s second arm is shipped untested — a count-only fixture passes
+  # against an expr that dropped it. 3 misses is under `> 5`, so only the ratio can fire this.
+  - interval: 1m
+    name: H5 harvest — the share arm fires on a small-but-lopsided day
+    input_series:
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="missed",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+1x3 3+0x200"
+      - series: 'openrouter_generation_harvest_total{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",outcome="stored",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "0+1x3 3+0x200"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: OpenRouterGenerationHarvestMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The /generation harvest is missing lookups (FU-131 ledger undercount)"
+              description: "The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter's /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line \"never appeared after 67s\"."
