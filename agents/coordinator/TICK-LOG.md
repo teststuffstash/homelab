@@ -13497,3 +13497,22 @@ updates or reverts as much as possible — mechanical revert or a responder."
   The real two-node roll saturates pve's 1 GbE (the wk-04 ingress-VIP hairpin). Spike §2026-10-14 re-measure; FU-280 re-scoped.
 - **homelab#1621 CLOSED:** oracle-fleet's first `/corpus-published` ring → `corpus-dispatch-n7xwx` → `repository_dispatch` 6 s later.
 - Wind-down: meta-state PICKUP = the next session's `/design-agents` batch.
+
+## 2026-10-14 ~20:00–21:30Z — /design-agents "batch from meta-state" (operator-typed; full corpus) (seat)
+
+- Corpus loaded per the skill (FSM YAMLs + retros excluded). Batch items (2)–(5) assessed, operator ruled "all".
+- **Rulings → builds:** FU-204 → #2562 (C4/C5 `$bodies` → `STRONG_LINK_JQ`, the #1720 asymmetry); FU-198 → #2563
+  (retry on a wrapper, semaphore on the leaf); FU-281 → #2477 (b) + #2565 (c), state-fp per trigger; FU-131 sweep
+  DROPPED (live missed=0/21 d) → belt #2564; FU-306 → #2567 tofu half first, Renovate rule after; FU-152 →
+  agent-coordinator#27 (deploy-pin sweeps the Composition + gc-mirrors literals) + #2566 (bump + manifest-lint
+  equality). All queued, platform doorbell rung.
+- **Admission:** #2477/#2412/#2178/agent-runtime#173 queued. #2178 narrowed to Half 1 before any ride could pick it
+  (Half 2 = #2561, blockedBy — today the refusal is the only brake on a spurious revert merging). #1669 unblocked:
+  its condition (theme 1 deployed) had held since 09-16 with no un-park trigger — the park-needs-an-un-park lesson
+  again. Seat read posted: strikes_7d = 2 (v4-pro auth-storm, opus harness-death), 0 on the coding pair, no pair
+  cooldowns → STANDING, thin traffic.
+- **Live finds:** the per-stack loop CronWorkflows run agent-coordinator `2026.8.7` (two months behind the
+  kustomize pin) — FU-152 was not cosmetic. `respond`'s retry (6 × 15 m doubling ≈ 16 h) and its semaphore share one
+  template. All four stack recipes already carry AGENT_INFEASIBLE (the README banner was stale).
+- Operator direction: next priority = agent-gateway (opencode-go + codex, router as an island); the
+  operator-decision bucket waits.

@@ -17,22 +17,20 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-14 ~19:45Z — seat; TICK-LOG 2026-10-14 board-sweep + fu-sweep/docs-cleanup): the sweep pipeline
-  ran WITHOUT the corpus (slice rule, #2219); the next session = the operator-typed `/design-agents` with this batch.**
-  (1) **Agents block of `docs/follow-ups.md`**: ~50 of its items were NOT classified (only the ones touched since 10-03 /
-  lint-flagged were) — run fu-sweep's buckets over the rest with the corpus loaded. (2) **Design rulings owed**: FU-204
-  (C4/C5 exclusion: age-bound vs wake-with-marker, since 09-02), FU-198 (does `respond`'s retry backoff hold the
-  semaphore slot), FU-281 (which lever — 2nd sweep in OPERATOR), FU-131 (drop the T+1 sweep: 0 misses in 3 weeks),
-  FU-306 (runner pin vs `latest`), FU-152 (composition/gc-mirrors image drift vs the 2026.10.12 tag); IL-G04 / IL-G07
-  rows cite closed issues (#209, agent-runtime#36); the e-ITS lens row in roles.md has no owning FU. (3) **Admission**:
-  queue-or-not #2477, #2412, #2178, agent-runtime#173; read homelab#1669 (the exacto re-read, waiting since 09-22).
-  (4) **Skills**: meta-coordinate's push/codeowner wording vs the seat card + ADR-110; board-sweep's graduation is due
-  (8 runs). (5) a CONTENT comb of `docs/agents/` (10-14's was mechanical: links/paths only). Watch: agent-runtime PR#165
-  was unparked 10-14 (its fix round on the reviewer's CHANGES_REQUESTED).
-  **Not agent-platform (seat, any session):** FU-280 — re-measured 10-14: placement is NOT the bottleneck (~75 MB/s
-  uncontended); a roll from pve VMs saturates pve's 1 GbE via the ingress-VIP hairpin — the operator picks the path fix; the `intel1` replica (registry-data beside garage-0's volumes on
-  a 255 GB disk at 75 %) wants moving off in a window either way. Done 10-14: FU-280's S3 half + bucket removed
-  (#2558/#2560, FU-279 archived), FU-156 Cloudflare expiry leg LIVE (#2559), homelab#1621 closed on oracle's first ring.
+- **⚑ PICKUP (2026-10-14 ~21:30Z — seat, design-agents corpus session; TICK-LOG 2026-10-14 design-agents batch):
+  the 19:45Z batch is DONE except its "operator decides" bucket.** **NEXT PRIORITY (operator): the new router —
+  `agent-gateway` (FU-270/ADR-139): opencode-go + codex rails, a router that works as an ISLAND** — start it from
+  FU-269/FU-270/FU-127 + `docs/spikes/codex-subscription-rail.md`; it is design-agents-shaped (ask full/slice).
+  **Deferred by the operator, NOT today:** every Agents-block item needing an operator decision (FU-218/220/292/180/
+  095-flip/174/311/256, FU-059 W2+, FU-094). **Rulings landed 10-14 → queued builds (watch, then the seat acts):**
+  #2562 (FU-204, C4/C5 strong link), #2563 (FU-198 — then the seat's toy semaphore probe), #2564 (FU-131 belt),
+  #2565 (FU-281 (c), blockedBy #2477), #2566 (FU-152 — merge only AFTER agent-coordinator#27), #2567 (FU-306 tofu
+  half — then the seat adds the Renovate regex manager to `.github/renovate-global.json`, operator-direct).
+  Admitted + queued: #2477, #2412, #2178 (narrowed to Half 1; Half 2 = #2561, blockedBy #2178 — must not land
+  first), agent-runtime#173; #1669 unblocked + queued with the seat's read (STANDING — the Goal #1640 verdict is the
+  operator's). Docs/skills comb = the `fix/agents-docs-comb-2026-10-14` PR (IAC-G01/G04 + IL-G04 closed, IL-G07
+  re-disposed, meta-coordinate/board-sweep rulings). **Not agent-platform (seat, any session):** FU-280 — the
+  operator picks the pve-uplink path fix; the `intel1` replica wants moving off in a window either way.
 - **⚑ PICKUP (2026-10-13 17:20Z — seat; TICK-LOG 2026-10-13 15:45–17:20Z): FU-312's pf class CLOSED on both legs
   (#2532 + #2535), #2533 applied, #2534 closed, VIP ingress = wk-04 by FRR weight (#2536), router nodes named
   (#2537 + bd57ba5d).** The stall COUNTS of every A/B were FU-280's volume (4 MiB reads at 0.5–8 s, ~8–10 MB/s; 22/32
