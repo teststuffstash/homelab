@@ -14,12 +14,12 @@
 #   3. the LB Service `registry` (192.168.40.33 ← registry.teststuff.net) flips its selector
 #      from `app: registry` to `app: registry-fs`. The hostname, VIP, cert and nginx auth
 #      front are unchanged; clients cannot tell. Rollback = flip the selector back.
-#   4. after a soak, the S3 Deployment + the Garage bucket go.
+#   4. after a soak, the S3 Deployment + the Garage bucket go. The Deployment went 2026-10-14;
+#      the bucket waits on FU-279's multipart-debris decision (garage-workspace.yaml header).
 #
-# The nginx front is the SAME ConfigMap as the S3 registry's (registry.yaml carries its
-# rationale: per-method auth, the challenging /v2/ ping). Env lessons carried from registry.yaml
-# are kept one-to-one; the S3-only ones (chunk sizes, redirect disable, credentials) have no
-# filesystem equivalent and are dropped.
+# The nginx front is the ConfigMap in registry.yaml, which carries its rationale (per-method
+# auth, the challenging /v2/ ping) and the env lessons below. The S3-only ones (chunk sizes,
+# redirect disable, credentials) had no filesystem equivalent and are in git history.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

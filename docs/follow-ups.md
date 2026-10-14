@@ -242,23 +242,23 @@ six OVERSIZE items pointer-ized into
       `sdb` ~90 % busy → `GarageClusterFlapping`. **Next, in order:** (1) garage-2 off the X240 (third std
       SFF; ledger via FU-137); (2) THEN alerts on `garage:s3_latency_seconds:{p50,p99}_5m` + the 30d burn
       rate; (3) attribute one CI-hour window by bucket (the #499 method). Link: FU-093, FU-137.
-- [ ] **FU-280** — **The first-party registry left Garage S3 — remove the S3 half; the volume is the bottleneck now. POINTER.**
+- [ ] **FU-280** — **The first-party registry left Garage S3; the volume is the bottleneck now. POINTER.**
       CUT OVER 2026-09-24 (ADR-121 amended): `registry.teststuff.net` = `registry-fs` on the 150Gi `registry-data`
-      volume (#1961/#1962); the S3 Deployment runs UNROUTED as the rollback. Soak DONE (other-tenant p99 at idle,
-      10-03); GC runs again (10-12/10-13). **Next:** (1) remove the S3 Deployment, the Garage bucket +
-      `RegistryBucketCommitHeadroomLow` (+ FU-279's debris); (2) ⚠ OPERATOR: cold reads ~9–10 MB/s off the
-      mx500/wk-metal-04 replicas (an 8.5 GB pull ≈ 15 min a node) — pin via a disk tag (against "tags only
-      exclude") or move the volume. Evidence: [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md) §2026-10-13/14.
-- [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects.**
-      `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does not walk MPUs, so they
-      accrue forever: 4.3 GB from 2026-09-02/09-10 still held on 09-22. It is **raw disk only**
-      (~13 GB at rf=3), never headroom — `garage_bucket_bytes` counts completed objects only, so it
-      cannot move `RegistryBucketCommitHeadroomLow`. Mechanism + the 09-22 measurements: the header of
-      [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml). Deferred by the
-      operator 2026-09-22: the reclaim command carries the ☠ in
-      [`2026-08-24-…-meta-wipe.md`](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md) (an abort
-      drops blocks it read to rc=0 — 3,952 blocks lost), scoped to a bucket under recovery, not this.
-      **Next:** decide when zone headroom presses (~79/150 GiB); if yes, age-gate + verify rc after.
+      volume. Soak done 10-03; **2026-10-14 the S3 Deployment (the rollback) + `RegistryBucketCommitHeadroomLow`
+      removed**. The bucket `registry` stays, unread, behind FU-279: Garage refuses a non-empty delete and
+      emptying first would strand the MPUs (order: [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml)).
+      **Next:** ⚠ OPERATOR: cold reads ~9–10 MB/s off the mx500/wk-metal-04 replicas (an 8.5 GB pull ≈ 15 min a
+      node) — pin via a disk tag (against "tags only exclude") or move the volume. Evidence:
+      [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md) §2026-10-13/14.
+- [ ] **FU-279** — **Garage-side incomplete multipart uploads are debris nothing collects — and they now gate the
+      registry bucket's removal (FU-280).** `UPLOADPURGING` deletes the `_uploads/` objects, `garbage-collect` does
+      not walk MPUs: 6 uploads / 4.3 GB from 2026-09-02/09-10 (re-read 10-14), **raw disk only** (~13 GB at rf=3).
+      Garage's DeleteBucket ignores MPUs, so deleting the bucket first strands them past every cleanup; they must
+      go BEFORE it. Mechanism + order: the header of [`garage-workspace.yaml`](../argocd/resources/registry/garage-workspace.yaml).
+      Deferred by the operator 2026-09-22: the reclaim command carries the ☠ in
+      [`2026-08-24-…-meta-wipe.md`](incidents/2026-08-24-pve-thin-pool-garage-meta-wipe.md) (an abort drops blocks it
+      read to rc=0 — 3,952 blocks lost), scoped to a bucket under recovery, not this.
+      **Next:** ⚠ OPERATOR: rule on `cleanup-incomplete-uploads` for `registry` (age-gate + verify rc after); then FU-280's bucket delete.
 - [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its three biggest
       tenants are ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
       2026-09-22), so our release churn sets the mirror's size. The registry's only size knob is the TTL, and
