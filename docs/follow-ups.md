@@ -1215,14 +1215,13 @@ the block needs pruning, not more headings.
       endpoint's "accepted permissions" docs line, never the catalog name (`devbox run
       cloudflare-token-audit` renders minted reality readably). Relates FU-156.
 - [ ] **FU-156** — **Credential-expiry BELT (re-scoped 2026-08-08, operator: dates-in-git is the
-      wrong system).** One gauge `credential_expiry_timestamp_seconds` + one <30d alert; live-poll
-      Cloudflare `/user/tokens` (needs a tiny User:API-Tokens:Read mint), declared expiries for
-      file-shaped creds; alert is `triage: none` → HA (responder can't touch admin creds — the
-      remedy is host-side). Design: [`docs/secrets.md`](secrets.md) §Credential expiry is telemetry.
-      **Urgency is real**: 4 CF tokens expire 2026-12-14…2027-01-09 (earliest = the broad
-      "Read all resources" token — RETIRE it when `homelab-observability-read` lands, don't
-      renew). **Next:** mint the inventory-read token + the exporter leg (can ride the
-      cloudflare-exporter build). Relates FU-150 (silent-expiry class), FU-039.
+      wrong system).** Gauge `credential_expiry_timestamp_seconds` + `CredentialExpiringSoon` (<30d) /
+      `CredentialExpiryImminent` (<7d), `triage: none` → HA; `CredentialExpiryProbeBlind` for a dead
+      poller. Design: [`docs/secrets.md`](secrets.md) §Credential expiry is telemetry. **Cloudflare
+      live-poll leg built 2026-10-14, PR #2559** (`cloudflare-credential-expiry-probe`, inventory-read
+      token). **Next:** the declared-expiry half — `.p12`s (`openssl`), the ghcr classic PAT
+      (`GHCR_MIRROR_PULL_EXPIRY`), GitHub PATs — emitting the same gauge under their own `provider`.
+      Relates FU-150 (silent-expiry class), FU-039.
 - [ ] **FU-036** — AWS cleanup: delete the orphaned Route53 hosted zone `ZCGRPARGVE3CW` (+ the
       leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root

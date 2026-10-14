@@ -158,3 +158,53 @@ spec:
           annotations:
             summary: "Cloudflare edge probe is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}"
             description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+    # ── credential-expiry belt (FU-156) — docs/secrets.md §Credential expiry is telemetry ───────
+    # Series: `credential_expiry_timestamp_seconds{provider, credential}` from
+    # cloudflare-credential-expiry-probe (credential-expiry-probe.py beside this file) — one per
+    # EXPIRING credential; never-expiring ones emit nothing, so absence on that gauge means "no
+    # date", and the poller's own liveness is the separate `credential_expiry_probe_ok` (computed
+    # per scrape: a failed, empty or >3-interval-stale poll reads 0) — absence never reads as
+    # agreement (FU-150). Two banded alerts rather than one name at two severities so neither
+    # leans on the critical→warning inhibit rule and the promtool drift pin covers both exprs.
+    # `triage: none` on the expiry pair: the remedy is host-side by construction (admin wallet +
+    # the mint root's apply, or the dashboard for the Tier-0 token) — no in-cluster session can
+    # change it; the default route takes it to ha-webhook, the human surface.
+    # Restart-gap shape (#288/#334): `min by (provider, credential)` drops pod identity and
+    # `min_over_time [10m]` bridges a `replicas: 1` roll. LOW-is-bad (an earlier expiry is worse,
+    # probe_ok 0 is blind), so `min` is the alert-preserving direction for all three.
+    # Behaviour fixture: credential-expiry.promtool-{rules,test} beside this file.
+    - name: credential-expiry
+      rules:
+        - alert: CredentialExpiringSoon
+          expr: (min by (provider, credential) (min_over_time(credential_expiry_timestamp_seconds[10m])) - time() < 30 * 86400) unless (min by (provider, credential) (min_over_time(credential_expiry_timestamp_seconds[10m])) - time() < 7 * 86400)
+          for: 10m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # triage: renewal is a host-side mint apply (admin wallet) or a dashboard re-create; nothing in-cluster can act
+            triage: none
+          annotations:
+            summary: "{{ $labels.provider }} credential \"{{ $labels.credential }}\" expires in {{ $value | humanizeDuration }}"
+            description: "{{ if eq $labels.credential \"Create Additional Tokens\" }}The Tier-0 Cloudflare mint-root expires in {{ $value | humanizeDuration }}. It is DASHBOARD-renewed by construction: re-create it from the recipe in tofu/cloudflare-token/README.md §The admin token, re-store in the host admin wallet (docs/secrets.md §Minting doctrine).{{ else }}Credential \"{{ $labels.credential }}\" ({{ $labels.provider }}) expires in {{ $value | humanizeDuration }}. Renew or RETIRE (a superseded credential is deleted, not renewed — docs/secrets.md §Credential expiry). Cloudflare: bump expires_on in tofu/cloudflare-token/, then on the host `devbox run cloudflare-token-tofu plan` + `apply` (tofu/cloudflare-token/README.md); the wrapper re-stores wallet + cache + Infisical (scripts/cloudflare-token-store.sh) — then refresh any non-ESO consumer the docs/cloudflare.md token matrix names.{{ end }}"
+        - alert: CredentialExpiryImminent
+          expr: min by (provider, credential) (min_over_time(credential_expiry_timestamp_seconds[10m])) - time() < 7 * 86400
+          for: 10m
+          labels:
+            severity: critical
+            platform_machinery: "true"
+            # triage: renewal is a host-side mint apply (admin wallet) or a dashboard re-create; nothing in-cluster can act
+            triage: none
+          annotations:
+            summary: "{{ $labels.provider }} credential \"{{ $labels.credential }}\" expires in {{ $value | humanizeDuration }} — renew NOW"
+            description: "Under 7 days (negative = ALREADY EXPIRED). {{ if eq $labels.credential \"Create Additional Tokens\" }}Tier-0 Cloudflare mint-root: DASHBOARD-renewed — tofu/cloudflare-token/README.md §The admin token, re-store in the host admin wallet. Without it no other Cloudflare token can be re-minted.{{ else }}Renew via the mint root's apply on the host (Cloudflare: bump expires_on, `devbox run cloudflare-token-tofu apply` — tofu/cloudflare-token/README.md; the wrapper re-stores) or retire it; consumers in the docs/cloudflare.md token matrix.{{ end }}"
+        - alert: CredentialExpiryProbeBlind
+          expr: min by (provider) (min_over_time(credential_expiry_probe_ok[10m])) == 0 or absent_over_time(credential_expiry_probe_ok{provider="cloudflare"}[10m])
+          for: 30m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # triage: probe pod logs, the ESO-fed Secret and the ExternalSecret status are readable in-cluster
+            triage: dig
+          annotations:
+            summary: "Credential-expiry belt is blind on provider {{ $labels.provider }}"
+            description: "The credential-expiry probe has not completed a fresh poll for 30m — the expiry gauge is UNKNOWN, not clear, and a credential could now expire unannounced. SYMPTOM ONLY. Check: deploy/cloudflare-credential-expiry-probe in monitoring (logs every failed poll), the cloudflare-inventory-read Secret (ESO ← Infisical CLOUDFLARE_INVENTORY_READ), then the token itself (homelab-token-inventory-read, docs/cloudflare.md §Token matrix)."
