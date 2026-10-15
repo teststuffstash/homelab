@@ -157,6 +157,71 @@ git -C "$T/rl-moved" show "$PLANT^:devbox.lock" >"$T/rl-moved/devbox.lock"   # <
 git -C "$T/rl-moved" commit -q -am "restore the plant's parent over the later move"
 checkrl "$T/rl-moved" "revert-lock-$P8" "$BODY" 1 "moved on the base since" "revert-lock: master moved the lock after <sha8> → refused"
 
+# ── The revert-wf arm (FU-1990 part 2, homelab#2561; the #2177 / #2358 shape). The SAME predicate
+# as the lock arm with the chain's wf triple: `revert-wf-<sha8>` + a `reverted-pins:` body line +
+# `.github/workflows/**` only + <sha8> on master + every file byte-for-byte <sha8>^'s with master
+# still at <sha8>'s version. The chain opens these PRs as the worker App, so without the arm a
+# legitimate revert is red on `^\.github/` and can never merge (#2177, #2358: armed, reflex-
+# APPROVED, structurally red). Expected verdicts from the arm's header in governance-lint.sh.
+# mkwf <dir>: master = base (ci.yaml pin v1) → PLANT (ci.yaml pin v2, the bad pin); tag base = PLANT. Sets P8.
+mkwf() {
+  local d="$1"
+  mkdir -p "$d/scripts" "$d/.github/workflows" && git -C "$d" init -q -b master
+  cp "$LINT" "$d/scripts/governance-lint.sh"
+  printf 'jobs:\n  ci:\n    steps:\n      - uses: actions/checkout@1111111111111111111111111111111111111111 # v4\n' >"$d/.github/workflows/ci.yaml"
+  git -C "$d" add -A && git -C "$d" commit -q -m base
+  printf 'jobs:\n  ci:\n    steps:\n      - uses: actions/checkout@2222222222222222222222222222222222222222 # v5\n' >"$d/.github/workflows/ci.yaml"
+  git -C "$d" commit -q -am plant
+  git -C "$d" tag base
+  P8="$(git -C "$d" rev-parse --short=8 HEAD)"
+}
+WF_BODY='FU-1990 deterministic rollback: workflow **CI** failed on `master` …
+
+**Reverted PR:** #2175 — renovatebot/github-action v46.3.3 -> v46.3.4
+
+reverted-pins: renovatebot/github-action@3333333333333333333333333333333333333333'
+WF_OK="revert-wf lane"
+
+# (1) the #2177 shape: `git revert <plant>` on revert-wf-<plant8> → the workflow back to v1 → ok.
+mkwf "$T/wf"
+git -C "$T/wf" checkout -q -b "revert-wf-$P8" && git -C "$T/wf" revert --no-edit HEAD >/dev/null
+checkrl "$T/wf" "revert-wf-$P8" "$WF_BODY" 0 "$WF_OK" "revert-wf: the #2177 shape (git revert of a pin-only workflow merge) passes"
+# (2) the SAME byte-exact restore without the `reverted-pins:` memory line → not the chain's PR → worker red.
+checkrl "$T/wf" "revert-wf-$P8" "a revert" 1 "$WORKER_RED" "revert-wf: no reverted-pins: body line → worker red"
+# (3) a worker workflow edit NOT on a revert branch (same body, same restored bytes) → worker red.
+git -C "$T/wf" checkout -q -b fix/wf-edit "revert-wf-$P8"
+checkrl "$T/wf" fix/wf-edit "$WF_BODY" 1 "$WORKER_RED" "revert-wf: a worker workflow edit on fix/* → worker red"
+# (4) the revert PLUS a smuggled non-pin line in the workflow (the head is no longer <sha8>^'s bytes) → refused.
+mkwf "$T/wf-smug"
+git -C "$T/wf-smug" checkout -q -b "revert-wf-$P8" && git -C "$T/wf-smug" revert --no-edit HEAD >/dev/null
+printf '      - run: echo smuggled\n' >>"$T/wf-smug/.github/workflows/ci.yaml"
+git -C "$T/wf-smug" commit -q -am "revert, plus a line the chain never wrote"
+checkrl "$T/wf-smug" "revert-wf-$P8" "$WF_BODY" 1 "is not byte-for-byte" "revert-wf: a smuggled non-pin line in the workflow → refused"
+# (5) the revert branch also writes a governance path beside the workflow → the arm declines → worker red.
+mkwf "$T/wf-gov"
+git -C "$T/wf-gov" checkout -q -b "revert-wf-$P8" && git -C "$T/wf-gov" revert --no-edit HEAD >/dev/null
+mkdir -p "$T/wf-gov/.agents" && echo x >"$T/wf-gov/.agents/fix.yaml"
+git -C "$T/wf-gov" add -A && git -C "$T/wf-gov" commit -q -m smuggle
+checkrl "$T/wf-gov" "revert-wf-$P8" "$WF_BODY" 1 "$WORKER_RED" "revert-wf: workflow + .agents/ smuggled → worker red"
+# (6) <sha8> is a commit the BRANCH carries, not master's: X writes an invented pin, Y overwrites it,
+# the head restores Y^ (= X's invented pin) byte-for-byte — refused, <sha8> is not on master.
+mkwf "$T/wf-side"
+git -C "$T/wf-side" checkout -q -b side
+printf 'jobs:\n  ci:\n    steps:\n      - uses: actions/checkout@6666666666666666666666666666666666666666 # v9\n' >"$T/wf-side/.github/workflows/ci.yaml"; git -C "$T/wf-side" commit -q -am X
+printf 'jobs:\n  ci:\n    steps:\n      - uses: actions/checkout@2222222222222222222222222222222222222222 # v5\n' >"$T/wf-side/.github/workflows/ci.yaml"; git -C "$T/wf-side" commit -q -am Y
+Y8="$(git -C "$T/wf-side" rev-parse --short=8 HEAD)"
+git -C "$T/wf-side" checkout -q -b "revert-wf-$Y8" && git -C "$T/wf-side" revert --no-edit HEAD >/dev/null
+checkrl "$T/wf-side" "revert-wf-$Y8" "$WF_BODY" 1 "is not on master" "revert-wf: <sha8> off master (branch-carried) → refused"
+# (7) master changed the workflow AGAIN after <sha8>: restoring <sha8>^ would undo more than that commit → refused.
+mkwf "$T/wf-moved"
+PLANT="$(git -C "$T/wf-moved" rev-parse HEAD)"
+printf 'jobs:\n  ci:\n    steps:\n      - uses: actions/checkout@4444444444444444444444444444444444444444 # v6\n' >"$T/wf-moved/.github/workflows/ci.yaml"; git -C "$T/wf-moved" commit -q -am later
+git -C "$T/wf-moved" tag -f base >/dev/null
+git -C "$T/wf-moved" checkout -q -b "revert-wf-$P8"
+git -C "$T/wf-moved" show "$PLANT^:.github/workflows/ci.yaml" >"$T/wf-moved/.github/workflows/ci.yaml"   # <sha8>^'s exact bytes
+git -C "$T/wf-moved" commit -q -am "restore the plant's parent over the later move"
+checkrl "$T/wf-moved" "revert-wf-$P8" "$WF_BODY" 1 "moved on the base since" "revert-wf: master moved the workflow after <sha8> → refused"
+
 # homelab#2412 — the THIRD shape (#1736's comment): a master-sync PR into a goal/** base. The PR
 # forks from the GOAL tip and merges master, so merge-base(base, head) == goal tip and three-dot ≡
 # two-dot: master's own governance write IS the PR's diff. The predicate is "content NOT reachable

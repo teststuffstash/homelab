@@ -164,59 +164,74 @@ if [ -n "$hits" ] && grep -qE '^goal/' <<< "${PR_HEAD_REF:-}" \
   exit 0
 fi
 
-# REVERT-LOCK ARM (class 7 — the 2026-10-07 ruling, homelab#2369: the lock revert chain merges its
-# own reverts; docs/dependency-upgrades.md §2 Review). `workflow-pin-revert`'s lock shape
-# (agents/coordinator/deploy-revert-argo.yaml) is opened by the SAME App as the worker, so its
-# `git revert` of a lock-only merge reads as a worker writing `devbox.lock` — the 2026-10-10 drill's
-# #2480 went red here, both sentinels green, and the chain's own revert could never merge. A revert
-# RESTORES, it never invents, so the arm admits exactly that and nothing else:
-#   - the head ref is `revert-lock-<sha8>` and the body carries a line-anchored `reverted-locks:`;
-#   - EVERY changed file is a lock the chain reverts (a `devbox.lock` in any dir, or
-#     mgmt/nixos/flake.lock — the chain's IS_LOCK set; the flake is not a governance path here,
-#     pin-only-lint check (j) holds its revert to the same byte-exact rule);
+# REVERT ARMS (class 7 — the 2026-10-07 ruling, homelab#2369: the lock revert chain merges its own
+# reverts; docs/dependency-upgrades.md §2 Review). `workflow-pin-revert`'s shapes
+# (agents/coordinator/deploy-revert-argo.yaml) are opened by the SAME App as the worker, so its
+# `git revert` of a pin-only merge reads as a worker writing the reverted path — the 2026-10-10
+# drill's #2480 went red here, both sentinels green, and the chain's own revert could never merge.
+# A revert RESTORES, it never invents, so the arm admits exactly that and nothing else. The chain
+# has THREE shapes and they are ONE predicate with a different (prefix, trailer, file set) triple:
+#   revert-lock-<sha8>  reverted-locks:   (^|/)devbox\.lock$|^mgmt/nixos/flake\.lock$   (#2482)
+#   revert-wf-<sha8>    reverted-pins:    ^\.github/workflows/                          (#2561)
+#   revert-img-<sha8>   reverted-images:  ^tofu/.*\.tf$                                 (#2561)
+#   - the head ref is `revert-<kind>-<sha8>` and the body carries the kind's line-anchored trailer;
+#   - EVERY changed file is one the chain reverts (the kind's file set above) — the lock set is the
+#     chain's IS_LOCK set (a `devbox.lock` in any dir, or mgmt/nixos/flake.lock; the flake is not a
+#     governance path here, pin-only-lint check (j) holds its revert to the same byte-exact rule),
+#     the wf set is the chain's candidate surface, the img set is its `all files tofu/*.tf` rule;
 #   - <sha8> is on the base branch (master history, not a commit the branch carries itself);
 #   - per file, the head is BYTE-FOR-BYTE <sha8>'s first parent (git blob identity), and the base
 #     still carries <sha8>'s version (the revert undoes the LATEST change, never an older state).
 # Every read fails CLOSED (exit 2). History comes from a private fetch, like the assembly arm
 # (CI's checkout is depth 1); GOVLINT_REMOTE is the same test seam.
-REVERT_LOCK_FILES='(^|/)devbox\.lock$|^mgmt/nixos/flake\.lock$'
-if [ -n "$hits" ] && [[ "${PR_HEAD_REF:-}" =~ ^revert-lock-([0-9a-f]{8})$ ]] \
-   && grep -qE '^[[:space:]]*reverted-locks:' <<< "${PR_BODY:-}"; then
-  rl_sha8="${BASH_REMATCH[1]}"
-  rl_files="$(printf '%s\n' "$changed" | grep . || true)"
-  rl_other="$(printf '%s\n' "$rl_files" | grep -vE "$REVERT_LOCK_FILES" || true)"
-  if [ -n "$rl_other" ]; then
-    echo "governance-lint: revert-lock arm declined — the diff changes non-lock files too:" >&2
-    printf '  %s\n' $rl_other >&2
-  else
-    rl_fail() { echo "governance-lint: FAIL — revert-lock arm: $*; refusing to report success." >&2; exit 2; }
-    git fetch -q --no-tags --depth=200 "${GOVLINT_REMOTE:-origin}" \
-      "+refs/heads/${PR_HEAD_REF}:refs/govlint/head" "+refs/heads/${BASE_REF:-master}:refs/govlint/base" 2>/dev/null \
-      || rl_fail "could not fetch '${PR_HEAD_REF}' and '${BASE_REF:-master}'"
-    rl_head="$(git rev-parse refs/govlint/head)"
-    if [ -n "${PR_HEAD_SHA:-}" ] && [ "$rl_head" != "$PR_HEAD_SHA" ]; then
-      rl_fail "fetched head ${rl_head:0:8} is not the event's head ${PR_HEAD_SHA:0:8} (branch moved — re-run)"
+# ⚖ REACHABILITY, stated not hidden: only the lock and wf rows can fire HERE — `devbox.lock` and
+# `.github/` are governance paths, `tofu/` is not (ADR-142's tier list), so an img revert has no
+# `hits` and falls through to the ok line below. The img row is kept because the predicate is the
+# CHAIN's shape, not this lint's: if `tofu/` ever joins GOVERNANCE the arm is already right, and a
+# `revert-img-` head that smuggles a governance path is declined by the file set either way.
+if [ -n "$hits" ] && [[ "${PR_HEAD_REF:-}" =~ ^revert-(lock|wf|img)-([0-9a-f]{8})$ ]]; then
+  rv_kind="${BASH_REMATCH[1]}"; rv_sha8="${BASH_REMATCH[2]}"
+  case "$rv_kind" in
+    lock) rv_trailer='reverted-locks:';  rv_files_re='(^|/)devbox\.lock$|^mgmt/nixos/flake\.lock$' ;;
+    wf)   rv_trailer='reverted-pins:';   rv_files_re='^\.github/workflows/' ;;
+    img)  rv_trailer='reverted-images:'; rv_files_re='^tofu/.*\.tf$' ;;
+  esac
+  if grep -qE "^[[:space:]]*${rv_trailer}" <<< "${PR_BODY:-}"; then
+    rv_files="$(printf '%s\n' "$changed" | grep . || true)"
+    rv_other="$(printf '%s\n' "$rv_files" | grep -vE "$rv_files_re" || true)"
+    if [ -n "$rv_other" ]; then
+      echo "governance-lint: revert-${rv_kind} arm declined — the diff changes files outside the ${rv_kind} shape:" >&2
+      printf '  %s\n' $rv_other >&2
+    else
+      rv_fail() { echo "governance-lint: FAIL — revert-${rv_kind} arm: $*; refusing to report success." >&2; exit 2; }
+      git fetch -q --no-tags --depth=200 "${GOVLINT_REMOTE:-origin}" \
+        "+refs/heads/${PR_HEAD_REF}:refs/govlint/head" "+refs/heads/${BASE_REF:-master}:refs/govlint/base" 2>/dev/null \
+        || rv_fail "could not fetch '${PR_HEAD_REF}' and '${BASE_REF:-master}'"
+      rv_head="$(git rev-parse refs/govlint/head)"
+      if [ -n "${PR_HEAD_SHA:-}" ] && [ "$rv_head" != "$PR_HEAD_SHA" ]; then
+        rv_fail "fetched head ${rv_head:0:8} is not the event's head ${PR_HEAD_SHA:0:8} (branch moved — re-run)"
+      fi
+      rv_full="$(git rev-parse --verify -q "${rv_sha8}^{commit}" 2>/dev/null)" || rv_fail "<sha8> ${rv_sha8} does not resolve to one commit"
+      rv_parent="$(git rev-parse --verify -q "${rv_full}^1" 2>/dev/null)" || rv_fail "cannot read the first parent of ${rv_sha8}"
+      rv_bad=""
+      git merge-base --is-ancestor "$rv_full" refs/govlint/base 2>/dev/null \
+        || rv_bad="${rv_bad}  ${rv_sha8} is not on ${BASE_REF:-master} — a revert-${rv_kind} branch reverts a MERGED commit"$'\n'
+      for f in $rv_files; do
+        want="$(git rev-parse --verify -q "${rv_parent}:${f}" 2>/dev/null)" || rv_fail "cannot read $f at ${rv_sha8}^"
+        got="$(git rev-parse --verify -q "${rv_head}:${f}" 2>/dev/null)"    || rv_fail "cannot read $f at the PR head"
+        was="$(git rev-parse --verify -q "${rv_full}:${f}" 2>/dev/null)"    || rv_fail "cannot read $f at ${rv_sha8}"
+        now="$(git rev-parse --verify -q "${BASE}:${f}" 2>/dev/null)"       || rv_fail "cannot read $f at the base"
+        [ "$got" = "$want" ] || rv_bad="${rv_bad}  $f is not byte-for-byte its content at ${rv_sha8}^ (head blob ${got:0:8}, want ${want:0:8})"$'\n'
+        [ "$now" = "$was" ]  || rv_bad="${rv_bad}  $f moved on the base since ${rv_sha8} — the revert would undo more than that commit"$'\n'
+      done
+      if [ -n "$rv_bad" ]; then
+        echo "governance-lint: FAIL — revert-${rv_kind} arm REFUSED (head revert-${rv_kind}-${rv_sha8}):" >&2
+        printf '%s' "$rv_bad" >&2
+        exit 1
+      fi
+      echo "governance-lint: ok — revert-${rv_kind} lane (revert-${rv_kind}-${rv_sha8}, ${rv_trailer} memory): $(printf '%s\n' "$rv_files" | grep -c .) file(s) restored byte-for-byte to ${rv_sha8}^ (class 7, #2369; FU-1990 #2561)."
+      exit 0
     fi
-    rl_full="$(git rev-parse --verify -q "${rl_sha8}^{commit}" 2>/dev/null)" || rl_fail "<sha8> ${rl_sha8} does not resolve to one commit"
-    rl_parent="$(git rev-parse --verify -q "${rl_full}^1" 2>/dev/null)" || rl_fail "cannot read the first parent of ${rl_sha8}"
-    rl_bad=""
-    git merge-base --is-ancestor "$rl_full" refs/govlint/base 2>/dev/null \
-      || rl_bad="${rl_bad}  ${rl_sha8} is not on ${BASE_REF:-master} — a revert-lock branch reverts a MERGED commit"$'\n'
-    for f in $rl_files; do
-      want="$(git rev-parse --verify -q "${rl_parent}:${f}" 2>/dev/null)" || rl_fail "cannot read $f at ${rl_sha8}^"
-      got="$(git rev-parse --verify -q "${rl_head}:${f}" 2>/dev/null)"    || rl_fail "cannot read $f at the PR head"
-      was="$(git rev-parse --verify -q "${rl_full}:${f}" 2>/dev/null)"    || rl_fail "cannot read $f at ${rl_sha8}"
-      now="$(git rev-parse --verify -q "${BASE}:${f}" 2>/dev/null)"       || rl_fail "cannot read $f at the base"
-      [ "$got" = "$want" ] || rl_bad="${rl_bad}  $f is not byte-for-byte its content at ${rl_sha8}^ (head blob ${got:0:8}, want ${want:0:8})"$'\n'
-      [ "$now" = "$was" ]  || rl_bad="${rl_bad}  $f moved on the base since ${rl_sha8} — the revert would undo more than that commit"$'\n'
-    done
-    if [ -n "$rl_bad" ]; then
-      echo "governance-lint: FAIL — revert-lock arm REFUSED (head revert-lock-${rl_sha8}):" >&2
-      printf '%s' "$rl_bad" >&2
-      exit 1
-    fi
-    echo "governance-lint: ok — revert-lock lane (revert-lock-${rl_sha8}, reverted-locks: memory): $(printf '%s\n' "$rl_files" | grep -c .) lock file(s) restored byte-for-byte to ${rl_sha8}^ (class 7, #2369)."
-    exit 0
   fi
 fi
 
