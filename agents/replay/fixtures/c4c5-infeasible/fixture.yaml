@@ -25,7 +25,11 @@
 #     and the issue invisible to every clause since). The C4/C5-specific holds (merged-into-goal,
 #     goal-based, debounced, live session, open PR) are NOT applied either: they answer "should
 #     this be RE-DISPATCHED", and the marker is a VERDICT that wins over every hold. The park
-#     CLEARS `agent/error` (the verdict supersedes the crash latch) and pushes the
+#     CLEARS `agent/error` (the verdict supersedes the crash latch) — and SAYS so (operator ruling
+#     2026-10-15): one park-comment paragraph naming the cleared latch (the newest ANCHORED
+#     `AGENT_ERROR:` comment's first line, else "likely a human — kill switch") plus
+#     `(agent/error cleared)` on the report line, since the label may have been an anomaly latch
+#     or a human's kill switch rather than this ride's crash — and pushes the
 #     `parked-infeasible` board row (who=operator — the class `agents/board.sh` renders as
 #     "AGENT_INFEASIBLE — re-scope needed").
 #   • THE VERDICT OUTRANKS THE STRIKE'S RESUMABLE BRANCH (homelab#1797, oracle-fleet#636). A goal
@@ -47,17 +51,21 @@
 #   verdict  the parked leg: #66's comments carry the REAL marker (its worker named
 #            `.github/workflows/ci.yaml` and ended without pushing); #66 is read → blocked →
 #            in-progress off → re-read → audited, emits NO unit and NO report line; #70 beside it
-#            (no marker) keeps its unit + `v2` report line byte-identical. THREE rows read it, one
+#            (no marker) keeps its unit + `v2` report line byte-identical. FOUR rows read it, one
 #            per value of the input axis the terminal's predicate turns on:
 #              parks        — the plain shape (no `agent/error`).
 #              error-marker — the SAME world + `agent/error` on #66 (patches/add-agent-error.jq):
 #                             the oracle-fleet#637 shape. On the base tree `C4C5_SEL` dropped it
-#                             and nothing happened at all; the row is the pin.
+#                             and nothing happened at all; the row is the pin. No `AGENT_ERROR:`
+#                             comment on the thread, so the park paragraph names a likely human.
 #              strike-marker — the SAME world, #66 a GOAL CHILD (`GOALBASED_NUMS=66`) whose thread
 #                             also carries an `AGENT_STRIKE:` + `Resumable branch pushed:` comment
 #                             (rows/strike-marker/ overlay): the down-chain half. On the base tree
 #                             the terminal never saw a goal child and the resumable path re-rode
 #                             it; the `infeas_done` hold is what stops that.
+#              error-latch-named — error-marker + a thread carrying anchored `AGENT_ERROR:` latches
+#                             and a newer human QUOTE of one (rows/error-latch-named/ overlay): the
+#                             park paragraph names the newest ANCHORED latch (ruling 2026-10-15).
 #   inert    the near-miss leg: #66's comments QUOTE the marker and name it mid-sentence but
 #            NONE starts with it (the unanchored latch this clause must not take), and #71 is
 #            human-blocked and never even read. SHARED by the probe-fail and quoted-inert rows —
