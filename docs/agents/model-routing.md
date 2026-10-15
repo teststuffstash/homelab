@@ -270,7 +270,9 @@ scope.
     `agents/replay/fixtures/strike-quota-classifier` (the classification it rides on).
 - **The raw-log fallback emits the finer subclasses** when no structured report exists
   (`budget-403-key`, `budget-403-account`, `http-403-other`) — the residual `budget-403` is
-  neither a strike nor a key-retry and escalates.
+  neither a strike nor a key-retry and escalates. Goose's one-line 402 rendering (`add more
+  credits`) is key-class, not residual, by the 2026-10-15 operator ruling (retro r8 F3): the
+  credit-floor gate (FU-088b) already defers dispatch on a low account.
   - anchor: `agents/agent-session.sh` (the classify block).
   - evidence: replay `agents/replay/fixtures/strike-quota-classifier` (three branches); the
     comment's `error_class=`.
