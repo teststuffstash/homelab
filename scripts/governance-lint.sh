@@ -68,18 +68,66 @@ fi
 # OWN files are the three-dot compare base...head, which needs the merge-base — absent in a
 # depth-1 checkout — so in CI ask GitHub for it (server-side three-dot, depth-independent);
 # locally git has the history and `BASE...HEAD` is the same answer. Fail closed either way.
+# homelab#2412 (the THIRD shape, #1736's comment): a master-sync PR into a `goal/**` base forks
+# from the GOAL tip, so three-dot ≡ two-dot there and master's own governance edits read as the
+# worker's. The hits are therefore filtered to content NOT reachable from origin/master
+# (MB = merge-base(master, head)) — see the block below.
 if [ -n "${PR_HEAD_SHA:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
   if ! changed="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE_REF:-master}...${PR_HEAD_SHA}" --jq '.files[].filename' 2>/dev/null)"; then
     echo "governance-lint: FAIL — could not read compare ${BASE_REF:-master}...${PR_HEAD_SHA} from GitHub; refusing to report success." >&2
     exit 2
   fi
+  # homelab#2412 — the THIRD shape (#1736's comment): a master-sync PR into a `goal/**` base forks
+  # from the GOAL tip, so merge-base(base, head) == goal tip and three-dot ≡ two-dot: master's own
+  # governance edits are in the PR's diff and were attributed to the worker. The predicate is
+  # "content NOT reachable from origin/master", so MB = merge-base(master, head) is the reference
+  # and a hit whose head content is byte-identical to MB's is master's, not the PR's. `master` is
+  # the repo's default branch — the same literal the BASE_REF default uses — and the read is
+  # depth-independent like the one above. MB == the base for a PR based on master, so this is a
+  # no-op there (the common case). The CI checkout is depth 1 (the merge ref), so fetch both sides.
+  if ! mb="$(gh api "repos/${GITHUB_REPOSITORY}/compare/master...${PR_HEAD_SHA}" --jq '.merge_base_commit.sha' 2>/dev/null)" \
+     || ! grep -Eq '^[0-9a-f]{40}$' <<< "$mb"; then
+    echo "governance-lint: FAIL — could not read the merge base of master...${PR_HEAD_SHA} from GitHub (homelab#2412); refusing to report success." >&2
+    exit 2
+  fi
+  # The CI checkout is depth 1 (the merge ref), so fetch both sides by SHA — the same form
+  # pin-only-lint uses (a refspec fetch of a bare SHA is not the proven shape here).
+  for r in "$PR_HEAD_SHA" "$mb"; do
+    git cat-file -e "${r}^{commit}" 2>/dev/null && continue
+    if ! git fetch -q --no-tags --depth=1 origin "$r" 2>/dev/null || ! git cat-file -e "${r}^{commit}" 2>/dev/null; then
+      echo "governance-lint: FAIL — could not fetch $r (the master-reachability filter, homelab#2412); refusing to report success." >&2
+      exit 2
+    fi
+  done
+  HEAD_TREE="$PR_HEAD_SHA"
 else
   if ! changed="$(git diff --name-only "$BASE"...HEAD 2>/dev/null)"; then
     echo "governance-lint: FAIL — no merge-base between '$BASE' and HEAD (shallow checkout?); refusing to report success." >&2
     exit 2
   fi
+  # The local arm's master reference: origin/master when the clone has it, else the base itself —
+  # the pre-#2412 behaviour (MB == the base, so the filter below is a no-op). GOVLINT_MASTER is
+  # the test seam; CI never reaches this arm.
+  MASTER_REF="${GOVLINT_MASTER:-origin/master}"
+  git rev-parse --verify "$MASTER_REF" >/dev/null 2>&1 || MASTER_REF="$BASE"
+  if ! mb="$(git merge-base "$MASTER_REF" HEAD 2>/dev/null)"; then
+    echo "governance-lint: FAIL — no merge-base between '$MASTER_REF' and HEAD (shallow checkout?); refusing to report success." >&2
+    exit 2
+  fi
+  HEAD_TREE=HEAD
 fi
 hits="$(printf '%s\n' "$changed" | grep -E "$GOVERNANCE" || true)"
+# homelab#2412: drop every hit whose head content is byte-identical to MB's — that content is
+# master's, not the PR's. A file absent at both ends compares equal (a deletion master also made).
+if [ -n "$hits" ]; then
+  own=""
+  for h in $hits; do
+    head_blob="$(git rev-parse -q --verify "$HEAD_TREE:$h" 2>/dev/null || echo -)"
+    mb_blob="$(git rev-parse -q --verify "$mb:$h" 2>/dev/null || echo -)"
+    [ "$head_blob" = "$mb_blob" ] || own="${own}${h}"$'\n'
+  done
+  hits="$(printf '%s' "$own" | grep . || true)"
+fi
 
 # ASSEMBLY-LANE ARM (homelab#1036, 2026-09-01). ADR-102's assembly PR is opened by the
 # COORDINATOR, whose token is minted from the same App as the worker's — so a `goal/**` head

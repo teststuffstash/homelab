@@ -103,7 +103,14 @@ MAP=(
   "pr-wait-test:^scripts/pr-wait"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   "follow-ups-lint:^docs/"
-  "docs-graph-lint:\.md$"
+  # docs-graph-lint's INPUTS are wider than .md: checks #4/#4b read §-code refs out of
+  # *.md/*.sh/*.py/*.yaml/*.yml (code comments included) and resolve them against living .md,
+  # so a YAML comment can red it. The .md-only row let exactly that through on #2575 — a
+  # sigiled code in prometheusrule.yaml, no .md in the diff, PR run SKIPPED the gate, master
+  # push ran it and redded every open PR (#2576). Row widened to the gate's real input set;
+  # ~7s, so the wider trigger is cheap. Keep this row and scripts/docs-graph-lint.sh's greps
+  # in step — that disagreement is the defect class, not the one comment.
+  "docs-graph-lint:\.(md|sh|py|ya?ml)$"
   "mermaid-lint:(\.md$|^scripts/mermaid-lint)"
   "lock-intake-lint-test:^scripts/lock-intake-lint"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with

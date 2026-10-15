@@ -103,3 +103,14 @@ groups:
         annotations:
           summary: OpenRouter/Go rides have NO served-side evidence ({{ $labels.stack }}/{{ $labels.role }})
           description: '{{ $value }} OpenRouter/Go ride(s) on {{ $labels.stack }} requested {{ $labels.requested }} with NO served-side record in the router store for 30m — a /generation harvest miss, a Go ledger gap, or a ride that never produced telemetry. Absence never reads as agreement (the FU-108/FU-125 silent-success class): the belt is blind to what served them. Check openrouter_generation_harvest_total{outcome="missed"} (a rising ratio = the harvest is half-blind) before assuming the rides were healthy.'
+      - alert: OpenRouterGenerationHarvestMissing
+        expr: |-
+          sum(increase(openrouter_generation_harvest_total{outcome="missed"}[1d])) > 5 or sum(increase(openrouter_generation_harvest_total{outcome="missed"}[1d]))
+            / sum(increase(openrouter_generation_harvest_total[1d])) > 0.05
+        for: 30m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: The /generation harvest is missing lookups (FU-131 ledger undercount)
+          description: 'The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter''s /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line "never appeared after 67s".'
