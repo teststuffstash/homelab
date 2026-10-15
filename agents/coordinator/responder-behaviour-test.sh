@@ -149,13 +149,22 @@ section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 # /tmp/rbody.md is the script's own scratch file for a body rewrite; clear it per scenario so a
 # `grep -c '^last-cleared:'` can never pass on the PREVIOUS scenario's leftovers.
 scenario() { H="$TMP/run/$1"; rm -rf "$H"; mkdir -p "$H/gh"; rm -f /tmp/rbody.md; export H; }
+# `go` is the NO-KEY run, and it says so EXPLICITLY: the four §A1 vars are UNSET here rather than
+# merely not-set. A bare `VAR=… cmd` inherits the rest of the caller's environment, and a worker pod
+# exports all four for the ride's own transcript capture — so the script under test saw a key,
+# uploaded, and the `capture-degrades` assertions reddened (#2572, 2026-10-14). That is a false red
+# in a REQUIRED `ci` task, hit by every worker running `devbox run diff-ci` in a pod, and it reads
+# exactly like "your change broke the capture path". `env -u` makes the scenario the scenario
+# regardless of who calls it.
 go() {
+  env -u AGENT_TS_ACCESS_KEY_ID -u AGENT_TS_SECRET_ACCESS_KEY \
+      -u AGENT_TS_BUCKET -u AGENT_TS_ENDPOINT \
   PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" \
   PUSHGATEWAY="" PATH="$BIN:$PATH" \
     bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
   OUT="$(cat "$H/out.txt")"
 }
-# go_ts — the same run WITH the §A1 transcripts key present. `go` deliberately leaves it unset,
+# go_ts — the same run WITH the §A1 transcripts key present. `go` deliberately UNSETS it (above),
 # so every other scenario exercises the degrade path (`optional: true` Secret absent) and the
 # capture can never be load-bearing for a triage.
 go_ts() {
