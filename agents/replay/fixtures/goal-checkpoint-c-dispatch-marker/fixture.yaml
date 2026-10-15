@@ -1,0 +1,31 @@
+# goal-checkpoint-c-dispatch-marker (homelab#2565) — the dispatch-marker block's
+# `goal-checkpoint:issue-*` arm writes the (c) HOLD's marker on the GOAL ISSUE.
+#
+# WHY A SEPARATE FIXTURE FROM goal-checkpoint-b-dispatch-marker: that one pins the (b) hold's
+# `goal_ckpt_b_prs` lookup, which writes on a PR. This one pins the THIRD lookup the same arm
+# gained — the (c) hold's `goal_ckpt_c_issues` — and it is the only one whose SURFACE is an issue
+# (`gh issue comment`), because trigger (c)'s unit is issue-shaped and there is no PR to annotate.
+# A regression in either map reds its own directory instead of blurring into the other's stream.
+#
+# THE CONTRACT (three passes, one directory — the PR#1208 remedy-(b) pattern):
+#   pass 1 (bridge.sh)   the (c) side map carries the fingerprint, the other two are EMPTY →
+#                        exactly ONE `gh issue comment 29` CALL, under `state-fp:goal-checkpoint-c:`.
+#   pass 2 (bridge2.sh)  ALL THREE maps empty (an ordinary threshold-fired goal-checkpoint, trigger
+#                        (a)/(b)/(e)) → NO call and no WARN. The absence is not vacuous: this
+#                        directory reds on base (the goal-checkpoint-c arm does not exist
+#                        pre-#2565), so the empty-map pass is a real negative row.
+#   pass 3 (bridge3.sh)  ALL THREE maps carry → THREE calls, one per clause key and per surface
+#                        (two PR comments, one issue comment), no conflict.
+name: goal-checkpoint-c-dispatch-marker
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:dispatch-marker
+  - file:bridge2.sh
+  - block:dispatch-marker
+  - file:bridge3.sh
+  - block:dispatch-marker
+env:
+  - ORG=teststuffstash
