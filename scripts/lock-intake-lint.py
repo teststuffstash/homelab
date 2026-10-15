@@ -14,14 +14,17 @@ fails the PR when any of them:
       Renovate's minimumReleaseAge applies to the DIRECT dependency only, enforced here on every
       resolved version, so a worm published an hour ago cannot arrive as someone's transitive;
   (c) can run code at install time (package-lock `hasInstallScript`; for deno.lock, the sibling
-      deno.json enabling a node_modules dir — Deno runs lifecycle scripts only there).
+      deno.json enabling a node_modules dir — Deno runs lifecycle scripts only there; for uv.lock,
+      an sdist-only package — installing it BUILDS it, which runs its build backend / setup.py).
+Ecosystems: npm (deno.lock, package-lock.json) and PyPI (uv.lock — OSV ecosystem `PyPI`, publish
+time = the version's first file upload per pypi.org's JSON API).
 
 WHY a static check: it reads lockfiles and registry metadata, installs and executes nothing, so it
 decides before any step that runs dependency code. Renovate's own `osvVulnerabilityAlerts` covers
 direct dependencies on the base branch only; it never saw lodash-es@4.17.23 arriving three levels
 under mermaid 12 (homelab#2032, FU-294) — an LLM reviewer did, which is not a gate.
 
-Fails CLOSED: a lockfile type with no extractor here, a non-npm entry (jsr:, remote URL), or an
+Fails CLOSED: a lockfile type with no extractor here, a non-registry entry (jsr:, remote URL, a git/path source), or an
 unreachable OSV/registry is exit 2, never a pass. Only net-new pairs are judged: an advisory
 published against something already on master is not this PR's intake.
 
@@ -48,7 +51,8 @@ MIN_AGE_DAYS = 7
 OSV_BATCH = "https://api.osv.dev/v1/querybatch"
 REGISTRY = os.environ.get("NPM_CONFIG_REGISTRY", "https://registry.npmjs.org/").rstrip("/")
 # Lockfile names this gate knows exist in the org; a changed one without an extractor fails closed.
-KNOWN_UNSUPPORTED = {"pnpm-lock.yaml", "yarn.lock", "uv.lock", "poetry.lock", "go.sum", "Cargo.lock",
+PYPI = os.environ.get("PYPI_INDEX_JSON", "https://pypi.org/pypi").rstrip("/")
+KNOWN_UNSUPPORTED = {"pnpm-lock.yaml", "yarn.lock", "poetry.lock", "go.sum", "Cargo.lock",
                      "Gemfile.lock", "composer.lock", "bun.lock", "bun.lockb"}
 
 
@@ -129,7 +133,29 @@ def extract_package_lock(text, path):
     return pkgs
 
 
-EXTRACTORS = {"deno.lock": extract_deno, "package-lock.json": extract_package_lock}
+def extract_uv_lock(text, path):
+    """uv.lock (TOML, `version = 1`): every `[[package]]` with a registry source is a PyPI pair.
+    Install-time code (c) = an sdist-only package — pip/uv must BUILD it, which runs its build backend
+    and any setup.py; a package with wheels installs by unpacking. The editable root project is not
+    intake; a git/url/path/directory source is a non-registry entry this gate cannot judge."""
+    import tomllib
+    lock = tomllib.loads(text)
+    if lock.get("version") != 1:
+        raise Closed(f"{path}: uv.lock version {lock.get('version')!r} — extractor knows 1")
+    pkgs = {}
+    for pkg in lock.get("package", []):
+        src = pkg.get("source") or {}
+        if "editable" in src or "virtual" in src:
+            continue  # the project itself / a workspace member
+        name, ver = pkg.get("name", ""), pkg.get("version", "")
+        if "registry" not in src:
+            pkgs[(f"{next(iter(src), 'unknown')}:{name}", ver)] = {"unsupported": "non-registry", "ecosystem": "PyPI"}
+            continue
+        pkgs[(name, ver)] = {"scripts": not pkg.get("wheels") and bool(pkg.get("sdist")), "ecosystem": "PyPI"}
+    return pkgs
+
+
+EXTRACTORS = {"deno.lock": extract_deno, "package-lock.json": extract_package_lock, "uv.lock": extract_uv_lock}
 
 
 def deno_scripts_enabled(ref, lock_path):
@@ -180,11 +206,14 @@ def http_json(url, data=None):
         raise Closed(f"{url}: {e}")
 
 
-def osv_findings(pairs):
+def osv_findings(pairs, ecosystems=None):
+    """pairs = [(name, version)]; ecosystems = {pair: "npm" | "PyPI"} (npm when absent)."""
+    ecosystems = ecosystems or {}
     out = {}
     for i in range(0, len(pairs), 500):
         chunk = pairs[i:i + 500]
-        res = http_json(OSV_BATCH, {"queries": [{"package": {"name": n, "ecosystem": "npm"}, "version": v} for n, v in chunk]})
+        res = http_json(OSV_BATCH, {"queries": [{"package": {"name": n, "ecosystem": ecosystems.get((n, v), "npm")},
+                                                 "version": v} for n, v in chunk]})
         results = res.get("results", [])
         if len(results) != len(chunk):
             raise Closed(f"OSV answered {len(results)} results for {len(chunk)} queries")
@@ -197,9 +226,14 @@ def osv_findings(pairs):
     return out
 
 
-def publish_age_days(name, version, now):
-    doc = http_json(f"{REGISTRY}/{urllib.parse.quote(name, safe='@')}")
-    stamp = (doc.get("time") or {}).get(version)
+def publish_age_days(name, version, now, ecosystem="npm"):
+    if ecosystem == "PyPI":
+        doc = http_json(f"{PYPI}/{urllib.parse.quote(name)}/{urllib.parse.quote(version)}/json")
+        stamps = sorted(u.get("upload_time_iso_8601") or "" for u in doc.get("urls") or [])
+        stamp = stamps[0] if stamps and stamps[0] else None  # the FIRST file upload = the publish time
+    else:
+        doc = http_json(f"{REGISTRY}/{urllib.parse.quote(name, safe='@')}")
+        stamp = (doc.get("time") or {}).get(version)
     if not stamp:
         raise Closed(f"{name}@{version}: the registry document carries no publish time")
     t = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
@@ -234,15 +268,16 @@ def run(base):
             intake_all.setdefault(pair, {"where": [], **meta})["where"].append(path)
     unsupported = [p for p, m in intake_all.items() if m.get("unsupported")]
     if unsupported:
-        raise Closed("non-npm lock entries this gate cannot judge: " + ", ".join(p[0] for p in unsupported))
+        raise Closed("non-registry lock entries this gate cannot judge: " + ", ".join(p[0] for p in unsupported))
     pairs = sorted(intake_all)
+    ecosystems = {p: m.get("ecosystem", "npm") for p, m in intake_all.items()}
     print(f"lock-intake-lint: {len(pairs)} net-new package version(s) across {len(locks)} lockfile(s)")
-    for (n, v), ids in sorted(osv_findings(pairs).items()):
+    for (n, v), ids in sorted(osv_findings(pairs, ecosystems).items()):
         kind = "MALICIOUS" if any(i.startswith("MAL-") for i in ids) else "vulnerable"
         failures.append(f"{kind} {n}@{v} — " + ", ".join(f"https://osv.dev/vulnerability/{i}" for i in ids))
     now = datetime.now(timezone.utc)
     for n, v in pairs:
-        age = publish_age_days(n, v, now)
+        age = publish_age_days(n, v, now, ecosystems[(n, v)])
         if age < MIN_AGE_DAYS:
             failures.append(f"too new {n}@{v} — published {age:.1f} d ago, the floor is {MIN_AGE_DAYS} d")
     for (n, v), m in sorted(intake_all.items()):
@@ -281,6 +316,37 @@ def self_test():
         "node_modules/a/node_modules/@s/b": {"version": "1.0.0"}}}), "p")
     check("package-lock names + scripts", sorted((k, v["scripts"]) for k, v in pl.items()),
           [(("@s/b", "1.0.0"), False), (("esbuild", "0.25.0"), True)])
+    uv = extract_uv_lock('''version = 1
+revision = 5
+[[package]]
+name = "agent-gateway"
+version = "0.1.0"
+source = { editable = "." }
+[[package]]
+name = "anyio"
+version = "4.12.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/a.tar.gz", hash = "sha256:00" }
+wheels = [{ url = "https://files.pythonhosted.org/a.whl", hash = "sha256:01" }]
+[[package]]
+name = "sdistonly"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/s.tar.gz", hash = "sha256:02" }
+[[package]]
+name = "fromgit"
+version = "0.0.1"
+source = { git = "https://github.com/x/y?rev=abc#abc" }
+''', "u")
+    check("uv.lock names + ecosystem + sdist-only = install-time code",
+          sorted((k, v.get("scripts"), v.get("unsupported"), v["ecosystem"]) for k, v in uv.items()),
+          [(("anyio", "4.12.0"), False, None, "PyPI"), (("git:fromgit", "0.0.1"), None, "non-registry", "PyPI"),
+           (("sdistonly", "0.1.0"), True, None, "PyPI")])
+    try:
+        extract_uv_lock("version = 2\n", "x")
+        check("unknown uv.lock version fails closed", "passed", "Closed")
+    except Closed:
+        check("unknown uv.lock version fails closed", "Closed", "Closed")
     try:
         extract_deno(json.dumps({"version": "3", "npm": {}}), "x")
         check("unknown deno.lock version fails closed", "passed", "Closed")
