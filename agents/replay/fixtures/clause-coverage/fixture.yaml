@@ -47,6 +47,7 @@ parts:
   - block:queued-derivation
   - block:inprog-selector
   - block:review-only-selector
+  - block:strong-link-count
   - block:c4c5-selector
   - block:frozen-pr-selector
   - block:clause-coverage

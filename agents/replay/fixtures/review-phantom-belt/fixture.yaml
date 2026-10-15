@@ -31,6 +31,7 @@ mode: actions
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh
+  - block:strong-link-count
   - block:review-phantom-belt
   - file:post.sh
 scrub:
