@@ -63,6 +63,9 @@ MAP=(
   "argo-lint:^agents/coordinator/"
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
+  # The gateway island's ONE gate (gateway/scripts/ci.sh via its own devbox: uv sync, ruff, pytest
+  # + evidence, spec gate) — ADR-139 / context-and-autonomy.md P2. Scoped to the island dir.
+  "gateway-ci:^gateway/"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
