@@ -919,8 +919,35 @@ yqw() { yq -r "$WT | $1" "$YAML" | grep -v -e '^---$' -e '^$'; }
 [ "$(yqw '.spec.templates[] | select(.name == "window-grace") | .synchronization // "none"')" = none ] \
   && ok "the window-grace step takes no semaphore" || bad "semaphore placement" "window-grace is synchronized"
 _order="$(yqw '.spec.templates[] | select(.name == "main") | [.steps[][].template] | join(",")')"
-[ "$(yqw '.spec.entrypoint')" = main ] && [ "$_order" = "window-grace,respond" ] \
-  && ok "main runs window-grace BEFORE respond" || bad "step order" "entrypoint=$(yqw '.spec.entrypoint') order=$_order"
+[ "$(yqw '.spec.entrypoint')" = main ] && [ "$_order" = "window-grace,respond-retry" ] \
+  && ok "main runs window-grace BEFORE the respond retry wrapper" || bad "step order" "entrypoint=$(yqw '.spec.entrypoint') order=$_order"
+
+# ── FU-198 (ruling 2026-10-14): the retry must not hold the subscription semaphore ─────────────
+# The FU-113(b) retry exists to wait out the FU-088 latch — i.e. to wait for CAPACITY — so a backoff
+# that holds a slot is the defect (10-09 01:50–04:50Z: five `respond-*` in backoff held all five
+# slots). Whether Argo releases a template-level lock during a backoff was asserted, not observed,
+# so the release is made STRUCTURAL: the retry lives on a wrapper steps template, the semaphore on
+# the leaf it calls, and every attempt is a fresh node that acquires and releases. These assertions
+# are the invariant — putting `retryStrategy` back on the synchronized template, or moving the
+# semaphore up onto the wrapper, reds here.
+_sync="$(yqw '.spec.templates[] | select(.synchronization != null) | .name')"
+[ "$_sync" = respond ] \
+  && ok "exactly one template is synchronized, and it is the respond leaf" || bad "FU-198 semaphore placement" "synchronized templates: '$_sync'"
+[ "$(yqw '.spec.templates[] | select(.synchronization != null) | .retryStrategy // "none"')" = none ] \
+  && ok "the template holding the semaphore carries NO retryStrategy (no backoff can hold a slot)" || bad "FU-198 retry placement" "the synchronized template still carries a retryStrategy"
+[ "$(yqw '.spec.templates[] | select(.name == "respond-retry") | .retryStrategy.limit')" = 6 ] \
+  && ok "the retry lives on the respond-retry wrapper (limit 6)" || bad "FU-198 retry placement" "respond-retry has no retryStrategy"
+_retry_backoff="$(yqw '.spec.templates[] | select(.name == "respond-retry") | .retryStrategy.backoff | [.duration, .factor] | join("x")')"
+[ "$_retry_backoff" = "15mx2" ] \
+  && ok "…with the FU-113(b) backoff preserved (15m, factor 2)" || bad "FU-198 retry placement" "backoff=$_retry_backoff"
+[ "$(yqw '.spec.templates[] | select(.name == "respond-retry") | .synchronization // "none"')" = none ] \
+  && ok "…and the wrapper itself takes no semaphore" || bad "FU-198 semaphore placement" "respond-retry is synchronized"
+# The caller edge, both halves: main's respond step must point at the wrapper, and the wrapper's
+# step at the leaf. Without the first the retry is gone; without the second the triage never runs.
+[ "$(yqw '.spec.templates[] | select(.name == "main") | .steps[][] | select(.name == "respond") | .template')" = respond-retry ] \
+  && ok "main's respond step calls the retry wrapper" || bad "FU-198 caller edge" "main's respond step does not call respond-retry"
+[ "$(yqw '.spec.templates[] | select(.name == "respond-retry") | .steps[][] | .template')" = respond ] \
+  && ok "…and the wrapper's step calls the respond leaf" || bad "FU-198 caller edge" "respond-retry does not call respond"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "FU-210 / FU-231 — the §A1 transcript + finding record"
