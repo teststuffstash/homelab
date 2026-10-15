@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agent-gateway/specs/endpoints/health.schema.json",
+  "$comment": "MACHINE half of the /healthz contract; the HUMAN half is health.md. The service imports this file for the response shape. No error codes: the process answers 200 or is not there.",
+  "x-endpoint": "health",
+  "x-use-cases": ["UC-1"],
+  "output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["ok", "db"],
+    "properties": {
+      "ok": { "const": true, "description": "the process is serving; a down process answers nothing", "x-requirements": ["GW-HEALTH"] },
+      "db": { "enum": ["pvc", "memory"], "description": "pvc = SQLite on /data/gateway.db; memory = the fail-open in-memory store (sessions do not survive a restart)", "x-requirements": ["GW-HEALTH"] }
+    },
+    "x-requirements": ["GW-HEALTH"]
+  },
+  "errors": {}
+}

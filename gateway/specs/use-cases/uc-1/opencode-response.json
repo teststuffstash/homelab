@@ -1,0 +1,28 @@
+{
+  "_comment": "UC-1 Q2 — the fake Go upstream's reply and what the pod, the session row and the metrics must show afterwards.",
+  "upstream_reply": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": {
+      "id": "chatcmpl-fake-0001",
+      "object": "chat.completion",
+      "model": "deepseek-v4-flash",
+      "choices": [
+        { "index": 0, "message": { "role": "assistant", "content": "Reading the recipe." }, "finish_reason": "stop" }
+      ],
+      "usage": { "prompt_tokens": 12, "completion_tokens": 7, "total_tokens": 19 }
+    }
+  },
+  "expected_response": {
+    "status": 200,
+    "body": "byte-identical to upstream_reply.body",
+    "headers_absent": ["Connection", "Transfer-Encoding"]
+  },
+  "expected_session_after": { "requests": 1, "tokens_in": 12, "tokens_out": 7 },
+  "expected_metrics": {
+    "gateway_requests_total{rail=\"opencode\",dialect=\"openai\",status=\"200\"}": 1,
+    "gateway_tokens_total{rail=\"opencode\",direction=\"in\"}": 12,
+    "gateway_tokens_total{rail=\"opencode\",direction=\"out\"}": 7,
+    "gateway_upstream_seconds_count{rail=\"opencode\"}": 1
+  }
+}

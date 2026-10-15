@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agent-gateway/specs/endpoints/openai-chat.schema.json",
+  "$comment": "MACHINE half of the /openai/v1/chat/completions + /openai/v1/models contract; the HUMAN half is openai-chat.md. The gateway inspects only what is declared here; the OpenAI Chat body is the vendor's and streams through byte-unchanged. `upstream` declares per rail the URL and credential header the fake upstream must receive. Cross-cutting requirement IDs here resolve to their one heading on anthropic-messages.md / sessions.md (rule 7).",
+  "x-endpoint": "openai-chat",
+  "x-use-cases": ["UC-1"],
+  "input": {
+    "type": "object",
+    "required": ["headers", "body"],
+    "properties": {
+      "headers": {
+        "type": "object",
+        "properties": {
+          "authorization": { "type": "string", "pattern": "^Bearer gws_[A-Za-z0-9_-]{32}$", "description": "the session token as a bearer — consulted first", "x-requirements": ["GW-CRED-BOUNDARY", "GW-SESSIONS-RELEASE"] },
+          "x-api-key": { "type": "string", "pattern": "^gws_[A-Za-z0-9_-]{32}$", "description": "the session token for SDKs that send x-api-key", "x-requirements": ["GW-CRED-BOUNDARY"] },
+          "x-opencode-session": { "type": "string", "description": "the Go rail's native session id — passthrough", "x-requirements": ["GW-RAIL-OPENCODE"] }
+        }
+      },
+      "body": {
+        "type": "object",
+        "description": "an OpenAI Chat Completions request; only `model` and `stream` are read",
+        "properties": {
+          "model": { "type": "string", "description": "must name the session's model as the harness spells it (the wire id); absent = filled", "x-requirements": ["GW-MODEL-RESOLVE"] },
+          "stream": { "type": "boolean", "default": false, "x-requirements": ["GW-RAIL-OPENROUTER", "GW-RAIL-OPENCODE"] }
+        }
+      }
+    }
+  },
+  "upstream": {
+    "$comment": "per rail: what the fake upstream must receive for POST chat/completions. Credential placeholders name the Secret key, never a value.",
+    "anthropic": {
+      "url": null,
+      "status": 501,
+      "error": "dialect-unsupported-on-rail",
+      "x-requirements": ["GW-RAIL-ANTHROPIC"]
+    },
+    "opencode": {
+      "url": "https://opencode.ai/zen/go/v1/chat/completions",
+      "auth": { "header": "Authorization", "value": "Bearer <OPENCODE_GO_API_KEY>" },
+      "x-requirements": ["GW-RAIL-OPENCODE", "GW-CRED-BOUNDARY", "GW-CRED-RESOLVE"]
+    },
+    "openrouter": {
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "auth": { "header": "Authorization", "value": "Bearer <OPENROUTER_API_KEY>" },
+      "x-requirements": ["GW-RAIL-OPENROUTER", "GW-CRED-BOUNDARY", "GW-CRED-RESOLVE"]
+    }
+  },
+  "models": {
+    "$comment": "GET /openai/v1/models — a passthrough on the rails that have one.",
+    "anthropic": { "url": null, "status": 501, "error": "dialect-unsupported-on-rail", "x-requirements": ["GW-RAIL-ANTHROPIC"] },
+    "opencode": { "url": "https://opencode.ai/zen/go/v1/models", "x-requirements": ["GW-RAIL-OPENCODE"] },
+    "openrouter": { "url": "https://openrouter.ai/api/v1/models", "x-requirements": ["GW-RAIL-OPENROUTER"] }
+  },
+  "output": {
+    "description": "the upstream response, status + headers (minus hop-by-hop) + body bytes, relayed unchanged; `retry-after` kept on 429",
+    "x-requirements": ["GW-RAIL-OPENROUTER", "GW-RAIL-OPENCODE"]
+  },
+  "error_envelope": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["error"],
+    "properties": {
+      "error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "description": "a key of this file's `errors`" },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "errors": {
+    "session-unknown": { "status": 401, "description": "no session token, or a token no row's hash matches", "x-requirements": ["GW-CRED-BOUNDARY"] },
+    "session-expired": { "status": 401, "description": "the session's expires_at has passed", "x-requirements": ["GW-SESSIONS-RELEASE", "GW-CRED-BOUNDARY"] },
+    "session-released": { "status": 401, "description": "the session was released by DELETE /sessions/{id}", "x-requirements": ["GW-SESSIONS-RELEASE", "GW-CRED-BOUNDARY"] },
+    "credential-unresolved": { "status": 401, "description": "the session's rail credential is a definitive miss", "x-requirements": ["GW-CRED-RESOLVE", "GW-CRED-BOUNDARY"] },
+    "credential-transient": { "status": 503, "description": "the kube API failed or was unreachable while resolving the session's credential; retry", "x-requirements": ["GW-CRED-RESOLVE", "GW-CRED-BOUNDARY"] },
+    "model-not-session": { "status": 403, "description": "the body's model is not the session's model", "x-requirements": ["GW-MODEL-RESOLVE"] },
+    "dialect-unsupported-on-rail": { "status": 501, "description": "the session's rail does not speak the openai dialect (the anthropic rail)", "x-requirements": ["GW-RAIL-ANTHROPIC"] },
+    "upstream-auth": { "status": 502, "description": "the upstream answered 401/403; the upstream body is never relayed", "x-requirements": ["GW-CRED-BOUNDARY", "GW-RAIL-OPENROUTER", "GW-RAIL-OPENCODE"] },
+    "upstream-timeout": { "status": 504, "description": "connect > 10 s or read > 600 s", "x-requirements": ["GW-RAIL-OPENROUTER", "GW-RAIL-OPENCODE"] }
+  }
+}

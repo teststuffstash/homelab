@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agent-gateway/specs/endpoints/anthropic-messages.schema.json",
+  "$comment": "MACHINE half of the /anthropic/v1/messages contract; the HUMAN half is anthropic-messages.md. The gateway inspects only the fields and headers declared here — the Anthropic Messages body is the vendor's and streams through byte-unchanged. `upstream` declares, per rail, the URL and the credential header the gateway must produce; tests assert it on the fake upstream. `x-requirements` couples each path to its requirement; scripts/spec_gate.py resolves an ID against every page under specs/ (cross-cutting requirements have one heading).",
+  "x-endpoint": "anthropic-messages",
+  "x-use-cases": ["UC-1"],
+  "input": {
+    "type": "object",
+    "required": ["headers", "body"],
+    "properties": {
+      "headers": {
+        "type": "object",
+        "properties": {
+          "authorization": { "type": "string", "pattern": "^Bearer gws_[A-Za-z0-9_-]{32}$", "description": "the session token as a bearer — consulted first", "x-requirements": ["GW-CRED-BOUNDARY", "GW-SESSIONS-RELEASE"] },
+          "x-api-key": { "type": "string", "pattern": "^gws_[A-Za-z0-9_-]{32}$", "description": "the session token for SDKs that send x-api-key", "x-requirements": ["GW-CRED-BOUNDARY"] },
+          "anthropic-beta": { "type": "string", "description": "comma-separated beta list; merged with oauth-2025-04-20 on the anthropic rail, dropped on the opencode rail", "x-requirements": ["GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE"] },
+          "anthropic-version": { "type": "string", "description": "passthrough" },
+          "x-opencode-session": { "type": "string", "description": "the Go rail's native session id — passthrough; supplied by the gateway when neither session header is present", "x-requirements": ["GW-RAIL-OPENCODE"] },
+          "x-claude-code-session-id": { "type": "string", "description": "claude-code's session id — passthrough; the Go rail accepts it alone", "x-requirements": ["GW-RAIL-OPENCODE"] }
+        }
+      },
+      "body": {
+        "type": "object",
+        "description": "an Anthropic Messages request; only `model` and `stream` are read",
+        "properties": {
+          "model": { "type": "string", "description": "must name the session's model (family match on the anthropic rail); absent = filled with the wire id", "x-requirements": ["GW-MODEL-RESOLVE"] },
+          "stream": { "type": "boolean", "default": false, "description": "a streamed response is relayed as its SSE bytes, unchanged", "x-requirements": ["GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE"] }
+        }
+      }
+    }
+  },
+  "upstream": {
+    "$comment": "per rail: what the fake upstream must receive. Credential placeholders name the Secret key, never a value.",
+    "anthropic": {
+      "url": "https://api.anthropic.com/v1/messages",
+      "auth": { "header": "Authorization", "value": "Bearer <AUTH_TOKEN>" },
+      "beta": "oauth-2025-04-20 merged into anthropic-beta",
+      "x-requirements": ["GW-RAIL-ANTHROPIC", "GW-CRED-BOUNDARY", "GW-CRED-RESOLVE"]
+    },
+    "opencode": {
+      "url": "https://opencode.ai/zen/go/v1/messages",
+      "auth": { "header": "x-api-key", "value": "<OPENCODE_GO_API_KEY>" },
+      "beta": "anthropic-beta dropped",
+      "session": "x-opencode-session | X-Claude-Code-Session-Id passthrough; gateway session id when neither",
+      "x-requirements": ["GW-RAIL-OPENCODE", "GW-CRED-BOUNDARY", "GW-CRED-RESOLVE"]
+    },
+    "openrouter": {
+      "url": "https://openrouter.ai/api/v1/messages",
+      "auth": { "header": "Authorization", "value": "Bearer <OPENROUTER_API_KEY>" },
+      "x-requirements": ["GW-RAIL-OPENROUTER", "GW-CRED-BOUNDARY", "GW-CRED-RESOLVE"]
+    }
+  },
+  "output": {
+    "description": "the upstream response, status + headers (minus hop-by-hop) + body bytes, relayed unchanged; `retry-after` kept on 429",
+    "x-requirements": ["GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE", "GW-RAIL-OPENROUTER"]
+  },
+  "error_envelope": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["error"],
+    "properties": {
+      "error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "description": "a key of this file's `errors`" },
+          "message": { "type": "string", "description": "one line, never a credential value and never an upstream auth body" }
+        }
+      }
+    }
+  },
+  "errors": {
+    "session-unknown": { "status": 401, "description": "no session token, or a token no row's hash matches", "x-requirements": ["GW-CRED-BOUNDARY"] },
+    "session-expired": { "status": 401, "description": "the session's expires_at has passed", "x-requirements": ["GW-SESSIONS-RELEASE", "GW-CRED-BOUNDARY"] },
+    "session-released": { "status": 401, "description": "the session was released by DELETE /sessions/{id}", "x-requirements": ["GW-SESSIONS-RELEASE", "GW-CRED-BOUNDARY"] },
+    "credential-unresolved": { "status": 401, "description": "the session's rail credential is a definitive miss (404/403/unlabeled/key absent)", "x-requirements": ["GW-CRED-RESOLVE", "GW-CRED-BOUNDARY"] },
+    "credential-transient": { "status": 503, "description": "the kube API failed or was unreachable while resolving the session's credential; retry", "x-requirements": ["GW-CRED-RESOLVE", "GW-CRED-BOUNDARY"] },
+    "model-not-session": { "status": 403, "description": "the body's model is not the session's model", "x-requirements": ["GW-MODEL-RESOLVE"] },
+    "dialect-unsupported-on-rail": { "status": 501, "description": "the session's rail does not speak this path's dialect (the subscription token is Anthropic-only)", "x-requirements": ["GW-RAIL-ANTHROPIC"] },
+    "upstream-auth": { "status": 502, "description": "the upstream answered 401/403 — the rail credential is bad; the upstream body is never relayed", "x-requirements": ["GW-CRED-BOUNDARY", "GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE"] },
+    "upstream-timeout": { "status": 504, "description": "connect > 10 s or read > 600 s", "x-requirements": ["GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE"] }
+  }
+}

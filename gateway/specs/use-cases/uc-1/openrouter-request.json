@@ -1,0 +1,37 @@
+{
+  "_comment": "UC-1 Q3 — the same worker admitted on the OpenRouter rail (opencode at 3/3), first data-plane call (openai dialect). World: policy-default · upstream-ok; the platform stack's openrouter_ref resolves to a labeled Secret with OPENROUTER_API_KEY.",
+  "admission": {
+    "request": { "stack": "platform", "role": "worker", "task": "homelab-2588-r2", "round": 2 },
+    "active_before": { "anthropic": 0, "opencode": 3, "openrouter": 0 },
+    "expected": { "decision": "dispatch", "rail": "openrouter", "harness": "opencode", "model": "deepseek/deepseek-v4-flash", "context_tokens": null }
+  },
+  "session": { "rail": "openrouter", "harness": "opencode", "model": "deepseek/deepseek-v4-flash" },
+  "inbound": {
+    "method": "POST",
+    "path": "/openai/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer gws_«the Q3 token»",
+      "Content-Type": "application/json",
+      "User-Agent": "opencode/1.18.21"
+    },
+    "body": {
+      "model": "deepseek/deepseek-v4-flash",
+      "messages": [
+        { "role": "user", "content": "Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: 2588." }
+      ],
+      "stream": false
+    }
+  },
+  "expected_upstream": {
+    "url": "https://openrouter.ai/api/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer «OPENROUTER_API_KEY of platform-agents/platform-openrouter»",
+      "Content-Type": "application/json",
+      "User-Agent": "opencode/1.18.21"
+    },
+    "headers_absent": ["x-api-key", "anthropic-beta"],
+    "body_model": "deepseek/deepseek-v4-flash",
+    "body_absent": ["provider"],
+    "body_otherwise": "identical to inbound.body"
+  }
+}

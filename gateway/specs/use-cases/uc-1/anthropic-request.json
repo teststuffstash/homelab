@@ -1,0 +1,47 @@
+{
+  "_comment": "UC-1 Q4 — the subscription rail through the anthropic dialect: a prober (claude harness, tier light → claude/haiku). The claude CLI resolves the alias to a dated id before the request leaves the pod (claude-haiku-4-5 is the id the old proxy's self-test uses on its anthropic leg); the gateway checks it by family and forwards the body untouched. World: policy-default · upstream-ok; platform-agents/claude-session is labeled and carries AUTH_TOKEN.",
+  "admission": {
+    "request": { "stack": "platform", "role": "prober", "task": "probe-platform", "round": 0 },
+    "expected": {
+      "decision": "dispatch", "rail": "anthropic", "harness": "claude", "model": "claude/haiku", "context_tokens": null,
+      "env": {
+        "ANTHROPIC_BASE_URL": "http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic",
+        "ANTHROPIC_AUTH_TOKEN": "gws_«the Q4 token»",
+        "ANTHROPIC_MODEL": "haiku"
+      }
+    }
+  },
+  "session": { "rail": "anthropic", "harness": "claude", "model": "claude/haiku" },
+  "inbound": {
+    "method": "POST",
+    "path": "/anthropic/v1/messages",
+    "headers": {
+      "Authorization": "Bearer gws_«the Q4 token»",
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "interleaved-thinking-2025-05-14",
+      "User-Agent": "claude-cli/2.1.281 (external, cli)",
+      "X-Claude-Code-Session-Id": "«claude-code's session uuid»"
+    },
+    "body": {
+      "model": "claude-haiku-4-5",
+      "max_tokens": 1024,
+      "messages": [ { "role": "user", "content": "Probe the live contract and report." } ],
+      "stream": false
+    }
+  },
+  "expected_upstream": {
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "Authorization": "Bearer «AUTH_TOKEN of platform-agents/claude-session»",
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "interleaved-thinking-2025-05-14,oauth-2025-04-20",
+      "User-Agent": "claude-cli/2.1.281 (external, cli)",
+      "X-Claude-Code-Session-Id": "«claude-code's session uuid»"
+    },
+    "headers_absent": ["x-api-key"],
+    "body_model": "claude-haiku-4-5",
+    "body_otherwise": "identical to inbound.body"
+  }
+}

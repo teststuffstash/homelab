@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agent-gateway/specs/endpoints/metrics.schema.json",
+  "$comment": "MACHINE half of the /metrics contract; the HUMAN half is metrics.md. This is not a JSON API: the document describes the metric families the service registers (it imports this file to do so) and the bounded value set of every label. A label or value absent here cannot be emitted. No error codes.",
+  "x-endpoint": "metrics",
+  "x-use-cases": ["UC-1"],
+  "$defs": {
+    "rail": { "enum": ["anthropic", "opencode", "openrouter", "none"] },
+    "role": { "enum": ["worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher"] },
+    "stack": { "type": "string", "description": "a key of policy.stacks" },
+    "decision": { "enum": ["dispatch", "defer"] },
+    "dialect": { "enum": ["anthropic", "openai"] },
+    "status": { "type": "string", "pattern": "^[1-5][0-9][0-9]$" },
+    "direction": { "enum": ["in", "out"] },
+    "outcome": { "enum": ["resolved", "definitive", "transient"] }
+  },
+  "families": {
+    "gateway_sessions_active": {
+      "type": "gauge",
+      "labels": { "rail": { "$ref": "#/$defs/rail" } },
+      "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT"]
+    },
+    "gateway_sessions_total": {
+      "type": "counter",
+      "labels": {
+        "rail": { "$ref": "#/$defs/rail" },
+        "role": { "$ref": "#/$defs/role" },
+        "stack": { "$ref": "#/$defs/stack" },
+        "decision": { "$ref": "#/$defs/decision" }
+      },
+      "x-requirements": ["GW-METRICS"]
+    },
+    "gateway_requests_total": {
+      "type": "counter",
+      "labels": {
+        "rail": { "$ref": "#/$defs/rail" },
+        "dialect": { "$ref": "#/$defs/dialect" },
+        "status": { "$ref": "#/$defs/status" }
+      },
+      "x-requirements": ["GW-METRICS"]
+    },
+    "gateway_upstream_seconds": {
+      "type": "histogram",
+      "labels": { "rail": { "$ref": "#/$defs/rail" } },
+      "x-requirements": ["GW-METRICS"]
+    },
+    "gateway_tokens_total": {
+      "type": "counter",
+      "labels": {
+        "rail": { "$ref": "#/$defs/rail" },
+        "direction": { "$ref": "#/$defs/direction" }
+      },
+      "x-requirements": ["GW-METRICS"]
+    },
+    "gateway_credential_resolve_total": {
+      "type": "counter",
+      "labels": {
+        "rail": { "$ref": "#/$defs/rail" },
+        "outcome": { "$ref": "#/$defs/outcome" }
+      },
+      "x-requirements": ["GW-METRICS", "GW-CRED-RESOLVE"]
+    }
+  },
+  "forbidden_labels": ["task", "session", "id", "model", "token"],
+  "errors": {}
+}
