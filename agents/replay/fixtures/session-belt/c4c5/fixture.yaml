@@ -31,6 +31,7 @@ requires:
 parts:
   - file:bridge.sh
   - block:session-belt
+  - block:strong-link-count
   - block:c4c5-selector
   - block:c4c5-derivations
   - file:post.sh

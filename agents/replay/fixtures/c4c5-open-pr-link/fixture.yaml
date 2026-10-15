@@ -1,0 +1,44 @@
+# c4c5-open-pr-link — the C4/C5 open-PR hold reads the ONE strong-link predicate (homelab#2562,
+# FU-204 ruling 2026-10-14; the homelab#1720 precedent).
+#
+# THE CONTRACT. `C4C5_SEL`'s open-PR test is `STRONG_LINK_JQ` — the same grammar `ghit`/`gref`
+# read (ADR-122 one-parser rule) — NOT a bare `#<n>` substring. A PR IMPLEMENTS issue #N iff its
+# body carries a verb keyword (`implements|closes|fixes|resolves #N`) or a line-anchored
+# `Issue: #N` trailer; anything else is a MENTION, and a mention is not live work.
+#
+# WHY THE ASYMMETRY DECIDES IT (the ruling). A false HOLD is an indefinite silent stall: fleet#345
+# r1 died on a model rate-limit, and assembly PR#346's coverage-map bare mention held the issue out
+# of BOTH the stall wake and the review flip — only a human re-tick recovered it. A false RELEASE
+# is at worst one wasted ride, and the launcher pre-flight already refuses a dispatch when the
+# issue has an open agent PR. So the predicate errs toward release, exactly as `gref` did after
+# homelab#1720.
+#
+# THE ROWS (the input axis is the open PR's body shape; the issue is the same abandoned ride in
+# every row — `agent/in-progress`, no live worker pod, no merged PR):
+#   bare-mention  the fleet#345 shape: an open PR that only NAMES `#100` (a coverage map). The
+#                 unit IS emitted. REDS ON BASE — the bare `#<n>` test held it.
+#   strong-link   `Implements #100`: still HELD (no unit, no report line). The negative control
+#                 that keeps the row above from being green for the wrong reason.
+#   trailer       the grammar's OTHER half: a line-anchored `Issue: #100` trailer is a strong link
+#                 too (the shape `finalize` writes), so it is HELD.
+#   no-pr         no open PR at all: the ordinary abandoned ride, emitted. The base world.
+#
+# WORLDS. One family-local `base` world (the abandoned ride, `pr-list-open.json` = `[]`); each row
+# patches its PR body onto it, so the delta a row earns is exactly the body shape under test.
+name: c4c5-open-pr-link
+mode: table
+source: agents/coordinator-scan.sh
+world: base
+# Its composition reaches `agents/issue_body.py` — the ONE body parser is Python (ADR-113),
+# so the interpreter is DECLARED rather than discovered as a mystery red (homelab#1460 leg 6;
+# the hermeticity contract, agents/replay/README.md cleanup-contract move 6).
+requires:
+  - python3
+parts:
+  - block:strong-link-count
+  - file:bridge.sh
+  - block:c4c5-selector
+  - block:c4c5-selector-run
+  - block:c4c5-derivations
+  - file:post.sh
+rows: rows.psv
