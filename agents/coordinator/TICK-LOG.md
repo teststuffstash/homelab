@@ -13516,3 +13516,30 @@ updates or reverts as much as possible — mechanical revert or a responder."
   template. All four stack recipes already carry AGENT_INFEASIBLE (the README banner was stale).
 - Operator direction: next priority = agent-gateway (opencode-go + codex, router as an island); the
   operator-decision bucket waits.
+
+## 2026-10-15 ~17:25–19:50Z — /design-agents "codeowner reads" (operator-typed; full corpus) (seat + 5 subagents)
+
+- Corpus loaded per the skill (FSM YAMLs + retros excluded). **Codeowner reads (ADR-110):** #2570 (#2178 Half 1 — the
+  workflow-pin revert couples to the FAILED workflow; checked every repo's workflow `name:`↔stem, only homelab's three
+  `*.reusable.yml` differ, fail-closed), #2573 + #2581 (FU-198 retry-on-wrapper / lock-on-leaf), #2574 (#2477 (b) hold),
+  #2580 (#2572 env unset), #2582 (FU-204 STRONG_LINK_JQ — every reader of the string-input signature checked), #2594
+  (FU-281 (c) hold; note: `sort_by(.createdAt)` on a REST payload is a stable no-op, correct by REST order), #2597
+  (P0), #2599 (infeasible park names the cleared latch). All merged.
+- **FU-198 proven + archived:** semaphore-1 toy + CONTROL in agent-coordinator (dedicated ConfigMap, deleted after):
+  wrapper/leaf → the sibling ran INSIDE the backoff; retry+lock on one template → it queued ~2 min behind it. Evidence on #2563.
+- **Operator rulings:** retro PRs merge on the bot review, read after (#2591 body); item 2 = option B (#2599); r8 F3 =
+  `add more credits` → key-retry, both classifiers (agent-runtime#176 + #2596; they had DISAGREED — finalize filed it
+  strike-shaped, the launcher residual); #2219 kept, status section #2595; meta-state design inputs re-ruled (drainage
+  stands, no ADR today; access inventory → P2 scope; three items dropped; the `requires:` FU not filed).
+- **agent-coordinator#27 landed operator-path** (admin merge, `45292680`) after the seat added a `Render-change:` body
+  line (the Composition sweep would otherwise red every deploy PR on xr-render). First sweep PR #2592 merged unattended;
+  ALL 19 agent-coordinator CronWorkflow refs + gc-mirrors on one tag (the per-stack loops jumped from 2026.8.7). #2566 released.
+- **P0 (#1935) needed no ruleset change:** `homelab-merge` already bypasses both live `goal/**` rulesets; #1934 was refreshed
+  by it post-approval. The 422 was the checkpoint's own token → brief subtraction #2597.
+- **Found + filed (inert):** #2588 — a worker PR whose CI ran during a master red stays red with no mover (live #2582,
+  19 h; seat `update-branch` un-stuck it); #2589 — S8 container finding entry 20 (bare cross-repo disposition rows),
+  bound under stint #1418, which is therefore NOT closable; #2600 — the responder harness's fixed /tmp paths race under
+  parallel subagents (two same-day sightings). #2564 closed done.
+- **Upstream outage, live:** OpenRouter `/generation` returns 404 for every lookup since ~17:59Z — project key AND the
+  router-account key, fresh completions included; 0 stored in 90 min. `OpenRouterGenerationHarvestMissing` (#2564) fired
+  on day one. Nothing to fix on our side; cost ledger undercounts for the window.
