@@ -142,6 +142,63 @@ mgmt_noroot_post() {   # <repo> <pr> <sha>
   fi
 }
 
+# ── the chain's revert arm (homelab#2561, FU-1990) ───────────────────────────────────────────
+# `workflow-pin-revert` / `tofu-image-revert` (agents/coordinator/deploy-revert-argo.yaml) open
+# their revert PRs from the SAME App as the worker, so a `git revert` of a pin-only workflow merge
+# reads here as a worker editing `.github/workflows/**` — this rule's own violation, on a PR the
+# chain is supposed to merge unattended (#2177, #2358: armed, reflex-APPROVED, structurally red).
+# The arm admits exactly the chain's shape and nothing else — the SAME predicate
+# scripts/governance-lint.sh applies, with the same (prefix, trailer, file set) triple:
+#   revert-wf-<sha8>   reverted-pins:    ^\.github/workflows/
+#   revert-img-<sha8>  reverted-images:  ^tofu/.*\.tf$
+#   - the head ref is `revert-<kind>-<sha8>` and the body carries the kind's line-anchored trailer;
+#   - EVERY changed file is one the chain reverts (the kind's file set);
+#   - <sha8> is a commit ON the default branch, and per file the head blob IS <sha8>^'s
+#     (byte-for-byte) with the default branch still at <sha8>'s — a revert RESTORES, it never
+#     invents, and it undoes the LATEST change, never an older state.
+# Every read fails CLOSED: a read we could not make is no exemption (the head stays red), and a
+# blob sha that is not 40-hex is a read we could not make (`null` must never compare equal).
+# ⚖ REACHABILITY, stated not hidden: only the wf row can fire here — this rule matches
+# `.github/workflows/` and `scripts/ci`, and `tofu/` is neither. The img row is the CHAIN's
+# predicate, kept so the arm stays right if the rule widens; a `revert-img-` head that smuggles a
+# CI-gate path is declined by the file set either way.
+# Sets RV_KIND/RV_SHA8 for the caller's log line. 0 = exempt, 1 = not the chain's shape.
+revert_arm_exempts() {   # <repo> <pr> <ref> <default-branch> <all changed files, one per line>
+  local repo="$1" pr="$2" ref="$3" def="$4" files="$5"
+  local meta rv_ref rv_body kind sha8 trailer files_re parent st f h w b n v
+  RV_KIND=""; RV_SHA8=""
+  [ -n "$def" ] && [ -n "$files" ] || return 1
+  meta="$(gh api "repos/${ORG}/${repo}/pulls/${pr}" 2>/dev/null)" || return 1
+  rv_ref="$(jq -r '.head.ref // ""' <<< "$meta" 2>/dev/null)" || return 1
+  rv_body="$(jq -r '.body // ""' <<< "$meta" 2>/dev/null)" || return 1
+  [[ "$rv_ref" =~ ^revert-(wf|img)-([0-9a-f]{8})$ ]] || return 1
+  kind="${BASH_REMATCH[1]}"; sha8="${BASH_REMATCH[2]}"
+  case "$kind" in
+    wf)  trailer='reverted-pins:';   files_re='^\.github/workflows/' ;;
+    img) trailer='reverted-images:'; files_re='^tofu/.*\.tf$' ;;
+  esac
+  grep -qE "^[[:space:]]*${trailer}" <<< "$rv_body" || return 1
+  grep -qvE "$files_re" <<< "$files" && return 1
+  # <sha8> must be a MERGED commit: its first parent readable, and <sha8> an ancestor of the
+  # default branch (compare's `behind`/`identical`; a branch-carried sha8 reads `ahead`/`diverged`).
+  parent="$(gh api "repos/${ORG}/${repo}/commits/${sha8}" --jq '.parents[0].sha' 2>/dev/null)" || return 1
+  grep -Eq '^[0-9a-f]{40}$' <<< "$parent" || return 1
+  st="$(gh api "repos/${ORG}/${repo}/compare/${def}...${sha8}" --jq '.status' 2>/dev/null)" || return 1
+  case "$st" in behind|identical) ;; *) return 1 ;; esac
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    h="$(gh api "repos/${ORG}/${repo}/contents/${f}?ref=${ref}"    --jq '.sha' 2>/dev/null)" || return 1
+    w="$(gh api "repos/${ORG}/${repo}/contents/${f}?ref=${parent}" --jq '.sha' 2>/dev/null)" || return 1
+    b="$(gh api "repos/${ORG}/${repo}/contents/${f}?ref=${sha8}"   --jq '.sha' 2>/dev/null)" || return 1
+    n="$(gh api "repos/${ORG}/${repo}/contents/${f}?ref=${def}"    --jq '.sha' 2>/dev/null)" || return 1
+    for v in "$h" "$w" "$b" "$n"; do grep -Eq '^[0-9a-f]{40}$' <<< "$v" || return 1; done
+    [ "$h" = "$w" ] || return 1
+    [ "$n" = "$b" ] || return 1
+  done <<< "$files"
+  RV_KIND="$kind"; RV_SHA8="$sha8"
+  return 0
+}
+
 # evaluate <repo> <ref/sha> <pr-number-or-'-'> <author-or-'-'> → violations counted in $VIOLATIONS
 evaluate() {
   repo="$1"; ref="$2"; pr="$3"; author="$4"
@@ -174,8 +231,11 @@ evaluate() {
   # ── path rule (worker-authored PRs only) ─────────────────────────────────────────────
   t0=$(now_ms)
   if [ "$pr" != "-" ] && [ "$author" = "$WORKER_AUTHOR" ]; then
-    touched="$(gh api "repos/${ORG}/${repo}/pulls/${pr}/files" --paginate \
-                 --jq '.[].filename' 2>/dev/null | grep -E '^\.github/workflows/|^scripts/ci' || true)"
+    # The UNFILTERED file list is read once: the #2412 filter below narrows `touched`, and the
+    # revert arm needs every changed file (a revert that smuggles a file outside the chain's shape
+    # is not the chain's revert). Same single API call as before.
+    all_files="$(gh api "repos/${ORG}/${repo}/pulls/${pr}/files" --paginate --jq '.[].filename' 2>/dev/null || true)"
+    touched="$(printf '%s\n' "$all_files" | grep -E '^\.github/workflows/|^scripts/ci' || true)"
     if [ -n "$touched" ]; then
       # homelab#2412 — a master-sync PR into a goal/** base forks from the goal tip, so its diff
       # against that base IS master's content: master's own CI-gate edits were attributed to the
@@ -202,6 +262,14 @@ evaluate() {
         done
         touched="$(printf '%s' "$own" | grep . || true)"
       fi
+    fi
+    # ── the chain's revert arm (homelab#2561) ─────────────────────────────────────────────
+    # A `revert-wf-<sha8>` head whose every changed file is restored byte-for-byte to <sha8>^ is
+    # the FU-1990 chain's own revert, not a worker edit — the exemption the arm's header defines.
+    # Fail-closed: any read the arm could not make leaves `touched` alone (the head stays red).
+    if [ -n "$touched" ] && revert_arm_exempts "$repo" "$pr" "$ref" "$def" "$all_files"; then
+      log "[$repo#$pr] path-rule: revert-${RV_KIND}-${RV_SHA8} — the chain's own revert (every changed file restored byte-for-byte to ${RV_SHA8}^, ${RV_KIND} trailer present); the CI-gate touch is not a worker edit (homelab#2561)"
+      touched=""
     fi
     if [ -n "$touched" ]; then
       VIOLATIONS=$((VIOLATIONS + 1))

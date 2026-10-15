@@ -450,7 +450,7 @@ spec:
               git add docs/agents/retros/
               git diff --cached --quiet || git commit -m "retros: ${STACK} ${RUN} — $N report(s) from the scheduled retro (FU-058)"
               # >>>REPLAY:retro-harvest-push>>>
-              PR_BODY="FU-058 scheduled retro output — HUMAN-GATED, read before merging. Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}"
+              PR_BODY="FU-058 scheduled retro output — merges on the bot review; the operator reads it after merge (operator ruling 2026-10-15). Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}"
               if [ -z "$OPEN_PR" ] && [ -n "$MERGED_PR" ] && git diff --quiet origin/master HEAD -- docs/agents/retros/; then
                 REPORT_PR="$MERGED_PR"
               else

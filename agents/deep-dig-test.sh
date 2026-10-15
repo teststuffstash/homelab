@@ -13,9 +13,13 @@ set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SEL="$REPO/agents/deep-dig-select.sh"
+# The manifest this harness also pins structurally (FU-198): the retry must not hold the
+# subscription semaphore. Read with yq, the way responder-behaviour-test.sh reads its own.
+YAML="${YAML:-$REPO/agents/coordinator/deep-dig-argo.yaml}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 BIN="$TMP/bin"; mkdir -p "$BIN"
 command -v jq >/dev/null 2>&1 || { echo "deep-dig-test: needs jq (devbox run -- bash $0)"; exit 2; }
+command -v yq >/dev/null 2>&1 || { echo "deep-dig-test: needs yq (devbox run -- bash $0)"; exit 2; }
 
 PASS=0; FAIL=0; FAILED=()
 ok()  { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
@@ -374,6 +378,42 @@ scenario harvest-none
 printf 'the session died before its first turn\n' > "$H/dig.log"
 bash "$SEL" harvest "$H/dig.log" "$H/findings" > "$H/h.out" 2>&1; RC=$?
 [ "$RC" -ne 0 ] && ok "no block at all → non-zero (the workflow log says the transcript is the only record)" || bad "harvest none rc" "rc=$RC"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-198 — the retry must not hold the subscription semaphore"
+# The `dig` retry exists to wait out a latched rail — i.e. to wait for CAPACITY — so a backoff that
+# holds a slot is the defect (the same class #2563 fixes for `respond`; here the lock sat one level
+# up, on `workflowSpec.synchronization`, and was held through every backoff). Whether Argo releases
+# a template-level lock during a backoff was asserted, not observed, so the release is made
+# STRUCTURAL: the retry lives on a wrapper steps template, the semaphore on the leaf it calls, and
+# every attempt is a fresh node that acquires and releases. These assertions are the invariant —
+# putting `retryStrategy` back on the synchronized template, moving the semaphore up onto the
+# wrapper, or back to the workflow, reds here.
+CW='select(.kind == "CronWorkflow")'
+# yq prints a `---` separator for each non-matching document; drop them.
+yqw() { yq -r "$CW | $1" "$YAML" | grep -v -e '^---$' -e '^$'; }
+[ "$(yqw '.spec.workflowSpec.synchronization // "none"')" = none ] \
+  && ok "no WORKFLOW-level semaphore (it would be held through every retry backoff)" || bad "FU-198 semaphore placement" "workflowSpec.synchronization is set"
+_sync="$(yqw '.spec.workflowSpec.templates[] | select(.synchronization != null) | .name')"
+[ "$_sync" = dig ] \
+  && ok "exactly one template is synchronized, and it is the dig leaf" || bad "FU-198 semaphore placement" "synchronized templates: '$_sync'"
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.synchronization != null) | .synchronization.semaphores[0].configMapKeyRef.name')" = subscription-capacity ] \
+  && ok "…and it is the subscription-capacity semaphore" || bad "FU-198 semaphore placement" "the synchronized template does not take subscription-capacity"
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.synchronization != null) | .retryStrategy // "none"')" = none ] \
+  && ok "the template holding the semaphore carries NO retryStrategy (no backoff can hold a slot)" || bad "FU-198 retry placement" "the synchronized template still carries a retryStrategy"
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-retry") | .retryStrategy.limit')" = 3 ] \
+  && ok "the retry lives on the dig-retry wrapper (limit 3)" || bad "FU-198 retry placement" "dig-retry has no retryStrategy"
+_retry_backoff="$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-retry") | .retryStrategy.backoff | [.duration, .factor] | join("x")')"
+[ "$_retry_backoff" = "30mx2" ] \
+  && ok "…with the original backoff preserved (30m, factor 2)" || bad "FU-198 retry placement" "backoff=$_retry_backoff"
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-retry") | .synchronization // "none"')" = none ] \
+  && ok "…and the wrapper itself takes no semaphore" || bad "FU-198 semaphore placement" "dig-retry is synchronized"
+# The caller edge, both halves: the entrypoint must be the wrapper, and the wrapper's step the leaf.
+# Without the first the retry is gone; without the second the dig never runs.
+[ "$(yqw '.spec.workflowSpec.entrypoint')" = dig-retry ] \
+  && ok "the entrypoint is the retry wrapper" || bad "FU-198 caller edge" "entrypoint=$(yqw '.spec.workflowSpec.entrypoint')"
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-retry") | .steps[][] | .template')" = dig ] \
+  && ok "…and the wrapper's step calls the dig leaf" || bad "FU-198 caller edge" "dig-retry does not call dig"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
