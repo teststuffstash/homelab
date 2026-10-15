@@ -181,10 +181,12 @@ metadata:
 spec:
   entrypoint: main
   serviceAccountName: agent-coordinator
-  # The subscription semaphore (FU-088 Argo layer) sits on the `respond` TEMPLATE, not here: the
-  # declared-window GRACE below must defer WITHOUT holding a slot (FU-230, operator ruling
-  # 2026-10-09). A workflow-level lock is taken before the first pod and held through every retry
-  # backoff, so a ten-minute grace would have parked one of the pool's slots on a sleeping alert.
+  # The subscription semaphore (FU-088 Argo layer) sits on the `respond` LEAF template — not here,
+  # and not on the `respond-retry` wrapper that calls it. Two waits must defer WITHOUT holding a
+  # slot: the declared-window GRACE (FU-230, operator ruling 2026-10-09) and the FU-113(b) retry
+  # backoff (FU-198 ruling, 2026-10-14). A workflow-level lock is taken before the first pod and
+  # held through every retry backoff, so a ten-minute grace — or a 15m→2h retry — would have parked
+  # one of the pool's slots on a sleeping alert.
   # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate (coordinate-argo.yaml — was `coordinate`, ADR-120)
   # (coordinate-argo.yaml). Verbatim copy; keep in sync.
   # homelab#867 soft Longhorn-disk de-preference — same rationale.
@@ -220,7 +222,7 @@ spec:
             template: window-grace
             arguments: { parameters: [ { name: payload, value: "{{workflow.parameters.payload}}" } ] }
         - - name: respond
-            template: respond
+            template: respond-retry
             arguments: { parameters: [ { name: payload, value: "{{workflow.parameters.payload}}" } ] }
     # ── THE DECLARED-WINDOW GRACE (FU-230, operator ruling 2026-10-09) ──────────────────────────
     # A declared window (agents/seat-window.sh) used to SKIP the triage of every alert it named —
@@ -292,6 +294,31 @@ spec:
         resources:
           requests: { cpu: "10m", memory: "32Mi" }
           limits: { memory: "128Mi" }
+    # ── THE RETRY WRAPPER (FU-198 ruling, operator-approved design-agents sitting 2026-10-14) ────
+    # The FU-113(b) retry — the one that waits out the FU-088 latch, i.e. waits for CAPACITY — lives
+    # HERE, on a steps template that holds NO semaphore, and NOT on the `respond` leaf that does.
+    # Whether Argo releases a template-level lock during a retry backoff was asserted, not observed:
+    # 2026-10-09 01:50–04:50Z five `respond-*` in backoff held all five slots (`ArgoLockPlaneWedged`,
+    # `argo stop` ×5), and 6 tries at 15m doubling is ≈16 h of potential hold. With the retry on the
+    # wrapper, every attempt is a FRESH inner node that acquires and releases the semaphore, so no
+    # backoff can hold a slot — the release is STRUCTURAL, not a property of Argo's retry semantics.
+    # Same split the `window-grace` step already uses: retry on the step's own template, no lock.
+    - name: respond-retry
+      inputs:
+        parameters:
+          - { name: payload }
+      steps:
+        - - name: triage
+            template: respond
+            arguments: { parameters: [ { name: payload, value: "{{inputs.parameters.payload}}" } ] }
+      # FU-113(b): the responder must not trust the alert edge to refire — a latch-deferred triage
+      # EXITS 1 and Argo re-runs the leaf below with backoff (15m→2h, 6 tries ≈ the FU-088 window).
+      # The 24h fp ledger + deferred-markers keep retries idempotent; retries exhausted = a Failed
+      # workflow, visible in Argo + the crosscheck belt.
+      retryStrategy:
+        limit: "6"
+        retryPolicy: OnFailure
+        backoff: { duration: "15m", factor: "2" }
     - name: respond
       inputs:
         parameters:
@@ -300,17 +327,12 @@ spec:
         labels: { app: respond-workflow }
       # Queue behind the shared subscription pool like review/coordinate workflows (FU-088 Argo
       # layer) — held from here on, AFTER the grace step above (template-level, see spec comment).
+      # NO retryStrategy on this template (FU-198 ruling): the retry lives on the `respond-retry`
+      # wrapper that calls it, so a backoff can never hold this lock — each attempt is its own node
+      # that acquires and releases it.
       synchronization:
         semaphores:
           - configMapKeyRef: { name: subscription-capacity, key: claude }
-      # FU-113(b): the responder must not trust the alert edge to refire — a latch-deferred
-      # triage EXITS 1 and Argo re-runs it here with backoff (15m→2h, 6 tries ≈ the FU-088
-      # window). The 24h fp ledger + deferred-markers keep retries idempotent; retries
-      # exhausted = a Failed workflow, visible in Argo + the crosscheck belt.
-      retryStrategy:
-        limit: "6"
-        retryPolicy: OnFailure
-        backoff: { duration: "15m", factor: "2" }
       container:
         image: ghcr.io/teststuffstash/agent-coordinator
         env:
