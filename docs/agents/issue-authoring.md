@@ -596,17 +596,19 @@ branch pattern is only real if the workflow producing it TRIGGERS on that patter
 requiring `ci` on `goal/**` while the workflow said `branches: [master]` left an approved,
 armed PR permanently BLOCKED on a check that could never report.
 
-**The theme's master-refresh hop (S8 #1423, 2026-09-08).** A theme's assembly PR
-`goal/<goal-n>-<slug> → master` is an ORDINARY armed PR, not the draft above — so the in-cluster
-updater does bring it current, but only once it is MERGE-READY (bot-approved at head; the
-updater skips a human-waiting park by design, homelab#1452 / #887). Before that point a master
-fix the theme's children need is pulled into the branch by the same call as the Goal's top hop,
-`gh api -X PUT repos/<slug>/pulls/<assembly-pr>/update-branch` — owned by the checkpoint's
-**"assemble a complete theme" step at PR-open, before arming**
-([`../../agents/coordinator/README.md`](../../agents/coordinator/README.md) §The
-`goal-checkpoint` clause), and by the seat if a child needs it earlier (a PR does not exist
-before assembly, so the pre-assembly form is a plain `git merge master` push to the theme
-branch — protected base, so it is the seat's act, not a worker's). The children `fix →
+**The theme's master-refresh hop (S8 #1423, 2026-09-08; owner corrected by #1935).** A theme's
+assembly PR `goal/<goal-n>-<slug> → master` is an ORDINARY armed PR, not the draft above — so its
+top hop is NOT manual: the in-cluster updater brings it current once it is MERGE-READY (approved
+at head — for a codeowner-parked assembly, after the codeowner's approval; homelab#1452), and its
+`homelab-merge` App is a bypass actor on both `goal/**` rulesets
+([`tofu/github/repo_rulesets.tf`](../../tofu/github/repo_rulesets.tf)), so the update-branch
+merge lands on the protected theme branch (an update-branch merge does not dismiss the approval —
+[merge-path.md](merge-path.md) §Why update-before-review). Proof: assembly PR #1934 took a
+master merge from `homelab-merge[bot]` after approval and merged 17 minutes later. The
+goal-checkpoint never refreshes the branch itself — its token is not a bypass actor, by design,
+so its own `update-branch` call 422s (#1935). Before assembly no PR exists, so a master fix a
+child needs earlier is a plain `git merge master` push to the theme branch — protected base, so
+it is the seat's act, not a worker's. The children `fix →
 goal/<goal-n>-<slug>` ride the updater like any PR.
 
 ## Dependencies: native `blockedBy` is the only reader (FU-111 — retired the body line 2026-08-07)
