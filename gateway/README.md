@@ -25,7 +25,7 @@ three **rails** — `anthropic` (the operator's Claude subscription OAuth token)
 | `GET /metrics` (`GW-METRICS`), `GET /healthz` (`GW-HEALTH`) | [`specs/endpoints/metrics.md`](specs/endpoints/metrics.md), [`specs/endpoints/health.md`](specs/endpoints/health.md) |
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
-| Evidence (rendered per requirement from the last green CI) | [`specs/evidence/`](specs/evidence/) |
+| Evidence (rendered per requirement by `devbox run ci`; gitignored, read it in the CI job summary) | `specs/evidence/` |
 
 ## Run
 
@@ -64,7 +64,10 @@ The test policy `tests/fixtures/policy-default.json` must stay **byte-identical*
 `specs/worlds/policy-default.json` (the gate checks it when both exist). Model ids live only in
 policy files — never in code (`GW-MODEL-RESOLVE`): the policy carries `model-classes.json`'s
 spelling (`claude/<alias>`, `opencode-go/<id>`, bare openrouter ids) and the gateway derives
-the wire id by stripping the rail prefix.
+the wire id by stripping the rail prefix. The deployed ConfigMap
+(`argocd/resources/agent-gateway/configmap-policy.yaml`) carries the same shape; a
+`GW-MODEL-RESOLVE` row loads it through the same loader and checks its ids against
+`model-classes.json`.
 
 ## Implementation notes the specs do not state
 
@@ -72,9 +75,5 @@ the wire id by stripping the rail prefix.
   OpenRouter-shaped alias): goose computes `$OPENROUTER_HOST/api/v1/…` and opencode's provider
   baseURL is `<host>/api/v1` today (`agents/agent-session.sh`), so the alias is what those
   harnesses reach if a launcher keeps today's wiring. One handler set, two prefixes.
-- Two error codes the schemas do not list yet: 502 `upstream-unreachable` (a connect error that
-  is not a timeout) and 502 `header-refused` (a credential-shaped value in a header the gateway
-  does not own — the old proxy's FU-251 tripwire). Both have rows; the schema `errors` need the
-  keys added (seat/specs reviewer).
 - The `upstream-slow` world is clock-faked (the fake transport raises `ReadTimeout`), so the
   `upstream-timeout` rows prove the 504 mapping, not the 600 s budget itself (specs: `🚧 WIP`).

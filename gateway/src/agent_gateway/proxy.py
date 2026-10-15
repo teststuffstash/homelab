@@ -6,9 +6,9 @@ on the anthropic rail the body is forwarded untouched after a family match) → 
 the credential → stream the upstream bytes back unchanged (SSE included) → record usage.
 Typed errors (specs/endpoints/*.schema.json `errors`): 401 session-unknown / -expired /
 -released / credential-unresolved, 403 model-not-session, 501 dialect-unsupported-on-rail,
-503 credential-transient, 502 upstream-auth, 504 upstream-timeout — plus two the schemas do not
-list yet: 502 upstream-unreachable (connect error) and 502 header-refused (the credential-shaped
-header tripwire). Upstream 429 passes through with `retry-after`.
+503 credential-transient, 502 upstream-auth, 502 upstream-unreachable (a connect failure that is
+not a timeout), 502 header-refused (the credential-shaped header tripwire), 504 upstream-timeout.
+Upstream 429 passes through with `retry-after`.
 """
 
 from __future__ import annotations
@@ -114,7 +114,9 @@ class Proxy:
             if asked is None:
                 doc["model"] = wire
                 body = json.dumps(doc, separators=(",", ":")).encode()
-            elif not isinstance(asked, str) or not model_matches(row.rail, row.model, asked):
+            elif not isinstance(asked, str) or not model_matches(
+                row.rail, row.model, asked, self.sessions.policy.rails[row.rail].side_models
+            ):
                 log.warning("model-not-session: session=%s asked=%s session_model=%s", row.id, asked, row.model)
                 self.metrics.request(row.rail, dialect, 403)
                 return error(403, "model-not-session", f"this session rides {row.model}")
@@ -157,7 +159,9 @@ class Proxy:
             log.warning("upstream-timeout %s session=%s: %s", row.rail, row.id, type(e).__name__)
             return error(504, "upstream-timeout", f"rail {row.rail} upstream: {type(e).__name__}")
         except httpx.HTTPError as e:
-            self.metrics.request(row.rail, dialect, 502, time.monotonic() - t0)
+            elapsed = time.monotonic() - t0
+            self.metrics.request(row.rail, dialect, 502, elapsed)
+            self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), 0, 0)
             log.warning("upstream-unreachable %s session=%s: %s", row.rail, row.id, type(e).__name__)
             return error(502, "upstream-unreachable", f"rail {row.rail} upstream: {type(e).__name__}")
         status = resp.status_code

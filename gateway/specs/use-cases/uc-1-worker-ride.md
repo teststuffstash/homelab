@@ -55,7 +55,7 @@ resolvable; upstream behaviour `upstream-ok` unless the pair says otherwise.
 | Stage | Input | Expected output | Requirements |
 |---|---|---|---|
 | ① admit | [`uc-1/request.json`](uc-1/request.json) | [`uc-1/expected-response.json`](uc-1/expected-response.json) | GW-SESSIONS-ADMIT, GW-SESSIONS-ENV, GW-SESSIONS-TOKEN, GW-CRED-RESOLVE |
-| ③ data plane, Go rail (the ride's own) | [`uc-1/opencode-request.json`](uc-1/opencode-request.json) | [`uc-1/opencode-response.json`](uc-1/opencode-response.json) | GW-RAIL-OPENCODE, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
+| ③ data plane, [Go rail](../../../docs/agents/chainless-redesign.md) (the ride's own) | [`uc-1/opencode-request.json`](uc-1/opencode-request.json) | [`uc-1/opencode-response.json`](uc-1/opencode-response.json) | GW-RAIL-OPENCODE, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
 | ③ data plane, OpenRouter rail (the same worker when Go is full) | [`uc-1/openrouter-request.json`](uc-1/openrouter-request.json) | [`uc-1/openrouter-response.json`](uc-1/openrouter-response.json) | GW-RAIL-OPENROUTER, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
 | ③ data plane, subscription rail (a prober's claude harness, for the anthropic dialect) | [`uc-1/anthropic-request.json`](uc-1/anthropic-request.json) | [`uc-1/anthropic-response.json`](uc-1/anthropic-response.json) | GW-RAIL-ANTHROPIC, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
 | ④ release | `DELETE /sessions/«id»` | [`uc-1/release-response.json`](uc-1/release-response.json) | GW-SESSIONS-RELEASE |

@@ -22,8 +22,8 @@
 
 | description | model (policy) | context_tokens |
 |---|---|---|
-| a declared window is echoed | opencode-go/deepseek-v4-flash | 1000000 |
-| an undeclared window is null, never a default | claude/sonnet | null |
+| a declared `context_tokens` is echoed | opencode-go/deepseek-v4-flash | 1000000 |
+| an undeclared `context_tokens` is null, never a default | claude/sonnet | null |
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ async def test_codex_is_a_gap(gw):
     assert r.status_code == 400 and err(r) == "harness-rail-mismatch"
 
 
-CTX_ROWS = [("a declared window is echoed", OPENCODE, 1000000), ("an undeclared window is null, never a default", CLAUDE, None)]
+CTX_ROWS = [("a declared `context_tokens` is echoed", OPENCODE, 1000000), ("an undeclared `context_tokens` is null, never a default", CLAUDE, None)]
 
 
 @pytest.mark.parametrize(("body", "ctx"), [r[1:] for r in CTX_ROWS], ids=[r[0] for r in CTX_ROWS])

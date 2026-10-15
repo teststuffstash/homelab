@@ -24,11 +24,11 @@ Messages body itself is the vendor's — the gateway validates only what it read
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-RAIL-ANTHROPIC](#gw-rail-anthropic) | `upstream.anthropic` (URL, auth, `anthropic-beta`) | `upstream-auth`, `upstream-timeout` | v0 |
-| [GW-RAIL-OPENCODE](#gw-rail-opencode) | `upstream.opencode` (URL, auth, session headers), `input.headers.x-opencode-session`, `input.headers.x-claude-code-session-id` | `upstream-auth`, `upstream-timeout` | v0; `upstream-timeout` rows `🚧 WIP` (the `upstream-slow` world is clock-faked only) |
+| [GW-RAIL-ANTHROPIC](#gw-rail-anthropic) | `upstream.anthropic` (URL, auth, `anthropic-beta`) | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 |
+| [GW-RAIL-OPENCODE](#gw-rail-opencode) | `upstream.opencode` (URL, auth, session headers), `input.headers.x-opencode-session`, `input.headers.x-claude-code-session-id` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0; `upstream-timeout` rows `🚧 WIP` (the `upstream-slow` world is clock-faked only) |
 | [GW-MODEL-RESOLVE](#gw-model-resolve) | `input.body.model` | `model-not-session` | v0 — provider pins / `:exacto` / the ADR-096 ladder `⚑ gap` (rows below) |
-| [GW-CRED-BOUNDARY](#gw-cred-boundary) | `input.headers.authorization`, `input.headers.x-api-key`, `upstream.*.auth` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth` | v0 |
-| [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned on openai-chat.md) | `upstream.openrouter` | `upstream-auth` | linked — the anthropic-dialect cell is a verified row there |
+| [GW-CRED-BOUNDARY](#gw-cred-boundary) | `input.headers.authorization`, `input.headers.x-api-key`, `upstream.*.auth` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `header-refused` | v0 |
+| [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned on openai-chat.md) | `upstream.openrouter` | `upstream-auth`, `upstream-unreachable` | linked — the anthropic-dialect cell is a verified row there |
 | [GW-SESSIONS-RELEASE](sessions.md#gw-sessions-release) (owned on sessions.md) | `input.headers.authorization` | `session-expired`, `session-released` | linked |
 | [GW-CRED-RESOLVE](sessions.md#gw-cred-resolve) (owned on sessions.md) | `upstream.*.auth` | `credential-unresolved`, `credential-transient` | linked |
 
@@ -48,7 +48,10 @@ gateway **adds** `anthropic-beta: oauth-2025-04-20`, merged with any inbound bet
 proxy's `OAUTH_BETA` precedent). The rail speaks the anthropic dialect only: an openai-dialect
 request on a session pinned here is 501 `dialect-unsupported-on-rail`, and so is the models
 list. Upstream 429 passes through with its `retry-after`; upstream 401/403 is 502
-`upstream-auth` with no upstream body; timeouts are connect 10 s / read 600 s.
+`upstream-auth` with no upstream body; timeouts are connect 10 s / read 600 s (504
+`upstream-timeout`); a connection that fails for any other reason — refused, DNS, TLS, reset —
+is 502 `upstream-unreachable` (nothing reached the vendor; the row counts, so a dead upstream
+is visible on the session and in `gateway_requests_total{status="502"}`).
 
 | description | inbound header || upstream header |
 |---|---||---|
@@ -69,6 +72,7 @@ list. Upstream 429 passes through with its `retry-after`; upstream 401/403 is 50
 | "an upstream auth failure is typed and hidden" | `POST /anthropic/v1/messages` | upstream-401 || 502 | `upstream-auth` envelope — not the upstream body | `requests` +1 |
 | "the openai dialect is not served on the subscription" | `POST /openai/v1/chat/completions` | (no upstream call) || 501 | `dialect-unsupported-on-rail` | nothing |
 | "the models list is not served on the subscription" | `GET /openai/v1/models` | (no upstream call) || 501 | `dialect-unsupported-on-rail` | nothing |
+| "an unreachable upstream is typed" | `POST /anthropic/v1/messages` | upstream-down || 502 | `upstream-unreachable` envelope | `requests` +1 |
 | "🚧 WIP: a read past 600 s" | `POST /anthropic/v1/messages` | upstream-slow || 504 | `upstream-timeout` | `requests` +1 |
 
 <details><summary>Evidence</summary>
@@ -115,6 +119,7 @@ policy id with `opencode-go/` removed ([GW-MODEL-RESOLVE](#gw-model-resolve)).
 | "a rate limit passes through" | `POST /anthropic/v1/messages` | upstream-429 || `…/messages` | 429 | the upstream body, `retry-after` kept |
 | "an upstream auth failure is typed and hidden" | `POST /openai/v1/chat/completions` | upstream-401 || `…/chat/completions` | 502 | `upstream-auth` envelope |
 | "the vendor's MissingSessionID is passed through, not masked ⚖" | `POST /anthropic/v1/messages` (fake rejects the supplied id as absent) | 400 `MissingSessionID` || `…/messages` | 400 | the upstream body |
+| "an unreachable upstream is typed" | `POST /anthropic/v1/messages` | upstream-down || `…/messages` | 502 | `upstream-unreachable` envelope |
 | "🚧 WIP: a read past 600 s" | `POST /anthropic/v1/messages` | upstream-slow || `…/messages` | 504 | `upstream-timeout` |
 
 <details><summary>Evidence</summary>
@@ -135,8 +140,13 @@ openrouter id is already bare. ⚖ On the `anthropic` rail the policy names an a
 (`claude/sonnet`, as `model-classes.json` spells it) that the claude CLI resolves to a dated id
 before the request leaves the pod, so the check there is by **family** (the alias name is a
 prefix-family of the dated id: `sonnet` ⊂ `claude-sonnet-4-6`) and the body is forwarded
-**untouched** — the old proxy's own self-test pins "anthropic leg: model untouched". An absent
-`model` is filled with the wire id. The ADR-096 ladder — classes, label tiers, strikes,
+**untouched** — the old proxy's own self-test pins "anthropic leg: model untouched". ⚖ A rail
+may declare `side_models` in policy — the families a harness's own side-calls name regardless
+of the session's model: claude-code makes small calls on the haiku family
+(`ANTHROPIC_SMALL_FAST_MODEL`'s default) under a sonnet session, so the anthropic rail admits
+the session's family **and** `claude/haiku` (seat ruling, 2026-10-16); the key lives in policy
+because no model id lives in code, and a rail that declares none (the Go rail today) keeps the
+exact check. An absent `model` is filled with the wire id. The ADR-096 ladder — classes, label tiers, strikes,
 cooldowns, provider pins, the `:exacto` suffix — is a gap, rendered below.
 
 | description | session model (policy) | rail | body `model` || verdict | upstream body `model` |
@@ -147,10 +157,20 @@ cooldowns, provider pins, the `:exacto` suffix — is a gap, rendered below.
 | "a different model is refused" | opencode-go/deepseek-v4-flash | opencode | `claude-sonnet-4-6` || 403 model-not-session | — |
 | "the policy spelling is not the wire spelling" | opencode-go/deepseek-v4-flash | opencode | `opencode-go/deepseek-v4-flash` || 403 model-not-session ⚖ | — |
 | "an anthropic alias matches its family ⚖" | claude/haiku | anthropic | `claude-haiku-4-5` || forwarded | `claude-haiku-4-5` (untouched) |
-| "an anthropic alias refuses another family" | claude/sonnet | anthropic | `claude-haiku-4-5` || 403 model-not-session | — |
+| "an anthropic alias refuses another family" | claude/sonnet | anthropic | `claude-opus-4-1` || 403 model-not-session | — |
 | "a bare alias in the body matches ⚖" | claude/sonnet | anthropic | `sonnet` || forwarded | `sonnet` (untouched) |
+| "a claude-code haiku side-call under a sonnet session is admitted ⚖" | claude/sonnet | anthropic | `claude-haiku-4-5` || forwarded | `claude-haiku-4-5` (untouched) |
+| "a bare haiku side-call under a sonnet session is admitted ⚖" | claude/sonnet | anthropic | `haiku` || forwarded | `haiku` (untouched) |
+| "a side-call family is policy, not code: the Go rail declares none" | opencode-go/claude-sonnet-4-6 | opencode | `claude-haiku-4-5` || 403 model-not-session | — |
 | "a Go-rail claude id is exact, not family" | opencode-go/claude-sonnet-4-6 | opencode | `claude-sonnet-4-6` || forwarded | `claude-sonnet-4-6` |
 | "a Go-rail claude id refuses a dated sibling" | opencode-go/claude-sonnet-4-6 | opencode | `claude-sonnet-4-5` || 403 model-not-session | — |
+
+| description | policy document || verdict |
+|---|---||---|
+| "the dispatch answer names the policy id for (rail, tier)" | `policy-default` || `model` = `rails.<rail>.models.<tier>` for every role |
+| "no model id from the policy appears in src/" | `policy-default` || grep finds none |
+| "the anthropic body is forwarded byte-untouched" | `policy-default` || upstream body == inbound body |
+| "the deployed policy loads under the island's loader, in model-classes.json's spelling" | `argocd/resources/agent-gateway/configmap-policy.yaml` (skipped when absent) || loads; same rails and roles as `policy-default`; every model and side-model id is a `models.*.ids` value of `model-classes.json`; opencode `max_sessions` = its `rails.opencode-go.concurrency` |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
@@ -176,6 +196,10 @@ upstream; the upstream credential is injected from the session's rail
 unknown, expired or released token is a typed 401; a resolvable session whose credential
 cannot be read is 401 `credential-unresolved` (definitive) or 503 `credential-transient`.
 Upstream 401/403 is 502 `upstream-auth` with no upstream body — a key hint never crosses back.
+The boundary also runs outward: a credential-shaped value (the [GW-REDACT](sessions.md#gw-redact)
+patterns) in any header the gateway does not own is 502 `header-refused` before any upstream
+call — the old proxy's FU-251 tripwire; a harness that smuggles a real key in a vendor header
+never gets it past this hop.
 
 | description | `Authorization` | `x-api-key` || verdict |
 |---|---||---|---|
@@ -197,6 +221,7 @@ Upstream 401/403 is 502 `upstream-auth` with no upstream body — a key hint nev
 | "hop-by-hop headers are stripped" | `Connection`, `Keep-Alive`, `Transfer-Encoding`, `TE`, `Trailer`, `Upgrade`, `Proxy-Authorization` || no |
 | "content-type passes through" | `Content-Type: application/json` || yes |
 | "an unknown vendor header passes through" | `x-foo: bar` || yes |
+| "a credential-shaped value in a vendor header is refused" | `x-foo: Bearer sk-ant-oat-…` || no — 502 `header-refused`, upstream not called |
 
 | description | upstream behaviour || status | body | log |
 |---|---||---|---|---|

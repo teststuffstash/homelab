@@ -73,8 +73,12 @@ Secret must carry the label `openrouter.teststuff.net/session-key=true`, else th
 The gateway's one configuration document, `/etc/agent-gateway/policy.json` (a ConfigMap,
 homelab config; the test world is [worlds/policy-default.json](worlds/policy-default.json)):
 per-stack credential refs, per-role allowed rails in preference order with a default tier and
-harness, per-(rail, tier) model, per-rail `max_sessions`, `session_ttl_s`. **No model id lives
-in code** — only here, copied from `argocd/resources/openrouter-proxy/model-classes.json`.
+harness, per-(rail, tier) model, per-rail `max_sessions` and `side_models` (the families a
+harness's side-calls may name on any session of that rail), per-model `context_tokens`,
+`session_ttl_s`. **No model id lives in code** — only here, copied from
+`argocd/resources/openrouter-proxy/model-classes.json`; the deployed ConfigMap
+(`argocd/resources/agent-gateway/configmap-policy.yaml`) has the same shape and is loaded by a
+test row.
 
 ## tier
 

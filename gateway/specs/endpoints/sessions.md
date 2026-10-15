@@ -130,7 +130,7 @@ window or `null` — a null is "not declared", never a guess.
 | "claude: the base url is this gateway's anthropic path" | claude | anthropic | claude/sonnet || `ANTHROPIC_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic` |
 | "claude: the auth token is the session token" | claude | anthropic | claude/sonnet || `ANTHROPIC_AUTH_TOKEN` | the session token |
 | "claude: the model name is the alias the CLI resolves" | claude | anthropic | claude/sonnet || `ANTHROPIC_MODEL` | `sonnet` |
-| "claude on the Go rail: same three vars, Go's model name" | claude | opencode | opencode-go/claude-sonnet-4-6 || `ANTHROPIC_MODEL` | `claude-sonnet-4-6` |
+| "claude on the [Go rail](../../../docs/agents/chainless-redesign.md): same three vars, Go's model name" | claude | opencode | opencode-go/claude-sonnet-4-6 || `ANTHROPIC_MODEL` | `claude-sonnet-4-6` |
 | "opencode: the base url is this gateway's openai path ⚖ (verify)" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
 | "opencode: the api key is the session token ⚖ (verify)" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENAI_API_KEY` | the session token |
 | "opencode: the model var carries the bare id ⚖ (verify)" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_MODEL` | `deepseek-v4-flash` |
@@ -147,8 +147,8 @@ window or `null` — a null is "not declared", never a guess.
 
 | description | model (policy) || `context_tokens` |
 |---|---||---|
-| "a declared window is echoed" | opencode-go/deepseek-v4-flash || 1000000 |
-| "an undeclared window is null, never a default" | claude/sonnet || null |
+| "a declared `context_tokens` is echoed" | opencode-go/deepseek-v4-flash || 1000000 |
+| "an undeclared `context_tokens` is null, never a default" | claude/sonnet || null |
 
 <details><summary>Evidence</summary>
 

@@ -17,6 +17,7 @@
 | a stream streams | POST /openai/v1/chat/completions, stream: true | upstream-stream | .../chat/completions | 200 | SSE bytes unchanged | tokens from the last chunk's usage |
 | a rate limit passes through | POST /openai/v1/chat/completions | upstream-429 | .../chat/completions | 429 | the upstream body, retry-after kept | requests +1 |
 | an upstream auth failure is typed and hidden | POST /openai/v1/chat/completions | upstream-401 | .../chat/completions | 502 | upstream-auth envelope | requests +1 |
+| an unreachable upstream is typed | POST /openai/v1/chat/completions | upstream-down | .../chat/completions | 502 | upstream-unreachable envelope | requests +1 |
 | a read past 600 s (WIP: clock-faked) | POST /openai/v1/chat/completions | upstream-slow | .../chat/completions | 504 | upstream-timeout | requests +1 |
 | the /api/v1 alias serves the OpenRouter-shaped path | POST /api/v1/chat/completions | upstream-ok | .../chat/completions | 200 | byte-identical | requests +1 |
 """
@@ -109,6 +110,14 @@ async def test_upstream_auth_hidden(gw, upstreams, store):
     upstreams[RAIL].behaviour = "upstream-401"
     doc, r = await ride(gw, RAIL, "chat")
     assert r.status_code == 502 and err(r) == "upstream-auth" and "LEAK" not in r.text
+    assert store.get_session(doc["session"]["id"]).requests == 1
+
+
+async def test_upstream_unreachable(gw, transport, store):
+    """row: an unreachable upstream is typed"""
+    transport.unreachable.add(RAIL)
+    doc, r = await ride(gw, RAIL, "chat")
+    assert r.status_code == 502 and err(r) == "upstream-unreachable"
     assert store.get_session(doc["session"]["id"]).requests == 1
 
 

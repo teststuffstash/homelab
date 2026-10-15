@@ -9,7 +9,7 @@ The data-plane path an `opencode` / `goose` harness rides ([UC-1](../use-cases/u
 step ③, openai dialect). The per-request steps are the ones
 [anthropic-messages.md](anthropic-messages.md) owns — session resolution
 ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)), the model check
-([GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)), the Go rail's wire
+([GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)), the [Go rail](../../../docs/agents/chainless-redesign.md)'s wire
 ([GW-RAIL-OPENCODE](anthropic-messages.md#gw-rail-opencode)) — applied to this path. This page
 owns the **OpenRouter rail**, which serves both dialects, and states the one cell this dialect
 cannot serve: the `anthropic` rail (501). Harnesses list models at start, so
@@ -22,11 +22,11 @@ inspects, the per-rail upstream contract and the error envelope; the service **i
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-RAIL-OPENROUTER](#gw-rail-openrouter) | `upstream.openrouter` (URL per dialect, auth), `models.openrouter` | `upstream-auth`, `upstream-timeout` | v0 — provider pins / `:exacto` / the headroom poll / the `/generation` cost harvest `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP` |
-| [GW-RAIL-OPENCODE](anthropic-messages.md#gw-rail-opencode) (owned there) | `upstream.opencode`, `models.opencode` | `upstream-auth` | linked |
+| [GW-RAIL-OPENROUTER](#gw-rail-openrouter) | `upstream.openrouter` (URL per dialect, auth), `models.openrouter` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 — provider pins / `:exacto` / the headroom poll / the `/generation` cost harvest `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP` |
+| [GW-RAIL-OPENCODE](anthropic-messages.md#gw-rail-opencode) (owned there) | `upstream.opencode`, `models.opencode` | `upstream-auth`, `upstream-unreachable` | linked |
 | [GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic) (owned there) | `upstream.anthropic` (none — 501) | `dialect-unsupported-on-rail` | linked |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked |
-| [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization`, `input.headers.x-api-key` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth` | linked |
+| [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization`, `input.headers.x-api-key` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `header-refused` | linked |
 | [GW-SESSIONS-RELEASE](sessions.md#gw-sessions-release) (owned there) | `input.headers.authorization` | `session-expired`, `session-released` | linked |
 | [GW-CRED-RESOLVE](sessions.md#gw-cred-resolve) (owned there) | `upstream.*.auth` | `credential-unresolved`, `credential-transient` | linked |
 
@@ -47,7 +47,8 @@ scheme, i.e. the same bearer); the human docs index and `llms.txt` do not mentio
 openapi file is the citation. ⚖ Whether that endpoint honours `anthropic-beta` is not stated
 anywhere read — the header is forwarded untouched and the row is **verify during
 implementation**. The body's `model` is the bare policy id. Upstream 429 passes through with
-`retry-after`; 401/403 is 502 `upstream-auth`.
+`retry-after`; 401/403 is 502 `upstream-auth`; a connection that fails before any byte is sent
+is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`).
 
 | description | dialect | inbound header || upstream header |
 |---|---|---||---|
@@ -65,6 +66,7 @@ implementation**. The body's `model` is the bare policy id. Upstream 429 passes 
 | "a stream streams" | `POST /openai/v1/chat/completions`, `stream: true` | upstream-stream || `…/chat/completions` | 200 | SSE bytes unchanged | tokens from the last chunk's `usage` when present, else unchanged ⚖ |
 | "a rate limit passes through" | `POST /openai/v1/chat/completions` | upstream-429 || `…/chat/completions` | 429 | the upstream body, `retry-after` kept | `requests` +1 |
 | "an upstream auth failure is typed and hidden" | `POST /openai/v1/chat/completions` | upstream-401 || `…/chat/completions` | 502 | `upstream-auth` envelope | `requests` +1 |
+| "an unreachable upstream is typed" | `POST /openai/v1/chat/completions` | upstream-down || `…/chat/completions` | 502 | `upstream-unreachable` envelope | `requests` +1 |
 | "🚧 WIP: a read past 600 s" | `POST /openai/v1/chat/completions` | upstream-slow || `…/chat/completions` | 504 | `upstream-timeout` | `requests` +1 |
 
 | description | session rail | inbound path || status | body |
@@ -78,7 +80,7 @@ implementation**. The body's `model` is the bare policy id. Upstream 429 passes 
 | "⚑ gap: provider pin / `:exacto` on the body" | openrouter session, upstream-ok || the body carries no `provider` block and no suffix | ADR-096 M4 pin injection, `provider_policy: exacto` |
 | "⚑ gap: key headroom" | the stack key at its limit || dispatched, upstream answers 402/429 | the FU-088 headroom poll (`/api/v1/auth/key`) |
 | "⚑ gap: cost per request" | upstream-ok || tokens only, no USD | the `/generation` harvest and the cost ledger |
-| "⚑ gap: the Zen rail" | `rail: zen` || 400 `malformed-body` (not in the enum) | `opencode-zen` is declared `enabled: false` upstream; not a v0 rail |
+| "⚑ gap: the [Zen rail](../../../docs/spikes/opencode-model-matrix.md)" | `rail: zen` || 400 `malformed-body` (not in the enum) | `opencode-zen` is declared `enabled: false` upstream; not a v0 rail |
 
 <details><summary>Evidence</summary>
 

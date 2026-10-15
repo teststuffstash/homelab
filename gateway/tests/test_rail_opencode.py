@@ -21,6 +21,7 @@
 | a rate limit passes through | POST /anthropic/v1/messages | upstream-429 | .../messages | 429 | the upstream body, retry-after kept |
 | an upstream auth failure is typed and hidden | POST /openai/v1/chat/completions | upstream-401 | .../chat/completions | 502 | upstream-auth envelope |
 | the vendor's MissingSessionID is passed through, not masked | POST /anthropic/v1/messages | upstream-400-missing-session | .../messages | 400 | the upstream body |
+| an unreachable upstream is typed | POST /anthropic/v1/messages | upstream-down | .../messages | 502 | upstream-unreachable envelope |
 | a read past 600 s (WIP: clock-faked) | POST /anthropic/v1/messages | upstream-slow | .../messages | 504 | upstream-timeout |
 """
 
@@ -102,6 +103,13 @@ async def test_missing_session_id_passthrough(gw, upstreams):
     upstreams[RAIL].behaviour = "upstream-400-missing-session"
     _, r = await ride(gw, RAIL, "messages")
     assert r.status_code == 400 and r.json()["type"] == "MissingSessionID"
+
+
+async def test_upstream_unreachable(gw, transport):
+    """row: an unreachable upstream is typed"""
+    transport.unreachable.add(RAIL)
+    _, r = await ride(gw, RAIL, "messages")
+    assert r.status_code == 502 and err(r) == "upstream-unreachable"
 
 
 async def test_read_past_600s(gw, transport):

@@ -52,16 +52,20 @@ def wire_model(rail: str, policy_id: str) -> str:
     return policy_id
 
 
-def model_matches(rail: str, policy_id: str, asked: str) -> bool:
+def model_matches(rail: str, policy_id: str, asked: str, side_models: tuple[str, ...] = ()) -> bool:
     """Does a body's `model` name the session's model? Exact on every rail but `anthropic`, where
     the policy names an alias the claude CLI resolves to a dated id before the request leaves the
     pod (`<alias>` ⊂ `claude-<alias>-<major>-<minor>`), so the check there is by family: the alias
-    equals the body's model or is one of its hyphen-separated segments."""
-    wire = wire_model(rail, policy_id)
-    if asked == wire:
-        return True
-    if rail == "anthropic":
-        return wire in asked.split("-")
+    equals the body's model or is one of its hyphen-separated segments. The rail's `side_models`
+    (policy, never code) are admitted the same way on every session of that rail — a harness's
+    small side-calls (claude-code's `ANTHROPIC_SMALL_FAST_MODEL`) ride the session's token under
+    another family (⚖ GW-MODEL-RESOLVE)."""
+    for candidate in (policy_id, *side_models):
+        wire = wire_model(rail, candidate)
+        if asked == wire:
+            return True
+        if rail == "anthropic" and wire in asked.split("-"):
+            return True
     return False
 
 
@@ -86,6 +90,7 @@ class RailPolicy:
     name: str
     max_sessions: int
     models: dict[str, str]  # tier -> the POLICY model id (model-classes.json spelling, rail-prefixed)
+    side_models: tuple[str, ...] = ()  # policy ids a harness's side-calls name, admitted on every session of this rail
 
 
 @dataclass(frozen=True)
@@ -126,7 +131,10 @@ class Policy:
             for tier, model in models.items():
                 if tier not in TIERS or not isinstance(model, str) or not model:
                     raise PolicyError(f"policy: rails.{name}.models.{tier} must name a model for a known tier")
-            rails[name] = RailPolicy(name, int(r.get("max_sessions", 0)), dict(models))
+            side = r.get("side_models") or []
+            if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
+                raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")
+            rails[name] = RailPolicy(name, int(r.get("max_sessions", 0)), dict(models), tuple(side))
         roles: dict[str, RolePolicy] = {}
         for name, ro in (d.get("roles") or {}).items():
             if name not in ROLES:

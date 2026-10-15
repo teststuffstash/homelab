@@ -145,7 +145,8 @@ def _sha256(path: Path) -> str | None:
 
 # ---------------------------------------------------------------------------------------------
 # fake upstreams — one Starlette app per rail; behaviour switched by the `behaviour` knob
-# (specs/worlds/: upstream-ok | upstream-429 | upstream-401 | upstream-stream)
+# (specs/worlds/: upstream-ok | upstream-429 | upstream-401 | upstream-stream; the transport-level
+# worlds upstream-down / upstream-slow live on RailTransport below)
 # ---------------------------------------------------------------------------------------------
 class FakeUpstream:
     def __init__(self, rail: str):
@@ -254,7 +255,7 @@ class RailTransport(httpx.AsyncBaseTransport):
     def __init__(self, upstreams: dict[str, FakeUpstream], bases: dict[str, str]):
         self.bases = {rail: httpx.URL(base) for rail, base in bases.items()}
         self.transports = {rail: httpx.ASGITransport(app=u.app) for rail, u in upstreams.items()}
-        self.unreachable: set[str] = set()
+        self.unreachable: set[str] = set()  # the `upstream-down` world: a connect failure that is not a timeout
         self.slow: set[str] = set()  # the `upstream-slow` world, clock-faked: the read "takes" > 600 s
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:

@@ -19,6 +19,7 @@
 | an upstream auth failure is typed and hidden | POST /anthropic/v1/messages | upstream-401 | 502 | upstream-auth envelope | requests +1 |
 | the openai dialect is not served on the subscription | POST /openai/v1/chat/completions | (no upstream call) | 501 | dialect-unsupported-on-rail | nothing |
 | the models list is not served on the subscription | GET /openai/v1/models | (no upstream call) | 501 | dialect-unsupported-on-rail | nothing |
+| an unreachable upstream is typed | POST /anthropic/v1/messages | upstream-down | 502 | upstream-unreachable envelope | requests +1 |
 | a read past 600 s (WIP: clock-faked) | POST /anthropic/v1/messages | upstream-slow | 504 | upstream-timeout | requests +1 |
 | the upstream URL is api.anthropic.com/v1/messages | — | — | — | — | — |
 """
@@ -112,6 +113,14 @@ async def test_openai_dialect_501(gw, upstreams, store, op):
     r = await (gw.get("/openai/v1/models", headers=bearer(doc)) if op == "models" else gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc)))
     assert r.status_code == 501 and err(r) == "dialect-unsupported-on-rail"
     assert upstreams[RAIL].calls == [] and store.get_session(doc["session"]["id"]).requests == 0
+
+
+async def test_upstream_unreachable(gw, transport, store):
+    """row: an unreachable upstream is typed"""
+    transport.unreachable.add(RAIL)
+    doc, r = await ride(gw, RAIL, "messages")
+    assert r.status_code == 502 and err(r) == "upstream-unreachable"
+    assert store.get_session(doc["session"]["id"]).requests == 1
 
 
 async def test_read_past_600s(gw, transport, store):

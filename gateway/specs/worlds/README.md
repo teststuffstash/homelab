@@ -10,7 +10,7 @@ a single-world module declares it once in its docstring and omits it from row id
 
 | world | file | what it is |
 |---|---|---|
-| `policy-default` | [policy-default.json](policy-default.json) | the test policy: two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json`; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20) |
+| `policy-default` | [policy-default.json](policy-default.json) | the test policy: two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json`; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖) |
 
 Names in the test policy (namespaces, Secret names) are **fixture names**, not production
 ones; the production policy is the ConfigMap in `argocd/resources/agent-gateway/`. Model ids
@@ -31,6 +31,7 @@ received** (URL, headers, body) as much as on the response the gateway returned.
 | `upstream-429` | 429 with `retry-after: 30` | 429 passthrough with `retry-after` |
 | `upstream-401` | 401 with a body mentioning the key | 502 `upstream-auth`, body never forwarded |
 | `upstream-slow` | holds the response past the read timeout | timeout rows (connect 10 s / read 600 s) — 🚧 WIP, clock-faked only |
+| `upstream-down` | the connection fails before any byte is sent (refused / DNS / reset — not a timeout) | 502 `upstream-unreachable` rows on every rail |
 
 ## The credential source (`FakeSecrets`)
 
