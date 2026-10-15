@@ -31,13 +31,13 @@ sequenceDiagram
   L->>P: ② pod created with env verbatim (the token is its only LLM credential)
   loop N calls
     P->>G: ③ POST /openai/v1/chat/completions  Authorization: Bearer gws_…
-    G->>G: session ← token; body.model == session model — GW-CRED-BOUNDARY, GW-MODEL-RESOLVE
+    G->>G: session ← token · body.model == session model — GW-CRED-BOUNDARY, GW-MODEL-RESOLVE
     G->>U: the rail's URL + the rail's credential, inbound auth stripped — GW-RAIL-OPENCODE
     U-->>G: 200 (or 429 / 401 / stream)
-    G-->>P: bytes unchanged; usage recorded on the session
+    G-->>P: bytes unchanged · usage recorded on the session
   end
   L->>G: ④ DELETE /sessions/{id} — GW-SESSIONS-RELEASE
-  G-->>L: {id, released_at}; the token is refused from now on
+  G-->>L: {id, released_at} · the token is refused from now on
 ```
 
 Every numbered step is a requirement on an endpoint page; the request/response shapes are the
