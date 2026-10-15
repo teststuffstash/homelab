@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "agent-gateway island toolchain (P2, ADR-139): python 3.13 + uv, the oracle-fleet shape. Run `devbox run ci` from THIS directory; the repo-root devbox.json reaches it through its `gateway-ci` script (diff-ci row `gateway-ci:^gateway/`). Nothing here is shared with the old openrouter-proxy, which stays on the repo-root toolchain untouched.",
+  "packages": {
+    "python": "3.13",
+    "uv": "latest"
+  },
+  "env": {
+    "UV_PYTHON_PREFERENCE": "only-system",
+    "UV_PROJECT_ENVIRONMENT": "$HOME/.cache/devbox-venv/agent-gateway$VENV_SUFFIX"
+  },
+  "shell": {
+    "init_hook": [],
+    "scripts": {
+      "ci": [
+        "bash scripts/ci.sh"
+      ],
+      "test": [
+        "uv run --frozen pytest -q \"$@\""
+      ],
+      "serve": [
+        "uv run --frozen python -m agent_gateway"
+      ]
+    }
+  }
+}
