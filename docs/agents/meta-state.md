@@ -22,7 +22,7 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   line — confirm merged, then ARCHIVE FU-198** (toy-semaphore observation + control posted on #2563). #2561 (Half 2) released
   by the edge and riding. **#2582 (#2562)** was stuck red-from-master 19 h → seat `update-branch`; codeowner-read it once the
   bot approves (class filed: #2588, inert). **#2566** waits on agent-coordinator#27, which only lands as an OPERATOR direct push
-  (workflow edit). **#1418** (S8) NOT closable: entry-20 defect filed + bound as #2589. **#2219 read DONE (kept, #2595); P0 = #1935 brief subtraction (subagent PR) — NEXT SESSION: P2 the gateway island.** **OpenRouter `/generation` 404s on every
+  (workflow edit). **#1418** (S8) NOT closable: entry-20 defect filed + bound as #2589. **#2219 read DONE (kept, #2595); P0 = #1935 brief subtraction (subagent PR) — NEXT SESSION: P2 the gateway island — scope includes the role×stack×service access inventory (ruled 10-15).** **OpenRouter `/generation` 404s on every
   lookup since ~17:59Z** — `OpenRouterGenerationHarvestMissing` (#2564, closed done) pending on it; seat watch running
   (lag vs outage); ledger cost undercounts for rides in the window.
 - **⚑ PICKUP (2026-10-14 ~21:30Z — seat, design-agents corpus session; TICK-LOG 2026-10-14 design-agents batch):
@@ -466,37 +466,21 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   cancelled by API: operator UI, or ignore. Phantom `agent/done` closes: confirm or relabel
   oracle-fleet #25 #24 #22 #7, sleep #7.
 - **⚑ DESIGN INPUTS WITH NO OTHER HOME (operator: deliberately not FUs — pick up in a
-  design-agents sitting):**
-  - **Drainage economics RULING (2026-08-31, operator-confirmed; TICK-LOG has the arc)** —
-    the drainage round/branch/triage design is BANKED (measured 1 stack-blocking : 16
-    nice-to-have on the live pile; the seat gate-reads every diff anyway, ADR-110 is the
-    binding resource). Standing policy: (1) blocking defects (incoming blockedBy from a stuck
-    stack issue / live wedge / 🚨) queue immediately, master-lane, hotfix-class, and every
-    filing door wires the edge; (2) the nice-to-have pile is corpus-session batch work —
-    no new machinery; (3) the Touches classifier survives as a LINT (#1102, done). The jail
-    watches blocking-class parks actively (meta-events BLOCKPARK). Banked, operator's own
-    "not yet": an AUTOMATED design-agents corpus read on codeowner-parked BLOCKING issues —
-    revisit if parked-PR volume freezes dispatch. Post-launch goal fixes target MASTER (v1.2
-    stands). **This ruling has no record beyond this bullet + issue-authoring.md's one
-    clause-1 reference — it is ADR-shaped (decision + rejected alternatives).**
-  - **Stack→platform routing (2026-08-30) — instances 3+4 undischarged by ADR-119:** (3)
-    stack ACCESS/SERVICE gaps have no tracked inventory — no role×stack×service matrix
-    exists (grep negative FU/ADR/GAPS); the oracle jail had no read on its own transcripts
-    (no coordinator anywhere holds transcript read; the brief's "reads freely … transcripts"
-    has no built mechanism — A2 MCP slices unbuilt, FU-058 leg); Loki (ADR-118) is the ONE
-    stack-scoped read and the donor shape; TOOL_GAP markers exist only for cluster sessions,
-    the jail lane has no channel. Direction to weigh: generate any matrix from grant sources
-    (never hand-author — FU-049's pattern), consumer-card + grants file per LIVE service,
-    TOOL_GAP extended to jail sessions, the capability-request lane as the routing. (4) a
-    fix landed on a `goal/**` branch protects NOTHING on master until assembly (oracle
-    PR#280 → master PR#293 hit the same class next day); long-lived RUNNER state is
-    untracked platform surface (ci-runner-01 dockerd insecure-registries, stale devbox
-    venvs — the y/n prompt class).
-  - **v1.3.1 BANKED** (PR#1220, "deserves a place when it works"): `Origin:` line + typed
-    defer/release + checkpoint theme-FORMATION are S8 originals — do not build piecemeal
-    ahead of S8; delta 1 (park economics) landed independently (PR#1375/#1376/#1352).
-  - **The dispatch-declared `requires:` FU is sanctioned to file** (operator's conditional
-    after the harness matrix closed on all three arms, 09-02) — not yet filed.
+  design-agents sitting; re-ruled 2026-10-15):**
+  - **Drainage economics RULING (2026-08-31, operator-confirmed; TICK-LOG 2026-08-31 has the arc)** — STANDS
+    (re-confirmed 2026-10-15: batching works). (1) blocking defects (incoming blockedBy from a stuck stack issue /
+    live wedge / 🚨) queue immediately, master-lane, hotfix-class, every filing door wires the edge; (2) the
+    nice-to-have pile is corpus-session batch work — no new machinery; (3) the Touches classifier survives as a
+    LINT (#1102). Clause 2's premise (gate reads are the binding resource) is revisited by the next admission
+    spike, not by an ADR today (operator 2026-10-15). Banked, operator's own "not yet": an AUTOMATED design-agents
+    corpus read on codeowner-parked BLOCKING issues — revisit if parked-PR volume freezes dispatch.
+  - **v1.3.1 BANKED** (PR#1220, "deserves a place when it works"): `Origin:` line + typed defer/release +
+    checkpoint theme-FORMATION are S8 originals — do not build piecemeal ahead of S8; delta 1 (park economics)
+    landed independently (PR#1375/#1376/#1352).
+  - Ruled 2026-10-15 and removed from this list: the role×stack×service access inventory (stack-transcript
+    reads, jail `TOOL_GAP:`) is **P2 scope** (the gateway island); goal/**-fix-protects-nothing and
+    long-lived-runner-state are DROPPED (dissolved by ADR-126 themes + hotfix master lane / runner cloud-init +
+    replace); the dispatch-declared `requires:` FU is NOT filed (MCP on every harness was built to avoid the matrix).
 
 ## Durable warnings — EVICTED (S4 #765, 2026-08-23)
 
