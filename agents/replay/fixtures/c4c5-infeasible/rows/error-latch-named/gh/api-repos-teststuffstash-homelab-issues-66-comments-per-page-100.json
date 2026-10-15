@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — picking this up (round 1)."
+  },
+  {
+    "id": 2,
+    "user": {"login": "homelab-reviewer-1234"},
+    "body": "AGENT_ERROR: an older latch, superseded by the newer one below — never the one named\n\nDetail."
+  },
+  {
+    "id": 3,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "AGENT_INFEASIBLE: .github/workflows/ci.yaml\n\nThe issue's whole deliverable is the CI workflow, and `.agents/fix.yaml` bans `.github/**` for this worker class: CI runs `on: pull_request`, so an edit there executes my branch's code on the runner before a human looks. Ending without pushing."
+  },
+  {
+    "id": 4,
+    "user": {"login": "homelab-reviewer-1234"},
+    "body": "AGENT_ERROR: anomaly latch — two live verdicts at the same head\n\nA human: inspect the review thread, then remove the `agent/error` label to resume."
+  },
+  {
+    "id": 5,
+    "user": {"login": "rasmussoot"},
+    "body": "> AGENT_ERROR: anomaly latch — two live verdicts at the same head\n\nQuoting it: a quote is not a latch, so this newest mention must not be the one named."
+  }
+]
