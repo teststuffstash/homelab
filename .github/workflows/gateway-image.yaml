@@ -66,7 +66,10 @@ jobs:
       # is blocked by the master ruleset (GH013), and rightly — `ci` (manifest-lint et al.) gates
       # every pin. App token: the workflow's homelab-renovate mint (the same App that opens the
       # devbox-update and runner-image pin PRs on homelab).
+      # The pin bump is master-only: a workflow_dispatch on a PR branch (the island's first build,
+      # before its manifests exist on master) must build + push the image and stop there.
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        if: github.ref == 'refs/heads/master'
         id: app
         with:
           app-id: ${{ secrets.RENOVATE_APP_ID }}
@@ -74,6 +77,7 @@ jobs:
           owner: teststuffstash
           repositories: homelab
       - name: Bump the kustomize pin (auto-merge PR)
+        if: github.ref == 'refs/heads/master'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           TAG: ${{ steps.tag.outputs.tag }}
