@@ -813,14 +813,6 @@ gaps:
       workflow that runs on all PRs and trivially greens itself unless the head is goal/**."
     accepted: "design when a goal actually demands one; the codeowner review is the gate meanwhile"
 
-  - id: IL-G04
-    name: "sprout-RATE gauge (the harvest-gate half is closed)"
-    detail: "The harvest gate DOES read remaining budget now — IL-T15/IL-T17 (ADR-102, homelab#207)
-      close that half. What remains is the metric: the exporter does not yet walk the sub-issue
-      lineage into a convergence number (inflow rate > fix rate = diverging), which is homelab#209's
-      per-goal panel. ADR-102 supersedes this gap once that lands."
-    fu: FU-090
-
   - id: IL-G06
     name: "merged-but-unlinked on MASTER only HELD, never resolved"
     detail: "IL-T16 refuses to reconcile an issue any merged PR merely MENTIONS, because a PR that
@@ -841,10 +833,11 @@ gaps:
 
   - id: IL-G07
     name: "the belt treats the symptom; the missing finalize is the cause"
-    detail: "agent-runtime#36 owns making finalize run on every exit path. Until it lands, phantom
-      labels keep being CREATED and IL-T16 keeps clearing them ≤1 scan interval later — visible as
-      a stream of RECONCILED report lines, which is itself the signal for how often the cause fires."
-    accepted: "belt-and-cause are separate items by design (homelab#155 vs agent-runtime#36); the report lines are the meter"
+    detail: "agent-runtime#36 made finalize run on every exit path (closed 2026-08-08). Phantom labels
+      still arise from paths finalize cannot reach (the activeDeadline reap — FU-187; a node loss
+      mid-ride), and IL-T16 clears them ≤1 scan interval later — visible as a stream of RECONCILED
+      report lines, which is itself the signal for how often a cause fires."
+    accepted: "the named cause is FIXED (agent-runtime#36, 2026-08-08); the belt stays as the net for the unreachable exits, its RECONCILED lines the meter (re-disposed 2026-10-14 design-agents sitting)"
 
   - id: IL-G08
     name: "the ASSEMBLY PR's own review Follow-ups have no harvester"

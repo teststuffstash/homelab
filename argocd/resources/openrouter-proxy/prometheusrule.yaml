@@ -303,3 +303,61 @@ spec:
           annotations:
             summary: "OpenRouter/Go rides have NO served-side evidence ({{ $labels.stack }}/{{ $labels.role }})"
             description: '{{ $value }} OpenRouter/Go ride(s) on {{ $labels.stack }} requested {{ $labels.requested }} with NO served-side record in the router store for 30m — a /generation harvest miss, a Go ledger gap, or a ride that never produced telemetry. Absence never reads as agreement (the FU-108/FU-125 silent-success class): the belt is blind to what served them. Check openrouter_generation_harvest_total{outcome="missed"} (a rising ratio = the harvest is half-blind) before assuming the rides were healthy.'
+
+        # ── FU-131 belt (homelab#2564): the /generation harvest's blind spot, as an alert ────────
+        # FU-131's T+1 `/activity` sweep is DROPPED (it needs a management key in-cluster, which
+        # model-routing.md rules out) and this replaces it. The harvest already measures its own
+        # blind spot: `openrouter_generation_harvest_total{outcome}` (openrouter-proxy.py
+        # `_gen_stats`) counts /generation lookups by outcome, and `missed` is a generation that
+        # never appeared in OpenRouter's index inside the backoff ladder's ~67s. Live 2026-10-14:
+        # missed 0 vs ~6,840 stored over 21d — so this is a recurrence detector, quiet on a healthy
+        # harvest, not a standing page.
+        #
+        # ⚠ RESTART-GAP CLASSIFIED (homelab#332's test in this file's header) — and it lands in
+        # NEITHER of the two arms the header names, which is why it is written out rather than
+        # pointed at. The counter is IN-MEMORY and resets on every roll (its own HELP text says
+        # so), so the naive reading is "in-memory ⇒ the reset is correct, do not bridge". That
+        # reading is wrong HERE, and the reason is the metric's TYPE: this is a COUNTER OF EVENTS,
+        # not a gauge of state. The misses happened; a roll does not un-happen them. What a roll
+        # destroys is the MEASUREMENT, and `increase()` already repairs exactly that: a decrease
+        # between two samples is read as a counter restart and the pre-reset value is added back,
+        # so the 1d window's increments survive the reset — the old pod's samples stay in the RANGE
+        # for the full window (the same premise the [10m] bridges above rest on; the header's
+        # staleness note is about the INSTANT vector's 5m lookback), and the new pod's climb is
+        # added on top. There is therefore NO HOLE TO BRIDGE, and `max_over_time` would be the
+        # wrong tool: it would hold a stale reading for 10m and then drop it, strictly worse than
+        # the reset compensation it replaced. Executed, not argued — H4 in agent-router.promtool-test
+        # replays a roll mid-burst and asserts the alert neither resolves nor restarts its `for:`.
+        #
+        # What the roll DOES break is IDENTITY (mechanism 1 of the header's two), and that is the
+        # half this alert needs: `pod`/`instance` are on the scraped series, so the raw
+        # `increase(...)` yields one series PER POD GENERATION — a new pod is a new alert instance
+        # with its own `for:` clock, and the old generation's instance keeps firing for a full day
+        # (its samples stay in the window) against a pod that no longer exists. `sum(...)` drops
+        # the churning labels and leaves ONE instance.
+        # ⚠ `sum`, NOT the `max by` the gauges above use, and the split is the same counter-vs-gauge
+        # one: the generations are DISJOINT IN TIME (single replica, `strategy: Recreate`), so the
+        # old series contributes only its pre-roll increments and the new only its post-roll ones —
+        # summing counts each miss exactly once, while `max` would silently DROP the smaller
+        # generation (6 before a roll + 4 after is 10 misses; `max` reads 6). The gauges above are
+        # the opposite case: both generations report the SAME underlying quantity, so `max` is the
+        # honest direction there.
+        #
+        # The two arms carry DIFFERENT UNITS (a count and a ratio), so `$value` is deliberately not
+        # rendered — the description names the metric to read instead. `or` over two label-free
+        # series is still exactly ONE alert instance.
+        - alert: OpenRouterGenerationHarvestMissing
+          expr: >-
+            sum(increase(openrouter_generation_harvest_total{outcome="missed"}[1d])) > 5
+            or
+            sum(increase(openrouter_generation_harvest_total{outcome="missed"}[1d]))
+              / sum(increase(openrouter_generation_harvest_total[1d])) > 0.05
+          for: 30m
+          labels:
+            severity: warning
+            # triage: proxy logs + the router store are readable in-cluster; the ladder and the
+            # upstream index are the two things to read
+            triage: dig
+          annotations:
+            summary: "The /generation harvest is missing lookups (FU-131 ledger undercount)"
+            description: 'The /generation harvest has missed more than 5 lookups in the last day, or more than 5% of them — the FU-131 ledger undercount is back, so every cost comparison built on the router store (P4-flip evidence, per-arm comparisons, FU-126 experiments) reads low and UNEVENLY. FIRST SUSPECT: the harvest backoff ladder (GENERATION_BACKOFF_S = 2/5/15/45 s in openrouter-proxy.py) — a miss is a generation that never appeared in OpenRouter''s /api/v1/generation index within ~67 s, so check whether the ladder was shortened, whether the index is slow, or whether the non-404 early-returns fired. Read openrouter_generation_harvest_total{outcome} and the proxy log line "never appeared after 67s".'

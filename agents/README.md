@@ -101,7 +101,7 @@ used to carry its own "Known gaps" and "Follow-ups" lists, and by 2026-08-01 eig
 in them had shipped and been archived while the text still called them open).
 
 - **opencode needs AVX2; goose runs anywhere.** opencode's Bun runtime SIGILLs (`Illegal
-  instruction`) on the non-AVX2 nodes (`hp-01`, `thinkcentre`, `wk-metal-04`). The launcher pins the **opencode**
+  instruction`) on the non-AVX2 nodes (`hp-01`, `wk-metal-04` — the AVX2 label set, not this list, is the authority). The launcher pins the **opencode**
   harness to nodes labelled `homelab.io/cpu-avx2=true` (the Xeon VMs + the Haswell/Broadwell
   ThinkPads); the label is codified in Talos `machine.nodeLabels` (`tofu/locals.tf` `avx2_nodes`).
 - **Run observability.** Agent pods are Loki-labelled `app=agent-session` + `pod`/`node`. Review any
