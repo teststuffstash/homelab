@@ -22,7 +22,7 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   line — confirm merged, then ARCHIVE FU-198** (toy-semaphore observation + control posted on #2563). #2561 (Half 2) released
   by the edge and riding. **#2582 (#2562)** was stuck red-from-master 19 h → seat `update-branch`; codeowner-read it once the
   bot approves (class filed: #2588, inert). **#2566** waits on agent-coordinator#27, which only lands as an OPERATOR direct push
-  (workflow edit). **#1418** (S8) NOT closable: entry-20 defect filed + bound as #2589. **OpenRouter `/generation` 404s on every
+  (workflow edit). **#1418** (S8) NOT closable: entry-20 defect filed + bound as #2589. **#2219 read DONE (kept, #2595); P0 = #1935 brief subtraction (subagent PR) — NEXT SESSION: P2 the gateway island.** **OpenRouter `/generation` 404s on every
   lookup since ~17:59Z** — `OpenRouterGenerationHarvestMissing` (#2564, closed done) pending on it; seat watch running
   (lag vs outage); ledger cost undercounts for rides in the window.
 - **⚑ PICKUP (2026-10-14 ~21:30Z — seat, design-agents corpus session; TICK-LOG 2026-10-14 design-agents batch):
@@ -150,8 +150,7 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   cannot converge until the jail Dockerfile installs the STAMP's claude-code (`version-sets/devbox.lock`, 2.1.291)
   instead of npm's latest (seat 2.1.296, stack jails 2.1.281): `VersionSetMembersDisagree` stands meanwhile and
   `VersionSetBehindPin` joins it after 2 d — both expected, not S9. (3) the Argo-half ruling (Garage `appVersion` customManager shape in
-  the 09:30Z PICKUP — arms unattended restarts of the one unrecoverable release). (4) the #2219 read (merged by
-  mistake; `git revert 42ad3aec` if unwanted). Seat-side residue (re-read 18:45Z): the kps lane's first lens-armed 92.x merge (no
+  the 09:30Z PICKUP — arms unattended restarts of the one unrecoverable release). (4) ~~the #2219 read~~ DONE 2026-10-15: kept; status section in the spike (#2595). Seat-side residue (re-read 18:45Z): the kps lane's first lens-armed 92.x merge (no
   92.x upstream yet; check (h) PROVEN, #2492); FU-297's first green drill (class fix #2501 landed 10-11 evening —
   see the 18:45Z PICKUP for run 3). DONE 10-11 evening: FU-305's hands-off rerun (#2503→#2504), sleep-tracking#67
   (closed on ride 2 after #2502). The lock-revert "ruling owed" of 10-10 is MOOT — the drill ran that
