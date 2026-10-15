@@ -1,0 +1,114 @@
+# Builds the agent-gateway image (gateway/Dockerfile — the LLM egress gateway island, ADR-139 /
+# docs/spikes/context-and-autonomy.md P2) and pins it. Runs on ubuntu-latest BY DESIGN (the
+# runner-image.yaml precedent): the gateway is what the fleet's rides authenticate through, so its
+# build must not depend on the scale set it will serve; hosted minutes are free on a public repo.
+# Raw `docker buildx` here (not `devbox run`) matches the image-build practice on hosted runners —
+# docker is the one tool the hosted image provides that devbox can't. Push auth is the job's
+# built-in GITHUB_TOKEN (packages: write) — no external credential. The image is consumed by TAG
+# PIN in argocd/resources/agent-gateway/kustomization.yaml (`images: newTag`) — the pin PR below
+# is the deploy; nothing consumes :latest (none is pushed).
+name: gateway-image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - gateway/**
+      - .github/workflows/gateway-image.yaml
+  # A dispatch builds the chosen ref — no `ref` input needed, the run's own checkout IS the ref.
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # push the pin bump branch after a build (see last step)
+  packages: write
+
+concurrency: gateway-image
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The pin push below authenticates with the App token IN THE URL. checkout's default
+          # persists GITHUB_TOKEN as an http.extraheader on github.com, which git sends first — so
+          # the push would land as `github-actions[bot]` (runner-image.yaml, 2026-09-27, #2023): a
+          # `synchronize` by that actor runs NO pull_request_target workflow (the approve reflex
+          # never fires) and the PR's CI sits "awaiting approval". No persisted credential = the
+          # URL token is the only one = the App is the actor.
+          persist-credentials: false
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute tag (calver-gsha, agent-coordinator convention)
+        id: tag
+        run: echo "tag=$(date +%Y.%-m.%-d)-g$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Build and push
+        # Registry layer cache (the runner-image shape): the hosted builder is ephemeral, so
+        # without --cache-from every build re-digests every layer. mode=max exports every layer's
+        # cache to the :buildcache ref; an unchanged step (uv sync against an unchanged lock) is
+        # REUSED bit-identical. --provenance=false keeps a plain manifest (no attestation index).
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/agent-gateway:${{ steps.tag.outputs.tag }}"
+          CACHE="ghcr.io/${{ github.repository_owner }}/agent-gateway:buildcache"
+          docker buildx build \
+            --push -t "$IMAGE" \
+            --provenance=false \
+            --cache-from "type=registry,ref=$CACHE" \
+            --cache-to "type=registry,ref=$CACHE,mode=max" \
+            -f gateway/Dockerfile gateway
+          echo "pushed $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      # The image is consumed by TAG PIN in the kustomization — a build nobody pins is a no-op.
+      # Bump = a CI-gated auto-merge PR, the homelab deploy-target shape (FU-051): a direct push
+      # is blocked by the master ruleset (GH013), and rightly — `ci` (manifest-lint et al.) gates
+      # every pin. App token: the workflow's homelab-renovate mint (the same App that opens the
+      # devbox-update and runner-image pin PRs on homelab).
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: app
+        with:
+          app-id: ${{ secrets.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: teststuffstash
+          repositories: homelab
+      - name: Bump the kustomize pin (auto-merge PR)
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          PIN=argocd/resources/agent-gateway/kustomization.yaml
+          # ONLY the newTag line of the agent-gateway image changes — the sed is anchored to the
+          # `newTag:` key and accepts both the calver-gsha shape and the 0.0.0-pending placeholder.
+          bump() { sed -i -E 's#^(\s*newTag:\s*)([0-9]+\.[0-9]+\.[0-9]+-g[0-9a-f]{12}|0\.0\.0-pending)\s*$#\1'"${TAG}"'#' "$PIN"; }
+          bump
+          if git diff --quiet "$PIN"; then
+            echo "pin already current" >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          BRANCH="deploy/agent-gateway"
+          git config user.name "gateway-image bot"
+          git config user.email "noreply@teststuff.net"
+          # The pin branch must sit on CURRENT master, not this job's checkout: if master moved (or
+          # a stale pin branch lingers), the pushed tree's .github/workflows/* differ from master's
+          # and GitHub rejects the App push as "updating a workflow file without workflows
+          # permission" — over files this bump never touches (runner-image.yaml, 2026-07-26).
+          # Re-apply the sed on fresh master. NEVER delete the branch first: delete+recreate while a
+          # pin PR is open desyncs the PR's head (mergeable stuck UNKNOWN — #1133/#1142); the
+          # force-push replaces a stale ref via a clean `synchronize` instead.
+          git fetch origin master && git checkout -B "$BRANCH" origin/master
+          bump
+          git diff --quiet "$PIN" && { echo "pin already current on fresh master" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          git add "$PIN"
+          git commit -m "deploy: agent-gateway ${TAG} (auto-bump after build)"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" "HEAD:$BRANCH"
+          PR="$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$PR" ]; then
+            PR="$(gh pr create --repo "${{ github.repository }}" --base master --head "$BRANCH" \
+              --label automerge,dependencies \
+              --title "deploy: agent-gateway ${TAG}" \
+              --body "Auto-bump after a gateway-image build (the runner-image closed loop, FU-051 deploy-target shape): the only edit is \`images.newTag\` in argocd/resources/agent-gateway/kustomization.yaml. CI-gated; auto-merges." \
+              | grep -oE '[0-9]+$')"
+          fi
+          gh pr merge --auto --squash "$PR" --repo "${{ github.repository }}"
+          echo "pin PR #$PR armed for ${TAG}" >> "$GITHUB_STEP_SUMMARY"

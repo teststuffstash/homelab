@@ -682,6 +682,12 @@ jobs:
       - name: Shim self-test (devbox run shim-self-test)
         if: steps.diff.outputs.shim-self-test != 'false'
         run: devbox run shim-self-test
+      # The gateway island (gateway/ — ADR-139, context-and-autonomy.md P2): one entrypoint,
+      # gateway/scripts/ci.sh, run through the island's OWN devbox (python 3.13 + uv, its own
+      # lock) — uv sync, ruff, pytest + evidence, the spec gate. Scoped to gateway/** by the map.
+      - name: Gateway island CI (devbox run gateway-ci)
+        if: steps.diff.outputs.gateway-ci != 'false'
+        run: devbox run gateway-ci
       # FU-tracker conventions: dangling ids + broken pointers FAIL; oversize/done-marker WARN.
       # In CI because the 2026-07 tracker bloat (258→1000 lines) happened under convention-only
       # discipline — see docs/follow-ups.md "Conventions".
