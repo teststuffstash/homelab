@@ -1,0 +1,30 @@
+# goal-checkpoint-b-dispatch-marker (homelab#2477) — the dispatch-marker block's
+# `goal-checkpoint:issue-*` arm writes the (b) HOLD's marker on the OPEN assembly PR.
+#
+# WHY A SEPARATE FIXTURE FROM assembly-cr-dispatch-marker: that one pins the assembly-cr side map
+# (homelab#1150). This one pins the SECOND lookup the same arm gained — the (b) hold's
+# `goal_ckpt_b_prs` — so a regression in either map reds its own directory instead of blurring
+# into the other's stream.
+#
+# THE CONTRACT (three passes, one directory — the PR#1208 remedy-(b) pattern):
+#   pass 1 (bridge.sh)   the (b) side map carries the PR, the assembly-cr map is EMPTY →
+#                        exactly ONE comment CALL, under `state-fp:goal-checkpoint-b:`.
+#   pass 2 (bridge2.sh)  BOTH maps empty (an ordinary threshold-fired goal-checkpoint, trigger
+#                        (a)/(c)/(e)) → NO call and no WARN. The absence is not vacuous: this
+#                        directory reds on base (the goal-checkpoint-b arm does not exist
+#                        pre-#2477), so the empty-map pass is a real negative row.
+#   pass 3 (bridge3.sh)  BOTH maps carry the PR — an assembly PR that is changes-requested AND
+#                        the (b) hold's PR → TWO calls, one per clause key, no conflict.
+name: goal-checkpoint-b-dispatch-marker
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:dispatch-marker
+  - file:bridge2.sh
+  - block:dispatch-marker
+  - file:bridge3.sh
+  - block:dispatch-marker
+env:
+  - ORG=teststuffstash

@@ -1,0 +1,18 @@
+{
+  "headRefOid": "845aaaa1111bbbb2222cccc3333dddd4444eeee",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    { "name": "ci", "conclusion": "SUCCESS" },
+    { "name": "iac-sentinel", "conclusion": "SUCCESS" }
+  ],
+  "reviews": [
+    { "state": "APPROVED", "submittedAt": "2026-10-10T18:04:00Z" }
+  ],
+  "comments": [
+    {
+      "createdAt": "2026-10-10T17:33:00Z",
+      "body": "🤖 `state-fp:goal-checkpoint-b:09eb9ea954a4` — deterministic scan dispatching a `goal-checkpoint` unit (trigger=b, child-set complete pre-launch) for goal 29 at 2026-10-10T17:33:00Z.\n\nMachine-readable hold marker (homelab#2477), written by `agents/coordinator-scan.sh`, not by the session that follows. It hashes the state that ride reads — the diff's content, the non-passing checks, `reviewDecision` and the newest verdict's timestamp — so a verdict, a content change or a check flip releases the hold while a rebase or a master-merge does not."
+    }
+  ],
+  "commits": []
+}
