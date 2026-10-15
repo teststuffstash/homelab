@@ -844,13 +844,6 @@ the block needs pruning, not more headings.
       (`cluster.etcd.extraArgs listen-metrics-urls`, scheduler/controller-manager `bind-address`) via
       the CP config patch, then the chart's `kubeEtcd`/`kubeScheduler`/`kubeControllerManager` endpoints.
 
-- [ ] **FU-198** — **No belt sees an Argo lock-plane wedge: POINTER.** Three instances + belt `ArgoLockPlaneWedged`
-      (PR#1722): [`incidents/2026-08-31-argo-semaphore-leak.md`](incidents/2026-08-31-argo-semaphore-leak.md).
-      Upstream leak fixes LIVE (controller v4.1.4, chart 2.0.11, 10-05). 10-09 01:50–04:50Z: five `respond-*` in
-      retry backoff held all five slots. **RULED 2026-10-14:** the release is made STRUCTURAL — retry on a wrapper
-      template, semaphore on the leaf (the `window-grace` split), proven post-merge by a toy semaphore-1 workflow.
-      **Next:** homelab#2563 (queued), then the seat's toy probe. Relates FU-187, FU-088.
-
 - [ ] **FU-228** — **`agent-transcripts` has no retention — 5Gi → 20Gi bought time, not a policy.**
       The bucket sat at 98 % (5.3 GB, 26.7k objects, ~1 GB/week of ride exhaust) the hour
       `GarageBucketQuotaNear` first ran (2026-09-10, #1577); the 2026-08-03 claim was "11× actual".
