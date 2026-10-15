@@ -1,0 +1,31 @@
+# agent-gateway — the LLM egress gateway for the agent fleet, rebuilt spec-first as an island
+# (gateway/: own build, specs, tests; docs/spikes/context-and-autonomy.md P2, ADR-139). Owns the
+# credential boundary (pods never see a real key), per-request model resolution from a session
+# identity, and the three rails (anthropic / openrouter / opencode). Runs PARALLEL to the
+# openrouter-proxy app in the same namespace (operator, 2026-10-15) — its own name, Service,
+# image and directory; consumers move later, the old router keeps its name until then.
+# Kustomize app; the image is a tag pin in the kustomization (bumped by gateway-image.yaml's
+# auto-merge pin PR, the runner-image/FU-051 deploy-target shape). Wave 1 like its sibling.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agent-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/agent-gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-egress
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -1,0 +1,18 @@
+# gateway_* metrics (GW-METRICS: sessions active/total, requests, upstream latency, tokens,
+# credential resolves) → Prometheus. Picked up cluster-wide
+# (serviceMonitorSelectorNilUsesHelmValues=false) — the github-exporter pattern.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: agent-gateway
+  namespace: agent-egress
+  labels:
+    app: agent-gateway
+spec:
+  selector:
+    matchLabels:
+      app: agent-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 60s

@@ -1,0 +1,95 @@
+# The v0 policy (gateway/specs/endpoints/sessions.md — GW-SESSIONS-ADMIT / GW-MODEL-RESOLVE):
+# per-stack credential refs, per-role allowed rails in preference order, per-(rail,tier) model,
+# per-rail max_sessions, session TTL. NO model id lives in gateway code — only here.
+#
+# stacks: one entry per AgentStack claim (circles / oracle / platform / sleep, 2026-10-15). Both refs
+# point at the stack's mainRepo namespace, because that is where the Secrets live TODAY — every
+# OpenRouter key is `<repo>/<repo>-openrouter` (no loop-ns OpenRouter key exists) and every ride's
+# `claude-session` is read as `ref:<project>/claude-session` by agents/agent-session.sh. `loop_ns`
+# is the stack's loop namespace (`<stack>-agents`); its `claude-session` exists for platform +
+# oracle only (the Composition renders the ExternalSecret for all four — sleep-agents and
+# circles-agents hold none live), so the policy does not lean on it.
+# models: copied from argocd/resources/openrouter-proxy/model-classes.json `models` cells, written
+# the way each UPSTREAM is asked for them (the gateway rewrites the body's `model` to this value):
+#   opencode   = the `opencode-go/<id>` cell with the rail prefix stripped (the old proxy's GO_PREFIX)
+#   openrouter = the `openrouter` cell verbatim
+#   anthropic  = the subscription cells are harness aliases (`claude/sonnet`) that claude-code
+#                resolves client-side; the API-facing ids are the brief's (claude-haiku-5-5 /
+#                claude-sonnet-5-5 — the current generation, 2026-10).
+# max_sessions: anthropic 5 / opencode 5 = the old proxy's SUBSCRIPTION_MAX_RUNNING /
+# OPENCODE_MAX_RUNNING; openrouter 20 (per-token, bounded by key budgets not slots).
+# roles: rails in preference order from model-classes.json's class table (role_defaults → classes
+# → rails), harness = what agents/agent-session.sh derives for that rail today.
+#
+# A plain ConfigMap (not a configMapGenerator): an edit here does NOT roll the pod — the gateway
+# re-reads the policy on change, or the seat restarts it. Flip to the generator if the first
+# canary shows a stale read.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-gateway-policy
+  namespace: agent-egress
+  labels:
+    app: agent-gateway
+data:
+  policy.json: |
+    {
+      "stacks": {
+        "platform": {
+          "loop_ns": "platform-agents",
+          "openrouter_ref": "homelab/homelab-openrouter",
+          "anthropic_ref": "homelab/claude-session"
+        },
+        "oracle": {
+          "loop_ns": "oracle-agents",
+          "openrouter_ref": "oracle-fleet/oracle-fleet-openrouter",
+          "anthropic_ref": "oracle-fleet/claude-session"
+        },
+        "sleep": {
+          "loop_ns": "sleep-agents",
+          "openrouter_ref": "sleep-tracking/sleep-tracking-openrouter",
+          "anthropic_ref": "sleep-tracking/claude-session"
+        },
+        "circles": {
+          "loop_ns": "circles-agents",
+          "openrouter_ref": "circles/circles-openrouter",
+          "anthropic_ref": "circles/claude-session"
+        }
+      },
+      "roles": {
+        "worker":      {"rails": ["opencode", "openrouter"],  "tier": "standard", "harness": "opencode"},
+        "reviewer":    {"rails": ["anthropic", "opencode"],   "tier": "heavy",    "harness": "claude"},
+        "coordinator": {"rails": ["anthropic"],               "tier": "standard", "harness": "claude"},
+        "responder":   {"rails": ["anthropic"],               "tier": "standard", "harness": "claude"},
+        "retro":       {"rails": ["openrouter"],              "tier": "heavy",    "harness": "opencode"},
+        "researcher":  {"rails": ["openrouter"],              "tier": "heavy",    "harness": "opencode"},
+        "prober":      {"rails": ["openrouter", "opencode"],  "tier": "light",    "harness": "opencode"}
+      },
+      "rails": {
+        "anthropic": {
+          "max_sessions": 5,
+          "models": {
+            "light":    "claude-haiku-5-5",
+            "standard": "claude-sonnet-5-5",
+            "heavy":    "claude-sonnet-5-5"
+          }
+        },
+        "openrouter": {
+          "max_sessions": 20,
+          "models": {
+            "light":    "deepseek/deepseek-v4-flash",
+            "standard": "deepseek/deepseek-v4-flash",
+            "heavy":    "anthropic/claude-sonnet-4.6"
+          }
+        },
+        "opencode": {
+          "max_sessions": 5,
+          "models": {
+            "light":    "deepseek-v4-flash",
+            "standard": "deepseek-v4-flash",
+            "heavy":    "claude-sonnet-4-6"
+          }
+        }
+      },
+      "session_ttl_s": 14400
+    }

@@ -1,0 +1,106 @@
+# The gateway pod: a built image (gateway/Dockerfile → ghcr.io/teststuffstash/agent-gateway, tag
+# pinned by kustomization.yaml `images:` — bumped by .github/workflows/gateway-image.yaml's pin PR),
+# unlike the old proxy's ConfigMap-shipped script. Holds ONE secret of its own: the OpenCode Go
+# key (the opencode rail's credential is the gateway's, not a stack's). Every other upstream
+# credential is resolved per request from a labeled Secret via the SA (rbac.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-gateway
+  namespace: agent-egress
+  labels:
+    app: agent-gateway
+spec:
+  replicas: 1
+  # The session store PVC is RWO — RollingUpdate would deadlock on the volume attach. Cost: a
+  # ~10-20s blackout per roll; launchers fail-open/retry by design. rollingUpdate: null is
+  # LOAD-BEARING under ServerSideApply (the openrouter-proxy lesson): the live object carries
+  # defaulted rollingUpdate fields and switching type without clearing them is rejected.
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  selector:
+    matchLabels:
+      app: agent-gateway
+  template:
+    metadata:
+      labels:
+        app: agent-gateway
+    spec:
+      serviceAccountName: agent-gateway
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000 # the PVC must be writable by the image's non-root uid (gateway/Dockerfile)
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: ghcr.io/teststuffstash/agent-gateway # tag: kustomization.yaml images.newTag
+          env:
+            - name: GATEWAY_POLICY
+              value: /etc/agent-gateway/policy.json
+            # Unset/unwritable ⇒ :memory: degrade (healthz db: "memory") — never a hard dependency.
+            - name: GATEWAY_DB
+              value: /data/gateway.db
+            # The opencode rail's credential — the EXISTING ESO-materialized Secret the old proxy
+            # consumes too (ADR-107 chunk C). optional: true — the pod keeps serving the anthropic
+            # and openrouter rails if ESO has not materialized it; the rail fails closed per request
+            # (credential-unresolved → defer).
+            - name: OPENCODE_GO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: opencode-go-key
+                  key: api-key
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 60
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: policy
+              mountPath: /etc/agent-gateway
+              readOnly: true
+            - name: data
+              mountPath: /data
+            # readOnlyRootFilesystem leaves NO writable temp dir; sqlite spills temp files there
+            # (the old proxy's "disk I/O error" class) — an emptyDir at /tmp is the class fix.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: policy
+          configMap:
+            name: agent-gateway-policy
+        - name: data
+          persistentVolumeClaim:
+            claimName: agent-gateway-data
+        - name: tmp
+          emptyDir: {}

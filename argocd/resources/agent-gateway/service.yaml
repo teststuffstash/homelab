@@ -1,0 +1,19 @@
+# In-cluster only — launchers and pods reach it cross-namespace at
+#   http://agent-gateway.agent-egress.svc.cluster.local:8080
+# (POST /sessions for the launcher; /anthropic + /openai/v1 as the pod's base URL — the env the
+# gateway hands back in the /sessions response points here).
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-gateway
+  namespace: agent-egress
+  labels:
+    app: agent-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: agent-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
