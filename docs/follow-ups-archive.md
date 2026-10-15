@@ -10,6 +10,13 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-198** *(archived 2026-10-15)* — **Argo lock-plane wedge: the retry backoff no longer holds a subscription slot.**
+  Belt `ArgoLockPlaneWedged` (PR#1722) + upstream leak fixes (v4.1.4, 10-05) stood; the 10-09 five-slot
+  wedge was retry backoff holding the semaphore. Ruled 10-14 (retry on a wrapper, lock on the leaf) →
+  #2573 (`respond`) + #2581 (`deep-dig`), merged 10-15. Proof: a semaphore-1 toy + control on #2563 —
+  the sibling ran inside the backoff on the new shape, queued ~2 min behind it on the old.
+  Postmortem: `incidents/2026-08-31-argo-semaphore-leak.md`.
+
 - **FU-279** *(archived 2026-10-14)* — **Garage-side incomplete multipart uploads in the `registry` bucket, uncollected.**
   Operator ruling 10-14 (the 08-24 ☠ was about a bucket under recovery): 6 MPUs aborted by upload id (S3
   AbortMultipartUpload; one held 410 parts / 4.3 GB), then the 16 objects (21 GB) deleted and the bucket destroyed
