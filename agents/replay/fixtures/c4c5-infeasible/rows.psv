@@ -27,6 +27,15 @@ error-marker  | verdict | gh/issue-list-inprog.json @ patches/add-agent-error.jq
 #                 goal child at all and BOTH emitted a `c4c5-redispatch` unit carrying
 #                 `--work-branch`.
 strike-marker | verdict | gh/issue-list-inprog.json @ patches/add-goal-child.jq | GOALBASED_NUMS=66,72 | strike-marker
+# ── operator ruling 2026-10-15 (option B): the park KEEPS the #1797 `agent/error` clear but SAYS
+# so — one comment paragraph naming the latch it cleared, `(agent/error cleared)` on the report line.
+# `error-marker` above is the no-`AGENT_ERROR:`-comment leg (the latch is named as likely a human's
+# kill switch); the row below is the named-latch leg.
+# error-latch-named = the SAME error-marker world, but #66's thread (rows/error-latch-named/ overlay)
+#                 carries TWO anchored `AGENT_ERROR:` comments and, newest of all, a human QUOTING the
+#                 second (`> AGENT_ERROR: …`). The paragraph names the NEWEST ANCHORED latch's first
+#                 line — not the older one, not the quote. Reds on the base tree (no paragraph).
+error-latch-named | verdict | gh/issue-list-inprog.json @ patches/add-agent-error.jq |       | error-latch-named
 # ── FU-290 GraphQL drain (STUB_GH_GRAPHQL=drained — agents/replay/stubs/gh): every GraphQL mutation
 # fails "API rate limit already exceeded for installation ID 142724430" while REST serves. The label
 # writes ride REST (gh_label_add/gh_label_rm, agents/machine-comment.sh), so they still LAND; RED on

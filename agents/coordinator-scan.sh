@@ -4502,6 +4502,21 @@ EOF_GTHEMES_OPEN
                       | sub("^[ \t]+"; "") | .[0:200]')"
               [ -n "$ipay" ] || ipay="(no path/resource named — ask the worker's transcript)"
               infeas_done="${infeas_done}${icand} "
+              # ── THE CLEARED LATCH IS NAMED, not erased (operator ruling 2026-10-15) ──────────
+              # The clear below is unconditional (homelab#1797), but `agent/error` is not only the
+              # launcher's crash stamp — an anomaly latch or a human's kill switch sets it too, and
+              # the swap would erase that fact from the labels. So the park comment SAYS it cleared
+              # one, and names the latch: the NEWEST comment that OPENS with `AGENT_ERROR:` (same
+              # anchor discipline as the marker read above), else "no such comment — likely a
+              # human". Read from the labels the loop already holds (`$inprog`, pre-write) and the
+              # comments already fetched (`$icmt`) — no new API call.
+              ierr_had="$(jq -r --arg n "$icand" '[.[] | select((.number|tostring) == $n) | .labels[].name] | index("agent/error") != null' <<<"$inprog" 2>/dev/null || echo false)"
+              ierr_para=""
+              if [ "$ierr_had" = "true" ]; then
+                ierr_latch="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_ERROR:"))] | last // "" | (split("\n")[0] // "") | .[0:200]' <<<"$icmt" 2>/dev/null || echo "")"
+                [ -n "$ierr_latch" ] || ierr_latch="no AGENT_ERROR: comment on the thread — likely applied by a human (kill switch)"
+                ierr_para="⚠ This issue also carried \`agent/error\`, which this park cleared (the verdict supersedes a crash latch — homelab#1797). Its latch: ${ierr_latch}. If that latch was NOT this ride's crash, read it before re-queueing."
+              fi
               # ⚠ Same non-atomic write as the belt below, same order for the same reason: ADD the
               # new lifecycle label FIRST, remove `agent/in-progress` SECOND, then RE-READ and prove
               # the end state. With neither label the issue is invisible to every clause.
@@ -4528,8 +4543,9 @@ EOF_GTHEMES_OPEN
                   "" \
                   "That is a VERDICT, not a crash, so it does not go back through \`c4c5-redispatch\`: re-riding it would spend another paid session to re-derive an answer the loop already has. Labels moved \`agent/in-progress\` → \`agent/blocked\`, which also frees the repo WIP slot and releases every sibling this issue's \`Touches:\` footprint was holding (ADR-097)." \
                   "" \
-                  "**A human is the next mover.** Either re-scope the issue so the deliverable is inside a fix-class worker's reach (recipe path tiers + what the pod can actually see), or do the named part by hand — then remove \`agent/blocked\` and re-queue. Re-queueing it unchanged will simply reach the same verdict." )" >/dev/null 2>&1 || true
-                orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} parked \`agent/blocked\` (worker: ${ipay}). NOT re-dispatched: a human must re-scope it or do that part by hand (retro r3 F4).\n"
+                  "**A human is the next mover.** Either re-scope the issue so the deliverable is inside a fix-class worker's reach (recipe path tiers + what the pod can actually see), or do the named part by hand — then remove \`agent/blocked\` and re-queue. Re-queueing it unchanged will simply reach the same verdict." \
+                  ${ierr_para:+"" "$ierr_para"} )" >/dev/null 2>&1 || true
+                orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} parked \`agent/blocked\` (worker: ${ipay}). NOT re-dispatched: a human must re-scope it or do that part by hand (retro r3 F4).${ierr_para:+ (agent/error cleared)}\n"
                 # The board row (homelab#1797): the class the operator's todo view renders as
                 # "AGENT_INFEASIBLE — re-scope needed" (agents/board.sh, who=operator — the same
                 # `who` the parked-infeasible alert keys on). Pushed only on a PROVEN park: a
