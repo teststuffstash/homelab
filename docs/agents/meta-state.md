@@ -17,14 +17,15 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-15 ~18:15Z — seat, design-agents "codeowner reads"; TICK-LOG same date).** Codeowner reads
-  merged #2570 (#2178 Half 1), #2573 (#2563), #2574 (#2477), #2580 (#2572); **#2581 (#2571) approved, last in the updater
-  line — confirm merged, then ARCHIVE FU-198** (toy-semaphore observation + control posted on #2563). #2561 (Half 2) released
-  by the edge and riding. **#2582 (#2562)** was stuck red-from-master 19 h → seat `update-branch`; codeowner-read it once the
-  bot approves (class filed: #2588, inert). **#2566** waits on agent-coordinator#27, which only lands as an OPERATOR direct push
-  (workflow edit). **#1418** (S8) NOT closable: entry-20 defect filed + bound as #2589. **#2219 read DONE (kept, #2595); P0 = #1935 brief subtraction (subagent PR) — NEXT SESSION: P2 the gateway island — scope includes the role×stack×service access inventory (ruled 10-15).** **OpenRouter `/generation` 404s on every
-  lookup since ~17:59Z** — `OpenRouterGenerationHarvestMissing` (#2564, closed done) pending on it; seat watch running
-  (lag vs outage); ledger cost undercounts for rides in the window.
+- **⚑ PICKUP (2026-10-15 ~19:50Z — seat, design-agents "codeowner reads"; TICK-LOG same date): every read
+  merged, FU-198 archived, all five agenda items ruled.** **NEXT SESSION: P2 — the gateway island**
+  (docs/spikes/context-and-autonomy.md §plan; FU-270/ADR-139; scope includes the role×stack×service access
+  inventory, ruled 10-15). Watch: P0 PR **#2597** (last to merge — confirm, then #1935 closes); agent-runtime#176's
+  finalize half goes live with the next agent-base deploy-pin (automatic). The per-stack loops jumped
+  agent-coordinator 2026.8.7 → 2026.10.15 (#2592) — first suspect for any stack-loop oddity. **Open, inert, filed
+  today:** #2588 (inherited-master-red PR has no mover), #2589 (S8 entry 20 — stint #1418 NOT closable until it lands),
+  #2600 (responder harness /tmp race). **OpenRouter `/generation` 404s account-wide since ~17:59Z** —
+  `OpenRouterGenerationHarvestMissing` firing; upstream, nothing to fix; confirm it clears.
 - **⚑ PICKUP (2026-10-14 ~21:30Z — seat, design-agents corpus session; TICK-LOG 2026-10-14 design-agents batch):
   the 19:45Z batch is DONE except its "operator decides" bucket.** **NEXT PRIORITY (operator): the new router —
   `agent-gateway` (FU-270/ADR-139): opencode-go + codex rails, a router that works as an ISLAND** — start it from
