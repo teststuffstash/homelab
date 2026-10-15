@@ -20,10 +20,10 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 - **⚑ PICKUP (2026-10-15 ~19:50Z — seat, design-agents "codeowner reads"; TICK-LOG same date): every read
   merged, FU-198 archived, all five agenda items ruled.** **NEXT SESSION: P2 — the gateway island**
   (docs/spikes/context-and-autonomy.md §plan; FU-270/ADR-139; scope includes the role×stack×service access
-  inventory, ruled 10-15). Watch: P0 PR **#2597** (last to merge — confirm, then #1935 closes); agent-runtime#176's
+  inventory, ruled 10-15). P0 #2597 MERGED (#1935 closed). **#2588 QUEUED + riding** (updater: refresh a red PR whose newest run predates master's newest green — ONE predicate in the existing pick, operator 10-15) — its PR parks on the codeowner read. agent-runtime#176's
   finalize half goes live with the next agent-base deploy-pin (automatic). The per-stack loops jumped
   agent-coordinator 2026.8.7 → 2026.10.15 (#2592) — first suspect for any stack-loop oddity. **Open, inert, filed
-  today:** #2588 (inherited-master-red PR has no mover), #2589 (S8 entry 20 — stint #1418 NOT closable until it lands),
+  today:** #2589 (S8 entry 20 — stint #1418 NOT closable until it lands),
   #2600 (responder harness /tmp race). **OpenRouter `/generation` 404s account-wide since ~17:59Z** —
   `OpenRouterGenerationHarvestMissing` firing; upstream, nothing to fix; confirm it clears.
 - **⚑ PICKUP (2026-10-14 ~21:30Z — seat, design-agents corpus session; TICK-LOG 2026-10-14 design-agents batch):

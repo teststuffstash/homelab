@@ -13543,3 +13543,6 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Upstream outage, live:** OpenRouter `/generation` returns 404 for every lookup since ~17:59Z — project key AND the
   router-account key, fresh completions included; 0 stored in 90 min. `OpenRouterGenerationHarvestMissing` (#2564) fired
   on day one. Nothing to fix on our side; cost ledger undercounts for the window.
+- **Late:** #2597 merged 19:51Z (#1935 closed). #2588 re-shaped with the operator (options A–E → C → "a lot of
+  conditions that will go stale" → ONE predicate inherited into the updater's existing pick) and QUEUED; the platform
+  loop dispatched it within minutes (`agent-homelab-issue-2588-r1`). Wind-down: one bookkeeping push, no monitors left.
