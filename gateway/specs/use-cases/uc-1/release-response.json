@@ -1,0 +1,16 @@
+{
+  "_comment": "UC-1 Q5 — the launcher's finalize hook releases the Q1 session; the pod's token is refused from then on.",
+  "request": { "method": "DELETE", "path": "/sessions/«Q1 id»" },
+  "expected_response": {
+    "status": 200,
+    "body": { "id": "«Q1 id»", "released_at": "«T»" }
+  },
+  "then": {
+    "repeat_of": "opencode-request.json inbound",
+    "expected": { "status": 401, "body": { "error": { "code": "session-released", "message": "«one line, no token»" } } }
+  },
+  "expected_metrics": {
+    "gateway_sessions_active{rail=\"opencode\"}": 0,
+    "gateway_requests_total{rail=\"none\",dialect=\"openai\",status=\"401\"}": 1
+  }
+}

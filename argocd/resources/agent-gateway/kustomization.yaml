@@ -1,0 +1,25 @@
+# agent-gateway — the LLM egress gateway island's deploy (gateway/ is the build; this dir is the
+# cluster shape). PARALLEL to openrouter-proxy (operator, 2026-10-15): the old router stays
+# untouched; this app adds a second service to the SAME namespace. No namespace.yaml — the
+# namespace exists and is owned by the openrouter-proxy app. NO `namespace:` transformer either:
+# rbac.yaml's Roles live in the loop/repo namespaces and each manifest names its own (the
+# upgrade-lease-reader precedent).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - serviceaccount.yaml
+  - rbac.yaml
+  - configmap-policy.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
+
+# The image pin — the ONLY line .github/workflows/gateway-image.yaml's deploy/agent-gateway pin PR
+# edits (calver-gsha, `2026.<m>.<d>-g<sha12>`). 0.0.0-pending = no build has landed yet: the
+# Deployment sits ImagePullBackOff until the first master push of gateway/** builds one. Nothing
+# consumes :latest (none is pushed).
+images:
+  - name: ghcr.io/teststuffstash/agent-gateway
+    newTag: 2026.10.15-ge22dcb6bc37c

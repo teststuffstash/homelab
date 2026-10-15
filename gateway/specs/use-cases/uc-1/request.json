@@ -1,0 +1,7 @@
+{
+  "_comment": "UC-1 Q1 — the launcher's one question. World: policy-default, every ref resolvable, all rails empty.",
+  "stack": "platform",
+  "role": "worker",
+  "task": "homelab-2588-r1",
+  "round": 1
+}

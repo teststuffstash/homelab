@@ -1,0 +1,172 @@
+# The credential boundary's RBAC (gateway/specs/ GW-CRED-BOUNDARY / GW-CRED-RESOLVE): a get-secrets
+# Role bound in EACH namespace the policy's credential refs point into — never cluster-wide — and
+# the gateway code additionally honours only Secrets labeled `openrouter.teststuff.net/session-key`
+# (RBAC bounds the blast radius, the label check stops the gateway being a generic secret oracle
+# within it). Same shape as the old proxy's openrouter-proxy-session-keys / the AgentStack
+# Composition's agentstack-proxy-session-keys, new names so the two services never collide.
+#
+# Hand-listed here (not composed into the AgentStack claim) while the gateway is 🟡 BUILDING —
+# folding it into the Composition is the LIVE-flip's job, once the parallel run proves the seam.
+# Two namespaces per stack, because that is where the refs live TODAY (2026-10-15 inventory):
+#   * the loop namespace `<stack>-agents` — where the brief's `<loop_ns>/claude-session` lives for
+#     platform + oracle (sleep-agents / circles-agents hold no session-key Secret yet);
+#   * the stack's mainRepo namespace — where every OpenRouter key (`<repo>-openrouter`) and every
+#     ride's `claude-session` actually live (agents/agent-session.sh: `ref:<project>/…`). The
+#     policy (configmap-policy.yaml) points there.
+# get-only: a Secret is read, never listed or watched. No openrouterkeys grant — v0 does not read
+# the guardrail CR (ADR-096 ladder is out of v0 scope).
+#
+# NB: this kustomization carries NO `namespace:` transformer (it would rewrite every Role into
+# agent-egress — the upgrade-lease-reader precedent); each resource names its own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: platform-agents
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: platform-agents
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: oracle-agents
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: oracle-agents
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: sleep-agents
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: sleep-agents
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: circles-agents
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: circles-agents
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+# ── the mainRepo namespaces: where the policy's refs resolve today ──────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: homelab
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: homelab
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: oracle-fleet
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: oracle-fleet
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: sleep-tracking
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: sleep-tracking
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: circles
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: circles
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }

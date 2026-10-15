@@ -1,0 +1,13 @@
+.devbox/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+evidence/
+tests/
+specs/
+scripts/
+devbox.json
+devbox.lock
+README.md

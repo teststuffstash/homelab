@@ -1,0 +1,56 @@
+{
+  "_comment": "The `policy-default` world — the TEST policy (specs/worlds/README.md). Namespaces and Secret names are fixture names. Model ids are copied verbatim from argocd/resources/openrouter-proxy/model-classes.json (`models.*.ids` per rail; the `coding` class chain_head order for openrouter) — never invented. Rail caps: opencode = 3 mirrors that file's declared `rails.opencode-go.concurrency`; anthropic 5 and openrouter 20 are fixture sizes. `side_models` (anthropic) = the family claude-code's small side-calls name (ANTHROPIC_SMALL_FAST_MODEL), admitted on every session of that rail (⚖ GW-MODEL-RESOLVE). Every key here is one the gateway reads; a fact the policy cannot hold yet rides as a ⚖ comment in the spec, never as an invented key.",
+  "stacks": {
+    "platform": {
+      "loop_ns": "platform-agents",
+      "openrouter_ref": "platform-agents/platform-openrouter",
+      "anthropic_ref": "platform-agents/claude-session"
+    },
+    "oracle": {
+      "loop_ns": "oracle-agents",
+      "openrouter_ref": "oracle-agents/oracle-openrouter",
+      "anthropic_ref": "oracle-agents/claude-session"
+    }
+  },
+  "roles": {
+    "worker":      {"rails": ["opencode", "openrouter"],  "tier": "standard", "harness": "opencode"},
+    "reviewer":    {"rails": ["anthropic", "opencode"],   "tier": "heavy",    "harness": "claude"},
+    "coordinator": {"rails": ["anthropic", "opencode"],   "tier": "standard", "harness": "claude"},
+    "responder":   {"rails": ["anthropic", "opencode"],   "tier": "standard", "harness": "claude"},
+    "retro":       {"rails": ["anthropic", "openrouter"], "tier": "heavy",    "harness": "claude"},
+    "prober":      {"rails": ["anthropic"],               "tier": "light",    "harness": "claude"},
+    "researcher":  {"rails": ["openrouter", "anthropic"], "tier": "heavy",    "harness": "goose"}
+  },
+  "rails": {
+    "anthropic": {
+      "max_sessions": 5,
+      "side_models": ["claude/haiku"],
+      "models": {
+        "light": "claude/haiku",
+        "standard": "claude/sonnet",
+        "heavy": "claude/sonnet"
+      }
+    },
+    "opencode": {
+      "max_sessions": 3,
+      "models": {
+        "light": "opencode-go/deepseek-v4-flash",
+        "standard": "opencode-go/deepseek-v4-flash",
+        "heavy": "opencode-go/claude-sonnet-4-6"
+      }
+    },
+    "openrouter": {
+      "max_sessions": 20,
+      "models": {
+        "light": "deepseek/deepseek-v4-flash",
+        "standard": "deepseek/deepseek-v4-flash",
+        "heavy": "deepseek/deepseek-v4.1-flash"
+      }
+    }
+  },
+  "context_tokens": {
+    "_comment": "per-model harness window, copied from model-classes.json `models.*.context_tokens` — the only non-null entry today is the Go rail's deepseek-v4-flash; absent = null in the dispatch answer, never a guess.",
+    "opencode-go/deepseek-v4-flash": 1000000
+  },
+  "session_ttl_s": 14400
+}

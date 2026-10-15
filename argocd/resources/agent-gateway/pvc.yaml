@@ -1,0 +1,17 @@
+# The session store (sqlite WAL at /data/gateway.db — sessions, requests, usage). RWO ⇒ the
+# Deployment runs strategy: Recreate (a RollingUpdate would deadlock on the attach). If the volume
+# ever fails to mount-write, the gateway degrades to :memory: (/healthz reports db: "memory",
+# logged loudly — ADR-139's fail-open) — the data plane never depends on it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-gateway-data
+  namespace: agent-egress
+  labels:
+    app: agent-gateway
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi

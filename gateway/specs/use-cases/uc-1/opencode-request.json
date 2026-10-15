@@ -1,0 +1,33 @@
+{
+  "_comment": "UC-1 Q2 — the Q1 session's first data-plane call on the Go rail (openai dialect). `inbound` is what the pod sends; `expected_upstream` is what the fake Go upstream must receive. World: policy-default · upstream-ok.",
+  "session": { "rail": "opencode", "harness": "opencode", "model": "opencode-go/deepseek-v4-flash" },
+  "inbound": {
+    "method": "POST",
+    "path": "/openai/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer gws_«the Q1 token»",
+      "Content-Type": "application/json",
+      "User-Agent": "opencode/1.18.21",
+      "x-opencode-session": "«opencode's own session id»"
+    },
+    "body": {
+      "model": "deepseek-v4-flash",
+      "messages": [
+        { "role": "user", "content": "Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: 2588." }
+      ],
+      "stream": false
+    }
+  },
+  "expected_upstream": {
+    "url": "https://opencode.ai/zen/go/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer «OPENCODE_GO_API_KEY»",
+      "Content-Type": "application/json",
+      "User-Agent": "opencode/1.18.21",
+      "x-opencode-session": "«opencode's own session id»"
+    },
+    "headers_absent": ["x-api-key", "anthropic-beta", "Proxy-Authorization"],
+    "body_model": "deepseek-v4-flash",
+    "body_otherwise": "identical to inbound.body"
+  }
+}
