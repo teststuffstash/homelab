@@ -90,6 +90,7 @@ growing without bound.
 | [`issue-authoring.md`](issue-authoring.md) + [`issue-lifecycle-fsm.md`](issue-lifecycle-fsm.md) | Coordinator-authored issues, harvest, the sprout index; the lint-checked issue/goal state machine |
 | [`research-and-specs.md`](research-and-specs.md) | The research→specs process — fan-out arms, judges, downstream proxy, weave, harvest |
 | [`spec-gate-tiering.md`](spec-gate-tiering.md) | Proposal only — do not implement before the operator re-opens it |
+| [`specs-reviewer.md`](specs-reviewer.md) | The specs reviewer — a second review pass gating spec ROWS + their evidence (reviewer-gated, §Direction 2); the lens is `agents/lenses/specs.md`; proposed wiring + open questions — DRAFT |
 | [`meta-state.md`](meta-state.md) | Transient: what a fresh meta session must pick up |
 | [`../glossary.md`](../glossary.md) | The term→home index ruling this corpus's vocabulary (Goal/mission, canary/contract probe, the platform stack) |
 
