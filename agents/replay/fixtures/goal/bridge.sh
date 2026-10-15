@@ -33,6 +33,10 @@ punits=""
 # The (b) HOLD's side map (homelab#2477) — the `assembly_cr_prs` shape, initialised per stack in
 # the scan's per-repo loop. The goal lane appends to it when (b) fires against an OPEN assembly PR.
 goal_ckpt_b_prs=""
+# The (c) HOLD's side map (homelab#2565) — same shape, carrying the undispositioned-member SET's
+# fingerprint. The goal lane appends to it when (c) fires against a set the marker does not
+# already record; the dispatch-marker block (a separate fixture) reads it back.
+goal_ckpt_c_issues=""
 # ── goal-decompose block variables ── set via env for the two new rows (base-required,
 # base-master-pass); empty for existing rows so the block is a no-op.
 qclass="${QCLASS:-}"
