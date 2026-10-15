@@ -1,0 +1,2 @@
+OUT → {{SLUG}}#{{PRNUM}}: the alert carries no workflow label — no causal link to check, report-only (responder/operator lane owns it)
+RC 0

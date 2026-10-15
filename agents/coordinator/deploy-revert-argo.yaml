@@ -370,7 +370,11 @@ spec:
 # workflow-pin-revert — FU-1990 part 2: deterministic revert of a pin-only workflow PR whose CI
 # just failed on master. The trigger is GithubWorkflowRunFailed on master/main branch; the workflow
 # finds the newest merged PR within the revert window whose files touch `.github/workflows/`, checks
-# if every changed line is a `uses:` pin (the third shape from scripts/pin-only-lint.sh), and if so:
+# that the candidate changed the FAILED workflow's own file (the causal coupling, homelab#2178 —
+# the alert names the workflow, and without the match the chain reverted whatever workflow-touching
+# merge was newest: #2177 and #2358 both reverted a `renovate.yaml` pin off a `ci.yaml` flake),
+# checks if every changed line is a `uses:` pin (the third shape from scripts/pin-only-lint.sh),
+# and if so:
 #   (a) reverts the merge commit as a new auto-merging PR
 #   (b) records the reverted pins (the versions reverted FROM) as a machine-readable
 #       `reverted-pins:` line in the revert PR body. Renovate re-proposes a merged-then-reverted
@@ -530,6 +534,52 @@ spec:
             if [ "$IS_LOCK" = 1 ]; then
               echo "→ $SLUG#$PRNUM is lock-only ($LOCK_FILES) — inside the revert class (the lock IS the pin set)"
             else
+            # >>>REPLAY:workflow-pin-revert-coupling>>>
+            # ── THE CAUSAL COUPLING (homelab#2178 Half 1, operator scope ruling 2026-10-14) ──────
+            # The alert names the workflow that FAILED; the candidate must have changed THAT
+            # workflow's file. Without this the chain reverts the newest workflow-touching merge in
+            # the window whatever failed: #2177 (2026-10-02) and #2358 (2026-10-06) both reverted a
+            # `renovate.yaml` pin off a clause-replay flake in `ci.yaml`, and the reverted PR's own
+            # master CI was green in both cases. The alert's `.labels.workflow` is the workflow's
+            # `name:` (github-exporter: `run.get("name")`), which is NOT always the file stem —
+            # `ci.yaml` is named `CI`, and a workflow with no `name:` reports its file path — so
+            # both sides are normalized: strip a `.yaml`/`.yml` suffix, lowercase, compare.
+            # Fail-closed: an empty workflow label, or no candidate file under `.github/workflows/`
+            # whose stem matches it, is report-only — never a revert on a link we cannot see.
+            # KNOWN GAP, stated: the three reusable workflows carry a `name:` that is NOT their
+            # file stem (`devbox-cache.reusable.yml` is `devbox-cache`, `pin-only.reusable.yml` is
+            # `pin-only-reusable`), so a failure in one of those suppresses the revert. That is the
+            # fail-closed direction (the responder lane owns it) and it is deliberate: the exact
+            # name↔path map would cost a second API read, and a swallowed read error is how this
+            # lane went dead for weeks (#1990).
+            # The LOCK shape is not gated here — a lock-only candidate has no workflow file to
+            # match, its coupling is the lock itself (the toolchain every workflow runs on), and
+            # #2480's lock revert was the genuine cause (master's `runner-image` AND `CI` both
+            # failed at the reverted merge). This block is reached only on the non-lock path.
+            # couples_wf <workflow-label> <files, one per line>: 0 when a changed file IS the failed
+            # workflow's file (prints the coupling line), 1 when none is (prints why) — report-only.
+            couples_wf() {
+              local wf="$1" files="$2" f b stem
+              stem="$(printf '%s' "$wf" | tr '[:upper:]' '[:lower:]' | sed -E 's/\.ya?ml$//')"
+              if [ -z "$stem" ]; then
+                echo "→ $SLUG#$PRNUM: the alert carries no workflow label — no causal link to check, report-only (responder/operator lane owns it)"
+                return 1
+              fi
+              while IFS= read -r f; do
+                [ -n "$f" ] || continue
+                case "$f" in .github/workflows/*) ;; *) continue ;; esac
+                b="${f##*/}"
+                b="$(printf '%s' "$b" | tr '[:upper:]' '[:lower:]' | sed -E 's/\.ya?ml$//')"
+                if [ "$b" = "$stem" ]; then
+                  echo "→ coupling: $SLUG#$PRNUM changed $f — the failed workflow '$wf'"
+                  return 0
+                fi
+              done <<< "$files"
+              echo "→ $SLUG#$PRNUM changed no file of the failed workflow '$wf' — no causal link, report-only (responder/operator lane owns it)"
+              return 1
+            }
+            couples_wf "$WF" "$(printf '%s' "$CAND" | jq -r '.files[]?.path')" || exit 0
+            # <<<REPLAY:workflow-pin-revert-coupling<<<
             DIFF="$(gh pr diff "$PRNUM" --repo "$SLUG" 2>/dev/null || true)"
             if [ -z "$DIFF" ]; then
               echo "→ cannot read the diff of $SLUG#$PRNUM — refusing to classify it (report-only)"; exit 0
