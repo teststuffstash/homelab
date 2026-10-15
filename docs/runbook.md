@@ -559,17 +559,22 @@ plan id only (#1827), so the scope rides inside the plan.
 
 Incident: [`2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md) (FU-248).
 
-### Replacing a ci-runner VM (a cloud-init edit) — drained, one at a time
+### Replacing a ci-runner VM — drained, one at a time
 
-Any edit to `tofu/templates/ci-runner-cloud-init.yaml.tftpl` plans a replace of both runner VMs
-(`proxmox_virtual_environment_{file,vm}.ci_runner[0]` and `.ci_runner_02[0]`), and the box refuses
-it to a human apply. Do one VM per plan, through `scripts/runner-maintenance.sh`
+A replace is now always **deliberate**. Since FU-306 (2026-10-14) an edit to
+`tofu/templates/ci-runner-cloud-init.yaml.tftpl` re-renders the snippet and replaces **no** VM —
+both VMs ignore `initialization[0].user_data_file_id` (`tofu/ci-runner.tf`) — so the new snippet
+lands at the next attended recreate and a replace must be planned with `-replace`. The box refuses
+a replace to a human apply. Do one VM per plan, through `scripts/runner-maintenance.sh`
 ([`management-box.md`](management-box.md) §Non-Talos VMs: the runner verb):
 
-1. Plan the one VM, with `-exclude` on the other runner's VM and snippet file. For ci-runner-02:
-   `devbox run mgmt-tf -- plan -exclude='proxmox_virtual_environment_vm.ci_runner[0]' -exclude='proxmox_virtual_environment_file.ci_runner_cloud_init[0]'`
-   (for ci-runner-01, exclude `ci_runner_02[0]` and `ci_runner_02_cloud_init[0]`). Read it: one
-   VM replace plus its snippet, and whatever residue master already carries.
+1. Plan the one VM with `-replace` — for ci-runner-02:
+   `devbox run mgmt-tf -- plan -replace='proxmox_virtual_environment_vm.ci_runner_02[0]'`
+   (for ci-runner-01, `…vm.ci_runner[0]`). Read it: exactly **one**
+   `proxmox_virtual_environment_vm` change — that VM's replace — plus the re-rendered snippet
+   file(s) and whatever residue master already carries. ⚠ Never put `-replace` beside `-exclude`:
+   this repo measured that pair as silently ignored (§Recreating a Talos VM above, incident
+   [`2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md)).
 2. `devbox run runner-maint -- run <plan-id> ci-runner-02`. It refuses unless the plan's only VM
    change is that VM's replace. It opens its own window, drains both slots (waits for the
    running jobs, ≤ `DRAIN_TIMEOUT` 60 min), applies, waits for `verify` (both slots online with

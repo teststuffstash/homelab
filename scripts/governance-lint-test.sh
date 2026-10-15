@@ -157,5 +157,45 @@ git -C "$T/rl-moved" show "$PLANT^:devbox.lock" >"$T/rl-moved/devbox.lock"   # <
 git -C "$T/rl-moved" commit -q -am "restore the plant's parent over the later move"
 checkrl "$T/rl-moved" "revert-lock-$P8" "$BODY" 1 "moved on the base since" "revert-lock: master moved the lock after <sha8> → refused"
 
+# homelab#2412 — the THIRD shape (#1736's comment): a master-sync PR into a goal/** base. The PR
+# forks from the GOAL tip and merges master, so merge-base(base, head) == goal tip and three-dot ≡
+# two-dot: master's own governance write IS the PR's diff. The predicate is "content NOT reachable
+# from origin/master", so master's file drops out — while the PR's OWN governance write stays red.
+# mksync <dir> <goal-own-path-or-empty> <post-sync edit shell>: master = base + a governance write;
+# goal/2412 = base + <own-path> (if any) + the sync merge + <edit> (if any). Sets GTIP (the PR's
+# base) and leaves HEAD on goal/2412. GOVLINT_MASTER is the seam (the synthetic repo has no origin).
+mksync() {
+  local d="$1" p="$2" edit="$3"
+  mkdir -p "$d/scripts" && git -C "$d" init -q -b master
+  cp "$LINT" "$d/scripts/governance-lint.sh"
+  echo base >"$d/README.md"
+  git -C "$d" add -A && git -C "$d" commit -q -m base
+  git -C "$d" checkout -q -b goal/2412
+  if [ -n "$p" ]; then mkdir -p "$d/$(dirname "$p")"; echo own >"$d/$p"; git -C "$d" add -A && git -C "$d" commit -q -m "goal: own write"; fi
+  GTIP="$(git -C "$d" rev-parse HEAD)"
+  git -C "$d" checkout -q master
+  mkdir -p "$d/.agents" && echo m >"$d/.agents/fix.yaml"
+  git -C "$d" add -A && git -C "$d" commit -q -m "master: governance write"
+  git -C "$d" checkout -q goal/2412
+  git -C "$d" merge -q --no-ff --no-edit master >/dev/null
+  if [ -n "$edit" ]; then ( cd "$d" && eval "$edit" ) >/dev/null 2>&1; git -C "$d" add -A && git -C "$d" commit -q -m "pr: own write"; fi
+}
+checksync() {  # checksync <repo> <want-exit> <want-phrase> <label>
+  local out rc
+  out="$(cd "$T" && PR_AUTHOR='homelab-agents-1234[bot]' GOVLINT_MASTER=master CI= \
+         bash "$1/scripts/governance-lint.sh" "$GTIP" 2>&1)"; rc=$?
+  if [ "$rc" = "$2" ] && grep -qF -- "$3" <<< "$out"; then
+    pass=$((pass+1)); echo "ok   $4"
+  else
+    fail=$((fail+1)); echo "FAIL $4 — want exit $2 + '$3', got exit $rc:"; printf '       %s\n' "$out"
+  fi
+}
+# master's own governance write rides the sync → never the worker's (the goal wrote only docs/).
+mksync "$T/sync" "docs/note.md" ""
+checksync "$T/sync" 0 "touches no governance path" "master-sync into goal/**: master's governance write is not the worker's (#2412)"
+# The PR's OWN governance write on top of the sync is still red.
+mksync "$T/sync-own" "" "mkdir -p policy/mgmt && echo p > policy/mgmt/plan-input.yaml"
+checksync "$T/sync-own" 1 "$WORKER_RED" "master-sync into goal/**: the PR's own governance write is still red (#2412)"
+
 echo "governance-lint-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
