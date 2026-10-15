@@ -715,6 +715,22 @@ state_fp_for_clause() {
   printf '%s' "$hash"
   return 0
 }
+
+# Clause-scoped state-fp reader for an ISSUE-shaped clause (homelab#2565). `state_fp_for_clause`
+# reads a PR VIEW (`.comments[]`); the goal lane holds the goal issue's comments as a BARE array
+# (agents/goal-findings.sh `_gf_comments` flattens the slurped pages), so it cannot be handed to
+# that reader. Deliberately NO legacy `state-fp:<hash>` fallback: this clause's surface is new, so
+# there is no pre-clause-scoped marker to stay compatible with, and a bare marker some other
+# clause wrote on the same issue must never arm — or hold — this one. Always exits 0: an
+# unreadable payload yields "", which can never equal a fingerprint, so the clause behaves exactly
+# as it did before the guard existed (the state-fp idiom's own fail-open direction).
+issue_state_fp_for_clause() {   # $1 clause, $2 comments json (bare array)
+  printf '%s' "${2:-[]}" | jq -r --arg c "${1:?}" \
+    '([ .[]? | select((.body // "") | test("state-fp:" + $c + ":[0-9a-f]{6,64}")) ]
+      | sort_by(.createdAt) | last // {})
+     | (((.body // "") | scan("state-fp:" + $c + ":([0-9a-f]{6,64})") | .[0]) // "")' 2>/dev/null || true
+  return 0
+}
 # <<<REPLAY:state-fp-jq<<<
 
 # pr_state_fp_pair <slug> <pr> [clause] → "<current>|<recorded>", either side empty when unknown.
@@ -1794,7 +1810,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""
+  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
@@ -3442,7 +3458,12 @@ EOF_GOVERNANCE
         # UNDISPOSITIONED = open, not the bucket, no row, no `agent/*` lifecycle label — the
         # #1315 shape (an inert issue bound into the tree with nobody's judgment on it).
         # FIX #1451: parse qualified keys from gdesc (e.g., "homelab#1234")
-        gundisp_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" --arg GREPO "$repo" \
+        # The SET, not just the count (homelab#2565): trigger (c)'s debounce hashes the member
+        # KEYS, so a member ruled, added or removed moves the fingerprint while a ride that rules
+        # nothing leaves it unchanged. ONE predicate, two derivations — the count is the set's word
+        # count, so the two can never disagree about WHICH members are undispositioned. Own-repo
+        # members print bare `#n`, cross-repo ones `repo#n` (the `gadopt_unl` spelling below).
+        gundisp_set="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" --arg ad "$gdisp_ad" --arg df "$gdisp_df" --arg GREPO "$repo" \
           '(($d | split(" ") | map(select(. != "")))) as $D
            | ($ad | split(" ") | map(select(. != ""))) as $AD
            | ($df | split(" ") | map(select(. != ""))) as $DF
@@ -3452,8 +3473,11 @@ EOF_GOVERNANCE
                            | (if .repo == $GREPO then (.number | tostring) else null end) as $bk
                            | ($AD | index($qk)) == null and ($bk == null or ($AD | index($bk)) == null)
                              and (($DF | index($qk)) == null and ($bk == null or ($DF | index($bk)) == null)))
-                  | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)] | length' 2>/dev/null || echo "")"
-        case "$gundisp_n" in ''|*[!0-9]*) gundisp_n=0;; esac
+                  | select(((.labels // []) | map(.name)) | any(. as $l | ($LC | index($l)) != null) | not)]
+           | sort_by(.repo, .number)
+           | map(if .repo == $GREPO then "#\(.number)" else "\(.repo)#\(.number)" end) | join(" ")' 2>/dev/null || echo "")"
+        gundisp_n=0
+        for _gk in $gundisp_set; do gundisp_n=$(( gundisp_n + 1 )); done
         # ── ADOPTED-OPEN-UNLABELLED — the silent deadlock (homelab#2052; live: #1910 under theme
         # #1907 / Goal #1906). A member that is `adopted` on the store, OPEN, not a container, and
         # carrying NO `agent/*` lifecycle label is COUNTED by the completion predicate above (it
@@ -3742,8 +3766,41 @@ EOF_GTHEMES_OPEN
         # Trigger (c) — ADR-122 (4): an undispositioned member WAKES the checkpoint and never
         # blocks it. It is deliberately NOT part of gopen_n_ckpt, so (b) still fires alongside
         # it: the container is asked to RULE the member, not to wait on it.
+        # ── (c) HOLD: one ride per undispositioned-member SET (homelab#2565, FU-281) ───────────
+        # (c) is level-triggered on a COUNT, and a count is not a state: a member the container
+        # has already ruled stays in the tree, so the predicate is true on every tick until the
+        # member CLOSES — and each tick summons a reasoning session that can only rule "no
+        # change". FU-281 measured 19 rulings on six Goals, 11 on #1640, four trigger-(c) fires
+        # for ONE new member, each a sonnet session that stamped `no change`.
+        # The hold is the state-fp idiom, clause-scoped (`state-fp:goal-checkpoint-c:<hash>`) and
+        # written at DISPATCH time by the block at the bottom of this script — never at emission,
+        # or a unit that lost the priority race would retire the clause without ever riding. The
+        # fingerprint is the SET of undispositioned member keys, not their count: a member ruled,
+        # added or removed moves it and the clause re-arms by itself, while a ride that rules
+        # nothing leaves the set unchanged and earns no second ride.
+        # The marker lives on the GOAL ISSUE (this clause's unit is issue-shaped — there is no PR
+        # to annotate) and is read from `gcomments`, the comments payload the store read already
+        # fetched: ONE fetch, two derivations (FU-084), never a second GET.
+        # rule #6, fail-OPEN: an unreadable store keeps today's behaviour — (c) does not arm at
+        # all (`gdisp_ok` gate below, unchanged) — and an unreadable fingerprint fires exactly as
+        # it does today, the state-fp idiom's own direction.
         if [ "$gdisp_ok" = 1 ] && [ "$gundisp_n" -gt 0 ]; then
-          gck="${gck:+${gck} + }members ${gundisp_n} undispositioned"
+          gc_fp=""
+          if [ -n "$gundisp_set" ]; then
+            gc_fp="$(printf '%s' "$gundisp_set" | sha256sum 2>/dev/null | cut -c1-12)"
+            case "$gc_fp" in *[!0-9a-f]*|'') gc_fp='';; esac
+          fi
+          gc_prev="$(issue_state_fp_for_clause goal-checkpoint-c "$gcomments")"
+          if [ -n "$gc_fp" ] && [ "$gc_fp" = "$gc_prev" ]; then
+            orphans="${orphans}[$repo] ⏳ goal #${g}: members ${gundisp_n} undispositioned HELD — the set is unchanged since the last goal-checkpoint dispatch (\`state-fp:goal-checkpoint-c:${gc_fp}\`, homelab#2565). The container already ruled this exact set; a member ruled, added or removed moves the fingerprint and the clause re-arms by itself, so a ride that rules nothing costs no second ride.\n"
+          else
+            gck="${gck:+${gck} + }members ${gundisp_n} undispositioned"
+            # Carry the fingerprint to the dispatch site via a side map (the `assembly_cr_prs`
+            # shape): the marker must gate on CONFIRMED selection, not on emission.
+            if [ -n "$gc_fp" ]; then
+              goal_ckpt_c_issues="${goal_ckpt_c_issues} ${repo}:issue-${g}:${gc_fp}"
+            fi
+          fi
         fi
         # Trigger (e) — ADR-126 v1.3.1: a theme's tree is done and its branch has no PR. Folded
         # into the ONE emit below, so a goal gets one unit per pass whatever fired.
@@ -6571,6 +6628,28 @@ EOF
                 "" \
                 "Machine-readable hold marker (homelab#2477), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — the diff's content, the non-passing checks, \`reviewDecision\` and the newest verdict's timestamp — so a verdict, a content change or a check flip releases the hold while a rebase or a master-merge does not. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
             echo "  WARN: could not record state-fp on ${urepo} PR #${bpr} (gh write refused?) — dispatching anyway; the goal-checkpoint-b hold will not arm (homelab#2477)" >&2
+          fi
+        fi
+        # homelab#2565: the (c) HOLD's marker. Same shape, a third side map, and a different
+        # SURFACE: this clause's unit is issue-shaped, so the marker goes on the GOAL ISSUE under
+        # `state-fp:goal-checkpoint-c:` (the goal lane reads it back from the comments payload it
+        # already fetches). The fingerprint is the undispositioned-member SET, computed at
+        # emission and carried here — the marker must gate on CONFIRMED selection, not emission.
+        # An empty fingerprint (hasher missing) writes nothing: the clause then fires every tick,
+        # which is exactly today's behaviour.
+        cfp=""
+        for entry in ${goal_ckpt_c_issues:-}; do
+          if [[ "$entry" == "${urepo}:${uitem}:"* ]]; then
+            cfp="${entry##*:}"
+            break
+          fi
+        done
+        if [ -n "$cfp" ]; then
+          if ! gh issue comment "${uitem#issue-}" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
+                "🤖 \`state-fp:goal-checkpoint-c:${cfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit (trigger=c, undispositioned members) for goal ${uitem#issue-} at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+                "" \
+                "Machine-readable hold marker (homelab#2565), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the SET of undispositioned tree members this ride was summoned to rule — the member keys, not their count — so a member ruled, added or removed moves it and the clause re-arms by itself, while a ride that rules nothing leaves the set unchanged and earns no second ride. While the hash is unchanged this clause emits a report line instead of another unit." )" >/dev/null 2>&1; then
+            echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the goal-checkpoint-c hold will not arm (homelab#2565)" >&2
           fi
         fi
         ;;

@@ -9,6 +9,22 @@ the direction recorded in §Direction is the operator's, the plan steps are prop
 [`no-human-in-the-loop.md`](no-human-in-the-loop.md), ADR-086 / ADR-103 / ADR-110 / ADR-122 /
 ADR-126 / ADR-139, ROADMAP §"The platform lane sheds the meta crutch"._
 
+## Status (2026-10-15, operator read)
+
+Kept as merged (#2219, `42ad3aec`); the quickfixes are in use. The plan's state, each line live-checked
+that day:
+
+- **P0** — no ruleset change needed: both `goal/**` rulesets already list `homelab-merge` as a bypass actor,
+  and the updater refreshes an assembly once the codeowner approves it (proof: #1934, refreshed by
+  `homelab-merge[bot]` 2026-09-23 09:36Z, merged 09:53Z). #1935's 422 was the goal-checkpoint ride refreshing
+  with the coordinator token; that step is being removed from the brief (closes #1935).
+- **P1** — executed as Goal #2273 (both themes on master 2026-10-06); the verdict is the operator's.
+- **P2** — the gateway island is the operator's next priority (2026-10-14; FU-270 / ADR-139).
+- **P3** — in part: ADR-122 (3)'s one parser (`agents/issue_body.py`) is live; the label vocabulary is not one file.
+- **P5** — open as #1224.
+- **P4, P6, P7** — proposals, no ruling. P4 (specs reviewer-gated) and P6 (machine admission) each move a gate
+  and are ADR-sized; they are taken up when P2/P3 make them buildable.
+
 ## The question, and the correction
 
 The first draft (2026-10-04) read "76 open issues, an FU counter over 300, nothing moves" as an
