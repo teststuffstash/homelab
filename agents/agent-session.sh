@@ -3124,14 +3124,17 @@ if [ -n "$RUN_CMD" ]; then
         ERR_CLASS="harness-death"
       elif grep -qiE '429.*quota|429.*limit|monthly.*limit.*reached|rate limit exceeded' "$RUNLOG"; then
         ERR_CLASS="quota"
-      elif BUDGET_MATCH="$(grep -iE 'key limit exceeded' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
+      # Retro r8 F3: `check your account with your provider to add more credits` is goose's rendering
+      # of ANY provider 402 — no code, envelope or URL on the line, so key-cap and empty-account read
+      # the same. Operator ruling 2026-10-15 (retro r8 F3) files it KEY-class (→ KEY-RETRY, no
+      # strike), as agent-finalize does: the credit-floor gate (FU-088b) defers dispatch pre-spawn
+      # when the ACCOUNT is low, so the line means this ride's own session key hit its cap; a mid-ride
+      # account drain is the residual mis-file, caught by the gate on the next dispatch.
+      elif BUDGET_MATCH="$(grep -iE 'key limit exceeded|check your account with your provider to add more credits' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
         ERR_CLASS="budget-403-key"
       elif BUDGET_MATCH="$(grep -iE 'insufficient (credit|fund)|402 payment|payment required|out of credit' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
         ERR_CLASS="budget-403-account"
-      # Retro r8 F3: `check your account with your provider to add more credits` is goose's rendering
-      # of ANY provider 402 — no code, envelope or URL on the line, so a per-session key at its cap
-      # and an empty account read the same: the residual arm, as agent-finalize files it.
-      elif BUDGET_MATCH="$(grep -iE 'insufficient quota|quota exceeded|budget exceeded|check your account with your provider to add more credits' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
+      elif BUDGET_MATCH="$(grep -iE 'insufficient quota|quota exceeded|budget exceeded' "$RUNLOG" | head -1)" && [ -n "$BUDGET_MATCH" ]; then
         ERR_CLASS="budget-403"
       # Retro r8 F3 (docs/agents/retros/2026-10-12-platform-r8-opus.md): goose's forced-final-output
       # pair — the model hit its per-response OUTPUT-token cap and goose ordered the recipe's
