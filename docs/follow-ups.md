@@ -802,12 +802,16 @@ the block needs pruning, not more headings.
       Deployment + Service in `agent-egress`, ≥2 replicas + PDB, its own SA with the Secret-read
       grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
       (retry) stays. Relates ADR-087, FU-089.
-- [ ] **FU-270** — **`agent-gateway`: the proxy as its own image-producing repo (ADR-139 step 3).**
-      LLM rails + the ADR-096 router, renamed by role; pinned-image deploy (FU-044 revert class);
-      `model-classes.json` stays homelab config, mounted; a compat Service keeps
-      `openrouter-proxy.agent-egress` resolving (160 refs in 52 homelab files). Stays single-replica
-      on SQLite. **Blocked on** FU-127 (one `model_id.py` home) and FU-269. **Next:** scaffold the
-      repo (agent-runtime shape) + image CI; move code with history. Glossary: pending renames.
+- [ ] **FU-270** — **`agent-gateway`: the island is BUILT and LIVE in parallel (2026-10-16, #2606); the
+      consumers have not moved.** ADR-139 step 3 executed as the in-monorepo island `gateway/` (P2 ruling,
+      not a separate repo): specs-first (`gateway/specs/`, 14 `GW-*` rows), own toolchain/tests/image CI
+      (`.github/workflows/gateway-image.yaml`, pinned-image deploy = FU-044 class), `POST /sessions` +
+      per-session model, three rails canaried. The OLD proxy stays untouched (operator, 2026-10-15); no
+      launcher calls `/sessions` yet; the ADR-096 ladder / FU-088 latches / `/route` are `⚑ gap` rows.
+      Unblocked from FU-127/FU-269 (nothing left the repo). **Next:** (1) `agent-session.sh` → `/sessions`
+      for ONE role on the platform stack (env names differ today: goose = GOOSE_PROVIDER/OPENROUTER_HOST,
+      opencode = OPENCODE_CONFIG file — `GW-SESSIONS-ENV` ⚖ rows); (2) wire the specs lens
+      (`docs/agents/specs-reviewer.md` §wiring — identity question open); (3) the ladder as GW rows.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).

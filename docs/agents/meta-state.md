@@ -17,10 +17,14 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-16 ~22:40Z — seat, P2 overnight build; TICK-LOG same date): `agent-gateway` BUILT + LIVE in
+  PARALLEL (#2606, `gateway/`, SERVICES row LIVE), three rails canaried; the old router untouched (operator, 10-15).**
+  **NEXT:** FU-270's three next steps (launcher `/sessions` for one platform role; specs-lens wiring — identity
+  question in `docs/agents/specs-reviewer.md`; the ladder as GW rows). Verify `gateway_tokens_total` appears after a
+  200 (did not in the canary). The sonnet-class 429 seen 22:19Z was upstream (old proxy too; haiku fine) — recheck once.
 - **⚑ PICKUP (2026-10-15 ~19:50Z — seat, design-agents "codeowner reads"; TICK-LOG same date): every read
-  merged, FU-198 archived, all five agenda items ruled.** **NEXT SESSION: P2 — the gateway island**
-  (docs/spikes/context-and-autonomy.md §plan; FU-270/ADR-139; scope includes the role×stack×service access
-  inventory, ruled 10-15). P0 #2597 MERGED (#1935 closed). **#2588 QUEUED + riding** (updater: refresh a red PR whose newest run predates master's newest green — ONE predicate in the existing pick, operator 10-15) — its PR parks on the codeowner read. agent-runtime#176's
+  merged, FU-198 archived, all five agenda items ruled.** P2 DONE 10-16 (bullet above; access inventory =
+  `gateway/specs/access.md`). P0 #2597 MERGED (#1935 closed). **#2588 QUEUED + riding** (updater: refresh a red PR whose newest run predates master's newest green — ONE predicate in the existing pick, operator 10-15) — its PR parks on the codeowner read. agent-runtime#176's
   finalize half goes live with the next agent-base deploy-pin (automatic). The per-stack loops jumped
   agent-coordinator 2026.8.7 → 2026.10.15 (#2592) — first suspect for any stack-loop oddity. **Open, inert, filed
   today:** #2589 (S8 entry 20 — stint #1418 NOT closable until it lands),

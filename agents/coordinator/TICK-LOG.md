@@ -13546,3 +13546,41 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Late:** #2597 merged 19:51Z (#1935 closed). #2588 re-shaped with the operator (options A–E → C → "a lot of
   conditions that will go stale" → ONE predicate inherited into the updater's existing pick) and QUEUED; the platform
   loop dispatched it within minutes (`agent-homelab-issue-2588-r1`). Wind-down: one bookkeeping push, no monitors left.
+
+## 2026-10-15 20:30Z – 2026-10-16 ~22:40Z — P2: the agent-gateway island, built overnight (seat + 5 subagents, PR lane)
+
+- Operator plan: pick up P2 (the gateway island) from the 10-15 pickup, oracle-shaped specs, a SECOND reviewer that reads
+  only specs + evidence (the "Reviewer shape trial" artifact as the grounding), end state = a new gateway in the cluster
+  talking the opencode, openrouter and anthropic rails. **Mid-session ruling: the old router stays in place, untouched; the
+  new gateway runs in PARALLEL.** Seat = coordinator only (one brief, four parallel builders in their own clones + one
+  integration pass); the brief is the scratchpad's `gateway-brief.md` (not committed — its content is now `gateway/README.md`
+  + the specs).
+- **Built (#2606, merged 22:13Z on the bot's approval, author==sole-codeowner waiver):** `gateway/` — specs (`gateway/specs/`,
+  14 `GW-*` requirement pages with schema siblings, `spec_gate.py`, pytest rows = evidence, 219 rows green), the service
+  (starlette/httpx/uvicorn, SQLite sessions, `POST /sessions` → dispatch|typed defer + pod env + `gws_` token, data plane
+  `/anthropic/v1/messages` + `/openai/v1/chat/completions`, three rails, redacting logs, `gateway_*` metrics),
+  deploy (`argocd/resources/agent-gateway/` + Application, pinned image), the specs reviewer lens
+  (`agents/lenses/specs.md` + `docs/agents/specs-reviewer.md`, wiring PROPOSED only). Direct-to-master (governance
+  path, seat): `.github/workflows/gateway-image.yaml` (pin step master-only so a branch dispatch builds a first image),
+  the `ci.yaml` step + `diff-ci` row + a `gateway-ci` devbox script that no-ops on a ref without `gateway/`.
+- **Gate found real intake:** `lock-intake-lint` (ADR-143) had no uv.lock extractor → red; the extractor added IN the PR
+  (PyPI ecosystem, sdist-only = install-time code, git/path fail closed) immediately caught starlette 0.52.1 (10
+  advisories) + pytest 8.4.2 + two versions published the day before → current majors + `tool.uv.exclude-newer` 7-day
+  floor in `gateway/pyproject.toml`. Image rebuilt on the branch, re-pinned, then the master build's own pin PR #2607
+  auto-merged.
+- **Contract reconciliation (specs win):** OpenRouter keys + `claude-session` live in each stack's MAINREPO ns, not the loop
+  ns (deploy subagent's inventory) → policy refs point there; anthropic rail = family match, body untouched, haiku
+  side-calls admitted via `side_models` (seat ruling); opencode cap 3 = `model-classes.json` concurrency; two error
+  codes added to the schemas. Two subagent-reported gaps carried as ⚖ rows: harness env names differ from today's
+  launcher wiring (goose/opencode), and `GW-ACCESS`'s non-rail columns are documented-unenforced.
+- **Canary (seat, port-forward, 22:19–22:35Z):** `/healthz` db=pvc; reviewer→anthropic session OK, sonnet call **429 on
+  BOTH the new gateway and the old proxy** (control; haiku 200 on both) → upstream sonnet limit, not the gateway; haiku
+  through the gateway 200 "pong"; worker→opencode-go deepseek-v4-flash 200; retro→openrouter deepseek-v4.1-flash 200
+  via Together ($0.00002). A first 403 `model-not-session` was the canary naming the wrong model — the gate working.
+  SERVICES row flipped to LIVE (parallel; no consumer yet). Not checked: `gateway_tokens_total` did not appear in
+  `/metrics` after 200s — a GW-METRICS row to verify next session.
+- Noise I caused: the workflow-file push triggered one red `gateway-image` run on master (no `gateway/` yet), cleared by
+  the post-merge build. Flake seen twice: `responder-behaviour-test` / `clause-replay` red when two gate runs overlap
+  in one jail (fixed `/tmp/rbody.md` scratch path — the #2600 class), green alone.
+- Wind-down: FU-270 rewritten (built; next = launcher `/sessions` for one role, lens wiring, ladder rows), ADR-139
+  amendment pointer, spike §Status P2 line, glossary rename row, memory `gateway-island.md`; clones removed; no monitors.

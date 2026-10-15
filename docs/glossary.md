@@ -81,7 +81,7 @@ mission) would drown the check in false positives and stay judgment-lint territo
 
 ## Pending renames (recorded here, each executed by its own FU — below)
 
-- **`openrouter-proxy` → `agent-gateway`** (ADR-139, executed with the extraction — FU-270): the
+- **`openrouter-proxy` → `agent-gateway`** (ADR-139, FU-270 — the NEW service carries the name since 2026-10-16 (#2606, `gateway/`); the old proxy keeps its name until its consumers move): the
   service outgrew its first job (four rails, the ADR-096 router, report/search); named by ROLE.
   The git broker leaves under its own name first (FU-269). Metric families (`openrouter_*`) keep
   their names — dashboards and alerts read them.

@@ -2451,6 +2451,10 @@ freedom — measurement: [change-hotspots §2026-09-21](spikes/change-hotspots.m
 **Consequences:** agent-runtime#144's broker retry stays as defense in depth; the renames sit in
 the glossary's pending list. Tracker: FU-269 (broker), FU-127 (structured ids), FU-270 (gateway
 project), FU-271 (HA measurement).
+**Amended 2026-10-16 (P2 ruling, [context-and-autonomy.md](spikes/context-and-autonomy.md) §plan):** step
+(3) executed as an in-monorepo island (`gateway/`, own build/specs/tests, image CI in this repo —
+homelab#2606), not a separate repo, and in PARALLEL to the untouched proxy rather than as a move; the
+"blocked on FU-127/FU-269" ordering fell away with it (nothing left the repo).
 
 ### ADR-140 — A service's "may I lose a member now" lives in its own PodDisruptionBudget; maintenance verbs stay generic (2026-09-22)
 

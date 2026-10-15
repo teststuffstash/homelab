@@ -19,7 +19,7 @@ that day:
   `homelab-merge[bot]` 2026-09-23 09:36Z, merged 09:53Z). #1935's 422 was the goal-checkpoint ride refreshing
   with the coordinator token; that step is being removed from the brief (closes #1935).
 - **P1** — executed as Goal #2273 (both themes on master 2026-10-06); the verdict is the operator's.
-- **P2** — the gateway island is the operator's next priority (2026-10-14; FU-270 / ADR-139).
+- **P2** — **BUILT 2026-10-16 (#2606)**: `gateway/` — specs (oracle shape, 14 `GW-*` rows), service, tests, image CI, deploy; live in PARALLEL to the untouched `openrouter-proxy` (operator, 2026-10-15), three rails canaried; the consumer move + the ladder rows are FU-270's next. The specs reviewer lens (P4(a)'s first half) is drafted, unwired.
 - **P3** — in part: ADR-122 (3)'s one parser (`agents/issue_body.py`) is live; the label vocabulary is not one file.
 - **P5** — open as #1224.
 - **P4, P6, P7** — proposals, no ruling. P4 (specs reviewer-gated) and P6 (machine admission) each move a gate
