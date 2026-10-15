@@ -20,8 +20,9 @@
 #   key        = the (alert, subject) of each prior finding, read back from the bucket with the
 #                READER key — unlike the responder, this lane CAN read its own records (the retro
 #                already holds both keys), so "already dug this week" is a real gate, not a ledger.
-#   capacity   = ONE session per run, the subscription-capacity semaphore, activeDeadline 1 h;
-#                groups beyond DIG_MAX_GROUPS wait for the next day (listed as deferred).
+#   capacity   = ONE session per run, the subscription-capacity semaphore on the `dig` LEAF (never
+#                the workflow — FU-198: a retry backoff must not hold the slot it waits for),
+#                activeDeadline 1 h; groups beyond DIG_MAX_GROUPS wait for the next day (deferred).
 #   output     = a `dig-finding/v1` record PER GROUP in the agent-transcripts bucket
 #                (homelab/dig-<date>/dig-r1-<ts>/finding-N.json, beside the digest, the transcript
 #                and an A1 manifest) — the FU-231 consumer leg: findings go to the bucket, NOT to
@@ -51,10 +52,11 @@ spec:
     serviceAccountName: agent-coordinator
     activeDeadlineSeconds: 3600
     ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 172800 }
-    # FU-088 Argo layer: queue, never spawn, into a full subscription pool.
-    synchronization:
-      semaphores:
-        - configMapKeyRef: { name: subscription-capacity, key: claude }
+    # The subscription semaphore (FU-088 Argo layer) sits on the `dig` LEAF template — not here, and
+    # not on the `dig-retry` wrapper that calls it (FU-198 ruling, 2026-10-14). The retry below
+    # exists to wait out a latched rail, i.e. to wait for CAPACITY, so a workflow-level lock — taken
+    # before the first pod and held through every retry backoff — would hold the very slot it waits
+    # for. Same split responder-argo.yaml lands for `respond`.
     # homelab#103 / #867 soft spread + Longhorn-disk de-preference — the respond template's.
     podSpecPatch: |
       topologySpreadConstraints:
@@ -74,19 +76,38 @@ spec:
                     operator: NotIn
                     values:
                       - "true"
-    entrypoint: dig
+    entrypoint: dig-retry
     volumes:
       - { name: work, emptyDir: {} }
     templates:
-      - name: dig
-        metadata:
-          labels: { app: deep-dig-workflow }
+      # ── THE RETRY WRAPPER (FU-198 ruling, operator-approved design-agents sitting 2026-10-14) ──
+      # The retry — the one that waits out the FU-088 latch, i.e. waits for CAPACITY — lives HERE,
+      # on a steps template that holds NO semaphore, and NOT on the `dig` leaf that does. Whether
+      # Argo releases a template-level lock during a retry backoff was asserted, not observed, so
+      # the release is made STRUCTURAL: every attempt is a FRESH inner node that acquires and
+      # releases the semaphore, and no backoff can hold a slot. Same split responder-argo.yaml
+      # lands for `respond` (#2563).
+      - name: dig-retry
+        steps:
+          - - name: dig
+              template: dig
         # A latched rail exits 1 (both subscription rails busy) — retry with backoff rather than
         # lose the day; a selection or session failure also lands here, bounded by `limit`.
         retryStrategy:
           limit: "3"
           retryPolicy: OnFailure
           backoff: { duration: "30m", factor: "2" }
+      - name: dig
+        metadata:
+          labels: { app: deep-dig-workflow }
+        # Queue behind the shared subscription pool (FU-088 Argo layer) — held from here on, on the
+        # LEAF, so the wrapper's backoff above runs no pod and holds no slot.
+        # NO retryStrategy on this template (FU-198 ruling): the retry lives on the `dig-retry`
+        # wrapper that calls it, so a backoff can never hold this lock — each attempt is its own
+        # node that acquires and releases it.
+        synchronization:
+          semaphores:
+            - configMapKeyRef: { name: subscription-capacity, key: claude }
         container:
           image: ghcr.io/teststuffstash/agent-coordinator
           env:
