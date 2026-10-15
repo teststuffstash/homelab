@@ -1,0 +1,5 @@
+OUT CLASS homelab|issue-100|phantom|machine|...
+OUT UNIT c4c5-redispatch|homelab|issue-100|fix
+OUT V2   issue #100 — scan: the C4/C5 open-PR hold reads the strong link [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0

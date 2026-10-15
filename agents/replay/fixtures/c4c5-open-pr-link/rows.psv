@@ -1,0 +1,15 @@
+# c4c5-open-pr-link — the open-PR hold's decision table (contract in fixture.yaml).
+# id           | world | patch                                          | env | expect
+# bare-mention = the fleet#345 shape: an open PR that only NAMES `#100` (a coverage map). The unit
+#                IS emitted. REDS ON BASE — the bare `#<n>` test held it out of the unit, the
+#                report line and the IL-T16 belt.
+bare-mention | | gh/pr-list-open.json @ patches/bare-mention.jq | | bare-mention
+# strong-link  = `Implements #100` — the grammar `finalize` writes. Still HELD: the negative
+#                control that keeps the row above from being green for the wrong reason.
+strong-link  | | gh/pr-list-open.json @ patches/strong-link.jq  | | strong-link
+# trailer      = the grammar's OTHER half: a line-anchored `Issue: #100` trailer is a strong link
+#                too, so it is HELD.
+trailer      | | gh/pr-list-open.json @ patches/trailer.jq      | | trailer
+# no-pr        = no open PR at all: the ordinary abandoned ride, emitted. The base world, so this
+#                row also proves the three above are not green for the wrong reason.
+no-pr        | |                                                | | no-pr
