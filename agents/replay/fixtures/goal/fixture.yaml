@@ -69,6 +69,12 @@ name: goal
 mode: table
 source: agents/coordinator-scan.sh
 parts:
+  # The state-fp machinery (homelab#2477): the (b) HOLD reads `pr_state_fp_pair` with the
+  # `goal-checkpoint-b` clause, so the family composes the two blocks that define it — the same
+  # two the assembly-cr fixtures compose. Pure definitions, no calls: every pre-#2477 row's
+  # stream is byte-identical with them present.
+  - block:state-fp-jq
+  - block:state-fp-pair
   - file:bridge.sh
   - file:loop-wrap.sh
   - block:goal-decompose

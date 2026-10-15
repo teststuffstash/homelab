@@ -1,0 +1,39 @@
+# workflow-pin-revert-coupling — the CAUSAL COUPLING of the FU-1990 workflow-pin revert
+# (homelab#2178 Half 1; operator scope ruling 2026-10-14, design-agents sitting).
+#
+# THE CONTRACT. The alert names the workflow that FAILED (`.labels.workflow`, the workflow's
+# `name:` — github-exporter emits `run.get("name")`); the revert candidate must have changed THAT
+# workflow's file. `couples_wf` (agents/coordinator/deploy-revert-argo.yaml, lifted by sentinel —
+# never a retyped copy) normalizes both sides (strip a `.yaml`/`.yml` suffix, lowercase) and
+# returns 0 only when a changed file under `.github/workflows/` has the failed workflow's stem.
+# Anything else is report-only: no revert PR, exit 0.
+#
+# THE DEFECT. The candidate query picked the NEWEST merged PR in the window whose files touch
+# `.github/workflows/`, with no check that the candidate's workflow is the one that failed. Two of
+# two observed firings were spurious: #2177 (2026-10-02) reverted #2175's `renovate.yaml` pin off a
+# clause-replay flake in `ci.yaml` (master CI run #6565), and #2358 (2026-10-06) reverted #2352's
+# `renovate.yaml` pin off a SIGPIPE flake in the same replay harness (run #7217). Both reverted
+# PRs' own master CI was green (#6568, #7214). The row `ci-vs-renovate` is that world.
+#
+# THE ROWS (rows.psv; per-row state in the env column — WF is the alert's workflow label, CAND the
+# candidate JSON the candidate read hands over). The axis is the label↔file relation:
+#   ci-vs-renovate        — failed `CI`, candidate touched `renovate.yaml` ⇒ report-only (THE FIXED
+#                           ROW: red on base, where the chain reverted it).
+#   ci-vs-ci              — failed `CI`, candidate touched `ci.yaml` ⇒ coupled (the lane still
+#                           fires; also pins the name↔file case fold, `CI` vs `ci.yaml`).
+#   ci-vs-ci-among-others — failed `CI`, candidate touched `renovate.yaml` AND `ci.yaml` ⇒ coupled
+#                           (any match wins — a Renovate PR bumping one action in two workflows).
+#   nameless-workflow     — the label IS the file path (`ci.yaml`; a workflow with no `name:`
+#                           reports its path) ⇒ coupled (the WF-side suffix strip).
+#   no-workflow-label     — the label is empty (the exporter's `or ""`) ⇒ report-only, fail-closed.
+#
+# The LOCK shape is deliberately outside this block (a lock-only candidate has no workflow file to
+# match; its coupling is the lock itself) — the block is reached only on the non-lock path, and the
+# sibling fixtures workflow-pin-revert-lock-candidate / -lock-flake-candidate pin that path.
+name: workflow-pin-revert-coupling
+mode: table
+source: agents/coordinator/deploy-revert-argo.yaml
+parts:
+  - block:workflow-pin-revert-coupling
+  - file:post.sh
+rows: rows.psv

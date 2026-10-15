@@ -304,6 +304,7 @@ is stale, so it cannot drift the way the prose register did.
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-gate` | table | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal` | table | - | `agents/agent-session.sh` | - |
+| `goal-checkpoint-b-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `goal` | table | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 IL-T19 IL-T20 IL-T21 IL-T22 |
 | `harness-enforce-default/explicit-wins` | actions | - | `agents/agent-session.sh` | - |
 | `harness-enforce-default/flip` | actions | - | `agents/agent-session.sh` | - |
@@ -385,6 +386,7 @@ is stale, so it cannot drift the way the prose register did.
 | `renovate-rebase-tick-unticked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
 | `resolve-model` | table | - | `agents/resolve-model.sh` | - |
+| `responder-behaviour/responder-behaviour` | suite | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-capture/no-key` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-capture/remediation-would` | actions | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-capture/uploads` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
@@ -572,6 +574,7 @@ is stale, so it cannot drift the way the prose register did.
 | `unowned-pr-backstop/deps-review-unarmed-old` | actions | - | `agents/coordinator-scan.sh` | - |
 | `updater` | table | - | `-` | MP-T02 |
 | `workflow-pin-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `workflow-pin-revert-coupling` | table | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-lock-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-lock-flake-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |

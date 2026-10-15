@@ -149,13 +149,22 @@ section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 # /tmp/rbody.md is the script's own scratch file for a body rewrite; clear it per scenario so a
 # `grep -c '^last-cleared:'` can never pass on the PREVIOUS scenario's leftovers.
 scenario() { H="$TMP/run/$1"; rm -rf "$H"; mkdir -p "$H/gh"; rm -f /tmp/rbody.md; export H; }
+# `go` is the NO-KEY run, and it says so EXPLICITLY: the four §A1 vars are UNSET here rather than
+# merely not-set. A bare `VAR=… cmd` inherits the rest of the caller's environment, and a worker pod
+# exports all four for the ride's own transcript capture — so the script under test saw a key,
+# uploaded, and the `capture-degrades` assertions reddened (#2572, 2026-10-14). That is a false red
+# in a REQUIRED `ci` task, hit by every worker running `devbox run diff-ci` in a pod, and it reads
+# exactly like "your change broke the capture path". `env -u` makes the scenario the scenario
+# regardless of who calls it.
 go() {
+  env -u AGENT_TS_ACCESS_KEY_ID -u AGENT_TS_SECRET_ACCESS_KEY \
+      -u AGENT_TS_BUCKET -u AGENT_TS_ENDPOINT \
   PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" \
   PUSHGATEWAY="" PATH="$BIN:$PATH" \
     bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
   OUT="$(cat "$H/out.txt")"
 }
-# go_ts — the same run WITH the §A1 transcripts key present. `go` deliberately leaves it unset,
+# go_ts — the same run WITH the §A1 transcripts key present. `go` deliberately UNSETS it (above),
 # so every other scenario exercises the degrade path (`optional: true` Secret absent) and the
 # capture can never be load-bearing for a triage.
 go_ts() {
@@ -910,8 +919,35 @@ yqw() { yq -r "$WT | $1" "$YAML" | grep -v -e '^---$' -e '^$'; }
 [ "$(yqw '.spec.templates[] | select(.name == "window-grace") | .synchronization // "none"')" = none ] \
   && ok "the window-grace step takes no semaphore" || bad "semaphore placement" "window-grace is synchronized"
 _order="$(yqw '.spec.templates[] | select(.name == "main") | [.steps[][].template] | join(",")')"
-[ "$(yqw '.spec.entrypoint')" = main ] && [ "$_order" = "window-grace,respond" ] \
-  && ok "main runs window-grace BEFORE respond" || bad "step order" "entrypoint=$(yqw '.spec.entrypoint') order=$_order"
+[ "$(yqw '.spec.entrypoint')" = main ] && [ "$_order" = "window-grace,respond-retry" ] \
+  && ok "main runs window-grace BEFORE the respond retry wrapper" || bad "step order" "entrypoint=$(yqw '.spec.entrypoint') order=$_order"
+
+# ── FU-198 (ruling 2026-10-14): the retry must not hold the subscription semaphore ─────────────
+# The FU-113(b) retry exists to wait out the FU-088 latch — i.e. to wait for CAPACITY — so a backoff
+# that holds a slot is the defect (10-09 01:50–04:50Z: five `respond-*` in backoff held all five
+# slots). Whether Argo releases a template-level lock during a backoff was asserted, not observed,
+# so the release is made STRUCTURAL: the retry lives on a wrapper steps template, the semaphore on
+# the leaf it calls, and every attempt is a fresh node that acquires and releases. These assertions
+# are the invariant — putting `retryStrategy` back on the synchronized template, or moving the
+# semaphore up onto the wrapper, reds here.
+_sync="$(yqw '.spec.templates[] | select(.synchronization != null) | .name')"
+[ "$_sync" = respond ] \
+  && ok "exactly one template is synchronized, and it is the respond leaf" || bad "FU-198 semaphore placement" "synchronized templates: '$_sync'"
+[ "$(yqw '.spec.templates[] | select(.synchronization != null) | .retryStrategy // "none"')" = none ] \
+  && ok "the template holding the semaphore carries NO retryStrategy (no backoff can hold a slot)" || bad "FU-198 retry placement" "the synchronized template still carries a retryStrategy"
+[ "$(yqw '.spec.templates[] | select(.name == "respond-retry") | .retryStrategy.limit')" = 6 ] \
+  && ok "the retry lives on the respond-retry wrapper (limit 6)" || bad "FU-198 retry placement" "respond-retry has no retryStrategy"
+_retry_backoff="$(yqw '.spec.templates[] | select(.name == "respond-retry") | .retryStrategy.backoff | [.duration, .factor] | join("x")')"
+[ "$_retry_backoff" = "15mx2" ] \
+  && ok "…with the FU-113(b) backoff preserved (15m, factor 2)" || bad "FU-198 retry placement" "backoff=$_retry_backoff"
+[ "$(yqw '.spec.templates[] | select(.name == "respond-retry") | .synchronization // "none"')" = none ] \
+  && ok "…and the wrapper itself takes no semaphore" || bad "FU-198 semaphore placement" "respond-retry is synchronized"
+# The caller edge, both halves: main's respond step must point at the wrapper, and the wrapper's
+# step at the leaf. Without the first the retry is gone; without the second the triage never runs.
+[ "$(yqw '.spec.templates[] | select(.name == "main") | .steps[][] | select(.name == "respond") | .template')" = respond-retry ] \
+  && ok "main's respond step calls the retry wrapper" || bad "FU-198 caller edge" "main's respond step does not call respond-retry"
+[ "$(yqw '.spec.templates[] | select(.name == "respond-retry") | .steps[][] | .template')" = respond ] \
+  && ok "…and the wrapper's step calls the respond leaf" || bad "FU-198 caller edge" "respond-retry does not call respond"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "FU-210 / FU-231 — the §A1 transcript + finding record"

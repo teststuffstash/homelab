@@ -750,7 +750,11 @@ pr_state_fp_pair() {
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
     # unarmed-major (homelab#2066, #2100): a sentinel re-judge re-opens the debounce; a Renovate
     # rebase with unchanged content, a heartbeat re-post or a green check arriving does not.
-    unarmed-major)
+    # goal-checkpoint-b (homelab#2477) reuses the SAME fold for the same reason: the hold must
+    # release on a verdict, a content change or a check flip, and NOT on a rebase or a master-merge
+    # (the assembly PR's head is a `goal/**` branch the updater merges master into, and #1935 makes
+    # that wait long by construction).
+    unarmed-major|goal-checkpoint-b)
       fp_jq="$STATE_FP_JQ_UNARMED"
       # the content id (#2100) — probed HERE, so the clause and the dispatch-marker site (which
       # calls this without a pre-fetched probe) hash the same thing. Changed files' blob ids at
@@ -1796,7 +1800,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""
+  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
@@ -3703,7 +3707,43 @@ EOF_GTHEMES_OPEN
         gck=""
         [ "$gundisp" -ge "${GOAL_CHECKPOINT_N:-5}" ] && gck="findings ${gundisp} undispositioned"
         if [ "$gopen_n_ckpt" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
-          gck="${gck:+${gck} + }child-set complete pre-launch"
+          # ── (b) HOLD: the assembly PR is OPEN and awaiting a human (homelab#2477) ─────────────
+          # (b) exists to get the assembly OPENED — the operator's 2026-08-05 deadlock backstop.
+          # Once an OPEN `goal/**`-head PR carries THIS goal's line-anchored `Assembly-for: #<g>`
+          # trailer (the same strong-link grammar the post-launch arm keys on), that job is DONE:
+          # the next mover is a reviewer, a human or the merge. #1935 makes that wait long by
+          # construction (BEHIND is terminal for a `goal/**` head), so without this hold the
+          # predicate stays true every tick and re-summons a reasoning session that can only rule
+          # "nothing to rule, waiting on the operator" — 29 rides / ~1 h on oracle-fleet#828
+          # (PR#845), ~25/h, each ringing the doorbell into the next scan.
+          # The hold is the state-fp idiom, clause-scoped (`state-fp:goal-checkpoint-b:<hash>`) and
+          # written at DISPATCH time by the block at the bottom of this script — never at emission,
+          # or a unit that lost the priority race would retire the clause without ever riding.
+          # The fold is STATE_FP_JQ_UNARMED's (cf. #1939): a verdict, a content change or a check
+          # flip releases the hold; a rebase or a master-merge does not.
+          # rule #6, fail-OPEN: an unreadable PR probe or an unreadable fingerprint leaves (b)
+          # firing exactly as it does today — the state-fp idiom's own direction.
+          # The probe reads `prsjson` (the per-repo OPEN-PR fetch above), never a second fetch:
+          # ONE fetch, two derivations, and the fixture inherits it the way it inherits `openall`.
+          gb_pr="$(printf '%s' "${prsjson:-[]}" | jq -r --argjson n "$g" \
+            '[.[] | select((.headRefName // "") | startswith("goal/"))
+                  | select((.body // "") | test("(?mi)^[ \\t]*assembly-for:[ \\t]*#\($n)\\b"))
+                  | .number] | sort | last // ""' 2>/dev/null || echo "")"
+          case "$gb_pr" in ''|*[!0-9]*) gb_pr="" ;; esac
+          gb_hold=0
+          if [ -n "$gb_pr" ]; then
+            gb_pair="$(pr_state_fp_pair "$slug" "$gb_pr" goal-checkpoint-b)"
+            gb_cur="${gb_pair%%|*}"; gb_prev="${gb_pair#*|}"
+            if [ -n "$gb_cur" ] && [ "$gb_cur" = "$gb_prev" ]; then
+              gb_hold=1
+              orphans="${orphans}[$repo] ⏳ goal #${g}: child-set complete pre-launch HELD — assembly PR #${gb_pr} is OPEN and awaiting a human (\`state-fp:goal-checkpoint-b:${gb_cur}\`, homelab#2477). Opening the assembly is all trigger (b) exists to do; a verdict, a content change or a check flip on the PR releases the hold, a rebase or a master-merge does not.\n"
+            else
+              # Carry the PR to the dispatch site via a side map (the `assembly_cr_prs` shape):
+              # the marker must gate on CONFIRMED selection, not on emission.
+              goal_ckpt_b_prs="${goal_ckpt_b_prs} ${repo}:issue-${g}:${gb_pr}"
+            fi
+          fi
+          [ "$gb_hold" = 1 ] || gck="${gck:+${gck} + }child-set complete pre-launch"
         fi
         # Trigger (c) — ADR-122 (4): an undispositioned member WAKES the checkpoint and never
         # blocks it. It is deliberately NOT part of gopen_n_ckpt, so (b) still fires alongside
@@ -6507,6 +6547,29 @@ EOF
                 "" \
                 "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the PR state — head sha, \`reviewDecision\`, and the newest verdict's timestamp. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
             echo "  WARN: could not record state-fp on ${urepo} PR #${apr} (gh write refused?) — dispatching anyway; the assembly-cr clause will re-emit on unchanged state (homelab#198)" >&2
+          fi
+        fi
+        # homelab#2477: the (b) HOLD's marker. Same shape, different clause key and a different
+        # side map: this unit was emitted because the child set completed pre-launch while an OPEN
+        # assembly PR awaits a human, so the marker goes on THAT PR under
+        # `state-fp:goal-checkpoint-b:`. Both lookups may hit on the same unit (an assembly PR that
+        # is BOTH changes-requested and the (b) hold's PR) — two markers, two clauses, no conflict.
+        bpr=""
+        for entry in ${goal_ckpt_b_prs:-}; do
+          if [[ "$entry" == "${urepo}:${uitem}:"* ]]; then
+            bpr="${entry##*:}"
+            break
+          fi
+        done
+        if [ -n "$bpr" ]; then
+          dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "$bpr" goal-checkpoint-b)"; dfp="${dfp%%|*}"
+          if [ -z "$dfp" ]; then
+            echo "  WARN: state fingerprint unreadable for ${urepo} PR #${bpr} — dispatching anyway; the goal-checkpoint-b hold cannot arm this pass (homelab#2477)" >&2
+          elif ! gh pr comment "$bpr" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
+                "🤖 \`state-fp:goal-checkpoint-b:${dfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit (trigger=b, child-set complete pre-launch) for goal ${uitem#issue-} at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+                "" \
+                "Machine-readable hold marker (homelab#2477), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — the diff's content, the non-passing checks, \`reviewDecision\` and the newest verdict's timestamp — so a verdict, a content change or a check flip releases the hold while a rebase or a master-merge does not. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+            echo "  WARN: could not record state-fp on ${urepo} PR #${bpr} (gh write refused?) — dispatching anyway; the goal-checkpoint-b hold will not arm (homelab#2477)" >&2
           fi
         fi
         ;;

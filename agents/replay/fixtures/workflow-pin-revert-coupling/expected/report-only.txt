@@ -1,0 +1,2 @@
+OUT → {{SLUG}}#{{PRNUM}} changed no file of the failed workflow '{{WF}}' — no causal link, report-only (responder/operator lane owns it)
+RC 0

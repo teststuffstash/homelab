@@ -130,6 +130,37 @@
 #                           legacy-grammar meter line — still a `goal-checkpoint` unit, no label,
 #                           no comment. The assembly-PR key stays the only writer for that shape,
 #                           and (b) stays its backstop.
+#
+# ── homelab#2477: trigger (b) HOLDS while an OPEN assembly PR awaits a human ────────────────────
+# (b) exists to get the assembly OPENED. Once an OPEN `goal/**`-head PR carries the goal's
+# line-anchored `Assembly-for: #<g>` trailer, that job is done and the next mover is a reviewer, a
+# human or the merge — #1935 makes that wait long by construction. Without a hold the predicate
+# stays true every tick and re-summons a session that can only rule "nothing to rule, waiting on
+# the operator": 29 rides / ~1 h on oracle-fleet#828 (PR#845), ~25/h. The hold is the state-fp
+# idiom, clause-scoped (`state-fp:goal-checkpoint-b:<hash>`) and written at DISPATCH time; the fold
+# is STATE_FP_JQ_UNARMED's, so a verdict, a content change or a check flip releases it and a rebase
+# or a master-merge does not. The three rows below are the whole contract, recorded from the
+# oracle-fleet#828 world mapped onto this family's circles world (goal #29, assembly PR #845).
+#
+# goal-checkpoint-b-held  = the #828 shape: children closed, #845 OPEN REVIEW_REQUIRED/BEHIND with
+#                           the trailer, and a `state-fp:goal-checkpoint-b:` marker matching the
+#                           PR's current fingerprint → 0 units and ONE hold line. REDS on base
+#                           (pre-#2477 the row emits the unit). The store is 6/6 so trigger (a)
+#                           cannot mask the hold, and the row is the family's only `UNITS <none>`
+#                           pre-launch shape.
+# goal-checkpoint-b-verdict-rearms
+#                         = the SAME world with a NEW verdict on #845 (an APPROVED review at
+#                           18:04Z, after the 17:33Z marker). The fingerprint's `verdict=` line
+#                           moves, the hold releases, and (b) fires ONCE — the row that keeps the
+#                           hold from becoming a permanent silence.
+# goal-checkpoint-b-c-armed
+#                         = the SAME held world PLUS one undispositioned member (#301). Trigger (c)
+#                           is deliberately NOT part of the hold: the unit is emitted with reason
+#                           `members 1 undispositioned` while the hold line still prints. This is
+#                           the row that proves the hold narrows (b) and nothing else.
+# child-set-complete      = the negative row for "no assembly PR → (b) fires": its world carries
+#                           `prsjson` = [] (the family default), so the probe finds nothing and the
+#                           stream is byte-identical to pre-#2477.
 bare-members-inert             | open-pre | openall.json @ patches/add-bare-members.jq        | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due
 bare-member-counted-not-queued | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | bare-member-counted-not-queued
 two-goal-inert                 | open-pre | openall.json @ patches/add-second-goal.jq         | IN_SLUG=teststuffstash/circles IN_REPO=circles | two-goal-inert
@@ -144,6 +175,9 @@ abandoned          | terminal | openall.json @ patches/verdict-abandoned.jq | IN
 assembly-complete  | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | assembly-complete
 checkpoint-due     | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due
 child-set-complete | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | child-set-complete
+goal-checkpoint-b-held | open-pre |                                       | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-held
+goal-checkpoint-b-verdict-rearms | open-pre |                             | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-verdict-rearms
+goal-checkpoint-b-c-armed | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-c-armed
 nonassembly-merge-inert | open-pre |                                       | IN_SLUG=teststuffstash/circles IN_REPO=circles | nonassembly-merge-inert
 reverted           | terminal | openall.json @ patches/verdict-reverted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | reverted
 validated          | terminal |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | validated

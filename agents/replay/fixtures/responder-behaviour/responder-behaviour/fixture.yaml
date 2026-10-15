@@ -1,0 +1,24 @@
+# FU-167 move 7 (stint #661) straggler — the responder's behavioural harness registers so
+# "executed replay" has one runner and one index.
+#
+# mode: suite — the responder clause file (agents/coordinator/responder-argo.yaml) is pinned by
+# agents/coordinator/responder-behaviour-test.sh, which EXTRACTS the embedded triage script out of
+# the manifest at run time (never a transcription) and asserts on what it decides. It is the
+# responder's executed replay, and it is the only thing that can see a change the action-stream
+# machinery cannot: the FU-198 ruling (2026-10-14) moved `retryStrategy` off the synchronized
+# `respond` template onto a `respond-retry` wrapper, which is template PLACEMENT — no
+# `>>>REPLAY:` block changed, so no `mode: actions` fixture can reach it. The harness's structural
+# block pins it, and it reds on the pre-fix manifest: with `retryStrategy` put back on the
+# synchronized template the harness reports "the synchronized template still carries a
+# retryStrategy" (232 passed, 1 failed).
+#
+# Registered, not rewritten: it keeps its own file and its own devbox task
+# (`devbox run responder-behaviour-test`, a required `ci` step since homelab#133).
+#
+# hermeticity contract (homelab#329): needs `yq` — present under devbox, absent outside it.
+name: responder-behaviour
+mode: suite
+source: agents/coordinator/responder-argo.yaml
+entrypoint: agents/coordinator/responder-behaviour-test.sh
+requires:
+  - yq
