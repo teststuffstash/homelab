@@ -20,9 +20,19 @@ HERE="$REPLAY_ROOT/agents"
 slug="$IN_SLUG"
 repo="$IN_REPO"
 openall="$(cat "$REPLAY_FIXTURE/world/openall.json")"
+# `prsjson` is the per-repo OPEN-PR fetch (coordinator-scan.sh §"ONE fetch, two derivations",
+# the same fetch the changes-requested clause reads). The (b) HOLD (homelab#2477) probes it for
+# an OPEN `goal/**`-head PR carrying the goal's `Assembly-for:` trailer, so it arrives the same
+# way `openall` does: a variable the block INHERITS, set here from the world, never a recorded
+# call. Both worlds carry `[]` — no assembly PR — which is why every pre-#2477 row's stream is
+# byte-identical; the #2477 rows overlay a world whose file carries the open assembly PR.
+prsjson="$(cat "$REPLAY_FIXTURE/world/prsjson.json")"
 orphans=""
 units=""
 punits=""
+# The (b) HOLD's side map (homelab#2477) — the `assembly_cr_prs` shape, initialised per stack in
+# the scan's per-repo loop. The goal lane appends to it when (b) fires against an OPEN assembly PR.
+goal_ckpt_b_prs=""
 # ── goal-decompose block variables ── set via env for the two new rows (base-required,
 # base-master-pass); empty for existing rows so the block is a no-op.
 qclass="${QCLASS:-}"
