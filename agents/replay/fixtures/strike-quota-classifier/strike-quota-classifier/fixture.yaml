@@ -35,8 +35,10 @@
 #      re-route), goose-gated like `-32602`, matched as the two-line pair at column 0 — the
 #      phrase alone in quoted content is text (#1705). Strikes with and without a PR (#866).
 #   5. Goose's 402 line (`check your account with your provider to add more credits`): no code,
-#      envelope or URL, so key-cap and empty-account are indistinguishable — the residual
-#      budget-403 arm (escalate; neither strike nor key-retry), mirroring agent-finalize.
+#      envelope or URL, so key-cap and empty-account are indistinguishable on the line. Operator
+#      ruling 2026-10-15 (retro r8 F3): KEY-class → budget-403-key → KEY-RETRY (same model, fresh
+#      key, no strike), mirroring agent-finalize — the credit-floor gate (FU-088b) defers dispatch
+#      when the account is low, so the line means the session key hit its cap.
 #
 # CONDITION UNDER REPLAY. The strike classifier sits in two branches of agent-session.sh:
 #   - STATS path (AGENT_RUN_STATS line exists): if exit_status classifies as "unknown", the
