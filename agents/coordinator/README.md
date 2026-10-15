@@ -911,11 +911,9 @@ down, 2026-09-22), and an unreadable store HOLDS the walk with one ⚠ (rule #6)
 branch already exists, exit clean** — the trigger is stale (a sibling session or the seat got
 there first). Otherwise verify every member is CLOSED (re-list the theme's descendants) and that
 `ci` is green at the branch head (`gh run list --repo <slug> --branch goal/<goal-n>-<slug>`); a
-red or missing run is a loud line on the theme, not an open. Then, before arming, pull master
-into the branch if it is behind (the theme's master-refresh hop — the in-cluster updater only
-brings a master-bound PR current once it is merge-ready, homelab#1452, so the assemble step
-owns this hop at PR-open: `gh api -X PUT repos/<slug>/pulls/<assembly-pr>/update-branch` right
-after the create below, re-checking `ci` if it moved). Open the assembly PR:
+red or missing run is a loud line on the theme, not an open. **Do not refresh the theme branch
+from master yourself** — the in-cluster updater brings the assembly PR current under its
+ruleset bypass once the codeowner approves it (homelab#1452, #1935). Open the assembly PR:
 `gh pr create --repo <slug> --base master --head goal/<goal-n>-<slug>` **non-draft**, body = the
 member list (each `#n` + one line) and the literal line `Fixes #<theme-n>`.
 > ⚠ **`Fixes #<theme-n>` — NOT `Assembly-for:`, and NOT the Goal's number as a closing keyword.**
