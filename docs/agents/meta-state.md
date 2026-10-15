@@ -17,6 +17,14 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-15 ~18:15Z — seat, design-agents "codeowner reads"; TICK-LOG same date).** Codeowner reads
+  merged #2570 (#2178 Half 1), #2573 (#2563), #2574 (#2477), #2580 (#2572); **#2581 (#2571) approved, last in the updater
+  line — confirm merged, then ARCHIVE FU-198** (toy-semaphore observation + control posted on #2563). #2561 (Half 2) released
+  by the edge and riding. **#2582 (#2562)** was stuck red-from-master 19 h → seat `update-branch`; codeowner-read it once the
+  bot approves (class filed: #2588, inert). **#2566** waits on agent-coordinator#27, which only lands as an OPERATOR direct push
+  (workflow edit). **#1418** (S8) NOT closable: entry-20 defect filed + bound as #2589. **OpenRouter `/generation` 404s on every
+  lookup since ~17:59Z** — `OpenRouterGenerationHarvestMissing` (#2564, closed done) pending on it; seat watch running
+  (lag vs outage); ledger cost undercounts for rides in the window.
 - **⚑ PICKUP (2026-10-14 ~21:30Z — seat, design-agents corpus session; TICK-LOG 2026-10-14 design-agents batch):
   the 19:45Z batch is DONE except its "operator decides" bucket.** **NEXT PRIORITY (operator): the new router —
   `agent-gateway` (FU-270/ADR-139): opencode-go + codex rails, a router that works as an ISLAND** — start it from
@@ -53,14 +61,12 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   DONE (rebases seen 00:13Z/00:31Z, un-armed set drained to two stack PRs). Standing alerts: `GithubWorkflowRunFailed`
   openrouter-operator deploy clears on the 06:16Z success; the rest unchanged from 10-12.
 - **⚑ PICKUP (2026-10-13 20:05Z — seat; TICK-LOG 2026-10-13 19:00–20:05Z): r8 F1–F5 EXECUTED, all merged.**
-  **OPERATOR:** (1) **agent-runtime#173** (standing-key `cost_usd` = siblings' spend; inert, `agent-fix` only) — queue it
-  or not; until fixed, trust ledger cost only on per-session keys. (2) **Re-rule F3's 402 line:** `add more credits` went
+  **OPERATOR:** (1) ~~agent-runtime#173~~ DONE (closed). (2) **Re-rule F3's 402 line:** `add more credits` went
   to the residual `budget-403` arm, not `-account` (goose's one line for every provider 402); (3) **F1 is live on master
   (0aaa6898) untested on a real goal-base PR** — watch the first `goal/**` PR's ratchet step. Standing alerts: not
   surveyed this session (the seat ran the retro execution only; the 17:15Z pickup's set stands).
 - **⚑ PICKUP (2026-10-12 20:00Z — seat; TICK-LOG 2026-10-12 17:00–20:00Z): r8 published after two class fixes;
-  FU-046's non-major path flew; ADR-153 half landed.** **OPERATOR:** (1) **#2522** (r8 reports) auto-merged though its
-  body says HUMAN-GATED — read it (`docs/agents/retros/2026-10-12-platform-r8-*.md`; the goose one has no findings
+  FU-046's non-major path flew; ADR-153 half landed.** **OPERATOR:** (1) **#2522** (r8 reports) auto-merged — FINE by ruling (operator 2026-10-15: retro PRs may merge on the bot review, the operator reads them after) — read it (`docs/agents/retros/2026-10-12-platform-r8-*.md`; the goose one has no findings
   block, recorded as a defect); (2) sleep-tracking#185 (the zombie) CLOSED by the seat 19:55Z with the reason, branch
   deleted — Renovate's own flagged intent; (3) **ADR-153 fully landed** — #2524 (updater + nudge: Renovate owns untouched PRs' currency,
   merge-ready exception) MERGED 19:48Z, 2bf9c792a. **Stack jails:** six
@@ -289,9 +295,7 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   by the agents App 6 s after the bot approval — the "HUMAN-GATED, auto-merge NOT armed" gate in
   `retro-argo.yaml` is defeated by `review-reflex.sh`'s C9 re-arm (worker-App author, no parking marker:
   C9 honours only `major/awaiting-human`, `major`, `agent/error`, `research/*`); r4 #1645 went the same
-  way (8 min), r5 #1819 only waited because the reviewer requested changes. Operator's call which marker
-  the retro PR should state (both existing ones carry other semantics) — one line in retro-argo.yaml's
-  `gh pr create` once chosen. Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
+  way (8 min), r5 #1819 only waited because the reviewer requested changes. RULED 2026-10-15 (operator): merging is fine — the reviewer blocks the catastrophic, the operator reads after merge; no marker. (Residue: the body still says "read before merging".) Prior-art grep FU/GAPS/merge-path: nothing on retro PRs specifically.**
 - **⚑ PICKUP (2026-09-29 evening — S9: #2033 merged + deployed, prod OPNsense on 26.7.4; TICK-LOG 2026-09-29).**
   **NEXT SESSION = ONE GOAL (operator): software-side prep for the router move — rehearse the
   from-git router VM on nx-02 IN ISOLATION** (WAN = `eno2` passed through but uncabled, LAN on a
