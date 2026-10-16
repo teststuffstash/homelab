@@ -455,6 +455,13 @@ when apt pain is real.
 
 ## Backlog / parked features
 
+### Portable spec/evidence review — one process for every specs repo (2026-10-16, ADR-156)
+Every repo with `specs/` runs the same requirements → tests (Allure) → evidence → review process,
+homed in `allure-behavior-snippets` and pinned per repo. One specs reviewer runs a rows brief and an
+evidence brief over a deterministic context pack. Phases and design:
+[`docs/agents/specs-reviewer.md` §The portable process](docs/agents/specs-reviewer.md#the-portable-process-adr-156-2026-10-16);
+the order and its status live in that section.
+
 ### Self-hosted supply-chain security (SLSA L3 / "L4") — plan written 2026-06-12
 Build **real software** here with verifiable provenance **without GitHub/Chainguard as services**.
 Full plan, self-hosted stack, phased steps and the hardware decision live in
