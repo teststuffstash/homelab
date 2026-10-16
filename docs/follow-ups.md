@@ -806,21 +806,16 @@ the block needs pruning, not more headings.
       Deployment + Service in `agent-egress`, ≥2 replicas + PDB, its own SA with the Secret-read
       grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
       (retry) stays. Relates ADR-087, FU-089.
-- [ ] **FU-270** — **`agent-gateway`: the island is BUILT and LIVE in parallel (2026-10-16, #2606); the
-      consumers have not moved.** ADR-139 step 3 executed as the in-monorepo island `gateway/` (P2 ruling,
-      not a separate repo): specs-first (`gateway/specs/`, 14 `GW-*` rows), own toolchain/tests/image CI
-      (`.github/workflows/gateway-image.yaml`, pinned-image deploy = FU-044 class), `POST /sessions` +
-      per-session model, three rails canaried. The OLD proxy stays untouched (operator, 2026-10-15); no
-      launcher calls `/sessions` yet; the ADR-096 ladder / FU-088 latches / `/route` are `⚑ gap` rows.
-      Unblocked from FU-127/FU-269 (nothing left the repo). **2026-10-16 (ADR-155):** the specs reviewer
-      is the FIRST `/sessions` consumer — own App `homelab-specs-reviewer` (declared, ids pending the
-      operator's Create+Install), own CronWorkflow, homelab master = 2 approvals (tofu, applies outside
-      the jail); specs site `gateway-specs.homelab.teststuff.net` (oracle shape) in flight. **Next:**
-      (1) operator: create+install the App, `github-app-bootstrap.sh homelab-specs-reviewer secrets`,
-      `tofu -chdir=tofu/github apply`; seat: fill ids, apply `specs-reviewer-git.yaml`, canary one specs
-      PR through the gate; (2) `agent-session.sh` → `/sessions` for a worker role (env names differ:
-      goose = GOOSE_PROVIDER/OPENROUTER_HOST, opencode = OPENCODE_CONFIG — `GW-SESSIONS-ENV` ⚖ rows);
-      (3) the ladder as GW rows.
+- [ ] **FU-270** — **`agent-gateway`: the island is BUILT and LIVE in parallel (2026-10-16, #2606); one
+      consumer has moved.** ADR-139 step 3 as the in-monorepo island `gateway/` (specs-first, 14 `GW-*`
+      rows, own CI, pinned-image deploy); the OLD proxy stays untouched (operator, 2026-10-15). The specs
+      reviewer (ADR-155) is the first `/sessions` consumer: LIVE 2026-10-16, first evidence pass #2628.
+      **Finding (2026-10-16):** every live Claude Code call logs `in=0 out=0`
+      (`gateway.proxy … status=200 … in=0 out=0`), so session `tokens_in/out` and `gateway_tokens_total`
+      are blind for real traffic, though the fake-SSE test row (23/9) is green: the live stream shape
+      differs from the fixture. **Next:** (1) capture one real streamed response shape, add it as a
+      world + row, fix the parser; (2) `agent-session.sh` → `/sessions` for a worker role
+      (`GW-SESSIONS-ENV` ⚖ rows); (3) the ladder as GW rows.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).

@@ -13633,3 +13633,31 @@ updates or reverts as much as possible — mechanical revert or a responder."
   only. Shadow mode over. NOT yet observed: a live specs-reviewer approval (no code-reviewer-approved PR since).
 - **Operator Q (answered, ADR-155 unchanged):** no native path-scoped bot approval — the ruleset "required reviewers"
   rule (preview, 2025-11) takes file patterns but only TEAMS; Apps cannot join teams or be CODEOWNERS.
+
+## 2026-10-16 ~13:00–16:00Z — ADR-156: the portable spec/evidence process, built through to a live evidence pass (seat + 2 subagents, PR lane)
+- **First live specs-reviewer verdict:** #2619 (OTEL_TRACES_EXPORTER=none on the 4 OTLP workflows — a traces 404
+  per pod) got its mechanical second approval 61 s after the code reviewer. Gateway specs site serves 200 (operator
+  had synced the secrets).
+- **Operator ruling (ADR-156, #2621):** "every repo gets the same tests/evidence/requirements process otherwise it
+  does not work" — home = allure-behavior-snippets (pinned per repo); one reviewer runs a rows + an evidence brief
+  (two-reviewer split rejected: ~77k vs ~57k tokens on oracle's 11-rule pack, and disagreement costs worker rounds);
+  shape checklist stays advisory; **oracle-fleet untouched** — keeps its own process + v0.4.2 until the gateway proves
+  this one (its pin is a hard-coded wheel URL no Renovate manager bumps). Mint gate refused FU-314 → ROADMAP Backlog
+  entry + the design section carry the status.
+- **Built:** #2620 (lens inputs fixed, 600 s model timeout, `SpecsReviewNoProgress`); #2622 (issue acceptance text,
+  baseline, prior review, finding contract); snippets v0.5.0 (#29, subagent: process/ RULES, CONVENTIONS, rows +
+  evidence + finding-contract briefs, `touched-rules`, `evidence-pack`), v0.5.1 (#30, `evidence/<RULE>.json` —
+  evidence.json was ~165k tokens on 14 rules), v0.5.2 (#31, the join read NO `||`-divided tables: 0 → 14/14 rules);
+  #2623 (subagent: all 14 gateway test modules on Allure, 219 cases, STEP_FLAT 212 → 0, THREAD_BROKEN 150 → 0,
+  `git.commit` stamp, artifact=pr-head); ci.yaml `gateway-evidence` artifact (seat-direct c63dbe1 + diff-ci row);
+  #2624 (the evidence pass: pinned wheel by sha256, stdlib python3, pack = model inputs, dispatch on specs OR
+  gateway/tests, touched-rules decides); #2627 (spec gate skipped generated specs/evidence — a 2nd local gateway-ci
+  was always red); #2631 (gateway README rules → pointer @ v0.5.2, rule 5's "built image" claim corrected, gateway
+  pin v0.5.2).
+- **Canary #2628** (the join's CELL_MISMATCH: fake upstream 11/5 vs the uc-1 use case's 12/7 → fixture moved, spec
+  untouched): dispatched via test labels, 3 touched rules, Sonnet via /sessions, 9 turns, ~186k cache-read, $0.19-eq,
+  34 s; APPROVE with Evidence lines per rule, false-positive digest findings dropped with reasons. #2631 exercised
+  the "specs path, no rule touched" mechanical route.
+- **Findings:** session release lost in a gateway rollout gap (one replica, Recreate; 15:31:13→19Z) → #2630 retries;
+  every live Claude Code call logs `in=0 out=0` (streamed usage not parsed for real traffic) → FU-270 next (1);
+  snippets repo ruleset = 0 approvals (the process home merges on green CI alone) → operator.

@@ -17,16 +17,13 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-16 ~13:30Z — seat; TICK-LOG same date): specs reviewer LIVE (App 5344206, #2618; homelab
-  ruleset = 2 approvals, applied). NEXT SESSION (operator-set): the reviewer MECHANISM + LENS improvements** —
-  `agents/specs-reviewer-session.sh`, `agents/coordinator/specs-review-argo.yaml`, lens `agents/lenses/specs.md`,
-  design `docs/agents/specs-reviewer.md` (agent-platform design → ask before any corpus read; `/design-agents` is
-  operator-typed). Open first: (a) the first LIVE verdict is unobserved — check the next code-reviewer-approved
-  homelab PR got the second (mechanical) approval, and canary one `gateway/specs/**` PR through the LLM pass +
-  `gateway_sessions_active{rail="anthropic"}`; tick pods are GC'd, read logs via Loki; (b) host-side
-  `devbox run github-secrets-sync` for homelab `GATEWAY_SPECS_S3_*` (source `agent-egress/gateway-specs-s3` exists;
-  the jail cannot see whether the repo secret is set), then verify `https://gateway-specs.homelab.teststuff.net`
-  after the first master publish. FU-297 carries the BACKUP-cert finding.
+- **⚑ PICKUP (2026-10-16 ~16:00Z — seat; TICK-LOG same date): ADR-156 evidence pass LIVE** (snippets v0.5.2 pinned
+  in `agents/specs-reviewer-session.sh` + `gateway/scripts/lib/snippets.sh` — bump TOGETHER; canary #2628 approved).
+  **Next:** (a) step 5's measurement — per completed PR: tokens, worker rounds, invalid findings, coordinator
+  interventions (design: `docs/agents/specs-reviewer.md` §The portable process); first wide PR will show whether
+  14-rule packs fit the 600 s / context budget; (b) operator decision: allure-behavior-snippets has a 0-approval
+  ruleset — the process home is ungated; (c) oracle-fleet stays on its own process until the operator says the
+  gateway has proven it; (d) FU-270 (1): live streamed usage reads `in=0 out=0`.
 - **⚑ PICKUP (2026-10-16 ~22:40Z — seat, P2 overnight build; TICK-LOG same date): `agent-gateway` BUILT + LIVE in
   PARALLEL (#2606, `gateway/`, SERVICES row LIVE), three rails canaried; the old router untouched (operator, 10-15).**
   **NEXT:** FU-270's three next steps (launcher `/sessions` for one platform role; specs-lens wiring — identity
