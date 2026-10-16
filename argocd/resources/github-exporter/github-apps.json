@@ -256,6 +256,8 @@
     },
     {
       "slug": "homelab-specs-reviewer",
+      "app_id": 5344206,
+      "install_id": 172048550,
       "purpose": "The SECOND review identity (ADR-155) — homelab-specs-reviewer[bot] gates spec ROWS and their evidence (`**/specs/**` + the head's CI evidence; agents/lenses/specs.md, docs/agents/specs-reviewer.md), never code. Distinct from homelab-reviewer on purpose: GitHub counts approvals per identity, so `required_approving_review_count = 2` on the island repos (tofu/github `required_approvals`) is satisfiable only by two bots — the code verdict and the specs verdict can never collapse into one. On a PR with no `**/specs/**` path the identity approves MECHANICALLY (no LLM) — the price of GitHub's repo-wide count (a pull_request rule cannot be path-scoped; only require_code_owner_review is). First consumer of the agent-gateway `/sessions` seam (FU-270 dogfood).",
       "permissions": {
         "metadata": {
