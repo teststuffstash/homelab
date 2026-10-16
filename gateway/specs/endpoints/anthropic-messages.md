@@ -68,6 +68,7 @@ is visible on the session and in `gateway_requests_total{status="502"}`).
 |---|---|---||---|---|---|
 | "a messages call lands" | `POST /anthropic/v1/messages` | upstream-ok || 200 | the upstream body, byte-identical | `requests` +1, `tokens_in` = `usage.input_tokens`, `tokens_out` = `usage.output_tokens` |
 | "a streamed call streams" | `POST /anthropic/v1/messages`, `stream: true` | upstream-stream || 200 | the SSE bytes, unchanged, as they arrive | `requests` +1; tokens from the final `message_delta` usage when present, else unchanged ⚖ |
+| "cache classes are recorded apart" | `POST /anthropic/v1/messages` | upstream-ok-cached || 200 | the upstream body, byte-identical | (`requests`, `tokens_in`, `tokens_cache_read`, `tokens_cache_write`, `tokens_out`) = (1, 12, 300, 40, 7) — `input_tokens` already excludes the cache |
 | "a gzipped stream still counts" | `POST /anthropic/v1/messages`, `stream: true` | upstream-stream-gzip || 200 | the gzip bytes, unchanged; `content-encoding: gzip` kept | `requests` +1; tokens from the DECODED final `message_delta` usage (live anthropic answers gzip SSE — FU-270) |
 | "a rate limit passes through" | `POST /anthropic/v1/messages` | upstream-429 || 429 | the upstream body | `requests` +1 |
 | "an upstream auth failure is typed and hidden" | `POST /anthropic/v1/messages` | upstream-401 || 502 | `upstream-auth` envelope — not the upstream body | `requests` +1 |

@@ -427,23 +427,30 @@ class FakeUpstream:
             return JSONResponse({"error": "boom"}, status_code=500)
         return None
 
+    def _rail_headers(self) -> dict:
+        """The subscription upstream's `anthropic-ratelimit-unified-*` set (live values, 2026-10-16);
+        the pay-per-token fakes send none."""
+        return {"x-fake-rail": self.rail, **(SUBSCRIPTION_HEADERS if self.rail == "anthropic" else {})}
+
     async def _messages(self, request: Request) -> Response:
         call = await self._record(request)
         if (r := self._behave()) is not None:
             return self._reply(call, r)
         model = (call["body"] or {}).get("model")
         if self.behaviour == "upstream-stream":
-            return self._reply(call, StreamingResponse(_anthropic_sse(model), media_type="text/event-stream", headers={"x-fake-rail": self.rail}))
+            return self._reply(call, StreamingResponse(_anthropic_sse(model), media_type="text/event-stream", headers=self._rail_headers()))
         if self.behaviour == "upstream-stream-gzip":
             return self._reply(call, StreamingResponse(_gzipped(_anthropic_sse(model)), media_type="text/event-stream",
-                                                       headers={"x-fake-rail": self.rail, "content-encoding": "gzip"}))
+                                                       headers={**self._rail_headers(), "content-encoding": "gzip"}))
+        # the committed key example's usage (specs/use-cases/uc-1/anthropic-response.json): rows that
+        # count tokens (GW-METRICS, GW-RAIL-*) cite these values; upstream-ok-cached adds the cache split
+        usage = {"input_tokens": 12, "output_tokens": 7}
+        if self.behaviour == "upstream-ok-cached":
+            usage = {"input_tokens": 12, "cache_read_input_tokens": 300, "cache_creation_input_tokens": 40, "output_tokens": 7}
         return self._reply(call, JSONResponse(
             {"id": "msg_1", "type": "message", "role": "assistant", "model": model,
-             "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn",
-             # the committed key example's usage (specs/use-cases/uc-1/anthropic-response.json):
-             # rows that count tokens (GW-METRICS, GW-RAIL-*) cite these values
-             "usage": {"input_tokens": 12, "output_tokens": 7}},
-            headers={"x-fake-rail": self.rail},
+             "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": usage},
+            headers=self._rail_headers(),
         ))
 
     async def _chat(self, request: Request) -> Response:
@@ -456,7 +463,10 @@ class FakeUpstream:
         return self._reply(call, JSONResponse(
             {"id": "chatcmpl-1", "object": "chat.completion", "model": model,
              "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
-             "usage": {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10}},
+             "usage": ({"prompt_tokens": 312, "completion_tokens": 7, "total_tokens": 319,
+                        "prompt_tokens_details": {"cached_tokens": 300}}
+                       if self.behaviour == "upstream-ok-cached" else
+                       {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10})},
             headers={"x-fake-rail": self.rail},
         ))
 
@@ -465,6 +475,17 @@ class FakeUpstream:
         if (r := self._behave()) is not None:
             return self._reply(call, r)
         return self._reply(call, JSONResponse({"object": "list", "data": [{"id": "fake-model", "object": "model"}]}, headers={"x-fake-rail": self.rail}))
+
+
+SUBSCRIPTION_HEADERS = {  # captured live 2026-10-16 (one haiku call), the shape Anthropic sends on every answer
+    "anthropic-ratelimit-unified-status": "allowed",
+    "anthropic-ratelimit-unified-5h-status": "allowed",
+    "anthropic-ratelimit-unified-5h-utilization": "0.13",
+    "anthropic-ratelimit-unified-5h-reset": "1792172400",
+    "anthropic-ratelimit-unified-7d-status": "allowed",
+    "anthropic-ratelimit-unified-7d-utilization": "0.67",
+    "anthropic-ratelimit-unified-7d-reset": "1792274400",
+}
 
 
 async def _anthropic_sse(model):

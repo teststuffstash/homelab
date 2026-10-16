@@ -99,7 +99,7 @@
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out"],
+      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write"],
       "properties": {
         "id": { "$ref": "#/$defs/session_id" },
         "stack": { "$ref": "#/$defs/stack" },
@@ -113,8 +113,10 @@
         "expires_at": { "$ref": "#/$defs/timestamp" },
         "released_at": { "oneOf": [ { "$ref": "#/$defs/timestamp" }, { "type": "null" } ], "x-requirements": ["GW-SESSIONS-RELEASE"] },
         "requests": { "type": "integer", "minimum": 0 },
-        "tokens_in": { "type": "integer", "minimum": 0 },
-        "tokens_out": { "type": "integer", "minimum": 0 }
+        "tokens_in": { "type": "integer", "minimum": 0, "description": "uncached input tokens (openai dialect: prompt_tokens - cached_tokens)" },
+        "tokens_out": { "type": "integer", "minimum": 0 },
+        "tokens_cache_read": { "type": "integer", "minimum": 0 },
+        "tokens_cache_write": { "type": "integer", "minimum": 0 }
       },
       "x-requirements": ["GW-SESSIONS-TOKEN"]
     }
