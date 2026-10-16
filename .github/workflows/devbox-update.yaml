@@ -40,6 +40,8 @@ jobs:
           - { repo: agent-runtime, dir: "agent-base" }
           - { repo: oracle-fleet, dir: "." }
           - { repo: oracle-iac, dir: "." }
+          - { repo: circles, dir: "." }
+          - { repo: circles-iac, dir: "." }
     steps:
       # the script lives here; also gives us xz/jq + single-user Nix + devbox (same pattern as ci.yaml)
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
