@@ -2891,3 +2891,27 @@ structural dep edit (new package, a tool table — #90's own mypy line) still pa
 operator's admin merge, since no owned route remains; porting `scripts/gate-drift.sh` is the
 un-gating path for `scripts/`; revert = `git revert` per repo. Proof: the next Renovate PR on each
 repo merging unattended (dependency-upgrades.md §Last proven).
+
+### ADR-155 — The specs reviewer is a second App identity, and the island repo requires two approvals (2026-10-16)
+**Status:** Accepted (operator, 2026-10-16: "wire up a new review identity and any gateway specs
+change requires 2 approvals — one old reviewer and then the new evidence/specs reviewer").
+**Decision:** the specs reviewer ([specs-reviewer.md](agents/specs-reviewer.md), lens
+`agents/lenses/specs.md`) runs under its OWN GitHub App, `homelab-specs-reviewer`
+(`docs/github-apps.yaml`), dispatched by its own level-triggered CronWorkflow in `agent-coordinator`
+(the [ADR-130](#adr-130--the-policy-verdict-gets-its-own-identity-2026-09-13) sentinel shape, not a
+second pass inside `reviewer-session.sh`), AFTER the code reviewer's live APPROVED at head. The
+island repo's master ruleset requires **2 approving reviews** (`required_approvals` in
+`tofu/github/variables.tf`); the count is repo-wide because a pull_request rule cannot be
+path-scoped, so on a PR with no `**/specs/**` path the identity approves mechanically, no LLM.
+Its LLM session is admitted through the agent-gateway `POST /sessions` seam — the first consumer
+(FU-270 dogfood). **Considered:** the same App with verdict supersession (rejected — one identity
+can never make the count 2, and a later CHANGES_REQUESTED silently overwrites the code verdict,
+the two gates become unreadable in the review list); a required status check instead of an
+approval (rejected — the operator asked for approvals; a status would need a third poster and
+puts the specs verdict outside the review timeline); the codeowner flag on `gateway/specs/`
+(rejected — §Direction 2 moves that read OFF the operator). **Why:** two gates need two names,
+and iac-lane.md's capability bound holds — this identity reads what the code reviewer cannot
+weigh (rows vs intent, evidence at head), on a deliberately small surface. **Consequences:**
+every homelab PR now waits ≤ one tick for a second bot approval; the goal/** twin stays at 1;
+a dead specs-review plane stalls homelab merges (the exit contract + a missing-approval alert
+are the belts); adoption by another island = install the App + `required_approvals = 2` there.

@@ -41,6 +41,17 @@ variable "protected_repos" {
     # path are unaffected: bot approval + green CI still auto-merge. Only meaningful where
     # require_approval=true (the rule rides the required-approval ruleset's pull_request block).
     require_code_owner_review = optional(bool, false)
+    # required_approvals — the approving-review COUNT on the master-targeted required-approval
+    # ruleset (ADR-155). 1 = the code reviewer bot alone. 2 = a SECOND, DISTINCT identity must
+    # also approve: homelab-specs-reviewer[bot] (docs/github-apps.yaml), the specs-and-evidence
+    # gate over `**/specs/**` (docs/agents/specs-reviewer.md). GitHub counts approvals per
+    # identity and a pull_request rule cannot be path-scoped (only require_code_owner_review
+    # is), so the count is REPO-WIDE: on a PR touching no `**/specs/**` path the specs identity
+    # approves mechanically (no LLM), so deploy pins / Renovate / bookkeeping still auto-merge
+    # on two bot approvals. The goal/** twin keeps 1 — a second gate on the children would
+    # serialise the fan-out exactly like the codeowner flag did (the 2026-08-06 split); the
+    # goal→master assembly PR carries the specs diff and meets the gate there.
+    required_approvals = optional(number, 1)
     # restrict_workflow_pushes=true → a PUSH ruleset rejects any push touching
     # `.github/workflows/**` (iac-lane.md §L0b: the enforcement-grade native version of the
     # sentinel's path rule — the sleep-iac#28 self-merge hole). Applies to every branch and
@@ -88,7 +99,9 @@ variable "protected_repos" {
     #     waits for a human. That is the intended reading of those tiers, not an accident.
     #   • Renovate's Actions SHA-pinning PRs touch .github/workflows/ — OWNED, likewise. Arguably
     #     the single change you most want eyes on (the Trivy-class mitigation, renovate.md).
-    homelab = { required_checks = ["ci", "iac-sentinel", "management-sentinel"], require_approval = true, require_code_owner_review = true } # management-sentinel = the box's plan-on-PR verdict (ADR-131), posted by the same sentinel App # public → no push ruleset possible (flag comment above)
+    # required_approvals = 2 since ADR-155 (2026-10-16): homelab hosts the agent-gateway island
+    # (gateway/specs/), the first repo whose spec rows are gated by the specs reviewer identity.
+    homelab = { required_checks = ["ci", "iac-sentinel", "management-sentinel"], require_approval = true, require_code_owner_review = true, required_approvals = 2 } # management-sentinel = the box's plan-on-PR verdict (ADR-131), posted by the same sentinel App # public → no push ruleset possible (flag comment above)
     # The three below flipped require_code_owner_review=true 2026-08-11 (the reviewer-enable
     # retrace): with the platform stack's bot reviewer ON, require_approval alone lets a bot
     # approval auto-merge — the codeowner flag is what turns the bot review into input-only on

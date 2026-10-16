@@ -140,7 +140,9 @@ resource "github_repository_ruleset" "required_approval" {
 
   rules {
     pull_request {
-      required_approving_review_count   = 1    # the reviewer bot's approval
+      # 1 = the reviewer bot's approval; 2 (homelab, ADR-155) = + the specs reviewer bot's — two
+      # DISTINCT App identities, so neither can satisfy the count alone (variables.tf note).
+      required_approving_review_count   = each.value.required_approvals
       dismiss_stale_reviews_on_push     = true # new commits after approval re-open the gate
       require_last_push_approval        = false
       required_review_thread_resolution = false

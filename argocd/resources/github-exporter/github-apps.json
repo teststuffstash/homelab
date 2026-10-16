@@ -251,6 +251,45 @@
       }
     },
     {
+      "slug": "homelab-specs-reviewer",
+      "purpose": "The SECOND review identity (ADR-155) — homelab-specs-reviewer[bot] gates spec ROWS and their evidence (`**/specs/**` + the head's CI evidence; agents/lenses/specs.md, docs/agents/specs-reviewer.md), never code. Distinct from homelab-reviewer on purpose: GitHub counts approvals per identity, so `required_approving_review_count = 2` on the island repos (tofu/github `required_approvals`) is satisfiable only by two bots — the code verdict and the specs verdict can never collapse into one. On a PR with no `**/specs/**` path the identity approves MECHANICALLY (no LLM) — the price of GitHub's repo-wide count (a pull_request rule cannot be path-scoped; only require_code_owner_review is). First consumer of the agent-gateway `/sessions` seam (FU-270 dogfood).",
+      "permissions": {
+        "metadata": {
+          "level": "read",
+          "why": "baseline"
+        },
+        "contents": {
+          "level": "write",
+          "why": "the approval must COUNT — GitHub only counts reviews from a repo writer (contents:read ⇒ authorAssociation NONE, ignored; the homelab-reviewer lesson 2026-07-02). It clones the PR to diff `**/specs/**` against the merge-base; never pushes"
+        },
+        "pull_requests": {
+          "level": "write",
+          "why": "submit the specs verdict (approve / request-changes) + read the PR body's `Spec changes:` section"
+        },
+        "issues": {
+          "level": "read",
+          "why": "read the closing issue's `## Acceptance` rows — the intent source the lens's check 1 compares each spec row against (reads only; no labels, no comments — the breaker label on a specs anomaly is a plain review comment, not agent/error)"
+        },
+        "checks": {
+          "level": "read",
+          "why": "CI green at head is the dispatch premise; `gh pr checks` + `gh run list --commit <head>`"
+        },
+        "actions": {
+          "level": "read",
+          "why": "`gh run view --log` on the head's CI run — the evidence-render step output is the lens's evidence input when `specs/evidence/` is gitignored (gateway/)"
+        }
+      },
+      "installs": "selected",
+      "key_locations": [
+        "Infisical SPECS_REVIEWER_GH_APP_PRIVATE_KEY",
+        "~/.claude/homelab-github-specs-reviewer/"
+      ],
+      "bootstrap": {
+        "redirect_port": 8772,
+        "cred_dir": "~/.claude/homelab-github-specs-reviewer"
+      }
+    },
+    {
       "slug": "homelab-labels",
       "app_id": 4314419,
       "install_id": 146964959,
