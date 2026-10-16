@@ -33,7 +33,21 @@ import pytest
 
 from agent_gateway.config import Policy
 
-from .conftest import ISLAND, bearer, err, open_session, rule
+from .conftest import (
+    ISLAND,
+    attach_json,
+    bearer,
+    check,
+    err,
+    given,
+    open_session,
+    quiet,
+    rule,
+    then,
+    then_eq,
+    when,
+    world,
+)
 
 pytestmark = rule("GW-MODEL-RESOLVE")
 
@@ -69,36 +83,53 @@ ROWS = [
 
 @pytest.mark.parametrize(("which", "asked", "expected"), [r[1:] for r in ROWS], ids=[r[0] for r in ROWS])
 async def test_body_model(gw, upstreams, which, asked, expected):
+    world(upstream="upstream-ok")
     body, rail, op = SESSIONS[which]
-    doc = await open_session(gw, **body)
-    assert doc["rail"] == rail
+    with given(f"session which={which}: {body} → rail {rail}"):
+        doc = await open_session(gw, **body)
+        assert doc["rail"] == rail
     payload = {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 8}
     if asked is not None:
         payload["model"] = asked
     path = "/anthropic/v1/messages" if op == "messages" else "/openai/v1/chat/completions"
-    r = await gw.post(path, json=payload, headers=bearer(doc))
+    with when(f"POST {path} asked model {asked if asked is not None else '(absent)'}"):
+        r = await gw.post(path, json=payload, headers=bearer(doc))
     if expected == 403:
-        assert r.status_code == 403 and err(r) == "model-not-session"
-        assert upstreams[rail].calls == []
+        then_eq("status", r.status_code, 403, claim="expected status = 403")
+        then_eq("code", err(r), "model-not-session", claim="error code = model-not-session")
+        then_eq("upstream calls", len(upstreams[rail].calls), 0, claim="no upstream call")
     else:
-        assert r.status_code == 200, r.text
-        assert upstreams[rail].calls[-1]["body"]["model"] == expected
+        then_eq("status", r.status_code, 200)
+        then_eq("upstream body model", upstreams[rail].calls[-1]["body"]["model"], expected, claim=f"expected upstream body model = {expected}")
 
 
 async def test_dispatch_names_policy_id(gw, policy):
     """row: the dispatch answer names the policy id for (rail, tier)"""
-    for role in policy.roles:
-        doc = await open_session(gw, role=role, task=f"t-{role}")
-        assert doc["model"] == policy.rails[doc["rail"]].models[policy.roles[role].tier]
+    world()
+    with given(f"roles {sorted(policy.roles)} in the policy"):
+        attach_json("roles → tier", {role: policy.roles[role].tier for role in policy.roles})
+    docs = {}
+    with when("POST /sessions once per role (platform)"):
+        with quiet():  # one summary of the answers instead of one exchange per role
+            for role in policy.roles:
+                docs[role] = await open_session(gw, role=role, task=f"t-{role}")
+        attach_json("answers: role → (rail, model)", {role: {"rail": d["rail"], "model": d["model"]} for role, d in docs.items()})
+    with then("every answer's model = policy.rails[rail].models[role tier]"):
+        want = {role: policy.rails[d["rail"]].models[policy.roles[role].tier] for role, d in docs.items()}
+        check("model per role", {role: d["model"] for role, d in docs.items()}, want)
 
 
 def test_no_model_id_in_code(policy):
     """row: no model id from the policy appears in src/"""
-    ids = {m for rail in policy.rails.values() for m in (*rail.models.values(), *rail.side_models)}
-    ids |= {m.split("/", 1)[-1] for m in ids}
-    src = "\n".join(p.read_text(encoding="utf-8") for p in (ISLAND / "src").rglob("*.py"))
-    leaked = sorted(m for m in ids if re.search(re.escape(m), src))
-    assert not leaked, leaked
+    world()
+    with given("every model id in the policy (full and without its rail prefix)"):
+        ids = {m for rail in policy.rails.values() for m in (*rail.models.values(), *rail.side_models)}
+        ids |= {m.split("/", 1)[-1] for m in ids}
+        attach_json("policy model ids", sorted(ids))
+    with when("grep src/**/*.py for each id"):
+        src = "\n".join(p.read_text(encoding="utf-8") for p in (ISLAND / "src").rglob("*.py"))
+        leaked = sorted(m for m in ids if re.search(re.escape(m), src))
+    then_eq("leaked ids", leaked, [], claim="leaked ids in src/ = []")
 
 
 def _configmap_policy(path) -> dict:
@@ -117,22 +148,36 @@ def _configmap_policy(path) -> dict:
 @pytest.mark.skipif(not DEPLOYED_POLICY.exists(), reason="deploy manifests absent (service-only checkout)")
 def test_deployed_policy_loads(policy):
     """row: the deployed policy loads under the island's loader, in model-classes.json's spelling"""
-    deployed = Policy.from_dict(_configmap_policy(DEPLOYED_POLICY))
-    assert set(deployed.rails) == set(policy.rails) and set(deployed.roles) == set(policy.roles)
-    assert all(set(r.models) == {"light", "standard", "heavy"} for r in deployed.rails.values())
+    world(note="against the deployed ConfigMap policy")
+    with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)} policy.json)"):
+        raw = _configmap_policy(DEPLOYED_POLICY)
+        deployed = Policy.from_dict(raw)
+    with then("deployed rails and roles = the test policy's",
+              rails={"expected": sorted(policy.rails), "actual": sorted(deployed.rails)},
+              roles={"expected": sorted(policy.roles), "actual": sorted(deployed.roles)}):
+        assert set(deployed.rails) == set(policy.rails) and set(deployed.roles) == set(policy.roles)
+    with then("every deployed rail's models = {light, standard, heavy}",
+              models={r: sorted(v.models) for r, v in deployed.rails.items()}):
+        assert all(set(r.models) == {"light", "standard", "heavy"} for r in deployed.rails.values())
     if MODEL_CLASSES.exists():
         mc = json.loads(MODEL_CLASSES.read_text(encoding="utf-8"))
         known = {wire for m in mc["models"].values() if isinstance(m, dict) for wire in m["ids"].values()}
         ids = {m for r in deployed.rails.values() for m in (*r.models.values(), *r.side_models)}
-        assert ids <= known, sorted(ids - known)
-        assert deployed.rails["opencode"].max_sessions == mc["rails"]["opencode-go"]["concurrency"]
+        with then("every deployed model id is spelled as in model-classes.json", unknown={"expected": [], "actual": sorted(ids - known)}):
+            assert ids <= known, sorted(ids - known)
+        then_eq("opencode max_sessions", deployed.rails["opencode"].max_sessions, mc["rails"]["opencode-go"]["concurrency"],
+                claim=f"opencode max_sessions = model-classes.json opencode-go concurrency ({mc['rails']['opencode-go']['concurrency']})")
 
 
 async def test_anthropic_body_untouched(gw, upstreams):
     """row: the anthropic body is forwarded byte-untouched"""
-    doc = await open_session(gw, role="prober", harness="claude")
+    world(upstream="upstream-ok")
+    with given("a session on rail anthropic (prober, harness claude)"):
+        doc = await open_session(gw, role="prober", harness="claude")
     inbound = {"model": "claude-haiku-4-5", "max_tokens": 1024, "messages": [{"role": "user", "content": "Probe."}], "stream": False, "metadata": {"user_id": "u"}}
     raw = json.dumps(inbound, indent=2).encode()
-    r = await gw.post("/anthropic/v1/messages", content=raw, headers={**bearer(doc), "content-type": "application/json"})
-    assert r.status_code == 200
-    assert upstreams["anthropic"].calls[-1]["raw"] == raw
+    with when("POST /anthropic/v1/messages with an indent=2 raw body (model claude-haiku-4-5)"):
+        r = await gw.post("/anthropic/v1/messages", content=raw, headers={**bearer(doc), "content-type": "application/json"})
+    then_eq("status", r.status_code, 200)
+    with then("the upstream received the raw bytes unchanged", raw={"expected_len": len(raw), "actual_len": len(upstreams["anthropic"].calls[-1]["raw"])}):
+        assert upstreams["anthropic"].calls[-1]["raw"] == raw

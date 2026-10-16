@@ -32,7 +32,7 @@ import pytest
 
 from agent_gateway.logging import looks_like_credential
 
-from .conftest import SELF_URL, err, open_session, rule
+from .conftest import SELF_URL, attach_json, check, err, given, open_session, rule, then, then_eq, when, world
 
 pytestmark = rule("GW-SESSIONS-ENV")
 
@@ -57,9 +57,12 @@ VAR_ROWS = [
 
 @pytest.mark.parametrize(("body", "var", "value"), [r[1:] for r in VAR_ROWS], ids=[r[0] for r in VAR_ROWS])
 async def test_env_var(gw, body, var, value):
-    doc = await open_session(gw, **body)
+    world()
+    with when(f"POST /sessions body {body} → dispatch"):
+        doc = await open_session(gw, **body)
     expected = doc["session"]["token"] if value == "<token>" else value
-    assert doc["env"][var] == expected, doc["env"]
+    with then(f"env var {var} = value {value}", **{var: {"expected": value, "actual": "<token>" if doc["env"].get(var) == doc["session"]["token"] else doc["env"].get(var)}}):
+        assert doc["env"][var] == expected, doc["env"]
 
 
 SHAPE_ROWS = [
@@ -70,26 +73,40 @@ SHAPE_ROWS = [
 
 @pytest.mark.parametrize(("body", "present", "absent"), [r[1:] for r in SHAPE_ROWS], ids=[r[0] for r in SHAPE_ROWS])
 async def test_env_shape(gw, body, present, absent):
-    env = (await open_session(gw, **body))["env"]
-    assert set(env) == present, env
-    for prefix in absent:
-        assert not any(k.startswith(prefix) for k in env), (prefix, env)
+    world()
+    with when(f"POST /sessions body {body} → dispatch"):
+        env = (await open_session(gw, **body))["env"]
+    with then(f"env keys present = exactly {sorted(present)}", present={"expected": sorted(present), "actual": sorted(env)}):
+        assert set(env) == present, env
+    with then(f"absent: no env key starts with {list(absent)}", absent={"expected": list(absent), "actual": sorted(env)}):
+        for prefix in absent:
+            assert not any(k.startswith(prefix) for k in env), (prefix, env)
 
 
 async def test_no_env_value_is_a_real_key(gw):
     """row: no env value is a real key"""
-    for body in (CLAUDE, CLAUDE_GO, OPENCODE, GOOSE):
-        doc = await open_session(gw, **body)
-        token = doc["session"]["token"]
-        for k, v in doc["env"].items():
-            assert v == token or v.startswith("http://") or v in (doc["model"], doc["model"].split("/", 1)[-1]), (k, v)
-            assert v == token or not looks_like_credential(v), (k, v)
+    world()
+    docs = []
+    with when("POST /sessions for each harness shape: claude, claude on Go, opencode, goose"):
+        for body in (CLAUDE, CLAUDE_GO, OPENCODE, GOOSE):
+            docs.append(await open_session(gw, **body))
+    with then("every env value is the session token, an http:// URL or the model id — never a credential-shaped value"):
+        attach_json("verdict: env values per harness (token shown as <token>)",
+                    {f"{d['harness']} on {d['rail']}": {k: ("<token>" if v == d["session"]["token"] else v) for k, v in d["env"].items()} for d in docs})
+        for doc in docs:
+            token = doc["session"]["token"]
+            for k, v in doc["env"].items():
+                assert v == token or v.startswith("http://") or v in (doc["model"], doc["model"].split("/", 1)[-1]), (k, v)
+                assert v == token or not looks_like_credential(v), (k, v)
 
 
 async def test_codex_is_a_gap(gw):
     """row: codex is a gap"""
-    r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t", "harness": "codex"})
-    assert r.status_code == 400 and err(r) == "harness-rail-mismatch"
+    world()
+    with when("POST /sessions harness codex (platform worker)"):
+        r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t", "harness": "codex"})
+    with then("status 400 with code harness-rail-mismatch"):
+        check("(status, code)", (r.status_code, err(r)), (400, "harness-rail-mismatch"))
 
 
 CTX_ROWS = [("a declared `context_tokens` is echoed", OPENCODE, 1000000), ("an undeclared `context_tokens` is null, never a default", CLAUDE, None)]
@@ -97,5 +114,9 @@ CTX_ROWS = [("a declared `context_tokens` is echoed", OPENCODE, 1000000), ("an u
 
 @pytest.mark.parametrize(("body", "ctx"), [r[1:] for r in CTX_ROWS], ids=[r[0] for r in CTX_ROWS])
 async def test_context_tokens(gw, body, ctx):
-    doc = await open_session(gw, **body)
-    assert doc["context_tokens"] == ctx
+    world()
+    with given(f"policy: the dispatched model's declared ctx (context_tokens) is {ctx}"):
+        pass
+    with when(f"POST /sessions body {body} → dispatch"):
+        doc = await open_session(gw, **body)
+    then_eq("context_tokens", doc["context_tokens"], ctx, claim=f"ctx: context_tokens = {ctx}")

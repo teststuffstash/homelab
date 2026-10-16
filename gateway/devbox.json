@@ -19,6 +19,9 @@
       "test": [
         "uv run --frozen pytest -q \"$@\""
       ],
+      "evidence": [
+        "bash scripts/gateway-evidence.sh \"$@\""
+      ],
       "serve": [
         "uv run --frozen python -m agent_gateway"
       ],

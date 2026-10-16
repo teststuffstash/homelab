@@ -33,7 +33,7 @@ from agent_gateway.config import UPSTREAM_DEFAULTS
 from agent_gateway.rails import OAUTH_BETA, upstream_url
 
 from ._rail_rows import expected_bytes, ride
-from .conftest import GO_KEY, err, rule
+from .conftest import GO_KEY, err, rule, then, then_eq, world
 
 pytestmark = rule("GW-RAIL-OPENCODE")
 RAIL = "opencode"
@@ -53,13 +53,16 @@ HEADER_ROWS = [
 
 @pytest.mark.parametrize(("op", "inbound", "expect"), [r[1:] for r in HEADER_ROWS], ids=[r[0] for r in HEADER_ROWS])
 async def test_headers(gw, upstreams, op, inbound, expect):
+    world(upstream="upstream-ok")
     doc, r = await ride(gw, RAIL, op, headers=inbound)
-    assert r.status_code == 200, r.text
+    then_eq("status", r.status_code, 200)
     call = upstreams[RAIL].calls[-1]
-    for k, v in expect.items():
-        if v == "<session id>":
-            v = doc["session"]["id"]
-        assert call["headers"].get(k) == v, (k, call["headers"].get(k))
+    want = {k: (doc["session"]["id"] if v == "<session id>" else v) for k, v in expect.items()}
+    got = {k: call["headers"].get(k) for k in want}
+    with then("expect upstream headers " + ", ".join(f"{k} = {v}" for k, v in expect.items()),
+              expect={"expected": want, "actual": got}):
+        for k, v in want.items():
+            assert call["headers"].get(k) == v, (k, call["headers"].get(k))
 
 
 LAND_ROWS = [
@@ -72,48 +75,70 @@ LAND_ROWS = [
 
 @pytest.mark.parametrize(("op", "behaviour", "path"), [r[1:] for r in LAND_ROWS], ids=[r[0] for r in LAND_ROWS])
 async def test_calls_land(gw, upstreams, settings, op, behaviour, path):
+    world(upstream=behaviour)
     model = "claude-sonnet-4-6" if op == "messages" else "deepseek-v4-flash"
     status, body, headers = await expected_bytes(upstreams[RAIL], op, model, behaviour)
     upstreams[RAIL].behaviour = behaviour
     extra = {"model": model, **({"stream": True} if behaviour == "upstream-stream" else {})} if op != "models" else None
     doc, r = await ride(gw, RAIL, op, body=extra)
-    assert r.status_code == status == 200 and r.content == body
-    assert r.headers["content-type"] == headers["content-type"]
-    assert upstreams[RAIL].calls[-1]["path"] == path
+    then_eq("status", (r.status_code, status), (200, 200), claim="status = 200 (= the upstream's)")
+    with then(f"body = the upstream body under {behaviour}, byte-identical, same content-type",
+              body={"expected_len": len(body), "actual_len": len(r.content)},
+              content_type={"expected": headers["content-type"], "actual": r.headers["content-type"]}):
+        assert r.content == body
+        assert r.headers["content-type"] == headers["content-type"]
     dialect = "anthropic" if op == "messages" else "openai"
-    assert upstream_url(RAIL, UPSTREAM_DEFAULTS[RAIL], dialect, op) == "https://opencode.ai/zen/go" + path
+    prod = upstream_url(RAIL, UPSTREAM_DEFAULTS[RAIL], dialect, op)
+    with then(f"upstream path = {path} (production URL https://opencode.ai/zen/go{path})",
+              path={"expected": path, "actual": upstreams[RAIL].calls[-1]["path"]},
+              production_url={"expected": "https://opencode.ai/zen/go" + path, "actual": prod}):
+        assert upstreams[RAIL].calls[-1]["path"] == path
+        assert prod == "https://opencode.ai/zen/go" + path
 
 
 async def test_rate_limit(gw, upstreams):
     """row: a rate limit passes through"""
+    world(upstream="upstream-429")
     upstreams[RAIL].behaviour = "upstream-429"
     _, r = await ride(gw, RAIL, "messages")
-    assert r.status_code == 429 and r.headers["retry-after"] == "30" and r.json()["error"]["type"] == "rate_limit_error"
+    then_eq("status", r.status_code, 429)
+    then_eq("retry-after", r.headers.get("retry-after"), "30")
+    then_eq("body error.type", r.json()["error"]["type"], "rate_limit_error", claim="body = the upstream body (error.type = rate_limit_error)")
 
 
 async def test_upstream_auth_hidden(gw, upstreams):
     """row: an upstream auth failure is typed and hidden"""
+    world(upstream="upstream-401")
     upstreams[RAIL].behaviour = "upstream-401"
     _, r = await ride(gw, RAIL, "chat")
-    assert r.status_code == 502 and err(r) == "upstream-auth" and "LEAK" not in r.text
+    then_eq("status", r.status_code, 502)
+    with then("body = the upstream-auth envelope, not the upstream body (no LEAK marker)", body={"actual": r.text}):
+        assert err(r) == "upstream-auth"
+        assert "LEAK" not in r.text
 
 
 async def test_missing_session_id_passthrough(gw, upstreams):
     """row: the vendor's MissingSessionID is passed through, not masked"""
+    world(upstream="upstream-400-missing-session")
     upstreams[RAIL].behaviour = "upstream-400-missing-session"
     _, r = await ride(gw, RAIL, "messages")
-    assert r.status_code == 400 and r.json()["type"] == "MissingSessionID"
+    then_eq("status", r.status_code, 400)
+    then_eq("body type", r.json()["type"], "MissingSessionID", claim="body = the vendor's (type = MissingSessionID)")
 
 
 async def test_upstream_unreachable(gw, transport):
     """row: an unreachable upstream is typed"""
+    world(upstream="upstream-down")
     transport.unreachable.add(RAIL)
     _, r = await ride(gw, RAIL, "messages")
-    assert r.status_code == 502 and err(r) == "upstream-unreachable"
+    then_eq("status", r.status_code, 502)
+    then_eq("code", err(r), "upstream-unreachable", claim="error code = upstream-unreachable")
 
 
 async def test_read_past_600s(gw, transport):
     """row: a read past 600 s (WIP: clock-faked)"""
+    world(upstream="upstream-slow")
     transport.slow.add(RAIL)
     _, r = await ride(gw, RAIL, "messages")
-    assert r.status_code == 504 and err(r) == "upstream-timeout"
+    then_eq("status", r.status_code, 504)
+    then_eq("code", err(r), "upstream-timeout", claim="error code = upstream-timeout")
