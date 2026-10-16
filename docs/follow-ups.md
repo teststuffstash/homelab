@@ -165,8 +165,12 @@ six OVERSIZE items pointer-ized into
       VM 9110; a weekly from-nothing rebuild drill on the box (`mgmt-opnsense-drill.timer`) scores prod's click-ops
       residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score has the drill record). The pair is
       COMPLETE (2026-10-09, both windows + WAN leg; history: [`router-move.md`](router-move.md) §Status). Drill GREEN
-      since 2026-10-11 (score 56). **Next:** code or accept the 56 click-ops rows the pair left in prod (`OPNsense/Kea`
-      36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493 note). Relates FU-013, FU-298, FU-307.
+      since 2026-10-11 (score 56). **⚠ 2026-10-17: certs issued on the MASTER never reach the BACKUP** — pve's 17
+      certs are seed copies (identical `statusLastUpdate`s), ACME on pve 400s (no WAN leg as BACKUP; `*.homelab`
+      issued on nx02 only, #2612), no XMLRPC sync by design → a failover serves the default cert; earliest copy
+      (registry, 2026-09-02) hits its renewal mark ~2026-11-01. **Next:** a cert-carry step in the pair's play
+      (export from MASTER → import on BACKUP, frontends re-bound) BEFORE that date; then the 56 click-ops rows
+      (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298, FU-307.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80
