@@ -110,9 +110,10 @@ async def test_walk(gw, app, secrets, clock, body, state, expected):
         r = await gw.post("/sessions", json=_req(body))
     then_eq("status", r.status_code, 200)
     doc = r.json()
-    with then("expected " + ", ".join(f"{k} = {v}" for k, v in expected.items())):
+    claim = "expected " + ", ".join(f"{k} = {v}" for k, v in expected.items())
+    with then(claim, **{k: {"expected": v, "actual": doc.get(k)} for k, v in expected.items()}):  # one verdict attachment per claim
         for k, v in expected.items():
-            then_eq(k, doc.get(k), v)
+            assert doc.get(k) == v, f"{k}: expected {v!r}, got {doc.get(k)!r}"
     if doc["decision"] == "defer":
         with then("a defer carries exactly decision, reason, retry_after_s ≥ 1",
                   keys={"expected": ["decision", "reason", "retry_after_s"], "actual": sorted(doc)}, retry_after_s=doc.get("retry_after_s")):
