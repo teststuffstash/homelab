@@ -35,6 +35,7 @@ resources:
   - responder-argo.yaml
   - deep-dig-argo.yaml
   - sentinel-argo.yaml
+  - specs-review-argo.yaml
   - responder-budget-alerts.yaml
   - responder-budget-dashboard.yaml
   - retro-argo.yaml

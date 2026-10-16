@@ -10,9 +10,9 @@ enforces **only the rail columns** (`roles.<role>.rails` in the policy —
 [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit)); every other column documents
 today's reality as the launchers render it (`agents/agent-session.sh`, `agents/stacks.json`,
 `agents/reviewer-session.sh`, `agents/coordinator-session.sh`, `agents/coordinator/responder-argo.yaml`,
-`agents/retro-session.sh`, `agents/research-fanout.sh`, the AgentStack composition's prober)
-and is marked unenforced. Read 2026-10-15; a cell is what the launcher does, not what a doc says
-it should.
+`agents/retro-session.sh`, `agents/research-fanout.sh`, the AgentStack composition's prober,
+`agents/specs-reviewer-session.sh`) and is marked unenforced. Read 2026-10-15 (specs reviewer row
+added 2026-10-16); a cell is what the launcher does, not what a doc says it should.
 
 ## The inventory (today, by launcher)
 
@@ -20,6 +20,7 @@ it should.
 |---|---|---|---|---|---|---|
 | worker | allowed — claude harness, `ref:<ns>/claude-session` | allowed — `opencode-go/*` models on the claude harness | allowed — goose/opencode, `ref:<ns>/<project>-openrouter` (session key) | broker — `GIT_CRED_BROKER_URL` per-op token, no standing Secret (FU-089) | allowed when the claim sets `spec.mcp.endpoint` (`stack-mcp`, #1041/#1276) | denied — no pod renders it (jail sidecar only) |
 | reviewer | allowed — `ref:agent-coordinator/coordinator-claude`, review class first | allowed — failover when the subscription is latched (`opencode-go/qwen3.7-plus`, homelab#424) | denied — the class lists it second, the FU-188 incident pin keeps reviews on the subscription | standing — `reviewer-git` Secret `GH_TOKEN` (the homelab-reviewer App) | allowed when the claim sets it (`--mcp-config`) | denied |
+| specs reviewer (gateway role `reviewer`) | allowed — the FIRST launcher admitted through `POST /sessions` (ADR-155, FU-270 dogfood): `env` exported verbatim, no ref rail | allowed — the role's failover, as the gateway walks it | denied — the role's list | standing — `specs-reviewer-git` Secret `GH_TOKEN` (the homelab-specs-reviewer App; absent = shadow, no verdicts) | denied — none rendered (inputs are a diff, a body, a CI log) | denied |
 | coordinator | allowed — `ref:agent-coordinator/coordinator-claude` | allowed — platform's `coordinatorModel: opencode-go/deepseek-v4-flash` | denied — class `dispatch` rails = subscription only | standing — `coordinator-git` Secret `GH_TOKEN` (ESO) | denied — none rendered | denied |
 | responder | allowed — `ref:agent-coordinator/coordinator-claude` | allowed — an `opencode-go/*` rail case in the triage step | denied — class `dispatch` | standing — `coordinator-git` `GH_TOKEN` | denied — none rendered | denied |
 | retro | allowed — cell A `claude:opus` on the subscription | denied — "add when its retro cell is first used" (`retro-session.sh`) | allowed — cell B `goose:deepseek/deepseek-v4-pro` on an ephemeral xs key | standing, read-only — `RETRO_GH_TOKEN` file mount (retro-git.yaml, #2171); the broker URL is not rendered | inherits the worker launcher's knob | denied |
