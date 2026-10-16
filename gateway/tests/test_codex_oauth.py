@@ -57,6 +57,7 @@ from agent_gateway.oauth import Code, Failure, Lifecycle, Record, Revoked
 from ._codex_world import (
     CODEX_BASE,
     MemoryStore,
+    admitted,
     codex_session,
     creds,
     fresh_report,
@@ -389,16 +390,15 @@ async def test_revoked_mid_session(codex_app, codex_gw, codex_upstream, clock):
 async def test_uncertain_refresh_data_plane(codex_app, codex_gw, codex_upstream, exchange, clock):
     """row: an uncertain refresh refuses, then stays refused"""
     world("policy-codex", "upstream-ok")
-    observe(codex_app, fresh_report(clock))
-    with given("a codex session; the exchange will time out"):
-        doc = await codex_session(codex_gw)
+    doc = await admitted(codex_app, codex_gw, clock)
+    with given("the exchange will time out"):
         exchange.fault = TimeoutError("DUMMY-SECRET token endpoint")
     r1 = await ride(codex_gw, doc, label="first")
     then_eq("first (status, code)", (r1.status_code, err(r1)), (401, "credential-refresh-uncertain"))
     with given("the second request"):
         r2 = await codex_gw.post("/openai/v1/responses", json=json.loads(r1.request.content), headers={"authorization": f"Bearer {doc['session']['token']}"})
-    then_eq("second (status, code)", (r2.status_code, err(r2)), (401, "credential-recovery-required"))
-    then_eq("(exchanges, upstream calls)", (exchange.calls, len(codex_upstream.calls)), (1, 0))
+    then_eq("second (status, code), exchanges, upstream calls", (r2.status_code, err(r2), exchange.calls, len(codex_upstream.calls)),
+            (401, "credential-recovery-required", 1, 0))
 
 
 async def test_store_fault_data_plane(codex_app, codex_gw, codex_store, codex_upstream, clock):

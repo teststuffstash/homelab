@@ -59,6 +59,7 @@ from agent_gateway.headroom import Headroom, ReportError, Verdict
 
 from ._codex_world import (
     CODEX_POLICY,
+    admitted,
     codex_session,
     fresh_report,
     observe,
@@ -181,33 +182,43 @@ def _window(key, value) -> dict:
     return r
 
 
+# report = the spec cell (a short param); the malformed reports are built from it here
+REPORTS = {
+    "`windows: []`, the 5h window twice": lambda: [dict(_report(), windows=[]), dict(_report(), windows=[_report()["windows"][0]] * 2)],
+    "`window_minutes: 301`, `true`": lambda: [_window("window_minutes", 301), _window("window_minutes", True)],
+    "−1, 101, `true`, NaN, ∞": lambda: [_window("used_percent", v) for v in (-1, 101, True, float("nan"), float("inf"))],
+    "`resets_at` ≤ T, `true`, NaN": lambda: [_window("resets_at", v) for v in (T, T - 1, True, float("nan"))],
+    "`source: untrusted`, `limited: 0`, not an object": lambda: [dict(_report(), source="untrusted"), dict(_report(), limited=0), None, [_report()]],
+}
 SHAPE_ROWS = [
-    ("a missing or duplicated window is refused", [dict(_report(), windows=[]), dict(_report(), windows=[_report()["windows"][0]] * 2)]),
-    ("a window outside the profile is refused", [_window("window_minutes", 301), _window("window_minutes", True)]),
-    ("an out-of-range or non-finite percentage is refused", [_window("used_percent", v) for v in (-1, 101, True, float("nan"), float("inf"))]),
-    ("an already-passed reset is refused", [_window("resets_at", v) for v in (T, T - 1, True, float("nan"))]),
-    ("an unknown source or a non-bool flag is refused", [dict(_report(), source="untrusted"), dict(_report(), limited=0), None, [_report()]]),
+    ("a missing or duplicated window is refused", "`windows: []`, the 5h window twice"),
+    ("a window outside the profile is refused", "`window_minutes: 301`, `true`"),
+    ("an out-of-range or non-finite percentage is refused", "−1, 101, `true`, NaN, ∞"),
+    ("an already-passed reset is refused", "`resets_at` ≤ T, `true`, NaN"),
+    ("an unknown source or a non-bool flag is refused", "`source: untrusted`, `limited: 0`, not an object"),
 ]
 
 
-@pytest.mark.parametrize("reports", [r[1] for r in SHAPE_ROWS], ids=[r[0] for r in SHAPE_ROWS])
-def test_shape_refused(reports):
+@pytest.mark.parametrize("report", [r[1] for r in SHAPE_ROWS], ids=[r[0] for r in SHAPE_ROWS])
+def test_shape_refused(report):
     world("policy-codex")
     room = _room()
-    with when(f"observe {len(reports)} malformed reports"):
+    reports = REPORTS[report]()
+    with when(f"observe report {report} ({len(reports)} malformed reports)"):
         for report in reports:
             with then(f"refused quota-invalid: {report!r}"[:160]):
                 _refused(room, copy.deepcopy(report), "quota-invalid")
     then_eq("verdict", room.verdict(), Verdict.UNKNOWN, claim="verdict = unknown (nothing accepted)")
 
 
+NOW = {"T": T, "T+110 (age 120)": T + 110, "T−20": T - 20, "T+10": T + 10}  # age = T+110 − (T−10) = 120 = max_age_s
 VERDICT_ROWS = [
-    ("a window at the ceiling limits", _report(used=(95, 64)), T, Verdict.LIMITED),
-    ("either window limits", _report(used=(20, 95)), T, Verdict.LIMITED),
-    ("the explicit flag limits", _report(limited=True), T, Verdict.LIMITED),
-    ("the freshness bound is stale", _report(), T + 110, Verdict.STALE),  # age = T+110 − (T−10) = 120 = max_age_s
-    ("a clock rollback is stale", _report(), T - 20, Verdict.STALE),
-    ("a reset passing is stale, not replenished", _report(resets=(T + 10, T + 8000)), T + 10, Verdict.STALE),
+    ("a window at the ceiling limits", _report(used=(95, 64)), "T", "quota-limited"),
+    ("either window limits", _report(used=(20, 95)), "T", "quota-limited"),
+    ("the explicit flag limits", _report(limited=True), "T", "quota-limited"),
+    ("the freshness bound is stale", _report(), "T+110 (age 120)", "quota-stale"),
+    ("a clock rollback is stale", _report(), "T−20", "quota-stale"),
+    ("a reset passing is stale, not replenished", _report(resets=(T + 10, T + 8000)), "T+10", "quota-stale"),
 ]
 
 
@@ -216,12 +227,12 @@ def test_verdicts(report, now, verdict):
     world("policy-codex")
     clock = _Clock()
     room = _room(clock)
-    with given(f"snapshot {[w['used_percent'] for w in report['windows']]} %, limited={report['limited']}, observed T-10"):
+    with given(f"report snapshot {[w['used_percent'] for w in report['windows']]} %, limited={report['limited']}, observed T-10"):
         room.observe(report)
-    with when(f"verdict at now = T{now - T:+g}"):
-        clock.t = now
+    with when(f"verdict at now = {now}"):
+        clock.t = NOW[now]
         v = room.verdict()
-    then_eq("verdict", v, verdict)
+    then_eq("verdict", v.value, verdict)
 
 
 # -- admission through POST /sessions -----------------------------------------------------------
@@ -248,11 +259,10 @@ async def test_admission(codex_app, codex_gw, clock, report, advance, expected):
     if report is not None:
         observe(codex_app, report(clock))
     else:
-        with given("no headroom observation"):
+        with given("no headroom observation (report: none)"):
             pass
-    if advance:
-        with given(f"the clock advances {advance} s (the report is now {advance + 10} s old, max_age_s 120)"):
-            clock.advance(advance)
+    with given(f"the clock advance = {advance} s" + (f" (the report is now {advance + 10} s old, max_age_s 120)" if advance else "")):
+        clock.advance(advance)
     with when("POST /sessions {role: prober, harness: codex}"):
         r = await codex_gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": "t", "harness": "codex"})
     doc = r.json()
@@ -292,12 +302,8 @@ async def test_rail_cap(codex_app, codex_gw, clock):
 async def test_no_regate_on_data_plane(codex_app, codex_gw, codex_upstream, clock):
     """row: an admitted session is not re-gated on the data plane"""
     world("policy-codex", "upstream-ok")
-    observe(codex_app, fresh_report(clock))
-    with given("a codex session dispatched at 20 % / 64 %"):
-        doc = await codex_session(codex_gw)
+    doc = await admitted(codex_app, codex_gw, clock)
     observe(codex_app, fresh_report(clock, used=(99, 99), limited=True, age=5))
-    with given("the new verdict is quota-limited"):
-        check("verdict", codex_app.state.codex.headroom.verdict(), Verdict.LIMITED)
     r = await ride(codex_gw, doc)
-    then_eq("status", r.status_code, 200)
-    then_eq("upstream calls", len(codex_upstream.calls), 1)
+    then_eq("(headroom verdict now, status, upstream calls)",
+            (codex_app.state.codex.headroom.verdict(), r.status_code, len(codex_upstream.calls)), (Verdict.LIMITED, 200, 1))

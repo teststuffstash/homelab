@@ -80,13 +80,11 @@ from agent_gateway import responses
 from ._codex_world import (
     ACCOUNT,
     WIRE_MODEL,
+    admitted,
     body,
-    codex_session,
-    fresh_report,
-    observe,
     ride,
 )
-from .conftest import attach_json, check, err, given, open_session, rule, then, then_eq, when, world
+from .conftest import check, err, given, open_session, rule, then, then_eq, when, world
 
 pytestmark = rule("GW-RAIL-CODEX")
 
@@ -101,9 +99,7 @@ BOUNDARY_ROWS = [
 
 
 async def _admitted(app, gw, clock) -> dict:
-    observe(app, fresh_report(clock))
-    with given("a codex session (prober, harness codex) admitted on fresh headroom"):
-        return await codex_session(gw)
+    return await admitted(app, gw, clock)
 
 
 @pytest.mark.parametrize(("over", "status", "code", "calls"), [r[1:] for r in BOUNDARY_ROWS], ids=[r[0] for r in BOUNDARY_ROWS])
@@ -111,7 +107,7 @@ async def test_request_boundary(codex_app, codex_gw, codex_upstream, clock, over
     world("policy-codex", "upstream-ok")
     doc = await _admitted(codex_app, codex_gw, clock)
     payload = {k: v for k, v in body(**over).items() if v is not None}
-    r = await ride(codex_gw, doc, payload)
+    r = await ride(codex_gw, doc, payload, label=f"over={over}")
     then_eq("status", r.status_code, status)
     if code:
         then_eq("code", err(r), code, claim=f"error code = {code}")
@@ -225,22 +221,22 @@ async def test_streams(codex_app, codex_gw, codex_upstream, store, clock, caplog
     codex_upstream.behaviour = behaviour
     caplog.set_level("INFO", logger="gateway.codex")
     r = await ride(codex_gw, doc, label=behaviour)
-    then_eq("status", r.status_code, 200)
-    with then(f"client bytes = {'a prefix of the events before the invalid one, never it' if invalid else 'the upstream bytes, identical'}",
+    with then(f"status 200; client bytes = {'a prefix of the events before the invalid one, never it' if invalid else 'the upstream bytes, identical'}",
+              status={"expected": 200, "actual": r.status_code},
               bytes={"expected_len": len(expected_bytes), "actual_len": len(r.content)}):
+        assert r.status_code == 200
         if invalid:
             assert expected_bytes.startswith(r.content) and b"not-json" not in r.content
         else:
             assert r.content == expected_bytes
     with then(f"outcome = {outcome} (the log line)"):
         lines = [rec.getMessage() for rec in caplog.records if rec.name == "gateway.codex" and "outcome=" in rec.getMessage()]
-        attach_json("log", lines)
         check("outcome", lines[-1].split("outcome=")[1].split()[0], outcome)
-    with then(f"recorded (status, in, cache_read, cache_write, out) = {recorded}"):
+    with then(f"recorded (status, in, cache_read, cache_write, out) = {recorded}, on the session's one request"):
         req = store.requests_for(doc["session"]["id"])[-1]
-        check("recorded", (req["status"], req["tokens_in"], req["tokens_cache_read"], req["tokens_cache_write"], req["tokens_out"]), recorded)
         row = store.get_session(doc["session"]["id"])
-        check("session requests", row.requests, 1)
+        check("recorded", (req["status"], req["tokens_in"], req["tokens_cache_read"], req["tokens_cache_write"], req["tokens_out"], row.requests),
+              (*recorded, 1))
 
 
 FAILURE_ROWS = [
@@ -261,8 +257,8 @@ async def test_upstream_failures(codex_app, codex_gw, codex_upstream, store, clo
     then_eq("(status, code)", (r.status_code, err(r)), (status, code))
     with then("the upstream body never reaches the client (no LEAK / DUMMY-SECRET marker)", body={"actual": r.text}):
         assert "LEAK" not in r.text and "DUMMY-SECRET" not in r.text
-    then_eq("upstream calls", len(codex_upstream.calls), calls)
-    then_eq("recorded status", store.requests_for(doc["session"]["id"])[-1]["status"], status)
+    then_eq("(upstream calls, recorded status)", (len(codex_upstream.calls), store.requests_for(doc["session"]["id"])[-1]["status"]),
+            (calls, status))
 
 
 async def test_rate_limit(codex_app, codex_gw, codex_upstream, clock):
@@ -277,7 +273,7 @@ async def test_rate_limit(codex_app, codex_gw, codex_upstream, clock):
 
 
 @pytest.mark.parametrize(("knob", "status", "code"), [("unreachable", 502, "upstream-unreachable"), ("slow", 504, "upstream-timeout")],
-                         ids=["an unreachable upstream is typed", "a read past the read timeout (WIP: clock-faked)"])
+                         ids=["an unreachable upstream is typed", "a read past the read timeout"])
 async def test_transport_failures(codex_app, codex_gw, codex_upstream, codex_transport, clock, knob, status, code):
     world("policy-codex", "upstream-down" if knob == "unreachable" else "upstream-slow")
     doc = await _admitted(codex_app, codex_gw, clock)
@@ -355,20 +351,28 @@ async def test_unknown_usage():
     then_eq("(outcome, in, out)", (obs.outcome, obs.input_tokens, obs.output_tokens), ("completed", None, None))
 
 
+# chunks = the spec cell; the bytes are built from it in CHUNKS (a short param, not a 1 KiB blob)
+CHUNKS = {
+    "one event over the bound": ([b":" + b"a" * 1024], 512),
+    "`response.completed` with `status: failed`": ([_event(status="failed")], None),
+    "`data: [DONE]`": ([b"data: [DONE]\n\n"], None),
+    "`data: []`": ([b"data: []\n\n"], None),
+}
 PROTOCOL_ROWS = [
-    ("an oversized event is refused", [b":" + b"a" * 1024], 512, "protocol-error", b""),
-    ("a completed event with another status is invalid", [_event(status="failed")], None, "protocol-error", b""),
-    ("[DONE] alone is truncation", [b"data: [DONE]\n\n"], None, "truncated", b"data: [DONE]\n\n"),
-    ("a non-object event is invalid", [b"data: []\n\n"], None, "protocol-error", b""),
+    ("an oversized event is refused", "one event over the bound", "protocol-error", "none of it"),
+    ("a completed event with another status is invalid", "`response.completed` with `status: failed`", "protocol-error", "none of it"),
+    ("[DONE] alone is truncation", "`data: [DONE]`", "truncated", "identical"),
+    ("a non-object event is invalid", "`data: []`", "protocol-error", "none of it"),
 ]
 
 
-@pytest.mark.parametrize(("chunks", "bound", "outcome", "out"), [r[1:] for r in PROTOCOL_ROWS], ids=[r[0] for r in PROTOCOL_ROWS])
-async def test_protocol(chunks, bound, outcome, out):
+@pytest.mark.parametrize(("chunks", "outcome", "out"), [r[1:] for r in PROTOCOL_ROWS], ids=[r[0] for r in PROTOCOL_ROWS])
+async def test_protocol(chunks, outcome, out):
     world("policy-codex")
-    with when(f"relay {chunks[0][:40]!r}… (event bound {bound or responses.MAX_EVENT_BYTES})"):
-        obs, got, closes, _ = await _drive(chunks, bound or responses.MAX_EVENT_BYTES)
-    then_eq("(outcome, bytes out, closes)", (obs.outcome, got, closes), (outcome, out, 1))
+    raw, bound = CHUNKS[chunks]
+    with when(f"relay chunks {chunks} (event bound {bound or responses.MAX_EVENT_BYTES})"):
+        obs, got, closes, _ = await _drive(raw, bound or responses.MAX_EVENT_BYTES)
+    then_eq("(outcome, bytes out, closes)", (obs.outcome, got, closes), (outcome, b"".join(raw) if out == "identical" else b"", 1))
 
 
 async def test_transport_fault():

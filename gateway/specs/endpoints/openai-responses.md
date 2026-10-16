@@ -88,15 +88,15 @@ failure, client cancellation — and a generation is never retried once a byte r
 |---|---||---|
 | "the session token becomes the rail's access token" | `Authorization: Bearer gws_…` || `authorization: Bearer <rotated access token>` |
 | "the account comes from the credential, never the caller" | `ChatGPT-Account-ID: attacker` || `chatgpt-account-id: dummy-account` |
-| "no inbound header crosses" | `Cookie`, `x-api-key`, `x-foo`, `User-Agent: codex_exec/…`, `OpenAI-Beta` || none of them (`user-agent: agent-gateway`) — the set is exactly the six above (+ the transport's `host`, `content-length`, `connection`) |
-| "the stream is asked for unencoded" | `Accept-Encoding: gzip` || `accept-encoding: identity`, `accept: text/event-stream` |
+| "no inbound header crosses ⚖" | `Cookie`, `x-api-key`, `x-foo`, `User-Agent: codex_exec/…`, `OpenAI-Beta` || none of them (`user-agent: agent-gateway`) — the set is exactly the six above (+ the transport's `host`, `content-length`, `connection`) |
+| "the stream is asked for unencoded ⚖" | `Accept-Encoding: gzip` || `accept-encoding: identity`, `accept: text/event-stream` |
 
 ### Streams and usage
 
 | description | upstream behaviour || client bytes | outcome | recorded (status, in, cache_read, cache_write, out) |
 |---|---||---|---|---|
 | "a completed stream relays byte-unchanged and counts once" | upstream-ok (usage 7 in / 3 out) || identical | completed | (200, 7, 0, 0, 3) |
-| "cached input is its own class" | upstream-ok-cached (`input_tokens` 312, cached 300, out 7) || identical | completed | (200, 12, 300, 0, 7) |
+| "cached input is its own class ⚖" | upstream-ok-cached (`input_tokens` 312, cached 300, out 7) || identical | completed | (200, 12, 300, 0, 7) |
 | "a second terminal event never replaces usage" | upstream-stream-duplicate (a second `response.completed`, usage 99/99) || identical | completed | (200, 7, 0, 0, 3) |
 | "a failed terminal is not a completion ⚖" | upstream-stream-failed || identical | failed | (200, 7, 0, 0, 3) |
 | "an incomplete terminal is not a completion ⚖" | upstream-stream-incomplete || identical | incomplete | (200, 7, 0, 0, 3) |
@@ -109,10 +109,10 @@ failure, client cancellation — and a generation is never retried once a byte r
 |---|---||---|---|---|
 | "an upstream 401 is typed and hidden" | upstream-401 || 502 | `upstream-auth` envelope, never the upstream body | 1 |
 | "an upstream 403 is the same class" | upstream-403 || 502 | `upstream-auth` | 1 |
-| "a rate limit passes through" | upstream-429 || 429 | the upstream body, `retry-after: 30` kept | 1 |
-| "an upstream 5xx is typed" | upstream-500 || 502 | `upstream-http-error` | 1 |
+| "a rate limit passes through ⚖" | upstream-429 || 429 | the upstream body, `retry-after: 30` kept | 1 |
+| "an upstream 5xx is typed ⚖" | upstream-500 || 502 | `upstream-http-error` | 1 |
 | "a redirect is never followed" | upstream-302 (`Location` → loopback) || 502 | `upstream-http-error` | 1 — the location is never fetched |
-| "a non-SSE 200 is refused" | upstream-wrong-type (`application/json`) || 502 | `upstream-content-type` | 1 |
+| "a non-SSE 200 is refused ⚖" | upstream-wrong-type (`application/json`) || 502 | `upstream-content-type` | 1 |
 | "an unreachable upstream is typed" | upstream-down || 502 | `upstream-unreachable` | 0 |
 | "🚧 WIP: a read past the read timeout" | upstream-slow (clock-faked) || 504 | `upstream-timeout` | 0 |
 
@@ -124,7 +124,7 @@ failure, client cancellation — and a generation is never retried once a byte r
 | "a multi-line data field is one event" | one completed event across two `data:` lines, one byte per chunk || completed | identical | 1 |
 | "terminal usage after 4 MiB of deltas is counted" | 100 000 delta events, then a terminal || completed, usage 7 / 3 | identical (> 4 MiB) | 1 |
 | "malformed usage is unknown, not zero" | `input_tokens: true`, `output_tokens: -1` || completed, usage unknown | identical | 1 |
-| "an oversized event is refused" | one event over the bound || protocol-error | none of it | 1 |
+| "an oversized event is refused ⚖" | one event over the bound || protocol-error | none of it | 1 |
 | "a completed event with another status is invalid" | `response.completed` with `status: failed` || protocol-error | none of it | 1 |
 | "[DONE] alone is truncation" | `data: [DONE]` || truncated | identical | 1 |
 | "a non-object event is invalid" | `data: []` || protocol-error | none of it | 1 |
@@ -192,9 +192,9 @@ before the credential store is read, and it reserves nothing ⚖.
 | "a window at the ceiling limits" | 95 % / 64 % | T || quota-limited |
 | "either window limits" | 20 % / 95 % | T || quota-limited |
 | "the explicit flag limits" | 20 % / 64 %, `limited: true` | T || quota-limited |
-| "the freshness bound is stale" | 20 % / 64 % | T+110 (age 120) || quota-stale |
+| "the freshness bound is stale ⚖" | 20 % / 64 % | T+110 (age 120) || quota-stale |
 | "a clock rollback is stale" | 20 % / 64 % | T−20 || quota-stale |
-| "a reset passing is stale, not replenished" | 5h resets at T+10 | T+10 || quota-stale |
+| "a reset passing is stale, not replenished ⚖" | 5h resets at T+10 | T+10 || quota-stale |
 
 ### Admission
 
@@ -203,10 +203,10 @@ before the credential store is read, and it reserves nothing ⚖.
 | "fresh headroom admits the codex harness" | 20 % / 64 % || dispatch on codex | — | — |
 | "no observation defers unknown" | — || defer | quota-unknown | 60 (`defer_retry_s`) |
 | "a stale observation defers stale" | observed T−10, asked at T+115 || defer | quota-stale | 60 |
-| "an exhausted window defers until its reset" | 96 % / 64 %, 5h resets T+1000 || defer | quota-limited | 1000 |
-| "two exhausted windows wait for the later reset" | 96 % / 97 %, resets T+1000 / T+8000 || defer | quota-limited | 8000 |
-| "the explicit flag alone defers by the policy interval" | 20 % / 64 %, `limited: true` || defer | quota-limited | 60 |
-| "headroom is read before the credential store" | no observation, the store would fail || defer | quota-unknown — the store was never read | 60 |
+| "an exhausted window defers until its reset ⚖" | 96 % / 64 %, 5h resets T+1000 || defer | quota-limited | 1000 |
+| "two exhausted windows wait for the later reset ⚖" | 96 % / 97 %, resets T+1000 / T+8000 || defer | quota-limited | 8000 |
+| "the explicit flag alone defers by the policy interval ⚖" | 20 % / 64 %, `limited: true` || defer | quota-limited | 60 |
+| "headroom is read before the credential store ⚖" | no observation, the store would fail || defer | quota-unknown — the store was never read | 60 |
 | "the rail's session cap still applies" | fresh; 2 codex sessions active (`max_sessions` 2) || defer | rail-capacity | 60 |
 | "an admitted session is not re-gated on the data plane ⚖" | dispatched at 20 %, then a limited report || data plane 200 | — (an upstream 429 is the in-session signal) | — |
 
@@ -256,8 +256,8 @@ durable state is read without refreshing: `ready` admits, `revoked` / `refreshin
 | "a failed marker write prevents the exchange" | marker save raises || credential-store-unavailable; the next acquire rotates | 0, then 1 | ready |
 | "a failed rotation write blocks restart" | rotation save raises || credential-store-unavailable, then credential-recovery-required | 1 | refreshing |
 | "an ambiguous save reloads the committed rotation" | rotation save commits, then raises || credential-store-unavailable, then the rotation | 1 | ready, rotated |
-| "a crash after the exchange requires recovery" | the process dies after the exchange || credential-recovery-required on restart | 1 | refreshing |
-| "an uncertain exchange is never retried" | the exchange times out || credential-refresh-uncertain, then credential-recovery-required | 1 | refreshing |
+| "a crash after the exchange requires recovery ⚖" | the process dies after the exchange || credential-recovery-required on restart | 1 | refreshing |
+| "an uncertain exchange is never retried ⚖" | the exchange times out || credential-refresh-uncertain, then credential-recovery-required | 1 | refreshing |
 | "revocation survives restart" | the exchange says revoked || credential-revoked, then credential-revoked | 1 | revoked |
 | "explicit revocation blocks a cached access token" | ready, fresh; `revoke()` || credential-revoked | 0 | revoked |
 | "an invalid rotation fails closed" | another account / CR-LF in a token / NaN expiry / already expired / none || credential-invalid, then credential-recovery-required | 1 each | refreshing |
@@ -272,12 +272,12 @@ durable state is read without refreshing: `ready` admits, `revoked` / `refreshin
 | description | world || admission | data plane |
 |---|---||---|---|
 | "a near-expiry credential rotates on first use" | stored credential 1 s from expiry || dispatch | 200; upstream bearer = the rotated access token; one exchange |
-| "a revoked credential is not admissible" | durable state revoked || defer `credential-unresolved` | — |
-| "a recovery-required credential is not admissible" | durable state refreshing || defer `credential-unresolved` | — |
-| "a store that does not answer at admission is transient" | the store's lock raises || 503 `credential-transient` | — |
+| "a revoked credential is not admissible ⚖" | durable state revoked || defer `credential-unresolved` | — |
+| "a recovery-required credential is not admissible ⚖" | durable state refreshing || defer `credential-unresolved` | — |
+| "a store that does not answer at admission is transient ⚖" | the store's lock raises || 503 `credential-transient` | — |
 | "a revocation mid-session refuses before upstream" | admitted, then revoked || — | 401 `credential-revoked`; upstream not called |
 | "an uncertain refresh refuses, then stays refused" | the exchange times out || — | 401 `credential-refresh-uncertain`, then 401 `credential-recovery-required` |
-| "a store fault on the data plane is retriable" | the marker save raises || — | 503 `credential-store-unavailable`, `retry-after: 60` |
+| "a store fault on the data plane is retriable ⚖" | the marker save raises || — | 503 `credential-store-unavailable`, `retry-after: 60` |
 | "no backend: the rail is a definitive miss" | `policy-codex`, `create_app` without a store || defer `credential-unresolved` | — |
 | "the deployed policy declares no codex rail" | `argocd/resources/agent-gateway/configmap-policy.yaml` || `rails` has no `codex` key — the rail ships dark | — |
 

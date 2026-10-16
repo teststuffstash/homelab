@@ -33,6 +33,7 @@ from .conftest import (
     attach_json,
     given,
     open_session,
+    quiet,
     when,
 )
 
@@ -226,6 +227,18 @@ def observe(app, report: dict) -> None:
                f"windows {[w['used_percent'] for w in report['windows']]}%, limited={report['limited']}"):
         app.state.codex.headroom.observe(report)
         attach_json("headroom report", report)
+
+
+async def admitted(app, gw, clock, **extra) -> dict:
+    """Given: a codex session (prober, harness codex) admitted on fresh headroom — the report and the
+    dispatch muted, ONE summary attachment (report hygiene: arrange is not the evidence)."""
+    with given("a codex session (prober, harness codex) admitted on fresh headroom 20 % / 64 %"):
+        with quiet():
+            app.state.codex.headroom.observe(fresh_report(clock))
+            doc = await codex_session(gw, **extra)
+        attach_json("arranged: headroom 20/64 observed, session dispatched",
+                    {"rail": doc["rail"], "model": doc["model"], "session": doc["session"]["id"]})
+    return doc
 
 
 async def codex_session(gw, **extra) -> dict:

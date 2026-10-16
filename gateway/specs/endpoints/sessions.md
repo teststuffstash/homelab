@@ -244,16 +244,16 @@ that block from a real dispatch answer; its run is the local-evidence row below.
 | "goose: the base url is this gateway's openai path ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
 | "goose: the api key is the session token ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_API_KEY` | the session token |
 | "goose: the model var carries the bare id ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `GOOSE_MODEL` | `deepseek/deepseek-v4-flash` |
-| "codex: the base url is this gateway's openai path ⚖ (wrapper-rendered)" | codex | codex | codex/fixture-model || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
+| "codex: the base url is this gateway's openai path (wrapper-rendered) ⚖" | codex | codex | codex/fixture-model || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
 | "codex: the api key is the session token, read through env_key ⚖" | codex | codex | codex/fixture-model || `OPENAI_API_KEY` | the session token |
-| "codex: the model var carries the bare id ⚖ (wrapper-rendered)" | codex | codex | codex/fixture-model || `CODEX_MODEL` | `fixture-model` |
+| "codex: the model var carries the bare id (wrapper-rendered) ⚖" | codex | codex | codex/fixture-model || `CODEX_MODEL` | `fixture-model` |
 
 | description | harness || vars present | vars absent |
 |---|---||---|---|
 | "claude's env is exactly three vars" | claude || `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL` | `ANTHROPIC_API_KEY`, any `OPENAI_*`, any `OPENROUTER_*` |
 | "the openai-dialect env never carries an anthropic var" | opencode || `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENCODE_MODEL` | any `ANTHROPIC_*`, `OPENROUTER_API_KEY` |
 | "no env value is a real key" | any || every value is the token, a URL or a model name | any value matching the [GW-REDACT](#gw-redact) patterns |
-| "codex's env is exactly three vars" | codex || `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `CODEX_MODEL` | any `ANTHROPIC_*`, any `OPENROUTER_*` |
+| "codex's env is exactly three vars ⚖" | codex || `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `CODEX_MODEL` | any `ANTHROPIC_*`, any `OPENROUTER_*` |
 | "⚖ local evidence: the pinned Codex CLI completes a turn from this env through the gateway" | codex (codex-cli 0.161.0) || the provider block rendered from the dispatch `env`; `OPENAI_API_KEY` in the child env | no `auth.json`, no operator config (a fresh `CODEX_HOME`) — `experiments/codex-rail/evidence.json`, not CI |
 
 | description | model (policy) || `context_tokens` |
