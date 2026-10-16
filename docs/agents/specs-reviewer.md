@@ -89,7 +89,13 @@ the gateway's. Its row in the access inventory: [`access.md`](../../gateway/spec
 **Inputs, exactly the lens's scope — built before admission, each checked.** An authenticated
 clone (`http.extraHeader` preemptive auth) of the base branch + `pull/<n>/head`; `git diff
 origin/<base>...pr -- ':(glob)**/specs/**'`; the PR title/body; the `specs/` trees at head
-extracted with `git archive`; the head's evidence (below). Any input that fails to fetch — or a
+extracted with `git archive`; the head's evidence (below); and the round inputs (ADR-156 step 2), each a stated line when
+unavailable rather than a refusal, because they are context, not the reviewed object:
+`issue-intent.md` (each closing issue's `## Acceptance` section, or its whole body under a note),
+`evidence-baseline.md` (the newest successful `ci` push run on the base branch that rendered
+evidence, naming its commit and run) and `prior-review.md` (the newest own LLM review in any state,
+since a push dismisses it). The lens's finding contract turns these into round tracking. Any
+reviewed input that fails to fetch — or a
 `specs.diff` that comes back empty although the PR's files name a specs path — is no review
 (fail CLOSED: a blocking lens must never read an empty input as clean). The model is CONFINED:
 it runs under `env -i` with exactly the gateway's dispatch env + OTEL + a throwaway `HOME`
@@ -143,6 +149,80 @@ generator would sit `SecretSyncedError` → `ArgoCDAppDegraded`, and manifest-li
 appearing IS the cutover — the next tick posts verdicts. Until then every homelab PR parks on its
 second required approval and the operator merges by admin override (ADR-155 landed first, by
 design); the alert belt is live from the first shadow tick.
+
+## The portable process (ADR-156, 2026-10-16)
+
+Every repo that keeps `specs/` runs the SAME requirements → tests → evidence → review process, or
+the process does not work: a row judged one way in homelab and another in oracle-fleet is two
+processes. Homelab took oracle-fleet's row-judgment rules and the reviewer-shape trial's lessons,
+but none of the evidence side. `gateway/tests/conftest.py` is oracle's `tests/evidence.py` "minus
+allure", and `evidence_render.py` emits one line per test (outcome, module, duration). That is a
+producer limit, not a prompt omission: no steps, parameters, attachments or observed values exist
+to review.
+
+**One home.** [`allure-behavior-snippets`](https://github.com/teststuffstash/allure-behavior-snippets),
+the wheel every repo already pins, carries the process, versioned together with its tools: the
+numbered spec rules, conventions § Prime rule of reporting (given/when/then steps, a verdict step
+per claim, attachments under the step they support), the two briefs, `touched-rules.py` and the
+context-pack builder. A repo adopts by bumping its pin. oracle-fleet's `docs/process/` and this
+repo's `gateway/specs/README.md` §Rules become pointers. The table-shape checklist ships there
+marked as a candidate under the operator's iteration (the 2026-09-29 hold), advisory only.
+
+**One reviewer, two briefs.** The briefs are maintained and evaluated apart, but one session runs
+both and posts ONE review under ONE identity (`homelab-specs-reviewer`; the two-approval count is
+unchanged):
+- the **rows brief**: intent source, ⚖ flags + `Spec changes:`, schema ⇄ page, removed proofs,
+  glossary, shape (advisory). Extracted from oracle's `.agents/review.md` WITHOUT its code-review
+  duties.
+- the **evidence brief**: oracle's `.agents/evidence-review.md` (a seat prototype there, never
+  wired). Per-ROW proof (`NO_EVIDENCE`, `ROW_UNPROVEN`, `BARE_ROW`, `FAILED`, `VANISHED`,
+  `UNIT_ONLY` ⚖, `WORLD_UNNAMED`), observed values traced through steps and attachments, baseline
+  differences, and Allure hygiene: the three worst codes as notes, the same unresolved code on the
+  same case across two reviews = blocking `HYGIENE_REPEAT`.
+
+Intent is read before evidence, and neither brief receives implementation code. A blocking finding
+from either brief means `CHANGES_REQUESTED`. Two independent reviewer sessions were rejected
+because the input saving is small and disagreement is the costly part. Measured on oracle's last
+pack (11 touched rules, ~50k tokens: spec sections ~19.5k, `evidence.json` ~20k, `digest.md`
+~7.7k), a split runs ~77k against ~57k for one session, and every disagreement costs another worker
+round that the coordinator has no way to arbitrate.
+
+**The finding contract (worker-facing).** Every blocking finding carries a stable ID, the rule or
+case, the violated requirement, the observed evidence, and what would satisfy it. The reviewer
+reconciles its findings before posting: no two requested fixes may contradict, and advisory shape
+stays distinguishable from missing proof. Every round after the first receives the previous review
+and marks each of its findings `resolved` / `still open` before reading new behaviour.
+
+**The context pack** (oracle's `scripts/evidence-review.sh` contract plus homelab's additions):
+- touched rules (`touched-rules.py`, which also reaches rules through changed test labels and event
+  mappings, so dispatch becomes "touches a rule", not "touches a specs path");
+- each touched rule's section + the spec diff, with the unchanged neighbouring specs as reference;
+- the closing issue's acceptance text (fetched, not just referenced);
+- `evidence.json` + `digest.md` + the raw Allure results and attachments, from a CI run artifact
+  the tick downloads into its read-only inputs dir (the model has no fetch);
+- the baseline: master's evidence, naming its commit and run scope, so a test that was not run is
+  not read as a vanished proof;
+- the previous review.
+
+**PR-head evidence is not built-artifact evidence.** A stamp in `environment.properties` proves
+nothing about an image: digest evidence requires the suite to run AGAINST the built image and the
+report to record that digest (open question 2).
+
+**Order** (status kept here; step 2 in flight 2026-10-16):
+1. This record.
+2. The homelab launcher inputs that need no Allure: the issue's acceptance text, the previous
+   review, a pinned baseline, the finding contract with round tracking.
+3. Snippets v0.5 carries the briefs, conventions, `touched-rules.py` and the pack builder;
+   oracle-fleet points at it.
+4. Gateway tests on Allure, with the pack uploaded as a CI artifact.
+5. The evidence pass live, then measure tokens, worker rounds, invalid findings and coordinator
+   interventions per completed PR.
+
+Cheaper helper subagents wait for that data, and they need a gateway change first: a session is
+admitted with one model and the gateway rewrites every request to it
+([GW-SESSIONS-ENV](../../gateway/specs/endpoints/sessions.md#gw-sessions-env)), so a cheaper
+subagent bills at the lead's model today. oracle-fleet's human codeowner gate is a separate
+decision; adopting the briefs does not remove it.
 
 ## Open questions
 

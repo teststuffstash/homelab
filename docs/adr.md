@@ -2915,3 +2915,24 @@ weigh (rows vs intent, evidence at head), on a deliberately small surface. **Con
 every homelab PR now waits ≤ one tick for a second bot approval; the goal/** twin stays at 1;
 a dead specs-review plane stalls homelab merges (the exit contract + a missing-approval alert
 are the belts); adoption by another island = install the App + `required_approvals = 2` there.
+
+### ADR-156 — One portable spec/evidence process, homed in allure-behavior-snippets; one reviewer runs two briefs (2026-10-16)
+**Status:** Accepted (operator, 2026-10-16: "every repo gets the same tests/evidence/requirements
+process otherwise it does not work").
+**Decision:** the spec rules, conventions § Prime rule, the rows brief, the evidence brief,
+`touched-rules.py` and the context-pack builder live ONCE, versioned in `allure-behavior-snippets`;
+every repo pins it, and oracle-fleet's `docs/process/` and `gateway/specs/README.md` §Rules become
+pointers. The specs reviewer ([ADR-155](#adr-155--the-specs-reviewer-is-a-second-app-identity-and-the-island-repo-requires-two-approvals-2026-10-16))
+runs BOTH briefs in one session and posts one review with a worker-facing finding contract. Design
+and order: [specs-reviewer.md §The portable process](agents/specs-reviewer.md#the-portable-process-adr-156-2026-10-16).
+**Considered:** two briefs on two identities (rejected: another App and ruleset per repo, no better
+inputs); two independent reviewer sessions (rejected: ~77k vs ~57k tokens on oracle's 11-rule pack,
+and every disagreement costs a worker round nobody arbitrates); one merged brief (rejected: the two
+responsibilities cannot be maintained or evaluated apart); oracle-fleet or homelab as the home
+(rejected: two pins, or the platform owning a stack's process).
+**Why:** a process that differs per repo is two processes, and the evidence side cannot be judged
+from one summary line per test.
+**Consequences:** homelab's gateway tests move to Allure; dispatch widens from "touches a specs
+path" to "touches a rule"; cheap helper subagents wait for measured data and a gateway per-session
+helper tier; oracle-fleet's codeowner gate is untouched; the table-shape checklist stays advisory,
+marked as a candidate under operator iteration.
