@@ -13661,3 +13661,20 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Findings:** session release lost in a gateway rollout gap (one replica, Recreate; 15:31:13→19Z) → #2630 retries;
   every live Claude Code call logs `in=0 out=0` (streamed usage not parsed for real traffic) → FU-270 next (1);
   snippets repo ruleset = 0 approvals (the process home merges on green CI alone) → operator.
+
+## 2026-10-16 ~15:35–16:55Z — minutark.ee edge review: analytics, tunnel-down drill, HSTS (second jail → primary, PR lane)
+- **Analytics (30 d, GraphQL `httpRequestsAdaptiveGroups`, jail-read-all):** apex ~230 browser-like humans of 14.2k
+  requests (rest scanners/crawlers); mcp 21.0k `POST /` = homelab 5.7k / claude.ai `Claude-User` 11.1k (7.4k in one
+  10-15 12–14Z burst) / direct 4.2k (121 IPs, 91% EE); ~3.25k `statute` calls (gateway histogram; `search` uncounted).
+- **Drill (teststuff.net, jail-run throwaway tunnel + minutark-identical cache rule, zero residue):** origin 5xx/dead
+  behind a live connector → STALE even for `no-cache`; connector gone → 530/1033 for anything needing revalidation,
+  `stale-if-error` included; a fresh copy kept HIT → docs/cloudflare.md gotcha 10.
+- **#2634** (applied first, window seat-1792168630-6668, targeted): minutark `security_header` (HSTS 180 d,
+  includeSubDomains, nosniff) + `email_obfuscation` off; PRF-TLS + new CTR-HEADERS contract row. HTML ETag still
+  stripped with obfuscation off (RUM injection the remaining suspect).
+- **#2602 drift applied** (window seat-1792168876-3762): ha `cloudflared` 2026.10.0 → 2026.10.1, merged 10-15 but
+  never applied; 2×4 tunnel conns, ha 403 no-cert / 200 cert.
+- **Handed to oracle:** oracle-fleet#885 (unqueued; oracle splits): MCP-Protocol-Version 2025-06-18 → 400 (most of
+  614 POST 400s), badge `.unavailable` + fetch timeout, CSP/Referrer-Policy, tool-call counter, revalidation,
+  outage-resilient landing (platform-request). Operator: Smart Tiered Cache out of scope until oracle sets caching
+  requirements. Withdrawn: origin-mark IP (self-heals from the ddclient record; only FU-282 naming remains).
