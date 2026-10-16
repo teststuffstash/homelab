@@ -126,3 +126,63 @@ concurrency controls. No Prometheus queries or production policy changes are inv
 
 Run all offline tests with the existing unittest command above. The original Responses and
 native CLI fixtures remain unchanged and are regression checks for this extension.
+
+## Composed offline fixture (FU-270)
+
+`composed_fixture.py` runs native Codex through two loopback servers:
+
+```text
+isolated Codex child (dummy gws token)
+  -> fixture listener -> Rail: session/model/body validation
+                      -> local headroom verdict
+                      -> Lifecycle: fake exchange + disposable FileStore
+                      -> recheck headroom after refresh
+                      -> Responses adapter + LoopbackTransport
+  -> fake Responses server (checks replaced bearer/account headers)
+```
+
+Run from the repo root with the same explicitly selected, version-checked executable as the
+original compatibility fixture:
+
+```sh
+devbox run -- python3 experiments/codex-rail/composed_fixture.py --expect-version 0.163.0
+devbox run -- python3 experiments/codex-rail/composed_fixture.py --codex /path/to/codex --expect-version 0.161.0
+```
+
+The existing native runner supplies the fresh child configuration, minimal environment, dummy
+token, synthetic completion and allowlisted evidence. It accepts a fixture factory so the
+original direct-adapter fixture remains runnable unchanged. Native runs prove the composed happy
+path: one fake rotation, one upstream request, one close and terminal usage of 7 input/3 output.
+They do not prove a real account, live tool use, launcher integration or subscription access.
+
+`test_composed.py` exercises the same `Rail` with HTTP against the fake upstream. Unknown, stale
+or limited quota, invalid sessions and mismatched models cannot refresh or connect. A second
+headroom check rejects quota that expires during refresh. Concurrent requests share one rotation.
+Duplicate terminal events do not replace usage. Revocation and uncertain refresh stay typed and
+redacted. HTTP 302/401/429/500, wrong content type, malformed/truncated SSE and header/body timeouts
+close once without redirect-following or retry. Consumer cancellation and closing before reading
+also release upstream. These cancellation tests close the composition iterator; they do not
+claim native Codex disconnect coverage.
+
+`LoopbackTransport` hardcodes `127.0.0.1` and `/responses`. It closes both the response and
+connection, because an HTTP/1.0 response may own the socket independently of `HTTPConnection`.
+It is an intentionally small **test transport**, not a proposed production client: no TLS,
+OAuth HTTP exchange, retries, vendor header translation or real endpoint is supported. `Rail`
+uses a fixed fixture session token; production session expiry/role checks remain outside it.
+It returns the adapter's per-request observation, not a production accounting sink.
+
+`file_store.py` is a disposable POSIX test backend, used only in caller-owned private temporary
+directories with dummy credentials. A stable lock file uses `flock`; data replacement writes a
+0600 temporary file, fsyncs it, atomically replaces the record, then fsyncs the directory. The
+lock spans the lifecycle's load/exchange/save. The backend must never be pointed at real
+credentials: it stores plaintext JSON and is not the Infisical source of truth.
+
+`test_file_store.py` starts separate processes to verify a single exchange across owners,
+replacement-token recovery after process exit, and fail-closed restart after termination between
+fake exchange and save. These tests demonstrate local process/filesystem behavior. They cannot
+prove physical power-loss durability, network-filesystem locking, cross-host fencing, a vendor's
+rotation semantics or Infisical write-back. The lost-rotation window still requires recovery;
+adding a local file backend does not solve it. All temporary artifacts are removed by the parent.
+
+The entire experiment remains explicitly invoked, outside active gateway CI/source/specs/locks.
+No production storage, admission policy or deployment is selected by these fixtures.
