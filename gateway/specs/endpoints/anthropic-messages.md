@@ -68,6 +68,7 @@ is visible on the session and in `gateway_requests_total{status="502"}`).
 |---|---|---||---|---|---|
 | "a messages call lands" | `POST /anthropic/v1/messages` | upstream-ok || 200 | the upstream body, byte-identical | `requests` +1, `tokens_in` = `usage.input_tokens`, `tokens_out` = `usage.output_tokens` |
 | "a streamed call streams" | `POST /anthropic/v1/messages`, `stream: true` | upstream-stream || 200 | the SSE bytes, unchanged, as they arrive | `requests` +1; tokens from the final `message_delta` usage when present, else unchanged ⚖ |
+| "a gzipped stream still counts" | `POST /anthropic/v1/messages`, `stream: true` | upstream-stream-gzip || 200 | the gzip bytes, unchanged; `content-encoding: gzip` kept | `requests` +1; tokens from the DECODED final `message_delta` usage (live anthropic answers gzip SSE — FU-270) |
 | "a rate limit passes through" | `POST /anthropic/v1/messages` | upstream-429 || 429 | the upstream body | `requests` +1 |
 | "an upstream auth failure is typed and hidden" | `POST /anthropic/v1/messages` | upstream-401 || 502 | `upstream-auth` envelope — not the upstream body | `requests` +1 |
 | "the openai dialect is not served on the subscription" | `POST /openai/v1/chat/completions` | (no upstream call) || 501 | `dialect-unsupported-on-rail` | nothing |

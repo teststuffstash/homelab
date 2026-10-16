@@ -31,6 +31,7 @@ import os
 import re
 import time
 import warnings
+import zlib
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -433,6 +434,9 @@ class FakeUpstream:
         model = (call["body"] or {}).get("model")
         if self.behaviour == "upstream-stream":
             return self._reply(call, StreamingResponse(_anthropic_sse(model), media_type="text/event-stream", headers={"x-fake-rail": self.rail}))
+        if self.behaviour == "upstream-stream-gzip":
+            return self._reply(call, StreamingResponse(_gzipped(_anthropic_sse(model)), media_type="text/event-stream",
+                                                       headers={"x-fake-rail": self.rail, "content-encoding": "gzip"}))
         return self._reply(call, JSONResponse(
             {"id": "msg_1", "type": "message", "role": "assistant", "model": model,
              "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn",
@@ -475,6 +479,15 @@ async def _anthropic_sse(model):
     ]
     for name, ev in events:
         yield f"event: {name}\ndata: {json.dumps(ev)}\n\n".encode()
+
+
+async def _gzipped(events):
+    """The live anthropic shape (captured 2026-10-16): the same SSE, `content-encoding: gzip`,
+    flushed per event the way a streaming gzip writer sends it."""
+    z = zlib.compressobj(wbits=zlib.MAX_WBITS | 16)
+    async for chunk in events:
+        yield z.compress(chunk) + z.flush(zlib.Z_SYNC_FLUSH)
+    yield z.flush()
 
 
 async def _openai_sse(model):

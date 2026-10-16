@@ -28,6 +28,7 @@ received** (URL, headers, body) as much as on the response the gateway returned.
 |---|---|---|
 | `upstream-ok` | 200, a complete JSON body with `usage` (`input_tokens`/`output_tokens` on the anthropic dialect, `prompt_tokens`/`completion_tokens` on openai) | the happy rows on every rail; usage accounting |
 | `upstream-stream` | 200, `text/event-stream`, a final usage event (anthropic: `message_delta` with `usage`; openai: a last chunk with `usage`) | byte-unchanged SSE passthrough; streaming usage best-effort |
+| `upstream-stream-gzip` | `upstream-stream`'s anthropic events, `content-encoding: gzip`, flushed per event — the live shape (2026-10-16) | usage parsed from the decoded capture while the bytes pass through encoded |
 | `upstream-429` | 429 with `retry-after: 30` | 429 passthrough with `retry-after` |
 | `upstream-401` | 401 with a body mentioning the key | 502 `upstream-auth`, body never forwarded |
 | `upstream-slow` | holds the response past the read timeout | timeout rows (connect 10 s / read 600 s) — 🚧 WIP, clock-faked only |

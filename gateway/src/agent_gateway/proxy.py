@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import zlib
 
 import httpx
 from starlette.requests import Request
@@ -40,6 +41,25 @@ def inbound_token(request: Request) -> str | None:
     if auth.lower().startswith("bearer "):
         return auth[7:].strip()
     return request.headers.get("x-api-key") or None
+
+
+def decoded(body: bytes, encoding: str | None) -> bytes:
+    """The capture as the client sees it: the upstream answers in the encoding httpx's default
+    `accept-encoding` asked for (live anthropic: gzip SSE), and `aiter_raw` keeps it encoded.
+    gzip/deflate via zlib's auto-detect; a truncated capture decodes as far as it goes; any other
+    encoding → b"" (usage unknown, never a wrong count)."""
+    enc = (encoding or "identity").strip().lower()
+    if enc == "identity":
+        return body
+    if enc not in ("gzip", "x-gzip", "deflate"):
+        return b""
+    try:
+        return zlib.decompressobj(zlib.MAX_WBITS | 32).decompress(body)
+    except zlib.error:
+        try:  # raw deflate (no zlib header), which some servers send for `deflate`
+            return zlib.decompressobj(-zlib.MAX_WBITS).decompress(body)
+        except zlib.error:
+            return b""
 
 
 def parse_usage(body: bytes, streaming: bool) -> tuple[int, int]:
@@ -196,7 +216,8 @@ class Proxy:
             finally:
                 await resp.aclose()
                 elapsed = time.monotonic() - t0
-                tokens_in, tokens_out = parse_usage(bytes(captured), streaming) if final[0] < 300 else (0, 0)
+                tokens_in, tokens_out = (parse_usage(decoded(bytes(captured), resp.headers.get("content-encoding")), streaming)
+                                         if final[0] < 300 else (0, 0))
                 self.metrics.request(row.rail, dialect, final[0], elapsed)
                 self.metrics.tokens(row.rail, tokens_in, tokens_out)
                 self.sessions.store.record_request(row.id, final[0], int(elapsed * 1000), tokens_in, tokens_out)
