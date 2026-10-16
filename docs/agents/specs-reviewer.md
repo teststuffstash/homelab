@@ -3,7 +3,7 @@
 > Design note for [`agents/lenses/specs.md`](../../agents/lenses/specs.md) (the brief, rules only).
 > Decided by [ADR-155](../adr.md#adr-155--the-specs-reviewer-is-a-second-app-identity-and-the-island-repo-requires-two-approvals-2026-10-16);
 > built 2026-10-16 (dispatch `agents/specs-reviewer-session.sh`, workflow
-> `agents/coordinator/specs-review-argo.yaml`, identity `agents/coordinator/scaffold/specs-reviewer-git.yaml`, parked until the App exists).
+> `agents/coordinator/specs-review-argo.yaml`, identity `agents/coordinator/specs-reviewer-git.yaml`).
 > Born with the P2 gateway island ([`context-and-autonomy.md`](../spikes/context-and-autonomy.md)
 > §Direction, FU-270 / ADR-139).
 
@@ -50,7 +50,7 @@ code looks RIGHT — the one failure the gate exists to catch. The specs reviewe
 read, checks read, actions read; installed on the island repos). GitHub counts approvals per
 identity, and the island repo's master ruleset requires 2 (`required_approvals` in `tofu/github`),
 so this approval is structurally the second one — the code verdict (`homelab-reviewer`) and the
-specs verdict can never collapse. The ESO chain is `agents/coordinator/scaffold/specs-reviewer-git.yaml`
+specs verdict can never collapse. The ESO chain is `agents/coordinator/specs-reviewer-git.yaml`
 (the [`iac-lane.md`](iac-lane.md) sentinel's shape: Infisical key
 `SPECS_REVIEWER_GH_APP_PRIVATE_KEY` → `GithubAccessToken` generator → Secret `specs-reviewer-git`,
 key `GH_TOKEN`). The login is a literal in the script (`homelab-specs-reviewer`, no `[bot]`
@@ -125,7 +125,7 @@ counts — a push replaces the group). OTEL with `role=specs-reviewer` so the su
 attributes. Self-test: `devbox run specs-review-self-test` (`bash -n` + the jq predicates on
 fixtures; `diff-ci` row ready, its `ci.yaml` step is operator-direct).
 
-**Cutover order (the operator; owning item FU-270).** The workflow lands first and runs in SHADOW
+**Cutover order (the operator; owning item FU-270 — App registered 2026-10-16).** The workflow lands first and runs in SHADOW
 (the `specs-reviewer-git` Secret is `optional:true`; the script logs "specs-reviewer-git absent —
 shadow, no verdicts" and exits 0 — it never reviews under another identity). Then: (1) create +
 install the App (`scripts/github-app-bootstrap.sh homelab-specs-reviewer manifest|catch`), its key

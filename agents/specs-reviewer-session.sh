@@ -261,7 +261,7 @@ token() {
   if [ -n "${GH_TOKEN_FILE:-}" ] && [ -s "$GH_TOKEN_FILE" ]; then cat "$GH_TOKEN_FILE"; else printf '%s' "${GH_TOKEN:-}"; fi
 }
 if [ -z "$(token)" ]; then
-  log "specs-reviewer-git absent — shadow, no verdicts (the Secret is optional; cutover order in agents/coordinator/scaffold/specs-reviewer-git.yaml)"
+  log "specs-reviewer-git absent — shadow, no verdicts (the Secret is optional; is it synced? agents/coordinator/specs-reviewer-git.yaml)"
   push_metrics 1
   exit 0
 fi

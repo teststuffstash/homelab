@@ -135,11 +135,8 @@ apps:
     bootstrap: { redirect_port: 8771, cred_dir: "~/.claude/homelab-github-sentinel", mint_site: agents/coordinator/sentinel-git.yaml, wallet: true }
 
   - slug: homelab-specs-reviewer
-    # app_id / install_id: FILLED after the operator's one Create + one Install click
-    # (scripts/github-app-bootstrap.sh homelab-specs-reviewer manifest|catch) — declared ahead of
-    # creation like homelab-sentinel was (FU-236 flow). The mint site (agents/coordinator/
-    # scaffold/specs-reviewer-git.yaml, parked) carries the same two ids and moves into
-    # agents/coordinator/ + the kustomization only once they exist (its banner has the order).
+    app_id: 5344206
+    install_id: 172048550
     purpose: >-
       The SECOND review identity (ADR-155) — homelab-specs-reviewer[bot] gates spec ROWS and
       their evidence (`**/specs/**` + the head's CI evidence; agents/lenses/specs.md,

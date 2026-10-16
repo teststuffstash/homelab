@@ -12,8 +12,8 @@
 # the one that moves off it. The gateway Service is in ns agent-egress, which the agent-loop
 # egress policy (egress-cnp.yaml) already allows for every Argo Workflow pod in this namespace.
 #
-# IDENTITY: GH_TOKEN = the `specs-reviewer-git` Secret (scaffold/specs-reviewer-git.yaml until the App
-# exists, then agents/coordinator/specs-reviewer-git.yaml), `optional:true`.
+# IDENTITY: GH_TOKEN = the `specs-reviewer-git` Secret (agents/coordinator/specs-reviewer-git.yaml),
+# `optional:true`.
 # Absent Secret = SHADOW mode: the script logs "specs-reviewer-git absent — shadow, no verdicts",
 # pushes its heartbeat and exits 0 — it never reviews under another identity (there is no second
 # token in this pod on purpose). The Secret appearing IS the cutover (the chain's banner documents

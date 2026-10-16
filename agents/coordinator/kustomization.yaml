@@ -51,6 +51,7 @@ resources:
   - transcripts-viewer.yaml
   - update-pr-argo.yaml
   - updater-git.yaml
+  - specs-reviewer-git.yaml
 
 # THE PIN. This is the only line the deploy-pin writes, and the only path CODEOWNERS carves out for
 # it. The manifests reference the image WITHOUT a tag; kustomize supplies it here.
