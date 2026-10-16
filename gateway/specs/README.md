@@ -6,75 +6,41 @@
 The spec system for this island, in the oracle-fleet shape: **the reviewer reviews the
 result, not the diff.** Every endpoint has a contract page in [endpoints/](endpoints/) with a
 sibling `<name>.schema.json`; rows are decision tables of key examples; tests prove the rows
-against the built service and stamp the image digest. What the gateway *is* lives one level up
+and stamp the commit they ran at (rule 5 below). What the gateway *is* lives one level up
 ([../README.md](../README.md)); this directory is only the contract.
 
-## Rules
+## Rules — the pinned process, and what this island adds
 
-1. **Specs are REVIEWER-gated, not codeowner-gated** (operator ruling —
-   [context-and-autonomy.md §Direction 2](../../docs/spikes/context-and-autonomy.md)). A
-   second reviewer — the specs lens, reading ONLY `specs/` + evidence, never implementation
-   code — gates spec rows; its brief is `agents/lenses/specs.md`. The operator reads ⚖ rows as a
-   digest and does not block. Agents *propose* changes freely in the same PR as the
-   implementation, **flagged in the PR body** (`Spec changes:`). Rows encode *intent*; never
-   adjust a row to match observed behaviour without flagging it as a judgment change — a row
-   golden-mastered from the diff is the lens's #1 failure.
-2. **Grown, not pre-written.** An issue carries a handful of key rows (happy path + the failure
-   modes worth a conversation). The implementing agent adds boundary rows as it finds them, splits
-   a requirement when it accretes too many tests, and proposes glossary terms. Spec refactoring is
-   routine work.
-3. **One ID namespace.** Requirement IDs (`GW-…`) are spec-page headings, test labels
-   (`@rule("GW-…")`), error codes, and log fields. IDs are stable coordinates; a heading is its
-   anchor, so it is never decorated (phase, WIP and gap flags live in the page's index table);
-   splitting leaves an alias on the old anchor.
-4. **Rows that encode judgment** (policy, anything with a plausible alternative) are flagged
-   `⚖` in the table's description column; mechanical boundary rows are not.
-5. **Evidence** under each table is generated from test runs against the built image and carries
-   `image digest · date`. Missing/stale evidence = unverified requirement. Verified-ness is
-   derived, never declared.
-6. **Glossary terms** ([glossary.md](glossary.md)) are used in rows instead of repeating
-   definitions; new terms take the same review path as rows.
-7. **Requirement ⇄ schema coupling is mechanical.** Every endpoint page
-   `endpoints/<name>.md` has a sibling `<name>.schema.json` — the machine half (input/output/error
-   shapes) that the service **imports**, never re-declares. Requirement IDs annotate the schema via
-   `x-requirements`; `scripts/spec_gate.py` (inside `devbox run ci`) fails on orphans in either
-   direction and on `errors` keys the page never mentions. The page owns *why/when* (rows); the
-   schema owns *shape*. A cross-cutting requirement has ONE heading (rule 3) and may be annotated
-   from several schemas — the gate resolves an annotation against every page under `specs/`,
-   and the annotating page's coupling table links the heading it does not own.
-8. **Use-case first.** [use-cases/](use-cases/) pins end-to-end key examples with committed
-   walk-through data (launcher request → pod env → per-rail wire pairs → release), so every stage
-   has its goalposts before it is built. Endpoint pages cite the use cases that exercise them; an
-   endpoint or field no use case needs is a candidate for deletion, not documentation.
-9. **External facts are linked with maximal precision.** A row that rests on a vendor's wire
-   behaviour names where it was read (`docs/agents/chainless-redesign.md §Proved on the wire`,
-   OpenRouter's `openapi.json` path list) and the date; a vendor fact nobody read is marked
-   "verify during implementation", never asserted.
-10. **The spec is always master; incompleteness is rendered, not hidden in branches.**
-    - A requirement MAY land before its implementation, marked `🚧 WIP → #<issue>` in the page's
-      requirement index table (never on the heading line — heading text == anchor == ID).
-    - **Known implementation gaps are rendered too** (`⚑ gap`, the dual of `🚧 WIP`): when a PR is
-      merged forward despite falling short of a requirement, the shortfall is flagged in the
-      index row as `⚑ gap (YYYY-MM-DD, PR #N → work #M): <one line>`; the fixing PR deletes it.
-      `git log` on the spec file is the audit trail. Flags carry no sequential id — identity is
-      (requirement anchor, date, PR#).
-    - Removed requirements keep a one-cycle tombstone (~~struck heading~~ + the removing PR).
-    - Everything the brief lists as OUT of v0 is a `⚑ gap` row on the requirement it would
-      belong to — the ADR-096 ladder, the FU-088 latches, the capacity doorbell, `/route`
-      compatibility, the git broker (FU-269), the codex and Zen rails, the cost ledger, HA
-      (FU-271). A spec that looks complete but is not strands the worker at the first gap.
+The numbered rules 1–10, the test & evidence conventions and the reviewer briefs are NOT kept here:
+they live ONCE in [allure-behavior-snippets](https://github.com/teststuffstash/allure-behavior-snippets)
+([ADR-156](../../docs/adr.md#adr-156--one-portable-specevidence-process-homed-in-allure-behavior-snippets-one-reviewer-runs-two-briefs-2026-10-16)),
+pinned by version: **[RULES.md @ v0.5.2](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.5.2/allure_behavior_snippets/process/RULES.md)**,
+**[CONVENTIONS.md @ v0.5.2](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.5.2/allure_behavior_snippets/process/CONVENTIONS.md)**.
+"Rule N" anywhere in this island means rule N there. The pins: `../scripts/lib/snippets.sh` (CI
+evidence) and `agents/specs-reviewer-session.sh` (the reviewer's context pack); bump them together.
 
-## Table shape (the operator's reviewer-shape trial, 2026-09-29)
+What this island adds, by rule:
 
-- A table answers **one question**; rows vary along the same axes. A column that is constant for
-  most rows is a mixed question — split the table.
-- **One value per cell**: no `{k: v}` records, no lists unless the value IS a set.
-- Values are spelled out; no invented notation. The one inherited mark: `||` separates the
-  input columns from the expected columns (oracle's shape); `⚖` marks a judgment row (rule 4).
-- Size is a smell, not a limit: the gate reports split candidates (> ~6 columns, > ~12 rows, a
-  constant column) and never fails on them.
-- Every row names its **world** ([worlds/README.md](worlds/README.md)) — a policy state plus a
-  fake-upstream behaviour; a row that does not name its fixture is lying by omission.
+- **Rule 1 (gate):** reviewer-gated, not codeowner-gated (operator ruling,
+  [context-and-autonomy.md §Direction 2](../../docs/spikes/context-and-autonomy.md)): the specs
+  reviewer ([docs/agents/specs-reviewer.md](../../docs/agents/specs-reviewer.md)) is the island's
+  second required approval; ⚖ rows reach the operator as a digest, never as a blocker.
+- **Rule 3 (IDs):** the prefix is `GW-`; tests label rows with `rule("GW-…")`.
+- **Rule 5 (evidence):** the suite runs in-process against the PR head's source (fake upstreams),
+  so `environment.properties` carries `git.commit` and `artifact=pr-head`, never `image.digest`.
+  This is PR-head evidence; built-image evidence is an open question
+  ([specs-reviewer.md §Open questions](../../docs/agents/specs-reviewer.md#open-questions) 2).
+- **Rule 7 (coupling):** enforced by `../scripts/spec_gate.py` inside `devbox run ci`.
+- **Rule 9 (external facts):** the wire facts this island rests on are read in
+  `docs/agents/chainless-redesign.md §Proved on the wire` and OpenRouter's `openapi.json`.
+- **Rule 10 (incompleteness):** everything OUT of v0 is a `⚑ gap` row on the requirement it would
+  belong to — the ADR-096 ladder, the FU-088 latches, the capacity doorbell, `/route`
+  compatibility, the git broker (FU-269), the codex and Zen rails, the cost ledger, HA (FU-271).
+- **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a policy state
+  plus a fake-upstream behaviour; tests carry it as the `world` label.
+- **Table shape:** the rows brief's checklist is a CANDIDATE under the operator's iteration and
+  advisory only; `spec_gate.py` reports split candidates and never fails on them. The `||`
+  divider separates input columns from expected columns.
 
 ## Endpoint contract page template
 
