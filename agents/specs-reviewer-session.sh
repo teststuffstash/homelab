@@ -327,7 +327,11 @@ WORK="$(mktemp -d)"
 SESSION_ID=""
 cleanup() {
   if [ -n "$SESSION_ID" ]; then
-    curl -fsS --max-time 10 -X DELETE "${GATEWAY_URL}/sessions/${SESSION_ID}" >/dev/null 2>&1 \
+    # retried: the gateway is ONE replica with an RWO store (Recreate), so a deploy leaves a few
+    # seconds with no backend — 2026-10-16 the first live pass's release landed in one (old pod down
+    # 15:31:13, new pod up 15:31:19) and the slot sat until the 4 h TTL. ~20 s of retries spans it.
+    curl -fsS --max-time 10 --retry 5 --retry-delay 4 --retry-connrefused --retry-all-errors \
+         -X DELETE "${GATEWAY_URL}/sessions/${SESSION_ID}" >/dev/null 2>&1 \
       && log "session ${SESSION_ID} released" || log "WARN session ${SESSION_ID} release failed (expires by TTL)"
   fi
   rm -rf "$WORK"
