@@ -87,10 +87,11 @@
         "decision": { "const": "defer" },
         "reason": {
           "type": "string",
-          "enum": ["rail-capacity", "role-rail-denied", "stack-unknown", "credential-unresolved"],
+          "enum": ["rail-capacity", "rail-window", "rail-latched", "role-rail-denied", "stack-unknown", "credential-unresolved"],
+          "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch (sessions.md §Capacity); the reason and retry_after_s name the blocked rail that frees first",
           "x-requirements": ["GW-SESSIONS-ADMIT", "GW-CRED-RESOLVE"]
         },
-        "retry_after_s": { "type": "integer", "minimum": 1 }
+        "retry_after_s": { "type": "integer", "minimum": 1, "description": "seconds until the first blocked rail may admit: a window reset, a latch expiry, or the policy defer_retry_s for a full rail" }
       },
       "x-requirements": ["GW-SESSIONS-ADMIT"]
     }

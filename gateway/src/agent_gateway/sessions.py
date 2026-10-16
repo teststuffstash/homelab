@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import secrets
 import time
 import uuid
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from .capacity import Capacity
 from .config import (
     HARNESS_DIALECT,
     HARNESSES,
@@ -134,19 +136,24 @@ def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str
 
 class SessionService:
     def __init__(
-        self, policy: Policy, store: Store, resolver: CredentialResolver, metrics: Metrics, self_url: str, clock=time.time
+        self, policy: Policy, store: Store, resolver: CredentialResolver, metrics: Metrics, self_url: str, clock=time.time,
+        capacity: Capacity | None = None,
     ):
         self.policy = policy
         self.store = store
+        self.capacity = capacity or Capacity(policy, store)
         self.resolver = resolver
         self.metrics = metrics
         self.self_url = self_url
         self.clock = clock
 
     async def admit(self, adm: Admission) -> JSONResponse:
-        """The rail pick (v0): first allowed rail that (a) the harness can speak, (b) has capacity,
-        (c) has a resolvable credential for the stack, (d) names a model for the tier. A TRANSIENT
-        credential fault stops the walk with 503 — the kube API being away is not a verdict."""
+        """The rail pick: first allowed rail that (a) the harness can speak, (b) names a model for the
+        tier, (c) has a free slot, (d) is not capacity-blocked (window utilization / 429 latch /
+        window draw — capacity.py), (e) has a resolvable credential for the stack. A TRANSIENT
+        credential fault stops the walk with 503 — the kube API being away is not a verdict. A walk
+        that finds no rail defers with the reason and `retry_after_s` of the blocked rail that frees
+        FIRST (a full rail frees after the policy's `defer_retry_s`)."""
         if adm.stack.name not in self.policy.stacks:
             return self._defer(adm, "stack-unknown", f"stack {adm.stack.name!r} is not in policy")
         if adm.rail_override:
@@ -158,7 +165,7 @@ class SessionService:
             candidates = [r for r in adm.role.rails if HARNESS_DIALECT[adm.harness] in RAIL_DIALECTS[r]]
             if not candidates:
                 return self._defer(adm, "role-rail-denied", f"no rail allowed for role {adm.role.name} serves harness {adm.harness}")
-        capacity_blocked: list[str] = []
+        capacity_blocked: list[tuple[str, str, float, str]] = []  # (rail, reason, free_at, detail)
         cred_blocked: list[str] = []
         now = self.clock()
         for rail in candidates:
@@ -168,7 +175,12 @@ class SessionService:
                 log.info("session: rail %s has no model for tier %s — skipped", rail, adm.tier)
                 continue
             if self.store.active_count(rail, now) >= rp.max_sessions:
-                capacity_blocked.append(rail)
+                capacity_blocked.append((rail, "rail-capacity", now + self.policy.defer_retry_s, f"{rail} at max_sessions"))
+                continue
+            block = self.capacity.blocked(rail, now)
+            if block is not None:
+                log.info("session: rail %s capacity-blocked (%s) until %s — skipped", rail, block.detail, iso(block.free_at))
+                capacity_blocked.append((rail, block.reason, block.free_at, block.detail))
                 continue
             try:
                 await self.resolver.resolve(rail, adm.stack)
@@ -184,16 +196,20 @@ class SessionService:
             self.metrics.credential(rail, "resolved")
             return self._dispatch(adm, rail, model, now)
         if capacity_blocked:
-            return self._defer(adm, "rail-capacity", f"every allowed rail is at max_sessions: {', '.join(capacity_blocked)}")
+            rail, reason, free_at, _ = min(capacity_blocked, key=lambda b: b[2])  # ties: walk order (min is stable)
+            return self._defer(adm, reason, "every allowed rail is blocked: " + "; ".join(b[3] for b in capacity_blocked),
+                               retry_after_s=max(1, math.ceil(free_at - now)))
         if cred_blocked:
             return self._defer(adm, "credential-unresolved",
                                f"no allowed rail has a resolvable credential for stack {adm.stack.name}: {', '.join(cred_blocked)}")
         return self._defer(adm, "role-rail-denied", f"no allowed rail of role {adm.role.name} names a model for tier {adm.tier}")
 
-    def _defer(self, adm: Admission, reason: str, detail: str) -> JSONResponse:
+    def _defer(self, adm: Admission, reason: str, detail: str, retry_after_s: int | None = None) -> JSONResponse:
         self.metrics.session_decision("none", adm.role.name, adm.stack.name, "defer")
-        log.info("session: defer %s stack=%s role=%s task=%s — %s", reason, adm.stack.name, adm.role.name, adm.task, detail)
-        return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": self.policy.defer_retry_s})
+        retry = retry_after_s if retry_after_s is not None else self.policy.defer_retry_s
+        log.info("session: defer %s retry_after_s=%d stack=%s role=%s task=%s — %s",
+                 reason, retry, adm.stack.name, adm.role.name, adm.task, detail)
+        return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": retry})
 
     def _dispatch(self, adm: Admission, rail: str, model: str, now: float) -> JSONResponse:
         token = new_token()

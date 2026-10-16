@@ -34,7 +34,8 @@ What this island adds, by rule:
 - **Rule 9 (external facts):** the wire facts this island rests on are read in
   `docs/agents/chainless-redesign.md §Proved on the wire` and OpenRouter's `openapi.json`.
 - **Rule 10 (incompleteness):** everything OUT of v0 is a `⚑ gap` row on the requirement it would
-  belong to — the ADR-096 ladder, the FU-088 latches, the capacity doorbell, `/route`
+  belong to — the ADR-096 ladder past its capacity half, the FU-088 latches the admission rows do
+  not cover, the capacity doorbell, `/route`
   compatibility, the git broker (FU-269), the codex and Zen rails, the cost ledger, HA (FU-271).
 - **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a policy state
   plus a fake-upstream behaviour; tests carry it as the `world` label.

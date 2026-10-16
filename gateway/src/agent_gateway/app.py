@@ -95,5 +95,6 @@ def create_app(
     app.state.resolver = resolver
     app.state.metrics = m
     app.state.sessions = sessions
+    app.state.capacity = sessions.capacity
     app.state.proxy = proxy
     return app

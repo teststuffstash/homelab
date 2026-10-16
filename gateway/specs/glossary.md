@@ -89,8 +89,9 @@ may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which i
 ## defer
 
 The admission answer "not now": HTTP 200 `{decision: "defer", reason, retry_after_s}` — never
-an HTTP error. Typed reasons: `rail-capacity`, `role-rail-denied`, `stack-unknown`,
-`credential-unresolved`. The caller polls after `retry_after_s`.
+an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `role-rail-denied`,
+`stack-unknown`, `credential-unresolved`. The caller polls after `retry_after_s` — for a
+capacity-blocked rail, the moment the block lifts ([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)).
 
 ## control plane / data plane
 
