@@ -114,3 +114,18 @@ No fixture applies. Each site trades `printf|echo … | grep -q`/`| head` for `g
   the harness rather than the clause.
 
 The class itself is held by `scripts/sigpipe-lint.py`, which the `sigpipe-lint` suite fixture runs.
+
+## `OTEL_TRACES_EXPORTER=none` on the OTLP-wired workflows (homelab#2619)
+
+No fixture applies. The change adds one container env var to `fix-debounce-argo.yaml` and
+`responder-argo.yaml` (ratchet clause files), next to the OTLP vars they already carry. The variable
+is read only by the OpenTelemetry SDK inside the pod, never by a `gh`/`kubectl` call, label, comment
+or pod-side block the harness replays. A fixture could only assert that the manifest contains the
+line it contains, which is the cosmetic fixture this ratchet exists to prevent.
+
+The live pin is the pre-state. Before the merge (2026-10-16), Loki tenant `agent-coordinator` logged
+`traces export: failed to send to …/v1/traces: 404` once per pod for every deep-dig,
+fix-debounce-decide and specs-review run. The collector has no traces pipeline
+(`argocd/resources/otel-collector/otel-config.yaml`), so the SDK's default `otlp` traces exporter hit
+a 404. After the merge, `count_over_time({namespace="agent-coordinator"} |= "traces export: failed" [1h])`
+reads 0.
