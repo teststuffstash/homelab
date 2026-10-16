@@ -5,6 +5,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 evidence/
+.site-src/
+specs-site/
+mkdocs.yml
 tests/
 specs/
 scripts/

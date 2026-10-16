@@ -15,6 +15,8 @@ resources:
   - deployment.yaml
   - service.yaml
   - servicemonitor.yaml
+  # the specs-site bucket + keys (gateway-specs-garage Workspace, connection Secret gateway-specs-s3)
+  - garage-workspace.yaml
 
 # The image pin — the ONLY line .github/workflows/gateway-image.yaml's deploy/agent-gateway pin PR
 # edits (calver-gsha, `2026.<m>.<d>-g<sha12>`). 0.0.0-pending = no build has landed yet: the

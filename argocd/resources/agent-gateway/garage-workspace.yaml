@@ -1,0 +1,79 @@
+# Garage bucket + keys for the agent-gateway island's browsable specs site (gateway/mkdocs.yml,
+# published by gateway/scripts/specs-publish.sh from homelab CI; served at
+# https://gateway-specs.homelab.teststuff.net via the homelab gateway, ADR-092). Lives beside the
+# island's deploy because the bucket is the island's own artifact — its contract + evidence — not
+# the gateway's routing surface (argocd/resources/homelab-gateway/ holds the route). Same
+# CREATE-pattern as agents/coordinator/garage-workspace.yaml and oracle-iac's allure-workspace.yaml:
+# Terraform holds the key secrets, Crossplane writes them into the `gateway-specs-s3` Secret here in
+# agent-egress — the source scripts/github-secrets-sync.sh copies the WRITER pair from into the
+# repo's GATEWAY_SPECS_S3_* Actions secrets (host-side, operator; docs/github-setup.md).
+#
+# Served ANONYMOUSLY by the Garage web endpoint (`website_enabled`): bucket alias == hostname under
+# the shared .teststuff.net rootDomain (docs/garage.md §Static-website serving), so the alias is
+# namespaced to the island (`gateway-specs`, never a bare `specs`). The site is spec text + test
+# evidence tables — nothing in it is secret; it is LAN/VPN-only by the route, not by auth.
+#
+# Sizing (ADR-089: every bucket claim states max_size): the rendered site is ~5–10 MB; every
+# pr-<N>/ preview is a full mirror, purged on PR close (gateway/scripts/specs-pr-purge.sh). 2Gi is
+# ~200 live previews of headroom (the oversize-caches doctrine; oracle's 1Gi sat over quota for a
+# week after the 2026-08-24 restore and every publish 403'd while CI stayed green — oracle-fleet#318,
+# which s3-publish.sh's verify-own-write now catches loudly).
+#
+# Keys: writer (read+write — the publish mirrors with --remove on its prefix and needs list) is
+# exposed to CI as the GitHub Actions secrets above; reader is read-only for humans/tools.
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  name: gateway-specs-garage
+  namespace: agent-egress
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "specs" {
+        global_alias           = "gateway-specs"
+        max_size               = 2147483648 # 2Gi — sizing note above
+        website_enabled        = true
+        website_index_document = "index.html"
+      }
+
+      resource "garage_key" "writer" { name = "gateway-specs-writer" }
+      resource "garage_key" "reader" { name = "gateway-specs-reader" }
+
+      resource "garage_bucket_permission" "writer_rw" {
+        bucket_id     = garage_bucket.specs.id
+        access_key_id = garage_key.writer.id
+        read  = true
+        write = true
+        owner = false
+      }
+      resource "garage_bucket_permission" "reader_read" {
+        bucket_id     = garage_bucket.specs.id
+        access_key_id = garage_key.reader.id
+        read  = true
+        write = false
+        owner = false
+      }
+
+      output "bucket" {
+        value = garage_bucket.specs.global_alias
+      }
+      output "writer_access_key_id" {
+        value = garage_key.writer.id
+      }
+      output "writer_secret_access_key" {
+        value     = garage_key.writer.secret_access_key
+        sensitive = true
+      }
+      output "reader_access_key_id" {
+        value = garage_key.reader.id
+      }
+      output "reader_secret_access_key" {
+        value     = garage_key.reader.secret_access_key
+        sensitive = true
+      }
+  writeConnectionSecretToRef:
+    namespace: agent-egress
+    name: gateway-specs-s3

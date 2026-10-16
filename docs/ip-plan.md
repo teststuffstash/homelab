@@ -99,6 +99,6 @@ spike's record). Retires with the trial at the cutover.
   in-cluster Gateway VIP (`40.x`), and a WILDCARD Unbound override so every `<svc>.<stack>` name
   resolves to it. First: **oracle** `3.22 ↔ 40.22` (40.20/.21/.31 = registry mirrors, ADR-091). New
   names under the subdomain cost **no** new VIP — the in-cluster gateway host-routes them.
-  Assigned so far: **oracle** `3.22 ↔ 40.22`, **sleep** `3.26 ↔ 40.26`, **circles** `3.28 ↔ 40.28`, **registry** `3.33 ↔ 40.33` (first-party registry, ADR-121); plain LB (no HAProxy pair): `40.29` otel-collector OTLP · `40.30` OpenCode usage ingest (ADR-108) · `40.32` Loki scoped read door (ADR-118) — per-address truth is `SERVICES.md`, this doc only governs ranges
+  Assigned so far: **oracle** `3.22 ↔ 40.22`, **sleep** `3.26 ↔ 40.26`, **circles** `3.28 ↔ 40.28`, **registry** `3.33 ↔ 40.33` (first-party registry, ADR-121), **homelab** `3.36 ↔ 40.36` (the platform's own delegation, 2026-10-16 — `gateway-specs.homelab` first; Gateway in `argocd/resources/homelab-gateway/`); plain LB (no HAProxy pair): `40.29` otel-collector OTLP · `40.30` OpenCode usage ingest (ADR-108) · `40.32` Loki scoped read door (ADR-118) — per-address truth is `SERVICES.md`, this doc only governs ranges
   (2026-08-04 — `40.10`–`40.27` were all taken, so the mirror convention put circles at `.28`). This is
   the near-term step before a stack graduates to its own `40.0/24`-style pool (the `32.0/19` note).

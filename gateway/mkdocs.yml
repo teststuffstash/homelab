@@ -1,0 +1,46 @@
+# Specs site — mkdocs renders the island's README.md + specs/ verbatim, the oracle-fleet shape
+# (oracle-fleet mkdocs.yml; zero custom rendering code). Published by scripts/specs-publish.sh to
+# the `gateway-specs` bucket (argocd/resources/agent-gateway/garage-workspace.yaml), served via the
+# homelab gateway (ADR-092 delegation, argocd/resources/homelab-gateway/): master →
+# https://gateway-specs.homelab.teststuff.net, per-PR previews → …/pr-<N>/ (LAN/VPN-only).
+site_name: agent-gateway specs
+# .site-src mirrors the ISLAND-ROOT layout (README.md + specs/, staged by scripts/specs-build.sh —
+# mkdocs refuses docs_dir: "." outright): README.md is the site home, spec pages keep their
+# specs/… paths so their relative links resolve without rewriting spec text.
+docs_dir: .site-src
+site_dir: specs-site
+# Object-store hosting: emit real .html files and link them explicitly — Garage's website index
+# document is not guaranteed for nested directory URLs (specs-build.sh generates index.html
+# listings for directories that lack one).
+use_directory_urls: false
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: { icon: material/brightness-7, name: dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: { icon: material/brightness-4, name: light mode }
+  features:
+    - content.code.copy
+plugins:
+  - search
+markdown_extensions:
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  # Evidence transclusion: spec pages pull in per-rule fragments (`--8<-- "<RULE>.md"`) that
+  # scripts/evidence_render.py writes to specs/evidence/<RULE>.md from the pytest run
+  # (`devbox run ci`). A missing fragment renders as nothing — specs/README.md rule 5's
+  # "missing evidence = visibly unverified", not a build failure.
+  - pymdownx.snippets:
+      base_path: [specs/evidence]
+      check_paths: false
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format

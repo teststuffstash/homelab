@@ -1,0 +1,25 @@
+# ReferenceGrant: lets the platform's own homelab Gateway (ns homelab-gateway, argocd/platform/
+# homelab-gateway.yaml) route gateway-specs.homelab.teststuff.net to the Garage web endpoint
+# (Service garage-s3 in ns garage) across namespaces (ADR-092, mirroring oracle-/sleep-/
+# circles-gateway-refgrant.yaml). Gateway API forbids cross-namespace backend refs unless the
+# TARGET namespace grants them — so this lives in ns `garage`, beside its three siblings.
+#
+# Scope is deliberately tight: only HTTPRoutes from ns homelab-gateway, only the garage-s3 Service —
+# it exists solely for the Garage-served specs sites under *.homelab.teststuff.net (the agent-gateway
+# island's first). In-namespace homelab surfaces need no grant.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: homelab-gateway-httproute-to-garage-s3
+  namespace: garage
+  annotations:
+    argocd.argoproj.io/sync-wave: "2" # after the gateway-api-crds app (ReferenceGrant CRD)
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: homelab-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: garage-s3

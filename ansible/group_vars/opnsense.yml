@@ -98,6 +98,9 @@ acme_cert_specs:                             # name + the service to reload post
   - { name: oracle.teststuff.net, alt_names: ["*.oracle.teststuff.net"], restart_action: "reload haproxy" }
   - { name: sleep.teststuff.net, alt_names: ["*.sleep.teststuff.net"], restart_action: "reload haproxy" }
   - { name: circles.teststuff.net, alt_names: ["*.circles.teststuff.net"], restart_action: "reload haproxy" }
+  # homelab's OWN delegation (the platform as a stack, ADR-092): the agent-gateway island's specs
+  # site is gateway-specs.homelab.teststuff.net first (homelab argocd/resources/homelab-gateway/).
+  - { name: homelab.teststuff.net, alt_names: ["*.homelab.teststuff.net"], restart_action: "reload haproxy" }
 
 # --- opnsense-haproxy : HTTPS reverse proxy for LAN-exposed cluster services ---
 # name -> object prefix + Unbound/cert hostname. Keep `ha` first/unchanged so the
@@ -171,6 +174,13 @@ stack_gateways:
   # first, the same Garage-served specs tree as oracle/sleep).
   - { name: circles-gw, cert_domain: circles.teststuff.net, wildcard_domain: circles.teststuff.net,
       vip: 192.168.3.28, backend_ip: 192.168.40.28, backend_port: 80 }
+  # 3.36 ↔ 40.36: next free mirror pair — 40.29-40.35 are plain LB VIPs (otel, ingest, mcr mirror,
+  # loki door, registry, pypi, npm) and 3.33 (registry) was the last HAProxy pair; verified against
+  # SERVICES.md, this file and the live Services 2026-10-16. Homelab's OWN delegation (the platform
+  # as a stack): the Gateway + HTTPRoutes live in homelab argocd/resources/homelab-gateway/ since
+  # homelab is the platform; first name = gateway-specs.homelab (the agent-gateway island's specs).
+  - { name: homelab-gw, cert_domain: homelab.teststuff.net, wildcard_domain: homelab.teststuff.net,
+      vip: 192.168.3.36, backend_ip: 192.168.40.36, backend_port: 80 }
 
 # --- opnsense-wireguard : road-warrior VPN (full-LAN remote access, ADR-090) ---
 # The server keypair is generated ON the router at first run (privkey never leaves it).
