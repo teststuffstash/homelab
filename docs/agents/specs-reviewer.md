@@ -71,41 +71,29 @@ its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar
 | more than one live own verdict | ONE `AGENT_ERROR:` comment with a `head=` marker (idempotent), no label — this identity has no `issues:write` |
 | no live `homelab-reviewer` APPROVED | nothing — the code gate goes first ("one old reviewer and THEN the new"; a Renovate PR's approval comes from the renovate-approve reflex, so this holds for it too) |
 | CI not green, or label `agent/error` | nothing |
-| no `(^\|/)specs/` path among the PR's files (REST, paginated) | **mechanical** `--approve` with a fixed body, no LLM — the price of GitHub's repo-wide count; many per tick |
-| a specs path | an **LLM pass** — at most ONE per tick, the oldest candidate; the rest wait a tick |
+| no specs path and no rule-test path among the PR's files (REST, paginated; `review_path_re`: `(^\|/)specs/` or the repo's tests root, `gateway/tests/` here) | **mechanical** `--approve` with a fixed body, no LLM — the price of GitHub's repo-wide count; many per tick |
+| a specs or rule-test path | an **LLM pass** — at most ONE per tick, the oldest candidate; the rest wait a tick. Inside it, the pinned `touched-rules` decides: no rule touched = the mechanical approval after all |
 
-**The gateway seam (FU-270 dogfood).** The LLM pass is the first real consumer of
-[`POST /sessions`](../../gateway/specs/endpoints/sessions.md): body `{stack: platform, role:
-reviewer, task: "specs-review <repo>#<n>", round: 0, harness: claude}` (no new role — `reviewer`
-is right: the subscription first, Go as failover). `decision: defer` → log reason +
-`retry_after_s`, stop; the next tick retries (never an in-process poll). `decision: dispatch` →
-the returned `env` map is exported VERBATIM as the LLM env ([GW-SESSIONS-ENV](../../gateway/specs/endpoints/sessions.md#gw-sessions-env):
-`ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL`, nothing LLM-shaped added —
-the workflow renders no `ANTHROPIC_*` of its own), and the session is released on exit
-(`DELETE /sessions/{id}`, a trap). The `review` WorkflowTemplate's subscription-capacity
-semaphore is deliberately NOT carried: that is the old proxy's capacity model; the rail cap is now
-the gateway's. Its row in the access inventory: [`access.md`](../../gateway/specs/access.md).
-
-**Inputs, exactly the lens's scope — built before admission, each checked.** An authenticated
-clone (`http.extraHeader` preemptive auth) of the base branch + `pull/<n>/head`; `git diff
-origin/<base>...pr -- ':(glob)**/specs/**'`; the PR title/body; the `specs/` trees at head
-extracted with `git archive`; the head's evidence (below); and the round inputs (ADR-156 step 2), each a stated line when
-unavailable rather than a refusal, because they are context, not the reviewed object:
-`issue-intent.md` (each closing issue's `## Acceptance` section, or its whole body under a note),
-`evidence-baseline.md` (the newest successful `ci` push run on the base branch that rendered
-evidence, naming its commit and run) and `prior-review.md` (the newest own LLM review in any state,
-since a push dismisses it). The lens's finding contract turns these into round tracking. Any
-reviewed input that fails to fetch — or a
-`specs.diff` that comes back empty although the PR's files name a specs path — is no review
-(fail CLOSED: a blocking lens must never read an empty input as clean). The model is CONFINED:
-it runs under `env -i` with exactly the gateway's dispatch env + OTEL + a throwaway `HOME`
-(never `GH_TOKEN` / `GH_TOKEN_FILE` — pinned by the self-test), its cwd is the inputs dir, and
-its tool scope is an allow-list — `Read(//<inputs>/**)` + `Glob`, `--permission-mode default`, so
-in `-p` mode any read outside the inputs (the token file under `/var/run`, `/proc`, `$HOME`) is
-denied rather than prompted; Grep/Bash/Write are not granted. The lens is its WHOLE system prompt
-(fetched from `LENS_BASE`, default the public master raw URL; its "rule N" citations resolve to the
-island's own `specs/README.md` §Rules, which the model reads from `tree/`) — a fetch failure is no review and
-a non-zero exit. The verdict is parsed from the model's `Verdict:` line and submitted
+**Inputs: the context pack (ADR-156), built before admission.** An authenticated clone
+(`http.extraHeader` preemptive auth) of the base branch + `pull/<n>/head`; the pinned
+`allure-behavior-snippets` wheel (`SNIPPETS_VERSION`, verified against `SNIPPETS_SHA256`, extracted
+and run with the image's stdlib `python3`); the round context the pack cannot fetch itself (PR body,
+`issue-intent.md` = each closing issue's `## Acceptance` section, `prior-review.md` = the newest own
+LLM review in any state, since a push dismisses it); the head's `ci` run artifact
+`gateway-evidence` (raw Allure results) and the base branch's newest artifact as baseline (its
+`evidence.json` + commit). `evidence-pack` turns these into the model's inputs dir: touched rules,
+their sections + the spec diff, the specs tree, `digest.md` (`Stamp:` / `Baseline:` + mechanical
+findings), per-rule tables, `evidence/<RULE>.json`, attachments, and `process/` (RULES, CONVENTIONS,
+briefs). A failed clone, wheel or pack is no review (fail CLOSED); ABSENT evidence is not a refusal:
+the pack states it, and the evidence brief turns it into `E-STALE` / `NO_EVIDENCE` findings. The
+model is CONFINED: it runs under `env -i` with exactly the gateway's dispatch env + OTEL + a
+throwaway `HOME` (never `GH_TOKEN` / `GH_TOKEN_FILE` — pinned by the self-test), its cwd is the
+pack, and its tool scope is an allow-list — `Read(//<inputs>/**)` + `Glob`, `--permission-mode
+default`, so in `-p` mode any read outside the inputs (the token file under `/var/run`, `/proc`,
+`$HOME`) is denied rather than prompted; Grep/Bash/Write are not granted. The system prompt is
+homelab's wiring lens (`agents/lenses/specs.md`, fetched from `LENS_BASE`, default the public
+master raw URL; a fetch failure is no review) followed by the pinned finding contract, rows brief
+and evidence brief from the pack's `process/briefs/`. The verdict is parsed from the model's `Verdict:` line and submitted
 by the SCRIPT, **pinned to the reviewed head**: the head is re-read immediately before the
 submit (moved = the verdict is dropped and the next tick reads the new head — a push during the
 minutes the model runs must never land a verdict on an unreviewed head), and the review is
@@ -113,12 +101,10 @@ posted through the REST reviews endpoint with `commit_id` = the reviewed head (`
 `APPROVE`, `CHANGES_REQUESTED` → `REQUEST_CHANGES`); an unparsable result is no terminal. The
 mechanical approval takes the same path.
 
-**Evidence at head.** `gh run list --commit <head> --workflow ci.yaml` → the completed, successful
-run → `gh run view --log` → the `evidence-render: BEGIN … END` block
-(`gateway/scripts/evidence_render.py` prints its render to stdout since 2026-10-16 — the step
-summary has no API and `specs/evidence/` is gitignored) → counted only when its stamp is
-`git <head sha12>`; anything else reads "evidence: none at head" with the reason, and the lens's
-check 6 does the rest.
+**Evidence at head.** Only a run stamped `git.commit=<head>` in `environment.properties` counts
+(CONVENTIONS § The head/artifact stamp); the pack's `Stamp:` line says whether it does. The gateway
+suite runs against the PR head's source in-process, so its stamp carries no `image.digest`: it is
+PR-head evidence, never built-image evidence (open question 2).
 
 **Exit contract.** Every PR the tick posted on is re-read; a live own verdict at the content commit
 must exist, else exit 10 (a silent green would mask a dead review plane — the
@@ -208,13 +194,14 @@ and marks each of its findings `resolved` / `still open` before reading new beha
 nothing about an image: digest evidence requires the suite to run AGAINST the built image and the
 report to record that digest (open question 2).
 
-**Order** (status kept here; step 2 in flight 2026-10-16):
-1. This record.
-2. The homelab launcher inputs that need no Allure: the issue's acceptance text, the previous
-   review, a pinned baseline, the finding contract with round tracking.
-3. Snippets v0.5 carries the briefs, conventions, `touched-rules.py` and the pack builder;
-   oracle-fleet points at it.
-4. Gateway tests on Allure, with the pack uploaded as a CI artifact.
+**Order** (status kept here):
+1. This record — DONE 2026-10-16 (#2621).
+2. The homelab launcher inputs that need no Allure (issue acceptance text, previous review,
+   baseline, finding contract with round tracking) — DONE 2026-10-16 (#2622).
+3. Snippets v0.5 carries the briefs, conventions, `touched-rules` and the pack builder — DONE
+   (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join). oracle-fleet keeps its own process and v0.4.2
+   until the gateway has proven this one (operator, 2026-10-16).
+4. Gateway tests on Allure, the raw results uploaded as the `gateway-evidence` CI artifact.
 5. The evidence pass live, then measure tokens, worker rounds, invalid findings and coordinator
    interventions per completed PR.
 
