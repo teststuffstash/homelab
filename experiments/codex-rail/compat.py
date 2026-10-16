@@ -96,14 +96,14 @@ def fixture():
         thread.join()
 
 
-def run(binary, expected_version):
+def run(binary, expected_version, fixture_factory=fixture):
     executable = shutil.which(binary)
     if executable is None:
         raise RuntimeError("codex executable not found")
     version = subprocess.check_output([executable, "--version"], text=True, timeout=10).strip()
     if version != "codex-cli " + expected_version:
         raise RuntimeError("CLI version differs from --expect-version; select the intended binary explicitly")
-    with tempfile.TemporaryDirectory(prefix="codex-rail-fixture-") as tmp, fixture() as (url, evidence):
+    with tempfile.TemporaryDirectory(prefix="codex-rail-fixture-") as tmp, fixture_factory() as (url, evidence):
         root = Path(tmp)
         child_config = root / "config"
         child_config.mkdir()

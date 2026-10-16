@@ -324,3 +324,16 @@ not adopted gateway policy. Restart needs a fresh report; reset time passing alo
 The prototype remains outside gateway source/specs/locks/CI and uses no live credentials. This
 extends #2625; real backend eligibility, store durability/fencing, authenticated report ingress,
 gateway integration and the separately authorized live canary remain unproven under FU-270.
+
+### Composed offline verification (2026-10-16, FU-270)
+
+The [composed fixture](../../experiments/codex-rail/README.md#composed-offline-fixture-fu-270)
+connects native Codex, dummy session validation, headroom admission, fake OAuth rotation and the
+Responses adapter to a loopback HTTP upstream. Combined tests check rejection before upstream
+contact, freshness after a blocked refresh, concurrent rotation, terminal usage, cancellation,
+HTTP failures and redaction. A disposable POSIX file backend adds subprocess lock/restart tests,
+including termination after exchange and exit after durable replacement. It is an experimental
+plaintext store for dummy credentials, not a production persistence choice. This strengthens the
+local evidence without changing gateway code, specs, dependency locks, CI, launchers, policies,
+credentials or deployments. Physical durability, distributed fencing, Infisical write-back and
+real-backend canary evidence remain outside this experiment under FU-270.
