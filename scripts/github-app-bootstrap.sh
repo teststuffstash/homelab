@@ -158,6 +158,11 @@ cmd_secrets() {
       say "Pushing the sentinel App private key into Infisical (homelab/prod)"
       devbox run infisical-secret "SENTINEL_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
       say "Paste appID=$APP_ID installID=$INSTALL_ID into agents/coordinator/sentinel-git.yaml + app_id/install_id in $DECLARED, then apply it" ;;
+    homelab-specs-reviewer)
+      need gh; _resolve_install_id
+      say "Pushing the specs-reviewer App private key into Infisical (homelab/prod)"
+      devbox run infisical-secret "SPECS_REVIEWER_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      say "Paste appID=$APP_ID installID=$INSTALL_ID into agents/coordinator/specs-reviewer-git.yaml + app_id/install_id in $DECLARED (regenerate the exporter JSON: devbox run -- yq -o=json $DECLARED > argocd/resources/github-exporter/github-apps.json), then apply the yaml (ADR-155)" ;;
     homelab-merge)
       # No install-id: the updater's create-github-app-token resolves it from app-id+key+repo.
       say "Pushing the merge App private key into Infisical (homelab/prod) — source of truth"
@@ -197,6 +202,11 @@ cmd_verify() {
       say "reviewer-git ESO chain (ns agent-coordinator)"
       $KC -n agent-coordinator get externalsecret reviewer-github-app reviewer-git 2>/dev/null || warn "ExternalSecrets not applied (reviewer-git.yaml)"
       $KC -n agent-coordinator get secret reviewer-git 2>/dev/null && echo "  → reviewer-git Secret present" || warn "no reviewer-git Secret yet" ;;
+    homelab-specs-reviewer)
+      need devbox
+      say "specs-reviewer-git ESO chain (ns agent-coordinator, ADR-155)"
+      $KC -n agent-coordinator get externalsecret specs-reviewer-github-app specs-reviewer-git 2>/dev/null || warn "ExternalSecrets not applied (agents/coordinator/specs-reviewer-git.yaml)"
+      $KC -n agent-coordinator get secret specs-reviewer-git 2>/dev/null && echo "  → specs-reviewer-git Secret present (the specs-review CronWorkflow leaves shadow mode)" || warn "no specs-reviewer-git Secret yet — the CronWorkflow stays in shadow mode" ;;
     homelab-sentinel)
       need devbox
       say "sentinel-git ESO chain (ns agent-coordinator)"
