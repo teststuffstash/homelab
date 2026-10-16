@@ -50,7 +50,7 @@ async def _expected_bytes(upstream, op: str, model: str, behaviour: str) -> tupl
         if op == "models":
             r = await c.get(UPSTREAM_PATHS[op])
         else:
-            r = await c.post(UPSTREAM_PATHS[op], json={"messages": [{"role": "user", "content": "hi"}], "max_tokens": 8, "model": model, **({"stream": True} if behaviour == "upstream-stream" else {})})
+            r = await c.post(UPSTREAM_PATHS[op], json={"messages": [{"role": "user", "content": "hi"}], "max_tokens": 8, "model": model, **({"stream": True} if behaviour.startswith("upstream-stream") else {})})
     upstream.calls.pop()
     return r.status_code, r.content, dict(r.headers)
 
