@@ -31,7 +31,9 @@ the process is down.
 | `gateway_sessions_total` | counter | `rail`, `role`, `stack`, `decision` | every `POST /sessions` answer; `rail` = `none` on a defer ⚖ |
 | `gateway_requests_total` | counter | `rail`, `dialect`, `status` | every data-plane request, by the status the gateway returned |
 | `gateway_upstream_seconds` | histogram | `rail` | upstream round-trip, first byte to last |
-| `gateway_tokens_total` | counter | `rail`, `direction` | usage recorded from upstream bodies, `in` / `out` |
+| `gateway_tokens_total` | counter | `rail`, `class` | usage recorded from upstream bodies in four classes: `in` (UNCACHED input — the openai dialect's `prompt_tokens` minus `cached_tokens`), `cache_read`, `cache_write`, `out` — the split the window draw and the cost ledger price from ⚖ |
+| `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖ |
+| `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds) |
 | `gateway_credential_resolve_total` | counter | `rail`, `outcome` | every ref resolution verdict |
 
 | description | event (world `policy-default`, upstream-ok) || series | value |
@@ -44,7 +46,8 @@ the process is down.
 | "a refused request is counted by its status" | an expired token on `/anthropic/v1/messages` || `gateway_requests_total{rail="none",dialect="anthropic",status="401"}` | 1 |
 | "an upstream 429 keeps its status" | upstream-429 on openrouter || `gateway_requests_total{rail="openrouter",dialect="openai",status="429"}` | 1 |
 | "upstream time is observed per rail" | one call on anthropic || `gateway_upstream_seconds_count{rail="anthropic"}` | 1 |
-| "tokens are counted by direction" | upstream-ok answers `usage {input_tokens: 12, output_tokens: 7}` on anthropic || `gateway_tokens_total{rail="anthropic",direction="in"}` / `…"out"}` | 12 / 7 |
+| "tokens are counted by class" | upstream-ok-cached answers `usage {input_tokens: 12, cache_read_input_tokens: 300, cache_creation_input_tokens: 40, output_tokens: 7}` on anthropic || `gateway_tokens_total{rail="anthropic",class="in"}` / `"cache_read"` / `"cache_write"` / `"out"` | 12 / 300 / 40 / 7 |
+| "the subscription windows are read" | one call on anthropic, answered with `anthropic-ratelimit-unified-{5h,7d}-{utilization,reset}` || `gateway_subscription_utilization{rail="anthropic",window="5h"}` / `"7d"`; `gateway_subscription_reset_seconds{…}` | 0.13 / 0.67; 1792172400 / 1792274400 |
 | "a resolution verdict is counted" | the anthropic ref is a definitive miss || `gateway_credential_resolve_total{rail="anthropic",outcome="definitive"}` | 1 |
 
 | description | the series || label | allowed values |
@@ -55,7 +58,8 @@ the process is down.
 | "decision is the answer enum" | sessions_total || `decision` | `dispatch`, `defer` |
 | "dialect is the two paths" | requests_total || `dialect` | `anthropic`, `openai` |
 | "status is a numeric HTTP status" | requests_total || `status` | the codes this gateway returns (`200`, `400`, `401`, `403`, `429`, `501`, `502`, `503`, `504`) and the upstream statuses relayed |
-| "direction is in or out" | tokens_total || `direction` | `in`, `out` |
+| "class is one of the four usage classes" | tokens_total || `class` | `in`, `cache_read`, `cache_write`, `out` |
+| "window is 5h or 7d" | subscription_utilization || `window` | `5h`, `7d` |
 | "outcome is the verdict class" | credential_resolve_total || `outcome` | `resolved`, `definitive`, `transient` |
 | "no task label, ever" | any || — | no label named `task`, `session`, `id`, `model` |
 

@@ -2,7 +2,9 @@
 
 Families: `gateway_sessions_active{rail}`, `gateway_sessions_total{rail,role,stack,decision}`,
 `gateway_requests_total{rail,dialect,status}`, `gateway_upstream_seconds{rail}` (histogram),
-`gateway_tokens_total{rail,direction}`, `gateway_credential_resolve_total{rail,outcome}`.
+`gateway_tokens_total{rail,class}`, `gateway_credential_resolve_total{rail,outcome}`,
+`gateway_subscription_utilization{rail,window}` + `gateway_subscription_reset_seconds{rail,window}`
+(gauges, last seen on the subscription rail's `anthropic-ratelimit-unified-*` response headers).
 A label value outside its declared set renders as `other` — a task key, a session id or a model
 string can never become a series (cardinality is a policy decision, not a request's).
 """
@@ -16,7 +18,8 @@ from .config import DIALECTS, RAILS, ROLES
 
 OTHER = "other"
 DECISIONS = ("dispatch", "defer")
-DIRECTIONS = ("in", "out")
+TOKEN_CLASSES = ("in", "cache_read", "cache_write", "out")
+WINDOWS = ("5h", "7d")
 CRED_OUTCOMES = ("resolved", "definitive", "transient")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
@@ -43,6 +46,8 @@ class Metrics:
         self.requests_total: dict[tuple[str, str, str], int] = {}
         self.tokens_total: dict[tuple[str, str], int] = {}
         self.cred_total: dict[tuple[str, str], int] = {}
+        self.sub_util: dict[tuple[str, str], float] = {}
+        self.sub_reset: dict[tuple[str, str], float] = {}
         self.upstream_buckets: dict[str, list[int]] = {}
         self.upstream_sum: dict[str, float] = {}
         self.upstream_count: dict[str, int] = {}
@@ -69,13 +74,28 @@ class Metrics:
                 self.upstream_sum[r] = self.upstream_sum.get(r, 0.0) + upstream_s
                 self.upstream_count[r] = self.upstream_count.get(r, 0) + 1
 
-    def tokens(self, rail: str, tokens_in: int, tokens_out: int) -> None:
+    def tokens(self, rail: str, usage) -> None:
         r = _bounded(rail, RAILS)
+        counts = {"in": usage.tokens_in, "cache_read": usage.tokens_cache_read,
+                  "cache_write": usage.tokens_cache_write, "out": usage.tokens_out}
         with self._lock:
-            if tokens_in:
-                self.tokens_total[(r, "in")] = self.tokens_total.get((r, "in"), 0) + tokens_in
-            if tokens_out:
-                self.tokens_total[(r, "out")] = self.tokens_total.get((r, "out"), 0) + tokens_out
+            for cls, n in counts.items():
+                if n:
+                    self.tokens_total[(r, cls)] = self.tokens_total.get((r, cls), 0) + n
+
+    def subscription_windows(self, rail: str, headers) -> None:
+        """Last-seen 5h/7d utilization (0–1) + reset epoch from `anthropic-ratelimit-unified-<w>-*`;
+        a window with an absent or malformed field is left as it was (no guessing)."""
+        r = _bounded(rail, RAILS)
+        for w in WINDOWS:
+            try:
+                util = float(headers[f"anthropic-ratelimit-unified-{w}-utilization"])
+                reset = float(headers[f"anthropic-ratelimit-unified-{w}-reset"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            with self._lock:
+                self.sub_util[(r, w)] = util
+                self.sub_reset[(r, w)] = reset
 
     def credential(self, rail: str, outcome: str) -> None:
         key = (_bounded(rail, RAILS), _bounded(outcome, CRED_OUTCOMES))
@@ -103,9 +123,15 @@ class Metrics:
                 lines.append(f"gateway_upstream_seconds_bucket{_fmt_labels({'rail': rail, 'le': '+Inf'})} {self.upstream_count[rail]}")
                 lines.append(f"gateway_upstream_seconds_sum{_fmt_labels({'rail': rail})} {self.upstream_sum[rail]:.6f}")
                 lines.append(f"gateway_upstream_seconds_count{_fmt_labels({'rail': rail})} {self.upstream_count[rail]}")
-            lines += ["# HELP gateway_tokens_total Tokens reported by upstream usage, by rail and direction.", "# TYPE gateway_tokens_total counter"]
-            for (rail, direction), n in sorted(self.tokens_total.items()):
-                lines.append(f"gateway_tokens_total{_fmt_labels({'rail': rail, 'direction': direction})} {n}")
+            lines += ["# HELP gateway_tokens_total Tokens reported by upstream usage, by rail and class (in = uncached input).", "# TYPE gateway_tokens_total counter"]
+            for (rail, cls), n in sorted(self.tokens_total.items()):
+                lines.append(f"gateway_tokens_total{_fmt_labels({'rail': rail, 'class': cls})} {n}")
+            lines += ["# HELP gateway_subscription_utilization Last-seen subscription window utilization (0-1) per rail and window.", "# TYPE gateway_subscription_utilization gauge"]
+            for (rail, w), v in sorted(self.sub_util.items()):
+                lines.append(f"gateway_subscription_utilization{_fmt_labels({'rail': rail, 'window': w})} {v:g}")
+            lines += ["# HELP gateway_subscription_reset_seconds Last-seen subscription window reset time (unix seconds).", "# TYPE gateway_subscription_reset_seconds gauge"]
+            for (rail, w), v in sorted(self.sub_reset.items()):
+                lines.append(f"gateway_subscription_reset_seconds{_fmt_labels({'rail': rail, 'window': w})} {v:.0f}")
             lines += ["# HELP gateway_credential_resolve_total Credential resolves by rail and outcome.", "# TYPE gateway_credential_resolve_total counter"]
             for (rail, outcome), n in sorted(self.cred_total.items()):
                 lines.append(f"gateway_credential_resolve_total{_fmt_labels({'rail': rail, 'outcome': outcome})} {n}")

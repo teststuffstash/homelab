@@ -26,7 +26,8 @@ received** (URL, headers, body) as much as on the response the gateway returned.
 
 | behaviour | the fake answers | exercised by |
 |---|---|---|
-| `upstream-ok` | 200, a complete JSON body with `usage` (`input_tokens`/`output_tokens` on the anthropic dialect, `prompt_tokens`/`completion_tokens` on openai) | the happy rows on every rail; usage accounting |
+| `upstream-ok` | 200, a complete JSON body with `usage` (`input_tokens`/`output_tokens` on the anthropic dialect, `prompt_tokens`/`completion_tokens` on openai); on the `anthropic` rail every answer also carries the live `anthropic-ratelimit-unified-{5h,7d}-{status,utilization,reset}` set (5h 0.13, 7d 0.67, captured 2026-10-16) | the happy rows on every rail; usage accounting; the subscription-window gauges |
+| `upstream-ok-cached` | `upstream-ok` with a cache split: anthropic `usage {input_tokens: 12, cache_read_input_tokens: 300, cache_creation_input_tokens: 40, output_tokens: 7}`; openai `usage {prompt_tokens: 312, completion_tokens: 7, prompt_tokens_details: {cached_tokens: 300}}` | the four token classes; the openai-dialect normalisation |
 | `upstream-stream` | 200, `text/event-stream`, a final usage event (anthropic: `message_delta` with `usage`; openai: a last chunk with `usage`) | byte-unchanged SSE passthrough; streaming usage best-effort |
 | `upstream-stream-gzip` | `upstream-stream`'s anthropic events, `content-encoding: gzip`, flushed per event — the live shape (2026-10-16) | usage parsed from the decoded capture while the bytes pass through encoded |
 | `upstream-429` | 429 with `retry-after: 30` | 429 passthrough with `retry-after` |

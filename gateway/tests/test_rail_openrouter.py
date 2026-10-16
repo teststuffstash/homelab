@@ -14,6 +14,7 @@
 | an openai-dialect call lands | POST /openai/v1/chat/completions | upstream-ok | https://openrouter.ai/api/v1/chat/completions | 200 | byte-identical | requests +1, tokens_in = usage.prompt_tokens, tokens_out = usage.completion_tokens |
 | an anthropic-dialect call lands | POST /anthropic/v1/messages | upstream-ok | https://openrouter.ai/api/v1/messages | 200 | byte-identical | tokens_in = usage.input_tokens, tokens_out = usage.output_tokens |
 | the models list passes through | GET /openai/v1/models | upstream-ok | https://openrouter.ai/api/v1/models | 200 | byte-identical | nothing |
+| an openai-dialect cache read is split out | POST /openai/v1/chat/completions | upstream-ok-cached | .../chat/completions | 200 | byte-identical | (requests, tokens_in, tokens_cache_read, tokens_cache_write, tokens_out) = (1, 12, 300, 0, 7): tokens_in = prompt_tokens - cached_tokens |
 | a stream streams | POST /openai/v1/chat/completions, stream: true | upstream-stream | .../chat/completions | 200 | SSE bytes unchanged | tokens from the last chunk's usage |
 | a rate limit passes through | POST /openai/v1/chat/completions | upstream-429 | .../chat/completions | 429 | the upstream body, retry-after kept | requests +1 |
 | an upstream auth failure is typed and hidden | POST /openai/v1/chat/completions | upstream-401 | .../chat/completions | 502 | upstream-auth envelope | requests +1 |
@@ -138,6 +139,22 @@ async def test_calls_land(gw, upstreams, store, op, behaviour, path, recorded):
             check("recorded", got, (1, 0, 0))
         else:
             check("recorded", got, recorded)
+
+
+async def test_openai_cache_read_split_out(gw, upstreams, store):
+    """row: an openai-dialect cache read is split out"""
+    world(upstream="upstream-ok-cached")
+    model = "deepseek/deepseek-v4-flash"
+    status, body, _headers = await expected_bytes(upstreams[RAIL], "chat", model, "upstream-ok-cached")
+    upstreams[RAIL].behaviour = "upstream-ok-cached"
+    doc, r = await ride(gw, RAIL, "chat", body={"model": model})
+    then_eq("status", (r.status_code, status), (200, 200), claim="status = 200 (= the upstream's)")
+    with then("body = the upstream body, byte-identical", body={"expected_len": len(body), "actual_len": len(r.content)}):
+        assert r.content == body
+    what = "(requests, tokens_in, tokens_cache_read, tokens_cache_write, tokens_out)"
+    with then(f"recorded on the session: {what} = (1, 12, 300, 0, 7) — prompt_tokens 312 includes cached_tokens 300"):
+        row = store.get_session(doc["session"]["id"])
+        check(what, (row.requests, row.tokens_in, row.tokens_cache_read, row.tokens_cache_write, row.tokens_out), (1, 12, 300, 0, 7))
 
 
 async def test_rate_limit(gw, upstreams, store):

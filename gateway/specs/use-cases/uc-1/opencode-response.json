@@ -21,8 +21,8 @@
   "expected_session_after": { "requests": 1, "tokens_in": 12, "tokens_out": 7 },
   "expected_metrics": {
     "gateway_requests_total{rail=\"opencode\",dialect=\"openai\",status=\"200\"}": 1,
-    "gateway_tokens_total{rail=\"opencode\",direction=\"in\"}": 12,
-    "gateway_tokens_total{rail=\"opencode\",direction=\"out\"}": 7,
+    "gateway_tokens_total{rail=\"opencode\",class=\"in\"}": 12,
+    "gateway_tokens_total{rail=\"opencode\",class=\"out\"}": 7,
     "gateway_upstream_seconds_count{rail=\"opencode\"}": 1
   }
 }
