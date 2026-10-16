@@ -807,15 +807,14 @@ the block needs pruning, not more headings.
       grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
       (retry) stays. Relates ADR-087, FU-089.
 - [ ] **FU-270** — **`agent-gateway`: the island is BUILT and LIVE in parallel (2026-10-16, #2606); one
-      consumer has moved.** ADR-139 step 3 as the in-monorepo island `gateway/` (specs-first, 14 `GW-*`
+      consumer has moved.** ADR-139 step 3 as the in-monorepo island `gateway/` (specs-first, `GW-*`
       rows, own CI, pinned-image deploy); the OLD proxy stays untouched (operator, 2026-10-15). The specs
-      reviewer (ADR-155) is the first `/sessions` consumer: LIVE 2026-10-16, first evidence pass #2628.
-      **Finding (2026-10-16):** every live Claude Code call logs `in=0 out=0`
-      (`gateway.proxy … status=200 … in=0 out=0`), so session `tokens_in/out` and `gateway_tokens_total`
-      are blind for real traffic, though the fake-SSE test row (23/9) is green: the live stream shape
-      differs from the fixture. **Next:** (1) capture one real streamed response shape, add it as a
-      world + row, fix the parser; (2) `agent-session.sh` → `/sessions` for a worker role
-      (`GW-SESSIONS-ENV` ⚖ rows); (3) the ladder as GW rows.
+      reviewer (ADR-155) is the first `/sessions` consumer (LIVE 2026-10-16, first evidence pass #2628).
+      Usage: live `in=0 out=0` was gzip SSE parsed undecoded (fixed #2635); operator ruling A
+      (2026-10-16): four token classes (`in` = uncached) + the `anthropic-ratelimit-unified-*` window
+      gauges, no USD in the gateway (#2640). **Next:** (1) verify live non-zero classes + gauges after
+      the deploy; (2) `agent-session.sh` → `/sessions` for a worker role (`GW-SESSIONS-ENV` ⚖ rows);
+      (3) the ladder + the Go window cap as GW rows (prices from the four classes).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
