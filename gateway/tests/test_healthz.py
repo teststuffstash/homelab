@@ -31,7 +31,20 @@ from agent_gateway.app import create_app
 from agent_gateway.config import Settings
 from agent_gateway.store import Store
 
-from .conftest import POLICY_FIXTURE, bearer, err, open_session, rule
+from .conftest import (
+    POLICY_FIXTURE,
+    ObservedAsyncClient,
+    attach_json,
+    bearer,
+    check,
+    err,
+    given,
+    open_session,
+    rule,
+    then,
+    when,
+    world,
+)
 
 pytestmark = rule("GW-HEALTH")
 
@@ -42,7 +55,7 @@ def _app(policy, secrets, path: str):
 
 
 async def _get(app, path: str, **kw):
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as c:
+    async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as c:
         return await c.get(path, **kw)
 
 
@@ -56,64 +69,87 @@ ROWS = [
 
 @pytest.mark.parametrize(("state", "mode"), [r[1:] for r in ROWS], ids=[r[0] for r in ROWS])
 async def test_store_state(tmp_path, policy, secrets, caplog, state, mode):
+    world()
     caplog.set_level(logging.INFO, logger="gateway.store")
     path = str(tmp_path / "data" / "gateway.db")
-    if state == "file":
-        (tmp_path / "data").mkdir()
-    elif state == "read-only":
-        (tmp_path / "data").mkdir()
-        Store(path).close()
-        os.chmod(path, 0o444)
-        os.chmod(tmp_path / "data", 0o555)
-    elif state == "corrupt":
-        (tmp_path / "data").mkdir()
-        (tmp_path / "data" / "gateway.db").write_bytes(b"SQLite format 3\x00" + b"\xff" * 4096)
-    try:
-        app = _app(policy, secrets, path)
-        r = await _get(app, "/healthz")
-    finally:
-        if state == "read-only":
-            os.chmod(tmp_path / "data", 0o755)
-    assert r.status_code == 200 and r.json() == {"ok": True, "db": mode}
+    with given(f"state: the DB path {state} (GATEWAY_DB=<tmp>/data/gateway.db)"):
+        if state == "file":
+            (tmp_path / "data").mkdir()
+        elif state == "read-only":
+            (tmp_path / "data").mkdir()
+            Store(path).close()
+            os.chmod(path, 0o444)
+            os.chmod(tmp_path / "data", 0o555)
+        elif state == "corrupt":
+            (tmp_path / "data").mkdir()
+            (tmp_path / "data" / "gateway.db").write_bytes(b"SQLite format 3\x00" + b"\xff" * 4096)
+    with when(f"the gateway starts on the {state} store, then GET /healthz"):
+        try:
+            app = _app(policy, secrets, path)
+            r = await _get(app, "/healthz")
+        finally:
+            if state == "read-only":
+                os.chmod(tmp_path / "data", 0o755)
+    with then(f"status 200, body {{ok: true, db: {mode}}} (mode = {mode})",
+              mode={"expected": {"ok": True, "db": mode}, "actual": r.json()}, status={"expected": 200, "actual": r.status_code}):
+        assert r.status_code == 200 and r.json() == {"ok": True, "db": mode}
     lines = [rec.getMessage() for rec in caplog.records]
     if mode == "pvc":
-        assert any(line.startswith(f"db: pvc {path}") for line in lines), lines
+        with then("the store log line says db: pvc <path>", log={"actual": lines}):
+            assert any(line.startswith(f"db: pvc {path}") for line in lines), lines
     else:
-        assert any(line.startswith("db: memory — FAIL-OPEN, sessions do not survive a restart") and path in line for line in lines), lines
+        with then("the store log line says db: memory — FAIL-OPEN, naming the path", log={"actual": lines}):
+            assert any(line.startswith("db: memory — FAIL-OPEN, sessions do not survive a restart") and path in line for line in lines), lines
 
 
-async def _restart_roundtrip(policy, secrets, path: str) -> tuple[int, int]:
-    app1 = _app(policy, secrets, path)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://gw") as c:
-        doc = await open_session(c)
-    app1.state.store.close()
-    app2 = _app(policy, secrets, path)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app2), base_url="http://gw") as c:
-        text = (await c.get("/metrics")).text
-        active = int(re.search(r'^gateway_sessions_active\{rail="opencode"\} (\d+)$', text, re.M).group(1))
-        r = await c.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+async def _restart_roundtrip(policy, secrets, path: str, store: str) -> tuple[int, int]:
+    with given(f"a gateway on the {store} store dispatched a worker session, then its store closed"):
+        app1 = _app(policy, secrets, path)
+        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://gw") as c:
+            doc = await open_session(c)
+        app1.state.store.close()
+    with when(f"a second gateway starts on the same {store} store; GET /metrics, then the old token rides"):
+        app2 = _app(policy, secrets, path)
+        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app2), base_url="http://gw") as c:
+            text = (await c.get("/metrics")).text
+            active = int(re.search(r'^gateway_sessions_active\{rail="opencode"\} (\d+)$', text, re.M).group(1))
+            r = await c.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+        attach_json(f"after restart: active {active}, status {r.status_code}", {"gateway_sessions_active{rail=opencode}": active, "status": r.status_code})
     return active, (r.status_code, err(r) if r.status_code != 200 else None)
 
 
 async def test_memory_forgets(policy, secrets):
     """row: a memory store forgets on restart"""
-    active, verdict = await _restart_roundtrip(policy, secrets, ":memory:")
-    assert active == 0 and verdict == (401, "session-unknown")
+    world()
+    active, verdict = await _restart_roundtrip(policy, secrets, ":memory:", "memory")
+    with then("after restart: gateway_sessions_active{rail=opencode} = 0 and the token is 401 session-unknown"):
+        attach_json("verdict: forgotten", {"active": {"expected": 0, "actual": active}, "verdict": {"expected": [401, "session-unknown"], "actual": list(verdict)}})
+        assert active == 0 and verdict == (401, "session-unknown")
 
 
 async def test_pvc_remembers(tmp_path, policy, secrets, upstreams):
     """row: a PVC store remembers"""
-    active, verdict = await _restart_roundtrip(policy, secrets, str(tmp_path / "gateway.db"))
-    assert active == 1 and verdict[0] in (200, 502)  # 502: the fresh app has no fake transport — the session resolved either way
+    world()
+    active, verdict = await _restart_roundtrip(policy, secrets, str(tmp_path / "gateway.db"), "pvc")
+    with then("after restart: gateway_sessions_active{rail=opencode} = 1 and the token still resolves (200, or 502 with no fake transport)"):
+        attach_json("verdict: remembered", {"active": {"expected": 1, "actual": active}, "status": {"expected": [200, 502], "actual": verdict[0]}})
+        assert active == 1 and verdict[0] in (200, 502)  # 502: the fresh app has no fake transport — the session resolved either way
 
 
 async def test_no_auth_required(gw):
     """row: no auth is required"""
-    r = await gw.get("/healthz")
-    assert r.status_code == 200 and r.json()["ok"] is True
+    world()
+    with when("GET /healthz with no authorization header"):
+        r = await gw.get("/healthz")
+    with then("status 200 and ok = true", status={"expected": 200, "actual": r.status_code}, ok={"expected": True, "actual": r.json().get("ok")}):
+        assert r.status_code == 200 and r.json()["ok"] is True
 
 
 async def test_no_other_field(gw):
     """row: no other field is served"""
-    r = await gw.get("/healthz")
-    assert set(r.json()) == {"ok", "db"} and r.json()["db"] == "pvc"
+    world()
+    with when("GET /healthz"):
+        r = await gw.get("/healthz")
+    with then("the body has exactly ok, db and db = pvc"):
+        check("fields", sorted(r.json()), ["db", "ok"])
+        check("db", r.json()["db"], "pvc")

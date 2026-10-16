@@ -33,7 +33,7 @@ import re
 
 import pytest
 
-from .conftest import bearer, open_session, rule
+from .conftest import attach_json, bearer, check, given, open_session, quiet, rule, then, then_eq, when, world
 
 pytestmark = rule("GW-METRICS")
 
@@ -49,87 +49,142 @@ def _value(text: str, series: str) -> float | None:
 
 
 async def _metrics(gw) -> str:
-    return (await gw.get("/metrics")).text
+    """The exposition, read quietly — a verdict attaches the sample lines it judged instead."""
+    with quiet():
+        return (await gw.get("/metrics")).text
+
+
+def _lines(text: str, prefix: str) -> list[str]:
+    return [line for line in text.splitlines() if line.startswith(prefix)]
+
+
+async def _then_series(gw, series: str, expected: float) -> None:
+    """Then: <series> = <value>, read from GET /metrics inside the step."""
+    with then(f"series {series} = {expected:g}"):
+        text = await _metrics(gw)
+        attach_json(f"sample: {series.split('{')[0]} lines", _lines(text, series.split("{")[0]))
+        check(series, _value(text, series), expected)
 
 
 async def test_dispatch_raises_gauge(gw):
     """row: a dispatch raises the active gauge"""
-    await open_session(gw)
-    assert _value(await _metrics(gw), 'gateway_sessions_active{rail="opencode"}') == 1
+    world(upstream="upstream-ok")
+    with when("event: worker dispatched on opencode (POST /sessions)"):
+        await open_session(gw)
+    await _then_series(gw, 'gateway_sessions_active{rail="opencode"}', 1)
 
 
 async def test_release_lowers_gauge(gw):
     """row: a release lowers it"""
-    doc = await open_session(gw)
-    await gw.delete(f"/sessions/{doc['session']['id']}")
-    assert _value(await _metrics(gw), 'gateway_sessions_active{rail="opencode"}') == 0
+    world(upstream="upstream-ok")
+    with given("a worker session dispatched on opencode"):
+        doc = await open_session(gw)
+    with when(f"event: …then released (DELETE /sessions/{doc['session']['id']})"):
+        await gw.delete(f"/sessions/{doc['session']['id']}")
+    await _then_series(gw, 'gateway_sessions_active{rail="opencode"}', 0)
 
 
 async def test_dispatch_counted_with_identity(gw):
     """row: a dispatch is counted with its identity"""
-    await open_session(gw)
-    assert _value(await _metrics(gw), 'gateway_sessions_total{rail="opencode",role="worker",stack="platform",decision="dispatch"}') == 1
+    world(upstream="upstream-ok")
+    with when("event: worker dispatched on opencode (POST /sessions, stack platform)"):
+        await open_session(gw)
+    await _then_series(gw, 'gateway_sessions_total{rail="opencode",role="worker",stack="platform",decision="dispatch"}', 1)
 
 
 async def test_defer_counted_with_no_rail(gw, policy):
     """row: a defer is counted with no rail"""
-    for rail in ("opencode", "openrouter"):
-        for i in range(policy.rails[rail].max_sessions):
-            await open_session(gw, task=f"{rail}-{i}", rail=rail)
-    r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t"})
-    assert r.json()["reason"] == "rail-capacity"
-    assert _value(await _metrics(gw), 'gateway_sessions_total{rail="none",role="worker",stack="platform",decision="defer"}') == 1
+    world(upstream="upstream-ok")
+    caps = {rail: policy.rails[rail].max_sessions for rail in ("opencode", "openrouter")}
+    with given(f"every worker rail is full: {caps}"):
+        with quiet():
+            for rail in ("opencode", "openrouter"):
+                for i in range(policy.rails[rail].max_sessions):
+                    await open_session(gw, task=f"{rail}-{i}", rail=rail)
+        attach_json(f"filled: {caps}", caps)
+    with when("event: worker deferred (POST /sessions, every rail full)"):
+        r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t"})
+    then_eq("reason", r.json()["reason"], "rail-capacity")
+    await _then_series(gw, 'gateway_sessions_total{rail="none",role="worker",stack="platform",decision="defer"}', 1)
 
 
 async def test_served_request_counted(gw):
     """row: a served request is counted by status"""
-    doc = await open_session(gw)
-    assert (await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))).status_code == 200
-    assert _value(await _metrics(gw), 'gateway_requests_total{rail="opencode",dialect="openai",status="200"}') == 1
+    world(upstream="upstream-ok")
+    with given("a worker session on opencode"):
+        doc = await open_session(gw)
+    with when("event: one openai-dialect call on opencode (POST /openai/v1/chat/completions)"):
+        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 200)
+    await _then_series(gw, 'gateway_requests_total{rail="opencode",dialect="openai",status="200"}', 1)
 
 
 async def test_refused_request_counted(gw, policy, clock):
     """row: a refused request is counted by its status"""
-    doc = await open_session(gw, role="reviewer", harness="claude")
-    clock.advance(policy.session_ttl_s + 1)
-    assert (await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))).status_code == 401
-    assert _value(await _metrics(gw), 'gateway_requests_total{rail="none",dialect="anthropic",status="401"}') == 1
+    world(upstream="upstream-ok")
+    with given(f"a reviewer session on anthropic, expired (clock +{policy.session_ttl_s + 1} s)"):
+        doc = await open_session(gw, role="reviewer", harness="claude")
+        clock.advance(policy.session_ttl_s + 1)
+    with when("event: an expired token on /anthropic/v1/messages"):
+        r = await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 401)
+    await _then_series(gw, 'gateway_requests_total{rail="none",dialect="anthropic",status="401"}', 1)
 
 
 async def test_429_keeps_status(gw, upstreams):
     """row: an upstream 429 keeps its status"""
+    world(upstream="upstream-429")
     upstreams["openrouter"].behaviour = "upstream-429"
-    doc = await open_session(gw, harness="goose", rail="openrouter")
-    assert (await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))).status_code == 429
-    assert _value(await _metrics(gw), 'gateway_requests_total{rail="openrouter",dialect="openai",status="429"}') == 1
+    with given("a worker session on openrouter (harness goose)"):
+        doc = await open_session(gw, harness="goose", rail="openrouter")
+    with when("event: upstream-429 on openrouter (POST /openai/v1/chat/completions)"):
+        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 429)
+    await _then_series(gw, 'gateway_requests_total{rail="openrouter",dialect="openai",status="429"}', 1)
 
 
 async def test_upstream_time_per_rail(gw):
     """row: upstream time is observed per rail"""
-    doc = await open_session(gw, role="reviewer", harness="claude")
-    assert (await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))).status_code == 200
-    text = await _metrics(gw)
-    assert _value(text, 'gateway_upstream_seconds_count{rail="anthropic"}') == 1
-    assert _value(text, 'gateway_upstream_seconds_bucket{rail="anthropic",le="+Inf"}') == 1
-    assert re.search(r'^gateway_upstream_seconds_sum\{rail="anthropic"\} \d', text, re.M)
+    world(upstream="upstream-ok")
+    with given("a reviewer session on anthropic"):
+        doc = await open_session(gw, role="reviewer", harness="claude")
+    with when("event: one call on anthropic (POST /anthropic/v1/messages)"):
+        r = await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 200)
+    with then('series gateway_upstream_seconds{rail="anthropic"}: count 1, +Inf bucket 1, a sum'):
+        text = await _metrics(gw)
+        attach_json("sample: gateway_upstream_seconds lines", [line for line in _lines(text, "gateway_upstream_seconds") if 'rail="anthropic"' in line and ("_count" in line or "_sum" in line or "+Inf" in line)])
+        check('gateway_upstream_seconds_count{rail="anthropic"}', _value(text, 'gateway_upstream_seconds_count{rail="anthropic"}'), 1)
+        check('gateway_upstream_seconds_bucket{rail="anthropic",le="+Inf"}', _value(text, 'gateway_upstream_seconds_bucket{rail="anthropic",le="+Inf"}'), 1)
+        assert re.search(r'^gateway_upstream_seconds_sum\{rail="anthropic"\} \d', text, re.M)
 
 
 async def test_tokens_by_direction(gw):
     """row: tokens are counted by direction"""
-    doc = await open_session(gw, role="reviewer", harness="claude")
-    assert (await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))).status_code == 200
-    text = await _metrics(gw)
-    assert _value(text, 'gateway_tokens_total{rail="anthropic",direction="in"}') == 11
-    assert _value(text, 'gateway_tokens_total{rail="anthropic",direction="out"}') == 5
+    world(upstream="upstream-ok")
+    with given("a reviewer session on anthropic"):
+        doc = await open_session(gw, role="reviewer", harness="claude")
+    with when("event: upstream-ok answers usage {input_tokens: 11, output_tokens: 5} on anthropic"):
+        r = await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 200)
+    with then('series gateway_tokens_total{rail="anthropic",direction="in"} / "out" = 11 / 5'):
+        text = await _metrics(gw)
+        attach_json("sample: gateway_tokens_total lines", _lines(text, "gateway_tokens_total"))
+        check('gateway_tokens_total{rail="anthropic",direction="in"}', _value(text, 'gateway_tokens_total{rail="anthropic",direction="in"}'), 11)
+        check('gateway_tokens_total{rail="anthropic",direction="out"}', _value(text, 'gateway_tokens_total{rail="anthropic",direction="out"}'), 5)
 
 
 async def test_resolution_verdict_counted(gw, app, secrets):
     """row: a resolution verdict is counted"""
-    secrets.secrets.pop("platform-agents/claude-session")
-    app.state.resolver.forget()
-    r = await gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": "t"})
-    assert r.json()["reason"] == "credential-unresolved"
-    assert _value(await _metrics(gw), 'gateway_credential_resolve_total{rail="anthropic",outcome="definitive"}') == 1
+    world(upstream="upstream-ok")
+    with given("state: the anthropic ref platform-agents/claude-session is a definitive miss"):
+        secrets.secrets.pop("platform-agents/claude-session")
+        app.state.resolver.forget()
+        attach_json("secrets after: platform-agents/claude-session removed", sorted(secrets.secrets))
+    with when("event: a prober asks POST /sessions (its only rail is anthropic)"):
+        r = await gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": "t"})
+    then_eq("reason", r.json()["reason"], "credential-unresolved")
+    await _then_series(gw, 'gateway_credential_resolve_total{rail="anthropic",outcome="definitive"}', 1)
 
 
 LABEL_RE = re.compile(r'^(gateway_[a-z_]+)\{([^}]*)\} ')
@@ -145,14 +200,20 @@ async def _series(gw) -> list[tuple[str, dict[str, str]]]:
 
 
 async def _exercise(gw, app, secrets, upstreams, policy, clock):
-    """Drive every family, including an unknown stack and a refused request."""
-    doc = await open_session(gw, task="homelab-2588-r1")
-    await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-    await gw.post("/sessions", json={"stack": "nope", "role": "worker", "task": "t"})
-    await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": "Bearer gws_" + "x" * 32})
-    secrets.transient.add("platform-agents/claude-session")
-    app.state.resolver.forget()
-    await gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": "t"})
+    """Drive every family, including an unknown stack and a refused request (one given step,
+    the exchanges muted — a summary attaches instead)."""
+    with given("every family driven: a dispatch + a served call, an unknown stack, an unknown token, a transient credential"):
+        with quiet():
+            doc = await open_session(gw, task="homelab-2588-r1")
+            await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+            await gw.post("/sessions", json={"stack": "nope", "role": "worker", "task": "t"})
+            await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": "Bearer gws_" + "x" * 32})
+            secrets.transient.add("platform-agents/claude-session")
+            app.state.resolver.forget()
+            await gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": "t"})
+        attach_json("exercised: the calls", ["POST /sessions platform worker task homelab-2588-r1 → dispatch", "POST /openai/v1/chat/completions on it",
+                                             "POST /sessions stack nope", "POST /openai/v1/chat/completions with an unknown gws_ token",
+                                             "POST /sessions platform prober with claude-session transient"])
     return doc
 
 
@@ -170,27 +231,46 @@ LABEL_ROWS = [
 
 @pytest.mark.parametrize(("family", "label", "allowed"), [r[1:] for r in LABEL_ROWS], ids=[r[0] for r in LABEL_ROWS])
 async def test_bounded_labels(gw, app, secrets, upstreams, policy, clock, family, label, allowed):
+    world(upstream="upstream-ok")
     await _exercise(gw, app, secrets, upstreams, policy, clock)
-    seen = {labels[label] for fam, labels in await _series(gw) if (family is None or fam == family) and label in labels}
-    assert seen, (family, label)
-    if allowed is None:
-        assert all(re.fullmatch(r"[1-5][0-9][0-9]", v) for v in seen), seen
-    else:
-        assert seen <= allowed, seen - allowed
+    with when(f"GET /metrics: the values of label {label} on family {family or 'any'}"):
+        seen = {labels[label] for fam, labels in await _series(gw) if (family is None or fam == family) and label in labels}
+        attach_json(f"seen: {label} values", sorted(seen))
+    allowed_txt = "^[1-5][0-9][0-9]$" if allowed is None else ", ".join(sorted(allowed))
+    with then(f"label {label} is non-empty and allowed ⊇ seen (allowed: {allowed_txt})",
+              allowed={"expected": allowed_txt if allowed is None else sorted(allowed), "actual": sorted(seen)}):
+        assert seen, (family, label)
+        if allowed is None:
+            assert all(re.fullmatch(r"[1-5][0-9][0-9]", v) for v in seen), seen
+        else:
+            assert seen <= allowed, seen - allowed
 
 
 async def test_no_task_label_ever(gw, app, secrets, upstreams, policy, clock):
     """row: no task label, ever"""
+    world(upstream="upstream-ok")
     doc = await _exercise(gw, app, secrets, upstreams, policy, clock)
-    text = await _metrics(gw)
-    for fam, labels in await _series(gw):
-        assert not ({"task", "session", "id", "model", "token"} & set(labels)), (fam, labels)
-    for needle in ("homelab-2588-r1", doc["session"]["id"], doc["session"]["token"], doc["model"], "nope"):
-        assert needle not in text, needle
+    with when("GET /metrics after every family was driven"):
+        text = await _metrics(gw)
+        series = await _series(gw)
+        attach_json("label names seen per family", {fam: sorted({k for f, labels in series if f == fam for k in labels}) for fam in sorted({f for f, _ in series})})
+    with then("no label named task, session, id, model, token"):
+        for fam, labels in series:
+            assert not ({"task", "session", "id", "model", "token"} & set(labels)), (fam, labels)
+    needles = ("homelab-2588-r1", doc["session"]["id"], doc["session"]["token"], doc["model"], "nope")
+    with then("no task key / session id / token / model / unknown stack string in the text",
+              absent={"expected": "none of", "needles": ["homelab-2588-r1", "<session id>", "<token>", doc["model"], "nope"],
+                      "found": [n for n in needles if n in text]}):
+        for needle in needles:
+            assert needle not in text, needle
 
 
 async def test_families_declared(gw):
     """row: every family is declared with HELP and TYPE"""
-    text = await _metrics(gw)
-    for fam in FAMILIES:
-        assert f"# HELP {fam} " in text and f"# TYPE {fam} " in text, fam
+    world()
+    with when("GET /metrics"):
+        text = await _metrics(gw)
+        attach_json("HELP/TYPE lines", [line for line in text.splitlines() if line.startswith(("# HELP gateway_", "# TYPE gateway_"))])
+    with then(f"{len(FAMILIES)} families declared with HELP and TYPE: {', '.join(FAMILIES)}"):
+        for fam in FAMILIES:
+            assert f"# HELP {fam} " in text and f"# TYPE {fam} " in text, fam

@@ -30,7 +30,8 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
 # Spec pages that head rules, and their rules in page order.
-mapfile -t pages < <(grep -rlE '^#{2,6} GW-[A-Z0-9-]+\s*$' specs --include='*.md' | sort)
+# specs/evidence/ is GENERATED (evidence_render.py fragments, gitignored) — never a spec page.
+mapfile -t pages < <(grep -rlE '^#{2,6} GW-[A-Z0-9-]+\s*$' specs --include='*.md' --exclude-dir=evidence | sort)
 all_rules=()
 for page in "${pages[@]}"; do
   mapfile -t rules < <(sed -nE 's/^#{2,6} (GW-[A-Z0-9-]+)\s*$/\1/p' "$page")
