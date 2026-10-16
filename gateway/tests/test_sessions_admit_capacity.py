@@ -82,11 +82,15 @@ async def _ride(gw, upstreams, *, rail: str, role: str, behaviour: str = "upstre
             doc = await open_session(gw, role=role, rail=rail, harness="claude", task=f"arrange-{rail}-{role}")
     up = upstreams[rail]
     up.behaviour, up.usage, up.rate_headers = behaviour, usage, rate
-    r = await gw.post("/anthropic/v1/messages", headers=bearer(doc),
-                      json={"max_tokens": 8, "messages": [{"role": "user", "content": "hi"}]})
+    with quiet():  # one folded attachment per arranged ride instead of the gateway + fake exchange pair
+        r = await gw.post("/anthropic/v1/messages", headers=bearer(doc),
+                          json={"max_tokens": 8, "messages": [{"role": "user", "content": "hi"}]})
     up.behaviour, up.usage, up.rate_headers = "upstream-ok", None, None
-    attach_json(f"arranged ride: {role} on {rail} → {r.status_code}", {"behaviour": behaviour, "usage": usage, "rate": rate,
-                                                                      "status": r.status_code})
+    call = up.calls[-1] if up.calls else {}
+    attach_json(f"arranged ride: {role} on {rail} → {r.status_code}",
+                {"session": doc["session"]["id"], "rail": rail, "model": doc["model"],
+                 "upstream": {"behaviour": behaviour, "path": call.get("path"), "usage": usage, "ratelimit_headers": rate},
+                 "gateway_status": r.status_code, "retry_after": r.headers.get("retry-after")})
     return doc
 
 
@@ -106,9 +110,9 @@ async def _admit(gw, body: dict) -> dict:
 
 
 def _verdict(doc: dict, expected: dict) -> None:
-    with then("expected " + ", ".join(f"{k} = {v}" for k, v in expected.items())):
-        for k, v in expected.items():
-            then_eq(k, doc.get(k), v)
+    claim = "expected " + ", ".join(f"{k} = {v}" for k, v in expected.items())
+    with then(claim, **{k: {"expected": v, "actual": doc.get(k)} for k, v in expected.items()}):  # one verdict attachment
+        assert {k: doc.get(k) for k in expected} == expected, f"{claim}: got {doc}"
     if doc.get("decision") == "defer":
         with then("a defer carries exactly decision, reason, retry_after_s",
                   keys={"expected": ["decision", "reason", "retry_after_s"], "actual": sorted(doc)}):
@@ -149,11 +153,10 @@ UTIL_ROWS = [
 async def test_utilization(gw, upstreams, clock, reading, advance, body, expected):
     world(upstream="upstream-ok", note="the subscription answer carries the row's anthropic-ratelimit-unified-* set")
     u5, u7, d5, d7 = reading
-    with given(f"state: the last anthropic answer read 5h {u5} (reset T0{d5:+d} s) / 7d {u7} (reset T0{d7:+d} s)"):
+    with given(f"reading = {reading!r}: the last anthropic answer read 5h {u5} (reset T0{d5:+d} s) / 7d {u7} (reset T0{d7:+d} s)"):
         await _ride(gw, upstreams, rail="anthropic", role="reviewer", rate=_rate(u5, u7, clock.t + d5, clock.t + d7))
-    if advance:
-        with given(f"state: {advance} s pass with no further anthropic answer"):
-            clock.advance(advance)
+    with given(f"advance = {advance}: {advance} s pass with no further anthropic answer"):
+        clock.advance(advance)
     doc = await _admit(gw, {"role": "reviewer", **body})
     _verdict(doc, expected)
 
@@ -192,12 +195,11 @@ async def test_latch(gw, upstreams, clock, arrange, advance, body, expected):
                 await _fill(gw, step[1], step[2])
             continue
         rail, role, behaviour = step
-        with given(f"state: a {role} ride on {rail} is answered {behaviour}"):
+        with given(f"arrange: a {role} ride on {rail} is answered {behaviour}"):
             doc = await _ride(gw, upstreams, rail=rail, role=role, behaviour=behaviour,
                               doc=doc if doc and doc["rail"] == rail else None)
-    if advance:
-        with given(f"state: {advance} s pass"):
-            clock.advance(advance)
+    with given(f"advance = {advance}: {advance} s pass"):
+        clock.advance(advance)
     _verdict(await _admit(gw, body), expected)
 
 
@@ -248,12 +250,10 @@ DRAW_ROWS = [
 async def test_window_draw(gw, upstreams, clock, ride, advance, body, expected):
     world(upstream="upstream-ok-usage", note="the Go answer's anthropic-dialect usage is the row's")
     role, usage, at = ride
-    if at:
-        with given(f"state: the clock is at T0 + {at} s"):
-            clock.advance(at)
-    with given(f"state: one {role} ride on opencode drew usage {usage}"):
+    with given(f"ride = {ride!r}: the clock is at T0 + {at} s"):
+        clock.advance(at)
+    with given(f"ride = {ride!r}: one {role} ride on opencode drew usage {usage}"):
         await _ride(gw, upstreams, rail="opencode", role=role, usage=usage)
-    if advance:
-        with given(f"state: {advance} s pass with no further Go request"):
-            clock.advance(advance)
+    with given(f"advance = {advance}: {advance} s pass with no further Go request"):
+        clock.advance(advance)
     _verdict(await _admit(gw, body), expected)
