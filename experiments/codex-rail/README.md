@@ -51,7 +51,7 @@ recorded in `evidence.json`; these are dated local evidence, not automatically m
 
 ## Integration boundary
 
-The prototype deliberately has no production HTTP client, OAuth refresh/store, quota polling,
+The prototype deliberately has no production HTTP client, OAuth transport/store backend, quota polling,
 retry policy, model entitlement discovery, Kubernetes manifests or gateway policy changes.
 Protocol compatibility with a fake Responses endpoint does not choose between the September
 Codex backend path and the newer SIWC preview. Both need backend-specific request/header
@@ -62,5 +62,67 @@ replace the fixed fixture token with its session lookup, supply its managed HTTP
 and wire terminal outcomes into metrics/accounting. Review identity/session-affinity header
 requirements explicitly: this prototype's conservative allowlist does not claim full vendor
 header compatibility. Preserve stream cleanup on cancellation and never retry a generation
-after bytes reach the consumer. OAuth lifecycle and fresh headroom remain the later FU-270
-slices described in the owning spike; HA remains FU-271.
+after bytes reach the consumer. OAuth lifecycle and headroom are offline components described below; production integration
+remains under FU-270 in the owning spike. HA remains FU-271.
+
+
+## Offline lifecycle and headroom (FU-270)
+
+`lifecycle.py` takes a clock, exchange callback and `Store` interface. Credentials never
+appear in record reprs or boundary exception messages/chains. This is not a general-purpose
+logging scrubber: consumers must never serialize the credential object or log callback locals.
+`test_lifecycle.py` uses dummy strings and a shared memory store to exercise multiple owners,
+rotation, owner restart, process interruption, ambiguous persistence, revocation and redaction.
+It proves state-machine behavior, not disk durability or distributed fencing.
+
+The proposed store contract is one account per store, an exclusive lock across **all** owners,
+and atomic durable replacement. Hold the lock across load, refresh and save. Before contacting
+upstream, persist `refreshing`; return a rotated access token only after saving `ready` with the
+replacement credentials. Fresh credentials bypass refresh. Expiry margin defaults to 30 seconds.
+A refresh callback must return the complete validated replacement record for the same account;
+authoritative revocation raises `Revoked`. There is no automatic exchange retry.
+
+| Durable state / failure | Result on next acquire |
+|---|---|
+| `ready`, still fresh | Return access credential |
+| `ready`, near expiry | Persist marker, exchange once, persist rotation |
+| `refreshing`, including crash or uncertain exchange | `credential-recovery-required`; no exchange |
+| `revoked` | `credential-revoked`; no cached access |
+| Save acknowledges failure after committing | Reload authoritative state on next call |
+
+If the exchange rotates the token and the process dies before persistence, the marker cannot
+recover the lost replacement. The prototype fails closed. Recovery needs an authoritative
+replacement credential through a future, explicitly designed recovery operation; blindly clearing
+the marker or replaying the old refresh token is forbidden. Store exceptions produce
+`credential-store-unavailable`; exchange uncertainty produces `credential-refresh-uncertain`;
+invalid replacements produce `credential-invalid`. A failed save never returns new access.
+Infisical write-back, cross-process lock/fencing, timeouts and revocation transport are unresolved
+production choices. No Kubernetes Secret or Infisical implementation is supplied.
+
+`headroom.py` owns one account's immutable snapshot. Its explicit ingress schema is:
+
+```json
+{"observed_at": 990, "source": "poll", "limited": false,
+ "windows": [{"used_percent": 20, "resets_at": 2000, "window_minutes": 300},
+             {"used_percent": 64, "resets_at": 9000, "window_minutes": 10080}]}
+```
+
+Timestamps are epoch seconds supplied by an authenticated, account-bound producer. Source is
+one of `poll`, `upstream`, or `jail`; it is provenance, not an authorization claim. Authenticating
+reports and translating vendor payloads are future integration responsibilities. The two window
+durations are an explicit **fixture profile**, not discovered account entitlements. Percentages
+normalize to ratios. Non-finite numbers, bool-as-number, missing/duplicate windows, expired reset
+times, unknown sources, stale/future observations and non-increasing timestamps are rejected
+without replacing the last accepted snapshot. Equal timestamps are rejected even across sources;
+this prototype assumes synchronized clocks and gives no source preferential authority.
+
+Verdicts are `admit`, `quota-unknown`, `quota-stale`, or `quota-limited`. Fixture policy uses a
+120-second freshness limit and a 95% utilization ceiling, both configurable. Any exhausted
+window or explicit limit blocks admission. Reaching freshness expiry or a reset timestamp requires
+a new observation; reset time passing does not imply replenished capacity. Clock rollback is
+stale. Restart starts unknown. Reports do not reserve capacity, meter concurrent requests, or
+provide an entitlement guarantee; admission must still compose with the gateway's session and
+concurrency controls. No Prometheus queries or production policy changes are involved.
+
+Run all offline tests with the existing unittest command above. The original Responses and
+native CLI fixtures remain unchanged and are regression checks for this extension.

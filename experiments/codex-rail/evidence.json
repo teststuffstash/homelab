@@ -1,6 +1,6 @@
 {
   "checked_at": "2026-10-16",
-  "unit_tests": 10,
+  "unit_tests": 31,
   "agent_runtime_commit": "d10904baa8fac8c66e49cd86510277ee9ef508f1",
   "runtime_lock": "agent-base/devbox.lock",
   "native_runs": [
@@ -46,5 +46,11 @@
         "output_tokens": 3
       }
     }
-  ]
+  ],
+  "offline_components": {
+    "oauth_lifecycle": "fake credentials, shared memory store, injected clock",
+    "headroom": "normalized synthetic reports, injected clock",
+    "production_storage_verified": false,
+    "live_subscription_verified": false
+  }
 }
