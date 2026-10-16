@@ -13696,3 +13696,5 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Overnight plan:** `gateway/PLAN.md` (named-slice grounding: model-routing.md, ADR-096/112/139/155, the Codex spike +
   #2642) — admission rows for the ladder's capacity half, the Codex rail ported in dark, the launcher's first worker
   behind an off-by-default flag + one ad-hoc canary.
+- **Plan amended (operator, ~20:10Z):** step 3 is specs-reviewer harness × rail cells in SHADOW (no GitHub writes),
+  not the worker launcher — the blast radius stays the gateway build; `agent-session.sh` is out of tonight.

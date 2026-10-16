@@ -20,7 +20,7 @@ The seat coordinates; builders are subagents in their OWN clones (never the shar
 per step, both reviewers gate (ADR-155: specs changes need the specs reviewer's approval too —
 every PR body carries a `Spec changes:` section). Waits are `pr-wait` in the background. Grounding
 slice (no `/design-agents` load — it is operator-typed only): `gateway/` + specs,
-[`model-routing.md`](../docs/agents/model-routing.md) (the ladder), the launcher seams named below,
+[`model-routing.md`](../docs/agents/model-routing.md) (the ladder), `agents/specs-reviewer-session.sh` (the live consumer),
 the Codex spike + `experiments/codex-rail/README.md`, ADR-096/112/139/155/156.
 
 ## Steps — in merge order; builders may run in parallel, merges do not
@@ -70,32 +70,45 @@ The DEPLOYED policy (`argocd/resources/agent-gateway/configmap-policy.yaml`) get
 — the code ships dark. **Settles:** `GW-RAIL-CODEX` rows green, spec gate 0 red, the experiment
 directory reduced to the native-CLI compat harness (or removed if the evidence row covers it).
 
-### 3. The launcher's first worker consumer (FU-270 next 1)
+### 3. Specs-reviewer cell experiments — harnesses × rails through the gateway, in shadow
 
-`agents/agent-session.sh` gains a gateway branch for the platform `worker` role (policy: harness
-`opencode`, rail `opencode`), behind a launcher flag that defaults OFF:
+Operator (2026-10-16): exercise the gateway with the specs reviewer, its one live consumer, instead
+of moving the worker launcher — the blast radius is the gateway build, nothing else. The launcher
+move (`agents/agent-session.sh`) is NOT part of tonight.
 
-- `POST /sessions` replaces, for that ride only, the `/route` consult, the capacity reads and the
-  hand-assembled harness env (the `CLAUDE_ENV` / `GOOSE_PROXY_ENV` / `OC_ENV` blocks): `defer` →
-  the launcher's existing typed-defer path with `retry_after_s`; `dispatch` → the `env` copied into
-  the pod spec verbatim, the session id recorded, `DELETE /sessions/{id}` at the ride's end (TTL is
-  the belt). The router `/report` (strike store) keeps being written — the router still owns
-  strikes.
-- First resolve the `GW-SESSIONS-ENV` "⚖ (verify)" rows: run the pinned opencode (and goose) CLI
-  against a loopback upstream and record which vars it honours. Whatever the CLI really reads is
-  what the rows say — if that is `OPENCODE_CONFIG`'s `baseURL`/`apiKey`, the gateway's env changes,
-  not the harness.
-- A replay fixture for the new branch (ADR-103 ratchet: red on the pre-fix launcher); the
-  merge-path/FSM lints the touched clauses require.
+- **Shadow mode in `agents/specs-reviewer-session.sh`:** a run that takes an explicit `harness`
+  (and an optional `rail` override — both are `POST /sessions` inputs already) and a PR list,
+  builds the SAME context pack, runs the brief, and writes the verdict + findings to a file/S3
+  object — it **never submits a review, comments or labels** (assert it: the shadow path has no
+  `gh` write call; a fixture/self-test row proves it). The live cron path is unchanged.
+- **The cells:** `claude@anthropic` (today's, the control), `claude@opencode` (claude on the
+  [Go rail](../docs/agents/chainless-redesign.md)), `opencode@opencode` (deepseek), `goose@openrouter`. Codex has no cell —
+  its rail ships dark (step 2). Each non-claude cell first proves its `GW-SESSIONS-ENV` "⚖ (verify)"
+  rows: whatever the pinned CLI really reads is what the rows say (if that is
+  `OPENCODE_CONFIG`'s `baseURL`/`apiKey` or goose's `OPENROUTER_HOST`, the GATEWAY's env changes,
+  not the harness), and the confinement contract (`env -i` + the dispatch env) holds for it.
+- **Where it runs:** the cluster, as one-off runs of the specs-review WorkflowTemplate shape with
+  the shadow parameters; the opencode/goose cells need an image carrying those CLIs (the
+  agent-base family) — pick the existing image that has them, never build a new one tonight.
+- **The corpus:** merged specs PRs with KNOWN verdicts — #2635 (r1 blocked on a missing
+  `Spec changes:` section), #2640 (r1 blocked on the GET row the diff missed — a true positive),
+  #2628, #2631 — each PR at the head the live reviewer judged. Bounded: ≤ 4 cells × ≤ 4 PRs × 1
+  run; the openrouter cell under its session key's budget.
+- **The output:** one table — cell × PR → verdict, the known findings caught/missed, invalid
+  findings, tokens by class (the session row), wall clock, timeouts — written into
+  [`specs-reviewer.md`](../docs/agents/specs-reviewer.md)'s measurement section (ADR-156 step 5's
+  "per completed PR" numbers), with the raw files linked. A comparison, not a ruling: which cell
+  the live reviewer rides stays the operator's call.
 
-**Canary, the one live act tonight:** ONE ad-hoc platform worker ride with the flag on, on the
-opencode-go rail ([the Go rail](../docs/agents/chainless-redesign.md)). **Settles:** the ride ends clean; its session row shows `requests > 0` and
-non-zero token classes; the pod env holds no real key; the session is released. The default stays
-OFF — the flip is the operator's, in the morning.
+**Settles:** every cell either completes the corpus or names the row/harness gap that stopped it
+(a failed env row is a finding, not a skip); the ⚖ (verify) rows on the openai dialect are
+resolved one way or the other; no review, comment or label written by a shadow run (check the
+four PRs' timelines).
 
 ## Boundaries — what the unattended session never does
 
-- Touch `argocd/resources/openrouter-proxy/` or move any production consumer (the flag stays off).
+- Touch `argocd/resources/openrouter-proxy/` or `agents/agent-session.sh`, or change which cell the LIVE
+  specs reviewer rides (shadow runs only).
 - Mint, read or write a real Codex/OpenAI credential, write Infisical, or run a Codex canary
   (the spike's step 4 is a separately authorized maintenance window).
 - Edit governance files (`.github/workflows/**`, `.agents/review.md`, CODEOWNERS, rulesets).
@@ -109,5 +122,5 @@ OFF — the flip is the operator's, in the morning.
 - A step blocked on an operator decision → leave its PR open, unarmed, named in the pickup; go on to
   the next step.
 - Wind down ~50 k tokens before the context cap: a `meta-state.md` PICKUP bullet (what merged, what
-  is parked and why, the flag's state), a TICK-LOG entry, FU-270's next steps updated, monitors
+  is parked and why, the shadow table's state), a TICK-LOG entry, FU-270's next steps updated, monitors
   killed, this file deleted or trimmed to what remains.

@@ -814,7 +814,7 @@ the block needs pruning, not more headings.
       (2026-10-16): four token classes (`in` = uncached) + the `anthropic-ratelimit-unified-*` window
       gauges, no USD in the gateway (#2640) — LIVE, seat canary 2026-10-16 (in 24/out 5, 5h 0.10/7d 0.70).
       **Next:** the overnight plan [`gateway/PLAN.md`](../gateway/PLAN.md) — (1) the ladder's capacity
-      half as admission rows, (2) the Codex rail ported in dark (#2642), (3) the launcher's first worker.
+      half as admission rows, (2) the Codex rail ported in dark (#2642), (3) specs-reviewer harness × rail cells in shadow.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
