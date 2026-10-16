@@ -1,4 +1,7 @@
 evidence/
+# raw Allure results (pytest --alluredir) + the snippets tool's output (scripts/gateway-evidence.sh)
+allure-results/
+allure-evidence/
 # the specs site build (scripts/specs-build.sh): the staged docs root + the rendered site
 .site-src/
 specs-site/

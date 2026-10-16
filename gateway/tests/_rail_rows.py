@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from .conftest import open_session
+from .conftest import given, open_session, when
 
 PATHS = {"messages": "/anthropic/v1/messages", "chat": "/openai/v1/chat/completions", "models": "/openai/v1/models"}
 UPSTREAM_PATHS = {"messages": "/v1/messages", "chat": "/v1/chat/completions", "models": "/v1/models"}
@@ -18,20 +18,31 @@ SESSION_FOR = {  # (rail, dialect) → an admission that lands on that rail with
 
 
 async def ride(gw, rail: str, op: str, headers: dict | None = None, body: dict | None = None, path: str | None = None):
+    """Given a session on `rail` whose harness speaks `op`'s dialect; WHEN the one call under test
+    (op=<op>, its inbound headers and body extras in the step name — the row's values)."""
     dialect = "anthropic" if op == "messages" else "openai"
-    doc = await open_session(gw, **SESSION_FOR[(rail, dialect)])
+    with given(f"a session on rail {rail} ({dialect} dialect, {SESSION_FOR[(rail, dialect)]})"):
+        doc = await open_session(gw, **SESSION_FOR[(rail, dialect)])
     h = {"authorization": f"Bearer {doc['session']['token']}", **(headers or {})}
     p = path or PATHS[op]
-    if op == "models":
-        r = await gw.get(p, headers=h)
-    else:
-        payload = {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 8, **(body or {})}
-        r = await gw.post(p, json=payload, headers=h)
+    verb = "GET" if op == "models" else "POST"
+    with when(f"{verb} {p} op={op} · inbound {headers or '(no extra headers)'}" + (f" · body {body}" if body else "")):
+        if op == "models":
+            r = await gw.get(p, headers=h)
+        else:
+            payload = {"messages": [{"role": "user", "content": "hi"}], "max_tokens": 8, **(body or {})}
+            r = await gw.post(p, json=payload, headers=h)
     return doc, r
 
 
 async def expected_bytes(upstream, op: str, model: str, behaviour: str) -> tuple[int, bytes, dict]:
-    """What the fake upstream itself returns for the same call — the identity oracle."""
+    """What the fake upstream itself returns for the same call — the identity oracle (a given
+    step: the fake's own exchange attaches under it)."""
+    with given(f"the identity oracle: the {upstream.rail} fake's own answer to op={op} model {model} under {behaviour}"):
+        return await _expected_bytes(upstream, op, model, behaviour)
+
+
+async def _expected_bytes(upstream, op: str, model: str, behaviour: str) -> tuple[int, bytes, dict]:
     import httpx
 
     upstream.behaviour = behaviour

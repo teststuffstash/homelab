@@ -51,6 +51,7 @@ Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
 cd gateway
 devbox run ci             # THE gate: uv sync --frozen, ruff, pytest (+ evidence), spec gate, evidence render
 devbox run test -- -k admit   # one table
+devbox run evidence       # after a test run: allure-results/ → allure-evidence/ (evidence.json, digest.md, <RULE>.md, allure-results/)
 ```
 
 Every test module is a decision table (`@pytest.mark.parametrize(..., ids=[row descriptions])`
@@ -58,6 +59,17 @@ with the same table in the module docstring) under one `@rule("GW-…")` marker,
 collection when `specs/` has no such heading. The plugin in `tests/conftest.py` writes
 `evidence/evidence.json`; `scripts/spec_gate.py` couples requirement headings ⇄ schema
 `x-requirements` ⇄ evidence rows; `scripts/evidence_render.py` renders the per-rule tables.
+Every run also writes raw **Allure** results (`allure-results/`, pyproject `addopts`) in the
+oracle-fleet conventions' shape (ADR-156 — one portable process): `rule()` sets story == rule ID
+(epic = spec page, feature = section, a link to the anchor), every case names its world
+(`world()` → the `world` label; a rule-labelled case without one fails), and its steps read
+`Given:` / one `When:` / `Then:` per claim (a `verdict: …` JSON with expected/actual under each),
+with every gateway and fake-upstream exchange attached under the step it supports;
+`environment.properties` stamps `git.commit` (the head sha — the pinned snippets key), policy sha256, timestamp and
+`artifact=pr-head (not the built image)`. `devbox run evidence` (`scripts/gateway-evidence.sh`,
+snippets pin in `scripts/lib/snippets.sh`) turns them into the reviewer's pack, joining each spec
+page's tables (`--spec`) where the tool can parse them; `evidence_render.py` and its
+`evidence-render: BEGIN/END` log block are unchanged.
 `GATEWAY_SPECS_OPTIONAL=1` lets the rule check + gate skip with a warning when `specs/` is absent
 (only for a checkout that carries the service half alone — CI never sets it).
 
