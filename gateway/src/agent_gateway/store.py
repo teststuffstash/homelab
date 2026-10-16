@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS requests (
   tokens_cache_write INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS requests_session ON requests (session_id, ts);
+CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts);
 """
 # Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
 # them to an existing table, so _migrate() does (idempotent, additive only).
@@ -232,6 +233,18 @@ class Store:
                 " tokens_cache_read = tokens_cache_read + ?, tokens_cache_write = tokens_cache_write + ? WHERE id = ?",
                 (u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write, session_id),
             )
+
+    def rail_usage_since(self, rail: str, since: float) -> list[tuple[float, str, int, int, int, int]]:
+        """The rail's metered (2xx) requests since `since`, ascending: (ts, session model, tokens_in,
+        cache_read, cache_write, tokens_out) — the window-draw ledger (GW-SESSIONS-ADMIT)."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT r.ts, s.model, r.tokens_in, r.tokens_cache_read, r.tokens_cache_write, r.tokens_out"
+                " FROM requests r JOIN sessions s ON s.id = r.session_id"
+                " WHERE s.rail = ? AND r.ts >= ? AND r.status BETWEEN 200 AND 299 ORDER BY r.ts",
+                (rail, since),
+            ).fetchall()
+        return [(float(r[0]), r[1], int(r[2]), int(r[3]), int(r[4]), int(r[5])) for r in rows]
 
     def requests_for(self, session_id: str) -> list[dict]:
         with self._lock:
