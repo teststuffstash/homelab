@@ -10,7 +10,7 @@
 | a refused request is counted by its status | an expired token on /anthropic/v1/messages | gateway_requests_total{rail="none",dialect="anthropic",status="401"} | 1 |
 | an upstream 429 keeps its status | upstream-429 on openrouter | gateway_requests_total{rail="openrouter",dialect="openai",status="429"} | 1 |
 | upstream time is observed per rail | one call on anthropic | gateway_upstream_seconds_count{rail="anthropic"} | 1 |
-| tokens are counted by direction | upstream-ok answers usage {input_tokens: 11, output_tokens: 5} on anthropic | gateway_tokens_total{rail="anthropic",direction="in"} / "out" | 11 / 5 |
+| tokens are counted by direction | upstream-ok answers usage {input_tokens: 12, output_tokens: 7} on anthropic | gateway_tokens_total{rail="anthropic",direction="in"} / "out" | 12 / 7 |
 | a resolution verdict is counted | the anthropic ref is a definitive miss | gateway_credential_resolve_total{rail="anthropic",outcome="definitive"} | 1 |
 
 | description | the series | label | allowed values |
@@ -164,14 +164,14 @@ async def test_tokens_by_direction(gw):
     world(upstream="upstream-ok")
     with given("a reviewer session on anthropic"):
         doc = await open_session(gw, role="reviewer", harness="claude")
-    with when("event: upstream-ok answers usage {input_tokens: 11, output_tokens: 5} on anthropic"):
+    with when("event: upstream-ok answers usage {input_tokens: 12, output_tokens: 7} on anthropic"):
         r = await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))
     then_eq("status", r.status_code, 200)
-    with then('series gateway_tokens_total{rail="anthropic",direction="in"} / "out" = 11 / 5'):
+    with then('series gateway_tokens_total{rail="anthropic",direction="in"} / "out" = 12 / 7'):
         text = await _metrics(gw)
         attach_json("sample: gateway_tokens_total lines", _lines(text, "gateway_tokens_total"))
-        check('gateway_tokens_total{rail="anthropic",direction="in"}', _value(text, 'gateway_tokens_total{rail="anthropic",direction="in"}'), 11)
-        check('gateway_tokens_total{rail="anthropic",direction="out"}', _value(text, 'gateway_tokens_total{rail="anthropic",direction="out"}'), 5)
+        check('gateway_tokens_total{rail="anthropic",direction="in"}', _value(text, 'gateway_tokens_total{rail="anthropic",direction="in"}'), 12)
+        check('gateway_tokens_total{rail="anthropic",direction="out"}', _value(text, 'gateway_tokens_total{rail="anthropic",direction="out"}'), 7)
 
 
 async def test_resolution_verdict_counted(gw, app, secrets):
