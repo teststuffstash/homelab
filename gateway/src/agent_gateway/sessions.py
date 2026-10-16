@@ -76,7 +76,7 @@ class Admission:
 def parse_admission(policy: Policy, body: object) -> Admission:
     """Validate the body against `post.input`; every shape miss is 400 `malformed-body` (the
     message says which), an explicit harness×rail whose dialects do not meet is 400
-    `harness-rail-mismatch` — and so is `harness: codex` against anything (⚑ gap: no codex rail)."""
+    `harness-rail-mismatch` (`codex` speaks `responses`, which only the `codex` rail serves)."""
     if not isinstance(body, dict):
         raise BadRequest("malformed-body", "body must be a JSON object")
     for key in ("stack", "role", "task"):
@@ -99,8 +99,6 @@ def parse_admission(policy: Policy, body: object) -> Admission:
     rail = body.get("rail")
     if rail is not None and rail not in RAILS:
         raise BadRequest("malformed-body", f"rail {rail!r} is not one of {', '.join(RAILS)}")
-    if harness == "codex":
-        raise BadRequest("harness-rail-mismatch", "harness codex has no rail in v0 (gap: no codex rail, no codex env)")
     if rail is not None and HARNESS_DIALECT[harness] not in RAIL_DIALECTS[rail]:
         raise BadRequest(
             "harness-rail-mismatch",
@@ -127,7 +125,12 @@ def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str
             "ANTHROPIC_MODEL": wire,
         }
     env = {"OPENAI_BASE_URL": f"{self_url}/openai/v1", "OPENAI_API_KEY": token}
-    if harness == "goose":
+    if harness == "codex":
+        # The CLI reads neither the base URL nor the model from env (observed 0.161.0, compat.py):
+        # its `[model_providers.<id>]` block does — base_url, wire_api = "responses",
+        # env_key = "OPENAI_API_KEY" — rendered by the harness wrapper FROM these values (⚖).
+        env["CODEX_MODEL"] = wire
+    elif harness == "goose":
         env["GOOSE_MODEL"] = wire
     elif harness == "opencode":
         env["OPENCODE_MODEL"] = wire
@@ -146,6 +149,7 @@ class SessionService:
         self.metrics = metrics
         self.self_url = self_url
         self.clock = clock
+        self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
 
     async def admit(self, adm: Admission) -> JSONResponse:
         """The rail pick: first allowed rail that (a) the harness can speak, (b) names a model for the
@@ -181,6 +185,21 @@ class SessionService:
             if block is not None:
                 log.info("session: rail %s capacity-blocked (%s) until %s — skipped", rail, block.detail, iso(block.free_at))
                 capacity_blocked.append((rail, block.reason, block.free_at, block.detail))
+                continue
+            if rail == "codex":  # the codex rail's own gate (GW-CODEX-HEADROOM) — no Secret ref to resolve
+                blocked = self.codex.admission(self.policy.defer_retry_s) if self.codex else ("credential-unresolved", 0)
+                if blocked is None:
+                    self.metrics.credential(rail, "resolved")
+                    return self._dispatch(adm, rail, model, now)
+                if blocked[0] == "credential-transient":
+                    self.metrics.credential(rail, "transient")
+                    return error(503, "credential-transient", "the codex credential store does not answer — retry",
+                                 headers={"retry-after": str(self.policy.defer_retry_s)})
+                if blocked[0] == "credential-unresolved":
+                    self.metrics.credential(rail, "definitive")
+                    cred_blocked.append(rail)
+                else:  # a quota-* headroom verdict joins the "frees first" race like any capacity block
+                    capacity_blocked.append((rail, blocked[0], now + blocked[1], f"codex headroom {blocked[0]}"))
                 continue
             try:
                 await self.resolver.resolve(rail, adm.stack)

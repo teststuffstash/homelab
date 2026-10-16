@@ -1,106 +1,43 @@
 {
   "checked_at": "2026-10-16",
-  "unit_tests": 45,
-  "agent_runtime_commit": "d10904baa8fac8c66e49cd86510277ee9ef508f1",
-  "runtime_lock": "agent-base/devbox.lock",
+  "what": "native codex exec --json through the REAL agent-gateway (uvicorn on 127.0.0.1, policy-codex world, the FAKE credential store) to a loopback fake Responses upstream \u2014 GW-RAIL-CODEX / GW-SESSIONS-ENV local-evidence rows",
+  "command": "cd gateway && uv run --frozen python ../experiments/codex-rail/compat.py --codex <nix store codex-0.161.0>/bin/codex --expect-version 0.161.0 --probe-bare-env",
+  "binary": "nixpkgs codex-0.161.0 (/nix/store/x83jfii8339k38mbpbbkidnxdfijj8c9-codex-0.161.0) \u2014 the version the agent-runtime lock pins (d10904baa8fac8c66e49cd86510277ee9ef508f1, agent-base/devbox.lock)",
+  "gateway_head": "fix/gw-codex-rail (this PR's head)",
   "native_runs": [
     {
       "cli_version": "codex-cli 0.161.0",
       "live_subscription_verified": false,
-      "requests": [
+      "dispatch_env_keys": [
+        "CODEX_MODEL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL"
+      ],
+      "bare_env_reached_gateway": false,
+      "exit": 0,
+      "turn_completed": true,
+      "synthetic_text_seen": true,
+      "auth_json_written": false,
+      "upstream_requests": 1,
+      "upstream_auth_replaced": true,
+      "upstream_shape": [
         {
-          "path": "/openai/v1/responses",
           "model": "fixture-model",
           "stream": true,
           "store": false,
-          "input_is_array": true,
-          "auth_replaced": true
+          "input_is_array": true
         }
       ],
-      "errors": [],
-      "closed": 1,
-      "observation": {
-        "outcome": "completed",
-        "input_tokens": 7,
-        "output_tokens": 3
-      }
-    },
-    {
-      "cli_version": "codex-cli 0.163.0",
-      "live_subscription_verified": false,
-      "requests": [
-        {
-          "path": "/openai/v1/responses",
-          "model": "fixture-model",
-          "stream": true,
-          "store": false,
-          "input_is_array": true,
-          "auth_replaced": true
-        }
-      ],
-      "errors": [],
-      "closed": 1,
-      "observation": {
-        "outcome": "completed",
-        "input_tokens": 7,
-        "output_tokens": 3
-      }
+      "oauth_exchanges": 1,
+      "session_row": {
+        "requests": 1,
+        "tokens_in": 7,
+        "tokens_cache_read": 0,
+        "tokens_out": 3
+      },
+      "passed": true
     }
   ],
-  "offline_components": {
-    "oauth_lifecycle": "fake credentials, shared memory store, injected clock",
-    "headroom": "normalized synthetic reports, injected clock",
-    "production_storage_verified": false,
-    "live_subscription_verified": false,
-    "composed_transport": "loopback HTTP, fake Responses upstream, no redirects or retries",
-    "file_store": "dummy-only POSIX backend; subprocess locking and crash/restart fixtures"
-  },
-  "composed_native_runs": [
-    {
-      "cli_version": "codex-cli 0.161.0",
-      "live_subscription_verified": false,
-      "requests": [
-        {
-          "path": "/openai/v1/responses",
-          "model": "fixture-model",
-          "stream": true,
-          "store": false,
-          "input_is_array": true,
-          "auth_replaced": true
-        }
-      ],
-      "errors": [],
-      "closed": 1,
-      "observation": {
-        "outcome": "completed",
-        "input_tokens": 7,
-        "output_tokens": 3
-      },
-      "refreshes": 1,
-      "upstream_requests": 1
-    },
-    {
-      "cli_version": "codex-cli 0.163.0",
-      "live_subscription_verified": false,
-      "requests": [
-        {
-          "path": "/openai/v1/responses",
-          "model": "fixture-model",
-          "stream": true,
-          "store": false,
-          "input_is_array": true,
-          "auth_replaced": true
-        }
-      ],
-      "errors": [],
-      "closed": 1,
-      "observation": {
-        "outcome": "completed",
-        "input_tokens": 7,
-        "output_tokens": 3
-      },
-      "refreshes": 1,
-      "upstream_requests": 1
-    }
-  ]
+  "not_rerun": "codex-cli 0.163.0 (the jail CLI the prototype also ran, #2642) is not installed on the box this ran on; its prototype-era run is in git history (experiments/codex-rail/evidence.json before this PR).",
+  "superseded": "the prototype's standalone unit tests (adapter/lifecycle/headroom/composed/file_store, 45 tests) are ported to gateway/tests as GW rows (GW-RAIL-CODEX, GW-CODEX-HEADROOM, GW-CODEX-OAUTH); file_store.py's subprocess lock tests are NOT ported (FAKE store only \u2014 a disposable POSIX backend is not a production choice either); their last evidence is this file's previous revision."
 }

@@ -22,7 +22,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input`, `post.output` (`dispatch` / `defer`) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw); the ladder's class/tier/cell walk, strikes, cooldowns and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
-| [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose`; `codex` harness `⚑ gap` (no codex rail, no codex env today) |
+| [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
@@ -45,7 +45,9 @@ the stack resolves ([GW-CRED-RESOLVE](#gw-cred-resolve)). None → `defer`, whos
 policy's `defer_retry_s`, 60 s; ties go to walk order — ⚖ a gateway choice, the old proxy has no multi-rail answer); a walk blocked only on credentials
 defers `credential-unresolved`. The walk is filtered
 by the harness first: `claude` speaks the anthropic dialect (rails `anthropic`, `opencode`);
-`opencode` / `goose` / `codex` speak openai (rails `openrouter`, `opencode`); a rail the harness
+`opencode` / `goose` speak openai (rails `openrouter`, `opencode`); `codex` speaks responses
+(rail `codex` only — gated by account headroom, [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom),
+whose admission rows live there); a rail the harness
 cannot speak is skipped, and an **explicit** `harness` × `rail` pair that cannot speak is a 400
 `harness-rail-mismatch`, never a silent skip. `defer` is HTTP 200 — a normal answer the caller
 polls after `retry_after_s`; only a malformed body or a transient credential fault is an HTTP
@@ -83,6 +85,8 @@ caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limi
 | "an explicit harness and rail that cannot speak" | `harness: claude`, `rail: openrouter` || 400 | harness-rail-mismatch |
 | "an explicit harness and rail that can speak" | `harness: claude`, `rail: opencode` (reviewer) || 200 | — (`decision: dispatch`) |
 | "the kube API is away while resolving the credential" | reviewer; `FakeSecrets` transient fault || 503 | credential-transient |
+| "codex where no allowed rail serves responses" | `harness: codex` (worker, `policy-default` — no codex rail) || 200 | — (`decision: defer`, `role-rail-denied`) |
+| "codex against a rail that does not serve responses" | `harness: codex`, `rail: openrouter` || 400 | harness-rail-mismatch |
 
 ### Counting
 
@@ -218,6 +222,16 @@ passed one. The model var carries the policy id with its rail prefix removed (`c
 same strip `agents/agent-session.sh` performs today. `context_tokens` is the policy's per-model
 window or `null` — a null is "not declared", never a guess.
 
+**`codex`** (world `policy-codex` — the rail ships dark): the pinned CLI reads its provider from
+config, not from env — observed with codex-cli 0.161.0 (`experiments/codex-rail/compat.py`):
+a bare `OPENAI_BASE_URL` + `OPENAI_API_KEY` with no provider block is ignored (the CLI dialled
+`api.openai.com`, refused by the fixture's closed proxy), while a `[model_providers.<id>]` block
+with `base_url`, `wire_api = "responses"`, `env_key` and the model completes a turn. So the env
+carries the three VALUES that block needs and the harness wrapper renders the block from them
+(`base_url = $OPENAI_BASE_URL`, `env_key = "OPENAI_API_KEY"`, `model = $CODEX_MODEL`) ⚖ — the
+only var the CLI itself reads is the `env_key` one, the token. The compat harness renders exactly
+that block from a real dispatch answer; its run is the local-evidence row below.
+
 | description | harness | rail | model (policy) || env var | value |
 |---|---|---||---|---|
 | "claude: the base url is this gateway's anthropic path" | claude | anthropic | claude/sonnet || `ANTHROPIC_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic` |
@@ -230,13 +244,17 @@ window or `null` — a null is "not declared", never a guess.
 | "goose: the base url is this gateway's openai path ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
 | "goose: the api key is the session token ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_API_KEY` | the session token |
 | "goose: the model var carries the bare id ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `GOOSE_MODEL` | `deepseek/deepseek-v4-flash` |
+| "codex: the base url is this gateway's openai path (wrapper-rendered) ⚖" | codex | codex | codex/fixture-model || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
+| "codex: the api key is the session token, read through env_key ⚖" | codex | codex | codex/fixture-model || `OPENAI_API_KEY` | the session token |
+| "codex: the model var carries the bare id (wrapper-rendered) ⚖" | codex | codex | codex/fixture-model || `CODEX_MODEL` | `fixture-model` |
 
 | description | harness || vars present | vars absent |
 |---|---||---|---|
 | "claude's env is exactly three vars" | claude || `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL` | `ANTHROPIC_API_KEY`, any `OPENAI_*`, any `OPENROUTER_*` |
 | "the openai-dialect env never carries an anthropic var" | opencode || `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENCODE_MODEL` | any `ANTHROPIC_*`, `OPENROUTER_API_KEY` |
 | "no env value is a real key" | any || every value is the token, a URL or a model name | any value matching the [GW-REDACT](#gw-redact) patterns |
-| "⚑ gap: codex" | codex || — | no env table — the codex harness/rail is out of v0; `harness: codex` is a 400 `harness-rail-mismatch` against every rail until a row says otherwise |
+| "codex's env is exactly three vars ⚖" | codex || `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `CODEX_MODEL` | any `ANTHROPIC_*`, any `OPENROUTER_*` |
+| "⚖ local evidence: the pinned Codex CLI completes a turn from this env through the gateway" | codex (codex-cli 0.161.0) || the provider block rendered from the dispatch `env`; `OPENAI_API_KEY` in the child env | no `auth.json`, no operator config (a fresh `CODEX_HOME`) — `experiments/codex-rail/evidence.json`, not CI |
 
 | description | model (policy) || `context_tokens` |
 |---|---||---|

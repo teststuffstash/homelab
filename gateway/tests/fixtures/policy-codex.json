@@ -1,0 +1,203 @@
+{
+  "_comment": "The `policy-codex` world — `policy-default` plus the codex rail (specs/worlds/README.md), for the GW-RAIL-CODEX / GW-CODEX-HEADROOM / GW-CODEX-OAUTH / codex GW-SESSIONS-ENV rows ONLY. The DEPLOYED policy declares no codex rail (the rail ships dark). The codex model id is a FIXTURE name (`codex/fixture-model` → wire `fixture-model`, the name experiments/codex-rail/compat.py uses): model-classes.json runs no codex model, and choosing a representative one is not a fixture's call. `prober` alone may ride codex, after anthropic (the spike's prober-only canary shape, docs/spikes/codex-subscription-rail.md); only `harness: codex` speaks the rail's `responses` dialect, so no other harness ever lands on it. `headroom` = the experiment's fixture profile (120 s freshness, 0.95 ceiling, the 300/10080-minute windows) and `oauth.refresh_margin_s` = its 30 s — adopted as fixture values, not as production policy (⚖ GW-CODEX-HEADROOM).",
+  "stacks": {
+    "platform": {
+      "loop_ns": "platform-agents",
+      "openrouter_ref": "platform-agents/platform-openrouter",
+      "anthropic_ref": "platform-agents/claude-session"
+    },
+    "oracle": {
+      "loop_ns": "oracle-agents",
+      "openrouter_ref": "oracle-agents/oracle-openrouter",
+      "anthropic_ref": "oracle-agents/claude-session"
+    }
+  },
+  "roles": {
+    "worker": {
+      "rails": [
+        "opencode",
+        "openrouter"
+      ],
+      "tier": "standard",
+      "harness": "opencode"
+    },
+    "reviewer": {
+      "rails": [
+        "anthropic",
+        "opencode"
+      ],
+      "tier": "heavy",
+      "harness": "claude"
+    },
+    "coordinator": {
+      "rails": [
+        "anthropic",
+        "opencode"
+      ],
+      "tier": "standard",
+      "harness": "claude"
+    },
+    "responder": {
+      "rails": [
+        "anthropic",
+        "opencode"
+      ],
+      "tier": "standard",
+      "harness": "claude"
+    },
+    "retro": {
+      "rails": [
+        "anthropic",
+        "openrouter"
+      ],
+      "tier": "heavy",
+      "harness": "claude"
+    },
+    "prober": {
+      "rails": [
+        "anthropic",
+        "codex"
+      ],
+      "tier": "light",
+      "harness": "claude"
+    },
+    "researcher": {
+      "rails": [
+        "openrouter",
+        "anthropic"
+      ],
+      "tier": "heavy",
+      "harness": "goose"
+    }
+  },
+  "rails": {
+    "anthropic": {
+      "admission": {
+        "_comment": "⚖ the old proxy's values, copied (sessions.md §Capacity): utilization_thresholds 5h = ANTHROPIC_UTIL_THRESHOLD's code default 0.80 (openrouter-proxy.py; unset in its deployment.yaml), 7d = ANTHROPIC_UTIL_THRESHOLD_7D 0.95 (deployment.yaml); latch_429_hold_s = ANTHROPIC_429_HOLD_S 900. reading_stale_s 900 has NO old-proxy precedent (it only drops a reading whose reset passed) — the gateway's own guess, ⚖.",
+        "utilization_thresholds": {
+          "5h": 0.8,
+          "7d": 0.95
+        },
+        "reading_stale_s": 900,
+        "latch_429_hold_s": 900
+      },
+      "max_sessions": 5,
+      "side_models": [
+        "claude/haiku"
+      ],
+      "models": {
+        "light": "claude/haiku",
+        "standard": "claude/sonnet",
+        "heavy": "claude/sonnet"
+      }
+    },
+    "opencode": {
+      "admission": {
+        "_comment": "⚖ copied from argocd/resources/openrouter-proxy/gometer.py (snapshot 2026-09-17) — a DUPLICATE until the old proxy retires: latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900; prices = GO_PRICES / GO_PRICES_PEAK rows for the policy's priced Go model ($/M; null = gometer's None, draws 0); fallback = _GO_MAX_PRICE/2 each for in/out (max in+out = kimi-k3 3.00+15.00), cache 0 — what an unpriced id (claude-sonnet-4-6) draws at; peak hours = GO_PEAK_HOURS_UTC / GO_PEAK_WEEKDAYS; windows = _GO_WINDOW_DEFAULTS (budgets 12/30/60, anchors chain/weekly mon 00:00/monthly 13 11:30; GO_WINDOW_ANCHORS unset in deployment.yaml) with threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
+        "latch_429_hold_s": 900,
+        "window_draw": {
+          "prices": {
+            "opencode-go/deepseek-v4-flash": {
+              "in": 0.15,
+              "out": 0.6,
+              "cache_read": 0.003,
+              "cache_write": null,
+              "peak": {
+                "in": 0.3,
+                "out": 1.2,
+                "cache_read": 0.006,
+                "cache_write": null
+              }
+            }
+          },
+          "fallback": {
+            "in": 9.0,
+            "out": 9.0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "peak_hours_utc": [
+            [
+              1,
+              4
+            ],
+            [
+              6,
+              10
+            ]
+          ],
+          "peak_weekdays": [
+            "mon",
+            "tue",
+            "wed",
+            "thu",
+            "fri"
+          ],
+          "windows": {
+            "5h": {
+              "budget_usd": 12.0,
+              "threshold": 0.8,
+              "anchor": "chain",
+              "span_s": 18000,
+              "chain_lookback_s": 604800
+            },
+            "7d": {
+              "budget_usd": 30.0,
+              "threshold": 0.8,
+              "anchor": "weekly",
+              "weekday": "mon",
+              "hour": 0,
+              "minute": 0
+            },
+            "30d": {
+              "budget_usd": 60.0,
+              "threshold": 0.8,
+              "anchor": "monthly",
+              "month_day": 13,
+              "hour": 11,
+              "minute": 30
+            }
+          }
+        }
+      },
+      "max_sessions": 3,
+      "models": {
+        "light": "opencode-go/deepseek-v4-flash",
+        "standard": "opencode-go/deepseek-v4-flash",
+        "heavy": "opencode-go/claude-sonnet-4-6"
+      }
+    },
+    "openrouter": {
+      "max_sessions": 20,
+      "models": {
+        "light": "deepseek/deepseek-v4-flash",
+        "standard": "deepseek/deepseek-v4-flash",
+        "heavy": "deepseek/deepseek-v4.1-flash"
+      }
+    },
+    "codex": {
+      "max_sessions": 2,
+      "models": {
+        "light": "codex/fixture-model",
+        "standard": "codex/fixture-model",
+        "heavy": "codex/fixture-model"
+      },
+      "headroom": {
+        "max_age_s": 120,
+        "ceiling": 0.95,
+        "windows_minutes": [
+          300,
+          10080
+        ]
+      },
+      "oauth": {
+        "refresh_margin_s": 30
+      }
+    }
+  },
+  "context_tokens": {
+    "_comment": "per-model harness window, copied from model-classes.json `models.*.context_tokens` — the only non-null entry today is the Go rail's deepseek-v4-flash; absent = null in the dispatch answer, never a guess.",
+    "opencode-go/deepseek-v4-flash": 1000000
+  },
+  "session_ttl_s": 14400
+}

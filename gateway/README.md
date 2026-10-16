@@ -7,8 +7,10 @@ untouched in parallel until consumers move.
 
 It owns three things: the **credential boundary** (a pod holds a `gws_…` session token, never a
 real key), **per-session model resolution** (one model per session, from `policy.json`), and the
-three **rails** — `anthropic` (the operator's Claude subscription OAuth token), `openrouter`
-(per-stack keys minted by openrouter-operator), `opencode` (the OpenCode Go key).
+three live **rails** — `anthropic` (the operator's Claude subscription OAuth token), `openrouter`
+(per-stack keys minted by openrouter-operator), `opencode` (the OpenCode Go key) — plus `codex`
+(the ChatGPT subscription, `responses` dialect), which ships **dark**: no deployed policy declares
+it and no production credential store exists.
 
 ## The contract
 
@@ -22,6 +24,7 @@ three **rails** — `anthropic` (the operator's Claude subscription OAuth token)
 | `POST/GET/DELETE /sessions` (`GW-SESSIONS-*`, `GW-MODEL-RESOLVE`) | [`specs/endpoints/sessions.md`](specs/endpoints/sessions.md) |
 | `POST /anthropic/v1/messages` (`GW-RAIL-*`, `GW-CRED-*`) | [`specs/endpoints/anthropic-messages.md`](specs/endpoints/anthropic-messages.md) |
 | `POST /openai/v1/chat/completions`, `GET /openai/v1/models` | [`specs/endpoints/openai-chat.md`](specs/endpoints/openai-chat.md) |
+| `POST /openai/v1/responses` — the dark codex rail (`GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-CODEX-OAUTH`) | [`specs/endpoints/openai-responses.md`](specs/endpoints/openai-responses.md) |
 | `GET /metrics` (`GW-METRICS`), `GET /healthz` (`GW-HEALTH`) | [`specs/endpoints/metrics.md`](specs/endpoints/metrics.md), [`specs/endpoints/health.md`](specs/endpoints/health.md) |
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
@@ -39,7 +42,7 @@ Environment: `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is
 logged, and `/healthz` says `db: memory`), `OPENCODE_GO_API_KEY` (the gateway's own mounted Go
 key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Service name),
 `ANTHROPIC_UPSTREAM` / `OPENROUTER_UPSTREAM` / `OPENCODE_GO_UPSTREAM` (base URLs, overridable for
-tests), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20).
+tests), `CODEX_UPSTREAM` (no default — the codex upstream profile is unselected), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20).
 
 Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
 `agent-gateway.agent-egress.svc.cluster.local:8080`); image built by
@@ -88,5 +91,10 @@ the wire id by stripping the rail prefix. The deployed ConfigMap
   OpenRouter-shaped alias): goose computes `$OPENROUTER_HOST/api/v1/…` and opencode's provider
   baseURL is `<host>/api/v1` today (`agents/agent-session.sh`), so the alias is what those
   harnesses reach if a launcher keeps today's wiring. One handler set, two prefixes.
+- The codex rail's credential backend is a `create_app(codex_backend=…)` argument (a `Store` +
+  refresh `exchange`); only the tests pass one (`tests/_codex_world.py`'s FAKE store). `python -m
+  agent_gateway` passes none, so even a policy that declared the rail would defer it
+  `credential-unresolved`. The native-CLI compat harness stays in `experiments/codex-rail/`
+  (it needs the pinned `codex` binary, which CI does not carry).
 - The `upstream-slow` world is clock-faked (the fake transport raises `ReadTimeout`), so the
   `upstream-timeout` rows prove the 504 mapping, not the 600 s budget itself (specs: `🚧 WIP`).

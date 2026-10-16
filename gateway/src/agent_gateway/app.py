@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
 from . import __version__
+from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
 from .config import Policy, Settings
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
 from .logging import register_literal
@@ -42,6 +43,7 @@ def create_app(
     store: Store | None = None,
     client: httpx.AsyncClient | None = None,
     clock=time.time,
+    codex_backend: CodexBackend | None = None,
 ) -> Starlette:
     policy = policy or Policy.load(settings.policy_path)
     register_literal(settings.opencode_go_api_key)  # the Go key has no recognisable shape — GW-REDACT masks it by value
@@ -57,6 +59,12 @@ def create_app(
         follow_redirects=False,
     )
     proxy = Proxy(sessions, m, settings.upstreams, client)
+    # The codex rail exists only when the policy declares it; it has a credential backend only when
+    # one is handed in (tests: the FAKE store) — production passes none (⚑ gap), so it ships dark.
+    codex = (CodexRail(policy.rails["codex"], clock, codex_backend, settings.upstreams.get("codex", ""))
+             if "codex" in policy.rails else None)
+    sessions.codex = codex
+    codex_proxy = CodexProxy(sessions, m, codex, client)
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -84,6 +92,8 @@ def create_app(
             # alias: goose computes `$OPENROUTER_HOST/api/v1/…` and opencode's provider baseURL
             # is `<host>/api/v1` today (agent-session.sh), so the alias is what those harnesses
             # reach without a new launcher knob. One handler set, two prefixes.
+            # The `responses` dialect (GW-RAIL-CODEX) — the contract prefix only, no `/api/v1` alias.
+            Route("/openai/v1/responses", openai_responses, methods=["POST"]),
             *[Route("/openai/v1" + r.path, r.endpoint, methods=list(r.methods or [])) for r in openai_routes],
             *[Route("/api/v1" + r.path, r.endpoint, methods=list(r.methods or [])) for r in openai_routes],
         ],
@@ -97,4 +107,6 @@ def create_app(
     app.state.sessions = sessions
     app.state.capacity = sessions.capacity
     app.state.proxy = proxy
+    app.state.codex = codex
+    app.state.codex_proxy = codex_proxy
     return app

@@ -16,11 +16,11 @@
 
 | description | the series | label | allowed values |
 |---|---|---|---|
-| rail is the rail enum plus none | any | rail | anthropic, opencode, openrouter, none |
+| rail is the rail enum plus none | any | rail | anthropic, opencode, openrouter, codex, none |
 | role is the role enum | sessions_total | role | the seven roles |
 | stack is a policy key | sessions_total | stack | the keys of policy.stacks (an unknown stack renders as other) |
 | decision is the answer enum | sessions_total | decision | dispatch, defer |
-| dialect is the two paths | requests_total | dialect | anthropic, openai |
+| dialect is the three paths | requests_total | dialect | anthropic, openai, responses |
 | status is a numeric HTTP status | requests_total | status | ^[1-5][0-9][0-9]$ |
 | class is one of the four usage classes | tokens_total | class | in, cache_read, cache_write, out |
 | window is 5h or 7d | subscription_utilization | window | 5h, 7d |
@@ -242,11 +242,11 @@ async def _exercise(gw, app, secrets, upstreams, policy, clock):
 
 
 LABEL_ROWS = [
-    ("rail is the rail enum plus none", None, "rail", {"anthropic", "opencode", "openrouter", "none"}),
+    ("rail is the rail enum plus none", None, "rail", {"anthropic", "opencode", "openrouter", "codex", "none"}),
     ("role is the role enum", "gateway_sessions_total", "role", {"worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher"}),
     ("stack is a policy key", "gateway_sessions_total", "stack", {"platform", "oracle", "other"}),
     ("decision is the answer enum", "gateway_sessions_total", "decision", {"dispatch", "defer"}),
-    ("dialect is the two paths", "gateway_requests_total", "dialect", {"anthropic", "openai"}),
+    ("dialect is the three paths", "gateway_requests_total", "dialect", {"anthropic", "openai", "responses"}),
     ("status is a numeric HTTP status", "gateway_requests_total", "status", None),
     ("class is one of the four usage classes", "gateway_tokens_total", "class", {"in", "cache_read", "cache_write", "out"}),
     ("window is 5h or 7d", "gateway_subscription_utilization", "window", {"5h", "7d"}),

@@ -35,28 +35,30 @@ cluster: it resolves only at this gateway.
 
 ## rail
 
-A billing/credential lane upstream. v0 has three; each has one upstream host, one credential
-source and one `max_sessions` cap in the policy.
+A billing/credential lane upstream. v0 has four (one dark); each has one upstream host, one
+credential source and one `max_sessions` cap in the policy.
 
 | rail | credential | upstream host | dialects served |
 |---|---|---|---|
 | `anthropic` | the operator's Claude subscription OAuth token (`AUTH_TOKEN` in the stack's `claude-session` Secret) | `api.anthropic.com` | anthropic |
 | `opencode` | the OpenCode Go subscription key (the gateway's own mounted Secret) | `opencode.ai/zen/go` | anthropic, openai |
 | `openrouter` | the per-stack OpenRouter key minted by openrouter-operator | `openrouter.ai/api/v1` | anthropic, openai |
+| `codex` (**dark**) | the operator's ChatGPT subscription OAuth record, behind the persistence interface — FAKE store only, no production write-back ([GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth)) | unselected (`CODEX_UPSTREAM`, no default) | responses |
 
-Out of v0 and named only as gaps: `codex`, `zen`.
+Out of v0 and named only as gaps: `zen`.
 
 ## dialect
 
 The wire format of an LLM request — which inbound path the pod speaks and which upstream
 endpoint shape it maps to. `anthropic` = Anthropic Messages (`/anthropic/v1/messages`);
-`openai` = OpenAI Chat Completions (`/openai/v1/chat/completions`, plus `GET /openai/v1/models`).
+`openai` = OpenAI Chat Completions (`/openai/v1/chat/completions`, plus `GET /openai/v1/models`);
+`responses` = OpenAI Responses over SSE (`/openai/v1/responses` — streaming, `store: false`).
 A harness speaks exactly one dialect; a rail serves one or both (table under *rail*).
 
 ## harness
 
-The agent CLI the pod runs: `claude`, `opencode`, `goose` (`codex` is a named gap). The
-harness fixes the dialect (`claude` → anthropic; `opencode`/`goose`/`codex` → openai) and the
+The agent CLI the pod runs: `claude`, `opencode`, `goose`, `codex` (its rail ships dark). The
+harness fixes the dialect (`claude` → anthropic; `opencode`/`goose` → openai; `codex` → responses) and the
 set of env var names the gateway must hand the pod
 ([GW-SESSIONS-ENV](endpoints/sessions.md#gw-sessions-env)).
 
@@ -90,8 +92,26 @@ may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which i
 
 The admission answer "not now": HTTP 200 `{decision: "defer", reason, retry_after_s}` — never
 an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `role-rail-denied`,
-`stack-unknown`, `credential-unresolved`. The caller polls after `retry_after_s` — for a
-capacity-blocked rail, the moment the block lifts ([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)).
+`stack-unknown`, `credential-unresolved`, and the codex rail's headroom verdicts `quota-unknown`,
+`quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
+The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
+([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)).
+
+## headroom
+
+The codex rail's account capacity as the gateway last saw it: one normalised snapshot of the
+subscription's windows (used fraction, reset time) plus an explicit `limited` flag, replaced only
+by a strictly newer valid report. Its verdict (`admit`, `quota-unknown`, `quota-stale`,
+`quota-limited`) gates admission onto the rail
+([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)); Prometheus observes it,
+never decides it.
+
+## persistence interface
+
+The `Store` seam the codex OAuth lifecycle runs behind — `lock()` / `load()` / `save()`, one
+account per store, the lock held across load → refresh → save, `save` atomic and durable
+([GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth)). Only a FAKE (process-memory)
+implementation exists; the production one is a `⚑ gap`.
 
 ## control plane / data plane
 

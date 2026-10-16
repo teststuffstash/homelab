@@ -52,11 +52,11 @@ the process is down.
 
 | description | the series || label | allowed values |
 |---|---||---|---|
-| "rail is the rail enum plus none" | any || `rail` | `anthropic`, `opencode`, `openrouter`, `none` |
+| "rail is the rail enum plus none" | any || `rail` | `anthropic`, `opencode`, `openrouter`, `codex`, `none` — `codex` renders `gateway_sessions_active{rail="codex"} 0` even where no policy declares it (the rail ships dark) ⚖ |
 | "role is the role enum" | sessions_total || `role` | `worker`, `reviewer`, `coordinator`, `responder`, `retro`, `prober`, `researcher` |
 | "stack is a policy key" | sessions_total || `stack` | the keys of `policy.stacks` (`platform`, `oracle` in `policy-default`) |
 | "decision is the answer enum" | sessions_total || `decision` | `dispatch`, `defer` |
-| "dialect is the two paths" | requests_total || `dialect` | `anthropic`, `openai` |
+| "dialect is the three paths" | requests_total || `dialect` | `anthropic`, `openai`, `responses` ([GW-RAIL-CODEX](openai-responses.md#gw-rail-codex)) |
 | "status is a numeric HTTP status" | requests_total || `status` | the codes this gateway returns (`200`, `400`, `401`, `403`, `429`, `501`, `502`, `503`, `504`) and the upstream statuses relayed |
 | "class is one of the four usage classes" | tokens_total || `class` | `in`, `cache_read`, `cache_write`, `out` |
 | "window is 5h or 7d" | subscription_utilization || `window` | `5h`, `7d` |
