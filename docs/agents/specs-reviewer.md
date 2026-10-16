@@ -86,12 +86,19 @@ the workflow renders no `ANTHROPIC_*` of its own), and the session is released o
 semaphore is deliberately NOT carried: that is the old proxy's capacity model; the rail cap is now
 the gateway's. Its row in the access inventory: [`access.md`](../../gateway/specs/access.md).
 
-**Inputs, exactly the lens's scope.** An authenticated clone (`http.extraHeader` preemptive auth)
-of the base branch + `pull/<n>/head`; `git diff origin/<base>...pr -- ':(glob)**/specs/**'`; the
-PR title/body; the `specs/` trees at head extracted with `git archive`; the head's evidence (below).
-The model runs with these as its ONLY cwd, read-only tools, and the lens as its WHOLE system
-prompt (fetched from `LENS_BASE`, default the public master raw URL) — a fetch failure is no
-review and a non-zero exit. The verdict is parsed from the model's `Verdict:` line and submitted
+**Inputs, exactly the lens's scope — built before admission, each checked.** An authenticated
+clone (`http.extraHeader` preemptive auth) of the base branch + `pull/<n>/head`; `git diff
+origin/<base>...pr -- ':(glob)**/specs/**'`; the PR title/body; the `specs/` trees at head
+extracted with `git archive`; the head's evidence (below). Any input that fails to fetch — or a
+`specs.diff` that comes back empty although the PR's files name a specs path — is no review
+(fail CLOSED: a blocking lens must never read an empty input as clean). The model is CONFINED:
+it runs under `env -i` with exactly the gateway's dispatch env + OTEL + a throwaway `HOME`
+(never `GH_TOKEN` / `GH_TOKEN_FILE` — pinned by the self-test), its cwd is the inputs dir, and
+its tool scope is an allow-list — `Read(//<inputs>/**)` + `Glob`, `--permission-mode default`, so
+in `-p` mode any read outside the inputs (the token file under `/var/run`, `/proc`, `$HOME`) is
+denied rather than prompted; Grep/Bash/Write are not granted. The lens is its WHOLE system prompt
+(fetched from `LENS_BASE`, default the public master raw URL) — a fetch failure is no review and
+a non-zero exit. The verdict is parsed from the model's `Verdict:` line and submitted
 by the SCRIPT (`APPROVE` → `--approve`, `CHANGES_REQUESTED` → `--request-changes`); an
 unparsable result is no terminal.
 

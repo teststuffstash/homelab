@@ -39,9 +39,14 @@
 #              session is ALWAYS released (`DELETE /sessions/{id}`, trap). Inputs = exactly the
 #              lens's scope: specs.diff (merge-base..head, `**/specs/**` only), the PR body, the
 #              specs trees at head (unchanged neighbours), the head's CI evidence (the ci run's
-#              `evidence-render: BEGIN/END` block, counted only when its stamp names THIS head).
-#              The lens is the WHOLE system prompt; a fetch failure is no review + exit 1 (a
-#              blocking lens never degrades to advisory). The verdict is parsed from the model's
+#              `evidence-render: BEGIN/END` block, counted only when its stamp names THIS head),
+#              built BEFORE admission and each checked — any missing input is no review (fail
+#              CLOSED). The model is CONFINED: `env -i` with exactly the dispatch env + OTEL + a
+#              throwaway HOME (never GH_TOKEN/GH_TOKEN_FILE), and an allow-listed tool scope —
+#              `Read(//<inputs>/**)` + Glob, nothing else — so the token file, /proc and $HOME
+#              are unreadable (a prompt-injected "quote X" from authored text has nothing to
+#              reach). The lens is the WHOLE system prompt; a fetch failure is no review + exit 1
+#              (a blocking lens never degrades to advisory). The verdict is parsed from the model's
 #              `Verdict:` line and SUBMITTED BY THIS SCRIPT — APPROVE → --approve,
 #              CHANGES_REQUESTED → --request-changes, anything else = no terminal.
 #   exit contract — every PR this tick posted on is re-read: a live own verdict at the content
@@ -140,6 +145,20 @@ self_test() {
   check "verdict parse: missing → empty" "" "$(parse_verdict "$(printf 'no verdict here\n')")"
   check "env key guard rejects a shell-hostile key" 1 "$(valid_env_key 'FOO=bar; rm' && echo 0 || echo 1)"
   check "env key guard accepts ANTHROPIC_MODEL" 0 "$(valid_env_key 'ANTHROPIC_MODEL' && echo 0 || echo 1)"
+  # the confinement contract (PR#2613 finding 1): the model's env is the dispatch env + OTEL +
+  # HOME/PATH/TMPDIR, and NEVER the pod's GH_TOKEN / GH_TOKEN_FILE / GATEWAY_URL — asserted by
+  # running the real builder with those set in THIS shell and a uc-1-shaped dispatch fixture.
+  local d; d="$(mktemp -d)"
+  printf '%s' '{"decision":"dispatch","session":{"id":"s1","token":"gws_x","expires_at":"2026-10-16T12:00:00Z"},"rail":"anthropic","harness":"claude","model":"claude/sonnet","env":{"ANTHROPIC_BASE_URL":"http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic","ANTHROPIC_AUTH_TOKEN":"gws_x","ANTHROPIC_MODEL":"sonnet"},"context_tokens":null}' > "$d/resp.json"
+  local envout; envout="$(GH_TOKEN=leak-me GH_TOKEN_FILE=/var/run/x GATEWAY_URL=http://g OTEL_RESOURCE_ATTRIBUTES=role=t HOME="$d/fakehome" llm_env_args "$d/resp.json" "$d/home")"
+  check "env builder: dispatch keys present" 3 "$(grep -cE '^ANTHROPIC_(BASE_URL|AUTH_TOKEN|MODEL)=' <<< "$envout")"
+  check "env builder: ANTHROPIC_MODEL verbatim" "ANTHROPIC_MODEL=sonnet" "$(grep -E '^ANTHROPIC_MODEL=' <<< "$envout")"
+  check "env builder: no GH_TOKEN / GH_TOKEN_FILE / GATEWAY_URL / PUSHGATEWAY" 0 "$(grep -cE '^(GH_TOKEN|GH_TOKEN_FILE|GATEWAY_URL|PUSHGATEWAY)=' <<< "$envout")"
+  check "env builder: OTEL attribute carried" "OTEL_RESOURCE_ATTRIBUTES=role=t" "$(grep -E '^OTEL_RESOURCE_ATTRIBUTES=' <<< "$envout")"
+  check "env builder: throwaway HOME" "HOME=$d/home" "$(grep -E '^HOME=' <<< "$envout")"
+  printf '%s' '{"env":{"EVIL=x; rm -rf":"y"}}' > "$d/bad.json"
+  check "env builder: shell-hostile key is a refusal" 1 "$(llm_env_args "$d/bad.json" "$d/home2" >/dev/null 2>&1 && echo 0 || echo 1)"
+  rm -rf "$d"
   [ "$fails" -eq 0 ] && { echo "self-test: ok"; return 0; }
   echo "self-test: $fails FAILED"; return 1
 }
@@ -155,6 +174,27 @@ parse_verdict() {
   esac
 }
 valid_env_key() { [[ "$1" =~ ^[A-Z][A-Z0-9_]*$ ]]; }
+
+# llm_env_args <dispatch-json> <home-dir> → one `K=V` per line: the COMPLETE env the model runs
+# under (`env -i`). Exactly: the gateway's `env` map verbatim (keys validated — a shell-hostile
+# key is a refusal, exit 1), the OTEL/telemetry vars this pod carries, PATH, and a throwaway
+# HOME (created here; seeded with the image's .claude.json / settings.json when present, never
+# its credential files). GH_TOKEN, GH_TOKEN_FILE, PUSHGATEWAY, GATEWAY_URL and the rest of the
+# pod env are NOT in it — the token file stays unreadable by construction (allow-listed Read).
+llm_env_args() {
+  local resp="$1" home="$2" k v
+  mkdir -p "$home/.claude"
+  [ -f "${HOME:-/nonexistent}/.claude.json" ] && cp "${HOME}/.claude.json" "$home/.claude.json"
+  [ -f "${HOME:-/nonexistent}/.claude/settings.json" ] && cp "${HOME}/.claude/settings.json" "$home/.claude/settings.json"
+  printf 'HOME=%s\nPATH=%s\nTMPDIR=%s\n' "$home" "${PATH:-/usr/local/bin:/usr/bin:/bin}" "$home"
+  for k in CLAUDE_CODE_ENABLE_TELEMETRY OTEL_METRICS_EXPORTER OTEL_LOGS_EXPORTER OTEL_EXPORTER_OTLP_PROTOCOL OTEL_EXPORTER_OTLP_ENDPOINT OTEL_RESOURCE_ATTRIBUTES; do
+    [ -n "${!k:-}" ] && printf '%s=%s\n' "$k" "${!k}"
+  done
+  while IFS= read -r k && IFS= read -r v; do
+    valid_env_key "$k" || { log "refusing env key '${k}' from the gateway" >&2; return 1; }
+    printf '%s=%s\n' "$k" "$v"
+  done < <(jq -r '.env | to_entries[] | .key, .value' "$resp")
+}
 
 if [ "${1:-}" = "--self-test" ]; then self_test; exit $?; fi
 
@@ -269,58 +309,78 @@ else
   log "[$repo#$num] LLM pass (${n_cand} candidate(s); the rest wait for the next tick)"
   run_llm_pass() {
     local slug="${ORG}/${repo}" inputs="$WORK/inputs" lens="$WORK/lens.md" resp="$WORK/session.json"
-    mkdir -p "$inputs"
+    mkdir -p "$inputs/tree"
+    # EVERY step below is checked explicitly: this function runs under `|| LLM_RC=$?`, which
+    # suspends `set -e` for its whole body (bot review, PR#2613 finding 2) — an unchecked failed
+    # fetch would hand the model an empty input set, and an empty diff reads as a clean APPROVE.
+    # A blocking lens fails CLOSED: no input, no review.
     # 1) the lens IS the system prompt — a fetch failure is no review (blocking never degrades)
     if ! curl -fsS --max-time 15 "${LENS_BASE}/specs.md" -o "$lens" || ! grep -q '^# LENS: specs' "$lens"; then
       log "[$repo#$num] LENS FETCH FAILED (${LENS_BASE}/specs.md) — no review; a blocking lens never degrades to advisory"; return 1
     fi
-    # 2) admission: POST /sessions (gateway/specs/endpoints/sessions.md, sessions.schema.json post.input)
+    # 2) inputs — the lens's scope and nothing else, built BEFORE admission (a session is held
+    #    only while the model runs). The LLM's cwd holds ONLY these.
+    local ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$(token)" | base64 | tr -d '\n')"
+    git clone -q -c "$ah" --no-tags --single-branch -b "$base" "https://github.com/${slug}.git" "$WORK/repo" \
+      || { log "[$repo#$num] clone of ${slug}@${base} FAILED — no review"; return 1; }
+    git -C "$WORK/repo" fetch -q origin "pull/${num}/head:pr-${num}" \
+      || { log "[$repo#$num] fetch of pull/${num}/head FAILED — no review"; return 1; }
+    local fetched; fetched="$(git -C "$WORK/repo" rev-parse "pr-${num}")" || { log "[$repo#$num] rev-parse FAILED — no review"; return 1; }
+    if [ "$fetched" != "$head" ]; then log "[$repo#$num] head moved while fetching (${head:0:8} → ${fetched:0:8}) — the next tick reads the new head"; return 0; fi
+    git -C "$WORK/repo" diff "origin/${base}...pr-${num}" -- ':(glob)**/specs/**' > "$inputs/specs.diff" \
+      || { log "[$repo#$num] specs diff FAILED — no review"; return 1; }
+    git -C "$WORK/repo" diff --stat "origin/${base}...pr-${num}" > "$inputs/diffstat.txt" \
+      || { log "[$repo#$num] diffstat FAILED — no review"; return 1; }
+    gh pr view "$num" --repo "$slug" --json title,body,url -q '"# " + .title + "\n\n" + .url + "\n\n" + (.body // "")' > "$inputs/pr-body.md" \
+      || { log "[$repo#$num] PR body read FAILED — no review"; return 1; }
+    [ -s "$inputs/pr-body.md" ] || { log "[$repo#$num] PR body read came back EMPTY — no review"; return 1; }
+    local specdirs; specdirs="$(git -C "$WORK/repo" ls-tree -r --name-only "pr-${num}" | grep -E "$SPECS_PATH_RE" | sed -E 's#^((.*/)?specs)/.*#\1#' | sort -u || true)"
+    if [ -n "$specdirs" ]; then
+      # shellcheck disable=SC2086 — the dir list is word-split on purpose
+      git -C "$WORK/repo" archive --format=tar "pr-${num}" -- $specdirs | tar -x -C "$inputs/tree" \
+        || { log "[$repo#$num] specs tree extract FAILED — no review"; return 1; }
+    fi
+    # The PR's file list names a specs path (that is why we are here), so the merge-base diff of
+    # **/specs/** cannot be empty; an empty diff is a broken fetch, never a clean read.
+    if [ ! -s "$inputs/specs.diff" ]; then
+      log "[$repo#$num] specs.diff is EMPTY although the PR's files name a specs path — refusing to review from nothing"; return 1
+    fi
+    local tree_files; tree_files="$(cd "$inputs/tree" && find . -type f | sed 's#^\./##' | sort)"
+    # 3) evidence — the head's ci run log, the evidence-render BEGIN/END block, stamp must name THIS head
+    evidence_at_head "$slug" "$head" > "$inputs/evidence.md"
+    # 4) admission: POST /sessions (gateway/specs/endpoints/sessions.md, sessions.schema.json post.input)
     local body http
     body="$(jq -cn --arg task "specs-review ${repo}#${num}" '{stack:"platform", role:"reviewer", task:$task, round:0, harness:"claude"}')"
     http="$(curl -sS --max-time 20 -o "$resp" -w '%{http_code}' -H 'Content-Type: application/json' -X POST "${GATEWAY_URL}/sessions" -d "$body" || echo 000)"
     if [ "$http" != "200" ]; then
       log "[$repo#$num] POST /sessions HTTP ${http}: $(head -c 300 "$resp" 2>/dev/null | tr '\n' ' ')"; return 1
     fi
-    local decision; decision="$(jq -r '.decision // ""' "$resp")"
+    local decision; decision="$(jq -r '.decision // ""' "$resp")" || return 1
     if [ "$decision" = "defer" ]; then
       log "[$repo#$num] gateway DEFER reason=$(jq -r '.reason' "$resp") retry_after_s=$(jq -r '.retry_after_s' "$resp") — the next tick retries"
       N_DEFER=$((N_DEFER+1)); return 0
     fi
     [ "$decision" = "dispatch" ] || { log "[$repo#$num] unknown decision '${decision}' from /sessions"; return 1; }
-    SESSION_ID="$(jq -r '.session.id' "$resp")"
+    SESSION_ID="$(jq -r '.session.id' "$resp")" || return 1
     log "[$repo#$num] DISPATCH session=${SESSION_ID} rail=$(jq -r '.rail' "$resp") model=$(jq -r '.model' "$resp") context_tokens=$(jq -r '.context_tokens' "$resp")"
-    # 3) the env map, VERBATIM (GW-SESSIONS-ENV) — keys validated, values untouched, nothing added
-    local k v; while IFS= read -r k && IFS= read -r v; do
-      valid_env_key "$k" || { log "[$repo#$num] refusing env key '${k}' from the gateway"; return 1; }
-      export "$k=$v"
-    done < <(jq -r '.env | to_entries[] | .key, .value' "$resp")
-    local model="${ANTHROPIC_MODEL:-}"
+    local model; model="$(jq -r '.env.ANTHROPIC_MODEL // ""' "$resp")"
     [ -n "$model" ] || { log "[$repo#$num] dispatch env carries no ANTHROPIC_MODEL — cannot run claude"; return 1; }
-    # 4) inputs — the lens's scope and nothing else (the LLM's cwd holds ONLY these)
-    local ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$(token)" | base64 | tr -d '\n')"
-    git clone -q -c "$ah" --no-tags --single-branch -b "$base" "https://github.com/${slug}.git" "$WORK/repo"
-    git -C "$WORK/repo" fetch -q origin "pull/${num}/head:pr-${num}"
-    local fetched; fetched="$(git -C "$WORK/repo" rev-parse "pr-${num}")"
-    if [ "$fetched" != "$head" ]; then log "[$repo#$num] head moved while fetching (${head:0:8} → ${fetched:0:8}) — the next tick reads the new head"; return 0; fi
-    git -C "$WORK/repo" diff "origin/${base}...pr-${num}" -- ':(glob)**/specs/**' > "$inputs/specs.diff"
-    git -C "$WORK/repo" diff --stat "origin/${base}...pr-${num}" > "$inputs/diffstat.txt"
-    gh pr view "$num" --repo "$slug" --json title,body,url -q '"# " + .title + "\n\n" + .url + "\n\n" + (.body // "")' > "$inputs/pr-body.md"
-    mkdir -p "$inputs/tree"
-    local specdirs; specdirs="$(git -C "$WORK/repo" ls-tree -r --name-only "pr-${num}" | grep -E "$SPECS_PATH_RE" | sed -E 's#^((.*/)?specs)/.*#\1#' | sort -u || true)"
-    if [ -n "$specdirs" ]; then
-      # shellcheck disable=SC2086 — the dir list is word-split on purpose
-      git -C "$WORK/repo" archive --format=tar "pr-${num}" -- $specdirs | tar -x -C "$inputs/tree"
-    fi
-    # 5) evidence — the head's ci run log, the evidence-render BEGIN/END block, stamp must name THIS head
-    evidence_at_head "$slug" "$head" > "$inputs/evidence.md"
-    # 6) the pass: lens = whole system prompt; cwd = inputs; read-only tools
-    local otel="${OTEL_RESOURCE_ATTRIBUTES:-service.name=claude-code,role=specs-reviewer,stack=platform},project=${repo},pr=${num}"
-    export OTEL_RESOURCE_ATTRIBUTES="$otel"
+    # 5) the pass — CONFINED (bot review, PR#2613 finding 1). The model sees authored text from a
+    #    public repo and its output is posted publicly, so its reach is bounded twice:
+    #    • `env -i`: the process env is EXACTLY the gateway's dispatch env (GW-SESSIONS-ENV,
+    #      verbatim, keys validated) + OTEL + a throwaway HOME — never GH_TOKEN / GH_TOKEN_FILE,
+    #      never the pod's env (llm_env_args; pinned by --self-test);
+    #    • an ALLOW-LIST tool scope: `Read(//<inputs>/**)` + Glob, permission-mode default — in
+    #      `-p` mode a tool call outside the allow-list is denied, not prompted, so the token file
+    #      under /var/run, /proc/*/environ and $HOME are unreadable; Grep/Bash/Write are not
+    #      granted at all (Grep's rule grammar is not path-scoped, and the inputs are small).
     local prompt
-    prompt="You are the specs reviewer for pull request ${slug}#${num} (head ${head}). Your working directory holds your ONLY inputs: pr-body.md (title, URL, body — read Spec changes: and the closing issue reference), specs.diff (the **/specs/** diff from the merge-base to the head; empty means a specs path was touched but has no textual diff), diffstat.txt (file names only, for the removed-row check), tree/ (every specs/ tree at the head — the unchanged neighbours a row may reference), evidence.md (the head's CI evidence, or the words 'evidence: none at head'). Apply your brief's checks to every added, changed and removed row and write ONLY the review body in your brief's Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <failing check numbers>'. Do not run commands, do not fetch anything, do not submit the review yourself — the launcher submits what you return."
+    prompt="You are the specs reviewer for pull request ${slug}#${num} (head ${head}). Your working directory holds your ONLY inputs, and your Read tool is scoped to it: pr-body.md (title, URL, body — read Spec changes: and the closing issue reference), specs.diff (the **/specs/** diff from the merge-base to the head), diffstat.txt (file names only, for the removed-row check), tree/ (every specs/ tree at the head — the unchanged neighbours a row may reference; files: ${tree_files//$'\n'/, }), evidence.md (the head's CI evidence, or the words 'evidence: none at head'). Apply your brief's checks to every added, changed and removed row and write ONLY the review body in your brief's Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <failing check numbers>'. Do not run commands, do not fetch anything, do not submit the review yourself — the launcher submits what you return."
+    llm_env_args "$resp" "$WORK/home" > "$WORK/env.list" || { log "[$repo#$num] refusing the gateway's env map — no review"; return 1; }
+    local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
     local rc=0
-    (cd "$inputs" && claude -p "$prompt" --model "$model" --append-system-prompt-file "$lens" \
-        --allowedTools "Read,Grep,Glob" --permission-mode default --output-format json > "$WORK/result.json") || rc=$?
+    (cd "$inputs" && env -i "${envargs[@]}" claude -p "$prompt" --model "$model" --append-system-prompt-file "$lens" \
+        --allowedTools "Read(//${inputs}/**)" "Glob" --permission-mode default --output-format json > "$WORK/result.json") || rc=$?
     if [ "$rc" -ne 0 ] || ! jq -e . "$WORK/result.json" >/dev/null 2>&1; then
       log "[$repo#$num] claude exited ${rc} / no JSON result — no verdict"; return 1
     fi
