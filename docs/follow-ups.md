@@ -812,9 +812,9 @@ the block needs pruning, not more headings.
       reviewer (ADR-155) is the first `/sessions` consumer (LIVE 2026-10-16, first evidence pass #2628).
       Usage: live `in=0 out=0` was gzip SSE parsed undecoded (fixed #2635); operator ruling A
       (2026-10-16): four token classes (`in` = uncached) + the `anthropic-ratelimit-unified-*` window
-      gauges, no USD in the gateway (#2640). **Next:** (1) verify live non-zero classes + gauges after
-      the deploy; (2) `agent-session.sh` → `/sessions` for a worker role (`GW-SESSIONS-ENV` ⚖ rows);
-      (3) the ladder + the Go window cap as GW rows (prices from the four classes).
+      gauges, no USD in the gateway (#2640) — LIVE, seat canary 2026-10-16 (in 24/out 5, 5h 0.10/7d 0.70).
+      **Next:** (1) `agent-session.sh` → `/sessions` for a worker role (`GW-SESSIONS-ENV` ⚖ rows);
+      (2) the ladder + the Go window cap as GW rows (prices from the four classes).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
