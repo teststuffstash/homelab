@@ -271,7 +271,7 @@ kept on a separate branch/PR. These are proposed contracts, not new enforced GW 
 
 Refresh persistence is an unresolved implementation decision: Infisical remains the source of
 truth under [the secrets doctrine](../secrets.md). Updating only its ESO-generated Kubernetes
-Secret risks restoring an obsolete refresh token. A later lifecycle component should use fake
+Secret risks restoring an obsolete refresh token. The offline lifecycle component now uses fake
 credentials and a persistence interface to exercise concurrent refresh, write failure,
 revocation and restart before choosing the production write-back mechanism. Recovery from a
 crash after upstream rotation but before durable persistence must be specified, not assumed.
@@ -294,8 +294,8 @@ Acceptance order under FU-270:
 2. Native Codex fixture: isolated configuration, dummy session token, loopback server,
    synthetic Responses completion; record the exact CLI version and observed request shape.
    This proves the client seam, not subscription access or the deployed agent-runtime pin.
-3. Later slices: fake OAuth lifecycle and headroom components; then gateway spec/schema/test
-   integration and launcher replay. Preserve the existing runtime work rather than rebuilding it.
+3. Offline lifecycle/headroom: fake OAuth state machine and local freshness verdicts (see
+   the extension below); then gateway spec/schema/test integration and launcher replay. Preserve the existing runtime work rather than rebuilding it.
 4. A separately authorized maintenance-window canary proves real subscription access, tool use,
    finalization and credential absence before general routing. No production wiring is part of
    this prototype PR. FU-271's HA measurement remains separate.
@@ -306,3 +306,21 @@ Prototype evidence (2026-10-16): 10 offline contract tests pass; native Codex 0.
 and array input; terminal usage and upstream cleanup are observed. Exact summaries live in
 `experiments/codex-rail/evidence.json`. This checks the pinned executable, not the deployed
 container, wrapper finalization, real credentials, subscription headroom or real model access.
+
+
+### Offline lifecycle/headroom extension (2026-10-16, FU-270)
+
+The [prototype contracts and failure table](../../experiments/codex-rail/README.md#offline-lifecycle-and-headroom-fu-270)
+now cover a fake-credential OAuth state machine and account-local headroom component. The storage
+interface requires atomic durable writes plus exclusive ownership across refresh. A persisted
+in-progress marker makes a crash after rotation fail closed after restart; it does **not** recover
+a replacement token lost before persistence. Production recovery and Infisical write-back remain
+unselected. Tests exercise shared-owner serialization, rotation, ambiguous write acknowledgement,
+revocation, restart and secret-free boundary failures.
+
+Quota fixtures normalize both windows, reject stale/future/out-of-order input, and return typed
+local verdicts. Freshness, utilization thresholds and window durations are experimental fixtures,
+not adopted gateway policy. Restart needs a fresh report; reset time passing alone grants nothing.
+The prototype remains outside gateway source/specs/locks/CI and uses no live credentials. This
+extends #2625; real backend eligibility, store durability/fencing, authenticated report ingress,
+gateway integration and the separately authorized live canary remain unproven under FU-270.
