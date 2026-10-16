@@ -89,7 +89,7 @@ directory reduced to the native-CLI compat harness (or removed if the evidence r
   merge-path/FSM lints the touched clauses require.
 
 **Canary, the one live act tonight:** ONE ad-hoc platform worker ride with the flag on, on the
-opencode-go rail. **Settles:** the ride ends clean; its session row shows `requests > 0` and
+opencode-go rail ([the Go rail](../docs/agents/chainless-redesign.md)). **Settles:** the ride ends clean; its session row shows `requests > 0` and
 non-zero token classes; the pod env holds no real key; the session is released. The default stays
 OFF — the flip is the operator's, in the morning.
 
