@@ -66,6 +66,13 @@ source behind that WAN address marks as ours — the jail, the operator's laptop
 clients), and **one claim per zone** may set it (one entry-point ruleset per phase, FU-039).
 The name coupling to `wg.` is cosmetic debt: FU-282.
 
+**Zone-wide response headers are the bootstrap's, page headers are the app's (2026-10-16):** HSTS
+(180 d, `includeSubDomains`, no preload) and `nosniff` ride the zone's `security_header` setting
+in the product-zone bootstrap (`cloudflare_zone_setting.minutark_security_header`) — a promise
+about the hostname's TLS, beside the TLS floor (request-flow `PRF-TLS`). CSP, `frame-ancestors`
+and `Referrer-Policy` depend on what a page loads, so they are the app's (`CTR-HEADERS`). The same
+bootstrap pins `email_obfuscation` off (it rewrites HTML and fights a strict CSP).
+
 The quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, leaked-credentials, speed optimizations) were DECLINED 2026-08-12 precisely because they cannot see this split — zone-wide toggles are the wrong altitude; the class default is per-route, in the claim. **The bot contract is robots.txt** (ruled 2026-09-24, oracle-fleet#732): Cloudflare's zone default `ai_bots_protection = only_on_ad_pages` had been 403-ing GPTBot/ClaudeBot on minutark.ee ("Block AI bots on ad pages", `source = firewallManaged`) while robots.txt said `Allow: /`. Bot Management is a per-zone setting with no per-host form, so the zone bootstrap pins every bot knob OFF in tofu (`cloudflare_bot_management.minutark`, managed robots.txt included), so re-bootstrapping the zone cannot bring the default back. A new product zone needs the same pin in its own bootstrap. The OpenAPI schema validation 2.0 path (originally part of the predicted shape) was **not built** — app-side validation stays the real gate, and the free-plan 1 KB body limit makes schema validation a non-starter for the api profile's first consumer (oracle-gateway, streamable-HTTP/SSE).
 
 **Completion state (2026-09-02):**
@@ -526,6 +533,20 @@ works on WiFi and dies on mobile.
    `Client-Cert` forwarding example carries the same warning verbatim ("ensure that … can only
    originate from this transform rule"). No cf-api-proxy change was needed: the `rulesets`
    allowlist entry is phase-agnostic by design.
+
+10. **A tunnel that is DOWN gets no stale serving — only a still-FRESH cached copy survives
+    (2026-10-16 drill on teststuff.net: a throwaway jail-run tunnel + a cache rule identical to
+    minutark's consumer rule, warmed at both colos the jail lands on, then broken three ways;
+    zero residue).** Cloudflare documents stale-on-error for an origin that "returns a 5xx or
+    cannot be reached", and that holds while the CONNECTOR is up: origin 502 and origin process
+    dead both answered `200 STALE` — even for `Cache-Control: no-cache`, which the Cache-Control
+    table says "does not serve stale". With the connector gone, every copy that needed
+    revalidation (`no-cache`, `max-age=0`, `max-age=0, stale-if-error=604800`) answered
+    **`530` / error 1033** — the tunnel lookup runs before the cache's error path — while a
+    `max-age=600` copy kept answering `200 HIT`. So a consumer page survives a pod outage on
+    today's headers, but a cluster/WAN outage only for the remainder of its edge TTL; outlasting a
+    long one needs a long edge TTL + a purge on rollout (no token holds Cache Purge) or serving the
+    static site off the home origin. Custom error pages, the other escape, are paid-plan only.
 
 ## Cloudflare MCP
 

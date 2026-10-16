@@ -100,6 +100,37 @@ resource "cloudflare_zone_setting" "minutark_always_https" {
   value      = "on"
 }
 
+# HSTS + nosniff at the edge (2026-10-16 edge review). HSTS is a promise about the hostname's TLS,
+# so it lives HERE beside the TLS floor and always-https — the platform's half of the request flow
+# (PRF-TLS); the page-specific headers (CSP, frame-ancestors, Referrer-Policy) are the app's
+# (CTR-HEADERS in docs/patterns/request-flow/platform.yaml). include_subdomains is safe because
+# every name in the zone is proxied + always-https (records above; PublicRoute claims are proxied
+# CNAMEs) — a future DNS-only record serving plain HTTP would break under it. preload stays OFF:
+# list removal takes months, which makes it an operator decision of its own, not a default.
+# max_age 180 d: long enough to matter, short enough to walk back.
+resource "cloudflare_zone_setting" "minutark_security_header" {
+  zone_id    = var.minutark_zone_id
+  setting_id = "security_header"
+  value = {
+    strict_transport_security = {
+      enabled            = true
+      max_age            = 15552000
+      include_subdomains = true
+      preload            = false
+      nosniff            = true
+    }
+  }
+}
+
+# Email obfuscation OFF: it rewrites HTML (injects /cdn-cgi/…/email-decode.min.js) — one of the edge
+# body rewrites that make Cloudflare drop the origin's ETag on documents — and fights a strict CSP. The site already opts its
+# one mailto out with <!--email_off-->, and the address is published on purpose (privacy contact).
+resource "cloudflare_zone_setting" "minutark_email_obfuscation" {
+  zone_id    = var.minutark_zone_id
+  setting_id = "email_obfuscation"
+  value      = "off"
+}
+
 # ── bot contract ────────────────────────────────────────────────────────────────────────────────
 # robots.txt IS the contract ("crawl it all"): training crawlers (GPTBot, ClaudeBot, …) pass like
 # search and live-fetch agents. The zone came up with Cloudflare's default `ai_bots_protection =
