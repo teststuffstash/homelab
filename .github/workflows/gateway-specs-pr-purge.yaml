@@ -1,0 +1,44 @@
+# gateway-specs-pr-purge.yaml — teardown of a homelab PR's gateway-specs preview (the oracle-fleet
+# specs-pr-purge.yaml shape).
+#
+# Previews are served BY PATH under the master route (argocd/resources/homelab-gateway/
+# httproute-gateway-specs.yaml, ADR-092): https://gateway-specs.homelab.teststuff.net/pr-<N>/ →
+# bucket `gateway-specs` prefix pr-<N>/, written by ci.yaml's `Gateway specs site publish` step
+# whenever the PR's skip map ran the gateway gate. Nothing is created when a PR opens — Garage
+# serves an index on any sub-prefix, so the prefix IS the preview; the one lifecycle event is
+# the close. `paths` mirrors the publish condition: gateway/** plus the files whose change makes
+# scripts/diff-ci.sh's skip map fail open (every gate runs, the publish included).
+#
+# THIN workflow: logic lives in gateway/scripts/specs-pr-purge.sh (no `bash -c`, no error-swallow —
+# oracle-fleet#517/#529), tools come from devbox. A failed purge fails this step.
+name: gateway-specs-pr-purge
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - gateway/**
+      - devbox.json
+      - devbox.lock
+      - .github/workflows/ci.yaml
+      - scripts/diff-ci.sh
+
+concurrency:
+  group: gateway-specs-pr-purge-${{ github.event.number }}
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    runs-on: homelab-ephemeral
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # No toolchain install: the ARC runner image bakes devbox + the LAN nix substituter. In-cluster
+      # runner → cluster-local S3. The writer key: argocd/resources/agent-gateway/garage-workspace.yaml
+      # → scripts/github-secrets-sync.sh (GATEWAY_SPECS_S3, set host-side by the operator).
+      - name: Purge pr-prefix (close)
+        env:
+          GATEWAY_SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
+          GATEWAY_SPECS_S3_ACCESS_KEY_ID: ${{ secrets.GATEWAY_SPECS_S3_ACCESS_KEY_ID }}
+          GATEWAY_SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.GATEWAY_SPECS_S3_SECRET_ACCESS_KEY }}
+        run: devbox run gateway-specs-pr-purge -- "${{ github.event.number }}"
