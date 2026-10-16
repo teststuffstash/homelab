@@ -2,7 +2,9 @@
 """evidence/evidence.json → markdown tables (stdlib only).
 
 Writes `evidence/evidence.md` (every rule) and, when `specs/evidence/` exists, one
-`specs/evidence/<RULE>.md` per rule; appends the summary to `$GITHUB_STEP_SUMMARY` when set.
+`specs/evidence/<RULE>.md` per rule; appends the summary to `$GITHUB_STEP_SUMMARY` when set and
+prints the whole render to stdout between `evidence-render: BEGIN` / `END` (the run log is the
+only CI output a reader outside the job can fetch).
 Each table is sha-stamped (git sha + the test policy's sha256) so a spec row can say which
 revision earned its evidence.
 """
@@ -54,6 +56,13 @@ def main() -> int:
     if step := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(step, "a", encoding="utf-8") as fh:
             fh.write("\n".join(summary) + "\n")
+    # The whole render ALSO goes to stdout, between markers, so the CI run LOG carries it: the
+    # step summary has no API, `specs/evidence/` is gitignored, and the specs reviewer (ADR-155,
+    # agents/specs-reviewer-session.sh) reads evidence from `gh run view --log` — it counts a
+    # table only when the stamp names the PR head it is reviewing.
+    print("evidence-render: BEGIN")
+    print(body, end="")
+    print("evidence-render: END")
     return 0
 
 

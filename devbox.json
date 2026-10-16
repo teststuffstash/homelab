@@ -431,6 +431,9 @@
       "recipe-lint": [
         "bash agents/recipe-lint.sh \"$@\""
       ],
+      "specs-review-self-test": [
+        "bash agents/specs-reviewer-session.sh --self-test"
+      ],
       "new-stack": [
         "bash scripts/new-stack.sh \"$@\""
       ],
