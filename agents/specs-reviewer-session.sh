@@ -177,6 +177,19 @@ self_test() {
   check "pinned verdict: head unchanged → rc 0" 0 "$rs"
   check "pinned verdict: POST carries commit_id=reviewed head + REQUEST_CHANGES" 1 "$(grep -c 'repos/teststuffstash/homelab/pulls/7/reviews.*commit_id=aaaa1111.*event=REQUEST_CHANGES' "$d/gh.calls")"
   unset -f gh current_head
+  # round inputs (ADR-156 step 2): the acceptance section is cut at the next `## ` heading and
+  # keeps `###`; an issue with none is passed whole under a note; the prior review is the newest
+  # OWN LLM review in ANY state (a dismissed one is the round memory), never a mechanical approval
+  # and never another identity's review.
+  local issue; issue="$(printf '# t\n\n## Why\nbecause\n\n## Acceptance\n| a | b |\n### edge\nx\n\n## Notes\nno\n')"
+  check "acceptance: section only" 4 "$(acceptance_of "$issue" | grep -c .)"
+  check "acceptance: next ## heading ends it" 0 "$(acceptance_of "$issue" | grep -c 'Notes')"
+  check "acceptance: none → whole body under a note" 1 "$(acceptance_of "$(printf '# t\nbody\n')" | grep -c 'no `## Acceptance` section')"
+  local revs='[{"user":{"login":"homelab-specs-reviewer[bot]"},"state":"DISMISSED","commit_id":"aaaa1111aaaa1111","submitted_at":"2026-10-16T10:00:00Z","body":"## Specs review\nVerdict: CHANGES_REQUESTED — 6\nF1"},{"user":{"login":"homelab-specs-reviewer[bot]"},"state":"APPROVED","commit_id":"bbbb2222bbbb2222","submitted_at":"2026-10-16T11:00:00Z","body":"## Specs review\nVerdict: APPROVE — mechanical: no specs path"},{"user":{"login":"homelab-reviewer[bot]"},"state":"APPROVED","commit_id":"cccc","submitted_at":"2026-10-16T12:00:00Z","body":"## Specs review\nnot mine"}]'
+  check "prior review: newest own LLM review, DISMISSED included" "previous review: DISMISSED at aaaa1111aaaa (2026-10-16T10:00:00Z)" "$(prior_review_pick "$revs" | head -1)"
+  check "prior review: none → empty" "" "$(prior_review_pick '[]')"
+  printf 'ci\tgw\t2026-10-16T10:00:00.1Z evidence-render: BEGIN\nci\tgw\t2026-10-16T10:00:00.2Z git 0123456789ab\nci\tgw\t2026-10-16T10:00:00.3Z evidence-render: END\n' > "$d/run.log"
+  check "evidence block: prefixes stripped" "git 0123456789ab" "$(evidence_block "$d/run.log")"
   rm -rf "$d"
   [ "$fails" -eq 0 ] && { echo "self-test: ok"; return 0; }
   echo "self-test: $fails FAILED"; return 1
@@ -193,6 +206,33 @@ parse_verdict() {
   esac
 }
 valid_env_key() { [[ "$1" =~ ^[A-Z][A-Z0-9_]*$ ]]; }
+
+# evidence_block <run-log-file> → the evidence-render BEGIN/END block with the `gh run view --log`
+# prefixes (`<job>\t<step>\t<timestamp> `) stripped; empty = the run rendered none.
+evidence_block() {
+  awk '/evidence-render: BEGIN/{f=1; next} /evidence-render: END/{f=0} f{ sub(/^[^\t]*\t[^\t]*\t/, ""); sub(/^[0-9T:.Z-]+ /, ""); print }' "$1" || true
+}
+
+# acceptance_of <issue-body> → the issue's `## Acceptance` section (heading to the next `## `
+# heading; `###` subsections stay), or the whole body under a note when it has none. Check 1
+# grounds rows in this text, so it is copied verbatim, never summarised.
+acceptance_of() {
+  local sec; sec="$(awk '/^##[[:space:]]+Acceptance/{f=1; print; next} f && /^##[[:space:]]/{f=0} f' <<< "$1")"
+  if [ -n "$sec" ]; then printf '%s\n' "$sec"; else printf '(no `## Acceptance` section, so the whole body)\n\n%s\n' "$1"; fi
+}
+
+# prior_review_pick <REST-reviews-json-array> → the newest OWN review that came from an LLM pass
+# (mechanical approvals carry no findings), in ANY state: a push dismisses the previous round's
+# verdict, and that dismissed review is exactly the round memory (ADR-156 finding contract).
+# Empty = round 1.
+prior_review_pick() {
+  jq -r --arg me "$SPECS_REVIEWER_LOGIN" '
+    [ .[] | select(((.user.login // "") | sub("\\[bot\\]$"; "")) == $me)
+          | select((.body // "") | contains("## Specs review"))
+          | select((.body // "") | contains("Verdict: APPROVE — mechanical:") | not) ]
+    | sort_by(.submitted_at) | last // empty
+    | "previous review: \(.state) at \((.commit_id // "")[0:12]) (\(.submitted_at))\n\n\(.body)"' <<< "$1"
+}
 
 # llm_env_args <dispatch-json> <home-dir> → one `K=V` per line: the COMPLETE env the model runs
 # under (`env -i`). Exactly: the gateway's `env` map verbatim (keys validated — a shell-hostile
@@ -385,6 +425,18 @@ else
     local tree_files; tree_files="$(cd "$inputs/tree" && find . -type f | sed 's#^\./##' | sort)"
     # 3) evidence — the head's ci run log, the evidence-render BEGIN/END block, stamp must name THIS head
     evidence_at_head "$slug" "$head" > "$inputs/evidence.md"
+    # 3b) the round inputs (ADR-156 step 2). Each is CONTEXT, not the reviewed object, so an
+    #     unavailable one is a stated line the lens reports under "What would change my verdict",
+    #     never an empty file and never a silent skip.
+    issue_intent "$slug" "$num" > "$inputs/issue-intent.md"
+    evidence_baseline "$slug" "$base" > "$inputs/evidence-baseline.md"
+    local revs prior
+    if revs="$(gh api --paginate "repos/${slug}/pulls/${num}/reviews" --jq '.[]' 2>/dev/null | jq -s .)"; then
+      prior="$(prior_review_pick "$revs")"
+      printf '%s\n' "${prior:-previous review: none, this is round 1}" > "$inputs/prior-review.md"
+    else
+      printf 'previous review: the reviews read FAILED; treat this as round 1 and say so\n' > "$inputs/prior-review.md"
+    fi
     # 4) admission: POST /sessions (gateway/specs/endpoints/sessions.md, sessions.schema.json post.input)
     local body http
     body="$(jq -cn --arg task "specs-review ${repo}#${num}" '{stack:"platform", role:"reviewer", task:$task, round:0, harness:"claude"}')"
@@ -414,7 +466,7 @@ else
     #      under /var/run, /proc/*/environ and $HOME are unreadable; Grep/Bash/Write are not
     #      granted at all (Grep's rule grammar is not path-scoped, and the inputs are small).
     local prompt
-    prompt="You are the specs reviewer for pull request ${slug}#${num} (head ${head}). Your working directory holds your ONLY inputs, and your Read tool is scoped to it: pr-body.md (title, URL, body — read Spec changes: and the closing issue reference), specs.diff (the **/specs/** diff from the merge-base to the head), diffstat.txt (file names only, for the removed-row check), tree/ (every specs/ tree at the head — the unchanged neighbours a row may reference, and each tree's README.md §Rules, the numbered rules your brief cites as 'rule N'; files: ${tree_files//$'\n'/, }), evidence.md (the head's CI evidence, or the words 'evidence: none at head'). Apply your brief's checks to every added, changed and removed row and write ONLY the review body in your brief's Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <failing check numbers>'. Do not run commands, do not fetch anything, do not submit the review yourself — the launcher submits what you return."
+    prompt="You are the specs reviewer for pull request ${slug}#${num} (head ${head}). Your working directory holds your ONLY inputs, and your Read tool is scoped to it: pr-body.md (title, URL, body — read Spec changes: and the closing issue reference), specs.diff (the **/specs/** diff from the merge-base to the head), diffstat.txt (file names only, for the removed-row check), tree/ (every specs/ tree at the head — the unchanged neighbours a row may reference, and each tree's README.md §Rules, the numbered rules your brief cites as 'rule N'; files: ${tree_files//$'\n'/, }), evidence.md (the head's CI evidence, or the words 'evidence: none at head'), evidence-baseline.md (the base branch's newest rendered evidence, naming its commit and run, or 'baseline: none'), issue-intent.md (the closing issue's acceptance text, fetched; the ground for check 1), prior-review.md (your previous review of this PR, or 'previous review: none'; on a later round, mark each of its findings resolved or still open FIRST). Apply your brief's checks to every added, changed and removed row and write ONLY the review body in your brief's Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <failing check numbers>'. Do not run commands, do not fetch anything, do not submit the review yourself — the launcher submits what you return."
     llm_env_args "$resp" "$WORK/home" > "$WORK/env.list" || { log "[$repo#$num] refusing the gateway's env map — no review"; return 1; }
     local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
     local rc=0
@@ -456,13 +508,51 @@ else
     log_file="$WORK/run-$run_id.log"
     if ! gh run view "$run_id" --repo "$slug" --log > "$log_file" 2>/dev/null; then printf 'evidence: none at head — `gh run view %s --log` failed\n' "$run_id"; return 0; fi
     # `gh run view --log` lines are `<job>\t<step>\t<text>`; the render marks its block
-    block="$(awk '/evidence-render: BEGIN/{f=1; next} /evidence-render: END/{f=0} f{ sub(/^[^\t]*\t[^\t]*\t/, ""); sub(/^[0-9T:.Z-]+ /, ""); print }' "$log_file" || true)"
+    block="$(evidence_block "$log_file")"
     if [ -z "$block" ]; then printf 'evidence: none at head — ci run %s logged no `evidence-render: BEGIN/END` block (the gateway-ci step did not run on this head, or the image predates the stdout render)\n' "$run_id"; return 0; fi
     stamp="$(grep -m1 -oE 'git [0-9a-f]{12}' <<< "$block" || true)"
     if [ "$stamp" != "git ${head:0:12}" ]; then
       printf 'evidence: none at head — ci run %s rendered evidence stamped `%s`, which does not name this head (%s)\n' "$run_id" "${stamp:-<no stamp>}" "${head:0:12}"; return 0
     fi
     printf 'evidence: ci run %s, stamped at THIS head (%s)\n\n%s\n' "$run_id" "${head:0:12}" "$block"
+  }
+  # issue_intent <slug> <pr> → markdown: each closing issue's acceptance text (never fails the pass)
+  issue_intent() {
+    local slug="$1" num="$2" refs r n body
+    if ! refs="$(gh pr view "$num" --repo "$slug" --json closingIssuesReferences \
+                  --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name) \(.number)"' 2>/dev/null)"; then
+      printf 'issue intent: the closing-issue lookup FAILED; pr-body.md names the reference, the acceptance text is not available\n'; return 0
+    fi
+    if [ -z "$refs" ]; then
+      printf 'issue intent: none, this PR closes no issue (check 1 grounds rows in the page prose, a use case or Spec changes:)\n'; return 0
+    fi
+    while read -r r n; do
+      [ -n "$n" ] || continue
+      if body="$(gh issue view "$n" --repo "$r" --json title,body --jq '"# " + .title + "\n\n" + (.body // "")' 2>/dev/null)"; then
+        printf '## %s#%s\n\n%s\n\n' "$r" "$n" "$(acceptance_of "$body")"
+      else
+        printf '## %s#%s\n\nnot readable by this identity; the acceptance text is not available\n\n' "$r" "$n"
+      fi
+    done <<< "$refs"
+  }
+  # evidence_baseline <slug> <base> → the newest successful `ci` push run on <base> that rendered
+  # evidence, naming its commit and run (never fails the pass). The gateway step runs only when
+  # gateway paths change, so a run without a block is skipped, not read as "no rows".
+  evidence_baseline() {
+    local slug="$1" base="$2" runs id sha log_file block
+    runs="$(gh run list --repo "$slug" --branch "$base" --event push --workflow ci.yaml --status success --limit 5 \
+              --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null || true)"
+    while read -r id sha; do
+      [ -n "$id" ] || continue
+      log_file="$WORK/base-$id.log"
+      gh run view "$id" --repo "$slug" --log > "$log_file" 2>/dev/null || continue
+      block="$(evidence_block "$log_file")"
+      [ -n "$block" ] || continue
+      printf 'baseline: %s evidence from ci run %s at commit %s. Scope: the rows THAT run rendered; a row missing here was not run on %s, so it is not a vanished proof.\n\n%s\n' \
+        "$base" "$id" "${sha:0:12}" "$base" "$block"
+      return 0
+    done <<< "$runs"
+    printf 'baseline: none, no successful `ci` push run among the newest 5 on %s rendered evidence\n' "$base"
   }
   run_llm_pass || LLM_RC=$?
   [ "$LLM_RC" -eq 0 ] || N_ERR=$((N_ERR+1))

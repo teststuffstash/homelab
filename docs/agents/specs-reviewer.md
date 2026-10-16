@@ -89,7 +89,13 @@ the gateway's. Its row in the access inventory: [`access.md`](../../gateway/spec
 **Inputs, exactly the lens's scope — built before admission, each checked.** An authenticated
 clone (`http.extraHeader` preemptive auth) of the base branch + `pull/<n>/head`; `git diff
 origin/<base>...pr -- ':(glob)**/specs/**'`; the PR title/body; the `specs/` trees at head
-extracted with `git archive`; the head's evidence (below). Any input that fails to fetch — or a
+extracted with `git archive`; the head's evidence (below); and the round inputs (ADR-156 step 2), each a stated line when
+unavailable rather than a refusal, because they are context, not the reviewed object:
+`issue-intent.md` (each closing issue's `## Acceptance` section, or its whole body under a note),
+`evidence-baseline.md` (the newest successful `ci` push run on the base branch that rendered
+evidence, naming its commit and run) and `prior-review.md` (the newest own LLM review in any state,
+since a push dismisses it). The lens's finding contract turns these into round tracking. Any
+reviewed input that fails to fetch — or a
 `specs.diff` that comes back empty although the PR's files name a specs path — is no review
 (fail CLOSED: a blocking lens must never read an empty input as clean). The model is CONFINED:
 it runs under `env -i` with exactly the gateway's dispatch env + OTEL + a throwaway `HOME`
