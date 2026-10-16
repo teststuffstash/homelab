@@ -13678,3 +13678,21 @@ updates or reverts as much as possible — mechanical revert or a responder."
   614 POST 400s), badge `.unavailable` + fetch timeout, CSP/Referrer-Policy, tool-call counter, revalidation,
   outage-resilient landing (platform-request). Operator: Smart Tiered Cache out of scope until oracle sets caching
   requirements. Withdrawn: origin-mark IP (self-heals from the ddclient record; only FU-282 naming remains).
+
+## 2026-10-16 ~16:30–20:00Z — gateway usage made true, reviewer CANCELLED wedge, circles Renovate onboarding, overnight plan (seat, PR lane)
+
+- **FU-270 usage (#2635):** live `in=0 out=0` = httpx's default `accept-encoding: gzip` → Anthropic gzip SSE → `aiter_raw`
+  parsed undecoded; the capture is now decoded by `content-encoding` (row "a gzipped stream still counts", red on base).
+- **Operator ruling A (#2640):** four token classes (`in` = uncached; openai `prompt_tokens − cached_tokens`), `class`
+  label, session cache columns (additive migration, row red without it), `gateway_subscription_{utilization,reset_seconds}`
+  from `anthropic-ratelimit-unified-*`; no USD in the gateway. Seat canary on `g02fbba54`: in 24/out 5, 5h 0.10/7d 0.70.
+  Specs review r1 caught a GET row my edit missed (fixed in-PR).
+- **#2637:** a superseded CANCELLED rollup entry read red in the specs reviewer's `green` and review-reflex's twin →
+  #2636 wedged at 1/2 approvals. Per-check grouping; review-pick fixtures (red on base) + MP-T03 replay list. Drill:
+  #2636 auto-approved 18:50Z after the merge, no hand act.
+- **circles handoff (done/):** #2639 circles → `reviewer_repos` (operator applied — the first apply ran on a tree 3
+  commits behind → #2641: `github-tofu` refuses plan/apply while origin has tofu/github commits HEAD lacks);
+  devbox-update matrix + circles/circles-iac direct (20e4f9a7). Operator click pending: homelab-renovate App on both.
+- **Overnight plan:** `gateway/PLAN.md` (named-slice grounding: model-routing.md, ADR-096/112/139/155, the Codex spike +
+  #2642) — admission rows for the ladder's capacity half, the Codex rail ported in dark, the launcher's first worker
+  behind an off-by-default flag + one ad-hoc canary.

@@ -17,6 +17,11 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-16 ~20:00Z — seat; TICK-LOG same date): OVERNIGHT UNATTENDED BUILD = [`gateway/PLAN.md`](../../gateway/PLAN.md)**
+  (operator, 2026-10-16: the Codex spike #2642 rolls into the gateway as it rolls out). Live today: gzip usage fix (#2635),
+  four token classes + window gauges (#2640, canaried), the superseded-CANCELLED green predicate (#2637 — drilled on #2636),
+  `github-tofu` stale-checkout refusal (#2641), circles in `reviewer_repos` (#2639, applied by the operator; end-state
+  check = the first circles Renovate PR's `approve` job, after the operator's App-install click).
 - **⚑ PICKUP (2026-10-16 ~16:00Z — seat; TICK-LOG same date): ADR-156 evidence pass LIVE** (snippets v0.5.2 pinned
   in `agents/specs-reviewer-session.sh` + `gateway/scripts/lib/snippets.sh` — bump TOGETHER; canary #2628 approved).
   **Next:** (a) step 5's measurement — per completed PR: tokens, worker rounds, invalid findings, coordinator
