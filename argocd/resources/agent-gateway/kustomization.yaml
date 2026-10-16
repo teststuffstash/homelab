@@ -24,4 +24,4 @@ resources:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.10.16-g550a10296887
+    newTag: 2026.10.16-gae1757e77a2a
