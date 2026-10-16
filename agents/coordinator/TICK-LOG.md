@@ -13584,3 +13584,36 @@ updates or reverts as much as possible — mechanical revert or a responder."
   in one jail (fixed `/tmp/rbody.md` scratch path — the #2600 class), green alone.
 - Wind-down: FU-270 rewritten (built; next = launcher `/sessions` for one role, lens wiring, ladder rows), ADR-139
   amendment pointer, spike §Status P2 line, glossary rename row, memory `gateway-island.md`; clones removed; no monitors.
+
+## 2026-10-17 ~05:40–07:30Z — ADR-155: the specs reviewer identity + 2 approvals + the specs site (seat + 2 subagents, PR lane)
+
+- **Operator order:** "wire up a new review identity; any gateway specs change requires 2 approvals — one old reviewer
+  and then the new evidence/specs reviewer; the specs reviewer mechanism uses the new gateway (dogfood); specs
+  published like oracle-fleet at gateway-specs.homelab.teststuff.net; give me the App identity + tofu ruleset."
+- **Ruling recorded (ADR-155, seat direct — governance by necessity):** distinct App `homelab-specs-reviewer`
+  (`docs/github-apps.yaml`, ids pending the Create+Install clicks; `github-app-bootstrap.sh` secrets/verify cases
+  added), own CronWorkflow (sentinel shape) running AFTER homelab-reviewer's APPROVED at head, first `/sessions`
+  consumer. GitHub cannot path-scope an approval count → `required_approvals` per repo (tofu/github, homelab = 2 on
+  the master ruleset, goal/** twin stays 1); the identity approves mechanically on PRs with no `**/specs/**` path.
+  Applies outside the jail (OrgAdmin PAT) — pushed to master 7532d50a/8ba3cafe for the operator's checkout.
+- **#2613 (dispatch, subagent):** `agents/specs-reviewer-session.sh` (tick: classify → mechanical approve / ONE LLM
+  pass per tick via `POST /sessions` {platform, reviewer, claude} → env verbatim → `claude -p` with the lens as the
+  WHOLE system prompt → launcher parses `Verdict:` and submits → `DELETE /sessions` → exit contract; shadow mode
+  without the Secret), `specs-review-argo.yaml` (*/5, mutex, 900 s), the ESO scaffold parked in `scaffold/` until the
+  ids exist (a listed placeholder generator would sit SecretSyncedError), `SpecsReviewTickStale`, lens §Verdict →
+  approve (distinct identity), design note §Wiring. Found: the gateway evidence stamp was `GITHUB_SHA` = the PR
+  test-merge sha, so no stamp could ever name a head — conftest now prefers `pull_request.head.sha`, and
+  `evidence_render.py` prints the render to stdout (`evidence-render: BEGIN/END`) for the tick to read via run logs.
+- **#2612 (site, subagent):** `*.homelab.teststuff.net` delegation `3.36 ↔ 40.36` applied LIVE (window
+  `seat-1792133291-6659`; dig → 3.36, wildcard cert on the MASTER, 503 until the Gateway exists); homelab Cilium
+  Gateway as its own app (`argocd/resources/homelab-gateway/`, ns homelab-gateway) + HTTPRoute → garage-s3 +
+  ReferenceGrant; Workspace bucket `gateway-specs` (website, 2Gi) → Secret `agent-egress/gateway-specs-s3` → GitHub
+  secrets via `scripts/github-secrets-sync.sh` row (host-side); mkdocs render + s3 publish + PR-close purge in
+  `gateway/`. ci.yaml publish step + purge workflow = seat-direct AFTER merge (branch
+  `seat-direct/gateway-specs-ci-workflow` in the clone).
+- **Finding → FU-297:** the CARP BACKUP (pve) cannot issue certs (ACME 400: no WAN leg while BACKUP, no XMLRPC by
+  design) — its 17 certs are seed copies; earliest renewal mark ~2026-11-01; a failover would serve the default cert
+  for `*.homelab`. Cert-carry step needed in the pair's play.
+- **State at write:** both PRs park on the SECOND approval (the identity does not exist yet) + the codeowner read —
+  operator merges by admin override, or creates the App first. Clones: `/workspace/homelab-clones/{specs-reviewer,
+  gateway-specs-site}` kept until the seat-direct commits land.
