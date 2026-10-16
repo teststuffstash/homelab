@@ -362,6 +362,21 @@ spec:
           annotations:
             summary: "specs-review heartbeat silent >30m — the second required approval on homelab is not being evaluated"
             description: "SYMPTOM ONLY — no specs_review_last_tick_timestamp_seconds push for >30m (the specs-review CronWorkflow ticks every 5 minutes; agents/specs-reviewer-session.sh pushes the heartbeat on every tick, shadow ticks included). While silent, open homelab PRs wait on homelab-specs-reviewer's approval (ADR-155's second required review) that nobody posts — merges stall, never bypass. Look at the `specs-review` CronWorkflow runs in ns agent-coordinator (argo.teststuff.net or `kubectl -n agent-coordinator get workflows`), then the newest run's logs; a wedged/suspended cron, an image pull failure, the agent-gateway down, or a pushgateway outage are the plausible causes to check in that order."
+        # ADR-155's other belt: the heartbeat above proves the tick RUNS, not that the gate MOVES. A
+        # tick that errors (lens fetch, clone, /sessions HTTP, an unparsable verdict) or defers at the
+        # gateway on EVERY run for an hour leaves PRs parked on their second approval while
+        # SpecsReviewTickStale stays quiet. specs_review_tick_verdicts is a per-tick gauge (a push
+        # replaces the group), so min_over_time > 0 = every tick in the window produced one.
+        - alert: SpecsReviewNoProgress
+          expr: min_over_time(specs_review_tick_verdicts{kind=~"error|defer"}[1h]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: dig
+          annotations:
+            summary: "specs-review: every tick for 1h ended in {{ $labels.kind }}. The second required approval on homelab is not progressing"
+            description: "SYMPTOM ONLY. Every specs-review tick for the last hour reported at least one `{{ $labels.kind }}` (agents/specs-reviewer-session.sh: error = a failed PR list, files read, lens fetch, clone, /sessions call, claude run or submit; defer = the agent-gateway refused admission). The heartbeat is fine (SpecsReviewTickStale is quiet), but the PR the tick is stuck on keeps waiting for its second approval. Read the newest specs-review run logs in Loki (tenant agent-coordinator, `{pod=~\"specs-review.*\"}`); for defer, check the gateway's reason and retry_after_s there and the rail's capacity."
         # platform_machinery for the homelab#239 reason.
         # ADR-125: counted PER LANE. `agent_dispatch_cron_woken_timestamp` carries the lane base in
         # its pushgateway grouping key since the per-lane walk shipped, so a project's dispatches

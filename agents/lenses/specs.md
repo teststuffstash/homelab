@@ -15,6 +15,8 @@ items 1–2 and 8 ("rows derive from intent, not from the diff"); the operator's
 trial (2026-09-29 — the design note `docs/agents/specs-reviewer.md` holds the pointer and the
 ruling: R-ATOMIC's atomic cells and R-JUDGE's one-question-per-table adopted; R-HARD's 3×5
 limit rejected). A change to either source is a re-baseline of this lens, not a reviewer call.
+The island carries its own copy of those numbered rules: `<island>/specs/README.md` §Rules, in your
+inputs under `tree/`. When this brief cites "rule N", read rule N there.
 
 ## Scope — what you read
 
@@ -23,9 +25,11 @@ limit rejected). A change to either source is a re-baseline of this lens, not a 
   row references them (an alias anchor, a glossary term, a cited use case).
 - The PR body: the `Spec changes:` section and the `Fixes #N` issue (its intent is the ground
   for check 1).
-- The CI evidence this PR's HEAD rendered: `gh run list --commit <head-sha>` → `gh run view
-  <id> --log` (the evidence-render step), or the `specs/evidence/` files in the diff — in either
-  form, evidence counts only when its stamp (sha / corpus digest / date) names THIS head.
+- The CI evidence this PR's HEAD rendered: `evidence.md` in your inputs (the launcher reads the
+  head's `ci` run log and copies its `evidence-render` block, or writes `evidence: none at head`
+  with the reason), or the `specs/evidence/` files in the diff. In either form, evidence counts
+  only when its stamp (sha / corpus digest / date) names THIS head. You have no `gh` and no
+  network. A missing input is a line under *What would change my verdict*, never a fetch.
 - Nothing else. `src/`, `tests/`, manifests and workflows are not inputs; if judging a row needs
   them, say so under *What would change my verdict* and leave the row unjudged, never guessed.
 

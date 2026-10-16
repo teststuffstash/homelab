@@ -97,7 +97,8 @@ it runs under `env -i` with exactly the gateway's dispatch env + OTEL + a throwa
 its tool scope is an allow-list — `Read(//<inputs>/**)` + `Glob`, `--permission-mode default`, so
 in `-p` mode any read outside the inputs (the token file under `/var/run`, `/proc`, `$HOME`) is
 denied rather than prompted; Grep/Bash/Write are not granted. The lens is its WHOLE system prompt
-(fetched from `LENS_BASE`, default the public master raw URL) — a fetch failure is no review and
+(fetched from `LENS_BASE`, default the public master raw URL; its "rule N" citations resolve to the
+island's own `specs/README.md` §Rules, which the model reads from `tree/`) — a fetch failure is no review and
 a non-zero exit. The verdict is parsed from the model's `Verdict:` line and submitted
 by the SCRIPT, **pinned to the reviewed head**: the head is re-read immediately before the
 submit (moved = the verdict is dropped and the next tick reads the new head — a push during the
@@ -121,7 +122,11 @@ must exist, else exit 10 (a silent green would mask a dead review plane — the
 tick, shadow and zero-PR ticks included — the `SpecsReviewTickStale` alert in
 `argocd/resources/pushgateway/prometheusrule.yaml` reads it, 30 m), `specs_review_shadow`,
 `specs_review_tick_verdicts{kind=mechanical|approve|request_changes|defer|error}` (per-tick
-counts — a push replaces the group). OTEL with `role=specs-reviewer` so the subscription spend
+counts — a push replaces the group; `SpecsReviewNoProgress` fires when every tick for an hour
+reported an `error` or a `defer`, the stuck-but-ticking case the heartbeat cannot see). The model
+run is bounded by `timeout ${LLM_TIMEOUT_S}` (600 s) inside the pod's 900 s deadline, because a
+deadline kill skips the EXIT trap and leaves the gateway session holding its slot until the 4 h
+TTL. OTEL with `role=specs-reviewer` so the subscription spend
 attributes. Self-test: `devbox run specs-review-self-test` (`bash -n` + the jq predicates on
 fixtures; `diff-ci` row ready, its `ci.yaml` step is operator-direct).
 
