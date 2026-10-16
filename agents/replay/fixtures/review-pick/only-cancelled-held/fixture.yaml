@@ -1,0 +1,12 @@
+# review-pick-only-cancelled-held (homelab#2636, 2026-10-16) — the twin of
+# superseded-cancel-admitted: a check whose ONLY run was cancelled has not passed, so the PR is
+# held. Guards the cancel rule against over-admitting.
+name: review-pick-only-cancelled-held
+mode: actions
+pins:
+  - MP-T03
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:review-pick
+  - file:../two-lanes-two-picks/post.sh
