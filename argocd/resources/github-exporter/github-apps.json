@@ -115,7 +115,9 @@
       ],
       "bootstrap": {
         "redirect_port": 8767,
-        "cred_dir": "~/.claude/homelab-github-reviewer"
+        "cred_dir": "~/.claude/homelab-github-reviewer",
+        "mint_site": "agents/coordinator/reviewer-git.yaml",
+        "wallet": true
       }
     },
     {
@@ -247,7 +249,9 @@
       ],
       "bootstrap": {
         "redirect_port": 8771,
-        "cred_dir": "~/.claude/homelab-github-sentinel"
+        "cred_dir": "~/.claude/homelab-github-sentinel",
+        "mint_site": "agents/coordinator/sentinel-git.yaml",
+        "wallet": true
       }
     },
     {
@@ -286,7 +290,9 @@
       ],
       "bootstrap": {
         "redirect_port": 8772,
-        "cred_dir": "~/.claude/homelab-github-specs-reviewer"
+        "cred_dir": "~/.claude/homelab-github-specs-reviewer",
+        "mint_site": "agents/coordinator/specs-reviewer-git.yaml",
+        "wallet": true
       }
     },
     {

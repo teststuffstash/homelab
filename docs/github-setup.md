@@ -23,14 +23,17 @@ this is the broader catalog.
 > land → clears). `scripts/github-apps.sh` is the outside-jail deep verify (report to /tmp); the always-current view is SERVED at
 > **`https://apps.teststuff.net/apps`** (in-cluster `github-exporter.monitoring.svc:9504/apps`). `devbox run github-apps-lint` (in ci) proves every mint
 > site's request ⊆ the declaration. Creation is ONE script — `scripts/github-app-bootstrap.sh
-> <slug> manifest|catch|convert` — whose manifest is built FROM the yaml (the six per-App
-> scripts keep only their secrets/verify plumbing; their creation subcommands are retired stubs).
+> <slug> …` — whose manifest is built FROM the yaml. The chain for a new App: `manifest` →
+> `catch` (the **Create** click) → the **Install** click → `secrets` (key → Infisical) →
+> `register` (ids → the yaml + exporter JSON + the `bootstrap.mint_site` generator, un-parked from
+> `scaffold/`; key + ids → the KeePass wallet) → PR the diff → `verify`. No id is pasted by hand.
 
 **The per-App detail lives in the yaml itself** (readable, whys inline) and the served `/apps` page (declared-vs-live, per poll) — no committed generated table.
 
 **Click-only (per the runner bootstrap doc):** *creating* an App (driven to a single Create via the
-App-manifest REST flow), **Installing** it on the org, generating its **private key**. The private
-keys live out-of-repo (KeePass/Infisical / `~/.claude/homelab-runner-app/`).
+App-manifest REST flow) and **Installing** it on the org. The manifest conversion returns the private
+key, so no key-generation click. Keys live out-of-repo (KeePass/Infisical / the `~/.claude/` cache
+dirs `wallet-files.sh` regenerates).
 
 **Also click-only: an App installation's repository selection** (Settings → Installed GitHub Apps →
 Configure → Repository access). Tempting to codify — `tofu`'s `github_app_installation_repositories`
@@ -134,9 +137,9 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
 4. Create + install the **runner-registrar App** (ADR-082) → private key → Infisical.
 5. Runner group **Default**: All repositories **+ Allow public repositories**.
 6. **Fork-PR approval** = require approval for outside collaborators.
-7. Create + install the **homelab-agents**, **homelab-reviewer** and **homelab-sentinel** Apps (manifest flow) → keys →
-   Infisical (`scripts/github-app-bootstrap.sh homelab-agents`, `… homelab-reviewer`, `… homelab-sentinel` — one App per
-   writing role, ADR-130).
+7. Create + install the **homelab-agents**, **homelab-reviewer**, **homelab-sentinel** and **homelab-specs-reviewer**
+   Apps — `scripts/github-app-bootstrap.sh <slug>` `manifest` → `catch` → Install → `secrets` → `register` (§2's chain;
+   one App per writing role, ADR-130/ADR-155).
    Install each as **"Only select repositories"** and pick the agent repos — the install's repo scope
    is click-only (fine-grained PATs 403 on the `/user/installations` API; see §2).
 8. **Branch protection** is code in [`tofu/github/`](../tofu/github/) (org ruleset targets `~ALL`, so

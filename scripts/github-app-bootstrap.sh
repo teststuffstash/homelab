@@ -3,19 +3,23 @@
 # FROM docs/github-apps.yaml (the declared state), so a created App can never diverge from the
 # declaration. Replaces the creation halves of the six per-App scripts.
 #
-#   scripts/github-app-bootstrap.sh <slug> check|manifest|catch|convert <code>|secrets|verify
+#   scripts/github-app-bootstrap.sh <slug> check|manifest|catch|convert <code>|secrets|register|verify
 #
-# check/manifest/catch/convert are fully generic (this file). secrets/verify stay app-specific
-# plumbing (Infisical keys vs org Actions secrets vs paste-into-yaml) and DELEGATE to the app's
-# legacy script (yaml `bootstrap.legacy`) until each is individually ported — the legacy
-# scripts' own creation subcommands are retired stubs pointing back here.
+# The chain for a NEW App: manifest → catch (the Create click) → the Install click → secrets →
+# register → PR the diff → verify. check/manifest/catch/convert/register are generic (this file);
+# secrets/verify are per-slug plumbing (Infisical keys vs org Actions secrets) — the per-App legacy
+# scripts are gone (FU-098 completion, 2026-07-26).
 #
 # The two clicks GitHub reserves for the browser stay: one Create (manifest flow), one Install.
+# Everything after them is `register`: the ids the App got land in docs/github-apps.yaml + its
+# exporter JSON + the mint site (`bootstrap.mint_site`, moved out of scaffold/ and listed in its
+# kustomization), and the key + ids in the KeePass wallet (`bootstrap.wallet: true` →
+# scripts/wallet-files.sh re-materializes the cache dir anywhere). Nothing is pasted by hand.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export GH_PAGER=cat
 
-SLUG="${1:?usage: github-app-bootstrap.sh <slug> <check|manifest|catch|convert|secrets|verify> — slugs: $(yq -r '.apps[].slug' docs/github-apps.yaml 2>/dev/null | tr '\n' ' ')}"
+SLUG="${1:?usage: github-app-bootstrap.sh <slug> <check|manifest|catch|convert|secrets|register|verify> — slugs: $(yq -r '.apps[].slug' docs/github-apps.yaml 2>/dev/null | tr '\n' ' ')}"
 shift || true
 ORG="${ORG:-teststuffstash}"
 DECLARED=docs/github-apps.yaml
@@ -31,7 +35,7 @@ app_json="$(yq -o=json "$DECLARED" | jq --arg s "$SLUG" '.apps[] | select(.slug=
 CRED_DIR="$(echo "$app_json" | jq -r '.bootstrap.cred_dir // ("~/.claude/homelab-github-" + (.slug | sub("^homelab-";"")))')"
 CRED_DIR="${CRED_DIR/#\~/$HOME}"
 REDIRECT_PORT="$(echo "$app_json" | jq -r '.bootstrap.redirect_port // 8766')"
-LEGACY="$(echo "$app_json" | jq -r '.bootstrap.legacy // empty')"
+MINT_SITE="$(echo "$app_json" | jq -r '.bootstrap.mint_site // empty')"
 INSTALLS="$(echo "$app_json" | jq -r '.installs // "selected"')"
 # declared permissions → the manifest's default_permissions (org: prefix → organization_*)
 PERMS_JSON="$(echo "$app_json" | jq '(.permissions // {}) | with_entries({key: (.key | sub("^org:"; "organization_")), value: .value.level})')"
@@ -43,7 +47,8 @@ cmd_check() {
   cat <<EOF
   1. Create the App   -> 'manifest' then 'catch' (or 'convert <code>') — one Create click.
   2. Install the App  -> one Install click; repository access: $INSTALLS.
-  Then: 'secrets' (app-specific wiring${LEGACY:+ — delegates to scripts/$LEGACY}), 'verify'.
+  Then: 'secrets' (key → Infisical/Actions), 'register' (ids → yaml/JSON/mint site + wallet),
+  PR the diff, and 'verify' once it has synced.
 EOF
 }
 
@@ -94,8 +99,9 @@ _save_conversion() {
   cat <<EOF
   NEXT (one Install click; repository access: $INSTALLS):
       https://github.com/organizations/$ORG/settings/apps/$(echo "$resp" | jq -r .slug)/installations
-  Then fill app_id/install_id for $SLUG in $DECLARED, and run:
+  Then run, in order (register writes the ids — nothing is pasted by hand):
       scripts/github-app-bootstrap.sh $SLUG secrets
+      scripts/github-app-bootstrap.sh $SLUG register
 EOF
 }
 
@@ -147,22 +153,22 @@ cmd_secrets() {
       # Infisical CLI escapes the PEM newlines; ESO un-escapes (template replace) — ARC pattern.
       devbox run infisical-secret "AGENTS_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
       say "Wire the generators (non-secret ids): appID=$APP_ID installID=$INSTALL_ID"
-      echo "  → agents/coordinator/git-token.yaml + the agentstack composition constants" ;;
+      echo "  → 'register' (yaml + JSON + wallet), then by hand: the agentstack composition constants" ;;
     homelab-reviewer)
       need gh; _resolve_install_id
       say "Pushing the review App private key into Infisical (homelab/prod)"
       devbox run infisical-secret "REVIEWER_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
-      say "Paste appID=$APP_ID installID=$INSTALL_ID into agents/coordinator/reviewer-git.yaml, then apply it" ;;
+      echo "  NEXT: scripts/github-app-bootstrap.sh $SLUG register" ;;
     homelab-sentinel)
       need gh; _resolve_install_id
       say "Pushing the sentinel App private key into Infisical (homelab/prod)"
       devbox run infisical-secret "SENTINEL_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
-      say "Paste appID=$APP_ID installID=$INSTALL_ID into agents/coordinator/sentinel-git.yaml + app_id/install_id in $DECLARED, then apply it" ;;
+      echo "  NEXT: scripts/github-app-bootstrap.sh $SLUG register" ;;
     homelab-specs-reviewer)
       need gh; _resolve_install_id
       say "Pushing the specs-reviewer App private key into Infisical (homelab/prod)"
       devbox run infisical-secret "SPECS_REVIEWER_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
-      say "Paste appID=$APP_ID installID=$INSTALL_ID into agents/coordinator/specs-reviewer-git.yaml + app_id/install_id in $DECLARED (regenerate the exporter JSON: devbox run -- yq -o=json $DECLARED > argocd/resources/github-exporter/github-apps.json), then apply the yaml (ADR-155)" ;;
+      echo "  NEXT: scripts/github-app-bootstrap.sh $SLUG register   (ADR-155: the Secret appearing ends shadow mode)" ;;
     homelab-merge)
       # No install-id: the updater's create-github-app-token resolves it from app-id+key+repo.
       say "Pushing the merge App private key into Infisical (homelab/prod) — source of truth"
@@ -187,6 +193,100 @@ cmd_secrets() {
       echo "  ESO materializes github-labels-provider-creds (crossplane-system) on its refresh" ;;
     *) die "no secrets flow for $SLUG (runner apps ride scripts/github-runner-bootstrap.sh)" ;;
   esac
+}
+
+# ── register: the post-Install bookkeeping, scripted (was: "paste the ids into …") ──
+# Idempotent; edits the checkout this script lives in (open the diff as a PR — never commit to the
+# shared tree's master) and the KeePass wallet. Needs the cred dir (host side, where 'catch' ran);
+# APP_ID= / INSTALL_ID= override for a re-run elsewhere (the wallet half then needs the PEM too).
+_kp() { if command -v keepassxc-cli >/dev/null 2>&1; then keepassxc-cli "$@"; else devbox run --quiet -- keepassxc-cli "$@"; fi; }
+
+_register_yaml() { # app_id/install_id right under the slug line (any old pair in the block dropped)
+  local tmp; tmp="$(mktemp)"
+  awk -v slug="$SLUG" -v a="$APP_ID" -v i="$INSTALL_ID" '
+    /^  - slug: / { inb = ($3 == slug); print; if (inb) { print "    app_id: " a; print "    install_id: " i }; next }
+    inb && /^    (app_id|install_id):/ { next }
+    { print }' "$DECLARED" > "$tmp" && cat "$tmp" > "$DECLARED" && rm -f "$tmp"
+  local json=argocd/resources/github-exporter/github-apps.json
+  yq -o=json "$DECLARED" > "$json"
+  echo "  ✓ $DECLARED: app_id=$APP_ID install_id=$INSTALL_ID; $json regenerated"
+}
+
+_register_mint_site() { # bootstrap.mint_site: fill the generator ids; un-park it from scaffold/
+  [ -n "$MINT_SITE" ] || { echo "  - no bootstrap.mint_site declared — no generator to fill"; return 0; }
+  local dir base parked kz n
+  dir="$(dirname "$MINT_SITE")"; base="$(basename "$MINT_SITE")"; parked="$dir/scaffold/$base"
+  if [ ! -f "$MINT_SITE" ] && [ -f "$parked" ]; then
+    git mv "$parked" "$MINT_SITE"; echo "  ✓ git mv $parked → $MINT_SITE"
+  fi
+  [ -f "$MINT_SITE" ] || die "mint site $MINT_SITE not found (nor parked at $parked)"
+  n="$(grep -cE '^[[:space:]]*appID:' "$MINT_SITE" || true)"
+  [ "$n" = 1 ] || die "$MINT_SITE has $n appID lines — fill it by hand (register handles one generator)"
+  sed -i -E "s/^([[:space:]]*appID:[[:space:]]*)\"[^\"]*\"/\1\"$APP_ID\"/; s/^([[:space:]]*installID:[[:space:]]*)\"[^\"]*\"/\1\"$INSTALL_ID\"/" "$MINT_SITE"
+  echo "  ✓ $MINT_SITE: appID/installID filled"
+  grep -q 'FILL-AFTER\|SCAFFOLD' "$MINT_SITE" && warn "$MINT_SITE still carries scaffold prose — trim its banner in the PR"
+  kz="$dir/kustomization.yaml"
+  if [ -f "$kz" ] && ! grep -qE "^  - $base\$" "$kz"; then
+    # append after the last item of the top-level resources: list
+    awk -v item="  - $base" '
+      /^resources:/ { inr = 1; print; next }
+      inr && /^  - / { print; next }
+      inr { print item; inr = 0 }
+      { print }
+      END { if (inr) print item }' "$kz" > "$kz.tmp" && mv "$kz.tmp" "$kz"
+    echo "  ✓ $kz: + $base"
+  fi
+}
+
+_register_wallet() { # github-<short>-app (attachment private-key.pem) + -app-id/-installation-id/-slug
+  [ "$(echo "$app_json" | jq -r '.bootstrap.wallet // false')" = true ] \
+    || { echo "  - bootstrap.wallet not true — wallet copy skipped"; return 0; }
+  local root="" d short entry k v
+  for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; do
+    [ -n "$d" ] && [ -f "$d/homelab-keepass/homelab.kdbx" ] && root="$d" && break
+  done
+  [ -n "$root" ] || { warn "wallet not found — key NOT copied to KeePass (re-run register where it is)"; return 0; }
+  local db="$root/homelab-keepass/homelab.kdbx" kf="$root/homelab-keepass/homelab.keyx"
+  short="${SLUG#homelab-}"; entry="github-$short-app"
+  _kpw() { _kp "$1" -q --no-password -k "$kf" "${@:2}"; }
+  if ! _kpw show "$db" "$entry" >/dev/null 2>&1; then
+    printf '%s\n' "$APP_ID" | _kpw add --password-prompt "$db" "$entry" >/dev/null
+  fi
+  if _kpw attachment-export --stdout "$db" "$entry" private-key.pem 2>/dev/null | cmp -s - "$PEM"; then
+    echo "  = wallet $entry/private-key.pem (same key, kept)"
+  else
+    _kpw attachment-import -f "$db" "$entry" private-key.pem "$PEM" >/dev/null
+    echo "  ✓ wallet $entry/private-key.pem"
+  fi
+  for k in app-id:"$APP_ID" installation-id:"$INSTALL_ID" slug:"$SLUG"; do
+    v="${k#*:}"; k="github-$short-${k%%:*}"
+    if [ "$(_kpw show -a Password "$db" "$k" 2>/dev/null || true)" = "$v" ]; then
+      echo "  = wallet $k (kept)"
+    else
+      _kpw show "$db" "$k" >/dev/null 2>&1 && _kpw rm "$db" "$k" >/dev/null
+      printf '%s\n' "$v" | _kpw add --password-prompt "$db" "$k" >/dev/null
+      echo "  ✓ wallet $k=$v"
+    fi
+  done
+}
+
+cmd_register() {
+  APP_ID="${APP_ID:-$(cat "$CRED_DIR/app-id" 2>/dev/null || true)}"
+  PEM="${APP_PRIVATE_KEY_FILE:-$CRED_DIR/private-key.pem}"
+  [ -n "$APP_ID" ] || die "no App id in $CRED_DIR (run 'catch'/'convert' there, or pass APP_ID=)"
+  [ -n "${INSTALL_ID:-}" ] || INSTALL_ID="$(cat "$CRED_DIR/installation-id" 2>/dev/null || true)"
+  [ -n "${INSTALL_ID:-}" ] || { need gh; mkdir -p "$CRED_DIR"; _resolve_install_id; }
+  say "Registering $SLUG (app $APP_ID, installation $INSTALL_ID)"
+  _register_yaml
+  _register_mint_site
+  if [ -f "$PEM" ]; then _register_wallet; else warn "no private key at $PEM — wallet half skipped (re-run register where 'catch' ran)"; fi
+  say "Gate + diff"
+  if command -v python3 >/dev/null 2>&1; then python3 scripts/github-apps-lint.py; fi
+  git status --short -- "$DECLARED" argocd/resources/github-exporter/github-apps.json ${MINT_SITE:+"$(dirname "$MINT_SITE")"}
+  cat <<EOF
+  NEXT: open this diff as a PR (branch fix/$SLUG-ids — never a direct master commit), then
+      scripts/github-app-bootstrap.sh $SLUG verify   (after ArgoCD/ESO sync)
+EOF
 }
 
 cmd_verify() {
@@ -246,6 +346,7 @@ case "${1:-check}" in
   catch)    cmd_catch ;;
   convert)  shift; _save_conversion "$(_convert_code "${1:?usage: convert <code>}")" ;;
   secrets)  cmd_secrets ;;
+  register) cmd_register ;;
   verify)   cmd_verify ;;
-  *) die "unknown subcommand '$1' (check|manifest|catch|convert|secrets|verify)" ;;
+  *) die "unknown subcommand '$1' (check|manifest|catch|convert|secrets|register|verify)" ;;
 esac
