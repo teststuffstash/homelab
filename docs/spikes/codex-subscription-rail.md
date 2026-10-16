@@ -1,6 +1,7 @@
 # Spike — Codex as a ChatGPT-subscription rail
 
-**Status:** investigation, 2026-09-21 (consumer-surrogate use case added 2026-09-22). No
+**Status:** investigation, 2026-09-21 (consumer-surrogate use case added 2026-09-22; isolated
+gateway prototype added 2026-10-16, see below). No
 architecture decision has been taken. This records the facts learned while bringing native Codex
 into the jail, the OpenCode Go precedent, and the first
 implementation slices. The question is: how can cluster agents use the operator's ChatGPT
@@ -244,3 +245,64 @@ Open questions before an ADR: whether the subscription terms tolerate this singl
 use; whether quota polling is stable enough to be primary or only advisory; the refresh-token
 rotation/replica ownership mechanism; and whether Codex becomes a full-support harness under
 ADR-112 or begins as a canary-only cell.
+
+## Gateway prototype — isolated build (2026-10-16, FU-270)
+
+Operator-authorized scope: extend this investigation and build the Responses adapter plus a
+credential-free native Codex compatibility fixture. The current target is the
+[`gateway/` island](../../gateway/README.md), not the old proxy. The earlier build order and
+consumer-surrogate investigation remain context; this section records the changed boundary.
+
+The prototype lives in [`experiments/codex-rail/`](../../experiments/codex-rail/README.md), with
+its own standard-library tests and no imports from the gateway. It changes no gateway source,
+contract, dependency lock, CI workflow, launcher, deployed policy or live credential. Work is
+kept on a separate branch/PR. These are proposed contracts, not new enforced GW requirements.
+
+| Concern | Proposed gateway integration |
+|---|---|
+| Worker identity | Admit through `POST /sessions`; the worker holds only `gws_…`. Credential references stay inside the gateway. |
+| Protocol | Add Responses as an explicit dialect; today's `openai` means Chat Completions. Codex is a harness, subscription is a rail, and Responses is the wire protocol. |
+| Model | Pin from session policy; reject a mismatching request before upstream contact. The fixture uses a synthetic model, not an entitlement claim. |
+| Streaming | Forward SSE bytes unchanged, observe bounded individual events incrementally, count terminal `response.usage` once, and distinguish failed/incomplete/truncated streams from completion. |
+| Cancellation | Close upstream on downstream cancellation; never replay a partially delivered generation. |
+| OAuth | Central refresh with one owner per account, durable rotation and restart recovery. The current read-only Secret resolver is insufficient. |
+| Headroom | Account-wide observations with source/time/reset, freshness and out-of-order checks; gateway state drives admission, Prometheus observes. |
+| Initial eligibility | Explicit canary cell before general role routing; no implicit paid fallback. |
+
+Refresh persistence is an unresolved implementation decision: Infisical remains the source of
+truth under [the secrets doctrine](../secrets.md). Updating only its ESO-generated Kubernetes
+Secret risks restoring an obsolete refresh token. A later lifecycle component should use fake
+credentials and a persistence interface to exercise concurrent refresh, write failure,
+revocation and restart before choosing the production write-back mechanism. Recovery from a
+crash after upstream rotation but before durable persistence must be specified, not assumed.
+
+There is a second upstream option to evaluate alongside the September Codex-backend findings:
+[Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source) now documents
+ChatGPT-plan Responses access for open-source/local apps, including a
+[Codex app-server configuration](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server).
+This is not evidence that our account, cluster deployment or pinned CLI is eligible.
+[Preview restrictions](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
+include streaming, no server-side conversation storage over HTTP, and a restricted tool/parameter
+surface. Keep the upstream profile explicit; do not mix client registrations or infer that
+existing Codex OAuth credentials authorize the SIWC route. The prototype selects neither live
+backend and performs no OAuth exchange.
+
+Acceptance order under FU-270:
+
+1. Offline adapter tests: session/model boundary, header replacement, chunked SSE, terminal
+   usage, failure/truncation, bounded buffering, cancellation and HTTP failure mapping.
+2. Native Codex fixture: isolated configuration, dummy session token, loopback server,
+   synthetic Responses completion; record the exact CLI version and observed request shape.
+   This proves the client seam, not subscription access or the deployed agent-runtime pin.
+3. Later slices: fake OAuth lifecycle and headroom components; then gateway spec/schema/test
+   integration and launcher replay. Preserve the existing runtime work rather than rebuilding it.
+4. A separately authorized maintenance-window canary proves real subscription access, tool use,
+   finalization and credential absence before general routing. No production wiring is part of
+   this prototype PR. FU-271's HA measurement remains separate.
+
+Prototype evidence (2026-10-16): 10 offline contract tests pass; native Codex 0.161.0
+(the agent-runtime lock at `d10904baa8fac8c66e49cd86510277ee9ef508f1`) and the jail CLI
+0.163.0 both complete the loopback fixture. Both send streaming Responses with `store: false`
+and array input; terminal usage and upstream cleanup are observed. Exact summaries live in
+`experiments/codex-rail/evidence.json`. This checks the pinned executable, not the deployed
+container, wrapper finalization, real credentials, subscription headroom or real model access.

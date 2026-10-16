@@ -1,0 +1,50 @@
+{
+  "checked_at": "2026-10-16",
+  "unit_tests": 10,
+  "agent_runtime_commit": "d10904baa8fac8c66e49cd86510277ee9ef508f1",
+  "runtime_lock": "agent-base/devbox.lock",
+  "native_runs": [
+    {
+      "cli_version": "codex-cli 0.161.0",
+      "live_subscription_verified": false,
+      "requests": [
+        {
+          "path": "/openai/v1/responses",
+          "model": "fixture-model",
+          "stream": true,
+          "store": false,
+          "input_is_array": true,
+          "auth_replaced": true
+        }
+      ],
+      "errors": [],
+      "closed": 1,
+      "observation": {
+        "outcome": "completed",
+        "input_tokens": 7,
+        "output_tokens": 3
+      }
+    },
+    {
+      "cli_version": "codex-cli 0.163.0",
+      "live_subscription_verified": false,
+      "requests": [
+        {
+          "path": "/openai/v1/responses",
+          "model": "fixture-model",
+          "stream": true,
+          "store": false,
+          "input_is_array": true,
+          "auth_replaced": true
+        }
+      ],
+      "errors": [],
+      "closed": 1,
+      "observation": {
+        "outcome": "completed",
+        "input_tokens": 7,
+        "output_tokens": 3
+      }
+    }
+  ]
+}
