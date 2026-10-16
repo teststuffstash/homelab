@@ -150,9 +150,9 @@ def world(policy: str = "policy-default", upstream: str | None = None, *, note: 
     with contextlib.suppress(Exception):
         allure.dynamic.label("world", name)
     with allure.step(f"Given: world {name}" + (f" — {note}" if note else "")):
-        body = POLICY_FIXTURE.read_bytes()
+        body = (POLICY_FIXTURE.parent / f"{policy}.json").read_bytes()  # the named policy world's own file
         with contextlib.suppress(Exception):
-            allure.attach(body.decode("utf-8"), name=f"world {policy} — policy-default.json (sha256:{hashlib.sha256(body).hexdigest()[:12]})",
+            allure.attach(body.decode("utf-8"), name=f"world {policy} — {policy}.json (sha256:{hashlib.sha256(body).hexdigest()[:12]})",
                           attachment_type=allure.attachment_type.JSON)
     return name
 
@@ -661,3 +661,15 @@ def err(r) -> str:
 
 def bearer(doc: dict) -> dict[str, str]:
     return {"authorization": f"Bearer {doc['session']['token']}"}
+
+
+# The `policy-codex` world's fixtures (tests/_codex_world.py) — imported here so every module sees them.
+from ._codex_world import (  # noqa: E402,F401
+    codex_app,
+    codex_gw,
+    codex_policy,
+    codex_store,
+    codex_transport,
+    codex_upstream,
+    exchange,
+)

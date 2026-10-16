@@ -11,12 +11,15 @@ a single-world module declares it once in its docstring and omits it from row id
 | world | file | what it is |
 |---|---|---|
 | `policy-default` | [policy-default.json](policy-default.json) | the test policy: two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json`; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖) |
+| `policy-codex` | [policy-codex.json](policy-codex.json) | `policy-default` plus the codex rail (`max_sessions` 2, the fixture model `codex/fixture-model`, `headroom` 120 s / 0.95 / the 300- and 10080-minute windows, `oauth.refresh_margin_s` 30) that only `prober` may ride — for the codex rows only; the deployed policy declares no codex rail |
 
 Names in the test policy (namespaces, Secret names) are **fixture names**, not production
 ones; the production policy is the ConfigMap in `argocd/resources/agent-gateway/`. Model ids
 are the exception: they are copied verbatim from
 `argocd/resources/openrouter-proxy/model-classes.json` (`models.*.ids` per rail, the `coding`
-class's `chain_head` order) so the fixture never names a model the fleet does not run.
+class's `chain_head` order) so the fixture never names a model the fleet does not run. The one
+exception to the exception: `policy-codex`'s `codex/fixture-model` — the fleet runs no codex model
+yet, and choosing a representative one is the design session's call, not a fixture's ⚖.
 
 ## Upstream behaviours (fake upstreams)
 
@@ -35,6 +38,17 @@ received** (URL, headers, body) as much as on the response the gateway returned.
 | `upstream-401` | 401 with a body mentioning the key | 502 `upstream-auth`, body never forwarded |
 | `upstream-slow` | holds the response past the read timeout | timeout rows (connect 10 s / read 600 s) — 🚧 WIP, clock-faked only |
 | `upstream-down` | the connection fails before any byte is sent (refused / DNS / reset — not a timeout) | 502 `upstream-unreachable` rows on every rail |
+
+## The codex rail's fakes (`tests/_codex_world.py`)
+
+The codex upstream is a fake `POST /responses` whose behaviours are the stream shapes of
+[GW-RAIL-CODEX](../endpoints/openai-responses.md#gw-rail-codex): `upstream-ok` (the native CLI's
+accepted shape, usage 7 in / 3 out), `upstream-ok-cached` (312 in incl. 300 cached, 7 out),
+`upstream-stream-{failed,incomplete,truncated,invalid,duplicate}`, `upstream-{401,403,429,500,302}`,
+`upstream-wrong-type`; `upstream-down` / `upstream-slow` ride the shared transport. The credential
+is held by **`MemoryStore`**, the FAKE persistence backend (process memory, injectable save
+failures) with dummy `DUMMY-SECRET-…` values; a counting fake `exchange` returns the rotation.
+Headroom reports enter through the in-process seam (`app.state.codex.headroom.observe`).
 
 ## The credential source (`FakeSecrets`)
 

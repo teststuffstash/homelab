@@ -9,22 +9,26 @@ an inconsistent one — a typo in policy must never become a silent rail.
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-RAILS = ("anthropic", "openrouter", "opencode")
+RAILS = ("anthropic", "openrouter", "opencode", "codex")
 TIERS = ("light", "standard", "heavy")
 HARNESSES = ("claude", "opencode", "goose", "codex")
 ROLES = ("worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher")
-DIALECTS = ("anthropic", "openai")
+DIALECTS = ("anthropic", "openai", "responses")
 
 # Which dialect each harness speaks, and which dialects each rail serves (the brief's table).
-HARNESS_DIALECT = {"claude": "anthropic", "opencode": "openai", "goose": "openai", "codex": "openai"}
+# `responses` = OpenAI Responses (`/openai/v1/responses`); `openai` stays Chat Completions. Only the
+# `codex` rail serves it, and only the `codex` harness speaks it (GW-RAIL-CODEX).
+HARNESS_DIALECT = {"claude": "anthropic", "opencode": "openai", "goose": "openai", "codex": "responses"}
 RAIL_DIALECTS = {
     "anthropic": ("anthropic",),
     "opencode": ("anthropic", "openai"),
     "openrouter": ("anthropic", "openai"),
+    "codex": ("responses",),
 }
 
 SELF_URL_DEFAULT = "http://agent-gateway.agent-egress.svc.cluster.local:8080"
@@ -32,6 +36,9 @@ UPSTREAM_DEFAULTS = {
     "anthropic": "https://api.anthropic.com",
     "openrouter": "https://openrouter.ai/api",
     "opencode": "https://opencode.ai/zen/go",
+    # codex: NO default — the upstream profile (the Codex backend vs the SIWC preview) is unselected
+    # (⚑ gap, GW-RAIL-CODEX); an unset CODEX_UPSTREAM leaves the rail without a backend.
+    "codex": "",
 }
 
 
@@ -39,7 +46,7 @@ class PolicyError(ValueError):
     pass
 
 
-RAIL_PREFIX = {"opencode": "opencode-go/", "anthropic": "claude/"}
+RAIL_PREFIX = {"opencode": "opencode-go/", "anthropic": "claude/", "codex": "codex/"}
 
 
 def wire_model(rail: str, policy_id: str) -> str:
@@ -134,12 +141,25 @@ class AdmissionPolicy:
 
 
 @dataclass(frozen=True)
+class HeadroomPolicy:
+    """The codex rail's account-headroom admission (GW-CODEX-HEADROOM): an observation older than
+    `max_age_s` is stale; a window at or above `ceiling` (0–1) is limited; `windows_minutes` is the
+    window profile every observation must carry exactly (the fixture profile, not a discovered
+    entitlement)."""
+    max_age_s: float
+    ceiling: float
+    windows_minutes: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class RailPolicy:
     name: str
     max_sessions: int
     models: dict[str, str]  # tier -> the POLICY model id (model-classes.json spelling, rail-prefixed)
     side_models: tuple[str, ...] = ()  # policy ids a harness's side-calls name, admitted on every session of this rail
     admission: AdmissionPolicy = field(default_factory=AdmissionPolicy)
+    headroom: HeadroomPolicy | None = None  # codex only (required there)
+    refresh_margin_s: float | None = None  # codex only: refresh an OAuth access token this close to expiry
 
 
 SUBSCRIPTION_WINDOWS = ("5h", "7d")  # the `anthropic-ratelimit-unified-<w>-*` header windows
@@ -264,6 +284,30 @@ def _admission(rail: str, a) -> AdmissionPolicy:
     )
 
 
+def _finite(v) -> bool:
+    return type(v) in (int, float) and math.isfinite(v)
+
+
+def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
+    """The codex rail's two policy blocks; both required — a missing knob never becomes a code default."""
+    h = r.get("headroom")
+    if not isinstance(h, dict):
+        raise PolicyError("policy: rails.codex.headroom {max_age_s, ceiling, windows_minutes} is required")
+    max_age, ceiling, windows = h.get("max_age_s"), h.get("ceiling"), h.get("windows_minutes")
+    if not _finite(max_age) or max_age <= 0:
+        raise PolicyError("policy: rails.codex.headroom.max_age_s must be a positive number")
+    if not _finite(ceiling) or not 0 < ceiling <= 1:
+        raise PolicyError("policy: rails.codex.headroom.ceiling must be in (0, 1]")
+    if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
+            or any(type(w) is not int or w <= 0 for w in windows)):
+        raise PolicyError("policy: rails.codex.headroom.windows_minutes must be distinct positive integers")
+    oauth = r.get("oauth")
+    margin = oauth.get("refresh_margin_s") if isinstance(oauth, dict) else None
+    if not _finite(margin) or margin < 0:
+        raise PolicyError("policy: rails.codex.oauth.refresh_margin_s must be a non-negative number")
+    return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows))), float(margin)
+
+
 @dataclass(frozen=True)
 class Policy:
     stacks: dict[str, StackPolicy]
@@ -305,8 +349,9 @@ class Policy:
             side = r.get("side_models") or []
             if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
                 raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")
+            headroom, margin = (_codex_policy(r) if name == "codex" else (None, None))
             rails[name] = RailPolicy(name, int(r.get("max_sessions", 0)), dict(models), tuple(side),
-                                     _admission(name, r.get("admission")))
+                                     _admission(name, r.get("admission")), headroom, margin)
         roles: dict[str, RolePolicy] = {}
         for name, ro in (d.get("roles") or {}).items():
             if name not in ROLES:
@@ -361,6 +406,7 @@ class Settings:
                 "anthropic": e.get("ANTHROPIC_UPSTREAM", UPSTREAM_DEFAULTS["anthropic"]).rstrip("/"),
                 "openrouter": e.get("OPENROUTER_UPSTREAM", UPSTREAM_DEFAULTS["openrouter"]).rstrip("/"),
                 "opencode": e.get("OPENCODE_GO_UPSTREAM", UPSTREAM_DEFAULTS["opencode"]).rstrip("/"),
+                "codex": e.get("CODEX_UPSTREAM", UPSTREAM_DEFAULTS["codex"]).rstrip("/"),
             },
             opencode_go_api_key=e.get("OPENCODE_GO_API_KEY") or None,
             cred_cache_s=int(e.get("GATEWAY_CRED_CACHE_S", "300")),

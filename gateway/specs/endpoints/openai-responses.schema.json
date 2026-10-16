@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agent-gateway/specs/endpoints/openai-responses.schema.json",
+  "$comment": "MACHINE half of the POST /openai/v1/responses contract (the `responses` dialect, the codex rail — dark); the HUMAN half is openai-responses.md. The gateway inspects only what is declared here; the Responses body is the vendor's and streams through byte-unchanged. `upstream.codex.headers` is the COMPLETE upstream header set (nothing inbound crosses). `headroom.report` is the gateway's own normalised ingress shape, not a vendor payload. Credential placeholders name a field of the OAuth record, never a value.",
+  "x-endpoint": "openai-responses",
+  "x-use-cases": ["UC-1"],
+  "input": {
+    "type": "object",
+    "required": ["headers", "body"],
+    "properties": {
+      "headers": {
+        "type": "object",
+        "properties": {
+          "authorization": { "type": "string", "pattern": "^Bearer gws_[A-Za-z0-9_-]{32}$", "description": "the session token as a bearer (the provider block's env_key value)", "x-requirements": ["GW-CRED-BOUNDARY", "GW-RAIL-CODEX"] }
+        }
+      },
+      "body": {
+        "type": "object",
+        "required": ["stream", "store", "input"],
+        "description": "an OpenAI Responses request; only `model`, `stream`, `store` and `input`'s type are read",
+        "properties": {
+          "model": { "type": "string", "description": "must equal the session's wire id exactly (policy `codex/<id>` → `<id>`); absent = filled", "x-requirements": ["GW-MODEL-RESOLVE", "GW-RAIL-CODEX"] },
+          "stream": { "const": true, "x-requirements": ["GW-RAIL-CODEX"] },
+          "store": { "const": false, "x-requirements": ["GW-RAIL-CODEX"] },
+          "input": { "type": "array", "x-requirements": ["GW-RAIL-CODEX"] }
+        }
+      }
+    }
+  },
+  "upstream": {
+    "codex": {
+      "url": "<CODEX_UPSTREAM>/responses",
+      "url_default": null,
+      "headers": {
+        "authorization": "Bearer <access_token>",
+        "chatgpt-account-id": "<account_id>",
+        "content-type": "application/json",
+        "accept": "text/event-stream",
+        "accept-encoding": "identity",
+        "user-agent": "agent-gateway"
+      },
+      "auth": { "header": "Authorization", "value": "Bearer <access_token>", "source": "the OAuth lifecycle (GW-CODEX-OAUTH)", "x-requirements": ["GW-CODEX-OAUTH"] },
+      "redirects": "never followed",
+      "x-requirements": ["GW-RAIL-CODEX"]
+    }
+  },
+  "output": {
+    "description": "200 text/event-stream relayed byte-unchanged (only content-type set); 429 relayed with retry-after; every other upstream status is a typed error",
+    "usage": {
+      "description": "the terminal event's response.usage, counted once: in = input_tokens - input_tokens_details.cached_tokens, cache_read = cached_tokens, cache_write = 0, out = output_tokens; unknown = nothing counted",
+      "outcomes": ["completed", "failed", "incomplete", "truncated", "protocol-error", "transport-error", "cancelled"]
+    },
+    "x-requirements": ["GW-RAIL-CODEX"]
+  },
+  "headroom": {
+    "report": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["observed_at", "source", "limited", "windows"],
+      "properties": {
+        "observed_at": { "type": "number", "description": "epoch seconds; ≤ now and younger than rails.codex.headroom.max_age_s" },
+        "source": { "enum": ["poll", "upstream", "jail"], "description": "provenance, not an authorization claim" },
+        "limited": { "type": "boolean" },
+        "windows": {
+          "type": "array",
+          "description": "exactly the policy's windows_minutes profile, each once",
+          "items": {
+            "type": "object",
+            "required": ["used_percent", "resets_at", "window_minutes"],
+            "properties": {
+              "used_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+              "resets_at": { "type": "number", "description": "epoch seconds, > now" },
+              "window_minutes": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "x-requirements": ["GW-CODEX-HEADROOM"]
+    },
+    "verdicts": { "enum": ["admit", "quota-unknown", "quota-stale", "quota-limited"], "x-requirements": ["GW-CODEX-HEADROOM"] }
+  },
+  "admission": {
+    "reasons": {
+      "enum": ["quota-unknown", "quota-stale", "quota-limited", "credential-unresolved", "rail-capacity"],
+      "description": "the defer reasons the codex rail contributes to POST /sessions (sessions.schema.json post.defer.reason)",
+      "x-requirements": ["GW-CODEX-HEADROOM", "GW-SESSIONS-ADMIT"]
+    }
+  },
+  "credential_errors": {
+    "$comment": "lifecycle failure codes as data-plane answers (GW-CODEX-OAUTH)",
+    "x-requirements": ["GW-CODEX-OAUTH"]
+  },
+  "error_envelope": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["error"],
+    "properties": {
+      "error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "description": "a key of this file's `errors`" },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "errors": {
+    "session-unknown": { "status": 401, "description": "no session token, or one no row's hash matches", "x-requirements": ["GW-CRED-BOUNDARY"] },
+    "session-expired": { "status": 401, "description": "the session's expires_at has passed", "x-requirements": ["GW-CRED-BOUNDARY"] },
+    "session-released": { "status": 401, "description": "the session was released", "x-requirements": ["GW-CRED-BOUNDARY"] },
+    "malformed-body": { "status": 400, "description": "the body is not a JSON object", "x-requirements": ["GW-RAIL-CODEX"] },
+    "responses-mode-unsupported": { "status": 400, "description": "stream is not true or store is not false", "x-requirements": ["GW-RAIL-CODEX"] },
+    "responses-input-invalid": { "status": 400, "description": "input is not an array", "x-requirements": ["GW-RAIL-CODEX"] },
+    "model-not-session": { "status": 403, "description": "the body's model is not the session's wire id", "x-requirements": ["GW-MODEL-RESOLVE"] },
+    "dialect-unsupported-on-rail": { "status": 501, "description": "a non-codex session on this path (or a codex session on another dialect's path)", "x-requirements": ["GW-RAIL-CODEX"] },
+    "credential-unresolved": { "status": 401, "description": "the codex rail has no credential backend (dark)", "x-requirements": ["GW-CODEX-OAUTH"] },
+    "credential-transient": { "status": 503, "description": "admission only: the credential store did not answer", "x-requirements": ["GW-CODEX-OAUTH"] },
+    "credential-store-unavailable": { "status": 503, "description": "the store or its lock failed; retry-after set", "x-requirements": ["GW-CODEX-OAUTH"] },
+    "credential-recovery-required": { "status": 401, "description": "a refresh is marked in progress (crash / uncertain exchange / invalid replacement); never retried", "x-requirements": ["GW-CODEX-OAUTH"] },
+    "credential-revoked": { "status": 401, "description": "the record is revoked", "x-requirements": ["GW-CODEX-OAUTH"] },
+    "credential-refresh-uncertain": { "status": 401, "description": "the exchange failed without an authoritative answer", "x-requirements": ["GW-CODEX-OAUTH"] },
+    "credential-invalid": { "status": 401, "description": "the stored or replacement credential is malformed, expired or for another account", "x-requirements": ["GW-CODEX-OAUTH"] },
+    "upstream-auth": { "status": 502, "description": "the upstream answered 401/403; its body is never relayed", "x-requirements": ["GW-RAIL-CODEX"] },
+    "upstream-http-error": { "status": 502, "description": "any other non-200/non-429 upstream status, a redirect included (never followed)", "x-requirements": ["GW-RAIL-CODEX"] },
+    "upstream-content-type": { "status": 502, "description": "a 200 that is not text/event-stream", "x-requirements": ["GW-RAIL-CODEX"] },
+    "upstream-unreachable": { "status": 502, "description": "the upstream connection failed before any byte (not a timeout)", "x-requirements": ["GW-RAIL-CODEX"] },
+    "upstream-timeout": { "status": 504, "description": "connect > 10 s or read > 600 s before the stream started", "x-requirements": ["GW-RAIL-CODEX"] }
+  }
+}
