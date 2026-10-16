@@ -228,7 +228,7 @@ def self_test() -> int:
     platform = load_yaml(plat_p)
     examples = (
         ("example-app.yaml", "api", "example-rendered.md", {"CTR-OPTIONS", "CTR-ERRORS"}, 0),
-        ("example-static-site.yaml", "consumer", "example-static-rendered.md", {"CTR-CACHE"}, 1),
+        ("example-static-site.yaml", "consumer", "example-static-rendered.md", {"CTR-CACHE", "CTR-HEADERS"}, 1),
     )
     for app_file, profile, rendered, want_gaps, want_deps in examples:
         app_p = os.path.join(EXAMPLE_DIR, app_file)
@@ -256,7 +256,7 @@ def self_test() -> int:
     assert any("does not apply to the 'api' profile" in e for e in validate(platform, bad, "api"))
     bad = {"stages": [{"seq": 100, "id": "X", "stage": "s", "depends_on": "mcp.minutark.ee/status"}]}
     assert any("depends_on must be a list" in e for e in validate(platform, bad, "api"))
-    print("request-flow-render self-test: OK (both examples render byte-identical; gaps api = CTR-OPTIONS + CTR-ERRORS, consumer = CTR-CACHE; one depends_on edge; validator catches seq/contract/profile/applies_to/depends_on faults)")
+    print("request-flow-render self-test: OK (both examples render byte-identical; gaps api = CTR-OPTIONS + CTR-ERRORS, consumer = CTR-CACHE + CTR-HEADERS; one depends_on edge; validator catches seq/contract/profile/applies_to/depends_on faults)")
     return 0
 
 
