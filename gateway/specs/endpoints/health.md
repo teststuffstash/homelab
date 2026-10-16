@@ -33,6 +33,7 @@ next restart. HA (FU-271) is a gap.
 |---|---||---|
 | "a memory store forgets on restart" | memory mode, dispatch, restart || 0 — the pod's token is now `session-unknown` |
 | "a PVC store remembers" | pvc mode, dispatch, restart || 1 — the pod's token still resolves |
+| "a PVC store from before the cache columns is migrated" | pvc mode, dispatch, cache columns dropped (the 2026-10-16 schema), restart, the old token rides once || 1 — the session survives; the ride is recorded (`requests` = 1); `GET` shows `tokens_cache_read` = `tokens_cache_write` = 0 (columns added on open, additive only) |
 
 | description | request || status | body |
 |---|---||---|---|

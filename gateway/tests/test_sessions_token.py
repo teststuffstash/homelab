@@ -23,7 +23,7 @@ from .conftest import bearer, check, err, given, open_session, rule, then, when,
 pytestmark = rule("GW-SESSIONS-TOKEN")
 
 TOKEN_RE = re.compile(r"^gws_[A-Za-z0-9_-]{32}$")
-FIELDS = {"id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out"}
+FIELDS = {"id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write"}
 
 
 async def test_token_shape(gw):

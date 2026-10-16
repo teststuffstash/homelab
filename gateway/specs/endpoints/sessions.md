@@ -174,7 +174,7 @@ the token; `GET /sessions/{id}` returns the row without it. The data plane accep
 | "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out`; no `token`, no `token_hash` |
 | "GET on an unknown id" | `GET /sessions/nope` || 404 `session-not-found` |
 | "expiry is the policy TTL" | dispatch at T || `expires_at` = T + 14400 s (`policy-default`) |
-| "a request through the data plane is counted on the row" | dispatch → one `upstream-ok` call → GET || `requests` = 1, `tokens_in`/`tokens_out` = the upstream `usage` |
+| "a request through the data plane is counted on the row" | dispatch → one `upstream-ok` call → GET || `requests` = 1, `tokens_in`/`tokens_out` = the upstream `usage` (`tokens_in` = uncached input; the cache classes in `tokens_cache_read`/`tokens_cache_write` — GW-METRICS) |
 
 <details><summary>Evidence</summary>
 

@@ -11,7 +11,8 @@
     "decision": { "enum": ["dispatch", "defer"] },
     "dialect": { "enum": ["anthropic", "openai"] },
     "status": { "type": "string", "pattern": "^[1-5][0-9][0-9]$" },
-    "direction": { "enum": ["in", "out"] },
+    "class": { "enum": ["in", "cache_read", "cache_write", "out"] },
+    "window": { "enum": ["5h", "7d"] },
     "outcome": { "enum": ["resolved", "definitive", "transient"] }
   },
   "families": {
@@ -48,7 +49,23 @@
       "type": "counter",
       "labels": {
         "rail": { "$ref": "#/$defs/rail" },
-        "direction": { "$ref": "#/$defs/direction" }
+        "class": { "$ref": "#/$defs/class" }
+      },
+      "x-requirements": ["GW-METRICS"]
+    },
+    "gateway_subscription_utilization": {
+      "type": "gauge",
+      "labels": {
+        "rail": { "$ref": "#/$defs/rail" },
+        "window": { "$ref": "#/$defs/window" }
+      },
+      "x-requirements": ["GW-METRICS"]
+    },
+    "gateway_subscription_reset_seconds": {
+      "type": "gauge",
+      "labels": {
+        "rail": { "$ref": "#/$defs/rail" },
+        "window": { "$ref": "#/$defs/window" }
       },
       "x-requirements": ["GW-METRICS"]
     },

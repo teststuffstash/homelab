@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   released_at REAL,
   requests INTEGER NOT NULL DEFAULT 0,
   tokens_in INTEGER NOT NULL DEFAULT 0,
-  tokens_out INTEGER NOT NULL DEFAULT 0
+  tokens_out INTEGER NOT NULL DEFAULT 0,
+  tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+  tokens_cache_write INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
 CREATE TABLE IF NOT EXISTS requests (
@@ -42,10 +44,30 @@ CREATE TABLE IF NOT EXISTS requests (
   status INTEGER NOT NULL,
   upstream_ms INTEGER NOT NULL,
   tokens_in INTEGER NOT NULL DEFAULT 0,
-  tokens_out INTEGER NOT NULL DEFAULT 0
+  tokens_out INTEGER NOT NULL DEFAULT 0,
+  tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+  tokens_cache_write INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS requests_session ON requests (session_id, ts);
 """
+# Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
+# them to an existing table, so _migrate() does (idempotent, additive only).
+_ADDED_COLUMNS = {
+    "sessions": ("tokens_cache_read", "tokens_cache_write"),
+    "requests": ("tokens_cache_read", "tokens_cache_write"),
+}
+
+
+@dataclass(frozen=True)
+class Usage:
+    """One response's token usage in four classes (the old router's gometer split). `tokens_in` is
+    UNCACHED input on every rail: anthropic's `input_tokens` already excludes the cache; the openai
+    dialect's `prompt_tokens` includes it, so the parser subtracts `cached_tokens` there."""
+    tokens_in: int = 0
+    tokens_cache_read: int = 0
+    tokens_cache_write: int = 0
+    tokens_out: int = 0
+
 
 def iso(ts: float | None) -> str | None:
     """Epoch seconds → RFC 3339 UTC (the schemas' `timestamp`)."""
@@ -57,6 +79,7 @@ def iso(ts: float | None) -> str | None:
 _SESSION_COLS = (
     "id", "token_hash", "stack", "role", "task", "round", "rail", "harness", "model",
     "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out",
+    "tokens_cache_read", "tokens_cache_write",
 )
 
 
@@ -77,6 +100,8 @@ class Session:
     requests: int
     tokens_in: int
     tokens_out: int
+    tokens_cache_read: int = 0
+    tokens_cache_write: int = 0
 
     def state(self, now: float | None = None) -> str:
         """`active` | `released` | `expired` — the OLDER fact wins: a session that expired before
@@ -106,6 +131,8 @@ class Session:
             "requests": self.requests,
             "tokens_in": self.tokens_in,
             "tokens_out": self.tokens_out,
+            "tokens_cache_read": self.tokens_cache_read,
+            "tokens_cache_write": self.tokens_cache_write,
         }
 
 
@@ -122,6 +149,7 @@ class Store:
                 if integrity != "ok":
                     raise sqlite3.DatabaseError(f"quick_check: {integrity}")
             self._db.executescript(_SCHEMA)
+            self._migrate()
         except sqlite3.Error as e:
             if self.mode == "memory":
                 raise
@@ -132,6 +160,14 @@ class Store:
         else:
             log.info("db: %s %s", self.mode, path)
         self._db.row_factory = sqlite3.Row
+
+    def _migrate(self) -> None:
+        for table, cols in _ADDED_COLUMNS.items():
+            have = {r[1] for r in self._db.execute(f"PRAGMA table_info({table})").fetchall()}
+            for col in cols:
+                if col not in have:
+                    self._db.execute(f"ALTER TABLE {table} ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+                    log.info("db: migrated %s.%s", table, col)
 
     # -- sessions -------------------------------------------------------------------------------
     def create_session(self, **fields) -> Session:
@@ -181,17 +217,20 @@ class Store:
 
     # -- requests -------------------------------------------------------------------------------
     def record_request(
-        self, session_id: str, status: int, upstream_ms: int, tokens_in: int, tokens_out: int, ts: float | None = None
+        self, session_id: str, status: int, upstream_ms: int, usage: Usage | None = None, ts: float | None = None
     ) -> None:
         ts = time.time() if ts is None else ts
+        u = usage or Usage()
         with self._lock:
             self._db.execute(
-                "INSERT INTO requests (session_id, ts, status, upstream_ms, tokens_in, tokens_out) VALUES (?,?,?,?,?,?)",
-                (session_id, ts, status, upstream_ms, tokens_in, tokens_out),
+                "INSERT INTO requests (session_id, ts, status, upstream_ms, tokens_in, tokens_out, tokens_cache_read,"
+                " tokens_cache_write) VALUES (?,?,?,?,?,?,?,?)",
+                (session_id, ts, status, upstream_ms, u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write),
             )
             self._db.execute(
-                "UPDATE sessions SET requests = requests + 1, tokens_in = tokens_in + ?, tokens_out = tokens_out + ? WHERE id = ?",
-                (tokens_in, tokens_out, session_id),
+                "UPDATE sessions SET requests = requests + 1, tokens_in = tokens_in + ?, tokens_out = tokens_out + ?,"
+                " tokens_cache_read = tokens_cache_read + ?, tokens_cache_write = tokens_cache_write + ? WHERE id = ?",
+                (u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write, session_id),
             )
 
     def requests_for(self, session_id: str) -> list[dict]:

@@ -11,6 +11,7 @@
 |---|---|---|
 | a memory store forgets on restart | memory mode, dispatch, restart | 0 — the pod's token is now session-unknown |
 | a PVC store remembers | pvc mode, dispatch, restart | 1 — the pod's token still resolves |
+| a PVC store from before the cache columns is migrated | pvc mode, dispatch, cache columns dropped (the 2026-10-16 schema), restart, the old token rides once | 1 — the session survives; the ride is recorded (requests = 1); tokens_cache_read = tokens_cache_write = 0 |
 
 | description | request | status | body |
 |---|---|---|---|
@@ -23,6 +24,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sqlite3
 
 import httpx
 import pytest
@@ -134,6 +136,39 @@ async def test_pvc_remembers(tmp_path, policy, secrets, upstreams):
     with then("after restart: gateway_sessions_active{rail=opencode} = 1 and the token still resolves (200, or 502 with no fake transport)"):
         attach_json("verdict: remembered", {"active": {"expected": 1, "actual": active}, "status": {"expected": [200, 502], "actual": verdict[0]}})
         assert active == 1 and verdict[0] in (200, 502)  # 502: the fresh app has no fake transport — the session resolved either way
+
+
+async def test_pvc_pre_cache_schema_migrated(tmp_path, policy, secrets):
+    """row: a PVC store from before the cache columns is migrated"""
+    world()
+    path = str(tmp_path / "gateway.db")
+    with given("a gateway on the pvc store dispatched a worker session; then the cache columns were dropped (the 2026-10-16 schema)"):
+        app1 = _app(policy, secrets, path)
+        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://gw") as c:
+            doc = await open_session(c)
+        app1.state.store.close()
+        db = sqlite3.connect(path)
+        for table in ("sessions", "requests"):
+            for col in ("tokens_cache_read", "tokens_cache_write"):
+                db.execute(f"ALTER TABLE {table} DROP COLUMN {col}")
+        db.commit()
+        cols = [r[1] for r in db.execute("PRAGMA table_info(sessions)")]
+        db.close()
+        attach_json("sessions columns before restart", cols)
+    with when("a second gateway starts on the same pvc store; GET /metrics, the old token rides once, GET /sessions/{id}"):
+        app2 = _app(policy, secrets, path)
+        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app2), base_url="http://gw") as c:
+            text = (await c.get("/metrics")).text
+            active = int(re.search(r'^gateway_sessions_active\{rail="opencode"\} (\d+)$', text, re.M).group(1))
+            # the write is the probe: an unmigrated table reads fine (defaults) and breaks on the UPDATE
+            await c.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+            row = (await c.get(f"/sessions/{doc['session']['id']}")).json()
+    with then("after restart: active = 1; the ride is recorded (requests = 1); tokens_cache_read = tokens_cache_write = 0"):
+        got = {"active": active, "requests": row.get("requests"),
+               "tokens_cache_read": row.get("tokens_cache_read"), "tokens_cache_write": row.get("tokens_cache_write")}
+        want = {"active": 1, "requests": 1, "tokens_cache_read": 0, "tokens_cache_write": 0}
+        attach_json("verdict: migrated", {"expected": want, "actual": got})
+        assert got == want
 
 
 async def test_no_auth_required(gw):

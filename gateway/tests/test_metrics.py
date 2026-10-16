@@ -10,7 +10,8 @@
 | a refused request is counted by its status | an expired token on /anthropic/v1/messages | gateway_requests_total{rail="none",dialect="anthropic",status="401"} | 1 |
 | an upstream 429 keeps its status | upstream-429 on openrouter | gateway_requests_total{rail="openrouter",dialect="openai",status="429"} | 1 |
 | upstream time is observed per rail | one call on anthropic | gateway_upstream_seconds_count{rail="anthropic"} | 1 |
-| tokens are counted by direction | upstream-ok answers usage {input_tokens: 12, output_tokens: 7} on anthropic | gateway_tokens_total{rail="anthropic",direction="in"} / "out" | 12 / 7 |
+| tokens are counted by class | upstream-ok-cached answers usage {input_tokens: 12, cache_read_input_tokens: 300, cache_creation_input_tokens: 40, output_tokens: 7} on anthropic | gateway_tokens_total{rail="anthropic",class="in"} / "cache_read" / "cache_write" / "out" | 12 / 300 / 40 / 7 |
+| the subscription windows are read | one call on anthropic, answered with anthropic-ratelimit-unified-{5h,7d}-{utilization,reset} | gateway_subscription_utilization{rail="anthropic",window="5h"} / "7d"; gateway_subscription_reset_seconds{…} | 0.13 / 0.67; 1792172400 / 1792274400 |
 | a resolution verdict is counted | the anthropic ref is a definitive miss | gateway_credential_resolve_total{rail="anthropic",outcome="definitive"} | 1 |
 
 | description | the series | label | allowed values |
@@ -21,10 +22,11 @@
 | decision is the answer enum | sessions_total | decision | dispatch, defer |
 | dialect is the two paths | requests_total | dialect | anthropic, openai |
 | status is a numeric HTTP status | requests_total | status | ^[1-5][0-9][0-9]$ |
-| direction is in or out | tokens_total | direction | in, out |
+| class is one of the four usage classes | tokens_total | class | in, cache_read, cache_write, out |
+| window is 5h or 7d | subscription_utilization | window | 5h, 7d |
 | outcome is the verdict class | credential_resolve_total | outcome | resolved, definitive, transient |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 6 families |
+| every family is declared with HELP and TYPE | — | — | 8 families |
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ pytestmark = rule("GW-METRICS")
 FAMILIES = (
     "gateway_sessions_active", "gateway_sessions_total", "gateway_requests_total",
     "gateway_upstream_seconds", "gateway_tokens_total", "gateway_credential_resolve_total",
+    "gateway_subscription_utilization", "gateway_subscription_reset_seconds",
 )
 
 
@@ -159,19 +162,38 @@ async def test_upstream_time_per_rail(gw):
         assert re.search(r'^gateway_upstream_seconds_sum\{rail="anthropic"\} \d', text, re.M)
 
 
-async def test_tokens_by_direction(gw):
-    """row: tokens are counted by direction"""
+async def test_tokens_by_class(gw, upstreams):
+    """row: tokens are counted by class"""
+    world(upstream="upstream-ok-cached")
+    upstreams["anthropic"].behaviour = "upstream-ok-cached"
+    with given("a reviewer session on anthropic"):
+        doc = await open_session(gw, role="reviewer", harness="claude")
+    with when("event: upstream-ok-cached answers usage {input_tokens: 12, cache_read_input_tokens: 300, cache_creation_input_tokens: 40, output_tokens: 7} on anthropic"):
+        r = await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 200)
+    with then('series gateway_tokens_total{rail="anthropic",class="in"} / "cache_read" / "cache_write" / "out" = 12 / 300 / 40 / 7'):
+        text = await _metrics(gw)
+        attach_json("sample: gateway_tokens_total lines", _lines(text, "gateway_tokens_total"))
+        for cls, want in (("in", 12), ("cache_read", 300), ("cache_write", 40), ("out", 7)):
+            series = f'gateway_tokens_total{{rail="anthropic",class="{cls}"}}'
+            check(series, _value(text, series), want)
+
+
+async def test_subscription_windows_read(gw):
+    """row: the subscription windows are read"""
     world(upstream="upstream-ok")
     with given("a reviewer session on anthropic"):
         doc = await open_session(gw, role="reviewer", harness="claude")
-    with when("event: upstream-ok answers usage {input_tokens: 12, output_tokens: 7} on anthropic"):
+    with when("event: one call on anthropic, answered with anthropic-ratelimit-unified-{5h,7d}-{utilization,reset}"):
         r = await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(doc))
     then_eq("status", r.status_code, 200)
-    with then('series gateway_tokens_total{rail="anthropic",direction="in"} / "out" = 12 / 7'):
+    with then("gateway_subscription_utilization 5h / 7d = 0.13 / 0.67; gateway_subscription_reset_seconds = 1792172400 / 1792274400"):
         text = await _metrics(gw)
-        attach_json("sample: gateway_tokens_total lines", _lines(text, "gateway_tokens_total"))
-        check('gateway_tokens_total{rail="anthropic",direction="in"}', _value(text, 'gateway_tokens_total{rail="anthropic",direction="in"}'), 12)
-        check('gateway_tokens_total{rail="anthropic",direction="out"}', _value(text, 'gateway_tokens_total{rail="anthropic",direction="out"}'), 7)
+        attach_json("sample: gateway_subscription_* lines", _lines(text, "gateway_subscription"))
+        for fam, w, want in (("utilization", "5h", 0.13), ("utilization", "7d", 0.67),
+                             ("reset_seconds", "5h", 1792172400), ("reset_seconds", "7d", 1792274400)):
+            series = f'gateway_subscription_{fam}{{rail="anthropic",window="{w}"}}'
+            check(series, _value(text, series), want)
 
 
 async def test_resolution_verdict_counted(gw, app, secrets):
@@ -206,12 +228,15 @@ async def _exercise(gw, app, secrets, upstreams, policy, clock):
         with quiet():
             doc = await open_session(gw, task="homelab-2588-r1")
             await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+            rev = await open_session(gw, role="reviewer", harness="claude", task="homelab-2588-review")
+            await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(rev))
             await gw.post("/sessions", json={"stack": "nope", "role": "worker", "task": "t"})
             await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": "Bearer gws_" + "x" * 32})
             secrets.transient.add("platform-agents/claude-session")
             app.state.resolver.forget()
             await gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": "t"})
         attach_json("exercised: the calls", ["POST /sessions platform worker task homelab-2588-r1 → dispatch", "POST /openai/v1/chat/completions on it",
+                                             "a reviewer session + POST /anthropic/v1/messages on it",
                                              "POST /sessions stack nope", "POST /openai/v1/chat/completions with an unknown gws_ token",
                                              "POST /sessions platform prober with claude-session transient"])
     return doc
@@ -224,7 +249,8 @@ LABEL_ROWS = [
     ("decision is the answer enum", "gateway_sessions_total", "decision", {"dispatch", "defer"}),
     ("dialect is the two paths", "gateway_requests_total", "dialect", {"anthropic", "openai"}),
     ("status is a numeric HTTP status", "gateway_requests_total", "status", None),
-    ("direction is in or out", "gateway_tokens_total", "direction", {"in", "out"}),
+    ("class is one of the four usage classes", "gateway_tokens_total", "class", {"in", "cache_read", "cache_write", "out"}),
+    ("window is 5h or 7d", "gateway_subscription_utilization", "window", {"5h", "7d"}),
     ("outcome is the verdict class", "gateway_credential_resolve_total", "outcome", {"resolved", "definitive", "transient"}),
 ]
 

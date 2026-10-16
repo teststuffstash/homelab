@@ -15,6 +15,7 @@
 |---|---|---|---|---|---|
 | a messages call lands | POST /anthropic/v1/messages | upstream-ok | 200 | the upstream body, byte-identical | requests +1, tokens_in = usage.input_tokens, tokens_out = usage.output_tokens |
 | a streamed call streams | POST /anthropic/v1/messages, stream: true | upstream-stream | 200 | the SSE bytes, unchanged | requests +1; tokens from the final message_delta usage |
+| cache classes are recorded apart | POST /anthropic/v1/messages | upstream-ok-cached | 200 | the upstream body, byte-identical | (requests, tokens_in, tokens_cache_read, tokens_cache_write, tokens_out) = (1, 12, 300, 40, 7) |
 | a gzipped stream still counts | POST /anthropic/v1/messages, stream: true | upstream-stream-gzip | 200 | the gzip bytes, unchanged, content-encoding: gzip kept | requests +1; tokens from the decoded message_delta usage |
 | a rate limit passes through | POST /anthropic/v1/messages | upstream-429 | 429 | the upstream body, retry-after kept | requests +1 |
 | an upstream auth failure is typed and hidden | POST /anthropic/v1/messages | upstream-401 | 502 | upstream-auth envelope | requests +1 |
@@ -118,6 +119,21 @@ async def test_streamed_call_streams(gw, upstreams, store):
         assert r.content == body
         assert r.headers["content-type"].startswith("text/event-stream")
     _recorded(store, doc, (1, 23, 9))
+
+
+async def test_cache_classes_recorded_apart(gw, upstreams, store):
+    """row: cache classes are recorded apart"""
+    world(upstream="upstream-ok-cached")
+    status, body, headers = await expected_bytes(upstreams[RAIL], "messages", "claude-sonnet-4-6", "upstream-ok-cached")
+    upstreams[RAIL].behaviour = "upstream-ok-cached"
+    doc, r = await ride(gw, RAIL, "messages", body={"model": "claude-sonnet-4-6"})
+    then_eq("status", r.status_code, 200)
+    with then("body = the upstream body, byte-identical", body={"expected_len": len(body), "actual_len": len(r.content)}):
+        assert r.content == body
+    what = "(requests, tokens_in, tokens_cache_read, tokens_cache_write, tokens_out)"
+    with then(f"recorded on the session: {what} = (1, 12, 300, 40, 7)"):
+        row = store.get_session(doc["session"]["id"])
+        check(what, (row.requests, row.tokens_in, row.tokens_cache_read, row.tokens_cache_write, row.tokens_out), (1, 12, 300, 40, 7))
 
 
 async def test_gzipped_stream_still_counts(gw, upstreams, store):

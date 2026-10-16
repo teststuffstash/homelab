@@ -21,7 +21,7 @@
   "expected_metrics": {
     "gateway_sessions_total{rail=\"anthropic\",role=\"prober\",stack=\"platform\",decision=\"dispatch\"}": 1,
     "gateway_requests_total{rail=\"anthropic\",dialect=\"anthropic\",status=\"200\"}": 1,
-    "gateway_tokens_total{rail=\"anthropic\",direction=\"in\"}": 12,
-    "gateway_tokens_total{rail=\"anthropic\",direction=\"out\"}": 7
+    "gateway_tokens_total{rail=\"anthropic\",class=\"in\"}": 12,
+    "gateway_tokens_total{rail=\"anthropic\",class=\"out\"}": 7
   }
 }
