@@ -97,6 +97,22 @@ an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `r
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
 ([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)).
 
+## headroom
+
+The codex rail's account capacity as the gateway last saw it: one normalised snapshot of the
+subscription's windows (used fraction, reset time) plus an explicit `limited` flag, replaced only
+by a strictly newer valid report. Its verdict (`admit`, `quota-unknown`, `quota-stale`,
+`quota-limited`) gates admission onto the rail
+([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)); Prometheus observes it,
+never decides it.
+
+## persistence interface
+
+The `Store` seam the codex OAuth lifecycle runs behind — `lock()` / `load()` / `save()`, one
+account per store, the lock held across load → refresh → save, `save` atomic and durable
+([GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth)). Only a FAKE (process-memory)
+implementation exists; the production one is a `⚑ gap`.
+
 ## control plane / data plane
 
 Control plane = `/sessions` (admission, lookup, release), `/healthz`, `/metrics`. Data plane =

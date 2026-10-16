@@ -32,7 +32,7 @@ admission reasons and the error envelope.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, dark — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP` |
+| [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, dark — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP`; `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
 | [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `admission.reasons` | — | v0, dark — authenticated report ingress and the codex window gauges are `⚑ gap` |
 | [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | v0 with the FAKE store only — the production write-back, the refresh exchange transport and lost-rotation recovery are `⚑ gap` |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked — exact on this rail |
@@ -263,7 +263,7 @@ durable state is read without refreshing: `ready` admits, `revoked` / `refreshin
 | "an invalid rotation fails closed" | another account / CR-LF in a token / NaN expiry / already expired / none || credential-invalid, then credential-recovery-required | 1 each | refreshing |
 | "a lock failure is the store class" | the lock raises || credential-store-unavailable | 0 | unchanged |
 | "the next refresh uses the persisted rotation" | rotated once, near expiry again || the third credential, exchanged from the rotated one | 2 | ready |
-| "a failed revocation save still blocks restart" | revoked; that save raises || credential-store-unavailable, then credential-recovery-required | 1 | refreshing |
+| "a failed revocation save still blocks restart ⚖" | revoked; that save raises || credential-store-unavailable, then credential-recovery-required | 1 | refreshing |
 | "a committed-then-failed marker never exchanges" | marker save commits, then raises || credential-store-unavailable, then credential-recovery-required | 0 | refreshing |
 | "no record or failure shows a credential" | any of the above || reprs, messages and tracebacks hold no `DUMMY-SECRET` | — | — |
 
