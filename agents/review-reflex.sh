@@ -317,10 +317,13 @@ EOF_C9
   #   migration lens by the label and its APPROVED completes the merge. See merge-path.md.
   picks="$(printf '%s' "$prs" | jq -r --arg bot "$REVIEWER_LOGIN" --arg default "$DEFAULT_BRANCH" --argjson required "${required_json:-[]}" '
     def green:
-      ([ .statusCheckRollup[]? | (.conclusion // .state // "") ]) as $c
-      | ([ .statusCheckRollup[]? | (.name // .context // "") ]) as $names
+      ([ .statusCheckRollup[]? | (.name // .context // "") ]) as $names
+      | ([ .statusCheckRollup[]? | {n: (.name // .context // ""), c: (.conclusion // .state // "")} ]) as $c
+      # A CANCELLED run counts only when NO other run of the same check concluded (superseded
+      # concurrency cancels stay in the rollup — the specs-reviewer-session.sh twin, #2636).
       | ($c | length) > 0
-        and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0
+        and ([ $c | group_by(.n)[] | [ .[].c | select(. != "CANCELLED") ] as $k
+               | select(($k | length) == 0 or ([ $k[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) > 0) ] | length) == 0
         and ([ $required[] | select(. as $r | ($names | index($r)) == null) ] | length) == 0;
     # >>>REPLAY:reviewable_again>>>
     def newest_review_at:

@@ -113,8 +113,13 @@ JQ_PRELUDE='
   def login_of: (.author.login // "") | sub("\\[bot\\]$"; "");
   def live_verdicts($bot): content_ts as $h | [ .reviews[]? | select(login_of == $bot) | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | select(.submittedAt >= $h) ];
   def green:
-    ([ .statusCheckRollup[]? | (.conclusion // .state // "") ]) as $c
-    | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0;
+    ([ .statusCheckRollup[]? | {n: (.name // .context // ""), c: (.conclusion // .state // "")} ]) as $c
+    # A CANCELLED run counts only when NO other run of the same check concluded: concurrency
+    # cancels superseded runs (renovate-approve, 4× on #2636) and those rows stay in the rollup
+    # beside the run that replaced them — read as red they wedge the PR forever.
+    | ($c | length) > 0
+      and ([ $c | group_by(.n)[] | [ .[].c | select(. != "CANCELLED") ] as $k
+             | select(($k | length) == 0 or ([ $k[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) > 0) ] | length) == 0;
   def has_label($l): ([ .labels[]?.name ] | index($l)) != null;
 '
 
@@ -156,6 +161,9 @@ self_test() {
   j=$(jq -c --argjson r "[$code_ok,$own_ok,$own_rc]" '.reviews=$r' <<< "$base");       check "two own live verdicts → own-anomaly" own-anomaly "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[{"name":"ci","conclusion":"FAILURE"},{"name":"x","conclusion":"SUCCESS"}]' <<< "$base"); check "one FAILURE → ci-not-green" ci-not-green "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[]' <<< "$base"); check "empty rollup → ci-not-green" ci-not-green "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[{"name":"approve","conclusion":"CANCELLED"},{"name":"approve","conclusion":"SUCCESS"},{"name":"ci","conclusion":"SUCCESS"}]' <<< "$base"); check "superseded CANCELLED beside its SUCCESS → candidate (#2636)" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[{"name":"approve","conclusion":"CANCELLED"},{"name":"ci","conclusion":"SUCCESS"}]' <<< "$base"); check "only-CANCELLED check → ci-not-green" ci-not-green "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[{"name":"ci","conclusion":"CANCELLED"},{"name":"ci","conclusion":"FAILURE"}]' <<< "$base"); check "CANCELLED beside a FAILURE → ci-not-green" ci-not-green "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .labels=[{"name":"agent/error"}]' <<< "$base"); check "agent/error → error-label (touch nothing)" error-label "$(classify "$j")"
   check "content sha skips the merge commit" aaaa1111 "$(jq -r "$JQ_PRELUDE"'content_sha' <<< "$base")"
   check "specs path predicate: gateway/specs/access.md" 0 "$(grep -cE "$SPECS_PATH_RE" <<< 'gateway/specs/access.md' >/dev/null; echo $?)"
