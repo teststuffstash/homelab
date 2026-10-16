@@ -1,0 +1,16 @@
+# review-pick-superseded-cancel-admitted (homelab#2636, 2026-10-16) — a CANCELLED run beside the
+# run of the same check that superseded it is not red.
+#
+# WHAT THIS ROW ADDS. `green` read every rollup entry, so concurrency-cancelled runs (four
+# `approve` runs on the gateway deploy bump #2636) stayed red next to their SUCCESS and the PR
+# could never be picked. Red on base (no pick), green after. The specs reviewer's `green`
+# (agents/specs-reviewer-session.sh, --self-test rows) carries the same rule.
+name: review-pick-superseded-cancel-admitted
+mode: actions
+pins:
+  - MP-T03
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:review-pick
+  - file:../two-lanes-two-picks/post.sh
