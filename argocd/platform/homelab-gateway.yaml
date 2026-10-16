@@ -1,0 +1,35 @@
+# homelab-gateway — the PLATFORM's own ADR-092 subdomain delegation: `*.homelab.teststuff.net`.
+# Every other stack's Gateway lives in its -iac repo because the stack owns it; homelab IS the
+# platform, so its Gateway + HTTPRoutes live here, as their own small app (raw manifests in
+# argocd/resources/homelab-gateway/) in a dedicated namespace `homelab-gateway` — not agent-egress
+# (the gateway is a routing surface for any homelab-owned site, the first being the agent-gateway
+# island's specs; coupling it to one tenant namespace would put the next homelab site's route
+# in the wrong place) and not `homelab` (the platform fixer's namespace: PSS-pinned for rides,
+# AgentStack-composed RBAC — a Cilium Gateway's generated LB Service does not belong among a
+# worker's resources). Homelab wires the HAProxy/Unbound half in ansible/group_vars/opnsense.yml
+# (`stack_gateways` row homelab-gw, 3.36 ↔ 40.36) exactly as for oracle/sleep/circles.
+# Wave 3: after gateway-api-crds (0) and the `cilium` GatewayClass + the garage ReferenceGrant (2).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homelab-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/homelab-gateway
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: homelab-gateway
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

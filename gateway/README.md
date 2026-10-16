@@ -26,6 +26,7 @@ three **rails** — `anthropic` (the operator's Claude subscription OAuth token)
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
 | Evidence (rendered per requirement by `devbox run ci`; gitignored, read it in the CI job summary) | `specs/evidence/` |
+| **The browsable site** — this README + `specs/` with the evidence fragments transcluded; master at the root, PR previews at `/pr-<N>/` (LAN/VPN; `mkdocs.yml`, `scripts/specs-publish.sh`, bucket `gateway-specs`) | [`gateway-specs.homelab.teststuff.net`](https://gateway-specs.homelab.teststuff.net) |
 
 ## Run
 

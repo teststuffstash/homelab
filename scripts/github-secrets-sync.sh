@@ -34,6 +34,7 @@ MAPPING="
 teststuffstash/oracle-fleet | oracle-fleet | allure-reports-s3 | writer | ALLURE_S3
 teststuffstash/oracle-fleet | oracle-fleet | ert-snapshots-s3  | reader | ERT_S3_READER
 teststuffstash/circles      | circles      | circles-specs-s3  | writer | SPECS_S3
+teststuffstash/homelab      | agent-egress | gateway-specs-s3  | writer | GATEWAY_SPECS_S3
 "
 
 CHECK=0

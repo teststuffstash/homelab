@@ -1,0 +1,31 @@
+# gateway-specs.homelab.teststuff.net → the agent-gateway island's browsable specs site (gateway/
+# mkdocs.yml, published by gateway/scripts/specs-publish.sh; ADR-092 delegation). The site is a
+# Garage website-enabled bucket (alias `gateway-specs`, argocd/resources/agent-gateway/
+# garage-workspace.yaml). Garage's web endpoint keys the bucket off the Host header under rootDomain
+# `.teststuff.net`, so the URLRewrite rewrites Host `gateway-specs.homelab.teststuff.net` →
+# `gateway-specs.teststuff.net` before the backend request — Garage sees alias == Host at the
+# origin. Per-PR previews ride the SAME route by path (…/pr-<N>/) — no per-PR route.
+#
+# Cross-namespace backend (garage-s3 in ns garage) is permitted by the platform ReferenceGrant in
+# ns garage (argocd/platform/homelab-gateway-refgrant.yaml) — the oracle-iac httproute-specs.yaml shape.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gateway-specs
+  namespace: homelab-gateway
+spec:
+  parentRefs:
+    - name: homelab-gateway
+  hostnames:
+    - gateway-specs.homelab.teststuff.net
+  rules:
+    - filters:
+        - type: URLRewrite
+          urlRewrite:
+            hostname: gateway-specs.teststuff.net
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: garage-s3
+          namespace: garage
+          port: 3902

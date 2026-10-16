@@ -21,6 +21,9 @@ echo "== spec gate"
 uv run --frozen python scripts/spec_gate.py
 
 echo "== evidence render"
+# specs/evidence/ (gitignored) must exist for the per-rule fragments the spec pages transclude
+# (`--8<-- "<RULE>.md"`, mkdocs.yml) — evidence_render.py writes them only when the dir is there.
+mkdir -p specs/evidence
 uv run --frozen python scripts/evidence_render.py
 
 echo "== agent-gateway ci: green"

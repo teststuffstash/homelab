@@ -1,5 +1,8 @@
 # agent-gateway specs — the contract, and how it is worked
 
+> Browsable, with the evidence tables rendered in place: **[gateway-specs.homelab.teststuff.net](https://gateway-specs.homelab.teststuff.net)**
+> (a PR's preview lives at `/pr-<N>/` while it is open) — `../mkdocs.yml`, published by homelab CI.
+
 The spec system for this island, in the oracle-fleet shape: **the reviewer reviews the
 result, not the diff.** Every endpoint has a contract page in [endpoints/](endpoints/) with a
 sibling `<name>.schema.json`; rows are decision tables of key examples; tests prove the rows

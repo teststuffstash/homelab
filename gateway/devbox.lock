@@ -5,6 +5,54 @@
       "last_modified": "2026-10-14T08:20:44Z",
       "resolved": "github:NixOS/nixpkgs/319e4cebef10cbb636c6ea392137b52ad105336a?lastModified=1791966044&narHash=sha256-t1hT8UW97rFCWCJO7%2FpClvu0AhLN5V3uir2M0ic4w%2FQ%3D"
     },
+    "minio-client@latest": {
+      "last_modified": "2026-10-02T22:55:44Z",
+      "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#minio-client",
+      "source": "devbox-search",
+      "version": "2025-08-13T08-35-41Z",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6i3kma1m5np72bpqib0ck1i3ba8c2ar8-minio-client-2025-08-13T08-35-41Z",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/6i3kma1m5np72bpqib0ck1i3ba8c2ar8-minio-client-2025-08-13T08-35-41Z"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/pf5ajfkkl7sg5cd5h2bswf9if9w6vq8m-minio-client-2025-08-13T08-35-41Z",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/pf5ajfkkl7sg5cd5h2bswf9if9w6vq8m-minio-client-2025-08-13T08-35-41Z"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/bbkmm0hjblwplfw9d46077yva0wbs67l-minio-client-2025-08-13T08-35-41Z",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/bbkmm0hjblwplfw9d46077yva0wbs67l-minio-client-2025-08-13T08-35-41Z"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/p3p2fxkrh9mmxacpzck9hkl9nhqw8i4i-minio-client-2025-08-13T08-35-41Z",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/p3p2fxkrh9mmxacpzck9hkl9nhqw8i4i-minio-client-2025-08-13T08-35-41Z"
+        }
+      }
+    },
     "python@3.13": {
       "last_modified": "2026-10-02T22:55:44Z",
       "plugin_version": "0.0.5",

@@ -66,6 +66,11 @@ MAP=(
   # The gateway island's ONE gate (gateway/scripts/ci.sh via its own devbox: uv sync, ruff, pytest
   # + evidence, spec gate) — ADR-139 / context-and-autonomy.md P2. Scoped to the island dir.
   "gateway-ci:^gateway/"
+  # The island's specs-site publish (gateway/scripts/specs-publish.sh — mkdocs build + mirror to the
+  # gateway-specs bucket; soft-skips without GATEWAY_SPECS_S3_* creds, so locally it is the dogfood
+  # build). Same trigger as the gate it rides behind in ci.yaml. WAN-bound (uv fetches the mkdocs
+  # pins) → PUSH_HEAVY below keeps it off the pre-push hook.
+  "gateway-specs-publish:^gateway/"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
@@ -151,7 +156,9 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           (`--connect-timeout 10 -m 300`) is a 5-MINUTE hang per blob on a dead
 #                           mirror or an off-LAN push, which blows the budget and the "works from
 #                           anywhere" requirement outright.
-PUSH_HEAVY="argocd-validate-pins manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render"
+#   gateway-specs-publish   `uv run --no-project --with mkdocs…` resolves three pins from PyPI on a
+#                           cold cache — real WAN on the first run (measured 2026-10-16: ~40s cold).
+PUSH_HEAVY="argocd-validate-pins manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish"
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.

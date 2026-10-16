@@ -1,12 +1,13 @@
 {
-  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
-  "_comment": "agent-gateway island toolchain (P2, ADR-139): python 3.13 + uv, the oracle-fleet shape. Run `devbox run ci` from THIS directory; the repo-root devbox.json reaches it through its `gateway-ci` script (diff-ci row `gateway-ci:^gateway/`). Nothing here is shared with the old openrouter-proxy, which stays on the repo-root toolchain untouched.",
+  "$schema":  "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "agent-gateway island toolchain (P2, ADR-139): python 3.13 + uv, the oracle-fleet shape; minio-client (mc) for the specs-site publish (scripts/specs-publish.sh — mkdocs itself rides `uv run --no-project` with exact pins, see scripts/specs-build.sh). Run `devbox run ci` from THIS directory; the repo-root devbox.json reaches it through its `gateway-ci` script (diff-ci row `gateway-ci:^gateway/`). Nothing here is shared with the old openrouter-proxy, which stays on the repo-root toolchain untouched.",
   "packages": {
-    "python": "3.13",
-    "uv": "latest"
+    "python":       "3.13",
+    "uv":           "latest",
+    "minio-client": "latest"
   },
   "env": {
-    "UV_PYTHON_PREFERENCE": "only-system",
+    "UV_PYTHON_PREFERENCE":   "only-system",
     "UV_PROJECT_ENVIRONMENT": "$HOME/.cache/devbox-venv/agent-gateway$VENV_SUFFIX"
   },
   "shell": {
@@ -20,6 +21,15 @@
       ],
       "serve": [
         "uv run --frozen python -m agent_gateway"
+      ],
+      "specs-build": [
+        "bash scripts/specs-build.sh"
+      ],
+      "specs-publish": [
+        "bash scripts/specs-publish.sh"
+      ],
+      "specs-pr-purge": [
+        "bash scripts/specs-pr-purge.sh \"$@\""
       ]
     }
   }

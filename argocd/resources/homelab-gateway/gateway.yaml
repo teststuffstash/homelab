@@ -1,0 +1,35 @@
+# The platform's own in-cluster L7 gateway for `*.homelab.teststuff.net` (ADR-092 — the same
+# delegation every stack gets, applied to homelab itself; oracle-iac oracle-fleet/infra/gateway.yaml
+# is the shape). Homelab's router half: a wildcard-cert HAProxy frontend on VIP 192.168.3.36
+# forwarding plain HTTP to this gateway's 192.168.40.36 LB VIP + the `*.homelab` Unbound override
+# (ansible/group_vars/opnsense.yml `stack_gateways` row homelab-gw). From here every hostname
+# under homelab.teststuff.net is an HTTPRoute in THIS directory — no router change per name.
+#
+# TLS terminates upstream at OPNsense HAProxy (the wildcard cert), so the listener is plain HTTP
+# :80 — the gateway host-routes on the preserved Host header.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: homelab-gateway
+  namespace: homelab-gateway
+spec:
+  gatewayClassName: cilium
+  # Pin the LB VIP + carry the bgp=advertise label onto the Cilium-generated Service so FRR
+  # advertises 40.36 (the CiliumBGPAdvertisement selects Services by matchLabels bgp=advertise —
+  # tofu/cilium-bgp.tf). 40.36 ↔ 3.36 is the next free mirror pair (docs/ip-plan.md): 40.29–40.35
+  # are plain LB VIPs (otel, ingest, mcr mirror, loki door, registry, pypi, npm), 3.33 is the last
+  # HAProxy pair — verified free against SERVICES.md, opnsense.yml and the live Services 2026-10-16.
+  addresses:
+    - type: IPAddress
+      value: 192.168.40.36
+  infrastructure:
+    labels:
+      bgp: advertise
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: "*.homelab.teststuff.net"
+      allowedRoutes:
+        namespaces:
+          from: Same
