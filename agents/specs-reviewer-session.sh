@@ -29,23 +29,27 @@
 #   anomaly  — MORE THAN ONE live own verdict at the content commit: ONE comment starting
 #              `AGENT_ERROR:` carrying a machine marker, no label (this identity has no
 #              issues:write — the breaker label is the code reviewer's), idempotent per head.
-#   mechanical — no `(^|/)specs/` path in the PR's files: `gh pr review --approve` with a fixed
-#              body, no LLM. Many per tick, cheap — the price of GitHub's repo-wide count.
+#   mechanical — no specs path and no rule-test path (`review_path_re`) in the PR's files, or the
+#              pass's touched-rules finds no rule: an approval with a fixed body, no LLM. Many per
+#              tick, cheap — the price of GitHub's repo-wide count.
 #   LLM pass — ONE per tick (the oldest candidate): admitted through the agent-gateway
 #              `POST /sessions` seam (role `reviewer`, stack `platform`, harness `claude` — the
 #              first real consumer, FU-270 dogfood); `decision: defer` = log + stop, the next tick
 #              retries (never poll in-process); `dispatch` = the returned `env` map is exported
 #              VERBATIM as the LLM env (GW-SESSIONS-ENV: nothing LLM-shaped is added) and the
-#              session is ALWAYS released (`DELETE /sessions/{id}`, trap). Inputs = exactly the
-#              lens's scope: specs.diff (merge-base..head, `**/specs/**` only), the PR body, the
-#              specs trees at head (unchanged neighbours), the head's CI evidence (the ci run's
-#              `evidence-render: BEGIN/END` block, counted only when its stamp names THIS head),
-#              built BEFORE admission and each checked — any missing input is no review (fail
-#              CLOSED). The model is CONFINED: `env -i` with exactly the dispatch env + OTEL + a
+#              session is ALWAYS released (`DELETE /sessions/{id}`, trap). Inputs = the CONTEXT PACK
+#              (ADR-156), built BEFORE admission by the pinned allure-behavior-snippets wheel
+#              (`evidence-pack`, digest-checked): touched rules + their sections + the spec diff, the
+#              specs tree, the head run's raw Allure results (the `gateway-evidence` artifact) with
+#              evidence.json + digest.md + attachments, the base branch's evidence as baseline, the
+#              PR body, the closing issue's acceptance text, the previous review, and process/ (the
+#              pinned RULES, CONVENTIONS and briefs). A failed clone/wheel/pack is no review (fail
+#              CLOSED); absent EVIDENCE is stated in the pack and becomes the brief's finding. The model is CONFINED: `env -i` with exactly the dispatch env + OTEL + a
 #              throwaway HOME (never GH_TOKEN/GH_TOKEN_FILE), and an allow-listed tool scope —
 #              `Read(//<inputs>/**)` + Glob, nothing else — so the token file, /proc and $HOME
 #              are unreadable (a prompt-injected "quote X" from authored text has nothing to
-#              reach). The lens is the WHOLE system prompt; a fetch failure is no review + exit 1
+#              reach). The system prompt is homelab's wiring lens + the pinned finding contract, rows
+#              and evidence briefs; a lens fetch failure is no review + exit 1
 #              (a blocking lens never degrades to advisory). The verdict is parsed from the model's
 #              `Verdict:` line and SUBMITTED BY THIS SCRIPT, PINNED to the reviewed head (the head
 #              is re-read right before the submit — moved = verdict dropped, next tick — and the
@@ -78,6 +82,20 @@ GATEWAY_URL="${GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local:
 PUSHGATEWAY="${PUSHGATEWAY:-}"                           # empty = log-only
 LENS_BASE="${LENS_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/lenses}"
 SPECS_PATH_RE='(^|/)specs/'
+# ── the pinned process (ADR-156): briefs + RULES/CONVENTIONS + touched-rules + the pack builder
+# ship in ONE wheel, verified by digest and run with the image's stdlib python3 (pack, evidence and
+# touched_rules import nothing outside the stdlib; the wheel is extracted, not zip-imported, because
+# the pack copies process/ from package files).
+SNIPPETS_VERSION="0.5.2"
+SNIPPETS_WHEEL="https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v${SNIPPETS_VERSION}/allure_behavior_snippets-${SNIPPETS_VERSION}-py3-none-any.whl"
+SNIPPETS_SHA256="9ab53c5faac49f4d72a51f59fc419d0b5d0d8d8d33c655b870901b86282828eb"
+EVIDENCE_ARTIFACT="${EVIDENCE_ARTIFACT:-gateway-evidence}"   # the ci run artifact: allure-results/ (+ evidence.json, digest.md)
+# pack_roots <repo> → "<specs-root> <tests-root>": where that repo's rules and their tests live
+pack_roots() { case "$1" in homelab) printf 'gateway/specs gateway/tests';; *) printf 'specs tests';; esac; }
+# review_path_re <repo> → the file-list trigger for the LLM pass: a specs path, or the repo's
+# rule-test root (a changed test label reaches a rule without touching specs — touched-rules
+# decides inside the pass; zero touched rules = the mechanical approval after all)
+review_path_re() { local _s t; read -r _s t <<< "$(pack_roots "$1")"; printf '%s|^%s/' "$SPECS_PATH_RE" "$t"; }
 PR_LIST_LIMIT="${PR_LIST_LIMIT:-40}"                     # review-reflex.sh's ceiling: the rollup fragment is deep
 LLM_TIMEOUT_S="${LLM_TIMEOUT_S:-600}"                    # the model's wall clock; < the 900 s pod deadline minus clone + submit
 
@@ -142,6 +160,11 @@ self_test() {
   check "content sha skips the merge commit" aaaa1111 "$(jq -r "$JQ_PRELUDE"'content_sha' <<< "$base")"
   check "specs path predicate: gateway/specs/access.md" 0 "$(grep -cE "$SPECS_PATH_RE" <<< 'gateway/specs/access.md' >/dev/null; echo $?)"
   check "specs path predicate: specs/x.md at root" 0 "$(grep -cE "$SPECS_PATH_RE" <<< 'specs/x.md' >/dev/null; echo $?)"
+  check "trigger: homelab rule-test path → LLM pass" 0 "$(grep -cE "$(review_path_re homelab)" <<< 'gateway/tests/test_access.py' >/dev/null; echo $?)"
+  check "trigger: homelab specs path → LLM pass" 0 "$(grep -cE "$(review_path_re homelab)" <<< 'gateway/specs/access.md' >/dev/null; echo $?)"
+  check "trigger: a non-gateway tests dir is NOT a homelab rule-test path" 1 "$(grep -cE "$(review_path_re homelab)" <<< 'scripts/tests/x.py' >/dev/null; echo $?)"
+  check "pack roots: homelab" "gateway/specs gateway/tests" "$(pack_roots homelab)"
+  check "pack roots: default island layout" "specs tests" "$(pack_roots some-island)"
   check "specs path predicate: docs/specs-reviewer.md is NOT a specs path" 1 "$(grep -cE "$SPECS_PATH_RE" <<< 'docs/agents/specs-reviewer.md' >/dev/null; echo $?)"
   check "verdict parse: APPROVE" APPROVE "$(parse_verdict "$(printf '## Specs review\nVerdict: APPROVE — no blocking check failed\nRows: …\n')")"
   check "verdict parse: CHANGES_REQUESTED" CHANGES_REQUESTED "$(parse_verdict "$(printf '## Specs review\nVerdict: CHANGES_REQUESTED — 1, 6\n')")"
@@ -188,8 +211,6 @@ self_test() {
   local revs='[{"user":{"login":"homelab-specs-reviewer[bot]"},"state":"DISMISSED","commit_id":"aaaa1111aaaa1111","submitted_at":"2026-10-16T10:00:00Z","body":"## Specs review\nVerdict: CHANGES_REQUESTED — 6\nF1"},{"user":{"login":"homelab-specs-reviewer[bot]"},"state":"APPROVED","commit_id":"bbbb2222bbbb2222","submitted_at":"2026-10-16T11:00:00Z","body":"## Specs review\nVerdict: APPROVE — mechanical: no specs path"},{"user":{"login":"homelab-reviewer[bot]"},"state":"APPROVED","commit_id":"cccc","submitted_at":"2026-10-16T12:00:00Z","body":"## Specs review\nnot mine"}]'
   check "prior review: newest own LLM review, DISMISSED included" "previous review: DISMISSED at aaaa1111aaaa (2026-10-16T10:00:00Z)" "$(prior_review_pick "$revs" | head -1)"
   check "prior review: none → empty" "" "$(prior_review_pick '[]')"
-  printf 'ci\tgw\t2026-10-16T10:00:00.1Z evidence-render: BEGIN\nci\tgw\t2026-10-16T10:00:00.2Z git 0123456789ab\nci\tgw\t2026-10-16T10:00:00.3Z evidence-render: END\n' > "$d/run.log"
-  check "evidence block: prefixes stripped" "git 0123456789ab" "$(evidence_block "$d/run.log")"
   rm -rf "$d"
   [ "$fails" -eq 0 ] && { echo "self-test: ok"; return 0; }
   echo "self-test: $fails FAILED"; return 1
@@ -206,12 +227,6 @@ parse_verdict() {
   esac
 }
 valid_env_key() { [[ "$1" =~ ^[A-Z][A-Z0-9_]*$ ]]; }
-
-# evidence_block <run-log-file> → the evidence-render BEGIN/END block with the `gh run view --log`
-# prefixes (`<job>\t<step>\t<timestamp> `) stripped; empty = the run rendered none.
-evidence_block() {
-  awk '/evidence-render: BEGIN/{f=1; next} /evidence-render: END/{f=0} f{ sub(/^[^\t]*\t[^\t]*\t/, ""); sub(/^[0-9T:.Z-]+ /, ""); print }' "$1" || true
-}
 
 # acceptance_of <issue-body> → the issue's `## Acceptance` section (heading to the next `## `
 # heading; `###` subsections stay), or the whole body under a note when it has none. Check 1
@@ -361,8 +376,8 @@ for repo in $SPECS_REVIEW_REPOS; do
     if ! files="$(gh api --paginate "repos/${ORG}/${repo}/pulls/${num}/files" --jq '.[].filename' 2>"$WORK/files.err")"; then
       log "[$repo#$num] files read FAILED — $(head -c 200 "$WORK/files.err" | tr '\n' ' ') — skipping this tick"; N_ERR=$((N_ERR+1)); continue
     fi
-    if ! grep -qE "$SPECS_PATH_RE" <<< "$files"; then
-      printf '## Specs review\nVerdict: APPROVE — mechanical: no `**/specs/**` path in this diff — nothing for the specs gate to read; approved mechanically (ADR-155, the repo-wide count). Head %s.\n' "${head:0:12}" > "$WORK/mech-$num.md"
+    if ! grep -qE "$(review_path_re "$repo")" <<< "$files"; then
+      printf '## Specs review\nVerdict: APPROVE — mechanical: no specs path and no rule-test path in this diff — nothing for the specs gate to read; approved mechanically (ADR-155, the repo-wide count). Head %s.\n' "${head:0:12}" > "$WORK/mech-$num.md"
       rs=0; review_submit "$repo" "$num" approve "$WORK/mech-$num.md" "$head" || rs=$?
       case "$rs" in
         0) log "[$repo#$num] MECHANICAL approve at ${head:0:8} (no specs path)"; N_MECH=$((N_MECH+1)); POSTED="$POSTED $repo#$num";;
@@ -386,7 +401,7 @@ else
   log "[$repo#$num] LLM pass (${n_cand} candidate(s); the rest wait for the next tick)"
   run_llm_pass() {
     local slug="${ORG}/${repo}" inputs="$WORK/inputs" lens="$WORK/lens.md" resp="$WORK/session.json"
-    mkdir -p "$inputs/tree"
+    local ctx="$WORK/ctx"; mkdir -p "$ctx"
     # EVERY step below is checked explicitly: this function runs under `|| LLM_RC=$?`, which
     # suspends `set -e` for its whole body (bot review, PR#2613 finding 2) — an unchecked failed
     # fetch would hand the model an empty input set, and an empty diff reads as a clean APPROVE.
@@ -404,39 +419,67 @@ else
       || { log "[$repo#$num] fetch of pull/${num}/head FAILED — no review"; return 1; }
     local fetched; fetched="$(git -C "$WORK/repo" rev-parse "pr-${num}")" || { log "[$repo#$num] rev-parse FAILED — no review"; return 1; }
     if [ "$fetched" != "$head" ]; then log "[$repo#$num] head moved while fetching (${head:0:8} → ${fetched:0:8}) — the next tick reads the new head"; return 0; fi
-    git -C "$WORK/repo" diff "origin/${base}...pr-${num}" -- ':(glob)**/specs/**' > "$inputs/specs.diff" \
-      || { log "[$repo#$num] specs diff FAILED — no review"; return 1; }
-    git -C "$WORK/repo" diff --stat "origin/${base}...pr-${num}" > "$inputs/diffstat.txt" \
-      || { log "[$repo#$num] diffstat FAILED — no review"; return 1; }
-    gh pr view "$num" --repo "$slug" --json title,body,url -q '"# " + .title + "\n\n" + .url + "\n\n" + (.body // "")' > "$inputs/pr-body.md" \
+    # 2b) the pinned process: the wheel, verified by digest, extracted (never zip-imported)
+    curl -fsSL --max-time 60 "$SNIPPETS_WHEEL" -o "$WORK/snippets.whl" \
+      || { log "[$repo#$num] snippets wheel fetch FAILED — no review"; return 1; }
+    [ "$(sha256sum "$WORK/snippets.whl" | cut -d' ' -f1)" = "$SNIPPETS_SHA256" ] \
+      || { log "[$repo#$num] snippets wheel DIGEST MISMATCH (pinned ${SNIPPETS_SHA256:0:12}) — no review"; return 1; }
+    python3 -m zipfile -e "$WORK/snippets.whl" "$WORK/snippets" \
+      || { log "[$repo#$num] snippets wheel extract FAILED — no review"; return 1; }
+    # 3) the context the pack carries but cannot fetch itself: PR body, issue intent, prior review
+    gh pr view "$num" --repo "$slug" --json title,body,url -q '"# " + .title + "\n\n" + .url + "\n\n" + (.body // "")' > "$ctx/pr-body.md" \
       || { log "[$repo#$num] PR body read FAILED — no review"; return 1; }
-    [ -s "$inputs/pr-body.md" ] || { log "[$repo#$num] PR body read came back EMPTY — no review"; return 1; }
-    local specdirs; specdirs="$(git -C "$WORK/repo" ls-tree -r --name-only "pr-${num}" | grep -E "$SPECS_PATH_RE" | awk -F/ '{ for (i = 1; i <= NF; i++) if ($i == "specs") { out = $1; for (j = 2; j <= i; j++) out = out "/" $j; print out; break } }' | sort -u || true)"
-    if [ -n "$specdirs" ]; then
-      # shellcheck disable=SC2086 — the dir list is word-split on purpose
-      git -C "$WORK/repo" archive --format=tar "pr-${num}" -- $specdirs | tar -x -C "$inputs/tree" \
-        || { log "[$repo#$num] specs tree extract FAILED — no review"; return 1; }
-    fi
-    # The PR's file list names a specs path (that is why we are here), so the merge-base diff of
-    # **/specs/** cannot be empty; an empty diff is a broken fetch, never a clean read.
-    if [ ! -s "$inputs/specs.diff" ]; then
-      log "[$repo#$num] specs.diff is EMPTY although the PR's files name a specs path — refusing to review from nothing"; return 1
-    fi
-    local tree_files; tree_files="$(cd "$inputs/tree" && find . -type f | sed 's#^\./##' | sort)"
-    # 3) evidence — the head's ci run log, the evidence-render BEGIN/END block, stamp must name THIS head
-    evidence_at_head "$slug" "$head" > "$inputs/evidence.md"
-    # 3b) the round inputs (ADR-156 step 2). Each is CONTEXT, not the reviewed object, so an
-    #     unavailable one is a stated line the lens reports under "What would change my verdict",
-    #     never an empty file and never a silent skip.
-    issue_intent "$slug" "$num" > "$inputs/issue-intent.md"
-    evidence_baseline "$slug" "$base" > "$inputs/evidence-baseline.md"
+    [ -s "$ctx/pr-body.md" ] || { log "[$repo#$num] PR body read came back EMPTY — no review"; return 1; }
+    issue_intent "$slug" "$num" > "$ctx/issue-intent.md"
     local revs prior
     if revs="$(gh api --paginate "repos/${slug}/pulls/${num}/reviews" --jq '.[]' 2>/dev/null | jq -s .)"; then
       prior="$(prior_review_pick "$revs")"
-      printf '%s\n' "${prior:-previous review: none, this is round 1}" > "$inputs/prior-review.md"
+      printf '%s\n' "${prior:-previous review: none, this is round 1}" > "$ctx/prior-review.md"
     else
-      printf 'previous review: the reviews read FAILED; treat this as round 1 and say so\n' > "$inputs/prior-review.md"
+      printf 'previous review: the reviews read FAILED; treat this as round 1 and say so\n' > "$ctx/prior-review.md"
     fi
+    # 3b) evidence: the head's raw Allure results + the base branch's evidence.json (the baseline),
+    #     both from ci run artifacts. Absent evidence is NOT a refusal: an empty results dir makes
+    #     the pack say so, and the evidence brief turns that into E-STALE / NO_EVIDENCE findings.
+    local results="$WORK/head-ev/allure-results" bl_json="" bl_commit=""
+    mkdir -p "$WORK/head-ev"
+    evidence_download "$slug" "$head" "$WORK/head-ev" || true
+    mkdir -p "$results"
+    if read -r bl_json bl_commit <<< "$(evidence_baseline_download "$slug" "$base" "$WORK/base-ev")" && [ -n "$bl_json" ]; then
+      log "[$repo#$num] baseline: ${base}@${bl_commit:0:8}"
+    else
+      bl_json=""; log "[$repo#$num] baseline: none (no ${EVIDENCE_ARTIFACT} artifact on the newest successful ${base} push runs)"
+    fi
+    # 3c) the context pack (allure-behavior-snippets evidence-pack): touched rules + sections + the
+    #     spec diff + the specs tree + evidence + digest + attachments + baseline + process/ briefs.
+    #     It IS the model's inputs dir. A pack failure is no review (fail closed).
+    local specs_root tests_root; read -r specs_root tests_root <<< "$(pack_roots "$repo")"
+    local -a packargs=("origin/${base}" "pr-${num}" "$results" --repo "$WORK/repo" --specs-root "$specs_root"
+      --tests-root "$tests_root" --prior-review "$ctx/prior-review.md" --issue-intent "$ctx/issue-intent.md"
+      --pr-body "$ctx/pr-body.md" --out "$inputs")
+    [ -n "$bl_json" ] && packargs+=(--baseline "$bl_json" --baseline-commit "$bl_commit")
+    PYTHONPATH="$WORK/snippets" python3 -c 'import sys; sys.argv[0] = "evidence-pack"; from allure_behavior_snippets.pack import main; sys.exit(main())' \
+        "${packargs[@]}" > "$WORK/pack.log" 2>&1 \
+      || { log "[$repo#$num] evidence-pack FAILED — no review: $(tail -c 300 "$WORK/pack.log" | tr '\n' ' ')"; return 1; }
+    local n_rules; n_rules="$(grep -c . "$inputs/touched-rules.txt" 2>/dev/null || true)"
+    if [ "${n_rules:-0}" -eq 0 ]; then
+      # the file list hit a specs/test path but no rule is touched (prose, a fixture, a helper):
+      # nothing for either brief — the mechanical approval, said so
+      printf '## Specs review\nVerdict: APPROVE — mechanical: touched-rules (allure-behavior-snippets %s) found no rule this diff touches. Head %s.\n' "$SNIPPETS_VERSION" "${head:0:12}" > "$WORK/mech-$num.md"
+      local rs0=0; review_submit "$repo" "$num" approve "$WORK/mech-$num.md" "$head" || rs0=$?
+      case "$rs0" in
+        0) log "[$repo#$num] MECHANICAL approve at ${head:0:8} (no rule touched)"; N_MECH=$((N_MECH+1)); POSTED="$POSTED $repo#$num"; return 0;;
+        3) return 0;;
+        *) log "[$repo#$num] mechanical approve FAILED"; return 1;;
+      esac
+    fi
+    log "[$repo#$num] pack: ${n_rules} touched rule(s): $(tr '\n' ' ' < "$inputs/touched-rules.txt" | head -c 300)"
+    # the system prompt: homelab's wiring lens + the pinned briefs (finding contract first)
+    local b
+    for b in finding-contract rows evidence; do
+      [ -s "$inputs/process/briefs/$b.md" ] || { log "[$repo#$num] pack has no process/briefs/$b.md — no review"; return 1; }
+      printf '\n\n---\n\n' >> "$lens"; cat "$inputs/process/briefs/$b.md" >> "$lens"
+    done
     # 4) admission: POST /sessions (gateway/specs/endpoints/sessions.md, sessions.schema.json post.input)
     local body http
     body="$(jq -cn --arg task "specs-review ${repo}#${num}" '{stack:"platform", role:"reviewer", task:$task, round:0, harness:"claude"}')"
@@ -466,7 +509,7 @@ else
     #      under /var/run, /proc/*/environ and $HOME are unreadable; Grep/Bash/Write are not
     #      granted at all (Grep's rule grammar is not path-scoped, and the inputs are small).
     local prompt
-    prompt="You are the specs reviewer for pull request ${slug}#${num} (head ${head}). Your working directory holds your ONLY inputs, and your Read tool is scoped to it: pr-body.md (title, URL, body — read Spec changes: and the closing issue reference), specs.diff (the **/specs/** diff from the merge-base to the head), diffstat.txt (file names only, for the removed-row check), tree/ (every specs/ tree at the head — the unchanged neighbours a row may reference, and each tree's README.md §Rules, the numbered rules your brief cites as 'rule N'; files: ${tree_files//$'\n'/, }), evidence.md (the head's CI evidence, or the words 'evidence: none at head'), evidence-baseline.md (the base branch's newest rendered evidence, naming its commit and run, or 'baseline: none'), issue-intent.md (the closing issue's acceptance text, fetched; the ground for check 1), prior-review.md (your previous review of this PR, or 'previous review: none'; on a later round, mark each of its findings resolved or still open FIRST). Apply your brief's checks to every added, changed and removed row and write ONLY the review body in your brief's Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <failing check numbers>'. Do not run commands, do not fetch anything, do not submit the review yourself — the launcher submits what you return."
+    prompt="You are the specs reviewer for pull request ${slug}#${num} (head ${head}). Your working directory is the context pack and holds your ONLY inputs; your Read and Glob tools are scoped to it. Start with manifest.json (what the pack holds and what was not provided), then intent: pr-body.md, issue-intent.md, spec-sections.md (each touched rule's section at the head + the spec diff), tree/ (the specs at the head, for neighbours), process/RULES.md and process/CONVENTIONS.md (the pinned process your briefs cite). Then evidence: digest.md first (its Stamp:, Baseline: and precomputed findings), the per-rule <RULE>.md tables, evidence/<RULE>.json for ONE rule's records (never the whole evidence.json: it holds every touched rule and can exceed your context), baseline-evidence.json, and attachments/ where a row's value is still unproven. prior-review.md is your previous review of this PR: on a later round, mark each of its findings resolved or still open FIRST. Apply BOTH briefs (rows, evidence) under the finding contract and write ONLY the review body in its Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <blocking finding IDs>'. Do not run commands, do not fetch anything, do not submit the review yourself: the launcher submits what you return."
     llm_env_args "$resp" "$WORK/home" > "$WORK/env.list" || { log "[$repo#$num] refusing the gateway's env map — no review"; return 1; }
     local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
     local rc=0
@@ -499,23 +542,6 @@ else
       *) log "[$repo#$num] review submit FAILED"; return 1;;
     esac
   }
-  # evidence_at_head <slug> <head> → markdown on stdout (never fails the pass; absence is a statement)
-  evidence_at_head() {
-    local slug="$1" head="$2" run_id log_file block stamp
-    run_id="$(gh run list --repo "$slug" --commit "$head" --workflow ci.yaml --status completed --json databaseId,conclusion --limit 3 \
-               --jq '[ .[] | select(.conclusion == "success") ] | .[0].databaseId // empty' 2>/dev/null || true)"
-    if [ -z "$run_id" ]; then printf 'evidence: none at head — no completed, successful `ci` run found for %s\n' "$head"; return 0; fi
-    log_file="$WORK/run-$run_id.log"
-    if ! gh run view "$run_id" --repo "$slug" --log > "$log_file" 2>/dev/null; then printf 'evidence: none at head — `gh run view %s --log` failed\n' "$run_id"; return 0; fi
-    # `gh run view --log` lines are `<job>\t<step>\t<text>`; the render marks its block
-    block="$(evidence_block "$log_file")"
-    if [ -z "$block" ]; then printf 'evidence: none at head — ci run %s logged no `evidence-render: BEGIN/END` block (the gateway-ci step did not run on this head, or the image predates the stdout render)\n' "$run_id"; return 0; fi
-    stamp="$(grep -m1 -oE 'git [0-9a-f]{12}' <<< "$block" || true)"
-    if [ "$stamp" != "git ${head:0:12}" ]; then
-      printf 'evidence: none at head — ci run %s rendered evidence stamped `%s`, which does not name this head (%s)\n' "$run_id" "${stamp:-<no stamp>}" "${head:0:12}"; return 0
-    fi
-    printf 'evidence: ci run %s, stamped at THIS head (%s)\n\n%s\n' "$run_id" "${head:0:12}" "$block"
-  }
   # issue_intent <slug> <pr> → markdown: each closing issue's acceptance text (never fails the pass)
   issue_intent() {
     local slug="$1" num="$2" refs r n body
@@ -535,24 +561,35 @@ else
       fi
     done <<< "$refs"
   }
-  # evidence_baseline <slug> <base> → the newest successful `ci` push run on <base> that rendered
-  # evidence, naming its commit and run (never fails the pass). The gateway step runs only when
-  # gateway paths change, so a run without a block is skipped, not read as "no rows".
-  evidence_baseline() {
-    local slug="$1" base="$2" runs id sha log_file block
+  # ci_success_run <slug> <commit> → the newest completed, successful `ci` run id at <commit> ("" = none)
+  ci_success_run() {
+    gh run list --repo "$1" --commit "$2" --workflow ci.yaml --status completed --json databaseId,conclusion --limit 3 \
+      --jq '[ .[] | select(.conclusion == "success") ] | .[0].databaseId // empty' 2>/dev/null || true
+  }
+  # evidence_download <slug> <head> <dir> → the head run's evidence artifact unpacked into <dir>
+  # (rc 1 = none: no successful run, or the run uploaded no artifact — the pack states the absence)
+  evidence_download() {
+    local run_id; run_id="$(ci_success_run "$1" "$2")"
+    [ -n "$run_id" ] || { log "evidence: no successful ci run at ${2:0:8}"; return 1; }
+    gh run download "$run_id" --repo "$1" -n "$EVIDENCE_ARTIFACT" -D "$3" >/dev/null 2>&1 \
+      || { log "evidence: ci run ${run_id} has no ${EVIDENCE_ARTIFACT} artifact"; return 1; }
+    log "evidence: ci run ${run_id} artifact ${EVIDENCE_ARTIFACT} → $(find "$3" -type f | wc -l) file(s)"
+  }
+  # evidence_baseline_download <slug> <base> <dir> → "<evidence.json path> <commit sha>" from the
+  # newest successful ci PUSH run on <base> (of the newest 5) that uploaded the artifact; "" = none.
+  # The gateway step runs only on gateway changes, so a run without the artifact is skipped.
+  evidence_baseline_download() {
+    local slug="$1" base="$2" dir="$3" runs id sha
     runs="$(gh run list --repo "$slug" --branch "$base" --event push --workflow ci.yaml --status success --limit 5 \
               --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null || true)"
     while read -r id sha; do
       [ -n "$id" ] || continue
-      log_file="$WORK/base-$id.log"
-      gh run view "$id" --repo "$slug" --log > "$log_file" 2>/dev/null || continue
-      block="$(evidence_block "$log_file")"
-      [ -n "$block" ] || continue
-      printf 'baseline: %s evidence from ci run %s at commit %s. Scope: the rows THAT run rendered; a row missing here was not run on %s, so it is not a vanished proof.\n\n%s\n' \
-        "$base" "$id" "${sha:0:12}" "$base" "$block"
-      return 0
+      rm -rf "$dir"; mkdir -p "$dir"
+      gh run download "$id" --repo "$slug" -n "$EVIDENCE_ARTIFACT" -D "$dir" >/dev/null 2>&1 || continue
+      [ -s "$dir/evidence.json" ] || continue
+      printf '%s %s\n' "$dir/evidence.json" "$sha"; return 0
     done <<< "$runs"
-    printf 'baseline: none, no successful `ci` push run among the newest 5 on %s rendered evidence\n' "$base"
+    printf '\n'
   }
   run_llm_pass || LLM_RC=$?
   [ "$LLM_RC" -eq 0 ] || N_ERR=$((N_ERR+1))
