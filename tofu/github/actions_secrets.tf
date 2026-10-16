@@ -140,6 +140,10 @@ locals {
     # OWNED path, so only the CODEOWNERS carve-outs (images.env, the arc-runner and chart pins) can
     # actually merge on it. That is precisely the mechanical lane and nothing else.
     github_repository.homelab.repo_id,
+    # circles — added 2026-10-16 (circles handoff 20261016-2130). require_approval defaults to true
+    # there (only require_code_owner_review is set), so it was the third repo to break the
+    # invariant; its renovate-approve.yaml (circles#95) skipped on the missing secret.
+    github_repository.circles.repo_id,
   ]
 }
 
