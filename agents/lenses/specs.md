@@ -23,8 +23,12 @@ inputs under `tree/`. When this brief cites "rule N", read rule N there.
 - Every file under `**/specs/**` in the diff (pages, `*.schema.json`, `glossary.md`,
   `use-cases/`, `worlds/`, `evidence/`), plus their unchanged neighbours on the branch when a
   row references them (an alias anchor, a glossary term, a cited use case).
-- The PR body: the `Spec changes:` section and the `Fixes #N` issue (its intent is the ground
-  for check 1).
+- The PR body: the `Spec changes:` section and the `Fixes #N` reference; `issue-intent.md`
+  carries that issue's acceptance text, fetched by the launcher (the ground for check 1).
+- `evidence-baseline.md`: the base branch's newest rendered evidence, naming its commit and run.
+  A row green there and absent at head is a lost proof only when the baseline's scope covers it.
+- `prior-review.md`: your previous review of this PR (any state; a push dismisses it), or
+  `previous review: none`.
 - The CI evidence this PR's HEAD rendered: `evidence.md` in your inputs (the launcher reads the
   head's `ci` run log and copies its `evidence-render` block, or writes `evidence: none at head`
   with the reason), or the `specs/evidence/` files in the diff. In either form, evidence counts
@@ -91,11 +95,32 @@ inputs under `tree/`. When this brief cites "rule N", read rule N there.
 - **Prose claims without a row** are unverified constraints: name them (ADVISORY — the gate's
   zero-row check sees whole requirements, not sentences).
 
+## Findings — the contract the worker fixes from (ADR-156)
+
+Every BLOCKING finding is one entry a worker can act on without reconstructing your argument:
+
+- **ID**: `C<check>/<page>#<ROW-ID>` (or `C<check>/<page>` for a page-level finding). It is
+  derived, never numbered, so the same problem keeps its ID across rounds.
+- **Rule / case**: the requirement and row it concerns.
+- **Violated**: the check and the sentence of the rule it breaks.
+- **Observed**: what the inputs show, quoted or pointed at (file + row).
+- **Satisfied by**: the edit that clears it. One edit, not a menu.
+
+Reconcile before you post: no two findings may ask for contradicting edits (a split that drops a
+cross-key row against "keep this proof" is one finding with one compatible edit). Advisory notes
+(shape, ⚖ noise, new terms) are never findings and never carry an ID.
+
+**Later rounds.** When `prior-review.md` holds a review, list each of its finding IDs first as
+`resolved` or `still open` (with what is still missing), THEN review what changed. A finding you
+drop without marking it is a contradiction the worker cannot see.
+
 ## Output shape — the review body, in this order
 
 ```
 ## Specs review
 Verdict: APPROVE | CHANGES_REQUESTED — <the failing check numbers, or "no blocking check failed">
+Prior findings: one line per ID from prior-review.md — <ID> resolved | still open: <what is missing>  (omit on round 1)
+Findings: one block per BLOCKING finding — ID · Rule/case · Violated · Observed · Satisfied by  ("none" when approving)
 Rows: one line per added / changed / removed row —
   <page>#<ID> "<description>" — intent: <source> | golden · ⚖: present | missing | noise · evidence: green@<sha8> | stale@<sha8> | none (🚧/⚑: yes | no)
 Shape: one line per touched table — question: <one | mixed: …> · axes: <same | constant col: …> · cells: <atomic | packed: …> — the split proposal, if any
@@ -118,7 +143,7 @@ What would change my verdict: the exact edit that flips each blocking finding; t
 
 ## Verdict
 
-`Verdict: CHANGES_REQUESTED` when any BLOCKING check fails, naming every failing row in ONE
+`Verdict: CHANGES_REQUESTED` when any BLOCKING check fails or any prior finding is still open, with every finding in ONE
 review — the launcher submits it as `--request-changes`. Otherwise `Verdict: APPROVE` with the body
 above — submitted as `--approve`, the SECOND required approval on the island repo (ADR-155: your
 identity is distinct from the code reviewer's, so your approval never overwrites its verdict state
