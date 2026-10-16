@@ -174,9 +174,8 @@ async def test_tokens_by_class(gw, upstreams):
     with then('series gateway_tokens_total{rail="anthropic",class="in"} / "cache_read" / "cache_write" / "out" = 12 / 300 / 40 / 7'):
         text = await _metrics(gw)
         attach_json("sample: gateway_tokens_total lines", _lines(text, "gateway_tokens_total"))
-        for cls, want in (("in", 12), ("cache_read", 300), ("cache_write", 40), ("out", 7)):
-            series = f'gateway_tokens_total{{rail="anthropic",class="{cls}"}}'
-            check(series, _value(text, series), want)
+        got = {cls: _value(text, f'gateway_tokens_total{{rail="anthropic",class="{cls}"}}') for cls in ("in", "cache_read", "cache_write", "out")}
+        check("gateway_tokens_total{rail=anthropic} by class", got, {"in": 12, "cache_read": 300, "cache_write": 40, "out": 7})
 
 
 async def test_subscription_windows_read(gw):
@@ -190,10 +189,10 @@ async def test_subscription_windows_read(gw):
     with then("gateway_subscription_utilization 5h / 7d = 0.13 / 0.67; gateway_subscription_reset_seconds = 1792172400 / 1792274400"):
         text = await _metrics(gw)
         attach_json("sample: gateway_subscription_* lines", _lines(text, "gateway_subscription"))
-        for fam, w, want in (("utilization", "5h", 0.13), ("utilization", "7d", 0.67),
-                             ("reset_seconds", "5h", 1792172400), ("reset_seconds", "7d", 1792274400)):
-            series = f'gateway_subscription_{fam}{{rail="anthropic",window="{w}"}}'
-            check(series, _value(text, series), want)
+        got = {f"{fam} {w}": _value(text, f'gateway_subscription_{fam}{{rail="anthropic",window="{w}"}}')
+               for fam in ("utilization", "reset_seconds") for w in ("5h", "7d")}
+        check("gateway_subscription_*{rail=anthropic}", got, {"utilization 5h": 0.13, "utilization 7d": 0.67,
+                                                             "reset_seconds 5h": 1792172400, "reset_seconds 7d": 1792274400})
 
 
 async def test_resolution_verdict_counted(gw, app, secrets):

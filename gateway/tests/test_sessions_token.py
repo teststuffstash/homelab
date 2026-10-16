@@ -5,7 +5,7 @@
 | the token has the fixed shape | dispatch | token matches ^gws_[A-Za-z0-9_-]{32}$ |
 | two dispatches never share a token | dispatch twice | tokens differ |
 | the row holds a hash, not the token | dispatch, read the DB | token_hash = sha256 hex of the token; no column equals the token |
-| GET returns the row without the token | dispatch -> GET /sessions/{id} | 200; exactly the 14 schema fields; no token, no token_hash |
+| GET returns the row without the token | dispatch -> GET /sessions/{id} | 200; exactly the 16 schema fields; no token, no token_hash |
 | GET on an unknown id | GET /sessions/nope | 404 session-not-found |
 | expiry is the policy TTL | dispatch at T | expires_at = T + 14400 s |
 | a request through the data plane is counted on the row | dispatch -> one upstream-ok call -> GET | requests = 1, tokens_in/tokens_out = the upstream usage |
