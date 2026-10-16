@@ -12,6 +12,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "allure-pytest>=2.16,<3",
     "pytest>=9.0.3,<10",
     "pytest-asyncio>=0.25,<2",
     "ruff>=0.9,<1",
@@ -26,6 +27,9 @@ packages = ["src/agent_gateway"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Raw Allure results for every run (conventions § Prime rule): `devbox run evidence` turns them
+# into evidence.json + digest.md + per-rule md via the pinned allure-behavior-snippets wheel.
+addopts = "--alluredir=allure-results --clean-alluredir"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

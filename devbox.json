@@ -467,6 +467,9 @@
       "gateway-ci": [
         "sh -c '[ -d gateway ] || { echo \"gateway-ci: no gateway/ on this ref — nothing to gate\"; exit 0; }; cd gateway && exec devbox run ci'"
       ],
+      "gateway-evidence": [
+        "sh -c '[ -d gateway ] || { echo \"gateway-evidence: no gateway/ on this ref\"; exit 0; }; cd gateway && exec devbox run evidence'"
+      ],
       "gateway-specs-publish": [
         "sh -c 'cd gateway && exec devbox run specs-publish'"
       ],

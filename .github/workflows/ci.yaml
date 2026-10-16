@@ -695,6 +695,25 @@ jobs:
       - name: Gateway island CI (devbox run gateway-ci)
         if: steps.diff.outputs.gateway-ci != 'false'
         run: devbox run gateway-ci
+      # ADR-156 step 4: the reviewer's evidence pack from the run's RAW Allure results (pytest above
+      # writes gateway/allure-results/, environment.properties included) — allure-behavior-snippets
+      # (pin: gateway/scripts/lib/snippets.sh) → gateway/allure-evidence/{allure-results/, evidence.json,
+      # digest.md, <RULE>.md}. Runs on a red suite too (a failing row is evidence); skipped when the suite never
+      # ran. PR runs = the head under review; master push runs = the reviewer's baseline.
+      - name: Gateway evidence (devbox run gateway-evidence)
+        id: gateway-evidence
+        if: ${{ !cancelled() && steps.diff.outputs.gateway-evidence != 'false' && hashFiles('gateway/allure-results/*-result.json') != '' }}
+        run: devbox run gateway-evidence
+      - name: Upload gateway-evidence artifact
+        if: ${{ !cancelled() && steps.gateway-evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gateway-evidence
+          # The pack dir IS the artifact root: allure-results/ (raw, attachments, environment.properties),
+          # evidence.json, digest.md, GW-*.md — `gh run download <id> -n gateway-evidence`.
+          path: gateway/allure-evidence/
+          retention-days: 14
+          if-no-files-found: error
       # The island's browsable specs site (gateway/mkdocs.yml) → the `gateway-specs` bucket, served by
       # the homelab gateway (ADR-092): master runs → https://gateway-specs.homelab.teststuff.net, PR
       # runs → …/pr-<N>/ (by path under the same route; purged on close by gateway-specs-pr-purge.yaml).

@@ -71,6 +71,10 @@ MAP=(
   # build). Same trigger as the gate it rides behind in ci.yaml. WAN-bound (uv fetches the mkdocs
   # pins) → PUSH_HEAVY below keeps it off the pre-push hook.
   "gateway-specs-publish:^gateway/"
+  # ADR-156 step 4: the reviewer's evidence pack from the gateway suite's raw Allure results; it
+  # rides the gateway-ci step's skip key in ci.yaml (no suite run, no results). WAN-bound (uv fetches
+  # the pinned snippets wheel) → PUSH_HEAVY.
+  "gateway-evidence:^gateway/"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
@@ -158,7 +162,7 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           anywhere" requirement outright.
 #   gateway-specs-publish   `uv run --no-project --with mkdocs…` resolves three pins from PyPI on a
 #                           cold cache — real WAN on the first run (measured 2026-10-16: ~40s cold).
-PUSH_HEAVY="argocd-validate-pins manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish"
+PUSH_HEAVY="argocd-validate-pins manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence"
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.

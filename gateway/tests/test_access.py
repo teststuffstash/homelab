@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import rule
+from .conftest import attach_json, given, rule, then, then_eq, when, world
 
 pytestmark = rule("GW-ACCESS")
 
@@ -50,12 +50,20 @@ ROWS = [(f"{role} x {rail}", role, rail, rail in rails) for role, rails in ALLOW
 
 @pytest.mark.parametrize(("role", "rail", "allowed"), [r[1:] for r in ROWS], ids=[r[0] for r in ROWS])
 async def test_role_rail(gw, policy, role, rail, allowed):
-    assert set(policy.roles[role].rails) == ALLOWED[role], "the table must mirror policy-default.json"
+    world()
+    with given(f"policy-default role {role} allows rails {sorted(ALLOWED[role])}"):
+        attach_json(f"policy role {role} rails", sorted(policy.roles[role].rails))
+        assert set(policy.roles[role].rails) == ALLOWED[role], "the table must mirror policy-default.json"
     # harness claude speaks the anthropic dialect, which every rail serves — so the verdict is the role's alone
-    r = await gw.post("/sessions", json={"stack": "platform", "role": role, "task": "t", "rail": rail, "harness": "claude"})
-    assert r.status_code == 200, r.text
+    with when(f"POST /sessions role {role}, rail {rail}, harness claude"):
+        r = await gw.post("/sessions", json={"stack": "platform", "role": role, "task": "t", "rail": rail, "harness": "claude"})
+    then_eq("status", r.status_code, 200)
     doc = r.json()
     if allowed:
-        assert doc["decision"] == "dispatch" and doc["rail"] == rail
+        with then(f"allowed = True: decision dispatch on rail {rail}",
+                  allowed={"expected": {"decision": "dispatch", "rail": rail}, "actual": {"decision": doc.get("decision"), "rail": doc.get("rail")}}):
+            assert doc["decision"] == "dispatch" and doc["rail"] == rail
     else:
-        assert doc["decision"] == "defer" and doc["reason"] == "role-rail-denied"
+        with then("allowed = False: decision defer, reason role-rail-denied",
+                  allowed={"expected": {"decision": "defer", "reason": "role-rail-denied"}, "actual": {"decision": doc.get("decision"), "reason": doc.get("reason")}}):
+            assert doc["decision"] == "defer" and doc["reason"] == "role-rail-denied"
