@@ -201,9 +201,10 @@ report to record that digest (open question 2).
 3. Snippets v0.5 carries the briefs, conventions, `touched-rules` and the pack builder — DONE
    (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join). oracle-fleet keeps its own process and v0.4.2
    until the gateway has proven this one (operator, 2026-10-16).
-4. Gateway tests on Allure, the raw results uploaded as the `gateway-evidence` CI artifact.
-5. The evidence pass live, then measure tokens, worker rounds, invalid findings and coordinator
-   interventions per completed PR.
+4. Gateway tests on Allure, the raw results uploaded as the `gateway-evidence` CI artifact — DONE
+   2026-10-16 (#2623; ci.yaml c63dbe1).
+5. The evidence pass live — LIVE 2026-10-16 (#2624; first pass #2628: 3 rules, 9 turns, 34 s). Next:
+   measure tokens, worker rounds, invalid findings and coordinator interventions per completed PR.
 
 Cheaper helper subagents wait for that data, and they need a gateway change first: a session is
 admitted with one model and the gateway rewrites every request to it
