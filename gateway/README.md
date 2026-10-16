@@ -51,7 +51,7 @@ Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
 cd gateway
 devbox run ci             # THE gate: uv sync --frozen, ruff, pytest (+ evidence), spec gate, evidence render
 devbox run test -- -k admit   # one table
-devbox run evidence       # after a test run: allure-results/ → allure-evidence/ (evidence.json, digest.md, <RULE>.md)
+devbox run evidence       # after a test run: allure-results/ → allure-evidence/ (evidence.json, digest.md, <RULE>.md, allure-results/)
 ```
 
 Every test module is a decision table (`@pytest.mark.parametrize(..., ids=[row descriptions])`
@@ -65,7 +65,7 @@ oracle-fleet conventions' shape (ADR-156 — one portable process): `rule()` set
 (`world()` → the `world` label; a rule-labelled case without one fails), and its steps read
 `Given:` / one `When:` / `Then:` per claim (a `verdict: …` JSON with expected/actual under each),
 with every gateway and fake-upstream exchange attached under the step it supports;
-`environment.properties` stamps the head sha, policy sha256, timestamp and
+`environment.properties` stamps `git.commit` (the head sha — the pinned snippets key), policy sha256, timestamp and
 `artifact=pr-head (not the built image)`. `devbox run evidence` (`scripts/gateway-evidence.sh`,
 snippets pin in `scripts/lib/snippets.sh`) turns them into the reviewer's pack, joining each spec
 page's tables (`--spec`) where the tool can parse them; `evidence_render.py` and its

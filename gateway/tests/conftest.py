@@ -319,7 +319,11 @@ def _write_allure_run_meta(config, doc: dict) -> None:
     out.mkdir(parents=True, exist_ok=True)
     head = _pr_head_sha()
     props = {
-        "git_sha": doc["git_sha"] or "unknown",
+        # `git.commit` is the PINNED key (allure-behavior-snippets CONVENTIONS.md § The head/artifact
+        # stamp — evidence-pack's stamp check reads it; any other spelling reads as unstamped).
+        # `image.digest` is deliberately ABSENT: it is written only by a suite that ran against the
+        # built image, which this one never does.
+        "git.commit": doc["git_sha"] or "unknown",
         "git_sha_source": "pull_request.head.sha" if head else ("GITHUB_SHA" if os.environ.get("GITHUB_SHA") else "git rev-parse HEAD"),
         "policy_sha256": doc["policy_sha256"] or "unknown",
         "policy_file": POLICY_FIXTURE.relative_to(ISLAND).as_posix(),
