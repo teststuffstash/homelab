@@ -31,6 +31,12 @@
 # just like a missing declared grant (over-grant is drift too).
 #
 # levels: read | write. org-level permissions are prefixed `org:`.
+#
+# bootstrap: (scripts/github-app-bootstrap.sh) — redirect_port/cred_dir for the manifest flow;
+# mint_site = the ONE generator manifest `register` fills with app_id/install_id (un-parked from
+# scaffold/ + listed in its kustomization); wallet: true = `register` copies key + ids into the
+# KeePass wallet as github-<slug minus homelab->-app{,-id,-installation-id,-slug} and
+# scripts/wallet-files.sh materializes them back into cred_dir.
 
 apps:
   - slug: homelab-agents
@@ -74,7 +80,7 @@ apps:
       security_events: { level: read, why: "same ruling" }
     installs: selected
     key_locations: [Infisical REVIEWER_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-reviewer/"]
-    bootstrap: { redirect_port: 8767, cred_dir: "~/.claude/homelab-github-reviewer" }
+    bootstrap: { redirect_port: 8767, cred_dir: "~/.claude/homelab-github-reviewer", mint_site: agents/coordinator/reviewer-git.yaml, wallet: true }
 
   - slug: homelab-merge
     app_id: 4207260
@@ -126,7 +132,7 @@ apps:
       contents: { level: write, why: "ADR-150 the ⚓ upgrade lease (operator-approved 2026-10-06): the box pushes the pin-only `revert-chart-lease-<sha8>` branch for an EXPIRED lease — a branch + PR through the reflex lane, never a direct master push (master is ruleset-protected; the App has no bypass). DECLARED ahead of the grant (FU-098 flow): GithubAppPermissionDrift rings until the operator clicks + approves the update on the homelab installation" }
     installs: selected   # the sentinel's scan set: sleep-iac, oracle-iac, circles-iac, homelab (SENTINEL_REPOS in scripts/iac-sentinel.sh)
     key_locations: [Infisical SENTINEL_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-sentinel/"]
-    bootstrap: { redirect_port: 8771, cred_dir: "~/.claude/homelab-github-sentinel" }
+    bootstrap: { redirect_port: 8771, cred_dir: "~/.claude/homelab-github-sentinel", mint_site: agents/coordinator/sentinel-git.yaml, wallet: true }
 
   - slug: homelab-specs-reviewer
     # app_id / install_id: FILLED after the operator's one Create + one Install click
@@ -153,7 +159,7 @@ apps:
       actions: { level: read, why: "`gh run view --log` on the head's CI run — the evidence-render step output is the lens's evidence input when `specs/evidence/` is gitignored (gateway/)" }
     installs: selected   # the island repos: homelab (gateway/) today; an island adopting the lens adds itself
     key_locations: [Infisical SPECS_REVIEWER_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-specs-reviewer/"]
-    bootstrap: { redirect_port: 8772, cred_dir: "~/.claude/homelab-github-specs-reviewer" }
+    bootstrap: { redirect_port: 8772, cred_dir: "~/.claude/homelab-github-specs-reviewer", mint_site: agents/coordinator/specs-reviewer-git.yaml, wallet: true }
 
   - slug: homelab-labels
     app_id: 4314419

@@ -129,10 +129,10 @@ fixtures; `diff-ci` row ready, its `ci.yaml` step is operator-direct).
 (the `specs-reviewer-git` Secret is `optional:true`; the script logs "specs-reviewer-git absent —
 shadow, no verdicts" and exits 0 — it never reviews under another identity). Then: (1) create +
 install the App (`scripts/github-app-bootstrap.sh homelab-specs-reviewer manifest|catch`), its key
-into Infisical as `SPECS_REVIEWER_GH_APP_PRIVATE_KEY`; (2) one commit fills `appID` / `installID`
-in `specs-reviewer-git.yaml` AND `app_id` / `install_id` in `docs/github-apps.yaml`, `git mv`s the
-file from `agents/coordinator/scaffold/` into `agents/coordinator/` and lists it in
-`kustomization.yaml` — it is parked, not listed with placeholders, on purpose: a placeholder
+into Infisical as `SPECS_REVIEWER_GH_APP_PRIVATE_KEY` (`… secrets`); (2) `… register` fills `appID` /
+`installID` in `specs-reviewer-git.yaml` AND `app_id` / `install_id` in `docs/github-apps.yaml`,
+`git mv`s the file from `agents/coordinator/scaffold/` into `agents/coordinator/` and lists it in
+`kustomization.yaml` — one PR. It is parked, not listed with placeholders, on purpose: a placeholder
 generator would sit `SecretSyncedError` → `ArgoCDAppDegraded`, and manifest-lint requires every
 `agents/coordinator/*.yaml` to be listed; (3) the Secret
 appearing IS the cutover — the next tick posts verdicts. Until then every homelab PR parks on its

@@ -59,7 +59,6 @@ att matchbox-grpc       client.crt      "$CRED/homelab-matchbox/client.crt"
 att matchbox-grpc       client.key      "$CRED/homelab-matchbox/client.key"
 att github-runner-app   private-key.pem "$CRED/homelab-runner-app/private-key.pem"
 att github-cv-deploy    id_ed25519      "$CRED/homelab-cv-deploy/id_ed25519" # rasmus-soot-cv write deploy key (tofu/github/deploy_keys.tf; Forgejo publish secret)
-att github-reviewer-app private-key.pem "$CRED/homelab-github-reviewer/private-key.pem"
 # deploy + renovate Apps — in the wallet since 2026-09-13 (imported from their Infisical durable
 # copies) so the management box can plan tofu/github with the count-gated org secrets present
 # (FU-238); the cache dirs are the ones scripts/github-tf.sh's _find_cred looks for.
@@ -67,13 +66,16 @@ att github-deploy-app   private-key.pem "$CRED/homelab-github-deploy/private-key
 val github-deploy-app-id                "$CRED/homelab-github-deploy/app-id"
 att github-renovate-app private-key.pem "$CRED/homelab-github-renovate/private-key.pem"
 val github-renovate-app-id              "$CRED/homelab-github-renovate/app-id"
-val github-reviewer-app-id              "$CRED/homelab-github-reviewer/app-id"
-val github-reviewer-installation-id     "$CRED/homelab-github-reviewer/installation-id"
-val github-reviewer-slug                "$CRED/homelab-github-reviewer/slug"
-att github-sentinel-app private-key.pem "$CRED/homelab-github-sentinel/private-key.pem"
-val github-sentinel-app-id              "$CRED/homelab-github-sentinel/app-id"
-val github-sentinel-installation-id     "$CRED/homelab-github-sentinel/installation-id"
-val github-sentinel-slug                "$CRED/homelab-github-sentinel/slug"
+# GitHub Apps with `bootstrap.wallet: true` in docs/github-apps.yaml — the entries
+# `github-app-bootstrap.sh <slug> register` writes (reviewer/sentinel were hand-added lines here).
+if command -v yq >/dev/null 2>&1; then yqx() { yq "$@"; }; else yqx() { (cd "$HERE/.." && devbox run --quiet -- yq "$@"); }; fi
+for slug in $(yqx -r '.apps[] | select(.bootstrap.wallet == true) | .slug' "$HERE/../docs/github-apps.yaml"); do
+  s="${slug#homelab-}"; d="$CRED/homelab-github-$s"
+  att "github-$s-app" private-key.pem "$d/private-key.pem"
+  val "github-$s-app-id"               "$d/app-id"
+  val "github-$s-installation-id"      "$d/installation-id"
+  val "github-$s-slug"                 "$d/slug"
+done
 att cloudflare-ha-client ha-client.p12       "$CRED/cloudflare/ha-client.p12"
 att cloudflare-ha-client ha-client.cert.pem  "$CRED/cloudflare/ha-client.cert.pem"
 val cloudflare-ha-client-p12-password        "$CRED/cloudflare/ha-client.p12.password"
