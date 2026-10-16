@@ -808,10 +808,15 @@ the block needs pruning, not more headings.
       (`.github/workflows/gateway-image.yaml`, pinned-image deploy = FU-044 class), `POST /sessions` +
       per-session model, three rails canaried. The OLD proxy stays untouched (operator, 2026-10-15); no
       launcher calls `/sessions` yet; the ADR-096 ladder / FU-088 latches / `/route` are `⚑ gap` rows.
-      Unblocked from FU-127/FU-269 (nothing left the repo). **Next:** (1) `agent-session.sh` → `/sessions`
-      for ONE role on the platform stack (env names differ today: goose = GOOSE_PROVIDER/OPENROUTER_HOST,
-      opencode = OPENCODE_CONFIG file — `GW-SESSIONS-ENV` ⚖ rows); (2) wire the specs lens
-      (`docs/agents/specs-reviewer.md` §wiring — identity question open); (3) the ladder as GW rows.
+      Unblocked from FU-127/FU-269 (nothing left the repo). **2026-10-16 (ADR-155):** the specs reviewer
+      is the FIRST `/sessions` consumer — own App `homelab-specs-reviewer` (declared, ids pending the
+      operator's Create+Install), own CronWorkflow, homelab master = 2 approvals (tofu, applies outside
+      the jail); specs site `gateway-specs.homelab.teststuff.net` (oracle shape) in flight. **Next:**
+      (1) operator: create+install the App, `github-app-bootstrap.sh homelab-specs-reviewer secrets`,
+      `tofu -chdir=tofu/github apply`; seat: fill ids, apply `specs-reviewer-git.yaml`, canary one specs
+      PR through the gate; (2) `agent-session.sh` → `/sessions` for a worker role (env names differ:
+      goose = GOOSE_PROVIDER/OPENROUTER_HOST, opencode = OPENCODE_CONFIG — `GW-SESSIONS-ENV` ⚖ rows);
+      (3) the ladder as GW rows.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
