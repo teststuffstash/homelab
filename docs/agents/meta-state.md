@@ -21,9 +21,8 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   + specs site BUILT, parked on the operator.** **NEXT, in order:** (1) operator: `github-app-bootstrap.sh
   homelab-specs-reviewer manifest|catch|secrets` (Create + Install on homelab), `tofu -chdir=tofu/github apply`
   (homelab → 2 approvals; until the App is live every homelab PR parks at one approval), admin-merge #2613 + #2612
-  (both touch owned paths); (2) seat: ids into `agents/coordinator/scaffold/specs-reviewer-git.yaml` + `docs/github-apps.yaml`
-  (+ regenerate the exporter JSON), `git mv` into `agents/coordinator/` + kustomization, apply → the Secret appearing
-  ends shadow mode; land the two seat-direct ci.yaml steps (`specs-review-self-test`; the gateway-specs publish step +
+  (both touch owned paths); (2) ✅ 2026-10-16 App 5344206 registered via the new `github-app-bootstrap.sh … register`
+  (#2617 builds it, #2618 the ids) — `specs-reviewer-git` Secret LIVE, token scoped to homelab, shadow mode over; land the two seat-direct ci.yaml steps (`specs-review-self-test`; the gateway-specs publish step +
   `gateway-specs-pr-purge.yaml` from branch `seat-direct/gateway-specs-ci-workflow` in the site clone); host-side
   `devbox run github-secrets-sync` once `agent-egress/gateway-specs-s3` exists; (3) canary: one PR touching
   `gateway/specs/**` through both gates + `gateway_sessions_active{rail="anthropic"}` moving; verify
