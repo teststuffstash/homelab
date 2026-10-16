@@ -86,9 +86,9 @@ SPECS_PATH_RE='(^|/)specs/'
 # ship in ONE wheel, verified by digest and run with the image's stdlib python3 (pack, evidence and
 # touched_rules import nothing outside the stdlib; the wheel is extracted, not zip-imported, because
 # the pack copies process/ from package files).
-SNIPPETS_VERSION="0.5.1"
+SNIPPETS_VERSION="0.5.2"
 SNIPPETS_WHEEL="https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v${SNIPPETS_VERSION}/allure_behavior_snippets-${SNIPPETS_VERSION}-py3-none-any.whl"
-SNIPPETS_SHA256="2046e063d112fe1ae320fe53d4527242f8792e49b3ddf4aa4e0607697864eee7"
+SNIPPETS_SHA256="9ab53c5faac49f4d72a51f59fc419d0b5d0d8d8d33c655b870901b86282828eb"
 EVIDENCE_ARTIFACT="${EVIDENCE_ARTIFACT:-gateway-evidence}"   # the ci run artifact: allure-results/ (+ evidence.json, digest.md)
 # pack_roots <repo> → "<specs-root> <tests-root>": where that repo's rules and their tests live
 pack_roots() { case "$1" in homelab) printf 'gateway/specs gateway/tests';; *) printf 'specs tests';; esac; }
