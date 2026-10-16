@@ -42,7 +42,7 @@ A `POST /sessions` body is admitted by walking `roles.<role>.rails` in order and
 capacity-blocked ([§Capacity](#capacity--the-ladders-capacity-half)), AND whose credential for
 the stack resolves ([GW-CRED-RESOLVE](#gw-cred-resolve)). None → `defer`, whose `reason` and
 `retry_after_s` are those of the blocked rail that frees **first** (a full rail frees after the
-policy's `defer_retry_s`, 60 s; ties go to walk order); a walk blocked only on credentials
+policy's `defer_retry_s`, 60 s; ties go to walk order — ⚖ a gateway choice, the old proxy has no multi-rail answer); a walk blocked only on credentials
 defers `credential-unresolved`. The walk is filtered
 by the harness first: `claude` speaks the anthropic dialect (rails `anthropic`, `opencode`);
 `opencode` / `goose` / `codex` speak openai (rails `openrouter`, `opencode`); a rail the harness
@@ -156,7 +156,7 @@ upstream answers as stated) — never seeded.
 | "a Go 429 latches the Go rail" | worker ride on opencode → 429 | — | worker, `rail: opencode` || defer | — | rail-latched | 30 |
 | "a latched rail is skipped, the walk continues" | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
 | "a rail whose policy declares no latch does not latch ⚖" | worker ride on openrouter → 429 | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
-| "every rail blocked: the rail that frees first names the defer" | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | rail-latched | 30 |
+| "every rail blocked: the rail that frees first names the defer ⚖" | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | rail-latched | 30 |
 
 The Go rows: a worker ride on opencode rides `opencode-go/deepseek-v4-flash` (peak in 0.30 / out
 1.20 / cache_read 0.006 / cache_write `null`; off-peak 0.15 / 0.60 / 0.003 / `null`), a reviewer
