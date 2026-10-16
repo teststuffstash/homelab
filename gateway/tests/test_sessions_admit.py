@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import err, open_session, rule
+from .conftest import attach_json, check, err, given, open_session, quiet, rule, then, then_eq, when, world
 
 pytestmark = rule("GW-SESSIONS-ADMIT")
 
@@ -72,33 +72,56 @@ WALK_ROWS = [
 
 
 async def _fill(gw, rail: str, n: int):
-    for i in range(n):
-        await open_session(gw, role="worker" if rail != "anthropic" else "reviewer", task=f"fill-{rail}-{i}", rail=rail, harness="claude")
+    """Arrange only: n active sessions on `rail` (muted — one summary attachment instead of n)."""
+    with quiet():
+        for i in range(n):
+            await open_session(gw, role="worker" if rail != "anthropic" else "reviewer", task=f"fill-{rail}-{i}", rail=rail, harness="claude")
+    attach_json(f"filled: {rail} × {n}", {"rail": rail, "active_sessions_opened": n})
 
 
 async def _arrange(gw, app, secrets, clock, state: dict):
+    if not state:
+        with given("state: no rail holds a session, every credential ref resolves"):
+            pass
     for rail, n in state.get("fill", {}).items():
-        await _fill(gw, rail, n)
+        with given(f"state: rail {rail} holds {n} active sessions"):
+            await _fill(gw, rail, n)
     if "miss" in state:
-        secrets.secrets.pop(state["miss"])
-        app.state.resolver.forget()
+        with given(f"state: credential ref {state['miss']} is a definitive miss"):
+            secrets.secrets.pop(state["miss"])
+            app.state.resolver.forget()
+            attach_json(f"secrets after: {state['miss']} removed", sorted(secrets.secrets))
     if "transient" in state:
-        secrets.transient.add(state["transient"])
-        app.state.resolver.forget()
+        with given(f"state: credential ref {state['transient']} answers a transient fault (kube API away)"):
+            secrets.transient.add(state["transient"])
+            app.state.resolver.forget()
+            attach_json(f"secrets transient: {state['transient']}", sorted(secrets.transient))
+
+
+def _req(body: dict) -> dict:
+    return {"stack": "platform", "role": "worker", "task": "homelab-2588-r1", **body}
 
 
 @pytest.mark.parametrize(("body", "state", "expected"), [r[1:] for r in WALK_ROWS], ids=[r[0] for r in WALK_ROWS])
 async def test_walk(gw, app, secrets, clock, body, state, expected):
+    world()
     await _arrange(gw, app, secrets, clock, state)
-    r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "homelab-2588-r1", **body})
-    assert r.status_code == 200, r.text
+    with when(f"POST /sessions body {body or '(defaults: platform worker)'}"):
+        r = await gw.post("/sessions", json=_req(body))
+    then_eq("status", r.status_code, 200)
     doc = r.json()
-    for k, v in expected.items():
-        assert doc.get(k) == v, (k, doc)
+    with then("expected " + ", ".join(f"{k} = {v}" for k, v in expected.items())):
+        for k, v in expected.items():
+            then_eq(k, doc.get(k), v)
     if doc["decision"] == "defer":
-        assert set(doc) == {"decision", "reason", "retry_after_s"} and doc["retry_after_s"] >= 1
+        with then("a defer carries exactly decision, reason, retry_after_s ≥ 1",
+                  keys={"expected": ["decision", "reason", "retry_after_s"], "actual": sorted(doc)}, retry_after_s=doc.get("retry_after_s")):
+            assert set(doc) == {"decision", "reason", "retry_after_s"} and doc["retry_after_s"] >= 1
     else:
-        assert set(doc) == {"decision", "session", "rail", "harness", "model", "env", "context_tokens"}
+        want = ["context_tokens", "decision", "env", "harness", "model", "rail", "session"]
+        with then("a dispatch carries exactly decision, session, rail, harness, model, env, context_tokens",
+                  keys={"expected": want, "actual": sorted(doc)}):
+            assert set(doc) == set(want)
 
 
 HTTP_ROWS = [
@@ -118,17 +141,20 @@ HTTP_ROWS = [
 
 @pytest.mark.parametrize(("body", "state", "status", "code"), [r[1:] for r in HTTP_ROWS], ids=[r[0] for r in HTTP_ROWS])
 async def test_http_errors(gw, app, secrets, clock, body, state, status, code):
+    world()
     await _arrange(gw, app, secrets, clock, state)
     if isinstance(body, str):
-        r = await gw.post("/sessions", content=body, headers={"content-type": "application/json"})
+        with when(f"POST /sessions body {body!r} (raw, content-type application/json)"):
+            r = await gw.post("/sessions", content=body, headers={"content-type": "application/json"})
     else:
-        req = {"stack": "platform", "role": "worker", "task": "homelab-2588-r1", **body}
-        r = await gw.post("/sessions", json={k: v for k, v in req.items() if v is not None})
-    assert r.status_code == status, r.text
+        req = {k: v for k, v in _req(body).items() if v is not None}
+        with when(f"POST /sessions body {body or '(defaults)'}"):
+            r = await gw.post("/sessions", json=req)
+    then_eq("status", r.status_code, status)
     if code:
-        assert err(r) == code
+        then_eq("code", err(r), code, claim=f"error code = {code}")
     if status == 503:
-        assert r.headers["retry-after"] == "20"
+        then_eq("retry-after", r.headers.get("retry-after"), "20", claim="status 503 carries retry-after = 20")
 
 
 async def _active(gw, rail: str) -> int:
@@ -140,28 +166,46 @@ async def _active(gw, rail: str) -> int:
 
 async def test_a_dispatch_counts_on_its_rail(gw):
     """row: a dispatch counts on its rail"""
-    await open_session(gw)
-    assert await _active(gw, "opencode") == 1
+    world()
+    with given("before: opencode holds 0 active sessions"):
+        await _active(gw, "opencode")  # the /metrics exchange attaches here: the before value
+    with when("POST /sessions (platform worker) → dispatch on opencode"):
+        await open_session(gw)
+    with then("after: gateway_sessions_active{rail=opencode} = 1"):
+        check("gateway_sessions_active{rail=opencode}", await _active(gw, "opencode"), 1)
 
 
 async def test_a_release_frees_the_slot(gw):
     """row: a release frees the slot"""
-    doc = await open_session(gw)
-    await gw.delete(f"/sessions/{doc['session']['id']}")
-    assert await _active(gw, "opencode") == 0
+    world()
+    with given("before: opencode holds 1 active session"):
+        doc = await open_session(gw)
+    with when(f"DELETE /sessions/{doc['session']['id']}"):
+        await gw.delete(f"/sessions/{doc['session']['id']}")
+    with then("after: gateway_sessions_active{rail=opencode} = 0"):
+        check("gateway_sessions_active{rail=opencode}", await _active(gw, "opencode"), 0)
 
 
 async def test_an_expiry_frees_the_slot(gw, policy, clock):
     """row: an expiry frees the slot without a DELETE"""
-    await open_session(gw)
-    clock.advance(policy.session_ttl_s + 1)
-    assert await _active(gw, "opencode") == 0
-    assert (await open_session(gw, task="again"))["rail"] == "opencode"
+    world()
+    with given("before: opencode holds 1 active session"):
+        await open_session(gw)
+    with when(f"the clock passes expires_at (+{policy.session_ttl_s + 1} s), no DELETE"):
+        clock.advance(policy.session_ttl_s + 1)
+    with then("after: gateway_sessions_active{rail=opencode} = 0"):
+        check("gateway_sessions_active{rail=opencode}", await _active(gw, "opencode"), 0)
+    with then("a new admission dispatches on rail opencode again"):
+        check("rail", (await open_session(gw, task="again"))["rail"], "opencode")
 
 
 async def test_a_defer_counts_nothing(gw):
     """row: a defer counts nothing"""
-    await _fill(gw, "opencode", 3)
-    r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t", "rail": "opencode"})
-    assert r.json()["decision"] == "defer"
-    assert await _active(gw, "opencode") == 3
+    world()
+    with given("before: opencode holds 3 active sessions (its cap)"):
+        await _fill(gw, "opencode", 3)
+    with when("POST /sessions rail=opencode (platform worker)"):
+        r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t", "rail": "opencode"})
+    then_eq("decision", r.json()["decision"], "defer")
+    with then("after: gateway_sessions_active{rail=opencode} = 3"):
+        check("gateway_sessions_active{rail=opencode}", await _active(gw, "opencode"), 3)
