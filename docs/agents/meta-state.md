@@ -21,8 +21,8 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   in `agents/specs-reviewer-session.sh` + `gateway/scripts/lib/snippets.sh` — bump TOGETHER; canary #2628 approved).
   **Next:** (a) step 5's measurement — per completed PR: tokens, worker rounds, invalid findings, coordinator
   interventions (design: `docs/agents/specs-reviewer.md` §The portable process); first wide PR will show whether
-  14-rule packs fit the 600 s / context budget; (b) operator decision: allure-behavior-snippets has a 0-approval
-  ruleset — the process home is ungated; (c) oracle-fleet stays on its own process until the operator says the
+  14-rule packs fit the 600 s / context budget; (b) allure-behavior-snippets' 0-approval ruleset stays (operator,
+  2026-10-16: "fine to have no review for now"); (c) oracle-fleet stays on its own process until the operator says the
   gateway has proven it; (d) FU-270 (1): live streamed usage reads `in=0 out=0`.
 - **⚑ PICKUP (2026-10-16 ~22:40Z — seat, P2 overnight build; TICK-LOG same date): `agent-gateway` BUILT + LIVE in
   PARALLEL (#2606, `gateway/`, SERVICES row LIVE), three rails canaried; the old router untouched (operator, 10-15).**
