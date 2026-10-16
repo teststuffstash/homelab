@@ -79,6 +79,7 @@ PUSHGATEWAY="${PUSHGATEWAY:-}"                           # empty = log-only
 LENS_BASE="${LENS_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/lenses}"
 SPECS_PATH_RE='(^|/)specs/'
 PR_LIST_LIMIT="${PR_LIST_LIMIT:-40}"                     # review-reflex.sh's ceiling: the rollup fragment is deep
+LLM_TIMEOUT_S="${LLM_TIMEOUT_S:-600}"                    # the model's wall clock; < the 900 s pod deadline minus clone + submit
 
 log() { printf '%s specs-review: %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
@@ -413,11 +414,14 @@ else
     #      under /var/run, /proc/*/environ and $HOME are unreadable; Grep/Bash/Write are not
     #      granted at all (Grep's rule grammar is not path-scoped, and the inputs are small).
     local prompt
-    prompt="You are the specs reviewer for pull request ${slug}#${num} (head ${head}). Your working directory holds your ONLY inputs, and your Read tool is scoped to it: pr-body.md (title, URL, body — read Spec changes: and the closing issue reference), specs.diff (the **/specs/** diff from the merge-base to the head), diffstat.txt (file names only, for the removed-row check), tree/ (every specs/ tree at the head — the unchanged neighbours a row may reference; files: ${tree_files//$'\n'/, }), evidence.md (the head's CI evidence, or the words 'evidence: none at head'). Apply your brief's checks to every added, changed and removed row and write ONLY the review body in your brief's Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <failing check numbers>'. Do not run commands, do not fetch anything, do not submit the review yourself — the launcher submits what you return."
+    prompt="You are the specs reviewer for pull request ${slug}#${num} (head ${head}). Your working directory holds your ONLY inputs, and your Read tool is scoped to it: pr-body.md (title, URL, body — read Spec changes: and the closing issue reference), specs.diff (the **/specs/** diff from the merge-base to the head), diffstat.txt (file names only, for the removed-row check), tree/ (every specs/ tree at the head — the unchanged neighbours a row may reference, and each tree's README.md §Rules, the numbered rules your brief cites as 'rule N'; files: ${tree_files//$'\n'/, }), evidence.md (the head's CI evidence, or the words 'evidence: none at head'). Apply your brief's checks to every added, changed and removed row and write ONLY the review body in your brief's Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <failing check numbers>'. Do not run commands, do not fetch anything, do not submit the review yourself — the launcher submits what you return."
     llm_env_args "$resp" "$WORK/home" > "$WORK/env.list" || { log "[$repo#$num] refusing the gateway's env map — no review"; return 1; }
     local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
     local rc=0
-    (cd "$inputs" && env -i "${envargs[@]}" claude -p "$prompt" --model "$model" --append-system-prompt-file "$lens" \
+    # bounded INSIDE the workflow's 900 s activeDeadlineSeconds: a deadline kill skips the EXIT
+    # trap, so the session would hold its rail slot until the gateway TTL (4 h) and the tick's
+    # metrics push would never happen. 124 = timed out → no verdict, the next tick retries.
+    (cd "$inputs" && timeout "${LLM_TIMEOUT_S}" env -i "${envargs[@]}" claude -p "$prompt" --model "$model" --append-system-prompt-file "$lens" \
         --allowedTools "Read(//${inputs#/}/**)" "Glob" --permission-mode default --output-format json > "$WORK/result.json") || rc=$?
     if [ "$rc" -ne 0 ] || ! jq -e . "$WORK/result.json" >/dev/null 2>&1; then
       log "[$repo#$num] claude exited ${rc} / no JSON result — no verdict"; return 1
