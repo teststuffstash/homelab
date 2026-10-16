@@ -17,16 +17,16 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-17 ~07:30Z — seat, ADR-155; TICK-LOG same date): specs reviewer identity + 2-approval gate
-  + specs site BUILT, parked on the operator.** **NEXT, in order:** (1) operator: `github-app-bootstrap.sh
-  homelab-specs-reviewer manifest|catch|secrets` (Create + Install on homelab), `tofu -chdir=tofu/github apply`
-  (homelab → 2 approvals; until the App is live every homelab PR parks at one approval), admin-merge #2613 + #2612
-  (both touch owned paths); (2) ✅ 2026-10-16 App 5344206 registered via the new `github-app-bootstrap.sh … register`
-  (#2617 builds it, #2618 the ids) — `specs-reviewer-git` Secret LIVE, token scoped to homelab, shadow mode over; land the two seat-direct ci.yaml steps (`specs-review-self-test`; the gateway-specs publish step +
-  `gateway-specs-pr-purge.yaml` from branch `seat-direct/gateway-specs-ci-workflow` in the site clone); host-side
-  `devbox run github-secrets-sync` once `agent-egress/gateway-specs-s3` exists; (3) canary: one PR touching
-  `gateway/specs/**` through both gates + `gateway_sessions_active{rail="anthropic"}` moving; verify
-  `https://gateway-specs.homelab.teststuff.net` serves after the first master publish. FU-297 carries the BACKUP-cert finding.
+- **⚑ PICKUP (2026-10-16 ~13:30Z — seat; TICK-LOG same date): specs reviewer LIVE (App 5344206, #2618; homelab
+  ruleset = 2 approvals, applied). NEXT SESSION (operator-set): the reviewer MECHANISM + LENS improvements** —
+  `agents/specs-reviewer-session.sh`, `agents/coordinator/specs-review-argo.yaml`, lens `agents/lenses/specs.md`,
+  design `docs/agents/specs-reviewer.md` (agent-platform design → ask before any corpus read; `/design-agents` is
+  operator-typed). Open first: (a) the first LIVE verdict is unobserved — check the next code-reviewer-approved
+  homelab PR got the second (mechanical) approval, and canary one `gateway/specs/**` PR through the LLM pass +
+  `gateway_sessions_active{rail="anthropic"}`; tick pods are GC'd, read logs via Loki; (b) host-side
+  `devbox run github-secrets-sync` for homelab `GATEWAY_SPECS_S3_*` (source `agent-egress/gateway-specs-s3` exists;
+  the jail cannot see whether the repo secret is set), then verify `https://gateway-specs.homelab.teststuff.net`
+  after the first master publish. FU-297 carries the BACKUP-cert finding.
 - **⚑ PICKUP (2026-10-16 ~22:40Z — seat, P2 overnight build; TICK-LOG same date): `agent-gateway` BUILT + LIVE in
   PARALLEL (#2606, `gateway/`, SERVICES row LIVE), three rails canaried; the old router untouched (operator, 10-15).**
   **NEXT:** FU-270's three next steps (launcher `/sessions` for one platform role; specs-lens wiring — identity

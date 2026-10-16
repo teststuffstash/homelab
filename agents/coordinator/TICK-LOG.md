@@ -13617,3 +13617,19 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **State at write:** both PRs park on the SECOND approval (the identity does not exist yet) + the codeowner read —
   operator merges by admin override, or creates the App first. Clones: `/workspace/homelab-clones/{specs-reviewer,
   gateway-specs-site}` kept until the seat-direct commits land.
+
+## 2026-10-16 ~10:30–13:30Z — specs-reviewer App created + registered; `github-app-bootstrap.sh register` (seat, PR lane)
+- **Operator:** `manifest` → `catch` (Create) → Install (homelab) → `secrets` → App 5344206 / installation 172048550;
+  later `tofu -chdir=tofu/github apply` (homelab master ruleset now `required_approving_review_count=2`, read back);
+  #2612/#2613 merged.
+- **Docs audit of the App-creation chain:** the post-Install step was "paste the ids" (wrong path for specs-reviewer,
+  NEXT ordered the yaml fill before the install id existed), no wallet copy for new Apps (reviewer/sentinel lines in
+  wallet-files.sh were hand-added), github-setup.md claimed key generation is a click + named retired per-App scripts.
+- **#2617:** new `register` subcommand — ids → github-apps.yaml + exporter JSON, `bootstrap.mint_site` generator filled
+  + un-parked from scaffold/ + kustomization, `bootstrap.wallet: true` → key + ids into KeePass (wallet-files.sh loops
+  the flagged slugs). Tested on a clone + wallet copy (idempotent, PEM byte-identical round trip).
+- **#2618:** the operator's host-side `register` diff lifted out of the shared checkout into a clone + banner trims.
+  ArgoCD synced in ~20 s → both ExternalSecrets SecretSynced, `specs-reviewer-git` present, token reaches [homelab]
+  only. Shadow mode over. NOT yet observed: a live specs-reviewer approval (no code-reviewer-approved PR since).
+- **Operator Q (answered, ADR-155 unchanged):** no native path-scoped bot approval — the ruleset "required reviewers"
+  rule (preview, 2025-11) takes file patterns but only TEAMS; Apps cannot join teams or be CODEOWNERS.
