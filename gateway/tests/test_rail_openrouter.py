@@ -104,7 +104,7 @@ async def test_stack_key(gw, upstreams, secrets):
 
 LAND_ROWS = [
     ("an openai-dialect call lands", "chat", "upstream-ok", "/v1/chat/completions", (1, 7, 3)),
-    ("an anthropic-dialect call lands", "messages", "upstream-ok", "/v1/messages", (1, 11, 5)),
+    ("an anthropic-dialect call lands", "messages", "upstream-ok", "/v1/messages", (1, 12, 7)),
     ("the models list passes through", "models", "upstream-ok", "/v1/models", (0, 0, 0)),
     ("a stream streams", "chat", "upstream-stream", "/v1/chat/completions", (1, 19, 4)),
 ]

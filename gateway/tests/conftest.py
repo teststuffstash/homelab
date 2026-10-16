@@ -436,7 +436,9 @@ class FakeUpstream:
         return self._reply(call, JSONResponse(
             {"id": "msg_1", "type": "message", "role": "assistant", "model": model,
              "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn",
-             "usage": {"input_tokens": 11, "output_tokens": 5}},
+             # the committed key example's usage (specs/use-cases/uc-1/anthropic-response.json):
+             # rows that count tokens (GW-METRICS, GW-RAIL-*) cite these values
+             "usage": {"input_tokens": 12, "output_tokens": 7}},
             headers={"x-fake-rail": self.rail},
         ))
 
