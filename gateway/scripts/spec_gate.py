@@ -85,10 +85,18 @@ def tables(md: Path):
             i += 1
 
 
+def spec_pages() -> list[Path]:
+    """Every authored spec page. specs/evidence/ is GENERATED (evidence_render.py writes one
+    `## <RULE>` page per rule there, gitignored), so reading it would make a second run of the
+    gate see every heading twice and fail on a dirty tree that a fresh checkout passes."""
+    generated = SPECS / "evidence"
+    return [md for md in sorted(SPECS.rglob("*.md")) if generated not in md.parents]
+
+
 def wip_ids() -> set[str]:
     """Requirement ids whose index row (specs/README.md) or own heading line carries a WIP/gap mark."""
     out: set[str] = set()
-    for md in SPECS.rglob("*.md"):
+    for md in spec_pages():
         for line in md.read_text(encoding="utf-8").splitlines():
             if any(m in line for m in WIP_MARKS):
                 if RULE_RE.match(line) or line.lstrip().startswith("|"):
@@ -107,7 +115,7 @@ def main() -> int:
 
     # 1. page ⇄ schema coupling
     all_headings: dict[str, Path] = {}
-    for md in sorted(SPECS.rglob("*.md")):
+    for md in spec_pages():
         for h in headings(md):
             if h in all_headings:
                 red.append(f"{h}: heading in both {all_headings[h].relative_to(ISLAND)} and {md.relative_to(ISLAND)} (one ID namespace)")
@@ -169,7 +177,7 @@ def main() -> int:
         warn.append(f"{WORLD_POLICY.relative_to(ISLAND)} absent — the test policy is unchecked against the specs world")
 
     # 4. report-only table-shape signals
-    for md in sorted(SPECS.rglob("*.md")):
+    for md in spec_pages():
         for line_no, header, rows in tables(md):
             where = f"{md.relative_to(ISLAND)}:{line_no}"
             if len(header) > 6:
