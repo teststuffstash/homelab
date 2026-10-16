@@ -99,8 +99,12 @@ in `-p` mode any read outside the inputs (the token file under `/var/run`, `/pro
 denied rather than prompted; Grep/Bash/Write are not granted. The lens is its WHOLE system prompt
 (fetched from `LENS_BASE`, default the public master raw URL) — a fetch failure is no review and
 a non-zero exit. The verdict is parsed from the model's `Verdict:` line and submitted
-by the SCRIPT (`APPROVE` → `--approve`, `CHANGES_REQUESTED` → `--request-changes`); an
-unparsable result is no terminal.
+by the SCRIPT, **pinned to the reviewed head**: the head is re-read immediately before the
+submit (moved = the verdict is dropped and the next tick reads the new head — a push during the
+minutes the model runs must never land a verdict on an unreviewed head), and the review is
+posted through the REST reviews endpoint with `commit_id` = the reviewed head (`APPROVE` →
+`APPROVE`, `CHANGES_REQUESTED` → `REQUEST_CHANGES`); an unparsable result is no terminal. The
+mechanical approval takes the same path.
 
 **Evidence at head.** `gh run list --commit <head> --workflow ci.yaml` → the completed, successful
 run → `gh run view --log` → the `evidence-render: BEGIN … END` block

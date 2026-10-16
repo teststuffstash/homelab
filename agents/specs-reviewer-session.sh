@@ -47,8 +47,10 @@
 #              are unreadable (a prompt-injected "quote X" from authored text has nothing to
 #              reach). The lens is the WHOLE system prompt; a fetch failure is no review + exit 1
 #              (a blocking lens never degrades to advisory). The verdict is parsed from the model's
-#              `Verdict:` line and SUBMITTED BY THIS SCRIPT — APPROVE → --approve,
-#              CHANGES_REQUESTED → --request-changes, anything else = no terminal.
+#              `Verdict:` line and SUBMITTED BY THIS SCRIPT, PINNED to the reviewed head (the head
+#              is re-read right before the submit — moved = verdict dropped, next tick — and the
+#              REST review carries `commit_id`): APPROVE → event APPROVE, CHANGES_REQUESTED →
+#              REQUEST_CHANGES, anything else = no terminal.
 #   exit contract — every PR this tick posted on is re-read: a live own verdict at the content
 #              commit must exist, else exit 10 (a silent green would mask a dead review plane).
 #   metrics  — pushgateway job/specs-review: specs_review_last_tick_timestamp_seconds (the
@@ -158,6 +160,22 @@ self_test() {
   check "env builder: throwaway HOME" "HOME=$d/home" "$(grep -E '^HOME=' <<< "$envout")"
   printf '%s' '{"env":{"EVIL=x; rm -rf":"y"}}' > "$d/bad.json"
   check "env builder: shell-hostile key is a refusal" 1 "$(llm_env_args "$d/bad.json" "$d/home2" >/dev/null 2>&1 && echo 0 || echo 1)"
+  # the pinned-verdict contract (PR#2613 round 2): review_submit re-reads the head right before
+  # submitting and DROPS the verdict (rc 3, no API call) when it moved; when it did not, the POST
+  # carries commit_id = the reviewed head. Seams injected: current_head (the re-read) and gh (the
+  # write), both recorded — the expectation is the contract, not a paste of the function.
+  : > "$d/gh.calls"
+  gh() { printf '%s\n' "$*" >> "$d/gh.calls"; }
+  current_head() { printf 'bbbb2222'; }
+  printf 'body\n' > "$d/body.md"
+  local rs=0; review_submit homelab 7 approve "$d/body.md" aaaa1111 >/dev/null 2>&1 || rs=$?
+  check "pinned verdict: head moved → rc 3" 3 "$rs"
+  check "pinned verdict: head moved → no API write" 0 "$(grep -c . "$d/gh.calls")"
+  current_head() { printf 'aaaa1111'; }
+  rs=0; review_submit homelab 7 request-changes "$d/body.md" aaaa1111 >/dev/null 2>&1 || rs=$?
+  check "pinned verdict: head unchanged → rc 0" 0 "$rs"
+  check "pinned verdict: POST carries commit_id=reviewed head + REQUEST_CHANGES" 1 "$(grep -c 'repos/teststuffstash/homelab/pulls/7/reviews.*commit_id=aaaa1111.*event=REQUEST_CHANGES' "$d/gh.calls")"
+  unset -f gh current_head
   rm -rf "$d"
   [ "$fails" -eq 0 ] && { echo "self-test: ok"; return 0; }
   echo "self-test: $fails FAILED"; return 1
@@ -194,6 +212,28 @@ llm_env_args() {
     valid_env_key "$k" || { log "refusing env key '${k}' from the gateway" >&2; return 1; }
     printf '%s=%s\n' "$k" "$v"
   done < <(jq -r '.env | to_entries[] | .key, .value' "$resp")
+}
+
+# current_head <repo> <pr> → the PR's headRefOid now (a seam: --self-test overrides it)
+current_head() { gh pr view "$2" --repo "${ORG}/$1" --json headRefOid -q .headRefOid; }
+# review_submit <repo> <pr> <approve|request-changes> <body-file> <reviewed-head>
+#   → 0 submitted · 3 head moved (no verdict; the next tick reads the new head) · 1 submit failed
+# The verdict is PINNED to the head that was reviewed (bot review, PR#2613 round 2): the LLM
+# path holds its head for minutes (gateway + model), and a plain `gh pr review` attaches to
+# whatever head exists at submit time — a push in that window would make an UNREVIEWED head read
+# as `own-at-head` next tick (dismiss_stale_reviews_on_push only dismisses reviews submitted
+# BEFORE the push). Two belts: re-read the head immediately before submitting and drop the
+# verdict if it moved; and submit through the REST reviews endpoint with `commit_id` = the
+# reviewed head, so a race lost between the re-read and the POST still lands on the OLD commit,
+# where the push has already made it stale.
+review_submit() {
+  local repo="$1" num="$2" kind="$3" bodyfile="$4" reviewed="$5" now event
+  now="$(current_head "$repo" "$num")" || { log "[$repo#$num] head re-read FAILED before submit — no verdict"; return 1; }
+  if [ "$now" != "$reviewed" ]; then
+    log "[$repo#$num] head moved before submit (${reviewed:0:8} → ${now:0:8}) — verdict dropped, the next tick reviews the new head"; return 3
+  fi
+  case "$kind" in approve) event=APPROVE;; request-changes) event=REQUEST_CHANGES;; *) log "review_submit: bad kind '$kind'"; return 1;; esac
+  gh api -X POST "repos/${ORG}/${repo}/pulls/${num}/reviews" -f "commit_id=${reviewed}" -f "event=${event}" -F "body=@${bodyfile}" >/dev/null
 }
 
 if [ "${1:-}" = "--self-test" ]; then self_test; exit $?; fi
@@ -241,11 +281,6 @@ trap cleanup EXIT
 POSTED=""          # "repo#N repo#M …" — the exit contract re-reads these
 LLM_CANDIDATES=""  # "createdAt repo N base headSha" lines, oldest first after sort
 
-# review_submit <repo> <pr> <approve|request-changes> <body-file> → 0 on submit
-review_submit() {
-  gh pr review "$2" --repo "${ORG}/$1" "--$3" --body-file "$4"
-}
-
 # ── the per-PR walk ─────────────────────────────────────────────────────────────────────────────
 for repo in $SPECS_REVIEW_REPOS; do
   if ! prs="$(gh pr list --repo "${ORG}/${repo}" --state open --limit "$PR_LIST_LIMIT" \
@@ -287,11 +322,12 @@ for repo in $SPECS_REVIEW_REPOS; do
     fi
     if ! grep -qE "$SPECS_PATH_RE" <<< "$files"; then
       printf '## Specs review\nVerdict: APPROVE — mechanical: no `**/specs/**` path in this diff — nothing for the specs gate to read; approved mechanically (ADR-155, the repo-wide count). Head %s.\n' "${head:0:12}" > "$WORK/mech-$num.md"
-      if review_submit "$repo" "$num" approve "$WORK/mech-$num.md"; then
-        log "[$repo#$num] MECHANICAL approve at ${head:0:8} (no specs path)"; N_MECH=$((N_MECH+1)); POSTED="$POSTED $repo#$num"
-      else
-        log "[$repo#$num] mechanical approve FAILED"; N_ERR=$((N_ERR+1))
-      fi
+      rs=0; review_submit "$repo" "$num" approve "$WORK/mech-$num.md" "$head" || rs=$?
+      case "$rs" in
+        0) log "[$repo#$num] MECHANICAL approve at ${head:0:8} (no specs path)"; N_MECH=$((N_MECH+1)); POSTED="$POSTED $repo#$num";;
+        3) ;;   # head moved — logged by review_submit; a push may have added a specs path, the next tick re-classifies
+        *) log "[$repo#$num] mechanical approve FAILED"; N_ERR=$((N_ERR+1));;
+      esac
       continue
     fi
     LLM_CANDIDATES="${LLM_CANDIDATES}${created} ${repo} ${num} ${base} ${head}"$'\n'
@@ -334,7 +370,7 @@ else
     gh pr view "$num" --repo "$slug" --json title,body,url -q '"# " + .title + "\n\n" + .url + "\n\n" + (.body // "")' > "$inputs/pr-body.md" \
       || { log "[$repo#$num] PR body read FAILED — no review"; return 1; }
     [ -s "$inputs/pr-body.md" ] || { log "[$repo#$num] PR body read came back EMPTY — no review"; return 1; }
-    local specdirs; specdirs="$(git -C "$WORK/repo" ls-tree -r --name-only "pr-${num}" | grep -E "$SPECS_PATH_RE" | sed -E 's#^((.*/)?specs)/.*#\1#' | sort -u || true)"
+    local specdirs; specdirs="$(git -C "$WORK/repo" ls-tree -r --name-only "pr-${num}" | grep -E "$SPECS_PATH_RE" | awk -F/ '{ for (i = 1; i <= NF; i++) if ($i == "specs") { out = $1; for (j = 2; j <= i; j++) out = out "/" $j; print out; break } }' | sort -u || true)"
     if [ -n "$specdirs" ]; then
       # shellcheck disable=SC2086 — the dir list is word-split on purpose
       git -C "$WORK/repo" archive --format=tar "pr-${num}" -- $specdirs | tar -x -C "$inputs/tree" \
@@ -370,7 +406,9 @@ else
     #    • `env -i`: the process env is EXACTLY the gateway's dispatch env (GW-SESSIONS-ENV,
     #      verbatim, keys validated) + OTEL + a throwaway HOME — never GH_TOKEN / GH_TOKEN_FILE,
     #      never the pod's env (llm_env_args; pinned by --self-test);
-    #    • an ALLOW-LIST tool scope: `Read(//<inputs>/**)` + Glob, permission-mode default — in
+    #    • an ALLOW-LIST tool scope: `Read(//<inputs>/**)` (`//` = filesystem root in Claude
+    #      Code's rule grammar, so the leading `/` of the absolute path is stripped) + Glob,
+    #      permission-mode default — in
     #      `-p` mode a tool call outside the allow-list is denied, not prompted, so the token file
     #      under /var/run, /proc/*/environ and $HOME are unreadable; Grep/Bash/Write are not
     #      granted at all (Grep's rule grammar is not path-scoped, and the inputs are small).
@@ -380,7 +418,7 @@ else
     local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
     local rc=0
     (cd "$inputs" && env -i "${envargs[@]}" claude -p "$prompt" --model "$model" --append-system-prompt-file "$lens" \
-        --allowedTools "Read(//${inputs}/**)" "Glob" --permission-mode default --output-format json > "$WORK/result.json") || rc=$?
+        --allowedTools "Read(//${inputs#/}/**)" "Glob" --permission-mode default --output-format json > "$WORK/result.json") || rc=$?
     if [ "$rc" -ne 0 ] || ! jq -e . "$WORK/result.json" >/dev/null 2>&1; then
       log "[$repo#$num] claude exited ${rc} / no JSON result — no verdict"; return 1
     fi
@@ -390,12 +428,20 @@ else
     review="$(awk '/^## Specs review/{f=1} f' <<< "$review")"
     local verdict; verdict="$(parse_verdict "$review")"
     printf '%s\n\n<!-- specs-review head=%s session=%s -->\n' "$review" "${head:0:12}" "$SESSION_ID" > "$WORK/review-$num.md"
+    local kind
     case "$verdict" in
-      APPROVE)           review_submit "$repo" "$num" approve "$WORK/review-$num.md" && { log "[$repo#$num] APPROVE submitted"; N_APPROVE=$((N_APPROVE+1)); };;
-      CHANGES_REQUESTED) review_submit "$repo" "$num" request-changes "$WORK/review-$num.md" && { log "[$repo#$num] CHANGES_REQUESTED submitted"; N_RC=$((N_RC+1)); };;
+      APPROVE)           kind=approve;;
+      CHANGES_REQUESTED) kind=request-changes;;
       *) log "[$repo#$num] no parsable Verdict: line in the model's result — no terminal (first 400 chars: $(head -c 400 <<< "$review" | tr '\n' ' '))"; return 1;;
     esac
-    POSTED="$POSTED $repo#$num"
+    local rs=0; review_submit "$repo" "$num" "$kind" "$WORK/review-$num.md" "$head" || rs=$?
+    case "$rs" in
+      0) log "[$repo#$num] ${verdict} submitted, pinned to ${head:0:8}"
+         if [ "$kind" = approve ]; then N_APPROVE=$((N_APPROVE+1)); else N_RC=$((N_RC+1)); fi
+         POSTED="$POSTED $repo#$num";;
+      3) return 0;;   # head moved — no verdict on this head; the next tick reads the new one
+      *) log "[$repo#$num] review submit FAILED"; return 1;;
+    esac
   }
   # evidence_at_head <slug> <head> → markdown on stdout (never fails the pass; absence is a statement)
   evidence_at_head() {
