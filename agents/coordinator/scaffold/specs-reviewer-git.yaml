@@ -1,0 +1,96 @@
+# Specs-reviewer git token (ADR-155): mints the `specs-reviewer-git` Secret the specs-review
+# CronWorkflow (specs-review-argo.yaml) reads as GH_TOKEN — the SECOND review identity,
+# homelab-specs-reviewer[bot] (docs/github-apps.yaml; brief agents/lenses/specs.md; design
+# docs/agents/specs-reviewer.md). Split from reviewer-git ON PURPOSE: GitHub counts approvals per
+# identity, and the island repo's master ruleset requires 2 — the code verdict (homelab-reviewer)
+# and the specs verdict can never collapse into one. Same ESO chain shape as sentinel-git.yaml.
+#
+# ⚠️ SCAFFOLD — prereqs (one-time, the operator; FU-270): the homelab-specs-reviewer App is created +
+# installed on homelab (scripts/github-app-bootstrap.sh homelab-specs-reviewer manifest|catch) and
+# its private key is in Infisical as SPECS_REVIEWER_GH_APP_PRIVATE_KEY. Then, in ONE commit:
+#   1. replace the two placeholders below with the ids `github-app-bootstrap.sh
+#      homelab-specs-reviewer secrets` prints, AND the matching app_id/install_id lines in
+#      docs/github-apps.yaml (the ⊆-lint keys the mint site to the declaration by app_id);
+#   2. `git mv agents/coordinator/scaffold/specs-reviewer-git.yaml agents/coordinator/` and add
+#      `- specs-reviewer-git.yaml` to agents/coordinator/kustomization.yaml — the sibling *-git.yaml
+#      chains are ArgoCD-managed through it (their "kubectl apply" banners predate FU-152), and
+#      manifest-lint requires every agents/coordinator/*.yaml to be listed (homelab#694). It is
+#      PARKED in scaffold/ (which no coordinator glob reads) rather than listed with placeholders on
+#      purpose: a GithubAccessToken with a non-numeric appID would sit SecretSyncedError →
+#      ArgoCDAppDegraded on agent-coordinator for as long as the App does not exist. Until the ids
+#      exist, this file is documentation of the chain, kept as real YAML.
+# ⚠ The placeholders are INVISIBLE to `devbox run github-apps-lint`: its APPID_RE parses numeric
+# ids only, so the ⊆-check (requested ⊆ declared) starts holding only once step 1 lands — keep the
+# permissions below a subset of docs/github-apps.yaml's declaration by hand until then (they are,
+# 2026-10-16: contents write, pull_requests write, issues read, checks read, actions read).
+# ⚠ CUTOVER ORDER: specs-review-argo.yaml mounts this Secret `optional:true`. Absent Secret =
+# SHADOW mode (agents/specs-reviewer-session.sh logs "specs-reviewer-git absent — shadow, no
+# verdicts" and exits 0 — it never reviews under another identity); the Secret appearing IS the
+# cutover, no manifest edit on the workflow side. While shadow, homelab PRs park on the second
+# required approval and the operator merges by admin override (ADR-155 landed first, by design).
+---
+# 1) App private key: Infisical → a k8s Secret in this namespace the generator reads.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: specs-reviewer-github-app
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: specs-reviewer-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: SPECS_REVIEWER_GH_APP_PRIVATE_KEY }
+---
+# 2) The generator: mint an installation token with ONLY the specs verdict's needs. contents:WRITE
+# is required for the approval to COUNT toward the required-approval ruleset — GitHub only counts
+# reviews from a reviewer with repo write access (contents:read ⇒ authorAssociation NONE, ignored;
+# the homelab-reviewer lesson, 2026-07-02). The identity still never pushes and never merges.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: specs-reviewer-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "FILL-AFTER-CREATE"      # homelab-specs-reviewer App — `github-app-bootstrap.sh homelab-specs-reviewer secrets`
+  installID: "FILL-AFTER-INSTALL" # the teststuffstash installation of homelab-specs-reviewer
+  auth:
+    privateKey:
+      secretRef: { name: specs-reviewer-github-app, key: privateKey }
+  permissions:
+    contents: write          #   clone the PR to diff **/specs/** against the merge-base + make the approval count
+    pull_requests: write     #   submit the specs verdict (approve / request-changes) + read the PR body's Spec changes:
+    issues: read             #   the closing issue's ## Acceptance rows — the lens's check-1 intent source (reads only)
+    checks: read             #   CI green at head is the dispatch premise (statusCheckRollup)
+    actions: read            #   `gh run view --log` on the head's ci run — the evidence-render block is the evidence input
+  repositories:              #   the island repos — SPECS_REVIEW_REPOS in agents/specs-reviewer-session.sh
+    - homelab                #   (an island adopting the lens adds itself here AND installs the App there)
+---
+# 3) Drive the generator → the Secret the CronWorkflow reads (key `token` → GH_TOKEN).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: specs-reviewer-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m
+  target:
+    name: specs-reviewer-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: specs-reviewer-git-gen

@@ -120,12 +120,25 @@ def pytest_sessionfinish(session, exitstatus):
         bucket[r["outcome"] if r["outcome"] in ("passed", "failed", "skipped") else "failed"] += 1
     doc = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "git_sha": os.environ.get("GITHUB_SHA") or _git_sha(),
+        "git_sha": _pr_head_sha() or os.environ.get("GITHUB_SHA") or _git_sha(),
         "policy_sha256": _sha256(POLICY_FIXTURE),
         "exitstatus": int(exitstatus),
         "rules": rules,
     }
     (EVIDENCE_DIR / "evidence.json").write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _pr_head_sha() -> str | None:
+    """On a `pull_request` run GITHUB_SHA is the test-MERGE commit, which no PR ever shows as its
+    head — so a stamp built from it can never name the head a reviewer is looking at. The event
+    payload carries the real head; prefer it (push runs have no pull_request key → None)."""
+    path = os.environ.get("GITHUB_EVENT_PATH")
+    if not path:
+        return None
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))["pull_request"]["head"]["sha"] or None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def _git_sha() -> str | None:

@@ -109,6 +109,9 @@ MAP=(
   "runner-maint-self-test:^(scripts/runner-maintenance|mgmt/scripts/mgmt-tf\.sh$|tofu/ci-runner\.tf$|machines/machines\.yaml$)"
   # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
   "pr-wait-test:^scripts/pr-wait"
+  # bash -n + the jq predicates of the specs reviewer's tick on fixtures (ADR-155); its only input
+  # is the script. Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
+  "specs-review-self-test:^agents/specs-reviewer-session\.sh$"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   "follow-ups-lint:^docs/"
   # docs-graph-lint's INPUTS are wider than .md: checks #4/#4b read §-code refs out of

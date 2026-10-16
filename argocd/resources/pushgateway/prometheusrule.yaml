@@ -344,6 +344,24 @@ spec:
           annotations:
             summary: "iac-sentinel heartbeat silent >30m — the required -iac merge gate is not evaluating"
             description: "SYMPTOM ONLY — no iac_sentinel_last_run_timestamp_seconds push for >30m (the sentinel CronWorkflow ticks every few minutes; scripts/iac-sentinel.sh pushes the heartbeat on every tick, zero-PR ticks included, FU-176). While silent, open -iac PRs wait on a required `iac-sentinel` commit status nobody posts — merges stall rather than bypass (fail-closed). Look at the `iac-sentinel` CronWorkflow runs in ns agent-coordinator (argo.teststuff.net or `kubectl -n agent-coordinator get workflows`), then the newest run's logs; a wedged/suspended cron, an image pull failure, or a pushgateway outage are the observed-plausible causes to check in that order."
+        # ADR-155: the specs-review plane's heartbeat (agents/specs-reviewer-session.sh pushes
+        # specs_review_last_tick_timestamp_seconds on EVERY tick, shadow and zero-PR ticks included;
+        # the CronWorkflow in agents/coordinator/specs-review-argo.yaml ticks */5). Same shape and
+        # same reasoning as IacSentinelSilent above: while silent, every homelab PR parks on its
+        # SECOND required approval (tofu/github `required_approvals = 2`) — merges stall rather than
+        # bypass, so the symptom is a quiet board, not a bad merge. platform_machinery for the
+        # homelab#239 reason (a pushgateway metric: no namespace, no Agent* name).
+        - alert: SpecsReviewTickStale
+          expr: absent(specs_review_last_tick_timestamp_seconds) or (time() - max(specs_review_last_tick_timestamp_seconds) > 1800)
+          for: 15m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # triage: the specs-review CronWorkflow runs are readable in Argo; the second approval gate is stalled
+            triage: dig
+          annotations:
+            summary: "specs-review heartbeat silent >30m — the second required approval on homelab is not being evaluated"
+            description: "SYMPTOM ONLY — no specs_review_last_tick_timestamp_seconds push for >30m (the specs-review CronWorkflow ticks every 5 minutes; agents/specs-reviewer-session.sh pushes the heartbeat on every tick, shadow ticks included). While silent, open homelab PRs wait on homelab-specs-reviewer's approval (ADR-155's second required review) that nobody posts — merges stall, never bypass. Look at the `specs-review` CronWorkflow runs in ns agent-coordinator (argo.teststuff.net or `kubectl -n agent-coordinator get workflows`), then the newest run's logs; a wedged/suspended cron, an image pull failure, the agent-gateway down, or a pushgateway outage are the plausible causes to check in that order."
         # platform_machinery for the homelab#239 reason.
         # ADR-125: counted PER LANE. `agent_dispatch_cron_woken_timestamp` carries the lane base in
         # its pushgateway grouping key since the per-lane walk shipped, so a project's dispatches
