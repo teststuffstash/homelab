@@ -16,6 +16,27 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
+# 0. Currency guard (2026-10-16): the root applies from THIS checkout, and on the host that is the
+#    shared ~/Projects/homelab tree, which nothing keeps current. A PR merged on origin but not pulled
+#    here reads as "0 changed" — the circles reviewer-secret apply (#2639) did exactly that. So
+#    plan/apply/destroy REFUSE while origin/master carries tofu/github commits HEAD lacks.
+#    GITHUB_TF_ALLOW_STALE=1 overrides (applying a deliberate local state); a failed fetch only warns.
+case "${1:-}" in
+  plan|apply|destroy)
+    if git -C "$ROOT" fetch -q origin master 2>/dev/null; then
+      _missing=$(git -C "$ROOT" rev-list --count HEAD..FETCH_HEAD -- tofu/github)
+      if [ "$_missing" -gt 0 ] && [ "${GITHUB_TF_ALLOW_STALE:-}" != 1 ]; then
+        echo "github-tf: REFUSED — this checkout lacks $_missing origin/master commit(s) touching tofu/github:" >&2
+        git -C "$ROOT" log --oneline HEAD..FETCH_HEAD -- tofu/github >&2
+        echo "github-tf: pull first (git -C $ROOT pull --rebase), or GITHUB_TF_ALLOW_STALE=1 to run on this tree anyway." >&2
+        exit 1
+      fi
+    else
+      echo "github-tf: WARN — could not fetch origin/master; currency of tofu/github unchecked." >&2
+    fi
+    ;;
+esac
+
 # FU-001: the reviewer cred dir is a wallet-materialized cache — regenerate missing files first
 # (best-effort; merge/deploy/renovate stay host-side flat files, outside the jail wallet's scope).
 bash "$ROOT/scripts/wallet-files.sh" >/dev/null 2>&1 || true
