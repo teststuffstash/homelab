@@ -165,8 +165,12 @@ six OVERSIZE items pointer-ized into
       VM 9110; a weekly from-nothing rebuild drill on the box (`mgmt-opnsense-drill.timer`) scores prod's click-ops
       residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score has the drill record). The pair is
       COMPLETE (2026-10-09, both windows + WAN leg; history: [`router-move.md`](router-move.md) §Status). Drill GREEN
-      since 2026-10-11 (score 56). **Next:** code or accept the 56 click-ops rows the pair left in prod (`OPNsense/Kea`
-      36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493 note). Relates FU-013, FU-298, FU-307.
+      since 2026-10-11 (score 56). **⚠ 2026-10-17: certs issued on the MASTER never reach the BACKUP** — pve's 17
+      certs are seed copies (identical `statusLastUpdate`s), ACME on pve 400s (no WAN leg as BACKUP; `*.homelab`
+      issued on nx02 only, #2612), no XMLRPC sync by design → a failover serves the default cert; earliest copy
+      (registry, 2026-09-02) hits its renewal mark ~2026-11-01. **Next:** a cert-carry step in the pair's play
+      (export from MASTER → import on BACKUP, frontends re-bound) BEFORE that date; then the 56 click-ops rows
+      (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298, FU-307.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80
@@ -808,10 +812,15 @@ the block needs pruning, not more headings.
       (`.github/workflows/gateway-image.yaml`, pinned-image deploy = FU-044 class), `POST /sessions` +
       per-session model, three rails canaried. The OLD proxy stays untouched (operator, 2026-10-15); no
       launcher calls `/sessions` yet; the ADR-096 ladder / FU-088 latches / `/route` are `⚑ gap` rows.
-      Unblocked from FU-127/FU-269 (nothing left the repo). **Next:** (1) `agent-session.sh` → `/sessions`
-      for ONE role on the platform stack (env names differ today: goose = GOOSE_PROVIDER/OPENROUTER_HOST,
-      opencode = OPENCODE_CONFIG file — `GW-SESSIONS-ENV` ⚖ rows); (2) wire the specs lens
-      (`docs/agents/specs-reviewer.md` §wiring — identity question open); (3) the ladder as GW rows.
+      Unblocked from FU-127/FU-269 (nothing left the repo). **2026-10-16 (ADR-155):** the specs reviewer
+      is the FIRST `/sessions` consumer — own App `homelab-specs-reviewer` (declared, ids pending the
+      operator's Create+Install), own CronWorkflow, homelab master = 2 approvals (tofu, applies outside
+      the jail); specs site `gateway-specs.homelab.teststuff.net` (oracle shape) in flight. **Next:**
+      (1) operator: create+install the App, `github-app-bootstrap.sh homelab-specs-reviewer secrets`,
+      `tofu -chdir=tofu/github apply`; seat: fill ids, apply `specs-reviewer-git.yaml`, canary one specs
+      PR through the gate; (2) `agent-session.sh` → `/sessions` for a worker role (env names differ:
+      goose = GOOSE_PROVIDER/OPENROUTER_HOST, opencode = OPENCODE_CONFIG — `GW-SESSIONS-ENV` ⚖ rows);
+      (3) the ladder as GW rows.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
