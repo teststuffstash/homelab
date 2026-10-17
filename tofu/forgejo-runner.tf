@@ -177,7 +177,7 @@ resource "kubernetes_deployment" "forgejo_runner" {
           # pin — it sat at 6.3.1 while Forgejo moved to v15 and upstream to v13 (2026-10-16: a
           # job whose every step succeeded was reaped as a zombie 10 min later — the final status
           # never stuck). As a literal it rides the Deployment-image lane (renovate-global.json).
-          image = "code.forgejo.org/forgejo/runner:6.3.1"
+          image = "code.forgejo.org/forgejo/runner:13.2.0"
           env {
             name  = "DOCKER_HOST"
             value = "tcp://localhost:2375"
