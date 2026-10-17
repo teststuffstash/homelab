@@ -191,7 +191,7 @@ cooldowns, provider pins, the `:exacto` suffix — is a gap, rendered below.
 | "the dispatch answer names the policy id for (rail, tier)" | `policy-default` || `model` = `rails.<rail>.models.<tier>` for every role |
 | "no model id from the policy appears in src/" | `policy-default` || grep finds none |
 | "the anthropic body is forwarded byte-untouched" | `policy-default` || upstream body == inbound body |
-| "the deployed policy loads under the island's loader, in model-classes.json's spelling" | `argocd/resources/agent-gateway/policy.json` (skipped when absent) || loads; same rails and roles as `policy-default`; every model and side-model id is a `models.*.ids` value of `model-classes.json`; opencode `max_sessions` = its `rails.opencode-go.concurrency` |
+| "the deployed policy loads under the island's loader, every id known ⚖" | `argocd/resources/agent-gateway/policy.json` (skipped when absent) || loads; same rails and roles as `policy-default`; every non-opencode model and side-model id is a `models.*.ids` value of `model-classes.json`; every opencode id is `opencode-go/<id>` of an id in the gateway-owned Go catalog snapshot `tests/fixtures/go-catalog.json` (operator, 2026-10-17: `model-classes.json` is the old proxy's table and carries no Go `deepseek-v4.1-flash` id; the Go-catalog leg, `docs/spikes/opencode-go-catalog.md`, replaces the snapshot); opencode `max_sessions` = its `rails.opencode-go.concurrency` |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
