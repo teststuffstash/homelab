@@ -152,7 +152,8 @@ def test_deployed_policy_loads(policy):
         assert all(set(r.models) == {"light", "standard", "heavy"} for r in deployed.rails.values())
     go = {f"opencode-go/{i}" for i in json.loads(GO_CATALOG.read_text(encoding="utf-8"))["ids"]}
     go_ids = {m for m in (*deployed.rails["opencode"].models.values(), *deployed.rails["opencode"].side_models)}
-    with then("every opencode deployed model id is opencode-go/<id> of the Go catalog snapshot ⚖", unknown={"expected": [], "actual": sorted(go_ids - go)}):
+    with then("every opencode deployed model id is opencode-go/<id> of the Go catalog snapshot ⚖",
+              checked=sorted(go_ids), unknown={"expected": [], "actual": sorted(go_ids - go)}):
         assert go_ids <= go, sorted(go_ids - go)
     if MODEL_CLASSES.exists():
         mc = json.loads(MODEL_CLASSES.read_text(encoding="utf-8"))
