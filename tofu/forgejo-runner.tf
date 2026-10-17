@@ -25,7 +25,6 @@ variable "forgejo_runner_token" {
 }
 
 locals {
-  forgejo_runner_image = "code.forgejo.org/forgejo/runner:6.3.1"
   # Runner labels = what `runs-on:` matches. `docker` runs the job in a container via DinD;
   # `native` runs it directly in the runner image.
   forgejo_runner_labels = "docker:docker://node:22-bookworm,native:host"
@@ -172,8 +171,13 @@ resource "kubernetes_deployment" "forgejo_runner" {
 
         # --- act_runner: register-if-needed, then run the daemon. ---
         container {
-          name  = "runner"
-          image = local.forgejo_runner_image
+          name = "runner"
+          # A LITERAL on purpose: Renovate's terraform manager reads only `image = "<ref>"` on a
+          # kubernetes_deployment, so the old `local.forgejo_runner_image` indirection hid this
+          # pin — it sat at 6.3.1 while Forgejo moved to v15 and upstream to v13 (2026-10-16: a
+          # job whose every step succeeded was reaped as a zombie 10 min later — the final status
+          # never stuck). As a literal it rides the Deployment-image lane (renovate-global.json).
+          image = "code.forgejo.org/forgejo/runner:6.3.1"
           env {
             name  = "DOCKER_HOST"
             value = "tcp://localhost:2375"
