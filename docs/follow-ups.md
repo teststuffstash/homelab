@@ -812,9 +812,10 @@ the block needs pruning, not more headings.
       dispatch carries no credential: the pod PULLS its env once (GW-SESSIONS-PULL, projected-SA TokenReview);
       canary 2026-10-17 clean (0 `gws_` in spec/logs, no Secret, 403 other pod / 409 re-pull). Policy is a
       configMapGenerator (#2664). Rulings 10-17: Go heavy → deepseek-v4-flash (experiment); ⚖ rows on
-      #2645/#2646 wait on the Codex spike (#2662). Open ⚑ rows: the bind is the caller's word (control plane
-      unauthenticated); codex `auth.command` re-runs vs at-most-once. **Next:** flip the knob for the platform
-      loop (one line, operator's go), then authenticate `POST /sessions`.
+      #2645/#2646 wait on the Codex spike (#2662). Control plane authenticated + ENFORCED (#2683/#2687/#2688;
+      `observe` = rollback knob; gaps #2684/#2685). Open ⚑: codex `auth.command` re-runs vs at-most-once.
+      **Next:** operator ruling on failure ownership (strikes/outcomes, free-model run 2026-10-17); the loop
+      flip needs the `gateway-token` volume on the coordinator pod first.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
