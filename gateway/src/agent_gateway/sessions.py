@@ -38,10 +38,12 @@ from .config import (
 )
 from .control import ControlPlaneAuth, authorize_outcome
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
+from .liveness import PodSource
 from .metrics import Metrics
 from .outcomes import OutcomeRefused, Outcomes, parse_outcome, public_outcome
 from .pull import (
     POD_NAME_EXTRA,
+    POD_UID_EXTRA,
     PULL_AUDIENCE,
     ReviewTransient,
     StaticTokenReviews,
@@ -119,6 +121,8 @@ class Admission:
     rail_override: str | None
     bind: Bind | None = None
     caller: str | None = None  # GW-SESSIONS-AUTH: the reviewed caller identity, stored on the row
+    caller_pod: str | None = None  # GW-SESSIONS-LIVENESS: the caller's pod (a pod-bound caller token)
+    caller_pod_uid: str | None = None
     attempt: int = 1  # GW-SESSIONS-ADMIT: the consumer's automatic re-admission counter at this round
 
 
@@ -229,6 +233,7 @@ class SessionService:
         self.self_url = self_url
         self.clock = clock
         self.reviewer: TokenReviewer = reviewer or StaticTokenReviews()  # app.py hands the kube one in
+        self.pods: PodSource | None = None  # GW-SESSIONS-LIVENESS: app.py hands the kube one in
         self.auth = ControlPlaneAuth(policy, self, metrics)  # reviews through self.reviewer (one TokenReview path)
         self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
         self.outcomes = Outcomes(store, metrics, policy.outcome_window_s, clock)  # GW-SESSIONS-OUTCOME
@@ -263,7 +268,7 @@ class SessionService:
         # refused — and this one admitted. Never two live sessions for one attempt.
         for dup in self.store.active_duplicates(adm.stack.name, adm.task, adm.round, adm.attempt, adm.caller,
                                                 adm.bind.pod if adm.bind else None, self.clock()):
-            self.store.release(dup, self.clock())
+            self.store.release(dup, self.clock(), reason="superseded")
             log.warning("session: superseded id=%s — the same caller re-admitted %s/%s round %d attempt %d",
                         dup, adm.stack.name, adm.task, adm.round, adm.attempt)
         struck_models, struck_cells = self._struck(adm)
@@ -410,6 +415,8 @@ class SessionService:
             })
         token = new_token()
         row = self.store.create_session(**common, token_hash=token_hash(token))
+        if adm.caller_pod and adm.caller:  # an unbound session lives in its caller's pod (GW-SESSIONS-LIVENESS)
+            self.store.set_live_pod(row.id, adm.caller.split(":")[2], adm.caller_pod, adm.caller_pod_uid)
         self.metrics.session_decision(rail, adm.role.name, adm.stack.name, "dispatch")
         log.info("session: dispatch id=%s stack=%s role=%s task=%s attempt=%d rail=%s harness=%s model=%s caller=%s",
                  sid, adm.stack.name, adm.role.name, adm.task, adm.attempt, rail, adm.harness, model, who)
@@ -458,6 +465,9 @@ class SessionService:
         if not self.store.deliver_env(row.id, token_hash(token), now):
             log.warning("session: env pull id=%s refused — env-already-delivered (a racing pull won)", row.id)
             return error(409, "env-already-delivered", "this session's env was already pulled")
+        pulled = review.extra.get(POD_NAME_EXTRA) or ()
+        if pulled:  # a bound session lives in the pod that pulled its env (GW-SESSIONS-LIVENESS)
+            self.store.set_live_pod(row.id, row.bind_namespace, pulled[0], (review.extra.get(POD_UID_EXTRA) or (None,))[0])
         env = assemble_env(self.self_url, row.harness, token, wire_model(row.rail, row.model))
         log.info("session: env pulled id=%s by %s pod=%s keys=%s", row.id, review.username,
                  ",".join(review.extra.get(POD_NAME_EXTRA, ())) or "?", ",".join(env))
@@ -466,6 +476,25 @@ class SessionService:
     def _refuse_pull(self, row: Session, why: str) -> JSONResponse:
         log.warning("session: env pull id=%s refused — pull-identity-refused: %s", row.id, why)
         return error(403, "pull-identity-refused", why)
+
+    async def reap(self) -> int:
+        """GW-SESSIONS-LIVENESS: release every active session whose pod is gone, terminal, or another
+        pod under the same name (a different uid). Unknown (the API away, no Role) = left to the TTL."""
+        if self.pods is None:
+            return 0
+        now = self.clock()
+        reaped = 0
+        for row in self.store.live_sessions(now):
+            st = await self.pods.pod(row.live_namespace or "", row.live_pod or "")
+            gone = st.state in ("gone", "terminal") or (
+                st.state == "running" and st.uid is not None and row.live_pod_uid is not None and st.uid != row.live_pod_uid)
+            if gone:
+                self.store.release(row.id, now, reason="pod-gone")
+                self.metrics.session_reaped(row.rail)
+                reaped += 1
+                log.warning("session: reaped id=%s rail=%s — pod %s/%s is %s", row.id, row.rail, row.live_namespace,
+                            row.live_pod, st.state if st.state != "running" else "a different pod (uid)")
+        return reaped
 
     def authenticate(self, token: str | None) -> tuple[Session | None, str | None]:
         """Data-plane auth: (session, None) or (None, typed 401 code)."""
@@ -502,7 +531,7 @@ async def post_sessions(request: Request) -> JSONResponse:
     denied = ControlPlaneAuth.authorize_admission(caller, adm.stack.name, adm.role.name, adm.bind.namespace if adm.bind else None)
     if denied is not None:
         return denied
-    return await svc.admit(replace(adm, caller=caller.identity))
+    return await svc.admit(replace(adm, caller=caller.identity, caller_pod=caller.pod, caller_pod_uid=caller.pod_uid))
 
 
 def _bearer(request: Request) -> str | None:
@@ -535,7 +564,7 @@ async def get_session(request: Request) -> JSONResponse:
     svc, row, refused = await _owned_row(request, "lookup")
     if refused is not None:
         return refused
-    return JSONResponse({**row.public(), "outcome": public_outcome(svc.store.latest_outcome(row.id))})
+    return JSONResponse({**row.public(svc.clock()), "outcome": public_outcome(svc.store.latest_outcome(row.id))})
 
 
 async def post_session_outcome(request: Request) -> JSONResponse:
@@ -568,6 +597,6 @@ async def delete_session(request: Request) -> JSONResponse:
     svc, row, refused = await _owned_row(request, "release")
     if refused is not None:
         return refused
-    row = svc.store.release(row.id, svc.clock())
+    row = svc.store.release(row.id, svc.clock(), reason="released")
     log.info("session: released id=%s rail=%s requests=%d caller=%s", row.id, row.rail, row.requests, row.caller or "(unauthenticated)")
     return JSONResponse({"id": row.id, "released_at": iso(row.released_at)})

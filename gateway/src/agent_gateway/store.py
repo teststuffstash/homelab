@@ -41,7 +41,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   env_delivered_at REAL,
   caller TEXT,
   requests_incomplete INTEGER NOT NULL DEFAULT 0,
-  attempt INTEGER NOT NULL DEFAULT 1
+  attempt INTEGER NOT NULL DEFAULT 1,
+  live_namespace TEXT,
+  live_pod TEXT,
+  live_pod_uid TEXT,
+  release_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
 CREATE TABLE IF NOT EXISTS requests (
@@ -96,7 +100,8 @@ _COUNTER = "INTEGER NOT NULL DEFAULT 0"
 _ADDED_COLUMNS = {
     "sessions": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "bind_namespace": "TEXT",
                  "bind_serviceaccount": "TEXT", "bind_pod": "TEXT", "env_delivered_at": "REAL",
-                 "caller": "TEXT", "requests_incomplete": _COUNTER, "attempt": "INTEGER NOT NULL DEFAULT 1"},
+                 "caller": "TEXT", "requests_incomplete": _COUNTER, "attempt": "INTEGER NOT NULL DEFAULT 1",
+                 "live_namespace": "TEXT", "live_pod": "TEXT", "live_pod_uid": "TEXT", "release_reason": "TEXT"},
     "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "incomplete": "TEXT"},
 }
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
@@ -126,7 +131,8 @@ _SESSION_COLS = (
     "id", "token_hash", "stack", "role", "task", "round", "rail", "harness", "model",
     "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out",
     "tokens_cache_read", "tokens_cache_write", "bind_namespace", "bind_serviceaccount", "bind_pod",
-    "env_delivered_at", "caller", "requests_incomplete", "attempt",
+    "env_delivered_at", "caller", "requests_incomplete", "attempt", "live_namespace", "live_pod", "live_pod_uid",
+    "release_reason",
 )
 
 
@@ -159,6 +165,11 @@ class Session:
     # GW-RAIL-*: the 2xx answers whose body stopped before its end (never counted as clean).
     requests_incomplete: int = 0
     attempt: int = 1  # GW-SESSIONS-ADMIT: the consumer's re-admission counter at this round
+    # GW-SESSIONS-LIVENESS: the pod this session lives in (the pulling pod, else the caller's), and why it ended
+    live_namespace: str | None = None
+    live_pod: str | None = None
+    live_pod_uid: str | None = None
+    release_reason: str | None = None  # released (DELETE) | superseded | pod-gone; NULL = not released
 
     @property
     def bound(self) -> bool:
@@ -175,7 +186,7 @@ class Session:
             return "expired"
         return "active"
 
-    def public(self) -> dict:
+    def public(self, now: float | None = None) -> dict:
         """The GET /sessions/{id} row — exactly the schema's fields; never the token, never its hash."""
         return {
             "id": self.id,
@@ -184,6 +195,8 @@ class Session:
             "task": self.task,
             "round": self.round,
             "attempt": self.attempt,
+            "state": self.state(now),
+            "release_reason": self.release_reason if self.released_at is not None else None,
             "rail": self.rail,
             "harness": self.harness,
             "model": self.model,
@@ -253,13 +266,27 @@ class Store:
             row = self._db.execute("SELECT * FROM sessions WHERE token_hash = ?", (token_hash,)).fetchone()
         return Session(**dict(row)) if row else None
 
-    def release(self, session_id: str, now: float | None = None) -> Session | None:
+    def release(self, session_id: str, now: float | None = None, reason: str = "released") -> Session | None:
         now = time.time() if now is None else now
         with self._lock:
             self._db.execute(
-                "UPDATE sessions SET released_at = ? WHERE id = ? AND released_at IS NULL", (now, session_id)
+                "UPDATE sessions SET released_at = ?, release_reason = ? WHERE id = ? AND released_at IS NULL",
+                (now, reason, session_id),
             )
         return self.get_session(session_id)
+
+    def set_live_pod(self, session_id: str, namespace: str | None, pod: str | None, uid: str | None) -> None:
+        with self._lock:
+            self._db.execute("UPDATE sessions SET live_namespace = ?, live_pod = ?, live_pod_uid = ? WHERE id = ?",
+                             (namespace, pod, uid, session_id))
+
+    def live_sessions(self, now: float) -> list[Session]:
+        """ACTIVE sessions with a known pod — the reaper's work list."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM sessions WHERE released_at IS NULL AND expires_at > ? AND live_pod IS NOT NULL", (now,)
+            ).fetchall()
+        return [Session(**dict(r)) for r in rows]
 
     def deliver_env(self, session_id: str, token_hash: str, now: float) -> bool:
         """GW-SESSIONS-PULL's at-most-once write: store the freshly minted token's hash and stamp

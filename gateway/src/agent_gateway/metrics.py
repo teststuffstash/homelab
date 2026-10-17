@@ -69,6 +69,7 @@ class Metrics:
         self.incomplete_total: dict[tuple[str, str, str], int] = {}
         self.strikes_total: dict[tuple[str, str], int] = {}
         self.probe_total: dict[tuple[str, str], int] = {}
+        self.reaped_total: dict[str, int] = {}
         self._gauge_source: Callable[[], dict[str, int]] | None = None
         self._cooled_source: Callable[[], dict[str, int]] | None = None
         self._rejected_source: Callable[[], dict[str, int]] | None = None
@@ -84,6 +85,11 @@ class Metrics:
         key = (_bounded(klass, tuple(OUTCOME_CLASSES)), _bounded(source, STRIKE_SOURCES))
         with self._lock:
             self.strikes_total[key] = self.strikes_total.get(key, 0) + 1
+    def session_reaped(self, rail: str) -> None:
+        r = _bounded(rail, RAILS)
+        with self._lock:
+            self.reaped_total[r] = self.reaped_total.get(r, 0) + 1
+
     def credential_probe(self, rail: str, outcome: str) -> None:
         key = (_bounded(rail, RAILS), _bounded(outcome, PROBE_OUTCOMES))
         with self._lock:
@@ -202,6 +208,9 @@ class Metrics:
                       "# TYPE gateway_strikes_total counter"]
             for (klass, source), n in sorted(self.strikes_total.items()):
                 lines.append(f"gateway_strikes_total{_fmt_labels({'class': klass, 'source': source})} {n}")
+            lines += ["# HELP gateway_sessions_reaped_total Sessions released because their pod was gone (GW-SESSIONS-LIVENESS).",
+                      "# TYPE gateway_sessions_reaped_total counter"]
+            lines += [f"gateway_sessions_reaped_total{_fmt_labels({'rail': rail})} {self.reaped_total.get(rail, 0)}" for rail in RAILS]
             lines += ["# HELP gateway_credential_probes_total Re-verifications of a rejected rail credential, by outcome.",
                       "# TYPE gateway_credential_probes_total counter"]
             for (rail, outcome), n in sorted(self.probe_total.items()):

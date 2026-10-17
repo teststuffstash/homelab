@@ -20,6 +20,7 @@
 | a rejected credential is counted on its rail | upstream-401 on openrouter | gateway_credentials_rejected{rail="openrouter"} | 1 |
 | an incomplete stream is counted by reason | upstream-stream-truncated on opencode (stream: true) | gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal"} | 1 |
 | a strike is counted by class and source | a worker session reports no-verdict | gateway_strikes_total{class="no-verdict",source="outcome"} | 1 |
+| a reaped session is counted on its rail | a bound opencode session whose pod is gone, one reaper pass | gateway_sessions_reaped_total{rail="opencode"} | 1 |
 | a credential re-probe is counted by outcome | opencode 401 (upstream-401-key-expired), +60 s, the re-probe answered upstream-ok | gateway_credential_probes_total{rail="opencode",outcome="cleared"} | 1 |
 | the transport-fact gauges render every rail from 0 | no request yet | gateway_cells_cooled{rail=…} / gateway_credentials_rejected{rail=…} for anthropic, openrouter, opencode, codex | 0 each |
 
@@ -39,7 +40,7 @@
 | class is a strike class, source the writer | strikes_total | class / source | the strike classes / outcome, gateway |
 | reason is why a 2xx body stopped before its end | requests_incomplete_total | reason | no-terminal, timeout, transport-error, client-closed |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 15 families |
+| every family is declared with HELP and TYPE | — | — | 16 families |
 """
 
 from __future__ import annotations
@@ -61,7 +62,7 @@ FAMILIES = (
     "gateway_control_plane_unauthenticated_total", "gateway_upstream_auth_rejected_total",
     "gateway_cells_cooled", "gateway_credentials_rejected", "gateway_requests_incomplete_total",
     "gateway_strikes_total",
-    "gateway_credential_probes_total",
+    "gateway_credential_probes_total", "gateway_sessions_reaped_total",
 )
 
 
@@ -294,6 +295,23 @@ async def test_strike_counted(gw):
     with when("POST /sessions/{id}/outcome {class: no-verdict}"):
         await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "no-verdict"})
     await _then_series(gw, 'gateway_strikes_total{class="no-verdict",source="outcome"}', 1)
+async def test_reaped_counted(gw, app, reviews, pods):
+    """row: a reaped session is counted on its rail"""
+    from agent_gateway.liveness import PodState
+    from agent_gateway.pull import POD_NAME_EXTRA, Review
+    world()
+    with given("a bound opencode worker session pulled by pod fixer-1, which is gone"):
+        with quiet():
+            doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker", "pod": "fixer-1"})
+            reviews.tokens["fake-projected-sa-token-metrics"] = Review(True, "system:serviceaccount:platform-agents:agentstack-worker",
+                                                                       ("agent-gateway",), {POD_NAME_EXTRA: ("fixer-1",)})
+            await gw.post(f"/sessions/{doc['session']['id']}/env", headers={"authorization": "Bearer fake-projected-sa-token-metrics"})
+        pods.pods[("platform-agents", "fixer-1")] = PodState("gone")
+    with when("one reaper pass"):
+        await app.state.sessions.reap()
+    await _then_series(gw, 'gateway_sessions_reaped_total{rail="opencode"}', 1)
+
+
 async def test_credential_probe_counted(gw, app, upstreams, clock):
     """row: a credential re-probe is counted by outcome"""
     world(upstream="upstream-401-key-expired")

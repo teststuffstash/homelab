@@ -5,7 +5,7 @@ schema: metrics.schema.json
 ---
 # GET /metrics — the `gateway_*` families, with bounded labels only
 
-The evidence surface the alert belts read. Fifteen families, Prometheus text format, no auth
+The evidence surface the alert belts read. Sixteen families, Prometheus text format, no auth
 (in-cluster, scraped by the ServiceMonitor). **Every label value is drawn from a bounded set**
 declared in the schema — never a task key, a session id, or a model string outside the
 policy's set — so cardinality is a property of the policy, not of traffic.
@@ -42,6 +42,7 @@ the process is down.
 | `gateway_cells_cooled` | gauge | `rail` | (rail, model) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)); per rail, never per model (`model` is no label); every rail renders from 0 |
 | `gateway_credentials_rejected` | gauge | `rail` | rail credentials an upstream 401/403 rejected, until a 2xx on them or a new value — the alert hook for a dead key; every rail renders from 0 ⚖ |
 | `gateway_strikes_total` | counter | `class`, `source` | strikes written to the store ([GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)): `class` a strike class of the one vocabulary, `source` `outcome` (the consumer) or `gateway` (a transport fact) |
+| `gateway_sessions_reaped_total` | counter | `rail` | sessions released because their pod was gone ([GW-SESSIONS-LIVENESS](sessions.md#gw-sessions-liveness)); every rail renders from 0 |
 | `gateway_credential_probes_total` | counter | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
 | `gateway_requests_incomplete_total` | counter | `rail`, `dialect`, `reason` | 2xx answers whose body stopped before its end — `no-terminal`, `timeout`, `transport-error`, `client-closed` ([GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)) |
 | `gateway_control_plane_unauthenticated_total` | counter | `route`, `reason` | every control-plane call with no valid caller token — admitted under `control_plane_auth: observe`, refused under `enforce`; every (`route`, `reason`) pair renders from 0, so a flat series reads as "no such call" ⚖ |
@@ -66,6 +67,7 @@ the process is down.
 | "a rejected credential is counted on its rail" | upstream-401 on openrouter || `gateway_credentials_rejected{rail="openrouter"}` | 1 |
 | "an incomplete stream is counted by reason" | upstream-stream-truncated on opencode (`stream: true`) || `gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal"}` | 1 |
 | "a strike is counted by class and source" | a worker session reports `no-verdict` || `gateway_strikes_total{class="no-verdict",source="outcome"}` | 1 |
+| "a reaped session is counted on its rail" | a bound opencode session whose pod is gone, one reaper pass || `gateway_sessions_reaped_total{rail="opencode"}` | 1 |
 | "a credential re-probe is counted by outcome" | opencode 401 (`upstream-401-key-expired`), +60 s, the re-probe answered upstream-ok || `gateway_credential_probes_total{rail="opencode",outcome="cleared"}` | 1 |
 | "the transport-fact gauges render every rail from 0" | no request yet || `gateway_cells_cooled{rail=…}` / `gateway_credentials_rejected{rail=…}` for `anthropic`, `openrouter`, `opencode`, `codex` | 0 each |
 

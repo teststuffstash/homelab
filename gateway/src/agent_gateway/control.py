@@ -24,7 +24,14 @@ from starlette.responses import JSONResponse
 
 from .config import CallerPolicy, Policy
 from .metrics import Metrics
-from .pull import GATEWAY_AUDIENCE, ReviewTransient, TokenReviewer, review_refusal
+from .pull import (
+    GATEWAY_AUDIENCE,
+    POD_NAME_EXTRA,
+    POD_UID_EXTRA,
+    ReviewTransient,
+    TokenReviewer,
+    review_refusal,
+)
 
 log = logging.getLogger("gateway.control")
 
@@ -43,6 +50,8 @@ class Caller:
 
     identity: str | None
     policy: CallerPolicy | None
+    pod: str | None = None  # GW-SESSIONS-LIVENESS: the caller's pod, when its projected token is pod-bound
+    pod_uid: str | None = None
 
 
 class ControlPlaneAuth:
@@ -55,6 +64,7 @@ class ControlPlaneAuth:
         """Authenticate the caller of `route` (one of ROUTES), then require it in `callers`."""
         reason = None
         identity = None
+        caller_pod: tuple[str | None, str | None] = (None, None)
         if not presented:
             reason = "absent"
         else:
@@ -70,6 +80,8 @@ class ControlPlaneAuth:
                     log.info("control-plane: %s — the caller's token was refused: %s", route, why)
                 else:
                     identity = review.username
+                    caller_pod = ((review.extra.get(POD_NAME_EXTRA) or (None,))[0],
+                                  (review.extra.get(POD_UID_EXTRA) or (None,))[0])
         if reason is not None:
             self.metrics.control_plane_unauthenticated(route, reason)
             if self.policy.control_plane_auth == "observe":
@@ -84,7 +96,7 @@ class ControlPlaneAuth:
         if entry is None:
             log.warning("control-plane: %s refused — caller-unknown: %s is not in policy callers", route, identity)
             return _error(403, "caller-unknown", f"{identity} is not a control-plane caller in policy")
-        return Caller(identity, entry)
+        return Caller(identity, entry, *caller_pod)
 
     @staticmethod
     def authorize_admission(caller: Caller, stack: str, role: str, bind_namespace: str | None) -> JSONResponse | None:
