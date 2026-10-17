@@ -1,0 +1,3 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1}
+ERR → gateway(sessions): defer — [gateway-http 503: {"error":{"code":"credential-transient","message":"kube API unreachable while resolving platform-agents/claude-session"}}] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy).
+RC 1

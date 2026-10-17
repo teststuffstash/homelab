@@ -1,0 +1,5 @@
+# gateway-env-secret — the decision table (family contract in fixture.yaml); row state in rows/<id>/vars.sh.
+# id           | world | patch | env                     | expect       | params
+off            |       |       |                         | off          |
+on             |       |       |                         | on           |
+create-fails   |       |       | STUB_KUBECTL_create=fail | create-fails |

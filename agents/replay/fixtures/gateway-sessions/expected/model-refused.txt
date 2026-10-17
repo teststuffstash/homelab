@@ -1,0 +1,2 @@
+ERR PREFLIGHT REFUSED: --model opencode-go/deepseek-v4-flash under AGENT_GATEWAY=sessions — the gateway owns the model (FU-270). Drop --model or unset AGENT_GATEWAY. No session, no pod.
+RC 2

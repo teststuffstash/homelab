@@ -1,0 +1,16 @@
+# FU-270 — the claude arm under a /sessions dispatch (AGENT_GATEWAY=sessions).
+#
+# CONDITION UNDER REPLAY: a recipe dispatch the gateway admitted on its Go rail with the claude
+# harness: MODEL is the policy id (opencode-go/deepseek-v4-flash), the gateway's env says
+# ANTHROPIC_MODEL=deepseek-v4-flash, and the policy declares context_tokens=1000000.
+#
+# THE CONTRACT: the CLI runs the model the GATEWAY named (`--model deepseek-v4-flash`, its
+# ANTHROPIC_MODEL — never the static chain or the launcher's own Go-id table) and the window the
+# policy declares (`CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000`, from `context_tokens`).
+name: harness-run-cmd-claude-gateway
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-run-cmd
+  - file:../claude/post.sh

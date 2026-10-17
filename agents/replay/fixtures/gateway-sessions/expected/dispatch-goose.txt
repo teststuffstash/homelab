@@ -1,0 +1,9 @@
+CALL curl POST http://127.0.0.1:18080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1,"harness":"goose"}
+CALL curl DELETE http://127.0.0.1:18080/sessions/0123abcd
+OUT → gateway(sessions): dispatch deepseek/deepseek-v4-flash [rail=openrouter,harness=goose,session=0123abcd,context_tokens=null] (task=adhoc, round=1)
+OUT GW_SESSIONS='1' HARNESS='goose' MODEL='deepseek/deepseek-v4-flash'
+OUT GW_RAIL='openrouter' GW_CONTEXT_TOKENS='' GW_CLAUDE_MODEL='' OPENCODE_MODEL='deepseek/deepseek-v4-flash'
+OUT AGENT_ROUTER='off' OR_CREDITS='' STRUCK_MODEL='deepseek/deepseek-v4-flash'
+OUT GW_ENV keys: GOOSE_MODEL,GOOSE_PROVIDER,OPENAI_API_KEY,OPENAI_BASE_URL
+OUT → gateway(sessions): released 0123abcd
+RC 0

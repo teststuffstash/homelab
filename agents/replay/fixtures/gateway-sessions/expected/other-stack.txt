@@ -1,0 +1,6 @@
+OUT GW_SESSIONS='' HARNESS='opencode' MODEL='openrouter/deepseek/deepseek-v4-flash'
+OUT GW_RAIL='' GW_CONTEXT_TOKENS='' GW_CLAUDE_MODEL='' OPENCODE_MODEL=''
+OUT AGENT_ROUTER='' OR_CREDITS='unset' STRUCK_MODEL=''
+OUT GW_ENV keys: 
+ERR WARN gateway(sessions): AGENT_GATEWAY=sessions IGNORED for stack 'circles' — the /sessions canary is platform-only (FU-270); this ride takes today's /route path
+RC 0

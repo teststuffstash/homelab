@@ -1,0 +1,15 @@
+# FU-270 — credential rendering for a /sessions ride (AGENT_GATEWAY=sessions).
+#
+# CONDITION UNDER REPLAY. An opencode ride the agent-gateway admitted, the egress proxy configured.
+#
+# THE CONTRACT: the pod holds NO OpenRouter key and NO `ref:` (its one LLM credential is the
+# gateway session token, Secret-held — GW-SESSIONS-TOKEN), the opencode proxy-injection marker
+# stays unset (no proxy baseURL merge), and git stays on the per-op broker (UC-1: the pod gets
+# its git token from the broker, not from the gateway).
+name: cred-inject-unconditional-gateway
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:cred-inject
+  - file:post.sh
