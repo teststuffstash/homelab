@@ -169,7 +169,39 @@ Tool scope differs by cell. claude keeps the live allow-list. opencode denies
 edit/bash/webfetch/external_directory (`OPENCODE_PERMISSION`). goose has no path-scoped read, so
 its `developer` builtin keeps a shell, and its records say `confinement: env-only`.
 
-**Measurements.** The cell × PR table lands here (ADR-156 step 5's per-PR numbers).
+**Measurements: 2026-10-17, the first cell sweep.** Four merged PRs whose live verdicts are known were replayed at the heads the live reviewer judged:
+- #2635 at `02c7fb58`, round 1: CHANGES_REQUESTED `R2`, no `Spec changes:` section;
+- #2640 at `9639e99e`, round 1: CHANGES_REQUESTED `R4`, the GET row's fields contradict the schema;
+- #2628 at `7af95c8f`: APPROVE;
+- #2631 at `22706567`: a mechanical APPROVE.
+
+One run per cell, through the deployed gateway (`2026.10.17-gfdebcd39b7bf`). Tokens are the gateway's session row, `in / out / cache read / cache write`. Model seconds are the harness wall clock only. No run timed out (`LLM_TIMEOUT_S` 600). Raw records, with the review bodies: [`specs-reviewer-shadow-2026-10-17.jsonl`](specs-reviewer-shadow-2026-10-17.jsonl).
+
+| cell (model) | PR | verdict | known finding | extra blocking | tokens | req | model s |
+|---|---|---|---|---|---|---|---|
+| claude@anthropic (claude/sonnet) — the control | #2635 | CHANGES_REQUESTED | ✅ R2 | 0 | 10 / 2.8k / 171k / 50k | 5 | 22 |
+| | #2640 | CHANGES_REQUESTED | ✅ R4 | 0 | 12 / 5.7k / 456k / 88k | 6 | 45 |
+| | #2628 | APPROVE | ✅ | 0 | 8 / 2.5k / 161k / 33k | 4 | 23 |
+| claude@opencode, tier standard (opencode-go/deepseek-v4-flash) | #2635 | CHANGES_REQUESTED | ✅ R2 | 0 | 71k / 18k / 487k / 0 | 13 | 100 |
+| | #2640 | CHANGES_REQUESTED | ✅ R4 | 0 | 106k / 30k / 1.21M / 0 | 17 | 198 |
+| | #2628 | APPROVE | ✅ | 0 | 73k / 23k / 692k / 0 | 13 | 125 |
+| claude@opencode, tier heavy, the reviewer's policy (opencode-go/claude-sonnet-4-6) | #2635, #2640, #2628 | no verdict | — | — | 0 / 0 / 0 / 0 | 1 each | ~2 |
+| opencode@opencode, tier standard (opencode-go/deepseek-v4-flash) | #2635 | CHANGES_REQUESTED | ✅ R2 | 0 | 75k / 19k / 448k / 0 | 12 | 106 |
+| | #2640 | CHANGES_REQUESTED | ✅ R4 | 1 (`R2` GW-METRICS: no ⚖ on two decision rows) | 104k / 30k / 1.23M / 0 | 19 | 319 |
+| | #2628 | APPROVE | ✅ | 0 | 85k / 43k / 842k / 0 | 16 | 214 |
+| goose@openrouter, role **worker** (deepseek/deepseek-v4-flash) | #2635 | APPROVE | ❌ missed R2 | 0 | 39k / 14k / 244k / 0 | 12 | 78 |
+| | #2640 | no verdict | — | — | 65k / 18k / 685k / 0 | 18 | 139 |
+| | #2628 | APPROVE | ✅ | 0 | 39k / 22k / 378k / 0 | 17 | 230 |
+
+#2631 came out `mechanical` in every cell: touched-rules finds no rule, so no LLM ran, matching the live verdict.
+
+**What the sweep found.** This is a comparison, not a ruling: which cell the live reviewer rides stays the operator's call.
+- **The reviewer's Go fallback is dead upstream.** The `claude@opencode` cell at the reviewer's policy tier (heavy) got `400 api_error "Upstream request failed: Model is unavailable."` for `opencode-go/claude-sonnet-4-6`. It was reproduced directly against the gateway. The same session shape at tier standard (deepseek-v4-flash) works. The heavy id comes from `model-classes.json`'s `ids.opencode-go`, copied into the gateway policy. The matrix's Go "sonnet slot" is `kimi-k3` ([`opencode-model-matrix.md`](../spikes/opencode-model-matrix.md)). Until the policy changes, a reviewer that overflows the subscription onto Go gets no review.
+- **goose@openrouter.** goose ran under `--role worker`, because the reviewer role has no openrouter rail and the policy stays unchanged. The cell missed the one known finding on #2635. On #2640 it ended without a `## Specs review` body. Its tool scope is env-only (`developer` shell). opencode on the same model family, deepseek-v4-flash, caught both known findings. So on this corpus the gap is the harness, not the model.
+- **opencode@opencode** reproduced both known verdicts. It raised one extra blocking finding the live reviewer and the claude cells did not: missing `⚖` on two GW-METRICS decision rows the PR body called a choice. Whether that is valid is a rows-brief question, not a cell defect.
+- **Cost shape.** The Go/deepseek cells read 3–5× the claude control's cache and run 4–7× longer, on a flat-rate rail. Claude reports list-price `total_cost_usd` even on Go; that number is not a charge.
+- **Repeatability.** The two claude cells ran twice; the first runs logged records only, so the table uses the second runs. Both runs gave the same verdicts.
+- **No GitHub writes.** No shadow run wrote a review, comment or label on the four PRs: their timelines show nothing after the sweep began (2026-10-17T07:12Z) beyond #2654's own cross-reference at 06:32Z.
 
 ## The portable process (ADR-156, 2026-10-16)
 
