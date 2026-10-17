@@ -34,7 +34,8 @@
 #              tick, cheap — the price of GitHub's repo-wide count.
 #   LLM pass — ONE per tick (the oldest candidate): admitted through the agent-gateway
 #              `POST /sessions` seam (role `reviewer`, stack `platform`, harness `claude` — the
-#              first real consumer, FU-270 dogfood); `decision: defer` = log + stop, the next tick
+#              first real consumer, FU-270 dogfood), authenticated as this pod's ServiceAccount
+#              (GW-SESSIONS-AUTH: the projected `gateway-token`, `gw_curl`); `decision: defer` = log + stop, the next tick
 #              retries (never poll in-process); `dispatch` = the returned `env` map is exported
 #              VERBATIM as the LLM env (GW-SESSIONS-ENV: nothing LLM-shaped is added) and the
 #              session is ALWAYS released (`DELETE /sessions/{id}`, trap). Inputs = the CONTEXT PACK
@@ -95,6 +96,21 @@ SPECS_REVIEW_REPOS="${SPECS_REVIEW_REPOS:-homelab}"      # the island repos; ano
 SPECS_REVIEWER_LOGIN="homelab-specs-reviewer"           # literal, no [bot] suffix (gh api user 403s for an App token)
 CODE_REVIEWER_LOGIN="${CODE_REVIEWER_LOGIN:-homelab-reviewer}"
 GATEWAY_URL="${GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local:8080}"
+# The control-plane caller token (GW-SESSIONS-AUTH, FU-270): the pod's projected ServiceAccount
+# token, audience agent-gateway (specs-review-argo.yaml's `gateway-token` volume) — re-read per call,
+# kubelet rotates it. Absent = the call goes without one: admitted and COUNTED while the gateway
+# `observe`s, refused once it `enforce`s, so the absence is logged loudly (stderr), never silent.
+GATEWAY_TOKEN_FILE="${GATEWAY_TOKEN_FILE:-/var/run/secrets/agent-gateway/token}"
+# gw_curl <curl args…> — curl to the gateway's control plane carrying the caller header via
+# `-H @<fd>` (the token never rides argv, which `ps` shows to every process in the pod).
+gw_curl() {
+  if [ -s "$GATEWAY_TOKEN_FILE" ]; then
+    curl -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$GATEWAY_TOKEN_FILE")") "$@"
+  else
+    log "WARN no gateway caller token at ${GATEWAY_TOKEN_FILE} — this /sessions call is unauthenticated (GW-SESSIONS-AUTH: counted under observe, refused under enforce)" >&2
+    curl "$@"
+  fi
+}
 PUSHGATEWAY="${PUSHGATEWAY:-}"                           # empty = log-only
 LENS_BASE="${LENS_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/lenses}"
 SPECS_PATH_RE='(^|/)specs/'
@@ -195,6 +211,16 @@ self_test() {
   check "verdict parse: missing → empty" "" "$(parse_verdict "$(printf 'no verdict here\n')")"
   check "env key guard rejects a shell-hostile key" 1 "$(valid_env_key 'FOO=bar; rm' && echo 0 || echo 1)"
   check "env key guard accepts ANTHROPIC_MODEL" 0 "$(valid_env_key 'ANTHROPIC_MODEL' && echo 0 || echo 1)"
+  # GW-SESSIONS-AUTH: gw_curl carries the projected token as the caller header, read from the file
+  # through an fd (never argv); no file = no header (and a stderr warning). `curl` is shadowed here.
+  local tokd; tokd="$(mktemp -d)"; printf 'fake-caller-token-selftest' > "$tokd/token"
+  check "caller header: the projected token rides as Authorization: Bearer" "Authorization: Bearer fake-caller-token-selftest" \
+    "$(curl() { local a p=""; for a in "$@"; do [ "$p" = "-H" ] && case "$a" in @*) cat "${a#@}";; esac; p="$a"; done; }; GATEWAY_TOKEN_FILE="$tokd/token" gw_curl -X GET http://g/sessions/x)"
+  check "caller header: never in curl's argv" 0 \
+    "$(curl() { printf '%s\n' "$@"; }; GATEWAY_TOKEN_FILE="$tokd/token" gw_curl -X GET http://g/sessions/x | grep -c fake-caller-token-selftest)"
+  check "caller header: no token file → no Authorization header" 0 \
+    "$(curl() { printf '%s\n' "$@"; }; GATEWAY_TOKEN_FILE="$tokd/absent" gw_curl -X GET http://g/sessions/x 2>/dev/null | grep -c '^-H$')"
+  rm -rf "$tokd"
   # the confinement contract (PR#2613 finding 1): the model's env is the dispatch env + OTEL +
   # HOME/PATH/TMPDIR, and NEVER the pod's GH_TOKEN / GH_TOKEN_FILE / GATEWAY_URL — asserted by
   # running the real builder with those set in THIS shell and a uc-1-shaped dispatch fixture.
@@ -747,7 +773,7 @@ shadow_one() {
   local body http resp="$WORK/session.json"
   body="$(jq -cn --arg task "specs-shadow ${repo}#${num}@${head:0:8} ${cell}" --arg role "$SHADOW_ROLE" --arg h "$SHADOW_HARNESS" --arg r "$SHADOW_RAIL" --arg t "$SHADOW_TIER" \
     '{stack:"platform", role:$role, task:$task, round:0, harness:$h} + (if $r != "" then {rail:$r} else {} end) + (if $t != "" then {tier:$t} else {} end)')"
-  http="$(curl -sS --max-time 20 -o "$resp" -w '%{http_code}' -H 'Content-Type: application/json' -X POST "${GATEWAY_URL}/sessions" -d "$body" || echo 000)"
+  http="$(gw_curl -sS --max-time 20 -o "$resp" -w '%{http_code}' -H 'Content-Type: application/json' -X POST "${GATEWAY_URL}/sessions" -d "$body" || echo 000)"
   http="${http:0:3}"   # a refused connect prints curl's 000 AND the fallback's
   shadow_record "$rec" "admission=$(admission_summary "$http" "$resp")"
   if [ "$http" != "200" ]; then
@@ -798,9 +824,9 @@ shadow_emit_review() {
 # the record: the four token classes + requests, the gateway's own count for every harness
 shadow_release() {
   [ -n "$SESSION_ID" ] || return 0
-  curl -fsS --max-time 10 --retry 5 --retry-delay 4 --retry-connrefused --retry-all-errors \
+  gw_curl -fsS --max-time 10 --retry 5 --retry-delay 4 --retry-connrefused --retry-all-errors \
        -X DELETE "${GATEWAY_URL}/sessions/${SESSION_ID}" >/dev/null 2>&1 || log "WARN session ${SESSION_ID} release failed (expires by TTL)"
-  local row; row="$(curl -fsS --max-time 10 "${GATEWAY_URL}/sessions/${SESSION_ID}" 2>/dev/null)" || row="null"
+  local row; row="$(gw_curl -fsS --max-time 10 "${GATEWAY_URL}/sessions/${SESSION_ID}" 2>/dev/null)" || row="null"
   jq -e . >/dev/null 2>&1 <<< "$row" || row="null"
   shadow_record "$1" "session_row=$row"
   SESSION_ID=""
@@ -830,7 +856,7 @@ shadow_main() {
   # attribution: the shadow's spend never reads as the live reviewer's
   OTEL_RESOURCE_ATTRIBUTES="${OTEL_RESOURCE_ATTRIBUTES:+${OTEL_RESOURCE_ATTRIBUTES},}shadow=true,cell=${SHADOW_HARNESS}@${SHADOW_RAIL:-policy}"
   mkdir -p "$SHADOW_OUT"; SHADOW_WORK="$(mktemp -d)"; SESSION_ID=""
-  trap '[ -n "$SESSION_ID" ] && curl -fsS --max-time 10 -X DELETE "${GATEWAY_URL}/sessions/${SESSION_ID}" >/dev/null 2>&1; rm -rf "$SHADOW_WORK"' EXIT
+  trap '[ -n "$SESSION_ID" ] && gw_curl -fsS --max-time 10 -X DELETE "${GATEWAY_URL}/sessions/${SESSION_ID}" >/dev/null 2>&1; rm -rf "$SHADOW_WORK"' EXIT
   local ref repo num head missing=0
   for ref in "${prs[@]}"; do
     if ! [[ "$ref" =~ ^([A-Za-z0-9._-]+)#([0-9]+)(@([0-9a-f]{7,40}))?$ ]]; then log "shadow: bad PR ref '$ref'"; missing=$((missing+1)); continue; fi
@@ -877,7 +903,7 @@ cleanup() {
     # retried: the gateway is ONE replica with an RWO store (Recreate), so a deploy leaves a few
     # seconds with no backend — 2026-10-16 the first live pass's release landed in one (old pod down
     # 15:31:13, new pod up 15:31:19) and the slot sat until the 4 h TTL. ~20 s of retries spans it.
-    curl -fsS --max-time 10 --retry 5 --retry-delay 4 --retry-connrefused --retry-all-errors \
+    gw_curl -fsS --max-time 10 --retry 5 --retry-delay 4 --retry-connrefused --retry-all-errors \
          -X DELETE "${GATEWAY_URL}/sessions/${SESSION_ID}" >/dev/null 2>&1 \
       && log "session ${SESSION_ID} released" || log "WARN session ${SESSION_ID} release failed (expires by TTL)"
   fi
@@ -970,7 +996,7 @@ else
     # 4) admission: POST /sessions (gateway/specs/endpoints/sessions.md, sessions.schema.json post.input)
     local body http
     body="$(jq -cn --arg task "specs-review ${repo}#${num}" '{stack:"platform", role:"reviewer", task:$task, round:0, harness:"claude"}')"
-    http="$(curl -sS --max-time 20 -o "$resp" -w '%{http_code}' -H 'Content-Type: application/json' -X POST "${GATEWAY_URL}/sessions" -d "$body" || echo 000)"
+    http="$(gw_curl -sS --max-time 20 -o "$resp" -w '%{http_code}' -H 'Content-Type: application/json' -X POST "${GATEWAY_URL}/sessions" -d "$body" || echo 000)"
     if [ "$http" != "200" ]; then
       log "[$repo#$num] POST /sessions HTTP ${http}: $(head -c 300 "$resp" 2>/dev/null | tr '\n' ' ')"; return 1
     fi

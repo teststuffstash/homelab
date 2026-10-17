@@ -17,3 +17,7 @@ unknown-decision               |       |       | AGENT_GATEWAY=sessions         
 unusable-env                   |       |       | AGENT_GATEWAY=sessions                    | unusable-env                 |
 credential-in-answer           |       |       | AGENT_GATEWAY=sessions                    | credential-in-answer         |
 bad-pull-url                   |       |       | AGENT_GATEWAY=sessions                    | bad-pull-url                 |
+caller-minted                  |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_RAIL=opencode AGENT_GATEWAY_CALLER_SA=platform-agents/agentstack-loop | caller-minted |
+caller-mint-fails              |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_CALLER_SA=platform-agents/agentstack-loop | caller-mint-fails |
+caller-sa-malformed            |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_CALLER_SA=agentstack-loop | caller-sa-malformed |
+no-caller-token                |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_CALLER_TOKEN_FILE=/nonexistent/agent-gateway/token | no-caller-token |

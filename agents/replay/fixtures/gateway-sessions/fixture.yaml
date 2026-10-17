@@ -18,9 +18,14 @@
 # gateway's reason + retry_after_s. Unreachable / non-200 / an unusable dispatch (a token or env in
 # a bound answer, a hostile env key, a pull_url not for this session) → FAIL CLOSED with that same
 # exit (a dispatch that is refused is released first). No launcher variable ever holds a `gws_`.
+# Every POST and DELETE carries the CALLER's token (GW-SESSIONS-AUTH) as `Authorization: Bearer`,
+# fetched fresh per call: the pod's projected file (AGENT_GATEWAY_CALLER_TOKEN_FILE), or — the jail
+# canary — a `kubectl create token <sa> --audience agent-gateway --duration 10m` mint for
+# AGENT_GATEWAY_CALLER_SA=<ns>/<sa>. Neither, an unmintable SA, or a malformed one refuses before
+# any request (exit 2).
 #
-# `curl` is shadowed as the gateway seam (recorded: the POST body IS the asserted request; the
-# DELETE is the release). Row state lives in rows/<id>/vars.sh (shell literals; JSON bodies with
+# `curl` is shadowed as the gateway seam (recorded: the POST body IS the asserted request, `[auth: …]`
+# the caller header it carried; the DELETE is the release); `kubectl` records the canary's mint. Row state lives in rows/<id>/vars.sh (shell literals; JSON bodies with
 # pipes cannot survive psv splitting).
 name: gateway-sessions
 mode: table

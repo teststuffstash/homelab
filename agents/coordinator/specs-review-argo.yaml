@@ -11,6 +11,10 @@
 # WorkflowTemplate carries: that semaphore is the OLD proxy's capacity model, and this plane is
 # the one that moves off it. The gateway Service is in ns agent-egress, which the agent-loop
 # egress policy (egress-cnp.yaml) already allows for every Argo Workflow pod in this namespace.
+# The call is AUTHENTICATED (GW-SESSIONS-AUTH, FU-270): the `gateway-token` volume is this pod's
+# projected ServiceAccount token (agent-coordinator, audience agent-gateway), and the gateway's
+# policy `callers` entry for that SA grants stack platform, roles reviewer + worker (the goose
+# shadow cell), no bind.
 #
 # IDENTITY: GH_TOKEN = the `specs-reviewer-git` Secret (agents/coordinator/specs-reviewer-git.yaml),
 # `optional:true`.
@@ -58,6 +62,14 @@ spec:
   volumes:
     - { name: work, emptyDir: {} }
     - { name: specs-reviewer-git, secret: { secretName: specs-reviewer-git, optional: true } }
+    # GW-SESSIONS-AUTH (FU-270): the caller token for the gateway's /sessions — this pod's projected
+    # ServiceAccount token (agent-coordinator), audience agent-gateway, the shortest expiry the API
+    # allows; kubelet rotates the file and the script re-reads it per call. Pod spec only: the
+    # gateway's TokenReview is its own RBAC, and the policy's `callers` grants this SA its roles.
+    - name: gateway-token
+      projected:
+        sources:
+          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
   templates:
     - name: main
       metadata:
@@ -104,6 +116,7 @@ spec:
         volumeMounts:
           - { name: work, mountPath: /work }
           - { name: specs-reviewer-git, mountPath: /var/run/specs-reviewer-git, readOnly: true }
+          - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
         resources:
           requests: { cpu: "250m", memory: "512Mi" }
           limits: { memory: "2Gi" }
@@ -162,6 +175,14 @@ spec:
   volumes:
     - { name: work, emptyDir: {} }
     - { name: specs-reviewer-git, secret: { secretName: specs-reviewer-git, optional: true } }
+    # GW-SESSIONS-AUTH (FU-270): the caller token for the gateway's /sessions — this pod's projected
+    # ServiceAccount token (agent-coordinator), audience agent-gateway, the shortest expiry the API
+    # allows; kubelet rotates the file and the script re-reads it per call. Pod spec only: the
+    # gateway's TokenReview is its own RBAC, and the policy's `callers` grants this SA its roles.
+    - name: gateway-token
+      projected:
+        sources:
+          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
   templates:
     - name: main
       metadata:
@@ -204,6 +225,7 @@ spec:
         volumeMounts:
           - { name: work, mountPath: /work }
           - { name: specs-reviewer-git, mountPath: /var/run/specs-reviewer-git, readOnly: true }
+          - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
         resources:
           requests: { cpu: "250m", memory: "512Mi" }
           limits: { memory: "2Gi" }

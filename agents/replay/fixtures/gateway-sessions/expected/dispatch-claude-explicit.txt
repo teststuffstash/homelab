@@ -1,6 +1,6 @@
-CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions {"stack":"platform","role":"worker","task":"issue-42","round":2,"harness":"claude","bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-issue-42-r2"}}
-CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd
-OUT → gateway(sessions): dispatch opencode-go/deepseek-v4-flash [rail=opencode,harness=claude,session=0123abcd,context_tokens=1000000] (task=issue-42, round=2) — bound to homelab/agentstack-worker pod agent-homelab-issue-42-r2; the pod pulls env ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"worker","task":"issue-42","round":2,"harness":"claude","bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-issue-42-r2"}}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): dispatch opencode-go/deepseek-v4-flash [rail=opencode,harness=claude,session=0123abcd,context_tokens=1000000] (task=issue-42, round=2) — bound to homelab/agentstack-worker pod agent-homelab-issue-42-r2; the pod pulls env ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL; caller the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)
 OUT GW_SESSIONS='1' HARNESS='claude' MODEL='opencode-go/deepseek-v4-flash'
 OUT GW_RAIL='opencode' GW_CONTEXT_TOKENS='1000000' GW_CLAUDE_MODEL='deepseek-v4-flash' OPENCODE_MODEL='opencode-go/deepseek-v4-flash'
 OUT AGENT_ROUTER='off' OR_CREDITS='' STRUCK_MODEL='opencode-go/deepseek-v4-flash'

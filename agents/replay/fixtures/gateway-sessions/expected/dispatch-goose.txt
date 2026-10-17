@@ -1,6 +1,6 @@
-CALL curl POST http://127.0.0.1:18080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1,"harness":"goose","bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-120000"}}
-CALL curl DELETE http://127.0.0.1:18080/sessions/0123abcd
-OUT → gateway(sessions): dispatch deepseek/deepseek-v4-flash [rail=openrouter,harness=goose,session=0123abcd,context_tokens=null] (task=adhoc, round=1) — bound to homelab/agentstack-worker pod agent-homelab-120000; the pod pulls env OPENAI_BASE_URL,OPENAI_API_KEY,GOOSE_PROVIDER,GOOSE_MODEL
+CALL curl POST http://127.0.0.1:18080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"worker","task":"adhoc","round":1,"harness":"goose","bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-120000"}}
+CALL curl DELETE http://127.0.0.1:18080/sessions/0123abcd [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): dispatch deepseek/deepseek-v4-flash [rail=openrouter,harness=goose,session=0123abcd,context_tokens=null] (task=adhoc, round=1) — bound to homelab/agentstack-worker pod agent-homelab-120000; the pod pulls env OPENAI_BASE_URL,OPENAI_API_KEY,GOOSE_PROVIDER,GOOSE_MODEL; caller the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)
 OUT GW_SESSIONS='1' HARNESS='goose' MODEL='deepseek/deepseek-v4-flash'
 OUT GW_RAIL='openrouter' GW_CONTEXT_TOKENS='' GW_CLAUDE_MODEL='' OPENCODE_MODEL='deepseek/deepseek-v4-flash'
 OUT AGENT_ROUTER='off' OR_CREDITS='' STRUCK_MODEL='deepseek/deepseek-v4-flash'
