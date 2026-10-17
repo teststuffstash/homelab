@@ -34,7 +34,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   tokens_in INTEGER NOT NULL DEFAULT 0,
   tokens_out INTEGER NOT NULL DEFAULT 0,
   tokens_cache_read INTEGER NOT NULL DEFAULT 0,
-  tokens_cache_write INTEGER NOT NULL DEFAULT 0
+  tokens_cache_write INTEGER NOT NULL DEFAULT 0,
+  bind_namespace TEXT,
+  bind_serviceaccount TEXT,
+  bind_pod TEXT,
+  env_delivered_at REAL
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
 CREATE TABLE IF NOT EXISTS requests (
@@ -52,11 +56,17 @@ CREATE INDEX IF NOT EXISTS requests_session ON requests (session_id, ts);
 CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts);
 """
 # Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
-# them to an existing table, so _migrate() does (idempotent, additive only).
+# them to an existing table, so _migrate() does (idempotent, additive only). The bind columns
+# (GW-SESSIONS-PULL) are nullable: NULL = an unbound session, whose env went out in the dispatch.
+_COUNTER = "INTEGER NOT NULL DEFAULT 0"
 _ADDED_COLUMNS = {
-    "sessions": ("tokens_cache_read", "tokens_cache_write"),
-    "requests": ("tokens_cache_read", "tokens_cache_write"),
+    "sessions": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "bind_namespace": "TEXT",
+                 "bind_serviceaccount": "TEXT", "bind_pod": "TEXT", "env_delivered_at": "REAL"},
+    "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER},
 }
+# A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
+# column (NOT NULL UNIQUE) holds this prefix + the id, which no sha256 hex digest can equal.
+UNMINTED_PREFIX = "unminted:"
 
 
 @dataclass(frozen=True)
@@ -80,7 +90,8 @@ def iso(ts: float | None) -> str | None:
 _SESSION_COLS = (
     "id", "token_hash", "stack", "role", "task", "round", "rail", "harness", "model",
     "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out",
-    "tokens_cache_read", "tokens_cache_write",
+    "tokens_cache_read", "tokens_cache_write", "bind_namespace", "bind_serviceaccount", "bind_pod",
+    "env_delivered_at",
 )
 
 
@@ -103,6 +114,15 @@ class Session:
     tokens_out: int
     tokens_cache_read: int = 0
     tokens_cache_write: int = 0
+    # GW-SESSIONS-PULL: the identity a bound session's env is pulled by (NULL = unbound) and when it was.
+    bind_namespace: str | None = None
+    bind_serviceaccount: str | None = None
+    bind_pod: str | None = None
+    env_delivered_at: float | None = None
+
+    @property
+    def bound(self) -> bool:
+        return self.bind_serviceaccount is not None
 
     def state(self, now: float | None = None) -> str:
         """`active` | `released` | `expired` — the OLDER fact wins: a session that expired before
@@ -165,9 +185,9 @@ class Store:
     def _migrate(self) -> None:
         for table, cols in _ADDED_COLUMNS.items():
             have = {r[1] for r in self._db.execute(f"PRAGMA table_info({table})").fetchall()}
-            for col in cols:
+            for col, decl in cols.items():
                 if col not in have:
-                    self._db.execute(f"ALTER TABLE {table} ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+                    self._db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
                     log.info("db: migrated %s.%s", table, col)
 
     # -- sessions -------------------------------------------------------------------------------
@@ -197,6 +217,18 @@ class Store:
                 "UPDATE sessions SET released_at = ? WHERE id = ? AND released_at IS NULL", (now, session_id)
             )
         return self.get_session(session_id)
+
+    def deliver_env(self, session_id: str, token_hash: str, now: float) -> bool:
+        """GW-SESSIONS-PULL's at-most-once write: store the freshly minted token's hash and stamp
+        `env_delivered_at` — only on a bound row not yet delivered. False = someone pulled first
+        (one conditional UPDATE, so two racing pulls cannot both win)."""
+        with self._lock:
+            cur = self._db.execute(
+                "UPDATE sessions SET token_hash = ?, env_delivered_at = ? WHERE id = ? AND env_delivered_at IS NULL"
+                " AND bind_serviceaccount IS NOT NULL",
+                (token_hash, now, session_id),
+            )
+            return cur.rowcount == 1
 
     def active_count(self, rail: str, now: float | None = None) -> int:
         now = time.time() if now is None else now

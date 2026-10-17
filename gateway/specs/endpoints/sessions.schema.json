@@ -41,12 +41,25 @@
         "round": { "type": "integer", "minimum": 0, "default": 0, "x-requirements": ["GW-SESSIONS-ADMIT"] },
         "tier": { "$ref": "#/$defs/tier", "description": "default from policy roles.<role>.tier", "x-requirements": ["GW-SESSIONS-ADMIT"] },
         "harness": { "$ref": "#/$defs/harness", "description": "default from policy roles.<role>.harness; fixes the dialect the walk may use", "x-requirements": ["GW-SESSIONS-ADMIT", "GW-SESSIONS-ENV"] },
-        "rail": { "$ref": "#/$defs/rail", "description": "operator override — logged; normally absent", "x-requirements": ["GW-SESSIONS-ADMIT"] }
+        "rail": { "$ref": "#/$defs/rail", "description": "operator override — logged; normally absent", "x-requirements": ["GW-SESSIONS-ADMIT"] },
+        "bind": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespace", "serviceaccount"],
+          "properties": {
+            "namespace": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$", "description": "the pod's namespace (a DNS-1123 label)" },
+            "serviceaccount": { "type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$", "description": "the pod's ServiceAccount (a DNS-1123 subdomain)" },
+            "pod": { "type": "string", "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$", "description": "the pod's name; absent = any pod of the ServiceAccount (⚖)" }
+          },
+          "description": "the identity that may pull this session's env (POST /sessions/{id}/env); present = the dispatch answer carries no token and no env values",
+          "x-requirements": ["GW-SESSIONS-PULL"]
+        }
       }
     },
     "output": {
       "oneOf": [
         { "$ref": "#/post/dispatch" },
+        { "$ref": "#/post/dispatch_bound" },
         { "$ref": "#/post/defer" }
       ]
     },
@@ -78,6 +91,31 @@
         },
         "context_tokens": { "type": ["integer", "null"], "minimum": 1, "description": "the policy's declared window for the model; null = not declared, never a guess", "x-requirements": ["GW-SESSIONS-ENV"] }
       }
+    },
+    "dispatch_bound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "session", "rail", "harness", "model", "env_keys", "pull_url", "context_tokens"],
+      "description": "the answer to a body carrying `bind`: no token, no env values — the bound pod pulls them",
+      "properties": {
+        "decision": { "const": "dispatch" },
+        "session": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "expires_at"],
+          "properties": {
+            "id": { "$ref": "#/$defs/session_id" },
+            "expires_at": { "$ref": "#/$defs/timestamp" }
+          }
+        },
+        "rail": { "$ref": "#/$defs/rail" },
+        "harness": { "$ref": "#/$defs/harness" },
+        "model": { "type": "string" },
+        "env_keys": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }, "description": "the NAMES of the env the pull returns, in GW-SESSIONS-ENV's order" },
+        "pull_url": { "type": "string", "description": "<self>/sessions/{id}/env" },
+        "context_tokens": { "type": ["integer", "null"], "minimum": 1 }
+      },
+      "x-requirements": ["GW-SESSIONS-PULL"]
     },
     "defer": {
       "type": "object",
@@ -134,10 +172,29 @@
       "x-requirements": ["GW-SESSIONS-RELEASE"]
     }
   },
+  "pull": {
+    "$comment": "POST /sessions/{id}/env — the bound pod's env pull. Request: no body; `Authorization: Bearer <projected ServiceAccount token, audience agent-gateway>`.",
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "expires_at", "env"],
+      "properties": {
+        "id": { "$ref": "#/$defs/session_id" },
+        "expires_at": { "$ref": "#/$defs/timestamp" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "exactly the env GW-SESSIONS-ENV hands an unbound dispatch, carrying the token minted at this pull" }
+      },
+      "x-requirements": ["GW-SESSIONS-PULL"]
+    }
+  },
   "errors": {
     "malformed-body": { "status": 400, "description": "the request body fails this schema's `post.input` (missing field, enum miss, negative round)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
     "harness-rail-mismatch": { "status": 400, "description": "an explicit `harness` and `rail` whose dialects do not meet (goose/opencode x anthropic, codex x anything but codex, claude x codex)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
-    "session-not-found": { "status": 404, "description": "GET or DELETE on an id no row carries", "x-requirements": ["GW-SESSIONS-TOKEN", "GW-SESSIONS-RELEASE"] },
+    "session-not-found": { "status": 404, "description": "GET, DELETE or a pull on an id no row carries", "x-requirements": ["GW-SESSIONS-TOKEN", "GW-SESSIONS-RELEASE", "GW-SESSIONS-PULL"] },
+    "pull-identity-refused": { "status": 403, "description": "the pull's bearer is absent, does not authenticate, lacks audience agent-gateway, or is not the bind's ServiceAccount (and pod); also any pull of an unbound session", "x-requirements": ["GW-SESSIONS-PULL"] },
+    "tokenreview-transient": { "status": 503, "description": "the TokenReview API failed or was unreachable — nothing is known about the caller; retry", "x-requirements": ["GW-SESSIONS-PULL"] },
+    "env-already-delivered": { "status": 409, "description": "the session's env was already pulled — at most once", "x-requirements": ["GW-SESSIONS-PULL"] },
+    "session-released": { "status": 401, "description": "a pull of a released session — the data plane's verdict", "x-requirements": ["GW-SESSIONS-PULL", "GW-SESSIONS-RELEASE"] },
+    "session-expired": { "status": 401, "description": "a pull of an expired session — the data plane's verdict", "x-requirements": ["GW-SESSIONS-PULL", "GW-SESSIONS-RELEASE"] },
     "credential-transient": { "status": 503, "description": "the kube API failed or was unreachable while resolving a ref — nothing is known about the credential; retry", "x-requirements": ["GW-CRED-RESOLVE"] }
   }
 }

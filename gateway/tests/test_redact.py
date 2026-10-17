@@ -10,12 +10,15 @@
 | a ref is not a credential | "ref platform-agents/claude-session unresolved" | the ref verbatim | <redacted> |
 | a model id is not a credential | "model opencode-go/deepseek-v4-flash" | the id verbatim | <redacted> |
 | a %-arg carrying a token is masked | "ride %s" % token | ride <redacted> | gws_ |
+| a projected ServiceAccount token (a JWT) | "review eyJ….eyJ….sig" | review <redacted> | eyJ |
 
 | description | path | the log holds | the log does not hold |
 |---|---|---|---|
 | an upstream 401 body is summarised, not copied | upstream-401 on openrouter | upstream-auth openrouter 401 | the upstream body, the key |
 | a bad inbound header is logged by shape | Authorization: Bearer notatoken | session-unknown | notatoken |
 | a dispatch line names the session id, never the token | dispatch | the session id | the token |
+| a pull line names the session and the identity, never either token | a bound dispatch -> its pull | env pulled id=<id> by system:serviceaccount:platform-agents:agentstack-worker | the presented SA token, the minted gws_ token |
+| a refused pull never logs the presented token | a pull whose token reviews as another ServiceAccount | pull-identity-refused | the presented token |
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ pytestmark = rule("GW-REDACT")
 
 TOKEN = "gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 FMT = RedactingFormatter("%(message)s")
+JWT = "eyJhbGciOiJSUzI1NiJ9.eyJGQUtFIjoxfQ.RkFLRS1TSUc"  # fake, JWT-shaped (header.payload.sig)
 
 ROWS = [
     ("a session token in a message", f"auth ok {TOKEN}", "auth ok <redacted>", "gws_"),
@@ -41,6 +45,7 @@ ROWS = [
     ("the Go key's value", f"go key {GO_KEY} in use", "go key <redacted> in use", GO_KEY),
     ("a ref is not a credential", "ref platform-agents/claude-session unresolved", "ref platform-agents/claude-session unresolved", REDACTED),
     ("a model id is not a credential", "model opencode-go/deepseek-v4-flash", "model opencode-go/deepseek-v4-flash", REDACTED),
+    ("a projected ServiceAccount token (a JWT)", f"review {JWT}", "review <redacted>", "eyJ"),
 ]
 
 
@@ -115,3 +120,41 @@ async def test_dispatch_line_names_id_not_token(gw, caplog):
         assert any(f"id={doc['session']['id']}" in line for line in lines), lines
         for rec in caplog.records:
             assert doc["session"]["token"] not in rec.getMessage() and "gws_" not in rec.getMessage()
+
+
+async def test_pull_line_names_identity_not_tokens(gw, reviews, caplog):
+    """row: a pull line names the session and the identity, never either token"""
+    from agent_gateway.pull import POD_NAME_EXTRA, Review
+
+    world()
+    caplog.set_level(logging.INFO)
+    user = "system:serviceaccount:platform-agents:agentstack-worker"
+    with given("a session bound to platform-agents/agentstack-worker pod fixer-1; the fake TokenReview answers that identity"):
+        reviews.tokens[JWT] = Review(True, user, ("agent-gateway",), {POD_NAME_EXTRA: ("fixer-1",)})
+        doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker", "pod": "fixer-1"})
+    with when(f"POST /sessions/{doc['session']['id']}/env with the pod's projected token"):
+        r = await gw.post(f"/sessions/{doc['session']['id']}/env", headers={"authorization": f"Bearer {JWT}"})
+    token = r.json()["env"]["OPENCODE_CONFIG_CONTENT"].split('"apiKey":"', 1)[1].split('"', 1)[0]
+    lines = _lines(caplog)
+    with then(f"a log line reads 'env pulled id={doc['session']['id']} by {user}'", log_lines={"actual": lines}):
+        assert any(f"env pulled id={doc['session']['id']} by {user}" in line for line in lines), lines
+    with then("no record carries the presented SA token or the minted gws_ token"):
+        for rec in caplog.records:
+            assert JWT not in rec.getMessage() and token not in rec.getMessage() and "gws_" not in rec.getMessage()
+
+
+async def test_refused_pull_never_logs_token(gw, reviews, caplog):
+    """row: a refused pull never logs the presented token"""
+    from agent_gateway.pull import Review
+
+    world()
+    caplog.set_level(logging.INFO)
+    with given("a bound session; the presented token reviews as system:serviceaccount:platform-agents:default"):
+        reviews.tokens[JWT] = Review(True, "system:serviceaccount:platform-agents:default", ("agent-gateway",), {})
+        doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker"})
+    with when(f"POST /sessions/{doc['session']['id']}/env with that token"):
+        await gw.post(f"/sessions/{doc['session']['id']}/env", headers={"authorization": f"Bearer {JWT}"})
+    lines = _lines(caplog)
+    with then("a log line names pull-identity-refused, none carries the presented token", log_lines={"actual": lines}):
+        assert any("pull-identity-refused" in line for line in lines), lines
+        assert not any(JWT in rec.getMessage() for rec in caplog.records)

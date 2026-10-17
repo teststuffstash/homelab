@@ -1,7 +1,8 @@
 """Redacting log formatter (GW-REDACT).
 
 A log line never carries a bearer value, a `gws_` session token, an Anthropic oauth token
-(`sk-ant-oat…`) or an OpenRouter key (`sk-or-v1-…`). The old proxy's `_cred_shaped` tripwire is
+(`sk-ant-oat…`), an OpenRouter key (`sk-or-v1-…`) or a JWT (the pod's projected ServiceAccount
+token on the env pull). The old proxy's `_cred_shaped` tripwire is
 the precedent; here the formatter scrubs the RENDERED line, so a value that reaches a log call by
 any path (message, args, exception text) is masked before it is written.
 """
@@ -23,6 +24,7 @@ _PATTERNS = [
     re.compile(r"\bgws_[A-Za-z0-9_-]+"),  # a gateway session token
     re.compile(r"\bsk-ant-oat[A-Za-z0-9_-]*"),  # the subscription oauth token
     re.compile(r"\bsk-or-v1-[A-Za-z0-9_-]*"),  # an OpenRouter key
+    re.compile(r"\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"),  # a JWT — a projected SA token (GW-SESSIONS-PULL)
     re.compile(r"(?i)\b(x-api-key|api-key)\s*[:=]\s*\S+"),  # `x-api-key: <value>` renderings
 ]
 

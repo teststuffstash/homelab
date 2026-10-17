@@ -170,3 +170,28 @@ metadata:
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
 subjects:
   - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+# GW-SESSIONS-PULL (FU-270, operator ruling 2026-10-17): the bound pod pulls its own LLM env from
+# POST /sessions/{id}/env with its projected ServiceAccount token (audience agent-gateway); the
+# gateway TokenReviews that token and compares the identity with the session's bind. A narrow
+# ClusterRole (tokenreviews.create only) rather than system:auth-delegator, which also grants
+# subjectaccessreviews.create — the pull needs no authorization review. TokenReview validates a
+# token; it cannot read or mint anything. The same grant the old proxy's git broker holds
+# (openrouter-proxy-tokenreview, FU-080/FU-089). NO Secret permission is added: credential writes
+# stay gateway-internal (the session token lives only as a sha256 in the gateway's DB).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agent-gateway-tokenreview
+rules:
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-gateway-tokenreview
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-gateway-tokenreview }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }

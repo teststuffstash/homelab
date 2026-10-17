@@ -19,7 +19,8 @@ from .credentials import CredentialResolver, CredentialSource, KubeSecrets
 from .logging import register_literal
 from .metrics import Metrics
 from .proxy import Proxy, anthropic_messages, openai_chat, openai_models
-from .sessions import SessionService, delete_session, get_session, post_sessions
+from .pull import KubeTokenReviews, TokenReviewer
+from .sessions import SessionService, delete_session, get_session, post_session_env, post_sessions
 from .store import Store
 
 log = logging.getLogger("gateway.app")
@@ -44,6 +45,7 @@ def create_app(
     client: httpx.AsyncClient | None = None,
     clock=time.time,
     codex_backend: CodexBackend | None = None,
+    reviewer: TokenReviewer | None = None,
 ) -> Starlette:
     policy = policy or Policy.load(settings.policy_path)
     register_literal(settings.opencode_go_api_key)  # the Go key has no recognisable shape — GW-REDACT masks it by value
@@ -53,7 +55,8 @@ def create_app(
                                   settings.cred_negative_cache_s, clock)
     m = Metrics(policy.stacks)
     m.bind_active_sessions(lambda: store.active_counts(clock()))
-    sessions = SessionService(policy, store, resolver, m, settings.self_url, clock)
+    # GW-SESSIONS-PULL's identity check: the kube TokenReview API (tests hand a StaticTokenReviews in).
+    sessions = SessionService(policy, store, resolver, m, settings.self_url, clock, reviewer=reviewer or KubeTokenReviews())
     client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(connect=settings.connect_timeout_s, read=settings.read_timeout_s, write=60, pool=10),
         follow_redirects=False,
@@ -87,6 +90,7 @@ def create_app(
             Route("/sessions", post_sessions, methods=["POST"]),
             Route("/sessions/{id}", get_session, methods=["GET"]),
             Route("/sessions/{id}", delete_session, methods=["DELETE"]),
+            Route("/sessions/{id}/env", post_session_env, methods=["POST"]),
             Route("/anthropic/v1/messages", anthropic_messages, methods=["POST"]),
             # The OpenAI dialect under its contract prefix AND the OpenRouter-shaped `/api/v1`
             # alias: goose computes `$OPENROUTER_HOST/api/v1/…` and opencode's provider baseURL

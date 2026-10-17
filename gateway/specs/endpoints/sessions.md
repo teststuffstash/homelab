@@ -3,13 +3,14 @@ id: EP-SESSIONS
 use-cases: [UC-1]
 schema: sessions.schema.json
 ---
-# POST /sessions · GET /sessions/{id} · DELETE /sessions/{id} — the launcher's one question
+# POST /sessions · GET /sessions/{id} · DELETE /sessions/{id} · POST /sessions/{id}/env — the launcher's one question
 
 *May this unit run now, with which harness, and what goes in the pod's env.* The control-plane
 seam of the island ([UC-1](../use-cases/uc-1-worker-ride.md) steps ① and ④). The caller sends
 `(stack, role, task, round)` and optional `tier` / `harness` / `rail`; the gateway answers
 `dispatch` (a session, a rail, a harness, a model, the pod's complete LLM env) or `defer` (a
-typed reason and when to ask again). No caller names a model: the policy does, and every
+typed reason and when to ask again). A body carrying `bind` gets a dispatch without the
+credential, and the bound pod pulls its env itself ([GW-SESSIONS-PULL](#gw-sessions-pull)). No caller names a model: the policy does, and every
 data-plane request is resolved from the session identity
 ([GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)).
 
@@ -25,6 +26,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
+| [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; the caller-authenticated control plane and a codex `auth.command` re-read are `⚑ gap` (rows below) |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
 | [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
@@ -337,6 +339,118 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 </details>
 
+## GW-SESSIONS-PULL
+
+*The pod pulls its own env; the launcher never holds the session token* (operator ruling
+2026-10-17, FU-270). A `POST /sessions` body may carry **`bind: {namespace, serviceaccount, pod?}`**
+— the identity of the pod the launcher is about to create. A bound `dispatch` carries **no
+credential**: `session.id`, `session.expires_at`, `rail`, `harness`, `model`, `context_tokens`,
+plus `env_keys` (the NAMES of the env [GW-SESSIONS-ENV](#gw-sessions-env) would have handed over,
+in its order) and `pull_url` (`<this gateway>/sessions/{id}/env`) — no `session.token`, no `env`.
+The token does not exist yet: the row holds an unminted placeholder no token hashes to. **Without
+`bind` the answer is byte-for-byte GW-SESSIONS-ENV's** — the specs reviewer's launcher depends on it.
+
+The pod then calls **`POST /sessions/{id}/env`** with `Authorization: Bearer <its projected
+ServiceAccount token>`, audience **`agent-gateway`**. The gateway TokenReviews it
+(`spec.audiences: [agent-gateway]`) and serves only when the review is `authenticated`, lists
+that audience, names the user `system:serviceaccount:<bind.namespace>:<bind.serviceaccount>`,
+and — when the bind names a pod — carries the extra `authentication.kubernetes.io/pod-name`
+equal to exactly that pod. Then it **mints the token** (GW-SESSIONS-TOKEN's shape; only the
+sha256 is stored) and answers `{id, expires_at, env}`, the `env` exactly GW-SESSIONS-ENV's.
+The checks run in a fixed order — the id (404 `session-not-found`), the identity (403
+`pull-identity-refused`; a review the API cannot answer is 503 `tokenreview-transient`,
+retriable), the session's state (401 `session-released` / `session-expired`, exactly as the
+data plane refuses it), delivery (409 `env-already-delivered`) — so a caller with the wrong
+identity learns nothing about a session but that its id exists. **At most once** ⚖: the
+launcher's pods are `restartPolicy: Never` (`agents/agent-session.sh`), so a legitimate pod
+pulls exactly once, and a leaked projected token cannot fetch the credential a second time
+inside its own lifetime. The identity check is the git broker's pattern
+(`GIT_CRED_BROKER_URL`, FU-089 — the old proxy's `_token_review`: the caller's projected token,
+TokenReview'd, a failed review never a pass-through); the gateway's RBAC adds
+`tokenreviews.create` and nothing else.
+
+Why a pull and not a launcher-written Secret (#2667's first cut): the loop SA cannot create
+Secrets in fixer namespaces, deliberately. **Credential writes stay gateway-only** — the codex
+rail's OAuth refresh needs ONE owner per account writing each rotation durably
+([codex spike §Gateway prototype](../../../docs/spikes/codex-subscription-rail.md#gateway-prototype--isolated-build-2026-10-16-fu-270)'s
+OAuth row and refresh-persistence paragraph); a launcher that wrote the session's Secret would
+be a second writer of credential material. And Codex's own seam is a pull: a custom provider's
+`auth.command` prints the bearer from a command
+([§Public ChatGPT/Codex OAuth contract](../../../docs/spikes/codex-subscription-rail.md#public-chatgptcodex-oauth-contract)),
+so a codex harness will later point that command at this endpoint — not built (the gap row below).
+
+### The bound dispatch answer
+
+| description | body || result |
+|---|---||---|
+| "a bound dispatch carries the session's identity, not its credential" | worker, `bind: {platform-agents, agentstack-worker, fixer-1}` || keys exactly `decision`, `session` (`id`, `expires_at`), `rail`, `harness`, `model`, `env_keys`, `pull_url`, `context_tokens`; no `gws_` anywhere in the body |
+| "env_keys names the opencode env" | worker (opencode) + bind || `env_keys` = `[OPENCODE_CONFIG_CONTENT]` |
+| "env_keys names the claude env" | reviewer (claude) + bind || `env_keys` = `[ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_MODEL]` |
+| "env_keys names the goose env" | worker, `harness: goose`, `rail: openrouter` + bind || `env_keys` = `[OPENAI_BASE_URL, OPENAI_API_KEY, GOOSE_PROVIDER, GOOSE_MODEL]` |
+| "pull_url is this gateway's pull path for the session" | worker + bind || `pull_url` = `http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/«id»/env` |
+| "without bind the dispatch answer is unchanged" | worker, no `bind` || `session.token` + `env` (GW-SESSIONS-ENV); no `env_keys`, no `pull_url` |
+| "a bound session holds no token until its pull" | worker + bind, read the DB || `token_hash` = `unminted:«id»` (no sha256 hex equals it) |
+| "a bind without a serviceaccount is malformed" | `bind: {namespace: platform-agents}` || 400 `malformed-body` |
+| "a bind namespace that is not a DNS label is malformed" | `bind: {namespace: Platform_Agents, serviceaccount: agentstack-worker}` || 400 `malformed-body` |
+
+### Who may pull
+
+The fake TokenReview answers the presented token as the `presented` cell says: **the bound
+identity** = authenticated · audiences `[agent-gateway]` · `system:serviceaccount:platform-agents:agentstack-worker`
+· pod-name `fixer-1`; every other cell changes ONE thing from it — `unauthenticated` (`authenticated: false`),
+`the kube API audience` (audiences `[https://kubernetes.default.svc]`), another username, `pod-name fixer-2`,
+`no pod-name extra`; `no bearer` sends no `Authorization` header. `session`: **bound to fixer-1** =
+`bind: {platform-agents, agentstack-worker, fixer-1}`; **bound, no pod** = the same without `pod`;
+**unbound** = dispatched without `bind`.
+
+| description | session | presented || status | code |
+|---|---|---||---|---|
+| "the bound pod's projected token is served" | bound to fixer-1 | the bound identity || 200 | — |
+| "no bearer token" | bound to fixer-1 | no bearer || 403 | pull-identity-refused |
+| "a token the API does not authenticate" | bound to fixer-1 | unauthenticated || 403 | pull-identity-refused |
+| "the bound identity without the gateway audience" | bound to fixer-1 | the kube API audience || 403 | pull-identity-refused |
+| "another ServiceAccount of the bound namespace" | bound to fixer-1 | system:serviceaccount:platform-agents:default || 403 | pull-identity-refused |
+| "the bound ServiceAccount name in another namespace" | bound to fixer-1 | system:serviceaccount:oracle-agents:agentstack-worker || 403 | pull-identity-refused |
+| "another pod of the bound ServiceAccount" | bound to fixer-1 | pod-name fixer-2 || 403 | pull-identity-refused |
+| "a token with no pod binding when the bind names a pod" | bound to fixer-1 | no pod-name extra || 403 | pull-identity-refused |
+| "a bind without a pod admits any pod of its ServiceAccount ⚖" | bound, no pod | pod-name fixer-2 || 200 | — |
+| "an unbound session refuses every pull ⚖" | unbound | the bound identity || 403 | pull-identity-refused |
+| "an unknown id" | — (`POST /sessions/nope/env`; no review is made) | the bound identity || 404 | session-not-found |
+| "the TokenReview API fails" | bound to fixer-1 | (the review raises: 5xx / unreachable) || 503 | tokenreview-transient |
+
+### What a pull returns, and only once
+
+| description | sequence || result |
+|---|---||---|
+| "the pull answers the opencode env GW-SESSIONS-ENV would have" | worker (opencode) bound → pull || `env` keys = `env_keys`; the provider `apiKey` is a fresh `^gws_[A-Za-z0-9_-]{32}$`; `baseURL` `…/openai/v1`, model `gateway/deepseek-v4-flash` |
+| "the pull answers the claude env" | reviewer (claude) bound → pull || `ANTHROPIC_AUTH_TOKEN` a fresh `gws_` token, `ANTHROPIC_BASE_URL` `…/anthropic`, `ANTHROPIC_MODEL` `sonnet` |
+| "the pull answers the goose env" | worker goose/openrouter bound → pull || `OPENAI_API_KEY` a fresh `gws_` token, `OPENAI_BASE_URL` `…/openai/v1`, `GOOSE_PROVIDER` `openai`, `GOOSE_MODEL` `deepseek/deepseek-v4-flash` |
+| "the pulled token rides the data plane" | pull → `POST /openai/v1/chat/completions` with it (`upstream-ok`) || 200; the row's `requests` = 1 |
+| "the row stores the pulled token's sha256 only" | pull, read the DB || `token_hash` = sha256(token); the token appears nowhere in the sqlite dump |
+| "a second pull by the same pod is refused ⚖" | pull, pull again (same identity) || 409 `env-already-delivered`; the first token is still served |
+| "a second pull by another pod is refused by identity first" | pull, then pod-name `fixer-2` || 403 `pull-identity-refused` |
+| "a released session is refused as the data plane refuses it" | `DELETE`, then pull || 401 `session-released` |
+| "an expired session is refused as the data plane refuses it" | the clock past `expires_at`, then pull || 401 `session-expired` |
+
+The log rows (a pull line names the session and the identity, never either token; a refused
+pull never logs the presented token; a JWT is masked by shape) are
+[GW-REDACT](#gw-redact)'s.
+
+### Named gaps
+
+| description | input || v0 answer | the gap |
+|---|---||---|---|
+| "⚑ gap: the bind is the caller's word" | any caller of `POST /sessions` || the gateway binds whatever identity the body names | the control plane is unauthenticated in v0 ([glossary](../glossary.md#control-plane--data-plane)): a caller that can `POST /sessions` can bind its own ServiceAccount — the reach it already has without `bind` (the token in the answer). Closing it = TokenReview the control-plane caller too |
+| "⚑ gap: a codex `auth.command` re-runs" | a codex harness whose provider `auth.command` calls the pull URL || its second run is 409 `env-already-delivered` | Codex re-runs the command every `refresh_interval_ms` (default 5 min); a token-only, same-pod re-read is needed before a codex harness can use this endpoint — not built |
+
+<details><summary>Evidence</summary>
+
+Rendered by `scripts/evidence_render.py` from CI.
+
+--8<-- "GW-SESSIONS-PULL.md"
+
+</details>
+
 ## GW-CRED-RESOLVE
 
 A credential ref (`namespace/name`) is resolved by reading the Secret through the gateway's
@@ -384,7 +498,8 @@ Rendered by `scripts/evidence_render.py` from CI.
 ## GW-REDACT
 
 No log line the gateway emits contains a credential value: a bearer value, a `gws_` token, an
-`sk-ant-oat…` OAuth token, an `sk-or-v1-…` OpenRouter key, or the Go key's value. The log
+`sk-ant-oat…` OAuth token, an `sk-or-v1-…` OpenRouter key, a JWT (the projected ServiceAccount
+token a pod presents to [the env pull](#gw-sessions-pull)), or the Go key's value. The log
 formatter replaces any such substring with `<redacted>` before the line is written, whatever
 the call site passed — the precedent is the old proxy's `_looks_like_credential`. A test row
 feeds each pattern through the formatter directly; a second set proves the formatter is on the
@@ -399,12 +514,15 @@ real paths (an upstream 401 body, a malformed header, a debug line of the resolv
 | "the Go key's value" | the `OPENCODE_GO_API_KEY` fixture value || `<redacted>` | the value |
 | "a ref is not a credential" | `"ref platform-agents/claude-session unresolved"` || the ref verbatim | `<redacted>` |
 | "a model id is not a credential" | `"model opencode-go/deepseek-v4-flash"` || the id verbatim | `<redacted>` |
+| "a projected ServiceAccount token (a JWT)" | `"review eyJhbGciOiJSUzI1NiJ9.eyJGQUtFIjoxfQ.RkFLRS1TSUc"` || `review <redacted>` | `eyJ` |
 
 | description | path || the log holds | the log does not hold |
 |---|---||---|---|
 | "an upstream 401 body is summarised, not copied" | `upstream-401` on openrouter || `upstream-auth openrouter 401` | the upstream body, the key |
 | "a bad inbound header is logged by shape" | `Authorization: Bearer notatoken` || `session-unknown` | `notatoken` |
 | "a dispatch line names the session id, never the token" | dispatch || the session id | the token |
+| "a pull line names the session and the identity, never either token" | a bound dispatch → its pull ([GW-SESSIONS-PULL](#gw-sessions-pull)) || `env pulled id=«id» by system:serviceaccount:platform-agents:agentstack-worker` | the presented ServiceAccount token, the minted `gws_` token |
+| "a refused pull never logs the presented token" | a pull whose token reviews as another ServiceAccount || `pull-identity-refused` | the presented token |
 
 <details><summary>Evidence</summary>
 
