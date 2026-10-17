@@ -20,7 +20,14 @@ from .logging import register_literal
 from .metrics import Metrics
 from .proxy import Proxy, anthropic_messages, openai_chat, openai_models
 from .pull import KubeTokenReviews, TokenReviewer
-from .sessions import SessionService, delete_session, get_session, post_session_env, post_sessions
+from .sessions import (
+    SessionService,
+    delete_session,
+    get_session,
+    post_session_env,
+    post_session_outcome,
+    post_sessions,
+)
 from .store import Store
 
 log = logging.getLogger("gateway.app")
@@ -92,6 +99,7 @@ def create_app(
             Route("/sessions/{id}", get_session, methods=["GET"]),
             Route("/sessions/{id}", delete_session, methods=["DELETE"]),
             Route("/sessions/{id}/env", post_session_env, methods=["POST"]),
+            Route("/sessions/{id}/outcome", post_session_outcome, methods=["POST"]),
             Route("/anthropic/v1/messages", anthropic_messages, methods=["POST"]),
             # The OpenAI dialect under its contract prefix AND the OpenRouter-shaped `/api/v1`
             # alias: goose computes `$OPENROUTER_HOST/api/v1/…` and opencode's provider baseURL

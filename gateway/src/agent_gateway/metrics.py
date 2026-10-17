@@ -23,14 +23,16 @@ from collections.abc import Callable, Iterable
 
 from .capacity import subscription_windows  # one parser for the gauges and the admission reading
 from .config import DIALECTS, RAILS, ROLES
+from .outcomes import OUTCOME_CLASSES  # the one vocabulary (GW-SESSIONS-OUTCOME)
 
 OTHER = "other"
 DECISIONS = ("dispatch", "defer")
 TOKEN_CLASSES = ("in", "cache_read", "cache_write", "out")
 CRED_OUTCOMES = ("resolved", "definitive", "transient")
-CP_ROUTES = ("admit", "lookup", "release")  # control.ROUTES (not imported: control imports this module)
+CP_ROUTES = ("admit", "lookup", "release", "outcome")  # control.ROUTES (not imported: control imports this module)
 CP_REASONS = ("absent", "invalid", "review-transient")
 INCOMPLETE_REASONS = ("no-terminal", "timeout", "transport-error", "client-closed")
+STRIKE_SOURCES = ("outcome", "gateway")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
 
@@ -64,6 +66,7 @@ class Metrics:
         self.upstream_sum: dict[str, float] = {}
         self.upstream_count: dict[str, int] = {}
         self.incomplete_total: dict[tuple[str, str, str], int] = {}
+        self.strikes_total: dict[tuple[str, str], int] = {}
         self._gauge_source: Callable[[], dict[str, int]] | None = None
         self._cooled_source: Callable[[], dict[str, int]] | None = None
         self._rejected_source: Callable[[], dict[str, int]] | None = None
@@ -74,6 +77,11 @@ class Metrics:
     def bind_transport_facts(self, cooled: Callable[[], dict[str, int]], rejected: Callable[[], dict[str, int]]) -> None:
         """The capacity state's two gauges (sessions.md §Capacity): cooled cells, rejected credentials."""
         self._cooled_source, self._rejected_source = cooled, rejected
+
+    def strike(self, klass: str, source: str) -> None:
+        key = (_bounded(klass, tuple(OUTCOME_CLASSES)), _bounded(source, STRIKE_SOURCES))
+        with self._lock:
+            self.strikes_total[key] = self.strikes_total.get(key, 0) + 1
 
     def request_incomplete(self, rail: str, dialect: str, reason: str) -> None:
         key = (_bounded(rail, RAILS), _bounded(dialect, DIALECTS), _bounded(reason, INCOMPLETE_REASONS))
@@ -184,6 +192,10 @@ class Metrics:
                       "# TYPE gateway_requests_incomplete_total counter"]
             for (rail, dialect, reason), n in sorted(self.incomplete_total.items()):
                 lines.append(f"gateway_requests_incomplete_total{_fmt_labels({'rail': rail, 'dialect': dialect, 'reason': reason})} {n}")
+            lines += ["# HELP gateway_strikes_total Strikes written to the store, by class and source (outcome = the consumer, gateway = a transport fact).",
+                      "# TYPE gateway_strikes_total counter"]
+            for (klass, source), n in sorted(self.strikes_total.items()):
+                lines.append(f"gateway_strikes_total{_fmt_labels({'class': klass, 'source': source})} {n}")
             # Every (route, reason) renders, zeros included: the flip's soak reads a flat series, and
             # an absent series cannot be told apart from a scrape that never saw the family.
             lines += ["# HELP gateway_control_plane_unauthenticated_total Control-plane requests without a valid caller token (admitted under observe, refused under enforce).",

@@ -97,5 +97,6 @@
       "bind_namespaces": []
     }
   },
-  "session_ttl_s": 14400
+  "session_ttl_s": 14400,
+  "outcome_window_s": 86400
 }

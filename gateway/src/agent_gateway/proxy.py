@@ -255,12 +255,14 @@ class Proxy:
             elapsed = time.monotonic() - t0
             self.metrics.request(row.rail, dialect, 504, elapsed)
             self.sessions.store.record_request(row.id, 504, int(elapsed * 1000), ts=self.sessions.clock())
+            self.sessions.outcomes.transport(row, "timeout")
             log.warning("upstream-timeout %s session=%s: %s", row.rail, row.id, type(e).__name__)
             return error(504, "upstream-timeout", f"rail {row.rail} upstream: {type(e).__name__}")
         except httpx.HTTPError as e:
             elapsed = time.monotonic() - t0
             self.metrics.request(row.rail, dialect, 502, elapsed)
             self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock())
+            self.sessions.outcomes.transport(row, "provider-5xx")
             log.warning("upstream-unreachable %s session=%s: %s", row.rail, row.id, type(e).__name__)
             return error(502, "upstream-unreachable", f"rail {row.rail} upstream: {type(e).__name__}")
         status = resp.status_code
@@ -276,12 +278,14 @@ class Proxy:
             if kind == "refused":
                 self.metrics.request(row.rail, dialect, 403, elapsed)
                 self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock())
+                self.sessions.outcomes.transport(row, "refused")
                 log.warning("upstream-refused %s %d session=%s model=%s [%s]", row.rail, status, row.id, row.model, note)
                 return error(403, "upstream-refused", f"rail {row.rail} refused this request for {row.model} (upstream {status}, a policy refusal — not the credential)")
             self.metrics.request(row.rail, dialect, 424, elapsed)
             self.metrics.upstream_auth_rejected(row.rail)
             self.sessions.store.record_request(row.id, 424, int(elapsed * 1000), ts=self.sessions.clock())
             self.sessions.capacity.reject_credential(row.rail, credential, self.sessions.clock())
+            self.sessions.outcomes.transport(row, "auth-storm")
             log.error("upstream-auth %s %d session=%s [%s]", row.rail, status, row.id, note)
             return error(424, "upstream-auth", f"rail {row.rail} rejected the gateway's credential (upstream {status}) — not retryable")
         if row.rail == "anthropic":
@@ -335,6 +339,14 @@ class Proxy:
                 self.metrics.tokens(row.rail, usage)
                 if incomplete:
                     self.metrics.request_incomplete(row.rail, dialect, incomplete)
+                # The gateway's own transport classes as strikes (GW-SESSIONS-OUTCOME): a relayed upstream
+                # 5xx, a cut stream. A client that hung up is the consumer's to classify ⚖.
+                if status >= 500:
+                    self.sessions.outcomes.transport(row, "provider-5xx")
+                elif incomplete == "timeout":
+                    self.sessions.outcomes.transport(row, "timeout")
+                elif incomplete in ("no-terminal", "transport-error"):
+                    self.sessions.outcomes.transport(row, "stream-incomplete")
                 self.sessions.store.record_request(row.id, final[0], int(elapsed * 1000), usage,
                                                   ts=self.sessions.clock(),  # the window-draw ledger's clock
                                                   incomplete=incomplete)

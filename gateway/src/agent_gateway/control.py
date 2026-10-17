@@ -28,7 +28,7 @@ from .pull import GATEWAY_AUDIENCE, ReviewTransient, TokenReviewer, review_refus
 
 log = logging.getLogger("gateway.control")
 
-ROUTES = ("admit", "lookup", "release")  # POST /sessions · GET /sessions/{id} · DELETE /sessions/{id}
+ROUTES = ("admit", "lookup", "release", "outcome")  # POST /sessions · GET · DELETE · POST /sessions/{id}/outcome
 REASONS = ("absent", "invalid", "review-transient")
 
 
@@ -109,6 +109,17 @@ class ControlPlaneAuth:
         if caller.identity is None or owner is None or owner == caller.identity:
             return None
         return _deny(caller, "caller-not-owner", f"session {sid} was admitted by another caller", route=route)
+
+
+def authorize_outcome(caller: Caller, sid: str, owner: str | None, stack: str) -> tuple[JSONResponse | None, bool]:
+    """POST /sessions/{id}/outcome: the DELETE rule (the admitting caller; a row with no recorded
+    caller has no owner), plus a JUDGE — a caller whose entry says `outcome: any` — on any session of
+    its stacks. Returns (refusal, reported-as-judge)."""
+    if caller.identity is None or owner is None or owner == caller.identity:
+        return None, bool(caller.policy and caller.policy.outcome == "any" and stack in caller.policy.stacks)
+    if caller.policy is not None and caller.policy.outcome == "any" and stack in caller.policy.stacks:
+        return None, True
+    return _deny(caller, "caller-not-owner", f"session {sid} was admitted by another caller", route="outcome"), False
 
 
 def _deny(caller: Caller, code: str, message: str, route: str = "admit") -> JSONResponse:

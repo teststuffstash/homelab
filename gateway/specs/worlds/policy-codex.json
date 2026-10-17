@@ -201,9 +201,11 @@
   },
   "control_plane_auth": "observe",
   "callers": {
-    "_comment": "GW-SESSIONS-AUTH — fixture identities (specs/worlds/README.md): the platform loop's dispatcher (worker admissions bound into its fixture worker namespace) and the specs reviewer's tick (reviewer + the worker-role shadow cell, never a bind). `observe` here: a caller with no token is admitted and counted, as in `policy-default`.",
+    "_comment": "GW-SESSIONS-AUTH — fixture identities (specs/worlds/README.md): the platform loop's dispatcher (worker admissions bound into its fixture worker namespace) and the specs reviewer's tick (reviewer + the worker-role shadow cell, never a bind), and a JUDGE (GW-SESSIONS-OUTCOME: admits nothing, `outcome: any` — may report an outcome on any platform session). `observe` here: a caller with no token is admitted and counted, as in `policy-default`.",
     "system:serviceaccount:platform-agents:agentstack-loop": {"stacks": ["platform"], "roles": ["worker"], "bind_namespaces": ["platform-agents"]},
-    "system:serviceaccount:agent-coordinator:agent-coordinator": {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []}
+    "system:serviceaccount:agent-coordinator:agent-coordinator": {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []},
+    "system:serviceaccount:agent-coordinator:outcome-judge": {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"}
   },
-  "session_ttl_s": 14400
+  "session_ttl_s": 14400,
+  "outcome_window_s": 86400
 }

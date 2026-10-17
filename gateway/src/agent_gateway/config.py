@@ -310,6 +310,7 @@ def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
 
 
 CONTROL_PLANE_AUTH_MODES = ("observe", "enforce")
+OUTCOME_GRANTS = ("own", "any")
 # A caller key is a ServiceAccount username exactly as a TokenReview names it: a DNS-1123 label
 # namespace, a DNS-1123 subdomain name (GW-SESSIONS-AUTH). No wildcard can match this shape.
 _CALLER_RE = re.compile(r"^system:serviceaccount:([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?):([a-z0-9]([-a-z0-9.]*[a-z0-9])?)$")
@@ -324,6 +325,9 @@ class CallerPolicy:
     stacks: frozenset[str]
     roles: frozenset[str]
     bind_namespaces: frozenset[str]
+    # GW-SESSIONS-OUTCOME: `own` = report outcomes on the sessions it admitted (the DELETE rule);
+    # `any` = a JUDGE — also on any session of its stacks. Optional, default `own` (⚖: absent grants nothing extra).
+    outcome: str = "own"
 
 
 def _callers(d, stacks: dict, roles: dict) -> dict[str, CallerPolicy]:
@@ -340,7 +344,10 @@ def _callers(d, stacks: dict, roles: dict) -> dict[str, CallerPolicy]:
             raise PolicyError(f"policy: {where} is not a ServiceAccount username system:serviceaccount:<namespace>:<name>")
         if not isinstance(c, dict):
             raise PolicyError(f"policy: {where} must be an object {{stacks, roles, bind_namespaces}}")
-        _keys(where, c, {"stacks", "roles", "bind_namespaces"})
+        _keys(where, c, {"stacks", "roles", "bind_namespaces", "outcome"})
+        outcome = c.get("outcome", "own")
+        if outcome not in OUTCOME_GRANTS:
+            raise PolicyError(f"policy: {where}.outcome must be one of {', '.join(OUTCOME_GRANTS)}")
         lists = {}
         for key in ("stacks", "roles", "bind_namespaces"):
             v = c.get(key)
@@ -356,7 +363,8 @@ def _callers(d, stacks: dict, roles: dict) -> dict[str, CallerPolicy]:
         for ns in lists["bind_namespaces"]:
             if not _NS_RE.match(ns):
                 raise PolicyError(f"policy: {where}.bind_namespaces names {ns!r}, which is not a namespace (a DNS-1123 label)")
-        out[ident] = CallerPolicy(ident, frozenset(lists["stacks"]), frozenset(lists["roles"]), frozenset(lists["bind_namespaces"]))
+        out[ident] = CallerPolicy(ident, frozenset(lists["stacks"]), frozenset(lists["roles"]), frozenset(lists["bind_namespaces"]),
+                                  outcome)
     return out
 
 
@@ -373,6 +381,7 @@ class Policy:
     # is refused (`enforce`) or admitted, logged and counted (`observe`, the rollout mode).
     control_plane_auth: str = "enforce"
     callers: dict[str, CallerPolicy] = field(default_factory=dict)
+    outcome_window_s: int = 86400  # GW-SESSIONS-OUTCOME: how long after a session ends an outcome is accepted
 
     def context_tokens_for(self, model: str) -> int | None:
         return self.context_tokens.get(model)
@@ -441,6 +450,7 @@ class Policy:
             raw=d,
             control_plane_auth=mode,
             callers=callers,
+            outcome_window_s=int(d.get("outcome_window_s", 86400)),
         )
 
     @staticmethod
