@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   bind_serviceaccount TEXT,
   bind_pod TEXT,
   env_delivered_at REAL,
-  caller TEXT
+  caller TEXT,
+  requests_incomplete INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
 CREATE TABLE IF NOT EXISTS requests (
@@ -51,7 +52,8 @@ CREATE TABLE IF NOT EXISTS requests (
   tokens_in INTEGER NOT NULL DEFAULT 0,
   tokens_out INTEGER NOT NULL DEFAULT 0,
   tokens_cache_read INTEGER NOT NULL DEFAULT 0,
-  tokens_cache_write INTEGER NOT NULL DEFAULT 0
+  tokens_cache_write INTEGER NOT NULL DEFAULT 0,
+  incomplete TEXT
 );
 CREATE INDEX IF NOT EXISTS requests_session ON requests (session_id, ts);
 CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts);
@@ -61,12 +63,14 @@ CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts);
 # (GW-SESSIONS-PULL) are nullable: NULL = an unbound session, whose env went out in the dispatch.
 # `caller` (GW-SESSIONS-AUTH) is the admitting caller's ServiceAccount username; NULL = admitted
 # with no authenticated identity (the `observe` knob), or before the column existed.
+# `requests_incomplete` / `requests.incomplete` (GW-RAIL-*): a 2xx whose body stopped before its end
+# (no terminal event, a mid-stream timeout or transport error, the client gone) — the reason; NULL = complete.
 _COUNTER = "INTEGER NOT NULL DEFAULT 0"
 _ADDED_COLUMNS = {
     "sessions": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "bind_namespace": "TEXT",
                  "bind_serviceaccount": "TEXT", "bind_pod": "TEXT", "env_delivered_at": "REAL",
-                 "caller": "TEXT"},
-    "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER},
+                 "caller": "TEXT", "requests_incomplete": _COUNTER},
+    "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "incomplete": "TEXT"},
 }
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
 # column (NOT NULL UNIQUE) holds this prefix + the id, which no sha256 hex digest can equal.
@@ -95,7 +99,7 @@ _SESSION_COLS = (
     "id", "token_hash", "stack", "role", "task", "round", "rail", "harness", "model",
     "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out",
     "tokens_cache_read", "tokens_cache_write", "bind_namespace", "bind_serviceaccount", "bind_pod",
-    "env_delivered_at", "caller",
+    "env_delivered_at", "caller", "requests_incomplete",
 )
 
 
@@ -125,6 +129,8 @@ class Session:
     env_delivered_at: float | None = None
     # GW-SESSIONS-AUTH: who admitted it (`system:serviceaccount:<ns>:<sa>`); None = no authenticated caller.
     caller: str | None = None
+    # GW-RAIL-*: the 2xx answers whose body stopped before its end (never counted as clean).
+    requests_incomplete: int = 0
 
     @property
     def bound(self) -> bool:
@@ -161,6 +167,7 @@ class Session:
             "tokens_cache_read": self.tokens_cache_read,
             "tokens_cache_write": self.tokens_cache_write,
             "caller": self.caller,
+            "requests_incomplete": self.requests_incomplete,
         }
 
 
@@ -257,20 +264,23 @@ class Store:
 
     # -- requests -------------------------------------------------------------------------------
     def record_request(
-        self, session_id: str, status: int, upstream_ms: int, usage: Usage | None = None, ts: float | None = None
+        self, session_id: str, status: int, upstream_ms: int, usage: Usage | None = None, ts: float | None = None,
+        incomplete: str | None = None,
     ) -> None:
         ts = time.time() if ts is None else ts
         u = usage or Usage()
         with self._lock:
             self._db.execute(
                 "INSERT INTO requests (session_id, ts, status, upstream_ms, tokens_in, tokens_out, tokens_cache_read,"
-                " tokens_cache_write) VALUES (?,?,?,?,?,?,?,?)",
-                (session_id, ts, status, upstream_ms, u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write),
+                " tokens_cache_write, incomplete) VALUES (?,?,?,?,?,?,?,?,?)",
+                (session_id, ts, status, upstream_ms, u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write,
+                 incomplete),
             )
             self._db.execute(
                 "UPDATE sessions SET requests = requests + 1, tokens_in = tokens_in + ?, tokens_out = tokens_out + ?,"
-                " tokens_cache_read = tokens_cache_read + ?, tokens_cache_write = tokens_cache_write + ? WHERE id = ?",
-                (u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write, session_id),
+                " tokens_cache_read = tokens_cache_read + ?, tokens_cache_write = tokens_cache_write + ?,"
+                " requests_incomplete = requests_incomplete + ? WHERE id = ?",
+                (u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write, 1 if incomplete else 0, session_id),
             )
 
     def rail_usage_since(self, rail: str, since: float) -> list[tuple[float, str, int, int, int, int]]:

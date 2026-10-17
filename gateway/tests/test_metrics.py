@@ -12,10 +12,14 @@
 | upstream time is observed per rail | one call on anthropic | gateway_upstream_seconds_count{rail="anthropic"} | 1 |
 | tokens are counted by class | upstream-ok-cached answers usage {input_tokens: 12, cache_read_input_tokens: 300, cache_creation_input_tokens: 40, output_tokens: 7} on anthropic | gateway_tokens_total{rail="anthropic",class="in"} / "cache_read" / "cache_write" / "out" | 12 / 300 / 40 / 7 |
 | the subscription windows are read | one call on anthropic, answered with anthropic-ratelimit-unified-{5h,7d}-{utilization,reset} | gateway_subscription_utilization{rail="anthropic",window="5h"} / "7d"; gateway_subscription_reset_seconds{…} | 0.13 / 0.67; 1792172400 / 1792274400 |
-| an upstream auth rejection is counted apart | upstream-401 on opencode | gateway_upstream_auth_rejected_total{rail="opencode"} / gateway_requests_total{rail="opencode",dialect="openai",status="502"} | 1 / 1 |
+| an upstream auth rejection is counted apart | upstream-401 on opencode | gateway_upstream_auth_rejected_total{rail="opencode"} / gateway_requests_total{rail="opencode",dialect="openai",status="424"} | 1 / 1 |
 | an unreachable upstream is not an auth rejection | upstream-down on opencode | gateway_upstream_auth_rejected_total{rail="opencode"} / gateway_requests_total{rail="opencode",dialect="openai",status="502"} | 0 / 1 |
 | every rail's rejection count renders from 0 | no request yet | gateway_upstream_auth_rejected_total{rail=…} for anthropic, openrouter, opencode, codex | 0 each |
 | a resolution verdict is counted | the anthropic ref is a definitive miss | gateway_credential_resolve_total{rail="anthropic",outcome="definitive"} | 1 |
+| a cooled cell is counted on its rail | upstream-429 on openrouter | gateway_cells_cooled{rail="openrouter"} | 1 |
+| a rejected credential is counted on its rail | upstream-401 on openrouter | gateway_credentials_rejected{rail="openrouter"} | 1 |
+| an incomplete stream is counted by reason | upstream-stream-truncated on opencode (stream: true) | gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal"} | 1 |
+| the transport-fact gauges render every rail from 0 | no request yet | gateway_cells_cooled{rail=…} / gateway_credentials_rejected{rail=…} for anthropic, openrouter, opencode, codex | 0 each |
 
 | description | the series | label | allowed values |
 |---|---|---|---|
@@ -30,8 +34,9 @@
 | outcome is the verdict class | credential_resolve_total | outcome | resolved, definitive, transient |
 | route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release |
 | reason is why no caller identity was read | control_plane_unauthenticated_total | reason | absent, invalid, review-transient |
+| reason is why a 2xx body stopped before its end | requests_incomplete_total | reason | no-terminal, timeout, transport-error, client-closed |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 10 families |
+| every family is declared with HELP and TYPE | — | — | 13 families |
 """
 
 from __future__ import annotations
@@ -49,6 +54,7 @@ FAMILIES = (
     "gateway_upstream_seconds", "gateway_tokens_total", "gateway_credential_resolve_total",
     "gateway_subscription_utilization", "gateway_subscription_reset_seconds",
     "gateway_control_plane_unauthenticated_total", "gateway_upstream_auth_rejected_total",
+    "gateway_cells_cooled", "gateway_credentials_rejected", "gateway_requests_incomplete_total",
 )
 
 
@@ -209,9 +215,9 @@ async def test_upstream_auth_counted_apart(gw, upstreams):
         doc = await open_session(gw)
     with when("event: upstream-401 on opencode (POST /openai/v1/chat/completions)"):
         r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-    then_eq("status", r.status_code, 502)
+    then_eq("status", r.status_code, 424)
     await _then_series(gw, 'gateway_upstream_auth_rejected_total{rail="opencode"}', 1)
-    await _then_series(gw, 'gateway_requests_total{rail="opencode",dialect="openai",status="502"}', 1)
+    await _then_series(gw, 'gateway_requests_total{rail="opencode",dialect="openai",status="424"}', 1)
 
 
 async def test_unreachable_not_auth(gw, transport):
@@ -254,6 +260,37 @@ async def test_resolution_verdict_counted(gw, app, secrets):
 LABEL_RE = re.compile(r'^(gateway_[a-z_]+)\{([^}]*)\} ')
 
 
+FACT_ROWS = [
+    ("a cooled cell is counted on its rail", "openrouter", "upstream-429", False, 'gateway_cells_cooled{rail="openrouter"}'),
+    ("a rejected credential is counted on its rail", "openrouter", "upstream-401", False, 'gateway_credentials_rejected{rail="openrouter"}'),
+    ("an incomplete stream is counted by reason", "opencode", "upstream-stream-truncated", True,
+     'gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal"}'),
+]
+
+
+@pytest.mark.parametrize(("rail", "behaviour", "stream", "series"), [r[1:] for r in FACT_ROWS], ids=[r[0] for r in FACT_ROWS])
+async def test_transport_facts(gw, upstreams, rail, behaviour, stream, series):
+    world(upstream=behaviour)
+    upstreams[rail].behaviour = behaviour
+    with given(f"a worker session on {rail} (harness goose)"):
+        doc = await open_session(gw, harness="goose", rail=rail)
+    with when(f"event: {behaviour} on {rail} (POST /openai/v1/chat/completions{', stream: true' if stream else ''})"):
+        await gw.post("/openai/v1/chat/completions", json={"messages": [], **({"stream": True} if stream else {})}, headers=bearer(doc))
+    await _then_series(gw, series, 1)
+
+
+async def test_fact_gauges_from_zero(gw):
+    """row: the transport-fact gauges render every rail from 0"""
+    world()
+    with when("GET /metrics before any request"):
+        text = await _metrics(gw)
+        attach_json("sample: the gauge lines", _lines(text, "gateway_cells_cooled") + _lines(text, "gateway_credentials_rejected"))
+    with then("gateway_cells_cooled / gateway_credentials_rejected = 0 for anthropic, openrouter, opencode, codex"):
+        rails = ("anthropic", "openrouter", "opencode", "codex")
+        got = {f"{fam}{{{r}}}": _value(text, f'{fam}{{rail="{r}"}}') for fam in ("gateway_cells_cooled", "gateway_credentials_rejected") for r in rails}
+        check("gauges by rail", got, {k: 0 for k in got})
+
+
 async def _series(gw) -> list[tuple[str, dict[str, str]]]:
     out = []
     for line in (await _metrics(gw)).splitlines():
@@ -272,6 +309,9 @@ async def _exercise(gw, app, secrets, upstreams, policy, clock):
             await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
             rev = await open_session(gw, role="reviewer", harness="claude", task="homelab-2588-review")
             await gw.post("/anthropic/v1/messages", json={"messages": []}, headers=bearer(rev))
+            upstreams["opencode"].behaviour = "upstream-stream-truncated"
+            await gw.post("/openai/v1/chat/completions", json={"messages": [], "stream": True}, headers=bearer(doc))
+            upstreams["opencode"].behaviour = "upstream-ok"
             await gw.post("/sessions", json={"stack": "nope", "role": "worker", "task": "t"})
             await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": "Bearer gws_" + "x" * 32})
             secrets.transient.add("platform-agents/claude-session")
@@ -279,6 +319,7 @@ async def _exercise(gw, app, secrets, upstreams, policy, clock):
             await gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": "t"})
         attach_json("exercised: the calls", ["POST /sessions platform worker task homelab-2588-r1 → dispatch", "POST /openai/v1/chat/completions on it",
                                              "a reviewer session + POST /anthropic/v1/messages on it",
+                                             "a truncated stream on the worker session (upstream-stream-truncated)",
                                              "POST /sessions stack nope", "POST /openai/v1/chat/completions with an unknown gws_ token",
                                              "POST /sessions platform prober with claude-session transient"])
     return doc
@@ -296,6 +337,8 @@ LABEL_ROWS = [
     ("outcome is the verdict class", "gateway_credential_resolve_total", "outcome", {"resolved", "definitive", "transient"}),
     ("route is the control-plane route", "gateway_control_plane_unauthenticated_total", "route", {"admit", "lookup", "release"}),
     ("reason is why no caller identity was read", "gateway_control_plane_unauthenticated_total", "reason", {"absent", "invalid", "review-transient"}),
+    ("reason is why a 2xx body stopped before its end", "gateway_requests_incomplete_total", "reason",
+     {"no-terminal", "timeout", "transport-error", "client-closed"}),
 ]
 
 

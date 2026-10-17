@@ -15,7 +15,8 @@
     "window": { "enum": ["5h", "7d"] },
     "outcome": { "enum": ["resolved", "definitive", "transient"] },
     "route": { "enum": ["admit", "lookup", "release"] },
-    "reason": { "enum": ["absent", "invalid", "review-transient"] }
+    "reason": { "enum": ["absent", "invalid", "review-transient"] },
+    "incomplete_reason": { "enum": ["no-terminal", "timeout", "transport-error", "client-closed"] }
   },
   "families": {
     "gateway_sessions_active": {
@@ -91,6 +92,25 @@
         "reason": { "$ref": "#/$defs/reason" }
       },
       "x-requirements": ["GW-METRICS", "GW-SESSIONS-AUTH"]
+    },
+    "gateway_cells_cooled": {
+      "type": "gauge",
+      "labels": { "rail": { "$ref": "#/$defs/rail" } },
+      "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT"]
+    },
+    "gateway_credentials_rejected": {
+      "type": "gauge",
+      "labels": { "rail": { "$ref": "#/$defs/rail" } },
+      "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT", "GW-CRED-BOUNDARY"]
+    },
+    "gateway_requests_incomplete_total": {
+      "type": "counter",
+      "labels": {
+        "rail": { "$ref": "#/$defs/rail" },
+        "dialect": { "$ref": "#/$defs/dialect" },
+        "reason": { "$ref": "#/$defs/incomplete_reason" }
+      },
+      "x-requirements": ["GW-METRICS", "GW-RAIL-ANTHROPIC", "GW-RAIL-OPENROUTER"]
     }
   },
   "forbidden_labels": ["task", "session", "id", "model", "token"],

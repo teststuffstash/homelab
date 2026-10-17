@@ -35,10 +35,17 @@ received** (URL, headers, body) as much as on the response the gateway returned.
 | `upstream-ok-usage` | `upstream-ok` whose anthropic-dialect `usage` is the row's (`FakeUpstream.usage`); on the anthropic rail `FakeUpstream.rate_headers` likewise replaces the `anthropic-ratelimit-unified-*` set with the row's reading | the capacity rows (window utilization, Go window draw) |
 | `upstream-stream` | 200, `text/event-stream`, a final usage event (anthropic: `message_delta` with `usage`; openai: a last chunk with `usage`) | byte-unchanged SSE passthrough; streaming usage best-effort |
 | `upstream-stream-gzip` | `upstream-stream`'s anthropic events, `content-encoding: gzip`, flushed per event — the live shape (2026-10-16) | usage parsed from the decoded capture while the bytes pass through encoded |
-| `upstream-429` | 429 with `retry-after: 30` | 429 passthrough with `retry-after` |
-| `upstream-401` | 401 with a body mentioning the key | 502 `upstream-auth`, body never forwarded |
+| `upstream-429` | 429 with `retry-after: 30` | 429 passthrough with `retry-after`; the subscription latch rows |
+| `upstream-429-no-header` | 429 with no reset header at all | the hold / `defer_retry_s` fallbacks |
+| `upstream-429-reset` | OpenRouter's 429 shape (the 2026-10-17 tap): `x-ratelimit-limit: 20`, `-remaining: 0`, `-reset` = the row's epoch **milliseconds**, no `retry-after` (a row may add one), body `limit_source: openrouter_free_tier_per_minute` | the cell-cooldown rows ([§Capacity](../endpoints/sessions.md#capacity--the-ladders-capacity-half)) |
+| `upstream-401` | 401 with a body mentioning the key | 424 `upstream-auth`, body never forwarded; the credential rejected |
+| `upstream-401-key-expired` | 401 `{type: authentication_error, code: api_key_expired}` — the Go vendor's live answer to an expired key (the 2026-10-17 tap) | 424 `upstream-auth` on the Go rail |
+| `upstream-403` | 403 `{type: permission_error}` — a credential reason | 424 `upstream-auth` |
+| `upstream-403-refused` | 403 with OpenRouter's harness-gate body (`… only available on agentic harnesses`, `failed_routing_step`) — no credential reason | 403 `upstream-refused`; the credential untouched |
 | `upstream-slow` | holds the response past the read timeout | timeout rows (connect 10 s / read 600 s) — 🚧 WIP, clock-faked only |
 | `upstream-down` | the connection fails before any byte is sent (refused / DNS / reset — not a timeout) | 502 `upstream-unreachable` rows on every rail |
+| `upstream-stream-truncated` | `upstream-stream` cut after its first event: no usage, no terminal event (`data: [DONE]` / `message_stop`) | the stream-completeness rows (`no-terminal`) |
+| `upstream-stream-cut` | the status and a first chunk arrive, then the read fails (`RailTransport.cut[rail]` = `timeout` → `ReadTimeout`, `transport-error` → `RemoteProtocolError`) | the `timeout` / `transport-error` completeness rows |
 
 ## The codex rail's fakes (`tests/_codex_world.py`)
 

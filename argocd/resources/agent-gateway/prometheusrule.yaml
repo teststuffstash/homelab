@@ -7,9 +7,9 @@
 # GoRailCredentialRejected — born from the 2026-10-17 Go key expiry: the OpenCode Go API key
 # expired upstream at 17:12:49Z, every Go call answered 401 `api_key_expired` for ~2 h, and the
 # only alert that fired was AgentLoopWorkflowsFailing (a symptom, from 17:28Z). The gateway types
-# an upstream 401/403 as 502 `upstream-auth`, but gateway_requests_total folds that into `502`
-# with `upstream-unreachable`; gateway_upstream_auth_rejected_total is the series that tells a
-# dead credential from a dead upstream.
+# an upstream 401 / credential-reason 403 as 424 `upstream-auth` (a policy-refusal 403 is 403
+# `upstream-refused`, never counted here); gateway_upstream_auth_rejected_total is the event series
+# that tells a dead credential from a dead upstream (gateway_credentials_rejected is the state).
 #
 # The shape, in three parts:
 #   ONSET  = ≥3 auth rejections in 5m AND zero 2xx in the same 5m, on the opencode rail. Zero 2xx
@@ -50,4 +50,4 @@ spec:
             triage: now
           annotations:
             summary: 'OpenCode Go answers 401/403 to the gateway''s key with no 2xx — if the probe confirms the key is dead, rotate: wallet opencode-go-api-key → Infisical OPENCODE_GO_API_KEY → force-sync ExternalSecret agent-egress/opencode-go-key → restart agent-gateway + openrouter-proxy'
-            description: 'OpenCode Go answered 401/403 (502 upstream-auth) to the gateway''s own key, with no 2xx since; the last sustained burst was at {{ $value | humanizeTimestamp }}. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "upstream-auth opencode" shows the rejections and their upstream status; (2) probe the key the Secret holds against https://opencode.ai/zen/go/v1/models (docs/runbook.md §Rotate the OpenCode Go API key, step 0) — 401 there = the key itself is rejected. If the probe confirms it, the runbook section is the rotation recipe; if the probe answers 200, the key works and the gateway is not sending it (look at the ExternalSecret sync and the pod''s env). Clears on the first 2xx window after the burst, or after 2h with no new burst.'
+            description: 'OpenCode Go answered 401/403 (424 upstream-auth) to the gateway''s own key, with no 2xx since; the last sustained burst was at {{ $value | humanizeTimestamp }}. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "upstream-auth opencode" shows the rejections and their upstream status; (2) probe the key the Secret holds against https://opencode.ai/zen/go/v1/models (docs/runbook.md §Rotate the OpenCode Go API key, step 0) — 401 there = the key itself is rejected. If the probe confirms it, the runbook section is the rotation recipe; if the probe answers 200, the key works and the gateway is not sending it (look at the ExternalSecret sync and the pod''s env). Clears on the first 2xx window after the burst, or after 2h with no new burst.'

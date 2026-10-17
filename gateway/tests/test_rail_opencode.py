@@ -19,7 +19,7 @@
 | the models list passes through | GET /openai/v1/models | upstream-ok | https://opencode.ai/zen/go/v1/models | 200 | byte-identical |
 | a stream streams | POST /openai/v1/chat/completions, stream: true | upstream-stream | .../chat/completions | 200 | SSE bytes unchanged |
 | a rate limit passes through | POST /anthropic/v1/messages | upstream-429 | .../messages | 429 | the upstream body, retry-after kept |
-| an upstream auth failure is typed and hidden | POST /openai/v1/chat/completions | upstream-401 | .../chat/completions | 502 | upstream-auth envelope |
+| an upstream auth failure is typed and hidden | POST /openai/v1/chat/completions | upstream-401 | .../chat/completions | 424 | upstream-auth envelope |
 | the vendor's MissingSessionID is passed through, not masked | POST /anthropic/v1/messages | upstream-400-missing-session | .../messages | 400 | the upstream body |
 | an unreachable upstream is typed | POST /anthropic/v1/messages | upstream-down | .../messages | 502 | upstream-unreachable envelope |
 | a read past 600 s (WIP: clock-faked) | POST /anthropic/v1/messages | upstream-slow | .../messages | 504 | upstream-timeout |
@@ -111,7 +111,7 @@ async def test_upstream_auth_hidden(gw, upstreams):
     world(upstream="upstream-401")
     upstreams[RAIL].behaviour = "upstream-401"
     _, r = await ride(gw, RAIL, "chat")
-    then_eq("status", r.status_code, 502)
+    then_eq("status", r.status_code, 424)
     with then("body = the upstream-auth envelope, not the upstream body (no LEAK marker)", body={"actual": r.text}):
         assert err(r) == "upstream-auth"
         assert "LEAK" not in r.text

@@ -30,7 +30,7 @@ Subscription window utilization (reviewer; arrange = one anthropic ride whose an
 | any 2xx on the rail clears the latch | reviewer ride on anthropic → 429, then the same session → 200 | — | reviewer, rail anthropic || dispatch | anthropic | — | — |
 | a Go 429 latches the Go rail | worker ride on opencode → 429 | — | worker, rail opencode || defer | — | rail-latched | 30 |
 | a latched rail is skipped, the walk continues | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
-| a rail whose policy declares no latch does not latch | worker ride on openrouter → 429 | — | worker, rail openrouter || dispatch | openrouter | — | — |
+| a rail whose policy declares no latch is not latched: its other model admits | worker ride on openrouter → 429 | — | worker, rail openrouter, tier heavy || dispatch | openrouter | — | — |
 | every rail blocked: the rail that frees first names the defer | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | rail-latched | 30 |
 
 Go window draw (worker ride on opencode = opencode-go/deepseek-v4-flash; reviewer = the unpriced
@@ -177,8 +177,10 @@ LATCH_ROWS = [
      {"rail": "opencode"}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 30}),
     ("a latched rail is skipped, the walk continues", [("opencode", "worker", "upstream-429")], 0,
      {}, {"decision": "dispatch", "rail": "openrouter"}),
-    ("a rail whose policy declares no latch does not latch", [("openrouter", "worker", "upstream-429")], 0,
-     {"rail": "openrouter"}, {"decision": "dispatch", "rail": "openrouter"}),
+    # openrouter declares no latch: the 429 cooled only its cell (deepseek-v4-flash, the worker's standard
+    # tier — test_sessions_admit_cells.py); the heavy tier's deepseek-v4.1-flash cell is untouched
+    ("a rail whose policy declares no latch is not latched: its other model admits", [("openrouter", "worker", "upstream-429")], 0,
+     {"rail": "openrouter", "tier": "heavy"}, {"decision": "dispatch", "rail": "openrouter"}),
     # opencode frees at +30 (latch), openrouter at +60 (full → defer_retry_s): the earlier names the defer
     ("every rail blocked: the rail that frees first names the defer", [("opencode", "worker", "upstream-429"), ("fill", "openrouter", 20)], 0,
      {}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 30}),

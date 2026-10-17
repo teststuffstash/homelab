@@ -22,11 +22,11 @@ inspects, the per-rail upstream contract and the error envelope; the service **i
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-RAIL-OPENROUTER](#gw-rail-openrouter) | `upstream.openrouter` (URL per dialect, auth), `models.openrouter` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 — provider pins / `:exacto` / the headroom poll / the `/generation` cost harvest `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP` |
+| [GW-RAIL-OPENROUTER](#gw-rail-openrouter) | `upstream.openrouter` (URL per dialect, auth), `models.openrouter`, `output.complete` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 — provider pins / `:exacto` / the headroom poll / the `/generation` cost harvest `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP` |
 | [GW-RAIL-OPENCODE](anthropic-messages.md#gw-rail-opencode) (owned there) | `upstream.opencode`, `models.opencode` | `upstream-auth`, `upstream-unreachable` | linked |
 | [GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic) (owned there) | `upstream.anthropic` (none — 501) | `dialect-unsupported-on-rail` | linked |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked |
-| [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization`, `input.headers.x-api-key` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `header-refused` | linked |
+| [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization`, `input.headers.x-api-key` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `upstream-refused`, `header-refused` | linked |
 | [GW-SESSIONS-RELEASE](sessions.md#gw-sessions-release) (owned there) | `input.headers.authorization` | `session-expired`, `session-released` | linked |
 | [GW-CRED-RESOLVE](sessions.md#gw-cred-resolve) (owned there) | `upstream.*.auth` | `credential-unresolved`, `credential-transient` | linked |
 
@@ -47,7 +47,8 @@ scheme, i.e. the same bearer); the human docs index and `llms.txt` do not mentio
 openapi file is the citation. ⚖ Whether that endpoint honours `anthropic-beta` is not stated
 anywhere read — the header is forwarded untouched and the row is **verify during
 implementation**. The body's `model` is the bare policy id. Upstream 429 passes through with
-`retry-after`; 401/403 is 502 `upstream-auth`; a connection that fails before any byte is sent
+`retry-after` (and cools the session's cell — [§Capacity](sessions.md#capacity--the-ladders-capacity-half));
+401/403 is 424 `upstream-auth` or 403 `upstream-refused` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)); a connection that fails before any byte is sent
 is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`).
 
 | description | dialect | inbound header || upstream header |
@@ -66,9 +67,21 @@ is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`).
 | "an openai-dialect cache read is split out" | `POST /openai/v1/chat/completions` | upstream-ok-cached || `…/chat/completions` | 200 | byte-identical | (`requests`, `tokens_in`, `tokens_cache_read`, `tokens_cache_write`, `tokens_out`) = (1, 12, 300, 0, 7) — `tokens_in` = `prompt_tokens` − `prompt_tokens_details.cached_tokens` ⚖ |
 | "a stream streams" | `POST /openai/v1/chat/completions`, `stream: true` | upstream-stream || `…/chat/completions` | 200 | SSE bytes unchanged | tokens from the last chunk's `usage` when present, else unchanged ⚖ |
 | "a rate limit passes through" | `POST /openai/v1/chat/completions` | upstream-429 || `…/chat/completions` | 429 | the upstream body, `retry-after` kept | `requests` +1 |
-| "an upstream auth failure is typed and hidden" | `POST /openai/v1/chat/completions` | upstream-401 || `…/chat/completions` | 502 | `upstream-auth` envelope | `requests` +1 |
+| "an upstream auth failure is typed and hidden" | `POST /openai/v1/chat/completions` | upstream-401 || `…/chat/completions` | 424 | `upstream-auth` envelope | `requests` +1 |
 | "an unreachable upstream is typed" | `POST /openai/v1/chat/completions` | upstream-down || `…/chat/completions` | 502 | `upstream-unreachable` envelope | `requests` +1 |
 | "🚧 WIP: a read past 600 s" | `POST /openai/v1/chat/completions` | upstream-slow || `…/chat/completions` | 504 | `upstream-timeout` | `requests` +1 |
+
+Stream completeness on this dialect: the terminal event is `data: [DONE]`; the rule and the four
+`incomplete` reasons are [GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)'s. The
+`upstream-stream-cut` world delivers the status and a first chunk, then fails the read.
+
+| description | upstream behaviour || client sees | recorded on the session | `gateway_requests_incomplete_total{rail="openrouter",dialect="openai",reason}` |
+|---|---||---|---|---|
+| "a stream that ends without [DONE] is recorded incomplete" | upstream-stream-truncated (stream: true) || 200, the bytes unchanged | `requests_incomplete` 1; the request row's `incomplete` = `no-terminal` | `no-terminal` = 1 |
+| "a stream that ends with [DONE] is complete" | upstream-stream (stream: true) || 200 | `requests_incomplete` 0; `incomplete` = null | `no-terminal` = 0 |
+| "a non-streamed answer read to its end is complete" | upstream-ok || 200 | `requests_incomplete` 0; `incomplete` = null | `no-terminal` = 0 |
+| "a stream cut by a read timeout is recorded incomplete" | upstream-stream-cut (timeout) || 200, then the body breaks | `requests_incomplete` 1; `incomplete` = `timeout`; the row's status 504 | `timeout` = 1 |
+| "a stream cut by the transport is recorded incomplete" | upstream-stream-cut (transport-error) || 200, then the body breaks | `requests_incomplete` 1; `incomplete` = `transport-error` | `transport-error` = 1 |
 
 | description | session rail | inbound path || status | body |
 |---|---|---||---|---|

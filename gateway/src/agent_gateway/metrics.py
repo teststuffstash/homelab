@@ -3,12 +3,15 @@
 Families: `gateway_sessions_active{rail}`, `gateway_sessions_total{rail,role,stack,decision}`,
 `gateway_requests_total{rail,dialect,status}`, `gateway_upstream_seconds{rail}` (histogram),
 `gateway_tokens_total{rail,class}`, `gateway_credential_resolve_total{rail,outcome}`,
-`gateway_upstream_auth_rejected_total{rail}` (every upstream 401/403 answered as 502 `upstream-auth` —
+`gateway_upstream_auth_rejected_total{rail}` (every upstream 401/403 credential verdict, answered 424 `upstream-auth` —
 the rail's credential is bad; every rail renders from 0),
 `gateway_control_plane_unauthenticated_total{route,reason}` (GW-SESSIONS-AUTH — every control-plane
 request without a valid caller token, admitted under `observe` or refused under `enforce`),
 `gateway_subscription_utilization{rail,window}` + `gateway_subscription_reset_seconds{rail,window}`
 (gauges, last seen on the subscription rail's `anthropic-ratelimit-unified-*` response headers).
+`gateway_cells_cooled{rail}` + `gateway_credentials_rejected{rail}` (gauges — the admission's transport
+facts, sessions.md §Capacity) and `gateway_requests_incomplete_total{rail,dialect,reason}` (a 2xx whose
+body stopped before its end, GW-RAIL-*).
 A label value outside its declared set renders as `other` — a task key, a session id or a model
 string can never become a series (cardinality is a policy decision, not a request's).
 """
@@ -27,6 +30,7 @@ TOKEN_CLASSES = ("in", "cache_read", "cache_write", "out")
 CRED_OUTCOMES = ("resolved", "definitive", "transient")
 CP_ROUTES = ("admit", "lookup", "release")  # control.ROUTES (not imported: control imports this module)
 CP_REASONS = ("absent", "invalid", "review-transient")
+INCOMPLETE_REASONS = ("no-terminal", "timeout", "transport-error", "client-closed")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
 
@@ -59,10 +63,22 @@ class Metrics:
         self.upstream_buckets: dict[str, list[int]] = {}
         self.upstream_sum: dict[str, float] = {}
         self.upstream_count: dict[str, int] = {}
+        self.incomplete_total: dict[tuple[str, str, str], int] = {}
         self._gauge_source: Callable[[], dict[str, int]] | None = None
+        self._cooled_source: Callable[[], dict[str, int]] | None = None
+        self._rejected_source: Callable[[], dict[str, int]] | None = None
 
     def bind_active_sessions(self, source: Callable[[], dict[str, int]]) -> None:
         self._gauge_source = source
+
+    def bind_transport_facts(self, cooled: Callable[[], dict[str, int]], rejected: Callable[[], dict[str, int]]) -> None:
+        """The capacity state's two gauges (sessions.md §Capacity): cooled cells, rejected credentials."""
+        self._cooled_source, self._rejected_source = cooled, rejected
+
+    def request_incomplete(self, rail: str, dialect: str, reason: str) -> None:
+        key = (_bounded(rail, RAILS), _bounded(dialect, DIALECTS), _bounded(reason, INCOMPLETE_REASONS))
+        with self._lock:
+            self.incomplete_total[key] = self.incomplete_total.get(key, 0) + 1
 
     def session_decision(self, rail: str, role: str, stack: str, decision: str) -> None:
         key = (_bounded(rail, RAILS + ("none",)), _bounded(role, ROLES), _bounded(stack, self.stacks), _bounded(decision, DECISIONS))
@@ -119,6 +135,15 @@ class Metrics:
     def render(self) -> str:
         lines: list[str] = []
         active = self._gauge_source() if self._gauge_source else {}
+        cooled = self._cooled_source() if self._cooled_source else {}
+        rejected = self._rejected_source() if self._rejected_source else {}
+        # Every rail renders, zeros included (an absent series reads as "never scraped", not "none").
+        lines += ["# HELP gateway_cells_cooled (rail, model) cells an upstream 429 cooled, until their reset — admission skips them.",
+                  "# TYPE gateway_cells_cooled gauge"]
+        lines += [f"gateway_cells_cooled{_fmt_labels({'rail': rail})} {cooled.get(rail, 0)}" for rail in RAILS]
+        lines += ["# HELP gateway_credentials_rejected Rail credentials an upstream 401/403 rejected, until a 2xx on them or a new credential.",
+                  "# TYPE gateway_credentials_rejected gauge"]
+        lines += [f"gateway_credentials_rejected{_fmt_labels({'rail': rail})} {rejected.get(rail, 0)}" for rail in RAILS]
         lines += ["# HELP gateway_sessions_active Sessions admitted and neither released nor expired.", "# TYPE gateway_sessions_active gauge"]
         for rail in RAILS:
             lines.append(f"gateway_sessions_active{_fmt_labels({'rail': rail})} {active.get(rail, 0)}")
@@ -151,10 +176,14 @@ class Metrics:
                 lines.append(f"gateway_credential_resolve_total{_fmt_labels({'rail': rail, 'outcome': outcome})} {n}")
             # Every rail renders, zeros included: the alert reads increase(), and a series born at 1 on
             # a fresh pod would hide its first rejection from it.
-            lines += ["# HELP gateway_upstream_auth_rejected_total Upstream 401/403 answers to the gateway's rail credential (answered 502 upstream-auth), per rail.",
+            lines += ["# HELP gateway_upstream_auth_rejected_total Upstream 401/403 credential verdicts on the gateway's rail credential (answered 424 upstream-auth), per rail.",
                       "# TYPE gateway_upstream_auth_rejected_total counter"]
             for rail in RAILS:
                 lines.append(f"gateway_upstream_auth_rejected_total{_fmt_labels({'rail': rail})} {self.upstream_auth_total.get(rail, 0)}")
+            lines += ["# HELP gateway_requests_incomplete_total 2xx answers whose body stopped before its end, by reason.",
+                      "# TYPE gateway_requests_incomplete_total counter"]
+            for (rail, dialect, reason), n in sorted(self.incomplete_total.items()):
+                lines.append(f"gateway_requests_incomplete_total{_fmt_labels({'rail': rail, 'dialect': dialect, 'reason': reason})} {n}")
             # Every (route, reason) renders, zeros included: the flip's soak reads a flat series, and
             # an absent series cannot be told apart from a scrape that never saw the family.
             lines += ["# HELP gateway_control_plane_unauthenticated_total Control-plane requests without a valid caller token (admitted under observe, refused under enforce).",
