@@ -1,0 +1,3 @@
+CALL kubectl -n platform-agents create token agentstack-loop --audience agent-gateway --duration 10m
+ERR PREFLIGHT REFUSED: could not mint a caller token for platform-agents/agentstack-loop (kubectl create token --audience agent-gateway) — GW-SESSIONS-AUTH. No session, no pod.
+RC 2

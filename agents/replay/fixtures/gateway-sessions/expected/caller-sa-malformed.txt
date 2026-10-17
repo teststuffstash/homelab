@@ -1,0 +1,2 @@
+ERR PREFLIGHT REFUSED: AGENT_GATEWAY_CALLER_SA='agentstack-loop' is not <namespace>/<serviceaccount> (GW-SESSIONS-AUTH). No session, no pod.
+RC 2

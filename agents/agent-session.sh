@@ -225,6 +225,20 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 #                            one-liner after the canary. Unset = today's /route path, byte-for-byte.
 #   AGENT_GATEWAY_RAIL=<r>   optional explicit `rail` in the body (the canary sets opencode).
 #   AGENT_GATEWAY_URL=<url>  the control-plane address (a jail run reaches it via port-forward).
+#   AGENT_GATEWAY_CALLER_SA=<ns>/<sa>  JAIL CANARY ONLY: mint the caller token for THAT ServiceAccount
+#                            (`kubectl create token … --audience agent-gateway --duration 10m`).
+#   AGENT_GATEWAY_CALLER_TOKEN_FILE=<path>  in a pod: the projected caller token
+#                            (default /var/run/secrets/agent-gateway/token).
+#
+# The CALLER authenticates (GW-SESSIONS-AUTH): every POST / DELETE /sessions carries
+# `Authorization: Bearer <a projected ServiceAccount token, audience agent-gateway>`, and the
+# gateway's policy `callers` grants that SA its stacks, roles and bind namespaces. In a pod the token
+# is the dispatcher's own projected one (the file above, mounted by the pod spec — re-read per call,
+# kubelet rotates it). In the jail there is no such file: the operator names the dispatcher SA the
+# stack would use (platform: `platform-agents/agentstack-loop`) and the admin kubeconfig mints a
+# 10-minute token for it — HONEST IMPERSONATION for canaries only, never an in-cluster path (a loop
+# pod cannot mint tokens for other SAs, by RBAC). Neither present = refused before any request:
+# under the knob a token-less call is never the plan, even while the gateway still `observe`s.
 #
 # Under the knob the router consult, the #158 rail-degrade, the chainless guard, the model_id
 # parse and the FU-088 subscription/Go gates are all SKIPPED: the gateway's admission walk IS the
@@ -241,8 +255,26 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 # a token to a bound request anyway is refused, released and not dispatched.
 # >>>REPLAY:gateway-sessions>>>
 GW_SESSIONS=""; GW_SESSION_ID=""; GW_ENV_KEYS=""; GW_PULL_URL=""; GW_RAIL=""; GW_CLAUDE_MODEL=""; GW_CONTEXT_TOKENS=""
-GW_POD=""; GW_PULL_PRELUDE=""; GW_TRAP_HOOK=""; GW_EXPIRES_AT=""
+GW_POD=""; GW_PULL_PRELUDE=""; GW_TRAP_HOOK=""; GW_EXPIRES_AT=""; GW_CALLER_DESC=""
 GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local:8080}"
+GW_CALLER_TOKEN_FILE="${AGENT_GATEWAY_CALLER_TOKEN_FILE:-/var/run/secrets/agent-gateway/token}"
+# gw_caller_token — a FRESH caller token on stdout (GW-SESSIONS-AUTH), fetched per call and never
+# kept in a variable: the release may run hours after admission, past a 10-minute mint and past a
+# kubelet rotation of the projected file. Non-zero = no token.
+gw_caller_token() {
+  local _t=""
+  if [ -n "${AGENT_GATEWAY_CALLER_SA:-}" ]; then
+    # JAIL CANARY: the admin kubeconfig impersonates the named dispatcher SA (comment above).
+    _t="$("$KUBECTL" $KUBE -n "${AGENT_GATEWAY_CALLER_SA%%/*}" create token "${AGENT_GATEWAY_CALLER_SA#*/}" \
+          --audience agent-gateway --duration 10m 2>/dev/null)" || return 1
+  elif [ -r "$GW_CALLER_TOKEN_FILE" ]; then
+    _t="$(cat "$GW_CALLER_TOKEN_FILE" 2>/dev/null)" || return 1
+  fi
+  [ -n "$_t" ] || return 1
+  printf '%s' "$_t"
+}
+# gw_auth_header — the header for curl's `-H @<file>`: the token never rides argv (ps-visible).
+gw_auth_header() { local _t; _t="$(gw_caller_token)" || return 1; printf 'Authorization: Bearer %s\n' "$_t"; }
 # gw_release — DELETE /sessions/{id} (GW-SESSIONS-RELEASE: idempotent server-side). Idempotent here
 # too (clears the id first), so the explicit call after the headless follow and the EXIT trap may
 # both run. A failed DELETE is non-fatal: the session expires by the policy TTL (4 h), and saying so
@@ -250,7 +282,7 @@ GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local
 gw_release() {
   [ -n "${GW_SESSION_ID:-}" ] || return 0
   local _sid="$GW_SESSION_ID"; GW_SESSION_ID=""
-  if curl -fsS --max-time 10 -X DELETE "${GW_URL}/sessions/${_sid}" >/dev/null 2>&1; then
+  if curl -fsS --max-time 10 -H @<(gw_auth_header) -X DELETE "${GW_URL}/sessions/${_sid}" >/dev/null 2>&1; then
     echo "→ gateway(sessions): released ${_sid}"
   else
     echo "WARN gateway(sessions): release of ${_sid} FAILED — it holds its rail slot until the session TTL" >&2
@@ -282,6 +314,22 @@ if [ -n "${GW_SESSIONS:-}" ]; then
     echo "PREFLIGHT REFUSED: an interactive session under AGENT_GATEWAY=sessions — the pod pulls its LLM env once, in its command (GW-SESSIONS-PULL); pass --run or --recipe. No session, no pod." >&2
     exit 2
   fi
+  # The caller's identity (GW-SESSIONS-AUTH) — resolved once up front so a missing token refuses
+  # before any request; every call below fetches its own fresh one.
+  if [ -n "${AGENT_GATEWAY_CALLER_SA:-}" ] && ! [[ "$AGENT_GATEWAY_CALLER_SA" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]]; then
+    echo "PREFLIGHT REFUSED: AGENT_GATEWAY_CALLER_SA='${AGENT_GATEWAY_CALLER_SA}' is not <namespace>/<serviceaccount> (GW-SESSIONS-AUTH). No session, no pod." >&2
+    exit 2
+  fi
+  if ! gw_caller_token >/dev/null; then
+    if [ -n "${AGENT_GATEWAY_CALLER_SA:-}" ]; then
+      echo "PREFLIGHT REFUSED: could not mint a caller token for ${AGENT_GATEWAY_CALLER_SA} (kubectl create token --audience agent-gateway) — GW-SESSIONS-AUTH. No session, no pod." >&2
+    else
+      echo "PREFLIGHT REFUSED: no gateway caller token — ${GW_CALLER_TOKEN_FILE} is not mounted, and AGENT_GATEWAY_CALLER_SA (jail canary: <ns>/<sa> of the dispatcher, e.g. platform-agents/agentstack-loop) is unset. /sessions authenticates its caller (GW-SESSIONS-AUTH). No session, no pod." >&2
+    fi
+    exit 2
+  fi
+  GW_CALLER_DESC="${AGENT_GATEWAY_CALLER_SA:+${AGENT_GATEWAY_CALLER_SA} (minted, jail canary)}"
+  GW_CALLER_DESC="${GW_CALLER_DESC:-the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)}"
   # The bind: the pod this launcher is about to create — its namespace (NS = PROJECT), its
   # ServiceAccount (the pod manifest's serviceAccountName) and its NAME, computed here by the same
   # rule the pod-name block applies later (which then reuses GW_POD verbatim).
@@ -300,7 +348,7 @@ if [ -n "${GW_SESSIONS:-}" ]; then
        + {bind: {namespace: $ns, serviceaccount: "agentstack-worker", pod: $pod}}')"
   _gw_resp="$(mktemp)"
   _gw_http="$(curl -sS --max-time 20 -o "$_gw_resp" -w '%{http_code}' -H 'Content-Type: application/json' \
-      -X POST "${GW_URL}/sessions" -d "$_gw_req" 2>/dev/null)" || _gw_http="000"
+      -H @<(gw_auth_header) -X POST "${GW_URL}/sessions" -d "$_gw_req" 2>/dev/null)" || _gw_http="000"
   _gw_decision=""
   [ "$_gw_http" != "200" ] || _gw_decision="$(jq -r '.decision // ""' "$_gw_resp" 2>/dev/null)" || _gw_decision=""
   case "$_gw_decision" in
@@ -363,7 +411,7 @@ if [ -n "${GW_SESSIONS:-}" ]; then
     echo "→ gateway(sessions): defer — [dispatch-unusable: ${_gw_bad}] retry_after=?s — FAIL CLOSED, releasing and not dispatching." >&2
     exit 1   # the EXIT trap releases the session
   fi
-  echo "→ gateway(sessions): dispatch ${MODEL} [rail=${GW_RAIL},harness=${HARNESS},session=${GW_SESSION_ID},context_tokens=${GW_CONTEXT_TOKENS:-null}] (task=${TASK:-adhoc}, round=${ROUND}) — bound to ${PROJECT}/agentstack-worker pod ${GW_POD}; the pod pulls env ${GW_ENV_KEYS}"
+  echo "→ gateway(sessions): dispatch ${MODEL} [rail=${GW_RAIL},harness=${HARNESS},session=${GW_SESSION_ID},context_tokens=${GW_CONTEXT_TOKENS:-null}] (task=${TASK:-adhoc}, round=${ROUND}) — bound to ${PROJECT}/agentstack-worker pod ${GW_POD}; the pod pulls env ${GW_ENV_KEYS}; caller ${GW_CALLER_DESC}"
   # The pod command's FIRST step (WRAPPED, ahead of the harness and outside its tee — nothing of it
   # reaches /tmp/run.log): read the projected token, POST the pull URL, export exactly the
   # `env_keys` from the answer, drop the locals. Any failure exits 97 BEFORE the harness starts.
