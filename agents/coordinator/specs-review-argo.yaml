@@ -123,3 +123,87 @@ spec:
   failedJobsHistoryLimit: 5
   workflowSpec:
     workflowTemplateRef: { name: specs-review }
+---
+# SHADOW cell runs (gateway/PLAN.md step 3; docs/agents/specs-reviewer.md §Shadow runs): ONE
+# harness × rail cell over a PR list, one-off, never on a schedule. The same script in
+# `--shadow` mode: the same context pack and brief, the verdicts written to /work/shadow (the
+# `shadow` output artifact → the namespace's default Garage repository), NO GitHub write (the
+# script's read-only gh allow-list, pinned by its --self-test) and no pushgateway metrics — the
+# live tick's belts never see a shadow run. A SEPARATE template, not parameters on `specs-review`:
+# its own mutex (a shadow run never holds the live tick's), its own deadline (a PR list outlasts
+# one tick's 900 s) and an image the caller picks — the opencode/goose cells need agent-base (the
+# harness image), the claude cells ride the live reviewer's agent-coordinator image. The image is a
+# runtime parameter with NO default, taken from agents/images.env (the probe-argo.yaml shape — no
+# first-party tag is written here):
+#   argo submit -n agent-coordinator --from workflowtemplate/specs-review-shadow \
+#     -p image="$(sed -n 's/^AGENT_BASE_IMAGE=//p' agents/images.env)" -p harness=goose -p rail=openrouter \
+#     -p prs="homelab#2640@9639e99ede9bf4c1deb77c8231837db73ee790bc homelab#2635@02c7fb58…"
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: specs-review-shadow
+  namespace: agent-coordinator
+spec:
+  entrypoint: main
+  serviceAccountName: agent-coordinator
+  arguments:
+    parameters:
+      - name: image                   # REQUIRED — an agents/images.env pin (AGENT_BASE_IMAGE / AGENT_COORDINATOR_IMAGE)
+      - name: harness                 # REQUIRED — claude | opencode | goose
+      - { name: rail, value: "" }     # optional POST /sessions override (anthropic | opencode | openrouter)
+      - { name: tier, value: "" }     # optional POST /sessions tier (light | standard | heavy)
+      - { name: role, value: "reviewer" }
+      - name: prs                     # REQUIRED — space-separated <repo>#<n>[@<judged head sha>]
+  synchronization:
+    mutexes:
+      - name: specs-review-shadow
+  activeDeadlineSeconds: 3600
+  ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 86400 }
+  volumes:
+    - { name: work, emptyDir: {} }
+    - { name: specs-reviewer-git, secret: { secretName: specs-reviewer-git, optional: true } }
+  templates:
+    - name: main
+      metadata:
+        labels: { app: specs-review-shadow }
+      outputs:
+        artifacts:
+          - { name: shadow, path: /work/shadow, optional: true }
+      container:
+        image: "{{workflow.parameters.image}}"
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -e
+            rm -rf /work/homelab
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            # parameters arrive as env, never spliced into this script; SHADOW_PRS word-splits on purpose
+            exec bash /work/homelab/agents/specs-reviewer-session.sh --shadow --harness "$SHADOW_HARNESS" \
+              --rail "$SHADOW_RAIL" --tier "$SHADOW_TIER" --role "$SHADOW_ROLE" --out /work/shadow $SHADOW_PRS
+        env:
+          - { name: SHADOW_HARNESS, value: "{{workflow.parameters.harness}}" }
+          - { name: SHADOW_RAIL, value: "{{workflow.parameters.rail}}" }
+          - { name: SHADOW_TIER, value: "{{workflow.parameters.tier}}" }
+          - { name: SHADOW_ROLE, value: "{{workflow.parameters.role}}" }
+          - { name: SHADOW_PRS, value: "{{workflow.parameters.prs}}" }
+          - { name: ORG, value: "teststuffstash" }
+          - { name: GATEWAY_URL, value: "http://agent-gateway.agent-egress.svc.cluster.local:8080" }
+          # READ identity for the PR bodies, reviews and CI artifacts (the shadow path cannot write
+          # with it — the script's gh allow-list). No PUSHGATEWAY: a shadow run reports nothing.
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: specs-reviewer-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/specs-reviewer-git/GH_TOKEN" }
+          - { name: CLAUDE_CODE_ENABLE_TELEMETRY, value: "1" }
+          - { name: OTEL_METRICS_EXPORTER, value: "otlp" }
+          - { name: OTEL_LOGS_EXPORTER, value: "otlp" }
+          - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: "http/protobuf" }
+          - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.monitoring.svc.cluster.local:4318" }
+          - { name: OTEL_TRACES_EXPORTER, value: "none" }
+          - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=specs-reviewer,stack=platform" }   # the script appends shadow=true,cell=…
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: specs-reviewer-git, mountPath: /var/run/specs-reviewer-git, readOnly: true }
+        resources:
+          requests: { cpu: "250m", memory: "512Mi" }
+          limits: { memory: "2Gi" }

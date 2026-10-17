@@ -136,6 +136,41 @@ appearing IS the cutover — the next tick posts verdicts. Until then every home
 second required approval and the operator merges by admin override (ADR-155 landed first, by
 design); the alert belt is live from the first shadow tick.
 
+## Shadow runs — harness × rail cells (gateway/PLAN.md step 3)
+
+A shadow run measures which harness × rail **cell** could ride this reviewer, on PRs whose verdicts
+are already known, without touching any PR. `agents/specs-reviewer-session.sh --shadow --harness
+claude|opencode|goose [--rail R] [--tier T] <repo>#<n>[@<sha>] …` takes the cell's explicit
+`POST /sessions` inputs and builds the SAME context pack as the live pass (`build_pack`, one
+builder), with the same lens, briefs and prompt. It writes one record per PR (verdict, findings,
+the admission answer without its token, the gateway's session row with its four token classes,
+wall clock, harness exit / timeout) to `--out`. It writes nothing to GitHub: every `gh` call goes
+through a read-only allow-list (`gh_shadow_allows`), and a write is refused with rc 97 before it
+reaches the CLI. The self-test pins the allow-list table, the refusal of the live verdict writer
+and the anomaly comment, and that a run installs the wrapper. It pushes no metrics.
+
+**Replay fidelity.** The judged head is fetched by sha. The base is `merge-base(origin/<base>,
+head)`. The PR body is the edit that was current at the live review (`as_of` = the first own
+review at that head). The prior review is the newest own LLM review before `as_of`. The baseline is
+the newest base push run that is an ancestor of that base. #2635 needs this: its first review
+judged a body without `Spec changes:`, and the same head was approved after the body edit. Issue
+intent, the lens and the wheel are today's, and each record says so.
+
+**Where.** The `specs-review-shadow` WorkflowTemplate (`agents/coordinator/specs-review-argo.yaml`)
+runs one cell per submission. It has its own mutex and a 1 h deadline, and the records come back
+as its `shadow` artifact. Its `image` is a runtime parameter from `agents/images.env`: agent-base
+for the opencode/goose cells (the harness image), agent-coordinator for the claude cells (the live
+reviewer's image).
+
+**Confinement per cell.** Every cell runs under `env -i` with the dispatch env verbatim plus OTEL
+and a throwaway `HOME`. The harness adds only its prompt, system prompt and tool scope, never a
+base URL, key or model ([GW-SESSIONS-ENV](../../gateway/specs/endpoints/sessions.md#gw-sessions-env)).
+Tool scope differs by cell. claude keeps the live allow-list. opencode denies
+edit/bash/webfetch/external_directory (`OPENCODE_PERMISSION`). goose has no path-scoped read, so
+its `developer` builtin keeps a shell, and its records say `confinement: env-only`.
+
+**Measurements.** The cell × PR table lands here (ADR-156 step 5's per-PR numbers).
+
 ## The portable process (ADR-156, 2026-10-16)
 
 Every repo that keeps `specs/` runs the SAME requirements → tests → evidence → review process, or
