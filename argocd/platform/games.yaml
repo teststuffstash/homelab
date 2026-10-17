@@ -1,0 +1,38 @@
+# games.homelab.teststuff.net — the operator's browser-games site (Forgejo rasmus/games). The repo's
+# `ship` workflow pushes registry.teststuff.net/games:main and rolls deploy/games by patching its pod
+# template annotations; those annotations are ignored here so selfHeal does not revert (and re-roll)
+# every release. ArgoCD never reads Forgejo (FU-007) — only these manifests, from GitHub.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: games
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2" # after gateway-api-crds (ReferenceGrant)
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/games
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: games
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: games
+      jsonPointers:
+        - /spec/template/metadata/annotations
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
