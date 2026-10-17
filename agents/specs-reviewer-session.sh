@@ -206,6 +206,15 @@ self_test() {
   check "env builder: no GH_TOKEN / GH_TOKEN_FILE / GATEWAY_URL / PUSHGATEWAY" 0 "$(grep -cE '^(GH_TOKEN|GH_TOKEN_FILE|GATEWAY_URL|PUSHGATEWAY)=' <<< "$envout")"
   check "env builder: OTEL attribute carried" "OTEL_RESOURCE_ATTRIBUTES=role=t" "$(grep -E '^OTEL_RESOURCE_ATTRIBUTES=' <<< "$envout")"
   check "env builder: throwaway HOME" "HOME=$d/home" "$(grep -E '^HOME=' <<< "$envout")"
+  # the seeded HOME carries NO permission rules (settings allow-rules union with --allowedTools):
+  # the fake image HOME holds the agent images' real permissive settings.json + a .claude.json;
+  # the .claude.json reaching the throwaway HOME proves the seeding ran at all.
+  mkdir -p "$d/fakehome/.claude"
+  printf '%s\n' '{"hasCompletedOnboarding":true}' > "$d/fakehome/.claude.json"
+  printf '%s\n' '{"permissions":{"allow":["Bash(*)","Read(*)","Edit(*)","Write(*)","WebSearch(*)","WebFetch(*)"]},"skipDangerousModePermissionPrompt":true}' > "$d/fakehome/.claude/settings.json"
+  HOME="$d/fakehome" llm_env_args "$d/resp.json" "$d/home3" >/dev/null
+  check "seeded HOME: .claude.json carried (onboarding state)" 1 "$(grep -c hasCompletedOnboarding "$d/home3/.claude.json" 2>/dev/null || echo 0)"
+  check "seeded HOME: no settings file carries a permissions key" 0 "$(cat "$d/home3/.claude/settings.json" "$d/home3/.claude/settings.local.json" 2>/dev/null | grep -c '"permissions"' || true)"
   printf '%s' '{"env":{"EVIL=x; rm -rf":"y"}}' > "$d/bad.json"
   check "env builder: shell-hostile key is a refusal" 1 "$(llm_env_args "$d/bad.json" "$d/home2" >/dev/null 2>&1 && echo 0 || echo 1)"
   # the pinned-verdict contract (PR#2613 round 2): review_submit re-reads the head right before
@@ -362,14 +371,21 @@ prior_review_pick() {
 # llm_env_args <dispatch-json> <home-dir> → one `K=V` per line: the COMPLETE env the model runs
 # under (`env -i`). Exactly: the gateway's `env` map verbatim (keys validated — a shell-hostile
 # key is a refusal, exit 1), the OTEL/telemetry vars this pod carries, PATH, and a throwaway
-# HOME (created here; seeded with the image's .claude.json / settings.json when present, never
-# its credential files). GH_TOKEN, GH_TOKEN_FILE, PUSHGATEWAY, GATEWAY_URL and the rest of the
-# pod env are NOT in it — the token file stays unreadable by construction (allow-listed Read).
+# HOME (created here; seeded with the image's .claude.json — onboarding/trust state — when
+# present, never its credential files and NEVER its settings.json). GH_TOKEN, GH_TOKEN_FILE,
+# PUSHGATEWAY, GATEWAY_URL and the rest of the pod env are NOT in it — the token file stays
+# unreadable by construction (allow-listed Read).
+# Why no settings.json (homelab#2654 follow-through): both agent images seed one with
+# `permissions.allow: [Bash(*), Read(*), Edit(*), Write(*), WebSearch(*), WebFetch(*)]` (plus
+# skipDangerousModePermissionPrompt, which only matters under bypass mode, never used here).
+# Settings allow-rules UNION with --allowedTools, so copying it voided the allow-list: a
+# prompt-injected diff could run Bash, Read the token file / /proc, and reach the network. The
+# file's other levers (env, hooks, apiKeyHelper) would breach `env -i` the same way, so nothing
+# from it is seeded — `claude -p --permission-mode default` needs none of it.
 llm_env_args() {
   local resp="$1" home="$2" k v
   mkdir -p "$home/.claude"
   [ -f "${HOME:-/nonexistent}/.claude.json" ] && cp "${HOME}/.claude.json" "$home/.claude.json"
-  [ -f "${HOME:-/nonexistent}/.claude/settings.json" ] && cp "${HOME}/.claude/settings.json" "$home/.claude/settings.json"
   printf 'HOME=%s\nPATH=%s\nTMPDIR=%s\n' "$home" "${PATH:-/usr/local/bin:/usr/bin:/bin}" "$home"
   for k in CLAUDE_CODE_ENABLE_TELEMETRY OTEL_METRICS_EXPORTER OTEL_LOGS_EXPORTER OTEL_TRACES_EXPORTER OTEL_EXPORTER_OTLP_PROTOCOL OTEL_EXPORTER_OTLP_ENDPOINT OTEL_RESOURCE_ATTRIBUTES; do
     [ -n "${!k:-}" ] && printf '%s=%s\n' "$k" "${!k}"
