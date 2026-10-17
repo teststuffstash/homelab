@@ -815,10 +815,10 @@ the block needs pruning, not more headings.
 - [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** `/sessions` consumers:
       specs reviewer (ADR-155) + the worker launcher behind `AGENT_GATEWAY=sessions` (env, platform only); the pod
       pulls its env (GW-SESSIONS-PULL); control plane authenticated + enforced (#2688; gaps #2684/#2685).
-      History: TICK-LOG 2026-10-16/17. In flight 10-17: failure-ownership specs (cell cooldowns, outcomes +
-      strikes, attempt/retry, liveness); Go catalog design = `docs/spikes/opencode-go-catalog.md` (#2690).
-      **Next:** operator ⚖ on the Go catalog spike; the loop flip needs the `gateway-token` volume on the
-      coordinator pod first.
+      Failure ownership LIVE 10-17 (#2692 cell cooldowns, #2697 outcomes + strikes, #2702 attempt/model lists,
+      #2704 reaper, #2699 latch fix). Go tiers on v4.1-flash (#2694); Go catalog leg in flight (ruled, #2690).
+      **Next:** the operator configures real per-tier model lists; a judge caller for `wrong-verdict`; the loop
+      flip needs the `gateway-token` volume on the coordinator pod. History: TICK-LOG 10-16/17.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
