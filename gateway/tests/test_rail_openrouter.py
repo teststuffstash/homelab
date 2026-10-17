@@ -17,10 +17,20 @@
 | an openai-dialect cache read is split out | POST /openai/v1/chat/completions | upstream-ok-cached | .../chat/completions | 200 | byte-identical | (requests, tokens_in, tokens_cache_read, tokens_cache_write, tokens_out) = (1, 12, 300, 0, 7): tokens_in = prompt_tokens - cached_tokens |
 | a stream streams | POST /openai/v1/chat/completions, stream: true | upstream-stream | .../chat/completions | 200 | SSE bytes unchanged | tokens from the last chunk's usage |
 | a rate limit passes through | POST /openai/v1/chat/completions | upstream-429 | .../chat/completions | 429 | the upstream body, retry-after kept | requests +1 |
-| an upstream auth failure is typed and hidden | POST /openai/v1/chat/completions | upstream-401 | .../chat/completions | 502 | upstream-auth envelope | requests +1 |
+| an upstream auth failure is typed and hidden | POST /openai/v1/chat/completions | upstream-401 | .../chat/completions | 424 | upstream-auth envelope | requests +1 |
 | an unreachable upstream is typed | POST /openai/v1/chat/completions | upstream-down | .../chat/completions | 502 | upstream-unreachable envelope | requests +1 |
 | a read past 600 s (WIP: clock-faked) | POST /openai/v1/chat/completions | upstream-slow | .../chat/completions | 504 | upstream-timeout | requests +1 |
 | the /api/v1 alias serves the OpenRouter-shaped path | POST /api/v1/chat/completions | upstream-ok | .../chat/completions | 200 | byte-identical | requests +1 |
+
+Stream completeness (openai dialect; terminal event = `data: [DONE]`):
+
+| description | inbound path | upstream behaviour | status | recorded on the session | gateway_requests_incomplete_total{rail="openrouter",dialect="openai",reason} |
+|---|---|---|---|---|---|
+| a stream that ends without [DONE] is recorded incomplete | POST /openai/v1/chat/completions, stream: true | upstream-stream-truncated | 200 | requests_incomplete 1; the request row's incomplete = no-terminal | no-terminal = 1 |
+| a stream that ends with [DONE] is complete | POST /openai/v1/chat/completions, stream: true | upstream-stream | 200 | requests_incomplete 0; incomplete = null | no-terminal = 0 |
+| a non-streamed answer read to its end is complete | POST /openai/v1/chat/completions | upstream-ok | 200 | requests_incomplete 0; incomplete = null | no-terminal = 0 |
+| a stream cut by a read timeout is recorded incomplete | POST /openai/v1/chat/completions, stream: true | upstream-stream-cut (timeout) | 200 sent, row 504 | requests_incomplete 1; incomplete = timeout | timeout = 1 |
+| a stream cut by the transport is recorded incomplete | POST /openai/v1/chat/completions, stream: true | upstream-stream-cut (transport-error) | 200 | requests_incomplete 1; incomplete = transport-error | transport-error = 1 |
 """
 
 from __future__ import annotations
@@ -32,6 +42,7 @@ from agent_gateway.credentials import StaticSecrets
 from agent_gateway.rails import OAUTH_BETA, upstream_url
 
 from ._rail_rows import expected_bytes, ride
+from ._stream_rows import incomplete_series, recorded_incomplete
 from .conftest import (
     OPENROUTER_KEY,
     attach_json,
@@ -172,7 +183,7 @@ async def test_upstream_auth_hidden(gw, upstreams, store):
     world(upstream="upstream-401")
     upstreams[RAIL].behaviour = "upstream-401"
     doc, r = await ride(gw, RAIL, "chat")
-    then_eq("status", r.status_code, 502)
+    then_eq("status", r.status_code, 424)
     with then("body = the upstream-auth envelope, not the upstream body (no LEAK marker)", body={"actual": r.text}):
         assert err(r) == "upstream-auth"
         assert "LEAK" not in r.text
@@ -211,3 +222,37 @@ async def test_api_v1_alias(gw, upstreams, store):
         assert r.content == body
         assert upstreams[RAIL].calls[-1]["path"] == "/v1/chat/completions"
     _recorded(store, doc, (1,))
+
+
+COMPLETENESS_ROWS = [
+    ("a stream that ends without [DONE] is recorded incomplete", "upstream-stream-truncated", None, True, 1, "no-terminal"),
+    ("a stream that ends with [DONE] is complete", "upstream-stream", None, True, 0, None),
+    ("a non-streamed answer read to its end is complete", "upstream-ok", None, False, 0, None),
+    ("a stream cut by a read timeout is recorded incomplete", "upstream-stream", "timeout", True, 1, "timeout"),
+    ("a stream cut by the transport is recorded incomplete", "upstream-stream", "transport-error", True, 1, "transport-error"),
+]
+
+
+@pytest.mark.parametrize(("behaviour", "cut", "stream", "count", "reason"), [r[1:] for r in COMPLETENESS_ROWS], ids=[r[0] for r in COMPLETENESS_ROWS])
+async def test_stream_completeness(gw, upstreams, transport, store, behaviour, cut, stream, count, reason):
+    world(upstream=behaviour if cut is None else "upstream-stream-cut", note=None if cut is None else f"cut: {cut}")
+    upstreams[RAIL].behaviour = behaviour
+    if cut is not None:
+        transport.cut[RAIL] = cut
+    try:
+        doc, r = await ride(gw, RAIL, "chat", body={"stream": True} if stream else None)
+        status = r.status_code
+    except Exception as e:  # noqa: BLE001 — a cut stream surfaces in the in-process client as the gateway's re-raise
+        doc = await _last_session(gw, store)
+        status = f"200 sent, then {type(e).__name__}"
+    attach_json("the client saw", {"status": status})
+    recorded_incomplete(store, doc, count, reason)
+    with then(f"gateway_requests_incomplete_total{{rail=openrouter,dialect=openai,reason={reason or 'no-terminal'}}} = {count}"):
+        check("series", await incomplete_series(gw, RAIL, "openai", reason or "no-terminal"), count)
+
+
+async def _last_session(gw, store) -> dict:
+    """The session the cut ride opened (its dispatch answer was consumed inside ride())."""
+    with store._lock:
+        (sid,) = store._db.execute("SELECT id FROM sessions ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
+    return {"session": {"id": sid}}

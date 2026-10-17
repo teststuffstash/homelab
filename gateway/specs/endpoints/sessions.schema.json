@@ -129,8 +129,8 @@
         "decision": { "const": "defer" },
         "reason": {
           "type": "string",
-          "enum": ["rail-capacity", "rail-window", "rail-latched", "role-rail-denied", "stack-unknown", "credential-unresolved", "quota-unknown", "quota-stale", "quota-limited"],
-          "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch (sessions.md §Capacity); quota-* = the codex rail's headroom verdicts (GW-CODEX-HEADROOM, openai-responses.md); the reason and retry_after_s name the blocked rail that frees first",
+          "enum": ["rail-capacity", "rail-window", "rail-latched", "cell-cooled", "role-rail-denied", "stack-unknown", "credential-unresolved", "credential-rejected", "quota-unknown", "quota-stale", "quota-limited"],
+          "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch on an account-scope rail; cell-cooled = the tier model's (rail, model) cell cooled by an upstream 429 until its reset; credential-rejected = the stack's credential for every remaining rail was rejected upstream (401/403 credential reason) — an operator act, polled at defer_retry_s (sessions.md §Capacity); quota-* = the codex rail's headroom verdicts (GW-CODEX-HEADROOM, openai-responses.md); the reason and retry_after_s name the blocked rail that frees first",
           "x-requirements": ["GW-SESSIONS-ADMIT", "GW-CRED-RESOLVE", "GW-CODEX-HEADROOM"]
         },
         "retry_after_s": { "type": "integer", "minimum": 1, "description": "seconds until the first blocked rail may admit: a window reset, a latch expiry, or the policy defer_retry_s for a full rail" }
@@ -142,7 +142,7 @@
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller"],
+      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete"],
       "properties": {
         "id": { "$ref": "#/$defs/session_id" },
         "stack": { "$ref": "#/$defs/stack" },
@@ -160,7 +160,8 @@
         "tokens_out": { "type": "integer", "minimum": 0 },
         "tokens_cache_read": { "type": "integer", "minimum": 0 },
         "tokens_cache_write": { "type": "integer", "minimum": 0 },
-        "caller": { "type": ["string", "null"], "pattern": "^system:serviceaccount:[a-z0-9-]+:[a-z0-9.-]+$", "description": "the admitting caller's reviewed ServiceAccount username; null = admitted with no valid caller token (control_plane_auth observe)", "x-requirements": ["GW-SESSIONS-AUTH"] }
+        "caller": { "type": ["string", "null"], "pattern": "^system:serviceaccount:[a-z0-9-]+:[a-z0-9.-]+$", "description": "the admitting caller's reviewed ServiceAccount username; null = admitted with no valid caller token (control_plane_auth observe)", "x-requirements": ["GW-SESSIONS-AUTH"] },
+        "requests_incomplete": { "type": "integer", "minimum": 0, "description": "2xx answers whose body stopped before its end (no terminal event, a mid-stream timeout or transport error, the client gone) — never counted as clean", "x-requirements": ["GW-RAIL-OPENROUTER", "GW-RAIL-ANTHROPIC"] }
       },
       "x-requirements": ["GW-SESSIONS-TOKEN"]
     }

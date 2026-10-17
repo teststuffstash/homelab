@@ -24,13 +24,20 @@
 
 | description | upstream behaviour | status | body | log |
 |---|---|---|---|---|
-| an upstream 401 never leaks | upstream-401 (body names the key) | 502 | upstream-auth envelope | upstream-auth <rail> 401, no body |
-| an upstream 403 is the same class | upstream-403 | 502 | upstream-auth envelope | upstream-auth <rail> 403 |
+| an upstream 401 never leaks | upstream-401 (body names the key) | 424 | upstream-auth envelope | upstream-auth <rail> 401, no body |
+| an upstream 403 naming a credential reason is the same class | upstream-403 (permission_error) | 424 | upstream-auth envelope | upstream-auth <rail> 403 |
+
+| description | rail | upstream behaviour | status | code | the rail's credential |
+|---|---|---|---|---|---|
+| an expired key is a credential verdict | opencode | upstream-401-key-expired | 424 | upstream-auth | rejected (gateway_credentials_rejected{rail="opencode"} = 1) |
+| a policy refusal is not a credential verdict | openrouter | upstream-403-refused | 403 | upstream-refused | not rejected (gateway_credentials_rejected{rail="openrouter"} = 0) |
+| a refusal's body is not relayed either | openrouter | upstream-403-refused | 403 | upstream-refused | the body names neither the model's gate text nor the routing step |
 """
 
 from __future__ import annotations
 
 import logging
+import re
 
 import pytest
 
@@ -174,7 +181,8 @@ async def test_credential_shaped_vendor_header_refused(gw, upstreams):
     then_eq("upstream calls", len(upstreams["openrouter"].calls), 0, claim="no upstream call")
 
 
-UPSTREAM_ROWS = [("an upstream 401 never leaks", "upstream-401", 401), ("an upstream 403 is the same class", "upstream-403", 403)]
+UPSTREAM_ROWS = [("an upstream 401 never leaks", "upstream-401", 401),
+                 ("an upstream 403 naming a credential reason is the same class", "upstream-403", 403)]
 
 
 @pytest.mark.parametrize(("behaviour", "upstream_status"), [r[1:] for r in UPSTREAM_ROWS], ids=[r[0] for r in UPSTREAM_ROWS])
@@ -186,7 +194,7 @@ async def test_upstream_auth_never_leaks(gw, upstreams, caplog, behaviour, upstr
         doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
     with when(f"POST /openai/v1/chat/completions (upstream answers {behaviour}, upstream_status {upstream_status})"):
         r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-    then_eq("status", r.status_code, 502)
+    then_eq("status", r.status_code, 424)
     with then("body = the upstream-auth envelope; no upstream body, no credential value", body={"actual": r.text}):
         assert err(r) == "upstream-auth"
         assert "sk-ant-oat" not in r.text and "LEAK" not in r.text
@@ -197,3 +205,44 @@ async def test_upstream_auth_never_leaks(gw, upstreams, caplog, behaviour, upstr
         attach_json(f"verdict: log line upstream_status {upstream_status}", {"upstream_status": {"expected": upstream_status, "actual": line}})
         assert line.startswith(f"upstream-auth openrouter {upstream_status}")
         assert "LEAK" not in line and "sk-ant-oat" not in line
+
+
+async def _rejected_gauge(gw, rail: str) -> float:
+    text = (await gw.get("/metrics")).text
+    m = re.search(rf'^gateway_credentials_rejected\{{rail="{rail}"\}} (\S+)$', text, re.M)
+    attach_json(f"sample: gateway_credentials_rejected{{rail={rail}}}", {"line": m.group(0) if m else None})
+    return float(m.group(1)) if m else -1
+
+
+KIND_ROWS = [
+    ("an expired key is a credential verdict", "opencode", "upstream-401-key-expired", 424, "upstream-auth", 1),
+    ("a policy refusal is not a credential verdict", "openrouter", "upstream-403-refused", 403, "upstream-refused", 0),
+]
+
+
+@pytest.mark.parametrize(("rail", "behaviour", "status", "code", "rejected"), [r[1:] for r in KIND_ROWS], ids=[r[0] for r in KIND_ROWS])
+async def test_upstream_401_403_kind(gw, upstreams, rail, behaviour, status, code, rejected):
+    world(upstream=behaviour)
+    upstreams[rail].behaviour = behaviour
+    with given(f"rail = {rail}: a worker session there (harness goose)"):
+        doc = await open_session(gw, role="worker", harness="goose", rail=rail)
+    with when(f"POST /openai/v1/chat/completions (upstream answers {behaviour})"):
+        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, status)
+    then_eq("code", err(r), code, claim=f"error code = {code}")
+    with then(f"the rail's credential: gateway_credentials_rejected{{rail=\"{rail}\"}} = {rejected}"):
+        check(f"gateway_credentials_rejected{{rail={rail}}}", await _rejected_gauge(gw, rail), rejected)
+
+
+async def test_refusal_body_not_relayed(gw, upstreams):
+    """row: a refusal's body is not relayed either"""
+    world(upstream="upstream-403-refused")
+    upstreams["openrouter"].behaviour = "upstream-403-refused"
+    with given("a worker session on openrouter (harness goose)"):
+        doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
+    with when("POST /openai/v1/chat/completions (upstream answers upstream-403-refused)"):
+        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 403)
+    with then("the body is the upstream-refused envelope; neither the gate text nor the routing step crosses back", body={"actual": r.text}):
+        assert err(r) == "upstream-refused"
+        assert "agentic harnesses" not in r.text and "Gate Free Endpoints" not in r.text

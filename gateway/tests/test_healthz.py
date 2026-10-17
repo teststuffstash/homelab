@@ -133,9 +133,9 @@ async def test_pvc_remembers(tmp_path, policy, secrets, upstreams):
     """row: a PVC store remembers"""
     world()
     active, verdict = await _restart_roundtrip(policy, secrets, str(tmp_path / "gateway.db"), "pvc")
-    with then("after restart: gateway_sessions_active{rail=opencode} = 1 and the token still resolves (200, or 502 with no fake transport)"):
-        attach_json("verdict: remembered", {"active": {"expected": 1, "actual": active}, "status": {"expected": [200, 502], "actual": verdict[0]}})
-        assert active == 1 and verdict[0] in (200, 502)  # 502: the fresh app has no fake transport — the session resolved either way
+    with then("after restart: gateway_sessions_active{rail=opencode} = 1 and the token still resolves (200, or 424 / 502 with no fake transport)"):
+        attach_json("verdict: remembered", {"active": {"expected": 1, "actual": active}, "status": {"expected": [200, 424, 502], "actual": verdict[0]}})
+        assert active == 1 and verdict[0] in (200, 424, 502)  # 424/502: the fresh app has no fake transport (a real upstream refuses the fixture key, or none answers) — the session resolved either way
 
 
 async def test_pvc_pre_cache_schema_migrated(tmp_path, policy, secrets):

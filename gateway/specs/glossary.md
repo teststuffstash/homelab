@@ -107,11 +107,19 @@ may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which i
 ## defer
 
 The admission answer "not now": HTTP 200 `{decision: "defer", reason, retry_after_s}` — never
-an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `role-rail-denied`,
-`stack-unknown`, `credential-unresolved`, and the codex rail's headroom verdicts `quota-unknown`,
+an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `cell-cooled`, `role-rail-denied`,
+`stack-unknown`, `credential-unresolved`, `credential-rejected`, and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
 ([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)).
+
+## cell
+
+A (rail, model) pair — one model served on one rail, the unit an upstream 429 cools
+([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)). ⚖ Narrower
+than the old router's cell, which is (model, provider) and carries a price and a pin
+([model-routing.md](../../docs/agents/model-routing.md)): the gateway pins no provider, so a
+provider is evidence on a cell, not part of its key.
 
 ## headroom
 
