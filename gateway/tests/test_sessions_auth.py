@@ -379,12 +379,14 @@ async def test_policy_shape(kind):
 
 
 async def test_deployed_callers():
-    """row: the deployed callers are today's two dispatchers"""
+    """row: the deployed callers are today's two dispatchers, under enforce"""
     world(note="the DEPLOYED policy is read, not the world's")
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
         p = Policy.from_dict(json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")))
         got = {k: {"stacks": sorted(c.stacks), "roles": sorted(c.roles), "bind_namespaces": sorted(c.bind_namespaces)}
                for k, c in p.callers.items()}
+    with then("control_plane_auth = enforce"):
+        check("control_plane_auth", p.control_plane_auth, "enforce")
     with then("callers = exactly the platform loop and the specs-review tick, with today's scopes"):
         check("callers", got, {
             LOOP: {"stacks": ["platform"], "roles": ["worker"], "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]},

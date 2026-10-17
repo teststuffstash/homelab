@@ -29,7 +29,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
 | [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; a codex `auth.command` re-read is `⚑ gap` (row below) |
-| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `observe` (the knob); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
+| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
 | [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
@@ -493,8 +493,8 @@ bearer, or one the review does not authenticate for audience `agent-gateway`, is
 pull. **`observe`**: that same call is **admitted**. The gateway writes one log line naming the
 route and the reason, and counts it on
 **`gateway_control_plane_unauthenticated_total{route,reason}`** ([GW-METRICS](metrics.md#gw-metrics)).
-It counts in both modes. The deployed policy starts in `observe`; it flips to `enforce` once every
-caller sends its token and the series stays flat. ⚖ **A VALID token is checked against `callers`
+It counts in both modes. The deployed policy ran in `observe` until every caller sent its token
+and the series stayed flat, then flipped to `enforce` (2026-10-17); `observe` stays the rollback knob. ⚖ **A VALID token is checked against `callers`
 in both modes.** Under `observe`, a caller the gateway can identify but that is unlisted, or that
 asks outside its entry, is refused exactly as under `enforce`. The knob forgives a missing identity
 during the rollout. It never waves through a known identity the policy does not grant.
@@ -572,7 +572,7 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
 | "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
 | "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
-| "the deployed callers are today's two dispatchers" | `argocd/resources/agent-gateway/policy.json` || loads; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:agent-coordinator` (`[platform]`, `[reviewer, worker]`, `[]`) |
+| "the deployed callers are today's two dispatchers, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:agent-coordinator` (`[platform]`, `[reviewer, worker]`, `[]`) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
