@@ -142,7 +142,7 @@
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete"],
+      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete", "outcome"],
       "properties": {
         "id": { "$ref": "#/$defs/session_id" },
         "stack": { "$ref": "#/$defs/stack" },
@@ -161,6 +161,11 @@
         "tokens_cache_read": { "type": "integer", "minimum": 0 },
         "tokens_cache_write": { "type": "integer", "minimum": 0 },
         "caller": { "type": ["string", "null"], "pattern": "^system:serviceaccount:[a-z0-9-]+:[a-z0-9.-]+$", "description": "the admitting caller's reviewed ServiceAccount username; null = admitted with no valid caller token (control_plane_auth observe)", "x-requirements": ["GW-SESSIONS-AUTH"] },
+        "outcome": {
+          "oneOf": [ { "$ref": "#/outcome/record" }, { "type": "null" } ],
+          "description": "the session's LATEST outcome (a judge's supersedes the admitter's); null = none reported",
+          "x-requirements": ["GW-SESSIONS-OUTCOME"]
+        },
         "requests_incomplete": { "type": "integer", "minimum": 0, "description": "2xx answers whose body stopped before its end (no terminal event, a mid-stream timeout or transport error, the client gone) — never counted as clean", "x-requirements": ["GW-RAIL-OPENROUTER", "GW-RAIL-ANTHROPIC"] }
       },
       "x-requirements": ["GW-SESSIONS-TOKEN"]
@@ -192,10 +197,53 @@
       "x-requirements": ["GW-SESSIONS-PULL"]
     }
   },
+  "outcome": {
+    "$comment": "POST /sessions/{id}/outcome — the consumer's classification of its own ride (GW-SESSIONS-OUTCOME). Caller-checked as DELETE is (the admitting caller), plus a judge: a `callers` entry with `outcome: any` may report on any session of its stacks. `class` is THE vocabulary (one home): `x-scope` maps each class to `cell` (serving-shaped: the (rail, model) for this task), `model` (the model on every rail for this task) or null (`clean`, which refutes).",
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class"],
+      "properties": {
+        "class": { "type": "string", "enum": ["clean", "harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown", "turn-cap", "tool-loop", "no-verdict", "wrong-verdict", "invented-findings", "repetition", "harness-gave-up", "stream-incomplete", "refused"], "x-scope": {"clean": null, "harness-death": "model", "auth-storm": "cell", "timeout": "cell", "provider-5xx": "cell", "no-pr": "model", "unknown": "model", "turn-cap": "model", "tool-loop": "cell", "no-verdict": "model", "wrong-verdict": "model", "invented-findings": "model", "repetition": "model", "harness-gave-up": "cell", "stream-incomplete": "cell", "refused": "cell"}, "x-judge-only": ["wrong-verdict"] },
+        "subclass": { "type": "string", "maxLength": 128, "description": "the producer's fine sub-type, kept as evidence (the old router's error_subclass)" },
+        "evidence": { "description": "any JSON, at most 4096 bytes; never a credential-shaped value" }
+      },
+      "x-requirements": ["GW-SESSIONS-OUTCOME"]
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "subclass", "evidence", "reporter", "at"],
+      "properties": {
+        "class": { "type": "string" },
+        "subclass": { "type": ["string", "null"] },
+        "evidence": {},
+        "reporter": { "type": ["string", "null"], "description": "the reporting caller's ServiceAccount username; null = unauthenticated under observe" },
+        "at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome", "strike", "refuted", "replay"],
+      "properties": {
+        "id": { "$ref": "#/$defs/session_id" },
+        "outcome": { "$ref": "#/outcome/record" },
+        "strike": { "oneOf": [ { "type": "null" }, { "type": "object", "required": ["class", "scope"], "properties": { "class": { "type": "string" }, "scope": { "enum": ["cell", "model"] } } } ], "description": "the strike this outcome counted; null for clean (and a replay)" },
+        "refuted": { "type": "integer", "minimum": 0, "description": "counted strikes a clean outcome refuted" },
+        "replay": { "type": "boolean", "description": "the same reporter sent the same class again — nothing new stored" }
+      },
+      "x-requirements": ["GW-SESSIONS-OUTCOME"]
+    },
+    "strike": {
+      "$comment": "the store's row (not served by an endpoint in this version): keyed (stack, task, rail, model, provider); provider is '' until admission pins providers; one per (session, class, source); source = outcome (the consumer) | gateway (a transport fact); refuted_at set by a later clean outcome on the same cell / model",
+      "x-requirements": ["GW-SESSIONS-OUTCOME"]
+    }
+  },
   "errors": {
     "malformed-body": { "status": 400, "description": "the request body fails this schema's `post.input` (missing field, enum miss, negative round)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
     "harness-rail-mismatch": { "status": 400, "description": "an explicit `harness` and `rail` whose dialects do not meet (goose/opencode x anthropic, codex x anything but codex, claude x codex)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
-    "session-not-found": { "status": 404, "description": "GET, DELETE or a pull on an id no row carries (GET / DELETE: after the caller check)", "x-requirements": ["GW-SESSIONS-TOKEN", "GW-SESSIONS-RELEASE", "GW-SESSIONS-PULL", "GW-SESSIONS-AUTH"] },
+    "session-not-found": { "status": 404, "description": "GET, DELETE, an outcome or a pull on an id no row carries (GET / DELETE / outcome: after the caller check)", "x-requirements": ["GW-SESSIONS-TOKEN", "GW-SESSIONS-RELEASE", "GW-SESSIONS-PULL", "GW-SESSIONS-AUTH", "GW-SESSIONS-OUTCOME"] },
     "pull-identity-refused": { "status": 403, "description": "the pull's bearer is absent, does not authenticate, lacks audience agent-gateway, or is not the bind's ServiceAccount (and pod); also any pull of an unbound session", "x-requirements": ["GW-SESSIONS-PULL"] },
     "tokenreview-transient": { "status": 503, "description": "the TokenReview API failed or was unreachable — nothing is known about the caller; retry (a pull, or a control-plane call under enforce)", "x-requirements": ["GW-SESSIONS-PULL", "GW-SESSIONS-AUTH"] },
     "caller-unauthenticated": { "status": 401, "description": "control_plane_auth enforce: the control-plane call carries no bearer, or one that does not review as authenticated for audience agent-gateway", "x-requirements": ["GW-SESSIONS-AUTH"] },
@@ -203,7 +251,12 @@
     "caller-stack-denied": { "status": 403, "description": "the body's `stack` is not in the caller's `stacks`", "x-requirements": ["GW-SESSIONS-AUTH"] },
     "caller-role-denied": { "status": 403, "description": "the body's `role` is not in the caller's `roles`", "x-requirements": ["GW-SESSIONS-AUTH"] },
     "caller-bind-denied": { "status": 403, "description": "the body's `bind.namespace` is not in the caller's `bind_namespaces`", "x-requirements": ["GW-SESSIONS-AUTH"] },
-    "caller-not-owner": { "status": 403, "description": "GET or DELETE of a session another caller admitted", "x-requirements": ["GW-SESSIONS-AUTH"] },
+    "caller-not-owner": { "status": 403, "description": "GET, DELETE or an outcome on a session another caller admitted (an outcome: unless the caller is a judge of its stack)", "x-requirements": ["GW-SESSIONS-AUTH", "GW-SESSIONS-OUTCOME"] },
+    "outcome-class-unknown": { "status": 400, "description": "the outcome's class is not a vocabulary member — a logic failure (CHANGES_REQUESTED, CI red) is a round, never an outcome", "x-requirements": ["GW-SESSIONS-OUTCOME"] },
+    "outcome-evidence-refused": { "status": 400, "description": "the outcome's evidence or subclass carries a credential-shaped value (the GW-REDACT patterns)", "x-requirements": ["GW-SESSIONS-OUTCOME"] },
+    "outcome-judge-only": { "status": 403, "description": "a judge-only class (wrong-verdict) from a caller whose entry is not outcome: any", "x-requirements": ["GW-SESSIONS-OUTCOME"] },
+    "outcome-window-closed": { "status": 409, "description": "the session ended more than the policy's outcome_window_s ago", "x-requirements": ["GW-SESSIONS-OUTCOME"] },
+    "outcome-conflict": { "status": 409, "description": "this reporter already reported a different class for this session", "x-requirements": ["GW-SESSIONS-OUTCOME"] },
     "env-already-delivered": { "status": 409, "description": "the session's env was already pulled — at most once", "x-requirements": ["GW-SESSIONS-PULL"] },
     "session-released": { "status": 401, "description": "a pull of a released session — the data plane's verdict", "x-requirements": ["GW-SESSIONS-PULL", "GW-SESSIONS-RELEASE"] },
     "session-expired": { "status": 401, "description": "a pull of an expired session — the data plane's verdict", "x-requirements": ["GW-SESSIONS-PULL", "GW-SESSIONS-RELEASE"] },

@@ -56,6 +56,32 @@ CREATE TABLE IF NOT EXISTS requests (
   incomplete TEXT
 );
 CREATE INDEX IF NOT EXISTS requests_session ON requests (session_id, ts);
+CREATE TABLE IF NOT EXISTS outcomes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  class TEXT NOT NULL,
+  subclass TEXT,
+  evidence TEXT,
+  reporter TEXT,
+  at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS outcomes_session ON outcomes (session_id, id);
+CREATE TABLE IF NOT EXISTS strikes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stack TEXT NOT NULL,
+  task TEXT NOT NULL,
+  rail TEXT NOT NULL,
+  model TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT '',
+  class TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  source TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  at REAL NOT NULL,
+  refuted_at REAL,
+  UNIQUE (session_id, class, source)
+);
+CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
 CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts);
 """
 # Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
@@ -294,6 +320,57 @@ class Store:
                 (rail, since),
             ).fetchall()
         return [(float(r[0]), r[1], int(r[2]), int(r[3]), int(r[4]), int(r[5])) for r in rows]
+
+    # -- outcomes + strikes (GW-SESSIONS-OUTCOME) ---------------------------------------------
+    def add_outcome(self, session_id: str, klass: str, sub: str | None, evidence: str | None, reporter: str | None,
+                    at: float) -> dict:
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO outcomes (session_id, class, subclass, evidence, reporter, at) VALUES (?,?,?,?,?,?)",
+                (session_id, klass, sub, evidence, reporter, at),
+            )
+            row = self._db.execute("SELECT * FROM outcomes WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return dict(row)
+
+    def outcome_by(self, session_id: str, reporter: str | None) -> dict | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT * FROM outcomes WHERE session_id = ? AND reporter IS ? ORDER BY id DESC LIMIT 1", (session_id, reporter)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def latest_outcome(self, session_id: str) -> dict | None:
+        with self._lock:
+            row = self._db.execute("SELECT * FROM outcomes WHERE session_id = ? ORDER BY id DESC LIMIT 1", (session_id,)).fetchone()
+        return dict(row) if row else None
+
+    def add_strike(self, stack: str, task: str, rail: str, model: str, provider: str, klass: str, scope: str, source: str,
+                   session_id: str, at: float) -> bool:
+        """One strike per (session, class, source); False = it was already counted."""
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT OR IGNORE INTO strikes (stack, task, rail, model, provider, class, scope, source, session_id, at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (stack, task, rail, model, provider, klass, scope, source, session_id, at),
+            )
+            return cur.rowcount == 1
+
+    def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float) -> int:
+        """A clean outcome on (rail, model) refutes the task's counted cell strikes on that cell and its
+        model strikes on that model."""
+        with self._lock:
+            cur = self._db.execute(
+                "UPDATE strikes SET refuted_at = ? WHERE stack = ? AND task = ? AND refuted_at IS NULL AND at <= ?"
+                " AND model = ? AND (scope = 'model' OR rail = ?)",
+                (at, stack, task, at, model, rail),
+            )
+            return cur.rowcount
+
+    def strikes_for(self, stack: str, task: str, counted_only: bool = True) -> list[dict]:
+        q = "SELECT * FROM strikes WHERE stack = ? AND task = ?" + (" AND refuted_at IS NULL" if counted_only else "") + " ORDER BY id"
+        with self._lock:
+            rows = self._db.execute(q, (stack, task)).fetchall()
+        return [dict(r) for r in rows]
 
     def requests_for(self, session_id: str) -> list[dict]:
         with self._lock:

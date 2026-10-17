@@ -14,9 +14,11 @@
     "class": { "enum": ["in", "cache_read", "cache_write", "out"] },
     "window": { "enum": ["5h", "7d"] },
     "outcome": { "enum": ["resolved", "definitive", "transient"] },
-    "route": { "enum": ["admit", "lookup", "release"] },
+    "route": { "enum": ["admit", "lookup", "release", "outcome"] },
     "reason": { "enum": ["absent", "invalid", "review-transient"] },
-    "incomplete_reason": { "enum": ["no-terminal", "timeout", "transport-error", "client-closed"] }
+    "incomplete_reason": { "enum": ["no-terminal", "timeout", "transport-error", "client-closed"] },
+    "strike_class": { "enum": ["harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown", "turn-cap", "tool-loop", "no-verdict", "wrong-verdict", "invented-findings", "repetition", "harness-gave-up", "stream-incomplete", "refused"], "description": "the strike classes of sessions.schema.json outcome.class (clean writes no strike)" },
+    "strike_source": { "enum": ["outcome", "gateway"] }
   },
   "families": {
     "gateway_sessions_active": {
@@ -102,6 +104,14 @@
       "type": "gauge",
       "labels": { "rail": { "$ref": "#/$defs/rail" } },
       "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT", "GW-CRED-BOUNDARY"]
+    },
+    "gateway_strikes_total": {
+      "type": "counter",
+      "labels": {
+        "class": { "$ref": "#/$defs/strike_class" },
+        "source": { "$ref": "#/$defs/strike_source" }
+      },
+      "x-requirements": ["GW-METRICS", "GW-SESSIONS-OUTCOME"]
     },
     "gateway_requests_incomplete_total": {
       "type": "counter",

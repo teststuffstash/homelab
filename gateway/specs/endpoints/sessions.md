@@ -3,7 +3,7 @@ id: EP-SESSIONS
 use-cases: [UC-1]
 schema: sessions.schema.json
 ---
-# POST /sessions · GET /sessions/{id} · DELETE /sessions/{id} · POST /sessions/{id}/env — the launcher's one question
+# POST /sessions · GET /sessions/{id} · DELETE /sessions/{id} · POST /sessions/{id}/env · POST /sessions/{id}/outcome — the launcher's one question
 
 *May this unit run now, with which harness, and what goes in the pod's env.* The control-plane
 seam of the island ([UC-1](../use-cases/uc-1-worker-ride.md) steps ① and ④). The caller sends
@@ -30,6 +30,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
 | [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; a codex `auth.command` re-read is `⚑ gap` (row below) |
 | [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
+| [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the store is written, read by nothing yet (the admission's strike walk is the next PR); `⚑ gap` rows below |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
 | [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
@@ -364,7 +365,7 @@ the token; `GET /sessions/{id}` returns the row without it. The data plane accep
 | "the token has the fixed shape" | dispatch || `token` matches `^gws_[A-Za-z0-9_-]{32}$` |
 | "two dispatches never share a token" | dispatch twice || tokens differ |
 | "the row holds a hash, not the token" | dispatch, read the DB || `token_hash` = sha256 hex of the token; no column equals the token |
-| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller, requests_incomplete` (`requests_incomplete`: the 2xx answers whose body stopped before its end, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter); the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
+| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller, requests_incomplete, outcome` (`outcome`: the latest reported outcome, [GW-SESSIONS-OUTCOME](#gw-sessions-outcome); `requests_incomplete`: the 2xx answers whose body stopped before its end, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter); the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
 | "GET on an unknown id" | `GET /sessions/nope` || 404 `session-not-found` |
 | "expiry is the policy TTL" | dispatch at T || `expires_at` = T + 14400 s (`policy-default`) |
 | "a request through the data plane is counted on the row" | dispatch → one `upstream-ok` call → GET || `requests` = 1, `tokens_in`/`tokens_out` = the upstream `usage` (`tokens_in` = uncached input; the cache classes in `tokens_cache_read`/`tokens_cache_write` — GW-METRICS) |
@@ -561,7 +562,8 @@ during the rollout. It never waves through a known identity the policy does not 
 
 Rows run against two worlds. **`policy-default`** is `observe`, so every other row on this page
 runs unchanged without a caller token. **`policy-enforce`** is the same document with `enforce`
-([worlds/README.md](../worlds/README.md)). Both hold two fixture callers.
+([worlds/README.md](../worlds/README.md)). Both hold three fixture callers; the third, the judge,
+admits nothing and is [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s.
 **The platform loop** = `system:serviceaccount:platform-agents:agentstack-loop` · stacks
 `[platform]` · roles `[worker]` · bind namespaces `[platform-agents]`. **The specs reviewer** =
 `system:serviceaccount:agent-coordinator:agent-coordinator` · stacks `[platform]` · roles
@@ -664,6 +666,149 @@ canary mints the loop SA's token (`kubectl create token`) and acts as that dispa
 Rendered by `scripts/evidence_render.py` from CI.
 
 --8<-- "GW-SESSIONS-AUTH.md"
+
+</details>
+
+## GW-SESSIONS-OUTCOME
+
+*The consumer classifies its own output; the gateway owns what it sees first-hand; one store, one
+vocabulary* (operator ruling 2026-10-17, FU-270). `POST /sessions/{id}/outcome {class, subclass?,
+evidence?}` is how a consumer says how its ride ended. The gateway can see a 429, a 401 or a cut
+stream ([§Capacity](#capacity--the-ladders-capacity-half)), but not a review that returned no
+verdict, or one that invented its findings — the 2026-10-17 free-model experiment
+(`docs/spikes/gateway-free-models-2026-10-17/cells.tsv`) had both behind clean 200s. The caller
+check is [GW-SESSIONS-AUTH](#gw-sessions-auth)'s with the DELETE rule: the admitting caller may
+report. ⚖ A **judge** may report too: a `callers` entry with `outcome: any` may report on any
+session of its `stacks`, which a later check (did the APPROVE hold?) needs, since the reviewer
+cannot grade its own verdict. The key is optional and `own` by default, so an absent key grants
+nothing extra. The deployed policy lists no judge.
+
+⚖ **When:** before release, and after release or expiry for the policy's `outcome_window_s`
+(**86400 s**). The launcher reports before its DELETE; a judge reads a verdict's fate later, so a
+pre-release-only rule would have no place for `wrong-verdict`. ⚖ **Once per reporter:** the same
+class again is a replay (200, `replay: true`, nothing new stored); a different class from the same
+reporter is 409 `outcome-conflict`; a judge's outcome is another reporter's and supersedes on
+`GET` (`outcome` = the latest). The checks run in a fixed order: the caller (401 / 403 / 503), the
+id (404), owner or judge (403 `caller-not-owner`), the body (400), a judge-only class (403), the
+window (409), the reporter's earlier class (409).
+
+**Rounds ≠ strikes** ([model-routing.md §The design's three rules](../../../docs/agents/model-routing.md#the-designs-three-rules)):
+a logic failure, a reviewer's `CHANGES_REQUESTED` or CI red on the change, is a ROUND, owned by
+the consumer's round counter. It is **no class here**, and saying one is 400
+`outcome-class-unknown`. An infra or serving failure is a STRIKE.
+
+### The vocabulary — one home
+
+`sessions.schema.json` `outcome.input.properties.class` (`enum` + `x-scope`) is the set; the code's
+copy (`outcomes.py` `OUTCOME_CLASSES`) is pinned to it by a row. **Scope** is the old router's rule
+([model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder)): a
+**cell**-scoped (serving-shaped) strike excludes that (rail, model) [cell](../glossary.md#cell) for
+the task; a **model**-scoped one excludes the model on every rail for the task. ⚖ Each new class's
+scope is a judgment, marked.
+
+| class | scope | who writes it | what it means |
+|---|---|---|---|
+| `clean` | — | consumer | the ride did its job; refutes the task's counted strikes on this cell / model |
+| `harness-death` | model | consumer | the harness died (goose `-32602` and kin) |
+| `auth-storm` | cell | consumer · **gateway** (an upstream 424 `upstream-auth`) | 401/403 from the serving upstream |
+| `timeout` | cell | consumer · **gateway** (504, or a stream cut by a read timeout) | the completion timed out at the provider |
+| `provider-5xx` | cell | consumer · **gateway** (an upstream 5xx relayed, or 502 `upstream-unreachable`) | the provider failed |
+| `no-pr` | model | consumer | the ride produced no artifact |
+| `unknown` | model | consumer | an unclassified death |
+| `turn-cap` | model | consumer | the ride died at a turn / output cap |
+| `tool-loop` | cell | consumer | a cap death with zero tool-result progress |
+| `no-verdict` | model ⚖ | consumer | a review ride ended without a verdict; the experiment's no-verdict behind an all-200 ride was the model's (nemotron on #2640: 16 × 200, then the 600 s cap) — the serving ones carry their own transport strike |
+| `wrong-verdict` | model | **judge only** | the verdict did not hold under a later check — the experiment's judged-WRONG verdicts: inkling's APPROVE on #2640, cohere's on #2628 and #2635 |
+| `invented-findings` | model ⚖ | consumer | a review cited defects the diff does not contain |
+| `repetition` | model ⚖ | consumer | the model looped on its own output |
+| `harness-gave-up` | cell ⚖ | consumer | the harness abandoned after the upstream kept failing (retries exhausted) — a serving shape |
+| `stream-incomplete` | cell ⚖ | **gateway** (a 2xx with `incomplete` = `no-terminal` / `transport-error`) | the stream ended before its terminal event |
+| `refused` | cell ⚖ | **gateway** (403 `upstream-refused`) | the upstream refused this model for this caller (OpenRouter's harness gate) |
+
+### The store
+
+A strike is a row keyed **(stack, task, rail, model, provider)** with its class, scope and
+**source** (`outcome` = the consumer, `gateway` = a transport fact). ⚖ At most one per
+(session, class, source): nine 502s on one ride are one `provider-5xx`, not nine. ⚖ A 429 writes
+**no** strike: the cell cooldown is that fact's whole answer, and a rate limit says nothing about
+this task. ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
+consumer's to say. **A clean outcome refutes** the task's counted strikes on the same cell
+(cell-scoped) and the same model (model-scoped): they stay as history, with `refuted_at` set.
+**A bare 2xx refutes nothing**: a provider serving badly behind HTTP 200 is exactly what a strike
+routes around (the old router's refutation rule). `gateway_strikes_total{class,source}` counts
+them ([GW-METRICS](metrics.md#gw-metrics)).
+
+### Who may report
+
+Fixture callers: the platform loop, the specs reviewer and **the judge**
+(`system:serviceaccount:agent-coordinator:outcome-judge` · stacks `[platform]` · roles `[]` ·
+`outcome: any`). A worker session = the platform loop admitted `{platform, worker, task
+homelab-2700, round 1}` (opencode, `opencode-go/deepseek-v4-flash`).
+
+| description | world | reporter | body || status | result |
+|---|---|---|---||---|---|
+| "the admitting caller reports an outcome" | policy-enforce | the platform loop | `no-verdict` || 200 | `strike` `{no-verdict, model}` |
+| "another listed caller may not" | policy-enforce | the specs reviewer | `no-verdict` || 403 | caller-not-owner |
+| "a judge may report on a session it did not admit ⚖" | policy-enforce | the judge | `wrong-verdict` || 200 | `strike` `{wrong-verdict, model}` |
+| "wrong-verdict is a judge's call ⚖" | policy-enforce | the platform loop | `wrong-verdict` || 403 | outcome-judge-only |
+| "no bearer, under enforce" | policy-enforce | no bearer | `no-verdict` || 401 | caller-unauthenticated |
+| "an unknown id after the caller check" | policy-enforce | the platform loop | `POST /sessions/nope/outcome` || 404 | session-not-found |
+
+### What an outcome may say
+
+World `policy-default`.
+
+| description | body || status | code |
+|---|---||---|---|
+| "a logic failure is not an outcome class" | `class: changes-requested` || 400 | outcome-class-unknown |
+| "a class outside the vocabulary" | `class: flaky` || 400 | outcome-class-unknown |
+| "a missing class" | `{}` || 400 | malformed-body |
+| "an unknown key" | `class: no-verdict`, `verdict: APPROVE` || 400 | malformed-body |
+| "a credential-shaped evidence value is refused ⚖" | `class: no-verdict`, `evidence: {log: "auth sk-or-v1-FAKE…"}` || 400 | outcome-evidence-refused |
+| "evidence over 4096 bytes ⚖" | `class: no-verdict`, `evidence: {log: 5000 × "x"}` || 400 | malformed-body |
+
+### When
+
+| description | sequence || status | result |
+|---|---||---|---|
+| "an outcome before release is accepted" | report, the session active || 200 | stored |
+| "an outcome after release, inside the window ⚖" | DELETE, +3600 s, report || 200 | stored |
+| "an outcome after the window" | DELETE, +86401 s, report || 409 | outcome-window-closed |
+| "the same outcome twice is a replay ⚖" | report `no-verdict` twice || 200, 200 | one strike; `replay: true` |
+| "a different outcome from the same reporter" | report `no-verdict`, then `repetition` || 409 | outcome-conflict |
+
+### What the store holds
+
+| description | sequence || counted strikes on task homelab-2700 | `gateway_strikes_total` |
+|---|---||---|---|
+| "a model-scoped class strikes the model" | report `no-verdict` || `{opencode, opencode-go/deepseek-v4-flash, no-verdict, model, outcome}` | `{class="no-verdict",source="outcome"}` 1 |
+| "a serving-scoped class strikes the cell" | report `harness-gave-up` || `{…, harness-gave-up, cell, outcome}` | `{class="harness-gave-up",source="outcome"}` 1 |
+| "the gateway writes its own transport class" | the session's request answered `upstream-401` || `{…, auth-storm, cell, gateway}` | `{class="auth-storm",source="gateway"}` 1 |
+| "one transport strike per session and class ⚖" | three `upstream-500` answers on one session || one `provider-5xx` | `{class="provider-5xx",source="gateway"}` 1 |
+| "a 429 is a cooldown, not a strike ⚖" | the session's request answered `upstream-429` || none | — |
+| "a read timeout is a transport strike" | the session's request hit `upstream-slow` (504 `upstream-timeout`) || `{…, timeout, cell, gateway}` | `{class="timeout",source="gateway"}` 1 |
+| "an unreachable upstream is a transport strike" | the session's request hit `upstream-down` (502 `upstream-unreachable`) || `{…, provider-5xx, cell, gateway}` | `{class="provider-5xx",source="gateway"}` 1 |
+| "a policy refusal is a transport strike, not a rejected credential" | the session's request answered `upstream-403-refused` (403 `upstream-refused`) || `{…, refused, cell, gateway}` | `{class="refused",source="gateway"}` 1 |
+| "a cut stream is a transport strike" | `upstream-stream-truncated` on the session || `{…, stream-incomplete, cell, gateway}` | `{class="stream-incomplete",source="gateway"}` 1 |
+| "a bare 2xx refutes nothing" | `upstream-500`, then `upstream-ok` on the same session || `provider-5xx` still counted | — |
+| "a clean outcome refutes the task's counted strikes" | the session's request answered `upstream-500` (a gateway `provider-5xx`), then the consumer reports `clean` — the ride recovered || none counted; the strike kept, refuted (`refuted: 1`) | — |
+| "a clean outcome on another model refutes nothing there" | the heavy tier's `opencode-go/claude-sonnet-4-6` struck `no-verdict`; a standard-tier session reports `clean` || the heavy model's `no-verdict` still counted (`refuted: 0`) | — |
+| "GET shows the latest outcome" | report `no-verdict` (`subclass: rc=1`), GET || — | `outcome` = `{class: no-verdict, subclass: rc=1, reporter: null}` |
+| "the code's vocabulary is the schema's" | `OUTCOME_CLASSES` vs `outcome.input.properties.class` (`enum`, `x-scope`) || equal, class and scope | — |
+
+### Named gaps
+
+| description | input || v0 answer | the gap |
+|---|---||---|---|
+| "⚑ gap: the store is read by nothing" | a counted strike on a task || admission ignores it | the admission's strike walk (the retry contract: `attempt`, per-tier model lists) is the next deliverable |
+| "⚑ gap: provider on a strike" | an OpenRouter ride served by a named provider || `provider` = `''` | the gateway does not parse the serving provider; the old router's pair scope is earned by knowing it |
+| "⚑ gap: the fleet view" | the same class on ≥ 2 distinct tasks || per-task strikes only | the old router's pair cooldown / model nomination across tasks (`router.py:pair_cooldowns`) |
+
+<details markdown="1"><summary>Evidence</summary>
+
+Rendered by `scripts/evidence_render.py` from CI.
+
+--8<-- "GW-SESSIONS-OUTCOME.md"
 
 </details>
 

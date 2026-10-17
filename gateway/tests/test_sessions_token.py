@@ -5,7 +5,7 @@
 | the token has the fixed shape | dispatch | token matches ^gws_[A-Za-z0-9_-]{32}$ |
 | two dispatches never share a token | dispatch twice | tokens differ |
 | the row holds a hash, not the token | dispatch, read the DB | token_hash = sha256 hex of the token; no column equals the token |
-| GET returns the row without the token | dispatch -> GET /sessions/{id} | 200; exactly the 18 schema fields (caller and requests_incomplete included); no token, no token_hash |
+| GET returns the row without the token | dispatch -> GET /sessions/{id} | 200; exactly the 19 schema fields (caller, requests_incomplete and outcome included); no token, no token_hash |
 | GET on an unknown id | GET /sessions/nope | 404 session-not-found |
 | expiry is the policy TTL | dispatch at T | expires_at = T + 14400 s |
 | a request through the data plane is counted on the row | dispatch -> one upstream-ok call -> GET | requests = 1, tokens_in/tokens_out = the upstream usage |
@@ -23,7 +23,7 @@ from .conftest import bearer, check, err, given, open_session, rule, then, when,
 pytestmark = rule("GW-SESSIONS-TOKEN")
 
 TOKEN_RE = re.compile(r"^gws_[A-Za-z0-9_-]{32}$")
-FIELDS = {"id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete"}
+FIELDS = {"id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete", "outcome"}
 
 
 async def test_token_shape(gw):

@@ -36,9 +36,10 @@ from .config import (
     StackPolicy,
     wire_model,
 )
-from .control import ControlPlaneAuth
+from .control import ControlPlaneAuth, authorize_outcome
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
 from .metrics import Metrics
+from .outcomes import OutcomeRefused, Outcomes, parse_outcome, public_outcome
 from .pull import (
     POD_NAME_EXTRA,
     PULL_AUDIENCE,
@@ -226,6 +227,7 @@ class SessionService:
         self.reviewer: TokenReviewer = reviewer or StaticTokenReviews()  # app.py hands the kube one in
         self.auth = ControlPlaneAuth(policy, self, metrics)  # reviews through self.reviewer (one TokenReview path)
         self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
+        self.outcomes = Outcomes(store, metrics, policy.outcome_window_s, clock)  # GW-SESSIONS-OUTCOME
 
     async def review(self, token: str, audiences: list[str]):
         """The TokenReviewer seam ControlPlaneAuth calls — delegated, so swapping `self.reviewer`
@@ -474,7 +476,33 @@ async def get_session(request: Request) -> JSONResponse:
     svc, row, refused = await _owned_row(request, "lookup")
     if refused is not None:
         return refused
-    return JSONResponse(row.public())
+    return JSONResponse({**row.public(), "outcome": public_outcome(svc.store.latest_outcome(row.id))})
+
+
+async def post_session_outcome(request: Request) -> JSONResponse:
+    """GW-SESSIONS-OUTCOME, in order: the caller (401 / 403 / 503) → the id (404) → owner or judge
+    (403) → the body (400) → judge-only class (403) → the window (409) → one class per reporter (409)."""
+    svc: SessionService = request.app.state.sessions
+    caller = await svc.auth.check("outcome", _bearer(request))
+    if isinstance(caller, JSONResponse):
+        return caller
+    row = svc.store.get_session(request.path_params["id"])
+    if row is None:
+        return error(404, "session-not-found", "no session carries that id")
+    denied, judge = authorize_outcome(caller, row.id, row.caller, row.stack)
+    if denied is not None:
+        return denied
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        return error(400, "malformed-body", "body is not JSON")
+    try:
+        klass, sub, evidence = parse_outcome(body)
+        answer = svc.outcomes.report(row, klass, sub, evidence, caller.identity, judge)
+    except OutcomeRefused as e:
+        log.info("session: outcome id=%s refused — %s", row.id, e.code)
+        return error(e.status, e.code, e.message)
+    return JSONResponse(answer)
 
 
 async def delete_session(request: Request) -> JSONResponse:

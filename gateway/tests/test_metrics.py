@@ -19,6 +19,7 @@
 | a cooled cell is counted on its rail | upstream-429 on openrouter | gateway_cells_cooled{rail="openrouter"} | 1 |
 | a rejected credential is counted on its rail | upstream-401 on openrouter | gateway_credentials_rejected{rail="openrouter"} | 1 |
 | an incomplete stream is counted by reason | upstream-stream-truncated on opencode (stream: true) | gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal"} | 1 |
+| a strike is counted by class and source | a worker session reports no-verdict | gateway_strikes_total{class="no-verdict",source="outcome"} | 1 |
 | the transport-fact gauges render every rail from 0 | no request yet | gateway_cells_cooled{rail=…} / gateway_credentials_rejected{rail=…} for anthropic, openrouter, opencode, codex | 0 each |
 
 | description | the series | label | allowed values |
@@ -32,11 +33,12 @@
 | class is one of the four usage classes | tokens_total | class | in, cache_read, cache_write, out |
 | window is 5h or 7d | subscription_utilization | window | 5h, 7d |
 | outcome is the verdict class | credential_resolve_total | outcome | resolved, definitive, transient |
-| route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release |
+| route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release, outcome |
 | reason is why no caller identity was read | control_plane_unauthenticated_total | reason | absent, invalid, review-transient |
+| class is a strike class, source the writer | strikes_total | class / source | the strike classes / outcome, gateway |
 | reason is why a 2xx body stopped before its end | requests_incomplete_total | reason | no-terminal, timeout, transport-error, client-closed |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 13 families |
+| every family is declared with HELP and TYPE | — | — | 14 families |
 """
 
 from __future__ import annotations
@@ -44,6 +46,8 @@ from __future__ import annotations
 import re
 
 import pytest
+
+from agent_gateway.outcomes import OUTCOME_CLASSES
 
 from .conftest import attach_json, bearer, check, given, open_session, quiet, rule, then, then_eq, when, world
 
@@ -55,6 +59,7 @@ FAMILIES = (
     "gateway_subscription_utilization", "gateway_subscription_reset_seconds",
     "gateway_control_plane_unauthenticated_total", "gateway_upstream_auth_rejected_total",
     "gateway_cells_cooled", "gateway_credentials_rejected", "gateway_requests_incomplete_total",
+    "gateway_strikes_total",
 )
 
 
@@ -279,6 +284,16 @@ async def test_transport_facts(gw, upstreams, rail, behaviour, stream, series):
     await _then_series(gw, series, 1)
 
 
+async def test_strike_counted(gw):
+    """row: a strike is counted by class and source"""
+    world()
+    with given("a worker session"):
+        doc = await open_session(gw)
+    with when("POST /sessions/{id}/outcome {class: no-verdict}"):
+        await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "no-verdict"})
+    await _then_series(gw, 'gateway_strikes_total{class="no-verdict",source="outcome"}', 1)
+
+
 async def test_fact_gauges_from_zero(gw):
     """row: the transport-fact gauges render every rail from 0"""
     world()
@@ -312,6 +327,7 @@ async def _exercise(gw, app, secrets, upstreams, policy, clock):
             upstreams["opencode"].behaviour = "upstream-stream-truncated"
             await gw.post("/openai/v1/chat/completions", json={"messages": [], "stream": True}, headers=bearer(doc))
             upstreams["opencode"].behaviour = "upstream-ok"
+            await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "no-verdict"})
             await gw.post("/sessions", json={"stack": "nope", "role": "worker", "task": "t"})
             await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": "Bearer gws_" + "x" * 32})
             secrets.transient.add("platform-agents/claude-session")
@@ -320,6 +336,7 @@ async def _exercise(gw, app, secrets, upstreams, policy, clock):
         attach_json("exercised: the calls", ["POST /sessions platform worker task homelab-2588-r1 → dispatch", "POST /openai/v1/chat/completions on it",
                                              "a reviewer session + POST /anthropic/v1/messages on it",
                                              "a truncated stream on the worker session (upstream-stream-truncated)",
+                                             "POST /sessions/{id}/outcome {class: no-verdict} on the worker session",
                                              "POST /sessions stack nope", "POST /openai/v1/chat/completions with an unknown gws_ token",
                                              "POST /sessions platform prober with claude-session transient"])
     return doc
@@ -335,8 +352,9 @@ LABEL_ROWS = [
     ("class is one of the four usage classes", "gateway_tokens_total", "class", {"in", "cache_read", "cache_write", "out"}),
     ("window is 5h or 7d", "gateway_subscription_utilization", "window", {"5h", "7d"}),
     ("outcome is the verdict class", "gateway_credential_resolve_total", "outcome", {"resolved", "definitive", "transient"}),
-    ("route is the control-plane route", "gateway_control_plane_unauthenticated_total", "route", {"admit", "lookup", "release"}),
+    ("route is the control-plane route", "gateway_control_plane_unauthenticated_total", "route", {"admit", "lookup", "release", "outcome"}),
     ("reason is why no caller identity was read", "gateway_control_plane_unauthenticated_total", "reason", {"absent", "invalid", "review-transient"}),
+    ("class is a strike class, source the writer", "gateway_strikes_total", "class", {k for k, v in OUTCOME_CLASSES.items() if v}),
     ("reason is why a 2xx body stopped before its end", "gateway_requests_incomplete_total", "reason",
      {"no-terminal", "timeout", "transport-error", "client-closed"}),
 ]
