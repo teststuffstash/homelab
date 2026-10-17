@@ -817,8 +817,9 @@ the block needs pruning, not more headings.
       live reviewer stays claude@anthropic; ⚖ rows on #2645/#2646 wait on the Codex spike (#2662).
       Policy = configMapGenerator since #2664 (an edit rolls the pod; diff-ci now runs the suite on it).
       Launcher leg MERGED #2667: `AGENT_GATEWAY=sessions` (env opt-in, platform only, fail-closed, token in a
-      pod-owned Secret); canary 2026-10-17 clean (opencode, 2 req, released, no key minted). **Next:** operator
-      ruling — `agentstack-loop` SA may create/delete Secrets in fixer ns? (blocks any loop-dispatched flip).
+      pod-owned Secret); canary 2026-10-17 clean (opencode, 2 req, released, no key minted). Ruled 2026-10-17: the
+      pod PULLS its env (projected SA token → TokenReview, bound at admission; codex `auth.command` aligns;
+      Secret writes gateway-only). **Next:** gateway pull endpoint PR, then the launcher drops #2667's Secret.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).

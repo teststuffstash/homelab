@@ -21,10 +21,9 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   Go heavy → deepseek-v4-flash (#2663, merged, gateway restarted, probe dispatched v4-flash); live reviewer = claude@anthropic;
   HYGIENE_REPEAT blocks anywhere (recorded in specs-reviewer.md); ⚖ rows on #2645/#2646 + headroom codes deferred to the
   Codex spike (#2662). Launcher leg MERGED #2667 (knob `AGENT_GATEWAY=sessions`, off by default; jail canary clean).
-  **For the operator:** the loop SA `agentstack-loop` cannot create Secrets in fixer namespaces
-  (`argocd/resources/agentstack/rbac.yaml`, deliberate), so a loop-dispatched ride with the knob on fails
-  closed. Grant it (scoped to `*-gateway-env`), or carry the token another way? Gateway rides still `/report`
-  to the old proxy, so `RouterRunModelUnverifiable` may count them.
+  **Ruled:** the pod PULLS its session env (SA-token TokenReview, the git-broker shape). A subagent is building the
+  gateway endpoint, then the launcher swap and a canary (FU-270). Gateway rides still `/report` to the old proxy, so
+  `RouterRunModelUnverifiable` may count them.
 - **⚑ PICKUP (2026-10-16 ~16:00Z — seat; TICK-LOG same date): ADR-156 evidence pass LIVE** (snippets v0.5.2 pinned
   in `agents/specs-reviewer-session.sh` + `gateway/scripts/lib/snippets.sh` — bump TOGETHER; canary #2628 approved).
   **Next:** (a) step 5's measurement — per completed PR: tokens, worker rounds, invalid findings, coordinator
