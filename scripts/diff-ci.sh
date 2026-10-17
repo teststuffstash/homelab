@@ -66,8 +66,9 @@ MAP=(
   # The gateway island's ONE gate (gateway/scripts/ci.sh via its own devbox: uv sync, ruff, pytest
   # + evidence, spec gate) — ADR-139 / context-and-autonomy.md P2. Scoped to the island dir plus
   # the deployed policy the suite loads (test_model_resolve / test_codex_oauth read
-  # argocd/resources/agent-gateway/policy.json — a policy edit must run the rows that check it).
-  "gateway-ci:^(gateway/|argocd/resources/agent-gateway/policy\.json$)"
+  # argocd/resources/agent-gateway/policy.json, and test_model_resolve checks every id against
+  # openrouter-proxy/model-classes.json — an edit to either must run the rows that check it).
+  "gateway-ci:^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/resources/openrouter-proxy/model-classes\.json$)"
   # The island's specs-site publish (gateway/scripts/specs-publish.sh — mkdocs build + mirror to the
   # gateway-specs bucket; soft-skips without GATEWAY_SPECS_S3_* creds, so locally it is the dogfood
   # build). Same trigger as the gate it rides behind in ci.yaml. WAN-bound (uv fetches the mkdocs
@@ -76,7 +77,7 @@ MAP=(
   # ADR-156 step 4: the reviewer's evidence pack from the gateway suite's raw Allure results; it
   # rides the gateway-ci step's skip key in ci.yaml (no suite run, no results). WAN-bound (uv fetches
   # the pinned snippets wheel) → PUSH_HEAVY. Same trigger as gateway-ci (the suite it packs).
-  "gateway-evidence:^(gateway/|argocd/resources/agent-gateway/policy\.json$)"
+  "gateway-evidence:^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/resources/openrouter-proxy/model-classes\.json$)"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
