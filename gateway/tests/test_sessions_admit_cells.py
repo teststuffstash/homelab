@@ -169,6 +169,9 @@ CRED_ROWS = [
 @pytest.mark.parametrize(("arrange", "advance", "secret", "body", "expected"), [r[1:] for r in CRED_ROWS], ids=[r[0] for r in CRED_ROWS])
 async def test_credential_rejected(gw, upstreams, clock, secrets, arrange, advance, secret, body, expected):
     world(upstream=arrange[0][2], note="the arranged ride's answer; every other answer is upstream-ok")
+    with given(f"secret = {secret!r}: " + {None: "every Secret as the world holds it", "oracle-own-key": "oracle's key differs from platform's",
+                                          "platform-new-key": "the platform key is rotated after the rejection"}[secret]):
+        pass
     if secret == "oracle-own-key":
         with given("state: the oracle stack's OpenRouter Secret holds its OWN key (a different value from platform's)"):
             secrets.secrets["oracle-agents/oracle-openrouter"] = StaticSecrets.secret("sk-or-v1-test-oracle-own-key", "OPENROUTER_API_KEY")
@@ -212,7 +215,8 @@ async def test_rejection_recovers(gw, app, upstreams, clock, arrange, probe, adv
     with given(f"advance = {advance!r}: {advance} s pass; probe = {probe!r}: the upstream's answer to a probe"):
         clock.advance(advance)
         upstreams[rail].behaviour = probe or "upstream-ok"
-        sent = await app.state.proxy.reprobe()
+        with quiet():
+            sent = await app.state.proxy.reprobe()
         upstreams[rail].behaviour = "upstream-ok"
         attach_json("the re-probe pass", {"probes sent": sent})
     then_eq("probes", sent, probes, claim=f"probes = {probes!r} sent by the re-probe pass")

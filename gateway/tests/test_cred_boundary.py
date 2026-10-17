@@ -210,7 +210,8 @@ async def test_upstream_auth_never_leaks(gw, upstreams, caplog, behaviour, upstr
 
 
 async def _rejected_gauge(gw, rail: str) -> float:
-    text = (await gw.get("/metrics")).text
+    with quiet():
+        text = (await gw.get("/metrics")).text
     m = re.search(rf'^gateway_credentials_rejected\{{rail="{rail}"\}} (\S+)$', text, re.M)
     attach_json(f"sample: gateway_credentials_rejected{{rail={rail}}}", {"line": m.group(0) if m else None})
     return float(m.group(1)) if m else -1
@@ -229,9 +230,12 @@ async def test_upstream_401_403_kind(gw, upstreams, rail, behaviour, status, cod
     world(upstream=behaviour)
     upstreams[rail].behaviour = behaviour
     with given(f"rail = {rail}: a worker session there (harness goose)"):
-        doc = await open_session(gw, role="worker", harness="goose", rail=rail)
-    with when(f"POST /openai/v1/chat/completions (upstream answers {behaviour})"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+        with quiet():
+            doc = await open_session(gw, role="worker", harness="goose", rail=rail)
+    with when(f"POST /openai/v1/chat/completions (behaviour = {behaviour!r}: the upstream's answer)"):
+        with quiet():
+            r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+        attach_json(f"gateway answer → {r.status_code}", {"status": r.status_code, "body": r.json()})
     then_eq("status", r.status_code, status)
     then_eq("code", err(r), code, claim=f"error code = {code}")
     with then(f"the rail's credential: gateway_credentials_rejected{{rail=\"{rail}\"}} = {rejected}"):

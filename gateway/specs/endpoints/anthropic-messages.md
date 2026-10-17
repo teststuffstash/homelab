@@ -48,8 +48,8 @@ gateway **adds** `anthropic-beta: oauth-2025-04-20`, merged with any inbound bet
 proxy's `OAUTH_BETA` precedent). The rail speaks the anthropic dialect only: an openai-dialect
 request on a session pinned here is 501 `dialect-unsupported-on-rail`, and so is the models
 list. Upstream 429 passes through with its `retry-after`; upstream 401/403 is 424
-`upstream-auth` (or 403 `upstream-refused` — [GW-CRED-BOUNDARY](#gw-cred-boundary)) with no upstream
-body; timeouts are connect 10 s / read 600 s (504
+`upstream-auth`, 403 `upstream-refused` or 403 `upstream-edge-refused` ([GW-CRED-BOUNDARY](#gw-cred-boundary))
+with no upstream body; timeouts are connect 10 s / read 600 s (504
 `upstream-timeout`); a connection that fails for any other reason — refused, DNS, TLS, reset —
 is 502 `upstream-unreachable` (nothing reached the vendor; the row counts, so a dead upstream
 is visible on the session and in `gateway_requests_total{status="502"}`).
@@ -138,7 +138,7 @@ policy id with `opencode-go/` removed ([GW-MODEL-RESOLVE](#gw-model-resolve)).
 | "no session header — the gateway supplies its session id ⚖" | anthropic | neither || `x-opencode-session: <gateway session id>` |
 | "the caller's user agent is replaced by the gateway's own ⚖" | openai | `User-Agent: Python-urllib/3.13` || `User-Agent: agent-gateway` |
 | "the client's Accept-Encoding passes through" | openai | `Accept-Encoding: gzip` || `Accept-Encoding: gzip` |
-| "no Accept-Encoding from the client is identity upstream" | openai | (none) || `Accept-Encoding: identity` |
+| "no Accept-Encoding from the client is identity upstream ⚖" | openai | (none) || `Accept-Encoding: identity` |
 
 | description | inbound path | upstream behaviour || upstream URL | status | body |
 |---|---|---||---|---|---|
@@ -228,7 +228,7 @@ cannot be read is 401 `credential-unresolved` (definitive) or 503 `credential-tr
 Upstream 401/403 never relays its body — a key hint never crosses back — and is told apart by
 what it says (the body is read, never forwarded): a 401, or a 403 whose error names a credential
 reason (`type` `authentication_error` / `permission_error`, `code` `api_key_expired` /
-`invalid_api_key` / …), or a 403 with no readable error object, is **424 `upstream-auth`**: the
+`invalid_api_key` / …), is **424 `upstream-auth`**: the
 rail credential is bad, and the [admission](sessions.md#capacity--the-ladders-capacity-half) skips
 that credential until a 2xx on it or a new value. ⚖ 424 (Failed Dependency), not 502: the pinned
 harnesses retry 5xx with backoff (opencode retried the expired Go key's 502 nine times in the

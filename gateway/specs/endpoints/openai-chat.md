@@ -48,7 +48,7 @@ openapi file is the citation. ⚖ Whether that endpoint honours `anthropic-beta`
 anywhere read — the header is forwarded untouched and the row is **verify during
 implementation**. The body's `model` is the bare policy id. Upstream 429 passes through with
 `retry-after` (and cools the session's cell — [§Capacity](sessions.md#capacity--the-ladders-capacity-half));
-401/403 is 424 `upstream-auth` or 403 `upstream-refused` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)); a connection that fails before any byte is sent
+401/403 is 424 `upstream-auth`, 403 `upstream-refused` or 403 `upstream-edge-refused` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)); a connection that fails before any byte is sent
 is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`). ⚖ The policy keeps the
 harness's User-Agent on this rail (`user_agent: forward`). The experiment's inkling rides passed
 OpenRouter's "agentic harnesses only" gate as opencode traffic (60 × 200); its one 403 was a bare
