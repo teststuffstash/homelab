@@ -81,8 +81,8 @@ TOKEN_RE = re.compile(r"^gws_[A-Za-z0-9_-]{32}$")
 NS, SA, POD = "platform-agents", "agentstack-worker", "fixer-1"
 BIND = {"namespace": NS, "serviceaccount": SA, "pod": POD}
 USER = f"system:serviceaccount:{NS}:{SA}"
-# Fixture projected tokens: obviously fake, JWT-shaped (so the GW-REDACT JWT pattern has a target).
-SA_TOKEN = "eyJGQUtFIjoiYm91bmQifQ.eyJwb2QiOiJmaXhlci0xIn0.RkFLRS1TSUctMQ"
+# Fixture projected tokens: obviously fake (the JWT-shaped one lives in test_redact.py).
+SA_TOKEN = "fake-projected-sa-token-for-pod-fixer-1"
 
 
 def bound_review(user: str = USER, pod: str | None = POD, audiences=("agent-gateway",), authenticated: bool = True) -> Review:
@@ -362,7 +362,7 @@ async def test_second_pull_same_pod(gw, reviews):
 async def test_second_pull_other_pod(gw, reviews):
     """row: a second pull by another pod is refused by identity first"""
     world()
-    other = "eyJGQUtFIjoib3RoZXIifQ.eyJwb2QiOiJmaXhlci0yIn0.RkFLRS1TSUctMg"
+    other = "fake-projected-sa-token-for-pod-fixer-2"
     with given("a bound opencode session, pulled once; a second token reviews as the bound SA on pod fixer-2"):
         doc, _ = await _bound_and_pulled(gw, reviews)
         reviews.tokens[other] = bound_review(pod="fixer-2")
