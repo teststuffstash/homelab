@@ -204,6 +204,7 @@ class Proxy:
             await resp.aclose()
             elapsed = time.monotonic() - t0
             self.metrics.request(row.rail, dialect, 502, elapsed)
+            self.metrics.upstream_auth_rejected(row.rail)
             self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock())
             log.error("upstream-auth %s %d session=%s [%s]", row.rail, status, row.id, note)
             return error(502, "upstream-auth", f"rail {row.rail} rejected the gateway's credential (upstream {status})")

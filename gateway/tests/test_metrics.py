@@ -12,6 +12,9 @@
 | upstream time is observed per rail | one call on anthropic | gateway_upstream_seconds_count{rail="anthropic"} | 1 |
 | tokens are counted by class | upstream-ok-cached answers usage {input_tokens: 12, cache_read_input_tokens: 300, cache_creation_input_tokens: 40, output_tokens: 7} on anthropic | gateway_tokens_total{rail="anthropic",class="in"} / "cache_read" / "cache_write" / "out" | 12 / 300 / 40 / 7 |
 | the subscription windows are read | one call on anthropic, answered with anthropic-ratelimit-unified-{5h,7d}-{utilization,reset} | gateway_subscription_utilization{rail="anthropic",window="5h"} / "7d"; gateway_subscription_reset_seconds{…} | 0.13 / 0.67; 1792172400 / 1792274400 |
+| an upstream auth rejection is counted apart | upstream-401 on opencode | gateway_upstream_auth_rejected_total{rail="opencode"} / gateway_requests_total{rail="opencode",dialect="openai",status="502"} | 1 / 1 |
+| an unreachable upstream is not an auth rejection | upstream-down on opencode | gateway_upstream_auth_rejected_total{rail="opencode"} / gateway_requests_total{rail="opencode",dialect="openai",status="502"} | 0 / 1 |
+| every rail's rejection count renders from 0 | no request yet | gateway_upstream_auth_rejected_total{rail=…} for anthropic, openrouter, opencode, codex | 0 each |
 | a resolution verdict is counted | the anthropic ref is a definitive miss | gateway_credential_resolve_total{rail="anthropic",outcome="definitive"} | 1 |
 
 | description | the series | label | allowed values |
@@ -28,7 +31,7 @@
 | route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release |
 | reason is why no caller identity was read | control_plane_unauthenticated_total | reason | absent, invalid, review-transient |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 9 families |
+| every family is declared with HELP and TYPE | — | — | 10 families |
 """
 
 from __future__ import annotations
@@ -45,7 +48,7 @@ FAMILIES = (
     "gateway_sessions_active", "gateway_sessions_total", "gateway_requests_total",
     "gateway_upstream_seconds", "gateway_tokens_total", "gateway_credential_resolve_total",
     "gateway_subscription_utilization", "gateway_subscription_reset_seconds",
-    "gateway_control_plane_unauthenticated_total",
+    "gateway_control_plane_unauthenticated_total", "gateway_upstream_auth_rejected_total",
 )
 
 
@@ -196,6 +199,43 @@ async def test_subscription_windows_read(gw):
                for fam in ("utilization", "reset_seconds") for w in ("5h", "7d")}
         check("gateway_subscription_*{rail=anthropic}", got, {"utilization 5h": 0.13, "utilization 7d": 0.67,
                                                              "reset_seconds 5h": 1792172400, "reset_seconds 7d": 1792274400})
+
+
+async def test_upstream_auth_counted_apart(gw, upstreams):
+    """row: an upstream auth rejection is counted apart"""
+    world(upstream="upstream-401")
+    upstreams["opencode"].behaviour = "upstream-401"
+    with given("a worker session on opencode"):
+        doc = await open_session(gw)
+    with when("event: upstream-401 on opencode (POST /openai/v1/chat/completions)"):
+        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 502)
+    await _then_series(gw, 'gateway_upstream_auth_rejected_total{rail="opencode"}', 1)
+    await _then_series(gw, 'gateway_requests_total{rail="opencode",dialect="openai",status="502"}', 1)
+
+
+async def test_unreachable_not_auth(gw, transport):
+    """row: an unreachable upstream is not an auth rejection"""
+    world(upstream="upstream-down")
+    transport.unreachable.add("opencode")
+    with given("a worker session on opencode"):
+        doc = await open_session(gw)
+    with when("event: upstream-down on opencode (POST /openai/v1/chat/completions)"):
+        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 502)
+    await _then_series(gw, 'gateway_upstream_auth_rejected_total{rail="opencode"}', 0)
+    await _then_series(gw, 'gateway_requests_total{rail="opencode",dialect="openai",status="502"}', 1)
+
+
+async def test_rejections_render_from_zero(gw):
+    """row: every rail's rejection count renders from 0"""
+    world()
+    with when("GET /metrics before any request"):
+        text = await _metrics(gw)
+        attach_json("sample: gateway_upstream_auth_rejected_total lines", _lines(text, "gateway_upstream_auth_rejected_total"))
+    with then("gateway_upstream_auth_rejected_total{rail=…} = 0 for anthropic, openrouter, opencode, codex"):
+        got = {rail: _value(text, f'gateway_upstream_auth_rejected_total{{rail="{rail}"}}') for rail in ("anthropic", "openrouter", "opencode", "codex")}
+        check("gateway_upstream_auth_rejected_total by rail", got, {"anthropic": 0, "openrouter": 0, "opencode": 0, "codex": 0})
 
 
 async def test_resolution_verdict_counted(gw, app, secrets):

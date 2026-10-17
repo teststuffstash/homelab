@@ -1,0 +1,25 @@
+# The `agent-gateway` group, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the
+# manifest is their one home) — the rules file agent-gateway.promtool-test loads. Not a manifest:
+# `promtool test rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps
+# them under `.spec`. Named .promtool-rules rather than .yaml because manifest-lint kubeconforms
+# every *.yaml under argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions), so a stale
+# copy reds instead of passing vacuously. RE-COPY AFTER EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway","rules":[.spec.groups[] | select(.name == "agent-gateway") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway
+    rules:
+      - alert: GoRailCredentialRejected
+        expr: |
+          max by (rail) (max_over_time((timestamp((sum by (rail) (increase(gateway_upstream_auth_rejected_total{rail="opencode"}[5m])) >= 3) unless on (rail) (sum by (rail) (increase(gateway_requests_total{rail="opencode",status=~"2.."}[5m])) > 0)))[2h:1m]))
+          unless on (rail)
+          (max by (rail) (max_over_time((timestamp(sum by (rail) (increase(gateway_requests_total{rail="opencode",status=~"2.."}[5m])) > 0))[2h:1m])) > on (rail) max by (rail) (max_over_time((timestamp((sum by (rail) (increase(gateway_upstream_auth_rejected_total{rail="opencode"}[5m])) >= 3) unless on (rail) (sum by (rail) (increase(gateway_requests_total{rail="opencode",status=~"2.."}[5m])) > 0)))[2h:1m])))
+        for: 2m
+        labels:
+          severity: warning
+          triage: now
+        annotations:
+          summary: 'OpenCode Go answers 401/403 to the gateway''s key with no 2xx — if the probe confirms the key is dead, rotate: wallet opencode-go-api-key → Infisical OPENCODE_GO_API_KEY → force-sync ExternalSecret agent-egress/opencode-go-key → restart agent-gateway + openrouter-proxy'
+          description: 'OpenCode Go answered 401/403 (502 upstream-auth) to the gateway''s own key, with no 2xx since; the last sustained burst was at {{ $value | humanizeTimestamp }}. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "upstream-auth opencode" shows the rejections and their upstream status; (2) probe the key the Secret holds against https://opencode.ai/zen/go/v1/models (docs/runbook.md §Rotate the OpenCode Go API key, step 0) — 401 there = the key itself is rejected. If the probe confirms it, the runbook section is the rotation recipe; if the probe answers 200, the key works and the gateway is not sending it (look at the ExternalSecret sync and the pod''s env). Clears on the first 2xx window after the burst, or after 2h with no new burst.'

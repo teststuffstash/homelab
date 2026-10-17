@@ -1,0 +1,168 @@
+# Behaviour fixture for the `agent-gateway` alerts (prometheusrule.yaml beside this file).
+#
+#   devbox run prometheus-rules-lint      # runs this, and every other *.promtool-test under argocd/
+#   .devbox/nix/profile/default/bin/promtool test rules agent-gateway.promtool-test   # from this dir
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# CLOCK: promtool's clock starts at 0. In G1 (the replay) minute 0 = 2026-10-17T16:30Z, so 20m =
+# 16:50Z, 50m = 17:20Z, 120m = 18:30Z, 190m = 19:40Z — the four replay instants. The alert's
+# $value is the newest onset's timestamp, so humanizeTimestamp renders fixture-epoch times
+# (1970-01-01 …) here; live it renders the real instant.
+#
+# LABELS are the real scraped set of gateway_* (read off the live gateway_sessions_active series,
+# 2026-10-17): container, endpoint, instance, job, namespace, pod, service, plus the family's own.
+rule_files:
+  - agent-gateway.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ G1 — THE 2026-10-17 EVENT, REPLAYED FROM ITS LOGS ═════════════════════════════════════════
+  # No scraped series saw this event: gateway_upstream_auth_rejected_total did not exist yet, and
+  # the only Go traffic during the outage was the free-model experiment's ephemeral
+  # agent-gateway-exp pod (same image, no Service, not scraped). Its own log lines are the
+  # evidence: Loki tenant agent-egress, per-minute counts of "upstream-auth opencode" (57 between
+  # 17:12 and 17:28, then the experiment stopped) and of "rail=opencode … status=2xx" (the last
+  # at 17:14), turned into the counters this pod WOULD have exposed:
+  #   sum(count_over_time({namespace="agent-egress",container="gateway"} |~ "upstream-auth opencode" [1m]))
+  #   sum(count_over_time({namespace="agent-egress",container="gateway"} |~ "rail=opencode .*status=2[0-9][0-9]" [1m]))
+  # The rejection counter is absent until the pod starts (17:07Z) and renders 0 from then on
+  # (GW-METRICS: every rail renders from 0).
+  - interval: 1m
+    name: G1 replay — expired key 17:12:49Z, traffic stops 17:28Z; fires 17:20, holds 18:30, clear 16:50 + 19:40
+    input_series:
+      - series: 'gateway_upstream_auth_rejected_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-exp-6b6f5497d8-8kq7l",rail="opencode"}'
+        values: "_x37 0x5 3 10 27 30 38 39x7 51 55 57x142"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-exp-6b6f5497d8-8kq7l",rail="opencode",dialect="openai",status="200"}'
+        values: "0x6 2x30 4x2 19 30 47 48x156"
+    alert_rule_test:
+      # 16:50Z — before the expiry: 2xx only.
+      - eval_time: 20m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+      # 17:18Z — the first 5m window with ≥3 rejections and no 2xx (the last 2xx sample is 17:14).
+      # Pending, not firing: for: 2m.
+      - eval_time: 48m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+      # 17:20Z — firing; $value is the onset still in progress (now).
+      - eval_time: 50m
+        alertname: GoRailCredentialRejected
+        exp_alerts:
+          - exp_labels:
+              rail: opencode
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: "OpenCode Go answers 401/403 to the gateway's key with no 2xx — if the probe confirms the key is dead, rotate: wallet opencode-go-api-key → Infisical OPENCODE_GO_API_KEY → force-sync ExternalSecret agent-egress/opencode-go-key → restart agent-gateway + openrouter-proxy"
+              description: "OpenCode Go answered 401/403 (502 upstream-auth) to the gateway's own key, with no 2xx since; the last sustained burst was at 1970-01-01 00:50:00 +0000 UTC. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"upstream-auth opencode\" shows the rejections and their upstream status; (2) probe the key the Secret holds against https://opencode.ai/zen/go/v1/models (docs/runbook.md §Rotate the OpenCode Go API key, step 0) — 401 there = the key itself is rejected. If the probe confirms it, the runbook section is the rotation recipe; if the probe answers 200, the key works and the gateway is not sending it (look at the ExternalSecret sync and the pod's env). Clears on the first 2xx window after the burst, or after 2h with no new burst."
+      # 18:30Z — no Go request since 17:28, still firing: quiet is not healed (the HOLD).
+      - eval_time: 120m
+        alertname: GoRailCredentialRejected
+        exp_alerts:
+          - exp_labels:
+              rail: opencode
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: "OpenCode Go answers 401/403 to the gateway's key with no 2xx — if the probe confirms the key is dead, rotate: wallet opencode-go-api-key → Infisical OPENCODE_GO_API_KEY → force-sync ExternalSecret agent-egress/opencode-go-key → restart agent-gateway + openrouter-proxy"
+              description: "OpenCode Go answered 401/403 (502 upstream-auth) to the gateway's own key, with no 2xx since; the last sustained burst was at 1970-01-01 01:00:00 +0000 UTC. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"upstream-auth opencode\" shows the rejections and their upstream status; (2) probe the key the Secret holds against https://opencode.ai/zen/go/v1/models (docs/runbook.md §Rotate the OpenCode Go API key, step 0) — 401 there = the key itself is rejected. If the probe confirms it, the runbook section is the rotation recipe; if the probe answers 200, the key works and the gateway is not sending it (look at the ExternalSecret sync and the pod's env). Clears on the first 2xx window after the burst, or after 2h with no new burst."
+      # 19:40Z — the newest onset (17:30Z) is more than 2h old: resolved. (Live, the 19:20Z
+      # rotation's 2xx would have cleared it earlier — G2.)
+      - eval_time: 190m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+
+  # ══ G2 — ROTATION CLEARS IT: a pod roll, then 2xx on the new pod ═════════════════════════════
+  # Rejections 5/min on pod A from 5m to 15m; A is replaced at 30m (the recipe's restart); pod B
+  # renders the rejection counter at 0 and answers 2xx from 40m. B's 2xx counter is born at 1 —
+  # the first 2xx is not an increase(), the second (41m) is.
+  - interval: 1m
+    name: G2 rotation — firing across the roll, cleared by the new pod's 2xx
+    input_series:
+      - series: 'gateway_upstream_auth_rejected_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-6f6994599c-lgmmg",rail="opencode"}'
+        values: "0x4 5+5x10 55x15"
+      - series: 'gateway_upstream_auth_rejected_total{container="gateway",endpoint="http",instance="10.244.7.52:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-6bc8c4745d-m7psv",rail="opencode"}'
+        values: "_x31 0x40"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.52:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-6bc8c4745d-m7psv",rail="opencode",dialect="openai",status="200"}'
+        values: "_x40 1+1x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: GoRailCredentialRejected
+        exp_alerts:
+          - exp_labels:
+              rail: opencode
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: "OpenCode Go answers 401/403 to the gateway's key with no 2xx — if the probe confirms the key is dead, rotate: wallet opencode-go-api-key → Infisical OPENCODE_GO_API_KEY → force-sync ExternalSecret agent-egress/opencode-go-key → restart agent-gateway + openrouter-proxy"
+              description: "OpenCode Go answered 401/403 (502 upstream-auth) to the gateway's own key, with no 2xx since; the last sustained burst was at 1970-01-01 00:18:00 +0000 UTC. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"upstream-auth opencode\" shows the rejections and their upstream status; (2) probe the key the Secret holds against https://opencode.ai/zen/go/v1/models (docs/runbook.md §Rotate the OpenCode Go API key, step 0) — 401 there = the key itself is rejected. If the probe confirms it, the runbook section is the rotation recipe; if the probe answers 200, the key works and the gateway is not sending it (look at the ExternalSecret sync and the pod's env). Clears on the first 2xx window after the burst, or after 2h with no new burst."
+      # 35m — mid-roll, nothing on the rail at all: still firing.
+      - eval_time: 35m
+        alertname: GoRailCredentialRejected
+        exp_alerts:
+          - exp_labels:
+              rail: opencode
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: "OpenCode Go answers 401/403 to the gateway's key with no 2xx — if the probe confirms the key is dead, rotate: wallet opencode-go-api-key → Infisical OPENCODE_GO_API_KEY → force-sync ExternalSecret agent-egress/opencode-go-key → restart agent-gateway + openrouter-proxy"
+              description: "OpenCode Go answered 401/403 (502 upstream-auth) to the gateway's own key, with no 2xx since; the last sustained burst was at 1970-01-01 00:18:00 +0000 UTC. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"upstream-auth opencode\" shows the rejections and their upstream status; (2) probe the key the Secret holds against https://opencode.ai/zen/go/v1/models (docs/runbook.md §Rotate the OpenCode Go API key, step 0) — 401 there = the key itself is rejected. If the probe confirms it, the runbook section is the rotation recipe; if the probe answers 200, the key works and the gateway is not sending it (look at the ExternalSecret sync and the pod's env). Clears on the first 2xx window after the burst, or after 2h with no new burst."
+      # 40m — B's first 2xx: not yet an increase, still firing.
+      - eval_time: 40m
+        alertname: GoRailCredentialRejected
+        exp_alerts:
+          - exp_labels:
+              rail: opencode
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: "OpenCode Go answers 401/403 to the gateway's key with no 2xx — if the probe confirms the key is dead, rotate: wallet opencode-go-api-key → Infisical OPENCODE_GO_API_KEY → force-sync ExternalSecret agent-egress/opencode-go-key → restart agent-gateway + openrouter-proxy"
+              description: "OpenCode Go answered 401/403 (502 upstream-auth) to the gateway's own key, with no 2xx since; the last sustained burst was at 1970-01-01 00:18:00 +0000 UTC. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"upstream-auth opencode\" shows the rejections and their upstream status; (2) probe the key the Secret holds against https://opencode.ai/zen/go/v1/models (docs/runbook.md §Rotate the OpenCode Go API key, step 0) — 401 there = the key itself is rejected. If the probe confirms it, the runbook section is the rotation recipe; if the probe answers 200, the key works and the gateway is not sending it (look at the ExternalSecret sync and the pod's env). Clears on the first 2xx window after the burst, or after 2h with no new burst."
+      # 42m — B's second 2xx is newer than the newest onset: cleared.
+      - eval_time: 42m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+
+  # ══ G3 — A BAD REQUEST, NOT A BAD KEY: rejections interleaved with 2xx ════════════════════════
+  # One model's 403 typed upstream-auth (the free-model experiment's harness 403) at 2/min while
+  # the rest of the rail answers 3/min. Every 5m window holds a 2xx, so there is never an onset.
+  - interval: 1m
+    name: G3 mixed — per-request 403s beside 2xx never fire
+    input_series:
+      - series: 'gateway_upstream_auth_rejected_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-exp-6b6f5497d8-8kq7l",rail="opencode"}'
+        values: "0+2x40"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-exp-6b6f5497d8-8kq7l",rail="opencode",dialect="openai",status="200"}'
+        values: "0+3x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+
+  # ══ G4 — A DEAD UPSTREAM, NOT A BAD KEY: 502 upstream-unreachable only ════════════════════════
+  # gateway_requests_total{status="502"} climbs, the auth counter stays 0 — this is the split the
+  # new family exists for.
+  - interval: 1m
+    name: G4 unreachable — 502s without auth rejections never fire
+    input_series:
+      - series: 'gateway_upstream_auth_rejected_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-exp-6b6f5497d8-8kq7l",rail="opencode"}'
+        values: "0x40"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",service="agent-gateway",pod="agent-gateway-exp-6b6f5497d8-8kq7l",rail="opencode",dialect="openai",status="502"}'
+        values: "0+4x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: GoRailCredentialRejected
+        exp_alerts: []
