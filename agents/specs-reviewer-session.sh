@@ -322,6 +322,10 @@ ROWS
   check "admission record: the env KEYS kept" '["OPENAI_API_KEY","OPENAI_BASE_URL"]' "$(admission_summary 200 "$d/disp.json" | jq -c .env_keys)"
   printf '%s' '{"decision":"defer","reason":"role-rail-denied","retry_after_s":60}' > "$d/defer.json"
   check "admission record: a defer keeps its reason" role-rail-denied "$(admission_summary 200 "$d/defer.json" | jq -r .answer.reason)"
+  # The review body reaches the log framed by its tag (the artifact store needs credentials the
+  # reader may lack); a body line can never be mistaken for a marker of another tag.
+  printf '## Specs review\nVerdict: APPROVE — x\n' > "$d/rv.md"
+  check "shadow: review body framed in the log" "SHADOW-REVIEW-BEGIN t1|## Specs review|Verdict: APPROVE — x|SHADOW-REVIEW-END t1" "$(shadow_emit_review t1 "$d/rv.md" | paste -sd'|')"
   # Usage errors are rc 2 BEFORE any read (no harness, no PR list).
   rs=0; ( shadow_main --rail opencode homelab#1 ) >/dev/null 2>&1 || rs=$?
   check "shadow_main: no --harness → rc 2" 2 "$rs"
@@ -778,9 +782,17 @@ shadow_one() {
   verdict="$(parse_verdict "$review")"
   printf '%s\n' "$review" > "$SHADOW_OUT/${tag}.review.md"
   [ -s "$WORK/result.txt" ] && cp "$WORK/result.txt" "$SHADOW_OUT/${tag}.raw.txt"
-  shadow_record "$rec" "verdict=$(js "$verdict")" "outcome=$(js "$([ -n "$verdict" ] && echo reviewed || echo no-verdict)")" "wall_s=$(( $(date +%s) - t0 ))"
+  shadow_record "$rec" "verdict=$(js "$verdict")" "outcome=$(js "$([ -n "$verdict" ] && echo reviewed || echo no-verdict)")" "wall_s=$(( $(date +%s) - t0 ))" \
+    "verdict_line=$(js "$(grep -m1 '^Verdict:' <<< "$review" || true)")" \
+    "result_head=$(js "$([ -n "$verdict" ] || head -c 400 "$WORK/result.txt" 2>/dev/null)")"
+  shadow_emit_review "$tag" "$SHADOW_OUT/${tag}.review.md"
   log "[$repo#$num] shadow ${cell}: verdict=${verdict:-none} rc=${rc}"
   [ -n "$verdict" ]
+}
+# shadow_emit_review <tag> <file> → the review body on stdout between markers: the pod's log (Loki)
+# is the durable copy a reader without the Argo artifact store's credentials can fetch
+shadow_emit_review() {
+  printf 'SHADOW-REVIEW-BEGIN %s\n' "$1"; cat "$2" 2>/dev/null || true; printf 'SHADOW-REVIEW-END %s\n' "$1"
 }
 # shadow_release <record> → DELETE the session (the live cleanup's retry), then GET its row into
 # the record: the four token classes + requests, the gateway's own count for every harness
