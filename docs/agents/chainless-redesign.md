@@ -492,7 +492,10 @@ What stands here is the doctrine the probe produced:
   quota API; the usage multipliers appear only in the vendor client's picker. So the Go-rail
   registry must be a **curated snapshot** (the §M8 gated-data pattern — docs table + picker
   multipliers + our own canary matrix) with windows **self-metered from per-request usage**,
-  never discovered. Billing resolved to list ×1 for every model, while badged models draw the
+  never discovered. *(2026-10-17: `/console/api/v2/config` now serves Go prices, context tiers and
+  limits machine-readably, but per-model monthly limits and peak rows still do not come from any
+  API — [`../spikes/opencode-go-catalog.md`](../spikes/opencode-go-catalog.md) proposes the
+  gateway's catalog leg.)* Billing resolved to list ×1 for every model, while badged models draw the
   WINDOWS at half their billed list-$ — favorable, and unverified at the limit boundary (the
   tell: a badged model not latching when billed $ predicts it).
 - **Pricing publishes cached-read rates, and that column decides capacity** — the platform's

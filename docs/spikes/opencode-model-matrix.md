@@ -22,7 +22,8 @@ or listed but every call fails.
 
 **Prices**: snapshotted from the vendor's own docs page (`go.mdx` §"Usage limits", the source
 behind https://opencode.ai/docs/go/) — the ONLY price source; the API (`/v1/models`) returns bare
-ids. $/M tokens: in / out / cached-read / cached-write. "Usage" = the docs' per-model monthly
+ids. (2026-10-17: no longer the only source — `/console/api/v2/config` carries prices; see
+[`opencode-go-catalog.md`](opencode-go-catalog.md).) $/M tokens: in / out / cached-read / cached-write. "Usage" = the docs' per-model monthly
 limit. "Badge" = the picker's "(Nx usage)" marker. **Current snapshot: 2026-09-17** (37 published
 rows / 29 model ids; the earlier 2026-08-13 console-curated snapshot had rotted). The prices in
 this file and in `argocd/resources/openrouter-proxy/gometer.py` are ONE table — refresh both in
