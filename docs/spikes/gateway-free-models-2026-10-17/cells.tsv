@@ -1,0 +1,36 @@
+batch	run	pr	model	outcome	verdict	ok	rc	model_s	wall_s	requests	statuses	in/out/cr/cw
+batch1	beam	2628	opencode-go/beam-free	no-verdict	-		1	76	90	9	502x9	0/0/0/0
+batch1	beam	2635	opencode-go/beam-free	reviewed	CHANGES_REQUESTED	ok	0	67	86	19	200x19	82525/17062/601664/0
+batch1	beam	2640	opencode-go/beam-free	no-verdict	-		1	125	142	23	200x17,502x6	152844/11960/707328/0
+batch1	gemma	2628	google/gemma-4-31b-it:free	no-verdict	-		1	157	171	9	429x9	0/0/0/0
+batch1	gemma	2635	google/gemma-4-31b-it:free	no-verdict	-		1	160	180	9	429x9	0/0/0/0
+batch1	gemma	2640	google/gemma-4-31b-it:free	no-verdict	-		1	158	173	9	429x9	0/0/0/0
+batch1	inkling	2628	thinkingmachines/inkling:free	reviewed	APPROVE	ok	0	171	185	13	200x13	120338/7714/598144/0
+batch1	inkling	2635	thinkingmachines/inkling:free	reviewed	CHANGES_REQUESTED	ok	0	200	218	25	200x25	63960/6555/748928/0
+batch1	inkling	2640	thinkingmachines/inkling:free	reviewed	APPROVE	WRONG	0	289	305	22	200x22	84803/11374/872064/0
+batch1	laguna	2628	defer:rail-capacity	defer	-		None	None	17	None		None/None/None/None
+batch1	laguna	2635	defer:rail-capacity	defer	-		None	None	30	None		None/None/None/None
+batch1	laguna	2640	defer:rail-capacity	defer	-		None	None	19	None		None/None/None/None
+batch1	longcat	2628	opencode-go/longcat-2.5-preview-free	no-verdict	-		1	78	93	9	502x9	0/0/0/0
+batch1	longcat	2635	opencode-go/longcat-2.5-preview-free	no-verdict	-		1	219	243	14	200x8,502x6	69639/6248/149504/0
+batch1	longcat	2640	opencode-go/longcat-2.5-preview-free	no-verdict	-		1	77	93	9	502x9	0/0/0/0
+batch2a	beam-rerun	2640	opencode-go/beam-free	no-verdict	-		1	83	98	9	502x9	0/0/0/0
+batch2a	gemma-rerun	2628	google/gemma-4-31b-it:free	no-verdict	-		1	157	171	9	429x9	0/0/0/0
+batch2a	gemma-rerun	2635	google/gemma-4-31b-it:free	no-verdict	-		1	157	175	9	429x9	0/0/0/0
+batch2a	gemma-rerun	2640	google/gemma-4-31b-it:free	no-verdict	-		1	157	173	9	429x9	0/0/0/0
+batch2a	laguna	2628	poolside/laguna-s-2.1:free	no-verdict	-		124	600	615	17	200x9,429x8	175066/1277/142112/0
+batch2a	laguna	2635	poolside/laguna-s-2.1:free	no-verdict	-		1	225	240	10	200x2,429x8	11245/350/32/0
+batch2a	laguna	2640	poolside/laguna-s-2.1:free	no-verdict	-		124	600	615	23	200x10,429x13	105007/6387/43456/0
+batch2a	longcat-rerun	2635	opencode-go/longcat-2.5-preview-free	no-verdict	-		1	77	92	9	502x9	0/0/0/0
+batch2b	cohere	2628	cohere/north-mini-code:free	reviewed	CHANGES_REQUESTED	WRONG	0	36	50	9	200x9	188335/2740/0/0
+batch2b	cohere	2635	cohere/north-mini-code:free	reviewed	APPROVE	WRONG	0	42	57	8	200x8	169936/3147/0/0
+batch2b	cohere	2640	cohere/north-mini-code:free	reviewed	CHANGES_REQUESTED	ok	0	346	361	29	200x28,429x1	1374645/6601/0/0
+batch2b	nemotron	2628	nvidia/nemotron-3-super-120b-a12b:free	reviewed	APPROVE	ok	0	388	403	13	200x13	81358/14320/169312/0
+batch2b	nemotron	2635	nvidia/nemotron-3-super-120b-a12b:free	reviewed	CHANGES_REQUESTED	ok	0	349	365	17	200x17	92596/14431/398112/0
+batch2b	nemotron	2640	nvidia/nemotron-3-super-120b-a12b:free	no-verdict	-		124	600	615	16	200x16	167640/9110/535392/0
+batch3	laguna-rerun	2628	poolside/laguna-s-2.1:free	no-verdict	-		124	600	615	12	200x4,429x8	43916/942/5472/0
+batch3	laguna-rerun	2635	poolside/laguna-s-2.1:free	reviewed	CHANGES_REQUESTED	ok	0	477	507	13	200x8,429x5	88592/3035/144864/0
+batch3	laguna-rerun	2640	poolside/laguna-s-2.1:free	no-verdict	-		124	600	616	14	200x6,429x8	61732/1295/35808/0
+batch3	nemotron-rerun	2640	nvidia/nemotron-3-super-120b-a12b:free	no-verdict	-		124	600	616	16	200x16	112878/1735/439296/0
+probe-c	sigkill	2640	defer:rail-capacity	defer	-		None	None	15	None		None/None/None/None
+probe-c	sigkill2	2640	cohere/north-mini-code:free	reviewed	CHANGES_REQUESTED	ok	0	113	129	10	200x10	322413/7777/0/0
