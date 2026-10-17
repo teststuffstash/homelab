@@ -71,14 +71,19 @@ File-shaped ones (SSH keys, matchbox certs, App PEMs, the `.p12`, esphome `secre
 ### Rotate the OpenCode Go API key
 
 Fired by **`GoRailCredentialRejected`** (`argocd/resources/agent-gateway/prometheusrule.yaml`): the
-Go rail answers 401/403 to our key, so the whole rail is down for both consumers of Secret
-`agent-egress/opencode-go-key` — `agent-gateway` and `openrouter-proxy`, which read it as an env var
-at start. First seen 2026-10-17 (`401 api_key_expired`). Minting is the **third-party console**
-class ([docs/secrets.md §Minting doctrine](secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret)).
+Go rail answers 401/403 to the gateway's key with no 2xx. Both consumers of Secret
+`agent-egress/opencode-go-key` (`agent-gateway`, `openrouter-proxy`) read it as an env var at start.
+First seen 2026-10-17 (`401 api_key_expired`). **Confirm before rotating** (step 0): 401 = the key the
+Secret holds is rejected → rotate; 200 = the key works and the pods are not sending it → check the
+ExternalSecret sync and the pod env instead. Minting is the **third-party console** class
+([docs/secrets.md §Minting doctrine](secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret)).
 
 ```bash
 K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n agent-egress"
 W="keepassxc-cli show -q --no-password -k $HOME/.claude/homelab-keepass/homelab.keyx $HOME/.claude/homelab-keepass/homelab.kdbx"
+# 0. confirm: probe the key the Secret holds (the models list authenticates a bearer when one is sent)
+curl -s -o /dev/null -w '%{http_code}\n' https://opencode.ai/zen/go/v1/models \
+  -H "Authorization: Bearer $($K get secret opencode-go-key -o jsonpath='{.data.api-key}' | base64 -d)"
 # 1. operator: mint a new key in the OpenCode console, write it to the wallet entry opencode-go-api-key
 #    (Password field). Probe it BEFORE storing it anywhere: 200 = good, 401 = a bad key (checked
 #    2026-10-17 — the models list authenticates a bearer when one is sent):
