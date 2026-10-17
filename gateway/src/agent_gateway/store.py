@@ -8,6 +8,7 @@ reports `db: memory` so the belt sees it.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import logging
 import sqlite3
 import threading
@@ -57,6 +58,11 @@ CREATE TABLE IF NOT EXISTS requests (
 );
 CREATE INDEX IF NOT EXISTS requests_session ON requests (session_id, ts);
 CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts);
+CREATE TABLE IF NOT EXISTS catalog_snapshots (
+  source TEXT PRIMARY KEY,
+  fetched_at REAL NOT NULL,
+  body TEXT NOT NULL
+);
 """
 # Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
 # them to an existing table, so _migrate() does (idempotent, additive only). The bind columns
@@ -301,6 +307,27 @@ class Store:
                 "SELECT * FROM requests WHERE session_id = ? ORDER BY id", (session_id,)
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # -- the Go catalog's last good snapshots (GW-CATALOG-GO) ---------------------------------
+    def snapshot_save(self, source: str, fetched_at: float, body: dict) -> None:
+        """Replace the source's last good snapshot (one row per source)."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO catalog_snapshots (source, fetched_at, body) VALUES (?,?,?)"
+                " ON CONFLICT(source) DO UPDATE SET fetched_at = excluded.fetched_at, body = excluded.body",
+                (source, fetched_at, json.dumps(body, sort_keys=True, separators=(",", ":"))),
+            )
+
+    def snapshot_load(self, source: str) -> tuple[float, dict] | None:
+        with self._lock:
+            row = self._db.execute("SELECT fetched_at, body FROM catalog_snapshots WHERE source = ?", (source,)).fetchone()
+        if row is None:
+            return None
+        try:
+            return float(row[0]), json.loads(row[1])
+        except ValueError:
+            log.error("db: catalog_snapshots.%s is not JSON — ignored (the next refresh replaces it)", source)
+            return None
 
     def ping(self) -> bool:
         try:

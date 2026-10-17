@@ -36,7 +36,9 @@
 | reason is why no caller identity was read | control_plane_unauthenticated_total | reason | absent, invalid, review-transient |
 | reason is why a 2xx body stopped before its end | requests_incomplete_total | reason | no-terminal, timeout, transport-error, client-closed |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 13 families |
+| source is the catalog source | go_catalog_refresh_total | source | config, docs |
+| the catalog outcome is the refresh outcome | go_catalog_refresh_total | outcome | ok, fetch-failed, parse-failed, implausible |
+| every family is declared with HELP and TYPE | — | — | 18 families |
 """
 
 from __future__ import annotations
@@ -55,6 +57,8 @@ FAMILIES = (
     "gateway_subscription_utilization", "gateway_subscription_reset_seconds",
     "gateway_control_plane_unauthenticated_total", "gateway_upstream_auth_rejected_total",
     "gateway_cells_cooled", "gateway_credentials_rejected", "gateway_requests_incomplete_total",
+    "gateway_go_catalog_age_seconds", "gateway_go_catalog_models", "gateway_go_catalog_refresh_total",
+    "gateway_go_catalog_last_outcome", "gateway_go_catalog_policy_models_missing",
 )
 
 
@@ -339,6 +343,8 @@ LABEL_ROWS = [
     ("reason is why no caller identity was read", "gateway_control_plane_unauthenticated_total", "reason", {"absent", "invalid", "review-transient"}),
     ("reason is why a 2xx body stopped before its end", "gateway_requests_incomplete_total", "reason",
      {"no-terminal", "timeout", "transport-error", "client-closed"}),
+    ("source is the catalog source", "gateway_go_catalog_refresh_total", "source", {"config", "docs"}),
+    ("the catalog outcome is the refresh outcome", "gateway_go_catalog_refresh_total", "outcome", {"ok", "fetch-failed", "parse-failed", "implausible"}),
 ]
 
 

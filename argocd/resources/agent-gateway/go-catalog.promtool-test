@@ -1,0 +1,160 @@
+# Behaviour fixture for the `agent-gateway-go-catalog` alerts (prometheusrule.yaml beside this file).
+#
+#   devbox run prometheus-rules-lint      # runs this, and every other *.promtool-test under argocd/
+#
+# LABELS are the real scraped set of gateway_* (container, endpoint, instance, job, namespace, pod,
+# service — read off the live gateway_sessions_active series, 2026-10-17), plus the family's own.
+# The families are hand-driven here; their values are the gateway's own rows in
+# gateway/specs/endpoints/catalog.md (age = seconds since the last good fetch, models = the last
+# good snapshot's count, last_outcome = 1 on the latest attempt's outcome, missing = a count).
+rule_files:
+  - go-catalog.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ S1 — STALE BY AGE: refreshes stop; the 6 h sawtooth becomes a ramp ═══════════════════════
+  # interval 1m (a coarser one goes stale between samples under the 5m lookback). The docs source
+  # refreshed at 0 and never again (a moved go.mdx: every 6 h fetch 404s, the last good snapshot
+  # ages): age = 60 × minute, > 86400 from 1441m; for 30m → firing from 1471m. The config source
+  # keeps its 6 h sawtooth (age back to 0 every 360 m) and never fires.
+  - interval: 1m
+    name: S1 stale — docs stops refreshing; fires 30m after 24 h, config never
+    input_series:
+      - series: 'gateway_go_catalog_age_seconds{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="docs"}'
+        values: "0+60x1550"
+      - series: 'gateway_go_catalog_models{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="docs"}'
+        values: "29x1550"
+      - series: 'gateway_go_catalog_age_seconds{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="config"}'
+        values: "0+60x359 0+60x359 0+60x359 0+60x359 0+60x110"
+      - series: 'gateway_go_catalog_models{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="config"}'
+        values: "29x1550"
+    alert_rule_test:
+      # 24 h: age = 86400, not past it.
+      - eval_time: 1440m
+        alertname: GoCatalogStale
+        exp_alerts: []
+      # 24 h 20 m: past it, still pending (for: 30m).
+      - eval_time: 1461m
+        alertname: GoCatalogStale
+        exp_alerts: []
+      # 25 h: firing for docs only.
+      - eval_time: 1500m
+        alertname: GoCatalogStale
+        exp_alerts:
+          - exp_labels:
+              source: docs
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway's Go catalog (docs) has had no good refresh for 24 h (or has none) — admission is reading old Go prices/limits"
+              description: "gateway_go_catalog_age_seconds{source=\"docs\"} is past 24 h, or the source has no snapshot at all (90000). Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"catalog: docs\" — \"fetch answered 404\" on docs = the vendor moved go.mdx (fix GATEWAY_GO_DOCS_URL / the default in gateway/src/agent_gateway/config.py); 401 on config = the Go key (see GoRailCredentialRejected); (2) gateway_go_catalog_last_outcome{source=\"docs\"} names the failing outcome; (3) GET /catalog/opencode on the gateway shows what admission reads now. gateway/specs/endpoints/catalog.md is the contract."
+
+  # ══ S2 — STALE BY ABSENCE: a fresh pod whose first refreshes fail (no snapshot ever) ═════════
+  # models 0 and no age series (the family renders no age until a snapshot exists). A start whose
+  # first refresh succeeds within the 30m `for` never fires — S3's control.
+  - interval: 1m
+    name: S2 none — no snapshot for 30m fires
+    input_series:
+      - series: 'gateway_go_catalog_models{container="gateway",endpoint="http",instance="10.244.7.52:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6bc8c4745d-m7psv",service="agent-gateway",source="config"}'
+        values: "0x45"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GoCatalogStale
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: GoCatalogStale
+        exp_alerts:
+          - exp_labels:
+              source: config
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway's Go catalog (config) has had no good refresh for 24 h (or has none) — admission is reading old Go prices/limits"
+              description: "gateway_go_catalog_age_seconds{source=\"config\"} is past 24 h, or the source has no snapshot at all (0). Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"catalog: config\" — \"fetch answered 404\" on docs = the vendor moved go.mdx (fix GATEWAY_GO_DOCS_URL / the default in gateway/src/agent_gateway/config.py); 401 on config = the Go key (see GoRailCredentialRejected); (2) gateway_go_catalog_last_outcome{source=\"config\"} names the failing outcome; (3) GET /catalog/opencode on the gateway shows what admission reads now. gateway/specs/endpoints/catalog.md is the contract."
+
+  # ══ S3 — A START: models 0 for the seconds before the first refresh, then 29 ══════════════════
+  - interval: 1m
+    name: S3 start — the first refresh lands inside the for, nothing fires
+    input_series:
+      - series: 'gateway_go_catalog_models{container="gateway",endpoint="http",instance="10.244.7.52:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6bc8c4745d-m7psv",service="agent-gateway",source="config"}'
+        values: "0 29x45"
+      - series: 'gateway_go_catalog_age_seconds{container="gateway",endpoint="http",instance="10.244.7.52:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6bc8c4745d-m7psv",service="agent-gateway",source="config"}'
+        values: "_ 0+60x45"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: GoCatalogStale
+        exp_alerts: []
+
+  # ══ P1 — A PARSE FAILURE: the vendor changes go.mdx, the next 6 h refresh parse-fails ═════════
+  # last_outcome{docs,parse-failed} 0 → 1 at 10m (the ok series 1 → 0); fires at 15m (for: 5m);
+  # the next refresh (6 h later — here at 40m) is ok again and it clears.
+  - interval: 1m
+    name: P1 parse failure — fires 5m after the failing refresh, clears on the next good one
+    input_series:
+      - series: 'gateway_go_catalog_last_outcome{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="docs",outcome="parse-failed"}'
+        values: "0x9 1x30 0x20"
+      - series: 'gateway_go_catalog_last_outcome{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="docs",outcome="ok"}'
+        values: "1x9 0x30 1x20"
+      - series: 'gateway_go_catalog_last_outcome{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="docs",outcome="fetch-failed"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: GoCatalogParseFailed
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: GoCatalogParseFailed
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: GoCatalogParseFailed
+        exp_alerts:
+          - exp_labels:
+              source: docs
+              outcome: parse-failed
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway could not read the Go catalog's docs source (parse-failed) — the last good snapshot is in use"
+              description: "The latest refresh of the Go catalog's docs source ended parse-failed: parse-failed = the vendor's format changed from the shape gateway/src/agent_gateway/catalog.py knows (parse_config / parse_docs); implausible = fewer than half the last good snapshot's models came back. The last good snapshot keeps admission running; GoCatalogStale follows at 24 h. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep \"catalog: docs parse failed\\|implausible\" names the line it choked on; compare with the vendor source (docs: anomalyco/opencode services/www/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart)."
+      - eval_time: 45m
+        alertname: GoCatalogParseFailed
+        exp_alerts: []
+
+  # ══ P2 — A FETCH FAILURE IS NOT A PARSE FAILURE: the vendor is down (GoCatalogStale's job) ════
+  - interval: 1m
+    name: P2 fetch-failed — never fires the parse alert
+    input_series:
+      - series: 'gateway_go_catalog_last_outcome{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="config",outcome="fetch-failed"}'
+        values: "1x40"
+      - series: 'gateway_go_catalog_last_outcome{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="config",outcome="parse-failed"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: GoCatalogParseFailed
+        exp_alerts: []
+
+  # ══ M1 — THE F3 CASE: the policy's Go model leaves the console's list ═════════════════════════
+  # missing{config} 0 → 1 at 10m (the vendor retires the model); fires at 25m (for: 15m); a policy
+  # PR moving the tier to a listed model rolls the pod at 60m → 0, cleared.
+  - interval: 1m
+    name: M1 policy model retired — fires 15m after, clears on the policy fix
+    input_series:
+      - series: 'gateway_go_catalog_policy_models_missing{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",source="config"}'
+        values: "0x9 1x50 0x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GoCatalogPolicyModelMissing
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: GoCatalogPolicyModelMissing
+        exp_alerts:
+          - exp_labels:
+              source: config
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: "1 Go model(s) the gateway policy routes to are not covered by the vendor's config catalog — the vendor no longer offers them on this plan"
+              description: "gateway_go_catalog_policy_models_missing{source=\"config\"} = 1: config = a policy Go model is not listed by the console (retired — docs/spikes/opencode-go-catalog.md §F3); docs = it has no monthly-limit row under rails.opencode.plan. Which ids: GET /catalog/opencode on the gateway → policy_models, or kubectl -n agent-egress logs deploy/agent-gateway | grep \"policy model(s) not covered\". The fix is a policy change in argocd/resources/agent-gateway/policy.json (rails.opencode.models) to a listed model, by PR."
+      - eval_time: 75m
+        alertname: GoCatalogPolicyModelMissing
+        exp_alerts: []

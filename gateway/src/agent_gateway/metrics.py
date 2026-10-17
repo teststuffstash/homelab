@@ -67,6 +67,7 @@ class Metrics:
         self._gauge_source: Callable[[], dict[str, int]] | None = None
         self._cooled_source: Callable[[], dict[str, int]] | None = None
         self._rejected_source: Callable[[], dict[str, int]] | None = None
+        self._extra: list[Callable[[], list[str]]] = []
 
     def bind_active_sessions(self, source: Callable[[], dict[str, int]]) -> None:
         self._gauge_source = source
@@ -79,6 +80,9 @@ class Metrics:
         key = (_bounded(rail, RAILS), _bounded(dialect, DIALECTS), _bounded(reason, INCOMPLETE_REASONS))
         with self._lock:
             self.incomplete_total[key] = self.incomplete_total.get(key, 0) + 1
+    def bind_extra(self, render: Callable[[], list[str]]) -> None:
+        """A module that owns its own families renders them here (the Go catalog — GW-CATALOG-GO)."""
+        self._extra.append(render)
 
     def session_decision(self, rail: str, role: str, stack: str, decision: str) -> None:
         key = (_bounded(rail, RAILS + ("none",)), _bounded(role, ROLES), _bounded(stack, self.stacks), _bounded(decision, DECISIONS))
@@ -192,4 +196,6 @@ class Metrics:
                 for reason in CP_REASONS:
                     n = self.cp_unauth_total.get((route, reason), 0)
                     lines.append(f"gateway_control_plane_unauthenticated_total{_fmt_labels({'route': route, 'reason': reason})} {n}")
+        for render in self._extra:
+            lines += render()
         return "\n".join(lines) + "\n"
