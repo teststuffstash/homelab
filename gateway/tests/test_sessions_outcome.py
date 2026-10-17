@@ -140,10 +140,11 @@ async def _report(gw, sid: str, body: dict, who: str = "the platform loop"):
     return await gw.post(f"/sessions/{sid}/outcome", json=body, headers=as_(who))
 
 
-def _strikes(store, counted: bool = True) -> list[dict]:
+def _strikes(store, counted: bool = True, attach: bool = True) -> list[dict]:
     rows = store.strikes_for("platform", TASK, counted_only=counted)
     out = [{k: r[k] for k in ("rail", "model", "class", "scope", "source")} for r in rows]
-    attach_json("strikes on task " + TASK + (" (counted)" if counted else " (all)"), out)
+    if attach:
+        attach_json("strikes on task " + TASK + (" (counted)" if counted else " (all)"), out)
     return out
 
 
@@ -247,10 +248,13 @@ async def test_same_outcome_twice_is_replay(gw, store):
     """row: the same outcome twice is a replay"""
     world()
     with given("a worker session with no-verdict reported once"):
-        doc = await _admit(gw, who=None)
-        first = await _report(gw, doc["session"]["id"], {"class": "no-verdict"}, None)
+        with quiet():
+            doc = await _admit(gw, who=None)
+            first = await _report(gw, doc["session"]["id"], {"class": "no-verdict"}, None)
     with when("POST /sessions/{id}/outcome {class: no-verdict} again"):
-        r = await _report(gw, doc["session"]["id"], {"class": "no-verdict"}, None)
+        with quiet():
+            r = await _report(gw, doc["session"]["id"], {"class": "no-verdict"}, None)
+        attach_json("the two replies", {"first": first.json(), "again": r.json()})
     then_eq("statuses", (first.status_code, r.status_code), (200, 200))
     then_eq("replay", r.json()["replay"], True)
     with then("one strike"):
@@ -316,11 +320,12 @@ async def _act(gw, upstreams, doc, step, transport=None):
 @pytest.mark.parametrize(("steps", "strikes", "series"), [r[1:] for r in STORE_ROWS], ids=[r[0] for r in STORE_ROWS])
 async def test_store(gw, upstreams, transport, store, steps, strikes, series):
     world(upstream=next((w for k, w in steps if k != "report"), "upstream-ok"))
-    with given(f"steps = {steps!r}: a worker session (opencode, opencode-go/deepseek-v4-flash)"):
-        doc = await open_session(gw, **WORKER)
-    for step in steps[:-1]:
-        with given(f"arrange: {step[0]} {step[1]}"):
-            await _act(gw, upstreams, doc, step, transport)
+    with given(f"steps = {steps!r}: a worker session (opencode, opencode-go/deepseek-v4-flash)"
+               + (f", arranged: {steps[:-1]!r}" if steps[:-1] else "")):
+        with quiet():
+            doc = await open_session(gw, **WORKER)
+            statuses = [(await _act(gw, upstreams, doc, step, transport)).status_code for step in steps[:-1]]
+        attach_json("arranged", {"session": doc["session"]["id"], "model": doc["model"], "arranged statuses": statuses})
     with when(f"{steps[-1][0]} {steps[-1][1]}"):
         await _act(gw, upstreams, doc, steps[-1], transport)
     with then(f"strikes = {strikes!r} (the counted strikes on task {TASK})"):
@@ -343,25 +348,31 @@ async def test_clean_refutes(gw, upstreams, store):
         with quiet():
             a1 = await open_session(gw, **WORKER)
             await _act(gw, upstreams, a1, ("ride", "upstream-500"))
-        _strikes(store)
+        before = _strikes(store, attach=False)
     with when("POST /sessions/{id}/outcome {class: clean} — the ride recovered and did its job"):
-        r = await _report(gw, a1["session"]["id"], {"class": "clean"}, None)
-    then_eq("refuted", r.json()["refuted"], 1)
-    with then("no counted strike is left on the task (the strike is kept, refuted)"):
-        check("counted", _strikes(store), [])
-        check("all", len(_strikes(store, counted=False)), 1)
+        with quiet():
+            r = await _report(gw, a1["session"]["id"], {"class": "clean"}, None)
+        attach_json("the outcome answer", r.json())
+    after_counted, after_all = _strikes(store, attach=False), _strikes(store, counted=False, attach=False)
+    attach_json("strikes on task " + TASK + ": before / after clean", {"before (counted)": before, "after (counted)": after_counted,
+                                                                      "after (all, refuted kept)": after_all})
+    with then("refuted = 1; no counted strike is left on the task (the strike is kept, refuted)"):
+        assert r.json()["refuted"] == 1 and after_counted == [] and len(after_all) == 1, (r.json(), after_counted, after_all)
 
 
 async def test_clean_elsewhere_refutes_nothing(gw, store):
     """row: a clean outcome on another model refutes nothing there"""
     world()
-    with given("a heavy-tier session (opencode-go/claude-sonnet-4-6) struck no-verdict"):
-        h = await open_session(gw, **WORKER, tier="heavy")
-        await _report(gw, h["session"]["id"], {"class": "no-verdict"}, None)
-    with given("a standard-tier session (opencode-go/deepseek-v4-flash) of the same task"):
-        s = await open_session(gw, **WORKER)
+    with given("a heavy-tier session (opencode-go/claude-sonnet-4-6) struck no-verdict; a standard-tier session (opencode-go/deepseek-v4-flash) of the same task"):
+        with quiet():
+            h = await open_session(gw, **WORKER, tier="heavy")
+            await _report(gw, h["session"]["id"], {"class": "no-verdict"}, None)
+            s = await open_session(gw, **WORKER)
+        attach_json("arranged sessions", {"heavy": h["model"], "standard": s["model"]})
     with when("POST /sessions/{standard}/outcome {class: clean}"):
-        r = await _report(gw, s["session"]["id"], {"class": "clean"}, None)
+        with quiet():
+            r = await _report(gw, s["session"]["id"], {"class": "clean"}, None)
+        attach_json("the outcome answer", r.json())
     then_eq("refuted", r.json()["refuted"], 0)
     with then("the heavy model's no-verdict still counts"):
         check("strikes", _strikes(store), [{"rail": "opencode", "model": "opencode-go/claude-sonnet-4-6", "class": "no-verdict",
