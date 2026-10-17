@@ -1,0 +1,45 @@
+# The `agent-gateway-go-catalog` group, lifted VERBATIM out of prometheusrule.yaml (comments
+# stripped — the manifest is their one home) — the rules file go-catalog.promtool-test loads. Not a
+# manifest: `promtool test rules` needs upstream-format rules (top-level `groups:`). Named
+# .promtool-rules rather than .yaml because manifest-lint kubeconforms every *.yaml under
+# argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions). RE-COPY AFTER
+# EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway-go-catalog","rules":[.spec.groups[] | select(.name == "agent-gateway-go-catalog") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway-go-catalog
+    rules:
+      - alert: GoCatalogStale
+        expr: |
+          (max by (source) (gateway_go_catalog_age_seconds{job="agent-gateway"}) > 86400)
+          or
+          (max by (source) (gateway_go_catalog_models{job="agent-gateway"}) == 0)
+        for: 30m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: The gateway's Go catalog ({{ $labels.source }}) has had no good refresh for 24 h (or has none) — admission is reading old Go prices/limits
+          description: 'gateway_go_catalog_age_seconds{source="{{ $labels.source }}"} is past 24 h, or the source has no snapshot at all ({{ $value }}). Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "catalog: {{ $labels.source }}" — "fetch answered 404" on docs = the vendor moved go.mdx (fix GATEWAY_GO_DOCS_URL / the default in gateway/src/agent_gateway/config.py); 401 on config = the Go key (see GoRailCredentialRejected); (2) gateway_go_catalog_last_outcome{source="{{ $labels.source }}"} names the failing outcome; (3) GET /catalog/opencode on the gateway shows what admission reads now. gateway/specs/endpoints/catalog.md is the contract.'
+      - alert: GoCatalogParseFailed
+        expr: |
+          max by (source, outcome) (gateway_go_catalog_last_outcome{job="agent-gateway",outcome=~"parse-failed|implausible"}) == 1
+        for: 5m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: The gateway could not read the Go catalog's {{ $labels.source }} source ({{ $labels.outcome }}) — the last good snapshot is in use
+          description: 'The latest refresh of the Go catalog''s {{ $labels.source }} source ended {{ $labels.outcome }}: parse-failed = the vendor''s format changed from the shape gateway/src/agent_gateway/catalog.py knows (parse_config / parse_docs); implausible = fewer than half the last good snapshot''s models came back. The last good snapshot keeps admission running; GoCatalogStale follows at 24 h. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep "catalog: {{ $labels.source }} parse failed\|implausible" names the line it choked on; compare with the vendor source (docs: anomalyco/opencode services/www/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart).'
+      - alert: GoCatalogPolicyModelMissing
+        expr: |
+          max by (source) (gateway_go_catalog_policy_models_missing{job="agent-gateway"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+          triage: now
+        annotations:
+          summary: '{{ $value }} Go model(s) the gateway policy routes to are not covered by the vendor''s {{ $labels.source }} catalog — the vendor no longer offers them on this plan'
+          description: 'gateway_go_catalog_policy_models_missing{source="{{ $labels.source }}"} = {{ $value }}: config = a policy Go model is not listed by the console (retired — docs/spikes/opencode-go-catalog.md §F3); docs = it has no monthly-limit row under rails.opencode.plan. Which ids: GET /catalog/opencode on the gateway → policy_models, or kubectl -n agent-egress logs deploy/agent-gateway | grep "policy model(s) not covered". The fix is a policy change in argocd/resources/agent-gateway/policy.json (rails.opencode.models) to a listed model, by PR.'

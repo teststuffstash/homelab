@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
 from . import __version__
+from .catalog import GoCatalog
 from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
 from .config import Policy, Settings
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
@@ -40,6 +41,11 @@ async def healthz(request: Request) -> JSONResponse:
     if not store.ping():
         return JSONResponse({"error": {"code": "db-unavailable", "message": "the store does not answer"}}, status_code=503)
     return JSONResponse({"ok": True, "db": store.mode})
+
+
+async def catalog_opencode(request: Request) -> JSONResponse:
+    """GW-CATALOG-GO's read-only view: the snapshots admission reads, never a credential."""
+    return JSONResponse(request.app.state.catalog.view())
 
 
 async def metrics(request: Request) -> PlainTextResponse:
@@ -99,6 +105,11 @@ def create_app(
              if "codex" in policy.rails else None)
     sessions.codex = codex
     codex_proxy = CodexProxy(sessions, m, codex, client)
+    # The Go catalog leg (GW-CATALOG-GO): starts from the store's last good snapshots, refreshes on
+    # the schedule the lifespan runs (tests call refresh() themselves — ASGI transports run no lifespan).
+    catalog = GoCatalog(policy, store, client, settings.go_catalog_urls, settings.opencode_go_api_key, clock,
+                        settings.go_catalog_refresh_s)
+    m.bind_extra(catalog.render)
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -108,10 +119,13 @@ def create_app(
         task = asyncio.create_task(_reprobe_loop(proxy)) if reprobe_every_s else None
         # A session whose pod is gone is reaped (GW-SESSIONS-LIVENESS).
         reaper = asyncio.create_task(_reap_loop(sessions, policy.liveness_check_s)) if policy.liveness_check_s else None
+        # The Go catalog's schedule (GW-CATALOG-GO): one refresh at start, then every go_catalog_refresh_s.
+        refresher = (asyncio.create_task(catalog.run(), name="go-catalog")
+                     if "opencode" in policy.rails and settings.go_catalog_refresh_s > 0 else None)
         try:
             yield
         finally:
-            for t in (task, reaper):
+            for t in (task, reaper, refresher):
                 if t is not None:
                     t.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -127,6 +141,7 @@ def create_app(
         routes=[
             Route("/healthz", healthz, methods=["GET"]),
             Route("/metrics", metrics, methods=["GET"]),
+            Route("/catalog/opencode", catalog_opencode, methods=["GET"]),
             Route("/sessions", post_sessions, methods=["POST"]),
             Route("/sessions/{id}", get_session, methods=["GET"]),
             Route("/sessions/{id}", delete_session, methods=["DELETE"]),
@@ -154,4 +169,5 @@ def create_app(
     app.state.proxy = proxy
     app.state.codex = codex
     app.state.codex_proxy = codex_proxy
+    app.state.catalog = catalog
     return app

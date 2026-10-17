@@ -1,0 +1,79 @@
+---
+title: "Go"
+---
+
+## Usage limits
+
+Usage limits are defined as monthly dollar amounts. The table below shows the
+monthly limit for each plan and the token costs for each model. Token pricing is
+the same for Go and Go Plus.
+
+Each model has the following usage limits: 5-hour — 20% of the monthly limit;
+weekly — 50%; and monthly — 100%.
+
+Each model's monthly limit below determines how its usage counts toward those allowances.
+
+Token prices are per 1M tokens.
+
+<PlanTabs id="go-pricing" label="Go plan" syncKey="go-plan">
+  <div slot="go">
+
+    | Model                                   | Input  | Output | Cached Read | Cached Write | Monthly limit                                         |
+    | --------------------------------------- | ------ | ------ | ----------- | ------------ | ----------------------------------------------------- |
+    | LongCat 2.5 Preview Free                | Free   | Free   | Free        | -            | **Unlimited**<br /><small>limited time</small>        |
+    | Step 5 Preview                          | $1.00  | $2.70  | $0.10       | -            | ~~$15~~ **$60**<br /><small>4x · Limited time</small> |
+    | DeepSeek V4.1 Flash (Off-Peak)          | $0.15  | $0.60  | $0.003      | -            | **$80**                                               |
+    | DeepSeek V4.1 Flash (Peak)              | $0.30  | $1.20  | $0.006      | -            | **$80**                                               |
+    | DeepSeek V4 Pro (Off-Peak)              | $0.66  | $1.98  | $0.022      | -            | **$15**                                               |
+    | DeepSeek V4 Pro (Peak)                  | $1.32  | $3.96  | $0.044      | -            | **$15**                                               |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                               |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$15**                                               |
+
+  </div>
+  <div slot="go-plus">
+
+    | Model                                   | Input  | Output | Cached Read | Cached Write | Monthly limit                                           |
+    | --------------------------------------- | ------ | ------ | ----------- | ------------ | ------------------------------------------------------- |
+    | LongCat 2.5 Preview Free                | Free   | Free   | Free        | -            | **Unlimited**<br /><small>limited time</small>          |
+    | Step 5 Preview                          | $1.00  | $2.70  | $0.10       | -            | ~~$60~~ **$240**<br /><small>4x · Limited time</small>  |
+    | DeepSeek V4.1 Flash (Off-Peak)          | $0.15  | $0.60  | $0.003      | -            | **$160**                                                |
+    | DeepSeek V4.1 Flash (Peak)              | $0.30  | $1.20  | $0.006      | -            | **$160**                                                |
+    | DeepSeek V4 Pro (Off-Peak)              | $0.66  | $1.98  | $0.022      | -            | **$60**                                                 |
+    | DeepSeek V4 Pro (Peak)                  | $1.32  | $3.96  | $0.044      | -            | **$60**                                                 |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                                 |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$60**                                                 |
+
+  </div>
+</PlanTabs>
+
+**LongCat 2.5 Preview Free:** Free for a limited time.
+
+
+**DeepSeek V4.1 Flash / V4 Pro:** Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday; all other hours, including weekends, are Off-Peak. [Learn more](https://api-docs.deepseek.com/quick_start/pricing/).
+
+## Endpoints
+
+You can also access Go models through the following API endpoints.
+
+<div class="docs-table-scroll" role="region" aria-label="Go model endpoints" tabIndex={0}>
+
+| Model                      | Model ID                   | Endpoint                                                                           | AI SDK Package              |
+| -------------------------- | -------------------------- | ---------------------------------------------------------------------------------- | --------------------------- |
+| Claude Haiku 5.5           | claude-haiku-5-5           | `https://opencode.ai/inference/go/anthropic/v1/messages`                           | `@ai-sdk/anthropic`         |
+| DeepSeek V4.1 Flash        | deepseek-v4.1-flash        | `https://opencode.ai/inference/go/openai/v1/chat/completions`                      | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro            | deepseek-v4-pro            | `https://opencode.ai/inference/go/openai/v1/chat/completions`                      | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Preview Free   | longcat-2.5-preview-free   | `https://opencode.ai/inference/go/openai/v1/chat/completions`                      | `@ai-sdk/openai-compatible` |
+| Step 5 Preview             | step-5-preview             | `https://opencode.ai/inference/go/openai/v1/chat/completions`                      | `@ai-sdk/openai-compatible` |
+
+</div>
+
+These AI SDK packages are for applications calling Go directly. To use Go in OpenCode, connect with `/connect` and set
+the [model](/models) using the format `opencode-go/<model-id>`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/kimi-k3",
+}
+```
+

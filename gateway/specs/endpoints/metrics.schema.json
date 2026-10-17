@@ -18,7 +18,9 @@
     "reason": { "enum": ["absent", "invalid", "review-transient"] },
     "incomplete_reason": { "enum": ["no-terminal", "timeout", "transport-error", "client-closed"] },
     "strike_class": { "enum": ["harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown", "turn-cap", "tool-loop", "no-verdict", "wrong-verdict", "invented-findings", "repetition", "harness-gave-up", "stream-incomplete", "refused"], "description": "the strike classes of sessions.schema.json outcome.class (clean writes no strike)" },
-    "strike_source": { "enum": ["outcome", "gateway"] }
+    "strike_source": { "enum": ["outcome", "gateway"] },
+    "catalog_source": { "enum": ["config", "docs"] },
+    "catalog_outcome": { "enum": ["ok", "fetch-failed", "parse-failed", "implausible"] }
   },
   "families": {
     "gateway_sessions_active": {
@@ -131,6 +133,33 @@
         "reason": { "$ref": "#/$defs/incomplete_reason" }
       },
       "x-requirements": ["GW-METRICS", "GW-RAIL-ANTHROPIC", "GW-RAIL-OPENROUTER"]
+    },
+    "gateway_go_catalog_age_seconds": {
+      "type": "gauge",
+      "labels": { "source": { "$ref": "#/$defs/catalog_source" } },
+      "description": "seconds since the source's last good snapshot was fetched; absent until one exists",
+      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+    },
+    "gateway_go_catalog_models": {
+      "type": "gauge",
+      "labels": { "source": { "$ref": "#/$defs/catalog_source" } },
+      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+    },
+    "gateway_go_catalog_refresh_total": {
+      "type": "counter",
+      "labels": { "source": { "$ref": "#/$defs/catalog_source" }, "outcome": { "$ref": "#/$defs/catalog_outcome" } },
+      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+    },
+    "gateway_go_catalog_last_outcome": {
+      "type": "gauge",
+      "labels": { "source": { "$ref": "#/$defs/catalog_source" }, "outcome": { "$ref": "#/$defs/catalog_outcome" } },
+      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+    },
+    "gateway_go_catalog_policy_models_missing": {
+      "type": "gauge",
+      "labels": { "source": { "$ref": "#/$defs/catalog_source" } },
+      "description": "policy Go models the source's snapshot does not cover; absent until a snapshot exists",
+      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
     }
   },
   "forbidden_labels": ["task", "session", "id", "model", "token"],

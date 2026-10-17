@@ -5,7 +5,7 @@ schema: metrics.schema.json
 ---
 # GET /metrics — the `gateway_*` families, with bounded labels only
 
-The evidence surface the alert belts read. Sixteen families, Prometheus text format, no auth
+The evidence surface the alert belts read. Twenty-one families, Prometheus text format, no auth
 (in-cluster, scraped by the ServiceMonitor). **Every label value is drawn from a bounded set**
 declared in the schema — never a task key, a session id, or a model string outside the
 policy's set — so cardinality is a property of the policy, not of traffic.
@@ -25,6 +25,7 @@ the process is down.
 | [GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth) (owned there) | `families.gateway_control_plane_unauthenticated_total` | — | linked — the rollout knob's soak signal; its increments are rows there |
 | [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity (owned there) | `families.gateway_cells_cooled`, `families.gateway_credentials_rejected` | — | linked — the admission's transport facts as gauges |
 | [GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic) / [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned there) | `families.gateway_requests_incomplete_total` | — | linked — the stream-completeness rule |
+| [GW-CATALOG-GO](catalog.md#gw-catalog-go) (owned there) | `families.gateway_go_catalog_*` | — | linked — the Go catalog's freshness, size and refresh outcomes; their values are rows there |
 
 ## GW-METRICS
 
@@ -45,6 +46,11 @@ the process is down.
 | `gateway_sessions_reaped_total` | counter | `rail` | sessions released because their pod was gone ([GW-SESSIONS-LIVENESS](sessions.md#gw-sessions-liveness)); every rail renders from 0 |
 | `gateway_credential_probes_total` | counter | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
 | `gateway_requests_incomplete_total` | counter | `rail`, `dialect`, `reason` | 2xx answers whose body stopped before its end — `no-terminal`, `timeout`, `transport-error`, `client-closed` ([GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)) |
+| `gateway_go_catalog_age_seconds` | gauge | `source` | seconds since the source's last good snapshot was fetched — absent until one exists ([GW-CATALOG-GO](catalog.md#gw-catalog-go)) |
+| `gateway_go_catalog_models` | gauge | `source` | models in the source's last good snapshot; 0 = none yet |
+| `gateway_go_catalog_refresh_total` | counter | `source`, `outcome` | refresh attempts by outcome; every pair renders from 0 |
+| `gateway_go_catalog_last_outcome` | gauge | `source`, `outcome` | 1 for the outcome of the source's latest attempt, 0 for the others — survives no restart, and needs none: the first refresh runs at start |
+| `gateway_go_catalog_policy_models_missing` | gauge | `source` | policy Go models the source's snapshot does not cover — a count, so no `model` label |
 | `gateway_control_plane_unauthenticated_total` | counter | `route`, `reason` | every control-plane call with no valid caller token — admitted under `control_plane_auth: observe`, refused under `enforce`; every (`route`, `reason`) pair renders from 0, so a flat series reads as "no such call" ⚖ |
 
 | description | event (world `policy-default`, upstream-ok) || series | value |
@@ -86,6 +92,8 @@ the process is down.
 | "reason is why no caller identity was read" | control_plane_unauthenticated_total || `reason` | `absent` (no bearer), `invalid` (the review is not authenticated for audience `agent-gateway`), `review-transient` (the TokenReview API did not answer) |
 | "class is a strike class, source the writer" | strikes_total || `class` / `source` | the strike classes of the vocabulary / `outcome`, `gateway` |
 | "reason is why a 2xx body stopped before its end" | requests_incomplete_total || `reason` | `no-terminal`, `timeout`, `transport-error`, `client-closed` |
+| "source is the catalog source" | go_catalog_refresh_total || `source` | `config` (the console's V2 config), `docs` (the vendor's Go page) |
+| "the catalog outcome is the refresh outcome" | go_catalog_refresh_total || `outcome` | `ok`, `fetch-failed`, `parse-failed`, `implausible` |
 | "no task label, ever" | any || — | no label named `task`, `session`, `id`, `model` |
 
 | description | input || v0 answer | the gap |
