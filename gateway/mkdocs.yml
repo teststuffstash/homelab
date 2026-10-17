@@ -15,6 +15,8 @@ site_dir: specs-site
 use_directory_urls: false
 theme:
   name: material
+  # site-overrides/main.html: full-width content grid (wide tables, no sideways scroll)
+  custom_dir: site-overrides
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
