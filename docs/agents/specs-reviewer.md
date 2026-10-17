@@ -87,7 +87,7 @@ findings), per-rule tables, `evidence/<RULE>.json`, attachments, and `process/` 
 briefs). A failed clone, wheel or pack is no review (fail CLOSED); ABSENT evidence is not a refusal:
 the pack states it, and the evidence brief turns it into `E-STALE` / `NO_EVIDENCE` findings. The
 model is CONFINED: it runs under `env -i` with exactly the gateway's dispatch env + OTEL + a
-throwaway `HOME` (never `GH_TOKEN` / `GH_TOKEN_FILE` — pinned by the self-test), its cwd is the
+throwaway `HOME` (never `GH_TOKEN` / `GH_TOKEN_FILE`, and no `settings.json` — the images' permissive `permissions.allow` would union with the allow-list; both pinned by the self-test), its cwd is the
 pack, and its tool scope is an allow-list — `Read(//<inputs>/**)` + `Glob`, `--permission-mode
 default`, so in `-p` mode any read outside the inputs (the token file under `/var/run`, `/proc`,
 `$HOME`) is denied rather than prompted; Grep/Bash/Write are not granted. The system prompt is
