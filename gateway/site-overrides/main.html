@@ -1,0 +1,10 @@
+{#- Specs-site theme override (gateway/mkdocs.yml theme.custom_dir). Material caps the content grid
+    at ~61rem, so wide requirement tables scroll sideways on a wide screen while most of the
+    viewport sits empty (operator, 2026-10-17). Lift the cap; the nav/TOC sidebars keep their width. -#}
+{% extends "base.html" %}
+{% block styles %}
+  {{ super() }}
+  <style>
+    .md-grid { max-width: none; }
+  </style>
+{% endblock %}
