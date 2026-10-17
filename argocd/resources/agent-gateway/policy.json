@@ -42,9 +42,9 @@
       "max_sessions": 5,
       "side_models": ["claude/haiku"],
       "models": {
-        "light":    "claude/haiku",
-        "standard": "claude/sonnet",
-        "heavy":    "claude/sonnet"
+        "light":    ["claude/haiku"],
+        "standard": ["claude/sonnet"],
+        "heavy":    ["claude/sonnet"]
       }
     },
     "opencode": {
@@ -70,9 +70,9 @@
       },
       "max_sessions": 3,
       "models": {
-        "light":    "opencode-go/deepseek-v4.1-flash",
-        "standard": "opencode-go/deepseek-v4.1-flash",
-        "heavy":    "opencode-go/deepseek-v4.1-flash"
+        "light":    ["opencode-go/deepseek-v4.1-flash"],
+        "standard": ["opencode-go/deepseek-v4.1-flash"],
+        "heavy":    ["opencode-go/deepseek-v4.1-flash"]
       }
     },
     "openrouter": {
@@ -80,9 +80,9 @@
       "credential_probe": {"method": "GET", "path": "/v1/key", "backoff_s": [60, 3600]},
       "max_sessions": 20,
       "models": {
-        "light":    "deepseek/deepseek-v4-flash",
-        "standard": "deepseek/deepseek-v4-flash",
-        "heavy":    "deepseek/deepseek-v4.1-flash"
+        "light":    ["deepseek/deepseek-v4-flash"],
+        "standard": ["deepseek/deepseek-v4-flash"],
+        "heavy":    ["deepseek/deepseek-v4.1-flash"]
       }
     }
   },

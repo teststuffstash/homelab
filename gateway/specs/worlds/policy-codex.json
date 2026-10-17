@@ -89,7 +89,7 @@
       "models": {
         "light": "claude/haiku",
         "standard": "claude/sonnet",
-        "heavy": "claude/sonnet"
+        "heavy": ["claude/sonnet", "claude/opus"]
       }
     },
     "opencode": {
@@ -175,7 +175,7 @@
       "credential_probe": {"method": "GET", "path": "/v1/key", "backoff_s": [60, 3600]},
       "max_sessions": 20,
       "models": {
-        "light": "deepseek/deepseek-v4-flash",
+        "light": ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash"],
         "standard": "deepseek/deepseek-v4-flash",
         "heavy": "deepseek/deepseek-v4.1-flash"
       }

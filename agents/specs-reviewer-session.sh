@@ -111,6 +111,31 @@ gw_curl() {
     curl "$@"
   fi
 }
+# The failure-ownership contract (GW-SESSIONS-OUTCOME, GW-SESSIONS-ADMIT §The retry contract):
+# the pass classifies its OWN ride and reports it before the release; a strike re-admits at the SAME
+# round with attempt + 1 — at most SPECS_REVIEW_AUTO_ATTEMPTS automatic re-admissions, and only while
+# the tick's wall budget still holds a whole LLM_TIMEOUT_S pass (the workflow's 900 s deadline).
+SPECS_REVIEW_AUTO_ATTEMPTS="${SPECS_REVIEW_AUTO_ATTEMPTS:-2}"
+SPECS_REVIEW_BUDGET_S="${SPECS_REVIEW_BUDGET_S:-840}"     # the tick's wall budget, < the 900 s activeDeadlineSeconds
+# outcome_class <harness rc> <result is JSON: 1|0> <parsed verdict> — the ride's class in the
+# gateway's ONE vocabulary (sessions.schema.json outcome.class). A logic verdict (APPROVE or
+# CHANGES_REQUESTED alike) is `clean`: the ride did its job — rounds are not strikes.
+outcome_class() {
+  if [ "$1" = 124 ]; then echo timeout
+  elif [ "$1" != 0 ] || [ "$2" != 1 ]; then echo harness-death
+  elif [ -z "$3" ]; then echo no-verdict
+  else echo clean; fi
+}
+# gw_outcome <session id> <class> <subclass> — POST /sessions/{id}/outcome; prints the strike's
+# class when the gateway counted one (else nothing). Non-fatal: a failed report is logged, and the
+# session's release still happens (the gateway's own transport strikes stand either way).
+gw_outcome() {
+  local r
+  r="$(gw_curl -fsS --max-time 10 -H 'Content-Type: application/json' -X POST "${GATEWAY_URL}/sessions/$1/outcome" \
+        -d "$(jq -cn --arg c "$2" --arg s "$3" '{class: $c, subclass: $s}')" 2>/dev/null)" \
+    || { log "WARN outcome report for session $1 ($2) FAILED — not counted" >&2; return 0; }
+  jq -r '.strike.class // empty' <<< "$r" 2>/dev/null || true
+}
 PUSHGATEWAY="${PUSHGATEWAY:-}"                           # empty = log-only
 LENS_BASE="${LENS_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/lenses}"
 SPECS_PATH_RE='(^|/)specs/'
@@ -209,6 +234,18 @@ self_test() {
   check "verdict parse: APPROVE" APPROVE "$(parse_verdict "$(printf '## Specs review\nVerdict: APPROVE — no blocking check failed\nRows: …\n')")"
   check "verdict parse: CHANGES_REQUESTED" CHANGES_REQUESTED "$(parse_verdict "$(printf '## Specs review\nVerdict: CHANGES_REQUESTED — 1, 6\n')")"
   check "verdict parse: missing → empty" "" "$(parse_verdict "$(printf 'no verdict here\n')")"
+  check "outcome: a verdict is clean (APPROVE)" clean "$(outcome_class 0 1 APPROVE)"
+  check "outcome: a verdict is clean (CHANGES_REQUESTED — a round, not a strike)" clean "$(outcome_class 0 1 CHANGES_REQUESTED)"
+  check "outcome: no parsable verdict → no-verdict" no-verdict "$(outcome_class 0 1 '')"
+  check "outcome: the LLM_TIMEOUT_S kill → timeout" timeout "$(outcome_class 124 0 '')"
+  check "outcome: a non-zero exit → harness-death" harness-death "$(outcome_class 1 1 '')"
+  check "outcome: no JSON result → harness-death" harness-death "$(outcome_class 0 0 '')"
+  check "outcome report: the strike class is read back" no-verdict \
+    "$(curl() { printf '%s' '{"id":"s1","strike":{"class":"no-verdict","scope":"model"},"refuted":0,"replay":false}'; }; GATEWAY_TOKEN_FILE=/nonexistent gw_outcome s1 no-verdict rc=0 2>/dev/null)"
+  check "outcome report: clean counts no strike" "" \
+    "$(curl() { printf '%s' '{"id":"s1","strike":null,"refuted":0,"replay":false}'; }; GATEWAY_TOKEN_FILE=/nonexistent gw_outcome s1 clean rc=0 2>/dev/null)"
+  check "outcome report: a failed POST is non-fatal and counts nothing" "" \
+    "$(curl() { return 22; }; GATEWAY_TOKEN_FILE=/nonexistent gw_outcome s1 timeout rc=124 2>/dev/null)"
   check "env key guard rejects a shell-hostile key" 1 "$(valid_env_key 'FOO=bar; rm' && echo 0 || echo 1)"
   check "env key guard accepts ANTHROPIC_MODEL" 0 "$(valid_env_key 'ANTHROPIC_MODEL' && echo 0 || echo 1)"
   # GW-SESSIONS-AUTH: gw_curl carries the projected token as the caller header, read from the file
@@ -994,8 +1031,11 @@ else
       *) return 1;;
     esac
     # 4) admission: POST /sessions (gateway/specs/endpoints/sessions.md, sessions.schema.json post.input)
-    local body http
-    body="$(jq -cn --arg task "specs-review ${repo}#${num}" '{stack:"platform", role:"reviewer", task:$task, round:0, harness:"claude"}')"
+    #    — in a loop over `attempt` (GW-SESSIONS-ADMIT §The retry contract): a strike on this pass
+    #    re-admits at the SAME round with attempt + 1; the gateway's walk excludes the struck cell.
+    local body http attempt=1
+    while :; do
+    body="$(jq -cn --arg task "specs-review ${repo}#${num}" --argjson a "$attempt" '{stack:"platform", role:"reviewer", task:$task, round:0, attempt:$a, harness:"claude"}')"
     http="$(gw_curl -sS --max-time 20 -o "$resp" -w '%{http_code}' -H 'Content-Type: application/json' -X POST "${GATEWAY_URL}/sessions" -d "$body" || echo 000)"
     if [ "$http" != "200" ]; then
       log "[$repo#$num] POST /sessions HTTP ${http}: $(head -c 300 "$resp" 2>/dev/null | tr '\n' ' ')"; return 1
@@ -1023,15 +1063,35 @@ else
     # bounded INSIDE the workflow's 900 s activeDeadlineSeconds: a deadline kill skips the EXIT
     # trap, so the session would hold its rail slot until the gateway TTL (4 h) and the tick's
     # metrics push would never happen. 124 = timed out → no verdict, the next tick retries.
+    rm -f "$WORK/result.json"
     harness_claude "$inputs" "$lens" "$prompt" "$model" || rc=$?
-    if [ "$rc" -ne 0 ] || ! jq -e . "$WORK/result.json" >/dev/null 2>&1; then
-      log "[$repo#$num] claude exited ${rc} / no JSON result — no verdict"; return 1
+    local is_json=0 review="" verdict=""
+    jq -e . "$WORK/result.json" >/dev/null 2>&1 && is_json=1
+    if [ "$rc" -eq 0 ] && [ "$is_json" = 1 ]; then
+      jq -r '"→ claude \(.subtype // "done"): in=\(.usage.input_tokens // 0) out=\(.usage.output_tokens // 0) cache_read=\(.usage.cache_read_input_tokens // 0) turns=\(.num_turns // 0) cost_usd=\(.total_cost_usd // 0)"' "$WORK/result.json"
+      review="$(jq -r '.result // ""' "$WORK/result.json")"
+      # the body starts at the lens's heading; anything the model said before it is dropped
+      review="$(awk '/^## Specs review/{f=1} f' <<< "$review")"
+      verdict="$(parse_verdict "$review")"
     fi
-    jq -r '"→ claude \(.subtype // "done"): in=\(.usage.input_tokens // 0) out=\(.usage.output_tokens // 0) cache_read=\(.usage.cache_read_input_tokens // 0) turns=\(.num_turns // 0) cost_usd=\(.total_cost_usd // 0)"' "$WORK/result.json"
-    local review; review="$(jq -r '.result // ""' "$WORK/result.json")"
-    # the body starts at the lens's heading; anything the model said before it is dropped
-    review="$(awk '/^## Specs review/{f=1} f' <<< "$review")"
-    local verdict; verdict="$(parse_verdict "$review")"
+    # the ride's own outcome, reported BEFORE the release (GW-SESSIONS-OUTCOME)
+    local cls struck; cls="$(outcome_class "$rc" "$is_json" "$verdict")"
+    struck="$(gw_outcome "$SESSION_ID" "$cls" "rc=${rc} attempt=${attempt}")"
+    log "[$repo#$num] outcome ${cls} reported for session ${SESSION_ID} (attempt ${attempt})${struck:+ — strike ${struck}}"
+    [ "$cls" = clean ] && break
+    gw_curl -fsS --max-time 10 --retry 5 --retry-delay 4 --retry-connrefused --retry-all-errors \
+         -X DELETE "${GATEWAY_URL}/sessions/${SESSION_ID}" >/dev/null 2>&1 && log "session ${SESSION_ID} released" \
+      || log "WARN session ${SESSION_ID} release failed (expires by TTL)"
+    SESSION_ID=""
+    if [ -n "$struck" ] && [ "$attempt" -le "$SPECS_REVIEW_AUTO_ATTEMPTS" ] \
+       && [ $(( SECONDS + LLM_TIMEOUT_S )) -le "$SPECS_REVIEW_BUDGET_S" ]; then   # SECONDS = since this tick's shell started
+      attempt=$(( attempt + 1 ))
+      log "[$repo#$num] strike ${struck} — re-admitting at round 0, attempt ${attempt} (the gateway excludes the struck cell)"
+      continue
+    fi
+    log "[$repo#$num] claude exited ${rc} / ${cls} — no verdict (attempt ${attempt}; ${struck:+the strike is counted; }the next tick retries)"
+    return 1
+    done
     printf '%s\n\n<!-- specs-review head=%s session=%s -->\n' "$review" "${head:0:12}" "$SESSION_ID" > "$WORK/review-$num.md"
     local kind
     case "$verdict" in

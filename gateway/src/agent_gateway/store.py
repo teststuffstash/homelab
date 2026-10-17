@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   bind_pod TEXT,
   env_delivered_at REAL,
   caller TEXT,
-  requests_incomplete INTEGER NOT NULL DEFAULT 0
+  requests_incomplete INTEGER NOT NULL DEFAULT 0,
+  attempt INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
 CREATE TABLE IF NOT EXISTS requests (
@@ -95,7 +96,7 @@ _COUNTER = "INTEGER NOT NULL DEFAULT 0"
 _ADDED_COLUMNS = {
     "sessions": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "bind_namespace": "TEXT",
                  "bind_serviceaccount": "TEXT", "bind_pod": "TEXT", "env_delivered_at": "REAL",
-                 "caller": "TEXT", "requests_incomplete": _COUNTER},
+                 "caller": "TEXT", "requests_incomplete": _COUNTER, "attempt": "INTEGER NOT NULL DEFAULT 1"},
     "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "incomplete": "TEXT"},
 }
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
@@ -125,7 +126,7 @@ _SESSION_COLS = (
     "id", "token_hash", "stack", "role", "task", "round", "rail", "harness", "model",
     "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out",
     "tokens_cache_read", "tokens_cache_write", "bind_namespace", "bind_serviceaccount", "bind_pod",
-    "env_delivered_at", "caller", "requests_incomplete",
+    "env_delivered_at", "caller", "requests_incomplete", "attempt",
 )
 
 
@@ -157,6 +158,7 @@ class Session:
     caller: str | None = None
     # GW-RAIL-*: the 2xx answers whose body stopped before its end (never counted as clean).
     requests_incomplete: int = 0
+    attempt: int = 1  # GW-SESSIONS-ADMIT: the consumer's re-admission counter at this round
 
     @property
     def bound(self) -> bool:
@@ -181,6 +183,7 @@ class Session:
             "role": self.role,
             "task": self.task,
             "round": self.round,
+            "attempt": self.attempt,
             "rail": self.rail,
             "harness": self.harness,
             "model": self.model,
@@ -269,6 +272,17 @@ class Store:
                 (token_hash, now, session_id),
             )
             return cur.rowcount == 1
+
+    def active_duplicates(self, stack: str, task: str, rnd: int, attempt: int, caller: str | None, pod: str | None,
+                          now: float) -> list[str]:
+        """ACTIVE sessions the same caller admitted for (stack, task, round, attempt) and the same bound
+        pod (NULL = unbound) — the ids a re-admission supersedes."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id FROM sessions WHERE stack = ? AND task = ? AND round = ? AND attempt = ? AND caller IS ?"
+                " AND bind_pod IS ? AND released_at IS NULL AND expires_at > ?",
+                (stack, task, rnd, attempt, caller, pod, now)).fetchall()
+        return [r[0] for r in rows]
 
     def active_count(self, rail: str, now: float | None = None) -> int:
         now = time.time() if now is None else now

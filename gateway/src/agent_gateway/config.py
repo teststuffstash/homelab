@@ -194,7 +194,7 @@ def _credential_probe(rail: str, p) -> CredentialProbe | None:
 class RailPolicy:
     name: str
     max_sessions: int
-    models: dict[str, str]  # tier -> the POLICY model id (model-classes.json spelling, rail-prefixed)
+    models: dict[str, tuple[str, ...]]  # tier -> the ORDERED policy model ids (model-classes.json spelling, rail-prefixed); a string in the file = a one-item list
     side_models: tuple[str, ...] = ()  # policy ids a harness's side-calls name, admitted on every session of this rail
     admission: AdmissionPolicy = field(default_factory=AdmissionPolicy)
     headroom: HeadroomPolicy | None = None  # codex only (required there)
@@ -452,10 +452,15 @@ class Policy:
         for name, r in (d.get("rails") or {}).items():
             if name not in RAILS:
                 raise PolicyError(f"policy: unknown rail {name!r} (known: {', '.join(RAILS)})")
-            models = r.get("models") or {}
-            for tier, model in models.items():
-                if tier not in TIERS or not isinstance(model, str) or not model:
-                    raise PolicyError(f"policy: rails.{name}.models.{tier} must name a model for a known tier")
+            models: dict[str, tuple[str, ...]] = {}
+            for tier, model in (r.get("models") or {}).items():
+                # GW-SESSIONS-ADMIT: a tier names an ORDERED list of models (the walk's fallback order);
+                # a bare string is the one-item list (backward compatible).
+                ids = [model] if isinstance(model, str) else model
+                if (tier not in TIERS or not isinstance(ids, list) or not ids
+                        or any(not isinstance(m, str) or not m for m in ids) or len(set(ids)) != len(ids)):
+                    raise PolicyError(f"policy: rails.{name}.models.{tier} must name a model (or a non-empty list of distinct models) for a known tier")
+                models[tier] = tuple(ids)
             side = r.get("side_models") or []
             if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
                 raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")

@@ -1,0 +1,2 @@
+ERR PREFLIGHT REFUSED: AGENT_GATEWAY_ATTEMPT='0' is not a positive integer (sessions.schema.json post.input.attempt). No session, no pod.
+RC 2

@@ -1,0 +1,6 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/outcome {"class":"harness-death"}
+CALL gw_release 0123abcd
+OUT → gateway(sessions): outcome harness-death reported for 0123abcd (attempt 1) — strike harness-death counted
+OUT → gateway(sessions): strike harness-death at attempt 1 — no automatic re-admission (salvage=resumable, tasked=1, cap 2); the coordinator decides, as today
+OUT GW_OUTCOME='harness-death' GW_STRUCK='harness-death' GW_SESSION_ID=''
+RC 0

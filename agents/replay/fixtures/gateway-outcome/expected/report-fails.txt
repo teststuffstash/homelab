@@ -1,0 +1,5 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/outcome {"class":"harness-death"}
+CALL gw_release 0123abcd
+OUT GW_OUTCOME='harness-death' GW_STRUCK='' GW_SESSION_ID=''
+ERR WARN gateway(sessions): outcome harness-death for 0123abcd NOT reported — no strike counted from this ride
+RC 0

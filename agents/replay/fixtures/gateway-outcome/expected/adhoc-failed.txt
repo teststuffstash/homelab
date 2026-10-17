@@ -1,0 +1,3 @@
+CALL gw_release 0123abcd
+OUT GW_OUTCOME='' GW_STRUCK='' GW_SESSION_ID=''
+RC 0

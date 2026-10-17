@@ -119,6 +119,7 @@ class Admission:
     rail_override: str | None
     bind: Bind | None = None
     caller: str | None = None  # GW-SESSIONS-AUTH: the reviewed caller identity, stored on the row
+    attempt: int = 1  # GW-SESSIONS-ADMIT: the consumer's automatic re-admission counter at this round
 
 
 def parse_admission(policy: Policy, body: object) -> Admission:
@@ -138,6 +139,9 @@ def parse_admission(policy: Policy, body: object) -> Admission:
     rnd = body.get("round", 0)
     if not isinstance(rnd, int) or isinstance(rnd, bool) or rnd < 0:
         raise BadRequest("malformed-body", "round must be a non-negative integer")
+    attempt = body.get("attempt", 1)
+    if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
+        raise BadRequest("malformed-body", "attempt must be a positive integer (default 1)")
     tier = body.get("tier", role.tier)
     if tier not in TIERS:
         raise BadRequest("malformed-body", f"tier {tier!r} is not one of {', '.join(TIERS)}")
@@ -156,7 +160,7 @@ def parse_admission(policy: Policy, body: object) -> Admission:
     # not know the stack. Carry the name through for the defer answer.
     bind = parse_bind(body["bind"]) if "bind" in body else None
     stack = policy.stacks.get(body["stack"]) or StackPolicy(body["stack"], "", None, None)
-    return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind)
+    return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind, attempt=attempt)
 
 
 def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str, str]:
@@ -253,23 +257,54 @@ class SessionService:
             candidates = [r for r in adm.role.rails if HARNESS_DIALECT[adm.harness] in RAIL_DIALECTS[r]]
             if not candidates:
                 return self._defer(adm, "role-rail-denied", f"no rail allowed for role {adm.role.name} serves harness {adm.harness}")
+        # ⚖ The same (stack, task, round, attempt) from the same caller, for the same pod (or both
+        # unbound), while the earlier session is still active = a re-run of THAT admission (a killed
+        # pod's re-run, a leaked slot): the earlier session is SUPERSEDED — released now, its token
+        # refused — and this one admitted. Never two live sessions for one attempt.
+        for dup in self.store.active_duplicates(adm.stack.name, adm.task, adm.round, adm.attempt, adm.caller,
+                                                adm.bind.pod if adm.bind else None, self.clock()):
+            self.store.release(dup, self.clock())
+            log.warning("session: superseded id=%s — the same caller re-admitted %s/%s round %d attempt %d",
+                        dup, adm.stack.name, adm.task, adm.round, adm.attempt)
+        struck_models, struck_cells = self._struck(adm)
         capacity_blocked: list[tuple[str, str, float, str]] = []  # (rail, reason, free_at, detail)
         cred_blocked: list[str] = []
         cred_rejected: list[str] = []
+        exhausted: list[str] = []  # "rail model" cells this task's strikes excluded
         now = self.clock()
         for rail in candidates:
             rp = self.policy.rails[rail]
-            model = rp.models.get(adm.tier)
-            if not model:
+            models = rp.models.get(adm.tier)
+            if not models:
                 log.info("session: rail %s has no model for tier %s — skipped", rail, adm.tier)
                 continue
             if self.store.active_count(rail, now) >= rp.max_sessions:
                 capacity_blocked.append((rail, "rail-capacity", now + self.policy.defer_retry_s, f"{rail} at max_sessions"))
                 continue
-            block = self.capacity.blocked(rail, now, model)
+            block = self.capacity.blocked(rail, now)
             if block is not None:
                 log.info("session: rail %s capacity-blocked (%s) until %s — skipped", rail, block.detail, iso(block.free_at))
                 capacity_blocked.append((rail, block.reason, block.free_at, block.detail))
+                continue
+            # The tier's ordered list: the first model this task has not struck and whose cell is not cooled.
+            model = None
+            cooled: list[tuple[float, str]] = []
+            for m in models:
+                if m in struck_models or (rail, m) in struck_cells:
+                    exhausted.append(f"{rail} {m}")
+                    continue
+                until = self.capacity.cooled(rail, m, now)
+                if until is not None:
+                    cooled.append((until, m))
+                    continue
+                model = m
+                break
+            if model is None:
+                if cooled:
+                    until, m = min(cooled)
+                    capacity_blocked.append((rail, "cell-cooled", until, f"{rail} cell {m} cooled (429)"))
+                log.info("session: rail %s — no admissible model for tier %s (struck: %s; cooled: %s)", rail, adm.tier,
+                         ", ".join(e for e in exhausted if e.startswith(rail + " ")) or "-", ", ".join(m for _, m in cooled) or "-")
                 continue
             if rail == "codex":  # the codex rail's own gate (GW-CODEX-HEADROOM) — no Secret ref to resolve
                 blocked = self.codex.admission(self.policy.defer_retry_s) if self.codex else ("credential-unresolved", 0)
@@ -317,18 +352,38 @@ class SessionService:
         if cred_blocked:
             return self._defer(adm, "credential-unresolved",
                                f"no allowed rail has a resolvable credential for stack {adm.stack.name}: {', '.join(cred_blocked)}")
+        if exhausted:  # every candidate cell is struck for this task: no wait helps — the caller escalates
+            return self._defer(adm, "cells-exhausted", "this task's strikes exclude every cell: " + ", ".join(exhausted),
+                               retry_after_s=None, escalate=True)
         return self._defer(adm, "role-rail-denied", f"no allowed rail of role {adm.role.name} names a model for tier {adm.tier}")
 
-    def _defer(self, adm: Admission, reason: str, detail: str, retry_after_s: int | None = None) -> JSONResponse:
+    def _defer(self, adm: Admission, reason: str, detail: str, retry_after_s: int | None = None,
+               escalate: bool = False) -> JSONResponse:
         self.metrics.session_decision("none", adm.role.name, adm.stack.name, "defer")
+        if escalate:  # cells-exhausted: no retry_after_s — waiting does not help, a human / the coordinator decides
+            log.info("session: defer %s (escalate) stack=%s role=%s task=%s attempt=%d — %s",
+                     reason, adm.stack.name, adm.role.name, adm.task, adm.attempt, detail)
+            return JSONResponse({"decision": "defer", "reason": reason})
         retry = retry_after_s if retry_after_s is not None else self.policy.defer_retry_s
         log.info("session: defer %s retry_after_s=%d stack=%s role=%s task=%s — %s",
                  reason, retry, adm.stack.name, adm.role.name, adm.task, detail)
         return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": retry})
 
+    def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str]]]:
+        """This task's counted strikes (GW-SESSIONS-OUTCOME): model-scoped → the model id on every rail;
+        cell-scoped → that (rail, model)."""
+        models: set[str] = set()
+        cells: set[tuple[str, str]] = set()
+        for st in self.store.strikes_for(adm.stack.name, adm.task):
+            if st["scope"] == "model":
+                models.add(st["model"])
+            else:
+                cells.add((st["rail"], st["model"]))
+        return models, cells
+
     def _dispatch(self, adm: Admission, rail: str, model: str, now: float) -> JSONResponse:
         sid = uuid.uuid4().hex
-        common = dict(id=sid, stack=adm.stack.name, role=adm.role.name, task=adm.task, round=adm.round, rail=rail,
+        common = dict(id=sid, stack=adm.stack.name, role=adm.role.name, task=adm.task, round=adm.round, attempt=adm.attempt, rail=rail,
                       harness=adm.harness, model=model, created_at=now, expires_at=now + self.policy.session_ttl_s,
                       caller=adm.caller)
         who = adm.caller or "(unauthenticated)"
@@ -340,8 +395,8 @@ class SessionService:
                 bind_serviceaccount=adm.bind.serviceaccount, bind_pod=adm.bind.pod,
             )
             self.metrics.session_decision(rail, adm.role.name, adm.stack.name, "dispatch")
-            log.info("session: dispatch id=%s stack=%s role=%s task=%s rail=%s harness=%s model=%s bind=%s/%s pod=%s caller=%s",
-                     sid, adm.stack.name, adm.role.name, adm.task, rail, adm.harness, model,
+            log.info("session: dispatch id=%s stack=%s role=%s task=%s attempt=%d rail=%s harness=%s model=%s bind=%s/%s pod=%s caller=%s",
+                     sid, adm.stack.name, adm.role.name, adm.task, adm.attempt, rail, adm.harness, model,
                      adm.bind.namespace, adm.bind.serviceaccount, adm.bind.pod or "(any)", who)
             return JSONResponse({
                 "decision": "dispatch",
@@ -356,8 +411,8 @@ class SessionService:
         token = new_token()
         row = self.store.create_session(**common, token_hash=token_hash(token))
         self.metrics.session_decision(rail, adm.role.name, adm.stack.name, "dispatch")
-        log.info("session: dispatch id=%s stack=%s role=%s task=%s rail=%s harness=%s model=%s caller=%s",
-                 sid, adm.stack.name, adm.role.name, adm.task, rail, adm.harness, model, who)
+        log.info("session: dispatch id=%s stack=%s role=%s task=%s attempt=%d rail=%s harness=%s model=%s caller=%s",
+                 sid, adm.stack.name, adm.role.name, adm.task, adm.attempt, rail, adm.harness, model, who)
         return JSONResponse({
             "decision": "dispatch",
             "session": {"id": row.id, "token": token, "expires_at": iso(row.expires_at)},

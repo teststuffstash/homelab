@@ -1,0 +1,13 @@
+# gateway-outcome — the decision table (family contract in fixture.yaml). Row state lives in rows/<id>/vars.sh.
+# id                   | world | patch | env                     | expect               | params
+off                    |       |       |                         | off                  |
+tasked-strike-retry    |       |       |                         | tasked-strike-retry  |
+tasked-clean           |       |       |                         | tasked-clean         |
+tasked-cap-reached     |       |       | AGENT_GATEWAY_ATTEMPT=3 | tasked-cap-reached   |
+tasked-salvage         |       |       |                         | tasked-salvage       |
+quota-gave-up          |       |       |                         | quota-gave-up        |
+pod-strike             |       |       |                         | pod-strike           |
+key-retry-silent       |       |       |                         | key-retry-silent     |
+adhoc-succeeded        |       |       |                         | adhoc-succeeded      |
+adhoc-failed           |       |       |                         | adhoc-failed         |
+report-fails           |       |       |                         | report-fails         |

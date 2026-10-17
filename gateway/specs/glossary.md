@@ -90,7 +90,7 @@ Secret must carry the label `openrouter.teststuff.net/session-key=true`, else th
 The gateway's one configuration document, `/etc/agent-gateway/policy.json` (a ConfigMap,
 homelab config; the test world is [worlds/policy-default.json](worlds/policy-default.json)):
 per-stack credential refs, per-role allowed rails in preference order with a default tier and
-harness, per-(rail, tier) model, per-rail `max_sessions` and `side_models` (the families a
+harness, per-(rail, tier) ordered model list, per-rail `max_sessions` and `side_models` (the families a
 harness's side-calls may name on any session of that rail), per-model `context_tokens`,
 `session_ttl_s`. **No model id lives in code** — only here, copied from
 `argocd/resources/openrouter-proxy/model-classes.json`; the deployed policy
@@ -101,14 +101,17 @@ test row.
 ## tier
 
 A size label on a session — `light` | `standard` | `heavy` — that selects the model within the
-chosen rail (`rails.<rail>.models.<tier>`). The role's default comes from the policy; the caller
+chosen rail: `rails.<rail>.models.<tier>`, an ORDERED list the walk takes the first admissible
+model of (not struck by this task, not cooled; a bare string = a one-item list —
+[§The retry contract](endpoints/sessions.md#the-retry-contract--model-lists-strikes-attempt)). The role's default comes from the policy; the caller
 may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap.
 
 ## defer
 
 The admission answer "not now": HTTP 200 `{decision: "defer", reason, retry_after_s}` — never
 an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `cell-cooled`, `role-rail-denied`,
-`stack-unknown`, `credential-unresolved`, `credential-rejected`, and the codex rail's headroom verdicts `quota-unknown`,
+`stack-unknown`, `credential-unresolved`, `credential-rejected`, `cells-exhausted` (no
+`retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
 ([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)).

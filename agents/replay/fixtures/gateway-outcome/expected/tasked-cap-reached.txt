@@ -1,0 +1,6 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/outcome {"class":"timeout"}
+CALL gw_release 0123abcd
+OUT → gateway(sessions): outcome timeout reported for 0123abcd (attempt 3) — strike timeout counted
+OUT → gateway(sessions): strike timeout at attempt 3 — no automatic re-admission (salvage=none, tasked=1, cap 2); the coordinator decides, as today
+OUT GW_OUTCOME='timeout' GW_STRUCK='timeout' GW_SESSION_ID=''
+RC 0

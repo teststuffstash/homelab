@@ -43,6 +43,7 @@
         "role": { "$ref": "#/$defs/role", "x-requirements": ["GW-SESSIONS-ADMIT", "GW-ACCESS"] },
         "task": { "type": "string", "minLength": 1, "description": "opaque task key (e.g. homelab-2588-r1); never a metric label", "x-requirements": ["GW-SESSIONS-ADMIT"] },
         "round": { "type": "integer", "minimum": 0, "default": 0, "x-requirements": ["GW-SESSIONS-ADMIT"] },
+        "attempt": { "type": "integer", "minimum": 1, "default": 1, "description": "the consumer's automatic re-admission counter at this round; the same caller re-admitting the same (stack, task, round, attempt, bound pod) supersedes the earlier ACTIVE session", "x-requirements": ["GW-SESSIONS-ADMIT"] },
         "tier": { "$ref": "#/$defs/tier", "description": "default from policy roles.<role>.tier", "x-requirements": ["GW-SESSIONS-ADMIT"] },
         "harness": { "$ref": "#/$defs/harness", "description": "default from policy roles.<role>.harness; fixes the dialect the walk may use", "x-requirements": ["GW-SESSIONS-ADMIT", "GW-SESSIONS-ENV"] },
         "rail": { "$ref": "#/$defs/rail", "description": "operator override — logged; normally absent", "x-requirements": ["GW-SESSIONS-ADMIT"] },
@@ -124,16 +125,16 @@
     "defer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["decision", "reason", "retry_after_s"],
+      "required": ["decision", "reason"],
       "properties": {
         "decision": { "const": "defer" },
         "reason": {
           "type": "string",
-          "enum": ["rail-capacity", "rail-window", "rail-latched", "cell-cooled", "role-rail-denied", "stack-unknown", "credential-unresolved", "credential-rejected", "quota-unknown", "quota-stale", "quota-limited"],
+          "enum": ["rail-capacity", "rail-window", "rail-latched", "cell-cooled", "role-rail-denied", "stack-unknown", "credential-unresolved", "credential-rejected", "cells-exhausted", "quota-unknown", "quota-stale", "quota-limited"],
           "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch on an account-scope rail; cell-cooled = the tier model's (rail, model) cell cooled by an upstream 429 until its reset; credential-rejected = the stack's credential for every remaining rail was rejected upstream (401/403 credential reason) — an operator act, polled at defer_retry_s (sessions.md §Capacity); quota-* = the codex rail's headroom verdicts (GW-CODEX-HEADROOM, openai-responses.md); the reason and retry_after_s name the blocked rail that frees first",
           "x-requirements": ["GW-SESSIONS-ADMIT", "GW-CRED-RESOLVE", "GW-CODEX-HEADROOM"]
         },
-        "retry_after_s": { "type": "integer", "minimum": 1, "description": "seconds until the first blocked rail may admit: a window reset, a latch expiry, or the policy defer_retry_s for a full rail" }
+        "retry_after_s": { "type": "integer", "minimum": 1, "description": "seconds until the first blocked rail may admit: a window reset, a latch expiry, or the policy defer_retry_s for a full rail. ABSENT exactly when reason = cells-exhausted (every candidate cell is struck for this task — waiting does not help; escalate)" }
       },
       "x-requirements": ["GW-SESSIONS-ADMIT"]
     }
@@ -142,13 +143,14 @@
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete", "outcome"],
+      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete", "outcome", "attempt"],
       "properties": {
         "id": { "$ref": "#/$defs/session_id" },
         "stack": { "$ref": "#/$defs/stack" },
         "role": { "$ref": "#/$defs/role" },
         "task": { "type": "string" },
         "round": { "type": "integer", "minimum": 0 },
+        "attempt": { "type": "integer", "minimum": 1, "x-requirements": ["GW-SESSIONS-ADMIT"] },
         "rail": { "$ref": "#/$defs/rail" },
         "harness": { "$ref": "#/$defs/harness" },
         "model": { "type": "string" },

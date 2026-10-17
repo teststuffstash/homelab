@@ -1,0 +1,6 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/outcome {"class":"harness-gave-up","subclass":"quota"}
+CALL gw_release 0123abcd
+CALL bash $TMP/gateway-outcome/quota-gave-up.clause.sh --project homelab --task issue-42 --round 1 --recipe .agents/fix.yaml [AGENT_GATEWAY_ATTEMPT=2]
+OUT → gateway(sessions): outcome harness-gave-up reported for 0123abcd (attempt 1) — strike harness-gave-up counted
+OUT → gateway(sessions): strike harness-gave-up — re-admitting round 1 at attempt 2 (the gateway excludes the struck cell; no coordinator hop)
+RC 0

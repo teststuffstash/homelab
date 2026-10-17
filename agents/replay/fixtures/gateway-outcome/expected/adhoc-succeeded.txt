@@ -1,0 +1,5 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/outcome {"class":"clean"}
+CALL gw_release 0123abcd
+OUT → gateway(sessions): outcome clean reported for 0123abcd (attempt 1)
+OUT GW_OUTCOME='clean' GW_STRUCK='' GW_SESSION_ID=''
+RC 0
