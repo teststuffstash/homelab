@@ -30,7 +30,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
 | [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; a codex `auth.command` re-read is `⚑ gap` (row below) |
 | [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
-| [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the store is written, read by nothing yet (the admission's strike walk is the next PR); `⚑ gap` rows below |
+| [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)); `⚑ gap` rows below |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
 | [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
@@ -43,8 +43,9 @@ ref the policy names unless a row says otherwise; the canonical end-to-end pair 
 
 ## GW-SESSIONS-ADMIT
 
-A `POST /sessions` body is admitted by walking `roles.<role>.rails` in order and picking the
-**first rail** whose `active_sessions < rails.<rail>.max_sessions`, that is not
+A `POST /sessions` body is admitted by walking `roles.<role>.rails` in order — and, inside each
+rail, the tier's ORDERED model list ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)) —
+and picking the **first rail** whose `active_sessions < rails.<rail>.max_sessions`, that is not
 capacity-blocked — the rail, or the [cell](../glossary.md#cell) its tier's model makes on it
 ([§Capacity](#capacity--the-ladders-capacity-half)) — AND whose credential for the stack resolves
 ([GW-CRED-RESOLVE](#gw-cred-resolve)) and has not been rejected upstream. None → `defer`, whose `reason` and
@@ -82,6 +83,66 @@ caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limi
 | "an explicit rail the role is not allowed" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: anthropic` || defer | — | — | role-rail-denied |
 | "an explicit rail the role is allowed is taken even when later in the list (logged as an override) ⚖" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: openrouter` || dispatch | openrouter | deepseek/deepseek-v4-flash | — |
 | "an unknown stack" | worker (stack `nope`) | (policy) | (policy) | 0 / 0 / 0 | — || defer | — | — | stack-unknown |
+
+### The retry contract — model lists, strikes, `attempt`
+
+*A failed attempt costs a re-dispatch, never a round* ([model-routing.md §The design's three
+rules](../../../docs/agents/model-routing.md#the-designs-three-rules), rule 3). A rail tier names
+an **ordered list** of models, `rails.<rail>.models.<tier>: [id, …]`; a bare string is the
+one-item list (every policy written before this keeps loading). The walk reads the task's
+**counted strikes** ([GW-SESSIONS-OUTCOME](#gw-sessions-outcome)) and takes, rail by rail, the
+first model of the tier's list that the task has not struck: a cell-scoped strike excludes that
+(rail, model), a model-scoped one excludes the model id on every rail, and a cooled cell
+([§Capacity](#capacity--the-ladders-capacity-half)) is skipped as well. A rail with no admissible
+model is passed over, and the walk moves on to the role's next rail. ⚖ When every candidate cell is
+**struck**, and no rail is held only by time (capacity, latch, window, cooldown — those defer as
+before, because waiting helps there), the answer is `defer` **`cells-exhausted` with no
+`retry_after_s`**. Waiting does not help: the caller escalates (the old ladder's "chain exhausted
+with the strike list"). ⚖ Model identity is the policy id: the same model on another rail is
+another id, so a model strike on `claude/sonnet` does not exclude `opencode-go/claude-sonnet-4-6`
+(a gap row below).
+
+`POST /sessions` carries **`attempt`** (default 1): the consumer's automatic re-admission counter at
+this round. Strikes are keyed by TASK, not by attempt, so the exclusion holds however the attempt is
+counted. `attempt` is what makes a re-run **detectable**. ⚖ The same caller re-admitting the same
+(stack, task, round, attempt) for the same bound pod (both unbound counts as the same pod) while the
+earlier session is still **active** is a re-run of that admission: a killed pod's re-run, or a slot
+leaked by a SIGKILL (the 2026-10-17 experiment's probe left one active until its TTL). The earlier
+session is **superseded**: it is released, and its token is refused from then on. Then this
+admission proceeds. Never two live sessions for one attempt. Refusing would wedge the re-run until
+the TTL; answering the old session again cannot work, because an unbound session's token exists only
+as a hash. **What the gateway cannot detect:** a re-run that restarts at attempt 1 after the earlier
+session was released or expired. The experiment saw Argo re-run a review as a fresh round-0
+admission. It is admitted as new, but it meets the task's strikes all the same (the last row below).
+The consumers' side: report the outcome before the DELETE, and on a strike re-admit at the SAME
+round with `attempt + 1`, at most 2 automatic attempts (`agents/agent-session.sh` and
+`agents/specs-reviewer-session.sh`, under `AGENT_GATEWAY=sessions` / the specs review).
+
+World `policy-default`: `rails.anthropic.models.heavy` = `[claude/sonnet, claude/opus]` (the
+reviewer's tier), `rails.openrouter.models.light` = `[deepseek/deepseek-v4-flash,
+deepseek/deepseek-v4.1-flash]`, every other tier a bare string. The strikes are arranged through
+the outcome endpoint on an earlier session of the SAME task. T = `specs-review homelab#2700`, round 0.
+
+| description | arrange (the task's strikes) | body || decision | rail | model | reason |
+|---|---|---||---|---|---|---|
+| "a tier names an ordered list: the first model is taken" | — | reviewer, T || dispatch | anthropic | claude/sonnet | — |
+| "a cell strike moves the walk to the next model in the list" | `harness-gave-up` on (anthropic, claude/sonnet) | reviewer, T, `attempt: 2` || dispatch | anthropic | claude/opus | — |
+| "a model strike excludes the model, the list continues" | `no-verdict` on claude/sonnet | reviewer, T, `attempt: 2` || dispatch | anthropic | claude/opus | — |
+| "a struck list moves the walk to the next rail" | `no-verdict` on claude/sonnet and on claude/opus | reviewer, T, `attempt: 3` || dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
+| "a strike is per task" | `no-verdict` on claude/sonnet for T | reviewer, another task || dispatch | anthropic | claude/sonnet | — |
+| "a refuted strike excludes nothing" | `provider-5xx` (gateway) on claude/sonnet, then `clean` on that session | reviewer, T, `attempt: 2` || dispatch | anthropic | claude/sonnet | — |
+| "a cooled cell in the list is skipped, the next model taken" | a 429 cooled (openrouter, deepseek/deepseek-v4-flash) | worker, `tier: light`, `rail: openrouter` || dispatch | openrouter | deepseek/deepseek-v4.1-flash | — |
+| "every cell struck: cells-exhausted, no retry_after_s ⚖" | `no-verdict` on claude/haiku (prober: anthropic only, light) | prober, T, `attempt: 2` || defer (`{decision, reason}` only) | — | — | cells-exhausted |
+| "a capacity-blocked rail outranks struck cells: the defer waits ⚖" | `no-verdict` on claude/sonnet and claude/opus; opencode at its 3 | reviewer, T, `attempt: 3` || defer | — | — | rail-capacity (60) |
+
+| description | sequence || result |
+|---|---||---|
+| "attempt defaults to 1 and is on the row" | admit with no `attempt`, GET || `attempt` = 1 |
+| "attempt below 1 is malformed" | `attempt: 0` || 400 malformed-body |
+| "a re-admission of the same attempt supersedes the active one ⚖" | admit T `attempt: 1` twice (the same caller, unbound) || the first released (its token 401 `session-released`), the second active |
+| "the next attempt does not supersede" | admit T `attempt: 1`, then `attempt: 2` || both active |
+| "another pod's same attempt is not superseded" | admit T `attempt: 1` bound to fixer-1, then bound to fixer-2 || both active |
+| "a re-run that restarts at attempt 1 still meets the task's strikes ⚖" | attempt 1 struck `no-verdict` on claude/sonnet and released; admit T `attempt: 1` again || dispatch claude/opus — undetectable as a re-run, excluded all the same |
 
 ### What is an HTTP error, and what is not
 
@@ -287,7 +348,7 @@ $24 (7d) / $48 (30d). The expected value of each row is computed in its test's c
 | "⚑ gap: a Go 402" | an upstream 402 on opencode || no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
 | "⚑ gap: the Go draw is the gateway's own traffic only" | Go spend through the old proxy or the jail shim || not in this ledger — this draw is a lower bound of the account's | the account-wide reading (the old proxy's ledger, the jail shim's reports) |
 | "⚑ gap: long-context price tiers" | a Go model with a `GO_PRICES_LONG` row || — no policy model has one | gometer's long-context override; add the row with the first such model |
-| "⚑ gap: a model struck on this task last round" | worker, round 2 after a strike || the policy model, unchanged | ADR-096 strikes / pair holds (the transport cooldown above is per cell, for every task) |
+| "⚑ gap: one model across rails" | a model strike on `claude/sonnet` || `opencode-go/claude-sonnet-4-6` still admits | the policy names rail-prefixed ids; `model-classes.json` groups them per model, and that grouping is not in the gateway policy |
 | "⚑ gap: labels, urgency, budget class" | body carries none, none read || — | the ADR-096 ladder's inputs; `tier` is the only size knob |
 | "⚑ gap: `POST /route`" | any || 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
 | "⚑ gap: a capacity doorbell" | a rail frees a slot || nothing is pushed | the caller polls `retry_after_s` |
@@ -396,7 +457,7 @@ the token; `GET /sessions/{id}` returns the row without it. The data plane accep
 | "the token has the fixed shape" | dispatch || `token` matches `^gws_[A-Za-z0-9_-]{32}$` |
 | "two dispatches never share a token" | dispatch twice || tokens differ |
 | "the row holds a hash, not the token" | dispatch, read the DB || `token_hash` = sha256 hex of the token; no column equals the token |
-| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller, requests_incomplete, outcome` (`outcome`: the latest reported outcome, [GW-SESSIONS-OUTCOME](#gw-sessions-outcome); `requests_incomplete`: the 2xx answers whose body stopped before its end, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter); the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
+| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, attempt, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller, requests_incomplete, outcome` (`outcome`: the latest reported outcome, [GW-SESSIONS-OUTCOME](#gw-sessions-outcome); `requests_incomplete`: the 2xx answers whose body stopped before its end, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter); the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
 | "GET on an unknown id" | `GET /sessions/nope` || 404 `session-not-found` |
 | "expiry is the policy TTL" | dispatch at T || `expires_at` = T + 14400 s (`policy-default`) |
 | "a request through the data plane is counted on the row" | dispatch → one `upstream-ok` call → GET || `requests` = 1, `tokens_in`/`tokens_out` = the upstream `usage` (`tokens_in` = uncached input; the cache classes in `tokens_cache_read`/`tokens_cache_write` — GW-METRICS) |
@@ -831,7 +892,6 @@ World `policy-default`.
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: the store is read by nothing" | a counted strike on a task || admission ignores it | the admission's strike walk (the retry contract: `attempt`, per-tier model lists) is the next deliverable |
 | "⚑ gap: provider on a strike" | an OpenRouter ride served by a named provider || `provider` = `''` | the gateway does not parse the serving provider; the old router's pair scope is earned by knowing it |
 | "⚑ gap: the fleet view" | the same class on ≥ 2 distinct tasks || per-task strikes only | the old router's pair cooldown / model nomination across tasks (`router.py:pair_cooldowns`) |
 

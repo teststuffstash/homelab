@@ -21,3 +21,5 @@ caller-minted                  |       |       | AGENT_GATEWAY=sessions AGENT_GA
 caller-mint-fails              |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_CALLER_SA=platform-agents/agentstack-loop | caller-mint-fails |
 caller-sa-malformed            |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_CALLER_SA=agentstack-loop | caller-sa-malformed |
 no-caller-token                |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_CALLER_TOKEN_FILE=/nonexistent/agent-gateway/token | no-caller-token |
+dispatch-attempt-2             |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_RAIL=opencode AGENT_GATEWAY_ATTEMPT=2 | dispatch-attempt-2           |
+attempt-refused                |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_ATTEMPT=0 | attempt-refused              |

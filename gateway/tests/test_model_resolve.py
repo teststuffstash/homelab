@@ -118,8 +118,8 @@ async def test_dispatch_names_policy_id(gw, policy):
             for role in policy.roles:
                 docs[role] = await open_session(gw, role=role, task=f"t-{role}")
         attach_json("answers: role → (rail, model)", {role: {"rail": d["rail"], "model": d["model"]} for role, d in docs.items()})
-    with then("every answer's model = policy.rails[rail].models[role tier]"):
-        want = {role: policy.rails[d["rail"]].models[policy.roles[role].tier] for role, d in docs.items()}
+    with then("every answer's model = the FIRST of policy.rails[rail].models[role tier] (nothing struck, nothing cooled)"):
+        want = {role: policy.rails[d["rail"]].models[policy.roles[role].tier][0] for role, d in docs.items()}
         check("model per role", {role: d["model"] for role, d in docs.items()}, want)
 
 
@@ -127,7 +127,7 @@ def test_no_model_id_in_code(policy):
     """row: no model id from the policy appears in src/"""
     world()
     with given("every model id in the policy (full and without its rail prefix)"):
-        ids = {m for rail in policy.rails.values() for m in (*rail.models.values(), *rail.side_models)}
+        ids = {m for rail in policy.rails.values() for m in (*(x for lst in rail.models.values() for x in lst), *rail.side_models)}
         ids |= {m.split("/", 1)[-1] for m in ids}
         attach_json("policy model ids", sorted(ids))
     with when("grep src/**/*.py for each id"):
@@ -151,14 +151,14 @@ def test_deployed_policy_loads(policy):
               models={r: sorted(v.models) for r, v in deployed.rails.items()}):
         assert all(set(r.models) == {"light", "standard", "heavy"} for r in deployed.rails.values())
     go = {f"opencode-go/{i}" for i in json.loads(GO_CATALOG.read_text(encoding="utf-8"))["ids"]}
-    go_ids = {m for m in (*deployed.rails["opencode"].models.values(), *deployed.rails["opencode"].side_models)}
+    go_ids = {m for m in (*(x for lst in deployed.rails["opencode"].models.values() for x in lst), *deployed.rails["opencode"].side_models)}
     with then("every opencode deployed model id is opencode-go/<id> of the Go catalog snapshot ⚖",
               checked=sorted(go_ids), unknown={"expected": [], "actual": sorted(go_ids - go)}):
         assert go_ids <= go, sorted(go_ids - go)
     if MODEL_CLASSES.exists():
         mc = json.loads(MODEL_CLASSES.read_text(encoding="utf-8"))
         known = {wire for m in mc["models"].values() if isinstance(m, dict) for wire in m["ids"].values()}
-        ids = {m for name, r in deployed.rails.items() if name != "opencode" for m in (*r.models.values(), *r.side_models)}
+        ids = {m for name, r in deployed.rails.items() if name != "opencode" for m in (*(x for lst in r.models.values() for x in lst), *r.side_models)}
         with then("every non-opencode deployed model id is spelled as in model-classes.json", unknown={"expected": [], "actual": sorted(ids - known)}):
             assert ids <= known, sorted(ids - known)
         then_eq("opencode max_sessions", deployed.rails["opencode"].max_sessions, mc["rails"]["opencode-go"]["concurrency"],

@@ -308,6 +308,13 @@ if [ -n "${GW_SESSIONS:-}" ]; then
     echo "PREFLIGHT REFUSED: --round '${ROUND}' is not a non-negative integer (sessions.schema.json post.input.round). No session, no pod." >&2
     exit 2;;
   esac
+  # The retry contract (GW-SESSIONS-ADMIT): AGENT_GATEWAY_ATTEMPT is this launcher's automatic
+  # re-admission counter at the SAME round — set only by its own strike re-entry (the
+  # gateway-outcome block); unset = attempt 1, which the request then omits (the gateway's default).
+  case "${AGENT_GATEWAY_ATTEMPT:-1}" in ''|0|*[!0-9]*)
+    echo "PREFLIGHT REFUSED: AGENT_GATEWAY_ATTEMPT='${AGENT_GATEWAY_ATTEMPT}' is not a positive integer (sessions.schema.json post.input.attempt). No session, no pod." >&2
+    exit 2;;
+  esac
   # The pod pulls its env in its OWN command (the prelude below) — an interactive pod has none, so
   # nothing would ever pull and an exec'd shell would hold no LLM env. Refused, not degraded.
   if [ -z "${RUN_CMD:-}" ] && [ -z "${RECIPE:-}" ]; then
@@ -341,8 +348,9 @@ if [ -n "${GW_SESSIONS:-}" ]; then
   # to its dialect); rail only from the operator knob (an override the gateway logs).
   _gw_req="$(jq -nc --arg task "${TASK:-adhoc}" --argjson round "$ROUND" \
       --arg harness "${HARNESS_SET:+$HARNESS}" --arg rail "${AGENT_GATEWAY_RAIL:-}" \
-      --arg ns "$PROJECT" --arg pod "$GW_POD" \
+      --arg ns "$PROJECT" --arg pod "$GW_POD" --argjson attempt "${AGENT_GATEWAY_ATTEMPT:-1}" \
       '{stack: "platform", role: "worker", task: $task, round: $round}
+       + (if $attempt > 1 then {attempt: $attempt} else {} end)
        + (if $harness != "" then {harness: $harness} else {} end)
        + (if $rail != "" then {rail: $rail} else {} end)
        + {bind: {namespace: $ns, serviceaccount: "agentstack-worker", pod: $pod}}')"
@@ -3208,8 +3216,9 @@ if [ -n "$RUN_CMD" ]; then
   # classification below has something to read.
   [ -s "$RUNLOG" ] || "$KUBECTL" $KUBE -n "$NS" logs "${POD}" > "$RUNLOG" 2>/dev/null || true
   echo "→ run finished. delete with: kubectl -n ${NS} delete pod ${POD}"
-  # FU-270 (GW-SESSIONS-RELEASE): the ride is over — free the rail slot and refuse the token now.
-  gw_release
+  # FU-270 (GW-SESSIONS-RELEASE): the ride is over. The release waits for the ride's OUTCOME
+  # (GW-SESSIONS-OUTCOME: reported before the DELETE — the gateway-outcome block below, after the
+  # strike classifier); the EXIT trap still releases on every other way out.
   # Clean up the context-prefetch ConfigMap (homelab#1205)
   if [ -n "${PF_CM_CREATED}" ]; then
     "$KUBECTL" $KUBE -n "$NS" delete configmap "${POD}-context" --ignore-not-found >/dev/null 2>&1 || true
@@ -3495,6 +3504,70 @@ if [ -n "$RUN_CMD" ]; then
     fi
     # <<<REPLAY:strike-line-format<<<
   fi
+
+    # >>>REPLAY:gateway-outcome>>>
+    # FU-270 — the failure-ownership contract (gateway/specs/endpoints/sessions.md GW-SESSIONS-OUTCOME
+    # + GW-SESSIONS-ADMIT §The retry contract). The gateway owns what it sees first-hand (429, 401,
+    # cut streams — its own transport strikes); THIS launcher classifies its own ride and reports it
+    # BEFORE the DELETE, in the gateway's one vocabulary:
+    #   • a TASKED ride (issue-*/pr-*) that struck → the strike's class when it is a vocabulary
+    #     member (quota → harness-gave-up: the harness gave up on a limited upstream; anything else
+    #     → unknown); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
+    #     strike — rounds are the scan's);
+    #   • an AD-HOC ride → clean when its pod Succeeded, else NOTHING: its task key is shared by every
+    #     ad-hoc ride, and a strike there would exclude cells for all of them.
+    # On a counted strike (the outcome answer's `strike`) with salvage = none, the launcher re-enters
+    # itself with the SAME argv (same --round: an infra failure consumes no round) and attempt + 1 —
+    # at most AGENT_GATEWAY_AUTO_ATTEMPTS (2) automatic re-admissions; the gateway's walk excludes the
+    # struck cell. A failed report is non-fatal (no retry: the gateway saw no strike from us).
+    GW_OUTCOME=""; GW_STRUCK=""
+    if [ -n "${GW_SESSIONS:-}" ] && [ -n "${GW_SESSION_ID:-}" ]; then
+      if [ -n "${STRIKE_APPLIES:-}" ]; then
+        if [ -n "${STRIKE_LINE:-}" ] || [ "${STRIKE_BY_POD:-false}" = "true" ]; then
+          # the pod's own strike (agent-finalize) carries its class on the stats line — the same
+          # read as the strike-retry block's (failed / ci-failed → unknown)
+          [ -n "${STRIKE_LINE:-}" ] || ERR_CLASS="$(printf '%s' "${STATS:-}" | jq -r '
+            (.error_class // "") as $e
+            | if ((.exit_status // "") == "failed" or (.exit_status // "") == "ci-failed") then "unknown"
+              elif $e == "" then "unknown" else $e end' 2>/dev/null || echo unknown)"
+          case "${ERR_CLASS:-unknown}" in
+            harness-death|auth-storm|timeout|provider-5xx|no-pr|unknown|turn-cap|tool-loop) GW_OUTCOME="${ERR_CLASS:-unknown}";;
+            quota) GW_OUTCOME="harness-gave-up";;
+            *) GW_OUTCOME="unknown";;
+          esac
+        elif [ -z "${KEY_RETRY_LINE:-}" ]; then
+          GW_OUTCOME="clean"
+        fi
+      else
+        _gw_phase="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+        [ "$_gw_phase" != "Succeeded" ] || GW_OUTCOME="clean"
+      fi
+      if [ -n "$GW_OUTCOME" ]; then
+        _gw_ores="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' -H @<(gw_auth_header) -X POST \
+            "${GW_URL}/sessions/${GW_SESSION_ID}/outcome" \
+            -d "$(jq -nc --arg c "$GW_OUTCOME" --arg s "${ERR_CLASS:-}" '{class: $c} + (if $s != "" and $s != $c then {subclass: $s} else {} end)')" 2>/dev/null)" \
+          && GW_STRUCK="$(printf '%s' "$_gw_ores" | jq -r '.strike.class // empty' 2>/dev/null || true)" \
+          && echo "→ gateway(sessions): outcome ${GW_OUTCOME} reported for ${GW_SESSION_ID} (attempt ${AGENT_GATEWAY_ATTEMPT:-1})${GW_STRUCK:+ — strike ${GW_STRUCK} counted}" \
+          || echo "WARN gateway(sessions): outcome ${GW_OUTCOME} for ${GW_SESSION_ID} NOT reported — no strike counted from this ride" >&2
+      fi
+      gw_release
+      _gw_attempt="${AGENT_GATEWAY_ATTEMPT:-1}"
+      _gw_salvage="none"
+      if [ -n "$(printf '%s' "${STATS:-}" | jq -r '.salvaged_branch // ""' 2>/dev/null || true)" ] || [ -n "${WORK_BRANCH:-}" ] \
+         || [ "$(printf '%s' "${STATS:-}" | jq -r '.salvage_undetermined // false' 2>/dev/null || true)" = "true" ]; then
+        _gw_salvage="resumable"
+      fi
+      if [ -n "$GW_STRUCK" ] && [ -n "${STRIKE_APPLIES:-}" ] && [ "$_gw_salvage" = "none" ] \
+         && [ "$_gw_attempt" -le "${AGENT_GATEWAY_AUTO_ATTEMPTS:-2}" ]; then
+        echo "→ gateway(sessions): strike ${GW_STRUCK} — re-admitting round ${ROUND} at attempt $(( _gw_attempt + 1 )) (the gateway excludes the struck cell; no coordinator hop)"
+        rm -f "$RUNLOG"
+        AGENT_GATEWAY_ATTEMPT="$(( _gw_attempt + 1 ))" bash "$0" "${ORIG_ARGS[@]}"
+        exit $?
+      elif [ -n "$GW_STRUCK" ]; then
+        echo "→ gateway(sessions): strike ${GW_STRUCK} at attempt ${_gw_attempt} — no automatic re-admission (salvage=${_gw_salvage}, tasked=${STRIKE_APPLIES:-no}, cap ${AGENT_GATEWAY_AUTO_ATTEMPTS:-2}); the coordinator decides, as today"
+      fi
+    fi
+    # <<<REPLAY:gateway-outcome<<<
 
     # >>>REPLAY:router-report>>>
     # ROUTER REPORT (ADR-096, M5 attribution) — unconditional POST, runs for every run with

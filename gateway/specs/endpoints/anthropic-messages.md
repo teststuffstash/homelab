@@ -197,7 +197,7 @@ cooldowns, provider pins, the `:exacto` suffix — is a gap, rendered below.
 
 | description | policy document || verdict |
 |---|---||---|
-| "the dispatch answer names the policy id for (rail, tier)" | `policy-default` || `model` = `rails.<rail>.models.<tier>` for every role |
+| "the dispatch answer names the policy id for (rail, tier)" | `policy-default` || `model` = the first id of `rails.<rail>.models.<tier>` (an ordered list; a string is one item) for every role, nothing struck or cooled |
 | "no model id from the policy appears in src/" | `policy-default` || grep finds none |
 | "the anthropic body is forwarded byte-untouched" | `policy-default` || upstream body == inbound body |
 | "the deployed policy loads under the island's loader, every id known ⚖" | `argocd/resources/agent-gateway/policy.json` (skipped when absent) || loads; same rails and roles as `policy-default`; every non-opencode model and side-model id is a `models.*.ids` value of `model-classes.json`; every opencode id is `opencode-go/<id>` of an id in the gateway-owned Go catalog snapshot `tests/fixtures/go-catalog.json` (operator, 2026-10-17: `model-classes.json` is the old proxy's table and carries no Go `deepseek-v4.1-flash` id; the Go-catalog leg, `docs/spikes/opencode-go-catalog.md`, replaces the snapshot); opencode `max_sessions` = its `rails.opencode-go.concurrency` |

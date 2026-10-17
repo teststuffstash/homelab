@@ -67,11 +67,11 @@ pytestmark = rule("GW-SESSIONS-ADMIT")
 
 
 async def _ride(gw, upstreams, clock, *, rail: str, role: str, behaviour: str, stack: str = "platform",
-                reset_in: int | None = None, retry_after: str | None = None, doc=None):
+                reset_in: int | None = None, retry_after: str | None = None, doc=None, task: str | None = None):
     """Arrange through the data plane: one claude-harness ride on `rail` answered by the fake as stated."""
     if doc is None:
         with quiet():
-            doc = await open_session(gw, stack=stack, role=role, rail=rail, harness="claude", task=f"arrange-{rail}-{role}-{stack}")
+            doc = await open_session(gw, stack=stack, role=role, rail=rail, harness="claude", task=task or f"arrange-{rail}-{role}-{stack}")
     up = upstreams[rail]
     up.behaviour = behaviour
     up.reset_ms = int((clock.t + reset_in) * 1000) if reset_in is not None else None
@@ -229,5 +229,6 @@ async def test_second_rejection_doubles_hold(gw, upstreams, clock):
     with given("a prober ride on anthropic answered upstream-401; 900 s pass (half-open); the next ride is rejected again"):
         await _ride(gw, upstreams, clock, rail="anthropic", role="prober", behaviour="upstream-401")
         clock.advance(900)
-        await _ride(gw, upstreams, clock, rail="anthropic", role="prober", behaviour="upstream-401", stack="platform")
+        # another task: the first ride's own auth-storm strike excludes its cell for ITS task (GW-SESSIONS-ADMIT §The retry contract)
+        await _ride(gw, upstreams, clock, rail="anthropic", role="prober", behaviour="upstream-401", task="arrange-second-ride")
     _verdict(await _admit(gw, {"role": "prober"}), {"decision": "defer", "reason": "credential-rejected", "retry_after_s": 1800})
