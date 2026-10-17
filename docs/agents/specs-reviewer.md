@@ -232,6 +232,8 @@ unchanged):
   `UNIT_ONLY` ⚖, `WORLD_UNNAMED`), observed values traced through steps and attachments, baseline
   differences, and Allure hygiene: the three worst codes as notes, the same unresolved code on the
   same case across two reviews = blocking `HYGIENE_REPEAT`.
+  `HYGIENE_REPEAT` blocks on ANY case in the pack, including cases the PR's diff never touched
+  (operator, 2026-10-17, on #2645 round 3: "block anywhere").
 
 Intent is read before evidence, and neither brief receives implementation code. A blocking finding
 from either brief means `CHANGES_REQUESTED`. Two independent reviewer sessions were rejected

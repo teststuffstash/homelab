@@ -813,8 +813,13 @@ the block needs pruning, not more headings.
       Usage: gzip SSE fixed (#2635); four token classes + window gauges, no USD (ruling A, #2640) — LIVE.
       Overnight build 2026-10-17: capacity admission rows (#2645), Codex rail dark (#2646, CLI evidence #2650),
       specs-reviewer shadow cells (#2654/#2656/#2659, table in `docs/agents/specs-reviewer.md` §Shadow runs).
-      **Next:** operator rulings in meta-state (heavy Go fallback model dead upstream; the live reviewer's cell);
-      then the launcher's `/sessions` for one platform role.
+      Rulings 2026-10-17: Go heavy → deepseek-v4-flash, an experiment (#2663; rails get reconfigured later);
+      live reviewer stays claude@anthropic; ⚖ rows on #2645/#2646 wait on the Codex spike (#2662).
+      Policy = configMapGenerator since #2664 (an edit rolls the pod; diff-ci now runs the suite on it).
+      Launcher leg MERGED #2667: `AGENT_GATEWAY=sessions` (env opt-in, platform only, fail-closed, token in a
+      pod-owned Secret); canary 2026-10-17 clean (opencode, 2 req, released, no key minted). Ruled 2026-10-17: the
+      pod PULLS its env (projected SA token → TokenReview, bound at admission; codex `auth.command` aligns;
+      Secret writes gateway-only). **Next:** gateway pull endpoint PR, then the launcher drops #2667's Secret.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).

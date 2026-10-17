@@ -42,6 +42,7 @@ spec:
             - ClusterRole
           names:
             - agent-coordinator
+            - agent-gateway-tokenreview # FU-270: the agent-gateway's GW-SESSIONS-PULL TokenReview (create only — validates, cannot read or mint)
             - agent-read-app
             - agent-read-infra
             - agentstack-claims-read
@@ -60,6 +61,7 @@ spec:
           names:
             - agent-coordinator
             - agent-coordinator-read-infra
+            - agent-gateway-tokenreview # FU-270 (see the ClusterRole above)
             - agentstack-loop-read-infra
             - alloy-logs-reader
             - eso-retro-git-reader-ssrr
