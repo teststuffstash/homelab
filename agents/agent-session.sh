@@ -233,16 +233,20 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 # names its stacks, and the canary is platform's — any other stack keeps today's path, loudly.
 # FAIL CLOSED: unreachable / non-200 / unparseable = the router-defer exit (no pod). It is an
 # explicit experiment, so it never falls back onto the old proxy's rail.
-# ⚠ The session token is a CREDENTIAL: it lives in GW_ENV_JSON (memory) and a per-ride Secret
-# (gw_secret_create below) — never in the pod manifest's literal values, never on a log line.
+# ⚠ The launcher NEVER holds the session token (operator ruling 2026-10-17, GW-SESSIONS-PULL): the
+# request carries `bind` (the pod's namespace, ServiceAccount and name), the answer carries only
+# `env_keys` + `pull_url`, and the POD pulls its env itself — POST /sessions/{id}/env with its
+# projected ServiceAccount token (audience agent-gateway, TokenReview'd, at most once). No Secret is
+# written (the loop SA cannot create one in a fixer namespace, deliberately). A gateway that answers
+# a token to a bound request anyway is refused, released and not dispatched.
 # >>>REPLAY:gateway-sessions>>>
-GW_SESSIONS=""; GW_SESSION_ID=""; GW_ENV_JSON=""; GW_RAIL=""; GW_CLAUDE_MODEL=""; GW_CONTEXT_TOKENS=""
-GW_SECRET=""; GW_SECRET_CREATED=""; GW_TRAP_HOOK=""; GW_EXPIRES_AT=""
+GW_SESSIONS=""; GW_SESSION_ID=""; GW_ENV_KEYS=""; GW_PULL_URL=""; GW_RAIL=""; GW_CLAUDE_MODEL=""; GW_CONTEXT_TOKENS=""
+GW_POD=""; GW_PULL_PRELUDE=""; GW_TRAP_HOOK=""; GW_EXPIRES_AT=""
 GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local:8080}"
-# gw_release — DELETE /sessions/{id} (GW-SESSIONS-RELEASE: idempotent server-side) + the per-ride
-# env Secret. Idempotent here too (clears the id first), so the explicit call after the headless
-# follow and the EXIT trap may both run. A failed DELETE is non-fatal: the session expires by the
-# policy TTL (4 h), and saying so is the whole remedy.
+# gw_release — DELETE /sessions/{id} (GW-SESSIONS-RELEASE: idempotent server-side). Idempotent here
+# too (clears the id first), so the explicit call after the headless follow and the EXIT trap may
+# both run. A failed DELETE is non-fatal: the session expires by the policy TTL (4 h), and saying so
+# is the whole remedy.
 gw_release() {
   [ -n "${GW_SESSION_ID:-}" ] || return 0
   local _sid="$GW_SESSION_ID"; GW_SESSION_ID=""
@@ -250,11 +254,6 @@ gw_release() {
     echo "→ gateway(sessions): released ${_sid}"
   else
     echo "WARN gateway(sessions): release of ${_sid} FAILED — it holds its rail slot until the session TTL" >&2
-  fi
-  if [ -n "${GW_SECRET_CREATED:-}" ]; then
-    "$KUBECTL" $KUBE -n "${NS:-$PROJECT}" delete secret "$GW_SECRET" --ignore-not-found >/dev/null 2>&1 \
-      || echo "WARN gateway(sessions): could not delete Secret ${GW_SECRET} (its pod ownerReference collects it)" >&2
-    GW_SECRET_CREATED=""
   fi
   return 0
 }
@@ -277,13 +276,28 @@ if [ -n "${GW_SESSIONS:-}" ]; then
     echo "PREFLIGHT REFUSED: --round '${ROUND}' is not a non-negative integer (sessions.schema.json post.input.round). No session, no pod." >&2
     exit 2;;
   esac
+  # The pod pulls its env in its OWN command (the prelude below) — an interactive pod has none, so
+  # nothing would ever pull and an exec'd shell would hold no LLM env. Refused, not degraded.
+  if [ -z "${RUN_CMD:-}" ] && [ -z "${RECIPE:-}" ]; then
+    echo "PREFLIGHT REFUSED: an interactive session under AGENT_GATEWAY=sessions — the pod pulls its LLM env once, in its command (GW-SESSIONS-PULL); pass --run or --recipe. No session, no pod." >&2
+    exit 2
+  fi
+  # The bind: the pod this launcher is about to create — its namespace (NS = PROJECT), its
+  # ServiceAccount (the pod manifest's serviceAccountName) and its NAME, computed here by the same
+  # rule the pod-name block applies later (which then reuses GW_POD verbatim).
+  case "$TASK" in
+    issue-[0-9]*|pr-[0-9]*) GW_POD="agent-${PROJECT}-${TASK//[^a-z0-9]/-}-r${ROUND}";;
+    *) GW_POD="agent-${PROJECT}-$(date -u +%H%M%S)";;
+  esac
   # sessions.schema.json post.input: harness only when --harness was EXPLICIT (it narrows the walk
   # to its dialect); rail only from the operator knob (an override the gateway logs).
   _gw_req="$(jq -nc --arg task "${TASK:-adhoc}" --argjson round "$ROUND" \
       --arg harness "${HARNESS_SET:+$HARNESS}" --arg rail "${AGENT_GATEWAY_RAIL:-}" \
+      --arg ns "$PROJECT" --arg pod "$GW_POD" \
       '{stack: "platform", role: "worker", task: $task, round: $round}
        + (if $harness != "" then {harness: $harness} else {} end)
-       + (if $rail != "" then {rail: $rail} else {} end)')"
+       + (if $rail != "" then {rail: $rail} else {} end)
+       + {bind: {namespace: $ns, serviceaccount: "agentstack-worker", pod: $pod}}')"
   _gw_resp="$(mktemp)"
   _gw_http="$(curl -sS --max-time 20 -o "$_gw_resp" -w '%{http_code}' -H 'Content-Type: application/json' \
       -X POST "${GW_URL}/sessions" -d "$_gw_req" 2>/dev/null)" || _gw_http="000"
@@ -310,32 +324,53 @@ if [ -n "${GW_SESSIONS:-}" ]; then
   GW_TRAP_HOOK="gw_release"; trap 'gw_release' EXIT
   _gw_bad=""
   [[ "$GW_SESSION_ID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || _gw_bad="session id"
-  # Every env key becomes a pod env name AND a Secret data key — a hostile key is a refusal.
-  jq -e '(.env | type == "object") and ([.env | to_entries[] | select((.key | test("^[A-Za-z_][A-Za-z0-9_]*$") | not) or (.value | type != "string"))] | length == 0)' \
-    "$_gw_resp" >/dev/null 2>&1 || _gw_bad="${_gw_bad:+$_gw_bad, }env map"
-  GW_ENV_JSON="$(jq -c '.env' "$_gw_resp" 2>/dev/null)" || GW_ENV_JSON=""
+  # A bound answer carries NO credential (GW-SESSIONS-PULL). A token or an env map here means the
+  # gateway ignored the bind (a pre-pull build): refuse, so the launcher never holds a token.
+  jq -e '(.session.token == null) and (.env == null)' "$_gw_resp" >/dev/null 2>&1 \
+    || _gw_bad="${_gw_bad:+$_gw_bad, }a credential in a bound answer"
+  # Every env key becomes an in-pod `export` name — a hostile key is a refusal.
+  jq -e '(.env_keys | type == "array") and (.env_keys | length > 0) and ([.env_keys[] | select((type != "string") or (test("^[A-Za-z_][A-Za-z0-9_]*$") | not))] | length == 0)' \
+    "$_gw_resp" >/dev/null 2>&1 || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys"
+  GW_ENV_KEYS="$(jq -r '(.env_keys // []) | map(tostring) | join(",")' "$_gw_resp" 2>/dev/null)" || GW_ENV_KEYS=""
+  GW_PULL_URL="$(jq -r '.pull_url // ""' "$_gw_resp")"
+  [[ "$GW_PULL_URL" =~ ^https?://[A-Za-z0-9.:-]+(/[A-Za-z0-9._-]+)*/sessions/${GW_SESSION_ID}/env$ ]] \
+    || _gw_bad="${_gw_bad:+$_gw_bad, }pull_url"
   GW_RAIL="$(jq -r '.rail // ""' "$_gw_resp")"
   GW_EXPIRES_AT="$(jq -r '.session.expires_at // "?"' "$_gw_resp")"
   GW_CONTEXT_TOKENS="$(jq -r '.context_tokens // "" | tostring' "$_gw_resp")"
   HARNESS="$(jq -r '.harness // ""' "$_gw_resp")"
   MODEL="$(jq -r '.model // ""' "$_gw_resp")"
-  rm -f "$_gw_resp"   # it held the token; GW_ENV_JSON is the only copy from here on
+  rm -f "$_gw_resp"
   [ -n "$MODEL" ] || _gw_bad="${_gw_bad:+$_gw_bad, }model"
-  # The harness invocation's model comes from the gateway's answer, never the static chain.
+  # The harness invocation's model comes from the gateway's answer, never the static chain: the
+  # policy id with its rail prefix removed — GW-MODEL-RESOLVE's strip, which this launcher performed
+  # first — and, for opencode, under the `gateway` provider GW-SESSIONS-ENV names. The pulled env
+  # carries the same values; the launcher just cannot read them, by design.
+  case "$GW_RAIL" in
+    anthropic) _gw_wire="${MODEL#claude/}";;
+    opencode)  _gw_wire="${MODEL#opencode-go/}";;
+    *)         _gw_wire="$MODEL";;
+  esac
   case "$HARNESS" in
-    claude)   GW_CLAUDE_MODEL="$(printf '%s' "$GW_ENV_JSON" | jq -r '.ANTHROPIC_MODEL // ""' 2>/dev/null)" || GW_CLAUDE_MODEL=""
-              [ -n "$GW_CLAUDE_MODEL" ] || _gw_bad="${_gw_bad:+$_gw_bad, }ANTHROPIC_MODEL";;
-    opencode) OPENCODE_MODEL="$(printf '%s' "$GW_ENV_JSON" | jq -r '.OPENCODE_CONFIG_CONTENT // "" | fromjson? | .model // ""' 2>/dev/null)" || OPENCODE_MODEL=""
-              [ -n "$OPENCODE_MODEL" ] || _gw_bad="${_gw_bad:+$_gw_bad, }OPENCODE_CONFIG_CONTENT.model";;
-    goose)    _gw_goose_model="$(printf '%s' "$GW_ENV_JSON" | jq -r '.GOOSE_MODEL // ""' 2>/dev/null)" || _gw_goose_model=""
-              [ -n "$_gw_goose_model" ] || _gw_bad="${_gw_bad:+$_gw_bad, }GOOSE_MODEL";;
+    claude)   GW_CLAUDE_MODEL="$_gw_wire"
+              [[ ",${GW_ENV_KEYS}," == *",ANTHROPIC_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks ANTHROPIC_MODEL";;
+    opencode) OPENCODE_MODEL="gateway/${_gw_wire}"
+              [[ ",${GW_ENV_KEYS}," == *",OPENCODE_CONFIG_CONTENT,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks OPENCODE_CONFIG_CONTENT";;
+    goose)    [[ ",${GW_ENV_KEYS}," == *",GOOSE_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks GOOSE_MODEL";;
     *)        _gw_bad="${_gw_bad:+$_gw_bad, }harness '${HARNESS}' (this launcher runs claude|opencode|goose)";;
   esac
   if [ -n "$_gw_bad" ]; then
     echo "→ gateway(sessions): defer — [dispatch-unusable: ${_gw_bad}] retry_after=?s — FAIL CLOSED, releasing and not dispatching." >&2
     exit 1   # the EXIT trap releases the session
   fi
-  echo "→ gateway(sessions): dispatch ${MODEL} [rail=${GW_RAIL},harness=${HARNESS},session=${GW_SESSION_ID},context_tokens=${GW_CONTEXT_TOKENS:-null}] (task=${TASK:-adhoc}, round=${ROUND})"
+  echo "→ gateway(sessions): dispatch ${MODEL} [rail=${GW_RAIL},harness=${HARNESS},session=${GW_SESSION_ID},context_tokens=${GW_CONTEXT_TOKENS:-null}] (task=${TASK:-adhoc}, round=${ROUND}) — bound to ${PROJECT}/agentstack-worker pod ${GW_POD}; the pod pulls env ${GW_ENV_KEYS}"
+  # The pod command's FIRST step (WRAPPED, ahead of the harness and outside its tee — nothing of it
+  # reaches /tmp/run.log): read the projected token, POST the pull URL, export exactly the
+  # `env_keys` from the answer, drop the locals. Any failure exits 97 BEFORE the harness starts.
+  # Every harness gets this same text. Static: it reads only in-pod env (AGENT_GATEWAY_PULL_URL /
+  # AGENT_GATEWAY_ENV_KEYS, rendered by the gateway-env-pull block) and expands only in the pod.
+  GW_PULL_PRELUDE='_gw_t="$(cat /var/run/secrets/agent-gateway/token)" && _gw_env="$(curl -fsS --max-time 30 --retry 3 --retry-delay 2 --retry-connrefused -X POST -H "Authorization: Bearer ${_gw_t}" "$AGENT_GATEWAY_PULL_URL")" || { echo "→ gateway(sessions): env pull FAILED at ${AGENT_GATEWAY_PULL_URL} — the harness does not start (FU-270)" >&2; exit 97; }; unset _gw_t; for _gw_k in ${AGENT_GATEWAY_ENV_KEYS//,/ }; do _gw_v="$(printf "%s" "$_gw_env" | jq -er --arg k "$_gw_k" ".env[\$k] | strings")" || { echo "→ gateway(sessions): the env pull answer lacks ${_gw_k} — the harness does not start (FU-270)" >&2; exit 97; }; export "${_gw_k}=${_gw_v}"; done; unset _gw_env _gw_v _gw_k; echo "→ gateway(sessions): env pulled (${AGENT_GATEWAY_ENV_KEYS})"; '
+
   # The skipped region's outputs, as the gateway decided them (set -u reads them downstream).
   AGENT_ROUTER="off"; OR_MIN="${OPENROUTER_MIN_CREDIT:-0.25}"; OR_CREDITS=""; OR_CAPACITY_DOWN=""; RAIL_DEGRADED=""
   MODEL_RAIL="$GW_RAIL"; MODEL_HARNESS="$HARNESS"; MODEL_MODEL="$MODEL"; STRUCK_MODEL="$MODEL"
@@ -1497,6 +1532,9 @@ case "$TASK" in
   issue-[0-9]*|pr-[0-9]*) POD="agent-${PROJECT}-${TASK//[^a-z0-9]/-}-r${ROUND}";;
   *) POD="agent-${PROJECT}-$(date -u +%H%M%S)";;
 esac
+# FU-270: a /sessions ride's pod name is the one its session is BOUND to (computed by the same rule
+# in the gateway-sessions block) — a second timestamp here would bind the env to a pod never created.
+[ -z "${GW_POD:-}" ] || POD="$GW_POD"
 
 # ── FU-042 guard (a): the open-PR-liveness check, as a FUNCTION (sentinel-wrapped) so the
 # clause-replay fixture can drive its five arms without replaying the pre-flight's other guards
@@ -2042,7 +2080,7 @@ if [ "$HARNESS" = "claude" ]; then
     "$HERE/stacks.json" 2>/dev/null | head -1)}"
   CLAUDE_ENV=$'        - name: ANTHROPIC_BASE_URL\n          value: "'"$PROXY_URL"$'/anthropic"\n        - name: ANTHROPIC_AUTH_TOKEN\n          value: "ref:'"$NS"$'/claude-session"\n        - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\n          value: "1"\n        - name: CLAUDE_CODE_ENABLE_TELEMETRY\n          value: "1"\n        - name: OTEL_METRICS_EXPORTER\n          value: "otlp"\n        - name: OTEL_LOGS_EXPORTER\n          value: "otlp"\n        - name: OTEL_EXPORTER_OTLP_PROTOCOL\n          value: "http/protobuf"\n        - name: OTEL_EXPORTER_OTLP_ENDPOINT\n          value: "http://otel-collector.monitoring.svc.cluster.local:4318"\n        - name: OTEL_RESOURCE_ATTRIBUTES\n          value: "service.name=claude-code,role=worker,stack='"${STACK_LABEL:-none}"$',project='"$PROJECT"$'"'
   # FU-270: a /sessions ride's ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_MODEL are the
-  # gateway's `env` (GW-SESSIONS-ENV, Secret-held) — drop the proxy pair; telemetry stays.
+  # gateway's `env` (GW-SESSIONS-ENV, pulled in-pod — GW-SESSIONS-PULL) — drop the proxy pair; telemetry stays.
   if [ -n "${GW_SESSIONS:-}" ]; then
     CLAUDE_ENV="$(printf '%s\n' "$CLAUDE_ENV" | sed '/- name: ANTHROPIC_\(BASE_URL\|AUTH_TOKEN\)$/,+1d')"
   fi
@@ -2071,7 +2109,7 @@ if [ "$HARNESS" = "claude" ]; then
   OR_KEY_ENV=""   # subscription tier: no OpenRouter key at all — the pod's only cred is the claude ref
 fi
 # FU-270: a /sessions ride holds NO OpenRouter key or ref and no proxy baseURL — its one LLM
-# credential is the gateway session token (Secret-held, GW-SESSIONS-TOKEN). Git stays on the broker
+# credential is the gateway session token (pulled in-pod, GW-SESSIONS-PULL). Git stays on the broker
 # (UC-1: "the pod gets it from the broker, not from here").
 if [ -n "${GW_SESSIONS:-}" ]; then
   OR_KEY_ENV=""
@@ -2228,7 +2266,9 @@ if [ -n "$RUN_CMD" ]; then
   # the strike/report/salvage never ran. python IS baked + normally on PATH (agent-base/devbox.json,
   # /opt/agent/.devbox), so this guards that anomaly, not a missing dep. `\$PATH` expands in-pod.
   FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]} PATH=/opt/agent/.devbox/nix/profile/default/bin:\$PATH agent-finalize /tmp/run.log"
-  WRAPPED="${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
+  # FU-270: GW_PULL_PRELUDE (a /sessions ride only, empty otherwise) pulls the pod's LLM env first,
+  # outside the tee — see the gateway-sessions block.
+  WRAPPED="${OC_SETUP}${GW_PULL_PRELUDE}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
   # ── the payload ceiling (homelab#242) ─────────────────────────────────────────────────────────
   # `args: ["bash","-c","<WRAPPED>"]` is ONE argv string when the kubelet execs the container, and
   # the card-spliced recipe rides inside it as base64. Measure it HERE: this is the last point at
@@ -2831,38 +2871,27 @@ case "$TASK" in issue-[0-9]*|pr-[0-9]*)
 # FU-160 phase 1 of 2. Everything above this line is the launcher's DETERMINISTIC dispatch cost —
 # the router consult, the rail probe, the card + recipe build, the pre-flight guards, the
 # subscription latch, the credit gate, the stack-cache probe, the argv ceiling. It closes here
-# ── FU-270: the pod's LLM env — today's two goose lines, or the gateway's `env` VERBATIM ────────
-# GW-SESSIONS-ENV: the dispatch `env` is the pod's COMPLETE LLM environment and the launcher adds
-# nothing LLM-shaped. Its values carry the session token (a credential, GW-SESSIONS-TOKEN), so they
-# never become literal `value:`s in the manifest: they go into ONE per-ride Secret (stdin to
-# kubectl, never argv) and the pod reads every key through a secretKeyRef. The Secret dies with the
-# session (gw_release) and, as the belt, with the pod (ownerReference patched after create).
-# >>>REPLAY:gateway-env-secret>>>
+# ── FU-270: the pod's LLM env — today's two goose lines, or the gateway's PULL wiring ──────────────
+# GW-SESSIONS-PULL (operator ruling 2026-10-17): the launcher holds no LLM credential and writes no
+# Secret. The pod gets (1) the pull URL and the env key NAMES as plain values, (2) a projected
+# ServiceAccount token with audience agent-gateway and the shortest expiry the API allows (600 s —
+# the pull happens in the command's first seconds), mounted at /var/run/secrets/agent-gateway, and
+# (3) GW_PULL_PRELUDE at the head of its command, which pulls and exports the env (at most once —
+# restartPolicy Never). The manifest therefore carries no token, literal or by reference.
+# >>>REPLAY:gateway-env-pull>>>
 LLM_ENV=$'        - name: GOOSE_PROVIDER\n          value: "openrouter"\n        - name: GOOSE_MODEL\n          value: "'"${GOOSE_MODEL}"'"'
+GW_TOKEN_MOUNT=""; GW_TOKEN_VOLUME=""
 if [ -n "${GW_SESSIONS:-}" ]; then
-  GW_SECRET="${POD}-gateway-env"
-  LLM_ENV=""
-  for _gw_k in $(printf '%s' "$GW_ENV_JSON" | jq -r 'keys[]'); do
-    LLM_ENV="${LLM_ENV:+${LLM_ENV}
-}        - name: ${_gw_k}
-          valueFrom:
-            secretKeyRef: { name: ${GW_SECRET}, key: ${_gw_k} }"
-  done
-  if printf '%s' "$GW_ENV_JSON" | jq -c --arg name "$GW_SECRET" --arg ns "$NS" --arg sid "$GW_SESSION_ID" \
-       '{apiVersion: "v1", kind: "Secret", type: "Opaque",
-         metadata: {name: $name, namespace: $ns,
-                    labels: {app: "agent-session", "homelab.teststuff.net/gateway-session": $sid}},
-         stringData: .}' \
-     | "$KUBECTL" $KUBE -n "$NS" create -f - >/dev/null; then
-    GW_SECRET_CREATED=1
-    echo "→ gateway(sessions): pod LLM env = Secret ${GW_SECRET} ($(printf '%s' "$GW_ENV_JSON" | jq -r 'keys | join(",")')) — no literal token in the manifest"
-  else
-    echo "→ gateway(sessions): defer — [env-secret-create-failed: ${NS}/${GW_SECRET}] retry_after=?s — FAIL CLOSED, releasing and not dispatching." >&2
-    exit 1   # the EXIT trap releases the session
-  fi
+  LLM_ENV="        - name: AGENT_GATEWAY_PULL_URL
+          value: \"${GW_PULL_URL}\"
+        - name: AGENT_GATEWAY_ENV_KEYS
+          value: \"${GW_ENV_KEYS}\""
+  GW_TOKEN_MOUNT=$'\n        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }'
+  GW_TOKEN_VOLUME=$'\n    - name: gateway-token\n      projected:\n        sources:\n          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }'
+  echo "→ gateway(sessions): pod LLM env = pulled in-pod from ${GW_PULL_URL} (${GW_ENV_KEYS}) with a projected SA token (audience agent-gateway) — no token in the launcher or the manifest"
   SUB_LABEL="${SUB_LABEL}, \"homelab.teststuff.net/gateway-session\": \"${GW_SESSION_ID}\""
 fi
-# <<<REPLAY:gateway-env-secret<<<
+# <<<REPLAY:gateway-env-pull<<<
 # because past this point a pod exists and the cost stops being ours.
 run_phase dispatch-gates
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
@@ -3080,17 +3109,11 @@ ${CLAUDE_ENV}
       resources:
         requests: ${AGENT_REQUESTS}
         limits:   ${AGENT_LIMITS}
-      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${IV_MOUNT}${PF_CM_MOUNT}${RETRO_GH_MOUNT}
-  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${IV_VOLUME}${PF_CM_VOLUME}${RETRO_GH_VOLUME}
+      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}${IV_MOUNT}${PF_CM_MOUNT}${RETRO_GH_MOUNT}${GW_TOKEN_MOUNT}
+  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}${IV_VOLUME}${PF_CM_VOLUME}${RETRO_GH_VOLUME}${GW_TOKEN_VOLUME}
 EOF
 
 PF_POD_CREATED="1"
-# FU-270: the env Secret is owned by the pod from here — a launcher killed mid-follow (the cluster
-# dispatch path's normal end, see FU-160 above) still leaves nothing behind once the pod is reaped.
-if [ -n "${GW_SECRET_CREATED:-}" ]; then
-  _gw_uid="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
-  [ -n "$_gw_uid" ] && "$KUBECTL" $KUBE -n "$NS" patch secret "$GW_SECRET" --type=merge       -p "{\"metadata\":{\"ownerReferences\":[{\"apiVersion\":\"v1\",\"kind\":\"Pod\",\"name\":\"${POD}\",\"uid\":\"${_gw_uid}\",\"blockOwnerDeletion\":false}]}}" >/dev/null 2>&1     || echo "→ gateway(sessions): ownerReference patch on ${GW_SECRET} failed — the launcher's release still deletes it" >&2
-fi
 if [ -n "${PF_CM_CREATED:-}" ]; then
   PF_POD_UID="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
   if [ -n "$PF_POD_UID" ]; then
@@ -3715,7 +3738,7 @@ else
   # env Secret goes with the pod (ownerReference).
   if [ -n "${GW_SESSIONS:-}" ] && [ -n "${GW_SESSION_ID:-}" ]; then
     echo "→ gateway(sessions): interactive — session ${GW_SESSION_ID} is NOT released by this launcher; it expires at ${GW_EXPIRES_AT} (session TTL)"
-    GW_SESSION_ID=""; GW_SECRET_CREATED=""
+    GW_SESSION_ID=""
   fi
   echo "→ pod ${POD} ready at /work/repo. harnesses are wired to OpenRouter (model: ${MODEL}); try:"
   echo "    goose run -t \"<task>\"        # or: goose run --recipe .agents/fix.yaml --params issue=N"

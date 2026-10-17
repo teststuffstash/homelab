@@ -1,9 +1,10 @@
-CALL curl POST http://127.0.0.1:18080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1,"harness":"goose"}
+CALL curl POST http://127.0.0.1:18080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1,"harness":"goose","bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-120000"}}
 CALL curl DELETE http://127.0.0.1:18080/sessions/0123abcd
-OUT → gateway(sessions): dispatch deepseek/deepseek-v4-flash [rail=openrouter,harness=goose,session=0123abcd,context_tokens=null] (task=adhoc, round=1)
+OUT → gateway(sessions): dispatch deepseek/deepseek-v4-flash [rail=openrouter,harness=goose,session=0123abcd,context_tokens=null] (task=adhoc, round=1) — bound to homelab/agentstack-worker pod agent-homelab-120000; the pod pulls env OPENAI_BASE_URL,OPENAI_API_KEY,GOOSE_PROVIDER,GOOSE_MODEL
 OUT GW_SESSIONS='1' HARNESS='goose' MODEL='deepseek/deepseek-v4-flash'
 OUT GW_RAIL='openrouter' GW_CONTEXT_TOKENS='' GW_CLAUDE_MODEL='' OPENCODE_MODEL='deepseek/deepseek-v4-flash'
 OUT AGENT_ROUTER='off' OR_CREDITS='' STRUCK_MODEL='deepseek/deepseek-v4-flash'
-OUT GW_ENV keys: GOOSE_MODEL,GOOSE_PROVIDER,OPENAI_API_KEY,OPENAI_BASE_URL
+OUT GW_POD='agent-homelab-120000' GW_ENV_KEYS='OPENAI_BASE_URL,OPENAI_API_KEY,GOOSE_PROVIDER,GOOSE_MODEL' GW_PULL_URL='http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env' GW_PULL_PRELUDE set: yes
+OUT gws_ in launcher state: 0
 OUT → gateway(sessions): released 0123abcd
 RC 0

@@ -1,9 +1,10 @@
-CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1,"rail":"opencode"}
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1,"rail":"opencode","bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-120000"}}
 CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd
-OUT → gateway(sessions): dispatch opencode-go/deepseek-v4-flash [rail=opencode,harness=opencode,session=0123abcd,context_tokens=1000000] (task=adhoc, round=1)
+OUT → gateway(sessions): dispatch opencode-go/deepseek-v4-flash [rail=opencode,harness=opencode,session=0123abcd,context_tokens=1000000] (task=adhoc, round=1) — bound to homelab/agentstack-worker pod agent-homelab-120000; the pod pulls env OPENCODE_CONFIG_CONTENT
 OUT GW_SESSIONS='1' HARNESS='opencode' MODEL='opencode-go/deepseek-v4-flash'
 OUT GW_RAIL='opencode' GW_CONTEXT_TOKENS='1000000' GW_CLAUDE_MODEL='' OPENCODE_MODEL='gateway/deepseek-v4-flash'
 OUT AGENT_ROUTER='off' OR_CREDITS='' STRUCK_MODEL='opencode-go/deepseek-v4-flash'
-OUT GW_ENV keys: OPENCODE_CONFIG_CONTENT
+OUT GW_POD='agent-homelab-120000' GW_ENV_KEYS='OPENCODE_CONFIG_CONTENT' GW_PULL_URL='http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env' GW_PULL_PRELUDE set: yes
+OUT gws_ in launcher state: 0
 OUT → gateway(sessions): released 0123abcd
 RC 0

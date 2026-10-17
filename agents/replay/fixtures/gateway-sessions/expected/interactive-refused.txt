@@ -1,0 +1,2 @@
+ERR PREFLIGHT REFUSED: an interactive session under AGENT_GATEWAY=sessions — the pod pulls its LLM env once, in its command (GW-SESSIONS-PULL); pass --run or --recipe. No session, no pod.
+RC 2
