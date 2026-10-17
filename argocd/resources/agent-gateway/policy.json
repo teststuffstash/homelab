@@ -48,12 +48,12 @@
     },
     "opencode": {
       "admission": {
-        "_comment": "⚖ copied from argocd/resources/openrouter-proxy/gometer.py (snapshot 2026-09-17) — a DUPLICATE until the old proxy retires: latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900; prices = GO_PRICES / GO_PRICES_PEAK rows for the policy's priced Go model ($/M; null = gometer's None, draws 0); fallback = _GO_MAX_PRICE/2 each for in/out (max in+out = kimi-k3 3.00+15.00), cache 0 — what an unpriced id (claude-sonnet-4-6) draws at; peak hours = GO_PEAK_HOURS_UTC / GO_PEAK_WEEKDAYS; windows = _GO_WINDOW_DEFAULTS (budgets 12/30/60, anchors chain/weekly mon 00:00/monthly 13 11:30; GO_WINDOW_ANCHORS unset in deployment.yaml) with threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
+        "_comment": "⚖ copied from argocd/resources/openrouter-proxy/gometer.py (snapshot 2026-09-17) — a DUPLICATE until the old proxy retires: latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900; prices = GO_PRICES / GO_PRICES_PEAK rows for the policy's priced Go model ($/M; null = gometer's None, draws 0) — deepseek-v4.1-flash since 2026-10-17 (operator ruling; off-peak row re-checked against the console's /api/v2/config cost[] 0.15/0.60/0.003, peak = the docs' exact 2×, docs/spikes/opencode-go-catalog.md F6); fallback = _GO_MAX_PRICE/2 each for in/out (max in+out = kimi-k3 3.00+15.00), cache 0 — what an unpriced id (claude-sonnet-4-6) draws at; peak hours = GO_PEAK_HOURS_UTC / GO_PEAK_WEEKDAYS; windows = _GO_WINDOW_DEFAULTS (budgets 12/30/60, anchors chain/weekly mon 00:00/monthly 13 11:30; GO_WINDOW_ANCHORS unset in deployment.yaml) with threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
         "latch_429_hold_s": 900,
         "window_draw": {
           "prices": {
-            "opencode-go/deepseek-v4-flash": {"in": 0.15, "out": 0.60, "cache_read": 0.003, "cache_write": null,
-                                              "peak": {"in": 0.30, "out": 1.20, "cache_read": 0.006, "cache_write": null}}
+            "opencode-go/deepseek-v4.1-flash": {"in": 0.15, "out": 0.60, "cache_read": 0.003, "cache_write": null,
+                                                "peak": {"in": 0.30, "out": 1.20, "cache_read": 0.006, "cache_write": null}}
           },
           "fallback": {"in": 9.0, "out": 9.0, "cache_read": 0, "cache_write": 0},
           "peak_hours_utc": [[1, 4], [6, 10]],
@@ -67,9 +67,9 @@
       },
       "max_sessions": 3,
       "models": {
-        "light":    "opencode-go/deepseek-v4-flash",
-        "standard": "opencode-go/deepseek-v4-flash",
-        "heavy":    "opencode-go/deepseek-v4-flash"
+        "light":    "opencode-go/deepseek-v4.1-flash",
+        "standard": "opencode-go/deepseek-v4.1-flash",
+        "heavy":    "opencode-go/deepseek-v4.1-flash"
       }
     },
     "openrouter": {
@@ -82,7 +82,7 @@
     }
   },
   "context_tokens": {
-    "opencode-go/deepseek-v4-flash": 1000000
+    "opencode-go/deepseek-v4.1-flash": 1000000
   },
   "control_plane_auth": "enforce",
   "callers": {

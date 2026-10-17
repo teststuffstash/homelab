@@ -21,7 +21,7 @@
 | the dispatch answer names the policy id for (rail, tier) | policy-default | model == rails.<rail>.models.<tier> for every role |
 | no model id from the policy appears in src/ | policy-default | grep finds none |
 | the anthropic body is forwarded byte-untouched | policy-default | upstream body == inbound body |
-| the deployed policy loads under the island's loader, in model-classes.json's spelling | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same rails + roles as policy-default; every model/side-model id is a models.*.ids value of model-classes.json; opencode max_sessions = rails.opencode-go.concurrency |
+| the deployed policy loads under the island's loader, every id known | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same rails + roles as policy-default; every non-opencode model/side-model id is a models.*.ids value of model-classes.json; every opencode id is opencode-go/<id> of a tests/fixtures/go-catalog.json id ⚖; opencode max_sessions = rails.opencode-go.concurrency |
 """
 
 from __future__ import annotations
@@ -55,6 +55,10 @@ pytestmark = rule("GW-MODEL-RESOLVE")
 # service-only checkout): the deployed policy.json and the fleet's model table.
 DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "policy.json"
 MODEL_CLASSES = ISLAND.parent / "argocd" / "resources" / "openrouter-proxy" / "model-classes.json"
+# ⚖ (operator, 2026-10-17): the opencode rail's ids are checked against the gateway-owned Go catalog
+# snapshot, not model-classes.json — that table is the old proxy's, and a Go id added there is a new
+# models key in the live router. The Go-catalog leg (docs/spikes/opencode-go-catalog.md) replaces it.
+GO_CATALOG = ISLAND / "tests" / "fixtures" / "go-catalog.json"
 
 SESSIONS = {
     "go-flash": ({"role": "worker", "harness": "opencode"}, "opencode", "chat"),
@@ -134,7 +138,7 @@ def test_no_model_id_in_code(policy):
 
 @pytest.mark.skipif(not DEPLOYED_POLICY.exists(), reason="deploy manifests absent (service-only checkout)")
 def test_deployed_policy_loads(policy):
-    """row: the deployed policy loads under the island's loader, in model-classes.json's spelling"""
+    """row: the deployed policy loads under the island's loader, every id known"""
     world(note="against the deployed policy (the configMapGenerator source)")
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
         raw = json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8"))
@@ -146,11 +150,16 @@ def test_deployed_policy_loads(policy):
     with then("every deployed rail's models = {light, standard, heavy}",
               models={r: sorted(v.models) for r, v in deployed.rails.items()}):
         assert all(set(r.models) == {"light", "standard", "heavy"} for r in deployed.rails.values())
+    go = {f"opencode-go/{i}" for i in json.loads(GO_CATALOG.read_text(encoding="utf-8"))["ids"]}
+    go_ids = {m for m in (*deployed.rails["opencode"].models.values(), *deployed.rails["opencode"].side_models)}
+    with then("every opencode deployed model id is opencode-go/<id> of the Go catalog snapshot ⚖",
+              checked=sorted(go_ids), unknown={"expected": [], "actual": sorted(go_ids - go)}):
+        assert go_ids <= go, sorted(go_ids - go)
     if MODEL_CLASSES.exists():
         mc = json.loads(MODEL_CLASSES.read_text(encoding="utf-8"))
         known = {wire for m in mc["models"].values() if isinstance(m, dict) for wire in m["ids"].values()}
-        ids = {m for r in deployed.rails.values() for m in (*r.models.values(), *r.side_models)}
-        with then("every deployed model id is spelled as in model-classes.json", unknown={"expected": [], "actual": sorted(ids - known)}):
+        ids = {m for name, r in deployed.rails.items() if name != "opencode" for m in (*r.models.values(), *r.side_models)}
+        with then("every non-opencode deployed model id is spelled as in model-classes.json", unknown={"expected": [], "actual": sorted(ids - known)}):
             assert ids <= known, sorted(ids - known)
         then_eq("opencode max_sessions", deployed.rails["opencode"].max_sessions, mc["rails"]["opencode-go"]["concurrency"],
                 claim=f"opencode max_sessions = model-classes.json opencode-go concurrency ({mc['rails']['opencode-go']['concurrency']})")
