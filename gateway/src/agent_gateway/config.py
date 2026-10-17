@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -308,6 +309,57 @@ def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
     return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows))), float(margin)
 
 
+CONTROL_PLANE_AUTH_MODES = ("observe", "enforce")
+# A caller key is a ServiceAccount username exactly as a TokenReview names it: a DNS-1123 label
+# namespace, a DNS-1123 subdomain name (GW-SESSIONS-AUTH). No wildcard can match this shape.
+_CALLER_RE = re.compile(r"^system:serviceaccount:([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?):([a-z0-9]([-a-z0-9.]*[a-z0-9])?)$")
+_NS_RE = re.compile(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$")
+
+
+@dataclass(frozen=True)
+class CallerPolicy:
+    """`callers.<system:serviceaccount:ns:sa>` (GW-SESSIONS-AUTH): what that control-plane caller
+    may ask for — the stacks and roles of its admissions, and the namespaces a `bind` may name."""
+    identity: str
+    stacks: frozenset[str]
+    roles: frozenset[str]
+    bind_namespaces: frozenset[str]
+
+
+def _callers(d, stacks: dict, roles: dict) -> dict[str, CallerPolicy]:
+    """Every entry names exact values the policy knows — no wildcard, no unknown stack or role: a
+    typo must never become a silent grant (or a silent denial nobody can read off the policy)."""
+    if not isinstance(d, dict):
+        raise PolicyError("policy: callers must be an object {system:serviceaccount:<ns>:<sa>: {stacks, roles, bind_namespaces}}")
+    out: dict[str, CallerPolicy] = {}
+    for ident, c in d.items():
+        if ident.startswith("_"):
+            continue
+        where = f"callers.{ident}"
+        if not _CALLER_RE.match(ident):
+            raise PolicyError(f"policy: {where} is not a ServiceAccount username system:serviceaccount:<namespace>:<name>")
+        if not isinstance(c, dict):
+            raise PolicyError(f"policy: {where} must be an object {{stacks, roles, bind_namespaces}}")
+        _keys(where, c, {"stacks", "roles", "bind_namespaces"})
+        lists = {}
+        for key in ("stacks", "roles", "bind_namespaces"):
+            v = c.get(key)
+            if not isinstance(v, list) or any(not isinstance(x, str) for x in v):
+                raise PolicyError(f"policy: {where}.{key} must be a list of strings ([] = none)")
+            lists[key] = v
+        for st in lists["stacks"]:
+            if st not in stacks:
+                raise PolicyError(f"policy: {where}.stacks names {st!r}, which is not a policy stack")
+        for ro in lists["roles"]:
+            if ro not in roles:
+                raise PolicyError(f"policy: {where}.roles names {ro!r}, which is not a policy role")
+        for ns in lists["bind_namespaces"]:
+            if not _NS_RE.match(ns):
+                raise PolicyError(f"policy: {where}.bind_namespaces names {ns!r}, which is not a namespace (a DNS-1123 label)")
+        out[ident] = CallerPolicy(ident, frozenset(lists["stacks"]), frozenset(lists["roles"]), frozenset(lists["bind_namespaces"]))
+    return out
+
+
 @dataclass(frozen=True)
 class Policy:
     stacks: dict[str, StackPolicy]
@@ -317,6 +369,10 @@ class Policy:
     defer_retry_s: int
     context_tokens: dict[str, int]  # policy model id -> declared harness window; absent = null, never a guess
     raw: dict = field(repr=False, compare=False)
+    # GW-SESSIONS-AUTH: who may call the control plane, and whether a caller without a valid token
+    # is refused (`enforce`) or admitted, logged and counted (`observe`, the rollout mode).
+    control_plane_auth: str = "enforce"
+    callers: dict[str, CallerPolicy] = field(default_factory=dict)
 
     def context_tokens_for(self, model: str) -> int | None:
         return self.context_tokens.get(model)
@@ -367,6 +423,14 @@ class Policy:
             if harness not in HARNESSES:
                 raise PolicyError(f"policy: roles.{name}.harness {harness!r} unknown")
             roles[name] = RolePolicy(name, rl, tier, harness)
+        # Both control-plane keys are REQUIRED: a policy that says nothing about its callers must
+        # not quietly mean "anyone" (or "no one").
+        mode = d.get("control_plane_auth")
+        if mode not in CONTROL_PLANE_AUTH_MODES:
+            raise PolicyError(f"policy: control_plane_auth is required, one of {', '.join(CONTROL_PLANE_AUTH_MODES)}")
+        if "callers" not in d:
+            raise PolicyError("policy: callers is required ({} = no caller is authorized)")
+        callers = _callers(d["callers"], stacks, roles)
         return Policy(
             stacks=stacks,
             roles=roles,
@@ -375,6 +439,8 @@ class Policy:
             defer_retry_s=int(d.get("defer_retry_s", 60)),
             context_tokens=context_tokens,
             raw=d,
+            control_plane_auth=mode,
+            callers=callers,
         )
 
     @staticmethod

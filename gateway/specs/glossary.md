@@ -132,8 +132,10 @@ implementation exists; the production one is a `⚑ gap`.
 ## control plane / data plane
 
 Control plane = `/sessions` (admission, lookup, release), `/healthz`, `/metrics`. Data plane =
-the two dialect paths the pod's LLM traffic rides. The control plane is called by launchers
-with no credential in v0 (in-cluster only); the data plane requires a session token.
+the two dialect paths the pod's LLM traffic rides. `/sessions` is called by launchers with their
+projected ServiceAccount token, checked against the policy's `callers`
+([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth); `/healthz` and `/metrics` stay open,
+in-cluster only); the data plane requires a session token.
 
 ## world
 

@@ -10,7 +10,8 @@ a single-world module declares it once in its docstring and omits it from row id
 
 | world | file | what it is |
 |---|---|---|
-| `policy-default` | [policy-default.json](policy-default.json) | the test policy: two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json`; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖) |
+| `policy-default` | [policy-default.json](policy-default.json) | the test policy: two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json`; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖); `control_plane_auth: observe` with two fixture `callers` (the platform loop, the specs reviewer — [GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth)), so a row that sends no caller token is admitted |
+| `policy-enforce` | [policy-enforce.json](policy-enforce.json) | `policy-default` with `control_plane_auth: enforce` and nothing else changed — for the GW-SESSIONS-AUTH enforce rows only |
 | `policy-codex` | [policy-codex.json](policy-codex.json) | `policy-default` plus the codex rail (`max_sessions` 2, the fixture model `codex/fixture-model`, `headroom` 120 s / 0.95 / the 300- and 10080-minute windows, `oauth.refresh_margin_s` 30) that only `prober` may ride — for the codex rows only; the deployed policy declares no codex rail |
 
 Names in the test policy (namespaces, Secret names) are **fixture names**, not production
@@ -52,6 +53,16 @@ failures) with dummy `DUMMY-SECRET-…` values; a counting fake `exchange` retur
 HTTP adapter and a MockTransport endpoint: fabricated JWTs, rotation/rejection responses and
 request capture. No network or vendor account is involved.
 Headroom reports enter through the in-process seam (`app.state.codex.headroom.observe`).
+
+## The fake TokenReview (`StaticTokenReviews`)
+
+The kube TokenReview API is a seam (`TokenReviewer` protocol). `StaticTokenReviews` maps a
+presented token to the review status the API would answer (authenticated, username, audiences,
+the pod-name extra); any other token reviews as unauthenticated, and `transient` makes every
+review raise. One fake serves both readers of a projected token: the env pull
+([GW-SESSIONS-PULL](../endpoints/sessions.md#gw-sessions-pull)) and the control plane's caller
+([GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth)). Fixture tokens are plain
+`fake-…` strings, never JWT-shaped (the one JWT-shaped literal is GW-REDACT's masking row).
 
 ## The credential source (`FakeSecrets`)
 

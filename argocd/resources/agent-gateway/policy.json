@@ -84,5 +84,18 @@
   "context_tokens": {
     "opencode-go/deepseek-v4-flash": 1000000
   },
+  "control_plane_auth": "observe",
+  "callers": {
+    "system:serviceaccount:platform-agents:agentstack-loop": {
+      "stacks": ["platform"],
+      "roles": ["worker"],
+      "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]
+    },
+    "system:serviceaccount:agent-coordinator:agent-coordinator": {
+      "stacks": ["platform"],
+      "roles": ["reviewer", "worker"],
+      "bind_namespaces": []
+    }
+  },
   "session_ttl_s": 14400
 }

@@ -29,6 +29,10 @@
       }
     }
   },
+  "caller": {
+    "$comment": "GW-SESSIONS-AUTH — every POST /sessions, GET /sessions/{id} and DELETE /sessions/{id} carries `Authorization: Bearer <the caller's projected ServiceAccount token, audience agent-gateway>`, TokenReview'd through the same path as the pull. The reviewed username is looked up in the policy's `callers` map; under `control_plane_auth: observe` an absent or invalid token is admitted (and counted), under `enforce` it is refused. Not a body field: a header, so no request shape changes.",
+    "x-requirements": ["GW-SESSIONS-AUTH"]
+  },
   "post": {
     "input": {
       "type": "object",
@@ -138,7 +142,7 @@
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write"],
+      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller"],
       "properties": {
         "id": { "$ref": "#/$defs/session_id" },
         "stack": { "$ref": "#/$defs/stack" },
@@ -155,7 +159,8 @@
         "tokens_in": { "type": "integer", "minimum": 0, "description": "uncached input tokens (openai dialect: prompt_tokens - cached_tokens)" },
         "tokens_out": { "type": "integer", "minimum": 0 },
         "tokens_cache_read": { "type": "integer", "minimum": 0 },
-        "tokens_cache_write": { "type": "integer", "minimum": 0 }
+        "tokens_cache_write": { "type": "integer", "minimum": 0 },
+        "caller": { "type": ["string", "null"], "pattern": "^system:serviceaccount:[a-z0-9-]+:[a-z0-9.-]+$", "description": "the admitting caller's reviewed ServiceAccount username; null = admitted with no valid caller token (control_plane_auth observe)", "x-requirements": ["GW-SESSIONS-AUTH"] }
       },
       "x-requirements": ["GW-SESSIONS-TOKEN"]
     }
@@ -189,9 +194,15 @@
   "errors": {
     "malformed-body": { "status": 400, "description": "the request body fails this schema's `post.input` (missing field, enum miss, negative round)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
     "harness-rail-mismatch": { "status": 400, "description": "an explicit `harness` and `rail` whose dialects do not meet (goose/opencode x anthropic, codex x anything but codex, claude x codex)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
-    "session-not-found": { "status": 404, "description": "GET, DELETE or a pull on an id no row carries", "x-requirements": ["GW-SESSIONS-TOKEN", "GW-SESSIONS-RELEASE", "GW-SESSIONS-PULL"] },
+    "session-not-found": { "status": 404, "description": "GET, DELETE or a pull on an id no row carries (GET / DELETE: after the caller check)", "x-requirements": ["GW-SESSIONS-TOKEN", "GW-SESSIONS-RELEASE", "GW-SESSIONS-PULL", "GW-SESSIONS-AUTH"] },
     "pull-identity-refused": { "status": 403, "description": "the pull's bearer is absent, does not authenticate, lacks audience agent-gateway, or is not the bind's ServiceAccount (and pod); also any pull of an unbound session", "x-requirements": ["GW-SESSIONS-PULL"] },
-    "tokenreview-transient": { "status": 503, "description": "the TokenReview API failed or was unreachable — nothing is known about the caller; retry", "x-requirements": ["GW-SESSIONS-PULL"] },
+    "tokenreview-transient": { "status": 503, "description": "the TokenReview API failed or was unreachable — nothing is known about the caller; retry (a pull, or a control-plane call under enforce)", "x-requirements": ["GW-SESSIONS-PULL", "GW-SESSIONS-AUTH"] },
+    "caller-unauthenticated": { "status": 401, "description": "control_plane_auth enforce: the control-plane call carries no bearer, or one that does not review as authenticated for audience agent-gateway", "x-requirements": ["GW-SESSIONS-AUTH"] },
+    "caller-unknown": { "status": 403, "description": "the caller's reviewed ServiceAccount is not a key of the policy's `callers` (both modes)", "x-requirements": ["GW-SESSIONS-AUTH"] },
+    "caller-stack-denied": { "status": 403, "description": "the body's `stack` is not in the caller's `stacks`", "x-requirements": ["GW-SESSIONS-AUTH"] },
+    "caller-role-denied": { "status": 403, "description": "the body's `role` is not in the caller's `roles`", "x-requirements": ["GW-SESSIONS-AUTH"] },
+    "caller-bind-denied": { "status": 403, "description": "the body's `bind.namespace` is not in the caller's `bind_namespaces`", "x-requirements": ["GW-SESSIONS-AUTH"] },
+    "caller-not-owner": { "status": 403, "description": "GET or DELETE of a session another caller admitted", "x-requirements": ["GW-SESSIONS-AUTH"] },
     "env-already-delivered": { "status": 409, "description": "the session's env was already pulled — at most once", "x-requirements": ["GW-SESSIONS-PULL"] },
     "session-released": { "status": 401, "description": "a pull of a released session — the data plane's verdict", "x-requirements": ["GW-SESSIONS-PULL", "GW-SESSIONS-RELEASE"] },
     "session-expired": { "status": 401, "description": "a pull of an expired session — the data plane's verdict", "x-requirements": ["GW-SESSIONS-PULL", "GW-SESSIONS-RELEASE"] },

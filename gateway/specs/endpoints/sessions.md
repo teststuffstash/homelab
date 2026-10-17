@@ -9,7 +9,9 @@ schema: sessions.schema.json
 seam of the island ([UC-1](../use-cases/uc-1-worker-ride.md) steps ① and ④). The caller sends
 `(stack, role, task, round)` and optional `tier` / `harness` / `rail`; the gateway answers
 `dispatch` (a session, a rail, a harness, a model, the pod's complete LLM env) or `defer` (a
-typed reason and when to ask again). A body carrying `bind` gets a dispatch without the
+typed reason and when to ask again). The caller authenticates with its projected ServiceAccount
+token and may ask only for what the policy's `callers` grant it ([GW-SESSIONS-AUTH](#gw-sessions-auth)).
+A body carrying `bind` gets a dispatch without the
 credential, and the bound pod pulls its env itself ([GW-SESSIONS-PULL](#gw-sessions-pull)). No caller names a model: the policy does, and every
 data-plane request is resolved from the session identity
 ([GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)).
@@ -26,7 +28,8 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
-| [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; the caller-authenticated control plane and a codex `auth.command` re-read are `⚑ gap` (rows below) |
+| [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; a codex `auth.command` re-read is `⚑ gap` (row below) |
+| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `observe` (the knob); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
 | [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
@@ -301,7 +304,7 @@ the token; `GET /sessions/{id}` returns the row without it. The data plane accep
 | "the token has the fixed shape" | dispatch || `token` matches `^gws_[A-Za-z0-9_-]{32}$` |
 | "two dispatches never share a token" | dispatch twice || tokens differ |
 | "the row holds a hash, not the token" | dispatch, read the DB || `token_hash` = sha256 hex of the token; no column equals the token |
-| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write`; no `token`, no `token_hash` |
+| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller` (the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
 | "GET on an unknown id" | `GET /sessions/nope` || 404 `session-not-found` |
 | "expiry is the policy TTL" | dispatch at T || `expires_at` = T + 14400 s (`policy-default`) |
 | "a request through the data plane is counted on the row" | dispatch → one `upstream-ok` call → GET || `requests` = 1, `tokens_in`/`tokens_out` = the upstream `usage` (`tokens_in` = uncached input; the cache classes in `tokens_cache_read`/`tokens_cache_write` — GW-METRICS) |
@@ -352,6 +355,8 @@ the launcher reads both (the harness's context window, the TTL it reports); the 
 *values* do not — the launcher has `model`, the pod gets the wire names in its pulled env.
 The token does not exist yet: the row holds an unminted placeholder no token hashes to. **Without
 `bind` the answer is byte-for-byte GW-SESSIONS-ENV's** — the specs reviewer's launcher depends on it.
+Which namespaces a caller may bind is the policy's `callers` entry for it ([GW-SESSIONS-AUTH](#gw-sessions-auth)):
+the bind is no longer the caller's word alone.
 
 The pod then calls **`POST /sessions/{id}/env`** with `Authorization: Bearer <its projected
 ServiceAccount token>`, audience **`agent-gateway`**. The gateway TokenReviews it
@@ -451,7 +456,6 @@ pull never logs the presented token; a JWT is masked by shape) are
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: the bind is the caller's word" | any caller of `POST /sessions` || the gateway binds whatever identity the body names | the control plane is unauthenticated in v0 ([glossary](../glossary.md#control-plane--data-plane)): a caller that can `POST /sessions` can bind its own ServiceAccount — the reach it already has without `bind` (the token in the answer). Closing it = TokenReview the control-plane caller too |
 | "⚑ gap: a codex `auth.command` re-runs" | a codex harness whose provider `auth.command` calls the pull URL || its second run is 409 `env-already-delivered` | Codex re-runs the command every `refresh_interval_ms` (default 5 min); a token-only, same-pod re-read is needed before a codex harness can use this endpoint — not built |
 
 <details markdown="1"><summary>Evidence</summary>
@@ -459,6 +463,147 @@ pull never logs the presented token; a JWT is masked by shape) are
 Rendered by `scripts/evidence_render.py` from CI.
 
 --8<-- "GW-SESSIONS-PULL.md"
+
+</details>
+
+## GW-SESSIONS-AUTH
+
+*The control plane knows who is asking* (operator order 2026-10-17, FU-270). Every `POST /sessions`,
+`GET /sessions/{id}` and `DELETE /sessions/{id}` carries **`Authorization: Bearer <the caller's
+projected ServiceAccount token>`**, audience **`agent-gateway`**. The gateway reviews it through the
+**same** TokenReview path as [the env pull](#gw-sessions-pull) (`TokenReviewer`, `spec.audiences:
+[agent-gateway]`, one implementation) and reads the reviewed username,
+`system:serviceaccount:<ns>:<sa>`, as the caller. The policy's **`callers`** map, keyed by that
+username, says what the caller may ask for: its admissions' `stacks` and `roles`, and the
+`bind_namespaces` a [`bind`](../glossary.md#bind) may name. Exact values only, every key required, a
+key that is not a ServiceAccount username refuses the policy load. So a wildcard can never be
+written. The caller is stored on the session row (`caller`, returned by `GET`), and `GET` / `DELETE`
+belong to that caller. The env pull is NOT caller-checked here: its caller is the bound pod, which
+GW-SESSIONS-PULL checks against the bind.
+
+⚖ The checks run in a fixed order (an alternative would read the body first, or answer 404 before the caller check): the caller's token (401 / 503), its `callers` entry (403
+`caller-unknown`), the body (400, as [GW-SESSIONS-ADMIT](#gw-sessions-admit)), then the body against
+the entry: stack, role, bind namespace (403, one code each). For `GET` / `DELETE` the order is the
+token, the entry, the id (404), the owner (403 `caller-not-owner`). A caller without a valid token
+therefore learns nothing about a body or an id.
+
+**`control_plane_auth`** is the rollout knob. ⚖ It and `callers` are REQUIRED in the policy: a policy silent about its callers must not default to "anyone" (or to `observe`). **`enforce`**: a call with no
+bearer, or one the review does not authenticate for audience `agent-gateway`, is 401
+`caller-unauthenticated`; a review the API cannot answer is 503 `tokenreview-transient`, as on the
+pull. **`observe`**: that same call is **admitted**. The gateway writes one log line naming the
+route and the reason, and counts it on
+**`gateway_control_plane_unauthenticated_total{route,reason}`** ([GW-METRICS](metrics.md#gw-metrics)).
+It counts in both modes. The deployed policy starts in `observe`; it flips to `enforce` once every
+caller sends its token and the series stays flat. ⚖ **A VALID token is checked against `callers`
+in both modes.** Under `observe`, a caller the gateway can identify but that is unlisted, or that
+asks outside its entry, is refused exactly as under `enforce`. The knob forgives a missing identity
+during the rollout. It never waves through a known identity the policy does not grant.
+
+Rows run against two worlds. **`policy-default`** is `observe`, so every other row on this page
+runs unchanged without a caller token. **`policy-enforce`** is the same document with `enforce`
+([worlds/README.md](../worlds/README.md)). Both hold two fixture callers.
+**The platform loop** = `system:serviceaccount:platform-agents:agentstack-loop` · stacks
+`[platform]` · roles `[worker]` · bind namespaces `[platform-agents]`. **The specs reviewer** =
+`system:serviceaccount:agent-coordinator:agent-coordinator` · stacks `[platform]` · roles
+`[reviewer, worker]` · bind namespaces `[]`. The fake TokenReview answers a presented token as the
+`presented` cell says. A caller's name = authenticated · audiences `[agent-gateway]` · that
+username. **An unlisted ServiceAccount** = the same, as `system:serviceaccount:platform-agents:default`.
+**Unauthenticated** = `authenticated: false`. **The kube API audience** = the platform loop with
+audiences `[https://kubernetes.default.svc]`. **No bearer** sends no `Authorization` header.
+**(The review raises)** = the API is away. The body is a platform worker bound to
+`{platform-agents, agentstack-worker, fixer-1}` unless the row says otherwise.
+
+### Who may call
+
+| description | world | presented || status | result |
+|---|---|---||---|---|
+| "the platform loop admits a bound platform worker" | policy-enforce | the platform loop || 200 | `dispatch`; the row's `caller` = `system:serviceaccount:platform-agents:agentstack-loop` |
+| "no bearer, under enforce" | policy-enforce | no bearer || 401 | caller-unauthenticated; `{route="admit",reason="absent"}` + 1 |
+| "a token the API does not authenticate, under enforce" | policy-enforce | unauthenticated || 401 | caller-unauthenticated; `{route="admit",reason="invalid"}` + 1 |
+| "a token for another audience, under enforce" | policy-enforce | the kube API audience || 401 | caller-unauthenticated; `{route="admit",reason="invalid"}` + 1 |
+| "the TokenReview API fails, under enforce" | policy-enforce | (the review raises) || 503 | tokenreview-transient, `retry-after: 5`; `{route="admit",reason="review-transient"}` + 1 |
+| "the caller check precedes the body ⚖" | policy-enforce | no bearer; the body is not JSON || 401 | caller-unauthenticated, not 400 |
+| "no bearer, under observe, is admitted and counted ⚖" | policy-default | no bearer || 200 | `dispatch`; the row's `caller` = null; `{route="admit",reason="absent"}` + 1 |
+| "an invalid token, under observe, is admitted and counted" | policy-default | unauthenticated || 200 | `dispatch`; `{route="admit",reason="invalid"}` + 1 |
+| "a review the API cannot answer, under observe, is admitted and counted ⚖" | policy-default | (the review raises) || 200 | `dispatch`; `{route="admit",reason="review-transient"}` + 1 |
+| "an unlisted ServiceAccount, under enforce" | policy-enforce | an unlisted ServiceAccount || 403 | caller-unknown |
+| "an unlisted ServiceAccount is refused under observe too ⚖" | policy-default | an unlisted ServiceAccount || 403 | caller-unknown; the unauthenticated series unchanged (the caller WAS identified) |
+
+### What a caller may ask for
+
+World `policy-default` (the same answers under `policy-enforce`: a known caller is checked identically).
+
+| description | presented | body || status | result |
+|---|---|---||---|---|
+| "a stack outside the caller's entry" | the platform loop | stack `oracle`, worker, bind `{platform-agents, agentstack-worker}` || 403 | caller-stack-denied |
+| "a role outside the caller's entry" | the platform loop | platform `reviewer` + bind || 403 | caller-role-denied |
+| "a bind namespace outside the caller's entry" | the platform loop | platform worker, bind `{oracle-agents, agentstack-worker}` || 403 | caller-bind-denied |
+| "a caller with no bind namespaces may not bind" | the specs reviewer | platform reviewer + bind `{platform-agents, agentstack-worker}` || 403 | caller-bind-denied |
+| "an unbound admission needs no bind namespace" | the specs reviewer | platform reviewer, no bind || 200 | `dispatch` with `session.token` + `env` ([GW-SESSIONS-ENV](#gw-sessions-env)) |
+| "a known caller's malformed body is still 400" | the platform loop | no `task` || 400 | malformed-body |
+
+### Lookup and release belong to the admitting caller
+
+| description | world | sequence || status | result |
+|---|---|---||---|---|
+| "the admitting caller reads its session" | policy-enforce | the platform loop admits, then GETs || 200 | the row, `caller` = the platform loop |
+| "the admitting caller releases its session" | policy-enforce | the platform loop admits, then DELETEs || 200 | `released_at` set |
+| "another listed caller may not read it" | policy-enforce | the platform loop admits; the specs reviewer GETs || 403 | caller-not-owner |
+| "another listed caller may not release it" | policy-enforce | the platform loop admits; the specs reviewer DELETEs || 403 | caller-not-owner; the session stays active (`gateway_sessions_active` unchanged) |
+| "a release without a bearer, under enforce" | policy-enforce | the platform loop admits; DELETE with no bearer || 401 | caller-unauthenticated; `{route="release",reason="absent"}` + 1 |
+| "a lookup without a bearer, under observe, is served and counted" | policy-default | the platform loop admits; GET with no bearer || 200 | the row; `{route="lookup",reason="absent"}` + 1 |
+| "a session admitted with no caller is released by any listed caller ⚖" | policy-default | admitted with no bearer; the specs reviewer DELETEs || 200 | `released_at` set: a row with no recorded caller has no owner to protect, and refusing would pin its rail slot until the TTL |
+| "an unknown id is 404 only after the caller check ⚖" | policy-enforce | the platform loop GETs `/sessions/nope` || 404 | session-not-found |
+| "an unknown id without a bearer, under enforce ⚖" | policy-enforce | GET `/sessions/nope`, no bearer || 401 | caller-unauthenticated |
+
+### One TokenReview path, and the pull stays the pod's
+
+| description | world | sequence || result |
+|---|---|---||---|
+| "the caller's token is reviewed by the pull's reviewer, for audience agent-gateway" | policy-enforce | the gateway's reviewer is the kube one on a fake API that answers the platform loop's username; `POST /sessions` with a bearer || 200 `dispatch`; the API received exactly one TokenReview, `spec.audiences: [agent-gateway]`, sent with the gateway's own ServiceAccount token |
+| "the env pull is not caller-checked" | policy-enforce | the platform loop admits a bound worker; the bound pod (not in `callers`) pulls || 200 `{id, expires_at, env}`, as GW-SESSIONS-PULL |
+
+### The policy shape
+
+| description | the policy's control-plane keys || load |
+|---|---||---|
+| "a caller key that is not a ServiceAccount username refuses the load" | `callers: {"system:serviceaccount:platform-agents:*": …}` || PolicyError |
+| "a caller naming a stack the policy does not hold refuses the load" | the platform loop's `stacks: [nope]` || PolicyError |
+| "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
+| "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
+| "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
+| "the deployed callers are today's two dispatchers" | `argocd/resources/agent-gateway/policy.json` || loads; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:agent-coordinator` (`[platform]`, `[reviewer, worker]`, `[]`) |
+
+The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
+stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
+is the one in-cluster caller of `agents/agent-session.sh`. It binds into the platform repo
+namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
+no `agentstack-worker`, so a bind there could never be pulled and is not granted. The specs-review
+tick and its shadow cells run as `agent-coordinator` (`agents/coordinator/specs-review-argo.yaml`):
+role `reviewer`, plus ⚖ `worker` for the goose@openrouter shadow cell, which rode `--role worker`
+because the reviewer role has no openrouter rail
+([specs-reviewer.md §Shadow runs](../../../docs/agents/specs-reviewer.md#shadow-runs--harness--rail-cells-gatewayplanmd-step-3)). A jail
+canary mints the loop SA's token (`kubectl create token`) and acts as that dispatcher.
+
+### What the log says
+
+| description | sequence || the log holds | the log does not hold |
+|---|---||---|---|
+| "a dispatch line names the caller, never its token" | the platform loop admits || `caller=system:serviceaccount:platform-agents:agentstack-loop` | the presented token |
+| "an unauthenticated call is one line naming the route and the reason" | `policy-default`, no bearer || exactly one `control-plane: admit unauthenticated (absent) — ADMITTED under control_plane_auth=observe` | — |
+
+### Named gaps
+
+| description | input || v0 answer | the gap |
+|---|---||---|---|
+| "⚑ gap: a bind's ServiceAccount is not constrained per caller" | the platform loop binds `{homelab, default}` || admitted, because the namespace is listed | an entry lists bind NAMESPACES only, so any pod SA in a listed namespace can be named; a per-caller ServiceAccount list is the next key if a listed namespace ever holds an SA that must not ride |
+| "⚑ gap: one ServiceAccount, many workflows" | any workflow in `agent-coordinator` presents its pod's token || authorized as the specs reviewer | `callers` is per ServiceAccount, and `agent-coordinator` runs every workflow in that namespace (reflexes, deploy-revert, the review tick, …); a dedicated SA for the specs-review templates narrows the grant to that tick |
+
+<details><summary>Evidence</summary>
+
+Rendered by `scripts/evidence_render.py` from CI.
+
+--8<-- "GW-SESSIONS-AUTH.md"
 
 </details>
 
