@@ -1,0 +1,111 @@
+{
+  "observed_on": "2026-10-17",
+  "runtime_commit": "d10904baa8fac8c66e49cd86510277ee9ef508f1",
+  "native_source_commit": "979011409de0a60b52f179721948e65531d26144",
+  "gateway_base_commit": "9c0aa3c2d48108884c7f633852727ff35e839f48",
+  "scope": "Synthetic first turn through gateway; partial SIWC shape comparison, no live access or tool execution",
+  "runs": [
+    {
+      "fixture": {
+        "cli_version": "codex-cli 0.161.0",
+        "live_subscription_verified": false,
+        "dispatch_env_keys": [
+          "CODEX_MODEL",
+          "OPENAI_API_KEY",
+          "OPENAI_BASE_URL"
+        ],
+        "exit": 0,
+        "turn_completed": true,
+        "synthetic_text_seen": true,
+        "auth_json_written": false,
+        "upstream_requests": 1,
+        "upstream_auth_replaced": true,
+        "upstream_shape": [
+          {
+            "model": "fixture-model",
+            "stream": true,
+            "store": false,
+            "input_is_array": true
+          }
+        ],
+        "oauth_exchanges": 1,
+        "session_row": {
+          "requests": 1,
+          "tokens_in": 7,
+          "tokens_cache_read": 0,
+          "tokens_out": 3
+        },
+        "passed": true
+      },
+      "siwc_request_shape_observations": [
+        {
+          "stream_store_input_shape_matches": true,
+          "unsupported_fields_present": [],
+          "tool_type_counts": {
+            "function": 12,
+            "namespace": 1,
+            "web_search": 1
+          },
+          "unsupported_tool_types_present": [],
+          "ungrouped_function_or_custom_tools": 7,
+          "system_message_present": false,
+          "unknown_tool_or_input_shapes": 0,
+          "account_header_present": true,
+          "documented_blocker_observed": true,
+          "full_profile_compatibility_verified": false
+        }
+      ]
+    },
+    {
+      "fixture": {
+        "cli_version": "codex-cli 0.163.0",
+        "live_subscription_verified": false,
+        "dispatch_env_keys": [
+          "CODEX_MODEL",
+          "OPENAI_API_KEY",
+          "OPENAI_BASE_URL"
+        ],
+        "exit": 0,
+        "turn_completed": true,
+        "synthetic_text_seen": true,
+        "auth_json_written": false,
+        "upstream_requests": 1,
+        "upstream_auth_replaced": true,
+        "upstream_shape": [
+          {
+            "model": "fixture-model",
+            "stream": true,
+            "store": false,
+            "input_is_array": true
+          }
+        ],
+        "oauth_exchanges": 1,
+        "session_row": {
+          "requests": 1,
+          "tokens_in": 7,
+          "tokens_cache_read": 0,
+          "tokens_out": 3
+        },
+        "passed": true
+      },
+      "siwc_request_shape_observations": [
+        {
+          "stream_store_input_shape_matches": true,
+          "unsupported_fields_present": [],
+          "tool_type_counts": {
+            "function": 12,
+            "namespace": 1,
+            "web_search": 1
+          },
+          "unsupported_tool_types_present": [],
+          "ungrouped_function_or_custom_tools": 7,
+          "system_message_present": false,
+          "unknown_tool_or_input_shapes": 0,
+          "account_header_present": true,
+          "documented_blocker_observed": true,
+          "full_profile_compatibility_verified": false
+        }
+      ]
+    }
+  ]
+}
