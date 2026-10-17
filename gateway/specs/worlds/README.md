@@ -48,6 +48,9 @@ accepted shape, usage 7 in / 3 out), `upstream-ok-cached` (312 in incl. 300 cach
 `upstream-wrong-type`; `upstream-down` / `upstream-slow` ride the shared transport. The credential
 is held by **`MemoryStore`**, the FAKE persistence backend (process memory, injectable save
 failures) with dummy `DUMMY-SECRET-…` values; a counting fake `exchange` returns the rotation.
+`native-refresh` (`tests/test_codex_refresh.py`) replaces the counting exchange with the native
+HTTP adapter and a MockTransport endpoint: fabricated JWTs, rotation/rejection responses and
+request capture. No network or vendor account is involved.
 Headroom reports enter through the in-process seam (`app.state.codex.headroom.observe`).
 
 ## The credential source (`FakeSecrets`)
