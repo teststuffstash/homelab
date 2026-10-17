@@ -1038,15 +1038,15 @@ the block needs pruning, not more headings.
       `/design-agents` pass that inventories those surfaces and rules go/no-go — ADR-shaped.
       Relates FU-080 (archived), FU-068 (archived), ADR-093.
 - [ ] **FU-257** — **The loop-ns `agent-loop-egress` CNP is monitor-only with no owner for its
-      enforce flip, and it is NOT clean.** Hard-coded `enableDefaultDeny.egress: false`; the
-      Composition comment cites Goal #1162, which closed 2026-09-14 and excluded the flip.
-      7-day DNS read (`hubble_dns_queries_total`, 2026-09-20) — would-drop from `*-agents`:
+      enforce flip, and it is NOT clean.** Hard-coded `enableDefaultDeny.egress: false` (Goal
+      #1162 closed 2026-09-14 excluding the flip). 7-day DNS read (`hubble_dns_queries_total`, 2026-09-20) — would-drop from `*-agents`:
       `agent-loop-eventsource-svc.agent-coordinator` (the `/coordinate` doorbell — oracle,
       platform), `mcp.minutark.ee` (oracle-agents ~1k; a worker `extraFQDNs` entry the loop CNP
       never receives), `cafe.github.com` (all four, unclassified — no worker ns queries it).
-      DNS-only: IP-direct flows unseen. **Next:** add the doorbell leg; decide whether
-      `extraFQDNs` render loop-side; classify `cafe.github.com` from a flow capture; make
-      enforce a per-stack dial; re-harvest, flip oracle first. Relates FU-020 (archived), #1056.
+      DNS-only: IP-direct flows unseen. ⚠ 2026-10-17: the selector MISSES the reviewer — a plain
+      `app=agent-reviewer` pod (`reviewer-session.sh --loop-ns`), no workflow label (oracle-iac#1122).
+      **Next:** select the reviewer pod too; add the doorbell leg; decide `extraFQDNs` loop-side; classify
+      `cafe.github.com`; per-stack enforce dial; re-harvest, flip oracle first. Relates FU-020, #1056.
 - [ ] **FU-258** — **Cilium drops the `kubernetes` Service backend on an apiserver restart — POINTER.** Evidence +
       settling experiment: [`docs/spikes/cilium-apiserver-restart-backend-loss.md`](spikes/cilium-apiserver-restart-backend-loss.md).
       **PARKED (operator, 09-20)** behind 1.20.2. Guard: `cp-upgrade` gates the backend (`devbox run maint
