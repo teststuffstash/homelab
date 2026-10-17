@@ -299,7 +299,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-resumable-quoted` | table | - | `agents/coordinator-scan.sh` | - |
-| `gateway-env-secret` | table | - | `agents/agent-session.sh` | - |
+| `gateway-env-pull` | table | - | `agents/agent-session.sh` | - |
 | `gateway-sessions` | table | - | `agents/agent-session.sh` | - |
 | `gh-json-fields/allowlist-current` | suite | - | `agents/replay/gh-json-fields.sh` | - |
 | `gh-json-fields/unknown-field-refused` | actions | - | `-` | - |

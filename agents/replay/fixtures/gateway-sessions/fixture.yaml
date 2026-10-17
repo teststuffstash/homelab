@@ -6,13 +6,18 @@
 # unchanged). Set on another stack → one loud line, no request. Set on platform → ONE request,
 # `{stack: platform, role: worker, task, round}` + `harness` only when --harness was explicit +
 # `rail` only from AGENT_GATEWAY_RAIL; an explicit --model or a non-integer round refuses before
-# any request (exit 2). The answer: `dispatch` → HARNESS / MODEL from the gateway, the harness's
-# invocation model from the gateway's env (claude: ANTHROPIC_MODEL; opencode:
-# OPENCODE_CONFIG_CONTENT.model; goose: GOOSE_MODEL checked present), the skipped /route region's
-# outputs set (AGENT_ROUTER=off, no OpenRouter credit read), and the session RELEASED on exit (the
-# EXIT trap's DELETE). `defer` → the router-defer exit (stderr line, exit 1) with the gateway's
-# reason + retry_after_s. Unreachable / non-200 / an unusable dispatch → FAIL CLOSED with that same
-# exit (a dispatch that is refused is released first). The session token never reaches a line.
+# any request (exit 2), and so does an interactive ride (no --run / --recipe: nothing would pull).
+# Every request carries `bind` (GW-SESSIONS-PULL, operator ruling 2026-10-17): the namespace
+# (= PROJECT), ServiceAccount agentstack-worker and the pod name the launcher is about to create
+# (GW_POD — the pod-name rule, the ad-hoc clock pinned by the bridge). The answer: `dispatch` →
+# HARNESS / MODEL from the gateway, the harness's invocation model derived from `model` + `rail`
+# (the GW-MODEL-RESOLVE strip; opencode under the `gateway` provider; its env key checked present
+# in `env_keys`), GW_ENV_KEYS + GW_PULL_URL + the in-pod pull prelude set, the skipped /route
+# region's outputs set (AGENT_ROUTER=off, no OpenRouter credit read), and the session RELEASED on
+# exit (the EXIT trap's DELETE). `defer` → the router-defer exit (stderr line, exit 1) with the
+# gateway's reason + retry_after_s. Unreachable / non-200 / an unusable dispatch (a token or env in
+# a bound answer, a hostile env key, a pull_url not for this session) → FAIL CLOSED with that same
+# exit (a dispatch that is refused is released first). No launcher variable ever holds a `gws_`.
 #
 # `curl` is shadowed as the gateway seam (recorded: the POST body IS the asserted request; the
 # DELETE is the release). Row state lives in rows/<id>/vars.sh (shell literals; JSON bodies with

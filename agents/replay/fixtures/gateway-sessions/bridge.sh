@@ -1,9 +1,12 @@
 # ── bridge ── the launcher state the block reads, as a platform (homelab project) ad-hoc ride with
 # today's argv defaults; each row overrides from $REPLAY_WORLD/vars.sh. `curl` serves the row's
 # gateway answer ($GW_REPLY_HTTP + $GW_REPLY_BODY; HTTP 000 = connection refused, curl exit 7)
-# and records every call. The fake token is `gws_` + 32 A's — post.sh greps for it.
+# and records every call. A bound answer carries no token; the one row whose gateway answers one
+# anyway uses `gws_` + 32 A's — post.sh greps every launcher variable for it.
 PROJECT="homelab"; TASK=""; ROUND="1"; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"
 HARNESS_SET=""; MODEL_SET=""; KUBECTL="kubectl"; KUBE=""; NS="homelab"
+RUN_CMD="echo replay"; RECIPE=""   # headless by default (an interactive ride is its own row)
+date() { echo 120000; }            # the ad-hoc pod name's clock, pinned (agent-homelab-120000)
 _srow='{"name":"platform","repos":["homelab"]}'
 GW_REPLY_HTTP="200"; GW_REPLY_BODY=""
 . "$REPLAY_WORLD/vars.sh"

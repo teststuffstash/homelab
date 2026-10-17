@@ -1,0 +1,19 @@
+# gateway-env-pull — FU-270 / GW-SESSIONS-PULL: the pod's LLM env slot (`${LLM_ENV}` in the pod
+# manifest) and the projected-token mount/volume slots.
+#
+# THE CONTRACT. Knob OFF → LLM_ENV is exactly today's two goose lines (GOOSE_PROVIDER=openrouter,
+# GOOSE_MODEL=<model>), the mount/volume slots are EMPTY and nothing is created — the manifest is
+# unchanged byte-for-byte. Knob ON (a bound /sessions dispatch) → LLM_ENV is the pull wiring only
+# (AGENT_GATEWAY_PULL_URL + AGENT_GATEWAY_ENV_KEYS, plain values), the pod mounts a projected
+# ServiceAccount token (audience agent-gateway, expirationSeconds 600) at
+# /var/run/secrets/agent-gateway, the pod carries the `homelab.teststuff.net/gateway-session`
+# label, and NOTHING is written to the API — no Secret (the loop SA cannot create one in a fixer
+# namespace, by design). The launcher holds no token, so none can reach the manifest.
+name: gateway-env-pull
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:gateway-env-pull
+  - file:post.sh
+rows: rows.psv
