@@ -80,8 +80,9 @@ The test policy `tests/fixtures/policy-default.json` must stay **byte-identical*
 `specs/worlds/policy-default.json` (the gate checks it when both exist). Model ids live only in
 policy files — never in code (`GW-MODEL-RESOLVE`): the policy carries `model-classes.json`'s
 spelling (`claude/<alias>`, `opencode-go/<id>`, bare openrouter ids) and the gateway derives
-the wire id by stripping the rail prefix. The deployed ConfigMap
-(`argocd/resources/agent-gateway/configmap-policy.yaml`) carries the same shape; a
+the wire id by stripping the rail prefix. The deployed policy
+(`argocd/resources/agent-gateway/policy.json`, generated into the `agent-gateway-policy`
+ConfigMap by a hash-suffixed configMapGenerator, so an edit rolls the pod) carries the same shape; a
 `GW-MODEL-RESOLVE` row loads it through the same loader and checks its ids against
 `model-classes.json`.
 
