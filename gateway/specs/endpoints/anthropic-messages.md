@@ -24,10 +24,10 @@ Messages body itself is the vendor's — the gateway validates only what it read
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-RAIL-ANTHROPIC](#gw-rail-anthropic) | `upstream.anthropic` (URL, auth, `anthropic-beta`) | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 |
+| [GW-RAIL-ANTHROPIC](#gw-rail-anthropic) | `upstream.anthropic` (URL, auth, `anthropic-beta`), `output.complete` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 |
 | [GW-RAIL-OPENCODE](#gw-rail-opencode) | `upstream.opencode` (URL, auth, session headers), `input.headers.x-opencode-session`, `input.headers.x-claude-code-session-id` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0; `upstream-timeout` rows `🚧 WIP` (the `upstream-slow` world is clock-faked only) |
 | [GW-MODEL-RESOLVE](#gw-model-resolve) | `input.body.model` | `model-not-session` | v0 — provider pins / `:exacto` / the ADR-096 ladder `⚑ gap` (rows below) |
-| [GW-CRED-BOUNDARY](#gw-cred-boundary) | `input.headers.authorization`, `input.headers.x-api-key`, `upstream.*.auth` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `header-refused` | v0 |
+| [GW-CRED-BOUNDARY](#gw-cred-boundary) | `input.headers.authorization`, `input.headers.x-api-key`, `upstream.*.auth` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `upstream-refused`, `header-refused` | v0; the codex rail's `upstream-auth` is still 502 (`⚑ gap` row below) |
 | [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned on openai-chat.md) | `upstream.openrouter` | `upstream-auth`, `upstream-unreachable` | linked — the anthropic-dialect cell is a verified row there |
 | [GW-SESSIONS-RELEASE](sessions.md#gw-sessions-release) (owned on sessions.md) | `input.headers.authorization` | `session-expired`, `session-released` | linked |
 | [GW-CRED-RESOLVE](sessions.md#gw-cred-resolve) (owned on sessions.md) | `upstream.*.auth` | `credential-unresolved`, `credential-transient` | linked |
@@ -47,11 +47,24 @@ OAuth token from the stack's `claude-session` Secret). claude-code sends the bet
 gateway **adds** `anthropic-beta: oauth-2025-04-20`, merged with any inbound beta list (the old
 proxy's `OAUTH_BETA` precedent). The rail speaks the anthropic dialect only: an openai-dialect
 request on a session pinned here is 501 `dialect-unsupported-on-rail`, and so is the models
-list. Upstream 429 passes through with its `retry-after`; upstream 401/403 is 502
-`upstream-auth` with no upstream body; timeouts are connect 10 s / read 600 s (504
+list. Upstream 429 passes through with its `retry-after`; upstream 401/403 is 424
+`upstream-auth` (or 403 `upstream-refused` — [GW-CRED-BOUNDARY](#gw-cred-boundary)) with no upstream
+body; timeouts are connect 10 s / read 600 s (504
 `upstream-timeout`); a connection that fails for any other reason — refused, DNS, TLS, reset —
 is 502 `upstream-unreachable` (nothing reached the vendor; the row counts, so a dead upstream
 is visible on the session and in `gateway_requests_total{status="502"}`).
+
+**Stream completeness.** A 2xx is recorded **complete** only when its body reached its end: a
+non-streamed body read to its last byte, a stream that carried its terminal event — `message_stop`
+on this dialect (`data: [DONE]` on the openai one, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)),
+seen through any `content-encoding` the gateway can decode. Otherwise the request row carries
+`incomplete` = `no-terminal` (the body ended without it), `timeout` (a mid-stream read timeout;
+the row's status is 504), `transport-error` (the connection broke mid-body) or `client-closed` (the
+pod hung up), the session's `requests_incomplete` + 1, and
+`gateway_requests_incomplete_total{rail,dialect,reason}` + 1 ([GW-METRICS](metrics.md#gw-metrics)).
+A broken stream is never a clean 200 with 0 tokens. The bytes the pod got are unchanged either way.
+The experiment's tap (2026-10-17) saw 8 opencode streams cut by the client mid-body; the old
+record showed each as a 200.
 
 | description | inbound header || upstream header |
 |---|---||---|
@@ -71,11 +84,17 @@ is visible on the session and in `gateway_requests_total{status="502"}`).
 | "cache classes are recorded apart" | `POST /anthropic/v1/messages` | upstream-ok-cached || 200 | the upstream body, byte-identical | (`requests`, `tokens_in`, `tokens_cache_read`, `tokens_cache_write`, `tokens_out`) = (1, 12, 300, 40, 7) — `input_tokens` already excludes the cache |
 | "a gzipped stream still counts" | `POST /anthropic/v1/messages`, `stream: true` | upstream-stream-gzip || 200 | the gzip bytes, unchanged; `content-encoding: gzip` kept | `requests` +1; tokens from the DECODED final `message_delta` usage (live anthropic answers gzip SSE — FU-270) |
 | "a rate limit passes through" | `POST /anthropic/v1/messages` | upstream-429 || 429 | the upstream body | `requests` +1 |
-| "an upstream auth failure is typed and hidden" | `POST /anthropic/v1/messages` | upstream-401 || 502 | `upstream-auth` envelope — not the upstream body | `requests` +1 |
+| "an upstream auth failure is typed and hidden" | `POST /anthropic/v1/messages` | upstream-401 || 424 | `upstream-auth` envelope — not the upstream body | `requests` +1 |
 | "the openai dialect is not served on the subscription" | `POST /openai/v1/chat/completions` | (no upstream call) || 501 | `dialect-unsupported-on-rail` | nothing |
 | "the models list is not served on the subscription" | `GET /openai/v1/models` | (no upstream call) || 501 | `dialect-unsupported-on-rail` | nothing |
 | "an unreachable upstream is typed" | `POST /anthropic/v1/messages` | upstream-down || 502 | `upstream-unreachable` envelope | `requests` +1 |
 | "🚧 WIP: a read past 600 s" | `POST /anthropic/v1/messages` | upstream-slow || 504 | `upstream-timeout` | `requests` +1 |
+
+| description | upstream behaviour || recorded on the session | `gateway_requests_incomplete_total{rail="anthropic",dialect="anthropic",reason}` |
+|---|---||---|---|
+| "a stream that ends without message_stop is recorded incomplete" | upstream-stream-truncated (stream: true) || `requests_incomplete` 1; the request row's `incomplete` = `no-terminal` | `no-terminal` = 1 |
+| "a gzipped stream's message_stop is seen through the encoding" | upstream-stream-gzip (stream: true) || `requests_incomplete` 0; `incomplete` = null | `no-terminal` = 0 |
+| "the client going away mid-stream is recorded incomplete" | upstream-stream; the pod hangs up after the first chunk (the gateway's body iterator closed — the in-process client buffers whole bodies) || `requests_incomplete` 1; `incomplete` = `client-closed` | `client-closed` = 1 |
 
 <details markdown="1"><summary>Evidence</summary>
 
@@ -119,7 +138,7 @@ policy id with `opencode-go/` removed ([GW-MODEL-RESOLVE](#gw-model-resolve)).
 | "the models list passes through" | `GET /openai/v1/models` | upstream-ok || `https://opencode.ai/zen/go/v1/models` | 200 | byte-identical |
 | "a stream streams" | `POST /openai/v1/chat/completions`, `stream: true` | upstream-stream || `…/chat/completions` | 200 | SSE bytes unchanged |
 | "a rate limit passes through" | `POST /anthropic/v1/messages` | upstream-429 || `…/messages` | 429 | the upstream body, `retry-after` kept |
-| "an upstream auth failure is typed and hidden" | `POST /openai/v1/chat/completions` | upstream-401 || `…/chat/completions` | 502 | `upstream-auth` envelope |
+| "an upstream auth failure is typed and hidden" | `POST /openai/v1/chat/completions` | upstream-401 || `…/chat/completions` | 424 | `upstream-auth` envelope |
 | "the vendor's MissingSessionID is passed through, not masked ⚖" | `POST /anthropic/v1/messages` (fake rejects the supplied id as absent) | 400 `MissingSessionID` || `…/messages` | 400 | the upstream body |
 | "an unreachable upstream is typed" | `POST /anthropic/v1/messages` | upstream-down || `…/messages` | 502 | `upstream-unreachable` envelope |
 | "🚧 WIP: a read past 600 s" | `POST /anthropic/v1/messages` | upstream-slow || `…/messages` | 504 | `upstream-timeout` |
@@ -197,7 +216,18 @@ upstream; the upstream credential is injected from the session's rail
 ([GW-CRED-RESOLVE](sessions.md#gw-cred-resolve)) and hop-by-hop headers are stripped. An
 unknown, expired or released token is a typed 401; a resolvable session whose credential
 cannot be read is 401 `credential-unresolved` (definitive) or 503 `credential-transient`.
-Upstream 401/403 is 502 `upstream-auth` with no upstream body — a key hint never crosses back.
+Upstream 401/403 never relays its body — a key hint never crosses back — and is told apart by
+what it says (the body is read, never forwarded): a 401, or a 403 whose error names a credential
+reason (`type` `authentication_error` / `permission_error`, `code` `api_key_expired` /
+`invalid_api_key` / …), or a 403 with no readable error object, is **424 `upstream-auth`**: the
+rail credential is bad, and the [admission](sessions.md#capacity--the-ladders-capacity-half) skips
+that credential until a 2xx on it or a new value. ⚖ 424 (Failed Dependency), not 502: the pinned
+harnesses retry 5xx with backoff (opencode retried the expired Go key's 502 nine times in the
+2026-10-17 experiment, `docs/spikes/gateway-free-models-2026-10-17/cells.tsv`), and they retry
+neither 424 nor 403 — a dead credential must end the ride, not stall it. Any other 403 is a
+**policy refusal**: **403 `upstream-refused`**, the credential untouched. ⚖ The observed one is
+OpenRouter's harness gate (`… is only available on agentic harnesses`, `failed_routing_step: Gate
+Free Endpoints by Agentic Harness`), the model refusing this caller, not the key.
 The boundary also runs outward: a credential-shaped value (the [GW-REDACT](sessions.md#gw-redact)
 patterns) in any header the gateway does not own is 502 `header-refused` before any upstream
 call — the old proxy's FU-251 tripwire; a harness that smuggles a real key in a vendor header
@@ -227,8 +257,18 @@ never gets it past this hop.
 
 | description | upstream behaviour || status | body | log |
 |---|---||---|---|---|
-| "an upstream 401 never leaks" | upstream-401 (body names the key) || 502 | `upstream-auth` envelope | `upstream-auth <rail> 401`, no body |
-| "an upstream 403 is the same class" | upstream-403 || 502 | `upstream-auth` envelope | `upstream-auth <rail> 403` |
+| "an upstream 401 never leaks" | upstream-401 (body names the key) || 424 | `upstream-auth` envelope | `upstream-auth <rail> 401`, no body |
+| "an upstream 403 naming a credential reason is the same class" | upstream-403 (`permission_error`) || 424 | `upstream-auth` envelope | `upstream-auth <rail> 403` |
+
+| description | rail | upstream behaviour || status | code | the rail's credential |
+|---|---|---||---|---|---|
+| "an expired key is a credential verdict ⚖" | opencode | upstream-401-key-expired (`api_key_expired`, the Go vendor's live answer) || 424 | upstream-auth | rejected: `gateway_credentials_rejected{rail="opencode"}` = 1 |
+| "a policy refusal is not a credential verdict ⚖" | openrouter | upstream-403-refused (the harness gate) || 403 | upstream-refused | not rejected: `gateway_credentials_rejected{rail="openrouter"}` = 0 |
+| "a refusal's body is not relayed either" | openrouter | upstream-403-refused || 403 | upstream-refused | the body names neither the gate text nor the routing step |
+
+| description | input || v0 answer | the gap |
+|---|---||---|---|
+| "⚑ gap: the codex rail's upstream-auth" | an upstream 401/403 on the dark codex rail || 502 `upstream-auth` ([GW-RAIL-CODEX](openai-responses.md#gw-rail-codex)), no rejection mark | the codex rail's own lifecycle owns its credential verdicts (GW-CODEX-OAUTH); aligning its status waits on that rail leaving dark |
 
 <details markdown="1"><summary>Evidence</summary>
 

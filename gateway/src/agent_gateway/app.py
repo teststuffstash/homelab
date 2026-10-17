@@ -57,6 +57,7 @@ def create_app(
     m.bind_active_sessions(lambda: store.active_counts(clock()))
     # GW-SESSIONS-PULL's identity check: the kube TokenReview API (tests hand a StaticTokenReviews in).
     sessions = SessionService(policy, store, resolver, m, settings.self_url, clock, reviewer=reviewer or KubeTokenReviews())
+    m.bind_transport_facts(lambda: sessions.capacity.cooled_counts(clock()), sessions.capacity.rejected_counts)
     client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(connect=settings.connect_timeout_s, read=settings.read_timeout_s, write=60, pool=10),
         follow_redirects=False,

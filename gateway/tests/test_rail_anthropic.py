@@ -18,24 +18,37 @@
 | cache classes are recorded apart | POST /anthropic/v1/messages | upstream-ok-cached | 200 | the upstream body, byte-identical | (requests, tokens_in, tokens_cache_read, tokens_cache_write, tokens_out) = (1, 12, 300, 40, 7) |
 | a gzipped stream still counts | POST /anthropic/v1/messages, stream: true | upstream-stream-gzip | 200 | the gzip bytes, unchanged, content-encoding: gzip kept | requests +1; tokens from the decoded message_delta usage |
 | a rate limit passes through | POST /anthropic/v1/messages | upstream-429 | 429 | the upstream body, retry-after kept | requests +1 |
-| an upstream auth failure is typed and hidden | POST /anthropic/v1/messages | upstream-401 | 502 | upstream-auth envelope | requests +1 |
+| an upstream auth failure is typed and hidden | POST /anthropic/v1/messages | upstream-401 | 424 | upstream-auth envelope | requests +1 |
 | the openai dialect is not served on the subscription | POST /openai/v1/chat/completions | (no upstream call) | 501 | dialect-unsupported-on-rail | nothing |
 | the models list is not served on the subscription | GET /openai/v1/models | (no upstream call) | 501 | dialect-unsupported-on-rail | nothing |
 | an unreachable upstream is typed | POST /anthropic/v1/messages | upstream-down | 502 | upstream-unreachable envelope | requests +1 |
 | a read past 600 s (WIP: clock-faked) | POST /anthropic/v1/messages | upstream-slow | 504 | upstream-timeout | requests +1 |
 | the upstream URL is api.anthropic.com/v1/messages | — | — | — | — | — |
+
+Stream completeness (anthropic dialect; terminal event = `message_stop`):
+
+| description | upstream behaviour | recorded on the session | gateway_requests_incomplete_total{rail="anthropic",dialect="anthropic",reason} |
+|---|---|---|---|
+| a stream that ends without message_stop is recorded incomplete | upstream-stream-truncated | requests_incomplete 1; the request row's incomplete = no-terminal | no-terminal = 1 |
+| a gzipped stream's message_stop is seen through the encoding | upstream-stream-gzip | requests_incomplete 0; incomplete = null | no-terminal = 0 |
+| the client going away mid-stream is recorded incomplete | upstream-stream, the client closes after the first chunk | requests_incomplete 1; incomplete = client-closed | client-closed = 1 |
 """
 
 from __future__ import annotations
 
+import time
+
+import httpx
 import pytest
 
 from agent_gateway.rails import OAUTH_BETA, upstream_url
 
 from ._rail_rows import expected_bytes, ride
+from ._stream_rows import incomplete_series, recorded_incomplete
 from .conftest import (
     ANTHROPIC_TOKEN,
     UPSTREAM_BASES,
+    attach_json,
     bearer,
     check,
     err,
@@ -171,7 +184,7 @@ async def test_upstream_auth_hidden(gw, upstreams, store):
     world(upstream="upstream-401")
     upstreams[RAIL].behaviour = "upstream-401"
     doc, r = await ride(gw, RAIL, "messages")
-    then_eq("status", r.status_code, 502)
+    then_eq("status", r.status_code, 424)
     with then("body = the upstream-auth envelope, not the upstream body (no LEAK marker)", body={"actual": r.text}):
         assert err(r) == "upstream-auth"
         assert "LEAK" not in r.text
@@ -213,3 +226,44 @@ async def test_read_past_600s(gw, transport, store):
     then_eq("status", r.status_code, 504)
     then_eq("code", err(r), "upstream-timeout", claim="error code = upstream-timeout")
     _recorded(store, doc, (1,), "requests")
+
+
+ANTHROPIC_COMPLETENESS_ROWS = [
+    ("a stream that ends without message_stop is recorded incomplete", "upstream-stream-truncated", 1, "no-terminal"),
+    ("a gzipped stream's message_stop is seen through the encoding", "upstream-stream-gzip", 0, None),
+]
+
+
+@pytest.mark.parametrize(("behaviour", "count", "reason"), [r[1:] for r in ANTHROPIC_COMPLETENESS_ROWS], ids=[r[0] for r in ANTHROPIC_COMPLETENESS_ROWS])
+async def test_stream_completeness(gw, upstreams, store, behaviour, count, reason):
+    world(upstream=behaviour)
+    upstreams[RAIL].behaviour = behaviour
+    doc, r = await ride(gw, RAIL, "messages", body={"stream": True})
+    then_eq("status", r.status_code, 200)
+    recorded_incomplete(store, doc, count, reason)
+    with then(f"gateway_requests_incomplete_total{{rail=anthropic,dialect=anthropic,reason=no-terminal}} = {count}"):
+        check("series", await incomplete_series(gw, RAIL, "anthropic", "no-terminal"), count)
+
+
+async def test_client_closed_mid_stream(gw, app, store, upstreams):
+    """row: the client going away mid-stream is recorded incomplete"""
+    world(upstream="upstream-stream", note="the gateway's stream is driven directly: the in-process client buffers whole bodies, so a hang-up is the iterator closed early")
+    with given("a session on rail anthropic (reviewer, harness claude)"):
+        doc = await open_session(gw, role="reviewer", harness="claude")
+    row = store.get_session(doc["session"]["id"])
+
+    class _Events(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'event: message_start\ndata: {"type":"message_start"}\n\n'
+            yield b'event: content_block_delta\ndata: {"type":"content_block_delta"}\n\n'
+
+    resp = httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=_Events())
+    with when("the upstream stream's first chunk is relayed, then the client hangs up (the body iterator is closed)"):
+        sr = app.state.proxy._stream(resp, row, "anthropic", 200, {}, True, time.monotonic(), "")
+        it = sr.body_iterator
+        first = await it.__anext__()
+        await it.aclose()
+        attach_json("relayed before the hang-up", {"first_chunk": first.decode()})
+    recorded_incomplete(store, doc, 1, "client-closed")
+    with then("gateway_requests_incomplete_total{rail=anthropic,dialect=anthropic,reason=client-closed} = 1"):
+        check("series", await incomplete_series(gw, RAIL, "anthropic", "client-closed"), 1)

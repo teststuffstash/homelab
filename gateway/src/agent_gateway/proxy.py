@@ -6,9 +6,13 @@ on the anthropic rail the body is forwarded untouched after a family match) → 
 the credential → stream the upstream bytes back unchanged (SSE included) → record usage.
 Typed errors (specs/endpoints/*.schema.json `errors`): 401 session-unknown / -expired /
 -released / credential-unresolved, 403 model-not-session, 501 dialect-unsupported-on-rail,
-503 credential-transient, 502 upstream-auth, 502 upstream-unreachable (a connect failure that is
-not a timeout), 502 header-refused (the credential-shaped header tripwire), 504 upstream-timeout.
-Upstream 429 passes through with `retry-after`.
+503 credential-transient, 424 upstream-auth (an upstream 401/403 with a credential reason — 4xx so
+no harness retries it; the credential is marked rejected), 403 upstream-refused (an upstream 403
+that is a policy refusal, not a credential verdict), 502 upstream-unreachable (a connect failure
+that is not a timeout), 502 header-refused (the credential-shaped header tripwire), 504
+upstream-timeout. Upstream 429 passes through with `retry-after` and cools the session's cell.
+A 200 whose stream ends without its terminal event is recorded INCOMPLETE (GW-RAIL-*), never a
+clean 200.
 """
 
 from __future__ import annotations
@@ -33,6 +37,66 @@ log = logging.getLogger("gateway.proxy")
 
 USAGE_CAPTURE_MAX = 4 * 1024 * 1024  # bytes of response kept for the best-effort usage parse
 DEFAULT_RETRY_AFTER = "30"
+ERROR_BODY_MAX = 64 * 1024  # an upstream 401/403 body is read (never relayed) to classify it
+
+# An upstream 401 is always a credential verdict. A 403 is one when its error object names a
+# credential reason (or names nothing readable — the conservative read, today's behaviour);
+# otherwise it is a POLICY refusal: the upstream refused this model/request, the key is fine
+# (OpenRouter's "only available on agentic harnesses" 403, 2026-10-17 experiment) ⚖.
+CREDENTIAL_ERROR_TYPES = frozenset({"authentication_error", "permission_error"})
+CREDENTIAL_ERROR_CODES = frozenset({"api_key_expired", "invalid_api_key", "unauthorized", "invalid_x_api_key"})
+# The terminal event of a complete stream, per dialect (decoded bytes): openai `data: [DONE]`,
+# anthropic `message_stop`.
+TERMINAL_MARKERS = {"openai": (b"[DONE]",), "anthropic": (b"message_stop",)}
+
+
+def classify_auth_failure(status: int, body: bytes) -> str:
+    """`credential` | `refused` for an upstream 401/403 (the body is read, never relayed)."""
+    if status == 401:
+        return "credential"
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return "credential"
+    e = doc.get("error") if isinstance(doc, dict) else None
+    if not isinstance(e, dict):
+        return "credential"
+    if str(e.get("type") or "") in CREDENTIAL_ERROR_TYPES or str(e.get("code") or "") in CREDENTIAL_ERROR_CODES:
+        return "credential"
+    return "refused"
+
+
+class StreamWatch:
+    """Incremental completeness check over the bytes as the client sees them (gzip decoded on the
+    fly, a small tail kept so a marker split across chunks is still seen) — independent of the
+    usage capture's 4 MiB cap."""
+
+    def __init__(self, dialect: str, encoding: str | None):
+        self.markers = TERMINAL_MARKERS.get(dialect, ())
+        enc = (encoding or "identity").strip().lower()
+        self._z = zlib.decompressobj(zlib.MAX_WBITS | 32) if enc in ("gzip", "x-gzip", "deflate") else None
+        self._opaque = enc not in ("identity", "gzip", "x-gzip", "deflate")
+        self._tail = b""
+        self.terminal = False
+
+    def feed(self, chunk: bytes) -> None:
+        if self.terminal or self._opaque or not self.markers:
+            return
+        if self._z is not None:
+            try:
+                chunk = self._z.decompress(chunk)
+            except zlib.error:
+                self._opaque = True
+                return
+        buf = self._tail + chunk
+        if any(m in buf for m in self.markers):
+            self.terminal = True
+        self._tail = buf[-64:]
+
+    def complete(self, streaming: bool) -> bool:
+        """A non-streamed body is complete when it was read to its end; a stream needs its
+        terminal event (an encoding the watch cannot read counts as complete — unknown, not broken)."""
+        return (not streaming) or self._opaque or not self.markers or self.terminal
 
 
 def inbound_token(request: Request) -> str | None:
@@ -201,16 +265,29 @@ class Proxy:
             return error(502, "upstream-unreachable", f"rail {row.rail} upstream: {type(e).__name__}")
         status = resp.status_code
         if status in (401, 403):
-            await resp.aclose()
+            try:
+                raw_err = await resp.aread()
+            except httpx.HTTPError:
+                raw_err = b""
+            finally:
+                await resp.aclose()
             elapsed = time.monotonic() - t0
-            self.metrics.request(row.rail, dialect, 502, elapsed)
+            kind = classify_auth_failure(status, raw_err[:ERROR_BODY_MAX])
+            if kind == "refused":
+                self.metrics.request(row.rail, dialect, 403, elapsed)
+                self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock())
+                log.warning("upstream-refused %s %d session=%s model=%s [%s]", row.rail, status, row.id, row.model, note)
+                return error(403, "upstream-refused", f"rail {row.rail} refused this request for {row.model} (upstream {status}, a policy refusal — not the credential)")
+            self.metrics.request(row.rail, dialect, 424, elapsed)
             self.metrics.upstream_auth_rejected(row.rail)
-            self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock())
+            self.sessions.store.record_request(row.id, 424, int(elapsed * 1000), ts=self.sessions.clock())
+            self.sessions.capacity.reject_credential(row.rail, credential, self.sessions.clock())
             log.error("upstream-auth %s %d session=%s [%s]", row.rail, status, row.id, note)
-            return error(502, "upstream-auth", f"rail {row.rail} rejected the gateway's credential (upstream {status})")
+            return error(424, "upstream-auth", f"rail {row.rail} rejected the gateway's credential (upstream {status}) — not retryable")
         if row.rail == "anthropic":
             self.metrics.subscription_windows(row.rail, resp.headers)
-        note += self.sessions.capacity.observe(row.rail, status, resp.headers, self.sessions.clock())
+        note += self.sessions.capacity.observe(row.rail, status, resp.headers, self.sessions.clock(),
+                                               model=row.model, credential=credential)
         out_headers = rails.response_headers(resp.headers.multi_items())
         if status == 429 and "retry-after" not in {k.lower() for k in out_headers}:
             out_headers["retry-after"] = DEFAULT_RETRY_AFTER
@@ -220,30 +297,51 @@ class Proxy:
                 streaming: bool, t0: float, note: str) -> StreamingResponse:
         captured = bytearray()
         final = [status]  # what the row and the metric record; a mid-stream timeout rewrites it to 504
+        watch = StreamWatch(dialect, resp.headers.get("content-encoding"))
+        cut: list[str] = []  # why the body stopped before its end: timeout | transport-error | client-closed
 
         async def body_iter():
             try:
                 async for chunk in resp.aiter_raw():
                     if len(captured) < USAGE_CAPTURE_MAX:
                         captured.extend(chunk)
+                    watch.feed(chunk)
                     yield chunk
             except httpx.TimeoutException as e:
                 # Mid-stream read timeout: the status line is gone; the row and the metric say 504.
                 log.warning("upstream-timeout %s session=%s mid-stream: %s", row.rail, row.id, type(e).__name__)
                 final[0] = 504
+                cut.append("timeout")
+                raise
+            except httpx.HTTPError as e:
+                log.warning("upstream-transport-error %s session=%s mid-stream: %s", row.rail, row.id, type(e).__name__)
+                cut.append("transport-error")
+                raise
+            except BaseException:  # the client went away (the task is cancelled) — the stream never ended
+                cut.append("client-closed")
                 raise
             finally:
                 await resp.aclose()
                 elapsed = time.monotonic() - t0
                 usage = (parse_usage(decoded(bytes(captured), resp.headers.get("content-encoding")), streaming)
                          if final[0] < 300 else Usage())
+                incomplete = None
+                if 200 <= status < 300:
+                    if cut:
+                        incomplete = cut[0]
+                    elif not watch.complete(streaming):
+                        incomplete = "no-terminal"
                 self.metrics.request(row.rail, dialect, final[0], elapsed)
                 self.metrics.tokens(row.rail, usage)
+                if incomplete:
+                    self.metrics.request_incomplete(row.rail, dialect, incomplete)
                 self.sessions.store.record_request(row.id, final[0], int(elapsed * 1000), usage,
-                                                  ts=self.sessions.clock())  # the window-draw ledger's clock
-                log.info("%s rail=%s session=%s status=%d ms=%d in=%d cache_read=%d cache_write=%d out=%d [%s]",
+                                                  ts=self.sessions.clock(),  # the window-draw ledger's clock
+                                                  incomplete=incomplete)
+                log.info("%s rail=%s session=%s status=%d ms=%d in=%d cache_read=%d cache_write=%d out=%d%s [%s]",
                          dialect, row.rail, row.id, final[0], int(elapsed * 1000), usage.tokens_in,
-                         usage.tokens_cache_read, usage.tokens_cache_write, usage.tokens_out, note)
+                         usage.tokens_cache_read, usage.tokens_cache_write, usage.tokens_out,
+                         f" INCOMPLETE={incomplete}" if incomplete else "", note)
 
         return StreamingResponse(body_iter(), status_code=status, headers=out_headers)
 

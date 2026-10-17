@@ -235,7 +235,8 @@ class SessionService:
     async def admit(self, adm: Admission) -> JSONResponse:
         """The rail pick: first allowed rail that (a) the harness can speak, (b) names a model for the
         tier, (c) has a free slot, (d) is not capacity-blocked (window utilization / 429 latch /
-        window draw — capacity.py), (e) has a resolvable credential for the stack. A TRANSIENT
+        window draw / the tier model's cell cooled by a 429 — capacity.py), (e) has a resolvable
+        credential for the stack that no upstream has rejected (credential-rejected). A TRANSIENT
         credential fault stops the walk with 503 — the kube API being away is not a verdict. A walk
         that finds no rail defers with the reason and `retry_after_s` of the blocked rail that frees
         FIRST (a full rail frees after the policy's `defer_retry_s`)."""
@@ -252,6 +253,7 @@ class SessionService:
                 return self._defer(adm, "role-rail-denied", f"no rail allowed for role {adm.role.name} serves harness {adm.harness}")
         capacity_blocked: list[tuple[str, str, float, str]] = []  # (rail, reason, free_at, detail)
         cred_blocked: list[str] = []
+        cred_rejected: list[str] = []
         now = self.clock()
         for rail in candidates:
             rp = self.policy.rails[rail]
@@ -262,7 +264,7 @@ class SessionService:
             if self.store.active_count(rail, now) >= rp.max_sessions:
                 capacity_blocked.append((rail, "rail-capacity", now + self.policy.defer_retry_s, f"{rail} at max_sessions"))
                 continue
-            block = self.capacity.blocked(rail, now)
+            block = self.capacity.blocked(rail, now, model)
             if block is not None:
                 log.info("session: rail %s capacity-blocked (%s) until %s — skipped", rail, block.detail, iso(block.free_at))
                 capacity_blocked.append((rail, block.reason, block.free_at, block.detail))
@@ -283,7 +285,7 @@ class SessionService:
                     capacity_blocked.append((rail, blocked[0], now + blocked[1], f"codex headroom {blocked[0]}"))
                 continue
             try:
-                await self.resolver.resolve(rail, adm.stack)
+                credential = await self.resolver.resolve(rail, adm.stack)
             except CredentialTransient as e:
                 self.metrics.credential(rail, "transient")
                 log.warning("session: credential-transient on rail %s for stack %s: %s", rail, adm.stack.name, e)
@@ -294,11 +296,18 @@ class SessionService:
                 self.metrics.credential(rail, "definitive")
                 continue
             self.metrics.credential(rail, "resolved")
+            if self.capacity.credential_rejected(rail, credential):
+                log.info("session: rail %s skipped — its credential for stack %s was rejected upstream", rail, adm.stack.name)
+                cred_rejected.append(rail)
+                continue
             return self._dispatch(adm, rail, model, now)
         if capacity_blocked:
             rail, reason, free_at, _ = min(capacity_blocked, key=lambda b: b[2])  # ties: walk order (min is stable)
             return self._defer(adm, reason, "every allowed rail is blocked: " + "; ".join(b[3] for b in capacity_blocked),
                                retry_after_s=max(1, math.ceil(free_at - now)))
+        if cred_rejected:  # ⚖ a rejected credential outranks an unresolved one: it names the operator act
+            return self._defer(adm, "credential-rejected",
+                               f"the upstream rejected the credential of rail(s) {', '.join(cred_rejected)} for stack {adm.stack.name}")
         if cred_blocked:
             return self._defer(adm, "credential-unresolved",
                                f"no allowed rail has a resolvable credential for stack {adm.stack.name}: {', '.join(cred_blocked)}")

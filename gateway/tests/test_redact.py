@@ -87,8 +87,8 @@ async def test_upstream_401_summarised(gw, upstreams, caplog):
     with when("POST /openai/v1/chat/completions on the openrouter session (upstream answers 401)"):
         r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
     lines = _lines(caplog)
-    with then("status = 502", status={"expected": 502, "actual": r.status_code}):
-        assert r.status_code == 502
+    with then("status = 424", status={"expected": 424, "actual": r.status_code}):
+        assert r.status_code == 424
     with then("a log line starts 'upstream-auth openrouter 401' and none copies the upstream body (LEAK / sk-ant-oat / invalid x-api-key)",
               log_lines={"actual": lines}):
         assert any(line.startswith("upstream-auth openrouter 401") for line in lines), lines

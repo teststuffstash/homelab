@@ -52,6 +52,12 @@
   },
   "output": {
     "description": "the upstream response, status + headers (minus hop-by-hop) + body bytes, relayed unchanged; `retry-after` kept on 429",
+    "complete": {
+      "terminal_event": "message_stop",
+      "incomplete_reasons": ["no-terminal", "timeout", "transport-error", "client-closed"],
+      "description": "a 2xx is complete when a non-streamed body was read to its end, or a stream carried its terminal event; otherwise the request row's `incomplete` names the reason (sessions.schema.json get.output.requests_incomplete)",
+      "x-requirements": ["GW-RAIL-ANTHROPIC"]
+    },
     "x-requirements": ["GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE", "GW-RAIL-OPENROUTER"]
   },
   "error_envelope": {
@@ -78,7 +84,8 @@
     "credential-transient": { "status": 503, "description": "the kube API failed or was unreachable while resolving the session's credential; retry", "x-requirements": ["GW-CRED-RESOLVE", "GW-CRED-BOUNDARY"] },
     "model-not-session": { "status": 403, "description": "the body's model is not the session's model", "x-requirements": ["GW-MODEL-RESOLVE"] },
     "dialect-unsupported-on-rail": { "status": 501, "description": "the session's rail does not speak this path's dialect (the subscription token is Anthropic-only)", "x-requirements": ["GW-RAIL-ANTHROPIC"] },
-    "upstream-auth": { "status": 502, "description": "the upstream answered 401/403 — the rail credential is bad; the upstream body is never relayed", "x-requirements": ["GW-CRED-BOUNDARY", "GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE"] },
+    "upstream-auth": { "status": 424, "description": "the upstream answered 401, or 403 naming a credential reason — the rail credential is bad (marked rejected for admission); 4xx so no harness retries it; the upstream body is never relayed", "x-requirements": ["GW-CRED-BOUNDARY", "GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE"] },
+    "upstream-refused": { "status": 403, "description": "the upstream answered a 403 that names no credential reason — a policy refusal of this model/request (OpenRouter's harness gate); the credential is untouched; the body is never relayed", "x-requirements": ["GW-CRED-BOUNDARY"] },
     "upstream-timeout": { "status": 504, "description": "connect > 10 s or read > 600 s", "x-requirements": ["GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE"] },
     "upstream-unreachable": { "status": 502, "description": "the upstream connection failed for a reason that is not a timeout (DNS, refused, TLS, reset); nothing reached the vendor", "x-requirements": ["GW-RAIL-ANTHROPIC", "GW-RAIL-OPENCODE"] },
     "header-refused": { "status": 502, "description": "a credential-shaped value in a header the gateway does not own — refused before any upstream call (the FU-251 tripwire)", "x-requirements": ["GW-CRED-BOUNDARY"] }

@@ -385,6 +385,10 @@ class FakeUpstream:
         # `usage` object of a 200 (the window-draw rows' token counts).
         self.rate_headers: dict[str, str] | None = None
         self.usage: dict[str, int] | None = None
+        # `upstream-429-reset` (specs/worlds/): OpenRouter's rate-limit shape — `x-ratelimit-*` with the
+        # reset in epoch MILLISECONDS and no `retry-after`; `retry_after` adds one when a row needs both.
+        self.reset_ms: int | None = None
+        self.retry_after: str | None = None
         self.app = Starlette(
             routes=[
                 Route("/v1/messages", self._messages, methods=["POST"]),
@@ -423,6 +427,20 @@ class FakeUpstream:
                                 headers={"retry-after": "30"})
         if self.behaviour == "upstream-429-no-header":
             return JSONResponse({"error": {"type": "rate_limit_error"}}, status_code=429)
+        if self.behaviour == "upstream-429-reset":
+            headers = {"x-ratelimit-limit": "20", "x-ratelimit-remaining": "0", "x-ratelimit-reset": str(self.reset_ms)}
+            if self.retry_after is not None:
+                headers["retry-after"] = self.retry_after
+            return JSONResponse({"error": {"message": "Rate limit exceeded: free-models-per-min. ", "code": 429,
+                                           "metadata": {"limit_source": "openrouter_free_tier_per_minute"}}},
+                                status_code=429, headers=headers)
+        if self.behaviour == "upstream-401-key-expired":  # the Go vendor's expired-key answer (tap, 2026-10-17)
+            return JSONResponse({"error": {"type": "authentication_error", "code": "api_key_expired",
+                                           "message": "This API key has expired."}}, status_code=401)
+        if self.behaviour == "upstream-403-refused":  # OpenRouter's harness-gate refusal (tap, 2026-10-17)
+            return JSONResponse({"error": {"message": "fixture/model:free is only available on agentic harnesses.", "code": 403,
+                                           "metadata": {"failed_routing_step": "Gate Free Endpoints by Agentic Harness"}}},
+                                status_code=403)
         if self.behaviour == "upstream-401":
             return JSONResponse({"error": {"type": "authentication_error", "message": "invalid x-api-key sk-ant-oat-LEAK"}}, status_code=401)
         if self.behaviour == "upstream-400-missing-session":
@@ -449,6 +467,9 @@ class FakeUpstream:
         if self.behaviour == "upstream-stream-gzip":
             return self._reply(call, StreamingResponse(_gzipped(_anthropic_sse(model)), media_type="text/event-stream",
                                                        headers={**self._rail_headers(), "content-encoding": "gzip"}))
+        if self.behaviour == "upstream-stream-truncated":
+            return self._reply(call, StreamingResponse(_anthropic_sse(model, truncated=True), media_type="text/event-stream",
+                                                       headers=self._rail_headers()))
         # the committed key example's usage (specs/use-cases/uc-1/anthropic-response.json): rows that
         # count tokens (GW-METRICS, GW-RAIL-*) cite these values; upstream-ok-cached adds the cache split
         usage = {"input_tokens": 12, "output_tokens": 7}
@@ -469,6 +490,9 @@ class FakeUpstream:
         model = (call["body"] or {}).get("model")
         if self.behaviour == "upstream-stream":
             return self._reply(call, StreamingResponse(_openai_sse(model), media_type="text/event-stream", headers={"x-fake-rail": self.rail}))
+        if self.behaviour == "upstream-stream-truncated":
+            return self._reply(call, StreamingResponse(_openai_sse(model, truncated=True), media_type="text/event-stream",
+                                                       headers={"x-fake-rail": self.rail}))
         return self._reply(call, JSONResponse(
             {"id": "chatcmpl-1", "object": "chat.completion", "model": model,
              "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
@@ -497,7 +521,7 @@ SUBSCRIPTION_HEADERS = {  # captured live 2026-10-16 (one haiku call), the shape
 }
 
 
-async def _anthropic_sse(model):
+async def _anthropic_sse(model, truncated: bool = False):
     events = [
         ("message_start", {"type": "message_start", "message": {"id": "msg_s", "type": "message", "role": "assistant", "model": model, "content": [], "usage": {"input_tokens": 23, "output_tokens": 1}}}),
         ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
@@ -507,6 +531,8 @@ async def _anthropic_sse(model):
         ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 9}}),
         ("message_stop", {"type": "message_stop"}),
     ]
+    if truncated:  # `upstream-stream-truncated`: the body ends after the first delta — no message_delta, no message_stop
+        events = events[:3]
     for name, ev in events:
         yield f"event: {name}\ndata: {json.dumps(ev)}\n\n".encode()
 
@@ -520,15 +546,18 @@ async def _gzipped(events):
     yield z.flush()
 
 
-async def _openai_sse(model):
+async def _openai_sse(model, truncated: bool = False):
     chunks = [
         {"id": "c", "object": "chat.completion.chunk", "model": model, "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Hel"}}]},
         {"id": "c", "object": "chat.completion.chunk", "model": model, "choices": [{"index": 0, "delta": {"content": "lo"}}]},
         {"id": "c", "object": "chat.completion.chunk", "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 19, "completion_tokens": 4}},
     ]
+    if truncated:  # `upstream-stream-truncated`: the body ends after the first chunk — no usage, no [DONE]
+        chunks = chunks[:1]
     for c in chunks:
         yield f"data: {json.dumps(c)}\n\n".encode()
-    yield b"data: [DONE]\n\n"
+    if not truncated:
+        yield b"data: [DONE]\n\n"
 
 
 class RailTransport(httpx.AsyncBaseTransport):
@@ -539,6 +568,9 @@ class RailTransport(httpx.AsyncBaseTransport):
         self.transports = {rail: httpx.ASGITransport(app=u.app) for rail, u in upstreams.items()}
         self.unreachable: set[str] = set()  # the `upstream-down` world: a connect failure that is not a timeout
         self.slow: set[str] = set()  # the `upstream-slow` world, clock-faked: the read "takes" > 600 s
+        # `upstream-stream-cut`: the answer's status + first chunk arrive, then the read fails mid-body
+        # ("timeout" → httpx.ReadTimeout, "transport-error" → httpx.RemoteProtocolError).
+        self.cut: dict[str, str] = {}
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         for rail, base in self.bases.items():
@@ -549,8 +581,30 @@ class RailTransport(httpx.AsyncBaseTransport):
                     raise httpx.ReadTimeout(f"{rail} upstream read past 600 s (fake)", request=request)
                 prefix = base.path.rstrip("/")
                 sub = request.url.copy_with(path=request.url.path[len(prefix):])
-                return await self.transports[rail].handle_async_request(httpx.Request(request.method, sub, headers=request.headers, content=request.content))
+                resp = await self.transports[rail].handle_async_request(httpx.Request(request.method, sub, headers=request.headers, content=request.content))
+                if rail in self.cut:
+                    return httpx.Response(resp.status_code, headers=resp.headers, stream=_CutStream(resp.stream, self.cut[rail], request),
+                                          request=request)
+                return resp
         raise httpx.ConnectError(f"no fake upstream for {request.url}", request=request)
+
+
+class _CutStream(httpx.AsyncByteStream):
+    """The first chunk of the fake's body, then the read fails (the `upstream-stream-cut` world)."""
+
+    def __init__(self, inner, how: str, request: httpx.Request):
+        self.inner, self.how, self.request = inner, how, request
+
+    async def __aiter__(self):
+        async for chunk in self.inner:
+            yield chunk[: max(1, len(chunk) // 3)]
+            break
+        if self.how == "timeout":
+            raise httpx.ReadTimeout("read past 600 s mid-stream (fake)", request=self.request)
+        raise httpx.RemoteProtocolError("peer closed the connection mid-body (fake)", request=self.request)
+
+    async def aclose(self):
+        await self.inner.aclose()
 
 
 # ---------------------------------------------------------------------------------------------

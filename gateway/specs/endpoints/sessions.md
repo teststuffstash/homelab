@@ -24,7 +24,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input`, `post.output` (`dispatch` / `defer`) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw); the ladder's class/tier/cell walk, strikes, cooldowns and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input`, `post.output` (`dispatch` / `defer`) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
@@ -44,11 +44,13 @@ ref the policy names unless a row says otherwise; the canonical end-to-end pair 
 
 A `POST /sessions` body is admitted by walking `roles.<role>.rails` in order and picking the
 **first rail** whose `active_sessions < rails.<rail>.max_sessions`, that is not
-capacity-blocked ([§Capacity](#capacity--the-ladders-capacity-half)), AND whose credential for
-the stack resolves ([GW-CRED-RESOLVE](#gw-cred-resolve)). None → `defer`, whose `reason` and
+capacity-blocked — the rail, or the [cell](../glossary.md#cell) its tier's model makes on it
+([§Capacity](#capacity--the-ladders-capacity-half)) — AND whose credential for the stack resolves
+([GW-CRED-RESOLVE](#gw-cred-resolve)) and has not been rejected upstream. None → `defer`, whose `reason` and
 `retry_after_s` are those of the blocked rail that frees **first** (a full rail frees after the
 policy's `defer_retry_s`, 60 s; ties go to walk order — ⚖ a gateway choice, the old proxy has no multi-rail answer); a walk blocked only on credentials
-defers `credential-unresolved`. The walk is filtered
+defers `credential-unresolved`, or `credential-rejected` when any of its credentials was rejected
+upstream (⚖ the rejection outranks: it names the operator act, a rotation). The walk is filtered
 by the harness first: `claude` speaks the anthropic dialect (rails `anthropic`, `opencode`);
 `opencode` / `goose` speak openai (rails `openrouter`, `opencode`); `codex` speaks responses
 (rail `codex` only — gated by account headroom, [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom),
@@ -58,6 +60,8 @@ cannot speak is skipped, and an **explicit** `harness` × `rail` pair that canno
 polls after `retry_after_s`; only a malformed body or a transient credential fault is an HTTP
 error. ⚖ The gateway admits on count, capacity and credential: no strikes, no cooldowns, no
 provider pins — the rest of the ADR-096 ladder is a gap, rendered as rows, not omitted. The
+transport facts the gateway sees FIRST-HAND (a 429, a 401/403, a stream's end) are its own and are
+rows below; a ride's outcome is the consumer's and is not read here. The
 caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limit answer.
 
 ### Which rail, or why not
@@ -104,7 +108,7 @@ caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limi
 
 ### Capacity — the ladder's capacity half
 
-Three per-rail checks after the slot count ([model-routing.md §The ladder](../../../docs/agents/model-routing.md#the-ladder--rail--class--tier--cell)'s
+Three per-rail checks and one per-cell check after the slot count ([model-routing.md §The ladder](../../../docs/agents/model-routing.md#the-ladder--rail--class--tier--cell)'s
 capacity facts, moved from the old proxy's two limit endpoints into the admission answer). Every
 threshold, hold and price is policy data under `rails.<rail>.admission` — none is a code literal —
 and each is ⚖ **copied** from the old proxy, which keeps serving its own copy until it retires
@@ -121,11 +125,38 @@ blocks lifts.
   `reading_stale_s` (**900 s**) is no reading either — an unavailable reading admits, never blocks.
   ⚖ The 900 s bound has **no** old-proxy precedent (it sees every subscription ride; this gateway
   sees only its own, so its reading ages out) — a guess the operator may tune.
-- **429 latch** (`anthropic`, `opencode`): an upstream 429 on a rail whose policy sets
-  `latch_429_hold_s` blocks the rail until `retry-after` (a non-numeric or absent one → the hold);
-  any 2xx on the rail clears it early. ⚖ holds **900 s** = `ANTHROPIC_429_HOLD_S` /
-  `GO_CAPACITY_HOLD_S` (`openrouter-proxy.py`). `openrouter` declares none: the old proxy never
-  latches it on one 429 (its account latch needs cross-model 429s — a gap row below).
+- **Cell cooldown** (every rail): an upstream 429 cools the **cell** — (rail, the session's policy
+  model) — until its reset, read from the wire: `retry-after` (delta seconds) first, then
+  `x-ratelimit-reset` (OpenRouter sends the reset as epoch **milliseconds** and no `retry-after`),
+  else the rail's `latch_429_hold_s`, else the policy's `defer_retry_s`. Admission skips a cooled
+  cell (`cell-cooled`, `retry_after_s` = its reset); any 2xx on that cell clears it early — the old
+  router's transport belt, which a 2xx also clears
+  ([model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder)).
+  ⚖ The cell is (rail, model), not (rail, model, provider): the gateway pins no provider (a gap
+  row below), so admission could not act on a provider-scoped cooldown. The evidence that a 429
+  is a MODEL's fact, not the rail's: the 2026-10-17 free-model experiment
+  (`docs/spikes/gateway-free-models-2026-10-17/cells.tsv`, 549 upstream responses) saw 115
+  OpenRouter 429s across three models, each the model's own limit (`limit_source`
+  `upstream_provider_shared_pool` 105, `openrouter_shared_capacity` 3,
+  `openrouter_free_tier_per_minute` 7), while two other models on the same key served 200s
+  throughout; an experiment rail latch on one model's 429 deferred a different model.
+- **429 latch** (`anthropic`, `opencode`): the ACCOUNT-scope signal. ⚖ Scope is a property the
+  policy declares, never inferred from a count: a rail whose policy sets `latch_429_hold_s` is one
+  subscription account whose limits are account windows (the subscription's 5h/7d, Go's
+  5h/7d/30d dollar windows), so a 429 there latches the whole rail as well as cooling its cell,
+  for the same reset (a reset-less 429 → the hold); any 2xx on the rail clears it early. ⚖ holds
+  **900 s** = `ANTHROPIC_429_HOLD_S` / `GO_CAPACITY_HOLD_S` (`openrouter-proxy.py`). `openrouter`
+  declares none: its 429s are per model (the experiment above). A count rule ("≥ 2 models
+  429'd") would have latched it wrongly: two models' independent provider-pool 429s overlapped
+  there while two others served.
+- **Credential rejected** (every rail): an upstream 401, or a 403 whose error names a credential
+  reason ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)), marks THAT credential —
+  the rail plus a sha256 fingerprint of the value, never the value — rejected. Admission resolves
+  the stack's credential as before and skips the rail when that credential is rejected; any 2xx on
+  it clears it, and a changed value is a different fingerprint, so a rotation clears it by
+  construction. ⚖ No time lifts it (only an operator act or a 2xx can), so a walk blocked only by
+  it defers `credential-rejected` with the policy's `defer_retry_s`, the poll interval. A policy
+  refusal (a 403 that names no credential reason) rejects nothing.
 - **Go window draw** (`opencode`): each `window_draw.windows.<w>` sums the rail's metered (2xx)
   requests inside the window open at `now`, priced from the four token classes at **list** rates —
   uncached input and output at `in`/`out`, each cache class at its own rate (a `null` rate draws
@@ -164,8 +195,35 @@ upstream answers as stated) — never seeded.
 | "any 2xx on the rail clears the latch" | reviewer ride on anthropic → 429, the same session → 200 | — | reviewer, `rail: anthropic` || dispatch | anthropic | — | — |
 | "a Go 429 latches the Go rail" | worker ride on opencode → 429 | — | worker, `rail: opencode` || defer | — | rail-latched | 30 |
 | "a latched rail is skipped, the walk continues" | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
-| "a rail whose policy declares no latch does not latch ⚖" | worker ride on openrouter → 429 | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
+| "a rail whose policy declares no latch is not latched: its other model admits ⚖" | worker ride on openrouter → 429 | — | worker, `rail: openrouter`, `tier: heavy` || dispatch | openrouter | — | — |
 | "every rail blocked: the rail that frees first names the defer ⚖" | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | rail-latched | 30 |
+
+The cell rows ride `upstream-429-reset` — OpenRouter's shape, `x-ratelimit-limit` / `-remaining` /
+`-reset` (epoch ms) and no `retry-after` — unless stated. A worker on openrouter rides the standard
+tier's `deepseek/deepseek-v4-flash`; its heavy tier is `deepseek/deepseek-v4.1-flash`.
+
+| description | arrange | then | body || decision | rail | reason | retry_after_s |
+|---|---|---|---||---|---|---|---|
+| "a 429 cools its cell until x-ratelimit-reset (epoch ms)" | worker ride on openrouter → 429, reset T0 + 42 s | — | worker, `rail: openrouter` || defer | — | cell-cooled | 42 |
+| "retry-after outranks x-ratelimit-reset" | the same, plus `retry-after: 30` | — | worker, `rail: openrouter` || defer | — | cell-cooled | 30 |
+| "a 429 that names no reset cools for defer_retry_s ⚖" | worker ride on openrouter → 429, no header | — | worker, `rail: openrouter` || defer | — | cell-cooled | 60 |
+| "another model on the rail is not cooled" | worker ride on openrouter → 429, reset T0 + 42 s | — | worker, `rail: openrouter`, `tier: heavy` || dispatch | openrouter (`deepseek/deepseek-v4.1-flash`) | — | — |
+| "the cell admits again at its reset" | worker ride on openrouter → 429, reset T0 + 42 s | +42 s | worker, `rail: openrouter` || dispatch | openrouter | — | — |
+| "a 2xx on the cell clears it" | worker ride on openrouter → 429, the same session → 200 | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
+| "a cooled cell is skipped, the walk continues" | researcher ride on openrouter → 429 (the heavy cell) | — | researcher, `harness: claude` (policy walk) || dispatch | anthropic | — | — |
+| "a subscription 429 latches the rail and cools the cell: the latch names the defer ⚖" | reviewer ride on anthropic → 429 (`retry-after: 30`) | — | reviewer, `rail: anthropic` || defer | — | rail-latched | 30 |
+
+The credential rows arrange an upstream 401 (`upstream-401`, or the Go vendor's
+`upstream-401-key-expired`) or OpenRouter's harness-gate 403 (`upstream-403-refused`) on one ride.
+
+| description | arrange | then | body || decision | rail | reason | retry_after_s |
+|---|---|---|---||---|---|---|---|
+| "a rejected credential is skipped, the walk continues" | worker ride on opencode → `upstream-401-key-expired` | — | worker (policy walk) || dispatch | openrouter | — | — |
+| "every allowed rail's credential rejected defers credential-rejected ⚖" | prober ride on anthropic → `upstream-401` | — | prober (policy walk) || defer | — | credential-rejected | 60 |
+| "a rejection is per credential: another stack's key still admits" | platform worker ride on openrouter → `upstream-401` | — | oracle worker, `rail: openrouter` (its own key) || dispatch | openrouter | — | — |
+| "a new credential value clears it" | platform worker ride on openrouter → `upstream-401`; the Secret then holds a new key | +301 s (the ref cache) | worker, `rail: openrouter` || dispatch | openrouter | — | — |
+| "a 2xx on the credential clears it" | platform worker ride on openrouter → `upstream-401`, the same session → 200 | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
+| "a policy refusal does not reject the credential" | worker ride on openrouter → `upstream-403-refused` | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
 
 The Go rows: a worker ride on opencode rides `opencode-go/deepseek-v4-flash` (peak in 0.30 / out
 1.20 / cache_read 0.006 / cache_write `null`; off-peak 0.15 / 0.60 / 0.003 / `null`), a reviewer
@@ -190,12 +248,14 @@ $24 (7d) / $48 (30d). The expected value of each row is computed in its test's c
 | description | input || v0 answer | the gap |
 |---|---||---|---|
 | "⚑ gap: FU-109 tier thresholds" | a dispatch-unit tier asking past the 5h threshold || deferred at the per-window threshold | the old proxy RAISES a window's threshold per consumer tier (`model-classes.json` `tier_thresholds`); the gateway's `light`/`standard`/`heavy` is not that vocabulary |
-| "⚑ gap: a latch survives a restart" | a 429 latch, then a gateway roll || the latch is forgotten; the next 429 re-latches | the old proxy persists its latches (`router.latch_save`); this one is in memory |
-| "⚑ gap: the OpenRouter account latch" | 402s / cross-model 429s / credit below the floor on a stack key || no latch | the old proxy's `rpd` / `credit` / hard-402 legs (homelab#158) and the key headroom poll ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)) |
+| "⚑ gap: a latch survives a restart" | a 429 latch, a cooled cell or a rejected credential, then a gateway roll || forgotten; the next 429 / 401 marks it again | the old proxy persists its latches (`router.latch_save`); these are in memory |
+| "⚑ gap: the OpenRouter account latch" | 402s / credit below the floor on a stack key || no latch | the old proxy's `rpd` / `credit` / hard-402 legs (homelab#158) and the key headroom poll ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)); cross-model 429s are per-cell facts here (§Capacity), not an account signal |
+| "⚑ gap: the free-tier key budget spans every `:free` cell" | a 429 whose body says `limit_source: openrouter_free_tier_per_minute` || only the cell that saw it cools; the next `:free` cell 429s once and cools itself | the limit is the key's across `:free` models (20 req/min in the experiment's headers); reading the body's `limit_source` would cool them as one group — not built |
+| "⚑ gap: a provider-scoped cell" | a 429 naming `metadata.provider_name` || the (rail, model) cell cools | the old router's `(model, provider)` pair; meaningful only once admission pins providers (the provider-pin gap) |
 | "⚑ gap: a Go 402" | an upstream 402 on opencode || no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
 | "⚑ gap: the Go draw is the gateway's own traffic only" | Go spend through the old proxy or the jail shim || not in this ledger — this draw is a lower bound of the account's | the account-wide reading (the old proxy's ledger, the jail shim's reports) |
 | "⚑ gap: long-context price tiers" | a Go model with a `GO_PRICES_LONG` row || — no policy model has one | gometer's long-context override; add the row with the first such model |
-| "⚑ gap: a model struck on this task last round" | worker, round 2 after a strike || the policy model, unchanged | ADR-096 strikes / cooldowns / pair holds |
+| "⚑ gap: a model struck on this task last round" | worker, round 2 after a strike || the policy model, unchanged | ADR-096 strikes / pair holds (the transport cooldown above is per cell, for every task) |
 | "⚑ gap: labels, urgency, budget class" | body carries none, none read || — | the ADR-096 ladder's inputs; `tier` is the only size knob |
 | "⚑ gap: `POST /route`" | any || 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
 | "⚑ gap: a capacity doorbell" | a rail frees a slot || nothing is pushed | the caller polls `retry_after_s` |
@@ -304,7 +364,7 @@ the token; `GET /sessions/{id}` returns the row without it. The data plane accep
 | "the token has the fixed shape" | dispatch || `token` matches `^gws_[A-Za-z0-9_-]{32}$` |
 | "two dispatches never share a token" | dispatch twice || tokens differ |
 | "the row holds a hash, not the token" | dispatch, read the DB || `token_hash` = sha256 hex of the token; no column equals the token |
-| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller` (the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
+| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller, requests_incomplete` (`requests_incomplete`: the 2xx answers whose body stopped before its end, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter); the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
 | "GET on an unknown id" | `GET /sessions/nope` || 404 `session-not-found` |
 | "expiry is the policy TTL" | dispatch at T || `expires_at` = T + 14400 s (`policy-default`) |
 | "a request through the data plane is counted on the row" | dispatch → one `upstream-ok` call → GET || `requests` = 1, `tokens_in`/`tokens_out` = the upstream `usage` (`tokens_in` = uncached input; the cache classes in `tokens_cache_read`/`tokens_cache_write` — GW-METRICS) |
