@@ -474,3 +474,18 @@ zero usage or inventing resets. Native jail quota reports alone do not prove SIW
 
 No live credential was read, refreshed or transferred for this investigation. No model call,
 deployment, gateway rule, launcher, policy, runtime pin or credential backend was changed.
+
+### Native continuation measurement — 2026-10-17 (FU-270)
+
+The [continuation fixture](../../experiments/codex-rail/README.md#native-tool-continuation) now
+compares a synthetic tool-result request directly and through the gateway. Both runtime-pinned
+Codex 0.161.0 and jail 0.163.0 return the fake upstream's `x-codex-turn-state` on the direct
+continuation; neither returns it through the gateway. Both gateway turns nevertheless complete.
+This isolates the documented header gap: the current gateway suppresses the response header
+and has no inbound allowance to return it. A completed first-turn fixture is insufficient evidence
+for the native profile. The fixture uses `get_goal` (read-only), dummy credentials and temporary
+homes; it is not a real-model tool-use canary or a deployed-runtime test.
+
+The next FU-270 header change must explicitly define the opaque state round trip and its
+session/account boundaries in [GW-RAIL-CODEX](../../gateway/specs/endpoints/openai-responses.md#gw-rail-codex),
+then run this comparison again. No passthrough exception is introduced by this measurement.
