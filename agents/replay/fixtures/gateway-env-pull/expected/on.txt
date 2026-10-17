@@ -1,0 +1,15 @@
+OUT → gateway(sessions): pod LLM env = pulled in-pod from http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env (ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL) with a projected SA token (audience agent-gateway) — no token in the launcher or the manifest
+OUT LLM_ENV|        - name: AGENT_GATEWAY_PULL_URL
+OUT LLM_ENV|          value: "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env"
+OUT LLM_ENV|        - name: AGENT_GATEWAY_ENV_KEYS
+OUT LLM_ENV|          value: "ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL"
+OUT MOUNT|
+OUT MOUNT|        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
+OUT VOLUME|
+OUT VOLUME|    - name: gateway-token
+OUT VOLUME|      projected:
+OUT VOLUME|        sources:
+OUT VOLUME|          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
+OUT SUB_LABEL=', "homelab.teststuff.net/rail": opencode-go, "homelab.teststuff.net/gateway-session": "0123abcd"'
+OUT gws_ in the manifest fragments: 0
+RC 0

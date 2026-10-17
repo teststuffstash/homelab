@@ -1,5 +1,0 @@
-CALL kubectl -n homelab create -f -
-STDIN {"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"agent-homelab-120000-gateway-env","namespace":"homelab","labels":{"app":"agent-session","homelab.teststuff.net/gateway-session":"0123abcd"}},"stringData":{"OPENCODE_CONFIG_CONTENT":"{\"apiKey\":\"gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}"}}
-ERR error: the server could not find the requested resource
-ERR → gateway(sessions): defer — [env-secret-create-failed: homelab/agent-homelab-120000-gateway-env] retry_after=?s — FAIL CLOSED, releasing and not dispatching.
-RC 1

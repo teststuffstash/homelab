@@ -2,6 +2,8 @@ OUT LLM_ENV|        - name: GOOSE_PROVIDER
 OUT LLM_ENV|          value: "openrouter"
 OUT LLM_ENV|        - name: GOOSE_MODEL
 OUT LLM_ENV|          value: "deepseek/deepseek-v4-flash"
-OUT SUB_LABEL='' GW_SECRET='' GW_SECRET_CREATED=''
-OUT token in LLM_ENV: 0
+OUT MOUNT|
+OUT VOLUME|
+OUT SUB_LABEL=''
+OUT gws_ in the manifest fragments: 0
 RC 0
