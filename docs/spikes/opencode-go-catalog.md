@@ -210,7 +210,7 @@ means prose or a TypeScript literal, open to format drift.
 | `policy.json` `rails.opencode.admission.window_draw.windows` | per-model limit (row 5) | on doc commit | med |
 | `policy.json` `rails.opencode.models.*` (deepseek-v4-flash) | membership check against `/api/v2/config` | with the catalog | **high** (F3 is the case it would have caught) |
 | per-model context / output caps (nowhere today) | `/api/v2/config` `limit.context` / `limit.output` | with the catalog | **high** |
-| key expiry (FU-314, read off the console by hand) | none | — | n/a |
+| key expiry (read off the console by hand) | none | — | n/a |
 | live usage / remaining allowance | none for in-plan Go; Budgets API only for credit overflow | — | n/a: stays self-metered |
 
 ## Gaps where no API exists
