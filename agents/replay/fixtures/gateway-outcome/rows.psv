@@ -11,3 +11,4 @@ key-retry-silent       |       |       |                         | key-retry-sil
 adhoc-succeeded        |       |       |                         | adhoc-succeeded      |
 adhoc-failed           |       |       |                         | adhoc-failed         |
 report-fails           |       |       |                         | report-fails         |
+adhoc-stats-clean      |       |       |                         | adhoc-succeeded      |

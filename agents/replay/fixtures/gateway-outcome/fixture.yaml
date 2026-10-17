@@ -5,8 +5,8 @@
 #   • a TASKED ride (STRIKE_APPLIES) that struck → `class` = its ERR_CLASS when a vocabulary member
 #     (quota → harness-gave-up; anything else → unknown), the pod's own strike reading its class off
 #     the stats line; a tasked ride that did not strike → `clean`; a key-class marker → nothing;
-#   • an AD-HOC ride → `clean` when its pod Succeeded, else NO report (its task key is shared by
-#     every ad-hoc ride);
+#   • an AD-HOC ride → `clean` when its stats line says `exit_status: clean` or its pod Succeeded,
+#     else NO report (its task key is shared by every ad-hoc ride);
 #   • then the session is RELEASED (the DELETE) — after the report, never before;
 #   • a counted strike (the answer's `strike`) on a tasked ride with salvage none and attempt ≤
 #     AGENT_GATEWAY_AUTO_ATTEMPTS (2) → the launcher re-enters itself with the SAME argv and

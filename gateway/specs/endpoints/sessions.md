@@ -665,9 +665,9 @@ otherwise); the pass is `sessions.reap()` (the app's background loop in producti
 | "a re-created pod under the same name is reaped ⚖" | bound, pulled by fixer-1 (uid-1) | fixer-1: running, uid-2 || released | pod-gone |
 | "a running pod keeps its session" | bound, pulled by fixer-1 | fixer-1: running, uid-1 || active | null |
 | "a pod the API cannot answer for is left to the TTL ⚖" | bound, pulled by fixer-1 | unknown (5xx / no Role) || active | null |
-| "a bound session not yet pulled is not checked" | bound, never pulled | (0 calls) || active | null |
-| "an unbound session lives in its caller's pod" | unbound, the caller's token pod-bound to `specs-review-tick` | `specs-review-tick`: 404 || released | pod-gone |
-| "a caller token with no pod binding is left to the TTL" | unbound, the caller's token not pod-bound (minted) | (0 calls) || active | null |
+| "a bound session not yet pulled is not checked ⚖" | bound, never pulled | (0 calls) || active | null |
+| "an unbound session lives in its caller's pod ⚖" | unbound, the caller's token pod-bound to `specs-review-tick` | `specs-review-tick`: 404 || released | pod-gone |
+| "a caller token with no pod binding is left to the TTL ⚖" | unbound, the caller's token not pod-bound (minted) | (0 calls) || active | null |
 
 | description | sequence || (state, release_reason, released) |
 |---|---||---|
