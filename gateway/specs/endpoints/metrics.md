@@ -73,7 +73,7 @@ the process is down.
 | "⚑ gap: a slot freed is not announced" | a release on a full rail || the gauge drops; nothing is pushed | the capacity doorbell |
 | "⚑ gap: the store mode is not a metric" | the DB fell open to memory || only `/healthz` says so | a `gateway_db_mode` family, and the alert on it |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 

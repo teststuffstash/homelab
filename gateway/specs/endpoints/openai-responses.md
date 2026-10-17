@@ -34,7 +34,8 @@ admission reasons and the error envelope.
 |---|---|---|---|
 | [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, dark — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP`; `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
 | [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `admission.reasons` | — | v0, dark — authenticated report ingress and the codex window gauges are `⚑ gap` |
-| [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | v0 with the FAKE store only — the production write-back, the refresh exchange transport and lost-rotation recovery are `⚑ gap` |
+| [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | v0 with the FAKE store only — the production write-back and lost-rotation recovery are `⚑ gap` |
+| [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport, injectable only; production wiring remains dark |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked — exact on this rail |
 | [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization` | `session-unknown`, `session-expired`, `session-released` | linked |
 | [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) (owned there) | `admission.reasons` | — | linked — the headroom defers are three more `defer.reason` values |
@@ -140,7 +141,7 @@ failure, client cancellation — and a generation is never retried once a byte r
 | "⚑ gap: the live canary" | a real account || never run | spike step 4 — a separately authorized maintenance window |
 | "⚖ local evidence: the pinned Codex CLI completes a turn through this gateway" | `experiments/codex-rail/compat.py` (codex-cli 0.161.0, the agent-runtime lock) || a completed `codex exec --json` turn, one rotation, one upstream close | not CI: the CLI is not in the CI toolchain — dated local evidence in `experiments/codex-rail/evidence.json` |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -216,7 +217,7 @@ before the credential store is read, and it reserves nothing ⚖.
 | "⚑ gap: codex window gauges" | an accepted report || no `gateway_subscription_*{rail="codex"}` series | the report → gauge wiring and the dashboard panels |
 | "⚑ gap: reservation" | two admissions at 94 % || both dispatched | reports do not meter concurrent use; the session cap is the only bound |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -284,14 +285,70 @@ durable state is read without refreshing: `ready` admits, `revoked` / `refreshin
 | description | input || v0 answer | the gap |
 |---|---||---|---|
 | "⚑ gap: production write-back" | a rotation in production || no store is wired | Infisical write-back (the source of truth); updating only the ESO-generated Secret risks restoring an obsolete refresh token |
-| "⚑ gap: the refresh exchange" | a near-expiry credential in production || no exchange exists | the OAuth token-endpoint transport, its timeouts and revocation mapping |
+| "⚑ gap: refresh production wiring" | a near-expiry credential in production || native transport exists but is not wired | select the upstream profile, provision the durable store and run the live canary |
 | "⚑ gap: lost-rotation recovery" | a crash between the exchange and the save || recovery-required forever | an explicitly designed recovery operation with an authoritative replacement |
 | "⚑ gap: cross-process fencing" | two gateway replicas || one replica only (ADR-139) | distributed fencing — FU-271 |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
 --8<-- "GW-CODEX-OAUTH.md"
+
+</details>
+
+
+## GW-CODEX-REFRESH
+
+The native Codex refresh transport is an injectable callable for [GW-CODEX-OAUTH](#gw-codex-oauth),
+not a login/import operation and not the SIWC token-sharing profile. It is not wired into production.
+The [profile investigation](../../../docs/spikes/codex-subscription-rail.md#upstream-profile-investigation--2026-10-17-fu-270)
+explains why these profiles must stay separate (FU-270).
+
+> **External:** native implementation — [OpenAI Codex rust-v0.161.0 · auth manager § request_chatgpt_token_refresh](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/login/src/auth/manager.rs#L1627)
+> **External:** native implementation — [OpenAI Codex rust-v0.161.0 · auth manager § should_refresh_proactively, access JWT exp](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/login/src/auth/manager.rs#L2999)
+
+One POST goes to `https://auth.openai.com/oauth/token`, JSON containing only `grant_type`,
+`client_id` (the native public client id) and the stored `refresh_token`. No resource, scope,
+access bearer or inbound headers are sent. TLS verification is on; ambient proxies, redirects
+and retries are off. Connect/read/write/pool timeouts are each 10 seconds (per operation, not
+an overall deadline). Response bytes are bounded to 64 KiB; encoded responses are refused. ⚖ These
+bounds and refusing unknown token shapes are gateway policy, not vendor limits.
+
+A successful exchange requires a fresh access JWT with a finite future `exp`. This claim is
+used only for refresh scheduling, not verified identity; no guessed TTL is substituted for an
+opaque or malformed token. The enrolled account id is preserved; if the access JWT supplies
+`https://api.openai.com/auth.chatgpt_account_id`, it must match. An omitted refresh token retains
+the old one (as the native client does); a present empty/null/malformed token fails closed.
+ID tokens are not used for login or enrolment by this adapter.
+
+A JSON 401, or JSON 400 with `invalid_grant`, `refresh_token_expired`, `refresh_token_reused` or
+`refresh_token_invalidated` (case-insensitive, string `error` or nested `error.code`) is definitive:
+the lifecycle persists `revoked`. Every other failure is uncertain, including malformed/oversized
+responses, redirects, 429, 5xx, timeouts, invalid replacement and account mismatch. ⚖ Unlike the
+native CLI's transient retry, the gateway keeps `refreshing` and requires recovery, because it
+cannot rule out a lost rotation. Exceptions expose fixed text and no upstream exception chain.
+
+World: [policy-codex · native-refresh](../worlds/README.md#the-codex-rails-fakes-tests_codex_worldpy),
+HTTP fake reached through the real transport adapter and lifecycle; no live credentials.
+
+| description | token endpoint response || first acquire | durable state | HTTP attempts across two acquires |
+|---|---||---|---|---|
+| "invalid grant stops refresh permanently" | 400 invalid_grant || credential-revoked | revoked | 1 |
+| "reused rotation stops refresh permanently" | 400 nested refresh_token_reused || credential-revoked | revoked | 1 |
+| "unauthorized refresh stops permanently" | 401 JSON || credential-revoked | revoked | 1 |
+| "rate limit is uncertain and never retried ⚖" | 429 || credential-refresh-uncertain | refreshing | 1 |
+| "redirect never sends the refresh token elsewhere" | 302 with Location || credential-refresh-uncertain | refreshing | 1 |
+| "unknown expiry never gets a guessed lifetime ⚖" | 200 opaque access token || credential-refresh-uncertain | refreshing | 1 |
+| "different account cannot replace the enrolled account" | 200 other account claim || credential-refresh-uncertain | refreshing | 1 |
+
+| description | response || saved before return | expiry |
+|---|---||---|---|
+| "rotation is saved before use" | fresh access JWT and replacement refresh token || both replacements, ready | JWT exp |
+| "omitted refresh token retains the stored token" | fresh access JWT only || replacement access and stored refresh, ready | JWT exp |
+
+<details markdown="1"><summary>Evidence — latest run</summary>
+
+--8<-- "GW-CODEX-REFRESH.md"
 
 </details>

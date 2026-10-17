@@ -83,7 +83,7 @@ is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`).
 | "⚑ gap: cost per request" | upstream-ok || tokens only, no USD | the `/generation` harvest and the cost ledger |
 | "⚑ gap: the [Zen rail](../../../docs/spikes/opencode-model-matrix.md)" | `rail: zen` || 400 `malformed-body` (not in the enum) | `opencode-zen` is declared `enabled: false` upstream; not a v0 rail |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 

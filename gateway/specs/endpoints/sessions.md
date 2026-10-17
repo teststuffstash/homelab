@@ -200,7 +200,7 @@ $24 (7d) / $48 (30d). The expected value of each row is computed in its test's c
 | "⚑ gap: `POST /route`" | any || 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
 | "⚑ gap: a capacity doorbell" | a rail frees a slot || nothing is pushed | the caller polls `retry_after_s` |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI (`evidence/evidence.json`, stamped `image
 digest · date`); unrendered here = unverified.
@@ -283,7 +283,7 @@ that block from a real dispatch answer; its run is the local-evidence row below.
 | "a declared `context_tokens` is echoed" | opencode-go/deepseek-v4-flash || 1000000 |
 | "an undeclared `context_tokens` is null, never a default" | claude/sonnet || null |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -309,7 +309,7 @@ the token; `GET /sessions/{id}` returns the row without it. The data plane accep
 | "expiry is the policy TTL" | dispatch at T || `expires_at` = T + 14400 s (`policy-default`) |
 | "a request through the data plane is counted on the row" | dispatch → one `upstream-ok` call → GET || `requests` = 1, `tokens_in`/`tokens_out` = the upstream `usage` (`tokens_in` = uncached input; the cache classes in `tokens_cache_read`/`tokens_cache_write` — GW-METRICS) |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -334,7 +334,7 @@ DELETE. Release is idempotent — a second DELETE answers 200 with the same `rel
 | "an expired session releases its slot" | expired, no DELETE | admission walk || — | the slot counts as free |
 | "release of an expired session" | expired | DELETE || 200 | `released_at` set; the data-plane verdict stays `session-expired` ⚖ (expiry is the older fact) |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -458,7 +458,7 @@ pull never logs the presented token; a JWT is masked by shape) are
 |---|---||---|---|
 | "⚑ gap: a codex `auth.command` re-runs" | a codex harness whose provider `auth.command` calls the pull URL || its second run is 409 `env-already-delivered` | Codex re-runs the command every `refresh_interval_ms` (default 5 min); a token-only, same-pod re-read is needed before a codex harness can use this endpoint — not built |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -643,7 +643,7 @@ on secrets to the gateway SA.
 | "a miss expires fast" | 404, advance 21 s, resolve || 2 | negative TTL elapsed — a transient blip never poisons the window |
 | "a transient never poisons a stack's other rail ⚖" | anthropic transient, then openrouter || the openrouter read happens | verdicts are per ref |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -680,7 +680,7 @@ real paths (an upstream 401 body, a malformed header, a debug line of the resolv
 | "a pull line names the session and the identity, never either token" | a bound dispatch → its pull ([GW-SESSIONS-PULL](#gw-sessions-pull)) || `env pulled id=«id» by system:serviceaccount:platform-agents:agentstack-worker` | the presented ServiceAccount token, the minted `gws_` token |
 | "a refused pull never logs the presented token" | a pull whose token reviews as another ServiceAccount || `pull-identity-refused` | the presented token |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 

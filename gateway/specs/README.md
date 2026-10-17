@@ -60,7 +60,7 @@ schema: <name>.schema.json
 ## GW-<REQ>
 <prose constraint>
 <decision table: description | inputs || expected>
-<details><summary>Evidence</summary> --8<-- "GW-<REQ>.md" </details>
+<details markdown="1"><summary>Evidence</summary> --8<-- "GW-<REQ>.md" </details>
 ```
 
 ## Index
@@ -95,3 +95,4 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-METRICS](endpoints/metrics.md#gw-metrics) | metrics | the `gateway_*` families and their bounded labels |
 | [GW-HEALTH](endpoints/health.md#gw-health) | health | liveness and the store mode |
 | [GW-ACCESS](access.md#gw-access) | access | role × service: allowed / denied / unenforced |
+| [GW-CODEX-REFRESH](endpoints/openai-responses.md#gw-codex-refresh) | openai-responses | native Codex OAuth HTTP refresh transport (injectable, dark) |
