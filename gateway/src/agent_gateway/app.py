@@ -17,6 +17,7 @@ from . import __version__
 from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
 from .config import Policy, Settings
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
+from .liveness import KubePods, PodSource
 from .logging import register_literal
 from .metrics import Metrics
 from .proxy import Proxy, anthropic_messages, openai_chat, openai_models
@@ -54,6 +55,15 @@ async def _reprobe_loop(proxy: Proxy, every_s: float = 30.0) -> None:
         await asyncio.sleep(every_s)
 
 
+async def _reap_loop(sessions: SessionService, every_s: float) -> None:
+    while True:
+        await asyncio.sleep(every_s)
+        try:
+            await sessions.reap()
+        except Exception:  # noqa: BLE001 — the loop must outlive any one pass's failure
+            log.exception("session reaper: one pass failed")
+
+
 def create_app(
     settings: Settings,
     policy: Policy | None = None,
@@ -64,6 +74,7 @@ def create_app(
     codex_backend: CodexBackend | None = None,
     reviewer: TokenReviewer | None = None,
     reprobe_every_s: float = 30.0,
+    pods: PodSource | None = None,
 ) -> Starlette:
     policy = policy or Policy.load(settings.policy_path)
     register_literal(settings.opencode_go_api_key)  # the Go key has no recognisable shape — GW-REDACT masks it by value
@@ -75,6 +86,7 @@ def create_app(
     m.bind_active_sessions(lambda: store.active_counts(clock()))
     # GW-SESSIONS-PULL's identity check: the kube TokenReview API (tests hand a StaticTokenReviews in).
     sessions = SessionService(policy, store, resolver, m, settings.self_url, clock, reviewer=reviewer or KubeTokenReviews())
+    sessions.pods = pods or KubePods()
     m.bind_transport_facts(lambda: sessions.capacity.cooled_counts(clock()), sessions.capacity.rejected_counts)
     client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(connect=settings.connect_timeout_s, read=settings.read_timeout_s, write=60, pool=10),
@@ -94,13 +106,16 @@ def create_app(
                  ",".join(policy.rails), ",".join(policy.stacks))
         # A rejected credential recovers WITHOUT traffic (sessions.md §Capacity): the re-probe loop.
         task = asyncio.create_task(_reprobe_loop(proxy)) if reprobe_every_s else None
+        # A session whose pod is gone is reaped (GW-SESSIONS-LIVENESS).
+        reaper = asyncio.create_task(_reap_loop(sessions, policy.liveness_check_s)) if policy.liveness_check_s else None
         try:
             yield
         finally:
-            if task is not None:
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
+            for t in (task, reaper):
+                if t is not None:
+                    t.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await t
             await client.aclose()
             store.close()
 

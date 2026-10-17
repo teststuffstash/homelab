@@ -143,7 +143,7 @@
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete", "outcome", "attempt"],
+      "required": ["id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete", "outcome", "attempt", "state", "release_reason"],
       "properties": {
         "id": { "$ref": "#/$defs/session_id" },
         "stack": { "$ref": "#/$defs/stack" },
@@ -151,6 +151,8 @@
         "task": { "type": "string" },
         "round": { "type": "integer", "minimum": 0 },
         "attempt": { "type": "integer", "minimum": 1, "x-requirements": ["GW-SESSIONS-ADMIT"] },
+        "state": { "enum": ["active", "released", "expired"], "description": "the data plane's verdict on this session (the older fact wins)", "x-requirements": ["GW-SESSIONS-LIVENESS"] },
+        "release_reason": { "enum": ["released", "superseded", "pod-gone", null], "description": "why it was released: a DELETE, a re-admission of the same attempt, or the reaper (its pod gone); null while not released", "x-requirements": ["GW-SESSIONS-LIVENESS"] },
         "rail": { "$ref": "#/$defs/rail" },
         "harness": { "$ref": "#/$defs/harness" },
         "model": { "type": "string" },

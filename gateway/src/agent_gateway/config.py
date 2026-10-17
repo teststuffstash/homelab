@@ -427,6 +427,7 @@ class Policy:
     control_plane_auth: str = "enforce"
     callers: dict[str, CallerPolicy] = field(default_factory=dict)
     outcome_window_s: int = 86400  # GW-SESSIONS-OUTCOME: how long after a session ends an outcome is accepted
+    liveness_check_s: float = 60.0  # GW-SESSIONS-LIVENESS: the reaper's interval (0 = off)
 
     def context_tokens_for(self, model: str) -> int | None:
         return self.context_tokens.get(model)
@@ -508,6 +509,7 @@ class Policy:
             control_plane_auth=mode,
             callers=callers,
             outcome_window_s=int(d.get("outcome_window_s", 86400)),
+            liveness_check_s=float(d.get("liveness_check_s", 60)),
         )
 
     @staticmethod

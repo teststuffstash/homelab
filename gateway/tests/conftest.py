@@ -47,6 +47,7 @@ from starlette.routing import Route
 from agent_gateway.app import create_app
 from agent_gateway.config import Policy, Settings
 from agent_gateway.credentials import StaticSecrets
+from agent_gateway.liveness import StaticPods
 from agent_gateway.pull import StaticTokenReviews
 from agent_gateway.store import Store
 
@@ -695,9 +696,15 @@ def store(settings) -> Store:
 
 
 @pytest.fixture
-async def app(settings, policy, secrets, store, transport, clock, reviews):
+def pods() -> StaticPods:
+    """The fake kube pods API (GW-SESSIONS-LIVENESS): every pod is running until a row says otherwise."""
+    return StaticPods()
+
+
+@pytest.fixture
+async def app(settings, policy, secrets, store, transport, clock, reviews, pods):
     client = httpx.AsyncClient(transport=transport)
-    a = create_app(settings, policy=policy, source=secrets, store=store, client=client, clock=clock, reviewer=reviews)
+    a = create_app(settings, policy=policy, source=secrets, store=store, client=client, clock=clock, reviewer=reviews, pods=pods)
     yield a
     await client.aclose()
 

@@ -3514,8 +3514,10 @@ if [ -n "$RUN_CMD" ]; then
     #     member (quota → harness-gave-up: the harness gave up on a limited upstream; anything else
     #     → unknown); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
     #     strike — rounds are the scan's);
-    #   • an AD-HOC ride → clean when its pod Succeeded, else NOTHING: its task key is shared by every
-    #     ad-hoc ride, and a strike there would exclude cells for all of them.
+    #   • an AD-HOC ride → clean when agent-finalize's stats line says `exit_status: clean` or its pod
+    #     Succeeded, else NOTHING: its task key is shared by every ad-hoc ride, and a strike there would
+    #     exclude cells for all of them. (The stats line first: right after the log follow returns the
+    #     pod can still read Running — the 2026-10-17 canary's clean ride reported nothing.)
     # On a counted strike (the outcome answer's `strike`) with salvage = none, the launcher re-enters
     # itself with the SAME argv (same --round: an infra failure consumes no round) and attempt + 1 —
     # at most AGENT_GATEWAY_AUTO_ATTEMPTS (2) automatic re-admissions; the gateway's walk excludes the
@@ -3539,8 +3541,12 @@ if [ -n "$RUN_CMD" ]; then
           GW_OUTCOME="clean"
         fi
       else
-        _gw_phase="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-        [ "$_gw_phase" != "Succeeded" ] || GW_OUTCOME="clean"
+        if [ "$(printf '%s' "${STATS:-}" | jq -r '.exit_status // ""' 2>/dev/null || true)" = "clean" ]; then
+          GW_OUTCOME="clean"
+        else
+          _gw_phase="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+          [ "$_gw_phase" != "Succeeded" ] || GW_OUTCOME="clean"
+        fi
       fi
       if [ -n "$GW_OUTCOME" ]; then
         _gw_ores="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' -H @<(gw_auth_header) -X POST \

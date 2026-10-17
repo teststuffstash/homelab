@@ -29,6 +29,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
 | [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; a codex `auth.command` re-read is `⚑ gap` (row below) |
+| [GW-SESSIONS-LIVENESS](#gw-sessions-liveness) | `get.output.state`, `get.output.release_reason` | — | v0 |
 | [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
 | [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)); `⚑ gap` rows below |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
@@ -457,7 +458,7 @@ the token; `GET /sessions/{id}` returns the row without it. The data plane accep
 | "the token has the fixed shape" | dispatch || `token` matches `^gws_[A-Za-z0-9_-]{32}$` |
 | "two dispatches never share a token" | dispatch twice || tokens differ |
 | "the row holds a hash, not the token" | dispatch, read the DB || `token_hash` = sha256 hex of the token; no column equals the token |
-| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, attempt, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller, requests_incomplete, outcome` (`outcome`: the latest reported outcome, [GW-SESSIONS-OUTCOME](#gw-sessions-outcome); `requests_incomplete`: the 2xx answers whose body stopped before its end, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter); the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
+| "GET returns the row without the token" | dispatch → `GET /sessions/{id}` || 200; `id, stack, role, task, round, attempt, rail, harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, caller, requests_incomplete, outcome, state, release_reason` (`state` / `release_reason`: [GW-SESSIONS-LIVENESS](#gw-sessions-liveness); `outcome`: the latest reported outcome, [GW-SESSIONS-OUTCOME](#gw-sessions-outcome); `requests_incomplete`: the 2xx answers whose body stopped before its end, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter); the admitting caller, [GW-SESSIONS-AUTH](#gw-sessions-auth); `null` here — the row's caller sent no token under `observe`); no `token`, no `token_hash` |
 | "GET on an unknown id" | `GET /sessions/nope` || 404 `session-not-found` |
 | "expiry is the policy TTL" | dispatch at T || `expires_at` = T + 14400 s (`policy-default`) |
 | "a request through the data plane is counted on the row" | dispatch → one `upstream-ok` call → GET || `requests` = 1, `tokens_in`/`tokens_out` = the upstream `usage` (`tokens_in` = uncached input; the cache classes in `tokens_cache_read`/`tokens_cache_write` — GW-METRICS) |
@@ -616,6 +617,75 @@ pull never logs the presented token; a JWT is masked by shape) are
 Rendered by `scripts/evidence_render.py` from CI.
 
 --8<-- "GW-SESSIONS-PULL.md"
+
+</details>
+
+## GW-SESSIONS-LIVENESS
+
+*A session whose pod is gone is reaped* (operator ruling 2026-10-17, FU-270). A ride whose pod is
+SIGKILLed never sends its DELETE, and without liveness its session would hold the rail slot until the
+TTL. The 2026-10-17 experiment's probe left one active for its whole TTL
+(`docs/spikes/gateway-free-models-2026-10-17/cells.tsv`, probe-c: `released_at: null` at
+expiry). The gateway already knows the pod first-hand, from the TokenReviews it does anyway:
+- a **bound** session's pod is the one whose projected token pulled its env
+  ([GW-SESSIONS-PULL](#gw-sessions-pull)); the review names the pod and its uid;
+- an **unbound** session's pod is its **caller's**, when the caller's projected token is pod-bound
+  ([GW-SESSIONS-AUTH](#gw-sessions-auth); the same extras).
+
+⚖ **A pod check, not a TTL-with-renewal.** The pod check is one namespaced `pods get` per live
+session per pass. The cost is a reaper interval (`liveness_check_s`, **60 s**) times the active
+sessions (≤ 28 today, the rails' caps summed) GETs, so at most about 28 requests a minute to the
+kube API. A renewal protocol would put a heartbeat into every consumer and every harness wrapper,
+and still lose the session when the heartbeat process itself is what died. The RBAC is a namespaced
+`agent-gateway-session-pods` Role (`pods: get`) in each bind namespace and each caller namespace
+(`argocd/resources/agent-gateway/rbac.yaml`). It adds no cluster-scoped name.
+
+A pass releases a session whose pod is **gone** (404), **terminal** (`Succeeded` / `Failed`), or
+**another pod under the same name** (a different uid: the launcher re-creates a retried ride's pod
+with the same name). The release has `release_reason: pod-gone`, the slot frees, the token is refused
+from then on, and `gateway_sessions_reaped_total{rail}` goes up by 1. ⚖ A pod the API cannot answer
+for (5xx, unreachable, no Role in that namespace) is left to its TTL: an unknown is never a reap.
+Sessions with no known pod are left to the TTL as well: a bound session not yet pulled, or an
+unbound session whose caller token is not pod-bound (a jail canary's minted token).
+
+`GET /sessions/{id}` now says which state the session is in. **`state`**: `active` | `released` |
+`expired` — the data plane's verdict ([GW-SESSIONS-RELEASE](#gw-sessions-release): the older fact
+wins). **`release_reason`**: `released` (a DELETE) | `superseded` (a re-admission of the same attempt,
+[§The retry contract](#the-retry-contract--model-lists-strikes-attempt)) | `pod-gone`. It is null
+while the session is not released. An expired session therefore reads `state: expired`, where before
+it showed only `released_at: null`.
+
+World `policy-default`; the pods API is the fake `StaticPods` (every pod running unless the row says
+otherwise); the pass is `sessions.reap()` (the app's background loop in production).
+
+| description | session | the pods API answers || state | release_reason |
+|---|---|---||---|---|
+| "a bound session whose pod is gone is reaped" | bound, pulled by fixer-1 | fixer-1: 404 || released (its token 401 `session-released`, the slot freed) | pod-gone |
+| "a terminal pod is reaped" | bound, pulled by fixer-1 | fixer-1: phase `Succeeded` || released | pod-gone |
+| "a re-created pod under the same name is reaped ⚖" | bound, pulled by fixer-1 (uid-1) | fixer-1: running, uid-2 || released | pod-gone |
+| "a running pod keeps its session" | bound, pulled by fixer-1 | fixer-1: running, uid-1 || active | null |
+| "a pod the API cannot answer for is left to the TTL ⚖" | bound, pulled by fixer-1 | unknown (5xx / no Role) || active | null |
+| "a bound session not yet pulled is not checked ⚖" | bound, never pulled | (0 calls) || active | null |
+| "an unbound session lives in its caller's pod ⚖" | unbound, the caller's token pod-bound to `specs-review-tick` | `specs-review-tick`: 404 || released | pod-gone |
+| "a caller token with no pod binding is left to the TTL ⚖" | unbound, the caller's token not pod-bound (minted) | (0 calls) || active | null |
+
+| description | sequence || (state, release_reason, released) |
+|---|---||---|
+| "an active session says active" | admit, GET || (active, null, no) |
+| "a released session says why" | admit, DELETE, GET || (released, released, yes) |
+| "an expired session says expired, not a null release" | admit, the clock past `expires_at`, GET || (expired, null, no) |
+| "a superseded session says so" | admit attempt 1 twice (the same caller, unbound), GET the first || (released, superseded, yes) |
+
+| description | sequence || result |
+|---|---||---|
+| "a reap is counted on its rail" | a bound opencode session reaped (its pod gone) || `gateway_sessions_reaped_total{rail="opencode"}` = 1 |
+| "one pods API call per live session per pass" | three pulled bound sessions, one pass || 3 calls |
+
+<details markdown="1"><summary>Evidence</summary>
+
+Rendered by `scripts/evidence_render.py` from CI.
+
+--8<-- "GW-SESSIONS-LIVENESS.md"
 
 </details>
 

@@ -31,6 +31,7 @@ log = logging.getLogger("gateway.pull")
 PULL_AUDIENCE = "agent-gateway"
 GATEWAY_AUDIENCE = PULL_AUDIENCE  # one audience for every projected token this gateway reviews (pull + control plane)
 POD_NAME_EXTRA = "authentication.kubernetes.io/pod-name"
+POD_UID_EXTRA = "authentication.kubernetes.io/pod-uid"  # GW-SESSIONS-LIVENESS: tells a re-created same-name pod apart
 
 
 class ReviewTransient(Exception):

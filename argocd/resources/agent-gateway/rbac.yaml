@@ -195,3 +195,102 @@ metadata:
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-gateway-tokenreview }
 subjects:
   - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+# GW-SESSIONS-LIVENESS (gateway/specs/endpoints/sessions.md): the session reaper reads the pod a session
+# lives in — the pod that pulled a bound session's env (the policy callers' bind_namespaces), or an
+# unbound session's caller pod (the callers' own namespaces). get-only, NAMESPACED, one Role per namespace —
+# never cluster-wide: a namespace without it answers 403, which the reaper reads as "unknown" (left to the TTL).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-pods
+  namespace: agent-runtime
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-pods
+  namespace: agent-runtime
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-pods }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-pods
+  namespace: homelab
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-pods
+  namespace: homelab
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-pods }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-pods
+  namespace: openrouter-operator
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-pods
+  namespace: openrouter-operator
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-pods }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-pods
+  namespace: platform-agents
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-pods
+  namespace: platform-agents
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-pods }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-pods
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-pods
+  namespace: agent-coordinator
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-pods }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
