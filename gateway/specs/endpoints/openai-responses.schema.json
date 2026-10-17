@@ -86,6 +86,34 @@
       "x-requirements": ["GW-CODEX-HEADROOM", "GW-SESSIONS-ADMIT"]
     }
   },
+  "refresh": {
+    "url": "https://auth.openai.com/oauth/token",
+    "method": "POST",
+    "content_type": "application/json",
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grant_type", "client_id", "refresh_token"],
+      "properties": {
+        "grant_type": {"const": "refresh_token"},
+        "client_id": {"const": "app_EMoamEEZ73f0CkXaXp7hrann"},
+        "refresh_token": {"type": "string", "minLength": 1}
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["access_token"],
+      "properties": {
+        "access_token": {"type": "string", "description": "JWT with finite future exp; optional auth account claim must match enrolled account"},
+        "refresh_token": {"type": "string", "minLength": 1, "description": "omitted retains the stored token; null or malformed is refused"}
+      }
+    },
+    "timeout_s": 10,
+    "max_response_bytes": 65536,
+    "redirects": false,
+    "retries": 0,
+    "x-requirements": ["GW-CODEX-REFRESH"]
+  },
   "credential_errors": {
     "$comment": "lifecycle failure codes as data-plane answers (GW-CODEX-OAUTH)",
     "x-requirements": ["GW-CODEX-OAUTH"]
