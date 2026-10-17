@@ -32,6 +32,8 @@
 | an expired key is a credential verdict | opencode | upstream-401-key-expired | 424 | upstream-auth | rejected (gateway_credentials_rejected{rail="opencode"} = 1) |
 | a policy refusal is not a credential verdict | openrouter | upstream-403-refused | 403 | upstream-refused | not rejected (gateway_credentials_rejected{rail="openrouter"} = 0) |
 | a refusal's body is not relayed either | openrouter | upstream-403-refused | 403 | upstream-refused | the body names neither the model's gate text nor the routing step |
+| an edge's error-code 403 is not a credential verdict | opencode | upstream-403-edge | 403 | upstream-edge-refused | not rejected (gateway_credentials_rejected{rail="opencode"} = 0) |
+| an edge's HTML 403 is not a credential verdict | opencode | upstream-403-html | 403 | upstream-edge-refused | not rejected (gateway_credentials_rejected{rail="opencode"} = 0) |
 """
 
 from __future__ import annotations
@@ -208,7 +210,8 @@ async def test_upstream_auth_never_leaks(gw, upstreams, caplog, behaviour, upstr
 
 
 async def _rejected_gauge(gw, rail: str) -> float:
-    text = (await gw.get("/metrics")).text
+    with quiet():
+        text = (await gw.get("/metrics")).text
     m = re.search(rf'^gateway_credentials_rejected\{{rail="{rail}"\}} (\S+)$', text, re.M)
     attach_json(f"sample: gateway_credentials_rejected{{rail={rail}}}", {"line": m.group(0) if m else None})
     return float(m.group(1)) if m else -1
@@ -217,6 +220,8 @@ async def _rejected_gauge(gw, rail: str) -> float:
 KIND_ROWS = [
     ("an expired key is a credential verdict", "opencode", "upstream-401-key-expired", 424, "upstream-auth", 1),
     ("a policy refusal is not a credential verdict", "openrouter", "upstream-403-refused", 403, "upstream-refused", 0),
+    ("an edge's error-code 403 is not a credential verdict", "opencode", "upstream-403-edge", 403, "upstream-edge-refused", 0),
+    ("an edge's HTML 403 is not a credential verdict", "opencode", "upstream-403-html", 403, "upstream-edge-refused", 0),
 ]
 
 
@@ -225,9 +230,12 @@ async def test_upstream_401_403_kind(gw, upstreams, rail, behaviour, status, cod
     world(upstream=behaviour)
     upstreams[rail].behaviour = behaviour
     with given(f"rail = {rail}: a worker session there (harness goose)"):
-        doc = await open_session(gw, role="worker", harness="goose", rail=rail)
-    with when(f"POST /openai/v1/chat/completions (upstream answers {behaviour})"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+        with quiet():
+            doc = await open_session(gw, role="worker", harness="goose", rail=rail)
+    with when(f"POST /openai/v1/chat/completions (behaviour = {behaviour!r}: the upstream's answer)"):
+        with quiet():
+            r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+        attach_json(f"gateway answer → {r.status_code}", {"status": r.status_code, "body": r.json()})
     then_eq("status", r.status_code, status)
     then_eq("code", err(r), code, claim=f"error code = {code}")
     with then(f"the rail's credential: gateway_credentials_rejected{{rail=\"{rail}\"}} = {rejected}"):

@@ -10,7 +10,9 @@
 | the opencode session id passes through alone | openai | x-opencode-session: <id> | x-opencode-session: <id> |
 | both session headers pass through | anthropic | both | both, unchanged |
 | no session header — the gateway supplies its session id | anthropic | neither | x-opencode-session: <gateway session id> |
-| the user agent passes through | openai | User-Agent: opencode/1.18.21 | User-Agent: opencode/1.18.21 |
+| the caller's user agent is replaced by the gateway's own | openai | User-Agent: Python-urllib/3.13 | User-Agent: agent-gateway |
+| the client's Accept-Encoding passes through | openai | Accept-Encoding: gzip | Accept-Encoding: gzip |
+| no Accept-Encoding from the client is identity upstream | openai | (none) | Accept-Encoding: identity |
 
 | description | inbound path | upstream behaviour | upstream URL | status | body |
 |---|---|---|---|---|---|
@@ -33,7 +35,7 @@ from agent_gateway.config import UPSTREAM_DEFAULTS
 from agent_gateway.rails import OAUTH_BETA, upstream_url
 
 from ._rail_rows import expected_bytes, ride
-from .conftest import GO_KEY, err, rule, then, then_eq, world
+from .conftest import GO_KEY, err, given, open_session, rule, then, then_eq, when, world
 
 pytestmark = rule("GW-RAIL-OPENCODE")
 RAIL = "opencode"
@@ -47,7 +49,10 @@ HEADER_ROWS = [
     ("the opencode session id passes through alone", "chat", {"x-opencode-session": "c1"}, {"x-opencode-session": "c1", "x-claude-code-session-id": None}),
     ("both session headers pass through", "messages", {"x-opencode-session": "c1", "x-claude-code-session-id": "u1"}, {"x-opencode-session": "c1", "x-claude-code-session-id": "u1"}),
     ("no session header — the gateway supplies its session id", "messages", {}, {"x-opencode-session": "<session id>"}),
-    ("the user agent passes through", "chat", {"user-agent": "opencode/1.18.21"}, {"user-agent": "opencode/1.18.21"}),
+    # `user_agent: fixed` on this rail (policy ⚖): the edge in front of opencode.ai judges client
+    # signatures (Cloudflare 1010 refused `Python-urllib`, 2026-10-17) — it sees the gateway's own UA
+    ("the caller's user agent is replaced by the gateway's own", "chat", {"user-agent": "Python-urllib/3.13"}, {"user-agent": "agent-gateway"}),
+    ("the client's Accept-Encoding passes through", "chat", {"accept-encoding": "gzip"}, {"accept-encoding": "gzip"}),
 ]
 
 
@@ -63,6 +68,21 @@ async def test_headers(gw, upstreams, op, inbound, expect):
               expect={"expected": want, "actual": got}):
         for k, v in want.items():
             assert call["headers"].get(k) == v, (k, call["headers"].get(k))
+
+
+async def test_no_accept_encoding_is_identity(gw, upstreams):
+    """row: no Accept-Encoding from the client is identity upstream"""
+    world(upstream="upstream-ok")
+    with given("a worker session on opencode"):
+        doc = await open_session(gw)
+    with when("POST /openai/v1/chat/completions with NO Accept-Encoding header"):
+        req = gw.build_request("POST", "/openai/v1/chat/completions", json={"messages": []},
+                               headers={"authorization": f"Bearer {doc['session']['token']}"})
+        del req.headers["accept-encoding"]
+        r = await gw.send(req)
+    then_eq("status", r.status_code, 200)
+    then_eq("upstream accept-encoding", upstreams[RAIL].calls[-1]["headers"].get("accept-encoding"), "identity",
+            claim="upstream Accept-Encoding = identity (the client asked for none)")
 
 
 LAND_ROWS = [

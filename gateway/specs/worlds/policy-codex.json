@@ -72,6 +72,7 @@
   },
   "rails": {
     "anthropic": {
+      "user_agent": "forward",
       "admission": {
         "_comment": "⚖ the old proxy's values, copied (sessions.md §Capacity): utilization_thresholds 5h = ANTHROPIC_UTIL_THRESHOLD's code default 0.80 (openrouter-proxy.py; unset in its deployment.yaml), 7d = ANTHROPIC_UTIL_THRESHOLD_7D 0.95 (deployment.yaml); latch_429_hold_s = ANTHROPIC_429_HOLD_S 900. reading_stale_s 900 has NO old-proxy precedent (it only drops a reading whose reset passed) — the gateway's own guess, ⚖.",
         "utilization_thresholds": {
@@ -92,6 +93,8 @@
       }
     },
     "opencode": {
+      "user_agent": "fixed",
+      "credential_probe": {"method": "POST", "path": "/v1/chat/completions", "body": {"model": "deepseek-v4-flash", "max_tokens": 1, "messages": [{"role": "user", "content": "."}]}, "backoff_s": [60, 3600]},
       "admission": {
         "_comment": "⚖ copied from argocd/resources/openrouter-proxy/gometer.py (snapshot 2026-09-17) — a DUPLICATE until the old proxy retires: latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900; prices = GO_PRICES / GO_PRICES_PEAK rows for the policy's priced Go model ($/M; null = gometer's None, draws 0); fallback = _GO_MAX_PRICE/2 each for in/out (max in+out = kimi-k3 3.00+15.00), cache 0 — what an unpriced id (claude-sonnet-4-6) draws at; peak hours = GO_PEAK_HOURS_UTC / GO_PEAK_WEEKDAYS; windows = _GO_WINDOW_DEFAULTS (budgets 12/30/60, anchors chain/weekly mon 00:00/monthly 13 11:30; GO_WINDOW_ANCHORS unset in deployment.yaml) with threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
         "latch_429_hold_s": 900,
@@ -168,6 +171,8 @@
       }
     },
     "openrouter": {
+      "user_agent": "forward",
+      "credential_probe": {"method": "GET", "path": "/v1/key", "backoff_s": [60, 3600]},
       "max_sessions": 20,
       "models": {
         "light": "deepseek/deepseek-v4-flash",

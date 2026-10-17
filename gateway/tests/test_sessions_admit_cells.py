@@ -24,11 +24,23 @@ An upstream 401/403 with a credential reason rejects THAT credential (rail + sha
 | description | arrange | then | body || decision | rail | reason | retry_after_s |
 |---|---|---|---||---|---|---|---|
 | a rejected credential is skipped, the walk continues | worker ride on opencode → upstream-401-key-expired | — | worker (policy walk) || dispatch | openrouter | — | — |
-| every allowed rail's credential rejected defers credential-rejected | prober ride on anthropic → upstream-401 | — | prober (policy walk) || defer | — | credential-rejected | 60 |
+| every allowed rail's credential rejected defers credential-rejected | prober ride on anthropic → upstream-401 | — | prober (policy walk) || defer | — | credential-rejected | 900 |
 | a rejection is per credential: another stack's key still admits | platform worker ride on openrouter → upstream-401 | — | oracle worker, rail openrouter (its own key) || dispatch | openrouter | — | — |
 | a new credential value clears it | platform worker ride on openrouter → upstream-401; the Secret then holds a new key | +301 s (the ref cache) | worker, rail openrouter || dispatch | openrouter | — | — |
 | a 2xx on the credential clears it | platform worker ride on openrouter → upstream-401, the same session → 200 | — | worker, rail openrouter || dispatch | openrouter | — | — |
 | a policy refusal does not reject the credential | worker ride on openrouter → upstream-403-refused | — | worker, rail openrouter || dispatch | openrouter | — | — |
+
+A rejected credential recovers without traffic (opencode: credential_probe, backoff [60, 3600]; anthropic: no probe, credential_hold_s 900):
+
+| description | arrange | then | probe answers || probes sent | decision | reason | retry_after_s |
+|---|---|---|---||---|---|---|---|
+| a probe's 2xx clears a rejected credential without traffic | worker ride on opencode → upstream-401-key-expired | +60 s, re-probe | upstream-ok || 1 | dispatch (opencode) | — | — |
+| a probe rejected again doubles the backoff | the same | +60 s, re-probe | upstream-401-key-expired || 1 | defer | credential-rejected | 120 |
+| a probe with no verdict keeps the backoff | the same | +60 s, re-probe | upstream-500 || 1 | defer | credential-rejected | 60 |
+| a probe is not sent before it is due | the same | +30 s, re-probe | — || 0 | defer | credential-rejected | 30 |
+| a rail with no probe is re-admitted half-open after its hold | prober ride on anthropic → upstream-401 | +900 s | — || 0 | dispatch (anthropic) | — | — |
+| an edge refusal marks nothing: the rail keeps admitting | worker ride on opencode → upstream-403-edge | — | — || 0 | dispatch (opencode) | — | — |
+| a repeat rejection after half-open doubles the hold | prober on anthropic → 401; +900 s; → 401 again | — | — || — | defer | credential-rejected | 1800 |
 """
 
 from __future__ import annotations
@@ -138,9 +150,10 @@ async def test_cell_cooldown(gw, upstreams, clock, arrange, advance, body, expec
 CRED_ROWS = [
     ("a rejected credential is skipped, the walk continues", [("opencode", "worker", "upstream-401-key-expired", {})], 0, None,
      {}, {"decision": "dispatch", "rail": "openrouter"}),
-    # prober: rails [anthropic] only, tier light (claude/haiku); no rail frees by time → defer_retry_s
+    # prober: rails [anthropic] only, tier light (claude/haiku); anthropic declares no credential_probe →
+    # the mark lifts half-open after credential_hold_s (900, the default) — that is when asking again helps
     ("every allowed rail's credential rejected defers credential-rejected", [("anthropic", "prober", "upstream-401", {})], 0, None,
-     {"role": "prober"}, {"decision": "defer", "reason": "credential-rejected", "retry_after_s": 60}),
+     {"role": "prober"}, {"decision": "defer", "reason": "credential-rejected", "retry_after_s": 900}),
     ("a rejection is per credential: another stack's key still admits", [("openrouter", "worker", "upstream-401", {})], 0, "oracle-own-key",
      {"stack": "oracle", "rail": "openrouter"}, {"decision": "dispatch", "rail": "openrouter"}),
     # the resolver caches a resolved ref for 300 s (GW-CRED-RESOLVE): the new value is read at +301 s
@@ -156,6 +169,9 @@ CRED_ROWS = [
 @pytest.mark.parametrize(("arrange", "advance", "secret", "body", "expected"), [r[1:] for r in CRED_ROWS], ids=[r[0] for r in CRED_ROWS])
 async def test_credential_rejected(gw, upstreams, clock, secrets, arrange, advance, secret, body, expected):
     world(upstream=arrange[0][2], note="the arranged ride's answer; every other answer is upstream-ok")
+    with given(f"secret = {secret!r}: " + {None: "every Secret as the world holds it", "oracle-own-key": "oracle's key differs from platform's",
+                                          "platform-new-key": "the platform key is rotated after the rejection"}[secret]):
+        pass
     if secret == "oracle-own-key":
         with given("state: the oracle stack's OpenRouter Secret holds its OWN key (a different value from platform's)"):
             secrets.secrets["oracle-agents/oracle-openrouter"] = StaticSecrets.secret("sk-or-v1-test-oracle-own-key", "OPENROUTER_API_KEY")
@@ -166,3 +182,52 @@ async def test_credential_rejected(gw, upstreams, clock, secrets, arrange, advan
     with given(f"advance = {advance}: {advance} s pass"):
         clock.advance(advance)
     _verdict(await _admit(gw, body), expected)
+
+
+# -- a rejected credential recovers WITHOUT traffic (the 2026-10-17 self-latch's fix) ------------------
+# opencode declares `credential_probe` (POST /v1/chat/completions, 1 token, backoff [60, 3600]);
+# anthropic declares none → `credential_hold_s` 900, half-open. The probe is driven by the app's
+# background loop; here the case calls `proxy.reprobe()` itself on the test clock.
+RECOVER_ROWS = [
+    # (arrange rail+role+behaviour, probe answers, advance before the probe, probes expected, body, expected)
+    ("a probe's 2xx clears a rejected credential without traffic", ("opencode", "worker", "upstream-401-key-expired"),
+     "upstream-ok", 60, 1, {"rail": "opencode"}, {"decision": "dispatch", "rail": "opencode"}),
+    ("a probe rejected again doubles the backoff", ("opencode", "worker", "upstream-401-key-expired"),
+     "upstream-401-key-expired", 60, 1, {"rail": "opencode"}, {"decision": "defer", "reason": "credential-rejected", "retry_after_s": 120}),
+    ("a probe with no verdict keeps the backoff", ("opencode", "worker", "upstream-401-key-expired"),
+     "upstream-500", 60, 1, {"rail": "opencode"}, {"decision": "defer", "reason": "credential-rejected", "retry_after_s": 60}),
+    ("a probe is not sent before it is due", ("opencode", "worker", "upstream-401-key-expired"),
+     "upstream-ok", 30, 0, {"rail": "opencode"}, {"decision": "defer", "reason": "credential-rejected", "retry_after_s": 30}),
+    ("a rail with no probe is re-admitted half-open after its hold", ("anthropic", "prober", "upstream-401"),
+     None, 900, 0, {"role": "prober"}, {"decision": "dispatch", "rail": "anthropic"}),
+    ("an edge refusal marks nothing: the rail keeps admitting", ("opencode", "worker", "upstream-403-edge"),
+     None, 0, 0, {"rail": "opencode"}, {"decision": "dispatch", "rail": "opencode"}),
+]
+
+
+@pytest.mark.parametrize(("arrange", "probe", "advance", "probes", "body", "expected"), [r[1:] for r in RECOVER_ROWS],
+                         ids=[r[0] for r in RECOVER_ROWS])
+async def test_rejection_recovers(gw, app, upstreams, clock, arrange, probe, advance, probes, body, expected):
+    rail, role, behaviour = arrange
+    world(upstream=behaviour, note=f"probe answers {probe}" if probe else None)
+    with given(f"arrange = {arrange!r}: a {role} ride on {rail} answered {behaviour}"):
+        await _ride(gw, upstreams, clock, rail=rail, role=role, behaviour=behaviour)
+    with given(f"advance = {advance!r}: {advance} s pass; probe = {probe!r}: the upstream's answer to a probe"):
+        clock.advance(advance)
+        upstreams[rail].behaviour = probe or "upstream-ok"
+        with quiet():
+            sent = await app.state.proxy.reprobe()
+        upstreams[rail].behaviour = "upstream-ok"
+        attach_json("the re-probe pass", {"probes sent": sent})
+    then_eq("probes", sent, probes, claim=f"probes = {probes!r} sent by the re-probe pass")
+    _verdict(await _admit(gw, body), expected)
+
+
+async def test_second_rejection_doubles_hold(gw, upstreams, clock):
+    """row: a repeat rejection after half-open doubles the hold"""
+    world(upstream="upstream-401")
+    with given("a prober ride on anthropic answered upstream-401; 900 s pass (half-open); the next ride is rejected again"):
+        await _ride(gw, upstreams, clock, rail="anthropic", role="prober", behaviour="upstream-401")
+        clock.advance(900)
+        await _ride(gw, upstreams, clock, rail="anthropic", role="prober", behaviour="upstream-401", stack="platform")
+    _verdict(await _admit(gw, {"role": "prober"}), {"decision": "defer", "reason": "credential-rejected", "retry_after_s": 1800})

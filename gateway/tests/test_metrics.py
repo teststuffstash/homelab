@@ -20,6 +20,7 @@
 | a rejected credential is counted on its rail | upstream-401 on openrouter | gateway_credentials_rejected{rail="openrouter"} | 1 |
 | an incomplete stream is counted by reason | upstream-stream-truncated on opencode (stream: true) | gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal"} | 1 |
 | a strike is counted by class and source | a worker session reports no-verdict | gateway_strikes_total{class="no-verdict",source="outcome"} | 1 |
+| a credential re-probe is counted by outcome | opencode 401 (upstream-401-key-expired), +60 s, the re-probe answered upstream-ok | gateway_credential_probes_total{rail="opencode",outcome="cleared"} | 1 |
 | the transport-fact gauges render every rail from 0 | no request yet | gateway_cells_cooled{rail=…} / gateway_credentials_rejected{rail=…} for anthropic, openrouter, opencode, codex | 0 each |
 
 | description | the series | label | allowed values |
@@ -38,7 +39,7 @@
 | class is a strike class, source the writer | strikes_total | class / source | the strike classes / outcome, gateway |
 | reason is why a 2xx body stopped before its end | requests_incomplete_total | reason | no-terminal, timeout, transport-error, client-closed |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 14 families |
+| every family is declared with HELP and TYPE | — | — | 15 families |
 """
 
 from __future__ import annotations
@@ -60,6 +61,7 @@ FAMILIES = (
     "gateway_control_plane_unauthenticated_total", "gateway_upstream_auth_rejected_total",
     "gateway_cells_cooled", "gateway_credentials_rejected", "gateway_requests_incomplete_total",
     "gateway_strikes_total",
+    "gateway_credential_probes_total",
 )
 
 
@@ -292,6 +294,20 @@ async def test_strike_counted(gw):
     with when("POST /sessions/{id}/outcome {class: no-verdict}"):
         await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "no-verdict"})
     await _then_series(gw, 'gateway_strikes_total{class="no-verdict",source="outcome"}', 1)
+async def test_credential_probe_counted(gw, app, upstreams, clock):
+    """row: a credential re-probe is counted by outcome"""
+    world(upstream="upstream-401-key-expired")
+    with given("a worker session on opencode whose request was answered upstream-401-key-expired; 60 s pass"):
+        with quiet():
+            doc = await open_session(gw, harness="goose", rail="opencode")
+            upstreams["opencode"].behaviour = "upstream-401-key-expired"
+            await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+            upstreams["opencode"].behaviour = "upstream-ok"
+        clock.advance(60)
+    with when("the re-probe pass runs (the probe is answered upstream-ok)"):
+        sent = await app.state.proxy.reprobe()
+        attach_json("the re-probe pass", {"probes sent": sent})
+    await _then_series(gw, 'gateway_credential_probes_total{rail="opencode",outcome="cleared"}', 1)
 
 
 async def test_fact_gauges_from_zero(gw):

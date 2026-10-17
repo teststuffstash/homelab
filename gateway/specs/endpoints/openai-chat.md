@@ -26,7 +26,7 @@ inspects, the per-rail upstream contract and the error envelope; the service **i
 | [GW-RAIL-OPENCODE](anthropic-messages.md#gw-rail-opencode) (owned there) | `upstream.opencode`, `models.opencode` | `upstream-auth`, `upstream-unreachable` | linked |
 | [GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic) (owned there) | `upstream.anthropic` (none — 501) | `dialect-unsupported-on-rail` | linked |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked |
-| [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization`, `input.headers.x-api-key` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `upstream-refused`, `header-refused` | linked |
+| [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization`, `input.headers.x-api-key` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `upstream-refused`, `upstream-edge-refused`, `header-refused` | linked |
 | [GW-SESSIONS-RELEASE](sessions.md#gw-sessions-release) (owned there) | `input.headers.authorization` | `session-expired`, `session-released` | linked |
 | [GW-CRED-RESOLVE](sessions.md#gw-cred-resolve) (owned there) | `upstream.*.auth` | `credential-unresolved`, `credential-transient` | linked |
 
@@ -48,8 +48,13 @@ openapi file is the citation. ⚖ Whether that endpoint honours `anthropic-beta`
 anywhere read — the header is forwarded untouched and the row is **verify during
 implementation**. The body's `model` is the bare policy id. Upstream 429 passes through with
 `retry-after` (and cools the session's cell — [§Capacity](sessions.md#capacity--the-ladders-capacity-half));
-401/403 is 424 `upstream-auth` or 403 `upstream-refused` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)); a connection that fails before any byte is sent
-is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`).
+401/403 is 424 `upstream-auth`, 403 `upstream-refused` or 403 `upstream-edge-refused` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)); a connection that fails before any byte is sent
+is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`). ⚖ The policy keeps the
+harness's User-Agent on this rail (`user_agent: forward`). The experiment's inkling rides passed
+OpenRouter's "agentic harnesses only" gate as opencode traffic (60 × 200); its one 403 was a bare
+smoke call. A fixed UA might fail that gate, while this rail's edge has not refused a caller UA. An
+edge refusal here would be request-scoped anyway ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)).
+A rejected stack key is re-verified with `GET /v1/key` (free).
 
 | description | dialect | inbound header || upstream header |
 |---|---|---||---|
@@ -57,7 +62,7 @@ is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`).
 | "the stack key rides as a bearer on the anthropic dialect" | anthropic | `x-api-key: gws_…` || `Authorization: Bearer <OPENROUTER_API_KEY>`, no `x-api-key` |
 | "anthropic-beta is forwarded untouched ⚖ (verify)" | anthropic | `anthropic-beta: oauth-2025-04-20` || `anthropic-beta: oauth-2025-04-20` |
 | "the Go session header is not this rail's business" | openai | `x-opencode-session: <id>` || `x-opencode-session: <id>` (passthrough, meaningless here) |
-| "the user agent passes through" | openai | `User-Agent: goose/1.x` || `User-Agent: goose/1.x` |
+| "the user agent passes through (`user_agent: forward`) ⚖" | openai | `User-Agent: goose/1.x` || `User-Agent: goose/1.x` |
 
 | description | inbound path | upstream behaviour || upstream URL | status | body | recorded on the session |
 |---|---|---||---|---|---|---|

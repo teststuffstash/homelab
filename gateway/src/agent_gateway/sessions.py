@@ -298,9 +298,11 @@ class SessionService:
                 self.metrics.credential(rail, "definitive")
                 continue
             self.metrics.credential(rail, "resolved")
-            if self.capacity.credential_rejected(rail, credential):
-                log.info("session: rail %s skipped — its credential for stack %s was rejected upstream", rail, adm.stack.name)
-                cred_rejected.append(rail)
+            due = self.capacity.credential_rejected(rail, credential, now)
+            if due is not None:
+                log.info("session: rail %s skipped — its credential for stack %s was rejected upstream (re-verified at %s)",
+                         rail, adm.stack.name, iso(due))
+                cred_rejected.append((rail, due))
                 continue
             return self._dispatch(adm, rail, model, now)
         if capacity_blocked:
@@ -308,8 +310,10 @@ class SessionService:
             return self._defer(adm, reason, "every allowed rail is blocked: " + "; ".join(b[3] for b in capacity_blocked),
                                retry_after_s=max(1, math.ceil(free_at - now)))
         if cred_rejected:  # ⚖ a rejected credential outranks an unresolved one: it names the operator act
+            first = min(d for _, d in cred_rejected)  # the earliest re-verification is when asking again helps
             return self._defer(adm, "credential-rejected",
-                               f"the upstream rejected the credential of rail(s) {', '.join(cred_rejected)} for stack {adm.stack.name}")
+                               f"the upstream rejected the credential of rail(s) {', '.join(r for r, _ in cred_rejected)} for stack {adm.stack.name}",
+                               retry_after_s=max(1, math.ceil(first - now)))
         if cred_blocked:
             return self._defer(adm, "credential-unresolved",
                                f"no allowed rail has a resolvable credential for stack {adm.stack.name}: {', '.join(cred_blocked)}")
