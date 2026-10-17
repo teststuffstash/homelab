@@ -34,3 +34,28 @@ Dummy credentials only; no real upstream, OAuth exchange, model or tool call. Ne
 untrusted CLI binary here. Process logs and request bodies are never printed — only the
 allowlisted summary. This proves the client seam through the gateway, not subscription access,
 the deployed agent-runtime image, tool use or the live canary (spike step 4, separately authorized).
+
+## Upstream-profile observation
+
+FU-270's [upstream investigation](../../docs/spikes/codex-subscription-rail.md#upstream-profile-investigation--2026-10-17-fu-270)
+compares the native backend with SIWC. `profile_probe.py` adds an observer to the compat harness,
+reporting a fixed set of request-shape checks against the SIWC preview documentation. The fake
+upstream still accepts the request: a completed fixture is NOT a successful SIWC inference.
+There is no real OAuth exchange, backend call or entitlement test. It observes only the first
+synthetic turn with `fixture-model`, not every real-model tool configuration or a tool continuation.
+
+```sh
+# From gateway/, using its locked environment; the binary must be trusted and version matched.
+devbox run -- uv run --frozen python ../experiments/codex-rail/profile_probe.py \
+    --codex /path/to/codex --expect-version 0.161.0
+# From the repo root, pure observer checks (no CLI/network/dependencies):
+devbox run -- python3 -m unittest discover -s experiments/codex-rail -p 'test_profile_probe.py'
+```
+
+The observer exports fixed names, booleans and counts only. It never emits raw prompts, tool
+names/arguments, unknown fields, credentials or header values. Unknown tool structures are
+reported as unverified; passing the partial checks never proves complete profile compatibility.
+[`profile-evidence.json`](profile-evidence.json) records the dated 0.161.0/0.163.0 observations:
+both contain seven ungrouped function tools, a documented SIWC mismatch. The runtime provenance,
+source references and remaining acceptance work live in the spike. This probe is explicitly run,
+not added to active CI, and does not close #2650.

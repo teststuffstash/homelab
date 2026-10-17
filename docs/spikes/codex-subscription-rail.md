@@ -356,3 +356,121 @@ wrapper's job), so the env carries values, not a CLI-read base URL. The
 harness, re-pointed at the real gateway (dated local evidence; the CLI is not in CI). The
 `file_store.py` POSIX backend and its subprocess tests were not ported — a disposable local
 backend is not a production persistence choice; their evidence is in git history.
+
+## Upstream profile investigation — 2026-10-17 (FU-270)
+
+**Recommendation, not a deployment decision:** retain the native Codex backend as the first
+canary candidate for the current runtime. Evaluate Sign in with ChatGPT (SIWC) as a distinct
+profile; changing `CODEX_UPSTREAM` alone is insufficient. Neither profile is production-ready
+or selected by this investigation. Account eligibility and actual model access remain untested.
+The [gateway's named gaps](../../gateway/specs/endpoints/openai-responses.md#named-gaps-and-local-evidence)
+remain open. This section refines the upstream-profile gap under FU-270; it does not add a rail.
+
+### Evidence and its limits
+
+The runtime repository's current master was `d10904baa8fac8c66e49cd86510277ee9ef508f1`:
+[`agent-base/devbox.lock`](https://github.com/teststuffstash/agent-runtime/blob/d10904baa8fac8c66e49cd86510277ee9ef508f1/agent-base/devbox.lock)
+pins Codex **0.161.0**. Its `agent-codex` wrapper invokes `exec --json` and expects runtime-supplied
+configuration; it does not render the gateway provider block. Native source inspected at the
+`rust-v0.161.0` tag, commit `979011409de0a60b52f179721948e65531d26144` (links below).
+
+The new [profile probe](../../experiments/codex-rail/README.md#upstream-profile-observation)
+runs that pinned executable and the jail's 0.163.0 through the real gateway with a fresh home,
+dummy credentials and a loopback upstream. Both complete the synthetic turn and emit **seven
+ungrouped top-level function tools**, alongside one namespace containing five functions and one
+web-search tool. Neither request emits the checked forbidden fields or `tool_search`.
+[Recorded evidence](../../experiments/codex-rail/profile-evidence.json) contains only structural
+observations, not prompts, token/header values or raw bodies.
+
+This is a documented SIWC request-shape mismatch: its
+[preview contract](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
+requires function/custom tools in namespaces or `additional_tools` input items. The fake server
+accepts the request, so fixture success is **not** SIWC success. It uses `fixture-model` and the
+fixture's default tool configuration: it proves neither that every real-model configuration has
+this mismatch nor that any untested configuration avoids it. It executes no tool and proves no
+live subscription access. Grouping tools requires client/tool-call compatibility evidence, not
+silent gateway rewriting. Web-search availability also depends on the actual account and model.
+
+### The two credential and wire profiles
+
+| Concern | Native Codex backend (pinned source) | SIWC ChatGPT-plan route (official docs checked 2026-10-17) |
+|---|---|---|
+| Inference base | `https://chatgpt.com/backend-api/codex` | `https://api.openai.com/v1`; SIWC explicitly excludes the backend-api route |
+| Refresh | `https://auth.openai.com/oauth/token`, JSON grant, native client's registered ID, no resource field | `https://auth.openai.com/api/accounts/oauth/token`, form grant, saved issued client ID, `resource=https://api.openai.com/v1`, omit scope to retain grant |
+| Credential identity | Native OAuth token set and ChatGPT account ID | Issued client registration plus validated identity, scopes, expiry and stable host ID; do not substitute the native client ID/token set |
+| Inference auth | Native bearer/account context; gateway injects the account header | Documented bearer token; the documented token metadata is opaque, not a source for manufacturing a native account ID |
+| Model evidence | Complete a real turn on the explicitly selected account/model | Account catalog at `/v1/models`, then completed inference; bundled app-server catalogs are not entitlement evidence |
+| Quota evidence | Pinned client has a native usage endpoint; real payload still needs observation | Reviewed SIWC docs specify usage errors and app limits, but no machine-readable headroom polling contract |
+
+Native sources: [provider base](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/model-provider-info/src/lib.rs),
+[refresh exchange and client ID](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/login/src/auth/manager.rs),
+[usage URL selection](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/backend-client/src/client/rate_limit_resets.rs).
+These describe the client implementation, not a public commitment to arbitrary gateway use.
+SIWC sources: [registration](https://developers.openai.com/siwc/token-sharing-open-source/sign-in),
+[refresh](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions#refreshing-tokens),
+[token fields](https://developers.openai.com/siwc/token-sharing-open-source/token-reference),
+[inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference),
+[Codex app-server](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server).
+The app-server example documents a different invocation from our pinned `exec` wrapper; neither
+replacing the runtime nor interpreting its model catalog as access is justified by that example.
+
+SIWC's [self-hosted VM procedure](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)
+does describe a remote runtime owning subsequent refreshes after protected credential transfer.
+That is evidence for a self-hosted flow, not proof that this Kubernetes deployment or account is
+eligible. A gateway host identity must persist across pod recreation. Do not copy the jail's
+renewable session into a second independent refresher. Any future browser consent is the
+**third-party console** class under [the minting doctrine](../secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret),
+with configuration and credential delivery still managed as code.
+
+### Native header compatibility is a multi-request test
+
+The pinned [Responses client](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/codex-api/src/endpoint/responses.rs)
+adds session/thread/request identifiers; the
+[core client](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/core/src/client.rs)
+defines `x-codex-turn-state` as an upstream-issued routing value reused within a turn and cleared
+between turns. The gateway's fixed six-header set drops it. The current one-response fixture
+cannot establish compatibility with this behavior.
+
+FU-270's vendor-header gap therefore needs a fake two-request tool turn: return a synthetic
+turn-state header, verify reuse on the continuation and clearing on a new turn, and keep account
+identity gateway-owned. Specify validation, length limits and session/turn binding before any
+allowlist change; this finding does not authorize blindly forwarding worker headers. Source
+inspection establishes the missing client behavior, not that the live backend always requires
+every client header.
+
+### Refresh and headroom implications for the gateway build
+
+The current [OAuth record](../../gateway/src/agent_gateway/oauth.py) requires a native account ID
+and has no SIWC registration/grant metadata. A production store must preserve the selected
+profile's identity and token set atomically. Its existing `refreshing` marker is useful, but it
+cannot recover a rotated token lost before durable persistence. The next exchange implementation
+must use the chosen profile's exact encoding/client/resource, serialize owners, bound response
+reads/timeouts, redact failures and never replay an uncertain rotation. Keep the
+[Infisical source of truth](../secrets.md#boundaries); ESO is read-only, so updating only its Secret
+is insufficient. Single-replica ownership comes first; HA/fencing remains FU-271.
+
+SIWC [errors](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)
+distinguish unsupported capability, ineligible user, temporary usage-service failure, usage limit,
+and terminal refresh failure. A 401/403 by itself is not evidence that the refresh token was
+revoked. A limit may arrive inside `response.failed` after HTTP 200; HTTP-429 counting alone misses
+it. A usage-limit code does not identify a reset time or prove the whole subscription is empty.
+The gateway currently classifies failed streams but does not turn those errors into a profile-specific
+admission state. The existing two-window headroom fixture cannot represent these facts by guessing
+zero usage or inventing resets. Native jail quota reports alone do not prove SIWC app capacity.
+
+### Bounded continuation under FU-270
+
+1. **Native first-canary candidate:** finish the header-continuation fixture and native refresh
+   transport against fake endpoints, then the platform-owned durable write-back/recovery path.
+   Resolve backend-use eligibility before supplying a real credential. The explicit model comes
+   from account-specific evidence; neither this synthetic model nor a documentation example is a pin.
+2. **SIWC alternative:** prove a pinned runtime configuration with the documented tool shape,
+   preserve registration/grant metadata, and settle an admission policy with an evidenced quota
+   source. If no usable observation exists, retain `quota-unknown`; do not weaken freshness just
+   to enable the route. Registration and a completed real turn would still be needed.
+3. **Production acceptance:** use the existing separately authorized maintenance-window canary
+   to prove actual runtime tool use/finalization, renewal/restart behavior and credential isolation.
+   Offline native-CLI CI remains [#2650](https://github.com/teststuffstash/homelab/issues/2650).
+
+No live credential was read, refreshed or transferred for this investigation. No model call,
+deployment, gateway rule, launcher, policy, runtime pin or credential backend was changed.

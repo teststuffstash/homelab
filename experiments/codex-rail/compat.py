@@ -57,7 +57,7 @@ class _Now:
 
 
 @contextmanager
-def fake_upstream(rotated_access: str):
+def fake_upstream(rotated_access: str, request_observer=None):
     seen = {"requests": 0, "auth_ok": [], "shape": []}
 
     class Handler(BaseHTTPRequestHandler):
@@ -67,6 +67,8 @@ def fake_upstream(rotated_access: str):
         def do_POST(self):
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             doc = json.loads(body) if body else {}
+            if request_observer is not None:
+                request_observer(doc, dict(self.headers))
             seen["requests"] += 1
             seen["auth_ok"].append(self.path == "/responses"
                                    and self.headers.get("Authorization") == "Bearer " + rotated_access
@@ -157,7 +159,7 @@ def _exec(executable: str, env: dict, work: Path, timeout: float):
                           env=env, cwd=work, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
 
 
-def run(binary: str, expected_version: str, probe_bare_env: bool = False) -> dict:
+def run(binary: str, expected_version: str, probe_bare_env: bool = False, request_observer=None) -> dict:
     executable = shutil.which(binary)
     if executable is None:
         raise RuntimeError("codex executable not found")
@@ -167,7 +169,7 @@ def run(binary: str, expected_version: str, probe_bare_env: bool = False) -> dic
     evidence: dict = {"cli_version": version, "live_subscription_verified": False}
     with tempfile.TemporaryDirectory(prefix="codex-gw-compat-") as tmpdir:
         tmp = Path(tmpdir)
-        with fake_upstream(creds(_Now())[1].access_token) as (upstream, seen), gateway(upstream, tmp) as (app, url, exchange, _):
+        with fake_upstream(creds(_Now())[1].access_token, request_observer) as (upstream, seen), gateway(upstream, tmp) as (app, url, exchange, _):
             now = time.time()
             app.state.codex.headroom.observe({"observed_at": now - 1, "source": "poll", "limited": False, "windows": [
                 {"used_percent": 20, "resets_at": now + 3600, "window_minutes": 300},
