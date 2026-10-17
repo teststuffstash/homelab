@@ -142,6 +142,12 @@ six OVERSIZE items pointer-ized into
 
 - [ ] **FU-005** — Decide whether an Infisical break-glass second admin is worth codifying (one
       super admin today, signups disabled).
+- [ ] **FU-314** — **The OpenCode Go API key is a 30-day key: it expires 2026-11-16** (rotated 2026-10-17 after
+      the previous one expired silently at 17:12:49Z, Go rail down ~2 h). Operator-blocked: the move to an
+      OpenCode service-account key (opencode.ai/v2/docs/console/api/#service-accounts) needs the console.
+      Rotation: wallet `opencode-go-api-key` → `devbox run infisical-secret OPENCODE_GO_API_KEY=…` →
+      force-sync ExternalSecret `agent-egress/opencode-go-key` → restart `agent-gateway` + `openrouter-proxy`.
+      **Next:** operator mints a service-account key before 2026-11-16 (the expiry detector is in flight).
 
 ## GitOps & platform
 
