@@ -153,6 +153,44 @@ class HeadroomPolicy:
 
 
 @dataclass(frozen=True)
+class CredentialProbe:
+    """`rails.<rail>.credential_probe` — how the gateway re-verifies a REJECTED credential by itself
+    (sessions.md §Capacity): one authenticated request against the rail's upstream base, re-sent
+    on a doubling backoff; only a 2xx clears the mark. `path` is relative to the rail's upstream
+    base; `body` (POST only) is sent as JSON — a model id in it is policy data, never code."""
+    method: str
+    path: str
+    body: dict | None
+    backoff_s: tuple[float, float]  # (first, cap)
+
+
+USER_AGENT_MODES = ("fixed", "forward")
+
+
+def _credential_probe(rail: str, p) -> CredentialProbe | None:
+    where = f"rails.{rail}.credential_probe"
+    if p is None:
+        return None
+    if not isinstance(p, dict):
+        raise PolicyError(f"policy: {where} must be an object {{method, path, body?, backoff_s}}")
+    _keys(where, p, {"method", "path", "body", "backoff_s"})
+    method = p.get("method")
+    if method not in ("GET", "POST"):
+        raise PolicyError(f"policy: {where}.method must be GET or POST")
+    path = p.get("path")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise PolicyError(f"policy: {where}.path must be an absolute path under the rail's upstream base")
+    body = p.get("body")
+    if body is not None and (method != "POST" or not isinstance(body, dict)):
+        raise PolicyError(f"policy: {where}.body is a JSON object, POST only")
+    b = p.get("backoff_s")
+    if (not isinstance(b, list) or len(b) != 2 or any(isinstance(x, bool) or not isinstance(x, (int, float)) or x < 1 for x in b)
+            or b[0] > b[1]):
+        raise PolicyError(f"policy: {where}.backoff_s must be [first, cap] seconds, 1 <= first <= cap")
+    return CredentialProbe(method, path, body, (float(b[0]), float(b[1])))
+
+
+@dataclass(frozen=True)
 class RailPolicy:
     name: str
     max_sessions: int
@@ -161,6 +199,13 @@ class RailPolicy:
     admission: AdmissionPolicy = field(default_factory=AdmissionPolicy)
     headroom: HeadroomPolicy | None = None  # codex only (required there)
     refresh_margin_s: float | None = None  # codex only: refresh an OAuth access token this close to expiry
+    # The User-Agent the upstream sees: `fixed` (the gateway's own, the default) or `forward` (the
+    # harness's) — a per-rail ⚖ (GW-CRED-BOUNDARY): an edge that judges the client's signature
+    # (opencode.ai's Cloudflare, error 1010) must never see a caller's; a vendor that admits by
+    # harness (OpenRouter's "agentic harnesses" gate) may need it.
+    user_agent: str = "fixed"
+    credential_probe: CredentialProbe | None = None  # re-verifies a rejected credential; absent = the hold
+    credential_hold_s: float = 900.0  # no probe: a rejected credential is re-admitted (half-open) after this
 
 
 SUBSCRIPTION_WINDOWS = ("5h", "7d")  # the `anthropic-ratelimit-unified-<w>-*` header windows
@@ -415,8 +460,15 @@ class Policy:
             if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
                 raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")
             headroom, margin = (_codex_policy(r) if name == "codex" else (None, None))
+            ua = r.get("user_agent", "fixed")
+            if ua not in USER_AGENT_MODES:
+                raise PolicyError(f"policy: rails.{name}.user_agent must be one of {', '.join(USER_AGENT_MODES)}")
+            hold = r.get("credential_hold_s", 900)
+            if isinstance(hold, bool) or not isinstance(hold, (int, float)) or hold < 1:
+                raise PolicyError(f"policy: rails.{name}.credential_hold_s must be a number >= 1")
             rails[name] = RailPolicy(name, int(r.get("max_sessions", 0)), dict(models), tuple(side),
-                                     _admission(name, r.get("admission")), headroom, margin)
+                                     _admission(name, r.get("admission")), headroom, margin, ua,
+                                     _credential_probe(name, r.get("credential_probe")), float(hold))
         roles: dict[str, RolePolicy] = {}
         for name, ro in (d.get("roles") or {}).items():
             if name not in ROLES:

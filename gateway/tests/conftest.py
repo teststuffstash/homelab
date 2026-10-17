@@ -437,6 +437,10 @@ class FakeUpstream:
         if self.behaviour == "upstream-401-key-expired":  # the Go vendor's expired-key answer (tap, 2026-10-17)
             return JSONResponse({"error": {"type": "authentication_error", "code": "api_key_expired",
                                            "message": "This API key has expired."}}, status_code=401)
+        if self.behaviour == "upstream-403-edge":  # Cloudflare's client-signature refusal (the 2026-10-17 self-latch)
+            return Response("error code: 1010", status_code=403, media_type="text/plain")
+        if self.behaviour == "upstream-403-html":  # an edge's HTML block page (opencode.ai to Python-urllib, probed 2026-10-17)
+            return Response("<!doctype html><html><head><title>Access denied</title></head></html>", status_code=403, media_type="text/html")
         if self.behaviour == "upstream-403-refused":  # OpenRouter's harness-gate refusal (tap, 2026-10-17)
             return JSONResponse({"error": {"message": "fixture/model:free is only available on agentic harnesses.", "code": 403,
                                            "metadata": {"failed_routing_step": "Gate Free Endpoints by Agentic Harness"}}},

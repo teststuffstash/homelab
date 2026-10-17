@@ -32,6 +32,8 @@
 | an expired key is a credential verdict | opencode | upstream-401-key-expired | 424 | upstream-auth | rejected (gateway_credentials_rejected{rail="opencode"} = 1) |
 | a policy refusal is not a credential verdict | openrouter | upstream-403-refused | 403 | upstream-refused | not rejected (gateway_credentials_rejected{rail="openrouter"} = 0) |
 | a refusal's body is not relayed either | openrouter | upstream-403-refused | 403 | upstream-refused | the body names neither the model's gate text nor the routing step |
+| an edge's error-code 403 is not a credential verdict | opencode | upstream-403-edge | 403 | upstream-edge-refused | not rejected (gateway_credentials_rejected{rail="opencode"} = 0) |
+| an edge's HTML 403 is not a credential verdict | opencode | upstream-403-html | 403 | upstream-edge-refused | not rejected (gateway_credentials_rejected{rail="opencode"} = 0) |
 """
 
 from __future__ import annotations
@@ -217,6 +219,8 @@ async def _rejected_gauge(gw, rail: str) -> float:
 KIND_ROWS = [
     ("an expired key is a credential verdict", "opencode", "upstream-401-key-expired", 424, "upstream-auth", 1),
     ("a policy refusal is not a credential verdict", "openrouter", "upstream-403-refused", 403, "upstream-refused", 0),
+    ("an edge's error-code 403 is not a credential verdict", "opencode", "upstream-403-edge", 403, "upstream-edge-refused", 0),
+    ("an edge's HTML 403 is not a credential verdict", "opencode", "upstream-403-html", 403, "upstream-edge-refused", 0),
 ]
 
 

@@ -113,6 +113,11 @@
       },
       "x-requirements": ["GW-METRICS", "GW-SESSIONS-OUTCOME"]
     },
+    "gateway_credential_probes_total": {
+      "type": "counter",
+      "labels": { "rail": { "$ref": "#/$defs/rail" }, "outcome": { "enum": ["cleared", "rejected", "inconclusive"] } },
+      "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT"]
+    },
     "gateway_requests_incomplete_total": {
       "type": "counter",
       "labels": {

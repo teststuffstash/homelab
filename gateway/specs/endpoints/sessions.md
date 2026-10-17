@@ -155,9 +155,26 @@ blocks lifts.
   the rail plus a sha256 fingerprint of the value, never the value — rejected. Admission resolves
   the stack's credential as before and skips the rail when that credential is rejected; any 2xx on
   it clears it, and a changed value is a different fingerprint, so a rotation clears it by
-  construction. ⚖ No time lifts it (only an operator act or a 2xx can), so a walk blocked only by
-  it defers `credential-rejected` with the policy's `defer_retry_s`, the poll interval. A policy
-  refusal (a 403 that names no credential reason) rejects nothing.
+  construction. A rejected credential **recovers without traffic**. A mark that only data-plane
+  traffic could clear is a self-latch, because admission stops sending traffic once it is set. That
+  happened live on 2026-10-17: an edge's 403 latched the Go rail until a pod restart.
+  ⚖ A rail whose policy declares **`credential_probe`** (`{method, path, body?, backoff_s:
+  [first, cap]}`, relative to the rail's upstream base) is re-verified by the gateway itself. A
+  background loop re-resolves the credential through the stack that saw it (a changed value clears
+  the mark) and sends the probe with it, on a doubling backoff. Only a 2xx clears the mark. A
+  credential verdict doubles the backoff. Anything else (5xx, unreachable, an edge refusal) is no
+  verdict and is retried at the same backoff.
+  - opencode probes with `POST /v1/chat/completions`, one token on the rail's model. Its
+    `/v1/models` answers 200 to no key at all, and a bogus model fails before the key is checked
+    (both probed live), so neither proves the key.
+  - openrouter probes with `GET /v1/key`, which costs nothing.
+  - ⚖ A rail with **no probe** (anthropic: no free authenticated call on the subscription) is
+    re-admitted **half-open** after `credential_hold_s` (**900 s**): the next ride is the probe, and
+    a fresh rejection doubles the hold.
+  A walk blocked only by rejected credentials defers `credential-rejected` with `retry_after_s` =
+  the earliest re-verification. ⚖ The marks live in memory: a restart forgets them, and the next
+  rejection re-marks. Nothing unverified is carried across a restart. A policy refusal or an edge
+  refusal ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)) rejects nothing.
 - **Go window draw** (`opencode`): each `window_draw.windows.<w>` sums the rail's metered (2xx)
   requests inside the window open at `now`, priced from the four token classes at **list** rates —
   uncached input and output at `in`/`out`, each cache class at its own rate (a `null` rate draws
@@ -220,11 +237,25 @@ The credential rows arrange an upstream 401 (`upstream-401`, or the Go vendor's
 | description | arrange | then | body || decision | rail | reason | retry_after_s |
 |---|---|---|---||---|---|---|---|
 | "a rejected credential is skipped, the walk continues" | worker ride on opencode → `upstream-401-key-expired` | — | worker (policy walk) || dispatch | openrouter | — | — |
-| "every allowed rail's credential rejected defers credential-rejected ⚖" | prober ride on anthropic → `upstream-401` | — | prober (policy walk) || defer | — | credential-rejected | 60 |
+| "every allowed rail's credential rejected defers credential-rejected ⚖" | prober ride on anthropic → `upstream-401` | — | prober (policy walk) || defer | — | credential-rejected | 900 (the half-open hold) |
 | "a rejection is per credential: another stack's key still admits" | platform worker ride on openrouter → `upstream-401` | — | oracle worker, `rail: openrouter` (its own key) || dispatch | openrouter | — | — |
 | "a new credential value clears it" | platform worker ride on openrouter → `upstream-401`; the Secret then holds a new key | +301 s (the ref cache) | worker, `rail: openrouter` || dispatch | openrouter | — | — |
 | "a 2xx on the credential clears it" | platform worker ride on openrouter → `upstream-401`, the same session → 200 | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
 | "a policy refusal does not reject the credential" | worker ride on openrouter → `upstream-403-refused` | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
+
+The recovery rows. The probe pass is the app's background loop, called here directly
+(`proxy.reprobe()`) on the test clock. `policy-default`'s opencode probe is `POST
+/v1/chat/completions` (1 token, backoff `[60, 3600]`). Anthropic declares none (hold 900 s).
+
+| description | arrange | then | probe answers || probes sent | decision | reason | retry_after_s |
+|---|---|---|---||---|---|---|---|
+| "a probe's 2xx clears a rejected credential without traffic" | worker ride on opencode → `upstream-401-key-expired` | +60 s, re-probe | upstream-ok || 1 | dispatch (opencode) | — | — |
+| "a probe rejected again doubles the backoff" | the same | +60 s, re-probe | upstream-401-key-expired || 1 | defer | credential-rejected | 120 |
+| "a probe with no verdict keeps the backoff ⚖" | the same | +60 s, re-probe | upstream-500 || 1 | defer | credential-rejected | 60 |
+| "a probe is not sent before it is due" | the same | +30 s, re-probe | — || 0 | defer | credential-rejected | 30 |
+| "a rail with no probe is re-admitted half-open after its hold ⚖" | prober ride on anthropic → `upstream-401` | +900 s | — || 0 | dispatch (anthropic) | — | — |
+| "a repeat rejection after half-open doubles the hold" | prober on anthropic → 401; +900 s; → 401 again | — | — || — | defer | credential-rejected | 1800 |
+| "an edge refusal marks nothing: the rail keeps admitting" | worker ride on opencode → `upstream-403-edge` (`error code: 1010`) | — | — || 0 | dispatch (opencode) | — | — |
 
 The Go rows: a worker ride on opencode rides `opencode-go/deepseek-v4-flash` (peak in 0.30 / out
 1.20 / cache_read 0.006 / cache_write `null`; off-peak 0.15 / 0.60 / 0.003 / `null`), a reviewer

@@ -39,10 +39,13 @@ USAGE_CAPTURE_MAX = 4 * 1024 * 1024  # bytes of response kept for the best-effor
 DEFAULT_RETRY_AFTER = "30"
 ERROR_BODY_MAX = 64 * 1024  # an upstream 401/403 body is read (never relayed) to classify it
 
-# An upstream 401 is always a credential verdict. A 403 is one when its error object names a
-# credential reason (or names nothing readable — the conservative read, today's behaviour);
-# otherwise it is a POLICY refusal: the upstream refused this model/request, the key is fine
-# (OpenRouter's "only available on agentic harnesses" 403, 2026-10-17 experiment) ⚖.
+# An upstream 401 is always a credential verdict. A 403 is one ONLY when its JSON error object names
+# a credential reason. A 403 with a JSON error object that names none is a POLICY refusal (the
+# upstream refused this model/request — OpenRouter's "only available on agentic harnesses", the
+# 2026-10-17 experiment). A 403 with NO readable JSON error object (an HTML / plain-text page, a
+# Cloudflare `error code: 1010`) is an EDGE refusal: a proxy in front of the vendor judged THIS
+# request's client signature, which says nothing about the key (2026-10-17: a Python-urllib caller's
+# 403 1010 was read as a credential verdict and self-latched the Go rail until a restart) ⚖.
 CREDENTIAL_ERROR_TYPES = frozenset({"authentication_error", "permission_error"})
 CREDENTIAL_ERROR_CODES = frozenset({"api_key_expired", "invalid_api_key", "unauthorized", "invalid_x_api_key"})
 # The terminal event of a complete stream, per dialect (decoded bytes): openai `data: [DONE]`,
@@ -51,16 +54,16 @@ TERMINAL_MARKERS = {"openai": (b"[DONE]",), "anthropic": (b"message_stop",)}
 
 
 def classify_auth_failure(status: int, body: bytes) -> str:
-    """`credential` | `refused` for an upstream 401/403 (the body is read, never relayed)."""
+    """`credential` | `refused` | `edge` for an upstream 401/403 (the body is read, never relayed)."""
     if status == 401:
         return "credential"
     try:
         doc = json.loads(body)
     except ValueError:
-        return "credential"
+        return "edge"
     e = doc.get("error") if isinstance(doc, dict) else None
     if not isinstance(e, dict):
-        return "credential"
+        return "edge"
     if str(e.get("type") or "") in CREDENTIAL_ERROR_TYPES or str(e.get("code") or "") in CREDENTIAL_ERROR_CODES:
         return "credential"
     return "refused"
@@ -237,7 +240,8 @@ class Proxy:
         self.metrics.credential(row.rail, "resolved")
         try:
             headers, note = rails.build_headers(
-                row.rail, dialect, [(k.decode(), v.decode()) for k, v in request.headers.raw], credential, row.id
+                row.rail, dialect, [(k.decode(), v.decode()) for k, v in request.headers.raw], credential, row.id,
+                user_agent=self.sessions.policy.rails[row.rail].user_agent,
             )
         except rails.HeaderRefused as e:
             self.metrics.request(row.rail, dialect, 502)
@@ -275,6 +279,13 @@ class Proxy:
                 await resp.aclose()
             elapsed = time.monotonic() - t0
             kind = classify_auth_failure(status, raw_err[:ERROR_BODY_MAX])
+            if kind == "edge":
+                self.metrics.request(row.rail, dialect, 403, elapsed)
+                self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock())
+                log.warning("upstream-edge-refused %s %d session=%s — a non-JSON refusal (an edge judged this request's client), "
+                            "no credential verdict [%s]", row.rail, status, row.id, note)
+                return error(403, "upstream-edge-refused",
+                             f"an edge in front of rail {row.rail} refused this request (upstream {status}, not a credential verdict)")
             if kind == "refused":
                 self.metrics.request(row.rail, dialect, 403, elapsed)
                 self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock())
@@ -284,7 +295,7 @@ class Proxy:
             self.metrics.request(row.rail, dialect, 424, elapsed)
             self.metrics.upstream_auth_rejected(row.rail)
             self.sessions.store.record_request(row.id, 424, int(elapsed * 1000), ts=self.sessions.clock())
-            self.sessions.capacity.reject_credential(row.rail, credential, self.sessions.clock())
+            self.sessions.capacity.reject_credential(row.rail, credential, self.sessions.clock(), row.stack)
             self.sessions.outcomes.transport(row, "auth-storm")
             log.error("upstream-auth %s %d session=%s [%s]", row.rail, status, row.id, note)
             return error(424, "upstream-auth", f"rail {row.rail} rejected the gateway's credential (upstream {status}) — not retryable")
@@ -296,6 +307,51 @@ class Proxy:
         if status == 429 and "retry-after" not in {k.lower() for k in out_headers}:
             out_headers["retry-after"] = DEFAULT_RETRY_AFTER
         return self._stream(resp, row, dialect, status, out_headers, streaming, t0, note)
+
+    async def reprobe(self) -> int:
+        """Re-verify every rejected credential whose probe is due (sessions.md §Capacity): re-resolve it
+        through the stack that saw it (a changed value = a new credential → cleared), then send the
+        rail's policy `credential_probe` with it. 2xx → cleared; a credential verdict → backoff
+        doubles; anything else (5xx, an edge refusal, unreachable) → no verdict, retried at the same
+        backoff. Returns the number of probes sent."""
+        cap = self.sessions.capacity
+        now = self.sessions.clock()
+        sent = 0
+        for rail, fp, mark in cap.due_probes(now):
+            stack = self.sessions.policy.stacks.get(mark.stack)
+            if stack is None:
+                cap.clear_credential(rail, fp, "its stack left the policy")
+                continue
+            try:
+                credential = await self.sessions.resolver.resolve(rail, stack)
+            except CredentialUnresolved:
+                cap.clear_credential(rail, fp, "the ref no longer resolves (admission says credential-unresolved)")
+                continue
+            except CredentialTransient:
+                cap.probe_result(rail, fp, None, now)
+                continue
+            from .capacity import fingerprint
+            if fingerprint(credential) != fp:
+                cap.clear_credential(rail, fp, "the credential changed")
+                continue
+            probe = self.sessions.policy.rails[rail].credential_probe
+            dialect = "anthropic" if rail == "anthropic" else "openai"
+            headers, _ = rails.build_headers(rail, dialect, [], credential, "gateway-credential-probe",
+                                             user_agent="fixed")
+            ok: bool | None = None
+            try:
+                resp = await self.client.request(probe.method, self.upstreams[rail] + probe.path, headers=headers,
+                                                 json=probe.body if probe.method == "POST" else None, timeout=20)
+                sent += 1
+                if 200 <= resp.status_code < 300:
+                    ok = True
+                elif resp.status_code in (401, 403) and classify_auth_failure(resp.status_code, resp.content[:ERROR_BODY_MAX]) == "credential":
+                    ok = False
+            except httpx.HTTPError:
+                ok = None
+            self.metrics.credential_probe(rail, {True: "cleared", False: "rejected", None: "inconclusive"}[ok])
+            cap.probe_result(rail, fp, ok, now)
+        return sent
 
     def _stream(self, resp: httpx.Response, row: Session, dialect: str, status: int, out_headers: dict,
                 streaming: bool, t0: float, note: str) -> StreamingResponse:

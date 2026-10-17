@@ -33,6 +33,7 @@ CP_ROUTES = ("admit", "lookup", "release", "outcome")  # control.ROUTES (not imp
 CP_REASONS = ("absent", "invalid", "review-transient")
 INCOMPLETE_REASONS = ("no-terminal", "timeout", "transport-error", "client-closed")
 STRIKE_SOURCES = ("outcome", "gateway")
+PROBE_OUTCOMES = ("cleared", "rejected", "inconclusive")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
 
@@ -67,6 +68,7 @@ class Metrics:
         self.upstream_count: dict[str, int] = {}
         self.incomplete_total: dict[tuple[str, str, str], int] = {}
         self.strikes_total: dict[tuple[str, str], int] = {}
+        self.probe_total: dict[tuple[str, str], int] = {}
         self._gauge_source: Callable[[], dict[str, int]] | None = None
         self._cooled_source: Callable[[], dict[str, int]] | None = None
         self._rejected_source: Callable[[], dict[str, int]] | None = None
@@ -82,6 +84,10 @@ class Metrics:
         key = (_bounded(klass, tuple(OUTCOME_CLASSES)), _bounded(source, STRIKE_SOURCES))
         with self._lock:
             self.strikes_total[key] = self.strikes_total.get(key, 0) + 1
+    def credential_probe(self, rail: str, outcome: str) -> None:
+        key = (_bounded(rail, RAILS), _bounded(outcome, PROBE_OUTCOMES))
+        with self._lock:
+            self.probe_total[key] = self.probe_total.get(key, 0) + 1
 
     def request_incomplete(self, rail: str, dialect: str, reason: str) -> None:
         key = (_bounded(rail, RAILS), _bounded(dialect, DIALECTS), _bounded(reason, INCOMPLETE_REASONS))
@@ -196,6 +202,10 @@ class Metrics:
                       "# TYPE gateway_strikes_total counter"]
             for (klass, source), n in sorted(self.strikes_total.items()):
                 lines.append(f"gateway_strikes_total{_fmt_labels({'class': klass, 'source': source})} {n}")
+            lines += ["# HELP gateway_credential_probes_total Re-verifications of a rejected rail credential, by outcome.",
+                      "# TYPE gateway_credential_probes_total counter"]
+            for (rail, outcome), n in sorted(self.probe_total.items()):
+                lines.append(f"gateway_credential_probes_total{_fmt_labels({'rail': rail, 'outcome': outcome})} {n}")
             # Every (route, reason) renders, zeros included: the flip's soak reads a flat series, and
             # an absent series cannot be told apart from a scrape that never saw the family.
             lines += ["# HELP gateway_control_plane_unauthenticated_total Control-plane requests without a valid caller token (admitted under observe, refused under enforce).",

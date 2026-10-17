@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import time
@@ -44,6 +45,15 @@ async def metrics(request: Request) -> PlainTextResponse:
     return PlainTextResponse(request.app.state.metrics.render(), media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
+async def _reprobe_loop(proxy: Proxy, every_s: float = 30.0) -> None:
+    while True:
+        try:
+            await proxy.reprobe()
+        except Exception:  # noqa: BLE001 — the loop must outlive any one probe's failure
+            log.exception("credential re-probe loop: one pass failed")
+        await asyncio.sleep(every_s)
+
+
 def create_app(
     settings: Settings,
     policy: Policy | None = None,
@@ -53,6 +63,7 @@ def create_app(
     clock=time.time,
     codex_backend: CodexBackend | None = None,
     reviewer: TokenReviewer | None = None,
+    reprobe_every_s: float = 30.0,
 ) -> Starlette:
     policy = policy or Policy.load(settings.policy_path)
     register_literal(settings.opencode_go_api_key)  # the Go key has no recognisable shape — GW-REDACT masks it by value
@@ -81,9 +92,15 @@ def create_app(
     async def lifespan(app):
         log.info("agent-gateway %s up: db=%s rails=%s stacks=%s", __version__, store.mode,
                  ",".join(policy.rails), ",".join(policy.stacks))
+        # A rejected credential recovers WITHOUT traffic (sessions.md §Capacity): the re-probe loop.
+        task = asyncio.create_task(_reprobe_loop(proxy)) if reprobe_every_s else None
         try:
             yield
         finally:
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             await client.aclose()
             store.close()
 

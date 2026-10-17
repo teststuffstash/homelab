@@ -13,9 +13,14 @@ Three per-rail checks the admission walk consults after the slot count, each dri
 - **429 latch** — the account-scope signal: a rail whose policy declares `latch_429_hold_s` (the
   subscription rails, one account each) is latched by a 429 for the same reset; any 2xx on the
   rail clears it. In memory: a restart forgets, the next 429 re-latches.
-- **credential rejected** — an upstream 401/403 with a credential reason marks THAT credential
-  (rail + sha256 of the value, never the value) rejected until a 2xx on it; a changed credential
-  is a different fingerprint, so a rotation clears it by construction.
+- **credential rejected** — an upstream 401, or a 403 whose error names a credential reason, marks
+  THAT credential (rail + sha256 of the value, never the value) rejected. It RECOVERS WITHOUT
+  TRAFFIC: a rail with a policy `credential_probe` is re-verified by the gateway itself on a
+  doubling backoff (`reprobe()`, the app's background loop) and cleared by the probe's 2xx; a rail
+  without one is re-admitted half-open after `credential_hold_s` (a fresh rejection doubles the
+  hold). A 2xx on the credential clears it, and a changed value is a different fingerprint. In
+  memory only: a restart clears it, and the next rejection re-marks it (nothing unverified is
+  carried across a restart).
 - **window draw** — the Go rail's spend per subscription window, priced from the four token
   classes at list rates (gometer `window_draw()` semantics), read from the gateway's own request
   ledger; a window at/over `threshold × budget_usd` blocks the rail until that window resets.
@@ -83,6 +88,14 @@ def reset_at(headers: Mapping[str, str], now: float) -> float | None:
 def fingerprint(credential: str) -> str:
     """The credential-rejected key: a short sha256 of the value — never the value (GW-REDACT)."""
     return hashlib.sha256(credential.encode()).hexdigest()[:16]
+
+
+@dataclass
+class Rejection:
+    stack: str  # a stack whose ref resolved to this credential (the probe re-resolves through it)
+    since: float
+    next_at: float  # the probe is due (probe rails) / the half-open re-admission (no-probe rails)
+    backoff: float
 
 
 @dataclass(frozen=True)
@@ -163,7 +176,8 @@ class Capacity:
         self.readings: dict[str, dict[str, Reading]] = {}
         self.latched_until: dict[str, float] = {}
         self.cooled_until: dict[tuple[str, str], float] = {}  # (rail, policy model id) -> epoch
-        self.rejected: dict[tuple[str, str], float] = {}  # (rail, credential fingerprint) -> first seen
+        self.rejected: dict[tuple[str, str], Rejection] = {}  # (rail, credential fingerprint) -> the mark
+        self._hold: dict[tuple[str, str], float] = {}  # the last hold/backoff per credential, for doubling
 
     # -- the data plane reports --------------------------------------------------------------
     def observe(self, rail: str, status: int, headers: Mapping[str, str], now: float, model: str | None = None,
@@ -204,18 +218,71 @@ class Capacity:
                 if credential is not None and self.rejected.pop((rail, fingerprint(credential)), None) is not None:
                     log.info("capacity: %s 2xx on a rejected credential — credential cleared", rail)
                     note += "+credential-cleared"
+                if credential is not None:
+                    self._hold.pop((rail, fingerprint(credential)), None)
         return note
 
-    def reject_credential(self, rail: str, credential: str, now: float) -> None:
-        """An upstream 401/403 with a credential reason: this credential is down until a 2xx on it."""
+    def reject_credential(self, rail: str, credential: str, now: float, stack: str = "") -> None:
+        """An upstream credential verdict: mark this credential, due for a re-verification after the
+        rail's first backoff (probe rails) or its hold (no probe), doubling on a repeat."""
+        rp = self.policy.rails[rail]
+        key = (rail, fingerprint(credential))
         with self._lock:
-            self.rejected.setdefault((rail, fingerprint(credential)), now)
-        log.error("capacity: %s credential %s rejected upstream — admission skips it until a 2xx or a new credential",
-                  rail, fingerprint(credential))
+            if key in self.rejected:
+                return
+            first = rp.credential_probe.backoff_s[0] if rp.credential_probe else rp.credential_hold_s
+            cap = rp.credential_probe.backoff_s[1] if rp.credential_probe else max(rp.credential_hold_s * 4, rp.credential_hold_s)
+            prev = self._hold.get(key)
+            backoff = min(prev * 2, cap) if prev else first
+            self._hold[key] = backoff
+            self.rejected[key] = Rejection(stack, now, now + backoff, backoff)
+        log.error("capacity: %s credential %s rejected upstream — admission skips it; %s in %.0f s",
+                  rail, key[1], "re-probed" if rp.credential_probe else "re-admitted half-open", backoff)
 
-    def credential_rejected(self, rail: str, credential: str) -> bool:
+    def credential_rejected(self, rail: str, credential: str, now: float | None = None) -> float | None:
+        """When the rejected credential is next re-verified (epoch), or None when it admits. A no-probe
+        rail's mark lifts at its hold (half-open: the next ride is the probe)."""
+        key = (rail, fingerprint(credential))
         with self._lock:
-            return (rail, fingerprint(credential)) in self.rejected
+            mark = self.rejected.get(key)
+            if mark is None:
+                return None
+            if self.policy.rails[rail].credential_probe is None and now is not None and now >= mark.next_at:
+                del self.rejected[key]  # half-open; `_hold` keeps the backoff, so a repeat doubles it
+                log.info("capacity: %s credential %s re-admitted half-open after %.0f s", rail, key[1], mark.backoff)
+                return None
+            return mark.next_at
+
+    def due_probes(self, now: float) -> list[tuple[str, str, Rejection]]:
+        with self._lock:
+            return [(rail, fp, m) for (rail, fp), m in self.rejected.items()
+                    if self.policy.rails[rail].credential_probe is not None and m.next_at <= now]
+
+    def probe_result(self, rail: str, fp: str, ok: bool | None, now: float) -> None:
+        """ok True = the probe's 2xx (cleared); False = rejected again (backoff doubles); None = no
+        verdict (the upstream or the kube API away — retried at the same backoff)."""
+        with self._lock:
+            mark = self.rejected.get((rail, fp))
+            if mark is None:
+                return
+            if ok:
+                del self.rejected[(rail, fp)]
+                self._hold.pop((rail, fp), None)
+                log.info("capacity: %s credential %s re-verified by the probe — cleared", rail, fp)
+                return
+            if ok is False:
+                cap = self.policy.rails[rail].credential_probe.backoff_s[1]
+                mark.backoff = min(mark.backoff * 2, cap)
+                self._hold[(rail, fp)] = mark.backoff
+            mark.next_at = now + mark.backoff
+        log.warning("capacity: %s credential %s probe %s — next in %.0f s", rail, fp, "rejected again" if ok is False else "inconclusive",
+                    mark.backoff)
+
+    def clear_credential(self, rail: str, fp: str, why: str) -> None:
+        with self._lock:
+            self.rejected.pop((rail, fp), None)
+            self._hold.pop((rail, fp), None)
+        log.info("capacity: %s credential %s cleared — %s", rail, fp, why)
 
     def cooled(self, rail: str, model: str, now: float) -> float | None:
         """The cell's cooldown expiry, or None when the cell admits."""

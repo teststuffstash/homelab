@@ -27,7 +27,7 @@ Messages body itself is the vendor's — the gateway validates only what it read
 | [GW-RAIL-ANTHROPIC](#gw-rail-anthropic) | `upstream.anthropic` (URL, auth, `anthropic-beta`), `output.complete` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 |
 | [GW-RAIL-OPENCODE](#gw-rail-opencode) | `upstream.opencode` (URL, auth, session headers), `input.headers.x-opencode-session`, `input.headers.x-claude-code-session-id` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0; `upstream-timeout` rows `🚧 WIP` (the `upstream-slow` world is clock-faked only) |
 | [GW-MODEL-RESOLVE](#gw-model-resolve) | `input.body.model` | `model-not-session` | v0 — provider pins / `:exacto` / the ADR-096 ladder `⚑ gap` (rows below) |
-| [GW-CRED-BOUNDARY](#gw-cred-boundary) | `input.headers.authorization`, `input.headers.x-api-key`, `upstream.*.auth` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `upstream-refused`, `header-refused` | v0; the codex rail's `upstream-auth` is still 502 (`⚑ gap` row below) |
+| [GW-CRED-BOUNDARY](#gw-cred-boundary) | `input.headers.authorization`, `input.headers.x-api-key`, `upstream.*.auth` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `upstream-refused`, `upstream-edge-refused`, `header-refused` | v0; the codex rail's `upstream-auth` is still 502 (`⚑ gap` row below) |
 | [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned on openai-chat.md) | `upstream.openrouter` | `upstream-auth`, `upstream-unreachable` | linked — the anthropic-dialect cell is a verified row there |
 | [GW-SESSIONS-RELEASE](sessions.md#gw-sessions-release) (owned on sessions.md) | `input.headers.authorization` | `session-expired`, `session-released` | linked |
 | [GW-CRED-RESOLVE](sessions.md#gw-cred-resolve) (owned on sessions.md) | `upstream.*.auth` | `credential-unresolved`, `credential-transient` | linked |
@@ -75,7 +75,7 @@ record showed each as a 200.
 | "the OAuth beta is never duplicated" | `anthropic-beta: oauth-2025-04-20` || `anthropic-beta: oauth-2025-04-20` |
 | "anthropic-version passes through" | `anthropic-version: 2023-06-01` || `anthropic-version: 2023-06-01` |
 | "the claude-code session id passes through" | `X-Claude-Code-Session-Id: <uuid>` || `X-Claude-Code-Session-Id: <uuid>` |
-| "the user agent passes through" | `User-Agent: claude-cli/2.1.281` || `User-Agent: claude-cli/2.1.281` |
+| "the user agent passes through (`user_agent: forward`) ⚖" | `User-Agent: claude-cli/2.1.281` || `User-Agent: claude-cli/2.1.281` |
 
 | description | inbound path | upstream behaviour || status | body | recorded on the session |
 |---|---|---||---|---|---|
@@ -110,7 +110,14 @@ The `opencode` rail is the OpenCode Go subscription, served from the gateway's o
 Both dialects are spoken: anthropic → `https://opencode.ai/zen/go/v1/messages` with
 `x-api-key: <go key>`; openai → `https://opencode.ai/zen/go/v1/chat/completions` with
 `Authorization: Bearer <go key>`; `GET /openai/v1/models` → `https://opencode.ai/zen/go/v1/models`.
-`anthropic-beta` is **dropped** on this rail. The vendor routes by a session id and 400s
+`anthropic-beta` is **dropped** on this rail. ⚖ **The User-Agent is the gateway's own**
+(`user_agent: fixed`, a per-rail policy key, `fixed` by default). The caller's UA never reaches
+opencode.ai, whose edge judges client signatures: it answered `Python-urllib` with a 403 block page
+and accepted `agent-gateway` (probed live from the gateway pod, 2026-10-17). **Accept-Encoding is
+the client's** (every rail): the upstream answers in the encoding the client asked for, and the
+bytes come back unchanged. A client that sent none is sent upstream as `identity`, so it never gets
+a gzip body it did not ask for (the transport's own default asked for gzip — a 2026-10-17
+observation). The vendor routes by a session id and 400s
 (`MissingSessionID`) without one — measured, not argued
 ([chainless-redesign.md §Proved on the wire, 2026-09-17](../../../docs/agents/chainless-redesign.md)):
 either `X-Claude-Code-Session-Id` or `x-opencode-session` alone clears the gate and carries
@@ -129,7 +136,9 @@ policy id with `opencode-go/` removed ([GW-MODEL-RESOLVE](#gw-model-resolve)).
 | "the opencode session id passes through alone" | openai | `x-opencode-session: <id>` || `x-opencode-session: <id>` |
 | "both session headers pass through" | anthropic | both || both, unchanged |
 | "no session header — the gateway supplies its session id ⚖" | anthropic | neither || `x-opencode-session: <gateway session id>` |
-| "the user agent passes through" | openai | `User-Agent: opencode/1.18.21` || `User-Agent: opencode/1.18.21` |
+| "the caller's user agent is replaced by the gateway's own ⚖" | openai | `User-Agent: Python-urllib/3.13` || `User-Agent: agent-gateway` |
+| "the client's Accept-Encoding passes through" | openai | `Accept-Encoding: gzip` || `Accept-Encoding: gzip` |
+| "no Accept-Encoding from the client is identity upstream" | openai | (none) || `Accept-Encoding: identity` |
 
 | description | inbound path | upstream behaviour || upstream URL | status | body |
 |---|---|---||---|---|---|
@@ -224,10 +233,16 @@ rail credential is bad, and the [admission](sessions.md#capacity--the-ladders-ca
 that credential until a 2xx on it or a new value. ⚖ 424 (Failed Dependency), not 502: the pinned
 harnesses retry 5xx with backoff (opencode retried the expired Go key's 502 nine times in the
 2026-10-17 experiment, `docs/spikes/gateway-free-models-2026-10-17/cells.tsv`), and they retry
-neither 424 nor 403 — a dead credential must end the ride, not stall it. Any other 403 is a
-**policy refusal**: **403 `upstream-refused`**, the credential untouched. ⚖ The observed one is
-OpenRouter's harness gate (`… is only available on agentic harnesses`, `failed_routing_step: Gate
-Free Endpoints by Agentic Harness`), the model refusing this caller, not the key.
+neither 424 nor 403 — a dead credential must end the ride, not stall it. A 403 whose JSON error object names no credential reason is a
+**policy refusal**: **403 `upstream-refused`**, and the credential is untouched. ⚖ The observed one
+is OpenRouter's harness gate (`… is only available on agentic harnesses`, `failed_routing_step:
+Gate Free Endpoints by Agentic Harness`): the model refused this caller, and the key is fine.
+⚖ A 403 with **no readable JSON error object**, such as an HTML block page or Cloudflare's
+`error code: 1010`, is an **edge refusal**: **403 `upstream-edge-refused`**. A proxy in front of
+the vendor judged THIS request's client signature, so the refusal is scoped to that request, never
+rail-wide, and the credential is untouched. The 2026-10-17 defect: a `Python-urllib` caller's 403
+1010 was read as a credential verdict (the old "unreadable 403 = credential" rule) and self-latched
+the Go rail until a restart.
 The boundary also runs outward: a credential-shaped value (the [GW-REDACT](sessions.md#gw-redact)
 patterns) in any header the gateway does not own is 502 `header-refused` before any upstream
 call — the old proxy's FU-251 tripwire; a harness that smuggles a real key in a vendor header
@@ -265,6 +280,8 @@ never gets it past this hop.
 | "an expired key is a credential verdict ⚖" | opencode | upstream-401-key-expired (`api_key_expired`, the Go vendor's live answer) || 424 | upstream-auth | rejected: `gateway_credentials_rejected{rail="opencode"}` = 1 |
 | "a policy refusal is not a credential verdict ⚖" | openrouter | upstream-403-refused (the harness gate) || 403 | upstream-refused | not rejected: `gateway_credentials_rejected{rail="openrouter"}` = 0 |
 | "a refusal's body is not relayed either" | openrouter | upstream-403-refused || 403 | upstream-refused | the body names neither the gate text nor the routing step |
+| "an edge's error-code 403 is not a credential verdict ⚖" | opencode | upstream-403-edge (`text/plain` `error code: 1010`) || 403 | upstream-edge-refused | not rejected: `gateway_credentials_rejected{rail="opencode"}` = 0 |
+| "an edge's HTML 403 is not a credential verdict" | opencode | upstream-403-html (an HTML block page — what opencode.ai's edge answered `Python-urllib`, probed live) || 403 | upstream-edge-refused | not rejected: `gateway_credentials_rejected{rail="opencode"}` = 0 |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|

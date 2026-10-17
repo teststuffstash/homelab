@@ -14,13 +14,13 @@ from .config import RAIL_DIALECTS
 from .logging import looks_like_credential
 
 OAUTH_BETA = "oauth-2025-04-20"
-USER_AGENT = "agent-gateway"
+USER_AGENT = "agent-gateway"  # the gateway's own User-Agent (`user_agent: fixed`, the default)
 
 # Hop-by-hop + framing headers the gateway owns (the old proxy's _DROP_REQ / _DROP_RESP).
 DROP_REQUEST = frozenset(
     {
         "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "trailers",
-        "transfer-encoding", "upgrade", "host", "content-length", "accept-encoding",
+        "transfer-encoding", "upgrade", "host", "content-length",
     }
 )
 DROP_RESPONSE = frozenset({"connection", "keep-alive", "transfer-encoding", "content-length"})
@@ -59,7 +59,7 @@ def upstream_url(rail: str, base: str, dialect: str, op: str) -> str:
 
 
 def build_headers(
-    rail: str, dialect: str, inbound: list[tuple[str, str]], credential: str, session_id: str
+    rail: str, dialect: str, inbound: list[tuple[str, str]], credential: str, session_id: str, user_agent: str = "fixed"
 ) -> tuple[dict[str, str], str]:
     """Inbound headers → upstream headers for (rail, dialect). Raises HeaderRefused on a leak."""
     out: dict[str, str] = {}
@@ -106,8 +106,16 @@ def build_headers(
         note += "+or-bearer"
     else:  # pragma: no cover — config.RAILS is closed
         raise ValueError(rail)
-    if not out.get("user-agent"):
+    # The User-Agent is the rail's policy (GW-CRED-BOUNDARY): `fixed` = the gateway's own, never the
+    # caller's (an edge judging client signatures must not see a caller's — Cloudflare 1010, the
+    # 2026-10-17 self-latch); `forward` = the harness's, kept (a vendor that admits by harness).
+    if user_agent != "forward" or not out.get("user-agent"):
         out["user-agent"] = USER_AGENT
+    # Content-Encoding passthrough: the upstream answers in the encoding THE CLIENT asked for, and
+    # the bytes go back unchanged — so a client that sent no Accept-Encoding gets `identity`, never
+    # a gzip body it did not ask for (the transport's own default would otherwise ask for gzip).
+    if not out.get("accept-encoding"):
+        out["accept-encoding"] = "identity"
     own = {"authorization", "x-api-key"}
     leaked = sorted(k for k, v in out.items() if k not in own and looks_like_credential(v))
     if leaked:
