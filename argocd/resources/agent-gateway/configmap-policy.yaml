@@ -18,6 +18,10 @@
 # resolves client-side; `opencode-go/deepseek-v4-flash` → `deepseek-v4-flash`), the same strip
 # agents/agent-session.sh performs today. openrouter's tiers follow the `coding` class chain_head
 # order (v4-flash, then v4.1-flash).
+# ⚖ opencode heavy = deepseek-v4-flash, NOT model-classes.json's opencode-go claude-sonnet id (operator,
+# 2026-10-17): that id answers 400 "Model is unavailable" upstream (docs/agents/specs-reviewer.md
+# §Shadow runs), so an overflowing reviewer got no review. A cheap experiment until the rails are
+# reconfigured (kimi-k3 rejected as too expensive for review); the old proxy is untouched.
 # side_models (anthropic): claude-code's small side-calls name the haiku family
 # (ANTHROPIC_SMALL_FAST_MODEL default) under a sonnet session — admitted ⚖ (GW-MODEL-RESOLVE).
 # max_sessions: anthropic 5 = the old proxy's SUBSCRIPTION_MAX_RUNNING; opencode 3 =
@@ -116,7 +120,7 @@ data:
           "models": {
             "light":    "opencode-go/deepseek-v4-flash",
             "standard": "opencode-go/deepseek-v4-flash",
-            "heavy":    "opencode-go/claude-sonnet-4-6"
+            "heavy":    "opencode-go/deepseek-v4-flash"
           }
         },
         "openrouter": {
