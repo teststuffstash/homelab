@@ -39,7 +39,7 @@ received** (URL, headers, body) as much as on the response the gateway returned.
 | `upstream-429-no-header` | 429 with no reset header at all | the hold / `defer_retry_s` fallbacks |
 | `upstream-429-reset` | OpenRouter's 429 shape (the 2026-10-17 tap): `x-ratelimit-limit: 20`, `-remaining: 0`, `-reset` = the row's epoch **milliseconds**, no `retry-after` (a row may add one), body `limit_source: openrouter_free_tier_per_minute` | the cell-cooldown rows ([§Capacity](../endpoints/sessions.md#capacity--the-ladders-capacity-half)) |
 | `upstream-401` | 401 with a body mentioning the key | 424 `upstream-auth`, body never forwarded; the credential rejected |
-| `upstream-401-key-expired` | 401 `{type: authentication_error, code: api_key_expired}` — the Go vendor's live answer to an expired key (the 2026-10-17 tap) | 424 `upstream-auth` on the Go rail |
+| `upstream-401-key-expired` | 401 `{type: authentication_error, code: api_key_expired}` — the Go vendor's live answer to an expired key (the 2026-10-17 tap) | 424 `upstream-auth` on the opencode rail |
 | `upstream-403` | 403 `{type: permission_error}` — a credential reason | 424 `upstream-auth` |
 | `upstream-403-refused` | 403 with OpenRouter's harness-gate body (`… only available on agentic harnesses`, `failed_routing_step`) — no credential reason | 403 `upstream-refused`; the credential untouched |
 | `upstream-slow` | holds the response past the read timeout | timeout rows (connect 10 s / read 600 s) — 🚧 WIP, clock-faked only |
