@@ -1,0 +1,8 @@
+{
+  "_comment": "UC-1 Q7 — the worker launcher's question: Q1 plus the pod it is about to create (GW-SESSIONS-PULL). World: policy-default, every ref resolvable, all rails empty.",
+  "stack": "platform",
+  "role": "worker",
+  "task": "homelab-2588-r1",
+  "round": 1,
+  "bind": { "namespace": "platform-agents", "serviceaccount": "agentstack-worker", "pod": "fixer-homelab-2588-r1" }
+}

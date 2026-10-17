@@ -12,7 +12,8 @@ status: spine            # the initial use case the whole island is built and tr
 
 Today the launcher answers half of that itself (84 self-routing sites across six scripts,
 [context-and-autonomy.md §Interfaces](../../../docs/spikes/context-and-autonomy.md)); after this
-use case it asks once, copies `env` into the pod, and calls `DELETE` from its finalize hook.
+use case it asks once — naming the pod it will create (`bind`) — the pod pulls its own `env`,
+and the launcher calls `DELETE` from its finalize hook.
 Everything in the island exists to make this ride work end-to-end with **no model name chosen
 by the caller and no credential in the pod**.
 
@@ -22,13 +23,17 @@ by the caller and no credential in the pod**.
 sequenceDiagram
   actor L as launcher (agent-session.sh)
   participant G as agent-gateway
-  participant K as kube API (Secrets)
+  participant K as kube API (Secrets, TokenReview)
   participant P as worker pod (opencode)
   participant U as upstream rail
-  L->>G: ① POST /sessions {stack: platform, role: worker, task: homelab-2588-r1, round: 1}
+  L->>G: ① POST /sessions {stack: platform, role: worker, task: homelab-2588-r1, round: 1, bind{namespace, serviceaccount, pod}}
   G->>K: resolve the stack's refs — GW-CRED-RESOLVE
-  G-->>L: {decision: dispatch, session{id, token}, rail: opencode, harness: opencode, model, env{…}} — GW-SESSIONS-ADMIT, GW-SESSIONS-ENV, GW-SESSIONS-TOKEN
-  L->>P: ② pod created with env verbatim (the token is its only LLM credential)
+  G-->>L: {decision: dispatch, session{id}, rail: opencode, harness: opencode, model, env_keys, pull_url} — no token — GW-SESSIONS-ADMIT, GW-SESSIONS-PULL
+  L->>P: ② pod created (that name, that ServiceAccount) with a projected token, audience agent-gateway — no LLM credential in the manifest
+  P->>G: ②′ POST /sessions/{id}/env  Authorization: Bearer «projected SA token»
+  G->>K: TokenReview — the bind's ServiceAccount and pod? — GW-SESSIONS-PULL
+  G-->>P: {id, expires_at, env{…}} — the token minted now, once — GW-SESSIONS-ENV, GW-SESSIONS-TOKEN
+  Note over P: exports env, execs the harness (the token is its only LLM credential)
   loop N calls
     P->>G: ③ POST /openai/v1/chat/completions  Authorization: Bearer gws_…
     G->>G: session ← token · body.model == session model — GW-CRED-BOUNDARY, GW-MODEL-RESOLVE
@@ -54,7 +59,9 @@ resolvable; upstream behaviour `upstream-ok` unless the pair says otherwise.
 
 | Stage | Input | Expected output | Requirements |
 |---|---|---|---|
-| ① admit | [`uc-1/request.json`](uc-1/request.json) | [`uc-1/expected-response.json`](uc-1/expected-response.json) | GW-SESSIONS-ADMIT, GW-SESSIONS-ENV, GW-SESSIONS-TOKEN, GW-CRED-RESOLVE |
+| ① admit (unbound — the specs reviewer's shape) | [`uc-1/request.json`](uc-1/request.json) | [`uc-1/expected-response.json`](uc-1/expected-response.json) | GW-SESSIONS-ADMIT, GW-SESSIONS-ENV, GW-SESSIONS-TOKEN, GW-CRED-RESOLVE |
+| ① admit, bound (the worker launcher's shape) | [`uc-1/bind-request.json`](uc-1/bind-request.json) | [`uc-1/bind-response.json`](uc-1/bind-response.json) | GW-SESSIONS-ADMIT, GW-SESSIONS-PULL |
+| ②′ env pull | `POST /sessions/«id»/env`, `Authorization: Bearer «projected SA token»` | [`uc-1/pull-response.json`](uc-1/pull-response.json) | GW-SESSIONS-PULL, GW-SESSIONS-ENV, GW-SESSIONS-TOKEN |
 | ③ data plane, [Go rail](../../../docs/agents/chainless-redesign.md) (the ride's own) | [`uc-1/opencode-request.json`](uc-1/opencode-request.json) | [`uc-1/opencode-response.json`](uc-1/opencode-response.json) | GW-RAIL-OPENCODE, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
 | ③ data plane, OpenRouter rail (the same worker when Go is full) | [`uc-1/openrouter-request.json`](uc-1/openrouter-request.json) | [`uc-1/openrouter-response.json`](uc-1/openrouter-response.json) | GW-RAIL-OPENROUTER, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
 | ③ data plane, subscription rail (a prober's claude harness, for the anthropic dialect) | [`uc-1/anthropic-request.json`](uc-1/anthropic-request.json) | [`uc-1/anthropic-response.json`](uc-1/anthropic-response.json) | GW-RAIL-ANTHROPIC, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
@@ -70,6 +77,7 @@ resolvable; upstream behaviour `upstream-ok` unless the pair says otherwise.
 | Q4 | `POST /sessions {stack: platform, role: prober, task: probe-platform, round: 0}` then the pod's `POST /anthropic/v1/messages` with body model `claude-haiku-4-5` | `dispatch` on `anthropic`, model `claude/haiku`; the fake Anthropic upstream receives `Authorization: Bearer «AUTH_TOKEN»` and `anthropic-beta: oauth-2025-04-20`; the body model is untouched |
 | Q5 | `DELETE /sessions/«Q1 id»`, then Q2 again | `{id, released_at}`; the repeat is 401 `session-released`; `gateway_sessions_active{rail="opencode"}` is back to 0 |
 | Q6 | Q1 with every allowed rail full | 200 `{decision: defer, reason: rail-capacity, retry_after_s}` — not an HTTP error |
+| Q7 | `bind-request.json`, then the bound pod's `POST /sessions/«id»/env`, then the same pull again | a dispatch with `env_keys: [OPENCODE_CONFIG_CONTENT]` and no `gws_`; the pull answers Q1's `env` with a token minted then; the repeat is 409 `env-already-delivered` |
 
 ## What this use case does not cover (so nobody infers it)
 

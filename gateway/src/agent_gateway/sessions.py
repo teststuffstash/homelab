@@ -1,4 +1,5 @@
-"""The control plane: POST/GET/DELETE /sessions (GW-SESSIONS-ADMIT, -ENV, -TOKEN, -RELEASE).
+"""The control plane: POST/GET/DELETE /sessions (GW-SESSIONS-ADMIT, -ENV, -TOKEN, -RELEASE) and
+the pod's env pull, POST /sessions/{id}/env (GW-SESSIONS-PULL — the identity half lives in pull.py).
 
 `POST /sessions` is the launcher's one question: may this unit run now, with which harness, and
 what goes in the pod's env. `decision: defer` is a normal 200 answer (typed reason + retry_after_s),
@@ -12,6 +13,7 @@ import hashlib
 import json
 import logging
 import math
+import re
 import secrets
 import time
 import uuid
@@ -34,7 +36,15 @@ from .config import (
 )
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
 from .metrics import Metrics
-from .store import Session, Store, iso
+from .pull import (
+    POD_NAME_EXTRA,
+    PULL_AUDIENCE,
+    ReviewTransient,
+    StaticTokenReviews,
+    TokenReviewer,
+    identity_mismatch,
+)
+from .store import UNMINTED_PREFIX, Session, Store, iso
 
 log = logging.getLogger("gateway.sessions")
 
@@ -63,6 +73,37 @@ class BadRequest(Exception):
         self.message = message
 
 
+# Kubernetes object-name shapes: a namespace is a DNS-1123 label, a ServiceAccount and a Pod name
+# a DNS-1123 subdomain (the bind is compared verbatim with a TokenReview's username / pod extra).
+_DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$")
+_DNS_SUBDOMAIN = re.compile(r"^(?=.{1,253}$)[a-z0-9]([-a-z0-9.]*[a-z0-9])?$")
+
+
+@dataclass(frozen=True)
+class Bind:
+    """GW-SESSIONS-PULL: the pod identity a bound session's env may be pulled by."""
+
+    namespace: str
+    serviceaccount: str
+    pod: str | None
+
+
+def parse_bind(raw: object) -> Bind:
+    if not isinstance(raw, dict):
+        raise BadRequest("malformed-body", "bind must be an object {namespace, serviceaccount, pod?}")
+    extra = set(raw) - {"namespace", "serviceaccount", "pod"}
+    if extra:
+        raise BadRequest("malformed-body", f"bind carries unknown keys: {', '.join(sorted(extra))}")
+    ns, sa, pod = raw.get("namespace"), raw.get("serviceaccount"), raw.get("pod")
+    if not isinstance(ns, str) or not _DNS_LABEL.match(ns):
+        raise BadRequest("malformed-body", "bind.namespace is required (a DNS-1123 label)")
+    if not isinstance(sa, str) or not _DNS_SUBDOMAIN.match(sa):
+        raise BadRequest("malformed-body", "bind.serviceaccount is required (a DNS-1123 subdomain)")
+    if pod is not None and (not isinstance(pod, str) or not _DNS_SUBDOMAIN.match(pod)):
+        raise BadRequest("malformed-body", "bind.pod, when present, is a DNS-1123 subdomain")
+    return Bind(ns, sa, pod)
+
+
 @dataclass(frozen=True)
 class Admission:
     stack: StackPolicy
@@ -72,6 +113,7 @@ class Admission:
     tier: str
     harness: str
     rail_override: str | None
+    bind: Bind | None = None
 
 
 def parse_admission(policy: Policy, body: object) -> Admission:
@@ -107,8 +149,9 @@ def parse_admission(policy: Policy, body: object) -> Admission:
         )
     # stack-unknown is a DEFER (typed), not a 400 — the body is well-formed, the policy just does
     # not know the stack. Carry the name through for the defer answer.
+    bind = parse_bind(body["bind"]) if "bind" in body else None
     stack = policy.stacks.get(body["stack"]) or StackPolicy(body["stack"], "", None, None)
-    return Admission(stack, role, body["task"], rnd, tier, harness, rail)
+    return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind)
 
 
 def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str, str]:
@@ -167,7 +210,7 @@ def opencode_config(base_url: str, token: str, wire: str) -> dict:
 class SessionService:
     def __init__(
         self, policy: Policy, store: Store, resolver: CredentialResolver, metrics: Metrics, self_url: str, clock=time.time,
-        capacity: Capacity | None = None,
+        capacity: Capacity | None = None, reviewer: TokenReviewer | None = None,
     ):
         self.policy = policy
         self.store = store
@@ -176,6 +219,7 @@ class SessionService:
         self.metrics = metrics
         self.self_url = self_url
         self.clock = clock
+        self.reviewer: TokenReviewer = reviewer or StaticTokenReviews()  # app.py hands the kube one in
         self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
 
     async def admit(self, adm: Admission) -> JSONResponse:
@@ -258,13 +302,32 @@ class SessionService:
         return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": retry})
 
     def _dispatch(self, adm: Admission, rail: str, model: str, now: float) -> JSONResponse:
-        token = new_token()
         sid = uuid.uuid4().hex
-        row = self.store.create_session(
-            id=sid, token_hash=token_hash(token), stack=adm.stack.name, role=adm.role.name, task=adm.task,
-            round=adm.round, rail=rail, harness=adm.harness, model=model,
-            created_at=now, expires_at=now + self.policy.session_ttl_s,
-        )
+        common = dict(id=sid, stack=adm.stack.name, role=adm.role.name, task=adm.task, round=adm.round, rail=rail,
+                      harness=adm.harness, model=model, created_at=now, expires_at=now + self.policy.session_ttl_s)
+        if adm.bind is not None:
+            # GW-SESSIONS-PULL: nothing credential-shaped leaves in this answer — the token is minted
+            # at the pull, so the row holds the unminted placeholder no token hashes to.
+            row = self.store.create_session(
+                **common, token_hash=UNMINTED_PREFIX + sid, bind_namespace=adm.bind.namespace,
+                bind_serviceaccount=adm.bind.serviceaccount, bind_pod=adm.bind.pod,
+            )
+            self.metrics.session_decision(rail, adm.role.name, adm.stack.name, "dispatch")
+            log.info("session: dispatch id=%s stack=%s role=%s task=%s rail=%s harness=%s model=%s bind=%s/%s pod=%s",
+                     sid, adm.stack.name, adm.role.name, adm.task, rail, adm.harness, model,
+                     adm.bind.namespace, adm.bind.serviceaccount, adm.bind.pod or "(any)")
+            return JSONResponse({
+                "decision": "dispatch",
+                "session": {"id": row.id, "expires_at": iso(row.expires_at)},
+                "rail": rail,
+                "harness": adm.harness,
+                "model": model,
+                "env_keys": list(assemble_env(self.self_url, adm.harness, "", wire_model(rail, model))),
+                "pull_url": f"{self.self_url}/sessions/{row.id}/env",
+                "context_tokens": self.policy.context_tokens_for(model),
+            })
+        token = new_token()
+        row = self.store.create_session(**common, token_hash=token_hash(token))
         self.metrics.session_decision(rail, adm.role.name, adm.stack.name, "dispatch")
         log.info("session: dispatch id=%s stack=%s role=%s task=%s rail=%s harness=%s model=%s",
                  sid, adm.stack.name, adm.role.name, adm.task, rail, adm.harness, model)
@@ -277,6 +340,50 @@ class SessionService:
             "env": assemble_env(self.self_url, adm.harness, token, wire_model(rail, model)),
             "context_tokens": self.policy.context_tokens_for(model),
         })
+
+    async def pull_env(self, sid: str, presented: str | None) -> JSONResponse:
+        """GW-SESSIONS-PULL, in order: the id (404) → the identity (403; a TokenReview the API
+        cannot answer is 503) → the session's state (401 released / expired, as the data plane
+        refuses it) → at most once (409). Identity precedes state, so a stranger learns nothing
+        about a session but that its id exists. Success mints the token now; only its sha256 is
+        stored, and the answer is the env GW-SESSIONS-ENV would have handed the launcher."""
+        row = self.store.get_session(sid)
+        if row is None:
+            return error(404, "session-not-found", "no session carries that id")
+        if not row.bound:
+            return self._refuse_pull(row, "the session has no bind — its env went out in the dispatch answer")
+        if not presented:
+            return self._refuse_pull(row, "no bearer ServiceAccount token presented")
+        try:
+            review = await self.reviewer.review(presented, [PULL_AUDIENCE])
+        except ReviewTransient as e:
+            log.warning("session: env pull id=%s — tokenreview-transient: %s", row.id, e)
+            return error(503, "tokenreview-transient", "the TokenReview API did not answer — retry",
+                         headers={"retry-after": "5"})
+        why = identity_mismatch(review, row.bind_namespace or "", row.bind_serviceaccount or "", row.bind_pod)
+        if why:
+            return self._refuse_pull(row, why)
+        now = self.clock()
+        state = row.state(now)
+        if state != "active":
+            code = "session-released" if state == "released" else "session-expired"
+            log.info("session: env pull id=%s refused — %s", row.id, code)
+            return error(401, code, f"the session is {state}")
+        if row.env_delivered_at is not None:
+            log.warning("session: env pull id=%s refused — env-already-delivered (at %s)", row.id, iso(row.env_delivered_at))
+            return error(409, "env-already-delivered", "this session's env was already pulled")
+        token = new_token()
+        if not self.store.deliver_env(row.id, token_hash(token), now):
+            log.warning("session: env pull id=%s refused — env-already-delivered (a racing pull won)", row.id)
+            return error(409, "env-already-delivered", "this session's env was already pulled")
+        env = assemble_env(self.self_url, row.harness, token, wire_model(row.rail, row.model))
+        log.info("session: env pulled id=%s by %s pod=%s keys=%s", row.id, review.username,
+                 ",".join(review.extra.get(POD_NAME_EXTRA, ())) or "?", ",".join(env))
+        return JSONResponse({"id": row.id, "expires_at": iso(row.expires_at), "env": env})
+
+    def _refuse_pull(self, row: Session, why: str) -> JSONResponse:
+        log.warning("session: env pull id=%s refused — pull-identity-refused: %s", row.id, why)
+        return error(403, "pull-identity-refused", why)
 
     def authenticate(self, token: str | None) -> tuple[Session | None, str | None]:
         """Data-plane auth: (session, None) or (None, typed 401 code)."""
@@ -306,6 +413,19 @@ async def post_sessions(request: Request) -> JSONResponse:
     except BadRequest as e:
         return error(400, e.code, e.message)
     return await svc.admit(adm)
+
+
+def _bearer(request: Request) -> str | None:
+    auth = request.headers.get("authorization") or ""
+    scheme, _, value = auth.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    return value.strip() or None
+
+
+async def post_session_env(request: Request) -> JSONResponse:
+    svc: SessionService = request.app.state.sessions
+    return await svc.pull_env(request.path_params["id"], _bearer(request))
 
 
 async def get_session(request: Request) -> JSONResponse:

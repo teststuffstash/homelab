@@ -1,0 +1,8 @@
+{
+  "_comment": "UC-1 Q7 pull answer (POST /sessions/«id»/env with the bound pod's projected token, audience agent-gateway): exactly Q1's env, its token minted at this pull and stored only as sha256. A second pull is 409 env-already-delivered.",
+  "id": "«id»",
+  "expires_at": "«created_at + 14400 s»",
+  "env": {
+    "OPENCODE_CONFIG_CONTENT": "{\"$schema\":\"https://opencode.ai/config.json\",\"model\":\"gateway/deepseek-v4-flash\",\"small_model\":\"gateway/deepseek-v4-flash\",\"provider\":{\"gateway\":{\"npm\":\"@ai-sdk/openai-compatible\",\"options\":{\"baseURL\":\"http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1\",\"apiKey\":\"gws_«minted at this pull»\"},\"models\":{\"deepseek-v4-flash\":{}}}}}"
+  }
+}

@@ -23,15 +23,30 @@ harness and one model for its whole life. The DB row holds the token's sha256, n
 
 | state | how it is entered | data-plane verdict |
 |---|---|---|
-| active | `decision: dispatch` | served |
+| active | `decision: dispatch` | served (a bound session: once its env is pulled — no token exists before) |
 | released | `DELETE /sessions/{id}` | 401 `session-released` |
 | expired | `expires_at` passed (created_at + policy `session_ttl_s`) | 401 `session-expired` |
 
 ## session token
 
 `gws_` + 32 url-safe random characters, minted once per session, returned once (in the
-`dispatch` response) and carried by the pod as its only LLM credential. Worthless outside the
+`dispatch` response — or, for a [bound](#bind) session, in its [env pull](#env-pull)) and carried
+by the pod as its only LLM credential. Worthless outside the
 cluster: it resolves only at this gateway.
+
+## bind
+
+The pod identity a session's env may be pulled by — `{namespace, serviceaccount, pod?}` in a
+`POST /sessions` body ([GW-SESSIONS-PULL](endpoints/sessions.md#gw-sessions-pull)). A bound
+session's dispatch answer carries no token and no env values; the gateway compares the bind with
+a TokenReview of the pod's projected ServiceAccount token. Not a Kubernetes RoleBinding.
+
+## env pull
+
+`POST /sessions/{id}/env`: the bound pod presents its projected ServiceAccount token (audience
+`agent-gateway`) and receives its LLM env, carrying a session token minted at that moment — at
+most once per session ([GW-SESSIONS-PULL](endpoints/sessions.md#gw-sessions-pull)). The launcher
+never holds the token; credential writes stay with the gateway.
 
 ## rail
 

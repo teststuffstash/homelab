@@ -47,6 +47,7 @@ from starlette.routing import Route
 from agent_gateway.app import create_app
 from agent_gateway.config import Policy, Settings
 from agent_gateway.credentials import StaticSecrets
+from agent_gateway.pull import StaticTokenReviews
 from agent_gateway.store import Store
 
 HERE = Path(__file__).resolve().parent
@@ -599,6 +600,13 @@ def secrets() -> StaticSecrets:
 
 
 @pytest.fixture
+def reviews() -> StaticTokenReviews:
+    """The fake TokenReview (GW-SESSIONS-PULL): empty — every token reviews unauthenticated until
+    a row registers the projected tokens it presents (tests/test_sessions_pull.py)."""
+    return StaticTokenReviews()
+
+
+@pytest.fixture
 def upstreams() -> dict[str, FakeUpstream]:
     return {rail: FakeUpstream(rail) for rail in UPSTREAM_BASES}
 
@@ -629,9 +637,9 @@ def store(settings) -> Store:
 
 
 @pytest.fixture
-async def app(settings, policy, secrets, store, transport, clock):
+async def app(settings, policy, secrets, store, transport, clock, reviews):
     client = httpx.AsyncClient(transport=transport)
-    a = create_app(settings, policy=policy, source=secrets, store=store, client=client, clock=clock)
+    a = create_app(settings, policy=policy, source=secrets, store=store, client=client, clock=clock, reviewer=reviews)
     yield a
     await client.aclose()
 

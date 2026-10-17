@@ -1,0 +1,14 @@
+{
+  "_comment": "UC-1 Q7 expected answer: no session.token, no env values — the names only, and where the bound pod pulls them. Guillemet values are produced by the run.",
+  "decision": "dispatch",
+  "session": {
+    "id": "«id»",
+    "expires_at": "«created_at + 14400 s»"
+  },
+  "rail": "opencode",
+  "harness": "opencode",
+  "model": "opencode-go/deepseek-v4-flash",
+  "env_keys": ["OPENCODE_CONFIG_CONTENT"],
+  "pull_url": "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/«id»/env",
+  "context_tokens": 1000000
+}
