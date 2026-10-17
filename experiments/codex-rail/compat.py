@@ -57,7 +57,7 @@ class _Now:
 
 
 @contextmanager
-def fake_upstream(rotated_access: str, request_observer=None):
+def fake_upstream(rotated_access: str, request_observer=None, response_factory=None):
     seen = {"requests": 0, "auth_ok": [], "shape": []}
 
     class Handler(BaseHTTPRequestHandler):
@@ -80,8 +80,11 @@ def fake_upstream(rotated_access: str, request_observer=None):
             self.send_header("Content-Type", "text/event-stream")
             # A hostile redirect hint must never be followed (the gateway never follows redirects).
             self.send_header("Location", "http://127.0.0.1:1/never-follow")
+            extra, chunks = response_factory(seen["requests"]) if response_factory else ({}, completion())
+            for key, value in extra.items():
+                self.send_header(key, value)
             self.end_headers()
-            for chunk in completion():
+            for chunk in chunks:
                 self.wfile.write(chunk)
                 self.wfile.flush()
 
@@ -159,7 +162,8 @@ def _exec(executable: str, env: dict, work: Path, timeout: float):
                           env=env, cwd=work, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
 
 
-def run(binary: str, expected_version: str, probe_bare_env: bool = False, request_observer=None) -> dict:
+def run(binary: str, expected_version: str, probe_bare_env: bool = False, request_observer=None,
+        response_factory=None) -> dict:
     executable = shutil.which(binary)
     if executable is None:
         raise RuntimeError("codex executable not found")
@@ -169,7 +173,7 @@ def run(binary: str, expected_version: str, probe_bare_env: bool = False, reques
     evidence: dict = {"cli_version": version, "live_subscription_verified": False}
     with tempfile.TemporaryDirectory(prefix="codex-gw-compat-") as tmpdir:
         tmp = Path(tmpdir)
-        with fake_upstream(creds(_Now())[1].access_token, request_observer) as (upstream, seen), gateway(upstream, tmp) as (app, url, exchange, _):
+        with fake_upstream(creds(_Now())[1].access_token, request_observer, response_factory) as (upstream, seen), gateway(upstream, tmp) as (app, url, exchange, _):
             now = time.time()
             app.state.codex.headroom.observe({"observed_at": now - 1, "source": "poll", "limited": False, "windows": [
                 {"used_percent": 20, "resets_at": now + 3600, "window_minutes": 300},
