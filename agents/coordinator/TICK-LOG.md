@@ -13698,3 +13698,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
   behind an off-by-default flag + one ad-hoc canary.
 - **Plan amended (operator, ~20:10Z):** step 3 is specs-reviewer harness × rail cells in SHADOW (no GitHub writes),
   not the worker launcher — the blast radius stays the gateway build; `agent-session.sh` is out of tonight.
+
+## 2026-10-16 ~21:00Z → 2026-10-17 ~09:30Z — overnight gateway build, the three plan steps (seat + 3 clone subagents, PR lane)
+
+- **Step 1 #2645** (capacity admission rows): 3 specs-review rounds (r1: ⚖ rows not named under `Spec changes:`; r2: ATTACH_BULK
+  on cases the PR never touched — folded at the reviewer's request, question parked for the operator). Deploy #2649; settle:
+  gateway 0 defers, old proxy `/anthropic-limit` + `/opencode-limit` both unlimited (5h 0.27, 7d 0.74).
+- **Step 2 #2646** (Codex rail dark): 1 round (rule-10 local-evidence rows → ⚑ gap → #2650). Deploy #2651; `/healthz` ok,
+  no codex rail in the deployed policy.
+- **Step 3** #2654 shadow mode → #2655 settings.json quickfix (security, found by the builder) → #2656 env rows
+  (goose `GOOSE_PROVIDER`, opencode `OPENCODE_CONFIG_CONTENT`; deploy #2658) → #2657 log the bodies → #2659 the table.
+  No shadow write on the four corpus PRs. Finding: the heavy Go fallback model 400s upstream.
+- **Seat miss:** the briefs said `pr-wait --no-arm` to sequence merges → no reviewer came (the review reflex only
+  touches ARMED PRs); fixed by arming in order. Sequence merges by arming in order, never by leaving PRs unarmed.

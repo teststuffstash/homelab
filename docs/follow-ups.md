@@ -810,11 +810,11 @@ the block needs pruning, not more headings.
       consumer has moved.** ADR-139 step 3 as the in-monorepo island `gateway/` (specs-first, `GW-*`
       rows, own CI, pinned-image deploy); the OLD proxy stays untouched (operator, 2026-10-15). The specs
       reviewer (ADR-155) is the first `/sessions` consumer (LIVE 2026-10-16, first evidence pass #2628).
-      Usage: live `in=0 out=0` was gzip SSE parsed undecoded (fixed #2635); operator ruling A
-      (2026-10-16): four token classes (`in` = uncached) + the `anthropic-ratelimit-unified-*` window
-      gauges, no USD in the gateway (#2640) — LIVE, seat canary 2026-10-16 (in 24/out 5, 5h 0.10/7d 0.70).
-      **Next:** the overnight plan [`gateway/PLAN.md`](../gateway/PLAN.md) — (1) the ladder's capacity
-      half as admission rows, (2) the Codex rail ported in dark (#2642), (3) specs-reviewer harness × rail cells in shadow.
+      Usage: gzip SSE fixed (#2635); four token classes + window gauges, no USD (ruling A, #2640) — LIVE.
+      Overnight build 2026-10-17: capacity admission rows (#2645), Codex rail dark (#2646, CLI evidence #2650),
+      specs-reviewer shadow cells (#2654/#2656/#2659, table in `docs/agents/specs-reviewer.md` §Shadow runs).
+      **Next:** operator rulings in meta-state (heavy Go fallback model dead upstream; the live reviewer's cell);
+      then the launcher's `/sessions` for one platform role.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).

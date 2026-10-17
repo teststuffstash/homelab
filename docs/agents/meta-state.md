@@ -17,11 +17,17 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-16 ~20:00Z — seat; TICK-LOG same date): OVERNIGHT UNATTENDED BUILD = [`gateway/PLAN.md`](../../gateway/PLAN.md)**
-  (operator, 2026-10-16: the Codex spike #2642 rolls into the gateway as it rolls out). Live today: gzip usage fix (#2635),
-  four token classes + window gauges (#2640, canaried), the superseded-CANCELLED green predicate (#2637 — drilled on #2636),
-  `github-tofu` stale-checkout refusal (#2641), circles in `reviewer_repos` (#2639, applied by the operator; end-state
-  check = the first circles Renovate PR's `approve` job, after the operator's App-install click).
+- **⚑ PICKUP (2026-10-17 ~09:30Z — seat; TICK-LOG same date): OVERNIGHT GATEWAY BUILD DONE** (the plan file is deleted;
+  FU-270 holds status). Merged + deployed: admission rows for the ladder's capacity half (#2645, settle: 0 defers vs the old
+  proxy's limits both unlimited), the Codex rail DARK (#2646; CLI evidence outside CI = #2650), shadow mode for the specs reviewer
+  (#2654), goose/opencode env rows (#2656, gateway `gfdebcd39`), the shadow table (#2659 → `docs/agents/specs-reviewer.md`
+  §Shadow runs). Security quickfix #2655: the image's settings.json (`permissions.allow: Bash(*)…`) no longer seeds the
+  reviewer model's HOME. **For the operator:** (a) the reviewer's heavy Go fallback `opencode-go/claude-sonnet-4-6` returns
+  400 "Model is unavailable" upstream (an overflow = no review; the matrix lists kimi-k3 in that slot) — a policy ruling;
+  (b) which cell the live reviewer rides — the table is a comparison (goose missed R2 on #2635 + no verdict on #2640;
+  opencode@opencode caught both, +1 extra); (c) the ⚖ rows for ruling on #2645/#2646 (900 s stale reading, no
+  OpenRouter latch, first-freeing defer, prober-only codex, `CODEX_MODEL` name); (d) should the specs reviewer block on
+  evidence hygiene in cases a PR never touched (#2645 r2)? (e) headroom error codes not in the schema (#2646 advisory).
 - **⚑ PICKUP (2026-10-16 ~16:00Z — seat; TICK-LOG same date): ADR-156 evidence pass LIVE** (snippets v0.5.2 pinned
   in `agents/specs-reviewer-session.sh` + `gateway/scripts/lib/snippets.sh` — bump TOGETHER; canary #2628 approved).
   **Next:** (a) step 5's measurement — per completed PR: tokens, worker rounds, invalid findings, coordinator
