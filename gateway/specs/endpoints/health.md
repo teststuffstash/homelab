@@ -45,7 +45,7 @@ next restart. HA (FU-271) is a gap.
 | "⚑ gap: a second replica" | 2 replicas || both count sessions alone — every cap doubles | HA, FU-271 (a session store + a durable store after a per-request measurement) |
 | "⚑ gap: memory mode fires nothing" | `db: memory` || the log line and this field | a `gateway_db_mode` metric and its alert |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 

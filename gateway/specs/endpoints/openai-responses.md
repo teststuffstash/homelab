@@ -141,7 +141,7 @@ failure, client cancellation — and a generation is never retried once a byte r
 | "⚑ gap: the live canary" | a real account || never run | spike step 4 — a separately authorized maintenance window |
 | "⚖ local evidence: the pinned Codex CLI completes a turn through this gateway" | `experiments/codex-rail/compat.py` (codex-cli 0.161.0, the agent-runtime lock) || a completed `codex exec --json` turn, one rotation, one upstream close | not CI: the CLI is not in the CI toolchain — dated local evidence in `experiments/codex-rail/evidence.json` |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -217,7 +217,7 @@ before the credential store is read, and it reserves nothing ⚖.
 | "⚑ gap: codex window gauges" | an accepted report || no `gateway_subscription_*{rail="codex"}` series | the report → gauge wiring and the dashboard panels |
 | "⚑ gap: reservation" | two admissions at 94 % || both dispatched | reports do not meter concurrent use; the session cap is the only bound |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -289,7 +289,7 @@ durable state is read without refreshing: `ready` admits, `revoked` / `refreshin
 | "⚑ gap: lost-rotation recovery" | a crash between the exchange and the save || recovery-required forever | an explicitly designed recovery operation with an authoritative replacement |
 | "⚑ gap: cross-process fencing" | two gateway replicas || one replica only (ADR-139) | distributed fencing — FU-271 |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 

@@ -77,7 +77,7 @@ is visible on the session and in `gateway_requests_total{status="502"}`).
 | "an unreachable upstream is typed" | `POST /anthropic/v1/messages` | upstream-down || 502 | `upstream-unreachable` envelope | `requests` +1 |
 | "🚧 WIP: a read past 600 s" | `POST /anthropic/v1/messages` | upstream-slow || 504 | `upstream-timeout` | `requests` +1 |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -124,7 +124,7 @@ policy id with `opencode-go/` removed ([GW-MODEL-RESOLVE](#gw-model-resolve)).
 | "an unreachable upstream is typed" | `POST /anthropic/v1/messages` | upstream-down || `…/messages` | 502 | `upstream-unreachable` envelope |
 | "🚧 WIP: a read past 600 s" | `POST /anthropic/v1/messages` | upstream-slow || `…/messages` | 504 | `upstream-timeout` |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -180,7 +180,7 @@ cooldowns, provider pins, the `:exacto` suffix — is a gap, rendered below.
 | "⚑ gap: a per-task deny list" | claim `modelDeny` names the session's model || dispatched anyway | the claim's `modelDeny` projection into the policy |
 | "⚑ gap: a mid-session model change" | a strike on this session || the same model until release | strikes / cooldowns / the pair hold |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
@@ -230,7 +230,7 @@ never gets it past this hop.
 | "an upstream 401 never leaks" | upstream-401 (body names the key) || 502 | `upstream-auth` envelope | `upstream-auth <rail> 401`, no body |
 | "an upstream 403 is the same class" | upstream-403 || 502 | `upstream-auth` envelope | `upstream-auth <rail> 403` |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 
