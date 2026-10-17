@@ -806,20 +806,15 @@ the block needs pruning, not more headings.
       Deployment + Service in `agent-egress`, ≥2 replicas + PDB, its own SA with the Secret-read
       grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
       (retry) stays. Relates ADR-087, FU-089.
-- [ ] **FU-270** — **`agent-gateway`: the island is BUILT and LIVE in parallel (2026-10-16, #2606); one
-      consumer has moved.** ADR-139 step 3 as the in-monorepo island `gateway/` (specs-first, `GW-*`
-      rows, own CI, pinned-image deploy); the OLD proxy stays untouched (operator, 2026-10-15). The specs
-      reviewer (ADR-155) is the first `/sessions` consumer (LIVE 2026-10-16, first evidence pass #2628).
-      Usage: gzip SSE fixed (#2635); four token classes + window gauges, no USD (ruling A, #2640) — LIVE.
-      Overnight build 2026-10-17: capacity admission rows (#2645), Codex rail dark (#2646, CLI evidence #2650),
-      specs-reviewer shadow cells (#2654/#2656/#2659, table in `docs/agents/specs-reviewer.md` §Shadow runs).
-      Rulings 2026-10-17: Go heavy → deepseek-v4-flash, an experiment (#2663; rails get reconfigured later);
-      live reviewer stays claude@anthropic; ⚖ rows on #2645/#2646 wait on the Codex spike (#2662).
-      Policy = configMapGenerator since #2664 (an edit rolls the pod; diff-ci now runs the suite on it).
-      Launcher leg MERGED #2667: `AGENT_GATEWAY=sessions` (env opt-in, platform only, fail-closed, token in a
-      pod-owned Secret); canary 2026-10-17 clean (opencode, 2 req, released, no key minted). Ruled 2026-10-17: the
-      pod PULLS its env (projected SA token → TokenReview, bound at admission; codex `auth.command` aligns;
-      Secret writes gateway-only). **Next:** gateway pull endpoint PR, then the launcher drops #2667's Secret.
+- [ ] **FU-270** — **`agent-gateway`: the island is BUILT and LIVE in parallel (#2606); the old proxy stays
+      untouched (operator, 2026-10-15).** `/sessions` consumers: the specs reviewer (ADR-155) + the worker
+      launcher behind the env opt-in `AGENT_GATEWAY=sessions` (#2667, platform only). Since #2672/#2674 a bound
+      dispatch carries no credential: the pod PULLS its env once (GW-SESSIONS-PULL, projected-SA TokenReview);
+      canary 2026-10-17 clean (0 `gws_` in spec/logs, no Secret, 403 other pod / 409 re-pull). Policy is a
+      configMapGenerator (#2664). Rulings 10-17: Go heavy → deepseek-v4-flash (experiment); ⚖ rows on
+      #2645/#2646 wait on the Codex spike (#2662). Open ⚑ rows: the bind is the caller's word (control plane
+      unauthenticated); codex `auth.command` re-runs vs at-most-once. **Next:** flip the knob for the platform
+      loop (one line, operator's go), then authenticate `POST /sessions`.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
