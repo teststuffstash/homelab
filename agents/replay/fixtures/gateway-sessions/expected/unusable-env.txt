@@ -1,5 +1,5 @@
-CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1}
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1,"bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-120000"}}
 CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd
 OUT → gateway(sessions): released 0123abcd
-ERR → gateway(sessions): defer — [dispatch-unusable: env map, OPENCODE_CONFIG_CONTENT.model] retry_after=?s — FAIL CLOSED, releasing and not dispatching.
+ERR → gateway(sessions): defer — [dispatch-unusable: env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT] retry_after=?s — FAIL CLOSED, releasing and not dispatching.
 RC 1
