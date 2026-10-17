@@ -34,8 +34,10 @@ What this island adds, by rule:
 - **Rule 9 (external facts):** the wire facts this island rests on are read in
   `docs/agents/chainless-redesign.md §Proved on the wire` and OpenRouter's `openapi.json`.
 - **Rule 10 (incompleteness):** everything OUT of v0 is a `⚑ gap` row on the requirement it would
-  belong to — the ADR-096 ladder, the FU-088 latches, the capacity doorbell, `/route`
-  compatibility, the git broker (FU-269), the codex and Zen rails, the cost ledger, HA (FU-271).
+  belong to — the ADR-096 ladder past its capacity half, the FU-088 latches the admission rows do
+  not cover, the capacity doorbell, `/route`
+  compatibility, the git broker (FU-269), the Zen rail, the codex rail's production credential
+  write-back / upstream profile / report ingress (the rail itself ships dark), the cost ledger, HA (FU-271).
 - **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a policy state
   plus a fake-upstream behaviour; tests carry it as the `world` label.
 - **Table shape:** the rows brief's checklist is a CANDIDATE under the operator's iteration and
@@ -66,7 +68,8 @@ schema: <name>.schema.json
 Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (the spine) →
 [endpoints/sessions.md](endpoints/sessions.md) (the control plane) →
 [endpoints/anthropic-messages.md](endpoints/anthropic-messages.md) +
-[endpoints/openai-chat.md](endpoints/openai-chat.md) (the data plane) →
+[endpoints/openai-chat.md](endpoints/openai-chat.md) +
+[endpoints/openai-responses.md](endpoints/openai-responses.md) (the data plane; the last is the dark codex rail) →
 [endpoints/metrics.md](endpoints/metrics.md) · [endpoints/health.md](endpoints/health.md) ·
 [access.md](access.md) (the role × stack × service inventory) ·
 [glossary.md](glossary.md) · [worlds/](worlds/README.md).
@@ -84,6 +87,9 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-MODEL-RESOLVE](endpoints/anthropic-messages.md#gw-model-resolve) | anthropic-messages | the body's model is the session's model |
 | [GW-CRED-BOUNDARY](endpoints/anthropic-messages.md#gw-cred-boundary) | anthropic-messages | inbound auth stops here; the upstream credential starts here |
 | [GW-RAIL-OPENROUTER](endpoints/openai-chat.md#gw-rail-openrouter) | openai-chat | the per-stack OpenRouter rail's wire |
+| [GW-RAIL-CODEX](endpoints/openai-responses.md#gw-rail-codex) | openai-responses | the ChatGPT-subscription rail's Responses wire (dark) |
+| [GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom) | openai-responses | account headroom as the codex rail's admission |
+| [GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth) | openai-responses | the OAuth lifecycle behind the persistence interface (FAKE store only) |
 | [GW-METRICS](endpoints/metrics.md#gw-metrics) | metrics | the `gateway_*` families and their bounded labels |
 | [GW-HEALTH](endpoints/health.md#gw-health) | health | liveness and the store mode |
 | [GW-ACCESS](access.md#gw-access) | access | role × service: allowed / denied / unenforced |

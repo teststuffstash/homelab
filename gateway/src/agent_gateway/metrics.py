@@ -14,12 +14,12 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterable
 
+from .capacity import subscription_windows  # one parser for the gauges and the admission reading
 from .config import DIALECTS, RAILS, ROLES
 
 OTHER = "other"
 DECISIONS = ("dispatch", "defer")
 TOKEN_CLASSES = ("in", "cache_read", "cache_write", "out")
-WINDOWS = ("5h", "7d")
 CRED_OUTCOMES = ("resolved", "definitive", "transient")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
@@ -87,12 +87,7 @@ class Metrics:
         """Last-seen 5h/7d utilization (0–1) + reset epoch from `anthropic-ratelimit-unified-<w>-*`;
         a window with an absent or malformed field is left as it was (no guessing)."""
         r = _bounded(rail, RAILS)
-        for w in WINDOWS:
-            try:
-                util = float(headers[f"anthropic-ratelimit-unified-{w}-utilization"])
-                reset = float(headers[f"anthropic-ratelimit-unified-{w}-reset"])
-            except (KeyError, ValueError, TypeError):
-                continue
+        for w, (util, reset) in subscription_windows(headers).items():
             with self._lock:
                 self.sub_util[(r, w)] = util
                 self.sub_reset[(r, w)] = reset

@@ -310,7 +310,7 @@ container, wrapper finalization, real credentials, subscription headroom or real
 
 ### Offline lifecycle/headroom extension (2026-10-16, FU-270)
 
-The [prototype contracts and failure table](../../experiments/codex-rail/README.md#offline-lifecycle-and-headroom-fu-270)
+The prototype contracts and failure table (now the [GW-CODEX-OAUTH and GW-CODEX-HEADROOM rows](../../gateway/specs/endpoints/openai-responses.md#gw-codex-oauth))
 now cover a fake-credential OAuth state machine and account-local headroom component. The storage
 interface requires atomic durable writes plus exclusive ownership across refresh. A persisted
 in-progress marker makes a crash after rotation fail closed after restart; it does **not** recover
@@ -327,7 +327,7 @@ gateway integration and the separately authorized live canary remain unproven un
 
 ### Composed offline verification (2026-10-16, FU-270)
 
-The [composed fixture](../../experiments/codex-rail/README.md#composed-offline-fixture-fu-270)
+The composed fixture (now the gateway itself — see the port below)
 connects native Codex, dummy session validation, headroom admission, fake OAuth rotation and the
 Responses adapter to a loopback HTTP upstream. Combined tests check rejection before upstream
 contact, freshness after a blocked refresh, concurrent rotation, terminal usage, cancellation,
@@ -337,3 +337,22 @@ plaintext store for dummy credentials, not a production persistence choice. This
 local evidence without changing gateway code, specs, dependency locks, CI, launchers, policies,
 credentials or deployments. Physical durability, distributed fencing, Infisical write-back and
 real-backend canary evidence remain outside this experiment under FU-270.
+
+### Ported into the gateway, dark (2026-10-16, FU-270)
+
+Acceptance step 3's gateway half: the adapter, lifecycle and headroom modules moved into
+[`gateway/src/agent_gateway/`](../../gateway/README.md) and their tests became GW rows on
+[`openai-responses.md`](../../gateway/specs/endpoints/openai-responses.md) — a `responses`
+dialect at `/openai/v1/responses` (`openai` stays Chat Completions), the `codex` rail, headroom as
+`POST /sessions` admission (`quota-unknown` / `quota-stale` / `quota-limited` defers), the OAuth
+lifecycle behind its persistence interface with the FAKE store only, and the codex harness's
+`GW-SESSIONS-ENV` rows. The rail **ships dark**: the deployed policy declares no codex rail and
+production wires no credential store, so the production write-back (Infisical), the upstream
+profile (Codex backend vs SIWC), authenticated report ingress, cross-process fencing and the
+live canary stay `⚑ gap` rows there. One finding the port made: codex-cli 0.161.0 does **not**
+take its base URL from a bare `OPENAI_BASE_URL` — the provider block must be rendered (the
+wrapper's job), so the env carries values, not a CLI-read base URL. The
+[experiment directory](../../experiments/codex-rail/README.md) keeps only the native-CLI compat
+harness, re-pointed at the real gateway (dated local evidence; the CLI is not in CI). The
+`file_store.py` POSIX backend and its subprocess tests were not ported — a disposable local
+backend is not a production persistence choice; their evidence is in git history.

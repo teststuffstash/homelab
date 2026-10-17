@@ -190,13 +190,13 @@ class Proxy:
         except httpx.TimeoutException as e:
             elapsed = time.monotonic() - t0
             self.metrics.request(row.rail, dialect, 504, elapsed)
-            self.sessions.store.record_request(row.id, 504, int(elapsed * 1000))
+            self.sessions.store.record_request(row.id, 504, int(elapsed * 1000), ts=self.sessions.clock())
             log.warning("upstream-timeout %s session=%s: %s", row.rail, row.id, type(e).__name__)
             return error(504, "upstream-timeout", f"rail {row.rail} upstream: {type(e).__name__}")
         except httpx.HTTPError as e:
             elapsed = time.monotonic() - t0
             self.metrics.request(row.rail, dialect, 502, elapsed)
-            self.sessions.store.record_request(row.id, 502, int(elapsed * 1000))
+            self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock())
             log.warning("upstream-unreachable %s session=%s: %s", row.rail, row.id, type(e).__name__)
             return error(502, "upstream-unreachable", f"rail {row.rail} upstream: {type(e).__name__}")
         status = resp.status_code
@@ -204,11 +204,12 @@ class Proxy:
             await resp.aclose()
             elapsed = time.monotonic() - t0
             self.metrics.request(row.rail, dialect, 502, elapsed)
-            self.sessions.store.record_request(row.id, 502, int(elapsed * 1000))
+            self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock())
             log.error("upstream-auth %s %d session=%s [%s]", row.rail, status, row.id, note)
             return error(502, "upstream-auth", f"rail {row.rail} rejected the gateway's credential (upstream {status})")
         if row.rail == "anthropic":
             self.metrics.subscription_windows(row.rail, resp.headers)
+        note += self.sessions.capacity.observe(row.rail, status, resp.headers, self.sessions.clock())
         out_headers = rails.response_headers(resp.headers.multi_items())
         if status == 429 and "retry-after" not in {k.lower() for k in out_headers}:
             out_headers["retry-after"] = DEFAULT_RETRY_AFTER
@@ -237,7 +238,8 @@ class Proxy:
                          if final[0] < 300 else Usage())
                 self.metrics.request(row.rail, dialect, final[0], elapsed)
                 self.metrics.tokens(row.rail, usage)
-                self.sessions.store.record_request(row.id, final[0], int(elapsed * 1000), usage)
+                self.sessions.store.record_request(row.id, final[0], int(elapsed * 1000), usage,
+                                                  ts=self.sessions.clock())  # the window-draw ledger's clock
                 log.info("%s rail=%s session=%s status=%d ms=%d in=%d cache_read=%d cache_write=%d out=%d [%s]",
                          dialect, row.rail, row.id, final[0], int(elapsed * 1000), usage.tokens_in,
                          usage.tokens_cache_read, usage.tokens_cache_write, usage.tokens_out, note)

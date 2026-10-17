@@ -12,13 +12,16 @@
 | goose: the base url is this gateway's openai path (verify) | goose | openrouter | deepseek/deepseek-v4-flash | OPENAI_BASE_URL | <self>/openai/v1 |
 | goose: the api key is the session token (verify) | goose | openrouter | deepseek/deepseek-v4-flash | OPENAI_API_KEY | the session token |
 | goose: the model var carries the bare id (verify) | goose | openrouter | deepseek/deepseek-v4-flash | GOOSE_MODEL | deepseek/deepseek-v4-flash |
+| codex: the base url is this gateway's openai path (wrapper-rendered) | codex | codex | codex/fixture-model | OPENAI_BASE_URL | <self>/openai/v1 |
+| codex: the api key is the session token, read through env_key | codex | codex | codex/fixture-model | OPENAI_API_KEY | the session token |
+| codex: the model var carries the bare id (wrapper-rendered) | codex | codex | codex/fixture-model | CODEX_MODEL | fixture-model |
 
 | description | harness | vars present | vars absent |
 |---|---|---|---|
 | claude's env is exactly three vars | claude | ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL | ANTHROPIC_API_KEY, any OPENAI_*, any OPENROUTER_* |
 | the openai-dialect env never carries an anthropic var | opencode | OPENAI_BASE_URL OPENAI_API_KEY OPENCODE_MODEL | any ANTHROPIC_*, OPENROUTER_API_KEY |
 | no env value is a real key | any | every value is the token, a URL or a model name | any value matching the GW-REDACT patterns |
-| codex is a gap | codex | — | 400 harness-rail-mismatch |
+| codex's env is exactly three vars | codex | OPENAI_BASE_URL OPENAI_API_KEY CODEX_MODEL | any ANTHROPIC_*, any OPENROUTER_* |
 
 | description | model (policy) | context_tokens |
 |---|---|---|
@@ -32,7 +35,8 @@ import pytest
 
 from agent_gateway.logging import looks_like_credential
 
-from .conftest import SELF_URL, attach_json, check, err, given, open_session, rule, then, then_eq, when, world
+from ._codex_world import fresh_report
+from .conftest import SELF_URL, attach_json, given, open_session, rule, then, then_eq, when, world
 
 pytestmark = rule("GW-SESSIONS-ENV")
 
@@ -100,13 +104,38 @@ async def test_no_env_value_is_a_real_key(gw):
                 assert v == token or not looks_like_credential(v), (k, v)
 
 
-async def test_codex_is_a_gap(gw):
-    """row: codex is a gap"""
-    world()
-    with when("POST /sessions harness codex (platform worker)"):
-        r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t", "harness": "codex"})
-    with then("status 400 with code harness-rail-mismatch"):
-        check("(status, code)", (r.status_code, err(r)), (400, "harness-rail-mismatch"))
+CODEX_ROWS = [
+    ("codex: the base url is this gateway's openai path (wrapper-rendered)", "OPENAI_BASE_URL", f"{SELF_URL}/openai/v1"),
+    ("codex: the api key is the session token, read through env_key", "OPENAI_API_KEY", "<token>"),
+    ("codex: the model var carries the bare id (wrapper-rendered)", "CODEX_MODEL", "fixture-model"),
+]
+
+
+async def _codex_dispatch(codex_app, codex_gw, clock) -> dict:
+    with given("world policy-codex: a fresh headroom observation (the rail's admission gate)"):
+        codex_app.state.codex.headroom.observe(fresh_report(clock))
+    with when("POST /sessions {role: prober, harness: codex} → dispatch on codex"):
+        return await open_session(codex_gw, role="prober", harness="codex")
+
+
+@pytest.mark.parametrize(("var", "value"), [r[1:] for r in CODEX_ROWS], ids=[r[0] for r in CODEX_ROWS])
+async def test_codex_env_var(codex_app, codex_gw, clock, var, value):
+    world("policy-codex")
+    doc = await _codex_dispatch(codex_app, codex_gw, clock)
+    expected = doc["session"]["token"] if value == "<token>" else value
+    with then(f"env var {var} = value {value}", **{var: {"expected": value, "actual": "<token>" if doc["env"].get(var) == doc["session"]["token"] else doc["env"].get(var)}}):
+        assert doc["env"][var] == expected, doc["env"]
+
+
+async def test_codex_env_shape(codex_app, codex_gw, clock):
+    """row: codex's env is exactly three vars"""
+    world("policy-codex")
+    env = (await _codex_dispatch(codex_app, codex_gw, clock))["env"]
+    want = {"OPENAI_BASE_URL", "OPENAI_API_KEY", "CODEX_MODEL"}
+    with then(f"env keys present = exactly {sorted(want)}", present={"expected": sorted(want), "actual": sorted(env)}):
+        assert set(env) == want, env
+    with then("absent: no ANTHROPIC_* / OPENROUTER_* key"):
+        assert not any(k.startswith(("ANTHROPIC_", "OPENROUTER_")) for k in env), env
 
 
 CTX_ROWS = [("a declared `context_tokens` is echoed", OPENCODE, 1000000), ("an undeclared `context_tokens` is null, never a default", CLAUDE, None)]

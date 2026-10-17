@@ -118,7 +118,10 @@ async def test_verdicts(gw, app, secrets, upstreams, rail, state, verdict):
     world(upstream="upstream-ok")
     # data plane first: a session admitted while the ref was good, then the read changes
     with given(f"a session on rail {rail} admitted while the ref was good ({ONLY[rail]})"):
-        doc = await open_session(gw, **ONLY[rail])
+        with quiet():  # arrange: one summary instead of the /sessions exchange
+            doc = await open_session(gw, **ONLY[rail])
+        attach_json(f"arranged session on {rail}", {"request": ONLY[rail], "decision": doc["decision"], "rail": doc["rail"],
+                                                    "session": doc["session"]["id"]})
     _arrange(secrets, app, rail, state)
     with when(f"POST {PATH[rail]} on the rail {rail} session"):
         r = await gw.post(PATH[rail], json={"messages": []}, headers=bearer(doc))
@@ -126,13 +129,16 @@ async def test_verdicts(gw, app, secrets, upstreams, rail, state, verdict):
     with then(f"verdict {verdict} on the data plane: status {expected[0]}" + (f", code {expected[1]}" if expected[1] else "")):
         check("(status, code)", (r.status_code, err(r) if expected[1] else None), expected)
     if rail == "opencode":
-        with then("the Go key is never a kube read", secrets_calls={"expected": f"[] or only {SUB_REF}", "actual": list(secrets.calls)}):
+        # the observed kube reads are already in the data-plane verdict's step via the arrange summary; one claim, no
+        # second copy of the same list (ATTACH_BULK fold)
+        with then(f"the Go key is never a kube read (kube reads = {list(secrets.calls)}; expected [] or only {SUB_REF})"):
             assert secrets.calls == [] or all(c == SUB_REF for c in secrets.calls)  # the Go key is never a kube read
     # admission with the same read
     want = {"resolved": "decision dispatch", "definitive": "decision defer, reason credential-unresolved, retry_after_s 60",
             "transient": "status 503, code credential-transient"}[verdict]
     with then(f"verdict {verdict} on admission with the same read: {want}"):
-        r2 = await gw.post("/sessions", json={"stack": "platform", "task": "t2", **ONLY[rail]})
+        with quiet():  # the response is the verdict attachment below (one attachment, not exchange + verdict)
+            r2 = await gw.post("/sessions", json={"stack": "platform", "task": "t2", **ONLY[rail]})
         if verdict == "resolved":
             check("decision", r2.json()["decision"], "dispatch")
         elif verdict == "definitive":

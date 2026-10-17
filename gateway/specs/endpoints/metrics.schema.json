@@ -5,11 +5,11 @@
   "x-endpoint": "metrics",
   "x-use-cases": ["UC-1"],
   "$defs": {
-    "rail": { "enum": ["anthropic", "opencode", "openrouter", "none"] },
+    "rail": { "enum": ["anthropic", "opencode", "openrouter", "codex", "none"] },
     "role": { "enum": ["worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher"] },
     "stack": { "type": "string", "description": "a key of policy.stacks" },
     "decision": { "enum": ["dispatch", "defer"] },
-    "dialect": { "enum": ["anthropic", "openai"] },
+    "dialect": { "enum": ["anthropic", "openai", "responses"] },
     "status": { "type": "string", "pattern": "^[1-5][0-9][0-9]$" },
     "class": { "enum": ["in", "cache_read", "cache_write", "out"] },
     "window": { "enum": ["5h", "7d"] },

@@ -31,7 +31,8 @@ What is an HTTP error, and what is not:
 | an explicit harness and rail that cannot speak | harness: claude, rail: openrouter — wait, claude speaks anthropic and openrouter serves it; the spec's cell is goose x anthropic | 400 | harness-rail-mismatch |
 | an explicit harness and rail that can speak | harness: claude, rail: opencode (reviewer) | 200 | — (decision: dispatch) |
 | the kube API is away while resolving the credential | reviewer; FakeSecrets transient fault | 503 | credential-transient |
-| codex is a gap | harness: codex | 400 | harness-rail-mismatch |
+| codex where no allowed rail serves responses | harness: codex (worker; policy-default has no codex rail) | 200 | — (decision: defer, role-rail-denied) |
+| codex against a rail that does not serve responses | harness: codex, rail: openrouter | 400 | harness-rail-mismatch |
 
 Counting:
 
@@ -110,9 +111,10 @@ async def test_walk(gw, app, secrets, clock, body, state, expected):
         r = await gw.post("/sessions", json=_req(body))
     then_eq("status", r.status_code, 200)
     doc = r.json()
-    with then("expected " + ", ".join(f"{k} = {v}" for k, v in expected.items())):
+    claim = "expected " + ", ".join(f"{k} = {v}" for k, v in expected.items())
+    with then(claim, **{k: {"expected": v, "actual": doc.get(k)} for k, v in expected.items()}):  # one verdict attachment per claim
         for k, v in expected.items():
-            then_eq(k, doc.get(k), v)
+            assert doc.get(k) == v, f"{k}: expected {v!r}, got {doc.get(k)!r}"
     if doc["decision"] == "defer":
         with then("a defer carries exactly decision, reason, retry_after_s ≥ 1",
                   keys={"expected": ["decision", "reason", "retry_after_s"], "actual": sorted(doc)}, retry_after_s=doc.get("retry_after_s")):
@@ -135,7 +137,8 @@ HTTP_ROWS = [
     ("an explicit harness and rail that cannot speak", {"role": "reviewer", "harness": "goose", "rail": "anthropic"}, {}, 400, "harness-rail-mismatch"),
     ("an explicit harness and rail that can speak", {"role": "reviewer", "harness": "claude", "rail": "opencode"}, {}, 200, None),
     ("the kube API is away while resolving the credential", {"role": "reviewer"}, {"transient": "platform-agents/claude-session"}, 503, "credential-transient"),
-    ("codex is a gap", {"harness": "codex"}, {}, 400, "harness-rail-mismatch"),
+    ("codex where no allowed rail serves responses", {"harness": "codex"}, {}, 200, None),
+    ("codex against a rail that does not serve responses", {"harness": "codex", "rail": "openrouter"}, {}, 400, "harness-rail-mismatch"),
 ]
 
 
@@ -153,6 +156,8 @@ async def test_http_errors(gw, app, secrets, clock, body, state, status, code):
     then_eq("status", r.status_code, status)
     if code:
         then_eq("code", err(r), code, claim=f"error code = {code}")
+    if body == {"harness": "codex"}:
+        then_eq("(decision, reason)", (r.json()["decision"], r.json()["reason"]), ("defer", "role-rail-denied"))
     if status == 503:
         then_eq("retry-after", r.headers.get("retry-after"), "20", claim="status 503 carries retry-after = 20")
 

@@ -150,9 +150,9 @@ def world(policy: str = "policy-default", upstream: str | None = None, *, note: 
     with contextlib.suppress(Exception):
         allure.dynamic.label("world", name)
     with allure.step(f"Given: world {name}" + (f" — {note}" if note else "")):
-        body = POLICY_FIXTURE.read_bytes()
+        body = (POLICY_FIXTURE.parent / f"{policy}.json").read_bytes()  # the named policy world's own file
         with contextlib.suppress(Exception):
-            allure.attach(body.decode("utf-8"), name=f"world {policy} — policy-default.json (sha256:{hashlib.sha256(body).hexdigest()[:12]})",
+            allure.attach(body.decode("utf-8"), name=f"world {policy} — {policy}.json (sha256:{hashlib.sha256(body).hexdigest()[:12]})",
                           attachment_type=allure.attachment_type.JSON)
     return name
 
@@ -379,6 +379,11 @@ class FakeUpstream:
         self.rail = rail
         self.behaviour = "upstream-ok"
         self.calls: list[dict] = []
+        # `upstream-ok` variants the capacity rows arrange (specs/worlds/): `rate_headers` replaces the
+        # subscription rail's `anthropic-ratelimit-unified-*` set; `usage` replaces the anthropic-dialect
+        # `usage` object of a 200 (the window-draw rows' token counts).
+        self.rate_headers: dict[str, str] | None = None
+        self.usage: dict[str, int] | None = None
         self.app = Starlette(
             routes=[
                 Route("/v1/messages", self._messages, methods=["POST"]),
@@ -430,7 +435,8 @@ class FakeUpstream:
     def _rail_headers(self) -> dict:
         """The subscription upstream's `anthropic-ratelimit-unified-*` set (live values, 2026-10-16);
         the pay-per-token fakes send none."""
-        return {"x-fake-rail": self.rail, **(SUBSCRIPTION_HEADERS if self.rail == "anthropic" else {})}
+        rate = (self.rate_headers if self.rate_headers is not None else SUBSCRIPTION_HEADERS) if self.rail == "anthropic" else {}
+        return {"x-fake-rail": self.rail, **rate}
 
     async def _messages(self, request: Request) -> Response:
         call = await self._record(request)
@@ -447,6 +453,8 @@ class FakeUpstream:
         usage = {"input_tokens": 12, "output_tokens": 7}
         if self.behaviour == "upstream-ok-cached":
             usage = {"input_tokens": 12, "cache_read_input_tokens": 300, "cache_creation_input_tokens": 40, "output_tokens": 7}
+        if self.usage is not None:
+            usage = dict(self.usage)
         return self._reply(call, JSONResponse(
             {"id": "msg_1", "type": "message", "role": "assistant", "model": model,
              "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": usage},
@@ -653,3 +661,15 @@ def err(r) -> str:
 
 def bearer(doc: dict) -> dict[str, str]:
     return {"authorization": f"Bearer {doc['session']['token']}"}
+
+
+# The `policy-codex` world's fixtures (tests/_codex_world.py) — imported here so every module sees them.
+from ._codex_world import (  # noqa: E402,F401
+    codex_app,
+    codex_gw,
+    codex_policy,
+    codex_store,
+    codex_transport,
+    codex_upstream,
+    exchange,
+)

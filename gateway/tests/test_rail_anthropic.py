@@ -156,9 +156,13 @@ async def test_rate_limit_passes_through(gw, upstreams, store):
     world(upstream="upstream-429")
     upstreams[RAIL].behaviour = "upstream-429"
     doc, r = await ride(gw, RAIL, "messages")
-    then_eq("status", r.status_code, 429)
-    then_eq("retry-after", r.headers.get("retry-after"), "30")
-    then_eq("body error.type", r.json()["error"]["type"], "rate_limit_error", claim="body = the upstream body (error.type = rate_limit_error)")
+    got = {"status": r.status_code, "retry-after": r.headers.get("retry-after"), "body error.type": r.json()["error"]["type"]}
+    want = {"status": 429, "retry-after": "30", "body error.type": "rate_limit_error"}
+    with then("status 429, retry-after = '30', body = the upstream body (error.type = rate_limit_error)",
+              **{k: {"expected": want[k], "actual": got[k]} for k in want}):  # one verdict attachment for the three claims
+        assert got["status"] == 429, f"status: got {got['status']!r}"
+        assert got["retry-after"] == "30", f"retry-after: got {got['retry-after']!r}"
+        assert got["body error.type"] == "rate_limit_error", f"body error.type: got {got['body error.type']!r}"
     _recorded(store, doc, (1,), "requests")
 
 

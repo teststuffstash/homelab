@@ -8,7 +8,7 @@ Red when:
   - a `## GW-…` heading anywhere in specs/ has zero rows in evidence/evidence.json, unless its
     index row (specs/README.md) or heading line carries `🚧 WIP` / `⚑ gap`;
   - evidence names a rule that has no heading (a ghost rule);
-  - `specs/worlds/policy-default.json` and `tests/fixtures/policy-default.json` differ.
+  - a policy world `specs/worlds/policy-*.json` and its `tests/fixtures/` twin differ (or one lacks the other).
 Report-only: table-shape split candidates (> ~6 columns, > ~12 rows, a column constant across
 all rows) — the specs reviewer reads WHY, the gate never demands a size.
 
@@ -169,10 +169,16 @@ def main() -> int:
     if "(unlabelled)" in rules:
         warn.append(f"{len(rules['(unlabelled)']['rows'])} test rows carry no @rule marker")
 
-    # 3. the policy world is the test policy
+    # 3. every policy world is its test policy (policy-default, policy-codex, …)
     if WORLD_POLICY.exists():
-        if WORLD_POLICY.read_bytes() != FIXTURE_POLICY.read_bytes():
-            red.append(f"{WORLD_POLICY.relative_to(ISLAND)} and {FIXTURE_POLICY.relative_to(ISLAND)} differ — they must be byte-identical")
+        worlds = {p.name for p in WORLD_POLICY.parent.glob("policy-*.json")}
+        fixtures = {p.name for p in FIXTURE_POLICY.parent.glob("policy-*.json")}
+        for name in sorted(worlds | fixtures):
+            world, fixture = WORLD_POLICY.parent / name, FIXTURE_POLICY.parent / name
+            if not world.exists() or not fixture.exists():
+                red.append(f"policy world {name}: present in only one of specs/worlds/ and tests/fixtures/")
+            elif world.read_bytes() != fixture.read_bytes():
+                red.append(f"{world.relative_to(ISLAND)} and {fixture.relative_to(ISLAND)} differ — they must be byte-identical")
     else:
         warn.append(f"{WORLD_POLICY.relative_to(ISLAND)} absent — the test policy is unchecked against the specs world")
 

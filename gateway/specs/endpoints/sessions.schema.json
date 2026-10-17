@@ -9,7 +9,7 @@
     "role": { "type": "string", "enum": ["worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher"] },
     "tier": { "type": "string", "enum": ["light", "standard", "heavy"] },
     "harness": { "type": "string", "enum": ["claude", "opencode", "goose", "codex"] },
-    "rail": { "type": "string", "enum": ["anthropic", "opencode", "openrouter"] },
+    "rail": { "type": "string", "enum": ["anthropic", "opencode", "openrouter", "codex"] },
     "session_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" },
     "timestamp": { "type": "string", "format": "date-time" },
     "error_envelope": {
@@ -87,10 +87,11 @@
         "decision": { "const": "defer" },
         "reason": {
           "type": "string",
-          "enum": ["rail-capacity", "role-rail-denied", "stack-unknown", "credential-unresolved"],
-          "x-requirements": ["GW-SESSIONS-ADMIT", "GW-CRED-RESOLVE"]
+          "enum": ["rail-capacity", "rail-window", "rail-latched", "role-rail-denied", "stack-unknown", "credential-unresolved", "quota-unknown", "quota-stale", "quota-limited"],
+          "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch (sessions.md §Capacity); quota-* = the codex rail's headroom verdicts (GW-CODEX-HEADROOM, openai-responses.md); the reason and retry_after_s name the blocked rail that frees first",
+          "x-requirements": ["GW-SESSIONS-ADMIT", "GW-CRED-RESOLVE", "GW-CODEX-HEADROOM"]
         },
-        "retry_after_s": { "type": "integer", "minimum": 1 }
+        "retry_after_s": { "type": "integer", "minimum": 1, "description": "seconds until the first blocked rail may admit: a window reset, a latch expiry, or the policy defer_retry_s for a full rail" }
       },
       "x-requirements": ["GW-SESSIONS-ADMIT"]
     }
@@ -135,7 +136,7 @@
   },
   "errors": {
     "malformed-body": { "status": 400, "description": "the request body fails this schema's `post.input` (missing field, enum miss, negative round)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
-    "harness-rail-mismatch": { "status": 400, "description": "an explicit `harness` and `rail` whose dialects do not meet (claude x openrouter, opencode/goose x anthropic, codex x anything in v0)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
+    "harness-rail-mismatch": { "status": 400, "description": "an explicit `harness` and `rail` whose dialects do not meet (goose/opencode x anthropic, codex x anything but codex, claude x codex)", "x-requirements": ["GW-SESSIONS-ADMIT"] },
     "session-not-found": { "status": 404, "description": "GET or DELETE on an id no row carries", "x-requirements": ["GW-SESSIONS-TOKEN", "GW-SESSIONS-RELEASE"] },
     "credential-transient": { "status": 503, "description": "the kube API failed or was unreachable while resolving a ref — nothing is known about the credential; retry", "x-requirements": ["GW-CRED-RESOLVE"] }
   }

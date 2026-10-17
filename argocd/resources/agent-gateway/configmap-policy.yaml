@@ -25,6 +25,11 @@
 # (per-token, bounded by key budgets not slots).
 # context_tokens: per-model harness window from model-classes.json `models.*.context_tokens` —
 # the only declared one is the Go rail's deepseek-v4-flash; absent = null, never a guess.
+# admission (anthropic, opencode): the ladder's capacity half — window utilization thresholds, the
+# 429 latch hold, the Go window draw's prices + windows (gateway/specs/endpoints/sessions.md
+# §Capacity). Every value is COPIED from the old proxy (openrouter-proxy.py / gometer.py /
+# its deployment.yaml) and cited in the block's _comment — a duplicate until the old proxy retires;
+# change both together. Same block as the policy-default world.
 # roles: rails in preference order from model-classes.json's class table (role_defaults → classes
 # → rails), harness = what agents/agent-session.sh derives for that rail today.
 #
@@ -74,6 +79,12 @@ data:
       },
       "rails": {
         "anthropic": {
+          "admission": {
+            "_comment": "⚖ the old proxy's values, copied (sessions.md §Capacity): utilization_thresholds 5h = ANTHROPIC_UTIL_THRESHOLD's code default 0.80 (openrouter-proxy.py; unset in its deployment.yaml), 7d = ANTHROPIC_UTIL_THRESHOLD_7D 0.95 (deployment.yaml); latch_429_hold_s = ANTHROPIC_429_HOLD_S 900. reading_stale_s 900 has NO old-proxy precedent (it only drops a reading whose reset passed) — the gateway's own guess, ⚖.",
+            "utilization_thresholds": {"5h": 0.80, "7d": 0.95},
+            "reading_stale_s": 900,
+            "latch_429_hold_s": 900
+          },
           "max_sessions": 5,
           "side_models": ["claude/haiku"],
           "models": {
@@ -83,6 +94,24 @@ data:
           }
         },
         "opencode": {
+          "admission": {
+            "_comment": "⚖ copied from argocd/resources/openrouter-proxy/gometer.py (snapshot 2026-09-17) — a DUPLICATE until the old proxy retires: latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900; prices = GO_PRICES / GO_PRICES_PEAK rows for the policy's priced Go model ($/M; null = gometer's None, draws 0); fallback = _GO_MAX_PRICE/2 each for in/out (max in+out = kimi-k3 3.00+15.00), cache 0 — what an unpriced id (claude-sonnet-4-6) draws at; peak hours = GO_PEAK_HOURS_UTC / GO_PEAK_WEEKDAYS; windows = _GO_WINDOW_DEFAULTS (budgets 12/30/60, anchors chain/weekly mon 00:00/monthly 13 11:30; GO_WINDOW_ANCHORS unset in deployment.yaml) with threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
+            "latch_429_hold_s": 900,
+            "window_draw": {
+              "prices": {
+                "opencode-go/deepseek-v4-flash": {"in": 0.15, "out": 0.60, "cache_read": 0.003, "cache_write": null,
+                                                  "peak": {"in": 0.30, "out": 1.20, "cache_read": 0.006, "cache_write": null}}
+              },
+              "fallback": {"in": 9.0, "out": 9.0, "cache_read": 0, "cache_write": 0},
+              "peak_hours_utc": [[1, 4], [6, 10]],
+              "peak_weekdays": ["mon", "tue", "wed", "thu", "fri"],
+              "windows": {
+                "5h":  {"budget_usd": 12.0, "threshold": 0.80, "anchor": "chain", "span_s": 18000, "chain_lookback_s": 604800},
+                "7d":  {"budget_usd": 30.0, "threshold": 0.80, "anchor": "weekly", "weekday": "mon", "hour": 0, "minute": 0},
+                "30d": {"budget_usd": 60.0, "threshold": 0.80, "anchor": "monthly", "month_day": 13, "hour": 11, "minute": 30}
+              }
+            }
+          },
           "max_sessions": 3,
           "models": {
             "light":    "opencode-go/deepseek-v4-flash",
