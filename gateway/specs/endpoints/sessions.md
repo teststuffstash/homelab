@@ -347,6 +347,9 @@ Rendered by `scripts/evidence_render.py` from CI.
 credential**: `session.id`, `session.expires_at`, `rail`, `harness`, `model`, `context_tokens`,
 plus `env_keys` (the NAMES of the env [GW-SESSIONS-ENV](#gw-sessions-env) would have handed over,
 in its order) and `pull_url` (`<this gateway>/sessions/{id}/env`) — no `session.token`, no `env`.
+⚖ `context_tokens` and `session.expires_at` stay in the bound answer: neither is a credential, and
+the launcher reads both (the harness's context window, the TTL it reports); the env's model
+*values* do not — the launcher has `model`, the pod gets the wire names in its pulled env.
 The token does not exist yet: the row holds an unminted placeholder no token hashes to. **Without
 `bind` the answer is byte-for-byte GW-SESSIONS-ENV's** — the specs reviewer's launcher depends on it.
 
@@ -359,7 +362,8 @@ equal to exactly that pod. Then it **mints the token** (GW-SESSIONS-TOKEN's shap
 sha256 is stored) and answers `{id, expires_at, env}`, the `env` exactly GW-SESSIONS-ENV's.
 The checks run in a fixed order — the id (404 `session-not-found`), the identity (403
 `pull-identity-refused`; a review the API cannot answer is 503 `tokenreview-transient`,
-retriable), the session's state (401 `session-released` / `session-expired`, exactly as the
+retriable — also when the API refuses the GATEWAY's review with 401/403 ⚖: that is the gateway's own
+RBAC, not a verdict on the caller), the session's state (401 `session-released` / `session-expired`, exactly as the
 data plane refuses it), delivery (409 `env-already-delivered`) — so a caller with the wrong
 identity learns nothing about a session but that its id exists. **At most once** ⚖: the
 launcher's pods are `restartPolicy: Never` (`agents/agent-session.sh`), so a legitimate pod
@@ -383,7 +387,7 @@ so a codex harness will later point that command at this endpoint — not built 
 
 | description | body || result |
 |---|---||---|
-| "a bound dispatch carries the session's identity, not its credential" | worker, `bind: {platform-agents, agentstack-worker, fixer-1}` || keys exactly `decision`, `session` (`id`, `expires_at`), `rail`, `harness`, `model`, `env_keys`, `pull_url`, `context_tokens`; no `gws_` anywhere in the body |
+| "a bound dispatch carries the session's identity, not its credential ⚖" | worker, `bind: {platform-agents, agentstack-worker, fixer-1}` || keys exactly `decision`, `session` (`id`, `expires_at`), `rail`, `harness`, `model`, `env_keys`, `pull_url`, `context_tokens`; no `gws_` anywhere in the body |
 | "env_keys names the opencode env" | worker (opencode) + bind || `env_keys` = `[OPENCODE_CONFIG_CONTENT]` |
 | "env_keys names the claude env" | reviewer (claude) + bind || `env_keys` = `[ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_MODEL]` |
 | "env_keys names the goose env" | worker, `harness: goose`, `rail: openrouter` + bind || `env_keys` = `[OPENAI_BASE_URL, OPENAI_API_KEY, GOOSE_PROVIDER, GOOSE_MODEL]` |
@@ -417,8 +421,9 @@ identity** = authenticated · audiences `[agent-gateway]` · `system:serviceacco
 | "an unbound session refuses every pull ⚖" | unbound | the bound identity || 403 | pull-identity-refused |
 | "an unknown id" | — (`POST /sessions/nope/env`; no review is made) | the bound identity || 404 | session-not-found |
 | "the TokenReview API fails" | bound to fixer-1 | (the review raises: 5xx / unreachable) || 503 | tokenreview-transient |
+| "the TokenReview API refuses the gateway itself ⚖" | bound to fixer-1 | (the API answers the gateway's review 403 — its own RBAC) || 503 | tokenreview-transient |
 
-### What a pull returns, and only once
+### What a pull returns
 
 | description | sequence || result |
 |---|---||---|
@@ -427,10 +432,16 @@ identity** = authenticated · audiences `[agent-gateway]` · `system:serviceacco
 | "the pull answers the goose env" | worker goose/openrouter bound → pull || `OPENAI_API_KEY` a fresh `gws_` token, `OPENAI_BASE_URL` `…/openai/v1`, `GOOSE_PROVIDER` `openai`, `GOOSE_MODEL` `deepseek/deepseek-v4-flash` |
 | "the pulled token rides the data plane" | pull → `POST /openai/v1/chat/completions` with it (`upstream-ok`) || 200; the row's `requests` = 1 |
 | "the row stores the pulled token's sha256 only" | pull, read the DB || `token_hash` = sha256(token); the token appears nowhere in the sqlite dump |
+
+### Only once, and in order
+
+| description | sequence || result |
+|---|---||---|
 | "a second pull by the same pod is refused ⚖" | pull, pull again (same identity) || 409 `env-already-delivered`; the first token is still served |
-| "a second pull by another pod is refused by identity first" | pull, then pod-name `fixer-2` || 403 `pull-identity-refused` |
+| "a second pull by another pod is refused by identity first ⚖" | pull, then pod-name `fixer-2` || 403 `pull-identity-refused` |
 | "a released session is refused as the data plane refuses it" | `DELETE`, then pull || 401 `session-released` |
 | "an expired session is refused as the data plane refuses it" | the clock past `expires_at`, then pull || 401 `session-expired` |
+| "a wrong identity on a released session is refused by identity first ⚖" | `DELETE`, then a pull whose token reviews as pod-name `fixer-2` || 403 `pull-identity-refused` (not 401) |
 
 The log rows (a pull line names the session and the identity, never either token; a refused
 pull never logs the presented token; a JWT is masked by shape) are

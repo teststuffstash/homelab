@@ -7,7 +7,7 @@ The bound dispatch answer:
 
 | description | body | result |
 |---|---|---|
-| a bound dispatch carries the session's identity, not its credential | worker, bind {platform-agents, agentstack-worker, fixer-1} | keys exactly decision, session (id, expires_at), rail, harness, model, env_keys, pull_url, context_tokens; no gws_ in the body |
+| a bound dispatch carries the session's identity, not its credential ⚖ | worker, bind {platform-agents, agentstack-worker, fixer-1} | keys exactly decision, session (id, expires_at), rail, harness, model, env_keys, pull_url, context_tokens; no gws_ in the body |
 | env_keys names the opencode env | worker (opencode) + bind | env_keys = [OPENCODE_CONFIG_CONTENT] |
 | env_keys names the claude env | reviewer (claude) + bind | env_keys = [ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_MODEL] |
 | env_keys names the goose env | worker, harness goose, rail openrouter + bind | env_keys = [OPENAI_BASE_URL, OPENAI_API_KEY, GOOSE_PROVIDER, GOOSE_MODEL] |
@@ -33,8 +33,9 @@ Who may pull (presented = the fake TokenReview's answer, one change from "the bo
 | an unbound session refuses every pull ⚖ | unbound | the bound identity | 403 | pull-identity-refused |
 | an unknown id | — (POST /sessions/nope/env; no review is made) | the bound identity | 404 | session-not-found |
 | the TokenReview API fails | bound to fixer-1 | (the review raises) | 503 | tokenreview-transient |
+| the TokenReview API refuses the gateway itself ⚖ | bound to fixer-1 | (the API answers the gateway's review 403) | 503 | tokenreview-transient |
 
-What a pull returns, and only once:
+What a pull returns:
 
 | description | sequence | result |
 |---|---|---|
@@ -43,10 +44,16 @@ What a pull returns, and only once:
 | the pull answers the goose env | worker goose/openrouter bound -> pull | OPENAI_API_KEY gws_; OPENAI_BASE_URL /openai/v1; GOOSE_PROVIDER openai; GOOSE_MODEL deepseek/deepseek-v4-flash |
 | the pulled token rides the data plane | pull -> POST /openai/v1/chat/completions | 200; requests = 1 |
 | the row stores the pulled token's sha256 only | pull, read the DB | token_hash = sha256(token); token not in the dump |
-| a second pull by the same pod is refused | pull, pull again | 409 env-already-delivered; the first token still served |
-| a second pull by another pod is refused by identity first | pull, then pod-name fixer-2 | 403 pull-identity-refused |
+
+Only once, and in order:
+
+| description | sequence | result |
+|---|---|---|
+| a second pull by the same pod is refused ⚖ | pull, pull again | 409 env-already-delivered; the first token still served |
+| a second pull by another pod is refused by identity first ⚖ | pull, then pod-name fixer-2 | 403 pull-identity-refused |
 | a released session is refused as the data plane refuses it | DELETE, then pull | 401 session-released |
 | an expired session is refused as the data plane refuses it | clock past expires_at, then pull | 401 session-expired |
+| a wrong identity on a released session is refused by identity first ⚖ | DELETE, then a fixer-2 pull | 403 pull-identity-refused (not 401) |
 """
 
 from __future__ import annotations
@@ -56,9 +63,10 @@ import json
 import re
 import sqlite3
 
+import httpx
 import pytest
 
-from agent_gateway.pull import POD_NAME_EXTRA, Review
+from agent_gateway.pull import POD_NAME_EXTRA, KubeTokenReviews, Review
 
 from .conftest import (
     SELF_URL,
@@ -101,7 +109,7 @@ async def pull(gw, sid: str, headers: dict | None = None):
 # -- the bound dispatch answer --------------------------------------------------------------------
 
 async def test_bound_answer_has_no_credential(gw):
-    """row: a bound dispatch carries the session's identity, not its credential"""
+    """row: a bound dispatch carries the session's identity, not its credential ⚖"""
     world()
     with when(f"POST /sessions (platform worker) with bind {BIND}"):
         r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t", "bind": BIND})
@@ -360,7 +368,7 @@ async def test_second_pull_same_pod(gw, reviews):
 
 
 async def test_second_pull_other_pod(gw, reviews):
-    """row: a second pull by another pod is refused by identity first"""
+    """row: a second pull by another pod is refused by identity first ⚖"""
     world()
     other = "fake-projected-sa-token-for-pod-fixer-2"
     with given("a bound opencode session, pulled once; a second token reviews as the bound SA on pod fixer-2"):
@@ -396,3 +404,40 @@ async def test_expired_session_pull(gw, reviews, policy, clock):
         r = await pull(gw, doc["session"]["id"])
     with then("status 401 with code session-expired"):
         check("(status, code)", (r.status_code, err(r)), (401, "session-expired"))
+
+
+async def test_tokenreview_refuses_gateway(gw, app, tmp_path):
+    """row: the TokenReview API refuses the gateway itself ⚖"""
+    world()
+    seen: list[dict] = []
+
+    def api(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return httpx.Response(403, json={"kind": "Status", "reason": "Forbidden", "code": 403})
+
+    with given("a bound session; the gateway's reviewer is the kube one, whose API answers its TokenReview 403 (RBAC missing)"):
+        (tmp_path / "token").write_text("gateway-own-sa-token-fixture")
+        kube = KubeTokenReviews(sa_dir=str(tmp_path))
+        kube._client = httpx.AsyncClient(transport=httpx.MockTransport(api), base_url="https://kubernetes.default.svc")
+        app.state.sessions.reviewer = kube
+        doc = await open_session(gw, bind=BIND)
+    with when(f"POST /sessions/{doc['session']['id']}/env with the bound pod's token"):
+        r = await pull(gw, doc["session"]["id"])
+    then_eq("status", r.status_code, 503)
+    then_eq("code", err(r), "tokenreview-transient", claim="error code = tokenreview-transient")
+    with then("the review the gateway sent asked for audience agent-gateway"):
+        check("spec.audiences", [b["spec"]["audiences"] for b in seen], [["agent-gateway"]])
+
+
+async def test_wrong_identity_on_released(gw, reviews):
+    """row: a wrong identity on a released session is refused by identity first ⚖"""
+    world()
+    other = "fake-projected-sa-token-for-pod-fixer-2"
+    with given("a bound session, released by DELETE; the presented token reviews as the bound SA on pod fixer-2"):
+        reviews.tokens[other] = bound_review(pod="fixer-2")
+        doc = await open_session(gw, bind=BIND)
+        await gw.delete(f"/sessions/{doc['session']['id']}")
+    with when(f"POST /sessions/{doc['session']['id']}/env with the fixer-2 token"):
+        r = await pull(gw, doc["session"]["id"], sa(other))
+    then_eq("status", r.status_code, 403)
+    then_eq("code", err(r), "pull-identity-refused", claim="error code = pull-identity-refused (not session-released)")
