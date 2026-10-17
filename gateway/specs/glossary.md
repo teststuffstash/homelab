@@ -78,8 +78,9 @@ per-stack credential refs, per-role allowed rails in preference order with a def
 harness, per-(rail, tier) model, per-rail `max_sessions` and `side_models` (the families a
 harness's side-calls may name on any session of that rail), per-model `context_tokens`,
 `session_ttl_s`. **No model id lives in code** — only here, copied from
-`argocd/resources/openrouter-proxy/model-classes.json`; the deployed ConfigMap
-(`argocd/resources/agent-gateway/configmap-policy.yaml`) has the same shape and is loaded by a
+`argocd/resources/openrouter-proxy/model-classes.json`; the deployed policy
+(`argocd/resources/agent-gateway/policy.json`, the source of the `agent-gateway-policy`
+configMapGenerator) has the same shape and is loaded by a
 test row.
 
 ## tier

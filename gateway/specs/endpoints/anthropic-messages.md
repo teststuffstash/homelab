@@ -172,7 +172,7 @@ cooldowns, provider pins, the `:exacto` suffix — is a gap, rendered below.
 | "the dispatch answer names the policy id for (rail, tier)" | `policy-default` || `model` = `rails.<rail>.models.<tier>` for every role |
 | "no model id from the policy appears in src/" | `policy-default` || grep finds none |
 | "the anthropic body is forwarded byte-untouched" | `policy-default` || upstream body == inbound body |
-| "the deployed policy loads under the island's loader, in model-classes.json's spelling" | `argocd/resources/agent-gateway/configmap-policy.yaml` (skipped when absent) || loads; same rails and roles as `policy-default`; every model and side-model id is a `models.*.ids` value of `model-classes.json`; opencode `max_sessions` = its `rails.opencode-go.concurrency` |
+| "the deployed policy loads under the island's loader, in model-classes.json's spelling" | `argocd/resources/agent-gateway/policy.json` (skipped when absent) || loads; same rails and roles as `policy-default`; every model and side-model id is a `models.*.ids` value of `model-classes.json`; opencode `max_sessions` = its `rails.opencode-go.concurrency` |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
