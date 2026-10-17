@@ -1,7 +1,9 @@
 # Spike — a live catalog for the OpenCode Go rail
 
-**Status:** investigation, 2026-10-17. No decision has been taken; every fork below is marked ⚖
-for the operator. The question (operator, 2026-10-17): the Go rail's models, prices and limits
+**Status:** investigation 2026-10-17; **RULED** the same day (operator, FU-270) — see
+[§Rulings](#rulings-operator-2026-10-17). The read leg is built as
+[GW-CATALOG-GO](../../gateway/specs/endpoints/catalog.md#gw-catalog-go); the questions still
+open are marked ⚖ below. The question (operator, 2026-10-17): the Go rail's models, prices and limits
 are hand-copied JSON and Markdown — can they be read from the vendor instead, *"dynamic without
 me just like providers/cost on openrouter"*?
 
@@ -290,22 +292,36 @@ means prose or a TypeScript literal, open to format drift.
 - (d) a read-only GET on a Go-usage path, if the vendor publishes one. Nothing in the API index
   today.
 
+## Rulings (operator, 2026-10-17)
+
+1. **The catalog source is dynamic** — RULED: the gateway fetches `GET /console/api/v2/config`
+   (the `opencode-go` provider) on a schedule (§Proposed design step 1).
+2. **Limits and peak rows are PARSED from the vendor's published files** on a schedule, never
+   hand-edited — RULED; a parse failure keeps the last good snapshot and alerts (step 2's first
+   option). The leg parses `go.mdx` only: it keys rows per model through its own Endpoints table,
+   while `go-models.ts` keys them by family (`deepseek-flash`), which ruling 3 rules out.
+3. **Limits are keyed PER MODEL** — RULED: each model's windows are 20% / 50% / 100% of its own
+   monthly limit; one model's 429 or latch never blocks another Go model.
+4. **An id missing from the live catalog is REFUSED** — RULED: a typed defer `not-in-catalog`,
+   never the fallback price. The policy declares the plan (`plan: "go"`), since no API says.
+5. **The policy keeps only RULES** (model per tier, thresholds, latch hold, max sessions, anchors,
+   plan) — RULED: prices, the fallback price, peak hours and window budgets leave `policy.json`
+   and come from the snapshot.
+6. **The OpenRouter rail's registry is out of scope** — RULED; it is a `⚑ gap` row on the
+   catalog spec page.
+
+The picks the rulings left to the build (⚖ on the spec page): a 6 h refresh, a fresh snapshot
+below half the last good model count is implausible, `GoCatalogStale` at 24 h.
+
 ## Open questions for the operator (⚖)
 
-- ⚖ **Retired model in production.** deepseek-v4-flash (F3) is the gateway's only Go model.
-  Should it move to `deepseek-v4.1-flash`, which has the same off-peak price and the
-  $80 pool, before the catalog leg exists?
-- ⚖ **Key scope.** The gateway's key reads the admin Budgets API (F5). Should it be reissued as
+- **Retired model in production** — RULED (2026-10-17): the Go tiers move to
+  `deepseek-v4.1-flash`.
+- ⚖ **Key scope** (open). The gateway's key reads the admin Budgets API (F5). Should it be reissued as
   "Inference only" (enough for inference and `/api/v2/config`), with no admin rights in the
   egress pod?
-- ⚖ **Overlay source** for limits and peak: parse the vendor's repo files (automatic, but
-  breaks if their format drifts) or keep an operator-edited overlay with a change alert (manual,
-  but the alert tells the operator when to update it)?
-- ⚖ **Per-model windows.** Should the gateway's latch become per model (the vendor's rule, F2)
-  instead of one global triple? That changes admission semantics, so it needs a sessions.md spec
-  change.
-- ⚖ **Unlisted id.** Refuse admission, or keep the conservative fallback price?
-- ⚖ **Plan.** Go or Go Plus: no API reveals which plan the workspace is on. Should it be
-  declared in policy?
-- ⚖ **Cadence and staleness bounds:** fetch interval, the model-count drop threshold, and the
-  stale alert age.
+- **Overlay source** — RULED: parse the vendor's files (ruling 2).
+- **Per-model windows** — RULED: per model (ruling 3).
+- **Unlisted id** — RULED: refuse, `not-in-catalog` (ruling 4).
+- **Plan** — RULED: declared in policy, `go` (ruling 4).
+- **Cadence and staleness bounds** — RULED as "hours, not minutes"; the picks are above.

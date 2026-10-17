@@ -25,6 +25,7 @@ it and no production credential store exists.
 | `POST /anthropic/v1/messages` (`GW-RAIL-*`, `GW-CRED-*`) | [`specs/endpoints/anthropic-messages.md`](specs/endpoints/anthropic-messages.md) |
 | `POST /openai/v1/chat/completions`, `GET /openai/v1/models` | [`specs/endpoints/openai-chat.md`](specs/endpoints/openai-chat.md) |
 | `POST /openai/v1/responses` — the dark codex rail (`GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-CODEX-OAUTH`) | [`specs/endpoints/openai-responses.md`](specs/endpoints/openai-responses.md) |
+| `GET /catalog/opencode` — the Go catalog leg: vendor models, prices and per-model plan limits, refreshed every 6 h (`GW-CATALOG-GO`) | [`specs/endpoints/catalog.md`](specs/endpoints/catalog.md) |
 | `GET /metrics` (`GW-METRICS`), `GET /healthz` (`GW-HEALTH`) | [`specs/endpoints/metrics.md`](specs/endpoints/metrics.md), [`specs/endpoints/health.md`](specs/endpoints/health.md) |
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
@@ -42,7 +43,9 @@ Environment: `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is
 logged, and `/healthz` says `db: memory`), `OPENCODE_GO_API_KEY` (the gateway's own mounted Go
 key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Service name),
 `ANTHROPIC_UPSTREAM` / `OPENROUTER_UPSTREAM` / `OPENCODE_GO_UPSTREAM` (base URLs, overridable for
-tests), `CODEX_UPSTREAM` (no default — the codex upstream profile is unselected), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20).
+tests), `CODEX_UPSTREAM` (no default — the codex upstream profile is unselected), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20),
+`GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_DOCS_URL` (the Go catalog's two sources, overridable for
+tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule).
 
 Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
 `agent-gateway.agent-egress.svc.cluster.local:8080`); image built by

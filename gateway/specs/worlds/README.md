@@ -10,7 +10,7 @@ a single-world module declares it once in its docstring and omits it from row id
 
 | world | file | what it is |
 |---|---|---|
-| `policy-default` | [policy-default.json](policy-default.json) | the test policy: two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json`; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖); `control_plane_auth: observe` with two fixture `callers` (the platform loop, the specs reviewer — [GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth)), so a row that sends no caller token is admitted |
+| `policy-default` | [policy-default.json](policy-default.json) | the test policy (plan `go` on the opencode rail — [GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go)): two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json`; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖); `control_plane_auth: observe` with two fixture `callers` (the platform loop, the specs reviewer — [GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth)), so a row that sends no caller token is admitted |
 | `policy-enforce` | [policy-enforce.json](policy-enforce.json) | `policy-default` with `control_plane_auth: enforce` and nothing else changed — for the GW-SESSIONS-AUTH enforce rows only |
 | `policy-codex` | [policy-codex.json](policy-codex.json) | `policy-default` plus the codex rail (`max_sessions` 2, the fixture model `codex/fixture-model`, `headroom` 120 s / 0.95 / the 300- and 10080-minute windows, `oauth.refresh_margin_s` 30) that only `prober` may ride — for the codex rows only; the deployed policy declares no codex rail |
 
@@ -60,6 +60,36 @@ failures) with dummy `DUMMY-SECRET-…` values; a counting fake `exchange` retur
 HTTP adapter and a MockTransport endpoint: fabricated JWTs, rotation/rejection responses and
 request capture. No network or vendor account is involved.
 Headroom reports enter through the in-process seam (`app.state.codex.headroom.observe`).
+
+## The Go catalog's fakes
+
+`tests/_catalog_world.py`'s `FakeVendor` answers both sources of
+[GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go) in process, on fixture hosts
+(`console.opencode.test`, `raw.vendor.test`). Its fixtures are trimmed from the **live answers of
+2026-10-17**: `tests/fixtures/go-catalog/config.json` is the `opencode-go` provider of
+`GET /console/api/v2/config` cut to five models (`claude-haiku-5-5`, `deepseek-v4-pro`,
+`deepseek-v4.1-flash`, `longcat-2.5-preview-free`, `step-5-preview`), the account's org-id header
+dropped; its one synthetic row is `deepseek-v4-flash` marked `"disabled": true` (the live answer
+carries such rows under the pay-as-you-go `opencode` provider only).
+`tests/fixtures/go-catalog/go.mdx` is the vendor's page cut to its Usage-limits section and
+Endpoints table for the same five models, rows otherwise verbatim. Every variant below is derived
+from those two files in memory.
+
+| behaviour | the fake answers |
+|---|---|
+| `catalog-ok` | 200, the config fixture |
+| `catalog-trimmed` / `catalog-shrunk` | the fixture with 3 (`claude-haiku-5-5`, `deepseek-v4-pro`, `deepseek-v4.1-flash`) / 2 (`deepseek-v4-pro`, `deepseek-v4.1-flash`) models |
+| `catalog-malformed` | the fixture with `deepseek-v4-pro`'s `cost` removed |
+| `catalog-no-provider` | the fixture's provider under the key `opencode` instead of `opencode-go` |
+| `catalog-empty` | the fixture with `models: {}` |
+| `catalog-503` / `catalog-down` | 503 / a connect failure |
+| `catalog-401-echo` | 401 whose body names the test Go key (the redaction row) |
+| `docs-ok` | 200, the page fixture |
+| `docs-404` | 404 (the page moved) |
+| `docs-unknown-model` | a `DeepSeek V4.2 Flash` plan row the Endpoints table does not name |
+| `docs-header-drift` | the plan tables' `Monthly limit` column renamed `Limit` |
+| `docs-no-peak-hours` / `docs-no-shares` | the peak-hours sentence / the 5-hour-weekly-monthly share sentence removed |
+| `docs-shrunk` | only the two DeepSeek models' rows |
 
 ## The fake TokenReview (`StaticTokenReviews`)
 
