@@ -13711,3 +13711,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   No shadow write on the four corpus PRs. Finding: the heavy Go fallback model 400s upstream.
 - **Seat miss:** the briefs said `pr-wait --no-arm` to sequence merges → no reviewer came (the review reflex only
   touches ARMED PRs); fixed by arming in order. Sequence merges by arming in order, never by leaving PRs unarmed.
+
+## 2026-10-17 ~12:00Z — seat: gateway rulings
+- Operator ruled the overnight build's open items: (a) Go heavy fallback → `opencode-go/deepseek-v4-flash` as a cheap experiment (kimi-k3 too expensive for review; rails reconfigured later) — #2663 merged 11:55Z; (b) the live specs reviewer stays claude@anthropic; (c) the ⚖ rows on #2645/#2646 wait for the Codex spike (#2662); (d) HYGIENE_REPEAT blocks on any case, touched or not (already the pinned behaviour; recorded in specs-reviewer.md).
+- The ConfigMap synced, but the gateway reads its policy only at startup → `rollout restart deploy/agent-gateway` 11:56Z; in-pod probe `POST /sessions` (reviewer, opencode, heavy) → dispatch `opencode-go/deepseek-v4-flash`, the session DELETEd. Corrected the header's false "re-reads on change" claim; generator = FU-270 next.
+- #2664 merged 12:51Z: the policy is now a configMapGenerator (`argocd/resources/agent-gateway/policy.json`), so an edit rolls the pod; diff-ci's gateway rows now match policy.json too. Same gap is still open for `openrouter-proxy/model-classes.json`, which the suite reads. #2660 closed: a no-op bump (the image only dropped PLAN.md) cut from a master that 2ffa6511 had turned red, which wedged it ci-not-green (the #2588 class).

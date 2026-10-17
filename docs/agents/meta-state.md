@@ -17,17 +17,10 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-17 ~09:30Z — seat; TICK-LOG same date): OVERNIGHT GATEWAY BUILD DONE** (the plan file is deleted;
-  FU-270 holds status). Merged + deployed: admission rows for the ladder's capacity half (#2645, settle: 0 defers vs the old
-  proxy's limits both unlimited), the Codex rail DARK (#2646; CLI evidence outside CI = #2650), shadow mode for the specs reviewer
-  (#2654), goose/opencode env rows (#2656, gateway `gfdebcd39`), the shadow table (#2659 → `docs/agents/specs-reviewer.md`
-  §Shadow runs). Security quickfix #2655: the image's settings.json (`permissions.allow: Bash(*)…`) no longer seeds the
-  reviewer model's HOME. **For the operator:** (a) the reviewer's heavy Go fallback `opencode-go/claude-sonnet-4-6` returns
-  400 "Model is unavailable" upstream (an overflow = no review; the matrix lists kimi-k3 in that slot) — a policy ruling;
-  (b) which cell the live reviewer rides — the table is a comparison (goose missed R2 on #2635 + no verdict on #2640;
-  opencode@opencode caught both, +1 extra); (c) the ⚖ rows for ruling on #2645/#2646 (900 s stale reading, no
-  OpenRouter latch, first-freeing defer, prober-only codex, `CODEX_MODEL` name); (d) should the specs reviewer block on
-  evidence hygiene in cases a PR never touched (#2645 r2)? (e) headroom error codes not in the schema (#2646 advisory).
+- **⚑ PICKUP (2026-10-17 ~12:00Z — seat; TICK-LOG same date): the overnight build's operator rulings are IN** (FU-270):
+  Go heavy → deepseek-v4-flash (#2663, merged, gateway restarted, probe dispatched v4-flash); live reviewer = claude@anthropic;
+  HYGIENE_REPEAT blocks anywhere (recorded in specs-reviewer.md); ⚖ rows on #2645/#2646 + headroom codes deferred to the
+  Codex spike (#2662). **Next:** FU-270's launcher `/sessions` leg.
 - **⚑ PICKUP (2026-10-16 ~16:00Z — seat; TICK-LOG same date): ADR-156 evidence pass LIVE** (snippets v0.5.2 pinned
   in `agents/specs-reviewer-session.sh` + `gateway/scripts/lib/snippets.sh` — bump TOGETHER; canary #2628 approved).
   **Next:** (a) step 5's measurement — per completed PR: tokens, worker rounds, invalid findings, coordinator
