@@ -1,0 +1,70 @@
+{
+  "measured_at": "2026-10-17",
+  "gateway_source_commit": "e29463969e15d3eca1beaef606d63cd10601fa52",
+  "runs": [
+    {
+      "cli_version": "codex-cli 0.161.0",
+      "live_subscription_verified": false,
+      "direct": [
+        {
+          "turn_state_matches": false,
+          "fixture_tool_declared": true,
+          "tool_result_present": false
+        },
+        {
+          "turn_state_matches": true,
+          "fixture_tool_declared": true,
+          "tool_result_present": true
+        }
+      ],
+      "gateway": [
+        {
+          "turn_state_matches": false,
+          "fixture_tool_declared": true,
+          "tool_result_present": false
+        },
+        {
+          "turn_state_matches": false,
+          "fixture_tool_declared": true,
+          "tool_result_present": true
+        }
+      ],
+      "gateway_turn_completed": true,
+      "native_turn_state_replayed": true,
+      "gateway_turn_state_replayed": false,
+      "gateway_compatibility_gap": true
+    },
+    {
+      "cli_version": "codex-cli 0.163.0",
+      "live_subscription_verified": false,
+      "direct": [
+        {
+          "turn_state_matches": false,
+          "fixture_tool_declared": true,
+          "tool_result_present": false
+        },
+        {
+          "turn_state_matches": true,
+          "fixture_tool_declared": true,
+          "tool_result_present": true
+        }
+      ],
+      "gateway": [
+        {
+          "turn_state_matches": false,
+          "fixture_tool_declared": true,
+          "tool_result_present": false
+        },
+        {
+          "turn_state_matches": false,
+          "fixture_tool_declared": true,
+          "tool_result_present": true
+        }
+      ],
+      "gateway_turn_completed": true,
+      "native_turn_state_replayed": true,
+      "gateway_turn_state_replayed": false,
+      "gateway_compatibility_gap": true
+    }
+  ]
+}
