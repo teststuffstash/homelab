@@ -80,7 +80,7 @@ haiku-tier worker ride it. Every non-rail column is unenforced and documented on
 | "the MCP column changes nothing here" | stack MCP || none — `env` carries no MCP var |
 | "the browser column changes nothing here" | browser MCP || none |
 
-<details><summary>Evidence</summary>
+<details markdown="1"><summary>Evidence</summary>
 
 Rendered by `scripts/evidence_render.py` from CI.
 

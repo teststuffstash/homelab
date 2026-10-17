@@ -60,7 +60,7 @@ schema: <name>.schema.json
 ## GW-<REQ>
 <prose constraint>
 <decision table: description | inputs || expected>
-<details><summary>Evidence</summary> --8<-- "GW-<REQ>.md" </details>
+<details markdown="1"><summary>Evidence</summary> --8<-- "GW-<REQ>.md" </details>
 ```
 
 ## Index
