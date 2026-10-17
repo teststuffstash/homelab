@@ -64,8 +64,9 @@ resources:
 # none, so a bind there could never be pulled ⚖); the jail canary mints this SA's token to act as
 # it. `agent-coordinator:agent-coordinator` = the specs-review tick + its shadow cells
 # (agents/coordinator/specs-review-argo.yaml): `reviewer`, and `worker` for the goose@openrouter
-# shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it never binds. `observe` until every
-# caller sends its token and gateway_control_plane_unauthenticated_total stays flat, then `enforce`.
+# shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it never binds. `enforce` since 2026-10-17
+# (after #2687 made every caller send its token and the unauthenticated series stayed flat): a
+# call with no valid caller token is 401; `observe` is the rollback knob.
 #
 # A configMapGenerator (flipped 2026-10-17, FU-270): the gateway reads policy.json ONCE at startup
 # (gateway/src/agent_gateway/app.py Policy.load), and the plain ConfigMap this used to be left the

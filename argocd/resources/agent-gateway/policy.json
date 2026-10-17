@@ -84,7 +84,7 @@
   "context_tokens": {
     "opencode-go/deepseek-v4-flash": 1000000
   },
-  "control_plane_auth": "observe",
+  "control_plane_auth": "enforce",
   "callers": {
     "system:serviceaccount:platform-agents:agentstack-loop": {
       "stacks": ["platform"],
