@@ -5,7 +5,8 @@ schema: catalog.schema.json
 ---
 # GET /catalog/opencode — the Go rail's vendor facts, read from the vendor
 
-*Which Go models exist, what they cost, and how much of each the plan allows.* Until this leg,
+*Which [Go rail](../../../docs/agents/chainless-redesign.md) models exist, what they cost, and how
+much of each the plan allows* — the [Go catalog](../glossary.md#go-catalog). Until this leg,
 those facts were copied by hand into `policy.json` and `gometer.py`, and the copy went stale:
 the gateway's only Go model left the Go catalog on 2026-10-14 and nothing noticed
 ([opencode-go-catalog.md](../../../docs/spikes/opencode-go-catalog.md) §F3). The gateway now
