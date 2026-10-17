@@ -87,14 +87,14 @@ async def test_opencode_config(gw, path, value):
     world()
     with when(f"POST /sessions body {OPENCODE} → dispatch"):
         doc = await open_session(gw, **OPENCODE)
-    with when(f"read OPENCODE_CONFIG_CONTENT as JSON at .{'.'.join(path)}"):
+    with when(f"read OPENCODE_CONFIG_CONTENT as JSON at path {path}"):
         cfg = json.loads(doc["env"]["OPENCODE_CONFIG_CONTENT"])
         actual = cfg
         for key in path:
             actual = actual[key]
         expected = doc["session"]["token"] if value == "<token>" else value
         shown = "<token>" if actual == doc["session"]["token"] else actual
-    with then(f"OPENCODE_CONFIG_CONTENT .{'.'.join(path)} = {value}", **{".".join(path): {"expected": value, "actual": shown}}):
+    with then(f"OPENCODE_CONFIG_CONTENT at path {path} = value {value}", **{".".join(path): {"expected": value, "actual": shown}}):
         assert actual == expected, cfg
 
 
