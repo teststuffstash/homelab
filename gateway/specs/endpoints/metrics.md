@@ -5,7 +5,7 @@ schema: metrics.schema.json
 ---
 # GET /metrics — the `gateway_*` families, with bounded labels only
 
-The evidence surface the alert belts read. Six families, Prometheus text format, no auth
+The evidence surface the alert belts read. Nine families, Prometheus text format, no auth
 (in-cluster, scraped by the ServiceMonitor). **Every label value is drawn from a bounded set**
 declared in the schema — never a task key, a session id, or a model string outside the
 policy's set — so cardinality is a property of the policy, not of traffic.
@@ -22,6 +22,7 @@ the process is down.
 | [GW-METRICS](#gw-metrics) | `families.*` | — | v0 — the cost ledger / `/generation` USD harvest and the capacity-doorbell signal are `⚑ gap` (rows below) |
 | [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) (owned there) | `families.gateway_sessions_active` | — | linked — the gauge IS the admission counter |
 | [GW-CRED-RESOLVE](sessions.md#gw-cred-resolve) (owned there) | `families.gateway_credential_resolve_total` | — | linked — the `outcome` label is that requirement's verdict class |
+| [GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth) (owned there) | `families.gateway_control_plane_unauthenticated_total` | — | linked — the rollout knob's soak signal; its increments are rows there |
 
 ## GW-METRICS
 
@@ -35,6 +36,7 @@ the process is down.
 | `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖ |
 | `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds) |
 | `gateway_credential_resolve_total` | counter | `rail`, `outcome` | every ref resolution verdict |
+| `gateway_control_plane_unauthenticated_total` | counter | `route`, `reason` | every control-plane call with no valid caller token — admitted under `control_plane_auth: observe`, refused under `enforce`; every (`route`, `reason`) pair renders from 0, so a flat series reads as "no such call" ⚖ |
 
 | description | event (world `policy-default`, upstream-ok) || series | value |
 |---|---||---|---|
@@ -61,6 +63,8 @@ the process is down.
 | "class is one of the four usage classes" | tokens_total || `class` | `in`, `cache_read`, `cache_write`, `out` |
 | "window is 5h or 7d" | subscription_utilization || `window` | `5h`, `7d` |
 | "outcome is the verdict class" | credential_resolve_total || `outcome` | `resolved`, `definitive`, `transient` |
+| "route is the control-plane route" | control_plane_unauthenticated_total || `route` | `admit` (`POST /sessions`), `lookup` (`GET`), `release` (`DELETE`) |
+| "reason is why no caller identity was read" | control_plane_unauthenticated_total || `reason` | `absent` (no bearer), `invalid` (the review is not authenticated for audience `agent-gateway`), `review-transient` (the TokenReview API did not answer) |
 | "no task label, ever" | any || — | no label named `task`, `session`, `id`, `model` |
 
 | description | input || v0 answer | the gap |

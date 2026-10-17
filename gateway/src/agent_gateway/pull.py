@@ -1,4 +1,5 @@
-"""The pod's env pull: POST /sessions/{id}/env (GW-SESSIONS-PULL).
+"""The pod's env pull: POST /sessions/{id}/env (GW-SESSIONS-PULL) — and the ONE TokenReview path
+the control plane's caller check reuses (GW-SESSIONS-AUTH, control.py).
 
 A `POST /sessions` body that carries `bind: {namespace, serviceaccount, pod?}` is answered with
 the session's id, rail, harness, model, `env_keys` and `pull_url` — no token, no env values. The
@@ -28,6 +29,7 @@ from .credentials import KUBE_API, SA_DIR
 log = logging.getLogger("gateway.pull")
 
 PULL_AUDIENCE = "agent-gateway"
+GATEWAY_AUDIENCE = PULL_AUDIENCE  # one audience for every projected token this gateway reviews (pull + control plane)
 POD_NAME_EXTRA = "authentication.kubernetes.io/pod-name"
 
 
@@ -107,12 +109,21 @@ class KubeTokenReviews:
         return Review.from_status(r.json().get("status") or {})
 
 
+def review_refusal(review: Review) -> str | None:
+    """None when the review authenticates a username for this gateway's audience; else a one-line
+    reason (never a token). The shared half of the pull's and the control plane's identity check."""
+    if not review.authenticated or not review.username:
+        return "the token does not authenticate"
+    if GATEWAY_AUDIENCE not in review.audiences:
+        return f"the token is not valid for audience {GATEWAY_AUDIENCE}"
+    return None
+
+
 def identity_mismatch(review: Review, namespace: str, serviceaccount: str, pod: str | None) -> str | None:
     """None when `review` is the bind's identity; else a one-line reason (never a token)."""
-    if not review.authenticated:
-        return "the token does not authenticate"
-    if PULL_AUDIENCE not in review.audiences:
-        return f"the token is not valid for audience {PULL_AUDIENCE}"
+    why = review_refusal(review)
+    if why:
+        return why
     want = f"system:serviceaccount:{namespace}:{serviceaccount}"
     if review.username != want:
         return f"the token is {review.username}, the bind is {want}"

@@ -81,6 +81,7 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-SESSIONS-TOKEN](endpoints/sessions.md#gw-sessions-token) | sessions | the session token's shape, storage, lifetime |
 | [GW-SESSIONS-RELEASE](endpoints/sessions.md#gw-sessions-release) | sessions | release and expiry refuse the token |
 | [GW-SESSIONS-PULL](endpoints/sessions.md#gw-sessions-pull) | sessions | a bound dispatch carries no credential; the bound pod pulls its env once, TokenReview'd |
+| [GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth) | sessions | the control plane's caller: its projected token, its `callers` entry, the observe/enforce knob |
 | [GW-CRED-RESOLVE](endpoints/sessions.md#gw-cred-resolve) | sessions | credential ref → Secret read, caches, verdict classes |
 | [GW-REDACT](endpoints/sessions.md#gw-redact) | sessions | no credential value in any log line |
 | [GW-RAIL-ANTHROPIC](endpoints/anthropic-messages.md#gw-rail-anthropic) | anthropic-messages | the subscription OAuth rail's wire |

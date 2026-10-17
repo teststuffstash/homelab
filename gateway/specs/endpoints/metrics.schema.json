@@ -13,7 +13,9 @@
     "status": { "type": "string", "pattern": "^[1-5][0-9][0-9]$" },
     "class": { "enum": ["in", "cache_read", "cache_write", "out"] },
     "window": { "enum": ["5h", "7d"] },
-    "outcome": { "enum": ["resolved", "definitive", "transient"] }
+    "outcome": { "enum": ["resolved", "definitive", "transient"] },
+    "route": { "enum": ["admit", "lookup", "release"] },
+    "reason": { "enum": ["absent", "invalid", "review-transient"] }
   },
   "families": {
     "gateway_sessions_active": {
@@ -76,6 +78,14 @@
         "outcome": { "$ref": "#/$defs/outcome" }
       },
       "x-requirements": ["GW-METRICS", "GW-CRED-RESOLVE"]
+    },
+    "gateway_control_plane_unauthenticated_total": {
+      "type": "counter",
+      "labels": {
+        "route": { "$ref": "#/$defs/route" },
+        "reason": { "$ref": "#/$defs/reason" }
+      },
+      "x-requirements": ["GW-METRICS", "GW-SESSIONS-AUTH"]
     }
   },
   "forbidden_labels": ["task", "session", "id", "model", "token"],

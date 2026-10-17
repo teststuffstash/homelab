@@ -1,5 +1,7 @@
 """The control plane: POST/GET/DELETE /sessions (GW-SESSIONS-ADMIT, -ENV, -TOKEN, -RELEASE) and
 the pod's env pull, POST /sessions/{id}/env (GW-SESSIONS-PULL — the identity half lives in pull.py).
+Every POST/GET/DELETE is caller-checked first (GW-SESSIONS-AUTH, control.py); the pull is not — its
+caller is the bound pod, checked against the bind.
 
 `POST /sessions` is the launcher's one question: may this unit run now, with which harness, and
 what goes in the pod's env. `decision: defer` is a normal 200 answer (typed reason + retry_after_s),
@@ -17,7 +19,7 @@ import re
 import secrets
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -34,6 +36,7 @@ from .config import (
     StackPolicy,
     wire_model,
 )
+from .control import ControlPlaneAuth
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
 from .metrics import Metrics
 from .pull import (
@@ -114,6 +117,7 @@ class Admission:
     harness: str
     rail_override: str | None
     bind: Bind | None = None
+    caller: str | None = None  # GW-SESSIONS-AUTH: the reviewed caller identity, stored on the row
 
 
 def parse_admission(policy: Policy, body: object) -> Admission:
@@ -220,7 +224,13 @@ class SessionService:
         self.self_url = self_url
         self.clock = clock
         self.reviewer: TokenReviewer = reviewer or StaticTokenReviews()  # app.py hands the kube one in
+        self.auth = ControlPlaneAuth(policy, self, metrics)  # reviews through self.reviewer (one TokenReview path)
         self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
+
+    async def review(self, token: str, audiences: list[str]):
+        """The TokenReviewer seam ControlPlaneAuth calls — delegated, so swapping `self.reviewer`
+        (tests: the kube reviewer on a mock API) swaps it for the pull and the control plane alike."""
+        return await self.reviewer.review(token, audiences)
 
     async def admit(self, adm: Admission) -> JSONResponse:
         """The rail pick: first allowed rail that (a) the harness can speak, (b) names a model for the
@@ -304,7 +314,9 @@ class SessionService:
     def _dispatch(self, adm: Admission, rail: str, model: str, now: float) -> JSONResponse:
         sid = uuid.uuid4().hex
         common = dict(id=sid, stack=adm.stack.name, role=adm.role.name, task=adm.task, round=adm.round, rail=rail,
-                      harness=adm.harness, model=model, created_at=now, expires_at=now + self.policy.session_ttl_s)
+                      harness=adm.harness, model=model, created_at=now, expires_at=now + self.policy.session_ttl_s,
+                      caller=adm.caller)
+        who = adm.caller or "(unauthenticated)"
         if adm.bind is not None:
             # GW-SESSIONS-PULL: nothing credential-shaped leaves in this answer — the token is minted
             # at the pull, so the row holds the unminted placeholder no token hashes to.
@@ -313,9 +325,9 @@ class SessionService:
                 bind_serviceaccount=adm.bind.serviceaccount, bind_pod=adm.bind.pod,
             )
             self.metrics.session_decision(rail, adm.role.name, adm.stack.name, "dispatch")
-            log.info("session: dispatch id=%s stack=%s role=%s task=%s rail=%s harness=%s model=%s bind=%s/%s pod=%s",
+            log.info("session: dispatch id=%s stack=%s role=%s task=%s rail=%s harness=%s model=%s bind=%s/%s pod=%s caller=%s",
                      sid, adm.stack.name, adm.role.name, adm.task, rail, adm.harness, model,
-                     adm.bind.namespace, adm.bind.serviceaccount, adm.bind.pod or "(any)")
+                     adm.bind.namespace, adm.bind.serviceaccount, adm.bind.pod or "(any)", who)
             return JSONResponse({
                 "decision": "dispatch",
                 "session": {"id": row.id, "expires_at": iso(row.expires_at)},
@@ -329,8 +341,8 @@ class SessionService:
         token = new_token()
         row = self.store.create_session(**common, token_hash=token_hash(token))
         self.metrics.session_decision(rail, adm.role.name, adm.stack.name, "dispatch")
-        log.info("session: dispatch id=%s stack=%s role=%s task=%s rail=%s harness=%s model=%s",
-                 sid, adm.stack.name, adm.role.name, adm.task, rail, adm.harness, model)
+        log.info("session: dispatch id=%s stack=%s role=%s task=%s rail=%s harness=%s model=%s caller=%s",
+                 sid, adm.stack.name, adm.role.name, adm.task, rail, adm.harness, model, who)
         return JSONResponse({
             "decision": "dispatch",
             "session": {"id": row.id, "token": token, "expires_at": iso(row.expires_at)},
@@ -403,7 +415,12 @@ class SessionService:
 # -- Starlette endpoints ------------------------------------------------------------------------
 
 async def post_sessions(request: Request) -> JSONResponse:
+    """GW-SESSIONS-AUTH first (401 / 403 / 503 before the body is read), then the body (400), then
+    the caller's entry against the body's stack, role and bind (403), then the admission walk."""
     svc: SessionService = request.app.state.sessions
+    caller = await svc.auth.check("admit", _bearer(request))
+    if isinstance(caller, JSONResponse):
+        return caller
     try:
         body = await request.json()
     except Exception:  # noqa: BLE001 — any undecodable body is the same 400
@@ -412,7 +429,10 @@ async def post_sessions(request: Request) -> JSONResponse:
         adm = parse_admission(svc.policy, body)
     except BadRequest as e:
         return error(400, e.code, e.message)
-    return await svc.admit(adm)
+    denied = ControlPlaneAuth.authorize_admission(caller, adm.stack.name, adm.role.name, adm.bind.namespace if adm.bind else None)
+    if denied is not None:
+        return denied
+    return await svc.admit(replace(adm, caller=caller.identity))
 
 
 def _bearer(request: Request) -> str | None:
@@ -428,19 +448,30 @@ async def post_session_env(request: Request) -> JSONResponse:
     return await svc.pull_env(request.path_params["id"], _bearer(request))
 
 
-async def get_session(request: Request) -> JSONResponse:
+async def _owned_row(request: Request, route: str) -> tuple[SessionService, Session | None, JSONResponse | None]:
+    """GET / DELETE: the caller check (401 / 403 / 503), the id (404), then ownership (403)."""
     svc: SessionService = request.app.state.sessions
+    caller = await svc.auth.check(route, _bearer(request))
+    if isinstance(caller, JSONResponse):
+        return svc, None, caller
     row = svc.store.get_session(request.path_params["id"])
     if row is None:
-        return error(404, "session-not-found", "no session carries that id")
+        return svc, None, error(404, "session-not-found", "no session carries that id")
+    denied = ControlPlaneAuth.authorize_owner(caller, route, row.id, row.caller)
+    return svc, row, denied
+
+
+async def get_session(request: Request) -> JSONResponse:
+    svc, row, refused = await _owned_row(request, "lookup")
+    if refused is not None:
+        return refused
     return JSONResponse(row.public())
 
 
 async def delete_session(request: Request) -> JSONResponse:
-    svc: SessionService = request.app.state.sessions
-    row = svc.store.get_session(request.path_params["id"])
-    if row is None:
-        return error(404, "session-not-found", "no session carries that id")
+    svc, row, refused = await _owned_row(request, "release")
+    if refused is not None:
+        return refused
     row = svc.store.release(row.id, svc.clock())
-    log.info("session: released id=%s rail=%s requests=%d", row.id, row.rail, row.requests)
+    log.info("session: released id=%s rail=%s requests=%d caller=%s", row.id, row.rail, row.requests, row.caller or "(unauthenticated)")
     return JSONResponse({"id": row.id, "released_at": iso(row.released_at)})

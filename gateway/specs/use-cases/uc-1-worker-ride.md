@@ -12,8 +12,8 @@ status: spine            # the initial use case the whole island is built and tr
 
 Today the launcher answers half of that itself (84 self-routing sites across six scripts,
 [context-and-autonomy.md §Interfaces](../../../docs/spikes/context-and-autonomy.md)); after this
-use case it asks once — naming the pod it will create (`bind`) — the pod pulls its own `env`,
-and the launcher calls `DELETE` from its finalize hook.
+use case it asks once — authenticated as its dispatcher's ServiceAccount, naming the pod it will
+create (`bind`) — the pod pulls its own `env`, and the launcher calls `DELETE` from its finalize hook.
 Everything in the island exists to make this ride work end-to-end with **no model name chosen
 by the caller and no credential in the pod**.
 
@@ -26,7 +26,8 @@ sequenceDiagram
   participant K as kube API (Secrets, TokenReview)
   participant P as worker pod (opencode)
   participant U as upstream rail
-  L->>G: ① POST /sessions {stack: platform, role: worker, task: homelab-2588-r1, round: 1, bind{namespace, serviceaccount, pod}}
+  L->>G: ① POST /sessions  Authorization: Bearer «the dispatcher's projected SA token» {stack: platform, role: worker, task: homelab-2588-r1, round: 1, bind{namespace, serviceaccount, pod}}
+  G->>K: TokenReview the caller, whose `callers` entry grants stack, role, bind namespace — GW-SESSIONS-AUTH
   G->>K: resolve the stack's refs — GW-CRED-RESOLVE
   G-->>L: {decision: dispatch, session{id}, rail: opencode, harness: opencode, model, env_keys, pull_url} — no token — GW-SESSIONS-ADMIT, GW-SESSIONS-PULL
   L->>P: ② pod created (that name, that ServiceAccount) with a projected token, audience agent-gateway — no LLM credential in the manifest
@@ -41,7 +42,7 @@ sequenceDiagram
     U-->>G: 200 (or 429 / 401 / stream)
     G-->>P: bytes unchanged · usage recorded on the session
   end
-  L->>G: ④ DELETE /sessions/{id} — GW-SESSIONS-RELEASE
+  L->>G: ④ DELETE /sessions/{id}  Authorization: Bearer «the same caller's token» — GW-SESSIONS-RELEASE, GW-SESSIONS-AUTH (only the admitting caller)
   G-->>L: {id, released_at} · the token is refused from now on
 ```
 
@@ -60,7 +61,7 @@ resolvable; upstream behaviour `upstream-ok` unless the pair says otherwise.
 | Stage | Input | Expected output | Requirements |
 |---|---|---|---|
 | ① admit (unbound — the specs reviewer's shape) | [`uc-1/request.json`](uc-1/request.json) | [`uc-1/expected-response.json`](uc-1/expected-response.json) | GW-SESSIONS-ADMIT, GW-SESSIONS-ENV, GW-SESSIONS-TOKEN, GW-CRED-RESOLVE |
-| ① admit, bound (the worker launcher's shape) | [`uc-1/bind-request.json`](uc-1/bind-request.json) | [`uc-1/bind-response.json`](uc-1/bind-response.json) | GW-SESSIONS-ADMIT, GW-SESSIONS-PULL |
+| ① admit, bound (the worker launcher's shape) | [`uc-1/bind-request.json`](uc-1/bind-request.json), `Authorization: Bearer «the dispatcher's projected SA token»` | [`uc-1/bind-response.json`](uc-1/bind-response.json) | GW-SESSIONS-AUTH, GW-SESSIONS-ADMIT, GW-SESSIONS-PULL |
 | ②′ env pull | `POST /sessions/«id»/env`, `Authorization: Bearer «projected SA token»` | [`uc-1/pull-response.json`](uc-1/pull-response.json) | GW-SESSIONS-PULL, GW-SESSIONS-ENV, GW-SESSIONS-TOKEN |
 | ③ data plane, [Go rail](../../../docs/agents/chainless-redesign.md) (the ride's own) | [`uc-1/opencode-request.json`](uc-1/opencode-request.json) | [`uc-1/opencode-response.json`](uc-1/opencode-response.json) | GW-RAIL-OPENCODE, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
 | ③ data plane, OpenRouter rail (the same worker when Go is full) | [`uc-1/openrouter-request.json`](uc-1/openrouter-request.json) | [`uc-1/openrouter-response.json`](uc-1/openrouter-response.json) | GW-RAIL-OPENROUTER, GW-MODEL-RESOLVE, GW-CRED-BOUNDARY |
@@ -78,6 +79,7 @@ resolvable; upstream behaviour `upstream-ok` unless the pair says otherwise.
 | Q5 | `DELETE /sessions/«Q1 id»`, then Q2 again | `{id, released_at}`; the repeat is 401 `session-released`; `gateway_sessions_active{rail="opencode"}` is back to 0 |
 | Q6 | Q1 with every allowed rail full | 200 `{decision: defer, reason: rail-capacity, retry_after_s}` — not an HTTP error |
 | Q7 | `bind-request.json`, then the bound pod's `POST /sessions/«id»/env`, then the same pull again | a dispatch with `env_keys: [OPENCODE_CONFIG_CONTENT]` and no `gws_`; the pull answers Q1's `env` with a token minted then; the repeat is 409 `env-already-delivered` |
+| Q8 | Q7's admission under `control_plane_auth: enforce` ([`policy-enforce`](../worlds/policy-enforce.json)), once with the platform loop's token and once with none | the first dispatches and the row's `caller` is `system:serviceaccount:platform-agents:agentstack-loop`; the second is 401 `caller-unauthenticated` ([GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth)) |
 
 ## What this use case does not cover (so nobody infers it)
 

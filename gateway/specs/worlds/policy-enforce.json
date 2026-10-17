@@ -1,0 +1,86 @@
+{
+  "_comment": "The `policy-enforce` world — `policy-default` with `control_plane_auth: enforce` and NOTHING else changed (specs/worlds/README.md), for the GW-SESSIONS-AUTH enforce rows only. The rest of this comment is policy-default's: the TEST policy (specs/worlds/README.md). Namespaces and Secret names are fixture names. Model ids are copied verbatim from argocd/resources/openrouter-proxy/model-classes.json (`models.*.ids` per rail; the `coding` class chain_head order for openrouter) — never invented. Rail caps: opencode = 3 mirrors that file's declared `rails.opencode-go.concurrency`; anthropic 5 and openrouter 20 are fixture sizes. `side_models` (anthropic) = the family claude-code's small side-calls name (ANTHROPIC_SMALL_FAST_MODEL), admitted on every session of that rail (⚖ GW-MODEL-RESOLVE). Every key here is one the gateway reads; a fact the policy cannot hold yet rides as a ⚖ comment in the spec, never as an invented key.",
+  "stacks": {
+    "platform": {
+      "loop_ns": "platform-agents",
+      "openrouter_ref": "platform-agents/platform-openrouter",
+      "anthropic_ref": "platform-agents/claude-session"
+    },
+    "oracle": {
+      "loop_ns": "oracle-agents",
+      "openrouter_ref": "oracle-agents/oracle-openrouter",
+      "anthropic_ref": "oracle-agents/claude-session"
+    }
+  },
+  "roles": {
+    "worker":      {"rails": ["opencode", "openrouter"],  "tier": "standard", "harness": "opencode"},
+    "reviewer":    {"rails": ["anthropic", "opencode"],   "tier": "heavy",    "harness": "claude"},
+    "coordinator": {"rails": ["anthropic", "opencode"],   "tier": "standard", "harness": "claude"},
+    "responder":   {"rails": ["anthropic", "opencode"],   "tier": "standard", "harness": "claude"},
+    "retro":       {"rails": ["anthropic", "openrouter"], "tier": "heavy",    "harness": "claude"},
+    "prober":      {"rails": ["anthropic"],               "tier": "light",    "harness": "claude"},
+    "researcher":  {"rails": ["openrouter", "anthropic"], "tier": "heavy",    "harness": "goose"}
+  },
+  "rails": {
+    "anthropic": {
+      "admission": {
+        "_comment": "⚖ the old proxy's values, copied (sessions.md §Capacity): utilization_thresholds 5h = ANTHROPIC_UTIL_THRESHOLD's code default 0.80 (openrouter-proxy.py; unset in its deployment.yaml), 7d = ANTHROPIC_UTIL_THRESHOLD_7D 0.95 (deployment.yaml); latch_429_hold_s = ANTHROPIC_429_HOLD_S 900. reading_stale_s 900 has NO old-proxy precedent (it only drops a reading whose reset passed) — the gateway's own guess, ⚖.",
+        "utilization_thresholds": {"5h": 0.80, "7d": 0.95},
+        "reading_stale_s": 900,
+        "latch_429_hold_s": 900
+      },
+      "max_sessions": 5,
+      "side_models": ["claude/haiku"],
+      "models": {
+        "light": "claude/haiku",
+        "standard": "claude/sonnet",
+        "heavy": "claude/sonnet"
+      }
+    },
+    "opencode": {
+      "admission": {
+        "_comment": "⚖ copied from argocd/resources/openrouter-proxy/gometer.py (snapshot 2026-09-17) — a DUPLICATE until the old proxy retires: latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900; prices = GO_PRICES / GO_PRICES_PEAK rows for the policy's priced Go model ($/M; null = gometer's None, draws 0); fallback = _GO_MAX_PRICE/2 each for in/out (max in+out = kimi-k3 3.00+15.00), cache 0 — what an unpriced id (claude-sonnet-4-6) draws at; peak hours = GO_PEAK_HOURS_UTC / GO_PEAK_WEEKDAYS; windows = _GO_WINDOW_DEFAULTS (budgets 12/30/60, anchors chain/weekly mon 00:00/monthly 13 11:30; GO_WINDOW_ANCHORS unset in deployment.yaml) with threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
+        "latch_429_hold_s": 900,
+        "window_draw": {
+          "prices": {
+            "opencode-go/deepseek-v4-flash": {"in": 0.15, "out": 0.60, "cache_read": 0.003, "cache_write": null,
+                                              "peak": {"in": 0.30, "out": 1.20, "cache_read": 0.006, "cache_write": null}}
+          },
+          "fallback": {"in": 9.0, "out": 9.0, "cache_read": 0, "cache_write": 0},
+          "peak_hours_utc": [[1, 4], [6, 10]],
+          "peak_weekdays": ["mon", "tue", "wed", "thu", "fri"],
+          "windows": {
+            "5h":  {"budget_usd": 12.0, "threshold": 0.80, "anchor": "chain", "span_s": 18000, "chain_lookback_s": 604800},
+            "7d":  {"budget_usd": 30.0, "threshold": 0.80, "anchor": "weekly", "weekday": "mon", "hour": 0, "minute": 0},
+            "30d": {"budget_usd": 60.0, "threshold": 0.80, "anchor": "monthly", "month_day": 13, "hour": 11, "minute": 30}
+          }
+        }
+      },
+      "max_sessions": 3,
+      "models": {
+        "light": "opencode-go/deepseek-v4-flash",
+        "standard": "opencode-go/deepseek-v4-flash",
+        "heavy": "opencode-go/claude-sonnet-4-6"
+      }
+    },
+    "openrouter": {
+      "max_sessions": 20,
+      "models": {
+        "light": "deepseek/deepseek-v4-flash",
+        "standard": "deepseek/deepseek-v4-flash",
+        "heavy": "deepseek/deepseek-v4.1-flash"
+      }
+    }
+  },
+  "context_tokens": {
+    "_comment": "per-model harness window, copied from model-classes.json `models.*.context_tokens` — the only non-null entry today is the Go rail's deepseek-v4-flash; absent = null in the dispatch answer, never a guess.",
+    "opencode-go/deepseek-v4-flash": 1000000
+  },
+  "control_plane_auth": "enforce",
+  "callers": {
+    "_comment": "GW-SESSIONS-AUTH — fixture identities (specs/worlds/README.md): the platform loop's dispatcher (worker admissions bound into its fixture worker namespace) and the specs reviewer's tick (reviewer + the worker-role shadow cell, never a bind). The same two callers as `policy-default`; here a caller with no valid token is refused.",
+    "system:serviceaccount:platform-agents:agentstack-loop": {"stacks": ["platform"], "roles": ["worker"], "bind_namespaces": ["platform-agents"]},
+    "system:serviceaccount:agent-coordinator:agent-coordinator": {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []}
+  },
+  "session_ttl_s": 14400
+}

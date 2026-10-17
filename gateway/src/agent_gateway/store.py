@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   bind_namespace TEXT,
   bind_serviceaccount TEXT,
   bind_pod TEXT,
-  env_delivered_at REAL
+  env_delivered_at REAL,
+  caller TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
 CREATE TABLE IF NOT EXISTS requests (
@@ -58,10 +59,13 @@ CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts);
 # Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
 # them to an existing table, so _migrate() does (idempotent, additive only). The bind columns
 # (GW-SESSIONS-PULL) are nullable: NULL = an unbound session, whose env went out in the dispatch.
+# `caller` (GW-SESSIONS-AUTH) is the admitting caller's ServiceAccount username; NULL = admitted
+# with no authenticated identity (the `observe` knob), or before the column existed.
 _COUNTER = "INTEGER NOT NULL DEFAULT 0"
 _ADDED_COLUMNS = {
     "sessions": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "bind_namespace": "TEXT",
-                 "bind_serviceaccount": "TEXT", "bind_pod": "TEXT", "env_delivered_at": "REAL"},
+                 "bind_serviceaccount": "TEXT", "bind_pod": "TEXT", "env_delivered_at": "REAL",
+                 "caller": "TEXT"},
     "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER},
 }
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
@@ -91,7 +95,7 @@ _SESSION_COLS = (
     "id", "token_hash", "stack", "role", "task", "round", "rail", "harness", "model",
     "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out",
     "tokens_cache_read", "tokens_cache_write", "bind_namespace", "bind_serviceaccount", "bind_pod",
-    "env_delivered_at",
+    "env_delivered_at", "caller",
 )
 
 
@@ -119,6 +123,8 @@ class Session:
     bind_serviceaccount: str | None = None
     bind_pod: str | None = None
     env_delivered_at: float | None = None
+    # GW-SESSIONS-AUTH: who admitted it (`system:serviceaccount:<ns>:<sa>`); None = no authenticated caller.
+    caller: str | None = None
 
     @property
     def bound(self) -> bool:
@@ -154,6 +160,7 @@ class Session:
             "tokens_out": self.tokens_out,
             "tokens_cache_read": self.tokens_cache_read,
             "tokens_cache_write": self.tokens_cache_write,
+            "caller": self.caller,
         }
 
 

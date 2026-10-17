@@ -25,8 +25,10 @@
 | class is one of the four usage classes | tokens_total | class | in, cache_read, cache_write, out |
 | window is 5h or 7d | subscription_utilization | window | 5h, 7d |
 | outcome is the verdict class | credential_resolve_total | outcome | resolved, definitive, transient |
+| route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release |
+| reason is why no caller identity was read | control_plane_unauthenticated_total | reason | absent, invalid, review-transient |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 8 families |
+| every family is declared with HELP and TYPE | — | — | 9 families |
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ FAMILIES = (
     "gateway_sessions_active", "gateway_sessions_total", "gateway_requests_total",
     "gateway_upstream_seconds", "gateway_tokens_total", "gateway_credential_resolve_total",
     "gateway_subscription_utilization", "gateway_subscription_reset_seconds",
+    "gateway_control_plane_unauthenticated_total",
 )
 
 
@@ -251,6 +254,8 @@ LABEL_ROWS = [
     ("class is one of the four usage classes", "gateway_tokens_total", "class", {"in", "cache_read", "cache_write", "out"}),
     ("window is 5h or 7d", "gateway_subscription_utilization", "window", {"5h", "7d"}),
     ("outcome is the verdict class", "gateway_credential_resolve_total", "outcome", {"resolved", "definitive", "transient"}),
+    ("route is the control-plane route", "gateway_control_plane_unauthenticated_total", "route", {"admit", "lookup", "release"}),
+    ("reason is why no caller identity was read", "gateway_control_plane_unauthenticated_total", "reason", {"absent", "invalid", "review-transient"}),
 ]
 
 

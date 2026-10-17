@@ -3,6 +3,8 @@
 Families: `gateway_sessions_active{rail}`, `gateway_sessions_total{rail,role,stack,decision}`,
 `gateway_requests_total{rail,dialect,status}`, `gateway_upstream_seconds{rail}` (histogram),
 `gateway_tokens_total{rail,class}`, `gateway_credential_resolve_total{rail,outcome}`,
+`gateway_control_plane_unauthenticated_total{route,reason}` (GW-SESSIONS-AUTH — every control-plane
+request without a valid caller token, admitted under `observe` or refused under `enforce`),
 `gateway_subscription_utilization{rail,window}` + `gateway_subscription_reset_seconds{rail,window}`
 (gauges, last seen on the subscription rail's `anthropic-ratelimit-unified-*` response headers).
 A label value outside its declared set renders as `other` — a task key, a session id or a model
@@ -21,6 +23,8 @@ OTHER = "other"
 DECISIONS = ("dispatch", "defer")
 TOKEN_CLASSES = ("in", "cache_read", "cache_write", "out")
 CRED_OUTCOMES = ("resolved", "definitive", "transient")
+CP_ROUTES = ("admit", "lookup", "release")  # control.ROUTES (not imported: control imports this module)
+CP_REASONS = ("absent", "invalid", "review-transient")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
 
@@ -46,6 +50,7 @@ class Metrics:
         self.requests_total: dict[tuple[str, str, str], int] = {}
         self.tokens_total: dict[tuple[str, str], int] = {}
         self.cred_total: dict[tuple[str, str], int] = {}
+        self.cp_unauth_total: dict[tuple[str, str], int] = {}
         self.sub_util: dict[tuple[str, str], float] = {}
         self.sub_reset: dict[tuple[str, str], float] = {}
         self.upstream_buckets: dict[str, list[int]] = {}
@@ -97,6 +102,11 @@ class Metrics:
         with self._lock:
             self.cred_total[key] = self.cred_total.get(key, 0) + 1
 
+    def control_plane_unauthenticated(self, route: str, reason: str) -> None:
+        key = (_bounded(route, CP_ROUTES), _bounded(reason, CP_REASONS))
+        with self._lock:
+            self.cp_unauth_total[key] = self.cp_unauth_total.get(key, 0) + 1
+
     def render(self) -> str:
         lines: list[str] = []
         active = self._gauge_source() if self._gauge_source else {}
@@ -130,4 +140,12 @@ class Metrics:
             lines += ["# HELP gateway_credential_resolve_total Credential resolves by rail and outcome.", "# TYPE gateway_credential_resolve_total counter"]
             for (rail, outcome), n in sorted(self.cred_total.items()):
                 lines.append(f"gateway_credential_resolve_total{_fmt_labels({'rail': rail, 'outcome': outcome})} {n}")
+            # Every (route, reason) renders, zeros included: the flip's soak reads a flat series, and
+            # an absent series cannot be told apart from a scrape that never saw the family.
+            lines += ["# HELP gateway_control_plane_unauthenticated_total Control-plane requests without a valid caller token (admitted under observe, refused under enforce).",
+                      "# TYPE gateway_control_plane_unauthenticated_total counter"]
+            for route in CP_ROUTES:
+                for reason in CP_REASONS:
+                    n = self.cp_unauth_total.get((route, reason), 0)
+                    lines.append(f"gateway_control_plane_unauthenticated_total{_fmt_labels({'route': route, 'reason': reason})} {n}")
         return "\n".join(lines) + "\n"
