@@ -812,16 +812,13 @@ the block needs pruning, not more headings.
       Deployment + Service in `agent-egress`, ≥2 replicas + PDB, its own SA with the Secret-read
       grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
       (retry) stays. Relates ADR-087, FU-089.
-- [ ] **FU-270** — **`agent-gateway`: the island is BUILT and LIVE in parallel (#2606); the old proxy stays
-      untouched (operator, 2026-10-15).** `/sessions` consumers: the specs reviewer (ADR-155) + the worker
-      launcher behind the env opt-in `AGENT_GATEWAY=sessions` (#2667, platform only). Since #2672/#2674 a bound
-      dispatch carries no credential: the pod PULLS its env once (GW-SESSIONS-PULL, projected-SA TokenReview);
-      canary 2026-10-17 clean (0 `gws_` in spec/logs, no Secret, 403 other pod / 409 re-pull). Policy is a
-      configMapGenerator (#2664). Rulings 10-17: Go heavy → deepseek-v4-flash (experiment); ⚖ rows on
-      #2645/#2646 wait on the Codex spike (#2662). Control plane authenticated + ENFORCED (#2683/#2687/#2688;
-      `observe` = rollback knob; gaps #2684/#2685). Open ⚑: codex `auth.command` re-runs vs at-most-once.
-      **Next:** operator ruling on failure ownership (strikes/outcomes, free-model run 2026-10-17); the loop
-      flip needs the `gateway-token` volume on the coordinator pod first.
+- [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** `/sessions` consumers:
+      specs reviewer (ADR-155) + the worker launcher behind `AGENT_GATEWAY=sessions` (env, platform only); the pod
+      pulls its env (GW-SESSIONS-PULL); control plane authenticated + enforced (#2688; gaps #2684/#2685).
+      History: TICK-LOG 2026-10-16/17. In flight 10-17: failure-ownership specs (cell cooldowns, outcomes +
+      strikes, attempt/retry, liveness); Go catalog design = `docs/spikes/opencode-go-catalog.md` (#2690).
+      **Next:** operator ⚖ on the Go catalog spike; the loop flip needs the `gateway-token` volume on the
+      coordinator pod first.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
