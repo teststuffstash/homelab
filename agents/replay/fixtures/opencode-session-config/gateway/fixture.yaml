@@ -1,0 +1,16 @@
+# FU-270 — opencode session config under a /sessions dispatch (AGENT_GATEWAY=sessions).
+#
+# CONDITION UNDER REPLAY: a headless opencode ride the gateway admitted. Its provider + model are
+# the gateway's OPENCODE_CONFIG_CONTENT (the pod env, Secret-held); opencode 1.18.35 deep-merges
+# that OVER this OPENCODE_CONFIG file (probed in-cluster 2026-10-17 with `opencode debug config`).
+#
+# THE CONTRACT: the file carries ONLY what the gateway does not own — mode.autoApprove — and NO
+# OpenRouter pin (the registry lookup is never even attempted: HERE points at a real-looking path
+# whose estimate_budget.py would answer) and NO proxy baseURL / ref apiKey, even with OC_INJECT set.
+name: opencode-session-config-gateway
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:opencode-session-config
+  - file:../post.sh

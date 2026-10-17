@@ -1,0 +1,15 @@
+# FU-270 — the homelab#990 default-harness flip under a /sessions dispatch.
+#
+# CONDITION UNDER REPLAY: enforced egress, the harness NOT explicit, and the GATEWAY dispatched
+# opencode (AGENT_GATEWAY=sessions): its env is opencode's (OPENCODE_CONFIG_CONTENT only).
+#
+# THE CONTRACT: the flip does NOT fire — goose on opencode's env would have no provider at all —
+# and the line says so (the operator's lever is an explicit --harness goose, which narrows the
+# gateway's walk to goose's dialect before admission).
+name: harness-enforce-default-gateway
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-enforce-default
+  - file:post.sh

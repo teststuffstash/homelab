@@ -1,0 +1,15 @@
+# gateway-sessions — the decision table (family contract in fixture.yaml). Row state (the stack
+# row, argv flags, the gateway's reply) lives in rows/<id>/vars.sh.
+# id                       | world | patch | env                                       | expect                   | params
+off                        |       |       |                                           | off                      |
+other-stack                |       |       | AGENT_GATEWAY=sessions                    | other-stack              |
+model-refused              |       |       | AGENT_GATEWAY=sessions                    | model-refused            |
+round-refused              |       |       | AGENT_GATEWAY=sessions                    | round-refused            |
+dispatch-opencode          |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_RAIL=opencode | dispatch-opencode |
+dispatch-claude-explicit   |       |       | AGENT_GATEWAY=sessions                    | dispatch-claude-explicit |
+dispatch-goose             |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_URL=http://127.0.0.1:18080 | dispatch-goose |
+defer                      |       |       | AGENT_GATEWAY=sessions                    | defer                    |
+http-503                   |       |       | AGENT_GATEWAY=sessions                    | http-503                 |
+unreachable                |       |       | AGENT_GATEWAY=sessions                    | unreachable              |
+unknown-decision           |       |       | AGENT_GATEWAY=sessions                    | unknown-decision         |
+unusable-env               |       |       | AGENT_GATEWAY=sessions                    | unusable-env             |

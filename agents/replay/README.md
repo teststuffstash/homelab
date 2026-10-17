@@ -245,6 +245,7 @@ is stale, so it cannot drift the way the prose register did.
 | `coordinator-pick-rail/go` | actions | - | `agents/coordinator-scan.sh` | - |
 | `corpus-dispatch-allowlist` | table | - | `agents/coordinator/corpus-dispatch-argo.yaml` | - |
 | `cred-inject-unconditional/claude-opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
+| `cred-inject-unconditional/gateway` | actions | - | `agents/agent-session.sh` | - |
 | `cred-inject-unconditional/no-proxy-breakglass` | actions | - | `agents/agent-session.sh` | - |
 | `cred-inject-unconditional/opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
 | `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
@@ -298,6 +299,8 @@ is stale, so it cannot drift the way the prose register did.
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-resumable-quoted` | table | - | `agents/coordinator-scan.sh` | - |
+| `gateway-env-secret` | table | - | `agents/agent-session.sh` | - |
+| `gateway-sessions` | table | - | `agents/agent-session.sh` | - |
 | `gh-json-fields/allowlist-current` | suite | - | `agents/replay/gh-json-fields.sh` | - |
 | `gh-json-fields/unknown-field-refused` | actions | - | `-` | - |
 | `go-rail-latch` | table | - | `agents/agent-session.sh` | - |
@@ -309,7 +312,9 @@ is stale, so it cannot drift the way the prose register did.
 | `goal` | table | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 IL-T19 IL-T20 IL-T21 IL-T22 |
 | `harness-enforce-default/explicit-wins` | actions | - | `agents/agent-session.sh` | - |
 | `harness-enforce-default/flip` | actions | - | `agents/agent-session.sh` | - |
+| `harness-enforce-default/gateway` | actions | - | `agents/agent-session.sh` | - |
 | `harness-enforce-default/monitor-untouched` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/claude-gateway` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
@@ -359,6 +364,7 @@ is stale, so it cannot drift the way the prose register did.
 | `opencode-hostaliases/non-opencode` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-phonehome-killswitch/opencode-phonehome-killswitch` | suite | - | `-` | - |
 | `opencode-session-config` | actions | - | `agents/agent-session.sh` | - |
+| `opencode-session-config/gateway` | actions | - | `agents/agent-session.sh` | - |
 | `opencode-session-config/with-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `parity-assertion-sigpipe` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pick-rail/both` | actions | - | `agents/subscription-latch.sh` | - |

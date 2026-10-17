@@ -1,0 +1,3 @@
+OUT → homelab#990 workaround NOT applied: the gateway dispatched opencode (its env is opencode's) — enforced egress rides the resolver stubs; pass --harness goose to avoid opencode here
+OUT HARNESS: opencode
+RC 0

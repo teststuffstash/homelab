@@ -214,6 +214,135 @@ run_phase() {   # $1 = dispatch-gates | pod-spinup — close the open phase, pub
 # without AGENT_EGRESS_PROXY) → static behavior, one loud line.
 _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {}' "$HERE/stacks.json" 2>/dev/null)" || _srow="{}"
 [ -n "$_srow" ] || _srow='{}'   # normalize ONCE — `${_srow:-{}}` is a trap, see the guard below
+
+# ── FU-270 / UC-1: admission through the agent-gateway's POST /sessions (opt-in canary) ─────────
+# The island's spine (gateway/specs/use-cases/uc-1-worker-ride.md): the launcher asks ONE question —
+# may this unit run now, with which harness, and what goes in the pod's LLM env — and the gateway
+# answers `dispatch` (session + rail + harness + model + env) or a typed `defer`
+# (gateway/specs/endpoints/sessions.md GW-SESSIONS-ADMIT / -ENV / -TOKEN / -RELEASE).
+#
+#   AGENT_GATEWAY=sessions   the knob — ENV ONLY, no claim/stacks.json field yet: the flip is a later
+#                            one-liner after the canary. Unset = today's /route path, byte-for-byte.
+#   AGENT_GATEWAY_RAIL=<r>   optional explicit `rail` in the body (the canary sets opencode).
+#   AGENT_GATEWAY_URL=<url>  the control-plane address (a jail run reaches it via port-forward).
+#
+# Under the knob the router consult, the #158 rail-degrade, the chainless guard, the model_id
+# parse and the FU-088 subscription/Go gates are all SKIPPED: the gateway's admission walk IS the
+# capacity answer (count + window + latch + credential), and a second launcher-side opinion would
+# re-introduce the self-routing UC-1 exists to delete. PLATFORM STACK ONLY: the gateway's policy
+# names its stacks, and the canary is platform's — any other stack keeps today's path, loudly.
+# FAIL CLOSED: unreachable / non-200 / unparseable = the router-defer exit (no pod). It is an
+# explicit experiment, so it never falls back onto the old proxy's rail.
+# ⚠ The session token is a CREDENTIAL: it lives in GW_ENV_JSON (memory) and a per-ride Secret
+# (gw_secret_create below) — never in the pod manifest's literal values, never on a log line.
+# >>>REPLAY:gateway-sessions>>>
+GW_SESSIONS=""; GW_SESSION_ID=""; GW_ENV_JSON=""; GW_RAIL=""; GW_CLAUDE_MODEL=""; GW_CONTEXT_TOKENS=""
+GW_SECRET=""; GW_SECRET_CREATED=""; GW_TRAP_HOOK=""; GW_EXPIRES_AT=""
+GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local:8080}"
+# gw_release — DELETE /sessions/{id} (GW-SESSIONS-RELEASE: idempotent server-side) + the per-ride
+# env Secret. Idempotent here too (clears the id first), so the explicit call after the headless
+# follow and the EXIT trap may both run. A failed DELETE is non-fatal: the session expires by the
+# policy TTL (4 h), and saying so is the whole remedy.
+gw_release() {
+  [ -n "${GW_SESSION_ID:-}" ] || return 0
+  local _sid="$GW_SESSION_ID"; GW_SESSION_ID=""
+  if curl -fsS --max-time 10 -X DELETE "${GW_URL}/sessions/${_sid}" >/dev/null 2>&1; then
+    echo "→ gateway(sessions): released ${_sid}"
+  else
+    echo "WARN gateway(sessions): release of ${_sid} FAILED — it holds its rail slot until the session TTL" >&2
+  fi
+  if [ -n "${GW_SECRET_CREATED:-}" ]; then
+    "$KUBECTL" $KUBE -n "${NS:-$PROJECT}" delete secret "$GW_SECRET" --ignore-not-found >/dev/null 2>&1 \
+      || echo "WARN gateway(sessions): could not delete Secret ${GW_SECRET} (its pod ownerReference collects it)" >&2
+    GW_SECRET_CREATED=""
+  fi
+  return 0
+}
+if [ "${AGENT_GATEWAY:-}" = "sessions" ]; then
+  _gw_stack="$(printf '%s' "$_srow" | jq -r '.name // ""' 2>/dev/null)" || _gw_stack=""
+  if [ "$_gw_stack" = "platform" ]; then
+    GW_SESSIONS=1
+  else
+    echo "WARN gateway(sessions): AGENT_GATEWAY=sessions IGNORED for stack '${_gw_stack:-unresolved}' — the /sessions canary is platform-only (FU-270); this ride takes today's /route path" >&2
+  fi
+fi
+if [ -n "${GW_SESSIONS:-}" ]; then
+  # The gateway owns the model (GW-SESSIONS-ADMIT: no caller names one) — an explicit --model is a
+  # contradiction, not an override, so it refuses instead of being silently dropped.
+  if [ -n "${MODEL_SET:-}" ]; then
+    echo "PREFLIGHT REFUSED: --model ${MODEL} under AGENT_GATEWAY=sessions — the gateway owns the model (FU-270). Drop --model or unset AGENT_GATEWAY. No session, no pod." >&2
+    exit 2
+  fi
+  case "$ROUND" in ''|*[!0-9]*)
+    echo "PREFLIGHT REFUSED: --round '${ROUND}' is not a non-negative integer (sessions.schema.json post.input.round). No session, no pod." >&2
+    exit 2;;
+  esac
+  # sessions.schema.json post.input: harness only when --harness was EXPLICIT (it narrows the walk
+  # to its dialect); rail only from the operator knob (an override the gateway logs).
+  _gw_req="$(jq -nc --arg task "${TASK:-adhoc}" --argjson round "$ROUND" \
+      --arg harness "${HARNESS_SET:+$HARNESS}" --arg rail "${AGENT_GATEWAY_RAIL:-}" \
+      '{stack: "platform", role: "worker", task: $task, round: $round}
+       + (if $harness != "" then {harness: $harness} else {} end)
+       + (if $rail != "" then {rail: $rail} else {} end)')"
+  _gw_resp="$(mktemp)"
+  _gw_http="$(curl -sS --max-time 20 -o "$_gw_resp" -w '%{http_code}' -H 'Content-Type: application/json' \
+      -X POST "${GW_URL}/sessions" -d "$_gw_req" 2>/dev/null)" || _gw_http="000"
+  _gw_decision=""
+  [ "$_gw_http" != "200" ] || _gw_decision="$(jq -r '.decision // ""' "$_gw_resp" 2>/dev/null)" || _gw_decision=""
+  case "$_gw_decision" in
+    defer)
+      # Exactly the router-defer exit (stderr line, exit 1): the dispatcher's requeue path is unchanged.
+      echo "→ gateway(sessions): defer — [$(jq -r '.reason // "?"' "$_gw_resp")] retry_after=$(jq -r '.retry_after_s // "?"' "$_gw_resp")s — not dispatching (task=${TASK:-adhoc}, round=${ROUND})." >&2
+      rm -f "$_gw_resp"; exit 1;;
+    dispatch) ;;
+    *)
+      # Only a NON-200 body is echoed: it is the gateway's error envelope, redacted by GW-REDACT. A
+      # 200 that is neither verdict could carry a token, so its body is never printed.
+      _gw_why="http ${_gw_http}"; [ "$_gw_http" != "000" ] || _gw_why="unreachable"
+      [ "$_gw_http" = "200" ] && _gw_why="http 200, unknown decision '${_gw_decision}'" \
+        || _gw_why="${_gw_why}$(head -c 200 "$_gw_resp" 2>/dev/null | tr '\n' ' ' | sed 's/^./: &/')"
+      echo "→ gateway(sessions): defer — [gateway-${_gw_why}] retry_after=?s — FAIL CLOSED at ${GW_URL}/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy)." >&2
+      rm -f "$_gw_resp"; exit 1;;
+  esac
+  GW_SESSION_ID="$(jq -r '.session.id // ""' "$_gw_resp")"
+  # Released on ANY exit from here (pre-pod refusals included); the context-prefetch trap below
+  # chains this hook, because a later `trap … EXIT` replaces an earlier one.
+  GW_TRAP_HOOK="gw_release"; trap 'gw_release' EXIT
+  _gw_bad=""
+  [[ "$GW_SESSION_ID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || _gw_bad="session id"
+  # Every env key becomes a pod env name AND a Secret data key — a hostile key is a refusal.
+  jq -e '(.env | type == "object") and ([.env | to_entries[] | select((.key | test("^[A-Za-z_][A-Za-z0-9_]*$") | not) or (.value | type != "string"))] | length == 0)' \
+    "$_gw_resp" >/dev/null 2>&1 || _gw_bad="${_gw_bad:+$_gw_bad, }env map"
+  GW_ENV_JSON="$(jq -c '.env' "$_gw_resp" 2>/dev/null)" || GW_ENV_JSON=""
+  GW_RAIL="$(jq -r '.rail // ""' "$_gw_resp")"
+  GW_EXPIRES_AT="$(jq -r '.session.expires_at // "?"' "$_gw_resp")"
+  GW_CONTEXT_TOKENS="$(jq -r '.context_tokens // "" | tostring' "$_gw_resp")"
+  HARNESS="$(jq -r '.harness // ""' "$_gw_resp")"
+  MODEL="$(jq -r '.model // ""' "$_gw_resp")"
+  rm -f "$_gw_resp"   # it held the token; GW_ENV_JSON is the only copy from here on
+  [ -n "$MODEL" ] || _gw_bad="${_gw_bad:+$_gw_bad, }model"
+  # The harness invocation's model comes from the gateway's answer, never the static chain.
+  case "$HARNESS" in
+    claude)   GW_CLAUDE_MODEL="$(printf '%s' "$GW_ENV_JSON" | jq -r '.ANTHROPIC_MODEL // ""' 2>/dev/null)" || GW_CLAUDE_MODEL=""
+              [ -n "$GW_CLAUDE_MODEL" ] || _gw_bad="${_gw_bad:+$_gw_bad, }ANTHROPIC_MODEL";;
+    opencode) OPENCODE_MODEL="$(printf '%s' "$GW_ENV_JSON" | jq -r '.OPENCODE_CONFIG_CONTENT // "" | fromjson? | .model // ""' 2>/dev/null)" || OPENCODE_MODEL=""
+              [ -n "$OPENCODE_MODEL" ] || _gw_bad="${_gw_bad:+$_gw_bad, }OPENCODE_CONFIG_CONTENT.model";;
+    goose)    _gw_goose_model="$(printf '%s' "$GW_ENV_JSON" | jq -r '.GOOSE_MODEL // ""' 2>/dev/null)" || _gw_goose_model=""
+              [ -n "$_gw_goose_model" ] || _gw_bad="${_gw_bad:+$_gw_bad, }GOOSE_MODEL";;
+    *)        _gw_bad="${_gw_bad:+$_gw_bad, }harness '${HARNESS}' (this launcher runs claude|opencode|goose)";;
+  esac
+  if [ -n "$_gw_bad" ]; then
+    echo "→ gateway(sessions): defer — [dispatch-unusable: ${_gw_bad}] retry_after=?s — FAIL CLOSED, releasing and not dispatching." >&2
+    exit 1   # the EXIT trap releases the session
+  fi
+  echo "→ gateway(sessions): dispatch ${MODEL} [rail=${GW_RAIL},harness=${HARNESS},session=${GW_SESSION_ID},context_tokens=${GW_CONTEXT_TOKENS:-null}] (task=${TASK:-adhoc}, round=${ROUND})"
+  # The skipped region's outputs, as the gateway decided them (set -u reads them downstream).
+  AGENT_ROUTER="off"; OR_MIN="${OPENROUTER_MIN_CREDIT:-0.25}"; OR_CREDITS=""; OR_CAPACITY_DOWN=""; RAIL_DEGRADED=""
+  MODEL_RAIL="$GW_RAIL"; MODEL_HARNESS="$HARNESS"; MODEL_MODEL="$MODEL"; STRUCK_MODEL="$MODEL"
+  [ "$HARNESS" = "opencode" ] || OPENCODE_MODEL="$MODEL"
+fi
+# <<<REPLAY:gateway-sessions<<<
+if [ -z "${GW_SESSIONS:-}" ]; then   # FU-270: everything to the model-id parse is the /route path (not re-indented)
 # Per-stack routerMode (ADR-096 P4 knob, 2026-08-03): the claim/mirror row sets the stack's
 # mode; an EXPLICIT AGENT_ROUTER env still wins (jail experiments). Chainless stacks (no
 # workerModel) declare authoritative — enforced below.
@@ -581,6 +710,7 @@ case "$MODEL_RAIL" in
 esac
 MODEL="$MODEL_MODEL"
 # <<<REPLAY:model-id-resolution<<<
+fi   # FU-270: end of the /route path (opened at the gateway-sessions block)
 
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -757,7 +887,13 @@ resolve_image_volumes
 # slot. An explicit --harness opencode still wins (operator override), and a model-derived
 # harness (claude rails) is untouched — this guard fires only on the baked default.
 # Delete this block when #990's fail-fast lands.
-if [ "${EGRESS_ENFORCE:-}" = "true" ] && [ "$HARNESS" = "opencode" ] && [ -z "${HARNESS_SET:-}" ]; then
+# FU-270: a /sessions ride's harness is the GATEWAY's answer and its env is that harness's — a
+# flip here would run goose on opencode's env (no provider at all). Said, not flipped; the
+# hostAliases stubs below still fast-fail the SDK-init hosts, and `--harness goose` is the
+# operator's lever (it narrows the gateway's walk to goose's dialect).
+if [ "${EGRESS_ENFORCE:-}" = "true" ] && [ "$HARNESS" = "opencode" ] && [ -z "${HARNESS_SET:-}" ] && [ -n "${GW_SESSIONS:-}" ]; then
+  echo "→ homelab#990 workaround NOT applied: the gateway dispatched opencode (its env is opencode's) — enforced egress rides the resolver stubs; pass --harness goose to avoid opencode here"
+elif [ "${EGRESS_ENFORCE:-}" = "true" ] && [ "$HARNESS" = "opencode" ] && [ -z "${HARNESS_SET:-}" ]; then
   echo "→ homelab#990 workaround: enforced egress + default harness → goose (opencode wedges on un-suppressible SDK-init fetches under enforcement)"
   HARNESS="goose"
 fi
@@ -1335,6 +1471,12 @@ if [ -n "${RECIPE:-}" ]; then
   # threading clause below — replay clauses run self-contained, so a shared helper defined at
   # the script top is invisible to them (proven by RC-127 in the first fixture run).
   case "$_claude_model" in opencode-go/deepseek-v4-flash) _go_ctx="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) _go_ctx="";; esac
+  # FU-270: a /sessions ride runs the model the gateway named (its ANTHROPIC_MODEL) and the window the
+  # policy declares for it (`context_tokens`; null = not declared → the harness default, never a guess).
+  if [ -n "${GW_SESSIONS:-}" ]; then
+    _claude_model="${GW_CLAUDE_MODEL:-$_claude_model}"
+    _go_ctx="${GW_CONTEXT_TOKENS:+CLAUDE_CODE_MAX_CONTEXT_TOKENS=${GW_CONTEXT_TOKENS} }"
+  fi
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_GOOSE_FLAG}";;
@@ -1737,7 +1879,9 @@ $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
         # refusal — and each one would otherwise leak this ConfigMap. Past pod-create the pod's
         # ownerReference owns it (patch below), so this fires ONLY while no pod of ours exists:
         # deleting a bundle a live pod has mounted is the failure mode this must not have.
-        trap '[ -n "${PF_CM_CREATED:-}" ] && [ -z "${PF_POD_CREATED:-}" ] && "$KUBECTL" $KUBE -n "$NS" delete configmap "${PF_CM_NAME}" --ignore-not-found >/dev/null 2>&1 || true' EXIT
+        # FU-270: `${GW_TRAP_HOOK:-}` chains the gateway session's release (set only after a /sessions
+        # dispatch) — this trap REPLACES the one the gateway-sessions block installed. Empty = no-op.
+        trap '[ -n "${PF_CM_CREATED:-}" ] && [ -z "${PF_POD_CREATED:-}" ] && "$KUBECTL" $KUBE -n "$NS" delete configmap "${PF_CM_NAME}" --ignore-not-found >/dev/null 2>&1 || true; ${GW_TRAP_HOOK:-}' EXIT
         # Record the ConfigMap mount for the pod manifest
         PF_CM_MOUNT=$'\n        - { name: context-bundle, mountPath: /work/context }'
         PF_CM_VOLUME=$'\n    - name: context-bundle\n      configMap: { name: '"${PF_CM_NAME}"$' }'
@@ -1778,8 +1922,9 @@ $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
   # the CR spec claimed 20:19, the real key died 18:40). <30 min of real life → refuse; the fix is
   # delete the CR + re-mint (the POST path). Operators without the field → check skipped.
   # claude harness: no OpenRouter key in play — the check would misfire on the standing key.
+  # FU-270: a /sessions ride holds no OpenRouter key either (the gateway holds the credentials).
   PF_EXP=""
-  [ "$HARNESS" = "claude" ] || PF_EXP="$("$KUBECTL" $KUBE -n "$NS" get openrouterkeys -o json 2>/dev/null \
+  [ "$HARNESS" = "claude" ] || [ -n "${GW_SESSIONS:-}" ] || PF_EXP="$("$KUBECTL" $KUBE -n "$NS" get openrouterkeys -o json 2>/dev/null \
     | jq -r --arg s "$SECRET" '[.items[] | select((.spec.secretName // (.metadata.name + "-openrouter")) == $s)][0].status.openrouter.expires_at // empty')"
   if [ -n "$PF_EXP" ]; then
     PF_EXP_S="$(date -d "$PF_EXP" +%s 2>/dev/null || echo 0)"
@@ -1830,7 +1975,8 @@ fi
 
 GOOSE_PROXY_ENV=""; PROXY_URL=""
 PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
-if [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
+# FU-270: not for a /sessions ride — OPENROUTER_HOST is LLM env, and the gateway's `env` is all of it.
+if [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ] && [ -z "${GW_SESSIONS:-}" ]; then
   GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
 fi
 
@@ -1891,6 +2037,11 @@ if [ "$HARNESS" = "claude" ]; then
     '.stacks[] | select([.repos[] | if type=="object" then .name else . end] | index($r)) | .name' \
     "$HERE/stacks.json" 2>/dev/null | head -1)}"
   CLAUDE_ENV=$'        - name: ANTHROPIC_BASE_URL\n          value: "'"$PROXY_URL"$'/anthropic"\n        - name: ANTHROPIC_AUTH_TOKEN\n          value: "ref:'"$NS"$'/claude-session"\n        - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\n          value: "1"\n        - name: CLAUDE_CODE_ENABLE_TELEMETRY\n          value: "1"\n        - name: OTEL_METRICS_EXPORTER\n          value: "otlp"\n        - name: OTEL_LOGS_EXPORTER\n          value: "otlp"\n        - name: OTEL_EXPORTER_OTLP_PROTOCOL\n          value: "http/protobuf"\n        - name: OTEL_EXPORTER_OTLP_ENDPOINT\n          value: "http://otel-collector.monitoring.svc.cluster.local:4318"\n        - name: OTEL_RESOURCE_ATTRIBUTES\n          value: "service.name=claude-code,role=worker,stack='"${STACK_LABEL:-none}"$',project='"$PROJECT"$'"'
+  # FU-270: a /sessions ride's ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_MODEL are the
+  # gateway's `env` (GW-SESSIONS-ENV, Secret-held) — drop the proxy pair; telemetry stays.
+  if [ -n "${GW_SESSIONS:-}" ]; then
+    CLAUDE_ENV="$(printf '%s\n' "$CLAUDE_ENV" | sed '/- name: ANTHROPIC_\(BASE_URL\|AUTH_TOKEN\)$/,+1d')"
+  fi
 fi
 
 # ADR-087 / FU-018 leg A (DEFAULT-ON for goose+proxy since 2026-07-10 — acceptance green on
@@ -1915,7 +2066,18 @@ CRED_BROKER_ENV=""; OC_INJECT=""
 if [ "$HARNESS" = "claude" ]; then
   OR_KEY_ENV=""   # subscription tier: no OpenRouter key at all — the pod's only cred is the claude ref
 fi
-if [ -n "$PROXY_URL" ] && [ "$HARNESS" = "claude" ]; then
+# FU-270: a /sessions ride holds NO OpenRouter key or ref and no proxy baseURL — its one LLM
+# credential is the gateway session token (Secret-held, GW-SESSIONS-TOKEN). Git stays on the broker
+# (UC-1: "the pod gets it from the broker, not from here").
+if [ -n "${GW_SESSIONS:-}" ]; then
+  OR_KEY_ENV=""
+  if [ -n "$PROXY_URL" ]; then
+    echo "→ cred-inject (gateway sessions): no OpenRouter key/ref; git tokens fetched per-op from the proxy (FU-089)"
+    CRED_BROKER_ENV="        - name: GIT_CRED_BROKER_URL
+          value: \"${PROXY_URL}/git-token?ns=${NS}\""
+  fi
+fi
+if [ -z "${GW_SESSIONS:-}" ] && [ -n "$PROXY_URL" ] && [ "$HARNESS" = "claude" ]; then
   # FU-089: claude rides join the broker path too — they used to lean on the standing in-ns
   # agent-git-token Secret (the optional fallback FU-089 deleted; found live: issue-135 r1,
   # clone died tokenless — the goose/opencode-only gate was the gap).
@@ -1923,7 +2085,7 @@ if [ -n "$PROXY_URL" ] && [ "$HARNESS" = "claude" ]; then
   CRED_BROKER_ENV="        - name: GIT_CRED_BROKER_URL
           value: \"${PROXY_URL}/git-token?ns=${NS}\""
 fi
-if [ -n "$PROXY_URL" ] && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode" ]; }; then
+if [ -z "${GW_SESSIONS:-}" ] && [ -n "$PROXY_URL" ] && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode" ]; }; then
   echo "→ cred-inject: pod holds ref:${NS}/${SECRET}; git tokens fetched per-op from the proxy (ADR-087)"
   OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           value: \"ref:${NS}/${SECRET}\""
@@ -1976,6 +2138,15 @@ fi
 OC_SETUP=""; OC_ENV=""
 # >>>REPLAY:opencode-session-config>>>
 if [ "$HARNESS" = "opencode" ]; then
+  # FU-270: a /sessions ride's provider + model ARE the gateway's OPENCODE_CONFIG_CONTENT, which
+  # opencode 1.18.35 deep-merges OVER this OPENCODE_CONFIG file (probed in-cluster 2026-10-17 with
+  # `opencode debug config`: file-only → mode+mcp; content-only → model+provider.gateway; both →
+  # all four keys). So the file keeps only what the gateway does not own (autoApprove, MCP): no
+  # OpenRouter pin, no proxy baseURL. (Not re-indented: the else arm closes after the pin echo.)
+  if [ -n "${GW_SESSIONS:-}" ]; then
+    OC_CONFIG=""
+    echo "→ opencode: provider + model = the gateway's OPENCODE_CONFIG_CONTENT (${OPENCODE_MODEL:-?}); no OpenRouter pin"
+  else
   PIN_JSON="$(python3 "$HERE/estimate_budget.py" --model "$MODEL" --lookup 2>/dev/null || true)"
   # order carries the ROUTING slug — OpenRouter matches tags ("deepinfra"), display names no-op.
   # homelab#876: opencode silently falls back to its default model if the -m provider is not recognized.
@@ -1993,6 +2164,7 @@ if [ "$HARNESS" = "opencode" ]; then
   [ -n "$OC_CONFIG" ] \
     && echo "→ opencode session pin: $(printf '%s' "$PIN_JSON" | jq -r '"\(.pinned_provider.provider) (effective $\(.pinned_provider.effective_per_mtok)/M in)"')" \
     || echo "→ opencode session pin unavailable (registry lookup failed / no eligible provider) — running unpinned"
+  fi   # FU-270: end of the non-gateway pin arm
   # FU-018 opencode leg: under cred injection, route opencode's OpenRouter traffic through the
   # egress proxy (deep-merged into the session config so the pin above survives) — the proxy
   # resolves the ref key exactly as for goose. Without injection opencode stays direct.
@@ -2000,7 +2172,7 @@ if [ "$HARNESS" = "opencode" ]; then
   # (baseURL), opencode skips its env auto-detection and sends NO Authorization header at all —
   # the proxy 401s "Missing Authentication header" (validation ride adhoc-fu018, 2026-07-16).
   # The {env:...} placeholder resolves in-pod, so the ref never lands in the config file either.
-  if [ -n "$OC_INJECT" ]; then
+  if [ -n "$OC_INJECT" ] && [ -z "${GW_SESSIONS:-}" ]; then   # FU-270: never the proxy baseURL on a gateway ride
     OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" --arg u "${PROXY_URL}/api/v1" '
       ($base // {"$schema": "https://opencode.ai/config.json"})
       * {provider: {openrouter: {options: {baseURL: $u, apiKey: "{env:OPENROUTER_API_KEY}"}}}}')"
@@ -2091,6 +2263,11 @@ elif [ "$HARNESS" = "claude" ];  then
   case "$MODEL" in opencode-go/*) AGENT_RAIL="opencode-go";; *) AGENT_RAIL="subscription";; esac
 else                                  AGENT_RAIL="openrouter"; fi
 # <<<REPLAY:agent-rail<<<
+# FU-270: a /sessions ride's rail is the gateway's, in this env's existing vocabulary (the cost
+# dashboards and the pod label key on these strings, so no new value is coined for the canary).
+if [ -n "${GW_SESSIONS:-}" ]; then
+  case "$GW_RAIL" in opencode) AGENT_RAIL="opencode-go";; anthropic) AGENT_RAIL="subscription";; *) AGENT_RAIL="$GW_RAIL";; esac
+fi
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
 # >>>REPLAY:transcript-mirror-probe>>>
@@ -2445,7 +2622,9 @@ fi
 # proceed as dispatched; Anthropic latched but Go clear → FAIL OVER to the Go rail (leg 2, #439 —
 # the worker was the last gate that consulted the Anthropic latch alone); both latched → defer.
 # All three probes are fail-open burn-savers: the proxy 429s a genuinely latched window.
-if [ "$HARNESS" = "claude" ]; then
+# FU-270: not for a /sessions ride — the gateway's admission already walked count + window + latch
+# for the rail it dispatched (GW-SESSIONS-ADMIT §Capacity); the old proxy's view is not its rail's.
+if [ "$HARNESS" = "claude" ] && [ -z "${GW_SESSIONS:-}" ]; then
   case "$MODEL" in
     opencode-go/*)
       _go_reply="$(curl -fsS --max-time 5 "${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}/opencode-limit" 2>/dev/null)" || _go_reply=""
@@ -2648,6 +2827,38 @@ case "$TASK" in issue-[0-9]*|pr-[0-9]*)
 # FU-160 phase 1 of 2. Everything above this line is the launcher's DETERMINISTIC dispatch cost —
 # the router consult, the rail probe, the card + recipe build, the pre-flight guards, the
 # subscription latch, the credit gate, the stack-cache probe, the argv ceiling. It closes here
+# ── FU-270: the pod's LLM env — today's two goose lines, or the gateway's `env` VERBATIM ────────
+# GW-SESSIONS-ENV: the dispatch `env` is the pod's COMPLETE LLM environment and the launcher adds
+# nothing LLM-shaped. Its values carry the session token (a credential, GW-SESSIONS-TOKEN), so they
+# never become literal `value:`s in the manifest: they go into ONE per-ride Secret (stdin to
+# kubectl, never argv) and the pod reads every key through a secretKeyRef. The Secret dies with the
+# session (gw_release) and, as the belt, with the pod (ownerReference patched after create).
+# >>>REPLAY:gateway-env-secret>>>
+LLM_ENV=$'        - name: GOOSE_PROVIDER\n          value: "openrouter"\n        - name: GOOSE_MODEL\n          value: "'"${GOOSE_MODEL}"'"'
+if [ -n "${GW_SESSIONS:-}" ]; then
+  GW_SECRET="${POD}-gateway-env"
+  LLM_ENV=""
+  for _gw_k in $(printf '%s' "$GW_ENV_JSON" | jq -r 'keys[]'); do
+    LLM_ENV="${LLM_ENV:+${LLM_ENV}
+}        - name: ${_gw_k}
+          valueFrom:
+            secretKeyRef: { name: ${GW_SECRET}, key: ${_gw_k} }"
+  done
+  if printf '%s' "$GW_ENV_JSON" | jq -c --arg name "$GW_SECRET" --arg ns "$NS" --arg sid "$GW_SESSION_ID" \
+       '{apiVersion: "v1", kind: "Secret", type: "Opaque",
+         metadata: {name: $name, namespace: $ns,
+                    labels: {app: "agent-session", "homelab.teststuff.net/gateway-session": $sid}},
+         stringData: .}' \
+     | "$KUBECTL" $KUBE -n "$NS" create -f - >/dev/null; then
+    GW_SECRET_CREATED=1
+    echo "→ gateway(sessions): pod LLM env = Secret ${GW_SECRET} ($(printf '%s' "$GW_ENV_JSON" | jq -r 'keys | join(",")')) — no literal token in the manifest"
+  else
+    echo "→ gateway(sessions): defer — [env-secret-create-failed: ${NS}/${GW_SECRET}] retry_after=?s — FAIL CLOSED, releasing and not dispatching." >&2
+    exit 1   # the EXIT trap releases the session
+  fi
+  SUB_LABEL="${SUB_LABEL}, \"homelab.teststuff.net/gateway-session\": \"${GW_SESSION_ID}\""
+fi
+# <<<REPLAY:gateway-env-secret<<<
 # because past this point a pod exists and the cost stops being ours.
 run_phase dispatch-gates
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
@@ -2810,10 +3021,7 @@ ${NIX_ENV}
         # goose reads provider+model from env; opencode auto-detects OPENROUTER_API_KEY and takes
         # the model as the full vendor/model id (e.g. \`openrouter/vendor/model\`). Using the
         # stripped MODEL id (e.g. \`-m \$MODEL\`) silently falls back to opencode's default.
-        - name: GOOSE_PROVIDER
-          value: "openrouter"
-        - name: GOOSE_MODEL
-          value: "${GOOSE_MODEL}"
+${LLM_ENV}
         # goose→OpenRouter via the ADR-081 egress proxy (emitted only for goose, see above).
 ${GOOSE_PROXY_ENV}
         - name: MODEL
@@ -2873,6 +3081,12 @@ ${CLAUDE_ENV}
 EOF
 
 PF_POD_CREATED="1"
+# FU-270: the env Secret is owned by the pod from here — a launcher killed mid-follow (the cluster
+# dispatch path's normal end, see FU-160 above) still leaves nothing behind once the pod is reaped.
+if [ -n "${GW_SECRET_CREATED:-}" ]; then
+  _gw_uid="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
+  [ -n "$_gw_uid" ] && "$KUBECTL" $KUBE -n "$NS" patch secret "$GW_SECRET" --type=merge       -p "{\"metadata\":{\"ownerReferences\":[{\"apiVersion\":\"v1\",\"kind\":\"Pod\",\"name\":\"${POD}\",\"uid\":\"${_gw_uid}\",\"blockOwnerDeletion\":false}]}}" >/dev/null 2>&1     || echo "→ gateway(sessions): ownerReference patch on ${GW_SECRET} failed — the launcher's release still deletes it" >&2
+fi
 if [ -n "${PF_CM_CREATED:-}" ]; then
   PF_POD_UID="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
   if [ -n "$PF_POD_UID" ]; then
@@ -2919,6 +3133,8 @@ if [ -n "$RUN_CMD" ]; then
   # classification below has something to read.
   [ -s "$RUNLOG" ] || "$KUBECTL" $KUBE -n "$NS" logs "${POD}" > "$RUNLOG" 2>/dev/null || true
   echo "→ run finished. delete with: kubectl -n ${NS} delete pod ${POD}"
+  # FU-270 (GW-SESSIONS-RELEASE): the ride is over — free the rail slot and refuse the token now.
+  gw_release
   # Clean up the context-prefetch ConfigMap (homelab#1205)
   if [ -n "${PF_CM_CREATED}" ]; then
     "$KUBECTL" $KUBE -n "$NS" delete configmap "${POD}-context" --ignore-not-found >/dev/null 2>&1 || true
@@ -3490,6 +3706,13 @@ if [ -n "$RUN_CMD" ]; then
   rm -f "$RUNLOG"
 else
   ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -c 'cd /work/repo; exec bash -l'"
+  # FU-270: an interactive pod outlives this launcher, so its session must too — disarm the release
+  # (the EXIT trap would otherwise refuse the token under a live shell). The session TTL ends it; the
+  # env Secret goes with the pod (ownerReference).
+  if [ -n "${GW_SESSIONS:-}" ] && [ -n "${GW_SESSION_ID:-}" ]; then
+    echo "→ gateway(sessions): interactive — session ${GW_SESSION_ID} is NOT released by this launcher; it expires at ${GW_EXPIRES_AT} (session TTL)"
+    GW_SESSION_ID=""; GW_SECRET_CREATED=""
+  fi
   echo "→ pod ${POD} ready at /work/repo. harnesses are wired to OpenRouter (model: ${MODEL}); try:"
   echo "    goose run -t \"<task>\"        # or: goose run --recipe .agents/fix.yaml --params issue=N"
   echo "    opencode -m \"\$MODEL\"          # TUI   |   opencode run -m \"\$MODEL\" \"<task>\"   # headless"

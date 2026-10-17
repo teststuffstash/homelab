@@ -1,0 +1,9 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions {"stack":"platform","role":"worker","task":"adhoc","round":1,"rail":"opencode"}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd
+OUT → gateway(sessions): dispatch opencode-go/deepseek-v4-flash [rail=opencode,harness=opencode,session=0123abcd,context_tokens=1000000] (task=adhoc, round=1)
+OUT GW_SESSIONS='1' HARNESS='opencode' MODEL='opencode-go/deepseek-v4-flash'
+OUT GW_RAIL='opencode' GW_CONTEXT_TOKENS='1000000' GW_CLAUDE_MODEL='' OPENCODE_MODEL='gateway/deepseek-v4-flash'
+OUT AGENT_ROUTER='off' OR_CREDITS='' STRUCK_MODEL='opencode-go/deepseek-v4-flash'
+OUT GW_ENV keys: OPENCODE_CONFIG_CONTENT
+OUT → gateway(sessions): released 0123abcd
+RC 0
