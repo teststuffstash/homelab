@@ -6,12 +6,15 @@
 | claude: the auth token is the session token | claude | anthropic | claude/sonnet | ANTHROPIC_AUTH_TOKEN | the session token |
 | claude: the model name is the alias the CLI resolves | claude | anthropic | claude/sonnet | ANTHROPIC_MODEL | sonnet |
 | claude on the Go rail: same three vars, Go's model name | claude | opencode | opencode-go/claude-sonnet-4-6 | ANTHROPIC_MODEL | claude-sonnet-4-6 |
-| opencode: the base url is this gateway's openai path (verify) | opencode | opencode | opencode-go/deepseek-v4-flash | OPENAI_BASE_URL | <self>/openai/v1 |
-| opencode: the api key is the session token (verify) | opencode | opencode | opencode-go/deepseek-v4-flash | OPENAI_API_KEY | the session token |
-| opencode: the model var carries the bare id (verify) | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_MODEL | deepseek-v4-flash |
-| goose: the base url is this gateway's openai path (verify) | goose | openrouter | deepseek/deepseek-v4-flash | OPENAI_BASE_URL | <self>/openai/v1 |
-| goose: the api key is the session token (verify) | goose | openrouter | deepseek/deepseek-v4-flash | OPENAI_API_KEY | the session token |
-| goose: the model var carries the bare id (verify) | goose | openrouter | deepseek/deepseek-v4-flash | GOOSE_MODEL | deepseek/deepseek-v4-flash |
+| opencode: an openai-compatible provider block | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.npm | @ai-sdk/openai-compatible |
+| opencode: the provider's base url is this gateway's openai path | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.options.baseURL | <self>/openai/v1 |
+| opencode: the provider's api key is the session token | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.options.apiKey | the session token |
+| opencode: the session model is the bare id under that provider | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .model | gateway/deepseek-v4-flash |
+| opencode: the title model is the same id | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .small_model | gateway/deepseek-v4-flash |
+| goose: the provider is goose's openai provider | goose | openrouter | deepseek/deepseek-v4-flash | GOOSE_PROVIDER | openai |
+| goose: the base url is this gateway's openai path | goose | openrouter | deepseek/deepseek-v4-flash | OPENAI_BASE_URL | <self>/openai/v1 |
+| goose: the api key is the session token | goose | openrouter | deepseek/deepseek-v4-flash | OPENAI_API_KEY | the session token |
+| goose: the model var carries the bare id | goose | openrouter | deepseek/deepseek-v4-flash | GOOSE_MODEL | deepseek/deepseek-v4-flash |
 | codex: the base url is this gateway's openai path (wrapper-rendered) | codex | codex | codex/fixture-model | OPENAI_BASE_URL | <self>/openai/v1 |
 | codex: the api key is the session token, read through env_key | codex | codex | codex/fixture-model | OPENAI_API_KEY | the session token |
 | codex: the model var carries the bare id (wrapper-rendered) | codex | codex | codex/fixture-model | CODEX_MODEL | fixture-model |
@@ -19,8 +22,9 @@
 | description | harness | vars present | vars absent |
 |---|---|---|---|
 | claude's env is exactly three vars | claude | ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL | ANTHROPIC_API_KEY, any OPENAI_*, any OPENROUTER_* |
-| the openai-dialect env never carries an anthropic var | opencode | OPENAI_BASE_URL OPENAI_API_KEY OPENCODE_MODEL | any ANTHROPIC_*, OPENROUTER_API_KEY |
-| no env value is a real key | any | every value is the token, a URL or a model name | any value matching the GW-REDACT patterns |
+| opencode's env is exactly the provider config | opencode | OPENCODE_CONFIG_CONTENT | any ANTHROPIC_*, any OPENAI_*, any OPENROUTER_* |
+| goose's env is exactly four vars | goose | OPENAI_BASE_URL OPENAI_API_KEY GOOSE_PROVIDER GOOSE_MODEL | any ANTHROPIC_*, any OPENROUTER_* |
+| no env value is a real key | any | every value (each leaf of opencode's config) is the token, a URL, a model name or a provider/package name | any value matching the GW-REDACT patterns |
 | codex's env is exactly three vars | codex | OPENAI_BASE_URL OPENAI_API_KEY CODEX_MODEL | any ANTHROPIC_*, any OPENROUTER_* |
 
 | description | model (policy) | context_tokens |
@@ -30,6 +34,8 @@
 """
 
 from __future__ import annotations
+
+import json
 
 import pytest
 
@@ -50,12 +56,19 @@ VAR_ROWS = [
     ("claude: the auth token is the session token", CLAUDE, "ANTHROPIC_AUTH_TOKEN", "<token>"),
     ("claude: the model name is the alias the CLI resolves", CLAUDE, "ANTHROPIC_MODEL", "sonnet"),
     ("claude on the Go rail: same three vars, Go's model name", CLAUDE_GO, "ANTHROPIC_MODEL", "claude-sonnet-4-6"),
-    ("opencode: the base url is this gateway's openai path (verify)", OPENCODE, "OPENAI_BASE_URL", f"{SELF_URL}/openai/v1"),
-    ("opencode: the api key is the session token (verify)", OPENCODE, "OPENAI_API_KEY", "<token>"),
-    ("opencode: the model var carries the bare id (verify)", OPENCODE, "OPENCODE_MODEL", "deepseek-v4-flash"),
-    ("goose: the base url is this gateway's openai path (verify)", GOOSE, "OPENAI_BASE_URL", f"{SELF_URL}/openai/v1"),
-    ("goose: the api key is the session token (verify)", GOOSE, "OPENAI_API_KEY", "<token>"),
-    ("goose: the model var carries the bare id (verify)", GOOSE, "GOOSE_MODEL", "deepseek/deepseek-v4-flash"),
+    ("goose: the provider is goose's openai provider", GOOSE, "GOOSE_PROVIDER", "openai"),
+    ("goose: the base url is this gateway's openai path", GOOSE, "OPENAI_BASE_URL", f"{SELF_URL}/openai/v1"),
+    ("goose: the api key is the session token", GOOSE, "OPENAI_API_KEY", "<token>"),
+    ("goose: the model var carries the bare id", GOOSE, "GOOSE_MODEL", "deepseek/deepseek-v4-flash"),
+]
+
+# opencode's ONE var is a JSON config: each row reads one path of the parsed value
+OPENCODE_ROWS = [
+    ("opencode: an openai-compatible provider block", ("provider", "gateway", "npm"), "@ai-sdk/openai-compatible"),
+    ("opencode: the provider's base url is this gateway's openai path", ("provider", "gateway", "options", "baseURL"), f"{SELF_URL}/openai/v1"),
+    ("opencode: the provider's api key is the session token", ("provider", "gateway", "options", "apiKey"), "<token>"),
+    ("opencode: the session model is the bare id under that provider", ("model",), "gateway/deepseek-v4-flash"),
+    ("opencode: the title model is the same id", ("small_model",), "gateway/deepseek-v4-flash"),
 ]
 
 
@@ -69,9 +82,26 @@ async def test_env_var(gw, body, var, value):
         assert doc["env"][var] == expected, doc["env"]
 
 
+@pytest.mark.parametrize(("path", "value"), [r[1:] for r in OPENCODE_ROWS], ids=[r[0] for r in OPENCODE_ROWS])
+async def test_opencode_config(gw, path, value):
+    world()
+    with when(f"POST /sessions body {OPENCODE} → dispatch"):
+        doc = await open_session(gw, **OPENCODE)
+    with when(f"read OPENCODE_CONFIG_CONTENT as JSON at path {path}"):
+        cfg = json.loads(doc["env"]["OPENCODE_CONFIG_CONTENT"])
+        actual = cfg
+        for key in path:
+            actual = actual[key]
+        expected = doc["session"]["token"] if value == "<token>" else value
+        shown = "<token>" if actual == doc["session"]["token"] else actual
+    with then(f"OPENCODE_CONFIG_CONTENT at path {path} = value {value}", **{".".join(path): {"expected": value, "actual": shown}}):
+        assert actual == expected, cfg
+
+
 SHAPE_ROWS = [
     ("claude's env is exactly three vars", CLAUDE, {"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL"}, ("ANTHROPIC_API_KEY", "OPENAI_", "OPENROUTER_")),
-    ("the openai-dialect env never carries an anthropic var", OPENCODE, {"OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENCODE_MODEL"}, ("ANTHROPIC_", "OPENROUTER_API_KEY")),
+    ("opencode's env is exactly the provider config", OPENCODE, {"OPENCODE_CONFIG_CONTENT"}, ("ANTHROPIC_", "OPENAI_", "OPENROUTER_")),
+    ("goose's env is exactly four vars", GOOSE, {"OPENAI_BASE_URL", "OPENAI_API_KEY", "GOOSE_PROVIDER", "GOOSE_MODEL"}, ("ANTHROPIC_", "OPENROUTER_")),
 ]
 
 
@@ -94,14 +124,33 @@ async def test_no_env_value_is_a_real_key(gw):
     with when("POST /sessions for each harness shape: claude, claude on Go, opencode, goose"):
         for body in (CLAUDE, CLAUDE_GO, OPENCODE, GOOSE):
             docs.append(await open_session(gw, **body))
-    with then("every env value is the session token, an http:// URL or the model id — never a credential-shaped value"):
+    with then("every env value (each leaf of opencode's config) is the session token, a URL, the model id, a provider/package name — never a credential-shaped value"):
         attach_json("verdict: env values per harness (token shown as <token>)",
                     {f"{d['harness']} on {d['rail']}": {k: ("<token>" if v == d["session"]["token"] else v) for k, v in d["env"].items()} for d in docs})
         for doc in docs:
             token = doc["session"]["token"]
-            for k, v in doc["env"].items():
-                assert v == token or v.startswith("http://") or v in (doc["model"], doc["model"].split("/", 1)[-1]), (k, v)
+            wire = doc["model"].split("/", 1)[-1]
+            for k, v in _env_leaves(doc["env"]):
+                assert v == token or v.startswith(("http://", "https://opencode.ai/", "@ai-sdk/")) or v in (doc["model"], wire, f"gateway/{wire}", "openai"), (k, v)
                 assert v == token or not looks_like_credential(v), (k, v)
+
+
+def _env_leaves(env: dict) -> list[tuple[str, str]]:
+    """Every string an env carries: a plain var's value, and each leaf (key and value) of opencode's JSON config."""
+    out: list[tuple[str, str]] = []
+    for k, v in env.items():
+        if k != "OPENCODE_CONFIG_CONTENT":
+            out.append((k, v))
+            continue
+        stack = [("OPENCODE_CONFIG_CONTENT", json.loads(v))]
+        while stack:
+            path, node = stack.pop()
+            if isinstance(node, dict):
+                stack.extend((f"{path}.{ck}", cv) for ck, cv in node.items())
+                out.extend((f"{path}.{ck}<key>", ck) for ck in node if ck not in ("$schema", "model", "small_model", "provider", "gateway", "npm", "options", "baseURL", "apiKey", "models"))
+            elif isinstance(node, str):
+                out.append((path, node))
+    return out
 
 
 CODEX_ROWS = [

@@ -9,6 +9,7 @@ never an HTTP error; the HTTP errors are 400 (malformed body, harness×rail mism
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import math
 import secrets
@@ -114,9 +115,12 @@ def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str
     """The pod's complete LLM env for `harness`, pointing at THIS gateway (GW-SESSIONS-ENV).
 
     `claude` gets exactly ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_MODEL (the names
-    agents/agent-session.sh renders today); the openai-dialect harnesses get OPENAI_BASE_URL /
-    OPENAI_API_KEY plus their own model var (OPENCODE_MODEL / GOOSE_MODEL) carrying the wire id —
-    the specs flag those rows ⚖ "verify during implementation" against the live harnesses.
+    agents/agent-session.sh renders today). The openai-dialect harnesses get what their PINNED CLI
+    was observed to read (agent-base 2026.10.15, in-cluster probe 2026-10-17 — the specs rows):
+    goose 1.49.0 reads OPENAI_BASE_URL / OPENAI_API_KEY / GOOSE_MODEL only once GOOSE_PROVIDER
+    names the openai provider; opencode 1.18.35 ignores OPENCODE_MODEL and its built-in openai
+    provider speaks /responses, so it gets ONE var — OPENCODE_CONFIG_CONTENT, an
+    openai-compatible provider block carrying the base url, the token and the model.
     """
     if harness == "claude":
         return {
@@ -124,6 +128,8 @@ def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str
             "ANTHROPIC_AUTH_TOKEN": token,
             "ANTHROPIC_MODEL": wire,
         }
+    if harness == "opencode":
+        return {"OPENCODE_CONFIG_CONTENT": json.dumps(opencode_config(f"{self_url}/openai/v1", token, wire), separators=(",", ":"))}
     env = {"OPENAI_BASE_URL": f"{self_url}/openai/v1", "OPENAI_API_KEY": token}
     if harness == "codex":
         # The CLI reads neither the base URL nor the model from env (observed 0.161.0, compat.py):
@@ -131,10 +137,31 @@ def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str
         # env_key = "OPENAI_API_KEY" — rendered by the harness wrapper FROM these values (⚖).
         env["CODEX_MODEL"] = wire
     elif harness == "goose":
+        env["GOOSE_PROVIDER"] = "openai"
         env["GOOSE_MODEL"] = wire
-    elif harness == "opencode":
-        env["OPENCODE_MODEL"] = wire
     return env
+
+
+OPENCODE_PROVIDER_ID = "gateway"
+
+
+def opencode_config(base_url: str, token: str, wire: str) -> dict:
+    """The opencode session config (GW-SESSIONS-ENV): one openai-compatible provider pointing at
+    this gateway, the session token as its key, the wire id as BOTH the main and the small
+    (title) model — every request is resolved to the session's model anyway (GW-MODEL-RESOLVE)."""
+    model = f"{OPENCODE_PROVIDER_ID}/{wire}"
+    return {
+        "$schema": "https://opencode.ai/config.json",
+        "model": model,
+        "small_model": model,
+        "provider": {
+            OPENCODE_PROVIDER_ID: {
+                "npm": "@ai-sdk/openai-compatible",
+                "options": {"baseURL": base_url, "apiKey": token},
+                "models": {wire: {}},
+            }
+        },
+    }
 
 
 class SessionService:

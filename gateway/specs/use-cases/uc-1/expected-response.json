@@ -1,5 +1,5 @@
 {
-  "_comment": "UC-1 Q1 expected answer. Guillemet values are produced by the run: tests assert shape (token ^gws_[A-Za-z0-9_-]{32}$; expires_at = created_at + policy session_ttl_s = 14400 s) and that env.OPENAI_API_KEY equals session.token. The model is the policy's rails.opencode.models.standard; context_tokens is the policy's declared window for it.",
+  "_comment": "UC-1 Q1 expected answer. Guillemet values are produced by the run: tests assert shape (token ^gws_[A-Za-z0-9_-]{32}$; expires_at = created_at + policy session_ttl_s = 14400 s) and that the provider apiKey inside env.OPENCODE_CONFIG_CONTENT equals session.token. The model is the policy's rails.opencode.models.standard; context_tokens is the policy's declared window for it.",
   "decision": "dispatch",
   "session": {
     "id": "«id»",
@@ -10,9 +10,7 @@
   "harness": "opencode",
   "model": "opencode-go/deepseek-v4-flash",
   "env": {
-    "OPENAI_BASE_URL": "http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1",
-    "OPENAI_API_KEY": "gws_«the same token»",
-    "OPENCODE_MODEL": "deepseek-v4-flash"
+    "OPENCODE_CONFIG_CONTENT": "{\"$schema\":\"https://opencode.ai/config.json\",\"model\":\"gateway/deepseek-v4-flash\",\"small_model\":\"gateway/deepseek-v4-flash\",\"provider\":{\"gateway\":{\"npm\":\"@ai-sdk/openai-compatible\",\"options\":{\"baseURL\":\"http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1\",\"apiKey\":\"gws_«the same token»\"},\"models\":{\"deepseek-v4-flash\":{}}}}}"
   },
   "context_tokens": 1000000
 }
