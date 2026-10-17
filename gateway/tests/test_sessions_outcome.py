@@ -47,6 +47,9 @@ The store (policy-default):
 | the gateway writes its own transport class | the session's request answered upstream-401 || [{…, auth-storm, cell, gateway}] | {class=auth-storm,source=gateway} 1 |
 | one transport strike per session and class | three upstream-500 answers on one session || one provider-5xx strike | {class=provider-5xx,source=gateway} 1 |
 | a 429 is a cooldown, not a strike | the session's request answered upstream-429 || [] | — |
+| a read timeout is a transport strike | upstream-slow (504) on the session || [{…, timeout, cell, gateway}] | {class=timeout,source=gateway} 1 |
+| an unreachable upstream is a transport strike | upstream-down (502) on the session || [{…, provider-5xx, cell, gateway}] | {class=provider-5xx,source=gateway} 1 |
+| a policy refusal is a transport strike, not a rejected credential | upstream-403-refused on the session || [{…, refused, cell, gateway}] | {class=refused,source=gateway} 1 |
 | a cut stream is a transport strike | upstream-stream-truncated on the session || [{…, stream-incomplete, cell, gateway}] | {class=stream-incomplete,source=gateway} 1 |
 | a clean outcome refutes the task's counted strikes | the session's request answered upstream-500 (a gateway provider-5xx), then the consumer reports clean || [] (refuted 1) | — |
 | a bare 2xx refutes nothing | upstream-500, then upstream-ok on the same session || [provider-5xx] | — |
@@ -169,13 +172,13 @@ async def test_who_may_report(enforce_gw, who, body, status, result):
     world("policy-enforce")
     with given("a worker session the platform loop admitted"):
         doc = await _admit(enforce_gw)
-    with when(f"POST /sessions/{{id}}/outcome {body} presenting {who}"):
+    with when(f"POST /sessions/{{id}}/outcome body = {body!r} presenting who = {who!r}"):
         r = await _report(enforce_gw, doc["session"]["id"], body, who)
-    then_eq("status", r.status_code, status)
+    then_eq("status", r.status_code, status, claim=f"status = {status!r}")
     if status == 200:
-        then_eq("strike", r.json()["strike"], result)
+        then_eq("result", r.json()["strike"], result, claim=f"result (the strike) = {result!r}")
     else:
-        then_eq("code", err(r), result, claim=f"error code = {result}")
+        then_eq("result", err(r), result, claim=f"result (the error code) = {result!r}")
 
 
 async def test_unknown_id_after_caller(enforce_gw):
@@ -194,8 +197,10 @@ BODY_ROWS = [
     ("a missing class", {}, "malformed-body"),
     ("an unknown key", {"class": "no-verdict", "verdict": "APPROVE"}, "malformed-body"),
     ("a credential-shaped evidence value is refused", {"class": "no-verdict", "evidence": {"log": "auth sk-or-v1-FAKE0000"}}, "outcome-evidence-refused"),
-    ("evidence over 4096 bytes", {"class": "no-verdict", "evidence": {"log": "x" * 5000}}, "malformed-body"),
+    # the 5000-byte value is built in the case (EVIDENCE_5000): the row's parameter stays its short name
+    ("evidence over 4096 bytes", {"class": "no-verdict", "evidence": "EVIDENCE_5000"}, "malformed-body"),
 ]
+EVIDENCE_5000 = {"log": "x" * 5000}
 
 
 @pytest.mark.parametrize(("body", "code"), [r[1:] for r in BODY_ROWS], ids=[r[0] for r in BODY_ROWS])
@@ -203,11 +208,11 @@ async def test_outcome_body(gw, store, body, code):
     world()
     with given("a worker session"):
         doc = await _admit(gw, who=None)
-    shown = {k: (v if k != "evidence" else "<the row's evidence>") for k, v in body.items()}
-    with when(f"POST /sessions/{{id}}/outcome {shown}"):
-        r = await _report(gw, doc["session"]["id"], body, None)
+    sent = {**body, "evidence": EVIDENCE_5000} if body.get("evidence") == "EVIDENCE_5000" else body
+    with when(f"POST /sessions/{{id}}/outcome body = {body!r}" + (" (EVIDENCE_5000 = {log: 5000 × 'x'})" if sent is not body else "")):
+        r = await _report(gw, doc["session"]["id"], sent, None)
     then_eq("status", r.status_code, 400)
-    then_eq("code", err(r), code, claim=f"error code = {code}")
+    then_eq("code", err(r), code, claim=f"code = {code!r}")
     with then("nothing stored: no strike on the task"):
         check("strikes", _strikes(store), [])
 
@@ -226,16 +231,16 @@ async def test_outcome_window(gw, clock, order, advance, status, code):
     with given("a worker session"):
         doc = await _admit(gw, who=None)
     sid = doc["session"]["id"]
-    if order == "after":
-        with given(f"it is released, then {advance} s pass"):
+    with given(f"order = {order!r}, advance = {advance!r}: " + ("the session stays active" if order == "before"
+                                                                 else f"it is released, then {advance} s pass")):
+        if order == "after":
             with quiet():
                 await gw.delete(f"/sessions/{sid}")
             clock.advance(advance)
     with when("POST /sessions/{id}/outcome {class: no-verdict}"):
         r = await _report(gw, sid, {"class": "no-verdict"}, None)
-    then_eq("status", r.status_code, status)
-    if code:
-        then_eq("code", err(r), code, claim=f"error code = {code}")
+    then_eq("status", r.status_code, status, claim=f"status = {status!r}")
+    then_eq("code", err(r) if r.status_code >= 400 else None, code, claim=f"code = {code!r}")
 
 
 async def test_same_outcome_twice_is_replay(gw, store):
@@ -276,6 +281,12 @@ STORE_ROWS = [
     ("one transport strike per session and class", [("ride", "upstream-500"), ("ride", "upstream-500"), ("ride", "upstream-500")],
      [{**CELL, "class": "provider-5xx", "scope": "cell", "source": "gateway"}], ("provider-5xx", "gateway", 1)),
     ("a 429 is a cooldown, not a strike", [("ride", "upstream-429")], [], None),
+    ("a read timeout is a transport strike", [("ride", "upstream-slow")], [{**CELL, "class": "timeout", "scope": "cell", "source": "gateway"}],
+     ("timeout", "gateway", 1)),
+    ("an unreachable upstream is a transport strike", [("ride", "upstream-down")],
+     [{**CELL, "class": "provider-5xx", "scope": "cell", "source": "gateway"}], ("provider-5xx", "gateway", 1)),
+    ("a policy refusal is a transport strike, not a rejected credential", [("ride", "upstream-403-refused")],
+     [{**CELL, "class": "refused", "scope": "cell", "source": "gateway"}], ("refused", "gateway", 1)),
     ("a cut stream is a transport strike", [("stream", "upstream-stream-truncated")],
      [{**CELL, "class": "stream-incomplete", "scope": "cell", "source": "gateway"}], ("stream-incomplete", "gateway", 1)),
     ("a bare 2xx refutes nothing", [("ride", "upstream-500"), ("ride", "upstream-ok")],
@@ -283,42 +294,55 @@ STORE_ROWS = [
 ]
 
 
-async def _act(gw, upstreams, doc, step):
+async def _act(gw, upstreams, doc, step, transport=None):
     kind, what = step
     if kind == "report":
         return await _report(gw, doc["session"]["id"], {"class": what}, None)
-    upstreams["opencode"].behaviour = what
+    if what in ("upstream-slow", "upstream-down"):  # the transport-level worlds (RailTransport)
+        (transport.slow if what == "upstream-slow" else transport.unreachable).add("opencode")
+    else:
+        upstreams["opencode"].behaviour = what
     with quiet():
         r = await gw.post("/openai/v1/chat/completions", headers=bearer(doc),
                           json={"messages": [], **({"stream": True} if kind == "stream" else {})})
     upstreams["opencode"].behaviour = "upstream-ok"
+    if transport is not None:
+        transport.slow.discard("opencode")
+        transport.unreachable.discard("opencode")
     attach_json(f"the session's request answered {what} → {r.status_code}", {"status": r.status_code})
     return r
 
 
 @pytest.mark.parametrize(("steps", "strikes", "series"), [r[1:] for r in STORE_ROWS], ids=[r[0] for r in STORE_ROWS])
-async def test_store(gw, upstreams, store, steps, strikes, series):
+async def test_store(gw, upstreams, transport, store, steps, strikes, series):
     world(upstream=next((w for k, w in steps if k != "report"), "upstream-ok"))
-    with given("a worker session (opencode, opencode-go/deepseek-v4-flash)"):
+    with given(f"steps = {steps!r}: a worker session (opencode, opencode-go/deepseek-v4-flash)"):
         doc = await open_session(gw, **WORKER)
     for step in steps[:-1]:
         with given(f"arrange: {step[0]} {step[1]}"):
-            await _act(gw, upstreams, doc, step)
+            await _act(gw, upstreams, doc, step, transport)
     with when(f"{steps[-1][0]} {steps[-1][1]}"):
-        await _act(gw, upstreams, doc, steps[-1])
-    with then(f"counted strikes on task {TASK} = {strikes}"):
+        await _act(gw, upstreams, doc, steps[-1], transport)
+    with then(f"strikes = {strikes!r} (the counted strikes on task {TASK})"):
         check("strikes", _strikes(store), strikes)
-    if series:
-        with then(f"gateway_strikes_total{{class={series[0]},source={series[1]}}} = {series[2]}"):
+    with then(f"series = {series!r} (gateway_strikes_total{{class, source}} = n)"):
+        if series:
             check("series", await _strike_series(gw, series[0], series[1]), series[2])
+    if any(w == "upstream-403-refused" for _, w in steps):
+        with then("the credential is not rejected: gateway_credentials_rejected{rail=opencode} = 0"):
+            with quiet():
+                text = (await gw.get("/metrics")).text
+            line = next(x for x in text.splitlines() if x.startswith('gateway_credentials_rejected{rail="opencode"}'))
+            check("gateway_credentials_rejected{rail=opencode}", float(line.split()[-1]), 0)
 
 
 async def test_clean_refutes(gw, upstreams, store):
     """row: a clean outcome refutes the task's counted strikes"""
     world(upstream="upstream-500")
     with given("a worker session whose request answered upstream-500 (a gateway provider-5xx strike on its cell)"):
-        a1 = await open_session(gw, **WORKER)
-        await _act(gw, upstreams, a1, ("ride", "upstream-500"))
+        with quiet():
+            a1 = await open_session(gw, **WORKER)
+            await _act(gw, upstreams, a1, ("ride", "upstream-500"))
         _strikes(store)
     with when("POST /sessions/{id}/outcome {class: clean} — the ride recovered and did its job"):
         r = await _report(gw, a1["session"]["id"], {"class": "clean"}, None)

@@ -764,8 +764,8 @@ World `policy-default`.
 | "a class outside the vocabulary" | `class: flaky` || 400 | outcome-class-unknown |
 | "a missing class" | `{}` || 400 | malformed-body |
 | "an unknown key" | `class: no-verdict`, `verdict: APPROVE` || 400 | malformed-body |
-| "a credential-shaped evidence value is refused" | `class: no-verdict`, `evidence: {log: "auth sk-or-v1-FAKE…"}` || 400 | outcome-evidence-refused |
-| "evidence over 4096 bytes" | `class: no-verdict`, `evidence: {log: 5000 × "x"}` || 400 | malformed-body |
+| "a credential-shaped evidence value is refused ⚖" | `class: no-verdict`, `evidence: {log: "auth sk-or-v1-FAKE…"}` || 400 | outcome-evidence-refused |
+| "evidence over 4096 bytes ⚖" | `class: no-verdict`, `evidence: {log: 5000 × "x"}` || 400 | malformed-body |
 
 ### When
 
@@ -786,6 +786,9 @@ World `policy-default`.
 | "the gateway writes its own transport class" | the session's request answered `upstream-401` || `{…, auth-storm, cell, gateway}` | `{class="auth-storm",source="gateway"}` 1 |
 | "one transport strike per session and class ⚖" | three `upstream-500` answers on one session || one `provider-5xx` | `{class="provider-5xx",source="gateway"}` 1 |
 | "a 429 is a cooldown, not a strike ⚖" | the session's request answered `upstream-429` || none | — |
+| "a read timeout is a transport strike" | the session's request hit `upstream-slow` (504 `upstream-timeout`) || `{…, timeout, cell, gateway}` | `{class="timeout",source="gateway"}` 1 |
+| "an unreachable upstream is a transport strike" | the session's request hit `upstream-down` (502 `upstream-unreachable`) || `{…, provider-5xx, cell, gateway}` | `{class="provider-5xx",source="gateway"}` 1 |
+| "a policy refusal is a transport strike, not a rejected credential" | the session's request answered `upstream-403-refused` (403 `upstream-refused`) || `{…, refused, cell, gateway}` | `{class="refused",source="gateway"}` 1 |
 | "a cut stream is a transport strike" | `upstream-stream-truncated` on the session || `{…, stream-incomplete, cell, gateway}` | `{class="stream-incomplete",source="gateway"}` 1 |
 | "a bare 2xx refutes nothing" | `upstream-500`, then `upstream-ok` on the same session || `provider-5xx` still counted | — |
 | "a clean outcome refutes the task's counted strikes" | the session's request answered `upstream-500` (a gateway `provider-5xx`), then the consumer reports `clean` — the ride recovered || none counted; the strike kept, refuted (`refuted: 1`) | — |
