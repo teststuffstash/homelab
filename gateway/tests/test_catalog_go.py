@@ -127,85 +127,90 @@ async def _arrange_good(app, vendor, source: str) -> None:
 
 
 # ── What a refresh keeps: config ─────────────────────────────────────────────────────────────
+LAST_GOOD = "5, fetched T0"
 CONFIG_ROWS = [
-    ("a first good fetch becomes the snapshot", False, "catalog-ok", 0, "ok", T0, 5),
-    ("a disabled row is not listed", False, "catalog-ok", 0, "ok", T0, 5),
-    ("a later good fetch replaces it", True, "catalog-ok", 21600, "ok", T0 + 21600, 5),
-    ("an upstream error keeps the last good", True, "catalog-503", 0, "fetch-failed", T0, 5),
-    ("an unreachable vendor keeps the last good", True, "catalog-down", 0, "fetch-failed", T0, 5),
-    ("a row without its cost is a parse failure", True, "catalog-malformed", 0, "parse-failed", T0, 5),
-    ("a body without the Go provider is a parse failure", True, "catalog-no-provider", 0, "parse-failed", T0, 5),
-    ("a drop below half the models is implausible", True, "catalog-shrunk", 0, "implausible", T0, 5),
-    ("a drop to half or more is taken", True, "catalog-trimmed", 0, "ok", T0, 3),
-    ("zero models is implausible with no last good", False, "catalog-empty", 0, "implausible", None, 0),
+    ("a first good fetch becomes the snapshot", "none", "catalog-ok", "T0", "ok", T0, 5),
+    ("a disabled row is not listed", "none", "catalog-ok", "T0", "ok", T0, 5),
+    ("a later good fetch replaces it", LAST_GOOD, "catalog-ok", "T0 + 21600 s", "ok", T0 + 21600, 5),
+    ("an upstream error keeps the last good", LAST_GOOD, "catalog-503", "T0", "fetch-failed", T0, 5),
+    ("an unreachable vendor keeps the last good", LAST_GOOD, "catalog-down", "T0", "fetch-failed", T0, 5),
+    ("a row without its cost is a parse failure", LAST_GOOD, "catalog-malformed", "T0", "parse-failed", T0, 5),
+    ("a body without the Go provider is a parse failure", LAST_GOOD, "catalog-no-provider", "T0", "parse-failed", T0, 5),
+    ("a drop below half the models is implausible", LAST_GOOD, "catalog-shrunk", "T0", "implausible", T0, 5),
+    ("a drop to half or more is taken", LAST_GOOD, "catalog-trimmed", "T0", "ok", T0, 3),
+    ("zero models is implausible with no last good", "none", "catalog-empty", "T0", "implausible", None, 0),
 ]
 
 
-@pytest.mark.parametrize(("has_last", "behaviour", "advance", "outcome", "fetched", "models"),
+@pytest.mark.parametrize(("last", "behaviour", "at", "outcome", "fetched", "models"),
                          [r[1:] for r in CONFIG_ROWS], ids=[r[0] for r in CONFIG_ROWS])
-async def test_config_refresh(cworld, vendor, vendor_transport, clock, has_last, behaviour, advance, outcome, fetched, models):
+async def test_config_refresh(cworld, vendor, vendor_transport, clock, last, behaviour, at, outcome, fetched, models):
     world(upstream=behaviour)
     app = cworld.build()
-    if has_last:
-        await _arrange_good(app, vendor, "config")
-    clock.advance(advance)
-    with given(f"the fake vendor's config answers {behaviour}" + (f" at T0 + {advance} s" if advance else "")):
+    with given(f"last good (config): {last}"):
+        if last != "none":
+            vendor.config = "catalog-ok"
+            assert await app.state.catalog.refresh_source("config") == "ok"
+    if at != "T0":
+        clock.t = T0 + 21600
+    with given(f"the fake vendor's config answers {behaviour} at {at}"):
         vendor.config = behaviour
         if behaviour == "catalog-down":
             vendor_transport.down.add("config")
-    with when("the config source refreshes"):
+    with when(f"the config source refreshes at {at}"):
         got = await app.state.catalog.refresh_source("config")
     then_eq("outcome", got, outcome)
     with then(f"GET /catalog/opencode: config fetched_at {fetched and _iso(fetched)}, {models} models"):
         v = await _view(app)
-        check("sources.config.fetched_at", v["sources"]["config"]["fetched_at"], _iso(fetched) if fetched else None)
-        check("sources.config.models", v["sources"]["config"]["models"], models)
-        check("sources.config.last_outcome", v["sources"]["config"]["last_outcome"], outcome)
-    if behaviour == "catalog-ok" and not has_last:
+        cfg = v["sources"]["config"]
+        check("sources.config", {k: cfg[k] for k in ("fetched_at", "models", "last_outcome")},
+              {"fetched_at": _iso(fetched) if fetched else None, "models": models, "last_outcome": outcome})
+    if behaviour == "catalog-ok" and last == "none":
         with then("deepseek-v4-flash (disabled in the fixture) is not a listed model"):
-            check("models.deepseek-v4-flash.listed", v["models"].get("deepseek-v4-flash", {}).get("listed", False), False)
             check("listed ids", sorted(m for m, r in v["models"].items() if r["listed"]),
                   ["claude-haiku-5-5", "deepseek-v4-pro", "deepseek-v4.1-flash", "longcat-2.5-preview-free", "step-5-preview"])
 
 
 # ── What a refresh keeps: docs ───────────────────────────────────────────────────────────────
 DOCS_ROWS = [
-    ("the page parses", False, "docs-ok", "ok"),
-    ("a 404 keeps the last good — the page moved", True, "docs-404", "fetch-failed"),
-    ("a plan row naming a model the Endpoints table lacks is a parse failure", True, "docs-unknown-model", "parse-failed"),
-    ("a renamed limit column is a parse failure", True, "docs-header-drift", "parse-failed"),
-    ("peak rows without the peak-hours sentence are a parse failure", True, "docs-no-peak-hours", "parse-failed"),
-    ("no share sentence is a parse failure", True, "docs-no-shares", "parse-failed"),
-    ("a drop below half the models is implausible", True, "docs-shrunk", "implausible"),
+    ("the page parses", "none", "docs-ok", "ok"),
+    ("a 404 keeps the last good — the page moved", "5", "docs-404", "fetch-failed"),
+    ("a plan row naming a model the Endpoints table lacks is a parse failure", "5", "docs-unknown-model", "parse-failed"),
+    ("a renamed limit column is a parse failure", "5", "docs-header-drift", "parse-failed"),
+    ("peak rows without the peak-hours sentence are a parse failure", "5", "docs-no-peak-hours", "parse-failed"),
+    ("no share sentence is a parse failure", "5", "docs-no-shares", "parse-failed"),
+    ("a drop below half the models is implausible", "5", "docs-shrunk", "implausible"),
 ]
 
 
-@pytest.mark.parametrize(("has_last", "behaviour", "outcome"), [r[1:] for r in DOCS_ROWS], ids=[r[0] for r in DOCS_ROWS])
-async def test_docs_refresh(cworld, vendor, clock, has_last, behaviour, outcome):
+@pytest.mark.parametrize(("last", "behaviour", "outcome"), [r[1:] for r in DOCS_ROWS], ids=[r[0] for r in DOCS_ROWS])
+async def test_docs_refresh(cworld, vendor, clock, last, behaviour, outcome):
     world(upstream=behaviour)
     app = cworld.build()
-    if has_last:
-        await _arrange_good(app, vendor, "docs")
+    with given(f"last good (docs): {'none' if last == 'none' else last + ' models, fetched T0'}"):
+        if last != "none":
+            vendor.docs = "docs-ok"
+            assert await app.state.catalog.refresh_source("docs") == "ok"
     clock.advance(60)
     with given(f"the fake vendor's Go page answers {behaviour}"):
         vendor.docs = behaviour
-    with when("the docs source refreshes"):
+    with when(f"the docs source refreshes at T0 + 60 s ({behaviour})"):
         got = await app.state.catalog.refresh_source("docs")
     then_eq("outcome", got, outcome)
     expected_at = T0 + 60 if outcome == "ok" else T0
     with then(f"the docs snapshot: 5 models, fetched_at {_iso(expected_at)}"):
         v = await _view(app)
-        check("sources.docs.models", v["sources"]["docs"]["models"], 5)
-        check("sources.docs.fetched_at", v["sources"]["docs"]["fetched_at"], _iso(expected_at))
+        check("sources.docs", {k: v["sources"]["docs"][k] for k in ("models", "fetched_at")},
+              {"models": 5, "fetched_at": _iso(expected_at)})
 
 
 # ── What the page says, per model ────────────────────────────────────────────────────────────
 PEAK_V41 = {"in": 0.30, "out": 1.20, "cache_read": 0.006, "cache_write": None}
 LIMIT_ROWS = [
-    ("a plain row gives the monthly limit per plan", "deepseek-v4.1-flash", 80.0, 160.0, None, PEAK_V41),
-    ("a promotion reads the current limit, not the struck one", "step-5-preview", 60.0, 240.0, 4, None),
-    ("Unlimited is unlimited", "longcat-2.5-preview-free", "unlimited", "unlimited", None, None),
-    ("context-tier rows are one model with one limit", "claude-haiku-5-5", 15.0, 60.0, None, None),
+    ("a plain row gives the monthly limit per plan", "deepseek-v4.1-flash", 80.0, 160.0, "—", PEAK_V41),
+    ("a promotion reads the current limit, not the struck one", "step-5-preview", 60.0, 240.0, "4", None),
+    ("Unlimited is unlimited", "longcat-2.5-preview-free", "unlimited", "unlimited", "—", None),
+    ("context-tier rows are one model with one limit", "claude-haiku-5-5", 15.0, 60.0, "—", None),
 ]
 
 
@@ -219,12 +224,10 @@ async def test_page_per_model(cworld, vendor, model, go, go_plus, bonus, peak):
         v = await _view(app)
         row = v["models"][model]
         plus = app.state.catalog.snapshots["docs"].body["plans"]["go-plus"].get(model)
-        attach_json(f"view row {model}", row)
     with then(f"plan go {go} · go-plus {go_plus} · bonus {bonus} · peak {peak}"):
-        check("monthly_limit_usd (plan go)", row["monthly_limit_usd"], go)
-        check("go-plus", plus, go_plus)
-        check("bonus", row["bonus"], bonus)
-        check("peak", row["peak"], peak)
+        check(f"models.{model} (plan go) + the go-plus row",
+              {"go": row["monthly_limit_usd"], "go-plus": plus, "bonus": row["bonus"], "peak": row["peak"]},
+              {"go": go, "go-plus": go_plus, "bonus": None if bonus == "—" else int(bonus), "peak": peak})
 
 
 async def test_peak_hours_from_page(cworld, vendor):
@@ -281,7 +284,7 @@ async def test_tabulated_but_unlisted(cworld, vendor):
 # ── The plan ───────────────────────────────────────────────────────────────────────────────
 ABSENT = object()
 PLAN_ROWS = [
-    ("the declared plan picks the limits' tab", "opencode", "go", None),
+    ("the declared plan picks the limits' tab", "opencode", "go", "loads"),
     ("no plan refuses the load", "opencode", ABSENT, "rails.opencode.plan"),
     ("an unknown plan refuses the load", "opencode", "pro", "rails.opencode.plan"),
     ("a plan on another rail refuses the load", "openrouter", "go", "rails.openrouter.plan"),
@@ -307,10 +310,10 @@ async def test_plan(cworld, rail, plan, refused):
         except PolicyError as e:
             loaded, error = None, str(e)
         attach_json("load result", {"loaded": loaded is not None, "error": error})
-    if refused is None:
+    if refused == "loads":
         cworld.policy = loaded
         v = await _view(cworld.build())
-        then_eq("view plan", v["plan"], "go")
+        then_eq("view plan", v["plan"], "go", claim="loads; the view's plan is 'go'")
     else:
         with then(f"refused, naming {refused}", refused={"expected": refused, "actual": error}):
             assert error is not None and refused in error, error
