@@ -29,7 +29,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
 | [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; a codex `auth.command` re-read is `⚑ gap` (row below) |
-| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `observe` (the knob); a per-caller bind ServiceAccount list and a dedicated specs-review SA are `⚑ gap` (rows below) |
+| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `observe` (the knob); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
 | [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
@@ -481,13 +481,13 @@ written. The caller is stored on the session row (`caller`, returned by `GET`), 
 belong to that caller. The env pull is NOT caller-checked here: its caller is the bound pod, which
 GW-SESSIONS-PULL checks against the bind.
 
-The checks run in a fixed order: the caller's token (401 / 503), its `callers` entry (403
+⚖ The checks run in a fixed order (an alternative would read the body first, or answer 404 before the caller check): the caller's token (401 / 503), its `callers` entry (403
 `caller-unknown`), the body (400, as [GW-SESSIONS-ADMIT](#gw-sessions-admit)), then the body against
 the entry: stack, role, bind namespace (403, one code each). For `GET` / `DELETE` the order is the
 token, the entry, the id (404), the owner (403 `caller-not-owner`). A caller without a valid token
 therefore learns nothing about a body or an id.
 
-**`control_plane_auth`** is the rollout knob, required in the policy. **`enforce`**: a call with no
+**`control_plane_auth`** is the rollout knob. ⚖ It and `callers` are REQUIRED in the policy: a policy silent about its callers must not default to "anyone" (or to `observe`). **`enforce`**: a call with no
 bearer, or one the review does not authenticate for audience `agent-gateway`, is 401
 `caller-unauthenticated`; a review the API cannot answer is 503 `tokenreview-transient`, as on the
 pull. **`observe`**: that same call is **admitted**. The gateway writes one log line naming the
@@ -522,7 +522,7 @@ audiences `[https://kubernetes.default.svc]`. **No bearer** sends no `Authorizat
 | "a token the API does not authenticate, under enforce" | policy-enforce | unauthenticated || 401 | caller-unauthenticated; `{route="admit",reason="invalid"}` + 1 |
 | "a token for another audience, under enforce" | policy-enforce | the kube API audience || 401 | caller-unauthenticated; `{route="admit",reason="invalid"}` + 1 |
 | "the TokenReview API fails, under enforce" | policy-enforce | (the review raises) || 503 | tokenreview-transient, `retry-after: 5`; `{route="admit",reason="review-transient"}` + 1 |
-| "the caller check precedes the body" | policy-enforce | no bearer; the body is not JSON || 401 | caller-unauthenticated, not 400 |
+| "the caller check precedes the body ⚖" | policy-enforce | no bearer; the body is not JSON || 401 | caller-unauthenticated, not 400 |
 | "no bearer, under observe, is admitted and counted ⚖" | policy-default | no bearer || 200 | `dispatch`; the row's `caller` = null; `{route="admit",reason="absent"}` + 1 |
 | "an invalid token, under observe, is admitted and counted" | policy-default | unauthenticated || 200 | `dispatch`; `{route="admit",reason="invalid"}` + 1 |
 | "a review the API cannot answer, under observe, is admitted and counted ⚖" | policy-default | (the review raises) || 200 | `dispatch`; `{route="admit",reason="review-transient"}` + 1 |
@@ -553,8 +553,8 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "a release without a bearer, under enforce" | policy-enforce | the platform loop admits; DELETE with no bearer || 401 | caller-unauthenticated; `{route="release",reason="absent"}` + 1 |
 | "a lookup without a bearer, under observe, is served and counted" | policy-default | the platform loop admits; GET with no bearer || 200 | the row; `{route="lookup",reason="absent"}` + 1 |
 | "a session admitted with no caller is released by any listed caller ⚖" | policy-default | admitted with no bearer; the specs reviewer DELETEs || 200 | `released_at` set: a row with no recorded caller has no owner to protect, and refusing would pin its rail slot until the TTL |
-| "an unknown id is 404 only after the caller check" | policy-enforce | the platform loop GETs `/sessions/nope` || 404 | session-not-found |
-| "an unknown id without a bearer, under enforce" | policy-enforce | GET `/sessions/nope`, no bearer || 401 | caller-unauthenticated |
+| "an unknown id is 404 only after the caller check ⚖" | policy-enforce | the platform loop GETs `/sessions/nope` || 404 | session-not-found |
+| "an unknown id without a bearer, under enforce ⚖" | policy-enforce | GET `/sessions/nope`, no bearer || 401 | caller-unauthenticated |
 
 ### One TokenReview path, and the pull stays the pod's
 
@@ -570,8 +570,8 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "a caller key that is not a ServiceAccount username refuses the load" | `callers: {"system:serviceaccount:platform-agents:*": …}` || PolicyError |
 | "a caller naming a stack the policy does not hold refuses the load" | the platform loop's `stacks: [nope]` || PolicyError |
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
-| "a policy without control_plane_auth refuses the load" | `control_plane_auth` absent || PolicyError |
-| "a policy without callers refuses the load" | `callers` absent || PolicyError |
+| "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
+| "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
 | "the deployed callers are today's two dispatchers" | `argocd/resources/agent-gateway/policy.json` || loads; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:agent-coordinator` (`[platform]`, `[reviewer, worker]`, `[]`) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform

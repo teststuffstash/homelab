@@ -13,7 +13,7 @@ Who may call:
 | a token the API does not authenticate, under enforce | policy-enforce | unauthenticated | 401 | caller-unauthenticated; admit/invalid + 1 |
 | a token for another audience, under enforce | policy-enforce | the kube API audience | 401 | caller-unauthenticated; admit/invalid + 1 |
 | the TokenReview API fails, under enforce | policy-enforce | (the review raises) | 503 | tokenreview-transient; admit/review-transient + 1 |
-| the caller check precedes the body | policy-enforce | no bearer, body not JSON | 401 | caller-unauthenticated |
+| the caller check precedes the body ⚖ | policy-enforce | no bearer, body not JSON | 401 | caller-unauthenticated |
 | no bearer, under observe, is admitted and counted ⚖ | policy-default | no bearer | 200 | dispatch; caller null; admit/absent + 1 |
 | an invalid token, under observe, is admitted and counted | policy-default | unauthenticated | 200 | dispatch; admit/invalid + 1 |
 | a review the API cannot answer, under observe, is admitted and counted ⚖ | policy-default | (the review raises) | 200 | dispatch; admit/review-transient + 1 |
@@ -42,8 +42,8 @@ Lookup and release belong to the admitting caller:
 | a release without a bearer, under enforce | policy-enforce | loop admits; DELETE no bearer | 401 | caller-unauthenticated; release/absent + 1 |
 | a lookup without a bearer, under observe, is served and counted | policy-default | loop admits; GET no bearer | 200 | lookup/absent + 1 |
 | a session admitted with no caller is released by any listed caller ⚖ | policy-default | no-bearer admit; specs reviewer DELETEs | 200 | released_at set |
-| an unknown id is 404 only after the caller check | policy-enforce | loop GETs /sessions/nope | 404 | session-not-found |
-| an unknown id without a bearer, under enforce | policy-enforce | GET /sessions/nope, no bearer | 401 | caller-unauthenticated |
+| an unknown id is 404 only after the caller check ⚖ | policy-enforce | loop GETs /sessions/nope | 404 | session-not-found |
+| an unknown id without a bearer, under enforce ⚖ | policy-enforce | GET /sessions/nope, no bearer | 401 | caller-unauthenticated |
 
 One TokenReview path; the policy shape; the log: see the spec page's tables (one test each).
 """
@@ -190,14 +190,15 @@ async def test_who_may_call(gws, reviews, store, world_name, presented, status, 
         want = LOOP if presented == "the platform loop" else None
         with then(f"the row's caller = {want}"):
             check("caller", store.get_session(r.json()["session"]["id"]).caller, want)
-    with then("the unauthenticated series moved by exactly the row's reason" if reason else "the unauthenticated series is unchanged"):
+    with then(f"gateway_control_plane_unauthenticated_total{{route=admit}}: reason={reason} + 1, every other reason + 0" if reason
+              else "gateway_control_plane_unauthenticated_total{route=admit}: reason=none — every reason + 0 (the caller was identified)"):
         after = {k: await unauth(gw, "admit", k) for k in before}
         check("admit increments", {k: after[k] - before[k] for k in before},
               {k: (1.0 if k == reason else 0.0) for k in before})
 
 
 async def test_check_precedes_body(enforce_gw):
-    """row: the caller check precedes the body"""
+    """row: the caller check precedes the body ⚖"""
     world("policy-enforce")
     with when("POST /sessions with no bearer and a body that is not JSON"):
         r = await enforce_gw.post("/sessions", content=b"not json", headers={"content-type": "application/json"})
@@ -277,8 +278,8 @@ async def test_lookup_and_release(gws, world_name, admitter, method, presented, 
 
 
 UNKNOWN_ROWS = [
-    ("an unknown id is 404 only after the caller check", "the platform loop", 404, "session-not-found"),
-    ("an unknown id without a bearer, under enforce", "no bearer", 401, "caller-unauthenticated"),
+    ("an unknown id is 404 only after the caller check ⚖", "the platform loop", 404, "session-not-found"),
+    ("an unknown id without a bearer, under enforce ⚖", "no bearer", 401, "caller-unauthenticated"),
 ]
 
 
@@ -358,8 +359,8 @@ SHAPE_ROWS = [
     ("a caller key that is not a ServiceAccount username refuses the load", "wildcard"),
     ("a caller naming a stack the policy does not hold refuses the load", "unknown stack"),
     ("a caller entry missing a key refuses the load", "missing key"),
-    ("a policy without control_plane_auth refuses the load", "no knob"),
-    ("a policy without callers refuses the load", "no callers"),
+    ("a policy without control_plane_auth refuses the load ⚖", "no knob"),
+    ("a policy without callers refuses the load ⚖", "no callers"),
 ]
 
 
