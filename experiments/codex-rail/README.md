@@ -59,3 +59,24 @@ reported as unverified; passing the partial checks never proves complete profile
 both contain seven ungrouped function tools, a documented SIWC mismatch. The runtime provenance,
 source references and remaining acceptance work live in the spike. This probe is explicitly run,
 not added to active CI, and does not close #2650.
+
+## Native tool continuation
+
+`continuation_probe.py` compares the same synthetic two-request turn directly against the fake
+upstream and through the real gateway. It requests only the CLI's read-only `get_goal` tool in
+an empty temporary work directory; no shell command, real model or external inference runs.
+The fake emits a dummy `x-codex-turn-state` on the first response, then observes whether the
+tool-result request returns it. All exported fields are fixed booleans/counts; no header value,
+tool result or process log is printed.
+
+```sh
+# From gateway/, using the locked environment and a trusted, version-matched binary:
+devbox run -- uv run --frozen python ../experiments/codex-rail/continuation_probe.py \
+    --codex /path/to/codex --expect-version 0.161.0
+```
+
+[`continuation-evidence.json`](continuation-evidence.json) records both pinned runtime 0.161.0
+and jail 0.163.0: direct replay succeeds, gateway replay is absent, although both synthetic turns
+finish. `gateway_compatibility_gap: true` is a finding, not a passing compatibility claim.
+It demonstrates the existing header-policy gap under FU-270; it does not change that policy or
+close the native-CLI CI work in #2650. This is local binary evidence, not deployed-image evidence.
