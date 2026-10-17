@@ -211,13 +211,24 @@ pointing at THIS gateway with the session token as the credential — the launch
 verbatim and adds nothing LLM-shaped. Var names mirror what each harness consumes today
 (`agents/agent-session.sh`): `claude` reads `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`
 (rendered there today) and `ANTHROPIC_MODEL` (the name the CLI needs; the gateway rewrites
-anyway). ⚖ For `opencode` and `goose` the brief prescribes `OPENAI_BASE_URL` / `OPENAI_API_KEY`
-+ a model var, while the launcher today feeds goose through `GOOSE_PROVIDER=openrouter` +
-`GOOSE_MODEL` + `OPENROUTER_HOST` and opencode through an `OPENCODE_CONFIG` file
-(`provider.openrouter.options.baseURL` + `apiKey: {env:OPENROUTER_API_KEY}`) — the two do not
-agree, so the openai-dialect rows below carry the brief's names and are flagged **verify during
-implementation**: a harness that ignores a var the gateway hands it is a failed row, not a
-passed one. The model var carries the policy id with its rail prefix removed (`claude/sonnet` →
+anyway). The openai-dialect rows carry what the **pinned** CLI was observed to read — not the
+brief's names. They were probed in-cluster on 2026-10-17 in an `agent-base:2026.10.15-gd10904baa8fa`
+pod (goose 1.49.0, opencode 1.18.35), with a loopback listener standing in for this gateway and
+recording each request's path, `Authorization` and body `model`. A harness that ignores a var the
+gateway hands it is a failed row, not a passed one:
+
+- **goose** reads `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `GOOSE_MODEL` only when
+  `GOOSE_PROVIDER=openai`. Without it the run exits `No provider configured` before any request.
+  With it: `GET <base>/models`, then `POST <base>/chat/completions` with `Bearer <key>` and
+  `model` = `GOOSE_MODEL` (title side-calls included).
+- **opencode** does not read `OPENCODE_MODEL`. Given only `OPENAI_BASE_URL` / `OPENAI_API_KEY`,
+  its built-in openai provider sent `POST <base>/responses` with its OWN default models
+  (`gpt-5.6-terra`, `gpt-5.4-nano`), so that env is unusable here. One `OPENCODE_CONFIG_CONTENT`
+  value holding an `@ai-sdk/openai-compatible` provider (`baseURL`, `apiKey`, the model as both
+  `model` and `small_model`) gave `POST <base>/chat/completions` with `Bearer <key>` and
+  `model: deepseek-v4-flash` on every request. So opencode's env is that ONE var.
+
+The model var carries the policy id with its rail prefix removed (`claude/sonnet` →
 `sonnet`, `opencode-go/deepseek-v4-flash` → `deepseek-v4-flash`; openrouter ids are bare) — the
 same strip `agents/agent-session.sh` performs today. `context_tokens` is the policy's per-model
 window or `null` — a null is "not declared", never a guess.
@@ -238,12 +249,15 @@ that block from a real dispatch answer; its run is the local-evidence row below.
 | "claude: the auth token is the session token" | claude | anthropic | claude/sonnet || `ANTHROPIC_AUTH_TOKEN` | the session token |
 | "claude: the model name is the alias the CLI resolves" | claude | anthropic | claude/sonnet || `ANTHROPIC_MODEL` | `sonnet` |
 | "claude on the [Go rail](../../../docs/agents/chainless-redesign.md): same three vars, Go's model name" | claude | opencode | opencode-go/claude-sonnet-4-6 || `ANTHROPIC_MODEL` | `claude-sonnet-4-6` |
-| "opencode: the base url is this gateway's openai path ⚖ (verify)" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
-| "opencode: the api key is the session token ⚖ (verify)" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENAI_API_KEY` | the session token |
-| "opencode: the model var carries the bare id ⚖ (verify)" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_MODEL` | `deepseek-v4-flash` |
-| "goose: the base url is this gateway's openai path ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
-| "goose: the api key is the session token ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_API_KEY` | the session token |
-| "goose: the model var carries the bare id ⚖ (verify)" | goose | openrouter | deepseek/deepseek-v4-flash || `GOOSE_MODEL` | `deepseek/deepseek-v4-flash` |
+| "opencode: an openai-compatible provider block" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.npm` | `@ai-sdk/openai-compatible` |
+| "opencode: the provider's base url is this gateway's openai path" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.options.baseURL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
+| "opencode: the provider's api key is the session token" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.options.apiKey` | the session token |
+| "opencode: the session model is the bare id under that provider" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.model` | `gateway/deepseek-v4-flash` |
+| "opencode: the title model is the same id" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.small_model` | `gateway/deepseek-v4-flash` |
+| "goose: the provider is goose's openai provider" | goose | openrouter | deepseek/deepseek-v4-flash || `GOOSE_PROVIDER` | `openai` |
+| "goose: the base url is this gateway's openai path" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
+| "goose: the api key is the session token" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_API_KEY` | the session token |
+| "goose: the model var carries the bare id" | goose | openrouter | deepseek/deepseek-v4-flash || `GOOSE_MODEL` | `deepseek/deepseek-v4-flash` |
 | "codex: the base url is this gateway's openai path (wrapper-rendered) ⚖" | codex | codex | codex/fixture-model || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
 | "codex: the api key is the session token, read through env_key ⚖" | codex | codex | codex/fixture-model || `OPENAI_API_KEY` | the session token |
 | "codex: the model var carries the bare id (wrapper-rendered) ⚖" | codex | codex | codex/fixture-model || `CODEX_MODEL` | `fixture-model` |
@@ -251,9 +265,12 @@ that block from a real dispatch answer; its run is the local-evidence row below.
 | description | harness || vars present | vars absent |
 |---|---||---|---|
 | "claude's env is exactly three vars" | claude || `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL` | `ANTHROPIC_API_KEY`, any `OPENAI_*`, any `OPENROUTER_*` |
-| "the openai-dialect env never carries an anthropic var" | opencode || `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENCODE_MODEL` | any `ANTHROPIC_*`, `OPENROUTER_API_KEY` |
-| "no env value is a real key" | any || every value is the token, a URL or a model name | any value matching the [GW-REDACT](#gw-redact) patterns |
+| "opencode's env is exactly the provider config" | opencode || `OPENCODE_CONFIG_CONTENT` | any `ANTHROPIC_*`, any `OPENAI_*`, any `OPENROUTER_*` |
+| "goose's env is exactly four vars" | goose || `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `GOOSE_PROVIDER`, `GOOSE_MODEL` | any `ANTHROPIC_*`, any `OPENROUTER_*` |
+| "no env value is a real key" | any || every value (each leaf of opencode's config) is the token, a URL, a model name or a provider/package name | any value matching the [GW-REDACT](#gw-redact) patterns |
 | "codex's env is exactly three vars ⚖" | codex || `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `CODEX_MODEL` | any `ANTHROPIC_*`, any `OPENROUTER_*` |
+| "⚖ cluster evidence: the pinned goose and opencode send this gateway's dialect from this env" | goose 1.49.0, opencode 1.18.35 (agent-base 2026.10.15-gd10904baa8fa) || goose: `GET /openai/v1/models` + `POST /openai/v1/chat/completions`, `Bearer` = the token, `model` = `GOOSE_MODEL`; opencode: `POST /openai/v1/chat/completions` only, `Bearer` = the token, `model` = the bare id | the in-cluster probe of 2026-10-17 (the PR that resolved these rows), not CI; the shadow cells (specs-reviewer.md §Shadow runs) are the end-to-end check |
+| "⚑ gap: opencode's provider package under enforced egress" | opencode || the probe namespace (`agent-coordinator`) reached `registry.npmjs.org` and `models.dev` (HTTP 200), so whether opencode FETCHES `@ai-sdk/openai-compatible` at run time was not observed | a ride whose egress blocks npm (homelab#990's class) is unproven: it may wedge before the first request |
 | "⚖ local evidence: the pinned Codex CLI completes a turn from this env through the gateway" | codex (codex-cli 0.161.0) || the provider block rendered from the dispatch `env`; `OPENAI_API_KEY` in the child env | no `auth.json`, no operator config (a fresh `CODEX_HOME`) — `experiments/codex-rail/evidence.json`, not CI |
 
 | description | model (policy) || `context_tokens` |
