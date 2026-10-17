@@ -1,0 +1,13 @@
+# Context-bundle vars (PF_CM_*) are consumed by the pod manifest for EVERY launcher shape, so
+# they must be initialised outside the headless pre-flight gate. This leg: headless run with AGENT_PREFLIGHT=0.
+# Pre-fix the block did not exist (the init sat inside the gate) => red.
+name: pf-cm-init-preflight-off
+mode: actions
+source: agents/agent-session.sh
+env:
+  - RUN_CMD=true
+  - AGENT_PREFLIGHT=0
+parts:
+  - file:bridge.sh
+  - block:pf-cm-init
+  - file:post.sh

@@ -1545,13 +1545,17 @@ fu042_guard_a() {
 # The brief's soft judgment failed each of these live: a second coordinator pass double-dispatched an
 # in-progress issue (sleep-tracking#10 → conflicting PR #12), and three runs died on stale key/token
 # deadlines. Headless task runs only; AGENT_PREFLIGHT=0 to bypass (e.g. deliberate parallel tracks).
+# The context-bundle mount/volume variables are consumed by the pod manifest for EVERY task
+# shape, but homelab#1386 initialized them only inside the issue-* arm below — the retro cells
+# (and any ad-hoc run) reached `volumeMounts:` with them unset and died under set -u:
+# "PF_CM_MOUNT: unbound variable", both cells of the 2026-09-07 platform retro, harvest empty.
+# Empty = no bundle mounted, the pre-#1386 shape for a non-issue task.
+# Hoisted above the pre-flight gate: interactive (--no-attach, no --run) and AGENT_PREFLIGHT=0
+# shapes skip that gate yet still reach the manifest (same unbound-variable death).
+# >>>REPLAY:pf-cm-init>>>
+PF_CM_CREATED=""; PF_CM_MOUNT=""; PF_CM_VOLUME=""
+# <<<REPLAY:pf-cm-init<<<
 if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
-  # The context-bundle mount/volume variables are consumed by the pod manifest for EVERY task
-  # shape, but homelab#1386 initialized them only inside the issue-* arm below — the retro cells
-  # (and any ad-hoc run) reached `volumeMounts:` with them unset and died under set -u:
-  # "PF_CM_MOUNT: unbound variable", both cells of the 2026-09-07 platform retro, harvest empty.
-  # Empty = no bundle mounted, the pre-#1386 shape for a non-issue task.
-  PF_CM_CREATED=""; PF_CM_MOUNT=""; PF_CM_VOLUME=""
   case "$TASK" in issue-[0-9]*)
     PF_ISSUE="${TASK#issue-}"
     PF_SLUG="${REPO_URL#https://github.com/}"; PF_SLUG="${PF_SLUG%.git}"
