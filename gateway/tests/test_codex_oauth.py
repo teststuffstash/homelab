@@ -35,7 +35,7 @@ Through the gateway:
 | an uncertain refresh refuses, then stays refused | exchange times out | - | 401 refresh-uncertain, then 401 recovery-required |
 | a store fault on the data plane is retriable | marker save raises | - | 503 credential-store-unavailable, retry-after 60 |
 | no backend: the rail is a definitive miss | create_app without a store | defer credential-unresolved | - |
-| the deployed policy declares no codex rail | configmap-policy.yaml | no codex rail | - |
+| the deployed policy declares no codex rail | argocd/resources/agent-gateway/policy.json | no codex rail | - |
 """
 
 from __future__ import annotations
@@ -65,7 +65,6 @@ from ._codex_world import (
     ride,
 )
 from .conftest import ISLAND, Clock, attach_json, check, err, given, rule, then, then_eq, when, world
-from .test_model_resolve import _configmap_policy
 
 pytestmark = rule("GW-CODEX-OAUTH")
 
@@ -428,15 +427,15 @@ async def test_no_backend(settings, codex_policy, secrets, store, codex_transpor
     then_eq("(decision, reason)", (r.json()["decision"], r.json()["reason"]), ("defer", "credential-unresolved"))
 
 
-DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "configmap-policy.yaml"
+DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "policy.json"
 
 
 @pytest.mark.skipif(not DEPLOYED_POLICY.exists(), reason="deploy manifests absent (service-only checkout)")
 def test_deployed_policy_is_dark():
     """row: the deployed policy declares no codex rail"""
     world("policy-default")
-    with when("Policy.from_dict(the ConfigMap's policy.json) — the island's loader, the GW-MODEL-RESOLVE reader"):
-        policy = Policy.from_dict(_configmap_policy(DEPLOYED_POLICY))
+    with when("Policy.from_dict(the deployed policy.json) — the island's loader, the GW-MODEL-RESOLVE reader"):
+        policy = Policy.from_dict(json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")))
         attach_json("deployed rails", sorted(policy.rails))
     with then("rails has no codex key — the rail ships dark"):
         check("codex in rails", "codex" in policy.rails, False)

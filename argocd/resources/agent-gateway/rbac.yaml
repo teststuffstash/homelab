@@ -12,7 +12,7 @@
 #     platform + oracle (sleep-agents / circles-agents hold no session-key Secret yet);
 #   * the stack's mainRepo namespace — where every OpenRouter key (`<repo>-openrouter`) and every
 #     ride's `claude-session` actually live (agents/agent-session.sh: `ref:<project>/…`). The
-#     policy (configmap-policy.yaml) points there.
+#     policy (policy.json, the configMapGenerator source) points there.
 # get-only: a Secret is read, never listed or watched. No openrouterkeys grant — v0 does not read
 # the guardrail CR (ADR-096 ladder is out of v0 scope).
 #

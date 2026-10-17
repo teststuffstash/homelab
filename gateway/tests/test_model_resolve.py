@@ -21,7 +21,7 @@
 | the dispatch answer names the policy id for (rail, tier) | policy-default | model == rails.<rail>.models.<tier> for every role |
 | no model id from the policy appears in src/ | policy-default | grep finds none |
 | the anthropic body is forwarded byte-untouched | policy-default | upstream body == inbound body |
-| the deployed policy loads under the island's loader, in model-classes.json's spelling | argocd/resources/agent-gateway/configmap-policy.yaml (skipped when absent) | loads; same rails + roles as policy-default; every model/side-model id is a models.*.ids value of model-classes.json; opencode max_sessions = rails.opencode-go.concurrency |
+| the deployed policy loads under the island's loader, in model-classes.json's spelling | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same rails + roles as policy-default; every model/side-model id is a models.*.ids value of model-classes.json; opencode max_sessions = rails.opencode-go.concurrency |
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ from .conftest import (
 pytestmark = rule("GW-MODEL-RESOLVE")
 
 # The deploy half of the island, when this checkout carries it (the monorepo; absent in a
-# service-only checkout): the ConfigMap's embedded policy and the fleet's model table.
-DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "configmap-policy.yaml"
+# service-only checkout): the deployed policy.json and the fleet's model table.
+DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "policy.json"
 MODEL_CLASSES = ISLAND.parent / "argocd" / "resources" / "openrouter-proxy" / "model-classes.json"
 
 SESSIONS = {
@@ -132,25 +132,12 @@ def test_no_model_id_in_code(policy):
     then_eq("leaked ids", leaked, [], claim="leaked ids in src/ = []")
 
 
-def _configmap_policy(path) -> dict:
-    """The `policy.json: |` block of a ConfigMap, by indentation (no YAML dependency)."""
-    lines = path.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, line in enumerate(lines) if line.strip() == "policy.json: |")
-    indent = len(lines[start]) - len(lines[start].lstrip()) + 2
-    block = []
-    for line in lines[start + 1:]:
-        if line.strip() and len(line) - len(line.lstrip()) < indent:
-            break
-        block.append(line[indent:])
-    return json.loads("\n".join(block))
-
-
 @pytest.mark.skipif(not DEPLOYED_POLICY.exists(), reason="deploy manifests absent (service-only checkout)")
 def test_deployed_policy_loads(policy):
     """row: the deployed policy loads under the island's loader, in model-classes.json's spelling"""
-    world(note="against the deployed ConfigMap policy")
-    with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)} policy.json)"):
-        raw = _configmap_policy(DEPLOYED_POLICY)
+    world(note="against the deployed policy (the configMapGenerator source)")
+    with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
+        raw = json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8"))
         deployed = Policy.from_dict(raw)
     with then("deployed rails and roles = the test policy's",
               rails={"expected": sorted(policy.rails), "actual": sorted(deployed.rails)},

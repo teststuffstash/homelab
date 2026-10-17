@@ -8,7 +8,7 @@ schema: openai-responses.schema.json
 The data-plane path a `codex` harness rides: OpenAI **Responses** over SSE (today's `openai`
 dialect stays Chat Completions — [glossary: dialect](../glossary.md#dialect)). Only the `codex`
 rail serves it — the operator's ChatGPT subscription — and that rail **ships dark**: the deployed
-policy (`argocd/resources/agent-gateway/configmap-policy.yaml`) declares no codex rail, and even a
+policy (`argocd/resources/agent-gateway/policy.json`) declares no codex rail, and even a
 policy that declares one gets a credential backend only when `create_app` is handed a credential
 store, which production does not do yet (the write-back is a `⚑ gap`). Every row below runs
 offline against fake upstreams and the FAKE store; no real Codex/OpenAI credential exists in it.
@@ -279,7 +279,7 @@ durable state is read without refreshing: `ready` admits, `revoked` / `refreshin
 | "an uncertain refresh refuses, then stays refused" | the exchange times out || — | 401 `credential-refresh-uncertain`, then 401 `credential-recovery-required` |
 | "a store fault on the data plane is retriable ⚖" | the marker save raises || — | 503 `credential-store-unavailable`, `retry-after: 60` |
 | "no backend: the rail is a definitive miss" | `policy-codex`, `create_app` without a store || defer `credential-unresolved` | — |
-| "the deployed policy declares no codex rail" | `argocd/resources/agent-gateway/configmap-policy.yaml` || `rails` has no `codex` key — the rail ships dark | — |
+| "the deployed policy declares no codex rail" | `argocd/resources/agent-gateway/policy.json` || `rails` has no `codex` key — the rail ships dark | — |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
