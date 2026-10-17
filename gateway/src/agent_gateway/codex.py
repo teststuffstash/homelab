@@ -162,6 +162,8 @@ class CodexProxy:
         if refusal:
             await resp.aclose()
             log.error("%s codex %d session=%s", refusal, status, row.id)
+            if refusal == "upstream-auth":
+                self.metrics.upstream_auth_rejected(row.rail)
             return self._upstream_error(row, 502, refusal, f"upstream {status}", t0)
         if status == 429:
             body = await resp.aread()

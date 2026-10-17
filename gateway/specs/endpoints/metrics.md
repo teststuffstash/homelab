@@ -5,7 +5,7 @@ schema: metrics.schema.json
 ---
 # GET /metrics — the `gateway_*` families, with bounded labels only
 
-The evidence surface the alert belts read. Nine families, Prometheus text format, no auth
+The evidence surface the alert belts read. Ten families, Prometheus text format, no auth
 (in-cluster, scraped by the ServiceMonitor). **Every label value is drawn from a bounded set**
 declared in the schema — never a task key, a session id, or a model string outside the
 policy's set — so cardinality is a property of the policy, not of traffic.
@@ -36,6 +36,7 @@ the process is down.
 | `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖ |
 | `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds) |
 | `gateway_credential_resolve_total` | counter | `rail`, `outcome` | every ref resolution verdict |
+| `gateway_upstream_auth_rejected_total` | counter | `rail` | every upstream 401/403 to the gateway's own rail credential — the request answered 502 `upstream-auth` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)); `gateway_requests_total` folds it into `502` with `upstream-unreachable`, so this is the series that tells an expired or revoked key from a dead upstream. Every rail renders from 0 ⚖ |
 | `gateway_control_plane_unauthenticated_total` | counter | `route`, `reason` | every control-plane call with no valid caller token — admitted under `control_plane_auth: observe`, refused under `enforce`; every (`route`, `reason`) pair renders from 0, so a flat series reads as "no such call" ⚖ |
 
 | description | event (world `policy-default`, upstream-ok) || series | value |
@@ -50,6 +51,9 @@ the process is down.
 | "upstream time is observed per rail" | one call on anthropic || `gateway_upstream_seconds_count{rail="anthropic"}` | 1 |
 | "tokens are counted by class" | upstream-ok-cached answers `usage {input_tokens: 12, cache_read_input_tokens: 300, cache_creation_input_tokens: 40, output_tokens: 7}` on anthropic || `gateway_tokens_total{rail="anthropic",class="in"}` / `"cache_read"` / `"cache_write"` / `"out"` | 12 / 300 / 40 / 7 |
 | "the subscription windows are read" | one call on anthropic, answered with `anthropic-ratelimit-unified-{5h,7d}-{utilization,reset}` || `gateway_subscription_utilization{rail="anthropic",window="5h"}` / `"7d"`; `gateway_subscription_reset_seconds{…}` | 0.13 / 0.67; 1792172400 / 1792274400 |
+| "an upstream auth rejection is counted apart" | upstream-401 on opencode || `gateway_upstream_auth_rejected_total{rail="opencode"}` / `gateway_requests_total{rail="opencode",dialect="openai",status="502"}` | 1 / 1 |
+| "an unreachable upstream is not an auth rejection" | upstream-down on opencode || `gateway_upstream_auth_rejected_total{rail="opencode"}` / `gateway_requests_total{rail="opencode",dialect="openai",status="502"}` | 0 / 1 |
+| "every rail's rejection count renders from 0 ⚖" | no request yet || `gateway_upstream_auth_rejected_total{rail=…}` for `anthropic`, `openrouter`, `opencode`, `codex` | 0 each |
 | "a resolution verdict is counted" | the anthropic ref is a definitive miss || `gateway_credential_resolve_total{rail="anthropic",outcome="definitive"}` | 1 |
 
 | description | the series || label | allowed values |

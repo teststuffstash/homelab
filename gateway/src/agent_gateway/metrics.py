@@ -3,6 +3,8 @@
 Families: `gateway_sessions_active{rail}`, `gateway_sessions_total{rail,role,stack,decision}`,
 `gateway_requests_total{rail,dialect,status}`, `gateway_upstream_seconds{rail}` (histogram),
 `gateway_tokens_total{rail,class}`, `gateway_credential_resolve_total{rail,outcome}`,
+`gateway_upstream_auth_rejected_total{rail}` (every upstream 401/403 answered as 502 `upstream-auth` —
+the rail's credential is bad; every rail renders from 0),
 `gateway_control_plane_unauthenticated_total{route,reason}` (GW-SESSIONS-AUTH — every control-plane
 request without a valid caller token, admitted under `observe` or refused under `enforce`),
 `gateway_subscription_utilization{rail,window}` + `gateway_subscription_reset_seconds{rail,window}`
@@ -50,6 +52,7 @@ class Metrics:
         self.requests_total: dict[tuple[str, str, str], int] = {}
         self.tokens_total: dict[tuple[str, str], int] = {}
         self.cred_total: dict[tuple[str, str], int] = {}
+        self.upstream_auth_total: dict[str, int] = {}
         self.cp_unauth_total: dict[tuple[str, str], int] = {}
         self.sub_util: dict[tuple[str, str], float] = {}
         self.sub_reset: dict[tuple[str, str], float] = {}
@@ -102,6 +105,12 @@ class Metrics:
         with self._lock:
             self.cred_total[key] = self.cred_total.get(key, 0) + 1
 
+    def upstream_auth_rejected(self, rail: str) -> None:
+        """The upstream answered 401/403 to the gateway's own credential (502 `upstream-auth`)."""
+        r = _bounded(rail, RAILS)
+        with self._lock:
+            self.upstream_auth_total[r] = self.upstream_auth_total.get(r, 0) + 1
+
     def control_plane_unauthenticated(self, route: str, reason: str) -> None:
         key = (_bounded(route, CP_ROUTES), _bounded(reason, CP_REASONS))
         with self._lock:
@@ -140,6 +149,12 @@ class Metrics:
             lines += ["# HELP gateway_credential_resolve_total Credential resolves by rail and outcome.", "# TYPE gateway_credential_resolve_total counter"]
             for (rail, outcome), n in sorted(self.cred_total.items()):
                 lines.append(f"gateway_credential_resolve_total{_fmt_labels({'rail': rail, 'outcome': outcome})} {n}")
+            # Every rail renders, zeros included: the alert reads increase(), and a series born at 1 on
+            # a fresh pod would hide its first rejection from it.
+            lines += ["# HELP gateway_upstream_auth_rejected_total Upstream 401/403 answers to the gateway's rail credential (answered 502 upstream-auth), per rail.",
+                      "# TYPE gateway_upstream_auth_rejected_total counter"]
+            for rail in RAILS:
+                lines.append(f"gateway_upstream_auth_rejected_total{_fmt_labels({'rail': rail})} {self.upstream_auth_total.get(rail, 0)}")
             # Every (route, reason) renders, zeros included: the flip's soak reads a flat series, and
             # an absent series cannot be told apart from a scrape that never saw the family.
             lines += ["# HELP gateway_control_plane_unauthenticated_total Control-plane requests without a valid caller token (admitted under observe, refused under enforce).",

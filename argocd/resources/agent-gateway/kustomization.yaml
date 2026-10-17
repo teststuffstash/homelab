@@ -14,6 +14,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - servicemonitor.yaml
+  - prometheusrule.yaml
   # the specs-site bucket + keys (gateway-specs-garage Workspace, connection Secret gateway-specs-s3)
   - garage-workspace.yaml
 

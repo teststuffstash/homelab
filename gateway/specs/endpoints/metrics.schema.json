@@ -79,6 +79,11 @@
       },
       "x-requirements": ["GW-METRICS", "GW-CRED-RESOLVE"]
     },
+    "gateway_upstream_auth_rejected_total": {
+      "type": "counter",
+      "labels": { "rail": { "$ref": "#/$defs/rail" } },
+      "x-requirements": ["GW-METRICS", "GW-CRED-BOUNDARY"]
+    },
     "gateway_control_plane_unauthenticated_total": {
       "type": "counter",
       "labels": {

@@ -1,0 +1,53 @@
+# agent-gateway alerts — the gateway island's own belt (GW-METRICS families,
+# gateway/specs/endpoints/metrics.md). The old openrouter-proxy's alerts stay in
+# argocd/resources/openrouter-proxy/prometheusrule.yaml, untouched (operator, 2026-10-15).
+# Behaviour fixture: agent-gateway.promtool-{rules,test} beside this file (hand copy of the
+# groups below, drift-pinned by `devbox run prometheus-rules-lint`).
+#
+# GoRailCredentialRejected — born from the 2026-10-17 Go key expiry: the OpenCode Go API key
+# expired upstream at 17:12:49Z, every Go call answered 401 `api_key_expired` for ~2 h, and the
+# only alert that fired was AgentLoopWorkflowsFailing (a symptom, from 17:28Z). The gateway types
+# an upstream 401/403 as 502 `upstream-auth`, but gateway_requests_total folds that into `502`
+# with `upstream-unreachable`; gateway_upstream_auth_rejected_total is the series that tells a
+# dead credential from a dead upstream.
+#
+# The shape, in three parts:
+#   ONSET  = ≥3 auth rejections in 5m AND zero 2xx in the same 5m, on the opencode rail. Zero 2xx
+#            is what keeps a per-model 403 (the free-model experiment saw a harness 403 typed as
+#            upstream-auth) from paging while the rest of the rail answers: a bad KEY fails every
+#            call, a bad request fails some.
+#   HOLD   = the newest ONSET within 2h. A rail whose callers back off after the first failures
+#            goes quiet, and quiet is not healed — the 2026-10-17 traffic stopped 16 minutes in.
+#   CLEAR  = any 2xx window newer than the newest ONSET (the key works again), or 2h with no new
+#            ONSET. ⚠ a counter series is born at its first sample, so the very first 2xx on a
+#            freshly rolled pod is not an increase(); the second one clears. The rotation recipe
+#            restarts the pod, so expect the clear one request late.
+# Fires on ANY sustained rejection, not only expiry: a revoked or mistyped key looks the same.
+# NOT bridged across a roll by `max by` alone — the counter is in-memory, but the HOLD's subquery
+# reads the old pod's samples too, which is right: the credential outlives the pod.
+# Old-proxy coverage: none. openrouter-proxy.py's Go leg counts only 429/402
+# (router_go_observed_429_total) and keeps Go outcomes out of provider_events and the circuit
+# breaker on purpose, so no existing old-proxy series sees a Go 401.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agent-gateway
+  namespace: agent-egress
+  labels:
+    app: agent-gateway
+spec:
+  groups:
+    - name: agent-gateway
+      rules:
+        - alert: GoRailCredentialRejected
+          expr: |
+            max by (rail) (max_over_time((timestamp((sum by (rail) (increase(gateway_upstream_auth_rejected_total{rail="opencode"}[5m])) >= 3) unless on (rail) (sum by (rail) (increase(gateway_requests_total{rail="opencode",status=~"2.."}[5m])) > 0)))[2h:1m]))
+            unless on (rail)
+            (max by (rail) (max_over_time((timestamp(sum by (rail) (increase(gateway_requests_total{rail="opencode",status=~"2.."}[5m])) > 0))[2h:1m])) > on (rail) max by (rail) (max_over_time((timestamp((sum by (rail) (increase(gateway_upstream_auth_rejected_total{rail="opencode"}[5m])) >= 3) unless on (rail) (sum by (rail) (increase(gateway_requests_total{rail="opencode",status=~"2.."}[5m])) > 0)))[2h:1m])))
+          for: 2m
+          labels:
+            severity: warning
+            triage: now
+          annotations:
+            summary: 'OpenCode Go rail credential rejected — rotate: wallet opencode-go-api-key → Infisical OPENCODE_GO_API_KEY → force-sync ExternalSecret agent-egress/opencode-go-key → restart agent-gateway + openrouter-proxy'
+            description: 'OpenCode Go answered 401/403 to the gateway''s own key (502 upstream-auth) with no 2xx in between; the last sustained burst was at {{ $value | humanizeTimestamp }}. The whole Go rail is down for both consumers of Secret agent-egress/opencode-go-key (agent-gateway and openrouter-proxy). Usual cause: the key expired or was revoked upstream (2026-10-17: 401 api_key_expired). Confirm: kubectl -n agent-egress logs deploy/agent-gateway | grep "upstream-auth opencode". Remedy: docs/runbook.md §Rotate the OpenCode Go API key. Clears on the first 2xx window after the burst, or after 2h with no new burst.'

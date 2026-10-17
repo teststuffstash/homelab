@@ -68,6 +68,37 @@ File-shaped ones (SSH keys, matchbox certs, App PEMs, the `.p12`, esphome `secre
 `bash scripts/wallet-files.sh` regenerates any missing `~/.claude/<dir>/` cache file from the wallet
 (tf.sh/github-tf.sh call it automatically). Tofu state/`*.tfvars`/`kubeconfig`/`talosconfig` are gitignored.
 
+### Rotate the OpenCode Go API key
+
+Fired by **`GoRailCredentialRejected`** (`argocd/resources/agent-gateway/prometheusrule.yaml`): the
+Go rail answers 401/403 to our key, so the whole rail is down for both consumers of Secret
+`agent-egress/opencode-go-key` — `agent-gateway` and `openrouter-proxy`, which read it as an env var
+at start. First seen 2026-10-17 (`401 api_key_expired`). Minting is the **third-party console**
+class ([docs/secrets.md §Minting doctrine](secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret)).
+
+```bash
+K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n agent-egress"
+W="keepassxc-cli show -q --no-password -k $HOME/.claude/homelab-keepass/homelab.keyx $HOME/.claude/homelab-keepass/homelab.kdbx"
+# 1. operator: mint a new key in the OpenCode console, write it to the wallet entry opencode-go-api-key
+#    (Password field). Probe it BEFORE storing it anywhere: 200 = good, 401 = a bad key (checked
+#    2026-10-17 — the models list authenticates a bearer when one is sent):
+curl -s -o /dev/null -w '%{http_code}\n' https://opencode.ai/zen/go/v1/models \
+  -H "Authorization: Bearer $($W opencode-go-api-key -a Password)"
+# 2. wallet → Infisical (no `$` in the value — scripts/infisical-secret.sh header)
+devbox run infisical-secret OPENCODE_GO_API_KEY="$($W opencode-go-api-key -a Password)"
+# 3. Infisical → the k8s Secret now, not at the 1h refresh
+$K annotate externalsecret opencode-go-key force-sync=$(date +%s) --overwrite
+$K get externalsecret opencode-go-key   # SecretSynced / Ready=True
+# 4. both consumers read the key at start
+$K rollout restart deploy/agent-gateway deploy/openrouter-proxy
+$K rollout status deploy/agent-gateway && $K rollout status deploy/openrouter-proxy
+```
+
+Done when the alert resolves: it clears on the first 2xx window on the rail after the burst (a
+fresh pod's very first 2xx is not yet an `increase()`, so expect one request of lag). If the rail
+is quiet, check by hand: `gateway_requests_total{rail="opencode",status="200"}` rises on the next
+Go session.
+
 ## OPNsense as code
 
 OPNsense (router @ `.1` — the CARP pair's VIP since 2026-10-09, nodes on 26.7.x) is managed with the `oxlorg.opnsense` Ansible collection.
