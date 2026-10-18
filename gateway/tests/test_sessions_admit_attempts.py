@@ -76,8 +76,8 @@ async def _strike(gw, upstreams, body: dict, klass: str, via: str = "outcome"):
     return doc
 
 
-async def _admit(gw, body: dict) -> dict:
-    with when(f"POST /sessions body {body}"):
+async def _admit(gw, body: dict, label: str = "") -> dict:
+    with when(f"POST /sessions body {body}{label}"):
         r = await gw.post("/sessions", json=body)
     then_eq("status", r.status_code, 200)
     return r.json()
@@ -110,8 +110,8 @@ WALK_ROWS = [
 @pytest.mark.parametrize(("strikes", "body", "expected"), [r[1:] for r in WALK_ROWS], ids=[r[0] for r in WALK_ROWS])
 async def test_walk(gw, upstreams, strikes, body, expected):
     world()
-    for klass, attempt in strikes:
-        with given(f"strike: attempt {attempt} of task {T} ended {klass}"):
+    for i, (klass, attempt) in enumerate(strikes):
+        with given(f"strikes[{i}] = ({klass!r}, {attempt}): attempt {attempt} of task {T} ended {klass}"):
             await _strike(gw, upstreams, {**REVIEWER, "attempt": attempt}, klass)
     _verdict(await _admit(gw, {**REVIEWER, **body}), expected)
 
@@ -216,9 +216,9 @@ ACTIVE_ROWS = [
 @pytest.mark.parametrize(("first", "second"), [r[1:] for r in ACTIVE_ROWS], ids=[r[0] for r in ACTIVE_ROWS])
 async def test_both_active(gw, store, first, second):
     world()
-    with given(f"admitted: {first or 'T attempt 1'}"):
+    with given(f"first = {first}: admitted" + (" (T attempt 1, the REVIEWER defaults)" if not first else "")):
         a = await open_session(gw, **{**REVIEWER, **first})
-    b = await _admit(gw, {**REVIEWER, **second})
+    b = await _admit(gw, {**REVIEWER, **second}, label=f" (second = {second})")
     with then("both active"):
         check("released_at", [store.get_session(a["session"]["id"]).released_at, store.get_session(b["session"]["id"]).released_at], [None, None])
 
