@@ -1,0 +1,25 @@
+# coordinator-pod-manifest — the coordinator session Pod as RENDERED (FU-270, GW-SESSIONS-AUTH).
+#
+# THE CONTRACT. coordinator-session.sh dispatches by piping a heredoc Pod manifest into
+# `kubectl create -f -`; that manifest is the whole of what the session pod IS — the
+# ServiceAccount the gateway's TokenReview sees, the mounts the in-pod launchers read
+# (agents/agent-session.sh runs IN this pod, not in the scan Workflow pod that spawns it), the env
+# the session inherits. The kubectl stub captures the STDIN manifest into the action stream, and
+# this fixture pins it WHOLE — the same shape as context-prefetch's ConfigMap pin.
+#
+# The row this fixture was born for: the `gateway-token` projected ServiceAccount token (audience
+# agent-gateway, 600s, path token) mounted readOnly at /var/run/secrets/agent-gateway — the
+# launcher's DEFAULT AGENT_GATEWAY_CALLER_TOKEN_FILE. Red on base (no such volume: the
+# AGENT_GATEWAY=sessions flip would PREFLIGHT-REFUSE every dispatch for a missing token), green
+# after. Nothing in the manifest sets AGENT_GATEWAY — the mount is inert until the loop flip.
+#
+# One per-stack item dispatch (`--loop-ns`: POD_SA=agentstack-loop, CREATE_CMD=create) is the
+# rendered shape; the bridge pins every variable the heredoc expands so the recording is
+# deterministic. A manifest edit that is NOT the dispatch contract moving (a comment, say) still
+# reds this fixture — re-record it, and say in the commit what moved.
+name: coordinator-pod-manifest
+mode: actions
+source: agents/coordinator-session.sh
+parts:
+  - file:bridge.sh
+  - block:coordinator-pod-manifest

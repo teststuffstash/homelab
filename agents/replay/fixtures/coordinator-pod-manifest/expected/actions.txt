@@ -1,0 +1,138 @@
+CALL kubectl -n platform-agents create -f -
+STDIN apiVersion: v1
+STDIN kind: Pod
+STDIN metadata:
+STDIN   name: coordinator-homelab-issue-2700
+STDIN   labels: { app: agent-coordinator, "homelab.teststuff.net/subscription-session": claude }
+STDIN spec:
+STDIN   restartPolicy: Never
+STDIN   # This is a BARE pod — no Job, no controller, no owner. Without a deadline a wedge at any phase
+STDIN   # hangs forever and only surfaces via KubePodNotReady 15+ min later (homelab#94: the janitor sat
+STDIN   # 40min in ContainerCreating on a volume that could not attach, while its two sibling namespaces
+STDIN   # completed in seconds). activeDeadlineSeconds counts from pod START, so it reaps Pending wedges
+STDIN   # too, not just runaway sessions. Matches the Argo coordinate/review ticks (1800) with headroom;
+STDIN   # ride pods use their own 4h key-TTL bound (agent-session.sh).
+STDIN   activeDeadlineSeconds: 3600
+STDIN   terminationGracePeriodSeconds: 5
+STDIN   serviceAccountName: agentstack-loop
+STDIN   containers:
+STDIN     - name: coordinator
+STDIN       image: ghcr.io/teststuffstash/agent-coordinator:2026.10.15-g45292680478f
+STDIN       args: ["-lc", "echo replay"]
+STDIN       env:
+STDIN         - name: HOME
+STDIN           value: "/home/node"
+STDIN         # Per-stack scope: which stack + repos this coordinator owns this session, and the
+STDIN         # stack's main repo (the cwd). Exposed as env for forward-compat with the AgentStack claim.
+STDIN         - name: STACK
+STDIN           value: "platform"
+STDIN         - name: AGENT_REPOS
+STDIN           value: "homelab agent-runtime"
+STDIN         - name: MAIN_REPO
+STDIN           value: "homelab"
+STDIN         # ADR-097: the scan-computed worker-parallelism allowance for this item's repo. The
+STDIN         # session's agent-session.sh invocations inherit it (its WIP pre-flight reads this env),
+STDIN         # so the raise stays launcher-owned end-to-end — the LLM never assembles the number.
+STDIN         - name: AGENT_WIP_LIMIT
+STDIN           value: "2"
+STDIN         # Provenance for the transcript manifest (docs/agents/observability-and-retro.md §A1).
+STDIN         - name: MODEL
+STDIN           value: "fable"
+STDIN         # ADR-106 (5) detach: the pod pushes its own session row and rings the launcher-resolved
+STDIN         # completion doorbell (detach_post). CS_DOORBELL_JSON is empty on streamed/non-item runs,
+STDIN         # which no-ops the in-pod block. The gateway var mirrors the scan's '-' default (an
+STDIN         # explicitly EMPTY value stays a disable, only unset gets the cluster default).
+STDIN         - name: AGENT_PUSHGATEWAY_URL
+STDIN           value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091"
+STDIN         - name: CS_DOORBELL_JSON
+STDIN           value: '{"repo":"homelab","unit":"issue-2700"}'
+STDIN         # A0 standard rail: Claude Code exports OTLP metrics+logs (GenAI conventions) to the
+STDIN         # in-cluster collector (argocd/resources/otel-collector/) → Loki + Prometheus. Telemetry
+STDIN         # only — transcripts stay the durable record. Override endpoint with OTLP_ENDPOINT.
+STDIN         - name: CLAUDE_CODE_ENABLE_TELEMETRY
+STDIN           value: "1"
+STDIN         - name: OTEL_METRICS_EXPORTER
+STDIN           value: "otlp"
+STDIN         - name: OTEL_LOGS_EXPORTER
+STDIN           value: "otlp"
+STDIN         - name: OTEL_EXPORTER_OTLP_PROTOCOL
+STDIN           value: "http/protobuf"
+STDIN         - name: OTEL_EXPORTER_OTLP_ENDPOINT
+STDIN           value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+STDIN         - name: OTEL_RESOURCE_ATTRIBUTES
+STDIN           value: "service.name=claude-code,role=coordinator,stack=platform"
+STDIN         # Transcript capture (§A1): the WRITE-ONLY key for the agent-transcripts bucket, same-ns
+STDIN         # Secret written by the Crossplane Workspace (agents/coordinator/garage-workspace.yaml).
+STDIN         # optional:true → sessions still run before the Workspace has reconciled (upload skips).
+STDIN         - name: AGENT_TS_ENDPOINT
+STDIN           value: "http://garage.garage.svc.cluster.local:3900"
+STDIN         - name: AGENT_TS_BUCKET
+STDIN           value: "agent-transcripts"
+STDIN         - name: AGENT_TS_ACCESS_KEY_ID
+STDIN           valueFrom:
+STDIN             secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true }
+STDIN         - name: AGENT_TS_SECRET_ACCESS_KEY
+STDIN           valueFrom:
+STDIN             secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true }
+STDIN         # Subscription auth rides the ADR-087 ref rail (FU-066d): the pod holds only an opaque ref;
+STDIN         # the egress proxy's /anthropic upstream resolves it (session-key label + the Role in
+STDIN         # claude-token.yaml) and injects the ~1y oauth token + the oauth beta header. The raw token
+STDIN         # never sits next to checked-out code. NB: do NOT also set ANTHROPIC_API_KEY or
+STDIN         # CLAUDE_CODE_OAUTH_TOKEN — they take auth precedence over this path.
+STDIN         - name: ANTHROPIC_BASE_URL
+STDIN           value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+STDIN         - name: ANTHROPIC_AUTH_TOKEN
+STDIN           value: "ref:agent-coordinator/coordinator-claude"
+STDIN         # gh/git ops: read+label issues, open/merge PRs across the project repos. The coordinator-git
+STDIN         # token is a ~1h GitHub App token that ESO re-mints ~hourly — too short for a long session if
+STDIN         # frozen as an env var. So ALSO mount it as a file (below) and point the image's gh-wrapper at
+STDIN         # it via GH_TOKEN_FILE; the wrapper reads the LIVE token per call. The env stays as a fallback
+STDIN         # for the pre-wrapper image.
+STDIN         - name: GH_TOKEN
+STDIN           valueFrom:
+STDIN             secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true }
+STDIN         - name: GH_TOKEN_FILE
+STDIN           value: "/var/run/coordinator-git/GH_TOKEN"
+STDIN       volumeMounts:
+STDIN         - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+STDIN         # GW-SESSIONS-AUTH (FU-270): the gateway caller token at the worker launcher's DEFAULT
+STDIN         # AGENT_GATEWAY_CALLER_TOKEN_FILE path (agents/agent-session.sh, which runs IN this pod —
+STDIN         # the scan Workflow pod only spawns this one). INERT until AGENT_GATEWAY=sessions reaches
+STDIN         # this pod (the loop flip, the operator's later act — nothing here sets it).
+STDIN         - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
+STDIN         # Persist Claude Code session transcripts (the interactive session's only "log"). Mounts a
+STDIN         # subdir of ~/.claude so the image-baked settings.json / .claude.json are untouched.
+STDIN         - { name: transcripts, mountPath: /home/node/.claude/projects }
+STDIN       securityContext:
+STDIN         runAsNonRoot: true
+STDIN         runAsUser: 1000
+STDIN         runAsGroup: 1000
+STDIN         allowPrivilegeEscalation: false
+STDIN         capabilities: { drop: ["ALL"] }
+STDIN         seccompProfile: { type: RuntimeDefault }
+STDIN       resources:
+STDIN         requests: { cpu: "250m", memory: "512Mi" }
+STDIN         limits:   { cpu: "2",    memory: "2Gi" }
+STDIN   securityContext:
+STDIN     fsGroup: 1000          # make the RWX transcripts volume writable for the non-root (1000) user
+STDIN   volumes:
+STDIN     # kubelet keeps a mounted Secret current as ESO re-mints it (~1min lag) — the gh-wrapper reads the
+STDIN     # live token from here so a multi-hour session never uses a stale 1h token.
+STDIN     - name: coordinator-git
+STDIN       secret: { secretName: coordinator-git, optional: true }
+STDIN     # Durable, shared transcript store (RWX) — survives pod deletion, accumulates across sessions.
+STDIN     # optional via a claim that must exist; if absent, the pod won't start, so it's part of bootstrap.
+STDIN     - name: transcripts
+STDIN       persistentVolumeClaim: { claimName: coordinator-transcripts }
+STDIN     # GW-SESSIONS-AUTH (FU-270): this pod's projected ServiceAccount token (agentstack-loop; the loop's
+STDIN     # agentstack-loop is a callers entry in the gateway policy), audience agent-gateway, the
+STDIN     # shortest expiry the API allows; kubelet rotates the file and the launcher re-reads it per
+STDIN     # call. Same shape as the gateway-token volume in agents/coordinator/specs-review-argo.yaml.
+STDIN     # Pod spec only: the gateway's TokenReview is its own RBAC. Inert until the
+STDIN     # AGENT_GATEWAY=sessions flip. (No backticks in this heredoc: it is UNQUOTED, they execute.)
+STDIN     - name: gateway-token
+STDIN       projected:
+STDIN         sources:
+STDIN           - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
+OUT REACHED: create
+RC 0

@@ -523,6 +523,10 @@ case "${MODEL:-}" in
   *)             COORD_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
 esac
 # <<<REPLAY:coordinator-rail-label<<<
+# >>>REPLAY:coordinator-pod-manifest>>>
+# The rendered Pod IS the dispatch (agents/replay/fixtures/coordinator-pod-manifest pins it whole,
+# the kubectl stub's STDIN capture): the SA the gateway's TokenReview sees, the mounts the in-pod
+# launchers read, the env the session inherits.
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" "$CREATE_CMD" -f - \
   || { echo "PREFLIGHT REFUSED (atomic): ${CREATE_CMD} of ${POD} failed — a racing dispatcher won the (repo, item) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
@@ -621,6 +625,11 @@ spec:
           value: "/var/run/coordinator-git/GH_TOKEN"
       volumeMounts:
         - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        # GW-SESSIONS-AUTH (FU-270): the gateway caller token at the worker launcher's DEFAULT
+        # AGENT_GATEWAY_CALLER_TOKEN_FILE path (agents/agent-session.sh, which runs IN this pod —
+        # the scan Workflow pod only spawns this one). INERT until AGENT_GATEWAY=sessions reaches
+        # this pod (the loop flip, the operator's later act — nothing here sets it).
+        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
         # Persist Claude Code session transcripts (the interactive session's only "log"). Mounts a
         # subdir of ~/.claude so the image-baked settings.json / .claude.json are untouched.
         - { name: transcripts, mountPath: /home/node/.claude/projects }
@@ -645,7 +654,18 @@ spec:
     # optional via a claim that must exist; if absent, the pod won't start, so it's part of bootstrap.
     - name: transcripts
       persistentVolumeClaim: { claimName: coordinator-transcripts }
+    # GW-SESSIONS-AUTH (FU-270): this pod's projected ServiceAccount token (${POD_SA}; the loop's
+    # agentstack-loop is a callers entry in the gateway policy), audience agent-gateway, the
+    # shortest expiry the API allows; kubelet rotates the file and the launcher re-reads it per
+    # call. Same shape as the gateway-token volume in agents/coordinator/specs-review-argo.yaml.
+    # Pod spec only: the gateway's TokenReview is its own RBAC. Inert until the
+    # AGENT_GATEWAY=sessions flip. (No backticks in this heredoc: it is UNQUOTED, they execute.)
+    - name: gateway-token
+      projected:
+        sources:
+          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
 EOF
+# <<<REPLAY:coordinator-pod-manifest<<<
 
 echo "→ waiting for ${POD} (clone)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=180s || true
