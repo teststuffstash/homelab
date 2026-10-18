@@ -13753,3 +13753,28 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Seat miss: the first brief for #2713 named the wrong pod (scan Workflow vs session Pod) — trace the launcher's host before
   briefing a mount. A runaway `glob('/**')` I ran in the proxy pod via `kubectl exec` had no kill path (no ps/pkill); use
   `$ROUTER_DB` directly.
+
+## 2026-10-18 ~19:15–20:00Z — seat: S9 self-serve from meta-state + board (operator asleep; no rulings taken)
+- S9 what-is-left re-read: #1992 CLOSED 10-11; the "3 operator-direct workflow patches" of item (2) had LANDED 10-11
+  (`version-sets-dispatch.yaml` 7c50f507 + both consumers' `build-image.yaml` `repository_dispatch: version-sets` — read on
+  master of agent-coordinator/agent-runtime); meta-state's bullet was stale. Rewritten.
+- #2610 (Renovate python 3.13 → 3.15, `agent/blocked`, 4 reviewer rounds asking the seat to move the set): dry-ran the
+  four-member move in a clone — nixpkgs resolves `python315` → **3.15.0rc2** (no stable 3.15; `devbox search`: rc2, rc1,
+  b4 …); `uv lock` drops only typing-extensions; `devbox run ci` GREEN on the rc (664 passed). Operator (mid-turn): oracle
+  and other stacks hit the same wall; look at oracle's set assertion; it gets a worker once nix has the packages; check the
+  handoff inbox. Read: oracle-fleet #883 ruled 10-18 "parked until nixpkgs ships a stable 3.15, `Un-park:` the seat";
+  its `tests/test_serving_image.py` row 5 = the python version-set assertion that made #879 red and the fixer revert.
+  No 3.15 task in either handoff inbox. → #2610 PARKED with the same ruling + `Un-park:` line (edits NOT pushed);
+  **#2720** ports the assertion to the gateway island (6 members: Dockerfile FROM ×2, devbox.json/lock, requires-python,
+  ruff target; mutation row per member; unlabelled chassis test, spec gate warns by design) — reviewer APPROVED 19:36Z.
+  circles#124 = the same bump, `agent/in-progress` (stack-side; noted for the operator).
+- S9 #2014 seat consumer: **claude-jail#10** merged 19:29Z — the jail Dockerfile `ADD`s the stamp lock at build, npm-installs
+  the stamped claude-code, asserts `claude --version` (the agent-coordinator shape; jq read proven on the live stamp:
+  2.1.293). Host rebuild = the operator's act (live seat 2.1.301 → `VersionSetBehindPin` since 15:45Z). #2014 commented.
+- Docs: **#2721** — class 11 proposer gap → ok + deploy edge, §Version SETS claude-code row (❌ → ⚠ the seat lags until
+  rebuilt), `dependency-coverage` regenerated (checked-in table dated 10-11: newer proofs #2652/#2653, class 7 17 rows).
+- Board read 19:18Z: `RouterRunModelUnverifiable` did not age out at 18:06Z — counts grew (platform/worker v4-flash 4,
+  v4.1-flash 2; oracle/worker 1): the 10-17 gateway canaries/admissions ride the gateway, invisible to the proxy's harvest
+  (inferred, dig-explained line updated with the caveat). New, not S9: `ArgoCDAppDegraded snore-recorder` 12:40Z,
+  `MgmtOpnsenseDrillScoreRegressed` 57, `LonghornDiskFillingUp` intel1 88.9%, `RetentionLedgerPruneRemnant`.
+- Wind-down 19:50Z: #2720 merged 19:3xZ, #2721 merged 19:45Z (both reviewers approved); clones deleted; one push.

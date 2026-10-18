@@ -13,10 +13,21 @@ list every wind-down writes — does NOT count (#2526, 2026-10-12: `RegistryMirr
 dig for days by being listed). Write the marker only when the cause is known; the reason rides into the dig's record.
 
 
-dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe rides (adhoc-20261011T173846Z / T180558Z, platform/worker, opencode-go/deepseek-v4-flash, outcome clean, $0, no LLM call) count in the router's 7-day run_reports window; ages out ~2026-10-18 18:06Z (board-sweep 2026-10-14; the class = #2555). Delete this line once it clears.
+dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-side evidence in the OLD router's 7-day run_reports window (the class = #2555): the two 2026-10-11 probes (platform/worker v4-flash) plus, read 10-18 19:40Z, platform/worker v4-flash=4 / v4.1-flash=2 and oracle/worker v4-flash=1 — the 10-17 gateway canaries + v4.1-flash admissions (#2694/#2707) ride the gateway, which the proxy's harvest never sees (mechanism from TICK-LOG 10-17/18, NOT from the run_reports rows — a dig may confirm). Ages out ~2026-10-24. Delete this line once it clears.
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
+  3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
+  ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a
+  dry run, uv.lock drops only typing-extensions); **circles#124 is the same wall, `agent/in-progress`** — stack-side, its
+  worker will hit the set (the operator's read). Class fix **#2720** (gateway python version-set assertion, the oracle row-5
+  shape; approved, auto-merging) — a one-member bump reds `ci` naming the odd members. **S9 #2014's seat consumer:
+  claude-jail#10 merged** (Dockerfile pins claude-code to the stamp; the HOST REBUILD is the operator's — clears
+  `VersionSetBehindPin`/`MembersDisagree`); docs #2721 (class 11 proposer ok, §Version SETS row, table regenerated).
+  **Board, not S9:** `ArgoCDAppDegraded snore-recorder` since 12:40Z (sleep stack, no non-healthy resource listed —
+  stack-side); `MgmtOpnsenseDrillScoreRegressed` 57 (FU-297's click-ops read); `LonghornDiskFillingUp` wk-metal-04/intel1
+  88.9% (FU-093 class); `RetentionLedgerPruneRemnant` (oracle). No 3.15 handoff in either inbox (circles 1, oracle 9 unclaimed).
 - **⚑ PICKUP (2026-10-18 ~19:30Z — seat wind-down; TICK-LOG 10-18): the gateway's tier lists are now DERIVED from
   benchmark evidence** (FU-270, #2716 — operator ruling: no hand-picked model ids; AA intelligence bands of the rail's best,
   cheapest-first, cap 3; `argocd/resources/agent-gateway/benchmarks.json` + `tiers check`; refresh = `gateway/scripts/benchmarks-snapshot.sh`
@@ -172,11 +183,9 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
   above).** Operator-side: (1) ✅ **the one-update-process spike CLOSED 2026-10-11 evening** — ADR-152 (#2510) records the
   decision + the router's four differences; the build program (the box applies ansible) is ROADMAP §Deploy paths with
   D3/D4/D8 as its own forks; the docs were trimmed first (#2508 dependency-upgrades 817→627, #2509 renovate 254→174,
-  #2507 register rulings current). (2) the claude-jail host rebuild + the 3 operator-direct workflow patches (stamp→rebuild dispatch)
-  — **DEFERRED a couple of days (operator 2026-10-11 evening: too many claude-jail PRs in flight)**. The set
-  cannot converge until the jail Dockerfile installs the STAMP's claude-code (`version-sets/devbox.lock`, 2.1.291)
-  instead of npm's latest (seat 2.1.296, stack jails 2.1.281): `VersionSetMembersDisagree` stands meanwhile and
-  `VersionSetBehindPin` joins it after 2 d — both expected, not S9. (3) the Argo-half ruling (Garage `appVersion` customManager shape in
+  #2507 register rulings current). (2) the claude-jail HOST REBUILD (operator): the 3 workflow patches landed 10-11 (`version-sets-dispatch.yaml` +
+  both consumers' `build-image.yaml`) and the jail Dockerfile reads the STAMP since claude-jail#10 (10-18 19:29Z) — the
+  rebuild is the one act left; `VersionSetMembersDisagree` + `VersionSetBehindPin` (seat 2.1.301 vs stamp 2.1.293) clear on it. (3) the Argo-half ruling (Garage `appVersion` customManager shape in
   the 09:30Z PICKUP — arms unattended restarts of the one unrecoverable release). (4) ~~the #2219 read~~ DONE 2026-10-15: kept; status section in the spike (#2595). Seat-side residue (re-read 18:45Z): the kps lane's first lens-armed 92.x merge (no
   92.x upstream yet; check (h) PROVEN, #2492); FU-297's first green drill (class fix #2501 landed 10-11 evening —
   see the 18:45Z PICKUP for run 3). DONE 10-11 evening: FU-305's hands-off rerun (#2503→#2504), sleep-tracking#67
