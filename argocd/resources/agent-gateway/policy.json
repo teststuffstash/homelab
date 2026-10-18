@@ -68,6 +68,7 @@
           }
         }
       },
+      "plan": "go",
       "max_sessions": 3,
       "models": {
         "light":    ["opencode-go/deepseek-v4.1-flash"],

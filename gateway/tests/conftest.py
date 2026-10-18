@@ -737,6 +737,8 @@ def bearer(doc: dict) -> dict[str, str]:
 
 
 # The `policy-codex` world's fixtures (tests/_codex_world.py) — imported here so every module sees them.
+# The Go catalog's fake vendor (tests/_catalog_world.py, GW-CATALOG-GO).
+from ._catalog_world import cworld, vendor, vendor_transport  # noqa: E402,F401
 from ._codex_world import (  # noqa: E402,F401
     codex_app,
     codex_gw,

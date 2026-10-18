@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agent-gateway/specs/endpoints/catalog.schema.json",
+  "$comment": "MACHINE half of GET /catalog/opencode and of the two normalised snapshots the Go catalog leg keeps in its store; the HUMAN half is catalog.md. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows.",
+  "x-endpoint": "catalog",
+  "x-use-cases": ["UC-1"],
+  "$defs": {
+    "source": { "enum": ["config", "docs"] },
+    "outcome": { "enum": ["ok", "fetch-failed", "parse-failed", "implausible"] },
+    "plan": { "enum": ["go", "go-plus"] },
+    "timestamp": { "type": ["string", "null"], "format": "date-time" },
+    "rate": { "type": ["number", "null"], "minimum": 0 },
+    "limit": {
+      "description": "the plan's monthly limit in USD, \"unlimited\", or null = the page has no row for the model under the plan",
+      "oneOf": [{ "type": "number", "minimum": 0 }, { "const": "unlimited" }, { "type": "null" }]
+    },
+    "source_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fetched_at", "age_s", "models", "last_outcome", "last_attempt_at"],
+      "properties": {
+        "fetched_at": { "$ref": "#/$defs/timestamp", "description": "the last good snapshot's fetch time; null = none yet" },
+        "age_s": { "type": ["number", "null"] },
+        "models": { "type": "integer", "minimum": 0 },
+        "last_outcome": { "oneOf": [{ "$ref": "#/$defs/outcome" }, { "type": "null" }], "description": "null = no refresh attempted by this process yet" },
+        "last_attempt_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "price_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["in", "out", "cache_read", "cache_write"],
+      "properties": {
+        "in": { "$ref": "#/$defs/rate" }, "out": { "$ref": "#/$defs/rate" },
+        "cache_read": { "$ref": "#/$defs/rate" }, "cache_write": { "$ref": "#/$defs/rate" }
+      }
+    },
+    "cost_tier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["above_tokens", "in", "out", "cache_read", "cache_write"],
+      "properties": {
+        "above_tokens": { "type": "integer", "minimum": 0, "description": "0 = the base row; N = the vendor's `tier: {type: context, size: N}` row" },
+        "in": { "$ref": "#/$defs/rate" }, "out": { "$ref": "#/$defs/rate" },
+        "cache_read": { "$ref": "#/$defs/rate" }, "cache_write": { "$ref": "#/$defs/rate" }
+      }
+    },
+    "config_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["models"],
+      "properties": {
+        "models": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "family", "tools", "context", "output", "cost"],
+            "properties": {
+              "name": { "type": ["string", "null"] }, "family": { "type": ["string", "null"] },
+              "tools": { "type": "boolean" },
+              "context": { "type": "integer" }, "output": { "type": "integer" },
+              "cost": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/cost_tier" } }
+            }
+          }
+        }
+      },
+      "x-requirements": ["GW-CATALOG-GO"]
+    },
+    "docs_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plans", "bonus", "peak", "peak_hours_utc", "peak_weekdays", "window_shares"],
+      "properties": {
+        "plans": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["go", "go-plus"],
+          "properties": {
+            "go": { "type": "object", "additionalProperties": { "$ref": "#/$defs/limit" } },
+            "go-plus": { "type": "object", "additionalProperties": { "$ref": "#/$defs/limit" } }
+          }
+        },
+        "bonus": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
+        "peak": { "type": "object", "additionalProperties": { "$ref": "#/$defs/price_row" } },
+        "peak_hours_utc": { "type": "array", "items": { "type": "array", "prefixItems": [{ "type": "integer" }, { "type": "integer" }], "minItems": 2, "maxItems": 2 } },
+        "peak_weekdays": { "type": "array", "items": { "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] } },
+        "window_shares": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["5h", "7d", "30d"],
+          "properties": { "5h": { "type": "number" }, "7d": { "type": "number" }, "30d": { "type": "number" } }
+        }
+      },
+      "x-requirements": ["GW-CATALOG-GO"]
+    }
+  },
+  "output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["plan", "sources", "peak_hours_utc", "peak_weekdays", "window_shares", "models", "policy_models"],
+    "properties": {
+      "plan": { "oneOf": [{ "$ref": "#/$defs/plan" }, { "type": "null" }], "description": "rails.opencode.plan; null = the policy has no opencode rail" },
+      "sources": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["config", "docs"],
+        "properties": {
+          "config": { "$ref": "#/$defs/source_state" },
+          "docs": { "$ref": "#/$defs/source_state" }
+        }
+      },
+      "peak_hours_utc": { "$ref": "#/$defs/docs_snapshot/properties/peak_hours_utc" },
+      "peak_weekdays": { "$ref": "#/$defs/docs_snapshot/properties/peak_weekdays" },
+      "window_shares": { "type": "object" },
+      "models": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["listed", "family", "tools", "context", "output", "cost", "peak", "bonus", "monthly_limit_usd", "windows_usd"],
+          "properties": {
+            "listed": { "type": "boolean", "description": "in the config snapshot (the account's listed set — not a liveness signal)" },
+            "family": { "type": ["string", "null"] }, "tools": { "type": ["boolean", "null"] },
+            "context": { "type": ["integer", "null"] }, "output": { "type": ["integer", "null"] },
+            "cost": { "type": "array", "items": { "$ref": "#/$defs/cost_tier" } },
+            "peak": { "oneOf": [{ "$ref": "#/$defs/price_row" }, { "type": "null" }] },
+            "bonus": { "type": ["integer", "null"] },
+            "monthly_limit_usd": { "$ref": "#/$defs/limit" },
+            "windows_usd": { "type": ["object", "null"], "description": "window_shares x the plan's monthly limit; null when the limit is not a number" }
+          }
+        }
+      },
+      "policy_models": {
+        "type": "object",
+        "description": "every opencode model the policy names (tiers + side_models), by wire id",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["listed", "monthly_limit_usd"],
+          "properties": { "listed": { "type": "boolean" }, "monthly_limit_usd": { "$ref": "#/$defs/limit" } }
+        }
+      }
+    },
+    "x-requirements": ["GW-CATALOG-GO"]
+  },
+  "errors": {}
+}

@@ -40,7 +40,9 @@
 | class is a strike class, source the writer | strikes_total | class / source | the strike classes / outcome, gateway |
 | reason is why a 2xx body stopped before its end | requests_incomplete_total | reason | no-terminal, timeout, transport-error, client-closed |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
-| every family is declared with HELP and TYPE | — | — | 16 families |
+| source is the catalog source | go_catalog_refresh_total | source | config, docs |
+| the catalog outcome is the refresh outcome | go_catalog_refresh_total | outcome | ok, fetch-failed, parse-failed, implausible |
+| every family is declared with HELP and TYPE | — | — | 21 families |
 """
 
 from __future__ import annotations
@@ -63,6 +65,8 @@ FAMILIES = (
     "gateway_cells_cooled", "gateway_credentials_rejected", "gateway_requests_incomplete_total",
     "gateway_strikes_total",
     "gateway_credential_probes_total", "gateway_sessions_reaped_total",
+    "gateway_go_catalog_age_seconds", "gateway_go_catalog_models", "gateway_go_catalog_refresh_total",
+    "gateway_go_catalog_last_outcome", "gateway_go_catalog_policy_models_missing",
 )
 
 
@@ -223,9 +227,10 @@ async def test_upstream_auth_counted_apart(gw, upstreams):
         doc = await open_session(gw)
     with when("event: upstream-401 on opencode (POST /openai/v1/chat/completions)"):
         r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-    then_eq("status", r.status_code, 424)
-    await _then_series(gw, 'gateway_upstream_auth_rejected_total{rail="opencode"}', 1)
-    await _then_series(gw, 'gateway_requests_total{rail="opencode",dialect="openai",status="424"}', 1)
+    auth, req = 'gateway_upstream_auth_rejected_total{rail="opencode"}', 'gateway_requests_total{rail="opencode",dialect="openai",status="424"}'
+    with then(f"status 424; series {auth} = 1 and {req} = 1"):
+        text = await _metrics(gw)
+        check("status · the two series", (r.status_code, _value(text, auth), _value(text, req)), (424, 1, 1))
 
 
 async def test_unreachable_not_auth(gw, transport):
@@ -391,6 +396,8 @@ LABEL_ROWS = [
     ("class is a strike class, source the writer", "gateway_strikes_total", "class", {k for k, v in OUTCOME_CLASSES.items() if v}),
     ("reason is why a 2xx body stopped before its end", "gateway_requests_incomplete_total", "reason",
      {"no-terminal", "timeout", "transport-error", "client-closed"}),
+    ("source is the catalog source", "gateway_go_catalog_refresh_total", "source", {"config", "docs"}),
+    ("the catalog outcome is the refresh outcome", "gateway_go_catalog_refresh_total", "outcome", {"ok", "fetch-failed", "parse-failed", "implausible"}),
 ]
 
 

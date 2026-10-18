@@ -41,6 +41,14 @@ UPSTREAM_DEFAULTS = {
     # (⚑ gap, GW-RAIL-CODEX); an unset CODEX_UPSTREAM leaves the rail without a backend.
     "codex": "",
 }
+# The Go catalog leg's two sources (GW-CATALOG-GO): the console's V2 config (the Go key reads it)
+# and the vendor's Go page source on its default branch (unauthenticated; the path moved once,
+# on 2026-10-12 — a move is a fetch failure, and GoCatalogStale names it).
+GO_CATALOG_URLS = {
+    "config": "https://opencode.ai/console/api/v2/config",
+    "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx",
+}
+GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start
 
 
 class PolicyError(ValueError):
@@ -206,8 +214,10 @@ class RailPolicy:
     user_agent: str = "fixed"
     credential_probe: CredentialProbe | None = None  # re-verifies a rejected credential; absent = the hold
     credential_hold_s: float = 900.0  # no probe: a rejected credential is re-admitted (half-open) after this
+    plan: str | None = None  # opencode only (required there): the Go plan the key is on — no API says (GW-CATALOG-GO)
 
 
+GO_PLANS = ("go", "go-plus")  # the OpenCode Go plans the vendor's page tabulates (GW-CATALOG-GO)
 SUBSCRIPTION_WINDOWS = ("5h", "7d")  # the `anthropic-ratelimit-unified-<w>-*` header windows
 WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 ANCHORS = ("chain", "weekly", "monthly")
@@ -466,6 +476,12 @@ class Policy:
             if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
                 raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")
             headroom, margin = (_codex_policy(r) if name == "codex" else (None, None))
+            plan = r.get("plan")
+            if name == "opencode" and plan not in GO_PLANS:
+                raise PolicyError(f"policy: rails.opencode.plan is required, one of {', '.join(GO_PLANS)} "
+                                  "(no vendor API says which plan the key is on — GW-CATALOG-GO)")
+            if name != "opencode" and plan is not None:
+                raise PolicyError(f"policy: rails.{name}.plan is an opencode-only key")
             ua = r.get("user_agent", "fixed")
             if ua not in USER_AGENT_MODES:
                 raise PolicyError(f"policy: rails.{name}.user_agent must be one of {', '.join(USER_AGENT_MODES)}")
@@ -474,7 +490,7 @@ class Policy:
                 raise PolicyError(f"policy: rails.{name}.credential_hold_s must be a number >= 1")
             rails[name] = RailPolicy(name, int(r.get("max_sessions", 0)), dict(models), tuple(side),
                                      _admission(name, r.get("admission")), headroom, margin, ua,
-                                     _credential_probe(name, r.get("credential_probe")), float(hold))
+                                     _credential_probe(name, r.get("credential_probe")), float(hold), plan)
         roles: dict[str, RolePolicy] = {}
         for name, ro in (d.get("roles") or {}).items():
             if name not in ROLES:
@@ -529,6 +545,8 @@ class Settings:
     cred_negative_cache_s: int
     connect_timeout_s: float
     read_timeout_s: float
+    go_catalog_urls: dict[str, str] = field(default_factory=lambda: dict(GO_CATALOG_URLS))
+    go_catalog_refresh_s: float = GO_CATALOG_REFRESH_S  # 0 = no schedule (refresh only when called)
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> Settings:
@@ -548,4 +566,7 @@ class Settings:
             cred_negative_cache_s=int(e.get("GATEWAY_CRED_NEGATIVE_CACHE_S", "20")),
             connect_timeout_s=float(e.get("GATEWAY_CONNECT_TIMEOUT_S", "10")),
             read_timeout_s=float(e.get("GATEWAY_READ_TIMEOUT_S", "600")),
+            go_catalog_urls={"config": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["config"]),
+                             "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
+            go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
         )

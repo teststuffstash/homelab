@@ -1,0 +1,45 @@
+# The `agent-gateway-go-catalog` group, lifted VERBATIM out of prometheusrule.yaml (comments
+# stripped — the manifest is their one home) — the rules file go-catalog.promtool-test loads. Not a
+# manifest: `promtool test rules` needs upstream-format rules (top-level `groups:`). Named
+# .promtool-rules rather than .yaml because manifest-lint kubeconforms every *.yaml under
+# argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions). RE-COPY AFTER
+# EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway-go-catalog","rules":[.spec.groups[] | select(.name == "agent-gateway-go-catalog") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway-go-catalog
+    rules:
+      - alert: GoCatalogStale
+        expr: |
+          (max by (source) (gateway_go_catalog_age_seconds{job="agent-gateway"}) > 86400)
+          or
+          (max by (source) (gateway_go_catalog_models{job="agent-gateway"}) == 0)
+        for: 30m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: The gateway's Go catalog ({{ $labels.source }}) has had no good refresh for 24 h, or has no snapshot
+          description: 'gateway_go_catalog_age_seconds{source="{{ $labels.source }}"} is past 24 h, or gateway_go_catalog_models is 0 ({{ $value }}); the gateway keeps its last good snapshot. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "catalog: {{ $labels.source }}" names the failing step (fetch answered <status>, fetch failed, parse failed, implausible); (2) gateway_go_catalog_last_outcome{source="{{ $labels.source }}"}; (3) GET /catalog/opencode on the gateway, sources.{{ $labels.source }}. The contract is gateway/specs/endpoints/catalog.md.'
+      - alert: GoCatalogParseFailed
+        expr: |
+          max by (source, outcome) (gateway_go_catalog_last_outcome{job="agent-gateway",outcome=~"parse-failed|implausible"}) == 1
+        for: 5m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: The latest refresh of the gateway's Go catalog ({{ $labels.source }}) ended {{ $labels.outcome }} — its last good snapshot is in use
+          description: 'parse-failed = the answer did not match the shape gateway/src/agent_gateway/catalog.py parses (parse_config / parse_docs); implausible = it carried fewer than half the last good snapshot''s models. Either the vendor source or the parser may be what changed. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep "catalog: {{ $labels.source }}" names the line or count it stopped on; compare it with the vendor source (config: GET https://opencode.ai/console/api/v2/config; docs: anomalyco/opencode services/www/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart); GoCatalogStale follows at 24 h.'
+      - alert: GoCatalogPolicyModelMissing
+        expr: |
+          max by (source) (gateway_go_catalog_policy_models_missing{job="agent-gateway"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+          triage: now
+        annotations:
+          summary: '{{ $value }} Go model(s) in the gateway policy are not covered by its Go catalog''s {{ $labels.source }} snapshot'
+          description: 'config = a policy Go model is not listed in the console catalog snapshot; docs = it has no monthly-limit row under rails.opencode.plan in the Go page snapshot. Which ids: GET /catalog/opencode on the gateway, policy_models, or kubectl -n agent-egress logs deploy/agent-gateway | grep "policy model(s) not covered". Check the vendor source before acting: a model the vendor no longer lists needs a policy change (argocd/resources/agent-gateway/policy.json rails.opencode.models, by PR); a page or parser change also shows as GoCatalogParseFailed or as a drop in gateway_go_catalog_models.'
