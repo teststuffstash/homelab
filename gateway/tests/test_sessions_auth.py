@@ -82,7 +82,8 @@ DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "po
 ENFORCE_POLICY = POLICY_FIXTURE.parent / "policy-enforce.json"
 
 LOOP = "system:serviceaccount:platform-agents:agentstack-loop"
-SPECS = "system:serviceaccount:agent-coordinator:agent-coordinator"
+SPECS = "system:serviceaccount:agent-coordinator:agent-coordinator"   # the fixture world's specs reviewer
+DEPLOYED_SPECS = "system:serviceaccount:agent-coordinator:specs-review"   # the deployed tick's own SA (#2685)
 UNLISTED = "system:serviceaccount:platform-agents:default"
 # Fixture caller tokens: plain strings, never JWT-shaped (the masking row lives in test_redact.py).
 TOKENS = {
@@ -390,7 +391,7 @@ async def test_deployed_callers():
     with then("callers = exactly the platform loop and the specs-review tick, with today's scopes"):
         check("callers", got, {
             LOOP: {"stacks": ["platform"], "roles": ["worker"], "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]},
-            SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []},
+            DEPLOYED_SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []},
         })
 
 
