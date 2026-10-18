@@ -12,9 +12,12 @@
 # the one that moves off it. The gateway Service is in ns agent-egress, which the agent-loop
 # egress policy (egress-cnp.yaml) already allows for every Argo Workflow pod in this namespace.
 # The call is AUTHENTICATED (GW-SESSIONS-AUTH, FU-270): the `gateway-token` volume is this pod's
-# projected ServiceAccount token (agent-coordinator, audience agent-gateway), and the gateway's
+# projected ServiceAccount token (`specs-review`, audience agent-gateway), and the gateway's
 # policy `callers` entry for that SA grants stack platform, roles reviewer + worker (the goose
-# shadow cell), no bind.
+# shadow cell), no bind. Both templates run as the DEDICATED `specs-review` SA (rbac.yaml,
+# homelab#2685) — not `agent-coordinator`, the SA every other workflow here shares: `callers`
+# is per SA, so that key would authorize all of them as the specs reviewer. Its RBAC is the
+# executor's `workflowtaskresults` binding and nothing else — the script never calls kubectl.
 #
 # IDENTITY: GH_TOKEN = the `specs-reviewer-git` Secret (agents/coordinator/specs-reviewer-git.yaml),
 # `optional:true`.
@@ -30,7 +33,7 @@ metadata:
   namespace: agent-coordinator
 spec:
   entrypoint: main
-  serviceAccountName: agent-coordinator
+  serviceAccountName: specs-review
   # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate (coordinate-argo.yaml — was `coordinate`, ADR-120)
   # (coordinate-argo.yaml). Verbatim copy; keep in sync.
   # homelab#867 soft Longhorn-disk de-preference — same rationale.
@@ -63,7 +66,7 @@ spec:
     - { name: work, emptyDir: {} }
     - { name: specs-reviewer-git, secret: { secretName: specs-reviewer-git, optional: true } }
     # GW-SESSIONS-AUTH (FU-270): the caller token for the gateway's /sessions — this pod's projected
-    # ServiceAccount token (agent-coordinator), audience agent-gateway, the shortest expiry the API
+    # ServiceAccount token (specs-review), audience agent-gateway, the shortest expiry the API
     # allows; kubelet rotates the file and the script re-reads it per call. Pod spec only: the
     # gateway's TokenReview is its own RBAC, and the policy's `callers` grants this SA its roles.
     - name: gateway-token
@@ -158,7 +161,7 @@ metadata:
   namespace: agent-coordinator
 spec:
   entrypoint: main
-  serviceAccountName: agent-coordinator
+  serviceAccountName: specs-review
   arguments:
     parameters:
       - name: image                   # REQUIRED — an agents/images.env pin (AGENT_BASE_IMAGE / AGENT_COORDINATOR_IMAGE)
@@ -176,7 +179,7 @@ spec:
     - { name: work, emptyDir: {} }
     - { name: specs-reviewer-git, secret: { secretName: specs-reviewer-git, optional: true } }
     # GW-SESSIONS-AUTH (FU-270): the caller token for the gateway's /sessions — this pod's projected
-    # ServiceAccount token (agent-coordinator), audience agent-gateway, the shortest expiry the API
+    # ServiceAccount token (specs-review), audience agent-gateway, the shortest expiry the API
     # allows; kubelet rotates the file and the script re-reads it per call. Pod spec only: the
     # gateway's TokenReview is its own RBAC, and the policy's `callers` grants this SA its roles.
     - name: gateway-token

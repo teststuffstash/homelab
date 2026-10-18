@@ -91,7 +91,7 @@
       "roles": ["worker"],
       "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]
     },
-    "system:serviceaccount:agent-coordinator:agent-coordinator": {
+    "system:serviceaccount:agent-coordinator:specs-review": {
       "stacks": ["platform"],
       "roles": ["reviewer", "worker"],
       "bind_namespaces": []

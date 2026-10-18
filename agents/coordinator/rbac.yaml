@@ -84,6 +84,30 @@ subjects:
 # `agent-transcripts` ClusterSecretStore, and worker pods secretKeyRef it in-ns. No launcher
 # reads Secret values anymore; this SA has zero secret access.)
 ---
+# The specs-review tick's OWN identity (homelab#2685, FU-270 / GW-SESSIONS-AUTH): the gateway's
+# policy `callers` is keyed per ServiceAccount, and while `specs-review` + `specs-review-shadow`
+# (specs-review-argo.yaml) ran as `agent-coordinator`, every workflow in this namespace was
+# authorized as the specs reviewer on the gateway's control plane. This SA is what the policy
+# names now (`system:serviceaccount:agent-coordinator:specs-review`). Its grant is EXACTLY what
+# the two Workflow pods need: the Argo executor's `workflowtaskresults` create/patch — the
+# chart-rendered `argo-workflows-workflow` Role, the same one `agent-coordinator` holds through
+# `argo-workflows-workflow-coordinator` (review-argo.yaml). NOTHING from the ClusterRole above
+# and none of the namespaced Roles: agents/specs-reviewer-session.sh never calls kubectl or argo
+# (its inputs are a diff, a body and a CI log; its Secret is a volume/env ref, kubelet-served),
+# so pods, configmaps, workflows, openrouterkeys and agentstacks are all left out.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: specs-review
+  namespace: agent-coordinator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: argo-workflows-workflow-specs-review, namespace: agent-coordinator }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows-workflow }
+subjects:
+  - { kind: ServiceAccount, name: specs-review, namespace: agent-coordinator }
+---
 # Responder fingerprint ledger (responder-argo.yaml): one triage per alert fp per 24h + the
 # daily cap live in the responder-seen ConfigMap — NAMESPACED on purpose (a cluster-wide cm
 # patch grant could touch other namespaces' config; the pods grant above is cluster-wide only
