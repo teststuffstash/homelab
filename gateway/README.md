@@ -26,6 +26,7 @@ it and no production credential store exists.
 | `POST /openai/v1/chat/completions`, `GET /openai/v1/models` | [`specs/endpoints/openai-chat.md`](specs/endpoints/openai-chat.md) |
 | `POST /openai/v1/responses` — the dark codex rail (`GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-CODEX-OAUTH`) | [`specs/endpoints/openai-responses.md`](specs/endpoints/openai-responses.md) |
 | `GET /catalog/opencode` — the Go catalog leg: vendor models, prices and per-model plan limits, refreshed every 6 h (`GW-CATALOG-GO`) | [`specs/endpoints/catalog.md`](specs/endpoints/catalog.md) |
+| The tier evidence — the deployed policy's per-(rail, tier) model lists derived from benchmark evidence, the committed snapshot, the equality check (`GW-MODEL-TIERS`; `devbox run tiers -- snapshot \| derive \| check \| apply`, `scripts/benchmarks-snapshot.sh`) | [`specs/endpoints/catalog.md#gw-model-tiers`](specs/endpoints/catalog.md#gw-model-tiers) |
 | `GET /metrics` (`GW-METRICS`), `GET /healthz` (`GW-HEALTH`) | [`specs/endpoints/metrics.md`](specs/endpoints/metrics.md), [`specs/endpoints/health.md`](specs/endpoints/health.md) |
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
@@ -87,7 +88,9 @@ the wire id by stripping the rail prefix. The deployed policy
 (`argocd/resources/agent-gateway/policy.json`, generated into the `agent-gateway-policy`
 ConfigMap by a hash-suffixed configMapGenerator, so an edit rolls the pod) carries the same shape; a
 `GW-MODEL-RESOLVE` row loads it through the same loader and checks its ids against
-`model-classes.json`.
+`model-classes.json`. Its three rails' tier LISTS are not hand-picked: `GW-MODEL-TIERS` derives them
+from `argocd/resources/agent-gateway/benchmarks.json` (the committed tier evidence) under the
+policy's `tiers` block, and a row fails the suite when a list drifts from the derivation.
 
 ## Implementation notes the specs do not state
 

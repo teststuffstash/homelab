@@ -16,10 +16,16 @@ draw's prices, each model's own windows, `not-in-catalog`
 ([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); this page owns only the reading. The
 design input and the operator's rulings are the spike's §Rulings.
 
+This page is *what the gateway knows about models and where it comes from*, so it carries a
+second rule: [GW-MODEL-TIERS](#gw-model-tiers) — the deployed policy's per-(rail, tier) model
+lists are **derived from benchmark evidence** ([tier evidence](../glossary.md#tier-evidence)),
+never hand-picked.
+
 ## Interface — the machine half
 
-**[`catalog.schema.json`](catalog.schema.json)** holds the view's shape (`output`) and the two
-normalised snapshots (`$defs.config_snapshot`, `$defs.docs_snapshot`) the store keeps. The
+**[`catalog.schema.json`](catalog.schema.json)** holds the view's shape (`output`), the two
+normalised snapshots (`$defs.config_snapshot`, `$defs.docs_snapshot`) the store keeps, the
+tier-evidence snapshot (`$defs.benchmarks_snapshot`) and the policy's `tiers` block (`$defs.tiers_block`). The
 `gateway_go_catalog_*` families are declared in [metrics.schema.json](metrics.schema.json) with
 the other families. No error codes: the view answers 200 (no snapshot = empty rows, never an
 error), and no auth, like `/metrics` — it carries no credential.
@@ -27,6 +33,7 @@ error), and no auth, like `/metrics` — it carries no credential.
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
+| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`) | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation, the committed snapshot and the equality check; a price for the subscription rail, the coding/agentic axes, a refresh schedule and a staleness alert are `⚑ gap` (rows below) |
 
 ## GW-CATALOG-GO
 
@@ -183,5 +190,126 @@ families — `GoCatalogStale` (a source's last good snapshot older than 24 h ⚖
 Rendered by `scripts/evidence_render.py` from CI.
 
 --8<-- "GW-CATALOG-GO.md"
+
+</details>
+
+## GW-MODEL-TIERS
+
+*The deployed policy's `rails.<rail>.models.{light,standard,heavy}` lists are the output of a
+derivation over benchmark evidence, not a hand-picked set* — the
+[tier evidence](../glossary.md#tier-evidence) (operator rulings 2026-10-18, FU-270). Three
+parts, each a reviewable file in git:
+
+- **The snapshot** — `argocd/resources/agent-gateway/benchmarks.json`
+  (`$defs.benchmarks_snapshot`): per rail, every **candidate** policy id with its Artificial
+  Analysis row (joined by the rule below), its output/input price in $ per 1M tokens and its Go
+  monthly limit. Written by `scripts/benchmarks-snapshot.sh` from three live reads, and only
+  the candidate rows (not the capability table's 345). ⚖ The gateway itself never calls AA or
+  the OpenRouter MCP: the capability rows are the OLD proxy's weekly pull (`_capability_tick` →
+  its router store's `capability(model, source, intelligence, coding, agentic, updated_ts)`),
+  read out of that pod; the Go rows are the gateway's own `GET /catalog/opencode`
+  ([GW-CATALOG-GO](#gw-catalog-go) — the same snapshot admission reads); the OpenRouter prices
+  are the public `GET https://openrouter.ai/api/v1/models` (`pricing.completion` /
+  `pricing.prompt`, per token, scaled to $/1M; a negative = dynamic = no price).
+- **The rules** — the policy's top-level `tiers` block (`$defs.tiers_block`), which the loader
+  validates: `score` (one of `intelligence` | `coding` | `agentic`), `bands` (every tier, a
+  fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer). Unknown keys
+  refuse the load like every other policy block. The fixture worlds carry the same block so one
+  loader shape holds everywhere.
+- **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `check`,
+  `apply_text`; CLI `devbox run tiers -- snapshot | derive | check | apply`). The deployed
+  lists EQUAL the derivation, order included — a test row runs the check, so a hand edit of a
+  list fails the suite; `apply` rewrites exactly the three rails' `models` blocks in the
+  file's own layout.
+
+### The rulings ⚖
+
+Each row is proven against the committed snapshot + the deployed policy (skipped when absent);
+the two remaining rulings — the lists EQUAL the derivation, the fixture worlds are exempt — are
+the ⚖ rows of *The deployed policy* below.
+
+| description | the ruling || where it binds, and what the row checks |
+|---|---||---|
+| "the score is the Artificial Analysis intelligence index ⚖" | the one axis with full coverage: `coding` / `agentic` are null on most new rows (`claude-haiku-5.5`, `gpt-6-luna`, `mimo-v2.6-*` carry only `intelligence`) || `tiers.score: intelligence` in the deployed policy; every benched candidate row carries `intelligence`, at least one lacks `coding`; the other two axes are loadable, unused (gap row) |
+| "a tier is a band of the rail's best ⚖" | within a rail, a benched candidate is `heavy` when its score ≥ 0.90 × the rail's top score, `standard` when ≥ 0.75 ×, `light` when ≥ 0.50 ×; a model can sit in several tiers || `tiers.bands` `{heavy: 0.9, standard: 0.75, light: 0.5}` in the deployed policy; every id in a deployed list scores ≥ its band × its rail's top |
+| "each list is cheapest-first by output price, capped at 3 ⚖" | order = output price ascending, then input price, then score descending, then id (the last three break ties — the gateway's own choice); the list keeps the first `cap` || `tiers.cap: 3`; every deployed priced-rail list has ≤ 3 ids with non-decreasing `out_price`; the Go price is the catalog's base `cost[0].out`, the OpenRouter price `pricing.completion` × 1M |
+| "the subscription rail has no price: score ascending is its cost proxy ⚖" | the `anthropic` rail's candidates carry no per-token price (one flat subscription); its lists are ordered by score ascending — the cheapest-capable first || `PRICELESS_RAILS = (anthropic,)` in `agent_gateway.tiers`; every anthropic snapshot row has no price and each deployed anthropic list is strictly score-ascending; the gap row below |
+| "the candidates per rail ⚖" | opencode = the Go catalog's `listed` models with a `monthly_limit_usd` under the deployed plan (`opencode-go/<id>`); openrouter = every `models.*.ids.openrouter` value of `model-classes.json` (the old proxy's table — gap row); anthropic = the policy's three aliases `claude/haiku`, `claude/sonnet`, `claude/opus` (an argument of the snapshot script, never code) || `build_snapshot`; in the snapshot every opencode key is `opencode-go/<id>`, the openrouter keys = `model-classes.json`'s `models.*.ids.openrouter` values, the anthropic keys = the deployed rail's `claude/` aliases, `sources.capability.source` = `artificial-analysis` |
+| "the join to the AA row is a rule, not a table ⚖" | AA ids are `vendor/model` with dotted versions; Go ids are bare: join on the part after the vendor `/` with `-N-N` ↔ `-N.N` normalisation, a `:variant` suffix dropped, the vendor kept when the policy id names one; the three aliases join the NEWEST `anthropic/claude-<alias>-<version>` row by version; no match, or more than one, = unbenched || `join_aa_id`; every snapshot row's `aa_id` is what `join_aa_id` returns over the snapshot's AA ids (no row is a hand-written pair); the rows below |
+| "unbenched never tiers ⚖" | a candidate with no AA row is in no list, whatever its price (the free `beam-free` and `longcat-2.5-preview-free` stay out); so does an unpriced candidate on a priced rail (`inclusionai/ling-3.0-flash:free` is benched but no longer on OpenRouter's list) || `derive`; no id in a deployed list has a null `aa_id`, nor a null `out_price` on a priced rail |
+
+### The bands, on a hand-written rail
+
+A six-candidate priced rail `fx` under `score: intelligence`, bands 0.9 / 0.75 / 0.5, cap 3.
+Scores and prices are the row's inputs, the lists are arithmetic: top = 50, so heavy ≥ 45,
+standard ≥ 37.5, light ≥ 25.
+
+| description | candidates (id: score · out / in $ per 1M) || light | standard | heavy |
+|---|---||---|---|---|
+| "heavy = within 0.90 of the rail's top, cheapest first ⚖" | `fx/top` 50 · 2.0/0.5, `fx/near` 46 · 1.0/0.2, `fx/mid` 40 · 0.5/0.1, `fx/low` 26 · 0.1/0.05, `fx/far` 20 · 0.05/0.01, `fx/none` unbenched · 0/0 || — | — | `fx/near`, `fx/top` |
+| "standard = within 0.75 ⚖" | the same || — | `fx/mid`, `fx/near`, `fx/top` | — |
+| "light = within 0.50, the cap drops the 4th by price ⚖" | the same || `fx/low`, `fx/mid`, `fx/near` (`fx/top` is 4th at 2.0) | — | — |
+| "a model sits in several tiers" | the same || `fx/near` in all three | | |
+| "an unbenched candidate never tiers, however cheap ⚖" | the same (`fx/none` at 0/0 has no AA row) || `fx/none` in none | | |
+| "an unpriced candidate on a priced rail never tiers ⚖" | the same + `fx/nopx` 49 · no price || `fx/nopx` in none; top stays 50 | | |
+| "a price tie breaks by input price, then score, then id ⚖" | rail `fxt`: `fxt/a` 40 · 0.5/0.2, `fxt/b` 44 · 0.5/0.1, `fxt/c` 44 · 0.5/0.2 || — | — | `fxt/b`, `fxt/c`, `fxt/a` |
+| "the axis is the policy's: the same rail under `score: coding`" | `fx` with coding `top` 10, `near` 60, `mid` 55, `low` 50, `far` 5 || — | — | `fx/mid`, `fx/near` (top = 60, heavy ≥ 54) |
+| "the subscription rail orders by score ascending ⚖" | rail `anthropic`: `claude/fx-a` 40, `claude/fx-b` 55, `claude/fx-c` 60, no prices || `claude/fx-a`, `claude/fx-b`, `claude/fx-c` | `claude/fx-b`, `claude/fx-c` | `claude/fx-b`, `claude/fx-c` |
+| "no benched candidate: empty lists, which apply refuses to write" | rail `fx-empty`: `fx/none` only || `[]` — `apply_text` raises naming `fx-empty.light` | | |
+
+### The id join
+
+| description | policy id | AA ids present || joins |
+|---|---|---||---|
+| "a Go id joins the dotted AA id ⚖" | `opencode-go/claude-haiku-5-5` | `anthropic/claude-haiku-5.5`, `anthropic/claude-haiku-4.5` || `anthropic/claude-haiku-5.5` |
+| "a dotted Go id joins as is" | `opencode-go/glm-5.3` | `z-ai/glm-5.3`, `z-ai/glm-5.3-flash` || `z-ai/glm-5.3` |
+| "a Go id the table lacks is unbenched" | `opencode-go/beam-free` | (the two above) || none |
+| "a suffix is not a match" | `opencode-go/hy3` | `tencent/hy3-preview` || none |
+| "two vendors' rows for one bare id: unbenched ⚖" | `opencode-go/gpt-6-luna` | `openai/gpt-6-luna`, `other/gpt-6-luna` || none |
+| "an alias joins the newest row of its family by version ⚖" | `claude/opus` | `anthropic/claude-opus-5`, `anthropic/claude-opus-5.5`, `anthropic/claude-opus-4.1` || `anthropic/claude-opus-5.5` |
+| "an alias with no row of its family is unbenched" | `claude/haiku` | (the three opus rows) || none |
+| "an openrouter id keeps its vendor" | `deepseek/deepseek-v4-flash` | `deepseek/deepseek-v4-flash`, `other/deepseek-v4-flash` || `deepseek/deepseek-v4-flash` |
+| "a `:free` variant joins its family ⚖" | `inclusionai/ling-3.0-flash:free` | `inclusionai/ling-3.0-flash` || `inclusionai/ling-3.0-flash` |
+
+### The `tiers` block
+
+| description | `tiers` in an otherwise `policy-default` document || the policy load |
+|---|---||---|
+| "the block loads" | `{score: intelligence, bands: {heavy: 0.9, standard: 0.75, light: 0.5}, cap: 3}` (the world's) || loads; `Policy.tiers` = those values |
+| "an unknown key refuses the load" | + `foo: 1` || refused, naming `tiers` |
+| "an unknown score axis refuses the load" | `score: vibes` || refused, naming `tiers.score` |
+| "a band above 1 refuses the load" | `bands.heavy: 1.5` || refused, naming `tiers.bands.heavy` |
+| "a zero band refuses the load" | `bands.light: 0` || refused, naming `tiers.bands.light` |
+| "bands out of order refuse the load" | `bands.standard: 0.95` (heavy 0.9) || refused, naming `heavy >= standard >= light` |
+| "a missing tier band refuses the load" | `bands` without `light` || refused, naming `light` |
+| "a non-positive cap refuses the load" | `cap: 0` || refused, naming `tiers.cap` |
+| "no block: the policy loads with no rules, and the check refuses to run ⚖" | `tiers` absent || loads, `Policy.tiers` None; `check()` raises naming `tiers` |
+
+### The deployed policy
+
+Against `argocd/resources/agent-gateway/benchmarks.json` + `policy.json` (skipped when absent).
+
+| description | input || verdict |
+|---|---||---|
+| "the deployed tier lists equal the derivation ⚖" | the committed snapshot + the deployed `tiers` block || `check()` = `{}` — every `rails.<rail>.models.<tier>` is the derived list, in order |
+| "a hand edit of a list fails the check" | the deployed policy with `rails.opencode.models.heavy` reversed || `check()` names `opencode.heavy` with the derived list as expected |
+| "the snapshot is the schema's shape" | the committed snapshot || exactly the `required` keys of `$defs.benchmarks_snapshot`, of a source and of a candidate row |
+| "the fixture worlds carry the block, not the derivation ⚖" | `policy-default` + the committed snapshot || the world's `tiers` = the deployed block; `check()` on the world is NOT empty (its lists are fixture ids) and no suite row runs it |
+
+### Named gaps (rows that exist so the omission is visible)
+
+| description | input || v0 answer | the gap |
+|---|---||---|---|
+| "⚑ gap: no price for the subscription rail" | the `anthropic` rail || score ascending as the cost proxy | a subscription's marginal cost per model is not a per-token price; the gateway has no ledger for it (the cost ledger is a gap on [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)) |
+| "⚑ gap: coding / agentic unused" | `tiers.score: coding` || loads and derives — but most new rows carry null there (the ruling) | AA's task indices have no coverage on the newest models; revisit when they do |
+| "⚑ gap: the snapshot is hand-refreshed, nothing alerts on its age" | a `snapshot_at` a month old || the suite still passes | no schedule runs `benchmarks-snapshot.sh`, no `gateway_*` family carries the snapshot's age; the AA pull behind it is the old proxy's weekly tick |
+| "⚑ gap: the openrouter candidate set is the old proxy's table" | `model-classes.json` `models.*.ids.openrouter` || 11 ids, 6 benched, 5 priced — `moonshotai/kimi-k3` alone reaches `heavy` / `standard` | the gateway's openrouter rail has no registry of its own ([GW-CATALOG-GO](#gw-catalog-go) gap row); a Go-shaped catalog leg for OpenRouter would widen the set |
+| "⚑ gap: a Go-only id spelling joins nothing" | `gemini-4-argon-contributor`, `muse-spark-1.3-contributor`, `hy3`, `hy4-preview`, `qwen3.8-flash`, `space-bunny` || unbenched (9 of 29 listed Go models) | the vendor's `-contributor` / `-preview` suffixes and bare family ids have no AA spelling; a per-id alias would be a table, which the ruling forbids |
+
+<details markdown="1"><summary>Evidence</summary>
+
+Rendered by `scripts/evidence_render.py` from CI.
+
+--8<-- "GW-MODEL-TIERS.md"
 
 </details>

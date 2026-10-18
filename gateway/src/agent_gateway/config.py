@@ -335,6 +335,52 @@ def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
     return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows))), float(margin)
 
 
+SCORE_AXES = ("intelligence", "coding", "agentic")  # the AA capability row's three indices (GW-MODEL-TIERS)
+
+
+@dataclass(frozen=True)
+class TiersPolicy:
+    """`tiers` (GW-MODEL-TIERS): how the DEPLOYED policy's per-(rail, tier) model lists are derived
+    from the committed benchmark snapshot — the score axis, each tier's band as a fraction of the
+    rail's top score (heavy ≥ standard ≥ light), and the cap on a list's length. Rules only: the
+    scores and prices live in the snapshot, the lists are its output (`agent_gateway.tiers`)."""
+    score: str
+    bands: dict[str, float]  # tier -> fraction of the rail's top score a candidate must reach
+    cap: int
+
+
+def tiers_policy(t) -> TiersPolicy | None:
+    """Validate a policy's `tiers` block; None when the policy carries none (the derivation then
+    has nothing to run against — `tiers.check` refuses, the loader does not guess a default)."""
+    where = "tiers"
+    if t is None:
+        return None
+    if not isinstance(t, dict):
+        raise PolicyError(f"policy: {where} must be an object {{score, bands, cap}}")
+    _keys(where, t, {"score", "bands", "cap"})
+    score = t.get("score")
+    if score not in SCORE_AXES:
+        raise PolicyError(f"policy: {where}.score must be one of {', '.join(SCORE_AXES)}")
+    bands = t.get("bands")
+    if not isinstance(bands, dict):
+        raise PolicyError(f"policy: {where}.bands must be an object {{tier: fraction}}")
+    _keys(f"{where}.bands", bands, set(TIERS))
+    fractions: dict[str, float] = {}
+    for tier in TIERS:
+        if tier not in bands:
+            raise PolicyError(f"policy: {where}.bands must name every tier ({', '.join(TIERS)}); {tier} is missing")
+        v = _num(f"{where}.bands.{tier}", bands[tier], hi=1)
+        if v <= 0:
+            raise PolicyError(f"policy: {where}.bands.{tier} must be a fraction in (0, 1]")
+        fractions[tier] = v
+    if not fractions["heavy"] >= fractions["standard"] >= fractions["light"]:
+        raise PolicyError(f"policy: {where}.bands must satisfy heavy >= standard >= light")
+    cap = t.get("cap")
+    if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
+        raise PolicyError(f"policy: {where}.cap must be a positive integer")
+    return TiersPolicy(score, fractions, cap)
+
+
 CONTROL_PLANE_AUTH_MODES = ("observe", "enforce")
 OUTCOME_GRANTS = ("own", "any")
 # A caller key is a ServiceAccount username exactly as a TokenReview names it: a DNS-1123 label
@@ -409,6 +455,7 @@ class Policy:
     callers: dict[str, CallerPolicy] = field(default_factory=dict)
     outcome_window_s: int = 86400  # GW-SESSIONS-OUTCOME: how long after a session ends an outcome is accepted
     liveness_check_s: float = 60.0  # GW-SESSIONS-LIVENESS: the reaper's interval (0 = off)
+    tiers: TiersPolicy | None = None  # GW-MODEL-TIERS: the derivation's rules; None = the policy carries none
 
     def context_tokens_for(self, model: str) -> int | None:
         return self.context_tokens.get(model)
@@ -497,6 +544,7 @@ class Policy:
             callers=callers,
             outcome_window_s=int(d.get("outcome_window_s", 86400)),
             liveness_check_s=float(d.get("liveness_check_s", 60)),
+            tiers=tiers_policy(d.get("tiers")),
         )
 
     @staticmethod

@@ -25,6 +25,9 @@
       "serve": [
         "uv run --frozen python -m agent_gateway"
       ],
+      "tiers": [
+        "uv run --frozen python scripts/tiers.py \"$@\""
+      ],
       "specs-build": [
         "bash scripts/specs-build.sh"
       ],

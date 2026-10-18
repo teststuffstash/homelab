@@ -42,9 +42,9 @@
       "max_sessions": 5,
       "side_models": ["claude/haiku"],
       "models": {
-        "light":    ["claude/haiku"],
-        "standard": ["claude/sonnet"],
-        "heavy":    ["claude/sonnet"]
+        "light":    ["claude/haiku", "claude/sonnet", "claude/opus"],
+        "standard": ["claude/haiku", "claude/sonnet", "claude/opus"],
+        "heavy":    ["claude/sonnet", "claude/opus"]
       }
     },
     "opencode": {
@@ -65,9 +65,9 @@
       "plan": "go",
       "max_sessions": 3,
       "models": {
-        "light":    ["opencode-go/deepseek-v4.1-flash"],
-        "standard": ["opencode-go/deepseek-v4.1-flash"],
-        "heavy":    ["opencode-go/deepseek-v4.1-flash"]
+        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/claude-haiku-5-5", "opencode-go/gpt-6-luna"],
+        "standard": ["opencode-go/mimo-v2.6-flash", "opencode-go/claude-haiku-5-5", "opencode-go/gpt-6-luna"],
+        "heavy":    ["opencode-go/claude-haiku-5-5", "opencode-go/glm-5.3-flash", "opencode-go/mimo-v2.6-pro"]
       }
     },
     "openrouter": {
@@ -75,11 +75,17 @@
       "credential_probe": {"method": "GET", "path": "/v1/key", "backoff_s": [60, 3600]},
       "max_sessions": 20,
       "models": {
-        "light":    ["deepseek/deepseek-v4-flash"],
-        "standard": ["deepseek/deepseek-v4-flash"],
-        "heavy":    ["deepseek/deepseek-v4.1-flash"]
+        "light":    ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-flash", "xiaomi/mimo-v2.5"],
+        "standard": ["moonshotai/kimi-k3"],
+        "heavy":    ["moonshotai/kimi-k3"]
       }
     }
+  },
+  "tiers": {
+    "_comment": "GW-MODEL-TIERS (operator rulings 2026-10-18): the three rails' tier LISTS above are DERIVED from benchmarks.json beside this file — `devbox run tiers -- apply` writes them, `-- check` (a test row) fails on a hand edit. score = the Artificial Analysis intelligence index (the one axis with full coverage); bands = a candidate is in a tier when its score >= the fraction x the rail's top score (a model can sit in several tiers); cap = each list's length, cheapest-first by output price (the subscription rail: score ascending as the cost proxy).",
+    "score": "intelligence",
+    "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5},
+    "cap": 3
   },
   "context_tokens": {
     "opencode-go/deepseek-v4.1-flash": 1000000

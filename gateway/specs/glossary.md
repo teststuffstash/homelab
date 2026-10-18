@@ -104,7 +104,8 @@ A size label on a session — `light` | `standard` | `heavy` — that selects th
 chosen rail: `rails.<rail>.models.<tier>`, an ORDERED list the walk takes the first admissible
 model of (not struck by this task, not cooled; a bare string = a one-item list —
 [§The retry contract](endpoints/sessions.md#the-retry-contract--model-lists-strikes-attempt)). The role's default comes from the policy; the caller
-may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap.
+may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap. The
+deployed policy's lists are derived from the [tier evidence](#tier-evidence).
 
 ## defer
 
@@ -143,6 +144,19 @@ unparseable or implausible refresh keeps the last good snapshot, which the store
 ([GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go)). *Listed* means in the config snapshot — an
 account fact, not a liveness signal. **Plan** = `go` | `go-plus`, declared in the policy
 (`rails.opencode.plan`) because no vendor API says which one a key is on.
+
+## tier evidence
+
+The benchmark rows the DEPLOYED policy's [tier](#tier) lists are derived from
+([GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers)): a committed snapshot
+(`argocd/resources/agent-gateway/benchmarks.json`) of every candidate policy id per rail with its
+Artificial Analysis row (joined by rule, never a table), its price and its Go monthly limit, plus
+the policy's `tiers` block — the score axis, the per-tier **score bands** as fractions of the
+rail's top score, the cap. The lists are the derivation's output; a hand edit fails the suite.
+*Score band* here is the `tiers.bands` fraction, not the ADR-104 curation band of
+[`docs/glossary.md`](../../docs/glossary.md) (`regular` / `premium` / `ultra` / `instrument`).
+Refreshed by hand (`scripts/benchmarks-snapshot.sh`); the fixture worlds carry the block but
+keep their fixture lists.
 
 ## persistence interface
 
