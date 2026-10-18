@@ -89,6 +89,7 @@ from those two files in memory.
 | `docs-ok` | 200, the page fixture |
 | `docs-404` | 404 (the page moved) |
 | `docs-unknown-model` | a `DeepSeek V4.2 Flash` plan row the Endpoints table does not name |
+| `docs-short-endpoint-row` | the Endpoints table's `Step 5 Preview` row cut to one cell |
 | `docs-header-drift` | the plan tables' `Monthly limit` column renamed `Limit` |
 | `docs-no-peak-hours` / `docs-no-shares` | the peak-hours sentence / the 5-hour-weekly-monthly share sentence removed |
 | `docs-shrunk` | only the two DeepSeek models' rows |

@@ -100,6 +100,7 @@ class Metrics:
         key = (_bounded(rail, RAILS), _bounded(dialect, DIALECTS), _bounded(reason, INCOMPLETE_REASONS))
         with self._lock:
             self.incomplete_total[key] = self.incomplete_total.get(key, 0) + 1
+
     def bind_extra(self, render: Callable[[], list[str]]) -> None:
         """A module that owns its own families renders them here (the Go catalog — GW-CATALOG-GO)."""
         self._extra.append(render)

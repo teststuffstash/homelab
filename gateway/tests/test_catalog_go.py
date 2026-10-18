@@ -22,6 +22,7 @@ test clock, 2027-01-15T08:00:00Z.
 | the page parses | none | docs-ok | ok | 5 models |
 | a 404 keeps the last good — the page moved | 5 | docs-404 | fetch-failed | the last good |
 | a plan row naming a model the Endpoints table lacks is a parse failure | 5 | docs-unknown-model | parse-failed | the last good |
+| an Endpoints row with one cell is a parse failure | 5 | docs-short-endpoint-row | parse-failed | the last good |
 | a renamed limit column is a parse failure | 5 | docs-header-drift | parse-failed | the last good |
 | peak rows without the peak-hours sentence are a parse failure | 5 | docs-no-peak-hours | parse-failed | the last good |
 | no share sentence is a parse failure | 5 | docs-no-shares | parse-failed | the last good |
@@ -176,6 +177,7 @@ DOCS_ROWS = [
     ("the page parses", "none", "docs-ok", "ok"),
     ("a 404 keeps the last good — the page moved", "5", "docs-404", "fetch-failed"),
     ("a plan row naming a model the Endpoints table lacks is a parse failure", "5", "docs-unknown-model", "parse-failed"),
+    ("an Endpoints row with one cell is a parse failure", "5", "docs-short-endpoint-row", "parse-failed"),
     ("a renamed limit column is a parse failure", "5", "docs-header-drift", "parse-failed"),
     ("peak rows without the peak-hours sentence are a parse failure", "5", "docs-no-peak-hours", "parse-failed"),
     ("no share sentence is a parse failure", "5", "docs-no-shares", "parse-failed"),

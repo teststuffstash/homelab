@@ -191,6 +191,8 @@ def parse_docs(text: str) -> dict:
     for header, rows in _tables(text):
         if header[:2] == ["Model", "Model ID"]:
             for r in rows:
+                if len(r) != len(header) or not r[0] or not r[1]:
+                    raise ParseError(f"Endpoints row {r!r}: {len(r)} cells, expected {len(header)} with a name and an id")
                 ids[r[0]] = r[1]
     if not ids:
         raise ParseError("no Endpoints table (Model | Model ID)")
@@ -324,8 +326,8 @@ class GoCatalog:
             return "fetch-failed"
         try:
             body = PARSERS[source](r)
-        except (ParseError, ValueError) as e:
-            log.error("catalog: %s parse failed (%s) — keeping the last good snapshot", source, e)
+        except Exception as e:  # noqa: BLE001 — ANY drift from the known shape is a parse failure, never a guess
+            log.error("catalog: %s parse failed (%s: %s) — keeping the last good snapshot", source, type(e).__name__, e)
             return "parse-failed"
         fresh = Snapshot(source, now, body)
         last = self.snapshots.get(source)
@@ -341,7 +343,15 @@ class GoCatalog:
         return "ok"
 
     async def refresh(self) -> dict[str, str]:
-        return {s: await self.refresh_source(s) for s in SOURCES}
+        """Both sources, each on its own: one source's failure never skips the other."""
+        out: dict[str, str] = {}
+        for s in SOURCES:
+            try:
+                out[s] = await self.refresh_source(s)
+            except Exception:  # noqa: BLE001 — refresh_source records every outcome; this is the last net
+                log.exception("catalog: %s refresh raised", s)
+                out[s] = "fetch-failed"
+        return out
 
     async def run(self) -> None:
         """The schedule: one refresh of both sources at start, then every `refresh_s`."""

@@ -11,8 +11,8 @@ those facts were copied by hand into `policy.json` and `gometer.py`, and the cop
 the gateway's only Go model left the Go catalog on 2026-10-14 and nothing noticed
 ([opencode-go-catalog.md](../../../docs/spikes/opencode-go-catalog.md) §F3). The gateway now
 reads them on a schedule from two vendor sources, keeps the last good snapshot of each in its
-store, and shows both here and on `/metrics`. Admission reads the snapshot
-([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)); this page owns only the reading. The
+store, and shows both here and on `/metrics`. This page owns only the reading; admission does
+not read the snapshot yet (the `⚑ gap` row below — [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) still prices from the policy). The
 design input and the operator's rulings are the spike's §Rulings.
 
 ## Interface — the machine half
@@ -25,7 +25,7 @@ error), and no auth, like `/metrics` — it carries no credential.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg. Admission reading it is [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s; models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
+| [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg. Admission reading it is `⚑ gap` ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s, next); models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
 
 ## GW-CATALOG-GO
 
@@ -47,7 +47,9 @@ each with its own snapshot:
   file) is not read: it keys rows by family (`deepseek-flash`), and limits are per model (ruling 3);
   `go.mdx` carries every fact the leg needs.
 
-The parse is **strict**: a shape the parser does not know is a parse failure, never a guess. A
+The parse is **strict**: a shape the parser does not know is a parse failure, never a guess —
+whatever the parser raises on it is counted `parse-failed`, and one source's failure never skips
+the other source's refresh. A
 refresh whose fetch fails, whose parse fails, or whose model count drops below **half** ⚖ of the
 last good snapshot's (zero models always) keeps the last good snapshot. The snapshot is written
 to the gateway's store (`catalog_snapshots`, one row per source), so a restarted gateway starts
@@ -83,6 +85,7 @@ ids with a row in either plan tab.
 | "the page parses" | none | `docs-ok` || ok | 5 models |
 | "a 404 keeps the last good — the page moved" | 5 | `docs-404` || fetch-failed | the last good |
 | "a plan row naming a model the Endpoints table lacks is a parse failure" | 5 | `docs-unknown-model` (a `DeepSeek V4.2 Flash` row) || parse-failed | the last good |
+| "an Endpoints row with one cell is a parse failure" | 5 | `docs-short-endpoint-row` (`\| Step 5 Preview \|`) || parse-failed | the last good |
 | "a renamed limit column is a parse failure" | 5 | `docs-header-drift` (`Monthly limit` → `Limit`) || parse-failed | the last good |
 | "peak rows without the peak-hours sentence are a parse failure" | 5 | `docs-no-peak-hours` || parse-failed | the last good |
 | "no share sentence is a parse failure" | 5 | `docs-no-shares` || parse-failed | the last good |
@@ -157,6 +160,7 @@ families — `GoCatalogStale` (a source's last good snapshot older than 24 h ⚖
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
+| "⚑ gap: admission reads the snapshot" | a Go admission || priced from `policy.json` `window_draw` (the hand copy) | the second half of this leg: the window draw prices from the snapshot, sizes each model's windows from its own monthly limit, and refuses an unlisted id `not-in-catalog` (the spike's rulings 3–5) |
 | "⚑ gap: models.dev as a fallback" | the console config unreachable for a day || the last good snapshot, `GoCatalogStale` | the spike's §F4: `models.dev/api.json` mirrors the vendor and carries the only machine-readable `deprecated` marker |
 | "⚑ gap: listed is not alive" | a listed id that answers 400 `Model is unavailable` || listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are |
 | "⚑ gap: a vendor reset time" | a Go 429 || — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed |

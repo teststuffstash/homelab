@@ -64,6 +64,9 @@ def docs_text(behaviour: str) -> str:
     if behaviour == "docs-unknown-model":
         i = next(n for n, line in enumerate(lines) if "DeepSeek V4.1 Flash (Off-Peak)" in line)
         lines.insert(i, lines[i].replace("DeepSeek V4.1 Flash (Off-Peak)", "DeepSeek V4.2 Flash            "))
+    elif behaviour == "docs-short-endpoint-row":
+        i = next(n for n, line in enumerate(lines) if line.startswith("| Step 5 Preview ") and "step-5-preview" in line)
+        lines[i] = "| Step 5 Preview |"
     elif behaviour == "docs-header-drift":
         lines = [line.replace("| Monthly limit ", "| Limit         ") for line in lines]
     elif behaviour == "docs-no-peak-hours":
