@@ -147,7 +147,10 @@ six OVERSIZE items pointer-ized into
       OpenCode service-account key (opencode.ai/v2/docs/console/api/#service-accounts) needs the console.
       Rotation: wallet `opencode-go-api-key` → `devbox run infisical-secret OPENCODE_GO_API_KEY=…` →
       force-sync ExternalSecret `agent-egress/opencode-go-key` → restart `agent-gateway` + `openrouter-proxy`.
-      **Next:** operator mints a service-account key before 2026-11-16 (the expiry detector is in flight).
+      Scope settled 2026-10-18: an **"Inference only"** service-account key suffices — its scope covers
+      `GET /api/v2/config` (vendor doc, console/api), the ONLY console call either pod makes (`gateway/src/agent_gateway/catalog.py`;
+      the proxy calls inference only); neither reads Budgets. **Next:** operator mints an Inference-only
+      service-account key before 2026-11-16 (the expiry detector `GoRailCredentialRejected` is live, #2691/#2693).
 
 ## GitOps & platform
 
