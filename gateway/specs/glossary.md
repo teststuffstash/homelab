@@ -109,7 +109,7 @@ may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which i
 ## defer
 
 The admission answer "not now": HTTP 200 `{decision: "defer", reason, retry_after_s}` — never
-an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `cell-cooled`, `role-rail-denied`,
+an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `cell-cooled`, `not-in-catalog` (a Go model the [Go catalog](#go-catalog) does not cover), `role-rail-denied`,
 `stack-unknown`, `credential-unresolved`, `credential-rejected`, `cells-exhausted` (no
 `retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).

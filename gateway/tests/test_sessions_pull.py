@@ -39,7 +39,7 @@ What a pull returns:
 
 | description | sequence | result |
 |---|---|---|
-| the pull answers the opencode env GW-SESSIONS-ENV would have | worker (opencode) bound -> pull | env keys = env_keys; apiKey a fresh gws_ token; baseURL /openai/v1; model gateway/deepseek-v4-flash |
+| the pull answers the opencode env GW-SESSIONS-ENV would have | worker (opencode) bound -> pull | env keys = env_keys; apiKey a fresh gws_ token; baseURL /openai/v1; model gateway/deepseek-v4.1-flash |
 | the pull answers the claude env | reviewer (claude) bound -> pull | ANTHROPIC_AUTH_TOKEN gws_; ANTHROPIC_BASE_URL /anthropic; ANTHROPIC_MODEL sonnet |
 | the pull answers the goose env | worker goose/openrouter bound -> pull | OPENAI_API_KEY gws_; OPENAI_BASE_URL /openai/v1; GOOSE_PROVIDER openai; GOOSE_MODEL deepseek/deepseek-v4-flash |
 | the pulled token rides the data plane | pull -> POST /openai/v1/chat/completions | 200; requests = 1 |
@@ -287,9 +287,9 @@ async def test_pull_opencode_env(gw, reviews):
         check("env keys", list(env), doc["env_keys"])
     with then("the provider apiKey is a fresh gws_ token"):
         check("apiKey shape", bool(TOKEN_RE.match(cfg["provider"]["gateway"]["options"]["apiKey"])), True)
-    with then("baseURL = <self>/openai/v1, model = gateway/deepseek-v4-flash"):
+    with then("baseURL = <self>/openai/v1, model = gateway/deepseek-v4.1-flash"):
         check("(baseURL, model)", (cfg["provider"]["gateway"]["options"]["baseURL"], cfg["model"]),
-              (f"{SELF_URL}/openai/v1", "gateway/deepseek-v4-flash"))
+              (f"{SELF_URL}/openai/v1", "gateway/deepseek-v4.1-flash"))
 
 
 async def test_pull_claude_env(gw, reviews):

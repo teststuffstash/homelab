@@ -96,7 +96,7 @@ LAND_ROWS = [
 @pytest.mark.parametrize(("op", "behaviour", "path"), [r[1:] for r in LAND_ROWS], ids=[r[0] for r in LAND_ROWS])
 async def test_calls_land(gw, upstreams, settings, op, behaviour, path):
     world(upstream=behaviour)
-    model = "claude-sonnet-4-6" if op == "messages" else "deepseek-v4-flash"
+    model = "claude-haiku-5-5" if op == "messages" else "deepseek-v4.1-flash"
     status, body, headers = await expected_bytes(upstreams[RAIL], op, model, behaviour)
     upstreams[RAIL].behaviour = behaviour
     extra = {"model": model, **({"stream": True} if behaviour == "upstream-stream" else {})} if op != "models" else None

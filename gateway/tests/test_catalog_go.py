@@ -50,6 +50,14 @@ test clock, 2027-01-15T08:00:00Z.
 | an unknown plan refuses the load | opencode pro | refused, naming rails.opencode.plan |
 | a plan on another rail refuses the load | openrouter go | refused, naming rails.openrouter.plan |
 
+| description | rails.opencode.admission edit | the policy load |
+|---|---|---|
+| a price row in the policy refuses the load | window_draw.prices | refused, naming prices |
+| a fallback price refuses the load | window_draw.fallback | refused, naming fallback |
+| a window budget refuses the load | windows.5h.budget_usd | refused, naming budget_usd |
+| a window the vendor gives no share refuses the load | windows.1d | refused, naming windows.1d |
+| an unknown latch scope refuses the load | latch_scope: rail | refused, naming latch_scope |
+
 | description | source | authorization | user-agent | x-opencode-session |
 |---|---|---|---|---|
 | the config fetch carries the key and a client identity | config | Bearer <key> | agent-gateway/<v> (go-catalog) | a UUID, new per fetch |
@@ -69,8 +77,9 @@ test clock, 2027-01-15T08:00:00Z.
 | the model count of the last good snapshot | catalog-ok, then catalog-shrunk | gateway_go_catalog_models{source="config"} | 5 |
 | every refresh is counted by outcome | catalog-ok, then catalog-malformed | refresh_total ok / parse-failed | 1 / 1 |
 | the last outcome is 1, the others 0 | catalog-ok, then catalog-malformed | last_outcome parse-failed / ok | 1 / 0 |
-| policy Go models the config does not list are counted | catalog-ok | policy_models_missing{source="config"} | 2 |
-| policy Go models without a limit row under the plan are counted | docs-ok | policy_models_missing{source="docs"} | 2 |
+| every policy Go model listed: none missing | catalog-ok | policy_models_missing{source="config"} | 0 |
+| policy Go models the config does not list are counted | catalog-shrunk | policy_models_missing{source="config"} | 1 |
+| policy Go models without a limit row under the plan are counted | docs-shrunk | policy_models_missing{source="docs"} | 1 |
 """
 
 from __future__ import annotations
@@ -321,6 +330,45 @@ async def test_plan(cworld, rail, plan, refused):
             assert error is not None and refused in error, error
 
 
+# ── What the policy no longer holds (ruling 5) ─────────────────────────────────────────────────
+def _set(doc: dict, path: str, value) -> None:
+    node = doc["rails"]["opencode"]["admission"]
+    *parents, leaf = path.split(".")
+    for k in parents:
+        node = node[k]
+    node[leaf] = value
+
+
+RULES_ONLY_ROWS = [
+    ("a price row in the policy refuses the load", "window_draw.prices",
+     {"opencode-go/deepseek-v4.1-flash": {"in": 0.15, "out": 0.60, "cache_read": 0.003, "cache_write": None}}, "prices"),
+    ("a fallback price refuses the load", "window_draw.fallback", {"in": 9.0, "out": 9.0, "cache_read": 0, "cache_write": 0}, "fallback"),
+    ("a window budget refuses the load", "window_draw.windows.5h.budget_usd", 12.0, "budget_usd"),
+    ("a window the vendor gives no share refuses the load", "window_draw.windows.1d", {"threshold": 0.8, "anchor": "weekly", "weekday": "mon"}, "windows.1d"),
+    ("an unknown latch scope refuses the load", "latch_scope", "rail", "latch_scope"),
+]
+
+
+@pytest.mark.parametrize(("path", "value", "named"), [r[1:] for r in RULES_ONLY_ROWS], ids=[r[0] for r in RULES_ONLY_ROWS])
+def test_rules_only(path, value, named):
+    world()
+    from agent_gateway.config import Policy, PolicyError
+
+    from .conftest import POLICY_FIXTURE
+    doc = json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
+    with given(f"policy-default with rails.opencode.admission.{path} = {value!r}"):
+        _set(doc, path, value)
+    with when("the policy loads"):
+        try:
+            Policy.from_dict(doc)
+            error = None
+        except PolicyError as e:
+            error = str(e)
+        attach_json("load result", {"error": error})
+    with then(f"refused, naming {named}", refused={"expected": named, "actual": error}):
+        assert error is not None and named in error, error
+
+
 # ── What a fetch sends ───────────────────────────────────────────────────────────────────────
 UA = f"agent-gateway/{__version__} (go-catalog)"
 
@@ -485,28 +533,30 @@ async def test_metric_last_outcome(cworld, vendor):
 
 
 MISSING_ROWS = [
-    ("policy Go models the config does not list are counted", "config", "catalog-ok"),
-    ("policy Go models without a limit row under the plan are counted", "docs", "docs-ok"),
+    ("every policy Go model listed: none missing", "config", "catalog-ok", []),
+    ("policy Go models the config does not list are counted", "config", "catalog-shrunk", ["claude-haiku-5-5"]),
+    ("policy Go models without a limit row under the plan are counted", "docs", "docs-shrunk", ["claude-haiku-5-5"]),
 ]
 
 
-@pytest.mark.parametrize(("source", "behaviour"), [r[1:] for r in MISSING_ROWS], ids=[r[0] for r in MISSING_ROWS])
-async def test_metric_policy_missing(cworld, vendor, policy, source, behaviour):
+@pytest.mark.parametrize(("source", "behaviour", "missing"), [r[1:] for r in MISSING_ROWS], ids=[r[0] for r in MISSING_ROWS])
+async def test_metric_policy_missing(cworld, vendor, policy, source, behaviour, missing):
     world(upstream=behaviour)
     app = cworld.build()
     ids = app.state.catalog.policy_models
-    with given(f"policy-default's Go ids (tiers + side_models, wire spelling): {', '.join(ids)}"):
+    with given(f"policy-default's Go ids (tiers + side_models, wire spelling): {', '.join(ids)}; the {source} source answers {behaviour}"):
         attach_json("policy Go ids", list(ids))
+        setattr(vendor, source, behaviour)
     with when(f"the {source} source refreshes ({behaviour}); GET /metrics + /catalog/opencode"):
         await app.state.catalog.refresh_source(source)
         text = await _metrics(app)
         v = await _view(app)
     series = f'gateway_go_catalog_policy_models_missing{{source="{source}"}}'
-    then_eq(series, _value(text, series), 2)
-    with then("the view names them: neither listed nor limited"):
-        key = "listed" if source == "config" else "monthly_limit_usd"
-        check(f"policy_models.*.{key}", {m: r[key] for m, r in v["policy_models"].items()},
-              {m: (False if source == "config" else None) for m in ids})
+    then_eq(series, _value(text, series), len(missing))
+    key = "listed" if source == "config" else "monthly_limit_usd"
+    with then(f"the view names the missing: {', '.join(missing) or 'none'}"):
+        uncovered = sorted(m for m, r in v["policy_models"].items() if (r[key] is False if key == "listed" else r[key] is None))
+        check(f"policy_models whose {key} is uncovered", uncovered, missing)
 
 
 async def test_view_keys_are_the_schema(cworld, vendor):

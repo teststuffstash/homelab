@@ -2,19 +2,19 @@
 
 | description | session model (policy) | rail | body model | verdict | upstream body model |
 |---|---|---|---|---|---|
-| the Go wire id is the policy id without its prefix | opencode-go/deepseek-v4-flash | opencode | deepseek-v4-flash | forwarded | deepseek-v4-flash |
+| the Go wire id is the policy id without its prefix | opencode-go/deepseek-v4.1-flash | opencode | deepseek-v4.1-flash | forwarded | deepseek-v4.1-flash |
 | the openrouter wire id is the policy id itself | deepseek/deepseek-v4-flash | openrouter | deepseek/deepseek-v4-flash | forwarded | deepseek/deepseek-v4-flash |
-| an absent model is filled | opencode-go/deepseek-v4-flash | opencode | (absent) | forwarded | deepseek-v4-flash |
-| a different model is refused | opencode-go/deepseek-v4-flash | opencode | claude-sonnet-4-6 | 403 model-not-session | — |
-| the policy spelling is not the wire spelling | opencode-go/deepseek-v4-flash | opencode | opencode-go/deepseek-v4-flash | 403 model-not-session | — |
+| an absent model is filled | opencode-go/deepseek-v4.1-flash | opencode | (absent) | forwarded | deepseek-v4.1-flash |
+| a different model is refused | opencode-go/deepseek-v4.1-flash | opencode | claude-haiku-5-5 | 403 model-not-session | — |
+| the policy spelling is not the wire spelling | opencode-go/deepseek-v4.1-flash | opencode | opencode-go/deepseek-v4.1-flash | 403 model-not-session | — |
 | an anthropic alias matches its family | claude/haiku | anthropic | claude-haiku-4-5 | forwarded | claude-haiku-4-5 (untouched) |
 | an anthropic alias refuses another family | claude/sonnet | anthropic | claude-opus-4-1 | 403 model-not-session | — |
 | a bare alias in the body matches | claude/sonnet | anthropic | sonnet | forwarded | sonnet (untouched) |
 | a claude-code haiku side-call under a sonnet session is admitted | claude/sonnet | anthropic | claude-haiku-4-5 | forwarded | claude-haiku-4-5 (untouched) |
 | a bare haiku side-call under a sonnet session is admitted | claude/sonnet | anthropic | haiku | forwarded | haiku (untouched) |
-| a side-call family is policy, not code: the Go rail declares none | opencode-go/claude-sonnet-4-6 | opencode | claude-haiku-4-5 | 403 model-not-session | — |
-| a Go-rail claude id is exact, not family | opencode-go/claude-sonnet-4-6 | opencode | claude-sonnet-4-6 | forwarded | claude-sonnet-4-6 |
-| a Go-rail claude id refuses a dated sibling | opencode-go/claude-sonnet-4-6 | opencode | claude-sonnet-4-5 | 403 model-not-session | — |
+| a side-call family is policy, not code: the Go rail declares none | opencode-go/claude-haiku-5-5 | opencode | claude-haiku-4-5 | 403 model-not-session | — |
+| a Go-rail claude id is exact, not family | opencode-go/claude-haiku-5-5 | opencode | claude-haiku-5-5 | forwarded | claude-haiku-5-5 |
+| a Go-rail claude id refuses a dated sibling | opencode-go/claude-haiku-5-5 | opencode | claude-sonnet-4-5 | 403 model-not-session | — |
 
 | description | policy document | verdict |
 |---|---|---|
@@ -69,18 +69,18 @@ SESSIONS = {
 }
 
 ROWS = [
-    ("the Go wire id is the policy id without its prefix", "go-flash", "deepseek-v4-flash", "deepseek-v4-flash"),
+    ("the Go wire id is the policy id without its prefix", "go-flash", "deepseek-v4.1-flash", "deepseek-v4.1-flash"),
     ("the openrouter wire id is the policy id itself", "or-flash", "deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash"),
-    ("an absent model is filled", "go-flash", None, "deepseek-v4-flash"),
-    ("a different model is refused", "go-flash", "claude-sonnet-4-6", 403),
-    ("the policy spelling is not the wire spelling", "go-flash", "opencode-go/deepseek-v4-flash", 403),
+    ("an absent model is filled", "go-flash", None, "deepseek-v4.1-flash"),
+    ("a different model is refused", "go-flash", "claude-haiku-5-5", 403),
+    ("the policy spelling is not the wire spelling", "go-flash", "opencode-go/deepseek-v4.1-flash", 403),
     ("an anthropic alias matches its family", "sub-haiku", "claude-haiku-4-5", "claude-haiku-4-5"),
     ("an anthropic alias refuses another family", "sub-sonnet", "claude-opus-4-1", 403),
     ("a bare alias in the body matches", "sub-sonnet", "sonnet", "sonnet"),
     ("a claude-code haiku side-call under a sonnet session is admitted", "sub-sonnet", "claude-haiku-4-5", "claude-haiku-4-5"),
     ("a bare haiku side-call under a sonnet session is admitted", "sub-sonnet", "haiku", "haiku"),
     ("a side-call family is policy, not code: the Go rail declares none", "go-sonnet", "claude-haiku-4-5", 403),
-    ("a Go-rail claude id is exact, not family", "go-sonnet", "claude-sonnet-4-6", "claude-sonnet-4-6"),
+    ("a Go-rail claude id is exact, not family", "go-sonnet", "claude-haiku-5-5", "claude-haiku-5-5"),
     ("a Go-rail claude id refuses a dated sibling", "go-sonnet", "claude-sonnet-4-5", 403),
 ]
 

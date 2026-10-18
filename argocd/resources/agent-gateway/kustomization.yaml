@@ -54,11 +54,14 @@ resources:
 # (per-token, bounded by key budgets not slots).
 # context_tokens: per-model harness window — the Go rail's deepseek-v4.1-flash = 1000000, the
 # console /api/v2/config `limit.context` (2026-10-17); absent = null, never a guess.
-# admission (anthropic, opencode): the ladder's capacity half — window utilization thresholds, the
-# 429 latch hold, the Go window draw's prices + windows (gateway/specs/endpoints/sessions.md
-# §Capacity). Every value is COPIED from the old proxy (openrouter-proxy.py / gometer.py /
-# its deployment.yaml) and cited in the block's _comment — a duplicate until the old proxy retires;
-# change both together. Same block as the policy-default world.
+# admission (anthropic, opencode): the ladder's capacity half — RULES only: window utilization
+# thresholds, the 429 hold and its scope (opencode: `latch_scope: model` — a Go 429 cools its cell,
+# never the rail), the Go windows' thresholds + anchors (gateway/specs/endpoints/sessions.md
+# §Capacity). The Go rail's prices, peak rows/hours, per-model monthly limits and window shares are
+# NOT here: the gateway reads them from the vendor (the Go catalog, GW-CATALOG-GO; operator ruling
+# 5, 2026-10-17). Every remaining value is COPIED from the old proxy (openrouter-proxy.py /
+# gometer.py / its deployment.yaml) and cited in the block's _comment. Same block as the
+# policy-default world.
 # plan (opencode, GW-CATALOG-GO): the OpenCode Go plan the key is on — `go` ($10/month) — declared
 # here because no vendor API says; it picks which plan tab's per-model monthly limits the Go catalog
 # leg reads (gateway/specs/endpoints/catalog.md).

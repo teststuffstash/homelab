@@ -14,7 +14,7 @@ The walk:
 | a tier names an ordered list: the first model is taken | — | reviewer, T || dispatch | anthropic | claude/sonnet | — |
 | a cell strike moves the walk to the next model in the list | harness-gave-up on (anthropic, claude/sonnet) | reviewer, T, attempt 2 || dispatch | anthropic | claude/opus | — |
 | a model strike excludes the model, the list continues | no-verdict on claude/sonnet | reviewer, T, attempt 2 || dispatch | anthropic | claude/opus | — |
-| a struck list moves the walk to the next rail | no-verdict on claude/sonnet and on claude/opus | reviewer, T, attempt 3 || dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
+| a struck list moves the walk to the next rail | no-verdict on claude/sonnet and on claude/opus | reviewer, T, attempt 3 || dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
 | a strike is per task | no-verdict on claude/sonnet for T | reviewer, another task || dispatch | anthropic | claude/sonnet | — |
 | a refuted strike excludes nothing | provider-5xx (gateway) on claude/sonnet, then clean on that session | reviewer, T, attempt 2 || dispatch | anthropic | claude/sonnet | — |
 | a cooled cell in the list is skipped, the next model taken | a 429 cooled (openrouter, deepseek/deepseek-v4-flash) | worker, tier light, rail openrouter || dispatch | openrouter | deepseek/deepseek-v4.1-flash | — |
@@ -101,7 +101,7 @@ WALK_ROWS = [
     ("a model strike excludes the model, the list continues", [("no-verdict", 1)], {"attempt": 2},
      {"decision": "dispatch", "rail": "anthropic", "model": "claude/opus"}),
     ("a struck list moves the walk to the next rail", [("no-verdict", 1), ("no-verdict", 2)], {"attempt": 3},
-     {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-sonnet-4-6"}),
+     {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-haiku-5-5"}),
     ("a strike is per task", [("no-verdict", 1)], {"task": "specs-review homelab#2701"},
      {"decision": "dispatch", "rail": "anthropic", "model": "claude/sonnet"}),
 ]

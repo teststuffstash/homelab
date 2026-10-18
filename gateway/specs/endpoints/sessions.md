@@ -71,15 +71,15 @@ caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limi
 
 | description | role | harness | tier | active on rails (anthropic / opencode / openrouter) | credential state || decision | rail | model | reason |
 |---|---|---|---|---|---||---|---|---|---|
-| "a worker takes the first rail in its list" | worker | (policy: opencode) | (policy: standard) | 0 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/deepseek-v4-flash | — |
+| "a worker takes the first rail in its list" | worker | (policy: opencode) | (policy: standard) | 0 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/deepseek-v4.1-flash | — |
 | "the first rail is full, the second is taken" | worker | (policy) | (policy) | 0 / 3 / 0 | all resolve || dispatch | openrouter | deepseek/deepseek-v4-flash | — |
 | "every allowed rail is full" | worker | (policy) | (policy) | 0 / 3 / 20 | all resolve || defer | — | — | rail-capacity |
 | "a reviewer rides the subscription first" | reviewer | (policy: claude) | (policy: heavy) | 0 / 0 / 0 | all resolve || dispatch | anthropic | claude/sonnet | — |
-| "the subscription is full, the reviewer takes Go" | reviewer | (policy) | (policy) | 5 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
-| "the stack's anthropic ref does not resolve, the walk continues ⚖" | reviewer | (policy) | (policy) | 0 / 0 / 0 | anthropic_ref definitive miss || dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
+| "the subscription is full, the reviewer takes Go" | reviewer | (policy) | (policy) | 5 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
+| "the stack's anthropic ref does not resolve, the walk continues ⚖" | reviewer | (policy) | (policy) | 0 / 0 / 0 | anthropic_ref definitive miss || dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
 | "the only allowed rail's credential does not resolve" | prober | (policy) | (policy) | 0 / 0 / 0 | anthropic_ref definitive miss || defer | — | — | credential-unresolved |
-| "an explicit tier picks the model inside the rail" | worker | (policy) | heavy | 0 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
-| "an explicit harness narrows the walk to its dialect" | worker | goose | (policy) | 0 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/deepseek-v4-flash | — |
+| "an explicit tier picks the model inside the rail" | worker | (policy) | heavy | 0 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
+| "an explicit harness narrows the walk to its dialect" | worker | goose | (policy) | 0 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/deepseek-v4.1-flash | — |
 | "a harness that cannot speak the role's only rail ⚖" | prober | opencode | (policy) | 0 / 0 / 0 | all resolve || defer | — | — | role-rail-denied |
 | "an explicit rail the role is not allowed" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: anthropic` || defer | — | — | role-rail-denied |
 | "an explicit rail the role is allowed is taken even when later in the list (logged as an override) ⚖" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: openrouter` || dispatch | openrouter | deepseek/deepseek-v4-flash | — |
@@ -100,7 +100,7 @@ model is passed over, and the walk moves on to the role's next rail. ⚖ When ev
 before, because waiting helps there), the answer is `defer` **`cells-exhausted` with no
 `retry_after_s`**. Waiting does not help: the caller escalates (the old ladder's "chain exhausted
 with the strike list"). ⚖ Model identity is the policy id: the same model on another rail is
-another id, so a model strike on `claude/sonnet` does not exclude `opencode-go/claude-sonnet-4-6`
+another id, so a model strike on `claude/sonnet` does not exclude `opencode-go/claude-haiku-5-5`
 (a gap row below).
 
 `POST /sessions` carries **`attempt`** (default 1): the consumer's automatic re-admission counter at
@@ -129,7 +129,7 @@ the outcome endpoint on an earlier session of the SAME task. T = `specs-review h
 | "a tier names an ordered list: the first model is taken" | — | reviewer, T || dispatch | anthropic | claude/sonnet | — |
 | "a cell strike moves the walk to the next model in the list" | `harness-gave-up` on (anthropic, claude/sonnet) | reviewer, T, `attempt: 2` || dispatch | anthropic | claude/opus | — |
 | "a model strike excludes the model, the list continues" | `no-verdict` on claude/sonnet | reviewer, T, `attempt: 2` || dispatch | anthropic | claude/opus | — |
-| "a struck list moves the walk to the next rail" | `no-verdict` on claude/sonnet and on claude/opus | reviewer, T, `attempt: 3` || dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
+| "a struck list moves the walk to the next rail" | `no-verdict` on claude/sonnet and on claude/opus | reviewer, T, `attempt: 3` || dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
 | "a strike is per task" | `no-verdict` on claude/sonnet for T | reviewer, another task || dispatch | anthropic | claude/sonnet | — |
 | "a refuted strike excludes nothing" | `provider-5xx` (gateway) on claude/sonnet, then `clean` on that session | reviewer, T, `attempt: 2` || dispatch | anthropic | claude/sonnet | — |
 | "a cooled cell in the list is skipped, the next model taken" | a 429 cooled (openrouter, deepseek/deepseek-v4-flash) | worker, `tier: light`, `rail: openrouter` || dispatch | openrouter | deepseek/deepseek-v4.1-flash | — |
@@ -171,12 +171,17 @@ the outcome endpoint on an earlier session of the SAME task. T = `specs-review h
 
 ### Capacity — the ladder's capacity half
 
-Three per-rail checks and one per-cell check after the slot count ([model-routing.md §The ladder](../../../docs/agents/model-routing.md#the-ladder--rail--class--tier--cell)'s
+Three per-rail checks and two per-cell checks after the slot count ([model-routing.md §The ladder](../../../docs/agents/model-routing.md#the-ladder--rail--class--tier--cell)'s
 capacity facts, moved from the old proxy's two limit endpoints into the admission answer). Every
-threshold, hold and price is policy data under `rails.<rail>.admission` — none is a code literal —
+threshold, hold and anchor is policy data under `rails.<rail>.admission` — none is a code literal —
 and each is ⚖ **copied** from the old proxy, which keeps serving its own copy until it retires
 ([§Who owns which fact](../../../docs/agents/model-routing.md#who-owns-which-fact): this is a
-duplicate by design for that window, not a second owner). A rail with no `admission` key has no
+duplicate by design for that window, not a second owner). The Go rail's vendor facts — prices,
+peak rows and hours, per-model monthly limits, window shares — are not policy: they are the
+[Go catalog](../glossary.md#go-catalog)'s snapshot ([GW-CATALOG-GO](catalog.md#gw-catalog-go),
+operator ruling 5, 2026-10-17). The per-cell checks walk the tier's ordered list: a model a check
+holds is skipped for the next one, and only when every model is held does the rail defer, with the
+hold that lifts first. A rail with no `admission` key has no
 capacity check. A blocked rail is skipped like a full one; it frees when the **last** of its
 blocks lifts.
 
@@ -203,15 +208,18 @@ blocks lifts.
   `upstream_provider_shared_pool` 105, `openrouter_shared_capacity` 3,
   `openrouter_free_tier_per_minute` 7), while two other models on the same key served 200s
   throughout; an experiment rail latch on one model's 429 deferred a different model.
-- **429 latch** (`anthropic`, `opencode`): the ACCOUNT-scope signal. ⚖ Scope is a property the
-  policy declares, never inferred from a count: a rail whose policy sets `latch_429_hold_s` is one
-  subscription account whose limits are account windows (the subscription's 5h/7d, Go's
-  5h/7d/30d dollar windows), so a 429 there latches the whole rail as well as cooling its cell,
-  for the same reset (a reset-less 429 → the hold); any 2xx on the rail clears it early. ⚖ holds
-  **900 s** = `ANTHROPIC_429_HOLD_S` / `GO_CAPACITY_HOLD_S` (`openrouter-proxy.py`). `openrouter`
-  declares none: its 429s are per model (the experiment above). A count rule ("≥ 2 models
-  429'd") would have latched it wrongly: two models' independent provider-pool 429s overlapped
-  there while two others served.
+- **429 latch** (`anthropic`): the ACCOUNT-scope signal. ⚖ Scope is a property the policy
+  declares, never inferred from a count: a rail whose policy sets `latch_429_hold_s` with
+  `latch_scope: account` (the default) is one subscription account whose limits are account
+  windows (the subscription's 5h/7d), so a 429 there latches the whole rail as well as cooling its
+  cell, for the same reset (a reset-less 429 → the hold); any 2xx on the rail clears it early.
+  ⚖ hold **900 s** = `ANTHROPIC_429_HOLD_S` (`openrouter-proxy.py`). `opencode` declares
+  `latch_scope: model`: the vendor meters each Go model against **its own** monthly limit
+  (operator ruling 3, [the spike §F2](../../../docs/spikes/opencode-go-catalog.md)), so a Go 429
+  cools only its cell — for its reset, else the rail's `latch_429_hold_s` (**900 s** =
+  `GO_CAPACITY_HOLD_S`) — and never blocks another Go model. `openrouter` declares none: its 429s
+  are per model (the experiment above). A count rule ("≥ 2 models 429'd") would have latched it
+  wrongly: two models' independent provider-pool 429s overlapped there while two others served.
 - **Credential rejected** (every rail): an upstream 401, or a 403 whose error names a credential
   reason ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)), marks THAT credential —
   the rail plus a sha256 fingerprint of the value, never the value — rejected. Admission resolves
@@ -237,19 +245,25 @@ blocks lifts.
   the earliest re-verification. ⚖ The marks live in memory: a restart forgets them, and the next
   rejection re-marks. Nothing unverified is carried across a restart. A policy refusal or an edge
   refusal ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)) rejects nothing.
-- **Go window draw** (`opencode`): each `window_draw.windows.<w>` sums the rail's metered (2xx)
-  requests inside the window open at `now`, priced from the four token classes at **list** rates —
-  uncached input and output at `in`/`out`, each cache class at its own rate (a `null` rate draws
-  nothing), the peak row inside a peak hour by the REQUEST's timestamp, an unpriced model at
-  `fallback` — gometer's `window_draw()` semantics. A window at/over `threshold × budget_usd`
-  blocks the rail until it resets. ⚖ Every number is copied from `argocd/resources/openrouter-proxy/gometer.py`
-  (snapshot 2026-09-17) — a **duplicate until the old proxy retires**: `GO_PRICES` /
-  `GO_PRICES_PEAK` rows for the policy's priced Go model, `fallback` = `_GO_MAX_PRICE`/2 per side,
-  `GO_PEAK_HOURS_UTC` / `GO_PEAK_WEEKDAYS`, `_GO_WINDOW_DEFAULTS` (5h $12 `chain` · 7d $30
-  `weekly` Mon 00:00 · 30d $60 `monthly` 13th 11:30) and `OPENCODE_UTIL_THRESHOLD`'s 0.80. The
-  `chain` window opens at the first request after the previous one expired (`router.go_usage_chain_open`).
-  Prices apply at READ time from the ledger (`requests` × `sessions.model`), so a policy price edit
-  re-prices the open windows.
+- **Go window draw** (`opencode`, per cell): each `window_draw.windows.<w>` (`5h` / `7d` / `30d`)
+  sums the **model's** metered (2xx) requests inside the window open at `now`, priced from the
+  four token classes at the Go catalog's **list** rates — uncached input and output at `in`/`out`,
+  each cache class at its own rate (a `null` rate draws nothing); the model's peak row inside a
+  peak hour by the REQUEST's timestamp; else the cost tier the request's prompt (uncached + cache
+  read + cache write tokens) exceeds — gometer's `window_draw()` semantics. A window at/over
+  `threshold × monthly limit × share` holds that model until the window resets, where the monthly
+  limit is the model's own under `rails.opencode.plan` and the share is the page's (5h 20 % ·
+  weekly 50 % · monthly 100 % today). ⚖ The rules stay copied from `gometer.py`: the anchors
+  (`_GO_WINDOW_DEFAULTS`: 5h `chain` · 7d `weekly` Mon 00:00 · 30d `monthly` 13th 11:30 —
+  self-measured, no vendor source) and `OPENCODE_UTIL_THRESHOLD`'s 0.80. The `chain` window opens
+  at the model's first request after its previous one expired (`router.go_usage_chain_open`).
+  Prices apply at READ time from the ledger (`requests` × `sessions.model`), so a catalog refresh
+  re-prices the open windows. A model whose monthly limit is `unlimited` draws against no window.
+- **Not in the catalog** (`opencode`, per cell): a Go model the catalog's console snapshot does not
+  list, or that has no monthly-limit row under the policy's plan (or no snapshot exists yet), is
+  refused — `not-in-catalog`, `retry_after_s` = the next scheduled catalog refresh — never priced at
+  a fallback (operator ruling 4). This is the 2026-10-14 retirement (the spike's §F3) turned from
+  silent into a typed defer.
 
 Rows run at T0 = Fri 2027-01-15 08:00:00Z (the test clock; a Go peak hour). Every reading and
 every usage arrives through the data plane (a session + one `POST /anthropic/v1/messages` the fake
@@ -273,10 +287,12 @@ upstream answers as stated) — never seeded.
 | "a 429 without retry-after latches for the policy hold" | reviewer ride on anthropic → 429, no `retry-after` | — | reviewer, `rail: anthropic` || defer | — | rail-latched | 900 |
 | "the latch lifts at its expiry" | reviewer ride on anthropic → 429 | +30 s | reviewer, `rail: anthropic` || dispatch | anthropic | — | — |
 | "any 2xx on the rail clears the latch" | reviewer ride on anthropic → 429, the same session → 200 | — | reviewer, `rail: anthropic` || dispatch | anthropic | — | — |
-| "a Go 429 latches the Go rail" | worker ride on opencode → 429 | — | worker, `rail: opencode` || defer | — | rail-latched | 30 |
-| "a latched rail is skipped, the walk continues" | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
+| "a Go 429 cools only its cell, for its retry-after" | worker ride on opencode → 429 | — | worker, `rail: opencode` || defer | — | cell-cooled | 30 |
+| "a Go 429 without retry-after cools its cell for the rail's hold" | worker ride on opencode → 429, no `retry-after` | — | worker, `rail: opencode` || defer | — | cell-cooled | 900 |
+| "one Go model's 429 never blocks another Go model" | worker ride on opencode → 429 (`deepseek-v4.1-flash`) | — | worker, `rail: opencode`, `tier: heavy` (`claude-haiku-5-5`) || dispatch | opencode | — | — |
+| "a cooled Go cell is skipped, the walk continues" | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
 | "a rail whose policy declares no latch is not latched: its other model admits ⚖" | worker ride on openrouter → 429 | — | worker, `rail: openrouter`, `tier: heavy` || dispatch | openrouter | — | — |
-| "every rail blocked: the rail that frees first names the defer ⚖" | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | rail-latched | 30 |
+| "every rail blocked: the rail that frees first names the defer ⚖" | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | cell-cooled | 30 |
 
 The cell rows ride `upstream-429-reset` — OpenRouter's shape, `x-ratelimit-limit` / `-remaining` /
 `-reset` (epoch ms) and no `retry-after` — unless stated. A worker on openrouter rides the standard
@@ -319,23 +335,42 @@ The recovery rows. The probe pass is the app's background loop, called here dire
 | "a repeat rejection after half-open doubles the hold" | prober on anthropic → 401; +900 s; → 401 again | — | — || — | defer | credential-rejected | 1800 |
 | "an edge refusal marks nothing: the rail keeps admitting" | worker ride on opencode → `upstream-403-edge` (`error code: 1010`) | — | — || 0 | dispatch (opencode) | — | — |
 
-The Go rows: a worker ride on opencode rides `opencode-go/deepseek-v4-flash` (peak in 0.30 / out
-1.20 / cache_read 0.006 / cache_write `null`; off-peak 0.15 / 0.60 / 0.003 / `null`), a reviewer
-ride the unpriced `opencode-go/claude-sonnet-4-6` (fallback 9.00 / 9.00); thresholds $9.60 (5h) /
-$24 (7d) / $48 (30d). The expected value of each row is computed in its test's comment.
+The Go rows ride the world's Go catalog (`catalog-ok` + `docs-ok`, plan `go` —
+[worlds/README.md §The Go catalog's fakes](../worlds/README.md#the-go-catalogs-fakes)). A worker
+ride on opencode rides `opencode-go/deepseek-v4.1-flash`: base in 0.15 / out 0.60 / cache_read
+0.003 / cache_write `null`, peak 0.30 / 1.20 / 0.006 / `null`, $80 a month → windows $16 / $40 /
+$80, thresholds $12.80 / $32 / $64. A reviewer ride (or a worker's `tier: heavy`) rides
+`opencode-go/claude-haiku-5-5`: base 0.10 / 0.50 / 0.01 / 0.125, above 100000 prompt tokens
+0.50 / 2.50 / 0.05 / 0.625, no peak row, $15 a month → 5h threshold $2.40. The expected value of
+each row is computed in its test's comment.
 
 | description | ride usage (at) | then | body || decision | rail | reason | retry_after_s |
 |---|---|---|---||---|---|---|---|
-| "a 5h draw over threshold defers the Go rail until the window resets" | worker in 20M, out 3.2M (T0) — $9.84 | — | worker, `rail: opencode` || defer | — | rail-window | 18000 |
-| "a 5h draw under threshold admits" | worker in 20M, out 2.8M (T0) — $9.36 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
-| "an off-peak request draws at the base rate" | worker in 20M, out 3.2M (T0 + 2 h) — $4.92 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
+| "a 5h draw over threshold defers the Go model until its window resets" | worker in 30M, out 3.2M (T0) — $12.84 | — | worker, `rail: opencode` || defer | — | rail-window | 18000 |
+| "a 5h draw under threshold admits" | worker in 30M, out 3.1M (T0) — $12.72 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
+| "an off-peak request draws at the base rate" | worker in 30M, out 3.2M (T0 + 2 h) — $6.42 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
 | "cache reads draw at their own rate, not the input rate" | worker cache_read 1000M (T0) — $6.00, not $300 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
 | "a cache class with no rate draws nothing ⚖" | worker cache_write 1000M (T0) — $0 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
-| "an unpriced model draws at the fallback row" | reviewer in 1M, out 0.1M (T0) — $9.90 | — | worker, `rail: opencode` || defer | — | rail-window | 18000 |
-| "the walk continues past a full Go window" | worker in 20M, out 3.2M (T0) | — | worker (policy walk) || dispatch | openrouter | — | — |
-| "an expired 5h window draws nothing" | worker in 20M, out 3.2M (T0) | +18000 s | worker, `rail: opencode` || dispatch | opencode | — | — |
-| "the 7d window binds once the 5h one has expired" | worker in 90M (T0) — $27 | +18000 s | worker, `rail: opencode` || defer | — | rail-window | 212400 |
-| "the 30d window binds once the week has reset" | worker in 170M (T0) — $51 | +230401 s | worker, `rail: opencode` || defer | — | rail-window | 2287799 |
+| "a prompt past the context tier draws at the tier's rate" | reviewer in 4M, out 0.2M (T0) — $2.50 (the base row: $0.50) | — | worker, `rail: opencode`, `tier: heavy` || defer | — | rail-window | 18000 |
+| "a prompt within the context tier draws at the base row" | reviewer in 90K, out 1M (T0) — $0.509 (the tier row: $2.545) | — | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
+| "each model's windows are its own monthly limit's shares" | worker in 10M, out 1M (T0) — $4.20 (under its $12.80; haiku's $2.40 would hold it) | — | worker, `rail: opencode` || dispatch | opencode | — | — |
+| "a full window on one Go model never blocks another" | worker in 30M, out 3.2M (T0) | — | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
+| "the walk continues past a full Go window" | worker in 30M, out 3.2M (T0) | — | worker (policy walk) || dispatch | openrouter | — | — |
+| "an expired 5h window draws nothing" | worker in 30M, out 3.2M (T0) | +18000 s | worker, `rail: opencode` || dispatch | opencode | — | — |
+| "the 7d window binds once the 5h one has expired" | worker in 110M (T0) — $33 | +18000 s | worker, `rail: opencode` || defer | — | rail-window | 212400 |
+| "the 30d window binds once the week has reset" | worker in 220M (T0) — $66 | +230401 s | worker, `rail: opencode` || defer | — | rail-window | 2287799 |
+
+The catalog rows refresh the world's Go catalog against the fake vendor first: `catalog-retired`
+(the console list without `deepseek-v4.1-flash` — §F3 replayed) or `docs-retired` (the Go page
+without `claude-haiku-5-5`'s plan rows). `retry_after_s` = the next scheduled refresh (21600 s
+after the one just run).
+
+| description | the refresh | body || decision | rail | reason | retry_after_s |
+|---|---|---||---|---|---|---|
+| "a Go model the console no longer lists defers not-in-catalog" | `catalog-retired` | worker, `rail: opencode` || defer | — | not-in-catalog | 21600 |
+| "a not-in-catalog model is skipped, the walk continues" | `catalog-retired` | worker (policy walk) || dispatch | openrouter | — | — |
+| "a listed model with no monthly limit under the plan defers not-in-catalog" | `docs-retired` | worker, `rail: opencode`, `tier: heavy` || defer | — | not-in-catalog | 21600 |
+| "the other Go models still admit" | `catalog-retired` | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
 
 ### Named gaps (rows that exist so the omission is visible)
 
@@ -348,8 +383,7 @@ $24 (7d) / $48 (30d). The expected value of each row is computed in its test's c
 | "⚑ gap: a provider-scoped cell" | a 429 naming `metadata.provider_name` || the (rail, model) cell cools | the old router's `(model, provider)` pair; meaningful only once admission pins providers (the provider-pin gap) |
 | "⚑ gap: a Go 402" | an upstream 402 on opencode || no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
 | "⚑ gap: the Go draw is the gateway's own traffic only" | Go spend through the old proxy or the jail shim || not in this ledger — this draw is a lower bound of the account's | the account-wide reading (the old proxy's ledger, the jail shim's reports) |
-| "⚑ gap: long-context price tiers" | a Go model with a `GO_PRICES_LONG` row || — no policy model has one | gometer's long-context override; add the row with the first such model |
-| "⚑ gap: one model across rails" | a model strike on `claude/sonnet` || `opencode-go/claude-sonnet-4-6` still admits | the policy names rail-prefixed ids; `model-classes.json` groups them per model, and that grouping is not in the gateway policy |
+| "⚑ gap: one model across rails" | a model strike on `claude/sonnet` || `opencode-go/claude-haiku-5-5` still admits | the policy names rail-prefixed ids; `model-classes.json` groups them per model, and that grouping is not in the gateway policy |
 | "⚑ gap: labels, urgency, budget class" | body carries none, none read || — | the ADR-096 ladder's inputs; `tier` is the only size knob |
 | "⚑ gap: `POST /route`" | any || 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
 | "⚑ gap: a capacity doorbell" | a rail frees a slot || nothing is pushed | the caller polls `retry_after_s` |
@@ -385,10 +419,10 @@ gateway hands it is a failed row, not a passed one:
   (`gpt-5.6-terra`, `gpt-5.4-nano`), so that env is unusable here. One `OPENCODE_CONFIG_CONTENT`
   value holding an `@ai-sdk/openai-compatible` provider (`baseURL`, `apiKey`, the model as both
   `model` and `small_model`) gave `POST <base>/chat/completions` with `Bearer <key>` and
-  `model: deepseek-v4-flash` on every request. So opencode's env is that ONE var.
+  `model: deepseek-v4.1-flash` on every request. So opencode's env is that ONE var.
 
 The model var carries the policy id with its rail prefix removed (`claude/sonnet` →
-`sonnet`, `opencode-go/deepseek-v4-flash` → `deepseek-v4-flash`; openrouter ids are bare) — the
+`sonnet`, `opencode-go/deepseek-v4.1-flash` → `deepseek-v4.1-flash`; openrouter ids are bare) — the
 same strip `agents/agent-session.sh` performs today. `context_tokens` is the policy's per-model
 window or `null` — a null is "not declared", never a guess.
 
@@ -407,12 +441,12 @@ that block from a real dispatch answer; its run is the local-evidence row below.
 | "claude: the base url is this gateway's anthropic path" | claude | anthropic | claude/sonnet || `ANTHROPIC_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic` |
 | "claude: the auth token is the session token" | claude | anthropic | claude/sonnet || `ANTHROPIC_AUTH_TOKEN` | the session token |
 | "claude: the model name is the alias the CLI resolves" | claude | anthropic | claude/sonnet || `ANTHROPIC_MODEL` | `sonnet` |
-| "claude on the [Go rail](../../../docs/agents/chainless-redesign.md): same three vars, Go's model name" | claude | opencode | opencode-go/claude-sonnet-4-6 || `ANTHROPIC_MODEL` | `claude-sonnet-4-6` |
-| "opencode: an openai-compatible provider block" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.npm` | `@ai-sdk/openai-compatible` |
-| "opencode: the provider's base url is this gateway's openai path" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.options.baseURL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
-| "opencode: the provider's api key is the session token" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.options.apiKey` | the session token |
-| "opencode: the session model is the bare id under that provider" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.model` | `gateway/deepseek-v4-flash` |
-| "opencode: the title model is the same id" | opencode | opencode | opencode-go/deepseek-v4-flash || `OPENCODE_CONFIG_CONTENT` → `.small_model` | `gateway/deepseek-v4-flash` |
+| "claude on the [Go rail](../../../docs/agents/chainless-redesign.md): same three vars, Go's model name" | claude | opencode | opencode-go/claude-haiku-5-5 || `ANTHROPIC_MODEL` | `claude-haiku-5-5` |
+| "opencode: an openai-compatible provider block" | opencode | opencode | opencode-go/deepseek-v4.1-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.npm` | `@ai-sdk/openai-compatible` |
+| "opencode: the provider's base url is this gateway's openai path" | opencode | opencode | opencode-go/deepseek-v4.1-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.options.baseURL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
+| "opencode: the provider's api key is the session token" | opencode | opencode | opencode-go/deepseek-v4.1-flash || `OPENCODE_CONFIG_CONTENT` → `.provider.gateway.options.apiKey` | the session token |
+| "opencode: the session model is the bare id under that provider" | opencode | opencode | opencode-go/deepseek-v4.1-flash || `OPENCODE_CONFIG_CONTENT` → `.model` | `gateway/deepseek-v4.1-flash` |
+| "opencode: the title model is the same id" | opencode | opencode | opencode-go/deepseek-v4.1-flash || `OPENCODE_CONFIG_CONTENT` → `.small_model` | `gateway/deepseek-v4.1-flash` |
 | "goose: the provider is goose's openai provider" | goose | openrouter | deepseek/deepseek-v4-flash || `GOOSE_PROVIDER` | `openai` |
 | "goose: the base url is this gateway's openai path" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_BASE_URL` | `http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1` |
 | "goose: the api key is the session token" | goose | openrouter | deepseek/deepseek-v4-flash || `OPENAI_API_KEY` | the session token |
@@ -434,7 +468,7 @@ that block from a real dispatch answer; its run is the local-evidence row below.
 
 | description | model (policy) || `context_tokens` |
 |---|---||---|
-| "a declared `context_tokens` is echoed" | opencode-go/deepseek-v4-flash || 1000000 |
+| "a declared `context_tokens` is echoed" | opencode-go/deepseek-v4.1-flash || 1000000 |
 | "an undeclared `context_tokens` is null, never a default" | claude/sonnet || null |
 
 <details markdown="1"><summary>Evidence</summary>
@@ -586,7 +620,7 @@ identity** = authenticated · audiences `[agent-gateway]` · `system:serviceacco
 
 | description | sequence || result |
 |---|---||---|
-| "the pull answers the opencode env GW-SESSIONS-ENV would have" | worker (opencode) bound → pull || `env` keys = `env_keys`; the provider `apiKey` is a fresh `^gws_[A-Za-z0-9_-]{32}$`; `baseURL` `…/openai/v1`, model `gateway/deepseek-v4-flash` |
+| "the pull answers the opencode env GW-SESSIONS-ENV would have" | worker (opencode) bound → pull || `env` keys = `env_keys`; the provider `apiKey` is a fresh `^gws_[A-Za-z0-9_-]{32}$`; `baseURL` `…/openai/v1`, model `gateway/deepseek-v4.1-flash` |
 | "the pull answers the claude env" | reviewer (claude) bound → pull || `ANTHROPIC_AUTH_TOKEN` a fresh `gws_` token, `ANTHROPIC_BASE_URL` `…/anthropic`, `ANTHROPIC_MODEL` `sonnet` |
 | "the pull answers the goose env" | worker goose/openrouter bound → pull || `OPENAI_API_KEY` a fresh `gws_` token, `OPENAI_BASE_URL` `…/openai/v1`, `GOOSE_PROVIDER` `openai`, `GOOSE_MODEL` `deepseek/deepseek-v4-flash` |
 | "the pulled token rides the data plane" | pull → `POST /openai/v1/chat/completions` with it (`upstream-ok`) || 200; the row's `requests` = 1 |
@@ -905,7 +939,7 @@ them ([GW-METRICS](metrics.md#gw-metrics)).
 Fixture callers: the platform loop, the specs reviewer and **the judge**
 (`system:serviceaccount:agent-coordinator:outcome-judge` · stacks `[platform]` · roles `[]` ·
 `outcome: any`). A worker session = the platform loop admitted `{platform, worker, task
-homelab-2700, round 1}` (opencode, `opencode-go/deepseek-v4-flash`).
+homelab-2700, round 1}` (opencode, `opencode-go/deepseek-v4.1-flash`).
 
 | description | world | reporter | body || status | result |
 |---|---|---|---||---|---|
@@ -943,7 +977,7 @@ World `policy-default`.
 
 | description | sequence || counted strikes on task homelab-2700 | `gateway_strikes_total` |
 |---|---||---|---|
-| "a model-scoped class strikes the model" | report `no-verdict` || `{opencode, opencode-go/deepseek-v4-flash, no-verdict, model, outcome}` | `{class="no-verdict",source="outcome"}` 1 |
+| "a model-scoped class strikes the model" | report `no-verdict` || `{opencode, opencode-go/deepseek-v4.1-flash, no-verdict, model, outcome}` | `{class="no-verdict",source="outcome"}` 1 |
 | "a serving-scoped class strikes the cell" | report `harness-gave-up` || `{…, harness-gave-up, cell, outcome}` | `{class="harness-gave-up",source="outcome"}` 1 |
 | "the gateway writes its own transport class" | the session's request answered `upstream-401` || `{…, auth-storm, cell, gateway}` | `{class="auth-storm",source="gateway"}` 1 |
 | "one transport strike per session and class ⚖" | three `upstream-500` answers on one session || one `provider-5xx` | `{class="provider-5xx",source="gateway"}` 1 |
@@ -954,7 +988,7 @@ World `policy-default`.
 | "a cut stream is a transport strike" | `upstream-stream-truncated` on the session || `{…, stream-incomplete, cell, gateway}` | `{class="stream-incomplete",source="gateway"}` 1 |
 | "a bare 2xx refutes nothing" | `upstream-500`, then `upstream-ok` on the same session || `provider-5xx` still counted | — |
 | "a clean outcome refutes the task's counted strikes" | the session's request answered `upstream-500` (a gateway `provider-5xx`), then the consumer reports `clean` — the ride recovered || none counted; the strike kept, refuted (`refuted: 1`) | — |
-| "a clean outcome on another model refutes nothing there" | the heavy tier's `opencode-go/claude-sonnet-4-6` struck `no-verdict`; a standard-tier session reports `clean` || the heavy model's `no-verdict` still counted (`refuted: 0`) | — |
+| "a clean outcome on another model refutes nothing there" | the heavy tier's `opencode-go/claude-haiku-5-5` struck `no-verdict`; a standard-tier session reports `clean` || the heavy model's `no-verdict` still counted (`refuted: 0`) | — |
 | "GET shows the latest outcome" | report `no-verdict` (`subclass: rc=1`), GET || — | `outcome` = `{class: no-verdict, subclass: rc=1, reporter: null}` |
 | "the code's vocabulary is the schema's" | `OUTCOME_CLASSES` vs `outcome.input.properties.class` (`enum`, `x-scope`) || equal, class and scope | — |
 
@@ -1035,7 +1069,7 @@ real paths (an upstream 401 body, a malformed header, a debug line of the resolv
 | "a bearer header value" | `"Authorization: Bearer abc.def.ghi"` || `Authorization: Bearer <redacted>` | `abc.def.ghi` |
 | "the Go key's value" | the `OPENCODE_GO_API_KEY` fixture value || `<redacted>` | the value |
 | "a ref is not a credential" | `"ref platform-agents/claude-session unresolved"` || the ref verbatim | `<redacted>` |
-| "a model id is not a credential" | `"model opencode-go/deepseek-v4-flash"` || the id verbatim | `<redacted>` |
+| "a model id is not a credential" | `"model opencode-go/deepseek-v4.1-flash"` || the id verbatim | `<redacted>` |
 | "a projected ServiceAccount token (a JWT)" | `"review eyJhbGciOiJSUzI1NiJ9.eyJGQUtFIjoxfQ.RkFLRS1TSUc"` || `review <redacted>` | `eyJ` |
 
 | description | path || the log holds | the log does not hold |

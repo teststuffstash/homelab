@@ -4,7 +4,7 @@ Worlds `policy-enforce` (the caller rows: every call presents a caller token, re
 TokenReview) and `policy-default` (the rest). Fixture callers: the platform loop (admits platform
 workers), the specs reviewer (another listed caller) and the judge (`outcome: any`, admits nothing).
 A "worker session" = the platform loop admitted `{platform, worker, task homelab-2700, round 1}` on
-the policy walk (opencode, `opencode-go/deepseek-v4-flash`).
+the policy walk (opencode, `opencode-go/deepseek-v4.1-flash`).
 
 Who may report:
 
@@ -42,7 +42,7 @@ The store (policy-default):
 
 | description | sequence || strikes on task homelab-2700 (counted) | gateway_strikes_total |
 |---|---||---|---|
-| a model-scoped class strikes the model | report no-verdict || [{opencode, opencode-go/deepseek-v4-flash, no-verdict, model, outcome}] | {class=no-verdict,source=outcome} 1 |
+| a model-scoped class strikes the model | report no-verdict || [{opencode, opencode-go/deepseek-v4.1-flash, no-verdict, model, outcome}] | {class=no-verdict,source=outcome} 1 |
 | a serving-scoped class strikes the cell | report harness-gave-up || [{…, harness-gave-up, cell, outcome}] | {class=harness-gave-up,source=outcome} 1 |
 | the gateway writes its own transport class | the session's request answered upstream-401 || [{…, auth-storm, cell, gateway}] | {class=auth-storm,source=gateway} 1 |
 | one transport strike per session and class | three upstream-500 answers on one session || one provider-5xx strike | {class=provider-5xx,source=gateway} 1 |
@@ -274,7 +274,7 @@ async def test_different_outcome_conflicts(gw):
 
 
 # -- the store ---------------------------------------------------------------------------------------
-CELL = {"rail": "opencode", "model": "opencode-go/deepseek-v4-flash"}
+CELL = {"rail": "opencode", "model": "opencode-go/deepseek-v4.1-flash"}
 STORE_ROWS = [
     ("a model-scoped class strikes the model", [("report", "no-verdict")], [{**CELL, "class": "no-verdict", "scope": "model", "source": "outcome"}],
      ("no-verdict", "outcome", 1)),
@@ -320,7 +320,7 @@ async def _act(gw, upstreams, doc, step, transport=None):
 @pytest.mark.parametrize(("steps", "strikes", "series"), [r[1:] for r in STORE_ROWS], ids=[r[0] for r in STORE_ROWS])
 async def test_store(gw, upstreams, transport, store, steps, strikes, series):
     world(upstream=next((w for k, w in steps if k != "report"), "upstream-ok"))
-    with given(f"steps = {steps!r}: a worker session (opencode, opencode-go/deepseek-v4-flash)"
+    with given(f"steps = {steps!r}: a worker session (opencode, opencode-go/deepseek-v4.1-flash)"
                + (f", arranged: {steps[:-1]!r}" if steps[:-1] else "")):
         with quiet():
             doc = await open_session(gw, **WORKER)
@@ -363,7 +363,7 @@ async def test_clean_refutes(gw, upstreams, store):
 async def test_clean_elsewhere_refutes_nothing(gw, store):
     """row: a clean outcome on another model refutes nothing there"""
     world()
-    with given("a heavy-tier session (opencode-go/claude-sonnet-4-6) struck no-verdict; a standard-tier session (opencode-go/deepseek-v4-flash) of the same task"):
+    with given("a heavy-tier session (opencode-go/claude-haiku-5-5) struck no-verdict; a standard-tier session (opencode-go/deepseek-v4.1-flash) of the same task"):
         with quiet():
             h = await open_session(gw, **WORKER, tier="heavy")
             await _report(gw, h["session"]["id"], {"class": "no-verdict"}, None)
@@ -375,7 +375,7 @@ async def test_clean_elsewhere_refutes_nothing(gw, store):
         attach_json("the outcome answer", r.json())
     then_eq("refuted", r.json()["refuted"], 0)
     with then("the heavy model's no-verdict still counts"):
-        check("strikes", _strikes(store), [{"rail": "opencode", "model": "opencode-go/claude-sonnet-4-6", "class": "no-verdict",
+        check("strikes", _strikes(store), [{"rail": "opencode", "model": "opencode-go/claude-haiku-5-5", "class": "no-verdict",
                                             "scope": "model", "source": "outcome"}])
 
 

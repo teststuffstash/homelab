@@ -621,6 +621,9 @@ UPSTREAM_BASES = {
     "opencode": "https://opencode.test/zen/go",
 }
 SELF_URL = "http://agent-gateway.agent-egress.svc.cluster.local:8080"
+# The Go catalog's two sources on fixture hosts (tests/_catalog_world.py's FakeVendor answers them).
+GO_CONFIG_URL = "https://console.opencode.test/console/api/v2/config"
+GO_DOCS_URL = "https://raw.vendor.test/anomalyco/opencode/dev/go.mdx"
 GO_KEY = "go-key-for-tests-only"
 ANTHROPIC_TOKEN = "sk-ant-oat-test-subscription-token"
 OPENROUTER_KEY = "sk-or-v1-test-openrouter-key"
@@ -686,13 +689,29 @@ def settings(tmp_path) -> Settings:
             "OPENROUTER_UPSTREAM": UPSTREAM_BASES["openrouter"],
             "OPENCODE_GO_UPSTREAM": UPSTREAM_BASES["opencode"],
             "OPENCODE_GO_API_KEY": GO_KEY,
+            "GATEWAY_GO_CATALOG_URL": GO_CONFIG_URL,
+            "GATEWAY_GO_DOCS_URL": GO_DOCS_URL,
         }
     )
 
 
+GO_CATALOG_FIXTURES = HERE / "fixtures" / "go-catalog"
+
+
+def seed_go_catalog(store: Store, fetched_at: float = 1_800_000_000.0) -> Store:
+    """Every world's Go catalog (specs/worlds/README.md §The Go catalog's fakes): the last good
+    snapshots a gateway starts from — the `catalog-ok` + `docs-ok` fixtures, parsed by the leg's
+    own parsers and stored as one refresh would store them (GW-CATALOG-GO). Admission reads them."""
+    from agent_gateway.catalog import parse_config, parse_docs
+
+    store.snapshot_save("config", fetched_at, parse_config(json.loads((GO_CATALOG_FIXTURES / "config.json").read_text(encoding="utf-8"))))
+    store.snapshot_save("docs", fetched_at, parse_docs((GO_CATALOG_FIXTURES / "go.mdx").read_text(encoding="utf-8")))
+    return store
+
+
 @pytest.fixture
 def store(settings) -> Store:
-    return Store(settings.db_path)
+    return seed_go_catalog(Store(settings.db_path))
 
 
 @pytest.fixture
@@ -702,8 +721,8 @@ def pods() -> StaticPods:
 
 
 @pytest.fixture
-async def app(settings, policy, secrets, store, transport, clock, reviews, pods):
-    client = httpx.AsyncClient(transport=transport)
+async def app(settings, policy, secrets, store, vendor_transport, clock, reviews, pods):  # noqa: F811 — the fixture, imported below
+    client = httpx.AsyncClient(transport=vendor_transport)  # the rails' fakes + the Go catalog's fake vendor
     a = create_app(settings, policy=policy, source=secrets, store=store, client=client, clock=clock, reviewer=reviews, pods=pods)
     yield a
     await client.aclose()

@@ -6,7 +6,7 @@
     "body": {
       "id": "chatcmpl-fake-0001",
       "object": "chat.completion",
-      "model": "deepseek-v4-flash",
+      "model": "deepseek-v4.1-flash",
       "choices": [
         { "index": 0, "message": { "role": "assistant", "content": "Reading the recipe." }, "finish_reason": "stop" }
       ],

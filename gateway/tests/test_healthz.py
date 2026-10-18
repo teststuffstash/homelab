@@ -43,6 +43,7 @@ from .conftest import (
     given,
     open_session,
     rule,
+    seed_go_catalog,
     then,
     when,
     world,
@@ -53,7 +54,7 @@ pytestmark = rule("GW-HEALTH")
 
 def _app(policy, secrets, path: str):
     settings = Settings.from_env({"GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": path, "OPENCODE_GO_API_KEY": "go-key-for-tests-only"})
-    return create_app(settings, policy=policy, source=secrets, store=Store(path), client=httpx.AsyncClient())
+    return create_app(settings, policy=policy, source=secrets, store=seed_go_catalog(Store(path)), client=httpx.AsyncClient())
 
 
 async def _get(app, path: str, **kw):

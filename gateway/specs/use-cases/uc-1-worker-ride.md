@@ -72,8 +72,8 @@ resolvable; upstream behaviour `upstream-ok` unless the pair says otherwise.
 
 | # | Call | Expected |
 |---|---|---|
-| Q1 | `POST /sessions` with `request.json` (all rails empty) | `dispatch` on `opencode`, harness `opencode`, model `opencode-go/deepseek-v4-flash`, the three openai-dialect env vars, `context_tokens: 1000000` |
-| Q2 | the pod's `POST /openai/v1/chat/completions` with the Q1 token, body model `deepseek-v4-flash` | the fake Go upstream receives `…/zen/go/v1/chat/completions` with `Authorization: Bearer «OPENCODE_GO_API_KEY»` and no `gws_` anywhere; the pod gets the upstream body byte-identical; the session row shows `requests: 1, tokens_in: 12, tokens_out: 7` |
+| Q1 | `POST /sessions` with `request.json` (all rails empty) | `dispatch` on `opencode`, harness `opencode`, model `opencode-go/deepseek-v4.1-flash`, the three openai-dialect env vars, `context_tokens: 1000000` |
+| Q2 | the pod's `POST /openai/v1/chat/completions` with the Q1 token, body model `deepseek-v4.1-flash` | the fake Go upstream receives `…/zen/go/v1/chat/completions` with `Authorization: Bearer «OPENCODE_GO_API_KEY»` and no `gws_` anywhere; the pod gets the upstream body byte-identical; the session row shows `requests: 1, tokens_in: 12, tokens_out: 7` |
 | Q3 | Q1 again with `opencode` at 3/3 | `dispatch` on `openrouter`, model `deepseek/deepseek-v4-flash`; its call reaches `https://openrouter.ai/api/v1/chat/completions` with the stack key |
 | Q4 | `POST /sessions {stack: platform, role: prober, task: probe-platform, round: 0}` then the pod's `POST /anthropic/v1/messages` with body model `claude-haiku-4-5` | `dispatch` on `anthropic`, model `claude/haiku`; the fake Anthropic upstream receives `Authorization: Bearer «AUTH_TOKEN»` and `anthropic-beta: oauth-2025-04-20`; the body model is untouched |
 | Q5 | `DELETE /sessions/«Q1 id»`, then Q2 again | `{id, released_at}`; the repeat is 401 `session-released`; `gateway_sessions_active{rail="opencode"}` is back to 0 |
