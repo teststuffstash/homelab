@@ -17,13 +17,18 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-17 ~12:00Z — seat; TICK-LOG same date): the overnight build's operator rulings are IN** (FU-270):
-  Go heavy → deepseek-v4-flash (#2663, merged, gateway restarted, probe dispatched v4-flash); live reviewer = claude@anthropic;
-  HYGIENE_REPEAT blocks anywhere (recorded in specs-reviewer.md); ⚖ rows on #2645/#2646 + headroom codes deferred to the
-  Codex spike (#2662). Launcher leg MERGED #2667 (knob `AGENT_GATEWAY=sessions`, off by default; jail canary clean).
-  **Ruled + LIVE:** the pod PULLS its session env (#2672 gateway, #2674 launcher; canary clean). No RBAC blocker
-  remains for the loop flip. **Next:** operator go for the platform flip (FU-270). Gateway rides still `/report` to the old proxy, so
-  `RouterRunModelUnverifiable` may count them.
+- **⚑ PICKUP (2026-10-18 ~09:00Z — seat wind-down; TICK-LOG 10-17/18): gateway control plane, failure ownership and
+  the Go catalog are LIVE** (FU-270). `/sessions` auth enforced (#2688); the pod pulls its env (#2672/#2674); failure
+  ownership #2692/#2697/#2699/#2702/#2704; Go tiers on deepseek-v4.1-flash (#2694); the Go catalog is fetched from the vendor
+  every 6 h, admission prices from it, and policy is rules-only (#2695/#2707, `GW-CATALOG-GO`); alerts `GoRailCredentialRejected`
+  + `GoCatalog{Stale,ParseFailed,PolicyModelMissing}` loaded. Free models are not viable reviewers
+  (`docs/spikes/gateway-free-models-2026-10-17/`). **Next:** (a) the operator sets real per-tier model lists; (b) a judge
+  caller for `wrong-verdict` outcomes; (c) before the loop flip the coordinator pod needs the `gateway-token` volume;
+  (d) FU-313: rotate the Go key to a service account before **2026-11-16**, possibly "Inference only" (the gateway
+  reads the admin Budgets API today); (e) re-probe opencode 2.0 (a major; held); (f) gap rows: free-tier key budget shared
+  across `:free`, strike provider always empty, no fleet view, cross-rail identity, codex upstream-auth still 502, marks
+  lost on restart; #2684/#2685; (g) the static `gateway/tests/fixtures/go-catalog.json` is now redundant, so retire it;
+  about 20 older gateway tests break evidence hygiene (specs reviewer advisory; they become blockers on resight).
 - **⚑ PICKUP (2026-10-16 ~16:00Z — seat; TICK-LOG same date): ADR-156 evidence pass LIVE** (snippets v0.5.2 pinned
   in `agents/specs-reviewer-session.sh` + `gateway/scripts/lib/snippets.sh` — bump TOGETHER; canary #2628 approved).
   **Next:** (a) step 5's measurement — per completed PR: tokens, worker rounds, invalid findings, coordinator

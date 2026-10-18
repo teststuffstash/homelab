@@ -816,7 +816,7 @@ the block needs pruning, not more headings.
       specs reviewer (ADR-155) + the worker launcher behind `AGENT_GATEWAY=sessions` (env, platform only); the pod
       pulls its env (GW-SESSIONS-PULL); control plane authenticated + enforced (#2688; gaps #2684/#2685).
       Failure ownership LIVE 10-17 (#2692 cell cooldowns, #2697 outcomes + strikes, #2702 attempt/model lists,
-      #2704 reaper, #2699 latch fix). Go tiers on v4.1-flash (#2694); Go catalog leg in flight (ruled, #2690).
+      #2704 reaper, #2699 latch fix). Go tiers on v4.1-flash (#2694); Go catalog LIVE 10-18 (#2695/#2707: vendor fetch, rules-only policy).
       **Next:** the operator configures real per-tier model lists; a judge caller for `wrong-verdict`; the loop
       flip needs the `gateway-token` volume on the coordinator pod. History: TICK-LOG 10-16/17.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
