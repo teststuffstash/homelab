@@ -17,18 +17,21 @@ dig-explained: RouterRunModelUnverifiable — the two 2026-10-11 ad-hoc probe ri
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-18 ~09:00Z — seat wind-down; TICK-LOG 10-17/18): gateway control plane, failure ownership and
-  the Go catalog are LIVE** (FU-270). `/sessions` auth enforced (#2688); the pod pulls its env (#2672/#2674); failure
-  ownership #2692/#2697/#2699/#2702/#2704; Go tiers on deepseek-v4.1-flash (#2694); the Go catalog is fetched from the vendor
-  every 6 h, admission prices from it, and policy is rules-only (#2695/#2707, `GW-CATALOG-GO`); alerts `GoRailCredentialRejected`
-  + `GoCatalog{Stale,ParseFailed,PolicyModelMissing}` loaded. Free models are not viable reviewers
-  (`docs/spikes/gateway-free-models-2026-10-17/`). **Next:** (a) the operator sets real per-tier model lists; (b) a judge
-  caller for `wrong-verdict` outcomes; (c) before the loop flip the coordinator pod needs the `gateway-token` volume;
-  (d) FU-313: rotate the Go key to a service account before **2026-11-16**, possibly "Inference only" (the gateway
-  reads the admin Budgets API today); (e) re-probe opencode 2.0 (a major; held); (f) gap rows: free-tier key budget shared
-  across `:free`, strike provider always empty, no fleet view, cross-rail identity, codex upstream-auth still 502, marks
-  lost on restart; #2684/#2685; (g) the static `gateway/tests/fixtures/go-catalog.json` is now redundant, so retire it;
-  about 20 older gateway tests break evidence hygiene (specs reviewer advisory; they become blockers on resight).
+- **⚑ PICKUP (2026-10-18 ~19:30Z — seat wind-down; TICK-LOG 10-18): the gateway's tier lists are now DERIVED from
+  benchmark evidence** (FU-270, #2716 — operator ruling: no hand-picked model ids; AA intelligence bands of the rail's best,
+  cheapest-first, cap 3; `argocd/resources/agent-gateway/benchmarks.json` + `tiers check`; refresh = `gateway/scripts/benchmarks-snapshot.sh`
+  → PR). Live light head on Go = `mimo-v2.6-flash`. Also landed: specs reviewer on its own SA (#2710, #2685 closed), session pod
+  mounts the gateway caller token (#2713, inert), evidence hygiene zero (#2709), static Go fixture retired (#2712), responder
+  scratch race fixed (#2717, #2600 closed). **Needs the operator:** (a) the openrouter candidate set — with ALL `model-classes`
+  ids, heavy/standard = kimi-k3 alone ($11.94/1M out); the `coding` chain (2 deepseek ids) is the alternative, one script arg;
+  (b) the `wrong-verdict` judge source (candidates: deploy-revert of an approved PR, a contradicting re-review on resight, the
+  retro) — the spec already has the judge SA/role, nothing reports; (c) FU-313: mint an "Inference only" service-account key
+  (scope settled, covers the only console call). **Next seat work:** the loop flip = `AGENT_GATEWAY=sessions` into the
+  session-pod heredoc; `context_tokens` from the catalog's `context` (null for the new Go heads); #2718 gap rows; #2684 waits.
+  **opencode 2.0 re-check (held, facts):** v2 is a NEW package (`@opencode/cli`, brew `opencode-v2`, docker
+  `ghcr.io/anomalyco/opencode:2.0.0`), not in nixpkgs — the worker image's devbox `opencode@latest` = 1.18.18 and the 1.x line
+  continues (1.19.3, 2026-10-16); v2 renames `provider`→`providers`, nests MCP under `mcp.servers` with `disabled` (no `enabled`),
+  stores credentials in SQLite, documents no `OPENCODE_CONFIG_CONTENT` — every GW-SESSIONS-ENV opencode row would change; hold stands.
 - **⚑ PICKUP (2026-10-16 ~16:00Z — seat; TICK-LOG same date): ADR-156 evidence pass LIVE** (snippets v0.5.2 pinned
   in `agents/specs-reviewer-session.sh` + `gateway/scripts/lib/snippets.sh` — bump TOGETHER; canary #2628 approved).
   **Next:** (a) step 5's measurement — per completed PR: tokens, worker rounds, invalid findings, coordinator

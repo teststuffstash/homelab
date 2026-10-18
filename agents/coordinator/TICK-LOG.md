@@ -13730,3 +13730,26 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - #2694 merged: gateway Go tiers → deepseek-v4.1-flash (option B: Go ids checked against a gateway-owned catalog fixture; the old proxy untouched, because option A fails router self-test). Live: dispatch v4.1-flash, data plane 200. DEFECT the probe found: a Cloudflare 1010 403 (caller UA forwarded) is read as a credential rejection and latches the whole opencode rail credential-down; only a 2xx clears it, so it is a permanent self-latch. Cleared by a gateway restart; sent to the failure-ownership agent to fix (edge-vs-credential typing, the gateway's own UA, self-reprobe).
 - Failure-ownership PRs merged and live-checked (subagent): #2692 transport facts (cell cooldowns, 424 upstream-auth, incomplete streams), #2697 outcome endpoint + strike store, #2699 self-latch fix (edge 403 typed, gateway UA on opencode, credential re-probe, identity encoding), #2702 per-tier lists + strike walk + attempt (both consumers report and re-admit), #2704 pod-gone reaper (namespaced Roles). The launcher canary reports 'outcome clean' then releases. New gap rows: the free-tier key budget is shared, strike provider is always empty, no fleet view, cross-rail identity, codex 502, marks lost on restart. Incident written: docs/incidents/2026-10-17-opencode-go-key-expired.md.
 - 2026-10-18 Go catalog leg merged + live-checked (subagent): #2695 catalog fetch (console config + vendor go.mdx, persisted last-good snapshot, `/catalog/opencode`, `gateway_go_catalog_*`, 3 alerts) and #2707 admission from the snapshot (per-model 20/50/100% windows, `not-in-catalog` refuse, prices/budgets out of policy, `latch_scope` model on opencode). Live: 29/29 models, v4.1-flash $80 monthly; real admission dispatched v4.1-flash. Key-expiry detector #2691 deployed (#2693); all four Go rules loaded in Prometheus, ok/inactive. Seat wind-down.
+
+## 2026-10-18 ~13:30–19:30Z — seat: pickup-note sweep, tier lists from evidence (seat + 5 clone subagents, PR lane)
+- Operator ruling (13:40Z): per-tier model lists are no longer set by hand — "it needs a process and evidence based decision
+  making; for now we can just use some benchmark numbers". Evidence found in-repo: the old proxy's weekly AA pull
+  (`capability` table, 345 rows, 2026-10-17) + the live Go catalog prices. Operator chose (AskUserQuestion): band of the
+  rail's best (intelligence index; heavy ≥0.9×, standard ≥0.75×, light ≥0.5×; cheapest-first; cap 3) + a committed snapshot
+  with an equality check. #2716 merged 19:07Z (one specs round: gap form → #2718); pod rolled, `/healthz` ok, canary light
+  admission → `opencode-go/mimo-v2.6-flash`. Open ruling: openrouter candidates = all 11 `model-classes` ids → kimi-k3 alone at
+  heavy/standard ($11.94/1M out) vs the `coding` chain.
+- #2709 evidence hygiene (one knob: `--allure-no-capture`; 23 ATTACH_BULK + 14 THREAD_BROKEN → 0); #2712 static
+  `go-catalog.json` retired (row reads the catalog world via `parse_config`).
+- #2710 specs reviewer on SA `agent-coordinator:specs-review` (RoleBinding to the chart's workflow Role only); live: shadow +
+  first cron tick admitted as the new SA, old SA → 403 `caller-unknown`. #2685 closed.
+- #2713 gateway caller token on the SESSION pod (brief said the coordinate Workflow — wrong: the launcher runs in the
+  `coordinator-session.sh` heredoc Pod; subagent caught it, re-scoped). Fixture caught backticks executing in the unquoted
+  heredoc. Proven on `oracle-agents/coordinator-oracle-fleet-issue-898` (19:00Z). Flip still needs the env into that heredoc.
+- #2717 responder scratch paths → `$SCRATCH` (#2600 closed): master concurrent pair 215/18 ×2, branch 233/0 ×4. Residual:
+  decided-once/reopen/verdict-dispatch replay families still compose with `/tmp`.
+- FU-313 scope: "Inference only" covers `GET /api/v2/config`, the gateway's only console call; the pickup's "admin Budgets
+  API" claim was wrong (grep: no budgets reader in either pod). opencode 2.0 facts in meta-state; hold stands.
+- Seat miss: the first brief for #2713 named the wrong pod (scan Workflow vs session Pod) — trace the launcher's host before
+  briefing a mount. A runaway `glob('/**')` I ran in the proxy pod via `kubectl exec` had no kill path (no ps/pkill); use
+  `$ROUTER_DB` directly.
