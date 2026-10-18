@@ -831,15 +831,16 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
 | "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
 | "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
-| "the deployed callers are today's two dispatchers, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:agent-coordinator` (`[platform]`, `[reviewer, worker]`, `[]`) |
+| "the deployed callers are today's two dispatchers, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
 is the one in-cluster caller of `agents/agent-session.sh`. It binds into the platform repo
 namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
 no `agentstack-worker`, so a bind there could never be pulled and is not granted. The specs-review
-tick and its shadow cells run as `agent-coordinator` (`agents/coordinator/specs-review-argo.yaml`):
-role `reviewer`, plus ⚖ `worker` for the goose@openrouter shadow cell, which rode `--role worker`
+tick and its shadow cells run as their own SA `specs-review` (`agents/coordinator/specs-review-argo.yaml`;
+homelab#2685 — `callers` is per SA, and `agent-coordinator` is the SA every other workflow in that
+namespace shares): role `reviewer`, plus ⚖ `worker` for the goose@openrouter shadow cell, which rode `--role worker`
 because the reviewer role has no openrouter rail
 ([specs-reviewer.md §Shadow runs](../../../docs/agents/specs-reviewer.md#shadow-runs--harness--rail-cells-gatewayplanmd-step-3)). A jail
 canary mints the loop SA's token (`kubectl create token`) and acts as that dispatcher.
