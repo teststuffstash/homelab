@@ -171,7 +171,7 @@ the outcome endpoint on an earlier session of the SAME task. T = `specs-review h
 
 ### Capacity — the ladder's capacity half
 
-Three per-rail checks and two per-cell checks after the slot count ([model-routing.md §The ladder](../../../docs/agents/model-routing.md#the-ladder--rail--class--tier--cell)'s
+Three per-rail checks and three per-cell checks after the slot count ([model-routing.md §The ladder](../../../docs/agents/model-routing.md#the-ladder--rail--class--tier--cell)'s
 capacity facts, moved from the old proxy's two limit endpoints into the admission answer). Every
 threshold, hold and anchor is policy data under `rails.<rail>.admission` — none is a code literal —
 and each is ⚖ **copied** from the old proxy, which keeps serving its own copy until it retires
@@ -351,8 +351,8 @@ each row is computed in its test's comment.
 | "an off-peak request draws at the base rate" | worker in 30M, out 3.2M (T0 + 2 h) — $6.42 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
 | "cache reads draw at their own rate, not the input rate" | worker cache_read 1000M (T0) — $6.00, not $300 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
 | "a cache class with no rate draws nothing ⚖" | worker cache_write 1000M (T0) — $0 | — | worker, `rail: opencode` || dispatch | opencode | — | — |
-| "a prompt past the context tier draws at the tier's rate" | reviewer in 4M, out 0.2M (T0) — $2.50 (the base row: $0.50) | — | worker, `rail: opencode`, `tier: heavy` || defer | — | rail-window | 18000 |
-| "a prompt within the context tier draws at the base row" | reviewer in 90K, out 1M (T0) — $0.509 (the tier row: $2.545) | — | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
+| "a prompt past the context tier draws at the tier's rate ⚖" | reviewer in 4M, out 0.2M (T0) — $2.50 (the base row: $0.50) | — | worker, `rail: opencode`, `tier: heavy` || defer | — | rail-window | 18000 |
+| "a prompt within the context tier draws at the base row ⚖" | reviewer in 90K, out 1M (T0) — $0.509 (the tier row: $2.545) | — | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
 | "each model's windows are its own monthly limit's shares" | worker in 10M, out 1M (T0) — $4.20 (under its $12.80; haiku's $2.40 would hold it) | — | worker, `rail: opencode` || dispatch | opencode | — | — |
 | "a full window on one Go model never blocks another" | worker in 30M, out 3.2M (T0) | — | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
 | "the walk continues past a full Go window" | worker in 30M, out 3.2M (T0) | — | worker (policy walk) || dispatch | openrouter | — | — |
@@ -367,10 +367,11 @@ after the one just run).
 
 | description | the refresh | body || decision | rail | reason | retry_after_s |
 |---|---|---||---|---|---|---|
-| "a Go model the console no longer lists defers not-in-catalog" | `catalog-retired` | worker, `rail: opencode` || defer | — | not-in-catalog | 21600 |
-| "a not-in-catalog model is skipped, the walk continues" | `catalog-retired` | worker (policy walk) || dispatch | openrouter | — | — |
-| "a listed model with no monthly limit under the plan defers not-in-catalog" | `docs-retired` | worker, `rail: opencode`, `tier: heavy` || defer | — | not-in-catalog | 21600 |
-| "the other Go models still admit" | `catalog-retired` | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
+| "a Go model the console no longer lists defers not-in-catalog ⚖" | `catalog-retired` | worker, `rail: opencode` || defer | — | not-in-catalog | 21600 |
+| "a not-in-catalog model is skipped, the walk continues ⚖" | `catalog-retired` | worker (policy walk) || dispatch | openrouter | — | — |
+| "a listed model with no monthly limit under the plan defers not-in-catalog ⚖" | `docs-retired` | worker, `rail: opencode`, `tier: heavy` || defer | — | not-in-catalog | 21600 |
+| "the other Go models still admit ⚖" | `catalog-retired` | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
+| "no catalog snapshot at all: every Go model is not-in-catalog ⚖" | none — a fresh store, no refresh yet | worker, `rail: opencode` || defer | — | not-in-catalog | 60 (`defer_retry_s`: no refresh is scheduled yet) |
 
 ### Named gaps (rows that exist so the omission is visible)
 

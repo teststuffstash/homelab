@@ -64,6 +64,7 @@ deepseek-v4.1-flash from the console list; `docs-retired` drops claude-haiku-5-5
 | a not-in-catalog model is skipped, the walk continues | catalog-retired | — | worker (policy walk) || dispatch | openrouter | — | — |
 | a listed model with no monthly limit under the plan defers not-in-catalog | docs-retired | — | worker, rail opencode, tier heavy || defer | — | not-in-catalog | 21600 |
 | the other Go models still admit | catalog-retired | — | worker, rail opencode, tier heavy || dispatch | opencode | — | — |
+| no catalog snapshot at all: every Go model is not-in-catalog | none (a fresh store) | — | worker, rail opencode || defer | — | not-in-catalog | 60 |
 """
 
 from __future__ import annotations
@@ -326,3 +327,14 @@ async def test_not_in_catalog(gw, app, vendor, refresh, body, expected):
         attach_json("refresh outcome", {"source": source, "behaviour": behaviour, "outcome": outcome})
         assert outcome == "ok", outcome
     _verdict(await _admit(gw, body), expected)
+
+
+async def test_no_snapshot(cworld):
+    """row: no catalog snapshot at all: every Go model is not-in-catalog ⚖"""
+    world(note="a fresh store: no catalog snapshot, no refresh attempted yet (fails closed)")
+    from ._catalog_world import gw_client
+
+    with given("a gateway on a fresh store — no Go catalog snapshot, no refresh run"):
+        app = cworld.build()
+    async with gw_client(app) as gw:
+        _verdict(await _admit(gw, {"rail": "opencode"}), {"decision": "defer", "reason": "not-in-catalog", "retry_after_s": 60})
