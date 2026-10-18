@@ -88,7 +88,7 @@ ids with a row in either plan tab.
 | "an Endpoints row with one cell is a parse failure" | 5 | `docs-short-endpoint-row` (`\| Step 5 Preview \|`) || parse-failed | the last good |
 | "a renamed limit column is a parse failure" | 5 | `docs-header-drift` (`Monthly limit` → `Limit`) || parse-failed | the last good |
 | "peak rows without the peak-hours sentence are a parse failure" | 5 | `docs-no-peak-hours` || parse-failed | the last good |
-| "no share sentence is a parse failure" | 5 | `docs-no-shares` || parse-failed | the last good |
+| "no share sentence is a parse failure ⚖" | 5 | `docs-no-shares` || parse-failed | the last good |
 | "a drop below half the models is implausible" | 5 | `docs-shrunk` (2 models) || implausible | the last good |
 
 ### What the page says, per model
@@ -105,8 +105,8 @@ docs snapshot (both plans):
 
 | description | input || the snapshot reads |
 |---|---||---|
-| "the peak hours come from the page" | `docs-ok`'s *"Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday"* || `peak_hours_utc` `[[1, 4], [6, 10]]`, `peak_weekdays` mon–fri |
-| "the window shares come from the page" | *"5-hour — 20% of the monthly limit; weekly — 50%; and monthly — 100%"* || `window_shares` 5h 0.2 · 7d 0.5 · 30d 1.0; `deepseek-v4.1-flash` `windows_usd` 16 / 40 / 80 |
+| "the peak hours come from the page ⚖" | `docs-ok`'s *"Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday"* || `peak_hours_utc` `[[1, 4], [6, 10]]`, `peak_weekdays` mon–fri |
+| "the window shares come from the page ⚖" | *"5-hour — 20% of the monthly limit; weekly — 50%; and monthly — 100%"* || `window_shares` 5h 0.2 · 7d 0.5 · 30d 1.0; `deepseek-v4.1-flash` `windows_usd` 16 / 40 / 80 |
 | "the config's prices are the model's cost rows" | `catalog-ok`'s `claude-haiku-5-5` || `cost` base 0.10 / 0.50 / 0.01 / 0.125, above 100000 tokens 0.50 / 2.50 / 0.05 / 0.625 |
 | "a model the page tabulates but the config does not list is shown unlisted" | `catalog-trimmed` (no `step-5-preview`) + `docs-ok` || `step-5-preview` `listed: false`, `monthly_limit_usd` 60 |
 | "the view's shape is the schema's" | `catalog-ok` + `docs-ok`, `GET /catalog/opencode` || exactly the `required` keys of `output`, of a model row and of a source state |
