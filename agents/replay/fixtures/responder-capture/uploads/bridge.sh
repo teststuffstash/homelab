@@ -36,11 +36,16 @@ HOSTNAME="respond-abcde"
 HOME="$(mktemp -d)"
 mkdir -p "$HOME/.claude/projects"
 printf '{"type":"summary"}\n' > "$HOME/.claude/projects/session-abc.jsonl"
+# ⚠ The clause's scratch dir is fixture-local too (homelab#2600): it writes its temp files under
+# $SCRATCH — /tmp in the pod, where nothing sets it — and two replay runs sharing a jail's /tmp
+# raced on alert-one.json / triage.log / ts-finding.json. Under $HOME, so the one <fixhome> scrub
+# covers it.
+SCRATCH="$HOME/scratch"; mkdir -p "$SCRATCH"
 
 # The two files the loop has already written by the time the capture runs: the single-alert payload
 # and the session's tee'd output.
-printf '{"status":"firing","fingerprint":"%s","labels":{"alertname":"%s"}}' "$FP" "$NAME" > /tmp/alert-one.json
-printf 'triage report: forgejo-pg-1 replica diverged after failover (pg_rewind, no common timeline)\n' > /tmp/triage.log
+printf '{"status":"firing","fingerprint":"%s","labels":{"alertname":"%s"}}' "$FP" "$NAME" > "$SCRATCH/alert-one.json"
+printf 'triage report: forgejo-pg-1 replica diverged after failover (pg_rewind, no common timeline)\n' > "$SCRATCH/triage.log"
 # The mark is dated into the past rather than `touch`ed now: `find -newer` is a STRICT comparison,
 # and a mark created in the same second as the transcript is not older than it.
-touch -d '2020-01-01' /tmp/ts-mark
+touch -d '2020-01-01' "$SCRATCH/ts-mark"

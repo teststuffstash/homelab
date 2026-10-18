@@ -31,6 +31,11 @@ HOSTNAME="respond-abcde"
 # that the key check comes FIRST and nothing downstream of it runs.
 HOME="$(mktemp -d)"
 mkdir -p "$HOME"
-printf '{"status":"firing"}' > /tmp/alert-one.json
-printf 'triage report\n' > /tmp/triage.log
-touch -d '2020-01-01' /tmp/ts-mark
+# ⚠ The clause's scratch dir is fixture-local too (homelab#2600): it writes its temp files under
+# $SCRATCH — /tmp in the pod, where nothing sets it — and two replay runs sharing a jail's /tmp
+# raced on alert-one.json / triage.log / ts-finding.json. Under $HOME, so the one <fixhome> scrub
+# covers it.
+SCRATCH="$HOME/scratch"; mkdir -p "$SCRATCH"
+printf '{"status":"firing"}' > "$SCRATCH/alert-one.json"
+printf 'triage report\n' > "$SCRATCH/triage.log"
+touch -d '2020-01-01' "$SCRATCH/ts-mark"
