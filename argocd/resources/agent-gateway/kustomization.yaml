@@ -45,8 +45,9 @@ resources:
 # no review; kimi-k3 was rejected as too expensive for review. Then deepseek-v4-flash left the Go
 # catalog 2026-10-14 (docs/spikes/opencode-go-catalog.md — still 200, allowance unknown), so every
 # tier moved to v4.1-flash ($80/month Go pool, same off-peak price, peak 2×). model-classes.json
-# carries no Go id for v4.1-flash, so the Go rail's ids are checked against the gateway-owned
-# gateway/tests/fixtures/go-catalog.json (GW-MODEL-RESOLVE ⚖); the old proxy is untouched.
+# carries no Go id for v4.1-flash, so the Go rail's ids are checked against the Go catalog the
+# gateway's GW-CATALOG-GO world starts from (gateway/tests/fixtures/go-catalog/config.json through
+# the leg's own parser; GW-MODEL-RESOLVE ⚖); the old proxy is untouched.
 # side_models (anthropic): claude-code's small side-calls name the haiku family
 # (ANTHROPIC_SMALL_FAST_MODEL default) under a sonnet session — admitted ⚖ (GW-MODEL-RESOLVE).
 # max_sessions: anthropic 5 = the old proxy's SUBSCRIPTION_MAX_RUNNING; opencode 3 =
