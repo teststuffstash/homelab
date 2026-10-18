@@ -243,6 +243,7 @@ is stale, so it cannot drift the way the prose register did.
 | `coordinator-pick-rail/both` | actions | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-pick-rail/go-goal-lane` | actions | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-pick-rail/go` | actions | - | `agents/coordinator-scan.sh` | - |
+| `coordinator-pod-manifest` | actions | - | `agents/coordinator-session.sh` | - |
 | `corpus-dispatch-allowlist` | table | - | `agents/coordinator/corpus-dispatch-argo.yaml` | - |
 | `cred-inject-unconditional/claude-opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
 | `cred-inject-unconditional/gateway` | actions | - | `agents/agent-session.sh` | - |
