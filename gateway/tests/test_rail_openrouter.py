@@ -236,18 +236,16 @@ COMPLETENESS_ROWS = [
 @pytest.mark.parametrize(("behaviour", "cut", "stream", "count", "reason"), [r[1:] for r in COMPLETENESS_ROWS], ids=[r[0] for r in COMPLETENESS_ROWS])
 async def test_stream_completeness(gw, upstreams, transport, store, behaviour, cut, stream, count, reason):
     world(upstream=behaviour if cut is None else "upstream-stream-cut", note=None if cut is None else f"cut: {cut}")
-    upstreams[RAIL].behaviour = behaviour
-    if cut is not None:
-        transport.cut[RAIL] = cut
+    with given(f"cut = {cut}: the upstream answers {behaviour}" + (f", the transport cuts it ({cut})" if cut else ", uncut")):
+        upstreams[RAIL].behaviour = behaviour
+        if cut is not None:
+            transport.cut[RAIL] = cut
     try:
         doc, r = await ride(gw, RAIL, "chat", body={"stream": True} if stream else None)
-        status = r.status_code
-    except Exception as e:  # noqa: BLE001 — a cut stream surfaces in the in-process client as the gateway's re-raise
+    except Exception:  # noqa: BLE001 — a cut stream surfaces in the in-process client as the gateway's re-raise
         doc = await _last_session(gw, store)
-        status = f"200 sent, then {type(e).__name__}"
-    attach_json("the client saw", {"status": status})
     recorded_incomplete(store, doc, count, reason)
-    with then(f"gateway_requests_incomplete_total{{rail=openrouter,dialect=openai,reason={reason or 'no-terminal'}}} = {count}"):
+    with then(f"count = {count}: gateway_requests_incomplete_total{{rail=openrouter,dialect=openai,reason={reason or 'no-terminal'}}} = {count}"):
         check("series", await incomplete_series(gw, RAIL, "openai", reason or "no-terminal"), count)
 
 

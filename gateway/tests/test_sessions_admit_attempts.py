@@ -196,12 +196,13 @@ async def test_same_attempt_supersedes(gw):
         first = await open_session(gw, **REVIEWER)
     second = await _admit(gw, REVIEWER)
     with then("the first is released and its token refused (401 session-released); the second is active"):
-        g1 = (await gw.get(f"/sessions/{first['session']['id']}")).json()
-        g2 = (await gw.get(f"/sessions/{second['session']['id']}")).json()
-        r = await gw.post("/anthropic/v1/messages", headers=bearer(first), json={"max_tokens": 8, "messages": []})
-        check("first released", g1["released_at"] is not None, True)
-        check("second released", g2["released_at"], None)
-        check("first token", (r.status_code, r.json()["error"]["code"]), (401, "session-released"))
+        with quiet():  # one verdict carries the three observations
+            g1 = (await gw.get(f"/sessions/{first['session']['id']}")).json()
+            g2 = (await gw.get(f"/sessions/{second['session']['id']}")).json()
+            r = await gw.post("/anthropic/v1/messages", headers=bearer(first), json={"max_tokens": 8, "messages": []})
+        check("first released · second released_at · first token's answer",
+              (g1["released_at"] is not None, g2["released_at"], r.status_code, r.json()["error"]["code"]),
+              (True, None, 401, "session-released"))
 
 
 ACTIVE_ROWS = [
