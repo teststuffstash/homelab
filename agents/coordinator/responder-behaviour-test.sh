@@ -35,6 +35,12 @@ YAML="${YAML:-$REPO/agents/coordinator/responder-argo.yaml}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 BIN="$TMP/bin"; mkdir -p "$BIN" "$TMP/home"
+# The script's scratch dir (its alerts.json, rbody.md, triage.log, ts-finding.json, …) is THIS
+# run's, never the jail's /tmp: two harness runs overlapping in one jail (parallel seat subagents,
+# a gate re-run beside a replay) clobbered each other's files mid-assertion — 18 false reds per
+# run on 2026-10-18, 11/32 on 10-15, none reproducible alone (homelab#2600). The script derives
+# it from RESPONDER_SCRATCH (its config-defaults block); a pod, where nothing sets it, keeps /tmp.
+SCRATCH="$TMP/scratch"; mkdir -p "$SCRATCH"
 
 command -v yq >/dev/null 2>&1 || { echo "responder-behaviour-test: needs yq (devbox run -- bash $0)"; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "responder-behaviour-test: needs jq (devbox run -- bash $0)"; exit 2; }
@@ -146,9 +152,9 @@ ok()  { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); FAILED+=("$1"); printf '  \033[31m✗\033[0m %s\n       %s\n' "$1" "$2"; }
 section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
-# /tmp/rbody.md is the script's own scratch file for a body rewrite; clear it per scenario so a
-# `grep -c '^last-cleared:'` can never pass on the PREVIOUS scenario's leftovers.
-scenario() { H="$TMP/run/$1"; rm -rf "$H"; mkdir -p "$H/gh"; rm -f /tmp/rbody.md; export H; }
+# $SCRATCH/rbody.md is the script's own scratch file for a body rewrite; clear it per scenario so
+# a `grep -c '^last-cleared:'` can never pass on the PREVIOUS scenario's leftovers.
+scenario() { H="$TMP/run/$1"; rm -rf "$H"; mkdir -p "$H/gh"; rm -f "$SCRATCH/rbody.md"; export H; }
 # `go` is the NO-KEY run, and it says so EXPLICITLY: the four §A1 vars are UNSET here rather than
 # merely not-set. A bare `VAR=… cmd` inherits the rest of the caller's environment, and a worker pod
 # exports all four for the ride's own transcript capture — so the script under test saw a key,
@@ -159,7 +165,7 @@ scenario() { H="$TMP/run/$1"; rm -rf "$H"; mkdir -p "$H/gh"; rm -f /tmp/rbody.md
 go() {
   env -u AGENT_TS_ACCESS_KEY_ID -u AGENT_TS_SECRET_ACCESS_KEY \
       -u AGENT_TS_BUCKET -u AGENT_TS_ENDPOINT \
-  PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" \
+  PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" RESPONDER_SCRATCH="$SCRATCH" \
   PUSHGATEWAY="" PATH="$BIN:$PATH" \
     bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
   OUT="$(cat "$H/out.txt")"
@@ -170,7 +176,7 @@ go() {
 go_ts() {
   AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s \
   AGENT_TS_BUCKET=agent-transcripts AGENT_TS_ENDPOINT=http://garage.garage.svc:3900 \
-  PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" \
+  PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" RESPONDER_SCRATCH="$SCRATCH" \
   PUSHGATEWAY="" PATH="$BIN:$PATH" \
     bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
   OUT="$(cat "$H/out.txt")"
@@ -586,9 +592,9 @@ want       "fix-verdict: fix → stays OPEN, no comment" "OPEN, no comment"
 wantnocall "fix-verdict: fix → never closed" "issue close"
 wantnocall "fix-verdict: fix → never commented" "issue comment"
 wantcall   "fix-verdict: fix → one guarded body edit" "issue edit"
-n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
+n="$(grep -c '^last-cleared:' "$SCRATCH/rbody.md" 2>/dev/null || echo 0)"
 [ "$n" = "1" ] && ok "fix-verdict: fix → exactly 1 last-cleared line" || bad "last-cleared line count" "got $n"
-grep -q '^fix-verdict:' /tmp/rbody.md 2>/dev/null && grep -q '^alert-fp:r1' /tmp/rbody.md 2>/dev/null \
+grep -q '^fix-verdict:' "$SCRATCH/rbody.md" 2>/dev/null && grep -q '^alert-fp:r1' "$SCRATCH/rbody.md" 2>/dev/null \
   && ok "fix-verdict: fix → verdict + alert-fp markers survive the rewrite" \
   || bad "markers survive the rewrite" "a marker was lost"
 
@@ -599,7 +605,7 @@ alert-fp:r1
 fix-verdict: fix
 last-cleared: 2026-08-07T23:00:00Z — AgentWorkerEgressDropped stopped firing (alert-fp:r1).' '[]'
 go "$(resolved r1 AgentWorkerEgressDropped)"
-n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
+n="$(grep -c '^last-cleared:' "$SCRATCH/rbody.md" 2>/dev/null || echo 0)"
 [ "$n" = "1" ] && ok "second clear → still exactly 1 line (N clears never accumulate)" || bad "second-clear line count" "got $n"
 
 scenario resolve-report-only
@@ -626,9 +632,9 @@ want       "report-only + a human → left OPEN (unchanged)" "left OPEN"
 wantnocall "report-only + a human → not closed" "issue close"
 wantnocall "report-only + a human → NO ✅ comment any more (#148)" "issue comment"
 wantcall   "report-only + a human → one guarded body edit instead" "issue edit"
-n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
+n="$(grep -c '^last-cleared:' "$SCRATCH/rbody.md" 2>/dev/null || echo 0)"
 [ "$n" = "1" ] && ok "report-only + a human → exactly 1 last-cleared line" || bad "open-issue last-cleared count" "got $n"
-grep -q '^alert-fp:r3' /tmp/rbody.md 2>/dev/null && grep -q '^fix-verdict: report-only' /tmp/rbody.md 2>/dev/null \
+grep -q '^alert-fp:r3' "$SCRATCH/rbody.md" 2>/dev/null && grep -q '^fix-verdict: report-only' "$SCRATCH/rbody.md" 2>/dev/null \
   && ok "report-only + a human → markers survive the rewrite" \
   || bad "markers survive the rewrite (report-only)" "a marker was lost"
 
@@ -640,7 +646,7 @@ fix-verdict: report-only
 last-cleared: 2026-08-07T23:00:00Z — PVCNearFull stopped firing (alert-fp:r3). A human is engaged.' '[{"user":{"login":"RasmusSoot","type":"User"}}]'
 go "$(resolved r3 PVCNearFull)"
 wantnocall "second clear on an OPEN human-engaged issue → ZERO new comments (the flap case)" "issue comment"
-n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
+n="$(grep -c '^last-cleared:' "$SCRATCH/rbody.md" 2>/dev/null || echo 0)"
 [ "$n" = "1" ] && ok "second clear → still exactly 1 line (N flaps never accumulate)" || bad "second-clear line count (open issue)" "got $n"
 
 scenario resolve-report-only-human-no-marker
@@ -970,10 +976,10 @@ printf '[]' > "$H/gh/search.json"
 printf '[]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
 go_ts "$(alert ts2 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
 want     "the prefix is FU-210's: homelab/alert-<fp>/responder-r1-<ts>" "s3://agent-transcripts/homelab/alert-ts2/responder-r1-"
-wantcall "the INPUT alert is captured (the record is replayable)" "cp /tmp/alert-one.json"
-wantcall "the session's own words are captured" "cp /tmp/triage.log"
-wantcall "…with the A1 manifest beside them" "cp /tmp/ts-manifest.json"
-wantcall "…and the FU-231 typed finding record" "cp /tmp/ts-finding.json"
+wantcall "the INPUT alert is captured (the record is replayable)" "cp $SCRATCH/alert-one.json"
+wantcall "the session's own words are captured" "cp $SCRATCH/triage.log"
+wantcall "…with the A1 manifest beside them" "cp $SCRATCH/ts-manifest.json"
+wantcall "…and the FU-231 typed finding record" "cp $SCRATCH/ts-finding.json"
 want     "a triage that filed NOTHING still records a finding — the 09-03 shape" "verdict='none' issue='none'"
 
 # The verdict must REACH the record, or the finding is a list of alerts rather than of decisions.
@@ -1028,18 +1034,18 @@ section "goal#818 leg 2 — the would-lines are TYPED into finding.json (remedia
 # docs/agents/remediation-would-scoreboard.md. Three shapes: none → [], one, two (+ an echoed
 # duplicate collapsed, + a malformed line kept raw so it is still scored).
 wantwould() { # <label> <jq-predicate over the finding>
-  jq -e "$2" /tmp/ts-finding.json >/dev/null 2>&1 && ok "$1" || bad "$1" "finding.json fails: $2 — got $(jq -c .remediation_would /tmp/ts-finding.json 2>/dev/null)"
+  jq -e "$2" "$SCRATCH/ts-finding.json" >/dev/null 2>&1 && ok "$1" || bad "$1" "finding.json fails: $2 — got $(jq -c .remediation_would "$SCRATCH/ts-finding.json" 2>/dev/null)"
 }
 
 scenario would-none
-printf '[]' > "$H/gh/search.json"; rm -f /tmp/ts-finding.json
+printf '[]' > "$H/gh/search.json"; rm -f "$SCRATCH/ts-finding.json"
 go_ts "$(alert rw0 '{"alertname":"PVCNearFull","namespace":"oracle-fleet","persistentvolumeclaim":"x"}')"
 wantwould "no would-line → remediation_would is an EMPTY ARRAY (typed, not absent)" '.remediation_would == []'
 wantwould "…and the schema id stays responder-finding/v1 (additive field)" '.schema == "responder-finding/v1"'
 want      "…and the finding line reports the count" "remediation_would=0"
 
 scenario would-one
-printf '[]' > "$H/gh/search.json"; rm -f /tmp/ts-finding.json
+printf '[]' > "$H/gh/search.json"; rm -f "$SCRATCH/ts-finding.json"
 printf 'REMEDIATION-WOULD: delete oracle-fleet/pod/ert-mock-7f9c4-x2v1b — CrashLoopBackOff on a config already fixed on master\n' > "$H/session-says.txt"
 go_ts "$(alert rw1b '{"alertname":"PVCNearFull","namespace":"oracle-fleet","persistentvolumeclaim":"x"}')"
 wantwould "one would-line → one entry" '.remediation_would | length == 1'
@@ -1048,7 +1054,7 @@ wantwould "…with the raw action text kept verbatim" '.remediation_would[0].raw
 want      "…and the finding line reports the count" "remediation_would=1"
 
 scenario would-two
-printf '[]' > "$H/gh/search.json"; rm -f /tmp/ts-finding.json
+printf '[]' > "$H/gh/search.json"; rm -f "$SCRATCH/ts-finding.json"
 cat > "$H/session-says.txt" <<'SAYS'
 REMEDIATION-WOULD: delete monitoring/pod/loki-0 — WAL replay wedged on a torn segment
 some prose that mentions REMEDIATION-WOULD: mid-line is NOT a marker
@@ -1065,7 +1071,7 @@ wantwould "…a malformed line is kept raw with null parts, so it is still score
 # The shell half of the same contract: a REPORT-ONLY verdict whose session named an imperative
 # remediation keeps its would-line in finding.json — the harvest never keys on the verdict.
 scenario would-report-only
-printf '[]' > "$H/gh/search.json"; rm -f /tmp/ts-finding.json
+printf '[]' > "$H/gh/search.json"; rm -f "$SCRATCH/ts-finding.json"
 jq -n '[{number:42, body:"alert-fp:rw3\nfix-verdict: report-only"}]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
 jq -n '{body:"alert-fp:rw3\nfix-verdict: report-only"}' > "$H/gh/verdict-issue.json"
 printf 'fix-verdict: report-only\nREMEDIATION-WOULD: delete monitoring/pod/loki-0 — WAL replay wedged on a torn segment\n' > "$H/session-says.txt"

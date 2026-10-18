@@ -382,7 +382,17 @@ spec:
         args:
           - |
             set -euo pipefail
-            printf '%s' "$PAYLOAD" > /tmp/alerts.json
+            # SCRATCH: every temp file this script writes (alerts.json, alert-one.json,
+            # triage.log, rbody.md, …) lives under ONE dir, derived once. In the pod nothing sets
+            # the vars, so the path stays /tmp; a harness sets RESPONDER_SCRATCH to its own
+            # per-run dir, because two harness runs sharing a jail's /tmp clobbered each other's
+            # rbody.md / ts-finding.json mid-assertion (homelab#2600: 18 false reds per run).
+            # The sentinels make it the replay runner's prepended config-defaults block, so an
+            # extracted clause sees the same default as the whole script does.
+            # >>>REPLAY:config-defaults>>>
+            SCRATCH="${RESPONDER_SCRATCH:-${TMPDIR:-/tmp}}"
+            # <<<REPLAY:config-defaults<<<
+            printf '%s' "$PAYLOAD" > "$SCRATCH/alerts.json"
 
             # ── §A1 CAPTURE: the transcript + the finding record (FU-210 / FU-231) ───────────
             # THE HOLE THIS CLOSES. The A1 capture hooks (docs/agents/observability-and-retro.md)
@@ -437,10 +447,10 @@ spec:
                       fingerprint:$fp, subject:$subject, model:$model, rail:$rail,
                       session_key:$key, pod:$pod, timestamp:$ts,
                       files:["alert.json","triage.log","finding.json"],
-                      grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json 2>/dev/null || return 0
-              _ts_put /tmp/alert-one.json alert.json
-              _ts_put /tmp/triage.log     triage.log
-              _ts_put /tmp/ts-manifest.json manifest.json
+                      grafana_query:("{pod=\""+$pod+"\"}")}' > "$SCRATCH/ts-manifest.json" 2>/dev/null || return 0
+              _ts_put "$SCRATCH/alert-one.json" alert.json
+              _ts_put "$SCRATCH/triage.log"     triage.log
+              _ts_put "$SCRATCH/ts-manifest.json" manifest.json
               # The session's own JSONL — only this session's, keyed by the marker touched just
               # before the claude call. `find -newer` rather than a whole-directory sweep: the pod
               # walks N alerts in one loop and each prefix must carry ITS turn, not its
@@ -451,7 +461,7 @@ spec:
               # `set -e` takes down the alert loop MID-PAYLOAD — every remaining alert in the group
               # silently untriaged, while the exhaust-upload that caused it is the one thing in
               # this script that must never be load-bearing. Caught by the harness, not by review.
-              { find "$HOME/.claude/projects" -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do
+              { find "$HOME/.claude/projects" -name '*.jsonl' -newer "$SCRATCH/ts-mark" 2>/dev/null || true; } | while read -r f; do
                 _ts_put "$f" "$(basename "$f")"
               done
               echo "transcripts: uploaded → $TS_PREFIX"
@@ -488,7 +498,7 @@ spec:
             }
             _ts_finding() { # <verdict> <issue-ref-or-empty> <route-repo>
               [ -n "$TS_PREFIX" ] || return 0
-              TS_WOULD="$(_ts_would /tmp/triage.log)"; [ -n "$TS_WOULD" ] || TS_WOULD='[]'
+              TS_WOULD="$(_ts_would "$SCRATCH/triage.log")"; [ -n "$TS_WOULD" ] || TS_WOULD='[]'
               jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg alertname "$NAME" --arg fp "$FP" \
                     --arg subject "$SUBJ" --arg verdict "${1:-none}" --arg issue "${2:-}" \
                     --arg route_repo "${3:-}" --arg route_stack "${ROUTE_STACK:-}" \
@@ -500,8 +510,8 @@ spec:
                       route_stack:$route_stack, self_referential:($selfref == "true"),
                       observation_window:$window, model:$model, rail:$rail, pod:$pod,
                       remediation_would:$would}' \
-                > /tmp/ts-finding.json 2>/dev/null || return 0
-              _ts_put /tmp/ts-finding.json finding.json
+                > "$SCRATCH/ts-finding.json" 2>/dev/null || return 0
+              _ts_put "$SCRATCH/ts-finding.json" finding.json
               echo "finding: recorded verdict='${1:-none}' issue='${2:-none}' remediation_would=$(printf '%s' "$TS_WOULD" | jq 'length' 2>/dev/null || echo '?') → $TS_PREFIX/finding.json"
             }
             # <<<REPLAY:responder-capture<<<
@@ -549,14 +559,14 @@ spec:
             # clear. Reads $rname/$rfp from the resolve loop below.
             # Exit: 0 written, 1 edit failed, 2 guard refused.
             _record_clear() { # <repo> <number> <issue-json> <guard-regex> <tail-sentence>
-              printf '%s' "$3" | jq -r '.body // ""' | grep -v '^last-cleared:' > /tmp/rbody.md || true
+              printf '%s' "$3" | jq -r '.body // ""' | grep -v '^last-cleared:' > "$SCRATCH/rbody.md" || true
               printf 'last-cleared: %s — %s stopped firing (alert-fp:%s). %s\n' \
-                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rname" "$rfp" "$5" >> /tmp/rbody.md
-              [ -s /tmp/rbody.md ] && grep -qi "$4" /tmp/rbody.md || return 2
-              gh issue edit "$2" --repo "$1" --body-file /tmp/rbody.md >/dev/null 2>&1 || return 1
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rname" "$rfp" "$5" >> "$SCRATCH/rbody.md"
+              [ -s "$SCRATCH/rbody.md" ] && grep -qi "$4" "$SCRATCH/rbody.md" || return 2
+              gh issue edit "$2" --repo "$1" --body-file "$SCRATCH/rbody.md" >/dev/null 2>&1 || return 1
             }
             jq -r '.alerts[]? | select(.status == "resolved") | [(.fingerprint // ""), (.labels.alertname // "?")] | @tsv' \
-              /tmp/alerts.json 2>/dev/null | while IFS="$(printf '\t')" read -r rfp rname; do
+              "$SCRATCH/alerts.json" 2>/dev/null | while IFS="$(printf '\t')" read -r rfp rname; do
               [ -n "$rfp" ] || continue
               hit="$(gh search issues --owner "$ORG" "alert-fp:$rfp" --state open --json repository,number \
                      --limit 5 2>/dev/null | jq -r '.[] | "\(.repository.nameWithOwner)#\(.number)"' | head -1)"
@@ -642,7 +652,7 @@ spec:
               # <<<REPLAY:responder-engagement<<<
             done
 
-            COUNT="$(jq -r '[.alerts[]? | select(.status == "firing")] | length' /tmp/alerts.json 2>/dev/null || echo 0)"
+            COUNT="$(jq -r '[.alerts[]? | select(.status == "firing")] | length' "$SCRATCH/alerts.json" 2>/dev/null || echo 0)"
             [ "${COUNT:-0}" -gt 0 ] || { echo "no firing alerts in payload — resolve leg done, nothing to triage"; exit 0; }
 
             rm -rf /work/homelab
@@ -678,7 +688,7 @@ spec:
             # homelab#439: --pick-rail mode — when ANY rail is clear the triage proceeds.
             rail="$(SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh --pick-rail)" || rail=""
             if [ -z "$rail" ]; then
-              jq -r '.alerts[]? | select(.status == "firing") | .fingerprint // empty' /tmp/alerts.json \
+              jq -r '.alerts[]? | select(.status == "firing") | .fingerprint // empty' "$SCRATCH/alerts.json" \
                 | while read -r dfp; do [ -n "$dfp" ] && kubectl -n agent-coordinator patch cm responder-seen \
                     --type merge -p "{\"data\":{\"fp-$dfp\":\"deferred-$TODAY\"}}" >/dev/null 2>&1 || true; done
               echo "triage DEFERRED — both rails latched (FU-088); markers written, exit 1 → Argo retries with backoff (FU-113b)"; exit 1
@@ -699,7 +709,7 @@ spec:
             # The operator-facing signal is the ResponderTriageBudgetExhausted info alert, which
             # carries `triage: none` so it can never consume the budget it is reporting on.
             if ! RESPONDER_DAILY_MAX="${RESPONDER_DAILY_MAX:-12}" bash /work/homelab/agents/responder-budget.sh; then
-              jq -r '.alerts[]? | select(.status == "firing") | .fingerprint // empty' /tmp/alerts.json \
+              jq -r '.alerts[]? | select(.status == "firing") | .fingerprint // empty' "$SCRATCH/alerts.json" \
                 | while read -r bfp; do [ -n "$bfp" ] && kubectl -n agent-coordinator patch cm responder-seen \
                     --type merge -p "{\"data\":{\"fp-$bfp\":\"budget-$TODAY\"}}" >/dev/null 2>&1 || true; done
               echo "triage BLOCKED — daily LLM budget exhausted (FU-149); markers written, no session spawned"; exit 0
@@ -761,7 +771,7 @@ spec:
             # </dev/null on the claude call below: a piped while-read loop's stdin IS the
             # remaining alerts — claude eats them and a multi-alert group triages only its
             # first member (found live 2026-07-27 by meta-alert-crosscheck.sh, run 1).
-            jq -c '.alerts[] | select(.status == "firing")' /tmp/alerts.json | while read -r a; do
+            jq -c '.alerts[] | select(.status == "firing")' "$SCRATCH/alerts.json" | while read -r a; do
               FP="$(printf '%s' "$a" | jq -r '.fingerprint // empty')"
               NAME="$(printf '%s' "$a" | jq -r '.labels.alertname // "unknown-alert"')"
               [ -n "$FP" ] || FP="$(printf '%s' "$a" | jq -r '.labels | tostring' | sha256sum | cut -c1-16)"
@@ -1055,11 +1065,11 @@ spec:
                   # Drop-then-append, exactly like the resolve leg's `_record_clear`: N re-fires stay
                   # ONE line. Guarded on the verdict marker — the line this branch was selected by —
                   # so a body that came back short is left untouched rather than half-written.
-                  printf '%s' "$DEC_BODY" | grep -v '^still-firing:' > /tmp/sfbody.md || true
+                  printf '%s' "$DEC_BODY" | grep -v '^still-firing:' > "$SCRATCH/sfbody.md" || true
                   printf 'still-firing: %s — %s is still firing on this subject (alert-fp:%s). Already triaged; the verdict above stands until this issue closes.\n' \
-                    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$NAME" "$FP" >> /tmp/sfbody.md
-                  if [ -s /tmp/sfbody.md ] && grep -qi '^fix-verdict:' /tmp/sfbody.md; then
-                    gh issue edit "$DEC_NUM" --repo "$DEC_REPO" --body-file /tmp/sfbody.md >/dev/null 2>&1 \
+                    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$NAME" "$FP" >> "$SCRATCH/sfbody.md"
+                  if [ -s "$SCRATCH/sfbody.md" ] && grep -qi '^fix-verdict:' "$SCRATCH/sfbody.md"; then
+                    gh issue edit "$DEC_NUM" --repo "$DEC_REPO" --body-file "$SCRATCH/sfbody.md" >/dev/null 2>&1 \
                       && echo "→ $NAME ($FP): DECIDED — $DEC_HIT already carries a verdict for $SUBJ; still-firing line updated, no session" \
                       || echo "→ $NAME ($FP): DECIDED — $DEC_HIT already carries a verdict for $SUBJ; no session (body edit failed, non-fatal)"
                   else
@@ -1157,7 +1167,7 @@ spec:
               kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$SUBJ_KEY\":\"triaged-$TODAY\"}}" >/dev/null 2>&1 \
                 || echo "WARN: subject ledger patch failed — a repeat of $SUBJ may re-triage today"
 
-              printf '%s' "$a" > /tmp/alert-one.json
+              printf '%s' "$a" > "$SCRATCH/alert-one.json"
 
               # OWNERSHIP: THIS LOOKUP COMPUTES THE DEFAULT — THE TRIAGE'S NAMED FIX SURFACE WINS.
               # Precedence for the default: explicit stack/owner alert label → namespace ∈
@@ -1359,7 +1369,7 @@ spec:
               # §A1: the marker `find -newer` keys this session's JSONL off, and a fresh log file.
               # Touched HERE, immediately before the run, so a multi-alert payload never uploads a
               # predecessor's transcript into this alert's prefix.
-              : > /tmp/ts-mark; : > /tmp/triage.log
+              : > "$SCRATCH/ts-mark"; : > "$SCRATCH/triage.log"
               TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)"
               # The routed answer is a rail-prefixed id (`claude/sonnet`); the claude CLI takes the BARE
               # alias — parse through the ONE parser (model_id.py), coordinator-session.sh's exact move
@@ -1369,7 +1379,7 @@ spec:
               # 156 in the 7 days Loki holds, and no alert consumer sees a WARN inside a green run.
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
-            THE ALERT (JSON): $(cat /tmp/alert-one.json)
+            THE ALERT (JSON): $(cat "$SCRATCH/alert-one.json")
 
             SUBJECT (computed deterministically — the RESOURCE this alert is about): $SUBJ
             Before filing anything, search ACROSS the agent repos for an issue containing 'subject:$SUBJ' — OPEN or CLOSED, regardless of age, and NOT just in the repo you intend to file on: 'gh search issues --owner teststuffstash --match body' plus the marker. Org-wide is required because STEP 1 routes by fix surface, so an earlier fire of this same resource may sit in a DIFFERENT repo than the one you pick today, and a per-repo search would file a duplicate instead of finding it. A match means this resource has failed before: comment there (reopening if closed) instead of filing a new issue, and say what is DIFFERENT this time.
@@ -1411,8 +1421,8 @@ spec:
             For example: 'REMEDIATION-WOULD: delete oracle-fleet/pod/ert-mock-7f9c4-x2v1b — CrashLoopBackOff on a config already fixed on master; a delete lets the ReplicaSet re-pull.'
             At most one per distinct remediation per session. This line is INDEPENDENT of your fix-verdict: the verdict answers whether a fixer PR helps, and an imperative remediation is by definition not a PR — so a report-only verdict that names an imperative remediation MUST still carry the line (that class is exactly what the dial measures). The ONLY reason to omit it: no mechanical imperative remediation applies." \
                 --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 40 </dev/null 2>&1 \
-                | tee /tmp/triage.log \
-                || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow" | tee -a /tmp/triage.log
+                | tee "$SCRATCH/triage.log" \
+                || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow" | tee -a "$SCRATCH/triage.log"
               # The model resolution moved ABOVE the call (TS_MODEL) so the manifest can record
               # which model actually ran. It is the same one-parser expression, not a second read:
               # passing the routed answer verbatim is what killed EVERY triage session for a week
@@ -1480,8 +1490,8 @@ spec:
                       "🔁 **Reopen reverted** — this thread was closed by a person, and the responder's fingerprint/subject belt reopened it while triaging \`$NAME\` (alert-fp:\`$FP\`)." \
                       "" \
                       "A human close is a decision, so the belt restores it (homelab#1733). The triage's own findings stay on this thread above; if the condition really is new, it belongs in a new issue rather than in a reopened verdict." \
-                      > /tmp/reclose.md
-                    gh issue comment "$pnum" --repo "$prepo" --body-file /tmp/reclose.md >/dev/null 2>&1 || true
+                      > "$SCRATCH/reclose.md"
+                    gh issue comment "$pnum" --repo "$prepo" --body-file "$SCRATCH/reclose.md" >/dev/null 2>&1 || true
                     gh issue close "$pnum" --repo "$prepo" --reason completed >/dev/null 2>&1 \
                       && echo "→ reopened $pc: HUMAN-CLOSED — re-closed, the person's decision stands" \
                       || echo "→ reopened $pc: HUMAN-CLOSED — re-close FAILED (non-fatal); it is open against a human's close"
@@ -1549,22 +1559,22 @@ spec:
                 #   · agents/coordinator-scan.sh's footprint/verdict reads, agents/board.sh
                 # Best-effort by design: a failed edit changes nothing about the verdict below,
                 # which still reads the body it already has.
-                printf '%s' "$VBODY" > /tmp/vbody.orig
-                cp /tmp/vbody.orig /tmp/vbody.md
+                printf '%s' "$VBODY" > "$SCRATCH/vbody.orig"
+                cp "$SCRATCH/vbody.orig" "$SCRATCH/vbody.md"
                 IBOK=1
                 for ibk in alert-fp self-referential fix-verdict Touches; do
-                  ibv="$(ib get "$ibk" --ref "$VREPO#$VHIT" < /tmp/vbody.md)" || { IBOK=0; break; }
+                  ibv="$(ib get "$ibk" --ref "$VREPO#$VHIT" < "$SCRATCH/vbody.md")" || { IBOK=0; break; }
                   [ -n "$ibv" ] || continue
-                  ib set "$ibk=$ibv" < /tmp/vbody.md > /tmp/vbody.next || { IBOK=0; break; }
-                  mv /tmp/vbody.next /tmp/vbody.md
+                  ib set "$ibk=$ibv" < "$SCRATCH/vbody.md" > "$SCRATCH/vbody.next" || { IBOK=0; break; }
+                  mv "$SCRATCH/vbody.next" "$SCRATCH/vbody.md"
                 done
                 if [ "$IBOK" = 0 ]; then
                   echo "→ block: $VREPO#$VHIT body has a MALFORMED machine block (issue_body.py exit 2) — left untouched"
-                elif cmp -s /tmp/vbody.orig /tmp/vbody.md; then
+                elif cmp -s "$SCRATCH/vbody.orig" "$SCRATCH/vbody.md"; then
                   echo "→ block: $VREPO#$VHIT already carries its machine block (nothing to write)"
                 else
-                  gh issue edit "$VHIT" --repo "$VREPO" --body-file /tmp/vbody.md >/dev/null 2>&1 \
-                    && { VBODY="$(cat /tmp/vbody.md)"; echo "→ block: $VREPO#$VHIT machine block written (legacy lines kept — transition window)"; } \
+                  gh issue edit "$VHIT" --repo "$VREPO" --body-file "$SCRATCH/vbody.md" >/dev/null 2>&1 \
+                    && { VBODY="$(cat "$SCRATCH/vbody.md")"; echo "→ block: $VREPO#$VHIT machine block written (legacy lines kept — transition window)"; } \
                     || echo "→ block: writing the machine block on $VREPO#$VHIT failed (non-fatal — the legacy lines are still the truth)"
                 fi
                 # The verdict, through the parser. `agents/issue_body.py`'s LEGACY entry for
@@ -1574,7 +1584,7 @@ spec:
                 # case-insensitive and the parser's is not: a body spelling `Fix-Verdict:` would
                 # have matched before and does not now. Deliberate — the block has exactly one
                 # spelling and the prompt above pins the lowercase line.
-                VVERD="$(ib get fix-verdict --ref "$VREPO#$VHIT" < /tmp/vbody.md 2>/dev/null || true)"
+                VVERD="$(ib get fix-verdict --ref "$VREPO#$VHIT" < "$SCRATCH/vbody.md" 2>/dev/null || true)"
                 if [ "$(printf '%s' "$VVERD" | tr 'A-Z' 'a-z')" = "fix" ]; then
                   gh api -X POST "repos/$VREPO/issues/$VHIT/labels" -f "labels[]=agent-fix" >/dev/null 2>&1 \
                     && echo "→ verdict: $VREPO#$VHIT labelled agent-fix (inert — queueing is the debouncer's)" \
