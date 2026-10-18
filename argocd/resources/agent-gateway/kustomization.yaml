@@ -75,9 +75,11 @@ resources:
 # caller — worker admissions bound into the platform repo namespaces that hold an
 # `agentstack-worker` SA (agent-runtime, homelab, openrouter-operator; `agent-coordinator` holds
 # none, so a bind there could never be pulled ⚖); the jail canary mints this SA's token to act as
-# it. `agent-coordinator:agent-coordinator` = the specs-review tick + its shadow cells
-# (agents/coordinator/specs-review-argo.yaml): `reviewer`, and `worker` for the goose@openrouter
-# shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it never binds. `enforce` since 2026-10-17
+# it. `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
+# (agents/coordinator/specs-review-argo.yaml), their OWN ServiceAccount since #2685 (callers are
+# per SA; as `agent-coordinator` the key covered every workflow in that namespace): `reviewer`, and
+# `worker` for the goose@openrouter shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it
+# never binds. `enforce` since 2026-10-17
 # (after #2687 made every caller send its token and the unauthenticated series stayed flat): a
 # call with no valid caller token is 401; `observe` is the rollback knob.
 #
