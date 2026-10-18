@@ -71,7 +71,7 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 [endpoints/openai-chat.md](endpoints/openai-chat.md) +
 [endpoints/openai-responses.md](endpoints/openai-responses.md) (the data plane; the last is the dark codex rail) →
 [endpoints/metrics.md](endpoints/metrics.md) · [endpoints/health.md](endpoints/health.md) ·
-[endpoints/catalog.md](endpoints/catalog.md) (the Go rail's vendor facts) ·
+[endpoints/catalog.md](endpoints/catalog.md) (the Go rail's vendor facts; the tier evidence) ·
 [access.md](access.md) (the role × stack × service inventory) ·
 [glossary.md](glossary.md) · [worlds/](worlds/README.md).
 
@@ -98,5 +98,6 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-METRICS](endpoints/metrics.md#gw-metrics) | metrics | the `gateway_*` families and their bounded labels |
 | [GW-HEALTH](endpoints/health.md#gw-health) | health | liveness and the store mode |
 | [GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go) | catalog | the Go rail's models, prices and per-model plan limits, read from the vendor on a schedule; the last good snapshot |
+| [GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers) | catalog | the deployed per-(rail, tier) model lists are derived from benchmark evidence (AA intelligence bands of the rail's best, cheapest-first, capped) — a committed snapshot and an equality check |
 | [GW-ACCESS](access.md#gw-access) | access | role × service: allowed / denied / unenforced |
 | [GW-CODEX-REFRESH](endpoints/openai-responses.md#gw-codex-refresh) | openai-responses | native Codex OAuth HTTP refresh transport (injectable, dark) |

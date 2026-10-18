@@ -27,6 +27,11 @@ are checked against the vendor's catalog too, not `model-classes.json` — #2694
 `opencode-go/claude-haiku-5-5` (heavy), so the tier rows and the claude-on-Go rows stay
 distinguishable ⚖.
 
+Every policy world also carries the `tiers` block of the deployed policy (`score: intelligence`,
+bands 0.9 / 0.75 / 0.5, cap 3 — [GW-MODEL-TIERS](../endpoints/catalog.md#gw-model-tiers)) so one
+loader shape holds everywhere, but its LISTS stay the fixture ids above: the derivation applies to
+the deployed policy only ⚖.
+
 ## Upstream behaviours (fake upstreams)
 
 Each rail's upstream is an in-process fake mounted per test — offline, deterministic, no network.

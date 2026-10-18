@@ -21,7 +21,7 @@
 | the dispatch answer names the policy id for (rail, tier) | policy-default | model == rails.<rail>.models.<tier> for every role |
 | no model id from the policy appears in src/ | policy-default | grep finds none |
 | the anthropic body is forwarded byte-untouched | policy-default | upstream body == inbound body |
-| the deployed policy loads under the island's loader, every id known | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same rails + roles as policy-default; every non-opencode model/side-model id is a models.*.ids value of model-classes.json; every opencode id is opencode-go/<id> of a model the GW-CATALOG-GO world's catalog lists (tests/fixtures/go-catalog/config.json through the leg's own parse_config) ⚖; opencode max_sessions = rails.opencode-go.concurrency |
+| the deployed policy loads under the island's loader, every id known | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same rails + roles as policy-default; every non-opencode model/side-model id is a models.*.ids value of model-classes.json; every opencode id is an opencode candidate row of the committed tier evidence benchmarks.json (the gateway's own GET /catalog/opencode read — listed, with a monthly limit under the plan; GW-MODEL-TIERS) ⚖; opencode max_sessions = rails.opencode-go.concurrency |
 """
 
 from __future__ import annotations
@@ -31,11 +31,9 @@ import re
 
 import pytest
 
-from agent_gateway.catalog import parse_config
 from agent_gateway.config import Policy
 
 from .conftest import (
-    GO_CATALOG_FIXTURES,
     ISLAND,
     attach_json,
     bearer,
@@ -59,11 +57,13 @@ DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "po
 MODEL_CLASSES = ISLAND.parent / "argocd" / "resources" / "openrouter-proxy" / "model-classes.json"
 # ⚖ (operator, 2026-10-17): the opencode rail's ids are checked against the Go catalog, not
 # model-classes.json — that table is the old proxy's, and a Go id added there is a new models key in
-# the live router. The catalog is the GW-CATALOG-GO world's console fixture (conftest.GO_CATALOG_FIXTURES,
-# what every world's gateway starts from) read through the leg's own `parse_config` — the parser the live
-# console answer goes through — never a second parser or a hand-kept id list (the static go-catalog.json
-# snapshot retired 2026-10-18 once the catalog leg landed).
-GO_CATALOG_CONFIG = GO_CATALOG_FIXTURES / "config.json"
+# the live router. Since the lists are DERIVED (GW-MODEL-TIERS, 2026-10-18) the catalog read is the
+# committed tier evidence: benchmarks.json's opencode rows are the live `GET /catalog/opencode`
+# answer (the leg's own parser in the running gateway) filtered to listed models with a monthly limit
+# — the candidate set every deployed Go id is drawn from. The world's five-model console fixture
+# (#2712) cannot hold a derivation over 29 live models; the static go-catalog.json snapshot retired
+# 2026-10-18 once the catalog leg landed.
+BENCHMARKS = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "benchmarks.json"
 
 SESSIONS = {
     "go-flash": ({"role": "worker", "harness": "opencode"}, "opencode", "chat"),
@@ -141,14 +141,15 @@ def test_no_model_id_in_code(policy):
     then_eq("leaked ids", leaked, [], claim="leaked ids in src/ = []")
 
 
-@pytest.mark.skipif(not DEPLOYED_POLICY.exists(), reason="deploy manifests absent (service-only checkout)")
+@pytest.mark.skipif(not (DEPLOYED_POLICY.exists() and BENCHMARKS.exists()), reason="deploy manifests absent (service-only checkout)")
 def test_deployed_policy_loads(policy):
     """row: the deployed policy loads under the island's loader, every id known"""
     world(note="against the deployed policy (the configMapGenerator source)")
-    with given(f"the Go catalog the GW-CATALOG-GO world starts from: parse_config({GO_CATALOG_CONFIG.relative_to(ISLAND)}) "
-               "— the leg's own parser, a `disabled` row not listed"):
-        listed = parse_config(json.loads(GO_CATALOG_CONFIG.read_text(encoding="utf-8")))["models"]
-        attach_json("catalog model ids (parse_config)", sorted(listed))
+    with given(f"the opencode candidate rows of the committed tier evidence {BENCHMARKS.relative_to(ISLAND.parent)} "
+               "— the gateway's own GET /catalog/opencode read: listed models with a monthly limit under the plan (GW-MODEL-TIERS)"):
+        bench = json.loads(BENCHMARKS.read_text(encoding="utf-8"))
+        listed = sorted(bench["rails"]["opencode"])
+        attach_json("opencode candidates (benchmarks.json)", {"snapshot_at": bench["snapshot_at"], "ids": listed})
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
         raw = json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8"))
         deployed = Policy.from_dict(raw)
@@ -159,9 +160,9 @@ def test_deployed_policy_loads(policy):
     with then("every deployed rail's models = {light, standard, heavy}",
               models={r: sorted(v.models) for r, v in deployed.rails.items()}):
         assert all(set(r.models) == {"light", "standard", "heavy"} for r in deployed.rails.values())
-    go = {f"opencode-go/{i}" for i in listed}
+    go = set(listed)
     go_ids = {m for m in (*(x for lst in deployed.rails["opencode"].models.values() for x in lst), *deployed.rails["opencode"].side_models)}
-    with then("every opencode deployed model id is opencode-go/<id> of a model the catalog world lists ⚖",
+    with then("every opencode deployed model id is an opencode candidate row of the committed tier evidence ⚖",
               checked=sorted(go_ids), unknown={"expected": [], "actual": sorted(go_ids - go)}):
         assert go_ids <= go, sorted(go_ids - go)
     if MODEL_CLASSES.exists():

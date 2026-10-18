@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://teststuff.net/agent-gateway/specs/endpoints/catalog.schema.json",
-  "$comment": "MACHINE half of GET /catalog/opencode and of the two normalised snapshots the Go catalog leg keeps in its store; the HUMAN half is catalog.md. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows.",
+  "$comment": "MACHINE half of GET /catalog/opencode and of the two normalised snapshots the Go catalog leg keeps in its store; the HUMAN half is catalog.md. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows. A second rule, GW-MODEL-TIERS, owns $defs.benchmarks_snapshot (the committed tier-evidence snapshot, argocd/resources/agent-gateway/benchmarks.json) and $defs.tiers_block (the policy's derivation rules).",
   "x-endpoint": "catalog",
   "x-use-cases": ["UC-1"],
   "$defs": {
@@ -44,6 +44,74 @@
         "in": { "$ref": "#/$defs/rate" }, "out": { "$ref": "#/$defs/rate" },
         "cache_read": { "$ref": "#/$defs/rate" }, "cache_write": { "$ref": "#/$defs/rate" }
       }
+    },
+    "score_axis": { "enum": ["intelligence", "coding", "agentic"], "description": "the three Artificial Analysis indices of a capability row" },
+    "band": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+    "tiers_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "bands", "cap"],
+      "properties": {
+        "score": { "$ref": "#/$defs/score_axis" },
+        "bands": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["light", "standard", "heavy"],
+          "properties": { "light": { "$ref": "#/$defs/band" }, "standard": { "$ref": "#/$defs/band" }, "heavy": { "$ref": "#/$defs/band" } },
+          "description": "a candidate is in a tier when its score >= band x the rail's top score; heavy >= standard >= light"
+        },
+        "cap": { "type": "integer", "minimum": 1, "description": "each tier list keeps this many, cheapest-first" }
+      },
+      "x-requirements": ["GW-MODEL-TIERS"]
+    },
+    "candidate_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aa_id", "intelligence", "coding", "agentic", "out_price", "in_price", "monthly_limit_usd"],
+      "properties": {
+        "aa_id": { "type": ["string", "null"], "description": "the Artificial Analysis id the policy id joins (join_aa_id); null = unbenched" },
+        "intelligence": { "type": ["number", "null"] }, "coding": { "type": ["number", "null"] }, "agentic": { "type": ["number", "null"] },
+        "out_price": { "$ref": "#/$defs/rate", "description": "$ per 1M output tokens (the Go base cost row's out / OpenRouter pricing.completion x 1M); null = none (the subscription rail; a dynamic OpenRouter price)" },
+        "in_price": { "$ref": "#/$defs/rate" },
+        "monthly_limit_usd": { "$ref": "#/$defs/limit", "description": "the Go plan's monthly limit; null on the other rails" }
+      }
+    },
+    "benchmarks_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot_at", "sources", "rails"],
+      "properties": {
+        "snapshot_at": { "type": "string", "format": "date-time" },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["capability", "go_catalog", "openrouter_models"],
+          "properties": {
+            "capability": {
+              "type": "object", "additionalProperties": false, "required": ["source", "pulled_at", "rows"],
+              "properties": {
+                "source": { "const": "artificial-analysis" },
+                "pulled_at": { "$ref": "#/$defs/timestamp", "description": "the newest updated_ts of the old proxy's capability table" },
+                "rows": { "type": "integer", "minimum": 0, "description": "the capability table's row count (the snapshot keeps only the candidates)" }
+              }
+            },
+            "go_catalog": { "type": "object", "additionalProperties": false, "required": ["fetched_at"], "properties": { "fetched_at": { "$ref": "#/$defs/timestamp", "description": "GET /catalog/opencode sources.config.fetched_at" } } },
+            "openrouter_models": { "type": "object", "additionalProperties": false, "required": ["fetched_at"], "properties": { "fetched_at": { "$ref": "#/$defs/timestamp" } } }
+          }
+        },
+        "rails": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["anthropic", "opencode", "openrouter"],
+          "description": "per rail, the CANDIDATE rows keyed by POLICY model id (the rail's spelling: claude/<alias>, opencode-go/<id>, a bare openrouter id)",
+          "properties": {
+            "anthropic": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
+            "opencode": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
+            "openrouter": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } }
+          }
+        }
+      },
+      "x-requirements": ["GW-MODEL-TIERS"]
     },
     "config_snapshot": {
       "type": "object",
