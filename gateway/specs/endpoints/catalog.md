@@ -11,8 +11,9 @@ those facts were copied by hand into `policy.json` and `gometer.py`, and the cop
 the gateway's only Go model left the Go catalog on 2026-10-14 and nothing noticed
 ([opencode-go-catalog.md](../../../docs/spikes/opencode-go-catalog.md) §F3). The gateway now
 reads them on a schedule from two vendor sources, keeps the last good snapshot of each in its
-store, and shows both here and on `/metrics`. This page owns only the reading; admission does
-not read the snapshot yet (the `⚑ gap` row below — [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) still prices from the policy). The
+store, and shows both here and on `/metrics`. Admission reads the snapshot — the Go window
+draw's prices, each model's own windows, `not-in-catalog`
+([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); this page owns only the reading. The
 design input and the operator's rulings are the spike's §Rulings.
 
 ## Interface — the machine half
@@ -25,7 +26,7 @@ error), and no auth, like `/metrics` — it carries no credential.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg. Admission reading it is `⚑ gap` ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s, next); models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
+| [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
 
 ## GW-CATALOG-GO
 
@@ -120,6 +121,17 @@ docs snapshot (both plans):
 | "an unknown plan refuses the load" | opencode `pro` || refused, naming `rails.opencode.plan` |
 | "a plan on another rail refuses the load" | openrouter `go` || refused, naming `rails.openrouter.plan` |
 
+What the policy no longer holds (ruling 5): the vendor facts live in the snapshot, so a policy that
+still carries one refuses to load — a stale hand copy can never shadow the catalog.
+
+| description | `rails.opencode.admission` in an otherwise `policy-default` document || the policy load |
+|---|---||---|
+| "a price row in the policy refuses the load" | `window_draw.prices` = the old `deepseek-v4.1-flash` row || refused, naming `prices` |
+| "a fallback price refuses the load" | `window_draw.fallback` = 9.00 / 9.00 || refused, naming `fallback` |
+| "a window budget refuses the load" | `window_draw.windows.5h.budget_usd` = 12 || refused, naming `budget_usd` |
+| "a window the vendor gives no share refuses the load" | `window_draw.windows.1d` || refused, naming `windows.1d` |
+| "an unknown latch scope refuses the load" | `latch_scope: rail` || refused, naming `latch_scope` |
+
 ### What a fetch sends
 
 | description | source || `authorization` | `user-agent` | `x-opencode-session` |
@@ -145,8 +157,9 @@ docs snapshot (both plans):
 | "the model count of the last good snapshot" | `catalog-ok`, then `catalog-shrunk` || `gateway_go_catalog_models{source="config"}` | 5 |
 | "every refresh is counted by outcome" | `catalog-ok`, then `catalog-malformed` || `gateway_go_catalog_refresh_total{source="config",outcome="ok"}` / `"parse-failed"` | 1 / 1 |
 | "the last outcome is 1, the others 0" | `catalog-ok`, then `catalog-malformed` || `gateway_go_catalog_last_outcome{source="config",outcome="parse-failed"}` / `"ok"` | 1 / 0 |
-| "policy Go models the config does not list are counted" | `catalog-ok`; `policy-default` names `deepseek-v4-flash` and `claude-sonnet-4-6` || `gateway_go_catalog_policy_models_missing{source="config"}` | 2 |
-| "policy Go models without a limit row under the plan are counted" | `docs-ok`, the same two ids || `gateway_go_catalog_policy_models_missing{source="docs"}` | 2 |
+| "every policy Go model listed: none missing" | `catalog-ok`; `policy-default` names `deepseek-v4.1-flash` and `claude-haiku-5-5` || `gateway_go_catalog_policy_models_missing{source="config"}` | 0 |
+| "policy Go models the config does not list are counted" | `catalog-shrunk` (no `claude-haiku-5-5`) || `gateway_go_catalog_policy_models_missing{source="config"}` | 1 |
+| "policy Go models without a limit row under the plan are counted" | `docs-shrunk` (no `claude-haiku-5-5` row) || `gateway_go_catalog_policy_models_missing{source="docs"}` | 1 |
 
 No family carries a `model` label ([GW-METRICS](metrics.md#gw-metrics)): the missing ids are
 named in the refresh's log line and in the view's `policy_models`. The alert rules on these
@@ -160,7 +173,6 @@ families — `GoCatalogStale` (a source's last good snapshot older than 24 h ⚖
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: admission reads the snapshot" | a Go admission || priced from `policy.json` `window_draw` (the hand copy) | the second half of this leg: the window draw prices from the snapshot, sizes each model's windows from its own monthly limit, and refuses an unlisted id `not-in-catalog` (the spike's rulings 3–5) |
 | "⚑ gap: models.dev as a fallback" | the console config unreachable for a day || the last good snapshot, `GoCatalogStale` | the spike's §F4: `models.dev/api.json` mirrors the vendor and carries the only machine-readable `deprecated` marker |
 | "⚑ gap: listed is not alive" | a listed id that answers 400 `Model is unavailable` || listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are |
 | "⚑ gap: a vendor reset time" | a Go 429 || — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed |

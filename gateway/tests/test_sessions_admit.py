@@ -4,15 +4,15 @@ Which rail, or why not (world policy-default, every ref resolvable unless the ro
 
 | description | role | harness | tier | active on rails (anthropic / opencode / openrouter) | credential state | decision | rail | model | reason |
 |---|---|---|---|---|---|---|---|---|---|
-| a worker takes the first rail in its list | worker | (policy: opencode) | (policy: standard) | 0 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/deepseek-v4-flash | — |
+| a worker takes the first rail in its list | worker | (policy: opencode) | (policy: standard) | 0 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/deepseek-v4.1-flash | — |
 | the first rail is full, the second is taken | worker | (policy) | (policy) | 0 / 3 / 0 | all resolve | dispatch | openrouter | deepseek/deepseek-v4-flash | — |
 | every allowed rail is full | worker | (policy) | (policy) | 0 / 3 / 20 | all resolve | defer | — | — | rail-capacity |
 | a reviewer rides the subscription first | reviewer | (policy: claude) | (policy: heavy) | 0 / 0 / 0 | all resolve | dispatch | anthropic | claude/sonnet | — |
-| the subscription is full, the reviewer takes Go | reviewer | (policy) | (policy) | 5 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
-| the stack's anthropic ref does not resolve, the walk continues | reviewer | (policy) | (policy) | 0 / 0 / 0 | anthropic_ref definitive miss | dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
+| the subscription is full, the reviewer takes Go | reviewer | (policy) | (policy) | 5 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
+| the stack's anthropic ref does not resolve, the walk continues | reviewer | (policy) | (policy) | 0 / 0 / 0 | anthropic_ref definitive miss | dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
 | the only allowed rail's credential does not resolve | prober | (policy) | (policy) | 0 / 0 / 0 | anthropic_ref definitive miss | defer | — | — | credential-unresolved |
-| an explicit tier picks the model inside the rail | worker | (policy) | heavy | 0 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/claude-sonnet-4-6 | — |
-| an explicit harness narrows the walk to its dialect | worker | goose | (policy) | 0 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/deepseek-v4-flash | — |
+| an explicit tier picks the model inside the rail | worker | (policy) | heavy | 0 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
+| an explicit harness narrows the walk to its dialect | worker | goose | (policy) | 0 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/deepseek-v4.1-flash | — |
 | a harness that cannot speak the role's only rail | prober | opencode | (policy) | 0 / 0 / 0 | all resolve | defer | — | — | role-rail-denied |
 | an explicit rail the role is not allowed | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, rail: anthropic | defer | — | — | role-rail-denied |
 | an explicit rail the role is allowed is taken even when later in the list | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, rail: openrouter | dispatch | openrouter | deepseek/deepseek-v4-flash | — |
@@ -52,19 +52,19 @@ from .conftest import attach_json, check, err, given, open_session, quiet, rule,
 
 pytestmark = rule("GW-SESSIONS-ADMIT")
 
-MODELS = {"opencode": {"standard": "opencode-go/deepseek-v4-flash", "heavy": "opencode-go/claude-sonnet-4-6"},
+MODELS = {"opencode": {"standard": "opencode-go/deepseek-v4.1-flash", "heavy": "opencode-go/claude-haiku-5-5"},
           "openrouter": {"standard": "deepseek/deepseek-v4-flash"}, "anthropic": {"heavy": "claude/sonnet"}}
 
 WALK_ROWS = [
-    ("a worker takes the first rail in its list", {}, {}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/deepseek-v4-flash"}),
+    ("a worker takes the first rail in its list", {}, {}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/deepseek-v4.1-flash"}),
     ("the first rail is full, the second is taken", {}, {"fill": {"opencode": 3}}, {"decision": "dispatch", "rail": "openrouter", "model": "deepseek/deepseek-v4-flash"}),
     ("every allowed rail is full", {}, {"fill": {"opencode": 3, "openrouter": 20}}, {"decision": "defer", "reason": "rail-capacity"}),
     ("a reviewer rides the subscription first", {"role": "reviewer"}, {}, {"decision": "dispatch", "rail": "anthropic", "model": "claude/sonnet", "harness": "claude"}),
-    ("the subscription is full, the reviewer takes Go", {"role": "reviewer"}, {"fill": {"anthropic": 5}}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-sonnet-4-6"}),
-    ("the stack's anthropic ref does not resolve, the walk continues", {"role": "reviewer"}, {"miss": "platform-agents/claude-session"}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-sonnet-4-6"}),
+    ("the subscription is full, the reviewer takes Go", {"role": "reviewer"}, {"fill": {"anthropic": 5}}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-haiku-5-5"}),
+    ("the stack's anthropic ref does not resolve, the walk continues", {"role": "reviewer"}, {"miss": "platform-agents/claude-session"}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-haiku-5-5"}),
     ("the only allowed rail's credential does not resolve", {"role": "prober"}, {"miss": "platform-agents/claude-session"}, {"decision": "defer", "reason": "credential-unresolved"}),
-    ("an explicit tier picks the model inside the rail", {"tier": "heavy"}, {}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-sonnet-4-6"}),
-    ("an explicit harness narrows the walk to its dialect", {"harness": "goose"}, {}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/deepseek-v4-flash"}),
+    ("an explicit tier picks the model inside the rail", {"tier": "heavy"}, {}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-haiku-5-5"}),
+    ("an explicit harness narrows the walk to its dialect", {"harness": "goose"}, {}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/deepseek-v4.1-flash"}),
     ("a harness that cannot speak the role's only rail", {"role": "prober", "harness": "opencode"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
     ("an explicit rail the role is not allowed", {"rail": "anthropic", "harness": "claude"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
     ("an explicit rail the role is allowed is taken even when later in the list", {"rail": "openrouter"}, {}, {"decision": "dispatch", "rail": "openrouter", "model": "deepseek/deepseek-v4-flash"}),

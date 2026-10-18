@@ -8,7 +8,7 @@
 | a bearer header value | "Authorization: Bearer abc.def.ghi" | Authorization: Bearer <redacted> | abc.def.ghi |
 | the Go key's value | the OPENCODE_GO_API_KEY fixture value | <redacted> | the value |
 | a ref is not a credential | "ref platform-agents/claude-session unresolved" | the ref verbatim | <redacted> |
-| a model id is not a credential | "model opencode-go/deepseek-v4-flash" | the id verbatim | <redacted> |
+| a model id is not a credential | "model opencode-go/deepseek-v4.1-flash" | the id verbatim | <redacted> |
 | a %-arg carrying a token is masked | "ride %s" % token | ride <redacted> | gws_ |
 | a projected ServiceAccount token (a JWT) | "review eyJ….eyJ….sig" | review <redacted> | eyJ |
 
@@ -44,7 +44,7 @@ ROWS = [
     ("a bearer header value", "Authorization: Bearer abc.def.ghi", "Authorization: Bearer <redacted>", "abc.def.ghi"),
     ("the Go key's value", f"go key {GO_KEY} in use", "go key <redacted> in use", GO_KEY),
     ("a ref is not a credential", "ref platform-agents/claude-session unresolved", "ref platform-agents/claude-session unresolved", REDACTED),
-    ("a model id is not a credential", "model opencode-go/deepseek-v4-flash", "model opencode-go/deepseek-v4-flash", REDACTED),
+    ("a model id is not a credential", "model opencode-go/deepseek-v4.1-flash", "model opencode-go/deepseek-v4.1-flash", REDACTED),
     ("a projected ServiceAccount token (a JWT)", f"review {JWT}", "review <redacted>", "eyJ"),
 ]
 

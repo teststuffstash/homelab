@@ -1,5 +1,5 @@
 {
-  "_comment": "The `policy-enforce` world — `policy-default` with `control_plane_auth: enforce` and NOTHING else changed (specs/worlds/README.md), for the GW-SESSIONS-AUTH enforce rows only. The rest of this comment is policy-default's: the TEST policy (specs/worlds/README.md). Namespaces and Secret names are fixture names. Model ids are copied verbatim from argocd/resources/openrouter-proxy/model-classes.json (`models.*.ids` per rail; the `coding` class chain_head order for openrouter) — never invented. Rail caps: opencode = 3 mirrors that file's declared `rails.opencode-go.concurrency`; anthropic 5 and openrouter 20 are fixture sizes. `side_models` (anthropic) = the family claude-code's small side-calls name (ANTHROPIC_SMALL_FAST_MODEL), admitted on every session of that rail (⚖ GW-MODEL-RESOLVE). Every key here is one the gateway reads; a fact the policy cannot hold yet rides as a ⚖ comment in the spec, never as an invented key.",
+  "_comment": "The `policy-enforce` world — `policy-default` with `control_plane_auth: enforce` and NOTHING else changed (specs/worlds/README.md), for the GW-SESSIONS-AUTH enforce rows only. The rest of this comment is policy-default's: the TEST policy (specs/worlds/README.md). Namespaces and Secret names are fixture names. Model ids are copied verbatim from argocd/resources/openrouter-proxy/model-classes.json (`models.*.ids` per rail; the `coding` class chain_head order for openrouter) — never invented — except the opencode rail's: those are ids the fixture Go catalog lists (tests/fixtures/go-catalog/config.json, trimmed from the live console answer of 2026-10-17): light/standard deepseek-v4.1-flash = the deployed policy's choice, heavy claude-haiku-5-5 so the tier rows and the claude-on-Go rows stay distinguishable ⚖ (GW-CATALOG-GO). Rail caps: opencode = 3 mirrors that file's declared `rails.opencode-go.concurrency`; anthropic 5 and openrouter 20 are fixture sizes. `side_models` (anthropic) = the family claude-code's small side-calls name (ANTHROPIC_SMALL_FAST_MODEL), admitted on every session of that rail (⚖ GW-MODEL-RESOLVE). Every key here is one the gateway reads; a fact the policy cannot hold yet rides as a ⚖ comment in the spec, never as an invented key.",
   "stacks": {
     "platform": {
       "loop_ns": "platform-agents",
@@ -40,31 +40,25 @@
     },
     "opencode": {
       "user_agent": "fixed",
-      "credential_probe": {"method": "POST", "path": "/v1/chat/completions", "body": {"model": "deepseek-v4-flash", "max_tokens": 1, "messages": [{"role": "user", "content": "."}]}, "backoff_s": [60, 3600]},
+      "credential_probe": {"method": "POST", "path": "/v1/chat/completions", "body": {"model": "deepseek-v4.1-flash", "max_tokens": 1, "messages": [{"role": "user", "content": "."}]}, "backoff_s": [60, 3600]},
       "admission": {
-        "_comment": "⚖ copied from argocd/resources/openrouter-proxy/gometer.py (snapshot 2026-09-17) — a DUPLICATE until the old proxy retires: latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900; prices = GO_PRICES / GO_PRICES_PEAK rows for the policy's priced Go model ($/M; null = gometer's None, draws 0); fallback = _GO_MAX_PRICE/2 each for in/out (max in+out = kimi-k3 3.00+15.00), cache 0 — what an unpriced id (claude-sonnet-4-6) draws at; peak hours = GO_PEAK_HOURS_UTC / GO_PEAK_WEEKDAYS; windows = _GO_WINDOW_DEFAULTS (budgets 12/30/60, anchors chain/weekly mon 00:00/monthly 13 11:30; GO_WINDOW_ANCHORS unset in deployment.yaml) with threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
+        "_comment": "Rules only (GW-CATALOG-GO, operator ruling 5, 2026-10-17): prices, peak rows and hours, per-model monthly limits and the window shares come from the Go catalog snapshot, never from here. latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900: the hold a Go 429 that names no reset cools its CELL for; latch_scope model = a Go 429 never latches the whole rail (ruling 3: each model has its own limits). windows: the anchors are gometer _GO_WINDOW_DEFAULTS (chain / weekly mon 00:00 / monthly 13 11:30 — self-measured, no vendor source; GO_WINDOW_ANCHORS unset in deployment.yaml), threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
         "latch_429_hold_s": 900,
+        "latch_scope": "model",
         "window_draw": {
-          "prices": {
-            "opencode-go/deepseek-v4-flash": {"in": 0.15, "out": 0.60, "cache_read": 0.003, "cache_write": null,
-                                              "peak": {"in": 0.30, "out": 1.20, "cache_read": 0.006, "cache_write": null}}
-          },
-          "fallback": {"in": 9.0, "out": 9.0, "cache_read": 0, "cache_write": 0},
-          "peak_hours_utc": [[1, 4], [6, 10]],
-          "peak_weekdays": ["mon", "tue", "wed", "thu", "fri"],
           "windows": {
-            "5h":  {"budget_usd": 12.0, "threshold": 0.80, "anchor": "chain", "span_s": 18000, "chain_lookback_s": 604800},
-            "7d":  {"budget_usd": 30.0, "threshold": 0.80, "anchor": "weekly", "weekday": "mon", "hour": 0, "minute": 0},
-            "30d": {"budget_usd": 60.0, "threshold": 0.80, "anchor": "monthly", "month_day": 13, "hour": 11, "minute": 30}
+            "5h":  {"threshold": 0.80, "anchor": "chain", "span_s": 18000, "chain_lookback_s": 604800},
+            "7d":  {"threshold": 0.80, "anchor": "weekly", "weekday": "mon", "hour": 0, "minute": 0},
+            "30d": {"threshold": 0.80, "anchor": "monthly", "month_day": 13, "hour": 11, "minute": 30}
           }
         }
       },
       "plan": "go",
       "max_sessions": 3,
       "models": {
-        "light": "opencode-go/deepseek-v4-flash",
-        "standard": "opencode-go/deepseek-v4-flash",
-        "heavy": "opencode-go/claude-sonnet-4-6"
+        "light": "opencode-go/deepseek-v4.1-flash",
+        "standard": "opencode-go/deepseek-v4.1-flash",
+        "heavy": "opencode-go/claude-haiku-5-5"
       }
     },
     "openrouter": {
@@ -79,8 +73,8 @@
     }
   },
   "context_tokens": {
-    "_comment": "per-model harness window, copied from model-classes.json `models.*.context_tokens` — the only non-null entry today is the Go rail's deepseek-v4-flash; absent = null in the dispatch answer, never a guess.",
-    "opencode-go/deepseek-v4-flash": 1000000
+    "_comment": "per-model harness window — the Go rail's deepseek-v4.1-flash = the console /api/v2/config `limit.context` (2026-10-17), as in the deployed policy; absent = null in the dispatch answer, never a guess.",
+    "opencode-go/deepseek-v4.1-flash": 1000000
   },
   "control_plane_auth": "enforce",
   "callers": {

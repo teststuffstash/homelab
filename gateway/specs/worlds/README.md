@@ -10,7 +10,7 @@ a single-world module declares it once in its docstring and omits it from row id
 
 | world | file | what it is |
 |---|---|---|
-| `policy-default` | [policy-default.json](policy-default.json) | the test policy (plan `go` on the opencode rail — [GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go)): two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json` — two tiers name ordered LISTS (anthropic heavy `[claude/sonnet, claude/opus]`, openrouter light `[deepseek/deepseek-v4-flash, deepseek/deepseek-v4.1-flash]`, the `coding` chain_head order), the rest bare strings; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖); `control_plane_auth: observe` with three fixture `callers` (the platform loop, the specs reviewer — [GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth) — and a judge, `outcome: any`, [GW-SESSIONS-OUTCOME](../endpoints/sessions.md#gw-sessions-outcome)), so a row that sends no caller token is admitted; `outcome_window_s` 86400; the per-rail header and recovery keys: `user_agent` (`forward` on anthropic and openrouter, `fixed` on opencode) and `credential_probe` (opencode: `POST /v1/chat/completions`, 1 token on its light model; openrouter: `GET /v1/key`; anthropic none, so `credential_hold_s` defaults to 900) — [§Capacity](../endpoints/sessions.md#capacity--the-ladders-capacity-half) |
+| `policy-default` | [policy-default.json](policy-default.json) | the test policy (plan `go` on the opencode rail — [GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go)): two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json` (the opencode rail's from the world's Go catalog — below) — two tiers name ordered LISTS (anthropic heavy `[claude/sonnet, claude/opus]`, openrouter light `[deepseek/deepseek-v4-flash, deepseek/deepseek-v4.1-flash]`, the `coding` chain_head order), the rest bare strings; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖); `control_plane_auth: observe` with three fixture `callers` (the platform loop, the specs reviewer — [GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth) — and a judge, `outcome: any`, [GW-SESSIONS-OUTCOME](../endpoints/sessions.md#gw-sessions-outcome)), so a row that sends no caller token is admitted; `outcome_window_s` 86400; the per-rail header and recovery keys: `user_agent` (`forward` on anthropic and openrouter, `fixed` on opencode) and `credential_probe` (opencode: `POST /v1/chat/completions`, 1 token on its light model; openrouter: `GET /v1/key`; anthropic none, so `credential_hold_s` defaults to 900) — [§Capacity](../endpoints/sessions.md#capacity--the-ladders-capacity-half) |
 | `policy-enforce` | [policy-enforce.json](policy-enforce.json) | `policy-default` with `control_plane_auth: enforce` and nothing else changed — for the GW-SESSIONS-AUTH enforce rows only |
 | `policy-codex` | [policy-codex.json](policy-codex.json) | `policy-default` plus the codex rail (`max_sessions` 2, the fixture model `codex/fixture-model`, `headroom` 120 s / 0.95 / the 300- and 10080-minute windows, `oauth.refresh_margin_s` 30) that only `prober` may ride — for the codex rows only; the deployed policy declares no codex rail |
 
@@ -18,9 +18,14 @@ Names in the test policy (namespaces, Secret names) are **fixture names**, not p
 ones; the production policy is the ConfigMap in `argocd/resources/agent-gateway/`. Model ids
 are the exception: they are copied verbatim from
 `argocd/resources/openrouter-proxy/model-classes.json` (`models.*.ids` per rail, the `coding`
-class's `chain_head` order) so the fixture never names a model the fleet does not run. The one
-exception to the exception: `policy-codex`'s `codex/fixture-model` — the fleet runs no codex model
-yet, and choosing a representative one is the design session's call, not a fixture's ⚖.
+class's `chain_head` order) so the fixture never names a model the fleet does not run. The
+exceptions to the exception: `policy-codex`'s `codex/fixture-model` — the fleet runs no codex model
+yet, and choosing a representative one is the design session's call, not a fixture's ⚖ — and the
+**opencode rail's** ids, which are ids the world's Go catalog lists (the deployed policy's Go ids
+are checked against the vendor's catalog too, not `model-classes.json` — #2694):
+`opencode-go/deepseek-v4.1-flash` (light, standard — the deployed choice) and
+`opencode-go/claude-haiku-5-5` (heavy), so the tier rows and the claude-on-Go rows stay
+distinguishable ⚖.
 
 ## Upstream behaviours (fake upstreams)
 
@@ -75,12 +80,17 @@ dropped; its one synthetic row is `deepseek-v4-flash` marked `"disabled": true` 
 carries such rows under the pay-as-you-go `opencode` provider only).
 `tests/fixtures/go-catalog/go.mdx` is the vendor's page cut to its Usage-limits section and
 Endpoints table for the same five models, rows otherwise verbatim. Every variant below is derived
-from those two files in memory.
+from those two files in memory. **Every world's gateway starts from this catalog**:
+`conftest.seed_go_catalog` stores the `catalog-ok` + `docs-ok` snapshots (parsed by the leg's own
+parsers, fetched at T0) before the gateway is built, as a production gateway starts from its
+persisted last good snapshot — so the opencode rail's admission rows price from it. A row that
+needs another catalog refreshes against the fake vendor first (`catalog-retired`, `docs-retired`).
 
 | behaviour | the fake answers |
 |---|---|
 | `catalog-ok` | 200, the config fixture |
 | `catalog-trimmed` / `catalog-shrunk` | the fixture with 3 (`claude-haiku-5-5`, `deepseek-v4-pro`, `deepseek-v4.1-flash`) / 2 (`deepseek-v4-pro`, `deepseek-v4.1-flash`) models |
+| `catalog-retired` | the fixture without `deepseek-v4.1-flash` (the policy's model leaves the console list — the spike's §F3, replayed) |
 | `catalog-malformed` | the fixture with `deepseek-v4-pro`'s `cost` removed |
 | `catalog-no-provider` | the fixture's provider under the key `opencode` instead of `opencode-go` |
 | `catalog-empty` | the fixture with `models: {}` |
@@ -93,6 +103,7 @@ from those two files in memory.
 | `docs-header-drift` | the plan tables' `Monthly limit` column renamed `Limit` |
 | `docs-no-peak-hours` / `docs-no-shares` | the peak-hours sentence / the 5-hour-weekly-monthly share sentence removed |
 | `docs-shrunk` | only the two DeepSeek models' rows |
+| `docs-retired` | the page without `claude-haiku-5-5`'s plan rows (still listed by the console: no monthly limit) |
 
 ## The fake TokenReview (`StaticTokenReviews`)
 

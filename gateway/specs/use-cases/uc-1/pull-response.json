@@ -3,6 +3,6 @@
   "id": "«id»",
   "expires_at": "«created_at + 14400 s»",
   "env": {
-    "OPENCODE_CONFIG_CONTENT": "{\"$schema\":\"https://opencode.ai/config.json\",\"model\":\"gateway/deepseek-v4-flash\",\"small_model\":\"gateway/deepseek-v4-flash\",\"provider\":{\"gateway\":{\"npm\":\"@ai-sdk/openai-compatible\",\"options\":{\"baseURL\":\"http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1\",\"apiKey\":\"gws_«minted at this pull»\"},\"models\":{\"deepseek-v4-flash\":{}}}}}"
+    "OPENCODE_CONFIG_CONTENT": "{\"$schema\":\"https://opencode.ai/config.json\",\"model\":\"gateway/deepseek-v4.1-flash\",\"small_model\":\"gateway/deepseek-v4.1-flash\",\"provider\":{\"gateway\":{\"npm\":\"@ai-sdk/openai-compatible\",\"options\":{\"baseURL\":\"http://agent-gateway.agent-egress.svc.cluster.local:8080/openai/v1\",\"apiKey\":\"gws_«minted at this pull»\"},\"models\":{\"deepseek-v4.1-flash\":{}}}}}"
   }
 }

@@ -291,25 +291,34 @@ class SessionService:
                 log.info("session: rail %s capacity-blocked (%s) until %s — skipped", rail, block.detail, iso(block.free_at))
                 capacity_blocked.append((rail, block.reason, block.free_at, block.detail))
                 continue
-            # The tier's ordered list: the first model this task has not struck and whose cell is not cooled.
+            # The tier's ordered list: the first model this task has not struck, whose cell is not
+            # cooled, and that the model's own capacity admits (the Go rail: listed in the Go
+            # catalog, its own windows under threshold — GW-CATALOG-GO; one model's block never
+            # holds another).
             model = None
-            cooled: list[tuple[float, str]] = []
+            held: list[tuple[float, str, str, str]] = []  # (free_at, reason, model, detail)
             for m in models:
                 if m in struck_models or (rail, m) in struck_cells:
                     exhausted.append(f"{rail} {m}")
                     continue
                 until = self.capacity.cooled(rail, m, now)
                 if until is not None:
-                    cooled.append((until, m))
+                    held.append((until, "cell-cooled", m, f"{rail} cell {m} cooled (429)"))
+                    continue
+                mb = self.capacity.model_block(rail, m, now)
+                if mb is not None:
+                    log.info("session: rail %s model %s blocked (%s) until %s", rail, m, mb.detail, iso(mb.free_at))
+                    held.append((mb.free_at, mb.reason, m, mb.detail))
                     continue
                 model = m
                 break
             if model is None:
-                if cooled:
-                    until, m = min(cooled)
-                    capacity_blocked.append((rail, "cell-cooled", until, f"{rail} cell {m} cooled (429)"))
-                log.info("session: rail %s — no admissible model for tier %s (struck: %s; cooled: %s)", rail, adm.tier,
-                         ", ".join(e for e in exhausted if e.startswith(rail + " ")) or "-", ", ".join(m for _, m in cooled) or "-")
+                if held:
+                    until, reason, _m, detail = min(held)
+                    capacity_blocked.append((rail, reason, until, detail))
+                log.info("session: rail %s — no admissible model for tier %s (struck: %s; held: %s)", rail, adm.tier,
+                         ", ".join(e for e in exhausted if e.startswith(rail + " ")) or "-",
+                         ", ".join(f"{m} {r}" for _, r, m, _ in held) or "-")
                 continue
             if rail == "codex":  # the codex rail's own gate (GW-CODEX-HEADROOM) — no Secret ref to resolve
                 blocked = self.codex.admission(self.policy.defer_retry_s) if self.codex else ("credential-unresolved", 0)

@@ -239,10 +239,9 @@ async def test_stream_completeness(gw, upstreams, store, behaviour, count, reaso
     world(upstream=behaviour)
     upstreams[RAIL].behaviour = behaviour
     doc, r = await ride(gw, RAIL, "messages", body={"stream": True})
-    then_eq("status", r.status_code, 200)
     recorded_incomplete(store, doc, count, reason)
-    with then(f"gateway_requests_incomplete_total{{rail=anthropic,dialect=anthropic,reason=no-terminal}} = {count}"):
-        check("series", await incomplete_series(gw, RAIL, "anthropic", "no-terminal"), count)
+    with then(f"status 200; count = {count}: gateway_requests_incomplete_total{{rail=anthropic,dialect=anthropic,reason=no-terminal}} = {count}"):
+        check("status · series", (r.status_code, await incomplete_series(gw, RAIL, "anthropic", "no-terminal")), (200, count))
 
 
 async def test_client_closed_mid_stream(gw, app, store, upstreams):

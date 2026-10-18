@@ -110,13 +110,16 @@ class PriceRow:
     cache_write: float | None = None
 
 
+GO_WINDOWS = ("5h", "7d", "30d")  # the vendor's 5-hour / weekly / monthly shares (GW-CATALOG-GO window_shares)
+
+
 @dataclass(frozen=True)
 class DrawWindow:
-    """One Go subscription window (gometer `_GO_WINDOW_DEFAULTS` shape): a budget, a threshold
-    and an anchor — `chain` (opens at the first request after the previous window expired),
-    `weekly` (weekday HH:MM UTC) or `monthly` (day-of-month HH:MM UTC)."""
+    """One Go subscription window: a threshold and an anchor — `chain` (opens at the model's first
+    request after its previous window expired), `weekly` (weekday HH:MM UTC) or `monthly`
+    (day-of-month HH:MM UTC). Its BUDGET is not policy: it is the model's monthly limit x the
+    window's share, both read from the Go catalog (GW-CATALOG-GO)."""
     name: str
-    budget_usd: float
     threshold: float  # 0 disables the window
     anchor: str
     span_s: float = 0.0
@@ -129,13 +132,8 @@ class DrawWindow:
 
 @dataclass(frozen=True)
 class WindowDraw:
-    """The Go rail's window draw (gometer `window_draw()` semantics): list rates per class, peak
-    rows selected by the REQUEST timestamp, an unpriced model at the conservative fallback row."""
-    prices: dict[str, PriceRow]  # policy model id -> off-peak (base) row
-    peak_prices: dict[str, PriceRow]  # policy model id -> peak row
-    peak_hours_utc: tuple[tuple[int, int], ...]  # half-open [lo, hi) UTC hours
-    peak_weekdays: frozenset[int]
-    fallback: PriceRow
+    """The Go rail's per-MODEL window draw: the windows' rules (threshold, anchor). Prices, peak
+    rows/hours, monthly limits and window shares come from the Go catalog snapshot."""
     windows: tuple[DrawWindow, ...]
 
 
@@ -146,6 +144,9 @@ class AdmissionPolicy:
     utilization_thresholds: dict[str, float] = field(default_factory=dict)  # subscription window -> fraction (0 = off)
     reading_stale_s: float | None = None  # a window reading older than this is no reading
     latch_429_hold_s: float | None = None  # None = an upstream 429 does not latch this rail
+    # `account` = a 429 latches the whole rail (one account's windows — the subscription rails);
+    # `model` = a 429 cools only its cell for the hold — the Go rail, whose windows are per model.
+    latch_scope: str = "account"
     window_draw: WindowDraw | None = None
 
 
@@ -221,6 +222,7 @@ GO_PLANS = ("go", "go-plus")  # the OpenCode Go plans the vendor's page tabulate
 SUBSCRIPTION_WINDOWS = ("5h", "7d")  # the `anthropic-ratelimit-unified-<w>-*` header windows
 WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 ANCHORS = ("chain", "weekly", "monthly")
+LATCH_SCOPES = ("account", "model")
 
 
 def _keys(where: str, d: dict, allowed: set[str]) -> None:
@@ -240,28 +242,18 @@ def _num(where: str, v, *, lo: float = 0.0, hi: float | None = None, optional: b
     return float(v)
 
 
-def _price_row(where: str, r) -> PriceRow:
-    if not isinstance(r, dict):
-        raise PolicyError(f"policy: {where} must be an object {{in, out, cache_read, cache_write}}")
-    _keys(where, r, {"in", "out", "cache_read", "cache_write", "peak"})
-    return PriceRow(_num(f"{where}.in", r.get("in")), _num(f"{where}.out", r.get("out")),
-                    _num(f"{where}.cache_read", r.get("cache_read"), optional=True),
-                    _num(f"{where}.cache_write", r.get("cache_write"), optional=True))
-
-
 def _draw_window(where: str, name: str, w) -> DrawWindow:
     if not isinstance(w, dict):
         raise PolicyError(f"policy: {where} must be an object")
+    if name not in GO_WINDOWS:
+        raise PolicyError(f"policy: {where}: a Go window is one of {', '.join(GO_WINDOWS)} (the vendor's shares)")
     anchor = w.get("anchor")
-    allowed = {"budget_usd", "threshold", "anchor"} | {
+    allowed = {"threshold", "anchor"} | {
         "chain": {"span_s", "chain_lookback_s"}, "weekly": {"weekday", "hour", "minute"},
         "monthly": {"month_day", "hour", "minute"}}.get(anchor, set())
     _keys(where, w, allowed)
     if anchor not in ANCHORS:
         raise PolicyError(f"policy: {where}.anchor must be one of {', '.join(ANCHORS)}")
-    budget = _num(f"{where}.budget_usd", w.get("budget_usd"))
-    if not budget:
-        raise PolicyError(f"policy: {where}.budget_usd must be > 0")
     kw: dict = {}
     if anchor == "chain":
         kw["span_s"] = _num(f"{where}.span_s", w.get("span_s"), lo=1)
@@ -275,45 +267,20 @@ def _draw_window(where: str, name: str, w) -> DrawWindow:
     if anchor in ("weekly", "monthly"):
         kw["hour"] = int(_num(f"{where}.hour", w.get("hour", 0), hi=23))
         kw["minute"] = int(_num(f"{where}.minute", w.get("minute", 0), hi=59))
-    return DrawWindow(name, budget, _num(f"{where}.threshold", w.get("threshold"), hi=1), anchor, **kw)
+    return DrawWindow(name, _num(f"{where}.threshold", w.get("threshold"), hi=1), anchor, **kw)
 
 
 def _window_draw(where: str, d) -> WindowDraw:
+    """Rules only (ruling 5, GW-CATALOG-GO): a `prices` / `fallback` / `peak_*` / `budget_usd` key
+    is refused — those are vendor facts the catalog snapshot carries, never a policy copy."""
     if not isinstance(d, dict):
         raise PolicyError(f"policy: {where} must be an object")
-    _keys(where, d, {"prices", "fallback", "peak_hours_utc", "peak_weekdays", "windows"})
-    prices: dict[str, PriceRow] = {}
-    peak: dict[str, PriceRow] = {}
-    for model, row in (d.get("prices") or {}).items():
-        if model.startswith("_"):
-            continue
-        prices[model] = _price_row(f"{where}.prices.{model}", row)
-        if isinstance(row, dict) and row.get("peak") is not None:
-            p = row["peak"]
-            if isinstance(p, dict) and "peak" in p:
-                raise PolicyError(f"policy: {where}.prices.{model}.peak cannot nest a peak")
-            peak[model] = _price_row(f"{where}.prices.{model}.peak", p)
-    if "fallback" not in d:
-        raise PolicyError(f"policy: {where}.fallback is required (an unpriced model draws at it — fail conservative)")
-    hours = d.get("peak_hours_utc") or []
-    if not isinstance(hours, list) or any(
-            not isinstance(h, list) or len(h) != 2 or not all(isinstance(x, int) and 0 <= x <= 24 for x in h) or h[0] >= h[1]
-            for h in hours):
-        raise PolicyError(f"policy: {where}.peak_hours_utc must be a list of [lo, hi) UTC hour pairs")
-    days = d.get("peak_weekdays") or []
-    if not isinstance(days, list) or any(x not in WEEKDAYS for x in days):
-        raise PolicyError(f"policy: {where}.peak_weekdays must name weekdays ({', '.join(WEEKDAYS)})")
-    if peak and not hours:
-        raise PolicyError(f"policy: {where} has peak rows but no peak_hours_utc")
+    _keys(where, d, {"windows"})
     windows = d.get("windows") or {}
     if not isinstance(windows, dict) or not [k for k in windows if not k.startswith("_")]:
         raise PolicyError(f"policy: {where}.windows must declare at least one window")
-    return WindowDraw(
-        prices=prices, peak_prices=peak,
-        peak_hours_utc=tuple((h[0], h[1]) for h in hours), peak_weekdays=frozenset(WEEKDAYS[x] for x in days),
-        fallback=_price_row(f"{where}.fallback", d["fallback"]),
-        windows=tuple(_draw_window(f"{where}.windows.{n}", n, w) for n, w in windows.items() if not n.startswith("_")),
-    )
+    return WindowDraw(windows=tuple(_draw_window(f"{where}.windows.{n}", n, w) for n, w in windows.items()
+                                    if not n.startswith("_")))
 
 
 def _admission(rail: str, a) -> AdmissionPolicy:
@@ -322,7 +289,10 @@ def _admission(rail: str, a) -> AdmissionPolicy:
         return AdmissionPolicy()
     if not isinstance(a, dict):
         raise PolicyError(f"policy: {where} must be an object")
-    _keys(where, a, {"utilization_thresholds", "reading_stale_s", "latch_429_hold_s", "window_draw"})
+    _keys(where, a, {"utilization_thresholds", "reading_stale_s", "latch_429_hold_s", "latch_scope", "window_draw"})
+    scope = a.get("latch_scope", "account")
+    if scope not in LATCH_SCOPES:
+        raise PolicyError(f"policy: {where}.latch_scope must be one of {', '.join(LATCH_SCOPES)}")
     thr = a.get("utilization_thresholds") or {}
     if not isinstance(thr, dict):
         raise PolicyError(f"policy: {where}.utilization_thresholds must be an object {{window: fraction}}")
@@ -336,6 +306,7 @@ def _admission(rail: str, a) -> AdmissionPolicy:
         utilization_thresholds=thresholds,
         reading_stale_s=_num(f"{where}.reading_stale_s", a.get("reading_stale_s"), lo=1, optional=True),
         latch_429_hold_s=_num(f"{where}.latch_429_hold_s", a.get("latch_429_hold_s"), lo=1, optional=True),
+        latch_scope=scope,
         window_draw=_window_draw(f"{where}.window_draw", a["window_draw"]) if a.get("window_draw") is not None else None,
     )
 

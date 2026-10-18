@@ -35,7 +35,10 @@ from agent_gateway.store import Store
 
 from .conftest import (
     POLICY_FIXTURE,
+    UPSTREAM_BASES,
+    FakeUpstream,
     ObservedAsyncClient,
+    RailTransport,
     attach_json,
     bearer,
     check,
@@ -43,6 +46,7 @@ from .conftest import (
     given,
     open_session,
     rule,
+    seed_go_catalog,
     then,
     when,
     world,
@@ -52,8 +56,12 @@ pytestmark = rule("GW-HEALTH")
 
 
 def _app(policy, secrets, path: str):
-    settings = Settings.from_env({"GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": path, "OPENCODE_GO_API_KEY": "go-key-for-tests-only"})
-    return create_app(settings, policy=policy, source=secrets, store=Store(path), client=httpx.AsyncClient())
+    """A gateway on `path` whose rails reach the in-process fakes (no live upstream, ever)."""
+    settings = Settings.from_env({"GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": path, "OPENCODE_GO_API_KEY": "go-key-for-tests-only",
+                                  "ANTHROPIC_UPSTREAM": UPSTREAM_BASES["anthropic"], "OPENROUTER_UPSTREAM": UPSTREAM_BASES["openrouter"],
+                                  "OPENCODE_GO_UPSTREAM": UPSTREAM_BASES["opencode"]})
+    fakes = RailTransport({rail: FakeUpstream(rail) for rail in UPSTREAM_BASES}, UPSTREAM_BASES)
+    return create_app(settings, policy=policy, source=secrets, store=seed_go_catalog(Store(path)), client=httpx.AsyncClient(transport=fakes))
 
 
 async def _get(app, path: str, **kw):
@@ -133,9 +141,9 @@ async def test_pvc_remembers(tmp_path, policy, secrets, upstreams):
     """row: a PVC store remembers"""
     world()
     active, verdict = await _restart_roundtrip(policy, secrets, str(tmp_path / "gateway.db"), "pvc")
-    with then("after restart: gateway_sessions_active{rail=opencode} = 1 and the token still resolves (200, or 424 / 502 with no fake transport)"):
-        attach_json("verdict: remembered", {"active": {"expected": 1, "actual": active}, "status": {"expected": [200, 424, 502], "actual": verdict[0]}})
-        assert active == 1 and verdict[0] in (200, 424, 502)  # 424/502: the fresh app has no fake transport (a real upstream refuses the fixture key, or none answers) — the session resolved either way
+    with then("after restart: gateway_sessions_active{rail=opencode} = 1 and the token still resolves (200 from the fake Go upstream)"):
+        attach_json("verdict: remembered", {"active": {"expected": 1, "actual": active}, "status": {"expected": 200, "actual": verdict[0]}})
+        assert active == 1 and verdict[0] == 200
 
 
 async def test_pvc_pre_cache_schema_migrated(tmp_path, policy, secrets):

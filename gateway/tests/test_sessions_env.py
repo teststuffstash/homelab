@@ -5,12 +5,12 @@
 | claude: the base url is this gateway's anthropic path | claude | anthropic | claude/sonnet | ANTHROPIC_BASE_URL | <self>/anthropic |
 | claude: the auth token is the session token | claude | anthropic | claude/sonnet | ANTHROPIC_AUTH_TOKEN | the session token |
 | claude: the model name is the alias the CLI resolves | claude | anthropic | claude/sonnet | ANTHROPIC_MODEL | sonnet |
-| claude on the Go rail: same three vars, Go's model name | claude | opencode | opencode-go/claude-sonnet-4-6 | ANTHROPIC_MODEL | claude-sonnet-4-6 |
-| opencode: an openai-compatible provider block | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.npm | @ai-sdk/openai-compatible |
-| opencode: the provider's base url is this gateway's openai path | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.options.baseURL | <self>/openai/v1 |
-| opencode: the provider's api key is the session token | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.options.apiKey | the session token |
-| opencode: the session model is the bare id under that provider | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .model | gateway/deepseek-v4-flash |
-| opencode: the title model is the same id | opencode | opencode | opencode-go/deepseek-v4-flash | OPENCODE_CONFIG_CONTENT .small_model | gateway/deepseek-v4-flash |
+| claude on the Go rail: same three vars, Go's model name | claude | opencode | opencode-go/claude-haiku-5-5 | ANTHROPIC_MODEL | claude-haiku-5-5 |
+| opencode: an openai-compatible provider block | opencode | opencode | opencode-go/deepseek-v4.1-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.npm | @ai-sdk/openai-compatible |
+| opencode: the provider's base url is this gateway's openai path | opencode | opencode | opencode-go/deepseek-v4.1-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.options.baseURL | <self>/openai/v1 |
+| opencode: the provider's api key is the session token | opencode | opencode | opencode-go/deepseek-v4.1-flash | OPENCODE_CONFIG_CONTENT .provider.gateway.options.apiKey | the session token |
+| opencode: the session model is the bare id under that provider | opencode | opencode | opencode-go/deepseek-v4.1-flash | OPENCODE_CONFIG_CONTENT .model | gateway/deepseek-v4.1-flash |
+| opencode: the title model is the same id | opencode | opencode | opencode-go/deepseek-v4.1-flash | OPENCODE_CONFIG_CONTENT .small_model | gateway/deepseek-v4.1-flash |
 | goose: the provider is goose's openai provider | goose | openrouter | deepseek/deepseek-v4-flash | GOOSE_PROVIDER | openai |
 | goose: the base url is this gateway's openai path | goose | openrouter | deepseek/deepseek-v4-flash | OPENAI_BASE_URL | <self>/openai/v1 |
 | goose: the api key is the session token | goose | openrouter | deepseek/deepseek-v4-flash | OPENAI_API_KEY | the session token |
@@ -29,7 +29,7 @@
 
 | description | model (policy) | context_tokens |
 |---|---|---|
-| a declared `context_tokens` is echoed | opencode-go/deepseek-v4-flash | 1000000 |
+| a declared `context_tokens` is echoed | opencode-go/deepseek-v4.1-flash | 1000000 |
 | an undeclared `context_tokens` is null, never a default | claude/sonnet | null |
 """
 
@@ -55,7 +55,7 @@ VAR_ROWS = [
     ("claude: the base url is this gateway's anthropic path", CLAUDE, "ANTHROPIC_BASE_URL", f"{SELF_URL}/anthropic"),
     ("claude: the auth token is the session token", CLAUDE, "ANTHROPIC_AUTH_TOKEN", "<token>"),
     ("claude: the model name is the alias the CLI resolves", CLAUDE, "ANTHROPIC_MODEL", "sonnet"),
-    ("claude on the Go rail: same three vars, Go's model name", CLAUDE_GO, "ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+    ("claude on the Go rail: same three vars, Go's model name", CLAUDE_GO, "ANTHROPIC_MODEL", "claude-haiku-5-5"),
     ("goose: the provider is goose's openai provider", GOOSE, "GOOSE_PROVIDER", "openai"),
     ("goose: the base url is this gateway's openai path", GOOSE, "OPENAI_BASE_URL", f"{SELF_URL}/openai/v1"),
     ("goose: the api key is the session token", GOOSE, "OPENAI_API_KEY", "<token>"),
@@ -67,8 +67,8 @@ OPENCODE_ROWS = [
     ("opencode: an openai-compatible provider block", ("provider", "gateway", "npm"), "@ai-sdk/openai-compatible"),
     ("opencode: the provider's base url is this gateway's openai path", ("provider", "gateway", "options", "baseURL"), f"{SELF_URL}/openai/v1"),
     ("opencode: the provider's api key is the session token", ("provider", "gateway", "options", "apiKey"), "<token>"),
-    ("opencode: the session model is the bare id under that provider", ("model",), "gateway/deepseek-v4-flash"),
-    ("opencode: the title model is the same id", ("small_model",), "gateway/deepseek-v4-flash"),
+    ("opencode: the session model is the bare id under that provider", ("model",), "gateway/deepseek-v4.1-flash"),
+    ("opencode: the title model is the same id", ("small_model",), "gateway/deepseek-v4.1-flash"),
 ]
 
 

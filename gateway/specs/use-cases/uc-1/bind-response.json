@@ -7,7 +7,7 @@
   },
   "rail": "opencode",
   "harness": "opencode",
-  "model": "opencode-go/deepseek-v4-flash",
+  "model": "opencode-go/deepseek-v4.1-flash",
   "env_keys": ["OPENCODE_CONFIG_CONTENT"],
   "pull_url": "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/«id»/env",
   "context_tokens": 1000000

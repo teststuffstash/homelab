@@ -21,12 +21,14 @@ Three per-rail checks the admission walk consults after the slot count, each dri
   hold). A 2xx on the credential clears it, and a changed value is a different fingerprint. In
   memory only: a restart clears it, and the next rejection re-marks it (nothing unverified is
   carried across a restart).
-- **window draw** — the Go rail's spend per subscription window, priced from the four token
-  classes at list rates (gometer `window_draw()` semantics), read from the gateway's own request
-  ledger; a window at/over `threshold × budget_usd` blocks the rail until that window resets.
+- **window draw** — the Go rail's spend per MODEL per subscription window, priced from the four
+  token classes at the Go catalog's list rates (gometer `window_draw()` semantics), read from the
+  gateway's own request ledger; a window at/over `threshold × monthly limit × share` blocks the
+  cell until that window resets. A model the catalog does not list (or gives no monthly limit
+  under the policy's plan) is `not-in-catalog` — refused, never priced at a fallback.
 
-`blocked(rail, now)` answers `(reason, free_at, detail)` or None; the walk skips a blocked rail
-exactly like a full one.
+`blocked(rail, now, model)` answers `(reason, free_at, detail)` or None; the walk skips a blocked
+rail exactly like a full one.
 """
 
 from __future__ import annotations
@@ -38,9 +40,13 @@ import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from .config import SUBSCRIPTION_WINDOWS, DrawWindow, Policy, PriceRow, WindowDraw
+from .config import SUBSCRIPTION_WINDOWS, DrawWindow, Policy, PriceRow, WindowDraw, wire_model
 from .store import Store
+
+if TYPE_CHECKING:
+    from .catalog import GoCatalog, GoModel
 
 log = logging.getLogger("gateway.capacity")
 
@@ -107,22 +113,27 @@ class Reading:
 
 @dataclass(frozen=True)
 class Block:
-    reason: str  # a `post.defer.reason` value: rail-window | rail-latched | cell-cooled
+    reason: str  # a `post.defer.reason` value: rail-window | rail-latched | cell-cooled | not-in-catalog
     free_at: float  # epoch the rail may admit again
     detail: str
 
 
-def is_peak(wd: WindowDraw, ts: float) -> bool:
+def is_peak(m: GoModel, ts: float) -> bool:
     gt = time.gmtime(ts)
-    return gt.tm_wday in wd.peak_weekdays and any(lo <= gt.tm_hour < hi for lo, hi in wd.peak_hours_utc)
+    return gt.tm_wday in m.peak_weekdays and any(lo <= gt.tm_hour < hi for lo, hi in m.peak_hours_utc)
 
 
-def price_row(wd: WindowDraw, model: str, ts: float) -> PriceRow:
-    """The row a request at `ts` draws at: the peak row inside a peak hour, else the base row;
-    an unpriced model → the fallback row (fail conservative, gometer `_GO_MAX_PRICE`)."""
-    if model in wd.peak_prices and is_peak(wd, ts):
-        return wd.peak_prices[model]
-    return wd.prices.get(model, wd.fallback)
+def price_row(m: GoModel, ts: float, prompt_tokens: int) -> PriceRow:
+    """The row a request at `ts` draws at: the model's peak row inside a peak hour; else the cost
+    tier its prompt falls in — the base row, or the highest `tier: {type: context, size}` row the
+    prompt (uncached + cache read + cache write) exceeds."""
+    if m.peak is not None and is_peak(m, ts):
+        return m.peak
+    row = m.cost[0][1]
+    for above, tier in m.cost[1:]:
+        if prompt_tokens > above:
+            row = tier
+    return row
 
 
 def draw_usd(row: PriceRow, tokens_in: int, cache_read: int, cache_write: int, tokens_out: int) -> float:
@@ -169,9 +180,10 @@ def window_bounds(w: DrawWindow, now: float, request_ts: list[float]) -> tuple[f
 
 
 class Capacity:
-    def __init__(self, policy: Policy, store: Store):
+    def __init__(self, policy: Policy, store: Store, catalog: GoCatalog | None = None):
         self.policy = policy
         self.store = store
+        self.catalog = catalog  # the Go catalog (GW-CATALOG-GO); None = every Go model is not-in-catalog
         self._lock = threading.Lock()
         self.readings: dict[str, dict[str, Reading]] = {}
         self.latched_until: dict[str, float] = {}
@@ -201,7 +213,7 @@ class Capacity:
                     self.cooled_until[(rail, model)] = until
                 log.warning("capacity: %s 429 on %s — cell cooled for %.0f s", rail, model, until - now)
                 note = "+cell-cooled"
-            if adm.latch_429_hold_s:
+            if adm.latch_429_hold_s and adm.latch_scope == "account":
                 with self._lock:
                     self.latched_until[rail] = until
                 log.warning("capacity: %s 429 — rail latched for %.0f s (account scope: the rail declares latch_429_hold_s)",
@@ -327,16 +339,30 @@ class Capacity:
                 continue  # stale: no header for reading_stale_s — an unavailable reading is no reading
             if rd.utilization >= thr:
                 blocks.append(Block("rail-window", rd.reset, f"{rail} {w} utilization {rd.utilization:g} >= {thr:g}"))
-        if adm.window_draw is not None:
-            blocks += self._draw_blocks(rail, adm.window_draw, now)
+        if model is not None and (mb := self.model_block(rail, model, now)) is not None:
+            blocks.append(mb)
         if not blocks:
             return None
         return max(blocks, key=lambda b: b.free_at)
 
-    def draws(self, rail: str, wd: WindowDraw, now: float) -> dict[str, tuple[float, tuple[float, float] | None]]:
-        """{window: (draw usd, bounds)} over the gateway's own ledger for this rail."""
+    def model_block(self, rail: str, model: str, now: float) -> Block | None:
+        """The MODEL's own capacity verdict (the Go rail's per-model window draw and catalog
+        membership): its blocks merged — it frees when the last lifts. None = the model admits."""
+        wd = self.policy.rails[rail].admission.window_draw
+        if wd is None:
+            return None
+        blocks = self._draw_blocks(rail, wd, now, model)
+        return max(blocks, key=lambda b: b.free_at) if blocks else None
+
+    def go_model(self, rail: str, model: str) -> GoModel | str:
+        return self.catalog.go_model(wire_model(rail, model)) if self.catalog is not None else "no Go catalog"
+
+    def draws(self, rail: str, wd: WindowDraw, now: float, model: str, facts: GoModel
+              ) -> dict[str, tuple[float, tuple[float, float] | None]]:
+        """{window: (draw usd, bounds)} over the gateway's own ledger for this rail's MODEL (the
+        cell): the vendor meters each model against its own monthly limit (ruling 3)."""
         lookback = max((w.chain_lookback_s if w.anchor == "chain" else 32 * 86400) for w in wd.windows)
-        rows = self.store.rail_usage_since(rail, now - lookback)
+        rows = [r for r in self.store.rail_usage_since(rail, now - lookback) if r[1] == model]
         ts_list = [r[0] for r in rows]
         out: dict[str, tuple[float, tuple[float, float] | None]] = {}
         for w in wd.windows:
@@ -345,18 +371,26 @@ class Capacity:
                 out[w.name] = (0.0, None)
                 continue
             start = bounds[0]
-            out[w.name] = (sum(draw_usd(price_row(wd, model, ts), tin, cr, cw, tout)
-                               for ts, model, tin, cr, cw, tout in rows if start <= ts <= now), bounds)
+            out[w.name] = (sum(draw_usd(price_row(facts, ts, tin + cr + cw), tin, cr, cw, tout)
+                               for ts, _m, tin, cr, cw, tout in rows if start <= ts <= now), bounds)
         return out
 
-    def _draw_blocks(self, rail: str, wd: WindowDraw, now: float) -> list[Block]:
+    def _draw_blocks(self, rail: str, wd: WindowDraw, now: float, model: str) -> list[Block]:
+        facts = self.go_model(rail, model)
+        if isinstance(facts, str):
+            free_at = (self.catalog.retry_at(now, self.policy.defer_retry_s) if self.catalog is not None
+                       else now + self.policy.defer_retry_s)
+            return [Block("not-in-catalog", free_at, f"{rail} {model}: {facts}")]
+        if facts.monthly_limit is None:
+            return []  # an unlimited model draws against no window
         blocks = []
-        draws = self.draws(rail, wd, now)
+        draws = self.draws(rail, wd, now, model, facts)
         for w in wd.windows:
             draw, bounds = draws[w.name]
-            if bounds is None or w.threshold <= 0:
+            budget = facts.monthly_limit * facts.shares.get(w.name, 0.0)
+            if bounds is None or w.threshold <= 0 or budget <= 0:
                 continue
-            if draw >= w.threshold * w.budget_usd:
+            if draw >= w.threshold * budget:
                 blocks.append(Block("rail-window", bounds[1],
-                                    f"{rail} {w.name} window draw ${draw:.4f} >= {w.threshold:g} x ${w.budget_usd:g}"))
+                                    f"{rail} {model} {w.name} window draw ${draw:.4f} >= {w.threshold:g} x ${budget:g}"))
         return blocks

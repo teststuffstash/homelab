@@ -23,6 +23,8 @@ from agent_gateway.app import create_app
 from agent_gateway.config import Settings
 
 from .conftest import (
+    GO_CONFIG_URL,
+    GO_DOCS_URL,
     GO_KEY,
     POLICY_FIXTURE,
     SELF_URL,
@@ -35,8 +37,8 @@ from .conftest import (
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "go-catalog"
-CONFIG_URL = "https://console.opencode.test/console/api/v2/config"
-DOCS_URL = "https://raw.vendor.test/anomalyco/opencode/dev/go.mdx"
+CONFIG_URL = GO_CONFIG_URL
+DOCS_URL = GO_DOCS_URL
 SHRUNK = ("deepseek-v4-pro", "deepseek-v4.1-flash")
 TRIMMED = ("claude-haiku-5-5", "deepseek-v4-pro", "deepseek-v4.1-flash")
 SHRUNK_NAMES = ("DeepSeek V4.1 Flash", "DeepSeek V4 Pro")
@@ -49,6 +51,8 @@ def config_doc(behaviour: str) -> dict:
         doc["providers"]["opencode-go"]["models"] = {k: v for k, v in models.items() if k in SHRUNK}
     elif behaviour == "catalog-trimmed":
         doc["providers"]["opencode-go"]["models"] = {k: v for k, v in models.items() if k in TRIMMED}
+    elif behaviour == "catalog-retired":  # the vendor drops the policy's model (the spike's §F3, replayed)
+        del models["deepseek-v4.1-flash"]
     elif behaviour == "catalog-malformed":
         del models["deepseek-v4-pro"]["cost"]
     elif behaviour == "catalog-no-provider":
@@ -73,6 +77,8 @@ def docs_text(behaviour: str) -> str:
         lines = [line for line in lines if "Peak hours are" not in line]
     elif behaviour == "docs-no-shares":
         lines = [line for line in lines if not line.startswith(("Each model has the following usage limits", "weekly — 50%"))]
+    elif behaviour == "docs-retired":  # the page drops claude-haiku-5-5's plan rows (the console still lists it)
+        lines = [line for line in lines if not line.lstrip().startswith("| Claude Haiku 5.5 (")]
     elif behaviour == "docs-shrunk":
         def keep(line: str) -> bool:
             cell = line.strip().strip("|").split("|")[0].strip() if line.lstrip().startswith("|") else None

@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
 from . import __version__
+from .capacity import Capacity
 from .catalog import GoCatalog
 from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
 from .config import Policy, Settings
@@ -90,14 +91,21 @@ def create_app(
                                   settings.cred_negative_cache_s, clock)
     m = Metrics(policy.stacks)
     m.bind_active_sessions(lambda: store.active_counts(clock()))
-    # GW-SESSIONS-PULL's identity check: the kube TokenReview API (tests hand a StaticTokenReviews in).
-    sessions = SessionService(policy, store, resolver, m, settings.self_url, clock, reviewer=reviewer or KubeTokenReviews())
-    sessions.pods = pods or KubePods()
-    m.bind_transport_facts(lambda: sessions.capacity.cooled_counts(clock()), sessions.capacity.rejected_counts)
     client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(connect=settings.connect_timeout_s, read=settings.read_timeout_s, write=60, pool=10),
         follow_redirects=False,
     )
+    # The Go catalog leg (GW-CATALOG-GO): starts from the store's last good snapshots, refreshes on
+    # the schedule the lifespan runs (tests call refresh() themselves — ASGI transports run no lifespan).
+    # Admission reads it: the Go window draw's prices, per-model limits and not-in-catalog.
+    catalog = GoCatalog(policy, store, client, settings.go_catalog_urls, settings.opencode_go_api_key, clock,
+                        settings.go_catalog_refresh_s)
+    m.bind_extra(catalog.render)
+    # GW-SESSIONS-PULL's identity check: the kube TokenReview API (tests hand a StaticTokenReviews in).
+    sessions = SessionService(policy, store, resolver, m, settings.self_url, clock,
+                              capacity=Capacity(policy, store, catalog), reviewer=reviewer or KubeTokenReviews())
+    sessions.pods = pods or KubePods()
+    m.bind_transport_facts(lambda: sessions.capacity.cooled_counts(clock()), sessions.capacity.rejected_counts)
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when
     # one is handed in (tests: the FAKE store) — production passes none (⚑ gap), so it ships dark.
@@ -105,11 +113,6 @@ def create_app(
              if "codex" in policy.rails else None)
     sessions.codex = codex
     codex_proxy = CodexProxy(sessions, m, codex, client)
-    # The Go catalog leg (GW-CATALOG-GO): starts from the store's last good snapshots, refreshes on
-    # the schedule the lifespan runs (tests call refresh() themselves — ASGI transports run no lifespan).
-    catalog = GoCatalog(policy, store, client, settings.go_catalog_urls, settings.opencode_go_api_key, clock,
-                        settings.go_catalog_refresh_s)
-    m.bind_extra(catalog.render)
 
     @contextlib.asynccontextmanager
     async def lifespan(app):

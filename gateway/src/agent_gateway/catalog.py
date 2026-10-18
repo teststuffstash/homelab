@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import httpx
 
 from . import __version__
-from .config import Policy, wire_model
+from .config import WEEKDAYS, Policy, PriceRow, wire_model
 from .store import Store, iso
 
 log = logging.getLogger("gateway.catalog")
@@ -261,6 +261,23 @@ def parse_docs(text: str) -> dict:
 PARSERS: dict[str, Callable] = {"config": lambda r: parse_config(r.json()), "docs": lambda r: parse_docs(r.text)}
 
 
+@dataclass(frozen=True)
+class GoModel:
+    """What admission reads for one listed Go model (GW-SESSIONS-ADMIT §Capacity): its cost tiers
+    `((above_tokens, row), …)` ascending, its peak row and the peak hours, its monthly limit under
+    the policy's plan (None = unlimited) and the window shares."""
+    cost: tuple[tuple[int, PriceRow], ...]
+    peak: PriceRow | None
+    peak_hours_utc: tuple[tuple[int, int], ...]
+    peak_weekdays: frozenset[int]
+    monthly_limit: float | None
+    shares: dict[str, float]
+
+
+def _row(d: dict) -> PriceRow:
+    return PriceRow(d["in"], d["out"], d.get("cache_read"), d.get("cache_write"))
+
+
 # -- the leg ----------------------------------------------------------------------------------
 class GoCatalog:
     """The two snapshots, their refresh, and what /metrics and GET /catalog/opencode read."""
@@ -363,6 +380,37 @@ class GoCatalog:
             await asyncio.sleep(self.refresh_s)
 
     # -- reads ----------------------------------------------------------------------------------
+    def go_model(self, model: str) -> GoModel | str:
+        """Admission's read for a WIRE model id: its facts, or why it is not in the catalog (the
+        `not-in-catalog` defer's detail — ruling 4: never a fallback price)."""
+        cfg, docs = self.snapshots.get("config"), self.snapshots.get("docs")
+        if cfg is None:
+            return "no console catalog snapshot yet"
+        row = cfg.body["models"].get(model)
+        if row is None:
+            return "not listed by the console catalog"
+        if docs is None:
+            return "no Go page snapshot yet (no monthly limit)"
+        lim = docs.body["plans"].get(self.plan or "", {}).get(model)
+        if lim is None:
+            return f"no monthly limit under plan {self.plan}"
+        peak = docs.body["peak"].get(model)
+        return GoModel(
+            cost=tuple((t["above_tokens"], _row(t)) for t in row["cost"]),
+            peak=_row(peak) if peak else None,
+            peak_hours_utc=tuple((h[0], h[1]) for h in docs.body["peak_hours_utc"]),
+            peak_weekdays=frozenset(WEEKDAYS[d] for d in docs.body["peak_weekdays"]),
+            monthly_limit=None if lim == "unlimited" else float(lim),
+            shares=dict(docs.body["window_shares"]),
+        )
+
+    def retry_at(self, now: float, fallback_s: float) -> float:
+        """When a `not-in-catalog` verdict may change: the next scheduled refresh, else `fallback_s`."""
+        last = max(self.last_attempt.values(), default=None)
+        if last is not None and self.refresh_s > 0:
+            return max(last + self.refresh_s, now + 1)
+        return now + fallback_s
+
     def monthly_limit(self, model: str) -> float | str | None:
         """The plan's monthly limit for a WIRE model id: usd, "unlimited", or None (no row)."""
         docs = self.snapshots.get("docs")
