@@ -29,7 +29,11 @@ packages = ["src/agent_gateway"]
 testpaths = ["tests"]
 # Raw Allure results for every run (conventions § Prime rule): `devbox run evidence` turns them
 # into evidence.json + digest.md + per-rule md via the pinned allure-behavior-snippets wheel.
-addopts = "--alluredir=allure-results --clean-alluredir"
+# --allure-no-capture: pytest's captured logging never rides into the Allure results as a flat test-level
+# `log` attachment (the control-plane observe WARNING on every session) — no row's value rests on it, and a
+# flat attachment is what ATTACH_BULK counts past the step-bound exchanges (CONVENTIONS.md § Hygiene codes).
+# Captured logs still print in pytest's own failure output; rows that claim a log line read caplog.
+addopts = "--alluredir=allure-results --clean-alluredir --allure-no-capture"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

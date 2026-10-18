@@ -45,7 +45,8 @@ def test_success(rotate):
         return httpx.Response(200, stream=httpx.ByteStream(json.dumps(body).encode()))
 
     owner = Lifecycle(store, NativeRefresh(clock, transport=httpx.MockTransport(upstream)), clock, 30)
-    with when("acquire the near-expiry credential through native refresh HTTP"):
+    with when(f"acquire the near-expiry credential through native refresh HTTP; rotate = {rotate}: "
+              f"the answer {'carries a rotated refresh_token' if rotate else 'omits refresh_token'}"):
         got = owner.acquire()
     then_eq("URL and method", received[0][:2], ("https://auth.openai.com/oauth/token", "POST"))
     then_eq("request JSON", received[0][3], {"grant_type": "refresh_token",
@@ -85,7 +86,7 @@ def test_refusal(status, body, expected):
                               headers={"location": "https://elsewhere.invalid/steal"})
 
     owner = Lifecycle(store, NativeRefresh(clock, transport=httpx.MockTransport(upstream)), clock, 30)
-    with when("acquire twice across a rejected or uncertain HTTP refresh"):
+    with when(f"acquire twice across a rejected or uncertain HTTP refresh: status = {status}, body = {body}"):
         failures = []
         for _ in range(2):
             with pytest.raises(Failure) as raised:
