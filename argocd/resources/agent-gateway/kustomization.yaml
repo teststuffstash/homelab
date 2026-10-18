@@ -102,4 +102,4 @@ configMapGenerator:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.10.18-g0e74062204ee
+    newTag: 2026.10.18-g4730693c4257
