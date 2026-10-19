@@ -297,10 +297,3 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   OpenRouter never sees it. Gotcha: a direct-key ride's identity is a key-hash bucket, not a
   per-ride id — the remaining seam, not this fix. Prior art: earendil-works/pi#4847.
 
-- **FU-236** *(archived 2026-09-13)* — **`homelab-sentinel` App cutover (ADR-130), all four steps
-  the same day:** App 4929271 created/installed + ESO chain (`sentinel-git.yaml`); `sentinel-argo`
-  switched direct (guarded file), first status under homelab-sentinel[bot] 11:17:58Z;
-  `integration_id` pinned on 11 rulesets (`github-tofu apply`); reviewer `statuses` write→read
-  (#1614). Gotcha: the console un-grant came BEFORE the mint narrowing merged → the reviewer
-  mint 422'd at its 11:45 refresh; un-wedged by applying the narrowed generator by hand. For a
-  NARROWING: merge first, click second (the reverse of a widening).
