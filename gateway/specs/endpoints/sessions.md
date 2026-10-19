@@ -194,7 +194,7 @@ blocks lifts.
   ⚖ The 900 s bound has **no** old-proxy precedent (it sees every subscription ride; this gateway
   sees only its own, so its reading ages out) — a guess the operator may tune.
 - **Cell cooldown** (every rail): an upstream 429 cools the **cell** — (rail, the session's policy
-  model) — until its reset, read from the wire: `retry-after` (delta seconds) first, then
+  model, provider) — until its reset, read from the wire: `retry-after` (delta seconds) first, then
   `x-ratelimit-reset` (OpenRouter sends the reset as epoch **milliseconds** and no `retry-after`),
   else the rail's `latch_429_hold_s`, else the policy's `defer_retry_s`. Admission skips a cooled
   cell (`cell-cooled`, `retry_after_s` = its reset); any 2xx on that cell clears it early — the old

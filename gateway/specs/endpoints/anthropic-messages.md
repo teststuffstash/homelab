@@ -26,7 +26,7 @@ Messages body itself is the vendor's — the gateway validates only what it read
 |---|---|---|---|
 | [GW-RAIL-ANTHROPIC](#gw-rail-anthropic) | `upstream.anthropic` (URL, auth, `anthropic-beta`), `output.complete` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 |
 | [GW-RAIL-OPENCODE](#gw-rail-opencode) | `upstream.opencode` (URL, auth, session headers), `input.headers.x-opencode-session`, `input.headers.x-claude-code-session-id` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0; `upstream-timeout` rows `🚧 WIP` (the `upstream-slow` world is clock-faked only) |
-| [GW-MODEL-RESOLVE](#gw-model-resolve) | `input.body.model` | `model-not-session` | v0 — provider pins / `:exacto` / the ADR-096 ladder `⚑ gap` (rows below) |
+| [GW-MODEL-RESOLVE](#gw-model-resolve) | `input.body.model` | `model-not-session` | v0 — the ADR-096 ladder `⚑ gap` (rows below); the provider pin is [GW-RAIL-OPENROUTER §Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)'s (homelab#2741 — no `:exacto`, not ported) |
 | [GW-CRED-BOUNDARY](#gw-cred-boundary) | `input.headers.authorization`, `input.headers.x-api-key`, `upstream.*.auth` | `session-unknown`, `session-expired`, `session-released`, `credential-unresolved`, `credential-transient`, `upstream-auth`, `upstream-refused`, `upstream-edge-refused`, `header-refused` | v0; the codex rail's `upstream-auth` is still 502 (`⚑ gap` row below) |
 | [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned on openai-chat.md) | `upstream.openrouter` | `upstream-auth`, `upstream-unreachable` | linked — the anthropic-dialect cell is a verified row there |
 | [GW-SESSIONS-RELEASE](sessions.md#gw-sessions-release) (owned on sessions.md) | `input.headers.authorization` | `session-expired`, `session-released` | linked |
@@ -176,8 +176,10 @@ of the session's model: claude-code makes small calls on the haiku family
 (`ANTHROPIC_SMALL_FAST_MODEL`'s default) under a sonnet session, so the anthropic rail admits
 the session's family **and** `claude/haiku` (seat ruling, 2026-10-16); the key lives in policy
 because no model id lives in code, and a rail that declares none (the Go rail today) keeps the
-exact check. An absent `model` is filled with the wire id. The ADR-096 ladder — classes, label tiers, strikes,
-cooldowns, provider pins, the `:exacto` suffix — is a gap, rendered below.
+exact check. An absent `model` is filled with the wire id. The ADR-096 ladder — classes, label tiers — is a
+gap, rendered below; strikes and cooldowns are [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s, and the
+provider pin is [GW-RAIL-OPENROUTER §Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)'s
+(present once the endpoint snapshot covers the session's model; `:exacto` is not ported — operator 2026-10-19).
 
 | description | session model (policy) | rail | body `model` || verdict | upstream body `model` |
 |---|---|---|---||---|---|
@@ -204,7 +206,6 @@ cooldowns, provider pins, the `:exacto` suffix — is a gap, rendered below.
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: provider pin / `:exacto`" | openrouter session, policy `deepseek/deepseek-v4-flash` || the bare id, no `provider` block injected | ADR-096 M4 pins and the `provider_policy: exacto` suffix |
 | "⚑ gap: a per-task deny list" | claim `modelDeny` names the session's model || dispatched anyway | the claim's `modelDeny` projection into the policy |
 | "⚑ gap: a mid-session model change" | a strike on this session || the same model until release | strikes / cooldowns / the pair hold |
 

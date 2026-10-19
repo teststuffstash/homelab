@@ -181,7 +181,8 @@ async def test_attribution_rule(gw, store, upstreams, orworld, display, slug):
     r = await _ride(gw, doc)
     then_eq("status", r.status_code, 200)
     then_eq("the upstream body carries no provider pin", "provider" in (upstreams[RAIL].calls[-1]["body"] or {}), False)
-    then_eq("the request row's provider", _row_provider(store, doc), [slug])
+    then_eq("the request row's provider", _row_provider(store, doc), [slug],
+            claim=f"the request row's provider = {slug!r} (the answer named {display!r})")
 
 
 async def test_answer_outranks_pin(gw, store, upstreams, orworld):
@@ -383,6 +384,9 @@ async def test_failover(gw, store, upstreams, orworld, behaviours, calls, status
     if served:
         then_eq("the harness sees one answer, served by", (r.headers["content-type"].split(";")[0], r.json().get("provider")),
                 ("application/json", served))
+    else:
+        then_eq("the harness sees the typed error, served by nobody", r.json().get("provider"), None,
+                claim=f"served = {served!r}: the harness sees the last provider's error body, no answer")
     then_eq("the request rows' providers (one per attempt)", _row_provider(store, doc), calls)
     then_eq("strikes (class, provider, source)", _strikes(store, task), strikes)
     for (frm, to), n in failovers.items():
