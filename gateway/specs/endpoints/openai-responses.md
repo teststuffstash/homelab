@@ -111,8 +111,8 @@ into the newer turn. These are gateway judgments, not vendor limits.
 | "another session" | issue, cross session replay || refused |
 | "new turn clears state" | issue, next turn replay || refused |
 | "forged state" | no issue, replay || refused |
-| "oversized state" | upstream issues 4097 bytes || dropped |
-| "delayed old turn response" | new turn before old response || dropped |
+| "oversized state ⚖" | upstream issues 4097 bytes || dropped (not refused): no state header to the client, a replay of it is 400 |
+| "delayed old turn response ⚖" | new turn before old response || dropped (not refused): the old turn's value never installs into the newer turn; a replay of it is 400 |
 
 ### Streams and usage
 
