@@ -144,7 +144,9 @@ slug, so a provider's service tiers — `deepinfra/fp8`, `/flex`, `/priority` �
 representative is the vendor's default: no `service_tier`, then the shortest tag), kept only when it
 supports **every tool-choice mode the session's harness uses** (`providers.tool_choice.<harness>`),
 its **quantization** is on the policy ladder at or above the floor (`unknown` is off the ladder:
-excluded), its **`uptime_last_1d`** clears the floor, and its status is 0. ⚖ **Order**: output price
+excluded), its **`uptime_last_1d`** clears the floor, and its status is 0. ⚖ **Entry** ([GW-CATALOG-OR](catalog.md#gw-catalog-or)): of the endpoints that pass the floors, only the cells the
+catalog has admitted — a clean entry canary, state `eligible` — are pinned; a model with no eligible cell rides
+unpinned (the seeded worlds mark every snapshot cell eligible: already canaried). ⚖ **Order**: output price
 ÷ the cell's **clean-ride rate** from the outcome store (a ride = a session the provider served a 2xx
 to whose latest outcome is reported; clean = that outcome is `clean`), the input price, p90 latency
 and the slug breaking ties; while a cell has fewer than `min_rides` judged rides, its uptime is the

@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   live_namespace TEXT,
   live_pod TEXT,
   live_pod_uid TEXT,
-  release_reason TEXT
+  release_reason TEXT,
+  canary_provider TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
 CREATE TABLE IF NOT EXISTS requests (
@@ -95,6 +96,19 @@ CREATE TABLE IF NOT EXISTS catalog_snapshots (
   fetched_at REAL NOT NULL,
   body TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS provider_cells (
+  model TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  state TEXT NOT NULL,
+  class TEXT,
+  since REAL NOT NULL,
+  cooldown_until REAL,
+  PRIMARY KEY (model, provider)
+);
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value REAL NOT NULL
+);
 """
 _STRIKES_REBUILD = """
 BEGIN;
@@ -132,7 +146,8 @@ _ADDED_COLUMNS = {
     "sessions": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "bind_namespace": "TEXT",
                  "bind_serviceaccount": "TEXT", "bind_pod": "TEXT", "env_delivered_at": "REAL",
                  "caller": "TEXT", "requests_incomplete": _COUNTER, "attempt": "INTEGER NOT NULL DEFAULT 1",
-                 "live_namespace": "TEXT", "live_pod": "TEXT", "live_pod_uid": "TEXT", "release_reason": "TEXT"},
+                 "live_namespace": "TEXT", "live_pod": "TEXT", "live_pod_uid": "TEXT", "release_reason": "TEXT",
+                 "canary_provider": "TEXT"},  # GW-CATALOG-OR: the cell a canary session is pinned to (NULL = not a canary)
     "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "incomplete": "TEXT",
                  "provider": "TEXT NOT NULL DEFAULT ''"},  # GW-RAIL-OPENROUTER: the serving provider's slug ('' = none named)
 }
@@ -164,7 +179,7 @@ _SESSION_COLS = (
     "created_at", "expires_at", "released_at", "requests", "tokens_in", "tokens_out",
     "tokens_cache_read", "tokens_cache_write", "bind_namespace", "bind_serviceaccount", "bind_pod",
     "env_delivered_at", "caller", "requests_incomplete", "attempt", "live_namespace", "live_pod", "live_pod_uid",
-    "release_reason",
+    "release_reason", "canary_provider",
 )
 
 
@@ -202,6 +217,7 @@ class Session:
     live_pod: str | None = None
     live_pod_uid: str | None = None
     release_reason: str | None = None  # released (DELETE) | superseded | pod-gone; NULL = not released
+    canary_provider: str | None = None  # GW-CATALOG-OR: the (model, provider) cell this canary session is pinned to
 
     @property
     def bound(self) -> bool:
@@ -520,6 +536,70 @@ class Store:
         except ValueError:
             log.error("db: catalog_snapshots.%s is not JSON — ignored (the next refresh replaces it)", source)
             return None
+
+    # -- the OpenRouter catalog's cells + the canary meter (GW-CATALOG-OR) ----------------------
+    def cells_sync(self, pairs: list[tuple[str, str]], now: float) -> int:
+        """Every (model, provider) the snapshot carries gets a row; a pair new to the table enters as
+        `candidate`. Returns how many entered."""
+        n = 0
+        with self._lock:
+            for model, provider in set(pairs):
+                cur = self._db.execute("INSERT OR IGNORE INTO provider_cells (model, provider, state, class, since, cooldown_until)"
+                                       " VALUES (?,?,'candidate',NULL,?,NULL)", (model, provider, now))
+                n += cur.rowcount
+        return n
+
+    def cell_get(self, model: str, provider: str) -> dict | None:
+        with self._lock:
+            row = self._db.execute("SELECT * FROM provider_cells WHERE model = ? AND provider = ?", (model, provider)).fetchone()
+        return dict(row) if row else None
+
+    def cell_states(self, model: str) -> dict[str, dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM provider_cells WHERE model = ?", (model,)).fetchall()
+        return {r["provider"]: dict(r) for r in rows}
+
+    def cell_set(self, model: str, provider: str, state: str, klass: str | None, now: float, cooldown_until: float | None) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO provider_cells (model, provider, state, class, since, cooldown_until) VALUES (?,?,?,?,?,?)"
+                " ON CONFLICT(model, provider) DO UPDATE SET state = excluded.state, class = excluded.class,"
+                " since = excluded.since, cooldown_until = excluded.cooldown_until",
+                (model, provider, state, klass, now, cooldown_until))
+
+    def cells_count(self, now: float) -> dict[str, int]:
+        """Cells by state at `now` — an exclusion past its cooldown counts as a candidate."""
+        with self._lock:
+            rows = self._db.execute("SELECT state, cooldown_until, COUNT(*) AS n FROM provider_cells GROUP BY state, cooldown_until").fetchall()
+        out: dict[str, int] = {}
+        for r in rows:
+            state = "candidate" if r["state"] == "excluded" and r["cooldown_until"] is not None and now >= r["cooldown_until"] else r["state"]
+            out[state] = out.get(state, 0) + int(r["n"])
+        return out
+
+    def canary_sessions_since(self, since: float) -> int:
+        with self._lock:
+            (n,) = self._db.execute("SELECT COUNT(*) FROM sessions WHERE canary_provider IS NOT NULL AND created_at >= ?", (since,)).fetchone()
+        return int(n)
+
+    def canary_usage_since(self, since: float) -> list[tuple[str, str, int, int, int, int]]:
+        """The canary sessions' 2xx requests since `since`: (model, provider, tokens_in, cache_read,
+        cache_write, tokens_out) — the budget meter's ledger."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT s.model, s.canary_provider, r.tokens_in, r.tokens_cache_read, r.tokens_cache_write, r.tokens_out"
+                " FROM requests r JOIN sessions s ON s.id = r.session_id"
+                " WHERE s.canary_provider IS NOT NULL AND r.ts > ? AND r.status BETWEEN 200 AND 299", (since,)).fetchall()
+        return [(r[0], r[1], int(r[2]), int(r[3]), int(r[4]), int(r[5])) for r in rows]
+
+    def meta_get(self, key: str) -> float | None:
+        with self._lock:
+            row = self._db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return float(row[0]) if row else None
+
+    def meta_set(self, key: str, value: float) -> None:
+        with self._lock:
+            self._db.execute("INSERT INTO meta (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
     def ping(self) -> bool:
         try:

@@ -115,6 +115,7 @@ class Outcomes:
         self.metrics = metrics
         self.window_s = window_s
         self.clock = clock
+        self.judge = None  # GW-CATALOG-OR: `(model, provider, clean, klass, now)` — the canary verdict hook (app.py)
 
     def report(self, row: Session, klass: str, sub: str | None, evidence: object, reporter: str | None,
                judge: bool) -> dict:
@@ -140,6 +141,8 @@ class Outcomes:
             refuted = self.store.refute_strikes(row.stack, row.task, row.rail, row.model, now,
                                                 providers=self.store.session_providers(row.id))
             log.info("outcome: session=%s clean — refuted %d strike(s) on task %s", row.id, refuted, row.task)
+            if row.canary_provider and self.judge is not None:  # the canary's clean ride: the cell enters
+                self.judge(row.model, row.canary_provider, True, None, now)
         else:
             # A consumer's cell-scoped class lands on the provider(s) the ride rode — one strike per cell
             # it touched; a ride that rode none (unpinned, no attribution) strikes the model's own cell.
@@ -159,6 +162,8 @@ class Outcomes:
         self._strike(row, klass, scope, "gateway", self.clock(), provider)
 
     def _strike(self, row: Session, klass: str, scope: str, source: str, now: float, provider: str = "") -> dict | None:
+        if row.canary_provider and self.judge is not None:  # any strike on a canary ride excludes its cell
+            self.judge(row.model, row.canary_provider, False, klass, now)
         if self.store.add_strike(row.stack, row.task, row.rail, row.model, provider, klass, scope, source, row.id, now):
             self.metrics.strike(klass, source)
             log.warning("strike: %s/%s %s on %s %s%s (scope %s, source %s, session %s)",

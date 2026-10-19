@@ -389,6 +389,8 @@
             "credential-rejected",
             "cells-exhausted",
             "no-eligible-provider",
+            "canary-budget",
+            "canary-not-due",
             "quota-unknown",
             "quota-stale",
             "quota-limited"

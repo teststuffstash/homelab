@@ -139,6 +139,31 @@ unpinned, as before this leg); `deepseek/deepseek-v4-flash` never has an entry, 
 tier is the unpinned control inside the world. `openrouter-endpoints-ineligible` = the same
 snapshot trimmed to `open-inference/fp4`, `alibaba` and `parasail/fp8` (`seed_openrouter_endpoints(only=…)`).
 
+## The openrouter-catalog world
+
+[GW-CATALOG-OR](../endpoints/catalog.md#gw-catalog-or)'s sources, faked in process
+(`tests/_orcatalog_world.py`): the OpenRouter MCP on `mcp.openrouter.test/mcp` (JSON-RPC
+`initialize` + `tools/call`), and the endpoints route on the openrouter rail's fake
+(`/v1/models/<id>/endpoints`). Fixtures in `tests/fixtures/openrouter-catalog/`, trimmed from the
+**live MCP answers of 2026-10-19**: `rankings-programming.json` / `rankings-tool_calling.json`
+(`list-daily-model-rankings`, period week — the latest week's top rows of each slice, 14 and 12
+dated permaslugs plus `other`, and one older-week row), `benchmarks-aa.json` (`list-benchmarks`,
+source artificial-analysis — seven of the 350 rows: the models the two slices rank that AA
+benches), `deepseek-v4.1-flash.json` (the ten-endpoint fixture of the openrouter-endpoints world)
+and `glm-5.3-flash.json` (seven of `z-ai/glm-5.3-flash`'s 34 endpoints). Ranked ∩ benched = seven
+candidates; two have endpoint fixtures, the other five 404 (unreadable, absent from the refresh).
+Unlike the openrouter-endpoints world, nothing is seeded: a refresh (`app.state.orcatalog.refresh()`)
+builds the snapshot, and every cell enters as `candidate`.
+
+| behaviour | the fake answers | exercised by |
+|---|---|---|
+| `mcp` ok | the fixtures per tool and slice | the refresh rows |
+| `mcp` 503 / down | 503 / a connect failure on the MCP host | fetch-failed |
+| `mcp` malformed | a tool result whose text is not JSON | parse-failed |
+| `rankings-undated` | ranking rows without `date` | parse-failed |
+| `benchmarks-empty` | an empty AA list | implausible (no candidate) |
+| `endpoints_behaviour[model]` = `endpoints-503` / `endpoints-malformed` | 503 / a row without the fields the parser reads, for that model | the unreadable-candidate rows |
+
 ## The fake TokenReview (`StaticTokenReviews`)
 
 The kube TokenReview API is a seam (`TokenReviewer` protocol). `StaticTokenReviews` maps a

@@ -82,6 +82,20 @@
         "max_providers_per_request": 3,
         "tool_choice": {"opencode": ["auto"], "goose": ["auto"], "claude": ["auto", "required", "function"]}
       },
+      "catalog": {
+        "_comment": "GW-CATALOG-OR (homelab#2742) — the registry's SOURCES, never its candidates: account_ref = the labelled Secret holding the openrouter ACCOUNT key the MCP reads ride (the old proxy's ROUTER_ACCOUNT_REF, the same Secret); ranking_slices = the vendor's weekly ranking slices whose union is the ranked set (⚖ programming + tool_calling, operator 2026-10-19); ranking_top_n = per slice, the top N by tokens (⚖ 30 — the old proxy's RANKINGS_TOP_N). Candidates = ranked ∩ AA-benched; the endpoints are read per candidate.",
+        "account_ref": "agent-egress/router-account-key",
+        "ranking_slices": ["programming", "tool_calling"],
+        "ranking_top_n": 30
+      },
+      "canary": {
+        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again.",
+        "role": "prober",
+        "harness": "opencode",
+        "max_per_refresh": 3,
+        "usd_per_day": 1.0,
+        "cooldown_s": 86400
+      },
       "max_sessions": 20,
       "models": {
         "light":    ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-flash", "xiaomi/mimo-v2.5"],

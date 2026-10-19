@@ -397,13 +397,24 @@ class FakeUpstream:
         self.provider_behaviours: dict[str, str] = {}
         self.provider_names: dict[str, str] = {}
         self.provider_display: str | None = None
+        # GW-CATALOG-OR: the rail fake also serves `/v1/models/<id>/endpoints` (the catalog leg's per-candidate
+        # read) from tests/fixtures/openrouter-catalog/; `endpoints_behaviour[model]` overrides (503 / malformed).
+        self.endpoints_behaviour: dict[str, str] = {}
         self.app = Starlette(
             routes=[
                 Route("/v1/messages", self._messages, methods=["POST"]),
                 Route("/v1/chat/completions", self._chat, methods=["POST"]),
                 Route("/v1/models", self._models, methods=["GET"]),
+                Route("/v1/models/{author}/{slug:path}/endpoints", self._endpoints, methods=["GET"]),
             ]
         )
+
+    async def _endpoints(self, request: Request) -> Response:
+        from ._orcatalog_world import endpoints_answer
+
+        model = f"{request.path_params['author']}/{request.path_params['slug']}"
+        call = await self._record(request)
+        return self._reply(call, endpoints_answer(model, self.endpoints_behaviour.get(model, "endpoints-ok")))
 
     async def _record(self, request: Request) -> dict:
         raw = await request.body()
@@ -691,6 +702,8 @@ def secrets() -> StaticSecrets:
         s.secrets[f"{ns}/{ref}"] = StaticSecrets.secret(OPENROUTER_KEY, "OPENROUTER_API_KEY")
     for ns in ("platform-agents", "oracle-agents"):
         s.secrets[f"{ns}/claude-session"] = StaticSecrets.secret(ANTHROPIC_TOKEN, "AUTH_TOKEN")
+    # GW-CATALOG-OR: the openrouter ACCOUNT key the catalog's MCP reads ride (rails.openrouter.catalog.account_ref)
+    s.secrets["agent-egress/router-account-key"] = StaticSecrets.secret("sk-or-v1-test-account-key", "OPENROUTER_API_KEY")
     return s
 
 
@@ -724,6 +737,7 @@ def settings(tmp_path) -> Settings:
             "OPENCODE_GO_API_KEY": GO_KEY,
             "GATEWAY_GO_CATALOG_URL": GO_CONFIG_URL,
             "GATEWAY_GO_DOCS_URL": GO_DOCS_URL,
+            "GATEWAY_OR_MCP_URL": "https://mcp.openrouter.test/mcp",
         }
     )
 
@@ -752,6 +766,10 @@ def seed_openrouter_endpoints(store: Store, upstream: FakeUpstream | None = None
         if upstream is not None:
             upstream.provider_names.update({e["slug"]: e["provider_name"] for e in parsed["endpoints"]})
     store.snapshot_save(SNAPSHOT_SOURCE, fetched_at, body)
+    # the seeded world's cells are ALREADY canaried (GW-CATALOG-OR): every provider of every model is eligible
+    for mid, entry in body["models"].items():
+        for e in entry["endpoints"]:
+            store.cell_set(mid, e["slug"], "eligible", None, fetched_at, None)
     return body
 
 
@@ -778,8 +796,22 @@ def pods() -> StaticPods:
 
 
 @pytest.fixture
-async def app(settings, policy, secrets, store, vendor_transport, clock, reviews, pods):  # noqa: F811 — the fixture, imported below
-    client = httpx.AsyncClient(transport=vendor_transport)  # the rails' fakes + the Go catalog's fake vendor
+def mcp():
+    from ._orcatalog_world import FakeMcp
+
+    return FakeMcp()
+
+
+@pytest.fixture
+def mcp_transport(mcp, vendor_transport):  # noqa: F811 — the fixture, imported below
+    from ._orcatalog_world import McpTransport
+
+    return McpTransport(mcp, vendor_transport)
+
+
+@pytest.fixture
+async def app(settings, policy, secrets, store, mcp_transport, clock, reviews, pods):  # noqa: F811 — the fixture, imported below
+    client = httpx.AsyncClient(transport=mcp_transport)  # the rails' fakes + the Go catalog's fake vendor + the fake MCP
     a = create_app(settings, policy=policy, source=secrets, store=store, client=client, clock=clock, reviewer=reviews, pods=pods)
     yield a
     await client.aclose()

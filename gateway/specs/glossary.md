@@ -113,7 +113,9 @@ The admission answer "not now": HTTP 200 `{decision: "defer", reason, retry_afte
 an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `cell-cooled`, `not-in-catalog` (a Go model the [Go catalog](#go-catalog) does not cover), `role-rail-denied`,
 `stack-unknown`, `credential-unresolved`, `credential-rejected`, `no-eligible-provider` (the
 openrouter model's endpoint snapshot has no provider that clears the policy floors —
-[sessions.md §The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)), `cells-exhausted` (no
+[sessions.md §The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)), the
+[entry canary](#canary)'s `canary-not-due` and `canary-budget`
+([GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or)), `cells-exhausted` (no
 `retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
@@ -139,8 +141,11 @@ The openrouter rail's registry: per model, the rows of `GET /api/v1/models/<id>/
 latency, prices) as the gateway last read them, kept in its store under
 `catalog_snapshots.openrouter-endpoints`
 (`openai-chat.schema.json` `$defs.endpoint_snapshot`). [Selection](endpoints/openai-chat.md#selection--the-gateways-own-evidence-never-exacto)
-reads it; the catalog leg writes it (homelab#2742 — until then, the test worlds seed it). A model
-the snapshot does not cover rides **unpinned**. Not the [Go catalog](#go-catalog) (the opencode
+reads it; [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) writes it (the vendor's weekly
+ranking ∩ the AA-benched set, then each candidate's endpoints) and keeps, beside it, each
+`(model, provider)` cell's **entry state** — `candidate` → `eligible` by one clean
+[canary](#canary), or `excluded` by a struck one. A model the snapshot does not cover, or none of
+whose cells is eligible, rides **unpinned**. Not the [Go catalog](#go-catalog) (the opencode
 rail's vendor facts) and not the [tier evidence](#tier-evidence) (the benchmark snapshot the tier
 lists derive from).
 
@@ -176,6 +181,18 @@ rail's top score, the cap. The lists are the derivation's output; a hand edit fa
 [`docs/glossary.md`](../../docs/glossary.md) (`regular` / `premium` / `ultra` / `instrument`).
 Refreshed by hand (`scripts/benchmarks-snapshot.sh`); the fixture worlds carry the block but
 keep their fixture lists.
+
+## canary
+
+Narrowed here to the **entry canary** ([GW-CATALOG-OR §The entry canary](endpoints/catalog.md#the-entry-canary)):
+one ride through this gateway on exactly one `(model, provider)` [cell](#cell) of the openrouter
+rail — a session admitted with `canary: {model, provider}` (the policy's `canary.role` and
+`canary.harness`), pinned with fallbacks off and no failover — whose outcome is the cell's verdict:
+`clean` → `eligible`, a strike → `excluded`. It is the catalog's own gate, on demand (as the
+catalog refreshes) and budget-capped (`canary.max_per_refresh`, `canary.usd_per_day`). The
+platform's unqualified **canary** ([`docs/glossary.md`](../../docs/glossary.md)) is the scout's
+rail probe of a (model, harness, class) cell; this one adds the provider axis and supersedes the
+scout's canary leg for OpenRouter entrants.
 
 ## persistence interface
 

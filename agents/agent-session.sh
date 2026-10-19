@@ -224,6 +224,11 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 #   AGENT_GATEWAY=sessions   the knob — ENV ONLY, no claim/stacks.json field yet: the flip is a later
 #                            one-liner after the canary. Unset = today's /route path, byte-for-byte.
 #   AGENT_GATEWAY_RAIL=<r>   optional explicit `rail` in the body (the canary sets opencode).
+#   AGENT_GATEWAY_ROLE=<role>  the body's `role` (default worker; the entry canary rides as prober).
+#   AGENT_GATEWAY_CANARY=<model>@<provider>  GW-CATALOG-OR's ENTRY CANARY (homelab#2742): the body
+#                            carries `canary: {model, provider}` — a prober session pinned to that
+#                            OpenRouter cell, no failover; its outcome is the cell's verdict. The jail
+#                            launcher is gateway/scripts/canary-entrants.sh; a pod never sets it.
 #   AGENT_GATEWAY_URL=<url>  the control-plane address (a jail run reaches it via port-forward).
 #   AGENT_GATEWAY_CALLER_SA=<ns>/<sa>  JAIL CANARY ONLY: mint the caller token for THAT ServiceAccount
 #                            (`kubectl create token … --audience agent-gateway --duration 10m`).
@@ -348,11 +353,13 @@ if [ -n "${GW_SESSIONS:-}" ]; then
   # to its dialect); rail only from the operator knob (an override the gateway logs).
   _gw_req="$(jq -nc --arg task "${TASK:-adhoc}" --argjson round "$ROUND" \
       --arg harness "${HARNESS_SET:+$HARNESS}" --arg rail "${AGENT_GATEWAY_RAIL:-}" \
+      --arg role "${AGENT_GATEWAY_ROLE:-worker}" --arg canary "${AGENT_GATEWAY_CANARY:-}" \
       --arg ns "$PROJECT" --arg pod "$GW_POD" --argjson attempt "${AGENT_GATEWAY_ATTEMPT:-1}" \
-      '{stack: "platform", role: "worker", task: $task, round: $round}
+      '{stack: "platform", role: $role, task: $task, round: $round}
        + (if $attempt > 1 then {attempt: $attempt} else {} end)
        + (if $harness != "" then {harness: $harness} else {} end)
        + (if $rail != "" then {rail: $rail} else {} end)
+       + (if $canary != "" then {canary: {model: ($canary | split("@")[0]), provider: ($canary | split("@")[1])}} else {} end)
        + {bind: {namespace: $ns, serviceaccount: "agentstack-worker", pod: $pod}}')"
   _gw_resp="$(mktemp)"
   _gw_http="$(curl -sS --max-time 20 -o "$_gw_resp" -w '%{http_code}' -H 'Content-Type: application/json' \
