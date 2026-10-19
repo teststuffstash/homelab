@@ -17,6 +17,18 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-19 ~20:15Z — operator: "leave a session to build out the gateway overnight"; TICK-LOG 10-19):
+  build #2741 → #2742 → #2743 IN THAT ORDER** (attribution is what the other two stand on), each a PR on `gateway/`
+  (clone, PR lane, specs reviewer = 2 approvals, `cd gateway && devbox run ci` green before push, `Spec changes:` section
+  + ⚖ on judgment rows + per-row observed values — the three review classes that cost rounds on 10-19). **Context =
+  `gateway/specs` + `gateway/src` + the three issues + the plan comment on #2718; no corpus read (islands rule).**
+  Operator rulings 10-19, not to re-open: cost per CLEAN ride is the unit; `:exacto` NOT ported (the gateway attributes
+  per request and selects itself); failover at the REQUEST level before the first byte only; the canary is ON DEMAND
+  as the catalog's entry gate and BUDGET-CAPPED (policy knobs); candidate sets never hand tables. Acceptance the
+  operator stated: the gateway chooses openrouter vs opencode-go for deepseek-v4.1-flash on equal terms (fp8 floor,
+  tool-choice support, uptime) with price, and a failed provider is relaunched transparently. Codex rail: A–C merged
+  (#2734/#2735/#2736), D/E restart from the brief in the spike §Lighting the rail — NOT tonight's scope unless the
+  three land. **Operator-only, untouched:** FU-313 Go key mint, the codex login (leg E), the canary window.
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a

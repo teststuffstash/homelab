@@ -13806,3 +13806,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `:exacto` is NOT ported — it papered over the old router's inability to attribute provider problems; the gateway
   attributes per request (the response's `provider`) and selects from its own evidence + the endpoint data OpenRouter
   exposes now (33 endpoints on v4.1-flash: tool_choice support, quantization, uptime_1d, percentiles). Order on #2718.
+- Wind-down ~20:15Z: operator rulings — canary on demand as the catalog's entry gate, budget-capped; request-level
+  failover before the first byte; cross-rail choice for v4.1-flash on equal terms. Filed #2741 (attribution/selection/
+  failover), #2742 (GW-CATALOG-OR + entry canary + cap), #2743 (cost per clean ride, openrouter vs Go); meta-state
+  pickup for the overnight session. Bookkeeping pushed once.
