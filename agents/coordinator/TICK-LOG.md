@@ -13847,5 +13847,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   agents/replay/fixtures/gateway-sessions (role prober + `canary: {model, provider}` in the POST body; reds on base,
   23/23 green on the branch) at ceff6f42. The local push gates ran clause-replay (the replays) but not the ratchet —
   the ratchet is CI-only (`git diff` against the PR base).
+- Round 3 (21:50Z): E-HYGIENE_REPEAT on "fails over twice" (ATTACH_BULK: the threshold is 8 attachments PER CASE — every
+  then_eq is one; folded into one verdict + one series check), two GW-METRICS label rows unproven (cases added under the
+  exact descriptions), three new hygiene notes folded pre-emptively. 1ae2d297, round 4 pending.
 - Wound down at ~770k ctx with #2743 unstarted (the pickup names its design points); bookkeeping committed, pushed once.
 
