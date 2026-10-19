@@ -429,9 +429,14 @@ leg if that chain ever needs rework (noted, not acted on). Also new: `list-provi
 rates), `send-feedback` (per-generation feedback), `get-generation`, media tools
 (`generate-image`/`generate-speech`/`transcribe-audio`) and the Ori eval-harness pair.
 
-**No "top weekly / rising" view exists upstream for us**: daily popularity comes from the MCP
-rankings tool; *new* models come from the scout's weekly `/models` diff. A 1–2-week riser view
-would be a derivation over retained daily-rankings snapshots (rotation store) — not built.
+**A weekly view DOES exist upstream now (re-probed 2026-10-19, standard key via the MCP):**
+`list-daily-model-rankings` takes `period: day|week|month`, a sampled `category: programming`
+(weekly grain only), an exact `modality: tool_calling` slice, `context_bucket`, and a date window;
+`list-app-rankings` adds `sort: trending`. The 2026-08-26 reading above ("no top-weekly / rising
+view") is superseded: a 1–2-week riser is two weekly rows in one call, no retained snapshots
+needed. Rows are DATED permaslugs (`deepseek/deepseek-v4.1-flash-20260910`), so a consumer joins
+them to model ids the way the proxy's `_PERMASLUG_RE` does. *New* models still come from the
+scout's weekly `/models` diff. The gateway's OpenRouter catalog leg (FU-270) is the consumer.
 
 ## Who owns which fact
 
