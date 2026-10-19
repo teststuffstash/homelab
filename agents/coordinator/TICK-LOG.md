@@ -13802,4 +13802,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   legs A–C are in; D/E restart from the brief. OpenRouter MCP re-probed (operator reconnected it): weekly/programming/
   tool_calling ranking slices exist now (model-routing.md corrected); price read: OpenRouter market 3–5× under Go's meter
   per token, Go = $10 flat allowance; glm-5.3-flash invisible to the hand table. Operator: per-token is the wrong unit —
-  failed rides cost review + coordination (ADR-115); the gateway pins no provider yet (openai-chat gap row).
+  failed rides cost review + coordination (ADR-115); the gateway pins no provider yet (openai-chat gap row). Operator:
+  `:exacto` is NOT ported — it papered over the old router's inability to attribute provider problems; the gateway
+  attributes per request (the response's `provider`) and selects from its own evidence + the endpoint data OpenRouter
+  exposes now (33 endpoints on v4.1-flash: tool_choice support, quantization, uptime_1d, percentiles). Order on #2718.
