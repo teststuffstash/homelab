@@ -23,7 +23,7 @@ it and production ownership is wired only behind explicit environment settings.
 | The spine: launcher → pod env → LLM calls → release | [`specs/use-cases/uc-1-worker-ride.md`](specs/use-cases/uc-1-worker-ride.md) |
 | `POST/GET/DELETE /sessions`, the bound pod's env pull `POST /sessions/{id}/env` (`GW-SESSIONS-*`, `GW-MODEL-RESOLVE`) | [`specs/endpoints/sessions.md`](specs/endpoints/sessions.md) |
 | `POST /anthropic/v1/messages` (`GW-RAIL-*`, `GW-CRED-*`) | [`specs/endpoints/anthropic-messages.md`](specs/endpoints/anthropic-messages.md) |
-| `POST /openai/v1/chat/completions`, `GET /openai/v1/models` | [`specs/endpoints/openai-chat.md`](specs/endpoints/openai-chat.md) |
+| `POST /openai/v1/chat/completions`, `GET /openai/v1/models` — the OpenRouter rail and its provider axis (attribution, selection from the endpoint snapshot, request-level failover; `GW-RAIL-OPENROUTER`) | [`specs/endpoints/openai-chat.md`](specs/endpoints/openai-chat.md) |
 | `POST /openai/v1/responses` — the dark codex rail (`GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-CODEX-OAUTH`) | [`specs/endpoints/openai-responses.md`](specs/endpoints/openai-responses.md) |
 | `GET /catalog/opencode` — the Go catalog leg: vendor models, prices and per-model plan limits, refreshed every 6 h (`GW-CATALOG-GO`) | [`specs/endpoints/catalog.md`](specs/endpoints/catalog.md) |
 | The tier evidence — the deployed policy's per-(rail, tier) model lists derived from benchmark evidence, the committed snapshot, the equality check (`GW-MODEL-TIERS`; `devbox run tiers -- snapshot \| derive \| check \| apply`, `scripts/benchmarks-snapshot.sh`) | [`specs/endpoints/catalog.md#gw-model-tiers`](specs/endpoints/catalog.md#gw-model-tiers) |

@@ -41,6 +41,7 @@ from .credentials import CredentialResolver, CredentialTransient, CredentialUnre
 from .liveness import PodSource
 from .metrics import Metrics
 from .outcomes import OutcomeRefused, Outcomes, parse_outcome, public_outcome
+from .providers import Endpoint, EndpointSnapshot, eligible, order
 from .pull import (
     POD_NAME_EXTRA,
     POD_UID_EXTRA,
@@ -237,6 +238,32 @@ class SessionService:
         self.auth = ControlPlaneAuth(policy, self, metrics)  # reviews through self.reviewer (one TokenReview path)
         self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
         self.outcomes = Outcomes(store, metrics, policy.outcome_window_s, clock)  # GW-SESSIONS-OUTCOME
+        self.providers: EndpointSnapshot | None = None  # GW-RAIL-OPENROUTER: the endpoint snapshot (app.py hands it in)
+
+    def provider_plan(self, rail: str, model: str, harness: str, stack: str, task: str, now: float
+                      ) -> tuple[str, list[Endpoint] | float | str]:
+        """The provider order for one request / one admission on (rail, model) — GW-RAIL-OPENROUTER
+        §Selection. Returns (verdict, detail): `unpinned` (no snapshot for the model, or the rail
+        declares no `providers` policy — the request rides as today), `pinned` (the ordered
+        eligible providers not struck for this task nor cooled), `ineligible` (a snapshot, but no
+        endpoint clears the floors — the model is not ridden), `exhausted` (every eligible provider
+        is struck for this task), `cooled` (every remaining one is cooled: the earliest expiry)."""
+        pol = self.policy.rails[rail].providers
+        eps = self.providers.endpoints(wire_model(rail, model)) if self.providers is not None else None
+        if pol is None or eps is None:
+            return "unpinned", "no endpoint snapshot for the model" if pol is not None else "no providers policy"
+        kept, dropped = eligible(eps, pol, harness)
+        if not kept:
+            return "ineligible", "; ".join(f"{s}: {why}" for s, why in sorted(dropped.items())) or "no endpoints"
+        struck = {st["provider"] for st in self.store.strikes_for(stack, task)
+                  if st["scope"] == "cell" and st["rail"] == rail and st["model"] == model and st["provider"]}
+        cooled = self.capacity.cooled_providers(rail, model, now)
+        ranked = order(kept, self.store.cell_outcomes(rail, model), pol, exclude=struck, cooled=set(cooled))
+        if ranked:
+            return "pinned", ranked
+        if all(e.slug in struck for e in kept):
+            return "exhausted", ", ".join(sorted(struck))
+        return "cooled", min(until for s, until in cooled.items() if s not in struck)
 
     async def review(self, token: str, audiences: list[str]):
         """The TokenReviewer seam ControlPlaneAuth calls — delegated, so swapping `self.reviewer`
@@ -298,12 +325,29 @@ class SessionService:
             model = None
             held: list[tuple[float, str, str, str]] = []  # (free_at, reason, model, detail)
             for m in models:
-                if m in struck_models or (rail, m) in struck_cells:
+                if m in struck_models or (rail, m, "") in struck_cells:
                     exhausted.append(f"{rail} {m}")
                     continue
                 until = self.capacity.cooled(rail, m, now)
                 if until is not None:
                     held.append((until, "cell-cooled", m, f"{rail} cell {m} cooled (429)"))
+                    continue
+                # The provider axis (GW-RAIL-OPENROUTER §Selection): with a snapshot, the model admits
+                # only while an eligible provider is neither struck for this task nor cooled.
+                verdict, detail = self.provider_plan(rail, m, adm.harness, adm.stack.name, adm.task, now)
+                if verdict == "unpinned" and any(r == rail and mm == m for r, mm, _p in struck_cells):
+                    # ⚖ a provider-scoped strike with no snapshot to steer by: nothing can route around it
+                    exhausted.append(f"{rail} {m}")
+                    continue
+                if verdict == "exhausted":
+                    exhausted.append(f"{rail} {m}")
+                    continue
+                if verdict == "cooled":
+                    held.append((detail, "cell-cooled", m, f"{rail} cell {m}: every eligible provider cooled (429)"))
+                    continue
+                if verdict == "ineligible":
+                    held.append((now + self.policy.defer_retry_s, "no-eligible-provider", m,
+                                 f"{rail} {m}: no endpoint clears the provider floors ({detail})"))
                     continue
                 mb = self.capacity.model_block(rail, m, now)
                 if mb is not None:
@@ -383,16 +427,17 @@ class SessionService:
                  reason, retry, adm.stack.name, adm.role.name, adm.task, detail)
         return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": retry})
 
-    def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str]]]:
+    def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str, str]]]:
         """This task's counted strikes (GW-SESSIONS-OUTCOME): model-scoped → the model id on every rail;
-        cell-scoped → that (rail, model)."""
+        cell-scoped → that (rail, model, provider) — provider '' is the model's own cell, a slug one
+        provider's cell on it (GW-RAIL-OPENROUTER)."""
         models: set[str] = set()
-        cells: set[tuple[str, str]] = set()
+        cells: set[tuple[str, str, str]] = set()
         for st in self.store.strikes_for(adm.stack.name, adm.task):
             if st["scope"] == "model":
                 models.add(st["model"])
             else:
-                cells.add((st["rail"], st["model"]))
+                cells.add((st["rail"], st["model"], st["provider"] or ""))
         return models, cells
 
     def _dispatch(self, adm: Admission, rail: str, model: str, now: float) -> JSONResponse:

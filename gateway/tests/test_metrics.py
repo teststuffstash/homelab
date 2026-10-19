@@ -43,6 +43,21 @@
 | source is the catalog source | go_catalog_refresh_total | source | config, docs |
 | the catalog outcome is the refresh outcome | go_catalog_refresh_total | outcome | ok, fetch-failed, parse-failed, implausible |
 | every family is declared with HELP and TYPE | — | — | 21 families |
+
+The provider families (GW-RAIL-OPENROUTER; world policy-default · openrouter-endpoints — the snapshot of
+deepseek/deepseek-v4.1-flash, the openrouter heavy tier):
+
+| description | event || series | value |
+|---|---||---|---|
+| an attempt is counted on its cell by how it ended | a ride whose deepinfra attempt answered 500, served by atlas-cloud || gateway_provider_requests_total{rail=openrouter,model=deepseek/deepseek-v4.1-flash,provider=deepinfra,outcome=5xx} / {…,provider=atlas-cloud,outcome=ok} | 1 / 1 |
+| a failover is counted from and to | the same || gateway_provider_failovers_total{model=deepseek/deepseek-v4.1-flash,from=deepinfra,to=atlas-cloud} | 1 |
+| an unpinned attempt that names no provider is unattributed | a ride on deepseek/deepseek-v4-flash (no snapshot entry), the answer unnamed || gateway_provider_requests_total{rail=openrouter,model=deepseek/deepseek-v4-flash,provider=unattributed,outcome=ok} | 1 |
+| a provider the snapshot lacks renders as other | the same, the answer names Sail Research || gateway_provider_requests_total{…,model=deepseek/deepseek-v4-flash,provider=other,outcome=ok} | 1 |
+
+| description | the series || label | allowed values |
+|---|---||---|---|
+| model is a policy openrouter id | provider_requests_total, provider_failovers_total || model | the openrouter rail's policy models (wire ids); else other |
+| provider is a snapshot slug or unattributed | provider_requests_total (from, to on provider_failovers_total) || provider | the endpoint snapshot's tag-base slugs, unattributed; else other |
 """
 
 from __future__ import annotations
@@ -446,3 +461,108 @@ async def test_families_declared(gw):
     with then(f"{len(FAMILIES)} families declared with HELP and TYPE: {', '.join(FAMILIES)}"):
         for fam in FAMILIES:
             assert f"# HELP {fam} " in text and f"# TYPE {fam} " in text, fam
+
+
+# -- the provider families (GW-RAIL-OPENROUTER) ---------------------------------------------------
+PROVIDER_PATH = "/openai/v1/chat/completions"
+OR_M = "deepseek/deepseek-v4.1-flash"
+OR_M2 = "deepseek/deepseek-v4-flash"
+
+
+async def _provider_sample(gw, family: str, labels: dict[str, str]) -> float | None:
+    text = await _metrics(gw)
+    want = family + "{" + ",".join(f'{k}="{v}"' for k, v in labels.items()) + "}"
+    m = re.search("^" + re.escape(want) + r" (\S+)$", text, re.M)
+    attach_json(f"sample: {want}", {"line": m.group(0) if m else None})
+    return float(m.group(1)) if m else None
+
+
+async def _provider_world(app, store, upstreams):
+    from .conftest import seed_openrouter_endpoints
+
+    seed_openrouter_endpoints(store, upstreams["openrouter"])
+    app.state.providers.reload()
+
+
+async def test_provider_attempts_counted(gw, app, store, upstreams):
+    """row: an attempt is counted on its cell by how it ended"""
+    world(upstream="upstream-ok", note="openrouter-endpoints; deepinfra answers 500")
+    await _provider_world(app, store, upstreams)
+    upstreams["openrouter"].provider_behaviours["deepinfra"] = "upstream-500"
+    with given("a worker session on rail openrouter, tier heavy"):
+        doc = await open_session(gw, role="worker", harness="opencode", rail="openrouter", tier="heavy")
+    with when("one ride: deepinfra 500 → atlas-cloud 200"):
+        r = await gw.post(PROVIDER_PATH, json={"model": OR_M, "messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 200)
+    with then("gateway_provider_requests_total{rail=openrouter,model=M,provider=deepinfra,outcome=5xx} = 1"):
+        check("series", await _provider_sample(gw, "gateway_provider_requests_total", {"rail": "openrouter", "model": OR_M, "provider": "deepinfra", "outcome": "5xx"}), 1)
+    with then("gateway_provider_requests_total{…,provider=atlas-cloud,outcome=ok} = 1"):
+        check("series", await _provider_sample(gw, "gateway_provider_requests_total", {"rail": "openrouter", "model": OR_M, "provider": "atlas-cloud", "outcome": "ok"}), 1)
+    with then("gateway_provider_failovers_total{model=M,from=deepinfra,to=atlas-cloud} = 1 (the failover row)"):
+        check("series", await _provider_sample(gw, "gateway_provider_failovers_total", {"model": OR_M, "from": "deepinfra", "to": "atlas-cloud"}), 1)
+
+
+async def test_provider_failover_counted(gw, app, store, upstreams):
+    """row: a failover is counted from and to"""
+    world(upstream="upstream-ok", note="openrouter-endpoints; deepinfra answers 500")
+    await _provider_world(app, store, upstreams)
+    upstreams["openrouter"].provider_behaviours["deepinfra"] = "upstream-500"
+    with given("a worker session on rail openrouter, tier heavy"):
+        doc = await open_session(gw, role="worker", harness="opencode", rail="openrouter", tier="heavy")
+    with when("one ride: deepinfra 500 → atlas-cloud 200"):
+        r = await gw.post(PROVIDER_PATH, json={"model": OR_M, "messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 200)
+    with then("gateway_provider_failovers_total{model=M,from=deepinfra,to=atlas-cloud} = 1"):
+        check("series", await _provider_sample(gw, "gateway_provider_failovers_total", {"model": OR_M, "from": "deepinfra", "to": "atlas-cloud"}), 1)
+
+
+UNPINNED_ROWS = [
+    ("an unpinned attempt that names no provider is unattributed", None, "unattributed"),
+    ("a provider the snapshot lacks renders as other", "Sail Research", "other"),
+]
+
+
+@pytest.mark.parametrize(("display", "label"), [r[1:] for r in UNPINNED_ROWS], ids=[r[0] for r in UNPINNED_ROWS])
+async def test_provider_label_bounds(gw, app, store, upstreams, display, label):
+    world(upstream="upstream-ok", note=f"openrouter-endpoints; {OR_M2} has no entry; the answer names {display!r}")
+    await _provider_world(app, store, upstreams)
+    upstreams["openrouter"].provider_display = display
+    with given("a worker session on rail openrouter, tier standard (unpinned)"):
+        doc = await open_session(gw, role="worker", harness="opencode", rail="openrouter", tier="standard")
+    with when("one ride"):
+        r = await gw.post(PROVIDER_PATH, json={"model": OR_M2, "messages": []}, headers=bearer(doc))
+    then_eq("status", r.status_code, 200)
+    with then(f"gateway_provider_requests_total{{rail=openrouter,model={OR_M2},provider={label},outcome=ok}} = 1"):
+        check("series", await _provider_sample(gw, "gateway_provider_requests_total", {"rail": "openrouter", "model": OR_M2, "provider": label, "outcome": "ok"}), 1)
+
+
+async def _provider_labels(gw, app, store, upstreams) -> tuple[set[str], set[str]]:
+    """One failed-over ride, then every label value the two provider families render."""
+    await _provider_world(app, store, upstreams)
+    upstreams["openrouter"].provider_behaviours["deepinfra"] = "upstream-500"
+    with given("a worker session on rail openrouter, tier heavy; one failed-over ride (deepinfra 500 → atlas-cloud 200)"):
+        doc = await open_session(gw, role="worker", harness="opencode", rail="openrouter", tier="heavy")
+        await gw.post(PROVIDER_PATH, json={"model": OR_M, "messages": []}, headers=bearer(doc))
+    with when("GET /metrics"):
+        rows = await _series(gw)
+    models = {labels["model"] for fam, labels in rows if fam in ("gateway_provider_requests_total", "gateway_provider_failovers_total")}
+    providers = ({labels["provider"] for fam, labels in rows if fam == "gateway_provider_requests_total"}
+                 | {labels[k] for fam, labels in rows if fam == "gateway_provider_failovers_total" for k in ("from", "to")})
+    return models, providers
+
+
+async def test_provider_label_models(gw, app, store, upstreams, policy):
+    """row: model is a policy openrouter id"""
+    world(upstream="upstream-ok", note="openrouter-endpoints")
+    models, _ = await _provider_labels(gw, app, store, upstreams)
+    policy_models = {m for tier in policy.rails["openrouter"].models.values() for m in tier}
+    then_eq("every model label is a policy openrouter id", models <= policy_models, True, claim=f"model labels {sorted(models)} ⊆ the policy's openrouter ids")
+
+
+async def test_provider_label_providers(gw, app, store, upstreams):
+    """row: provider is a snapshot slug or unattributed"""
+    world(upstream="upstream-ok", note="openrouter-endpoints")
+    _, providers = await _provider_labels(gw, app, store, upstreams)
+    snapshot = app.state.providers.slugs() | {"unattributed"}
+    then_eq("every provider label is a snapshot slug (or unattributed)", providers <= snapshot, True,
+            claim=f"provider labels {sorted(providers)} ⊆ the snapshot's slugs + unattributed")

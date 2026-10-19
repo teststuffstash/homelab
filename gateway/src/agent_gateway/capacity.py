@@ -187,13 +187,15 @@ class Capacity:
         self._lock = threading.Lock()
         self.readings: dict[str, dict[str, Reading]] = {}
         self.latched_until: dict[str, float] = {}
-        self.cooled_until: dict[tuple[str, str], float] = {}  # (rail, policy model id) -> epoch
+        # (rail, policy model id, provider) -> epoch; provider '' = the model's own (unpinned) cooldown, a
+        # slug = that provider's cell on the model (GW-RAIL-OPENROUTER: the cell is (rail, model, provider))
+        self.cooled_until: dict[tuple[str, str, str], float] = {}
         self.rejected: dict[tuple[str, str], Rejection] = {}  # (rail, credential fingerprint) -> the mark
         self._hold: dict[tuple[str, str], float] = {}  # the last hold/backoff per credential, for doubling
 
     # -- the data plane reports --------------------------------------------------------------
     def observe(self, rail: str, status: int, headers: Mapping[str, str], now: float, model: str | None = None,
-                credential: str | None = None) -> str:
+                credential: str | None = None, provider: str = "") -> str:
         """Fold one upstream answer into the rail's and the cell's state. Returns a log-safe note suffix."""
         adm = self.policy.rails[rail].admission
         note = ""
@@ -210,8 +212,9 @@ class Capacity:
                 until = now + (adm.latch_429_hold_s or self.policy.defer_retry_s)
             if model is not None:
                 with self._lock:
-                    self.cooled_until[(rail, model)] = until
-                log.warning("capacity: %s 429 on %s — cell cooled for %.0f s", rail, model, until - now)
+                    self.cooled_until[(rail, model, provider)] = until
+                log.warning("capacity: %s 429 on %s%s — cell cooled for %.0f s", rail, model,
+                            f" @{provider}" if provider else "", until - now)
                 note = "+cell-cooled"
             if adm.latch_429_hold_s and adm.latch_scope == "account":
                 with self._lock:
@@ -224,8 +227,8 @@ class Capacity:
                 if self.latched_until.pop(rail, 0.0) > now:
                     log.info("capacity: %s 2xx while latched — latch cleared", rail)
                     note = "+latch-cleared"
-                if model is not None and self.cooled_until.pop((rail, model), 0.0) > now:
-                    log.info("capacity: %s 2xx on %s while cooled — cell cleared", rail, model)
+                if model is not None and self.cooled_until.pop((rail, model, provider), 0.0) > now:
+                    log.info("capacity: %s 2xx on %s%s while cooled — cell cleared", rail, model, f" @{provider}" if provider else "")
                     note += "+cell-cleared"
                 if credential is not None and self.rejected.pop((rail, fingerprint(credential)), None) is not None:
                     log.info("capacity: %s 2xx on a rejected credential — credential cleared", rail)
@@ -296,16 +299,21 @@ class Capacity:
             self._hold.pop((rail, fp), None)
         log.info("capacity: %s credential %s cleared — %s", rail, fp, why)
 
-    def cooled(self, rail: str, model: str, now: float) -> float | None:
-        """The cell's cooldown expiry, or None when the cell admits."""
+    def cooled(self, rail: str, model: str, now: float, provider: str = "") -> float | None:
+        """The cell's cooldown expiry, or None when the cell admits ('' = the model's unpinned cell)."""
         with self._lock:
-            until = self.cooled_until.get((rail, model), 0.0)
+            until = self.cooled_until.get((rail, model, provider), 0.0)
         return until if until > now else None
+
+    def cooled_providers(self, rail: str, model: str, now: float) -> dict[str, float]:
+        """The model's cooled PROVIDER cells: {slug: expiry} (GW-RAIL-OPENROUTER §Selection skips them)."""
+        with self._lock:
+            return {p: until for (r, m, p), until in self.cooled_until.items() if r == rail and m == model and p and until > now}
 
     def cooled_counts(self, now: float) -> dict[str, int]:
         with self._lock:
             out: dict[str, int] = {}
-            for (rail, _model), until in self.cooled_until.items():
+            for (rail, _model, _provider), until in self.cooled_until.items():
                 if until > now:
                     out[rail] = out.get(rail, 0) + 1
             return out

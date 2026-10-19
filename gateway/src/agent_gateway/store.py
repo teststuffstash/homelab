@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS requests (
   tokens_out INTEGER NOT NULL DEFAULT 0,
   tokens_cache_read INTEGER NOT NULL DEFAULT 0,
   tokens_cache_write INTEGER NOT NULL DEFAULT 0,
-  incomplete TEXT
+  incomplete TEXT,
+  provider TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS requests_session ON requests (session_id, ts);
 CREATE TABLE IF NOT EXISTS outcomes (
@@ -85,7 +86,7 @@ CREATE TABLE IF NOT EXISTS strikes (
   session_id TEXT NOT NULL,
   at REAL NOT NULL,
   refuted_at REAL,
-  UNIQUE (session_id, class, source)
+  UNIQUE (session_id, class, source, provider)
 );
 CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
 CREATE INDEX IF NOT EXISTS requests_ts ON requests (ts);
@@ -94,6 +95,30 @@ CREATE TABLE IF NOT EXISTS catalog_snapshots (
   fetched_at REAL NOT NULL,
   body TEXT NOT NULL
 );
+"""
+_STRIKES_REBUILD = """
+BEGIN;
+CREATE TABLE strikes_v2 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stack TEXT NOT NULL,
+  task TEXT NOT NULL,
+  rail TEXT NOT NULL,
+  model TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT '',
+  class TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  source TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  at REAL NOT NULL,
+  refuted_at REAL,
+  UNIQUE (session_id, class, source, provider)
+);
+INSERT INTO strikes_v2 (id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at)
+  SELECT id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at FROM strikes;
+DROP TABLE strikes;
+ALTER TABLE strikes_v2 RENAME TO strikes;
+CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
+COMMIT;
 """
 # Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
 # them to an existing table, so _migrate() does (idempotent, additive only). The bind columns
@@ -108,7 +133,8 @@ _ADDED_COLUMNS = {
                  "bind_serviceaccount": "TEXT", "bind_pod": "TEXT", "env_delivered_at": "REAL",
                  "caller": "TEXT", "requests_incomplete": _COUNTER, "attempt": "INTEGER NOT NULL DEFAULT 1",
                  "live_namespace": "TEXT", "live_pod": "TEXT", "live_pod_uid": "TEXT", "release_reason": "TEXT"},
-    "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "incomplete": "TEXT"},
+    "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "incomplete": "TEXT",
+                 "provider": "TEXT NOT NULL DEFAULT ''"},  # GW-RAIL-OPENROUTER: the serving provider's slug ('' = none named)
 }
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
 # column (NOT NULL UNIQUE) holds this prefix + the id, which no sha256 hex digest can equal.
@@ -251,6 +277,12 @@ class Store:
                 if col not in have:
                     self._db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
                     log.info("db: migrated %s.%s", table, col)
+        # The strike key gained the provider (GW-RAIL-OPENROUTER: a failed-over ride strikes each
+        # provider it tried, in the same class): a table built with the old UNIQUE is rebuilt once.
+        (sql,) = self._db.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'strikes'").fetchone()
+        if "UNIQUE (session_id, class, source)" in sql:
+            self._db.executescript(_STRIKES_REBUILD)
+            log.info("db: migrated strikes — the unique key now carries provider")
 
     # -- sessions -------------------------------------------------------------------------------
     def create_session(self, **fields) -> Session:
@@ -349,16 +381,16 @@ class Store:
     # -- requests -------------------------------------------------------------------------------
     def record_request(
         self, session_id: str, status: int, upstream_ms: int, usage: Usage | None = None, ts: float | None = None,
-        incomplete: str | None = None,
+        incomplete: str | None = None, provider: str = "",
     ) -> None:
         ts = time.time() if ts is None else ts
         u = usage or Usage()
         with self._lock:
             self._db.execute(
                 "INSERT INTO requests (session_id, ts, status, upstream_ms, tokens_in, tokens_out, tokens_cache_read,"
-                " tokens_cache_write, incomplete) VALUES (?,?,?,?,?,?,?,?,?)",
+                " tokens_cache_write, incomplete, provider) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (session_id, ts, status, upstream_ms, u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write,
-                 incomplete),
+                 incomplete, provider),
             )
             self._db.execute(
                 "UPDATE sessions SET requests = requests + 1, tokens_in = tokens_in + ?, tokens_out = tokens_out + ?,"
@@ -378,6 +410,33 @@ class Store:
                 (rail, since),
             ).fetchall()
         return [(float(r[0]), r[1], int(r[2]), int(r[3]), int(r[4]), int(r[5])) for r in rows]
+
+    def session_providers(self, session_id: str) -> set[str]:
+        """The providers this session's 2xx answers were attributed to (GW-RAIL-OPENROUTER)."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT DISTINCT provider FROM requests WHERE session_id = ? AND provider <> '' AND status BETWEEN 200 AND 299",
+                (session_id,)).fetchall()
+        return {r[0] for r in rows}
+
+    def cell_outcomes(self, rail: str, model: str) -> dict[str, tuple[int, int]]:
+        """Per provider of (rail, model): (clean rides, judged rides) — a ride = a session whose
+        2xx answers that provider served and whose LATEST outcome is reported; clean = that outcome
+        is `clean` (GW-RAIL-OPENROUTER §Selection: the clean-ride rate the order reads)."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT p.provider, o.class, COUNT(*) FROM"
+                " (SELECT DISTINCT r.session_id, r.provider FROM requests r JOIN sessions s ON s.id = r.session_id"
+                "  WHERE s.rail = ? AND s.model = ? AND r.provider <> '' AND r.status BETWEEN 200 AND 299) p"
+                " JOIN outcomes o ON o.id = (SELECT id FROM outcomes WHERE session_id = p.session_id ORDER BY id DESC LIMIT 1)"
+                " GROUP BY p.provider, o.class", (rail, model)).fetchall()
+        out: dict[str, list[int]] = {}
+        for provider, klass, n in rows:
+            cell = out.setdefault(provider, [0, 0])
+            cell[1] += int(n)
+            if klass == "clean":
+                cell[0] += int(n)
+        return {p: (c[0], c[1]) for p, c in out.items()}
 
     # -- outcomes + strikes (GW-SESSIONS-OUTCOME) ---------------------------------------------
     def add_outcome(self, session_id: str, klass: str, sub: str | None, evidence: str | None, reporter: str | None,
@@ -413,14 +472,18 @@ class Store:
             )
             return cur.rowcount == 1
 
-    def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float) -> int:
-        """A clean outcome on (rail, model) refutes the task's counted cell strikes on that cell and its
-        model strikes on that model."""
+    def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float, providers: set[str] = frozenset()) -> int:
+        """A clean outcome on (rail, model) refutes the task's counted model strikes on that model and
+        its cell strikes on the cells the ride touched: (rail, model, '') and (rail, model, p) for each
+        provider p the session rode (GW-RAIL-OPENROUTER: a provider-scoped strike is refuted only by
+        a clean ride on that provider)."""
+        ps = sorted(providers)
+        marks = ",".join("?" for _ in ps)
         with self._lock:
             cur = self._db.execute(
                 "UPDATE strikes SET refuted_at = ? WHERE stack = ? AND task = ? AND refuted_at IS NULL AND at <= ?"
-                " AND model = ? AND (scope = 'model' OR rail = ?)",
-                (at, stack, task, at, model, rail),
+                " AND model = ? AND (scope = 'model' OR (rail = ? AND (provider = ''" + (f" OR provider IN ({marks})" if ps else "") + ")))",
+                (at, stack, task, at, model, rail, *ps),
             )
             return cur.rowcount
 

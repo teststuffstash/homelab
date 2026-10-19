@@ -61,6 +61,15 @@ The vocabulary:
 | description | input || result |
 |---|---||---|
 | the code's vocabulary is the schema's | OUTCOME_CLASSES vs sessions.schema.json outcome.class enum + x-scope || equal, class and scope |
+
+The provider axis (world policy-default · openrouter-endpoints — GW-RAIL-OPENROUTER; a worker session on
+rail openrouter, tier heavy, rides deepseek/deepseek-v4.1-flash pinned):
+
+| description | sequence || strikes on the task (class, provider, refuted) |
+|---|---||---|
+| a cell-scoped class lands on the provider the ride rode | the ride served by deepinfra; the consumer reports harness-gave-up || [(harness-gave-up, deepinfra, no)] |
+| a failed-over ride strikes each provider it tried, one per cell | deepinfra 500 → atlas-cloud 500 → morph 200 || [(provider-5xx, deepinfra, no), (provider-5xx, atlas-cloud, no)] |
+| a clean ride refutes only the cells it rode clean | the same, then the consumer reports clean || [(provider-5xx, deepinfra, no), (provider-5xx, atlas-cloud, no)] — morph served it, the two failed cells stay counted |
 """
 
 from __future__ import annotations
@@ -402,3 +411,58 @@ async def test_vocabulary_is_the_schemas():
     with then("equal, class and scope"):
         check("classes", sorted(cls["enum"]), sorted(OUTCOME_CLASSES))
         check("scopes", cls["x-scope"], OUTCOME_CLASSES)
+
+
+# -- the provider axis (GW-RAIL-OPENROUTER) -------------------------------------------------------
+PROVIDER_PATH = "/openai/v1/chat/completions"
+PROVIDER_M = "deepseek/deepseek-v4.1-flash"
+
+
+def _provider_strikes(store, task: str) -> list[tuple[str, str, str]]:
+    return [(s["class"], s["provider"], "yes" if s["refuted_at"] else "no") for s in store.strikes_for("platform", task, counted_only=False)]
+
+
+async def _provider_ride(gw, app, store, upstreams, task: str, behaviours: dict | None = None) -> dict:
+    from .conftest import seed_openrouter_endpoints
+
+    seed_openrouter_endpoints(store, upstreams["openrouter"])
+    app.state.providers.reload()
+    upstreams["openrouter"].provider_behaviours.update(behaviours or {})
+    with given(f"a worker session on rail openrouter, tier heavy ({PROVIDER_M}), task {task}; one ride (provider_behaviours {behaviours or {}})"):
+        doc = await open_session(gw, role="worker", harness="opencode", rail="openrouter", tier="heavy", task=task)
+        r = await gw.post(PROVIDER_PATH, json={"model": PROVIDER_M, "messages": []}, headers=bearer(doc))
+        attach_json("the ride", {"status": r.status_code, "served_by": r.json().get("provider") if r.status_code == 200 else None})
+    return doc
+
+
+async def test_cell_class_lands_on_provider(gw, app, store, upstreams):
+    """row: a cell-scoped class lands on the provider the ride rode"""
+    world(upstream="upstream-ok", note="openrouter-endpoints")
+    task = "homelab-2741-oc-cell"
+    doc = await _provider_ride(gw, app, store, upstreams, task)
+    with when("POST /sessions/{id}/outcome class harness-gave-up"):
+        r = await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "harness-gave-up"})
+    then_eq("status", r.status_code, 200)
+    then_eq("strikes (class, provider, refuted)", _provider_strikes(store, task), [("harness-gave-up", "deepinfra", "no")])
+
+
+async def test_failed_over_ride_strikes_each_cell(gw, app, store, upstreams):
+    """row: a failed-over ride strikes each provider it tried, one per cell"""
+    world(upstream="upstream-ok", note="openrouter-endpoints; deepinfra and atlas-cloud answer 500")
+    task = "homelab-2741-oc-failover"
+    with when("one ride: deepinfra 500 → atlas-cloud 500 → morph 200"):
+        await _provider_ride(gw, app, store, upstreams, task, {"deepinfra": "upstream-500", "atlas-cloud": "upstream-500"})
+    then_eq("strikes (class, provider, refuted)", _provider_strikes(store, task),
+            [("provider-5xx", "deepinfra", "no"), ("provider-5xx", "atlas-cloud", "no")])
+
+
+async def test_clean_refutes_only_ridden_cells(gw, app, store, upstreams):
+    """row: a clean ride refutes only the cells it rode clean"""
+    world(upstream="upstream-ok", note="openrouter-endpoints; deepinfra and atlas-cloud answer 500")
+    task = "homelab-2741-oc-clean"
+    doc = await _provider_ride(gw, app, store, upstreams, task, {"deepinfra": "upstream-500", "atlas-cloud": "upstream-500"})
+    with when("POST /sessions/{id}/outcome class clean"):
+        r = await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "clean"})
+    then_eq("status · refuted", (r.status_code, r.json()["refuted"]), (200, 0))
+    then_eq("strikes (class, provider, refuted)", _provider_strikes(store, task),
+            [("provider-5xx", "deepinfra", "no"), ("provider-5xx", "atlas-cloud", "no")])

@@ -17,11 +17,12 @@ from . import __version__
 from .capacity import Capacity
 from .catalog import GoCatalog
 from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
-from .config import Policy, Settings
+from .config import Policy, Settings, wire_model
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
 from .liveness import KubePods, PodSource
 from .logging import register_literal
 from .metrics import Metrics
+from .providers import UNATTRIBUTED, EndpointSnapshot
 from .proxy import Proxy, anthropic_messages, openai_chat, openai_models
 from .pull import KubeTokenReviews, TokenReviewer
 from .sessions import (
@@ -106,6 +107,13 @@ def create_app(
                               capacity=Capacity(policy, store, catalog), reviewer=reviewer or KubeTokenReviews())
     sessions.pods = pods or KubePods()
     m.bind_transport_facts(lambda: sessions.capacity.cooled_counts(clock()), sessions.capacity.rejected_counts)
+    # The openrouter rail's provider axis (GW-RAIL-OPENROUTER): the endpoint snapshot the catalog leg
+    # writes (homelab#2742) and selection reads; no snapshot = every openrouter request rides unpinned.
+    providers = EndpointSnapshot(store)
+    sessions.providers = providers
+    or_rail = policy.rails.get("openrouter")
+    or_models = {wire_model("openrouter", mid) for tier in (or_rail.models.values() if or_rail else ()) for mid in tier}
+    m.bind_provider_bounds(lambda: or_models, lambda: providers.slugs() | {UNATTRIBUTED})
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when
     # one is handed in (tests: the FAKE store) — production passes none (⚑ gap), so it ships dark.
@@ -173,4 +181,5 @@ def create_app(
     app.state.codex = codex
     app.state.codex_proxy = codex_proxy
     app.state.catalog = catalog
+    app.state.providers = providers
     return app

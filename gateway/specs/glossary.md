@@ -111,7 +111,9 @@ deployed policy's lists are derived from the [tier evidence](#tier-evidence).
 
 The admission answer "not now": HTTP 200 `{decision: "defer", reason, retry_after_s}` — never
 an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `cell-cooled`, `not-in-catalog` (a Go model the [Go catalog](#go-catalog) does not cover), `role-rail-denied`,
-`stack-unknown`, `credential-unresolved`, `credential-rejected`, `cells-exhausted` (no
+`stack-unknown`, `credential-unresolved`, `credential-rejected`, `no-eligible-provider` (the
+openrouter model's endpoint snapshot has no provider that clears the policy floors —
+[sessions.md §The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)), `cells-exhausted` (no
 `retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
@@ -119,11 +121,28 @@ The caller polls after `retry_after_s` — for a capacity-blocked rail, the mome
 
 ## cell
 
-A (rail, model) pair — one model served on one rail, the unit an upstream 429 cools
-([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)). ⚖ Narrower
-than the old router's cell, which is (model, provider) and carries a price and a pin
-([model-routing.md](../../docs/agents/model-routing.md)): the gateway pins no provider, so a
-provider is evidence on a cell, not part of its key.
+A (rail, model, **provider**) triple — one model served on one rail by one provider, the unit a
+429 cools, a strike excludes and an outcome judges
+([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half),
+[§The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)). The provider is the
+endpoint tag's base slug on the openrouter rail — what `provider.order` names, joined from the
+answer's display name through the [endpoint snapshot](#endpoint-snapshot)
+([openai-chat.md §Attribution](endpoints/openai-chat.md#attribution--the-answer-names-the-cell)) —
+and `''` on the rails that pin none, or when no answer named one. The old router's cell was
+(model, provider) with a price and a pin ([model-routing.md](../../docs/agents/model-routing.md));
+the gateway's carries the rail and keeps the price in the snapshot.
+
+## endpoint snapshot
+
+The openrouter rail's registry: per model, the rows of `GET /api/v1/models/<id>/endpoints`
+(provider slug and display name, quantization, tool-choice support per mode, `uptime_last_1d`,
+latency, prices) as the gateway last read them, kept in its store under
+`catalog_snapshots.openrouter-endpoints`
+(`openai-chat.schema.json` `$defs.endpoint_snapshot`). [Selection](endpoints/openai-chat.md#selection--the-gateways-own-evidence-never-exacto)
+reads it; the catalog leg writes it (homelab#2742 — until then, the test worlds seed it). A model
+the snapshot does not cover rides **unpinned**. Not the [Go catalog](#go-catalog) (the opencode
+rail's vendor facts) and not the [tier evidence](#tier-evidence) (the benchmark snapshot the tier
+lists derive from).
 
 ## headroom
 

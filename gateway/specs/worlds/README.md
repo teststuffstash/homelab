@@ -50,6 +50,10 @@ received** (URL, headers, body) as much as on the response the gateway returned.
 | `upstream-429-reset` | OpenRouter's 429 shape (the 2026-10-17 tap): `x-ratelimit-limit: 20`, `-remaining: 0`, `-reset` = the row's epoch **milliseconds**, no `retry-after` (a row may add one), body `limit_source: openrouter_free_tier_per_minute` | the cell-cooldown rows ([§Capacity](../endpoints/sessions.md#capacity--the-ladders-capacity-half)) |
 | `upstream-401` | 401 with a body mentioning the key | 424 `upstream-auth`, body never forwarded; the credential rejected |
 | `upstream-401-key-expired` | 401 `{type: authentication_error, code: api_key_expired}` — the Go vendor's live answer to an expired key (the 2026-10-17 tap) | 424 `upstream-auth` on the opencode rail |
+| `upstream-500` | 500 `{error: {message, code: 500, metadata: {provider_name}}}` — OpenRouter's wrap of a provider's 5xx (the `metadata.provider_name` names the pinned provider when the request carried a pin) | the relayed-5xx rows; the failover rows |
+| `upstream-html` | 200 `text/html` (an edge's page behind a 200 — not a body the dialect reads) | the `content-type` failover rows (GW-RAIL-OPENROUTER §Failover) |
+| `upstream-provider-400` | 400 `{error: {message: "Provider returned error", code: 400, metadata: {raw, provider_name}}}` — OpenRouter's wrap of the PROVIDER's own refusal (a tool call it cannot serve) | the `provider-error` failover row |
+| per-provider behaviours (`FakeUpstream.provider_behaviours[slug]`) | a request PINNED to `slug` (`provider.order[0]`) is answered as that slug's behaviour says, every other request as the fake's `behaviour`; every 200 of a pinned request names the serving provider (`provider_names[slug]`, the snapshot's display name) at the top level / in the first SSE chunk; an unpinned 200 names `provider_display` (None = unnamed) | the openrouter-endpoints world below |
 | `upstream-403` | 403 `{type: permission_error}` — a credential reason | 424 `upstream-auth` |
 | `upstream-403-edge` | 403 `text/plain` `error code: 1010` — Cloudflare's client-signature refusal (the 2026-10-17 self-latch) | 403 `upstream-edge-refused`; nothing marked |
 | `upstream-403-html` | 403 with an HTML block page (what opencode.ai's edge answered `Python-urllib`, probed live 2026-10-17) | 403 `upstream-edge-refused`; nothing marked |
@@ -109,6 +113,31 @@ needs another catalog refreshes against the fake vendor first (`catalog-retired`
 | `docs-no-peak-hours` / `docs-no-shares` | the peak-hours sentence / the 5-hour-weekly-monthly share sentence removed |
 | `docs-shrunk` | only the two DeepSeek models' rows |
 | `docs-retired` | the page without `claude-haiku-5-5`'s plan rows (still listed by the console: no monthly limit) |
+
+## The openrouter-endpoints world
+
+The openrouter rail's provider axis ([GW-RAIL-OPENROUTER §Selection](../endpoints/openai-chat.md#selection--the-gateways-own-evidence-never-exacto),
+homelab#2741) reads the [endpoint snapshot](../glossary.md#endpoint-snapshot) from the store.
+`conftest.seed_openrouter_endpoints` stores it the way the catalog leg (homelab#2742) will: the raw
+`GET /api/v1/models/<id>/endpoints` fixture in `tests/fixtures/openrouter-endpoints/`, parsed by the
+leg's own `parse_endpoints`. The one fixture, `deepseek-v4.1-flash.json`, is the live answer of
+**2026-10-19** trimmed to ten of its 34 endpoints — every case the floors distinguish:
+
+| tag (slug) | quantization | tool_choice none/auto/required/function | uptime_1d | out $/M | why it is in the fixture |
+|---|---|---|---|---|---|
+| `open-inference/fp4` | fp4 | ✓✓✓✓ | 100 | 0.08 | the headline price: cheapest, excluded by the fp8 floor |
+| `morph/fp8` | fp8 | ✓✓✗✗ | 99.5 | 0.60 | eligible for a harness that uses `auto` only; dropped for claude |
+| `inference-net/fp8` | fp8 | ✓✓✓✓ | 100 | 0.715 | eligible, 4th by price |
+| `deepinfra/fp8/flex` · `deepinfra/fp8` · `deepinfra/fp8/priority` | fp8 | ✓✓✓✓ | 84.5 · 100 · 100 | 0.336 · 0.42 · 0.63 | three service tiers of ONE provider: `provider.order` names `deepinfra`, the no-tier row represents |
+| `atlas-cloud/fp8` | fp8 | ✓✓✓✓ | 100 | 0.54 | eligible, 2nd by price — the failover target |
+| `alibaba` | unknown | ✓✓✓✓ | 100 | 0.66 | excluded: `unknown` is off the ladder |
+| `baidu/fp8` | fp8 | ✓✓✗✓ | 100 | 1.20 | eligible for `auto`; dropped for claude (no `required`) |
+| `parasail/fp8` | fp8 | ✗✓✗✗ | 77.4 | 1.20 | excluded by the uptime floor |
+
+Unless a row seeds it, a world's store holds NO endpoint snapshot (every openrouter request rides
+unpinned, as before this leg); `deepseek/deepseek-v4-flash` never has an entry, so the standard
+tier is the unpinned control inside the world. `openrouter-endpoints-ineligible` = the same
+snapshot trimmed to `open-inference/fp4`, `alibaba` and `parasail/fp8` (`seed_openrouter_endpoints(only=…)`).
 
 ## The fake TokenReview (`StaticTokenReviews`)
 

@@ -34,6 +34,12 @@ CP_REASONS = ("absent", "invalid", "review-transient")
 INCOMPLETE_REASONS = ("no-terminal", "timeout", "transport-error", "client-closed")
 STRIKE_SOURCES = ("outcome", "gateway")
 PROBE_OUTCOMES = ("cleared", "rejected", "inconclusive")
+# GW-RAIL-OPENROUTER: how one attempt on a (rail, model, provider) cell ended — `ok` (a complete 2xx),
+# `incomplete` (a 2xx whose body stopped early), the pre-byte failures the gateway fails over on
+# (`5xx`, `429`, `unreachable`, `timeout`, `content-type`, `provider-error`), and the request-scoped
+# answers it never fails over on (`refused`, `auth`, `edge`).
+PROVIDER_OUTCOMES = ("ok", "incomplete", "5xx", "429", "unreachable", "timeout", "content-type", "provider-error",
+                     "refused", "auth", "edge")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
 
@@ -70,6 +76,12 @@ class Metrics:
         self.strikes_total: dict[tuple[str, str], int] = {}
         self.probe_total: dict[tuple[str, str], int] = {}
         self.reaped_total: dict[str, int] = {}
+        self.provider_total: dict[tuple[str, str, str, str], int] = {}
+        self.failover_total: dict[tuple[str, str, str], int] = {}
+        # The two provider families' bounded sets are the POLICY's openrouter models and the endpoint
+        # SNAPSHOT's providers (plus `unattributed`) — never a value a response invented.
+        self._provider_models: Callable[[], set[str]] = lambda: set()
+        self._provider_slugs: Callable[[], set[str]] = lambda: set()
         self._gauge_source: Callable[[], dict[str, int]] | None = None
         self._cooled_source: Callable[[], dict[str, int]] | None = None
         self._rejected_source: Callable[[], dict[str, int]] | None = None
@@ -81,6 +93,23 @@ class Metrics:
     def bind_transport_facts(self, cooled: Callable[[], dict[str, int]], rejected: Callable[[], dict[str, int]]) -> None:
         """The capacity state's two gauges (sessions.md §Capacity): cooled cells, rejected credentials."""
         self._cooled_source, self._rejected_source = cooled, rejected
+
+    def bind_provider_bounds(self, models: Callable[[], set[str]], providers: Callable[[], set[str]]) -> None:
+        self._provider_models, self._provider_slugs = models, providers
+
+    def provider_request(self, rail: str, model: str, provider: str, outcome: str) -> None:
+        """One attempt on a cell (GW-RAIL-OPENROUTER): `model` is the wire id (bounded to the policy's
+        openrouter models), `provider` the snapshot's slug (or `unattributed`)."""
+        key = (_bounded(rail, RAILS), _bounded(model, self._provider_models()),
+               _bounded(provider, self._provider_slugs() | {"unattributed"}), _bounded(outcome, PROVIDER_OUTCOMES))
+        with self._lock:
+            self.provider_total[key] = self.provider_total.get(key, 0) + 1
+
+    def failover(self, model: str, frm: str, to: str) -> None:
+        slugs = self._provider_slugs()
+        key = (_bounded(model, self._provider_models()), _bounded(frm, slugs), _bounded(to, slugs))
+        with self._lock:
+            self.failover_total[key] = self.failover_total.get(key, 0) + 1
 
     def strike(self, klass: str, source: str) -> None:
         key = (_bounded(klass, tuple(OUTCOME_CLASSES)), _bounded(source, STRIKE_SOURCES))
@@ -213,6 +242,14 @@ class Metrics:
                       "# TYPE gateway_strikes_total counter"]
             for (klass, source), n in sorted(self.strikes_total.items()):
                 lines.append(f"gateway_strikes_total{_fmt_labels({'class': klass, 'source': source})} {n}")
+            lines += ["# HELP gateway_provider_requests_total Attempts on a (rail, model, provider) cell by how they ended (GW-RAIL-OPENROUTER).",
+                      "# TYPE gateway_provider_requests_total counter"]
+            for (rail, model, provider, outcome), n in sorted(self.provider_total.items()):
+                lines.append(f"gateway_provider_requests_total{_fmt_labels({'rail': rail, 'model': model, 'provider': provider, 'outcome': outcome})} {n}")
+            lines += ["# HELP gateway_provider_failovers_total Requests reissued to the next provider before the first byte (GW-RAIL-OPENROUTER).",
+                      "# TYPE gateway_provider_failovers_total counter"]
+            for (model, frm, to), n in sorted(self.failover_total.items()):
+                lines.append(f"gateway_provider_failovers_total{_fmt_labels({'model': model, 'from': frm, 'to': to})} {n}")
             lines += ["# HELP gateway_sessions_reaped_total Sessions released because their pod was gone (GW-SESSIONS-LIVENESS).",
                       "# TYPE gateway_sessions_reaped_total counter"]
             lines += [f"gateway_sessions_reaped_total{_fmt_labels({'rail': rail})} {self.reaped_total.get(rail, 0)}" for rail in RAILS]

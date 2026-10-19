@@ -390,6 +390,13 @@ class FakeUpstream:
         # reset in epoch MILLISECONDS and no `retry-after`; `retry_after` adds one when a row needs both.
         self.reset_ms: int | None = None
         self.retry_after: str | None = None
+        # The provider axis (GW-RAIL-OPENROUTER, the `openrouter-endpoints` world): a request pinned to a
+        # provider (`provider.order[0]`) is answered as `provider_behaviours[slug]` says (else this fake's
+        # `behaviour`), and every 200 names the serving provider — `provider_names[slug]` (the snapshot's
+        # display name) for a pinned request, `provider_display` for an unpinned one (None = unnamed).
+        self.provider_behaviours: dict[str, str] = {}
+        self.provider_names: dict[str, str] = {}
+        self.provider_display: str | None = None
         self.app = Starlette(
             routes=[
                 Route("/v1/messages", self._messages, methods=["POST"]),
@@ -422,8 +429,29 @@ class FakeUpstream:
         )
         return response
 
-    def _behave(self) -> Response | None:
-        if self.behaviour == "upstream-429":
+    def _pinned(self, call: dict) -> str | None:
+        prov = (call.get("body") or {}).get("provider") if isinstance(call.get("body"), dict) else None
+        order = prov.get("order") if isinstance(prov, dict) else None
+        return order[0] if isinstance(order, list) and order else None
+
+    def _served_by(self, call: dict) -> str | None:
+        slug = self._pinned(call)
+        return self.provider_names.get(slug, slug) if slug else self.provider_display
+
+    def _behave(self, call: dict | None = None) -> Response | None:
+        slug = self._pinned(call) if call else None
+        behaviour = self.provider_behaviours.get(slug, self.behaviour) if slug else self.behaviour
+        served = self._served_by(call) if call else None
+        if behaviour == "upstream-html":  # a 200 that is not a body the dialect reads (an edge's page)
+            return Response("<!doctype html><html><body>busy</body></html>", status_code=200, media_type="text/html")
+        if behaviour == "upstream-provider-400":  # OpenRouter's wrap of the PROVIDER's own refusal (a tool call it cannot serve)
+            return JSONResponse({"error": {"message": "Provider returned error", "code": 400,
+                                           "metadata": {"raw": "tool_choice is not supported by this endpoint", "provider_name": served or "Unknown"}}},
+                                status_code=400)
+        if behaviour == "upstream-500":
+            return JSONResponse({"error": {"message": "Internal Server Error", "code": 500,
+                                           **({"metadata": {"provider_name": served}} if served else {})}}, status_code=500)
+        if behaviour == "upstream-429":
             return JSONResponse({"error": {"type": "rate_limit_error", "message": "slow down"}}, status_code=429,
                                 headers={"retry-after": "30"})
         if self.behaviour == "upstream-429-no-header":
@@ -452,8 +480,6 @@ class FakeUpstream:
             return JSONResponse({"type": "MissingSessionID", "message": "Error from provider (Console Go): Request is missing x-opencode-session and cannot be routed efficiently"}, status_code=400)
         if self.behaviour == "upstream-403":
             return JSONResponse({"error": {"type": "permission_error"}}, status_code=403)
-        if self.behaviour == "upstream-500":
-            return JSONResponse({"error": "boom"}, status_code=500)
         return None
 
     def _rail_headers(self) -> dict:
@@ -464,9 +490,10 @@ class FakeUpstream:
 
     async def _messages(self, request: Request) -> Response:
         call = await self._record(request)
-        if (r := self._behave()) is not None:
+        if (r := self._behave(call)) is not None:
             return self._reply(call, r)
         model = (call["body"] or {}).get("model")
+        served = self._served_by(call)
         if self.behaviour == "upstream-stream":
             return self._reply(call, StreamingResponse(_anthropic_sse(model), media_type="text/event-stream", headers=self._rail_headers()))
         if self.behaviour == "upstream-stream-gzip":
@@ -484,22 +511,27 @@ class FakeUpstream:
             usage = dict(self.usage)
         return self._reply(call, JSONResponse(
             {"id": "msg_1", "type": "message", "role": "assistant", "model": model,
-             "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": usage},
+             "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": usage,
+             **({"provider": served} if served else {})},
             headers=self._rail_headers(),
         ))
 
     async def _chat(self, request: Request) -> Response:
         call = await self._record(request)
-        if (r := self._behave()) is not None:
+        if (r := self._behave(call)) is not None:
             return self._reply(call, r)
         model = (call["body"] or {}).get("model")
-        if self.behaviour == "upstream-stream":
-            return self._reply(call, StreamingResponse(_openai_sse(model), media_type="text/event-stream", headers={"x-fake-rail": self.rail}))
-        if self.behaviour == "upstream-stream-truncated":
-            return self._reply(call, StreamingResponse(_openai_sse(model, truncated=True), media_type="text/event-stream",
+        served = self._served_by(call)
+        slug = self._pinned(call)
+        behaviour = self.provider_behaviours.get(slug, self.behaviour) if slug else self.behaviour
+        if behaviour == "upstream-stream":
+            return self._reply(call, StreamingResponse(_openai_sse(model, provider=served), media_type="text/event-stream", headers={"x-fake-rail": self.rail}))
+        if behaviour == "upstream-stream-truncated":
+            return self._reply(call, StreamingResponse(_openai_sse(model, truncated=True, provider=served), media_type="text/event-stream",
                                                        headers={"x-fake-rail": self.rail}))
         return self._reply(call, JSONResponse(
             {"id": "chatcmpl-1", "object": "chat.completion", "model": model,
+             **({"provider": served} if served else {}),
              "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
              "usage": ({"prompt_tokens": 312, "completion_tokens": 7, "total_tokens": 319,
                         "prompt_tokens_details": {"cached_tokens": 300}}
@@ -510,7 +542,7 @@ class FakeUpstream:
 
     async def _models(self, request: Request) -> Response:
         call = await self._record(request)
-        if (r := self._behave()) is not None:
+        if (r := self._behave(call)) is not None:
             return self._reply(call, r)
         return self._reply(call, JSONResponse({"object": "list", "data": [{"id": "fake-model", "object": "model"}]}, headers={"x-fake-rail": self.rail}))
 
@@ -551,9 +583,10 @@ async def _gzipped(events):
     yield z.flush()
 
 
-async def _openai_sse(model, truncated: bool = False):
+async def _openai_sse(model, truncated: bool = False, provider: str | None = None):
     chunks = [
-        {"id": "c", "object": "chat.completion.chunk", "model": model, "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Hel"}}]},
+        {"id": "c", "object": "chat.completion.chunk", "model": model, **({"provider": provider} if provider else {}),
+         "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Hel"}}]},
         {"id": "c", "object": "chat.completion.chunk", "model": model, "choices": [{"index": 0, "delta": {"content": "lo"}}]},
         {"id": "c", "object": "chat.completion.chunk", "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 19, "completion_tokens": 4}},
     ]
@@ -696,6 +729,30 @@ def settings(tmp_path) -> Settings:
 
 
 GO_CATALOG_FIXTURES = HERE / "fixtures" / "go-catalog"
+
+
+OPENROUTER_ENDPOINTS_FIXTURES = HERE / "fixtures" / "openrouter-endpoints"
+
+
+def seed_openrouter_endpoints(store: Store, upstream: FakeUpstream | None = None, fetched_at: float = 1_800_000_000.0,
+                              models: tuple[str, ...] = ("deepseek-v4.1-flash",), only: tuple[str, ...] | None = None) -> dict:
+    """The `openrouter-endpoints` world (specs/worlds/README.md): the endpoint snapshot a gateway starts
+    from — the raw `GET /api/v1/models/<id>/endpoints` fixtures (trimmed from the live answer of
+    2026-10-19), parsed by the leg's own parser and stored as the catalog leg (homelab#2742) will store
+    it (GW-RAIL-OPENROUTER §Selection reads it). The fake openrouter upstream learns the snapshot's
+    provider display names, so a pinned request is answered "by" that provider."""
+    from agent_gateway.providers import SNAPSHOT_SOURCE, parse_endpoints
+
+    body = {"models": {}}
+    for m in models:
+        parsed = parse_endpoints(json.loads((OPENROUTER_ENDPOINTS_FIXTURES / f"{m}.json").read_text(encoding="utf-8")))
+        if only is not None:  # a trimmed variant (`openrouter-endpoints-ineligible`): the named tags only
+            parsed["endpoints"] = [e for e in parsed["endpoints"] if e["tag"] in only]
+        body["models"][parsed["model"]] = {"endpoints": parsed["endpoints"]}
+        if upstream is not None:
+            upstream.provider_names.update({e["slug"]: e["provider_name"] for e in parsed["endpoints"]})
+    store.snapshot_save(SNAPSHOT_SOURCE, fetched_at, body)
+    return body
 
 
 def seed_go_catalog(store: Store, fetched_at: float = 1_800_000_000.0) -> Store:

@@ -30,6 +30,7 @@ from . import rails
 from .config import model_matches, wire_model
 from .credentials import CredentialTransient, CredentialUnresolved
 from .metrics import Metrics
+from .providers import UNATTRIBUTED, Endpoint, attribute, pin, provider_error
 from .sessions import SessionService, error
 from .store import Session, Usage
 
@@ -51,6 +52,13 @@ CREDENTIAL_ERROR_CODES = frozenset({"api_key_expired", "invalid_api_key", "unaut
 # The terminal event of a complete stream, per dialect (decoded bytes): openai `data: [DONE]`,
 # anthropic `message_stop`.
 TERMINAL_MARKERS = {"openai": (b"[DONE]",), "anthropic": (b"message_stop",)}
+# A 2xx body the dialect can read: JSON, or SSE for a stream. Anything else on a PINNED attempt (an
+# edge's HTML page behind a 200) is a pre-byte transport failure the gateway fails over on.
+BODY_TYPES = ("application/json", "text/event-stream")
+# The pre-byte failure classes (GW-RAIL-OPENROUTER §Failover): outcome label → the strike class the
+# cell takes (None = a 429 cools the cell instead).
+FAILOVER_STRIKE = {"5xx": "provider-5xx", "unreachable": "provider-5xx", "timeout": "timeout", "content-type": "provider-5xx",
+                   "provider-error": "refused", "429": None}
 
 
 def classify_auth_failure(status: int, body: bytes) -> str:
@@ -251,25 +259,75 @@ class Proxy:
         url = rails.upstream_url(row.rail, self.upstreams[row.rail], dialect, op)
         if request.method == "GET" and request.url.query:
             url += "?" + request.url.query
-        t0 = time.monotonic()
-        try:
-            req = self.client.build_request(request.method, url, headers=headers, content=body)
-            resp = await self.client.send(req, stream=True)
-        except httpx.TimeoutException as e:
-            elapsed = time.monotonic() - t0
-            self.metrics.request(row.rail, dialect, 504, elapsed)
-            self.sessions.store.record_request(row.id, 504, int(elapsed * 1000), ts=self.sessions.clock())
-            self.sessions.outcomes.transport(row, "timeout")
-            log.warning("upstream-timeout %s session=%s: %s", row.rail, row.id, type(e).__name__)
-            return error(504, "upstream-timeout", f"rail {row.rail} upstream: {type(e).__name__}")
-        except httpx.HTTPError as e:
-            elapsed = time.monotonic() - t0
-            self.metrics.request(row.rail, dialect, 502, elapsed)
-            self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock())
-            self.sessions.outcomes.transport(row, "provider-5xx")
-            log.warning("upstream-unreachable %s session=%s: %s", row.rail, row.id, type(e).__name__)
-            return error(502, "upstream-unreachable", f"rail {row.rail} upstream: {type(e).__name__}")
-        status = resp.status_code
+        # The provider axis (GW-RAIL-OPENROUTER §Selection / §Failover): on the openrouter rail a POST
+        # rides pinned to ONE provider per attempt (`provider.order` + `allow_fallbacks: false`) when the
+        # endpoint snapshot covers the model; a typed failure BEFORE any byte is relayed reissues the
+        # same request to the next provider, bounded by the policy; after a byte, never.
+        attempts: list[Endpoint | None] = [None]
+        if row.rail == "openrouter" and body is not None:
+            verdict, plan = self.sessions.provider_plan(row.rail, row.model, row.harness, row.stack, row.task,
+                                                       self.sessions.clock())
+            if verdict == "pinned":
+                attempts = list(plan[: self.sessions.policy.rails[row.rail].providers.max_providers_per_request])
+                note += "+pin[" + ",".join(e.slug for e in attempts) + "]"
+            else:
+                log.info("providers: %s %s session=%s rides unpinned — %s: %s", row.rail, row.model, row.id, verdict, plan)
+        wire = wire_model(row.rail, row.model)
+        for i, ep in enumerate(attempts):
+            last = i == len(attempts) - 1
+            nxt = attempts[i + 1] if not last else None
+            content = pin(body, ep.slug) if ep is not None else body
+            t0 = time.monotonic()
+            try:
+                req = self.client.build_request(request.method, url, headers=headers, content=content)
+                resp = await self.client.send(req, stream=True)
+            except httpx.TimeoutException as e:
+                elapsed = time.monotonic() - t0
+                if ep is not None and nxt is not None:
+                    self._fail_over(row, dialect, wire, ep, nxt, "timeout", 504, elapsed, {}, type(e).__name__)
+                    continue
+                self.metrics.request(row.rail, dialect, 504, elapsed)
+                self._provider_outcome(row, wire, ep, "timeout")
+                self.sessions.store.record_request(row.id, 504, int(elapsed * 1000), ts=self.sessions.clock(),
+                                                   provider=ep.slug if ep else "")
+                self.sessions.outcomes.transport(row, "timeout", ep.slug if ep else "")
+                log.warning("upstream-timeout %s session=%s: %s", row.rail, row.id, type(e).__name__)
+                return error(504, "upstream-timeout", f"rail {row.rail} upstream: {type(e).__name__}")
+            except httpx.HTTPError as e:
+                elapsed = time.monotonic() - t0
+                if ep is not None and nxt is not None:
+                    self._fail_over(row, dialect, wire, ep, nxt, "unreachable", 502, elapsed, {}, type(e).__name__)
+                    continue
+                self.metrics.request(row.rail, dialect, 502, elapsed)
+                self._provider_outcome(row, wire, ep, "unreachable")
+                self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock(),
+                                                   provider=ep.slug if ep else "")
+                self.sessions.outcomes.transport(row, "provider-5xx", ep.slug if ep else "")
+                log.warning("upstream-unreachable %s session=%s: %s", row.rail, row.id, type(e).__name__)
+                return error(502, "upstream-unreachable", f"rail {row.rail} upstream: {type(e).__name__}")
+            status = resp.status_code
+            prefetched: bytes | None = None
+            if ep is not None:
+                kind, prefetched = await self._prebyte_failure(resp, streaming)
+                if kind is not None:
+                    elapsed = time.monotonic() - t0
+                    if nxt is not None:
+                        await resp.aclose()
+                        self._fail_over(row, dialect, wire, ep, nxt, kind, status, elapsed, resp.headers, f"upstream {status}")
+                        continue
+                    if kind == "content-type":  # the order exhausted on an unreadable 2xx: the typed error
+                        await resp.aclose()
+                        self.metrics.request(row.rail, dialect, 502, elapsed)
+                        self._provider_outcome(row, wire, ep, kind)
+                        self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock(), provider=ep.slug)
+                        self.sessions.outcomes.transport(row, "provider-5xx", ep.slug)
+                        log.warning("upstream-content-type %s session=%s @%s: %s", row.rail, row.id, ep.slug,
+                                    resp.headers.get("content-type"))
+                        return error(502, "upstream-content-type",
+                                     f"rail {row.rail} provider {ep.slug} answered {status} with {resp.headers.get('content-type', '?')}, not a body this dialect reads")
+                    # the last provider failed the same way: its answer passes through as the typed outcome
+            break
+        provider = ep.slug if ep is not None else ""
         if status in (401, 403):
             try:
                 raw_err = await resp.aread()
@@ -281,32 +339,79 @@ class Proxy:
             kind = classify_auth_failure(status, raw_err[:ERROR_BODY_MAX])
             if kind == "edge":
                 self.metrics.request(row.rail, dialect, 403, elapsed)
-                self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock())
+                self._provider_outcome(row, wire, ep, "edge")
+                self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock(), provider=provider)
                 log.warning("upstream-edge-refused %s %d session=%s — a non-JSON refusal (an edge judged this request's client), "
                             "no credential verdict [%s]", row.rail, status, row.id, note)
                 return error(403, "upstream-edge-refused",
                              f"an edge in front of rail {row.rail} refused this request (upstream {status}, not a credential verdict)")
             if kind == "refused":
                 self.metrics.request(row.rail, dialect, 403, elapsed)
-                self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock())
-                self.sessions.outcomes.transport(row, "refused")
+                self._provider_outcome(row, wire, ep, "refused")
+                self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock(), provider=provider)
+                self.sessions.outcomes.transport(row, "refused", provider)
                 log.warning("upstream-refused %s %d session=%s model=%s [%s]", row.rail, status, row.id, row.model, note)
                 return error(403, "upstream-refused", f"rail {row.rail} refused this request for {row.model} (upstream {status}, a policy refusal — not the credential)")
             self.metrics.request(row.rail, dialect, 424, elapsed)
             self.metrics.upstream_auth_rejected(row.rail)
-            self.sessions.store.record_request(row.id, 424, int(elapsed * 1000), ts=self.sessions.clock())
+            self._provider_outcome(row, wire, ep, "auth")
+            self.sessions.store.record_request(row.id, 424, int(elapsed * 1000), ts=self.sessions.clock(), provider=provider)
             self.sessions.capacity.reject_credential(row.rail, credential, self.sessions.clock(), row.stack)
-            self.sessions.outcomes.transport(row, "auth-storm")
+            self.sessions.outcomes.transport(row, "auth-storm", provider)
             log.error("upstream-auth %s %d session=%s [%s]", row.rail, status, row.id, note)
             return error(424, "upstream-auth", f"rail {row.rail} rejected the gateway's credential (upstream {status}) — not retryable")
         if row.rail == "anthropic":
             self.metrics.subscription_windows(row.rail, resp.headers)
         note += self.sessions.capacity.observe(row.rail, status, resp.headers, self.sessions.clock(),
-                                               model=row.model, credential=credential)
+                                               model=row.model, credential=credential, provider=provider)
         out_headers = rails.response_headers(resp.headers.multi_items())
         if status == 429 and "retry-after" not in {k.lower() for k in out_headers}:
             out_headers["retry-after"] = DEFAULT_RETRY_AFTER
-        return self._stream(resp, row, dialect, status, out_headers, streaming, t0, note)
+        return self._stream(resp, row, dialect, status, out_headers, streaming, t0, note, ep, wire, prefetched)
+
+    @staticmethod
+    async def _prebyte_failure(resp: httpx.Response, streaming: bool) -> tuple[str | None, bytes | None]:
+        """A pinned attempt's answer, judged before any byte is relayed (GW-RAIL-OPENROUTER §Failover):
+        `5xx`, `429`, `content-type` (a 2xx the dialect cannot read), `provider-error` (a 4xx whose JSON
+        error names the provider that produced it — a refused tool call among them); None = relay it.
+        A 4xx body is read to classify it; it comes back so the relay can still send it."""
+        status = resp.status_code
+        if status >= 500:
+            return "5xx", None
+        if status == 429:
+            return "429", None
+        ctype = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
+        if 200 <= status < 300:
+            return (None if ctype in BODY_TYPES else "content-type"), None
+        if status in (401, 403):
+            return None, None  # the credential / refusal / edge classification below owns these
+        try:
+            raw = await resp.aread()
+        except httpx.HTTPError:
+            raw = b""
+        return ("provider-error" if provider_error(raw[:ERROR_BODY_MAX]) else None), raw
+
+    def _fail_over(self, row: Session, dialect: str, wire: str, ep: Endpoint, nxt: Endpoint, kind: str, status: int,
+                   elapsed: float, headers, why: str) -> None:
+        """Record the failed attempt on its cell — the request row, the strike (or the cooldown for a
+        429), the two families — and move on; the harness sees nothing of it."""
+        now = self.sessions.clock()
+        self.sessions.store.record_request(row.id, status, int(elapsed * 1000), ts=now, provider=ep.slug)
+        self._provider_outcome(row, wire, ep, kind)
+        klass = FAILOVER_STRIKE[kind]
+        if klass is None:
+            self.sessions.capacity.observe(row.rail, 429, headers, now, model=row.model, provider=ep.slug)
+        else:
+            self.sessions.outcomes.transport(row, klass, ep.slug)
+        self.metrics.failover(wire, ep.slug, nxt.slug)
+        log.warning("failover %s %s session=%s: %s → %s (%s: %s)", row.rail, wire, row.id, ep.slug, nxt.slug, kind, why)
+
+    def _provider_outcome(self, row: Session, wire: str, ep: Endpoint | None, outcome: str, attributed: str | None = None) -> None:
+        """`gateway_provider_requests_total` — the openrouter rail only; the cell's provider is the
+        attributed slug, else the pin, else `unattributed`."""
+        if row.rail != "openrouter":
+            return
+        self.metrics.provider_request(row.rail, wire, attributed or (ep.slug if ep else UNATTRIBUTED), outcome)
 
     async def reprobe(self) -> int:
         """Re-verify every rejected credential whose probe is due (sessions.md §Capacity): re-resolve it
@@ -354,14 +459,25 @@ class Proxy:
         return sent
 
     def _stream(self, resp: httpx.Response, row: Session, dialect: str, status: int, out_headers: dict,
-                streaming: bool, t0: float, note: str) -> StreamingResponse:
+                streaming: bool, t0: float, note: str, ep: Endpoint | None = None, wire: str = "",
+                prefetched: bytes | None = None) -> StreamingResponse:
         captured = bytearray()
         final = [status]  # what the row and the metric record; a mid-stream timeout rewrites it to 504
-        watch = StreamWatch(dialect, resp.headers.get("content-encoding"))
+        # A body already read (a 4xx classified before the relay) is DECODED: it goes out as identity.
+        encoding = None if prefetched is not None else resp.headers.get("content-encoding")
+        if prefetched is not None:
+            for k in [k for k in out_headers if k.lower() == "content-encoding"]:
+                del out_headers[k]
+        watch = StreamWatch(dialect, encoding)
         cut: list[str] = []  # why the body stopped before its end: timeout | transport-error | client-closed
 
         async def body_iter():
             try:
+                if prefetched is not None:
+                    captured.extend(prefetched[:USAGE_CAPTURE_MAX])
+                    watch.feed(prefetched)
+                    yield prefetched
+                    return
                 async for chunk in resp.aiter_raw():
                     if len(captured) < USAGE_CAPTURE_MAX:
                         captured.extend(chunk)
@@ -383,8 +499,19 @@ class Proxy:
             finally:
                 await resp.aclose()
                 elapsed = time.monotonic() - t0
-                usage = (parse_usage(decoded(bytes(captured), resp.headers.get("content-encoding")), streaming)
-                         if final[0] < 300 else Usage())
+                plain = decoded(bytes(captured), encoding)
+                usage = parse_usage(plain, streaming) if final[0] < 300 else Usage()
+                # Attribution (GW-RAIL-OPENROUTER): the answer's own `provider` names the cell; the
+                # snapshot joins the display name to the slug `provider.order` uses; a pinned attempt
+                # whose answer names another provider is recorded as the answer says, and logged.
+                provider = ep.slug if ep is not None else ""
+                display = attribute(plain, streaming) if row.rail == "openrouter" else None
+                if display and self.sessions.providers is not None:
+                    attributed = self.sessions.providers.slug_for(wire, display)
+                    if ep is not None and attributed != ep.slug:
+                        log.warning("attribution: %s session=%s pinned %s, the answer names %s (%r)", row.rail, row.id,
+                                    ep.slug, attributed, display)
+                    provider = attributed
                 incomplete = None
                 if 200 <= status < 300:
                     if cut:
@@ -398,17 +525,22 @@ class Proxy:
                 # The gateway's own transport classes as strikes (GW-SESSIONS-OUTCOME): a relayed upstream
                 # 5xx, a cut stream. A client that hung up is the consumer's to classify ⚖.
                 if status >= 500:
-                    self.sessions.outcomes.transport(row, "provider-5xx")
+                    self.sessions.outcomes.transport(row, "provider-5xx", provider)
                 elif incomplete == "timeout":
-                    self.sessions.outcomes.transport(row, "timeout")
+                    self.sessions.outcomes.transport(row, "timeout", provider)
                 elif incomplete in ("no-terminal", "transport-error"):
-                    self.sessions.outcomes.transport(row, "stream-incomplete")
+                    self.sessions.outcomes.transport(row, "stream-incomplete", provider)
+                self._provider_outcome(row, wire, ep, ("5xx" if status >= 500 else "429" if status == 429 else
+                                                       "incomplete" if incomplete else "ok" if status < 300 else
+                                                       "provider-error" if provider_error(plain) else "other"),
+                                       attributed=provider or None)
                 self.sessions.store.record_request(row.id, final[0], int(elapsed * 1000), usage,
                                                   ts=self.sessions.clock(),  # the window-draw ledger's clock
-                                                  incomplete=incomplete)
-                log.info("%s rail=%s session=%s status=%d ms=%d in=%d cache_read=%d cache_write=%d out=%d%s [%s]",
+                                                  incomplete=incomplete, provider=provider)
+                log.info("%s rail=%s session=%s status=%d ms=%d in=%d cache_read=%d cache_write=%d out=%d%s%s [%s]",
                          dialect, row.rail, row.id, final[0], int(elapsed * 1000), usage.tokens_in,
                          usage.tokens_cache_read, usage.tokens_cache_write, usage.tokens_out,
+                         f" provider={provider}" if provider else "",
                          f" INCOMPLETE={incomplete}" if incomplete else "", note)
 
         return StreamingResponse(body_iter(), status_code=status, headers=out_headers)

@@ -42,8 +42,71 @@
     "openrouter": {
       "url": "https://openrouter.ai/api/v1/chat/completions",
       "auth": { "header": "Authorization", "value": "Bearer <OPENROUTER_API_KEY>" },
+      "provider": {
+        "description": "the pin on a POST body when the endpoint snapshot covers the session's model (GW-RAIL-OPENROUTER §Selection): ONE provider per attempt, the tag's base slug, fallbacks off; absent = the model has no snapshot entry (the request rides unpinned). The body's other keys are the harness's, re-serialised.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["order", "allow_fallbacks"],
+        "properties": {
+          "order": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/provider_slug" } },
+          "allow_fallbacks": { "const": false }
+        },
+        "x-requirements": ["GW-RAIL-OPENROUTER"]
+      },
       "x-requirements": ["GW-RAIL-OPENROUTER", "GW-CRED-BOUNDARY", "GW-CRED-RESOLVE"]
     }
+  },
+  "$defs": {
+    "provider_slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "the base of an endpoint `tag` (`deepinfra/fp8` → `deepinfra`) — what `provider.order` names and the cell's provider key; a response's display name joins to it through the snapshot's `provider_name`, else by rule (lower-case, non-alphanumeric runs → `-`)" },
+    "tool_choice_mode": { "enum": ["none", "auto", "required", "function"] },
+    "endpoint_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier"],
+      "properties": {
+        "slug": { "$ref": "#/$defs/provider_slug" },
+        "tag": { "type": "string", "description": "the endpoint `tag` as the vendor spells it" },
+        "provider_name": { "type": "string", "description": "the display name a response's `provider` carries" },
+        "quantization": { "type": "string", "description": "the vendor's value (`fp4`, `fp8`, `mxfp4`, `unknown`, …); eligibility reads it against the policy ladder" },
+        "tool_choice": { "type": "object", "additionalProperties": false, "required": ["none", "auto", "required", "function"], "properties": { "none": { "type": "boolean" }, "auto": { "type": "boolean" }, "required": { "type": "boolean" }, "function": { "type": "boolean" } }, "description": "`supports_tool_choice` per mode" },
+        "uptime_1d": { "type": "number", "minimum": 0, "maximum": 100, "description": "`uptime_last_1d`, percent" },
+        "p90_ms": { "type": ["number", "null"], "description": "`latency_last_30m.p90`; null on the public API (the MCP carries it)" },
+        "in_price": { "type": ["number", "null"], "description": "$ per 1M prompt tokens; null = dynamic / unpriced" },
+        "out_price": { "type": ["number", "null"], "description": "$ per 1M completion tokens" },
+        "status": { "type": "integer" },
+        "service_tier": { "type": ["string", "null"], "description": "`flex` / `priority` / null — a provider's tiers share one slug; the representative is the null-tier, shortest-tag row" }
+      }
+    },
+    "endpoint_snapshot": {
+      "$comment": "the store's `catalog_snapshots.openrouter-endpoints` body (GW-RAIL-OPENROUTER §Selection reads it; the catalog leg — homelab#2742 — writes it): per model, the parsed rows of GET /api/v1/models/<id>/endpoints",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["models"],
+      "properties": {
+        "models": {
+          "type": "object",
+          "description": "keyed by the openrouter model id (the bare policy id)",
+          "additionalProperties": { "type": "object", "additionalProperties": false, "required": ["endpoints"], "properties": { "endpoints": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/endpoint_row" } } } }
+        }
+      },
+      "x-requirements": ["GW-RAIL-OPENROUTER"]
+    },
+    "providers_block": {
+      "$comment": "the policy's `rails.openrouter.providers` (GW-RAIL-OPENROUTER §Selection / §Failover) — the floors and the failover bound, every value ⚖; the loader refuses an unknown key, a floor off the ladder, a mode outside tool_choice_mode, a non-positive count",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quantization_ladder", "quantization_floor", "uptime_1d_floor", "min_rides", "max_providers_per_request", "tool_choice"],
+      "properties": {
+        "quantization_ladder": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" }, "description": "the vendor's `quantization` vocabulary in ascending precision; a value off it (`unknown`) is excluded" },
+        "quantization_floor": { "type": "string", "description": "a member of the ladder; an endpoint below it is excluded" },
+        "uptime_1d_floor": { "type": "number", "minimum": 0, "maximum": 100 },
+        "min_rides": { "type": "integer", "minimum": 1, "description": "judged rides before a cell's measured clean-ride rate replaces its uptime prior" },
+        "max_providers_per_request": { "type": "integer", "minimum": 1, "description": "one pin + at most (n − 1) failovers per request" },
+        "tool_choice": { "type": "object", "additionalProperties": false, "properties": { "claude": { "$ref": "#/$defs/mode_list" }, "opencode": { "$ref": "#/$defs/mode_list" }, "goose": { "$ref": "#/$defs/mode_list" }, "codex": { "$ref": "#/$defs/mode_list" } }, "description": "per harness, the tool-choice modes its requests carry; an endpoint must support every one" }
+      },
+      "x-requirements": ["GW-RAIL-OPENROUTER"]
+    },
+    "mode_list": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/tool_choice_mode" } }
   },
   "models": {
     "$comment": "GET /openai/v1/models — a passthrough on the rails that have one.",
@@ -90,6 +153,7 @@
     "upstream-edge-refused": { "status": 403, "description": "a 401/403 alternative: a 403 with no readable JSON error object (an HTML block page, Cloudflare `error code: 1010`) — an edge in front of the vendor judged THIS request's client signature; request-scoped, the credential is untouched; the body is never relayed", "x-requirements": ["GW-CRED-BOUNDARY"] },
     "upstream-timeout": { "status": 504, "description": "connect > 10 s or read > 600 s", "x-requirements": ["GW-RAIL-OPENROUTER", "GW-RAIL-OPENCODE"] },
     "upstream-unreachable": { "status": 502, "description": "the upstream connection failed for a reason that is not a timeout (DNS, refused, TLS, reset); nothing reached the vendor", "x-requirements": ["GW-RAIL-OPENROUTER", "GW-RAIL-OPENCODE"] },
+    "upstream-content-type": { "status": 502, "description": "the provider order exhausted on a 2xx whose body is not one the dialect reads (content-type neither JSON nor SSE — an edge's page behind a 200); a pinned attempt before the last fails over on it instead (GW-RAIL-OPENROUTER §Failover)", "x-requirements": ["GW-RAIL-OPENROUTER"] },
     "header-refused": { "status": 502, "description": "a credential-shaped value in a header the gateway does not own — refused before any upstream call (the FU-251 tripwire)", "x-requirements": ["GW-CRED-BOUNDARY"] }
   }
 }
