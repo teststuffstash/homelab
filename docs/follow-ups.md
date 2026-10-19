@@ -778,6 +778,9 @@ the block needs pruning, not more headings.
       `clean` canaries. #778 released unbuilt 2026-09-02 (Go cells mooted by the 08-25 ruling; hygiene →
       FU-181). **Next:** rung-2/FU-095(c), pool depth, void the tainted 08-10..08-17 rotation rows (no
       owner since #778). Related: #235's belt (machine lane owns it).
+      **2026-10-19:** the canary leg for OPENROUTER entrants is superseded by the agent-gateway's entry canary
+      (GW-CATALOG-OR, #2745 — a (model, provider) cell enters the gateway's order only after one clean prober ride);
+      the digest stays.
 
 - [ ] **FU-186** — **Provider selection priced per successful job (ADR-115): POINTER.** Design +
       evidence + 4-step build order: [`docs/spikes/model-routing-history.md`](spikes/model-routing-history.md)

@@ -13810,3 +13810,37 @@ updates or reverts as much as possible — mechanical revert or a responder."
   failover before the first byte; cross-rail choice for v4.1-flash on equal terms. Filed #2741 (attribution/selection/
   failover), #2742 (GW-CATALOG-OR + entry canary + cap), #2743 (cost per clean ride, openrouter vs Go); meta-state
   pickup for the overnight session. Bookkeeping pushed once.
+
+## 2026-10-19 ~20:30–21:25Z — the overnight gateway session: #2741 + #2742 built as #2744 + #2745 (PR lane, island context)
+
+- Pickup read (meta-state's 20:15Z bullet, the three issues, the #2718 plan comment, gateway/specs + gateway/src, no
+  corpus). Live OpenRouter reads for the fixtures: `/models/deepseek/deepseek-v4.1-flash/endpoints` (34 endpoints, three
+  DeepInfra service tiers under ONE base slug — `provider.order` names the base, so a provider's tiers are one cell; the
+  raw API's `latency_last_30m` is null, the MCP carries it), the MCP `list-daily-model-rankings` with `period: week` ×
+  `programming` / `tool_calling` and `list-benchmarks` (AA, 350 rows). Fixtures trimmed from them (ten + seven endpoints,
+  two slices' latest week, seven AA rows).
+- **#2744** (#2741): `providers.py` (parse / representatives / eligible / order / attribute / slug_for / pin), the proxy
+  attempt loop (pre-byte failures: 5xx, 429, unreachable, timeout, an unreadable 2xx `upstream-content-type`, a 4xx
+  naming the provider; after a byte never), `strikes` unique key rebuilt to carry provider (a one-time table migration),
+  cooldowns keyed (rail, model, provider), the admission's provider verdicts (`no-eligible-provider` new), two families
+  (`model` label permitted on them only, bounded to the policy). 26 + 6 + 3 + 6 new rows, all proven. Specs-review
+  rounds: R1 = two R7 glossary-term findings (the cell's old two-part spelling in two sentences) + the anthropic-messages
+  pin gap closed by pointer; R2 = one more R7 token + the three hygiene nits (ATTACH_BULK threatened to escalate) folded.
+  Round 3 pending at 114b13fe.
+- **#2745** (#2742, stacked): `orcatalog.py` — the MCP calls ride the openrouter ACCOUNT key via the credential seam
+  (`resolve_ref`, the label rule; rbac.yaml's agent-egress Role for the gateway SA), stamps of one model SUMMED per slice
+  (the first cut kept the later-inserted smaller count), candidates whose endpoints 404 absent and counted, the view counts
+  CELLS not endpoint rows (a 17-vs-15 slip caught by the first run), the day window is (now − 1 d, now]. The canary = a
+  prober session with `canary: {model, provider}` that bypasses the role's rail list (the catalog's own gate), model =
+  the catalog's. `GatewayCanaryBudgetExhausted` at severity warning (info is InfoInhibitor-suppressed — the rules lint
+  said so). 36 rows proven. Launcher knobs + `canary-entrants.sh` use the scout's canary ride shape (`--run "opencode run
+  -m … <prompt>"`, `--task`, `--round`).
+- Findings for the operator: (1) no Grafana dashboard in the repo carries any `gateway_*` series — #2741 item 4's
+  "sessions dashboard" panel has no home; (2) the tier derivation's openrouter candidate switch to the catalog is
+  deferred to #2743 (production has zero eligible cells until canaries run — a re-cut snapshot would be empty); (3) one
+  jail DNS blackout mid-push (github.com unresolvable for one attempt; the retry landed — the pop-os ARP class).
+- 21:22Z: #2745 (stacked on #2744's branch) auto-merged INTO that branch within a minute of arming — no protection on a
+  feature base, no review. #2744 now carries both legs (head 83759520); its body folded with #2745's so every ⚖ row is
+  listed; round 3 reviews the combined diff. Lesson: stack nothing on a feature branch here.
+- Wound down at ~770k ctx with #2743 unstarted (the pickup names its design points); bookkeeping committed, pushed once.
+
