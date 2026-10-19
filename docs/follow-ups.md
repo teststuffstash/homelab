@@ -817,14 +817,14 @@ the block needs pruning, not more headings.
       (retry) stays. Relates ADR-087, FU-089.
 - [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** `/sessions` consumers:
       specs reviewer (ADR-155, own SA #2710) + the worker launcher behind `AGENT_GATEWAY=sessions` (platform only); the
-      pod pulls its env (GW-SESSIONS-PULL); control plane enforced (#2688; gap #2684 waits). Failure ownership LIVE 10-17,
-      Go catalog LIVE 10-18, **tier lists DERIVED from evidence (operator ruling 10-18, #2716; gaps → #2718)**.
-      **Codex rail (rulings 2026-10-19: native backend, gateway-local SQLite store, the gateway's OWN login) — status and
-      the five legs A–E live in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)**
-      (A merged #2734; B #2735 / C #2736 in review; D headroom poll, E seed recipe unstarted; then policy + canary).
-      **Next:** (a) operator rulings — the openrouter candidate set (kimi-k3 alone at heavy/standard vs the `coding` chain)
-      and the `wrong-verdict` judge source; (b) the loop flip = `AGENT_GATEWAY=sessions` into the session-pod heredoc
-      (`agents/coordinator-session.sh`); (c) `context_tokens` from the catalog's `context`. History: TICK-LOG 10-16..19.
+      pod pulls its env; control plane enforced (#2688; gap #2684 waits). Failure ownership LIVE 10-17, Go catalog LIVE
+      10-18, **tier lists DERIVED from evidence (ruling 10-18, #2716; gaps → #2718)**. **Codex rail (rulings 10-19: native
+      backend, gateway-local store, own login) — legs A–E + status in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)**
+      (A merged #2734; B #2735 / C #2736 in review; D, E unstarted). **Next (seat, no ruling — operator 10-19: "again
+      deciding on models?"):** (a) an OpenRouter catalog leg (the GW-CATALOG-GO gap row): candidates = vendor `/models` ∩
+      AA-benched under the existing bands — the 11-id hand table is why kimi-k3 sits alone (#2718 item 4); (b) `wrong-verdict`
+      fed by the one machine signal that exists (deploy-revert of an approved PR); (c) the loop flip into the session-pod
+      heredoc; (d) `context_tokens` from the catalog. **Operator-only:** FU-313's Go key mint, the codex login (leg E), the canary window.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
