@@ -822,7 +822,7 @@ the block needs pruning, not more headings.
       (#2695/#2707). **Tier lists are DERIVED, never hand-picked (operator ruling 2026-10-18, #2716: GW-MODEL-TIERS —
       AA intelligence bands 0.9/0.75/0.5 of the rail's best, cheapest-first, cap 3; `benchmarks.json` committed snapshot
       + equality check; gaps → #2718).** Session pod mounts the gateway caller token (#2713, inert).
-      **Next:** (a) operator rulings — the openrouter candidate set (all `model-classes` ids put kimi-k3 alone at heavy/standard,
+      **Codex:** native profile + SQLite rotation ownership; A store in review, B–E and live canary remain. **Next:** (a) operator rulings — the openrouter candidate set (all `model-classes` ids put kimi-k3 alone at heavy/standard,
       $11.94/1M out; the `coding` chain is the alternative) and the `wrong-verdict` judge source; (b) the loop flip = `AGENT_GATEWAY=sessions`
       into the session-pod heredoc (`agents/coordinator-session.sh`); (c) `context_tokens` from the catalog's `context`, not policy. History: TICK-LOG 10-16..18.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process

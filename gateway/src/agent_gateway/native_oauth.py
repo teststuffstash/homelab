@@ -1,6 +1,6 @@
 """Native Codex refresh only (GW-CODEX-REFRESH); NOT the SIWC token-sharing profile.
 
-Callable seam for oauth.Lifecycle, deliberately not wired by __main__. The lifecycle owns
+Callable seam for oauth.Lifecycle, wired behind CODEX_UPSTREAM/CODEX_SEED_FILE. The lifecycle owns
 locking and durable rotation. This transport makes one attempt, never follows redirects,
 and exposes only fixed failures. JWT claims are scheduling/consistency hints from the token
 endpoint, not signature-verified identity: this module cannot enrol an account.

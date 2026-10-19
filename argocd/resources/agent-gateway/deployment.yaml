@@ -44,6 +44,10 @@ spec:
             # Unset/unwritable ⇒ :memory: degrade (healthz db: "memory") — never a hard dependency.
             - name: GATEWAY_DB
               value: /data/gateway.db
+            - name: CODEX_UPSTREAM
+              value: https://chatgpt.com/backend-api/codex
+            - name: CODEX_SEED_FILE
+              value: /var/run/codex-seed/record
             # The opencode rail's credential — the EXISTING ESO-materialized Secret the old proxy
             # consumes too (ADR-107 chunk C). optional: true — the pod keeps serving the anthropic
             # and openrouter rails if ESO has not materialized it; the rail fails closed per request
@@ -86,6 +90,9 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           volumeMounts:
+            - name: codex-seed
+              mountPath: /var/run/codex-seed
+              readOnly: true
             - name: policy
               mountPath: /etc/agent-gateway
               readOnly: true
@@ -96,6 +103,11 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: codex-seed
+          secret:
+            secretName: codex-seed
+            optional: true
+            defaultMode: 0440
         - name: policy
           configMap:
             name: agent-gateway-policy

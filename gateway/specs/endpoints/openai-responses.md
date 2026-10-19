@@ -10,8 +10,8 @@ dialect stays Chat Completions — [glossary: dialect](../glossary.md#dialect)).
 rail serves it — the operator's ChatGPT subscription — and that rail **ships dark**: the deployed
 policy (`argocd/resources/agent-gateway/policy.json`) declares no codex rail, and even a
 policy that declares one gets a credential backend only when `create_app` is handed a credential
-store, which production does not do yet (the write-back is a `⚑ gap`). Every row below runs
-offline against fake upstreams and the FAKE store; no real Codex/OpenAI credential exists in it.
+store. Production wiring now uses gateway-local SQLite; the policy still keeps the rail dark. Rows run
+offline against fake upstreams and dummy credentials; no real Codex/OpenAI credential exists in it.
 The design and the prototype it was ported from:
 [the Codex subscription-rail spike](../../../docs/spikes/codex-subscription-rail.md#gateway-prototype--isolated-build-2026-10-16-fu-270)
 (FU-270) and `experiments/codex-rail/` (its native-CLI compat harness remains there).
@@ -34,8 +34,8 @@ admission reasons and the error envelope.
 |---|---|---|---|
 | [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, dark — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP`; `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
 | [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `admission.reasons` | — | v0, dark — authenticated report ingress and the codex window gauges are `⚑ gap` |
-| [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | v0 with the FAKE store only — the production write-back and lost-rotation recovery are `⚑ gap` |
-| [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport, injectable only; production wiring remains dark |
+| [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | gateway-local SQLite with hash-gated seed recovery; live durability remains unverified |
+| [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport wired; rail absent from policy |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked — exact on this rail |
 | [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization` | `session-unknown`, `session-expired`, `session-released` | linked |
 | [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) (owned there) | `admission.reasons` | — | linked — the headroom defers are three more `defer.reason` values |
@@ -53,8 +53,8 @@ The `codex` rail serves one shape: **streaming** Responses with **`store: false`
 **array** `input` — what the pinned Codex CLI sends (`experiments/codex-rail/evidence.json`). Any
 other mode is a 400 before the credential is touched. The body's `model` must equal the session's
 wire id exactly (absent = filled, as on every rail). Upstream: `<CODEX_UPSTREAM>/responses` — the
-upstream base has **no default** (the Codex backend `chatgpt.com/backend-api/codex` vs the
-Sign-in-with-ChatGPT preview is unselected, ⚑ below). The upstream header set is **complete and
+upstream base has **no default**; the deployment selects the native Codex backend
+`https://chatgpt.com/backend-api/codex` (operator ruling 2026-10-19). SIWC is unselected. The upstream header set is **complete and
 fixed**: `authorization: Bearer <access token>`, `chatgpt-account-id: <the credential's account>`,
 `content-type: application/json`, `accept: text/event-stream`, `accept-encoding: identity`,
 `user-agent: agent-gateway` — no inbound header crosses, so a caller can never select an account or smuggle a cookie. A 200 SSE
@@ -136,7 +136,7 @@ failure, client cancellation — and a generation is never retried once a byte r
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: the upstream profile" | `CODEX_UPSTREAM` unset || no backend — admission defers `credential-unresolved` | the Codex backend vs the SIWC preview; each needs backend-specific request/header fixtures |
+| "⚑ gap: SIWC profile (unselected)" | SIWC credentials || unsupported | separate grant and tool-shape contract required |
 | "⚑ gap: vendor header compatibility" | the backend's session-affinity / identity headers || not sent (the fixed six) | reviewed against real backend fixtures before the canary |
 | "⚑ gap: the live canary" | a real account || never run | spike step 4 — a separately authorized maintenance window |
 | "⚖ local evidence: the pinned Codex CLI completes a turn through this gateway" | `experiments/codex-rail/compat.py` (codex-cli 0.161.0, the agent-runtime lock) || a completed `codex exec --json` turn, one rotation, one upstream close | not CI: the CLI is not in the CI toolchain — dated local evidence in `experiments/codex-rail/evidence.json` |
@@ -237,15 +237,34 @@ and returns the replacement only after saving it `ready`. A persisted `refreshin
 uncertain exchange, an invalid replacement — fails closed as `credential-recovery-required` and is
 never retried automatically (replaying a rotated refresh token is the one unrecoverable move). An
 authoritative revocation persists `revoked`. No failure carries a credential in its message, its
-exception chain or any repr. The ONLY store is the tests' FAKE (process memory); production wires
-none, so the rail ships dark — the write-back belongs to Infisical, the source of truth
-([secrets doctrine](../../../docs/secrets.md)), and is a `⚑ gap`.
+exception chain or any repr. The durable store and seed recovery are specified below. The deployed policy still omits Codex.
 
 On the data plane a lifecycle failure answers before upstream is contacted:
 `credential-store-unavailable` → 503 with `retry-after` (the store may answer next time); every
 other code → 401 with that code (a durable state only an operator act changes). At admission the
 durable state is read without refreshing: `ready` admits, `revoked` / `refreshing` skip the rail
 (`credential-unresolved`), a store that does not answer is 503 `credential-transient`.
+
+### Gateway-local durable ownership (operator ruling 2026-10-19)
+
+`CODEX_UPSTREAM` plus `CODEX_SEED_FILE` wires SQLite and the native refresh transport.
+The ESO-mounted seed is a JSON record with the four credential fields above. Infisical
+holds only the seed; SQLite in `GATEWAY_DB` owns rotations. No write-back.
+Each lock checks the mounted file's SHA-256; unchanged bytes are not decoded/imported again.
+A changed valid seed atomically replaces record and hash, including a recovery marker.
+A missing seed after import preserves the record. Invalid/oversized seeds fail closed.
+⚖ Seed bound: 64 KiB. A POSIX file lock spans load/exchange/save; each SQLite FULL-synchronous
+transaction commits independently so the marker survives process exit. Single replica,
+Recreate on the PVC; distributed fencing remains FU-271. No credential memory fallback.
+
+| description | sequence || result |
+|---|---||---|
+| "seed once" | empty database || ready |
+| "seed unchanged is not imported again" | rotate, restart || rotation retained |
+| "changed seed replaces" | rotate, replace seed || new ready record |
+| "restart recovers state" | revoke, restart || revoked |
+| "crash between exchange and save" | child exits in exchange || recovery until reseed |
+| "memory fallback is refused" | :memory: || unavailable |
 
 ### The lifecycle (driven at `oauth.Lifecycle` with the FAKE store)
 
@@ -284,9 +303,6 @@ durable state is read without refreshing: `ready` admits, `revoked` / `refreshin
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: production write-back" | a rotation in production || no store is wired | Infisical write-back (the source of truth); updating only the ESO-generated Secret risks restoring an obsolete refresh token |
-| "⚑ gap: refresh production wiring" | a near-expiry credential in production || native transport exists but is not wired | select the upstream profile, provision the durable store and run the live canary |
-| "⚑ gap: lost-rotation recovery" | a crash between the exchange and the save || recovery-required forever | an explicitly designed recovery operation with an authoritative replacement |
 | "⚑ gap: cross-process fencing" | two gateway replicas || one replica only (ADR-139) | distributed fencing — FU-271 |
 
 <details markdown="1"><summary>Evidence</summary>
