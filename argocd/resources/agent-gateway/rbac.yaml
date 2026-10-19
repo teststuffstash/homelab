@@ -294,3 +294,27 @@ metadata:
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-pods }
 subjects:
   - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
+# GW-CATALOG-OR (homelab#2742): the OpenRouter catalog's ranking + benchmark reads ride the openrouter
+# ACCOUNT key — the same labelled Secret the old proxy's ROUTER_ACCOUNT_REF names
+# (openrouter-proxy/openrouterkey.yaml, agent-egress/router-account-key) — so the gateway's own
+# namespace needs the one get-secrets Role the per-stack session-key Roles above do not cover.
+# Same narrowness rule: get-only, and the code honours only session-key-labelled Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-keys
+  namespace: agent-egress
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-keys
+  namespace: agent-egress
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }

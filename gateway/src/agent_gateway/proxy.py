@@ -264,7 +264,13 @@ class Proxy:
         # endpoint snapshot covers the model; a typed failure BEFORE any byte is relayed reissues the
         # same request to the next provider, bounded by the policy; after a byte, never.
         attempts: list[Endpoint | None] = [None]
-        if row.rail == "openrouter" and body is not None:
+        if row.rail == "openrouter" and body is not None and row.canary_provider and self.sessions.providers is not None:
+            # GW-CATALOG-OR: a canary session rides exactly its cell — pinned, no failover, whatever the cell's state
+            cell = [e for e in (self.sessions.providers.endpoints(wire_model(row.rail, row.model)) or ()) if e.slug == row.canary_provider]
+            if cell:
+                attempts = [sorted(cell, key=lambda e: (e.service_tier is not None, len(e.tag)))[0]]
+                note += f"+canary[{row.canary_provider}]"
+        elif row.rail == "openrouter" and body is not None:
             verdict, plan = self.sessions.provider_plan(row.rail, row.model, row.harness, row.stack, row.task,
                                                        self.sessions.clock())
             if verdict == "pinned":
