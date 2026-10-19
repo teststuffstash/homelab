@@ -1,0 +1,51 @@
+# Credentials + ClusterProviderConfig for provider-grafana (grafana-provider.yaml).
+#
+# The ExternalSecret assembles the provider's credentials JSON ({"url","auth"} — the provider's
+# docs/providerconfig-secret-fields.md) from ONE Infisical key: the Grafana admin password, the
+# same value tofu/monitoring.tf renders into the `grafana-admin` Secret from the wallet
+# (`grafana-admin-password`). The URL is the in-cluster Service, not the LAN VIP: the reconciler
+# never leaves the cluster for this. `toJson` quotes the password, so a `"` or `\` in it cannot
+# break the document.
+#
+# BOOTSTRAP (operator, once — the wallet → Infisical copy, scripts/infisical-secret.sh's caveats
+# apply: read the consuming Secret back if the value carries `$`):
+#   . scripts/keepass-env.sh && devbox run infisical-secret GRAFANA_ADMIN_PASSWORD="$TF_VAR_grafana_admin_password"
+# Until then this ES sits SecretSyncedError and the ClusterProviderConfig is inert — a stack's
+# `DashboardPublic` stays unsynced, nothing breaks (the github-providerconfig.yaml precedent).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-provider-creds
+  namespace: crossplane-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: grafana-provider-creds
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        credentials: |
+          {"url": "http://kube-prometheus-stack-grafana.monitoring.svc", "auth": {{ printf "admin:%s" .password | toJson }}}
+  data:
+    - secretKey: password
+      remoteRef: { key: GRAFANA_ADMIN_PASSWORD }
+---
+# The ClusterProviderConfig CRD only exists once the Provider package installs — skip the dry-run
+# so ArgoCD can sync this file in the same pass as grafana-provider.yaml. Cluster-scoped on
+# purpose: one admin credential, referenced from any stack namespace as
+# `providerConfigRef: { name: grafana, kind: ClusterProviderConfig }`.
+apiVersion: grafana.m.crossplane.io/v1beta1
+kind: ClusterProviderConfig
+metadata:
+  name: grafana
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: grafana-provider-creds
+      key: credentials
