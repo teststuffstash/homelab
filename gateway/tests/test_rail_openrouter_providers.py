@@ -378,27 +378,28 @@ async def test_failover(gw, store, upstreams, orworld, behaviours, calls, status
     upstreams[RAIL].provider_behaviours.update(behaviours)
     task = "homelab-2741-failover"
     doc = await _session(gw, task=task)
-    with when(f"POST {PATH} model {M} — the gateway tries the providers in order (one attachment per attempt)"):
-        with quiet():  # the per-attempt exchanges fold into one attachment each, below
+    with when(f"POST {PATH} model {M} — the gateway tries the providers in order (the attempts folded into one attachment)"):
+        with quiet():  # the per-attempt exchanges fold into ONE attachment (ATTACH_BULK: ≤ 8 per case)
             r = await gw.post(PATH, json={"model": M, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8}, headers=bearer(doc))
-        for i, c in enumerate(c for c in upstreams[RAIL].calls if c["path"] == "/v1/chat/completions"):
-            slug = ((c["body"] or {}).get("provider") or {}).get("order", [None])[0]
-            attach_json(f"attempt {i + 1}: {slug}", {"pin": (c["body"] or {}).get("provider"), "behaviour": behaviours.get(slug, "upstream-ok")})
-        attach_json("the harness's answer", {"status": r.status_code, "content_type": r.headers.get("content-type"),
-                                             "body": r.json() if "json" in (r.headers.get("content-type") or "") else r.text[:200]})
-    then_eq("status", r.status_code, status)
-    then_eq("the upstream calls, in order", _pins(upstreams[RAIL]), calls)
-    if served:
-        then_eq("the harness sees one answer, served by", (r.headers["content-type"].split(";")[0], r.json().get("provider")),
-                ("application/json", served))
-    else:
-        then_eq("the harness sees the typed error, served by nobody", r.json().get("provider"), None,
-                claim=f"served = {served!r}: the harness sees the last provider's error body, no answer")
-    then_eq("the request rows' providers (one per attempt)", _row_provider(store, doc), calls)
-    then_eq("strikes (class, provider, source)", _strikes(store, task), strikes)
-    for (frm, to), n in failovers.items():
-        with then(f"gateway_provider_failovers_total{{model={M},from={frm},to={to}}} = {n}"):
-            check("series", await _series(gw, "gateway_provider_failovers_total", {"model": M, "from": frm, "to": to}), n)
+        attach_json("the attempts and the harness's answer", {
+            "attempts": [{"pin": (c["body"] or {}).get("provider"),
+                          "behaviour": behaviours.get(((c["body"] or {}).get("provider") or {}).get("order", [None])[0], "upstream-ok")}
+                         for c in upstreams[RAIL].calls if c["path"] == "/v1/chat/completions"],
+            "answer": {"status": r.status_code, "content_type": r.headers.get("content-type"),
+                       "body": r.json() if "json" in (r.headers.get("content-type") or "") else r.text[:200]}})
+    observed = {"status": r.status_code, "calls": _pins(upstreams[RAIL]),
+                "served_by": r.json().get("provider") if "json" in (r.headers.get("content-type") or "") else None,
+                "request_rows": _row_provider(store, doc), "strikes": _strikes(store, task)}
+    with then(f"status {status}; calls {calls}; served by {served!r}; one request row per attempt; strikes {strikes}"):
+        check("the ride", observed, {"status": status, "calls": calls, "served_by": served, "request_rows": calls, "strikes": strikes})
+    with quiet():
+        text = (await gw.get("/metrics")).text
+    got = {}
+    for (frm, to) in failovers:
+        m = re.search("^" + re.escape(f'gateway_provider_failovers_total{{model="{M}",from="{frm}",to="{to}"}}') + r" (\S+)$", text, re.M)
+        got[f"{frm}→{to}"] = float(m.group(1)) if m else None
+    with then(f"gateway_provider_failovers_total{{model={M}}}: {', '.join(f'{f}→{t} {n}' for (f, t), n in failovers.items()) or 'no series'}"):
+        check("failovers", got, {f"{f}→{t}": n for (f, t), n in failovers.items()})
 
 
 async def test_429_cools_only_the_provider(gw, store, upstreams, orworld):

@@ -516,6 +516,26 @@ async def test_provider_failover_counted(gw, app, store, upstreams):
         check("series", await _provider_sample(gw, "gateway_provider_failovers_total", {"model": OR_M, "from": "deepinfra", "to": "atlas-cloud"}), 1)
 
 
+async def test_cell_state_labels(gw):
+    """row: state is a cell's entry state"""
+    world(note="policy-default (the catalog leg declared; its families render every value from 0)")
+    with when("GET /metrics"):
+        rows = await _series(gw)
+    then_eq("gateway_openrouter_cells{state}", sorted({labels["state"] for fam, labels in rows if fam == "gateway_openrouter_cells"}),
+            ["candidate", "eligible", "excluded"])
+
+
+async def test_canary_outcome_labels(gw):
+    """row: a canary outcome is a verdict, an admission an answer"""
+    world(note="policy-default (the catalog leg declared; its families render every value from 0)")
+    with when("GET /metrics"):
+        rows = await _series(gw)
+    then_eq("gateway_canary_rides_total{outcome} · gateway_canary_admissions_total{outcome}",
+            (sorted({labels["outcome"] for fam, labels in rows if fam == "gateway_canary_rides_total"}),
+             sorted({labels["outcome"] for fam, labels in rows if fam == "gateway_canary_admissions_total"})),
+            (["eligible", "excluded"], ["budget", "dispatch", "not-due", "not-in-catalog"]))
+
+
 UNPINNED_ROWS = [
     ("an unpinned attempt that names no provider is unattributed", None, "unattributed"),
     ("a provider the snapshot lacks renders as other", "Sail Research", "other"),

@@ -82,7 +82,11 @@ T0 = 1_800_000_000
 
 async def _refresh(app, label: str = "") -> str:
     with when(f"the catalog refreshes{label}"):
-        return await app.state.orcatalog.refresh()
+        with quiet():  # the MCP + endpoints exchanges fold into one attachment (ATTACH_BULK)
+            outcome = await app.state.orcatalog.refresh()
+        attach_json("the refresh", {"outcome": outcome, "sources": app.state.orcatalog.sources,
+                                    "endpoint_failures": app.state.orcatalog.endpoint_failures})
+        return outcome
 
 
 async def _view(gw) -> dict:
@@ -158,7 +162,7 @@ FAIL_ROWS = [
 @pytest.mark.parametrize(("mcp_behaviour", "endpoints", "outcome", "models"), [r[1:] for r in FAIL_ROWS], ids=[r[0] for r in FAIL_ROWS])
 async def test_refresh_keeps_last_good(gw, app, mcp, mcp_transport, upstreams, mcp_behaviour, endpoints, outcome, models):
     world(note=f"{WORLD}; mcp {mcp_behaviour}, endpoints {endpoints or 'ok'}")
-    with given("a first good refresh (2 models)"):
+    with given(f"a first good refresh (2 models); then mcp_behaviour = {mcp_behaviour!r}, endpoints = {endpoints or 'ok'!r}"):
         with quiet():
             assert await app.state.orcatalog.refresh() == "ok"
     if mcp_behaviour == "down":
@@ -254,14 +258,14 @@ async def test_canary_admitted(gw, app, store, upstreams):
     world(upstream="upstream-ok", note=WORLD)
     await _refresh(app)
     r = await _canary(gw, M, "deepinfra")
-    then_eq("status", r.status_code, 200)
     doc = r.json()
     _verdict(doc, {"decision": "dispatch", "rail": RAIL, "model": M, "harness": "opencode"})
-    with when("the canary's ride: POST /openai/v1/chat/completions"):
-        rr = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))
-    then_eq("status", rr.status_code, 200)
-    then_eq("the upstream body's provider block", (upstreams[RAIL].calls[-1]["body"] or {}).get("provider"), {"order": ["deepinfra"], "allow_fallbacks": False})
-    then_eq("the session row's canary_provider", store.get_session(doc["session"]["id"]).canary_provider, "deepinfra")
+    with then("the canary's ride pins deepinfra with fallbacks off; the row's canary_provider = deepinfra"):
+        with quiet():
+            rr = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))
+        check("ride (status, the upstream body's provider block, canary_provider)",
+              (rr.status_code, (upstreams[RAIL].calls[-1]["body"] or {}).get("provider"), store.get_session(doc["session"]["id"]).canary_provider),
+              (200, {"order": ["deepinfra"], "allow_fallbacks": False}, "deepinfra"))
 
 
 async def _canary_ride(gw, app, upstreams, provider: str = "deepinfra", behaviour: str = "upstream-ok", outcome: str | None = "clean") -> dict:
