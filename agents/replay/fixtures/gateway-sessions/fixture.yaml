@@ -24,6 +24,11 @@
 # AGENT_GATEWAY_CALLER_SA=<ns>/<sa>. Neither, an unmintable SA, or a malformed one refuses before
 # any request (exit 2).
 #
+# GW-CATALOG-OR's entry canary (homelab#2742): AGENT_GATEWAY_ROLE=<role> sets the body's role (default
+# worker) and AGENT_GATEWAY_CANARY=<model>@<provider> adds `canary: {model, provider}` — a prober
+# session the gateway pins to that OpenRouter cell (row dispatch-canary; the jail launcher is
+# gateway/scripts/canary-entrants.sh).
+#
 # `curl` is shadowed as the gateway seam (recorded: the POST body IS the asserted request, `[auth: …]`
 # the caller header it carried; the DELETE is the release); `kubectl` records the canary's mint. Row state lives in rows/<id>/vars.sh (shell literals; JSON bodies with
 # pipes cannot survive psv splitting).
