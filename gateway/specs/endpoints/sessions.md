@@ -642,8 +642,8 @@ then print this endpoint's plain token. No upstream OAuth credential reaches the
 | description | second pull || answer |
 |---|---||---|
 | "same pod rotates token only" | same UID || plain token, old invalid |
-| "recreated pod is refused" | different UID || 403 |
-| "absent UID cannot reread" | missing UID || 403 |
+| "recreated pod is refused ⚖" | different UID || 403 |
+| "absent UID cannot reread ⚖" | missing UID || 403 |
 | "released session cannot reread" | released || 401 |
 | "expired session cannot reread" | expired || 401 |
 
@@ -665,6 +665,7 @@ pull never logs the presented token; a JWT is masked by shape) are
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
+| "⚑ gap: a racing rotation" | two concurrent same-pod re-reads || one plain token, one 409 `token-rotation-conflict` (the conditional write) | unexercised: the ASGI test client serializes the two pulls, so the conflict arm has no row — it rides with the first concurrent fixture |
 
 <details markdown="1"><summary>Evidence</summary>
 

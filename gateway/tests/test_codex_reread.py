@@ -2,8 +2,8 @@
 
 | description | second pull | answer |
 | same pod rotates token only | same UID | plain token, old invalid |
-| recreated pod is refused | different UID | 403 |
-| absent UID cannot reread | missing UID | 403 |
+| recreated pod is refused ⚖ | different UID | 403 |
+| absent UID cannot reread ⚖ | missing UID | 403 |
 | released session cannot reread | released | 401 |
 | expired session cannot reread | expired | 401 |
 """
@@ -14,14 +14,14 @@ import pytest
 
 from agent_gateway.pull import POD_NAME_EXTRA, POD_UID_EXTRA, Review, StaticTokenReviews
 
-from ._codex_world import fresh_report
+from ._codex_world import body, fresh_report
 from .conftest import rule, then_eq, when, world
 
 pytestmark = rule("GW-SESSIONS-PULL")
 
 
 @pytest.mark.parametrize("case,status", [("same", 200), ("recreated", 403), ("no-uid", 403), ("released", 401), ("expired", 401)],
-                         ids=["same pod rotates token only", "recreated pod is refused", "absent UID cannot reread",
+                         ids=["same pod rotates token only", "recreated pod is refused ⚖", "absent UID cannot reread ⚖",
                               "released session cannot reread", "expired session cannot reread"])
 async def test_reread(codex_app, clock, case, status):
     world("policy-codex")
@@ -54,5 +54,6 @@ async def test_reread(codex_app, clock, case, status):
         if status == 200:
             then_eq("only a new token returned", answer.text.startswith("gws_") and len(answer.text) == 36 and answer.text != old, True)
             then_eq("old token refused", svc.authenticate(old)[1], "session-unknown")
-            then_eq("new token accepted", svc.authenticate(answer.text)[1], None)
+            ridden = await client.post("/openai/v1/responses", json=body(), headers={"authorization": f"Bearer {answer.text}"})
+            then_eq("data plane with the new token (POST /openai/v1/responses, upstream-ok)", ridden.status_code, 200)
             then_eq("cache disabled", answer.headers.get("cache-control"), "no-store")
