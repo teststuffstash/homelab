@@ -27,6 +27,7 @@ class SqliteStore:
         self.seed_file = seed_file
         self.mutex = threading.Lock()
         self.db = None
+        self.imports = 0  # seed imports by THIS owner (evidence: a restart on an unchanged seed imports nothing)
 
     @contextmanager
     def lock(self):
@@ -84,6 +85,7 @@ class SqliteStore:
             self.db.execute("INSERT OR REPLACE INTO codex_oauth VALUES (1,?,?,?,?,?,?)",
                             (credential.access_token, credential.refresh_token, credential.account_id,
                              credential.expires_at, "ready", digest))
+        self.imports += 1
 
     def load(self) -> Record:
         row = self.db.execute("SELECT access,refresh,account,expires,state FROM codex_oauth WHERE id=1").fetchone()

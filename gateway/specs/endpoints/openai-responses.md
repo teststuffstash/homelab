@@ -253,7 +253,10 @@ holds only the seed; SQLite in `GATEWAY_DB` owns rotations. No write-back.
 Each lock checks the mounted file's SHA-256; unchanged bytes are not decoded/imported again.
 A changed valid seed atomically replaces record and hash, including a recovery marker.
 A missing seed after import preserves the record. Invalid/oversized seeds fail closed.
-⚖ Seed bound: 64 KiB. A POSIX file lock spans load/exchange/save; each SQLite FULL-synchronous
+⚖ Seed bound: 64 KiB. ⚖ A changed seed is also the recovery operation: it replaces a persisted
+`refreshing` marker (the former "lost-rotation recovery", "production write-back" and "refresh
+production wiring" gap rows close here — recovery is an operator re-seed with a fresh login,
+never a gateway write-back). A POSIX file lock spans load/exchange/save; each SQLite FULL-synchronous
 transaction commits independently so the marker survives process exit. Single replica,
 Recreate on the PVC; distributed fencing remains FU-271. No credential memory fallback.
 
@@ -261,9 +264,9 @@ Recreate on the PVC; distributed fencing remains FU-271. No credential memory fa
 |---|---||---|
 | "seed once" | empty database || ready |
 | "seed unchanged is not imported again" | rotate, restart || rotation retained |
-| "changed seed replaces" | rotate, replace seed || new ready record |
+| "changed seed replaces ⚖" | rotate, replace seed (the record carries a `refreshing` marker) || new ready record — the marker is replaced too |
 | "restart recovers state" | revoke, restart || revoked |
-| "crash between exchange and save" | child exits in exchange || recovery until reseed |
+| "crash between exchange and save ⚖" | child exits in exchange || `refreshing` persists; `credential-recovery-required` until a changed seed |
 | "memory fallback is refused" | :memory: || unavailable |
 
 ### The lifecycle (driven at `oauth.Lifecycle` with the FAKE store)
