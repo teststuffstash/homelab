@@ -1,9 +1,7 @@
 """The codex rail's OAuth lifecycle behind a persistence interface (GW-CODEX-OAUTH).
 
-Ported from `experiments/codex-rail/lifecycle.py` (FU-270, #2625/#2642). No HTTP, no vendor
-registration, no secret backend: the refresh `exchange` and the `Store` are injected. The only
-`Store` that exists is the tests' in-memory FAKE — the production write-back (Infisical is the
-source of truth, docs/secrets.md) is a `⚑ gap`, so `create_app` wires none and the rail ships dark.
+The native exchange and Store are injected. Production uses sqlite_oauth.SqliteStore
+with the ESO seed as an import; rotations remain gateway-local (operator 2026-10-19).
 
 The store contract: one account per store; `lock()` is exclusive across ALL owners and spans load →
 exchange → save; `save` atomically replaces the record and acknowledges only after durability; a

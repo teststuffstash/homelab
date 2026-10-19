@@ -10,7 +10,7 @@ real key), **per-session model resolution** (one model per session, from `policy
 three live **rails** — `anthropic` (the operator's Claude subscription OAuth token), `openrouter`
 (per-stack keys minted by openrouter-operator), `opencode` (the OpenCode Go key) — plus `codex`
 (the ChatGPT subscription, `responses` dialect), which ships **dark**: no deployed policy declares
-it and no production credential store exists.
+it and production ownership is wired only behind explicit environment settings.
 
 ## The contract
 
@@ -44,7 +44,7 @@ Environment: `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is
 logged, and `/healthz` says `db: memory`), `OPENCODE_GO_API_KEY` (the gateway's own mounted Go
 key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Service name),
 `ANTHROPIC_UPSTREAM` / `OPENROUTER_UPSTREAM` / `OPENCODE_GO_UPSTREAM` (base URLs, overridable for
-tests), `CODEX_UPSTREAM` (no default — the codex upstream profile is unselected), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20),
+tests), `CODEX_UPSTREAM` (native backend; no default), `CODEX_SEED_FILE` (ESO-mounted JSON seed; SHA-256-gated import into `GATEWAY_DB`), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20),
 `GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_DOCS_URL` (the Go catalog's two sources, overridable for
 tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule).
 
@@ -98,10 +98,9 @@ policy's `tiers` block, and a row fails the suite when a list drifts from the de
   OpenRouter-shaped alias): goose computes `$OPENROUTER_HOST/api/v1/…` and opencode's provider
   baseURL is `<host>/api/v1` today (`agents/agent-session.sh`), so the alias is what those
   harnesses reach if a launcher keeps today's wiring. One handler set, two prefixes.
-- The codex rail's credential backend is a `create_app(codex_backend=…)` argument (a `Store` +
-  refresh `exchange`); only the tests pass one (`tests/_codex_world.py`'s FAKE store). `python -m
-  agent_gateway` passes none, so even a policy that declared the rail would defer it
-  `credential-unresolved`. The native-CLI compat harness stays in `experiments/codex-rail/`
-  (it needs the pinned `codex` binary, which CI does not carry).
+- The codex rail uses gateway-local SQLite in `GATEWAY_DB`; `CODEX_UPSTREAM` and
+  `CODEX_SEED_FILE` enable the executable's native backend. The mounted seed is imported only
+  when its content hash changes; rotations and recovery markers remain local and durable.
+  The deployed policy still omits Codex. Native-CLI evidence lives in `experiments/codex-rail/`.
 - The `upstream-slow` world is clock-faked (the fake transport raises `ReadTimeout`), so the
   `upstream-timeout` rows prove the 504 mapping, not the 600 s budget itself (specs: `🚧 WIP`).
