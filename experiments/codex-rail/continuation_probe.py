@@ -16,6 +16,7 @@ import tempfile
 from pathlib import Path
 
 import compat
+from profile_probe import summarize
 from tests._codex_world import completion, sse
 
 STATE = "fixture-turn-state"
@@ -45,7 +46,15 @@ class Observations:
 
     def observe(self, body, headers):
         headers = {k.lower(): v for k, v in headers.items()}
-        self.rows.append({"turn_state_matches": headers.get("x-codex-turn-state") == STATE,
+        allowed = {"host", "authorization", "chatgpt-account-id", "content-type", "accept", "accept-encoding",
+                   "user-agent", "content-length", "connection", "session_id", "x-codex-session-id",
+                   "x-codex-turn-state", "x-codex-turn-metadata", "x-codex-window-id", "x-codex-installation-id",
+                   "x-codex-beta-features", "x-client-request-id", "originator", "version", "openai-beta",
+                   "x-codex-thread-id", "x-codex-request-id", "conversation_id", "session-id", "thread-id"}
+        self.rows.append({"shape": summarize(body, headers), "header_names": sorted(allowed.intersection(headers)),
+                          "unknown_header_count": len(set(headers) - allowed),
+                          "turn_id_present": isinstance(body.get("client_metadata", {}).get("turn_id"), str),
+                          "turn_state_matches": headers.get("x-codex-turn-state") == STATE,
                           "fixture_tool_declared": any(tool.get("type") == "function" and tool.get("name") == "get_goal"
                                                        for tool in body.get("tools", []) if isinstance(tool, dict)),
                           "tool_result_present": any(item.get("type") == "function_call_output"

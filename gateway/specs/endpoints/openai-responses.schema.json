@@ -37,7 +37,8 @@
         "content-type": "application/json",
         "accept": "text/event-stream",
         "accept-encoding": "identity",
-        "user-agent": "agent-gateway"
+        "user-agent": "agent-gateway",
+        "x-codex-turn-state": "optional: previously issued state bound to session/account/turn"
       },
       "auth": { "header": "Authorization", "value": "Bearer <access_token>", "source": "the OAuth lifecycle (GW-CODEX-OAUTH)", "x-requirements": ["GW-CODEX-OAUTH"] },
       "redirects": "never followed",
@@ -135,6 +136,7 @@
     }
   },
   "errors": {
+    "turn-state-invalid": { "status": 400, "description": "routing state not issued for this session and turn", "x-requirements": ["GW-RAIL-CODEX"] },
     "session-unknown": { "status": 401, "description": "no session token, or one no row's hash matches", "x-requirements": ["GW-CRED-BOUNDARY"] },
     "session-expired": { "status": 401, "description": "the session's expires_at has passed", "x-requirements": ["GW-CRED-BOUNDARY"] },
     "session-released": { "status": 401, "description": "the session was released", "x-requirements": ["GW-CRED-BOUNDARY"] },

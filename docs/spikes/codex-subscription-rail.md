@@ -489,3 +489,46 @@ homes; it is not a real-model tool-use canary or a deployed-runtime test.
 The next FU-270 header change must explicitly define the opaque state round trip and its
 session/account boundaries in [GW-RAIL-CODEX](../../gateway/specs/endpoints/openai-responses.md#gw-rail-codex),
 then run this comparison again. No passthrough exception is introduced by this measurement.
+
+## Canary preparation evidence — 2026-10-19 (FU-270)
+
+Operator decisions supersede the investigation's earlier candidates: native backend selected,
+gateway-local SQLite owns rotation, Infisical holds only the hash-gated seed, and enrollment
+uses a separate gateway login. SIWC is unselected. The deployed policy still omits Codex.
+
+The [loopback continuation record](../../experiments/codex-rail/continuation-evidence.json)
+was rerun with runtime-pinned 0.161.0 and this jail's 0.163.0, isolated homes and dummy credentials.
+Both send `stream: true`, `store: false`, array input, seven ungrouped function tools plus
+one namespace with five functions and one web-search tool. Direct headers (names only):
+`accept`, `authorization`, `content-length`, `content-type`, `host`, `originator`, `session-id`,
+`thread-id`, `user-agent`, `x-client-request-id`, `x-codex-beta-features`, `x-codex-turn-metadata`,
+`x-codex-window-id`; the continuation adds `x-codex-turn-state`. The body carries a turn ID.
+The gateway replaces auth/account identity, forwards only its base headers plus validated
+turn state, and both CLI versions now replay the issued value on the tool continuation.
+This is a synthetic native CLI observation, not a capture of this conversation's transport.
+
+Pinned source at `rust-v0.161.0` / `979011409de0a60b52f179721948e65531d26144`:
+[refresh manager](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/login/src/auth/manager.rs)
+uses a JSON refresh grant at `auth.openai.com/oauth/token`, native client ID, no resource;
+omitted replacement refresh tokens retain the old value. Reused/expired/invalidated tokens
+have terminal classifications. This is client behavior, not proof of server grace periods.
+[Core client](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/core/src/client.rs)
+keeps turn state in a per-turn OnceLock. The gateway follows first-value-wins.
+
+[Usage endpoint](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/backend-client/src/client/rate_limit_resets.rs)
+is GET `https://chatgpt.com/backend-api/wham/usage` for the ChatGPT path style.
+[Window schema](https://github.com/openai/codex/blob/979011409de0a60b52f179721948e65531d26144/codex-rs/codex-backend-openapi-models/src/models/rate_limit_window_snapshot.rs)
+has integer `used_percent`, `limit_window_seconds`, `reset_after_seconds`, `reset_at`.
+`rate_limit` holds boolean `allowed`/`limit_reached` and nullable `primary_window`/
+`secondary_window`. The native client uses absolute `reset_at`, not a countdown reconstructed
+from `reset_after_seconds`; the gateway must require a fresh observation after that reset.
+These fields are **source-derived; the real endpoint response remains unverified**. A loopback
+fixture cannot establish what a live account actually returns.
+
+[Official authentication documentation](https://learn.chatgpt.com/docs/auth) describes automatic
+refresh and file storage under CODEX_HOME, and treats the cached login as sensitive. Neither
+that page nor the inspected client source establishes whether a second device login on the
+same account invalidates the first login's refresh token. **Unverified:** independent-login
+revocation semantics, server refresh replay grace, account eligibility, real usage window
+availability and reset behavior. The separate gateway login avoids sharing a rotation chain;
+it does not prove those server properties. Verify them during the separately authorized canary.

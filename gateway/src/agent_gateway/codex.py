@@ -34,6 +34,7 @@ from .oauth import Code, Credential, Failure, Lifecycle, Store
 from .proxy import inbound_token  # one token rule for every dialect (GW-CRED-BOUNDARY)
 from .sessions import SessionService, error
 from .store import Usage
+from .turn_state import HEADER, TurnStates
 
 log = logging.getLogger("gateway.codex")
 
@@ -98,6 +99,7 @@ def usage_of(obs: responses.Observation) -> Usage:
 class CodexProxy:
     def __init__(self, sessions: SessionService, metrics: Metrics, rail: CodexRail | None, client: httpx.AsyncClient):
         self.sessions, self.metrics, self.rail, self.client = sessions, metrics, rail, client
+        self.turn_states = TurnStates()
 
     def _refuse(self, rail: str, status: int, code: str, message: str, headers: dict | None = None) -> Response:
         self.metrics.request(rail, DIALECT, status)
@@ -145,6 +147,12 @@ class CodexProxy:
             headers = responses.upstream_headers(credential.access_token, credential.account_id)
         except responses.Refused:
             return self._refuse(row.rail, 401, "credential-invalid", "the codex credential is not usable: credential-invalid")
+        try:
+            turn_key = self.turn_states.request(row.id, credential.account_id, doc, request.headers.get(HEADER))
+        except ValueError:
+            return self._refuse(row.rail, 400, "turn-state-invalid", "routing state is not bound to this session and turn")
+        if request.headers.get(HEADER) is not None:
+            headers[HEADER] = request.headers[HEADER]
         del credential
         t0 = time.monotonic()
         try:
@@ -174,7 +182,8 @@ class CodexProxy:
             out = {"content-type": resp.headers.get("content-type", "application/json"),
                    "retry-after": resp.headers.get("retry-after", "30")}
             return Response(body, status_code=429, headers=out)
-        return self._stream(resp, row, t0)
+        state = self.turn_states.response(row.id, turn_key, resp.headers.get(HEADER))
+        return self._stream(resp, row, t0, {HEADER: state} if state else {})
 
     def _upstream_error(self, row, status: int, code: str, detail: str, t0: float) -> Response:
         elapsed = time.monotonic() - t0
@@ -183,7 +192,7 @@ class CodexProxy:
         log.warning("%s codex session=%s: %s", code, row.id, detail)
         return error(status, code, f"rail codex upstream: {detail}")
 
-    def _stream(self, resp: httpx.Response, row, t0: float) -> StreamingResponse:
+    def _stream(self, resp: httpx.Response, row, t0: float, headers: dict) -> StreamingResponse:
         obs = responses.Observation()
         closed = [False]
 
@@ -202,7 +211,7 @@ class CodexProxy:
                          usage.tokens_out)
 
         return StreamingResponse(responses.relay(resp.aiter_raw(), obs, close), status_code=200,
-                                 media_type="text/event-stream")
+                                 media_type="text/event-stream", headers=headers)
 
 
 async def openai_responses(request: Request) -> Response:

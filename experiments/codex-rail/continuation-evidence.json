@@ -1,17 +1,84 @@
 {
-  "measured_at": "2026-10-17",
-  "gateway_source_commit": "e29463969e15d3eca1beaef606d63cd10601fa52",
+  "observed_on": "2026-10-19",
+  "scope": "Loopback only, dummy credentials; no real usage response observed",
   "runs": [
     {
       "cli_version": "codex-cli 0.161.0",
       "live_subscription_verified": false,
       "direct": [
         {
+          "shape": {
+            "stream_store_input_shape_matches": true,
+            "unsupported_fields_present": [],
+            "tool_type_counts": {
+              "function": 12,
+              "namespace": 1,
+              "web_search": 1
+            },
+            "unsupported_tool_types_present": [],
+            "ungrouped_function_or_custom_tools": 7,
+            "system_message_present": false,
+            "unknown_tool_or_input_shapes": 0,
+            "account_header_present": false,
+            "documented_blocker_observed": true,
+            "full_profile_compatibility_verified": false
+          },
+          "header_names": [
+            "accept",
+            "authorization",
+            "content-length",
+            "content-type",
+            "host",
+            "originator",
+            "session-id",
+            "thread-id",
+            "user-agent",
+            "x-client-request-id",
+            "x-codex-beta-features",
+            "x-codex-turn-metadata",
+            "x-codex-window-id"
+          ],
+          "unknown_header_count": 0,
+          "turn_id_present": true,
           "turn_state_matches": false,
           "fixture_tool_declared": true,
           "tool_result_present": false
         },
         {
+          "shape": {
+            "stream_store_input_shape_matches": true,
+            "unsupported_fields_present": [],
+            "tool_type_counts": {
+              "function": 12,
+              "namespace": 1,
+              "web_search": 1
+            },
+            "unsupported_tool_types_present": [],
+            "ungrouped_function_or_custom_tools": 7,
+            "system_message_present": false,
+            "unknown_tool_or_input_shapes": 0,
+            "account_header_present": false,
+            "documented_blocker_observed": true,
+            "full_profile_compatibility_verified": false
+          },
+          "header_names": [
+            "accept",
+            "authorization",
+            "content-length",
+            "content-type",
+            "host",
+            "originator",
+            "session-id",
+            "thread-id",
+            "user-agent",
+            "x-client-request-id",
+            "x-codex-beta-features",
+            "x-codex-turn-metadata",
+            "x-codex-turn-state",
+            "x-codex-window-id"
+          ],
+          "unknown_header_count": 0,
+          "turn_id_present": true,
           "turn_state_matches": true,
           "fixture_tool_declared": true,
           "tool_result_present": true
@@ -19,31 +86,157 @@
       ],
       "gateway": [
         {
+          "shape": {
+            "stream_store_input_shape_matches": true,
+            "unsupported_fields_present": [],
+            "tool_type_counts": {
+              "function": 12,
+              "namespace": 1,
+              "web_search": 1
+            },
+            "unsupported_tool_types_present": [],
+            "ungrouped_function_or_custom_tools": 7,
+            "system_message_present": false,
+            "unknown_tool_or_input_shapes": 0,
+            "account_header_present": true,
+            "documented_blocker_observed": true,
+            "full_profile_compatibility_verified": false
+          },
+          "header_names": [
+            "accept",
+            "accept-encoding",
+            "authorization",
+            "chatgpt-account-id",
+            "connection",
+            "content-length",
+            "content-type",
+            "host",
+            "user-agent"
+          ],
+          "unknown_header_count": 0,
+          "turn_id_present": true,
           "turn_state_matches": false,
           "fixture_tool_declared": true,
           "tool_result_present": false
         },
         {
-          "turn_state_matches": false,
+          "shape": {
+            "stream_store_input_shape_matches": true,
+            "unsupported_fields_present": [],
+            "tool_type_counts": {
+              "function": 12,
+              "namespace": 1,
+              "web_search": 1
+            },
+            "unsupported_tool_types_present": [],
+            "ungrouped_function_or_custom_tools": 7,
+            "system_message_present": false,
+            "unknown_tool_or_input_shapes": 0,
+            "account_header_present": true,
+            "documented_blocker_observed": true,
+            "full_profile_compatibility_verified": false
+          },
+          "header_names": [
+            "accept",
+            "accept-encoding",
+            "authorization",
+            "chatgpt-account-id",
+            "connection",
+            "content-length",
+            "content-type",
+            "host",
+            "user-agent",
+            "x-codex-turn-state"
+          ],
+          "unknown_header_count": 0,
+          "turn_id_present": true,
+          "turn_state_matches": true,
           "fixture_tool_declared": true,
           "tool_result_present": true
         }
       ],
       "gateway_turn_completed": true,
       "native_turn_state_replayed": true,
-      "gateway_turn_state_replayed": false,
-      "gateway_compatibility_gap": true
+      "gateway_turn_state_replayed": true,
+      "gateway_compatibility_gap": false
     },
     {
       "cli_version": "codex-cli 0.163.0",
       "live_subscription_verified": false,
       "direct": [
         {
+          "shape": {
+            "stream_store_input_shape_matches": true,
+            "unsupported_fields_present": [],
+            "tool_type_counts": {
+              "function": 12,
+              "namespace": 1,
+              "web_search": 1
+            },
+            "unsupported_tool_types_present": [],
+            "ungrouped_function_or_custom_tools": 7,
+            "system_message_present": false,
+            "unknown_tool_or_input_shapes": 0,
+            "account_header_present": false,
+            "documented_blocker_observed": true,
+            "full_profile_compatibility_verified": false
+          },
+          "header_names": [
+            "accept",
+            "authorization",
+            "content-length",
+            "content-type",
+            "host",
+            "originator",
+            "session-id",
+            "thread-id",
+            "user-agent",
+            "x-client-request-id",
+            "x-codex-beta-features",
+            "x-codex-turn-metadata",
+            "x-codex-window-id"
+          ],
+          "unknown_header_count": 0,
+          "turn_id_present": true,
           "turn_state_matches": false,
           "fixture_tool_declared": true,
           "tool_result_present": false
         },
         {
+          "shape": {
+            "stream_store_input_shape_matches": true,
+            "unsupported_fields_present": [],
+            "tool_type_counts": {
+              "function": 12,
+              "namespace": 1,
+              "web_search": 1
+            },
+            "unsupported_tool_types_present": [],
+            "ungrouped_function_or_custom_tools": 7,
+            "system_message_present": false,
+            "unknown_tool_or_input_shapes": 0,
+            "account_header_present": false,
+            "documented_blocker_observed": true,
+            "full_profile_compatibility_verified": false
+          },
+          "header_names": [
+            "accept",
+            "authorization",
+            "content-length",
+            "content-type",
+            "host",
+            "originator",
+            "session-id",
+            "thread-id",
+            "user-agent",
+            "x-client-request-id",
+            "x-codex-beta-features",
+            "x-codex-turn-metadata",
+            "x-codex-turn-state",
+            "x-codex-window-id"
+          ],
+          "unknown_header_count": 0,
+          "turn_id_present": true,
           "turn_state_matches": true,
           "fixture_tool_declared": true,
           "tool_result_present": true
@@ -51,20 +244,79 @@
       ],
       "gateway": [
         {
+          "shape": {
+            "stream_store_input_shape_matches": true,
+            "unsupported_fields_present": [],
+            "tool_type_counts": {
+              "function": 12,
+              "namespace": 1,
+              "web_search": 1
+            },
+            "unsupported_tool_types_present": [],
+            "ungrouped_function_or_custom_tools": 7,
+            "system_message_present": false,
+            "unknown_tool_or_input_shapes": 0,
+            "account_header_present": true,
+            "documented_blocker_observed": true,
+            "full_profile_compatibility_verified": false
+          },
+          "header_names": [
+            "accept",
+            "accept-encoding",
+            "authorization",
+            "chatgpt-account-id",
+            "connection",
+            "content-length",
+            "content-type",
+            "host",
+            "user-agent"
+          ],
+          "unknown_header_count": 0,
+          "turn_id_present": true,
           "turn_state_matches": false,
           "fixture_tool_declared": true,
           "tool_result_present": false
         },
         {
-          "turn_state_matches": false,
+          "shape": {
+            "stream_store_input_shape_matches": true,
+            "unsupported_fields_present": [],
+            "tool_type_counts": {
+              "function": 12,
+              "namespace": 1,
+              "web_search": 1
+            },
+            "unsupported_tool_types_present": [],
+            "ungrouped_function_or_custom_tools": 7,
+            "system_message_present": false,
+            "unknown_tool_or_input_shapes": 0,
+            "account_header_present": true,
+            "documented_blocker_observed": true,
+            "full_profile_compatibility_verified": false
+          },
+          "header_names": [
+            "accept",
+            "accept-encoding",
+            "authorization",
+            "chatgpt-account-id",
+            "connection",
+            "content-length",
+            "content-type",
+            "host",
+            "user-agent",
+            "x-codex-turn-state"
+          ],
+          "unknown_header_count": 0,
+          "turn_id_present": true,
+          "turn_state_matches": true,
           "fixture_tool_declared": true,
           "tool_result_present": true
         }
       ],
       "gateway_turn_completed": true,
       "native_turn_state_replayed": true,
-      "gateway_turn_state_replayed": false,
-      "gateway_compatibility_gap": true
+      "gateway_turn_state_replayed": true,
+      "gateway_compatibility_gap": false
     }
   ]
 }
