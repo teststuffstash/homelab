@@ -816,15 +816,15 @@ the block needs pruning, not more headings.
       grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
       (retry) stays. Relates ADR-087, FU-089.
 - [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** `/sessions` consumers:
-      specs reviewer (ADR-155, own SA `agent-coordinator:specs-review` #2710) + the worker launcher behind
-      `AGENT_GATEWAY=sessions` (platform only); the pod pulls its env (GW-SESSIONS-PULL); control plane enforced (#2688;
-      gap #2684 waits on a need). Failure ownership LIVE 10-17 (#2692/#2697/#2699/#2702/#2704); Go catalog LIVE 10-18
-      (#2695/#2707). **Tier lists are DERIVED, never hand-picked (operator ruling 2026-10-18, #2716: GW-MODEL-TIERS —
-      AA intelligence bands 0.9/0.75/0.5 of the rail's best, cheapest-first, cap 3; `benchmarks.json` committed snapshot
-      + equality check; gaps → #2718).** Session pod mounts the gateway caller token (#2713, inert).
-      **Codex:** native profile + SQLite rotation ownership; A store in review, B–E and live canary remain. **Next:** (a) operator rulings — the openrouter candidate set (all `model-classes` ids put kimi-k3 alone at heavy/standard,
-      $11.94/1M out; the `coding` chain is the alternative) and the `wrong-verdict` judge source; (b) the loop flip = `AGENT_GATEWAY=sessions`
-      into the session-pod heredoc (`agents/coordinator-session.sh`); (c) `context_tokens` from the catalog's `context`, not policy. History: TICK-LOG 10-16..18.
+      specs reviewer (ADR-155, own SA #2710) + the worker launcher behind `AGENT_GATEWAY=sessions` (platform only); the
+      pod pulls its env (GW-SESSIONS-PULL); control plane enforced (#2688; gap #2684 waits). Failure ownership LIVE 10-17,
+      Go catalog LIVE 10-18, **tier lists DERIVED from evidence (operator ruling 10-18, #2716; gaps → #2718)**.
+      **Codex rail (rulings 2026-10-19: native backend, gateway-local SQLite store, the gateway's OWN login) — status and
+      the five legs A–E live in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)**
+      (A merged #2734; B #2735 / C #2736 in review; D headroom poll, E seed recipe unstarted; then policy + canary).
+      **Next:** (a) operator rulings — the openrouter candidate set (kimi-k3 alone at heavy/standard vs the `coding` chain)
+      and the `wrong-verdict` judge source; (b) the loop flip = `AGENT_GATEWAY=sessions` into the session-pod heredoc
+      (`agents/coordinator-session.sh`); (c) `context_tokens` from the catalog's `context`. History: TICK-LOG 10-16..19.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).

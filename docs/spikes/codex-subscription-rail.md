@@ -532,3 +532,34 @@ same account invalidates the first login's refresh token. **Unverified:** indepe
 revocation semantics, server refresh replay grace, account eligibility, real usage window
 availability and reset behavior. The separate gateway login avoids sharing a rotation chain;
 it does not prove those server properties. Verify them during the separately authorized canary.
+
+## Lighting the rail — 2026-10-19 (FU-270)
+
+Operator rulings (seat session, 2026-10-19) that end the "unselected" state of the gateway half:
+
+1. **Upstream profile = the native Codex backend** (`https://chatgpt.com/backend-api/codex`, the
+   native refresh transport of PR #2677). SIWC stays a named, unselected gap.
+2. **Credential store = gateway-local, durable** (`GATEWAY_DB` SQLite on the PVC; single replica,
+   `Recreate`; FU-271 keeps HA deferred). Infisical holds the **seed only** (`CODEX_SEED_RECORD`
+   → ESO → `agent-egress/codex-seed`, key `record`), imported once and re-read only when its bytes
+   change; a re-seed IS the lost-rotation recovery operation. No write-back.
+3. **The gateway gets its own login** — never the homelab-codex jail's `auth.json`: native refresh
+   rotates with reuse detection, so two refreshers on one token set revoke each other. Whether a
+   second device login on the same account invalidates the first is **unverified** (Codex's own
+   read of the pinned source left it open); the seed recipe must settle it before the mint.
+
+The five legs (Codex authored A–C in the jail until its usage limit; the seat finished the
+specs-review rounds):
+
+| Leg | What | State |
+|---|---|---|
+| A | `SqliteStore` + hash-gated seed import + `__main__` wiring + deploy manifests (ExternalSecret, env, optional mount) | **merged #2734**; the ExternalSecret switched to `dataFrom.find` the same hour (an absent Infisical key had kept the ArgoCD app Degraded) |
+| B | `x-codex-turn-state` round trip bound to session, account and `client_metadata.turn_id`; `turn-state-invalid` | PR #2735, rebased on A, in review |
+| C | same-pod token-only re-read on `POST /sessions/{id}/env` (the `auth.command` seam) | PR #2736, in review |
+| D | headroom from the gateway's own usage poll → `gateway_subscription_*{rail="codex"}` + panels on UID `claude-subscription` | not started |
+| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | not started |
+
+After E: the codex rail block in the deployed policy (tier lists derived — `benchmarks.json` needs
+`codex/<id>` spellings), the `codex` cell in the launcher, the agent-runtime `agent-codex` wrapper
+rendering the provider block from the dispatch env, and the live canary in a declared maintenance
+window (step 4 above). The mint and the window are the operator's.

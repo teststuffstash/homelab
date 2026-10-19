@@ -13778,3 +13778,23 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (inferred, dig-explained line updated with the caveat). New, not S9: `ArgoCDAppDegraded snore-recorder` 12:40Z,
   `MgmtOpnsenseDrillScoreRegressed` 57, `LonghornDiskFillingUp` intel1 88.9%, `RetentionLedgerPruneRemnant`.
 - Wind-down 19:50Z: #2720 merged 19:3xZ, #2721 merged 19:45Z (both reviewers approved); clones deleted; one push.
+
+## 2026-10-19 ~17:30–19:40Z — seat: gateway pickup, the codex rail's three rulings, Codex's PRs finished (PR lane + 1 quickfix)
+
+- Pickup read (gateway/ + FU-270 + the codex spike, no corpus): the codex rail is in the gateway DARK; what blocks lighting it
+  is three operator rulings. Asked; ruled: native backend / gateway-local store / the gateway's own login. Answered the
+  single-replica question from the record (ADR-096 consequence, the 09-21 clone death, the 09-25 nine FATALs — all the
+  broker side channel, fixed by agent-runtime#144 + #1932; no mid-generation ride loss on record).
+- Codex brief written (legs A–E, rules-only, use-yourself-as-evidence); Codex opened #2734/#2735/#2736 (A/B/C), hit its
+  usage limit (resets 10-20 02:23Z) before D/E. Operator: "in-flight PRs you can finish yourself".
+- Specs-review round 1 on all three = the same two classes: no `Spec changes:` section / ⚖ missing on judgment rows, and
+  ROW_UNPROVEN (a single boolean verdict per case). Fixed in clones: A's rows observe state/token identity/import count/
+  failure code (an `imports` counter on the store); B's rows now ride THROUGH the gateway against the fake backend
+  (issued/received/replayed/outcome/call count; the delayed row holds the first backend answer — two defects found on
+  the way: a re-observed headroom report is out-of-order, and a fake issuing the same value on the new turn makes the
+  replay legitimately accepted); C's acceptance proven by a data-plane 200 + a racing-rotation gap row. All three gates
+  green locally; bodies rewritten with `Spec changes:`. #2734 MERGED 19:07Z; #2735 conflicted with it on the spec page →
+  rebased, re-pushed; #2736 behind, updater's.
+- Live finding on A's deploy (#2737): `codex-seed` ExternalSecret `SecretSyncedError` (CODEX_SEED_RECORD not minted) →
+  app Degraded. Probed `dataFrom.find` live (clean sync, no Secret, mount optional) → 218e1815 direct (quickfix class,
+  pushed). FU-270 trimmed to a pointer; spike §Lighting the rail carries rulings + leg table.
