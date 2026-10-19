@@ -947,7 +947,7 @@ the consumer's round counter. It is **no class here**, and saying one is 400
 `sessions.schema.json` `outcome.input.properties.class` (`enum` + `x-scope`) is the set; the code's
 copy (`outcomes.py` `OUTCOME_CLASSES`) is pinned to it by a row. **Scope** is the old router's rule
 ([model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder)): a
-**cell**-scoped (serving-shaped) strike excludes that (rail, model) [cell](../glossary.md#cell) for
+**cell**-scoped (serving-shaped) strike excludes that (rail, model, provider) [cell](../glossary.md#cell) for
 the task; a **model**-scoped one excludes the model on every rail for the task. ⚖ Each new class's
 scope is a judgment, marked.
 

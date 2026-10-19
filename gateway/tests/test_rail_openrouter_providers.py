@@ -178,7 +178,7 @@ async def test_attribution_rule(gw, store, upstreams, orworld, display, slug):
     world(upstream="upstream-ok", note=f"{WORLD}; {M2} has no snapshot entry")
     upstreams[RAIL].provider_display = display
     doc = await _session(gw, tier="standard")
-    r = await _ride(gw, doc)
+    r = await _ride(gw, doc, label=f" — the answer names display = {display!r}, expected slug = {slug!r}")
     then_eq("status", r.status_code, 200)
     then_eq("the upstream body carries no provider pin", "provider" in (upstreams[RAIL].calls[-1]["body"] or {}), False)
     then_eq("the request row's provider", _row_provider(store, doc), [slug],
@@ -316,12 +316,12 @@ async def test_struck_cell_left_out(gw, upstreams, store, orworld):
         attach_json("the strike", _strikes(store, task))
     doc = await _session(gw, task=task)
     r = await _ride(gw, doc, label=" (the task)")
-    then_eq("status", r.status_code, 200)
-    then_eq("the task's pin", _pins(upstreams[RAIL])[-1], "atlas-cloud")
-    other = await _session(gw, task="homelab-2741-other")
-    r2 = await _ride(gw, other, label=" (another task)")
-    then_eq("status", r2.status_code, 200)
-    then_eq("another task's pin", _pins(upstreams[RAIL])[-1], "deepinfra")
+    then_eq("status · the task's pin", (r.status_code, _pins(upstreams[RAIL])[-1]), (200, "atlas-cloud"))
+    with then("another task still pins deepinfra (the strike is per task)"):
+        with quiet():
+            other = await open_session(gw, role="worker", harness="opencode", rail=RAIL, tier="heavy", task="homelab-2741-other")
+            r2 = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(other))
+        check("status · another task's pin", (r2.status_code, _pins(upstreams[RAIL])[-1]), (200, "deepinfra"))
 
 
 async def test_cooled_cell_left_out(gw, upstreams, clock, orworld):
@@ -378,7 +378,14 @@ async def test_failover(gw, store, upstreams, orworld, behaviours, calls, status
     upstreams[RAIL].provider_behaviours.update(behaviours)
     task = "homelab-2741-failover"
     doc = await _session(gw, task=task)
-    r = await _ride(gw, doc)
+    with when(f"POST {PATH} model {M} — the gateway tries the providers in order (one attachment per attempt)"):
+        with quiet():  # the per-attempt exchanges fold into one attachment each, below
+            r = await gw.post(PATH, json={"model": M, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8}, headers=bearer(doc))
+        for i, c in enumerate(c for c in upstreams[RAIL].calls if c["path"] == "/v1/chat/completions"):
+            slug = ((c["body"] or {}).get("provider") or {}).get("order", [None])[0]
+            attach_json(f"attempt {i + 1}: {slug}", {"pin": (c["body"] or {}).get("provider"), "behaviour": behaviours.get(slug, "upstream-ok")})
+        attach_json("the harness's answer", {"status": r.status_code, "content_type": r.headers.get("content-type"),
+                                             "body": r.json() if "json" in (r.headers.get("content-type") or "") else r.text[:200]})
     then_eq("status", r.status_code, status)
     then_eq("the upstream calls, in order", _pins(upstreams[RAIL]), calls)
     if served:
