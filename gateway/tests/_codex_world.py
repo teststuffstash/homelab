@@ -7,10 +7,12 @@ written, and the store is process memory (GW-CODEX-OAUTH: the FAKE store only).
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import dataclasses
 import json
 import threading
+from collections.abc import Callable
 
 import httpx
 import pytest
@@ -96,6 +98,10 @@ class FakeCodexUpstream:
     def __init__(self):
         self.behaviour = "upstream-ok"
         self.calls: list[dict] = []
+        # Extra response headers (the turn-state rows: what the backend issues) — a dict, or a callable
+        # of the recorded call (per-turn issuance for the ordering row).
+        self.response_headers: dict[str, str] | Callable[[dict], dict[str, str]] = {}
+        self.hold_first: asyncio.Event | None = None  # the turn-state ordering row: the FIRST call answers only once set
         self.app = Starlette(routes=[Route("/responses", self._responses, methods=["POST"])])
 
     async def _responses(self, request: Request) -> Response:
@@ -103,7 +109,11 @@ class FakeCodexUpstream:
         call = {"path": request.url.path, "headers": dict(request.headers), "raw": raw,
                 "body": json.loads(raw) if raw else None}
         self.calls.append(call)
+        if self.hold_first is not None and len(self.calls) == 1:
+            await self.hold_first.wait()
         status, ctype, extra, chunks = BEHAVIOURS[self.behaviour]()
+        issued = self.response_headers(call) if callable(self.response_headers) else self.response_headers
+        extra = {**extra, **issued}
         if ctype == "text/event-stream" and status == 200:
             async def gen():
                 for c in chunks:
