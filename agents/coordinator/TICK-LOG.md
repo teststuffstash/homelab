@@ -13850,5 +13850,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Round 3 (21:50Z): E-HYGIENE_REPEAT on "fails over twice" (ATTACH_BULK: the threshold is 8 attachments PER CASE — every
   then_eq is one; folded into one verdict + one series check), two GW-METRICS label rows unproven (cases added under the
   exact descriptions), three new hygiene notes folded pre-emptively. 1ae2d297, round 4 pending.
-- Wound down at ~770k ctx with #2743 unstarted (the pickup names its design points); bookkeeping committed, pushed once.
+- 21:52Z: #2744 MERGED (294c7b81) on round 4 — both reviewers approved; #2741 + #2742 closed by the body. Four rounds,
+  none touched the code: R7 glossary wording ×3, the ADR-103 ratchet, ATTACH_BULK (8 per case), two unproven label rows.
+- Wound down at ~800k ctx with #2743 unstarted (the pickup names its design points and the deploy checks); bookkeeping
+  committed, pushed once.
 
