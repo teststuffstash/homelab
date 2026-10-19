@@ -28,7 +28,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
-| [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; a codex `auth.command` re-read is `⚑ gap` (row below) |
+| [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; Codex same-pod token re-read after first delivery (below) |
 | [GW-SESSIONS-LIVENESS](#gw-sessions-liveness) | `get.output.state`, `get.output.release_reason` | — | v0 |
 | [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
 | [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)); `⚑ gap` rows below |
@@ -575,7 +575,7 @@ OAuth row and refresh-persistence paragraph); a launcher that wrote the session'
 be a second writer of credential material. And Codex's own seam is a pull: a custom provider's
 `auth.command` prints the bearer from a command
 ([§Public ChatGPT/Codex OAuth contract](../../../docs/spikes/codex-subscription-rail.md#public-chatgptcodex-oauth-contract)),
-so a codex harness will later point that command at this endpoint — not built (the gap row below).
+so a codex harness can point that command at this endpoint after its initial full env pull.
 
 ### The bound dispatch answer
 
@@ -627,6 +627,26 @@ identity** = authenticated · audiences `[agent-gateway]` · `system:serviceacco
 | "the pulled token rides the data plane" | pull → `POST /openai/v1/chat/completions` with it (`upstream-ok`) || 200; the row's `requests` = 1 |
 | "the row stores the pulled token's sha256 only" | pull, read the DB || `token_hash` = sha256(token); the token appears nowhere in the sqlite dump |
 
+### Codex token re-read (GW-SESSIONS-PULL / GW-SESSIONS-ENV)
+
+After the first full env delivery, a Codex pull returns **only a fresh session token** as
+`text/plain` with `Cache-Control: no-store`. It never returns configuration again.
+TokenReview runs every time. ⚖ Re-read requires the first pull's exact pod name AND UID;
+missing UID fails closed, even if namespace/ServiceAccount/name match. Every successful re-read
+atomically replaces the stored token hash; the old token stops authenticating immediately.
+Release and expiry are checked before rotation and again in the conditional write. A racing
+rotation returns 409 `token-rotation-conflict` and may be retried. Other harnesses stay once-only.
+The wrapper performs its initial full env pull before starting Codex; its `auth.command` can
+then print this endpoint's plain token. No upstream OAuth credential reaches the pod.
+
+| description | second pull || answer |
+|---|---||---|
+| "same pod rotates token only" | same UID || plain token, old invalid |
+| "recreated pod is refused" | different UID || 403 |
+| "absent UID cannot reread" | missing UID || 403 |
+| "released session cannot reread" | released || 401 |
+| "expired session cannot reread" | expired || 401 |
+
 ### Only once, and in order
 
 | description | sequence || result |
@@ -645,7 +665,6 @@ pull never logs the presented token; a JWT is masked by shape) are
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: a codex `auth.command` re-runs" | a codex harness whose provider `auth.command` calls the pull URL || its second run is 409 `env-already-delivered` | Codex re-runs the command every `refresh_interval_ms` (default 5 min); a token-only, same-pod re-read is needed before a codex harness can use this endpoint — not built |
 
 <details markdown="1"><summary>Evidence</summary>
 

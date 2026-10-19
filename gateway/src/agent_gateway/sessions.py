@@ -22,7 +22,7 @@ import uuid
 from dataclasses import dataclass, replace
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 
 from .capacity import Capacity
 from .config import (
@@ -467,6 +467,15 @@ class SessionService:
             code = "session-released" if state == "released" else "session-expired"
             log.info("session: env pull id=%s refused — %s", row.id, code)
             return error(401, code, f"the session is {state}")
+        if row.env_delivered_at is not None and row.harness == "codex":
+            # Refresh commands may rotate only for the original, positively identified pod.
+            names, uids = review.extra.get(POD_NAME_EXTRA), review.extra.get(POD_UID_EXTRA)
+            if (not row.live_pod_uid or names != (row.live_pod,) or uids != (row.live_pod_uid,)):
+                return self._refuse_pull(row, "token re-read requires the original pod UID")
+            token = new_token()
+            if not self.store.rotate_pulled_token(row.id, row.token_hash, token_hash(token), now):
+                return error(409, "token-rotation-conflict", "session changed during token re-read; retry")
+            return PlainTextResponse(token, headers={"cache-control": "no-store"})
         if row.env_delivered_at is not None:
             log.warning("session: env pull id=%s refused — env-already-delivered (at %s)", row.id, iso(row.env_delivered_at))
             return error(409, "env-already-delivered", "this session's env was already pulled")

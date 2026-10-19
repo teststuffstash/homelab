@@ -306,6 +306,17 @@ class Store:
             )
             return cur.rowcount == 1
 
+    def rotate_pulled_token(self, sid: str, previous: str, replacement: str, now: float) -> bool:
+        """Atomically replace only a still-active delivered token; racing reads cannot both win."""
+        with self._lock:
+            cur = self._db.execute(
+                "UPDATE sessions SET token_hash=? WHERE id=? AND token_hash=?"
+                " AND harness='codex' AND env_delivered_at IS NOT NULL"
+                " AND released_at IS NULL AND expires_at>? AND live_pod_uid IS NOT NULL",
+                (replacement, sid, previous, now),
+            )
+            return cur.rowcount == 1
+
     def active_duplicates(self, stack: str, task: str, rnd: int, attempt: int, caller: str | None, pod: str | None,
                           now: float) -> list[str]:
         """ACTIVE sessions the same caller admitted for (stack, task, round, attempt) and the same bound
