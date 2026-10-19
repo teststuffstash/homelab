@@ -41,6 +41,7 @@ from .credentials import CredentialResolver, CredentialTransient, CredentialUnre
 from .liveness import PodSource
 from .metrics import Metrics
 from .outcomes import OutcomeRefused, Outcomes, parse_outcome, public_outcome
+from .providers import Endpoint, EndpointSnapshot, eligible, order
 from .pull import (
     POD_NAME_EXTRA,
     POD_UID_EXTRA,
@@ -120,6 +121,7 @@ class Admission:
     harness: str
     rail_override: str | None
     bind: Bind | None = None
+    canary: tuple[str, str] | None = None  # GW-CATALOG-OR: (model, provider) — a canary session on that cell
     caller: str | None = None  # GW-SESSIONS-AUTH: the reviewed caller identity, stored on the row
     caller_pod: str | None = None  # GW-SESSIONS-LIVENESS: the caller's pod (a pod-bound caller token)
     caller_pod_uid: str | None = None
@@ -163,8 +165,27 @@ def parse_admission(policy: Policy, body: object) -> Admission:
     # stack-unknown is a DEFER (typed), not a 400 — the body is well-formed, the policy just does
     # not know the stack. Carry the name through for the defer answer.
     bind = parse_bind(body["bind"]) if "bind" in body else None
+    canary = None
+    if "canary" in body:  # GW-CATALOG-OR §The entry canary: the catalog's own gate, the policy's canary role
+        c = body["canary"]
+        if (not isinstance(c, dict) or set(c) != {"model", "provider"} or not isinstance(c.get("model"), str)
+                or not c["model"] or not isinstance(c.get("provider"), str) or not c["provider"]):
+            raise BadRequest("malformed-body", "canary must be an object {model, provider} of non-empty strings")
+        can = policy.rails["openrouter"].canary if "openrouter" in policy.rails else None
+        if can is None:
+            raise BadRequest("malformed-body", "canary: the openrouter rail declares no canary policy")
+        if role_name != can.role:
+            raise BadRequest("malformed-body", f"canary: the canary role is {can.role}, not {role_name}")
+        if "harness" not in body:
+            harness = can.harness
+        if HARNESS_DIALECT[harness] not in RAIL_DIALECTS["openrouter"]:
+            raise BadRequest("harness-rail-mismatch", f"canary: harness {harness} does not speak a dialect the openrouter rail serves")
+        if rail not in (None, "openrouter"):
+            raise BadRequest("malformed-body", "canary: the rail is openrouter")
+        rail = "openrouter"
+        canary = (c["model"], c["provider"])
     stack = policy.stacks.get(body["stack"]) or StackPolicy(body["stack"], "", None, None)
-    return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind, attempt=attempt)
+    return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind, canary=canary, attempt=attempt)
 
 
 def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str, str]:
@@ -237,6 +258,45 @@ class SessionService:
         self.auth = ControlPlaneAuth(policy, self, metrics)  # reviews through self.reviewer (one TokenReview path)
         self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
         self.outcomes = Outcomes(store, metrics, policy.outcome_window_s, clock)  # GW-SESSIONS-OUTCOME
+        self.providers: EndpointSnapshot | None = None  # GW-RAIL-OPENROUTER: the endpoint snapshot (app.py hands it in)
+        self.orcatalog = None  # an orcatalog.OpenRouterCatalog: the cells' entry states + the canary gate (app.py hands it in)
+
+    def eligible_cells(self, model: str, now: float) -> set[str] | None:
+        """The providers the catalog admitted on `model` (GW-CATALOG-OR: a clean canary) — None when no
+        catalog leg runs (every snapshot provider counts as admitted: the seeded worlds)."""
+        if self.orcatalog is None:
+            return None
+        return self.orcatalog.eligible_slugs(model, now)
+
+    def provider_plan(self, rail: str, model: str, harness: str, stack: str, task: str, now: float
+                      ) -> tuple[str, list[Endpoint] | float | str]:
+        """The provider order for one request / one admission on (rail, model) — GW-RAIL-OPENROUTER
+        §Selection. Returns (verdict, detail): `unpinned` (no snapshot for the model, or the rail
+        declares no `providers` policy — the request rides as today), `pinned` (the ordered
+        eligible providers not struck for this task nor cooled), `ineligible` (a snapshot, but no
+        endpoint clears the floors — the model is not ridden), `exhausted` (every eligible provider
+        is struck for this task), `cooled` (every remaining one is cooled: the earliest expiry)."""
+        pol = self.policy.rails[rail].providers
+        eps = self.providers.endpoints(wire_model(rail, model)) if self.providers is not None else None
+        if pol is None or eps is None:
+            return "unpinned", "no endpoint snapshot for the model" if pol is not None else "no providers policy"
+        kept, dropped = eligible(eps, pol, harness)
+        if not kept:
+            return "ineligible", "; ".join(f"{s}: {why}" for s, why in sorted(dropped.items())) or "no endpoints"
+        admitted = self.eligible_cells(model, now)
+        if admitted is not None:  # ⚖ GW-CATALOG-OR: only a canaried cell is pinned; none yet = the request rides unpinned
+            kept = [e for e in kept if e.slug in admitted]
+            if not kept:
+                return "unpinned", "no provider of the model has passed the entry canary yet"
+        struck = {st["provider"] for st in self.store.strikes_for(stack, task)
+                  if st["scope"] == "cell" and st["rail"] == rail and st["model"] == model and st["provider"]}
+        cooled = self.capacity.cooled_providers(rail, model, now)
+        ranked = order(kept, self.store.cell_outcomes(rail, model), pol, exclude=struck, cooled=set(cooled))
+        if ranked:
+            return "pinned", ranked
+        if all(e.slug in struck for e in kept):
+            return "exhausted", ", ".join(sorted(struck))
+        return "cooled", min(until for s, until in cooled.items() if s not in struck)
 
     async def review(self, token: str, audiences: list[str]):
         """The TokenReviewer seam ControlPlaneAuth calls — delegated, so swapping `self.reviewer`
@@ -253,6 +313,8 @@ class SessionService:
         FIRST (a full rail frees after the policy's `defer_retry_s`)."""
         if adm.stack.name not in self.policy.stacks:
             return self._defer(adm, "stack-unknown", f"stack {adm.stack.name!r} is not in policy")
+        if adm.canary is not None:
+            return await self._admit_canary(adm)
         if adm.rail_override:
             log.info("session: explicit rail override %s for %s/%s (operator)", adm.rail_override, adm.stack.name, adm.task)
             if adm.rail_override not in adm.role.rails:
@@ -298,12 +360,29 @@ class SessionService:
             model = None
             held: list[tuple[float, str, str, str]] = []  # (free_at, reason, model, detail)
             for m in models:
-                if m in struck_models or (rail, m) in struck_cells:
+                if m in struck_models or (rail, m, "") in struck_cells:
                     exhausted.append(f"{rail} {m}")
                     continue
                 until = self.capacity.cooled(rail, m, now)
                 if until is not None:
                     held.append((until, "cell-cooled", m, f"{rail} cell {m} cooled (429)"))
+                    continue
+                # The provider axis (GW-RAIL-OPENROUTER §Selection): with a snapshot, the model admits
+                # only while an eligible provider is neither struck for this task nor cooled.
+                verdict, detail = self.provider_plan(rail, m, adm.harness, adm.stack.name, adm.task, now)
+                if verdict == "unpinned" and any(r == rail and mm == m for r, mm, _p in struck_cells):
+                    # ⚖ a provider-scoped strike with no snapshot to steer by: nothing can route around it
+                    exhausted.append(f"{rail} {m}")
+                    continue
+                if verdict == "exhausted":
+                    exhausted.append(f"{rail} {m}")
+                    continue
+                if verdict == "cooled":
+                    held.append((detail, "cell-cooled", m, f"{rail} cell {m}: every eligible provider cooled (429)"))
+                    continue
+                if verdict == "ineligible":
+                    held.append((now + self.policy.defer_retry_s, "no-eligible-provider", m,
+                                 f"{rail} {m}: no endpoint clears the provider floors ({detail})"))
                     continue
                 mb = self.capacity.model_block(rail, m, now)
                 if mb is not None:
@@ -371,6 +450,58 @@ class SessionService:
                                retry_after_s=None, escalate=True)
         return self._defer(adm, "role-rail-denied", f"no allowed rail of role {adm.role.name} names a model for tier {adm.tier}")
 
+    async def _admit_canary(self, adm: Admission) -> JSONResponse:
+        """GW-CATALOG-OR §The entry canary: a prober-role session pinned to one `(model, provider)` cell
+        of the openrouter rail. In order: the cell is in the snapshot (`not-in-catalog`), it is a
+        `candidate` (`canary-not-due`: already eligible, or excluded inside its cooldown), the budget
+        (`canary-budget`: the per-refresh count or the day's spend at the cap), then the rail's slot
+        count and credential as any admission."""
+        model, provider = adm.canary
+        now = self.clock()
+        cat = self.orcatalog
+        if cat is None or self.providers is None:
+            return self._defer(adm, "not-in-catalog", "no OpenRouter catalog leg runs on this gateway")
+        eps = self.providers.endpoints(model)
+        if eps is None or provider not in {e.slug for e in eps}:
+            cat.canary_admissions["not-in-catalog"] += 1
+            return self._defer(adm, "not-in-catalog", f"({model}, {provider}) is not in the endpoint snapshot",
+                               retry_after_s=max(1, math.ceil(cat.retry_at(now, self.policy.defer_retry_s) - now)))
+        cell = cat.cell(model, provider, now)
+        if cell.state != "candidate":
+            cat.canary_admissions["not-due"] += 1
+            until = cell.cooldown_until if cell.cooldown_until is not None else cat.retry_at(now, self.policy.defer_retry_s)
+            return self._defer(adm, "canary-not-due", f"({model}, {provider}) is {cell.state}" + (f" ({cell.klass})" if cell.klass else ""),
+                               retry_after_s=max(1, math.ceil(until - now)))
+        budget = cat.budget(now)
+        if budget["exhausted"]:
+            cat.canary_admissions["budget"] += 1
+            return self._defer(adm, "canary-budget",
+                               f"canary budget spent: {budget['admitted_this_refresh']}/{budget['max_per_refresh']} this refresh, "
+                               f"${budget['spend_usd_1d']:.4f}/${budget['usd_per_day']:g} today",
+                               retry_after_s=max(1, math.ceil(cat.budget_retry(now, self.policy.defer_retry_s) - now)))
+        rail = "openrouter"
+        rp = self.policy.rails[rail]
+        if self.store.active_count(rail, now) >= rp.max_sessions:
+            return self._defer(adm, "rail-capacity", f"{rail} at max_sessions", retry_after_s=self.policy.defer_retry_s)
+        try:
+            credential = await self.resolver.resolve(rail, adm.stack)
+        except CredentialTransient:
+            self.metrics.credential(rail, "transient")
+            return error(503, "credential-transient", f"kube API failed resolving the {rail} credential — retry",
+                         headers={"retry-after": str(self.resolver.negative_cache_s)})
+        except CredentialUnresolved:
+            self.metrics.credential(rail, "definitive")
+            return self._defer(adm, "credential-unresolved", f"no resolvable {rail} credential for stack {adm.stack.name}")
+        self.metrics.credential(rail, "resolved")
+        due = self.capacity.credential_rejected(rail, credential, now)
+        if due is not None:
+            return self._defer(adm, "credential-rejected", f"the upstream rejected the {rail} credential of stack {adm.stack.name}",
+                               retry_after_s=max(1, math.ceil(due - now)))
+        cat.canary_admissions["dispatch"] += 1
+        log.info("session: canary admitted on (%s, %s) — %d/%d this refresh, $%.4f today", model, provider,
+                 budget["admitted_this_refresh"] + 1, budget["max_per_refresh"], budget["spend_usd_1d"])
+        return self._dispatch(adm, rail, model, now)
+
     def _defer(self, adm: Admission, reason: str, detail: str, retry_after_s: int | None = None,
                escalate: bool = False) -> JSONResponse:
         self.metrics.session_decision("none", adm.role.name, adm.stack.name, "defer")
@@ -383,23 +514,24 @@ class SessionService:
                  reason, retry, adm.stack.name, adm.role.name, adm.task, detail)
         return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": retry})
 
-    def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str]]]:
+    def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str, str]]]:
         """This task's counted strikes (GW-SESSIONS-OUTCOME): model-scoped → the model id on every rail;
-        cell-scoped → that (rail, model)."""
+        cell-scoped → that (rail, model, provider) — provider '' is the model's own cell, a slug one
+        provider's cell on it (GW-RAIL-OPENROUTER)."""
         models: set[str] = set()
-        cells: set[tuple[str, str]] = set()
+        cells: set[tuple[str, str, str]] = set()
         for st in self.store.strikes_for(adm.stack.name, adm.task):
             if st["scope"] == "model":
                 models.add(st["model"])
             else:
-                cells.add((st["rail"], st["model"]))
+                cells.add((st["rail"], st["model"], st["provider"] or ""))
         return models, cells
 
     def _dispatch(self, adm: Admission, rail: str, model: str, now: float) -> JSONResponse:
         sid = uuid.uuid4().hex
         common = dict(id=sid, stack=adm.stack.name, role=adm.role.name, task=adm.task, round=adm.round, attempt=adm.attempt, rail=rail,
                       harness=adm.harness, model=model, created_at=now, expires_at=now + self.policy.session_ttl_s,
-                      caller=adm.caller)
+                      caller=adm.caller, canary_provider=adm.canary[1] if adm.canary else None)
         who = adm.caller or "(unauthenticated)"
         if adm.bind is not None:
             # GW-SESSIONS-PULL: nothing credential-shaped leaves in this answer — the token is minted

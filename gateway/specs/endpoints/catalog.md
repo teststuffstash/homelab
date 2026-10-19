@@ -3,7 +3,7 @@ id: EP-CATALOG
 use-cases: [UC-1]
 schema: catalog.schema.json
 ---
-# GET /catalog/opencode — the Go rail's vendor facts, read from the vendor
+# GET /catalog/opencode · GET /catalog/openrouter — the two rails' vendor facts, read from the vendor
 
 *Which [Go rail](../../../docs/agents/chainless-redesign.md) models exist, what they cost, and how
 much of each the plan allows* — the [Go catalog](../glossary.md#go-catalog). Until this leg,
@@ -16,8 +16,11 @@ draw's prices, each model's own windows, `not-in-catalog`
 ([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); this page owns only the reading. The
 design input and the operator's rulings are the spike's §Rulings.
 
-This page is *what the gateway knows about models and where it comes from*, so it carries a
-second rule: [GW-MODEL-TIERS](#gw-model-tiers) — the deployed policy's per-(rail, tier) model
+This page is *what the gateway knows about models and where it comes from*, so it carries two
+more rules: [GW-CATALOG-OR](#gw-catalog-or) — the openrouter rail's registry, the
+[endpoint snapshot](../glossary.md#endpoint-snapshot) GW-RAIL-OPENROUTER selects from, with its
+budget-capped **entry canary** (operator rulings 2026-10-19, homelab#2742) — and
+[GW-MODEL-TIERS](#gw-model-tiers) — the deployed policy's per-(rail, tier) model
 lists are **derived from benchmark evidence** ([tier evidence](../glossary.md#tier-evidence)),
 never hand-picked.
 
@@ -33,6 +36,7 @@ error), and no auth, like `/metrics` — it carries no credential.
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
+| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary) |
 | [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`) | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation, the committed snapshot and the equality check; `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, the snapshot hand-refreshed with no staleness alert, the openrouter candidate set = the old proxy's table, Go-only id spellings unbenched (the five "⚑ gap" rows below) |
 
 ## GW-CATALOG-GO
@@ -190,6 +194,147 @@ families — `GoCatalogStale` (a source's last good snapshot older than 24 h ⚖
 Rendered by `scripts/evidence_render.py` from CI.
 
 --8<-- "GW-CATALOG-GO.md"
+
+</details>
+
+## GW-CATALOG-OR
+
+*The openrouter rail's registry is read from the vendor, and a provider enters the order only
+after a clean canary through our stack* (operator rulings 2026-10-19: the candidate set is never
+a hand table; vendor numbers alone do not whitelist — laguna read 100 % up while we saw 81 % 429s;
+the canary is ON DEMAND, part of this catalog's update, and CAPPED by a budget). The leg mirrors
+[GW-CATALOG-GO](#gw-catalog-go): read on a schedule (⚖ `GATEWAY_OR_CATALOG_REFRESH_S`, 21600 s —
+6 h, the Go catalog's interval; the first refresh at start), parsed strictly, the last good
+snapshot kept on any failure and persisted in the store, shown on `/metrics` and on
+`GET /catalog/openrouter`. What it reads:
+
+- **The ranked set** — the vendor's weekly ranking, the MCP `list-daily-model-rankings` with
+  `period: week`, one call per policy slice (`rails.openrouter.catalog.ranking_slices`: ⚖
+  `programming`, a category, and `tool_calling`, a modality — the two slices the MCP gained by
+  2026-10-19), the latest week's rows, the top N by tokens (⚖ `ranking_top_n` 30, the old proxy's
+  `RANKINGS_TOP_N`). Rows are DATED permaslugs (`deepseek/deepseek-v4.1-flash-20260910`); the id is
+  the stamp stripped (the old proxy's `_CAP_ID_RE`), so two stamps of one model are one candidate
+  (⚖ their tokens summed — both are the model's traffic).
+- **The benched set** — the MCP `list-benchmarks`, source `artificial-analysis`, keyed the same
+  way; ⚖ a `:variant` id joins its family's row, as [GW-MODEL-TIERS](#gw-model-tiers)'s join does.
+  Both MCP calls ride the openrouter ACCOUNT key (`catalog.account_ref`, a labelled Secret — the
+  old proxy's `ROUTER_ACCOUNT_REF`; the gateway's own namespace gains the one get-secrets Role) over
+  the MCP's JSON-RPC (`initialize`, then `tools/call`; a real User-Agent — Cloudflare 403s a bare
+  client).
+- **Candidates** = ranked ∩ benched. Per candidate, `GET <openrouter>/v1/models/<id>/endpoints`
+  (public, unauthenticated), parsed by GW-RAIL-OPENROUTER's `parse_endpoints` into the
+  [endpoint snapshot](../glossary.md#endpoint-snapshot) (`$defs.openrouter_snapshot`: the rows plus
+  the model's ranking tokens and AA indices — what [#2743](https://github.com/teststuffstash/homelab/issues/2743)'s
+  comparison needs on equal terms). ⚖ A candidate whose endpoints cannot be read is absent from
+  this refresh (counted, never guessed); an MCP source that fails is `fetch-failed`, one that
+  answers a shape the leg cannot read is `parse-failed`; a fresh snapshot with no model, or fewer
+  than half the last good one's, is `implausible` — the last good snapshot stands.
+
+### The entry canary
+
+A `(model, provider)` cell new to the snapshot — or back from exclusion — is **`candidate`**, not
+`eligible`: [selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto) pins only
+`eligible` cells, and ⚖ a model none of whose cells has passed rides **unpinned** (the vendor's own
+routing, exactly as before this leg — never refused for lack of a canary). A cell becomes
+`eligible` when ONE canary ride completes a tool-call loop through the gateway on exactly that
+cell: a session admitted by `POST /sessions` with **`canary: {model, provider}`** (the policy's
+`canary.role` — `prober` — on rail openrouter, the harness the cell serves — `canary.harness`,
+`opencode` — unless the body names another the rail speaks), pinned to that provider with
+fallbacks off and **no failover**, whose outcome is the verdict: `clean` → `eligible`; any strike
+(the consumer's class, or the gateway's own transport class) → `excluded` with the class, a
+`candidate` again after `canary.cooldown_s` (⚖ 86400 s). A canary session is a session like any
+other (a token, an env, the outcome endpoint), so its rides are metered by the gateway; its model
+is the catalog's, not the policy's (⚖ [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)'s
+one exception: the catalog is the entry gate the policy's lists are derived from). The checks, in
+order: the cell is in the snapshot (`not-in-catalog`, `retry_after_s` = the next refresh), it is a
+candidate (`canary-not-due` — already eligible, or excluded inside its cooldown: `retry_after_s` =
+the cooldown's end), the budget, then the rail's slot count and credential as any admission.
+Who RIDES the canaries is the jail's `gateway/scripts/canary-entrants.sh` (reads the view, launches
+one prober ride per candidate cell through `agents/agent-session.sh`'s `AGENT_GATEWAY_CANARY`
+knob); FU-161's scout keeps its digest, its canary leg for OpenRouter entrants is superseded by this.
+
+### The budget cap
+
+⚖ Policy knobs, never code constants (`rails.openrouter.canary`): **`max_per_refresh`** canary
+admissions between two catalog refreshes (3), and **`usd_per_day`** of metered canary spend (1.0 —
+the gateway's own token accounting on canary sessions, priced at the cell's endpoint rates:
+uncached input and cache reads at `in`, output at `out`, ⚖ an upper bound). Over either → the
+canary defers **`canary-budget`** (`retry_after_s` = the next refresh or the hour, whichever first
+⚖) and entrants stay `candidate`; `gateway_canary_budget_exhausted` reads 1 while the cap holds and
+candidates wait — `GatewayCanaryBudgetExhausted` fires on it
+(`argocd/resources/agent-gateway/prometheusrule.yaml`, promtool fixture
+`openrouter-catalog.promtool-test`), beside `OpenRouterCatalogStale` (no good refresh for 24 h, or
+no snapshot) and `OpenRouterCatalogParseFailed`. A failed canary excludes exactly its cell, never
+the model.
+
+World `policy-default · openrouter-catalog` ([worlds/README.md](../worlds/README.md#the-openrouter-catalog-world)):
+the fake MCP answers the two slices and the AA benchmarks from the live MCP answers of 2026-10-19,
+trimmed (13 ranked ids across the latest week, 7 benched, 7 candidates); the openrouter rail's
+fake serves `/v1/models/<id>/endpoints` for `deepseek/deepseek-v4.1-flash` (M) and
+`z-ai/glm-5.3-flash` (G) and 404 for the other five. T0 = the test clock. The account key is the
+fixture Secret `agent-egress/router-account-key`.
+
+| description | the fakes answer | last good || outcome | models | cells (candidate) |
+|---|---|---||---|---|---|
+| "a first refresh: ranked ∩ benched, then the endpoints per candidate" | mcp ok, endpoints ok | none || ok | 2 (M, G) of 7 candidates — 13 ranked, 7 benched, 5 unreadable | 15 |
+| "a dated permaslug joins its id: two stamps of one model are one candidate ⚖" | the rankings carry M-20260910 and M-20261017 | — || ok | M once, its stamps' tokens summed per slice | — |
+| "the MCP answers an error: fetch-failed, the last good kept" | mcp 503 | 2 || fetch-failed | 2 | 15 |
+| "the MCP is unreachable: fetch-failed" | mcp down | 2 || fetch-failed | 2 | — |
+| "a tool result that is not JSON is a parse failure ⚖" | mcp malformed | 2 || parse-failed | 2 | — |
+| "rankings without dates are a parse failure" | rankings-undated | 2 || parse-failed | 2 | — |
+| "no benched candidate: implausible, nothing taken ⚖" | benchmarks-empty | none || implausible | 0 | 0 |
+| "a candidate whose endpoints read fails is absent; the refresh still lands ⚖" | endpoints-503 for G | none || ok | 1 (M) — 6 unreadable | 8 |
+| "every endpoints read failing keeps the last good" | endpoints-503 for both | 2 || implausible | 2 | — |
+| "no account key: fetch-failed, no MCP call" | the ref absent | none || fetch-failed | 0 (0 MCP calls) | — |
+| "the MCP calls carry the account key and a client identity ⚖" | mcp ok | — || — | `authorization: Bearer <the account key>`; `user-agent: agent-gateway/<v> (openrouter-catalog)`; `initialize` then `tools/call` ×3 | — |
+| "a PVC store keeps the snapshot and the cells across a restart" | refresh, a new gateway on the same DB, +3600 s | — || — | `age_s` 3600; 2 models; 15 candidate cells | — |
+
+| description | arrange | body || decision | rail / model / harness | reason | retry_after_s | the cell after |
+|---|---|---||---|---|---|---|---|
+| "a new cell is a candidate: selection does not pin it ⚖" | refresh | worker ride on M (tier heavy) || dispatch | the upstream body carries no `provider` | — | — | candidate |
+| "a canary session is admitted on a candidate cell, pinned to it ⚖" | refresh | prober, `canary: {M, deepinfra}` || dispatch | openrouter / M / opencode | — | — | the ride's upstream body pins deepinfra, `allow_fallbacks: false`; the row's `canary_provider` = deepinfra |
+| "a clean canary makes the cell eligible: selection pins it" | the canary ride 200, outcome `clean` | worker ride on M || — | pinned deepinfra | — | — | eligible |
+| "a struck canary excludes exactly its cell ⚖" | the canary ride answered upstream-500 | — || — | — | — | — | (M, deepinfra) excluded (`provider-5xx`) until T0 + 86400; (M, atlas-cloud) still candidate |
+| "an excluded cell is a candidate again after the cooldown ⚖" | the same, +86400 s | prober, `canary: {M, deepinfra}` || dispatch | openrouter / M | — | — | — |
+| "a canary on an eligible cell is not due ⚖" | (M, deepinfra) eligible | prober, `canary: {M, deepinfra}` || defer | — | canary-not-due | 21600 (the next refresh) | — |
+| "a canary on an excluded cell inside its cooldown is not due" | (M, deepinfra) excluded at T0, +3600 s | prober, `canary: {M, deepinfra}` || defer | — | canary-not-due | 82800 | — |
+| "a canary on a cell the snapshot lacks" | refresh | prober, `canary: {M, fireworks}` || defer | — | not-in-catalog | 21600 | — |
+| "a canary names a model the snapshot lacks" | refresh | prober, `canary: {moonshotai/kimi-k3, deepinfra}` || defer | — | not-in-catalog | 21600 | — |
+| "the canary role is the policy's ⚖" | refresh | worker, `canary: {M, deepinfra}` || 400 | — | malformed-body | — | — |
+| "a canary never fails over ⚖" | the canary ride answered upstream-500 | — || 500 | the upstream calls: deepinfra only | — | — | — |
+
+| description | arrange | body || decision | reason | retry_after_s | `gateway_canary_budget_exhausted` |
+|---|---|---||---|---|---|---|
+| "under budget: N entrants are canaried" | refresh | 3 canaries on three cells || dispatch ×3 | — | — | 0 |
+| "at the cap the N+1th waits ⚖" | 3 admitted this refresh | a 4th canary || defer | canary-budget | 3600 | 1 |
+| "a refresh opens the next N ⚖" | 3 admitted, then a refresh | a 4th canary || dispatch | — | — | 0 |
+| "the day's spend at the cap defers ⚖" | one canary ride metered $1.12 (in 5M, out 1M at deepinfra 0.14 / 0.42) | the next canary || defer | canary-budget | 3600 | 1 |
+| "the day rolls over" | the same, +86400 s | the next canary || dispatch | — | — | 0 |
+| "spend is metered at the cell's endpoint price ⚖" | the same ride || — | — | `gateway_canary_spend_usd` 1.12 | — |
+
+| description | event || series | value |
+|---|---||---|---|
+| "age is seconds since the last good refresh" | refresh at T0, read at T0 + 600 s || `gateway_openrouter_catalog_age_seconds` | 600 |
+| "the model count of the last good snapshot" | refresh || `gateway_openrouter_catalog_models` | 2 |
+| "every refresh is counted by outcome" | refresh ok, then mcp 503 || `gateway_openrouter_catalog_refresh_total{outcome="ok"}` / `{outcome="fetch-failed"}` | 1 / 1 |
+| "the last outcome is 1, the others 0" | the same || `gateway_openrouter_catalog_last_outcome{outcome="fetch-failed"}` / `{outcome="ok"}` | 1 / 0 |
+| "cells are counted by state" | refresh, one clean canary on (M, deepinfra), one struck on (M, atlas-cloud) || `gateway_openrouter_cells{state="candidate"}` / `eligible` / `excluded` | 13 / 1 / 1 |
+| "canary verdicts are counted" | the same || `gateway_canary_rides_total{outcome="eligible"}` / `{outcome="excluded"}` | 1 / 1 |
+| "the view's shape is the schema's" | refresh, `GET /catalog/openrouter` || exactly the `required` keys of `openrouter_output`, of a model row, of an endpoint row, of `canary` | — |
+
+### Named gaps (rows that exist so the omission is visible)
+
+| description | input || v0 answer | the gap |
+|---|---||---|---|
+| "⚑ gap: no in-cluster canary trigger" | a refresh lands N candidate cells || they wait for the jail's `canary-entrants.sh` | the on-demand launcher is a jail verb; a cluster-side trigger (a CronWorkflow reading the view) is unbuilt |
+| "⚑ gap: the Go rail's canary" | a new Go model in the Go catalog || no entry gate on the opencode rail | [#2743](https://github.com/teststuffstash/homelab/issues/2743): the same canary is the yardstick on both rails |
+| "⚑ gap: the ranking's `other` bucket and a `:free` family" | a `:free` id in the ranking || joins its family's AA row; `other` is dropped | no fixture row carries a `:free` candidate (the latest week had none in the top of either slice) |
+
+<details markdown="1"><summary>Evidence</summary>
+
+Rendered by `scripts/evidence_render.py` from CI.
+
+--8<-- "GW-CATALOG-OR.md"
 
 </details>
 

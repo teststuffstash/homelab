@@ -5,7 +5,7 @@ schema: metrics.schema.json
 ---
 # GET /metrics — the `gateway_*` families, with bounded labels only
 
-The evidence surface the alert belts read. Twenty-one families, Prometheus text format, no auth
+The evidence surface the alert belts read. Thirty-two families, Prometheus text format, no auth
 (in-cluster, scraped by the ServiceMonitor). **Every label value is drawn from a bounded set**
 declared in the schema — never a task key, a session id, or a model string outside the
 policy's set — so cardinality is a property of the policy, not of traffic.
@@ -26,6 +26,8 @@ the process is down.
 | [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity (owned there) | `families.gateway_cells_cooled`, `families.gateway_credentials_rejected` | — | linked — the admission's transport facts as gauges |
 | [GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic) / [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned there) | `families.gateway_requests_incomplete_total` | — | linked — the stream-completeness rule |
 | [GW-CATALOG-GO](catalog.md#gw-catalog-go) (owned there) | `families.gateway_go_catalog_*` | — | linked — the Go catalog's freshness, size and refresh outcomes; their values are rows there |
+| [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned there) | `families.gateway_provider_requests_total`, `families.gateway_provider_failovers_total` | — | linked — the provider axis: attempts per cell and failovers; their values are rows there and below |
+| [GW-CATALOG-OR](catalog.md#gw-catalog-or) (owned there) | `families.gateway_openrouter_catalog_*`, `families.gateway_openrouter_cells`, `families.gateway_canary_*` | — | linked — the OpenRouter catalog's freshness and refresh outcomes, the cells by entry state, the canary meter and verdicts; their values are rows there |
 
 ## GW-METRICS
 
@@ -40,7 +42,7 @@ the process is down.
 | `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds) |
 | `gateway_credential_resolve_total` | counter | `rail`, `outcome` | every ref resolution verdict |
 | `gateway_upstream_auth_rejected_total` | counter | `rail` | every upstream 401/403 the gateway reads as a CREDENTIAL verdict — the request answered 424 `upstream-auth` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary); a policy refusal, 403 `upstream-refused`, is not counted here): the event series the dead-key alert reads; `gateway_credentials_rejected` below is the state. Every rail renders from 0 ⚖ |
-| `gateway_cells_cooled` | gauge | `rail` | (rail, model) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)); per rail, never per model (`model` is no label); every rail renders from 0 |
+| `gateway_cells_cooled` | gauge | `rail` | (rail, model, provider) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)); counted per rail (`model` is no label on this gauge); every rail renders from 0 |
 | `gateway_credentials_rejected` | gauge | `rail` | rail credentials an upstream 401/403 rejected, until a 2xx on them or a new value — the alert hook for a dead key; every rail renders from 0 ⚖ |
 | `gateway_strikes_total` | counter | `class`, `source` | strikes written to the store ([GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)): `class` a strike class of the one vocabulary, `source` `outcome` (the consumer) or `gateway` (a transport fact) |
 | `gateway_sessions_reaped_total` | counter | `rail` | sessions released because their pod was gone ([GW-SESSIONS-LIVENESS](sessions.md#gw-sessions-liveness)); every rail renders from 0 |
@@ -52,6 +54,17 @@ the process is down.
 | `gateway_go_catalog_last_outcome` | gauge | `source`, `outcome` | 1 for the outcome of the source's latest attempt, 0 for the others — survives no restart, and needs none: the first refresh runs at start |
 | `gateway_go_catalog_policy_models_missing` | gauge | `source` | policy Go models the source's snapshot does not cover — a count, so no `model` label |
 | `gateway_control_plane_unauthenticated_total` | counter | `route`, `reason` | every control-plane call with no valid caller token — admitted under `control_plane_auth: observe`, refused under `enforce`; every (`route`, `reason`) pair renders from 0, so a flat series reads as "no such call" ⚖ |
+| `gateway_provider_requests_total` | counter | `rail`, `model`, `provider`, `outcome` | every ATTEMPT on a (rail, model, provider) cell of the openrouter rail by how it ended ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)): `ok`, `incomplete`, the pre-byte failures the gateway fails over on (`5xx`, `429`, `unreachable`, `timeout`, `content-type`, `provider-error`) and the request-scoped answers it never does (`refused`, `auth`, `edge`). ⚖ `model` is bounded to the POLICY's openrouter ids, `provider` to the endpoint SNAPSHOT's slugs plus `unattributed` — never a value a response invented (one slugged by rule renders `other`) |
+| `gateway_provider_failovers_total` | counter | `model`, `from`, `to` | requests reissued to the next provider before the first byte; the same bounds |
+| `gateway_openrouter_catalog_age_seconds` | gauge | — | seconds since the last good OpenRouter catalog refresh ([GW-CATALOG-OR](catalog.md#gw-catalog-or)) — absent until one exists; `OpenRouterCatalogStale` reads it |
+| `gateway_openrouter_catalog_models` | gauge | — | models in the last good snapshot; 0 = none yet |
+| `gateway_openrouter_catalog_refresh_total` | counter | `outcome` | refresh attempts by outcome; every outcome renders from 0 |
+| `gateway_openrouter_catalog_last_outcome` | gauge | `outcome` | 1 for the latest attempt's outcome, 0 for the others — `OpenRouterCatalogParseFailed` reads it |
+| `gateway_openrouter_cells` | gauge | `state` | (model, provider) cells of the catalog by entry state — `candidate`, `eligible`, `excluded`; a provider's service tiers are one cell |
+| `gateway_canary_spend_usd` | gauge | — | metered canary spend over the trailing day at the cell's endpoint price |
+| `gateway_canary_budget_exhausted` | gauge | — | 1 while the canary cap (per refresh or per day) is spent and candidate cells wait — `GatewayCanaryBudgetExhausted` reads it |
+| `gateway_canary_rides_total` | counter | `outcome` | canary verdicts: `eligible` (a clean ride) or `excluded` (a struck one) |
+| `gateway_canary_admissions_total` | counter | `outcome` | canary admissions by answer: `dispatch`, `budget`, `not-due`, `not-in-catalog` |
 
 | description | event (world `policy-default`, upstream-ok) || series | value |
 |---|---||---|---|
@@ -77,6 +90,16 @@ the process is down.
 | "a credential re-probe is counted by outcome" | opencode 401 (`upstream-401-key-expired`), +60 s, the re-probe answered upstream-ok || `gateway_credential_probes_total{rail="opencode",outcome="cleared"}` | 1 |
 | "the transport-fact gauges render every rail from 0" | no request yet || `gateway_cells_cooled{rail=…}` / `gateway_credentials_rejected{rail=…}` for `anthropic`, `openrouter`, `opencode`, `codex` | 0 each |
 
+The provider families (world `policy-default · openrouter-endpoints` — the snapshot of
+`deepseek/deepseek-v4.1-flash`, the openrouter heavy tier; [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)):
+
+| description | event || series | value |
+|---|---||---|---|
+| "an attempt is counted on its cell by how it ended" | a ride whose deepinfra attempt answered 500, served by atlas-cloud || `gateway_provider_requests_total{rail="openrouter",model="deepseek/deepseek-v4.1-flash",provider="deepinfra",outcome="5xx"}` / `{…,provider="atlas-cloud",outcome="ok"}` | 1 / 1 |
+| "a failover is counted from and to" | the same || `gateway_provider_failovers_total{model="deepseek/deepseek-v4.1-flash",from="deepinfra",to="atlas-cloud"}` | 1 |
+| "an unpinned attempt that names no provider is unattributed ⚖" | a ride on `deepseek/deepseek-v4-flash` (no snapshot entry), the answer unnamed || `gateway_provider_requests_total{rail="openrouter",model="deepseek/deepseek-v4-flash",provider="unattributed",outcome="ok"}` | 1 |
+| "a provider the snapshot lacks renders as other ⚖" | the same, the answer names Sail Research || `gateway_provider_requests_total{…,model="deepseek/deepseek-v4-flash",provider="other",outcome="ok"}` | 1 |
+
 | description | the series || label | allowed values |
 |---|---||---|---|
 | "rail is the rail enum plus none" | any || `rail` | `anthropic`, `opencode`, `openrouter`, `codex`, `none` — `codex` renders `gateway_sessions_active{rail="codex"} 0` even where no policy declares it (the rail ships dark) ⚖ |
@@ -93,8 +116,12 @@ the process is down.
 | "class is a strike class, source the writer" | strikes_total || `class` / `source` | the strike classes of the vocabulary / `outcome`, `gateway` |
 | "reason is why a 2xx body stopped before its end" | requests_incomplete_total || `reason` | `no-terminal`, `timeout`, `transport-error`, `client-closed` |
 | "source is the catalog source" | go_catalog_refresh_total || `source` | `config` (the console's V2 config), `docs` (the vendor's Go page) |
+| "state is a cell's entry state ⚖" | openrouter_cells || `state` | `candidate`, `eligible`, `excluded` |
+| "a canary outcome is a verdict, an admission an answer" | canary_rides_total / canary_admissions_total || `outcome` | `eligible`, `excluded` / `dispatch`, `budget`, `not-due`, `not-in-catalog` |
 | "the catalog outcome is the refresh outcome" | go_catalog_refresh_total || `outcome` | `ok`, `fetch-failed`, `parse-failed`, `implausible` |
-| "no task label, ever" | any || — | no label named `task`, `session`, `id`, `model` |
+| "model is a policy openrouter id ⚖" | provider_requests_total, provider_failovers_total || `model` | the openrouter rail's policy models (wire ids); else `other` |
+| "provider is a snapshot slug or unattributed ⚖" | provider_requests_total (`from`, `to` on provider_failovers_total) || `provider` | the endpoint snapshot's tag-base slugs, `unattributed`; else `other` |
+| "no task label, ever" | any || — | no label named `task`, `session`, `id`, `token`; `model` only on the two provider families, bounded to the policy's set ⚖ |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|

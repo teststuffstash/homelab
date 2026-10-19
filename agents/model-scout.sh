@@ -45,6 +45,11 @@
 #          `pools.version`. It moves by PR until then — and the router self-test enforces the
 #          curation invariants at edit time, so a refresh that breaks a band reds in CI.
 #
+# ⚠ 2026-10-20 (homelab#2742, GW-CATALOG-OR): for OPENROUTER entrants the canary leg below is
+#   SUPERSEDED by the agent-gateway's entry canary — a (model, provider) cell enters the gateway's
+#   provider order only after one clean prober ride pinned to that cell, on demand as the gateway's
+#   catalog refreshes, budget-capped (gateway/scripts/canary-entrants.sh launches them; the gateway
+#   judges). This scout keeps its digest; its canary verdicts no longer gate the gateway's order.
 # v2 (FU-062 canary leg, 2026-07-17): candidates get a CANARY RIDE before the digest — a tiny
 # closed task (read README, echo its first heading — forces one real tool call) dispatched via
 # agent-session.sh into $CANARY_PROJECT on an ephemeral budget-capped OpenRouterKey. `:free`

@@ -91,13 +91,14 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-RAIL-OPENCODE](endpoints/anthropic-messages.md#gw-rail-opencode) | anthropic-messages | the Go rail's wire, both dialects |
 | [GW-MODEL-RESOLVE](endpoints/anthropic-messages.md#gw-model-resolve) | anthropic-messages | the body's model is the session's model |
 | [GW-CRED-BOUNDARY](endpoints/anthropic-messages.md#gw-cred-boundary) | anthropic-messages | inbound auth stops here; the upstream credential starts here |
-| [GW-RAIL-OPENROUTER](endpoints/openai-chat.md#gw-rail-openrouter) | openai-chat | the per-stack OpenRouter rail's wire |
+| [GW-RAIL-OPENROUTER](endpoints/openai-chat.md#gw-rail-openrouter) | openai-chat | the per-stack OpenRouter rail's wire; the provider axis — every answer attributed to its provider, the provider selected from the endpoint snapshot and the gateway's own clean-ride evidence, a failed provider relaunched before the first byte |
 | [GW-RAIL-CODEX](endpoints/openai-responses.md#gw-rail-codex) | openai-responses | the ChatGPT-subscription rail's Responses wire (dark) |
 | [GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom) | openai-responses | account headroom as the codex rail's admission |
 | [GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth) | openai-responses | the OAuth lifecycle behind the persistence interface (FAKE store only) |
 | [GW-METRICS](endpoints/metrics.md#gw-metrics) | metrics | the `gateway_*` families and their bounded labels |
 | [GW-HEALTH](endpoints/health.md#gw-health) | health | liveness and the store mode |
 | [GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go) | catalog | the Go rail's models, prices and per-model plan limits, read from the vendor on a schedule; the last good snapshot |
+| [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) | catalog | the OpenRouter rail's registry — the weekly ranking ∩ AA-benched, each candidate's endpoints, the persisted snapshot; a cell enters the order only after a clean, budget-capped entry canary |
 | [GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers) | catalog | the deployed per-(rail, tier) model lists are derived from benchmark evidence (AA intelligence bands of the rail's best, cheapest-first, capped) — a committed snapshot and an equality check |
 | [GW-ACCESS](access.md#gw-access) | access | role × service: allowed / denied / unenforced |
 | [GW-CODEX-REFRESH](endpoints/openai-responses.md#gw-codex-refresh) | openai-responses | native Codex OAuth HTTP refresh transport (injectable, dark) |

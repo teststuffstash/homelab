@@ -115,6 +115,7 @@ class Outcomes:
         self.metrics = metrics
         self.window_s = window_s
         self.clock = clock
+        self.judge = None  # GW-CATALOG-OR: `(model, provider, clean, klass, now)` — the canary verdict hook (app.py)
 
     def report(self, row: Session, klass: str, sub: str | None, evidence: object, reporter: str | None,
                judge: bool) -> dict:
@@ -137,25 +138,38 @@ class Outcomes:
         refuted = 0
         scope = OUTCOME_CLASSES[klass]
         if scope is None:
-            refuted = self.store.refute_strikes(row.stack, row.task, row.rail, row.model, now)
+            refuted = self.store.refute_strikes(row.stack, row.task, row.rail, row.model, now,
+                                                providers=self.store.session_providers(row.id))
             log.info("outcome: session=%s clean — refuted %d strike(s) on task %s", row.id, refuted, row.task)
+            if row.canary_provider and self.judge is not None:  # the canary's clean ride: the cell enters
+                self.judge(row.model, row.canary_provider, True, None, now)
         else:
-            strike = self._strike(row, klass, scope, "outcome", now)
+            # A consumer's cell-scoped class lands on the provider(s) the ride rode — one strike per cell
+            # it touched; a ride that rode none (unpinned, no attribution) strikes the model's own cell.
+            rode = sorted(self.store.session_providers(row.id)) if scope == "cell" else []
+            strike = self._strike(row, klass, scope, "outcome", now, rode[0] if rode else "")
+            for p in rode[1:]:
+                self._strike(row, klass, scope, "outcome", now, p)
         log.info("outcome: session=%s class=%s subclass=%s reporter=%s", row.id, klass, sub or "-", reporter or "(unauthenticated)")
         return self._answer(row, rec, strike, refuted)
 
-    def transport(self, row: Session, klass: str) -> None:
-        """The gateway's own transport fact as a strike on the session's cell (at most one per class)."""
+    def transport(self, row: Session, klass: str, provider: str = "") -> None:
+        """The gateway's own transport fact as a strike on the session's cell (at most one per class
+        and provider); `provider` = the serving provider's slug on the openrouter rail ('' = unpinned,
+        the model's own cell — GW-RAIL-OPENROUTER §Attribution)."""
         scope = OUTCOME_CLASSES[klass]
         assert scope is not None
-        self._strike(row, klass, scope, "gateway", self.clock())
+        self._strike(row, klass, scope, "gateway", self.clock(), provider)
 
-    def _strike(self, row: Session, klass: str, scope: str, source: str, now: float) -> dict | None:
-        if self.store.add_strike(row.stack, row.task, row.rail, row.model, "", klass, scope, source, row.id, now):
+    def _strike(self, row: Session, klass: str, scope: str, source: str, now: float, provider: str = "") -> dict | None:
+        if row.canary_provider and self.judge is not None:  # any strike on a canary ride excludes its cell
+            self.judge(row.model, row.canary_provider, False, klass, now)
+        if self.store.add_strike(row.stack, row.task, row.rail, row.model, provider, klass, scope, source, row.id, now):
             self.metrics.strike(klass, source)
-            log.warning("strike: %s/%s %s on %s %s (scope %s, source %s, session %s)",
-                        row.stack, row.task, klass, row.rail, row.model, scope, source, row.id)
-        return {"class": klass, "scope": scope}
+            log.warning("strike: %s/%s %s on %s %s%s (scope %s, source %s, session %s)",
+                        row.stack, row.task, klass, row.rail, row.model, f" @{provider}" if provider else "",
+                        scope, source, row.id)
+        return {"class": klass, "scope": scope}  # the wire's strike; the provider is the store row's (GET shows none)
 
     @staticmethod
     def _answer(row: Session, rec: dict, strike: dict | None, refuted: int, replay: bool = False) -> dict:

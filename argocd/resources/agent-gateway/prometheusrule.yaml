@@ -101,3 +101,50 @@ spec:
           annotations:
             summary: '{{ $value }} Go model(s) in the gateway policy are not covered by its Go catalog''s {{ $labels.source }} snapshot'
             description: 'config = a policy Go model is not listed in the console catalog snapshot; docs = it has no monthly-limit row under rails.opencode.plan in the Go page snapshot. Which ids: GET /catalog/opencode on the gateway, policy_models, or kubectl -n agent-egress logs deploy/agent-gateway | grep "policy model(s) not covered". Check the vendor source before acting: a model the vendor no longer lists needs a policy change (argocd/resources/agent-gateway/policy.json rails.opencode.models, by PR); a page or parser change also shows as GoCatalogParseFailed or as a drop in gateway_go_catalog_models.'
+    # ── The OpenRouter catalog leg (GW-CATALOG-OR, gateway/specs/endpoints/catalog.md) ────────────
+    # The gateway reads the openrouter rail's registry on a 6 h schedule (the weekly ranking ∩ the
+    # AA-benched set over the MCP, then each candidate's endpoints) and keeps the last good snapshot
+    # when a refresh fails; a (model, provider) cell enters selection only after a clean, budget-capped
+    # entry canary. Behaviour fixture: openrouter-catalog.promtool-{rules,test} beside this file.
+    #   OpenRouterCatalogStale        — no good refresh for 24 h (4 missed), or no snapshot at all:
+    #                                   every selection runs on month-old prices (#2718 item 3's class —
+    #                                   the 10-18 snapshot read $0.144/M against a live $0.080/M).
+    #   OpenRouterCatalogParseFailed  — the latest refresh read the sources but could not parse them,
+    #                                   or found an implausible drop: the parser needs a look.
+    #   GatewayCanaryBudgetExhausted  — the canary cap (per refresh or per day) is spent while
+    #                                   candidate cells wait: entrants stay out of the order until
+    #                                   the budget rolls — raise the knob or wait, never a code change.
+    - name: agent-gateway-openrouter-catalog
+      rules:
+        - alert: OpenRouterCatalogStale
+          expr: |
+            (max(gateway_openrouter_catalog_age_seconds{job="agent-gateway"}) > 86400)
+            or
+            (max(gateway_openrouter_catalog_models{job="agent-gateway"}) == 0)
+          for: 30m
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'The gateway''s OpenRouter catalog has had no good refresh for 24 h, or has no snapshot'
+            description: 'gateway_openrouter_catalog_age_seconds is past 24 h, or gateway_openrouter_catalog_models is 0 ({{ $value }}); the gateway keeps its last good snapshot and selection prices from it. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "orcatalog:" names the failing step (the account key, the MCP source, the parse, the endpoints reads, implausible); (2) gateway_openrouter_catalog_last_outcome; (3) GET /catalog/openrouter on the gateway. The contract is gateway/specs/endpoints/catalog.md#gw-catalog-or.'
+        - alert: OpenRouterCatalogParseFailed
+          expr: |
+            max by (outcome) (gateway_openrouter_catalog_last_outcome{job="agent-gateway",outcome=~"parse-failed|implausible"}) == 1
+          for: 5m
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'The latest refresh of the gateway''s OpenRouter catalog ended {{ $labels.outcome }} — its last good snapshot is in use'
+            description: 'parse-failed = an MCP answer (list-daily-model-rankings / list-benchmarks) did not match the shape gateway/src/agent_gateway/orcatalog.py parses; implausible = no candidate had readable endpoints, or fewer than half the last good snapshot''s models did. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep "orcatalog:" names the step; compare with the live MCP answer (the jail''s openrouter MCP tools) and GET https://openrouter.ai/api/v1/models/<id>/endpoints. Clears on the next good refresh (every 6 h, or a pod restart); OpenRouterCatalogStale follows at 24 h.'
+        - alert: GatewayCanaryBudgetExhausted
+          expr: |
+            max(gateway_canary_budget_exhausted{job="agent-gateway"}) == 1
+          for: 15m
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'The gateway''s canary budget is spent while candidate OpenRouter cells wait'
+            description: 'gateway_canary_budget_exhausted is 1: the per-refresh cap (rails.openrouter.canary.max_per_refresh) or the day''s metered spend (canary.usd_per_day) is reached and candidate cells stay out of selection until it rolls (the next catalog refresh, or the trailing day). GET /catalog/openrouter on the gateway shows canary.admitted_this_refresh, canary.spend_usd_1d and the candidate cells. Nothing is tried over budget by design (operator 2026-10-19); a higher cap is a policy edit (argocd/resources/agent-gateway/policy.json, by PR), never a code change.'

@@ -231,6 +231,26 @@ class CredentialResolver:
             raise CredentialUnresolved(f"{ref}: {reason}")
         return value
 
+    async def resolve_ref(self, ref: str, key: str) -> str:
+        """A labelled Secret's `key` by ref (GW-CRED-RESOLVE's verdicts, the same label rule, no cache)
+        — the OpenRouter catalog leg's account key (`rails.openrouter.catalog.account_ref`)."""
+        if ref.count("/") != 1:
+            raise CredentialUnresolved(f"{ref}: not a ns/name ref")
+        ns, name = ref.split("/", 1)
+        try:
+            secret = await self.source.get_secret(ns, name)
+        except SecretTransient as e:
+            raise CredentialTransient(f"{ref}: transient: {e}") from e
+        except SecretNotFound as e:
+            raise CredentialUnresolved(f"{ref}: missing: {e}") from e
+        labels = (secret.get("metadata") or {}).get("labels") or {}
+        if labels.get(SESSION_KEY_LABEL) != "true":
+            raise CredentialUnresolved(f"{ref}: exists but lacks {SESSION_KEY_LABEL}=true — refusing")
+        b64 = (secret.get("data") or {}).get(key) or ""
+        if not b64:
+            raise CredentialUnresolved(f"{ref}: labelled but has no {key} key")
+        return base64.b64decode(b64).decode().strip()
+
     def forget(self, ref: str | None = None) -> None:
         with self._lock:
             if ref is None:

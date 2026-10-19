@@ -7,7 +7,8 @@ schema: sessions.schema.json
 
 *May this unit run now, with which harness, and what goes in the pod's env.* The control-plane
 seam of the island ([UC-1](../use-cases/uc-1-worker-ride.md) steps ① and ④). The caller sends
-`(stack, role, task, round)` and optional `tier` / `harness` / `rail`; the gateway answers
+`(stack, role, task, round)` and optional `tier` / `harness` / `rail` — or, for the catalog's
+entry canary, `canary: {model, provider}` ([GW-CATALOG-OR](catalog.md#gw-catalog-or)); the gateway answers
 `dispatch` (a session, a rail, a harness, a model, the pod's complete LLM env) or `defer` (a
 typed reason and when to ask again). The caller authenticates with its projected ServiceAccount
 token and may ask only for what the policy's `callers` grant it ([GW-SESSIONS-AUTH](#gw-sessions-auth)).
@@ -24,7 +25,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input`, `post.output` (`dispatch` / `defer`) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
@@ -194,14 +195,16 @@ blocks lifts.
   ⚖ The 900 s bound has **no** old-proxy precedent (it sees every subscription ride; this gateway
   sees only its own, so its reading ages out) — a guess the operator may tune.
 - **Cell cooldown** (every rail): an upstream 429 cools the **cell** — (rail, the session's policy
-  model) — until its reset, read from the wire: `retry-after` (delta seconds) first, then
+  model, provider) — until its reset, read from the wire: `retry-after` (delta seconds) first, then
   `x-ratelimit-reset` (OpenRouter sends the reset as epoch **milliseconds** and no `retry-after`),
   else the rail's `latch_429_hold_s`, else the policy's `defer_retry_s`. Admission skips a cooled
   cell (`cell-cooled`, `retry_after_s` = its reset); any 2xx on that cell clears it early — the old
   router's transport belt, which a 2xx also clears
   ([model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder)).
-  ⚖ The cell is (rail, model), not (rail, model, provider): the gateway pins no provider (a gap
-  row below), so admission could not act on a provider-scoped cooldown. The evidence that a 429
+  ⚖ The cell is (rail, model, provider): on the openrouter rail a 429 answered to a PINNED attempt
+  cools that provider's cell only ([§The provider axis](#the-provider-axis-openrouter); the model
+  admits while another eligible provider remains), an unpinned 429 cools the model's own cell
+  (provider `''`) — the only cell on the rails that pin none. The evidence that a 429
   is a MODEL's fact, not the rail's: the 2026-10-17 free-model experiment
   (`docs/spikes/gateway-free-models-2026-10-17/cells.tsv`, 549 upstream responses) saw 115
   OpenRouter 429s across three models, each the model's own limit (`limit_source`
@@ -373,6 +376,32 @@ after the one just run).
 | "the other Go models still admit ⚖" | `catalog-retired` | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
 | "no catalog snapshot at all: every Go model is not-in-catalog ⚖" | none — a fresh store, no refresh yet | worker, `rail: opencode` || defer | — | not-in-catalog | 60 (`defer_retry_s`: no refresh is scheduled yet) |
 
+### The provider axis (openrouter)
+
+Once the endpoint snapshot covers a model ([GW-RAIL-OPENROUTER §Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto),
+homelab#2741), the openrouter [cell](../glossary.md#cell) is `(rail, model, provider)`: a cell-scoped
+strike or a 429 cooldown on one provider leaves the model admissible while another eligible
+provider remains; the model is **exhausted** for the task when every eligible provider is struck,
+**cell-cooled** (until the earliest reset) when every remaining one is cooled, and ⚖
+**`no-eligible-provider`** (a typed defer, `retry_after_s` = `defer_retry_s`) when the snapshot
+covers the model but no endpoint clears the policy floors — the model is not ridden, the walk
+continues. ⚖ A provider-scoped strike on a model the snapshot does NOT cover excludes the model's
+cell: nothing can route around it. The rails that pin no provider keep provider `''`.
+
+World `policy-default · openrouter-endpoints` (the snapshot of `deepseek/deepseek-v4.1-flash` = M, the
+openrouter heavy tier; `deepseek/deepseek-v4-flash` = the standard tier has no entry);
+`openrouter-endpoints-ineligible` = the snapshot trimmed to open-inference/fp4, alibaba and
+parasail/fp8, none of which clears the floors ([worlds/README.md](../worlds/README.md#the-openrouter-endpoints-world)).
+
+| description | arrange | body || decision | rail | model | reason | retry_after_s |
+|---|---|---||---|---|---|---|---|
+| "a provider cell strike leaves the model admissible while another eligible provider remains ⚖" | T's earlier ride struck `harness-gave-up` on deepinfra | worker, `rail: openrouter`, `tier: heavy`, T || dispatch | openrouter | M | — | — |
+| "every eligible provider struck for the task: the model is exhausted ⚖" | T's five earlier rides struck deepinfra, atlas-cloud, morph, inference-net, baidu | worker, `rail: openrouter`, `tier: heavy`, T || defer (`{decision, reason}` only) | — | — | cells-exhausted | — |
+| "every eligible provider cooled: cell-cooled until the earliest reset ⚖" | two requests whose pinned attempts all answered 429 (`retry-after: 30`) | worker, `rail: openrouter`, `tier: heavy` || defer | — | — | cell-cooled | 30 |
+| "no endpoint clears the floors: the model defers no-eligible-provider ⚖" | `openrouter-endpoints-ineligible` | worker, `rail: openrouter`, `tier: heavy` || defer | — | — | no-eligible-provider | 60 |
+| "an ineligible model is skipped, the walk continues" | `openrouter-endpoints-ineligible` | researcher, `harness: claude` (rails openrouter, anthropic) || dispatch | anthropic | claude/sonnet | — | — |
+| "a provider strike with no snapshot to steer by excludes the model's cell ⚖" | T's unpinned v4-flash ride (served by Sail Research) struck `harness-gave-up` | worker, `rail: openrouter`, `tier: standard`, T || defer (`{decision, reason}` only) | — | — | cells-exhausted | — |
+
 ### Named gaps (rows that exist so the omission is visible)
 
 | description | input || v0 answer | the gap |
@@ -381,7 +410,6 @@ after the one just run).
 | "⚑ gap: a latch survives a restart" | a 429 latch, a cooled cell or a rejected credential, then a gateway roll || forgotten; the next 429 / 401 marks it again | the old proxy persists its latches (`router.latch_save`); these are in memory |
 | "⚑ gap: the OpenRouter account latch" | 402s / credit below the floor on a stack key || no latch | the old proxy's `rpd` / `credit` / hard-402 legs (homelab#158) and the key headroom poll ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)); cross-model 429s are per-cell facts here (§Capacity), not an account signal |
 | "⚑ gap: the free-tier key budget spans every `:free` cell" | a 429 whose body says `limit_source: openrouter_free_tier_per_minute` || only the cell that saw it cools; the next `:free` cell 429s once and cools itself | the limit is the key's across `:free` models (20 req/min in the experiment's headers); reading the body's `limit_source` would cool them as one group — not built |
-| "⚑ gap: a provider-scoped cell" | a 429 naming `metadata.provider_name` || the (rail, model) cell cools | the old router's `(model, provider)` pair; meaningful only once admission pins providers (the provider-pin gap) |
 | "⚑ gap: a Go 402" | an upstream 402 on opencode || no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
 | "⚑ gap: the Go draw is the gateway's own traffic only" | Go spend through the old proxy or the jail shim || not in this ledger — this draw is a lower bound of the account's | the account-wide reading (the old proxy's ledger, the jail shim's reports) |
 | "⚑ gap: one model across rails" | a model strike on `claude/sonnet` || `opencode-go/claude-haiku-5-5` still admits | the policy names rail-prefixed ids; `model-classes.json` groups them per model, and that grouping is not in the gateway policy |
@@ -920,7 +948,7 @@ the consumer's round counter. It is **no class here**, and saying one is 400
 `sessions.schema.json` `outcome.input.properties.class` (`enum` + `x-scope`) is the set; the code's
 copy (`outcomes.py` `OUTCOME_CLASSES`) is pinned to it by a row. **Scope** is the old router's rule
 ([model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder)): a
-**cell**-scoped (serving-shaped) strike excludes that (rail, model) [cell](../glossary.md#cell) for
+**cell**-scoped (serving-shaped) strike excludes that (rail, model, provider) [cell](../glossary.md#cell) for
 the task; a **model**-scoped one excludes the model on every rail for the task. ⚖ Each new class's
 scope is a judgment, marked.
 
@@ -946,14 +974,20 @@ scope is a judgment, marked.
 ### The store
 
 A strike is a row keyed **(stack, task, rail, model, provider)** with its class, scope and
-**source** (`outcome` = the consumer, `gateway` = a transport fact). ⚖ At most one per
-(session, class, source): nine 502s on one ride are one `provider-5xx`, not nine. ⚖ A 429 writes
+**source** (`outcome` = the consumer, `gateway` = a transport fact); `provider` is the serving
+provider's slug on the openrouter rail ([GW-RAIL-OPENROUTER §Attribution](openai-chat.md#attribution--the-answer-names-the-cell)),
+`''` where none was named — a cell-scoped class lands on the provider(s) the ride rode, a
+model-scoped one carries none. ⚖ At most one per
+(session, class, source, provider): nine 502s on one ride are one `provider-5xx`, not nine — and a
+failed-over ride strikes each provider it tried, one per cell. ⚖ A 429 writes
 **no** strike: the cell cooldown is that fact's whole answer, and a rate limit says nothing about
 this task. ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
 consumer's to say. **A clean outcome refutes** the task's counted strikes on the same cell
 (cell-scoped) and the same model (model-scoped): they stay as history, with `refuted_at` set.
 **A bare 2xx refutes nothing**: a provider serving badly behind HTTP 200 is exactly what a strike
-routes around (the old router's refutation rule). `gateway_strikes_total{class,source}` counts
+routes around (the old router's refutation rule). ⚖ A clean outcome refutes cell strikes only on
+the cells the ride rode CLEAN (the providers that served it a 2xx, and the model's own cell): a
+provider the ride failed over from keeps its strike. `gateway_strikes_total{class,source}` counts
 them ([GW-METRICS](metrics.md#gw-metrics)).
 
 ### Who may report
@@ -1014,11 +1048,19 @@ World `policy-default`.
 | "GET shows the latest outcome" | report `no-verdict` (`subclass: rc=1`), GET || — | `outcome` = `{class: no-verdict, subclass: rc=1, reporter: null}` |
 | "the code's vocabulary is the schema's" | `OUTCOME_CLASSES` vs `outcome.input.properties.class` (`enum`, `x-scope`) || equal, class and scope | — |
 
+The provider axis (world `policy-default · openrouter-endpoints`, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter);
+a worker session on rail openrouter, `tier: heavy`, rides `deepseek/deepseek-v4.1-flash` pinned):
+
+| description | sequence || strikes on the task (class, provider, refuted) |
+|---|---||---|
+| "a cell-scoped class lands on the provider the ride rode ⚖" | the ride served by deepinfra; the consumer reports `harness-gave-up` || `[(harness-gave-up, deepinfra, no)]` |
+| "a failed-over ride strikes each provider it tried, one per cell ⚖" | deepinfra 500 → atlas-cloud 500 → morph 200 || `[(provider-5xx, deepinfra, no), (provider-5xx, atlas-cloud, no)]` |
+| "a clean ride refutes only the cells it rode clean ⚖" | the same, then the consumer reports `clean` || `[(provider-5xx, deepinfra, no), (provider-5xx, atlas-cloud, no)]` — morph served it, the two failed cells stay counted |
+
 ### Named gaps
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: provider on a strike" | an OpenRouter ride served by a named provider || `provider` = `''` | the gateway does not parse the serving provider; the old router's pair scope is earned by knowing it |
 | "⚑ gap: the fleet view" | the same class on ≥ 2 distinct tasks || per-task strikes only | the old router's pair cooldown / model nomination across tasks (`router.py:pair_cooldowns`) |
 
 <details markdown="1"><summary>Evidence</summary>

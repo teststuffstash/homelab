@@ -1,0 +1,122 @@
+# Behaviour fixture for the `agent-gateway-openrouter-catalog` alerts (prometheusrule.yaml beside this
+# file) — GW-CATALOG-OR, gateway/specs/endpoints/catalog.md.
+#
+#   devbox run prometheus-rules-lint      # runs this, and every other *.promtool-test under argocd/
+#
+# LABELS are the real scraped set of gateway_* (container, endpoint, instance, job, namespace, pod,
+# service — read off the live gateway_sessions_active series, 2026-10-17), plus the family's own.
+# The families are hand-driven here; their values are the gateway's own rows in catalog.md (age =
+# seconds since the last good refresh, models = the snapshot's count, last_outcome = 1 on the latest
+# attempt's outcome, budget_exhausted = 1 while the cap holds and candidates wait).
+rule_files:
+  - openrouter-catalog.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ S1 — STALE BY AGE: refreshes stop; the 6 h sawtooth becomes a ramp ═══════════════════════
+  # The refresh at 0 lands, every later one fails (the MCP 503s): age = 60 × minute, past 86400 from
+  # 1441m; with for: 30m → firing from 1471m.
+  - interval: 1m
+    name: S1 stale — no good refresh for 24 h fires 30m later
+    input_series:
+      - series: 'gateway_openrouter_catalog_age_seconds{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "0+60x1550"
+      - series: 'gateway_openrouter_catalog_models{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "7x1550"
+    alert_rule_test:
+      - eval_time: 1440m
+        alertname: OpenRouterCatalogStale
+        exp_alerts: []
+      - eval_time: 1461m
+        alertname: OpenRouterCatalogStale
+        exp_alerts: []
+      - eval_time: 1500m
+        alertname: OpenRouterCatalogStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway's OpenRouter catalog has had no good refresh for 24 h, or has no snapshot"
+              description: "gateway_openrouter_catalog_age_seconds is past 24 h, or gateway_openrouter_catalog_models is 0 (90000); the gateway keeps its last good snapshot and selection prices from it. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"orcatalog:\" names the failing step (the account key, the MCP source, the parse, the endpoints reads, implausible); (2) gateway_openrouter_catalog_last_outcome; (3) GET /catalog/openrouter on the gateway. The contract is gateway/specs/endpoints/catalog.md#gw-catalog-or."
+
+  # ══ S2 — STALE BY ABSENCE: a fresh pod whose refreshes all fail (no snapshot ever) ═════════════
+  - interval: 1m
+    name: S2 none — no snapshot for 30m fires
+    input_series:
+      - series: 'gateway_openrouter_catalog_models{container="gateway",endpoint="http",instance="10.244.7.52:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6bc8c4745d-m7psv",service="agent-gateway"}'
+        values: "0x45"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: OpenRouterCatalogStale
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: OpenRouterCatalogStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway's OpenRouter catalog has had no good refresh for 24 h, or has no snapshot"
+              description: "gateway_openrouter_catalog_age_seconds is past 24 h, or gateway_openrouter_catalog_models is 0 (0); the gateway keeps its last good snapshot and selection prices from it. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep \"orcatalog:\" names the failing step (the account key, the MCP source, the parse, the endpoints reads, implausible); (2) gateway_openrouter_catalog_last_outcome; (3) GET /catalog/openrouter on the gateway. The contract is gateway/specs/endpoints/catalog.md#gw-catalog-or."
+
+  # ══ S3 — A START: models 0 before the first refresh, then 7 — nothing fires ════════════════════
+  - interval: 1m
+    name: S3 start — the first refresh lands inside the for, nothing fires
+    input_series:
+      - series: 'gateway_openrouter_catalog_models{container="gateway",endpoint="http",instance="10.244.7.52:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6bc8c4745d-m7psv",service="agent-gateway"}'
+        values: "0 0 7x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: OpenRouterCatalogStale
+        exp_alerts: []
+
+  # ══ S4 — PARSE FAILED: the latest attempt could not read the sources ═════════════════════════
+  - interval: 1m
+    name: S4 parse-failed — the last outcome gauge at 1 for 5m fires; ok clears it
+    input_series:
+      - series: 'gateway_openrouter_catalog_last_outcome{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",outcome="parse-failed",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "1x10 0x10"
+      - series: 'gateway_openrouter_catalog_last_outcome{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",outcome="ok",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "0x10 1x10"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: OpenRouterCatalogParseFailed
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: OpenRouterCatalogParseFailed
+        exp_alerts:
+          - exp_labels:
+              outcome: parse-failed
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The latest refresh of the gateway's OpenRouter catalog ended parse-failed — its last good snapshot is in use"
+              description: "parse-failed = an MCP answer (list-daily-model-rankings / list-benchmarks) did not match the shape gateway/src/agent_gateway/orcatalog.py parses; implausible = no candidate had readable endpoints, or fewer than half the last good snapshot's models did. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep \"orcatalog:\" names the step; compare with the live MCP answer (the jail's openrouter MCP tools) and GET https://openrouter.ai/api/v1/models/<id>/endpoints. Clears on the next good refresh (every 6 h, or a pod restart); OpenRouterCatalogStale follows at 24 h."
+      - eval_time: 18m
+        alertname: OpenRouterCatalogParseFailed
+        exp_alerts: []
+
+  # ══ S5 — THE BUDGET: exhausted while candidates wait fires after 15m; rolls at the refresh ═════
+  - interval: 1m
+    name: S5 budget — exhausted for 15m fires; the next refresh resets it
+    input_series:
+      - series: 'gateway_canary_budget_exhausted{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "0x5 1x30 0x10"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: GatewayCanaryBudgetExhausted
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: GatewayCanaryBudgetExhausted
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway's canary budget is spent while candidate OpenRouter cells wait"
+              description: "gateway_canary_budget_exhausted is 1: the per-refresh cap (rails.openrouter.canary.max_per_refresh) or the day's metered spend (canary.usd_per_day) is reached and candidate cells stay out of selection until it rolls (the next catalog refresh, or the trailing day). GET /catalog/openrouter on the gateway shows canary.admitted_this_refresh, canary.spend_usd_1d and the candidate cells. Nothing is tried over budget by design (operator 2026-10-19); a higher cap is a policy edit (argocd/resources/agent-gateway/policy.json, by PR), never a code change."
+      - eval_time: 42m
+        alertname: GatewayCanaryBudgetExhausted
+        exp_alerts: []

@@ -174,6 +174,126 @@ class CredentialProbe:
 
 
 USER_AGENT_MODES = ("fixed", "forward")
+TOOL_CHOICE_MODES = ("none", "auto", "required", "function")  # OpenRouter's `supports_tool_choice` keys
+
+
+@dataclass(frozen=True)
+class ProvidersPolicy:
+    """`rails.openrouter.providers` (GW-RAIL-OPENROUTER §Selection, homelab#2741): the floors a
+    provider's endpoint must clear to be pinned, and how the gateway's own failover is bounded.
+    Every value is policy data with its ⚖ row in the spec; the endpoints themselves come from the
+    store's snapshot, never from here."""
+    quantization_ladder: tuple[str, ...]  # ascending precision; a quantization not on it (`unknown`) is excluded
+    quantization_floor: str  # a member of the ladder
+    uptime_1d_floor: float  # percent, the endpoint's `uptime_last_1d`
+    min_rides: int  # judged rides before a cell's measured clean rate replaces its uptime prior
+    max_providers_per_request: int  # one pin + at most (n − 1) failovers per request
+    tool_choice: dict[str, tuple[str, ...]]  # harness -> the modes it uses; every one must be supported
+
+
+RANKING_SLICES = ("programming", "tool_calling")  # the MCP ranking slices the catalog may read (orcatalog.SLICES)
+
+
+@dataclass(frozen=True)
+class CatalogPolicy:
+    """`rails.openrouter.catalog` (GW-CATALOG-OR): where the registry's sources are read from and how
+    the candidate set is cut — never the candidates themselves."""
+    account_ref: str  # ns/name of the labelled Secret holding the openrouter account key (the MCP calls)
+    ranking_slices: tuple[str, ...]  # the weekly ranking slices whose union is the ranked set
+    ranking_top_n: int  # per slice, the top N by tokens
+
+
+@dataclass(frozen=True)
+class CanaryPolicy:
+    """`rails.openrouter.canary` (GW-CATALOG-OR §The entry canary): who rides a canary, and the cap."""
+    role: str
+    harness: str
+    max_per_refresh: int
+    usd_per_day: float
+    cooldown_s: float  # an excluded cell is a candidate again after this
+
+
+def _catalog(rail: str, c) -> CatalogPolicy | None:
+    where = f"rails.{rail}.catalog"
+    if c is None:
+        return None
+    if rail != "openrouter":
+        raise PolicyError(f"policy: {where} is an openrouter-only key")
+    if not isinstance(c, dict):
+        raise PolicyError(f"policy: {where} must be an object")
+    _keys(where, c, {"account_ref", "ranking_slices", "ranking_top_n"})
+    ref = c.get("account_ref")
+    if not isinstance(ref, str) or ref.count("/") != 1:
+        raise PolicyError(f"policy: {where}.account_ref must be 'ns/name'")
+    slices = c.get("ranking_slices")
+    if (not isinstance(slices, list) or not slices or any(s not in RANKING_SLICES for s in slices)
+            or len(set(slices)) != len(slices)):
+        raise PolicyError(f"policy: {where}.ranking_slices must be a non-empty list of distinct slices from {', '.join(RANKING_SLICES)}")
+    top = c.get("ranking_top_n")
+    if isinstance(top, bool) or not isinstance(top, int) or top < 1:
+        raise PolicyError(f"policy: {where}.ranking_top_n must be a positive integer")
+    return CatalogPolicy(ref, tuple(slices), top)
+
+
+def _canary(rail: str, c, roles: set[str]) -> CanaryPolicy | None:
+    where = f"rails.{rail}.canary"
+    if c is None:
+        return None
+    if rail != "openrouter":
+        raise PolicyError(f"policy: {where} is an openrouter-only key")
+    if not isinstance(c, dict):
+        raise PolicyError(f"policy: {where} must be an object")
+    _keys(where, c, {"role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s"})
+    role = c.get("role")
+    if role not in ROLES:
+        raise PolicyError(f"policy: {where}.role must be one of {', '.join(ROLES)}")
+    harness = c.get("harness")
+    if harness not in HARNESSES or HARNESS_DIALECT[harness] not in RAIL_DIALECTS["openrouter"]:
+        raise PolicyError(f"policy: {where}.harness must be a harness the openrouter rail serves")
+    n = c.get("max_per_refresh")
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise PolicyError(f"policy: {where}.max_per_refresh must be a positive integer")
+    usd = _num(f"{where}.usd_per_day", c.get("usd_per_day"))
+    cooldown = _num(f"{where}.cooldown_s", c.get("cooldown_s"))
+    return CanaryPolicy(role, harness, n, usd, cooldown)
+
+
+def _providers(rail: str, p) -> ProvidersPolicy | None:
+    where = f"rails.{rail}.providers"
+    if p is None:
+        return None
+    if rail != "openrouter":
+        raise PolicyError(f"policy: {where} is an openrouter-only key")
+    if not isinstance(p, dict):
+        raise PolicyError(f"policy: {where} must be an object")
+    _keys(where, p, {"quantization_ladder", "quantization_floor", "uptime_1d_floor", "min_rides",
+                     "max_providers_per_request", "tool_choice"})
+    ladder = p.get("quantization_ladder")
+    if (not isinstance(ladder, list) or not ladder or any(not isinstance(q, str) or not q for q in ladder)
+            or len(set(ladder)) != len(ladder)):
+        raise PolicyError(f"policy: {where}.quantization_ladder must be a non-empty list of distinct names, ascending precision")
+    floor = p.get("quantization_floor")
+    if floor not in ladder:
+        raise PolicyError(f"policy: {where}.quantization_floor must be a member of quantization_ladder")
+    uptime = _num(f"{where}.uptime_1d_floor", p.get("uptime_1d_floor"), hi=100)
+    min_rides = p.get("min_rides")
+    if isinstance(min_rides, bool) or not isinstance(min_rides, int) or min_rides < 1:
+        raise PolicyError(f"policy: {where}.min_rides must be a positive integer")
+    max_p = p.get("max_providers_per_request")
+    if isinstance(max_p, bool) or not isinstance(max_p, int) or max_p < 1:
+        raise PolicyError(f"policy: {where}.max_providers_per_request must be a positive integer")
+    tc = p.get("tool_choice")
+    if not isinstance(tc, dict):
+        raise PolicyError(f"policy: {where}.tool_choice must be an object {{harness: [modes]}}")
+    _keys(f"{where}.tool_choice", tc, set(HARNESSES))
+    modes: dict[str, tuple[str, ...]] = {}
+    for h, ms in tc.items():
+        if h.startswith("_"):
+            continue
+        if not isinstance(ms, list) or any(m not in TOOL_CHOICE_MODES for m in ms):
+            raise PolicyError(f"policy: {where}.tool_choice.{h} must be a list of {', '.join(TOOL_CHOICE_MODES)}")
+        modes[h] = tuple(ms)
+    return ProvidersPolicy(tuple(ladder), floor, uptime, min_rides, max_p, modes)
 
 
 def _credential_probe(rail: str, p) -> CredentialProbe | None:
@@ -216,6 +336,9 @@ class RailPolicy:
     credential_probe: CredentialProbe | None = None  # re-verifies a rejected credential; absent = the hold
     credential_hold_s: float = 900.0  # no probe: a rejected credential is re-admitted (half-open) after this
     plan: str | None = None  # opencode only (required there): the Go plan the key is on — no API says (GW-CATALOG-GO)
+    providers: ProvidersPolicy | None = None  # openrouter only: the provider floors + failover bound; absent = no selection
+    catalog: CatalogPolicy | None = None  # openrouter only: the registry's sources (GW-CATALOG-OR); absent = no refresh
+    canary: CanaryPolicy | None = None  # openrouter only: the entry canary's role, harness and cap
 
 
 GO_PLANS = ("go", "go-plus")  # the OpenCode Go plans the vendor's page tabulates (GW-CATALOG-GO)
@@ -508,7 +631,9 @@ class Policy:
                 raise PolicyError(f"policy: rails.{name}.credential_hold_s must be a number >= 1")
             rails[name] = RailPolicy(name, int(r.get("max_sessions", 0)), dict(models), tuple(side),
                                      _admission(name, r.get("admission")), headroom, margin, ua,
-                                     _credential_probe(name, r.get("credential_probe")), float(hold), plan)
+                                     _credential_probe(name, r.get("credential_probe")), float(hold), plan,
+                                     _providers(name, r.get("providers")), _catalog(name, r.get("catalog")),
+                                     _canary(name, r.get("canary"), set()))
         roles: dict[str, RolePolicy] = {}
         for name, ro in (d.get("roles") or {}).items():
             if name not in ROLES:
@@ -566,6 +691,10 @@ class Settings:
     read_timeout_s: float
     go_catalog_urls: dict[str, str] = field(default_factory=lambda: dict(GO_CATALOG_URLS))
     go_catalog_refresh_s: float = GO_CATALOG_REFRESH_S  # 0 = no schedule (refresh only when called)
+    # The OpenRouter catalog leg (GW-CATALOG-OR): the MCP endpoint the ranking + benchmark reads ride, and
+    # its schedule (0 = no schedule). The endpoints read rides the openrouter rail's upstream base.
+    or_mcp_url: str = "https://mcp.openrouter.ai/mcp"
+    or_catalog_refresh_s: float = GO_CATALOG_REFRESH_S
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> Settings:
@@ -588,4 +717,6 @@ class Settings:
             go_catalog_urls={"config": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["config"]),
                              "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
+            or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
+            or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
         )

@@ -1,0 +1,10 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"prober","task":"adhoc","round":1,"canary":{"model":"deepseek/deepseek-v4.1-flash","provider":"deepinfra"},"bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-120000"}}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): dispatch deepseek/deepseek-v4.1-flash [rail=openrouter,harness=opencode,session=0123abcd,context_tokens=null] (task=adhoc, round=1) — bound to homelab/agentstack-worker pod agent-homelab-120000; the pod pulls env OPENCODE_CONFIG_CONTENT; caller the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)
+OUT GW_SESSIONS='1' HARNESS='opencode' MODEL='deepseek/deepseek-v4.1-flash'
+OUT GW_RAIL='openrouter' GW_CONTEXT_TOKENS='' GW_CLAUDE_MODEL='' OPENCODE_MODEL='gateway/deepseek/deepseek-v4.1-flash'
+OUT AGENT_ROUTER='off' OR_CREDITS='' STRUCK_MODEL='deepseek/deepseek-v4.1-flash'
+OUT GW_POD='agent-homelab-120000' GW_ENV_KEYS='OPENCODE_CONFIG_CONTENT' GW_PULL_URL='http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env' GW_PULL_PRELUDE set: yes
+OUT gws_ in launcher state: 0
+OUT → gateway(sessions): released 0123abcd
+RC 0

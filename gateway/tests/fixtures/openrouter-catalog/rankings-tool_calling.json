@@ -1,0 +1,80 @@
+{
+ "data": [
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "deepseek/deepseek-v4.1-flash-20260910",
+   "total_tokens": "32832415061947"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "z-ai/glm-5.3-flash-20260826",
+   "total_tokens": "12231280348768"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "stepfun/step-5-preview-20261008",
+   "total_tokens": "11466859348981"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "xiaomi/mimo-v2.6-flash-20260921",
+   "total_tokens": "9938687166943"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "tencent/hy4-preview-20260827",
+   "total_tokens": "7554812092790"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "openai/gpt-6-luna-20260922",
+   "total_tokens": "6208028392675"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "anthropic/claude-opus-5.5-20260921",
+   "total_tokens": "6182515811719"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "z-ai/glm-5.3-20260816",
+   "total_tokens": "5192182103497"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "deepseek/deepseek-v4-flash-20260731",
+   "total_tokens": "4699675619624"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "deepseek/deepseek-v4.1-flash-20261017",
+   "total_tokens": "3723484472816"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "moonshotai/kimi-k3-20260715",
+   "total_tokens": "2212667189054"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "xiaomi/mimo-v2.5-20260422",
+   "total_tokens": "512074243724"
+  },
+  {
+   "date": "2026-10-12",
+   "model_permaslug": "other",
+   "total_tokens": "10666609871653"
+  },
+  {
+   "date": "2026-10-05",
+   "model_permaslug": "deepseek/deepseek-v4.1-flash-20260910",
+   "total_tokens": "22441824713600"
+  }
+ ],
+ "meta": {
+  "as_of": "2026-10-19T20:52:38.282Z",
+  "version": "v1",
+  "start_date": "2026-10-12",
+  "end_date": "2026-10-18"
+ }
+}

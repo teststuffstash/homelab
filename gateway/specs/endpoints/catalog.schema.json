@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://teststuff.net/agent-gateway/specs/endpoints/catalog.schema.json",
-  "$comment": "MACHINE half of GET /catalog/opencode and of the two normalised snapshots the Go catalog leg keeps in its store; the HUMAN half is catalog.md. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows. A second rule, GW-MODEL-TIERS, owns $defs.benchmarks_snapshot (the committed tier-evidence snapshot, argocd/resources/agent-gateway/benchmarks.json) and $defs.tiers_block (the policy's derivation rules).",
+  "$comment": "MACHINE half of GET /catalog/opencode, GET /catalog/openrouter and of the normalised snapshots the two catalog legs keep in their store; the HUMAN half is catalog.md. GW-CATALOG-OR owns `openrouter_output`, `$defs.openrouter_snapshot` (the endpoint rows are openai-chat.schema.json $defs.endpoint_row), `$defs.catalog_block` and `$defs.canary_block` (the policy's two openrouter blocks), `$defs.cell_state`. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows. A second rule, GW-MODEL-TIERS, owns $defs.benchmarks_snapshot (the committed tier-evidence snapshot, argocd/resources/agent-gateway/benchmarks.json) and $defs.tiers_block (the policy's derivation rules).",
   "x-endpoint": "catalog",
   "x-use-cases": ["UC-1"],
   "$defs": {
@@ -46,6 +46,64 @@
       }
     },
     "score_axis": { "enum": ["intelligence", "coding", "agentic"], "description": "the three Artificial Analysis indices of a capability row" },
+    "cell_state": { "enum": ["candidate", "eligible", "excluded"], "description": "a (model, provider) cell's ENTRY state (GW-CATALOG-OR): new to the snapshot or back from exclusion → candidate; one canary ride completed clean on exactly that cell → eligible (the only state selection pins); a canary struck → excluded, with the class, for canary.cooldown_s" },
+    "ranking_slice": { "enum": ["programming", "tool_calling"], "description": "the MCP list-daily-model-rankings slices the catalog may read (period week): a category and a modality" },
+    "catalog_block": {
+      "$comment": "the policy's `rails.openrouter.catalog` (GW-CATALOG-OR): the registry's SOURCES, never its candidates",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account_ref", "ranking_slices", "ranking_top_n"],
+      "properties": {
+        "account_ref": { "type": "string", "pattern": "^[a-z0-9-]+/[a-z0-9.-]+$", "description": "ns/name of the labelled Secret holding the openrouter ACCOUNT key the MCP reads ride (key OPENROUTER_API_KEY)" },
+        "ranking_slices": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/ranking_slice" } },
+        "ranking_top_n": { "type": "integer", "minimum": 1, "description": "per slice, the top N of the latest week by tokens" }
+      },
+      "x-requirements": ["GW-CATALOG-OR"]
+    },
+    "canary_block": {
+      "$comment": "the policy's `rails.openrouter.canary` (GW-CATALOG-OR §The entry canary): who rides a canary and the cap — never code constants",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s"],
+      "properties": {
+        "role": { "enum": ["worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher"] },
+        "harness": { "enum": ["opencode", "goose", "claude"], "description": "the harness the openrouter cells serve; a canary body may name another the rail speaks" },
+        "max_per_refresh": { "type": "integer", "minimum": 1, "description": "canary admissions between two catalog refreshes" },
+        "usd_per_day": { "type": "number", "minimum": 0, "description": "metered canary spend over the trailing day, at the cell's endpoint price" },
+        "cooldown_s": { "type": "number", "minimum": 0, "description": "an excluded cell is a candidate again after this" }
+      },
+      "x-requirements": ["GW-CATALOG-OR"]
+    },
+    "openrouter_snapshot": {
+      "$comment": "the store's `catalog_snapshots.openrouter-endpoints` body as the catalog leg writes it (GW-CATALOG-OR) — openai-chat.schema.json $defs.endpoint_snapshot's `models` with the leg's provenance per model, plus `sources`",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["models", "sources"],
+      "properties": {
+        "models": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object", "additionalProperties": false, "required": ["endpoints", "fetched_at", "ranking", "aa"],
+            "properties": {
+              "endpoints": { "type": "array", "minItems": 1, "description": "openai-chat.schema.json $defs.endpoint_row each" },
+              "fetched_at": { "$ref": "#/$defs/timestamp" },
+              "ranking": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "per slice the model ranked in, the latest week's tokens" },
+              "aa": { "type": "object", "additionalProperties": false, "required": ["intelligence", "coding", "agentic"], "properties": { "intelligence": { "type": ["number", "null"] }, "coding": { "type": ["number", "null"] }, "agentic": { "type": ["number", "null"] } } }
+            }
+          }
+        },
+        "sources": {
+          "type": "object", "additionalProperties": false, "required": ["ranking", "benchmarks", "candidates", "endpoint_failures"],
+          "properties": {
+            "ranking": { "type": "object", "additionalProperties": false, "required": ["slices", "top_n", "ranked"], "properties": { "slices": { "type": "array", "items": { "$ref": "#/$defs/ranking_slice" } }, "top_n": { "type": "integer" }, "ranked": { "type": "integer", "description": "distinct model ids across the slices' latest week" } } },
+            "benchmarks": { "type": "object", "additionalProperties": false, "required": ["source", "as_of", "rows"], "properties": { "source": { "const": "artificial-analysis" }, "as_of": { "type": ["string", "null"] }, "rows": { "type": "integer" } } },
+            "candidates": { "type": "integer", "description": "ranked ∩ benched" },
+            "endpoint_failures": { "type": "integer", "description": "candidates whose endpoints could not be read this refresh (absent from it)" }
+          }
+        }
+      },
+      "x-requirements": ["GW-CATALOG-OR"]
+    },
     "band": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
     "tiers_block": {
       "type": "object",
@@ -162,6 +220,57 @@
       },
       "x-requirements": ["GW-CATALOG-GO"]
     }
+  },
+  "openrouter_output": {
+    "$comment": "GET /catalog/openrouter — the OpenRouter catalog's read-only view (GW-CATALOG-OR): the snapshot with every cell's entry state, the provider the data plane would pin per model, the canary budget; no auth, no error codes (no snapshot = empty models)",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["fetched_at", "age_s", "models_count", "last_outcome", "last_attempt_at", "refresh_s", "sources", "endpoint_failures", "models", "cells", "canary"],
+    "properties": {
+      "fetched_at": { "$ref": "#/$defs/timestamp" },
+      "age_s": { "type": ["number", "null"] },
+      "models_count": { "type": "integer", "minimum": 0 },
+      "last_outcome": { "oneOf": [{ "$ref": "#/$defs/outcome" }, { "type": "null" }] },
+      "last_attempt_at": { "$ref": "#/$defs/timestamp" },
+      "refresh_s": { "type": "number" },
+      "sources": { "type": "object", "description": "the snapshot's `sources` (empty before the first good refresh)" },
+      "endpoint_failures": { "type": "integer" },
+      "models": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object", "additionalProperties": false, "required": ["ranking", "aa", "fetched_at", "endpoints", "selected", "order", "cells"],
+          "properties": {
+            "ranking": { "type": "object" }, "aa": { "type": "object" }, "fetched_at": { "$ref": "#/$defs/timestamp" },
+            "endpoints": {
+              "type": "array",
+              "items": {
+                "type": "object", "additionalProperties": false,
+                "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier", "state", "class", "cooldown_until"],
+                "properties": {
+                  "slug": { "type": "string" }, "tag": { "type": "string" }, "provider_name": { "type": "string" }, "quantization": { "type": "string" },
+                  "tool_choice": { "type": "object" }, "uptime_1d": { "type": "number" }, "p90_ms": { "type": ["number", "null"] },
+                  "in_price": { "type": ["number", "null"] }, "out_price": { "type": ["number", "null"] }, "status": { "type": "integer" }, "service_tier": { "type": ["string", "null"] },
+                  "state": { "$ref": "#/$defs/cell_state" }, "class": { "type": ["string", "null"], "description": "the strike class that excluded the cell" }, "cooldown_until": { "$ref": "#/$defs/timestamp" }
+                }
+              }
+            },
+            "selected": { "type": ["string", "null"], "description": "the provider the data plane would pin first (GW-RAIL-OPENROUTER §Selection over the ELIGIBLE cells, the canary harness); null = none eligible — the model rides unpinned" },
+            "order": { "type": "array", "items": { "type": "string" } },
+            "cells": { "type": "object", "additionalProperties": false, "required": ["candidate", "eligible", "excluded"], "properties": { "candidate": { "type": "integer" }, "eligible": { "type": "integer" }, "excluded": { "type": "integer" } } }
+          }
+        }
+      },
+      "cells": { "type": "object", "additionalProperties": false, "required": ["candidate", "eligible", "excluded"], "properties": { "candidate": { "type": "integer" }, "eligible": { "type": "integer" }, "excluded": { "type": "integer" } } },
+      "canary": {
+        "type": "object", "additionalProperties": false,
+        "required": ["max_per_refresh", "usd_per_day", "admitted_this_refresh", "spend_usd_1d", "exhausted", "cooldown_s"],
+        "properties": {
+          "max_per_refresh": { "type": ["integer", "null"] }, "usd_per_day": { "type": ["number", "null"] }, "admitted_this_refresh": { "type": "integer" },
+          "spend_usd_1d": { "type": "number" }, "exhausted": { "type": "boolean" }, "cooldown_s": { "type": ["number", "null"] }
+        }
+      }
+    },
+    "x-requirements": ["GW-CATALOG-OR"]
   },
   "output": {
     "type": "object",

@@ -17,11 +17,13 @@ from . import __version__
 from .capacity import Capacity
 from .catalog import GoCatalog
 from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
-from .config import Policy, Settings
+from .config import Policy, Settings, wire_model
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
 from .liveness import KubePods, PodSource
 from .logging import register_literal
 from .metrics import Metrics
+from .orcatalog import OpenRouterCatalog
+from .providers import UNATTRIBUTED, EndpointSnapshot
 from .proxy import Proxy, anthropic_messages, openai_chat, openai_models
 from .pull import KubeTokenReviews, TokenReviewer
 from .sessions import (
@@ -47,6 +49,20 @@ async def healthz(request: Request) -> JSONResponse:
 async def catalog_opencode(request: Request) -> JSONResponse:
     """GW-CATALOG-GO's read-only view: the snapshots admission reads, never a credential."""
     return JSONResponse(request.app.state.catalog.view())
+
+
+async def catalog_openrouter(request: Request) -> JSONResponse:
+    """GW-CATALOG-OR's read-only view: the endpoint snapshot with every cell's entry state, the
+    provider the data plane would pin per model, the canary budget — never a credential."""
+    svc: SessionService = request.app.state.sessions
+    cat: OpenRouterCatalog = request.app.state.orcatalog
+    harness = cat.canary.harness if cat.canary else "opencode"
+
+    def order(model: str) -> list[str]:
+        verdict, plan = svc.provider_plan("openrouter", model, harness, "", "", svc.clock())
+        return [e.slug for e in plan] if verdict == "pinned" else []
+
+    return JSONResponse(cat.view(order))
 
 
 async def metrics(request: Request) -> PlainTextResponse:
@@ -106,6 +122,21 @@ def create_app(
                               capacity=Capacity(policy, store, catalog), reviewer=reviewer or KubeTokenReviews())
     sessions.pods = pods or KubePods()
     m.bind_transport_facts(lambda: sessions.capacity.cooled_counts(clock()), sessions.capacity.rejected_counts)
+    # The openrouter rail's provider axis (GW-RAIL-OPENROUTER): the endpoint snapshot the catalog leg
+    # writes (homelab#2742) and selection reads; no snapshot = every openrouter request rides unpinned.
+    providers = EndpointSnapshot(store)
+    sessions.providers = providers
+    or_rail = policy.rails.get("openrouter")
+    or_models = {wire_model("openrouter", mid) for tier in (or_rail.models.values() if or_rail else ()) for mid in tier}
+    m.bind_provider_bounds(lambda: or_models, lambda: providers.slugs() | {UNATTRIBUTED})
+    # The OpenRouter catalog leg (GW-CATALOG-OR): the registry the snapshot comes from, the cells' entry
+    # states and the canary gate. Runs only when the policy declares `rails.openrouter.catalog`.
+    orcatalog = OpenRouterCatalog(policy, store, client, resolver, providers, settings.upstreams["openrouter"],
+                                  settings.or_mcp_url, clock, settings.or_catalog_refresh_s)
+    sessions.orcatalog = orcatalog if orcatalog.enabled else None
+    sessions.outcomes.judge = orcatalog.judge if orcatalog.enabled else None
+    if orcatalog.enabled:
+        m.bind_extra(orcatalog.render)
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when
     # one is handed in (tests: the FAKE store) — production passes none (⚑ gap), so it ships dark.
@@ -125,10 +156,13 @@ def create_app(
         # The Go catalog's schedule (GW-CATALOG-GO): one refresh at start, then every go_catalog_refresh_s.
         refresher = (asyncio.create_task(catalog.run(), name="go-catalog")
                      if "opencode" in policy.rails and settings.go_catalog_refresh_s > 0 else None)
+        # The OpenRouter catalog's schedule (GW-CATALOG-OR): one refresh at start, then every or_catalog_refresh_s.
+        or_refresher = (asyncio.create_task(orcatalog.run(), name="openrouter-catalog")
+                        if orcatalog.enabled and settings.or_catalog_refresh_s > 0 else None)
         try:
             yield
         finally:
-            for t in (task, reaper, refresher):
+            for t in (task, reaper, refresher, or_refresher):
                 if t is not None:
                     t.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -145,6 +179,7 @@ def create_app(
             Route("/healthz", healthz, methods=["GET"]),
             Route("/metrics", metrics, methods=["GET"]),
             Route("/catalog/opencode", catalog_opencode, methods=["GET"]),
+            Route("/catalog/openrouter", catalog_openrouter, methods=["GET"]),
             Route("/sessions", post_sessions, methods=["POST"]),
             Route("/sessions/{id}", get_session, methods=["GET"]),
             Route("/sessions/{id}", delete_session, methods=["DELETE"]),
@@ -173,4 +208,6 @@ def create_app(
     app.state.codex = codex
     app.state.codex_proxy = codex_proxy
     app.state.catalog = catalog
+    app.state.providers = providers
+    app.state.orcatalog = orcatalog
     return app

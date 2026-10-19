@@ -64,6 +64,29 @@
     "openrouter": {
       "user_agent": "forward",
       "credential_probe": {"method": "GET", "path": "/v1/key", "backoff_s": [60, 3600]},
+      "providers": {
+        "_comment": "GW-RAIL-OPENROUTER §Selection / §Failover (homelab#2741) — the provider floors and the failover bound; the endpoints themselves are the store's snapshot (the catalog leg, homelab#2742), never policy. ⚖ every value: quantization_ladder = OpenRouter's `quantization` vocabulary in ascending precision (a value off it — `unknown` — is excluded); quantization_floor fp8 (operator 2026-10-19: fp8 vs fp8); uptime_1d_floor 95 % of `uptime_last_1d` (a gateway guess — the old proxy's UPTIME_FLOOR read uptime_last_30m); min_rides 5 judged rides before a cell's measured clean rate replaces its uptime prior; max_providers_per_request 3 = one pin + two failovers; tool_choice = the modes each harness's requests carry, every one of which the endpoint must support (opencode / goose: `auto`; claude's anthropic-dialect `any` / `tool` are OpenRouter's `required` / `function`) — verify on the wire.",
+        "quantization_ladder": ["int4", "fp4", "mxfp4", "int8", "fp8", "bf16", "fp16", "fp32"],
+        "quantization_floor": "fp8",
+        "uptime_1d_floor": 95,
+        "min_rides": 5,
+        "max_providers_per_request": 3,
+        "tool_choice": {"opencode": ["auto"], "goose": ["auto"], "claude": ["auto", "required", "function"]}
+      },
+      "catalog": {
+        "_comment": "GW-CATALOG-OR (homelab#2742) — the registry's SOURCES, never its candidates: account_ref = the labelled Secret holding the openrouter ACCOUNT key the MCP reads ride (the old proxy's ROUTER_ACCOUNT_REF, the same Secret); ranking_slices = the vendor's weekly ranking slices whose union is the ranked set (⚖ programming + tool_calling, operator 2026-10-19); ranking_top_n = per slice, the top N by tokens (⚖ 30 — the old proxy's RANKINGS_TOP_N). Candidates = ranked ∩ AA-benched; the endpoints are read per candidate.",
+        "account_ref": "agent-egress/router-account-key",
+        "ranking_slices": ["programming", "tool_calling"],
+        "ranking_top_n": 30
+      },
+      "canary": {
+        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again.",
+        "role": "prober",
+        "harness": "opencode",
+        "max_per_refresh": 3,
+        "usd_per_day": 1.0,
+        "cooldown_s": 86400
+      },
       "max_sessions": 20,
       "models": {
         "light": ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash"],

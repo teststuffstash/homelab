@@ -22,7 +22,7 @@ inspects, the per-rail upstream contract and the error envelope; the service **i
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-RAIL-OPENROUTER](#gw-rail-openrouter) | `upstream.openrouter` (URL per dialect, auth), `models.openrouter`, `output.complete` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout` | v0 — provider pins / `:exacto` / the headroom poll / the `/generation` cost harvest `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP` |
+| [GW-RAIL-OPENROUTER](#gw-rail-openrouter) | `upstream.openrouter` (URL per dialect, auth, the `provider` pin), `models.openrouter`, `output.complete`, `$defs.endpoint_snapshot`, `$defs.providers_block` | `upstream-auth`, `upstream-unreachable`, `upstream-timeout`, `upstream-content-type` | v0 + the provider axis ([§Attribution](#attribution--the-answer-names-the-cell), [§Selection](#selection--the-gateways-own-evidence-never-exacto), [§Failover](#failover--before-the-first-byte-only) — homelab#2741; `:exacto` is NOT ported, operator 2026-10-19); the headroom poll / the `/generation` cost harvest `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP` |
 | [GW-RAIL-OPENCODE](anthropic-messages.md#gw-rail-opencode) (owned there) | `upstream.opencode`, `models.opencode` | `upstream-auth`, `upstream-unreachable` | linked |
 | [GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic) (owned there) | `upstream.anthropic` (none — 501) | `dialect-unsupported-on-rail` | linked |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked |
@@ -94,9 +94,120 @@ Stream completeness on this dialect: the terminal event is `data: [DONE]`; the r
 | "the subscription has no models list" | anthropic | `GET /openai/v1/models` || 501 | `dialect-unsupported-on-rail` |
 | "the Go rail speaks openai" | opencode | `POST /openai/v1/chat/completions` || 200 | byte-identical ([GW-RAIL-OPENCODE](anthropic-messages.md#gw-rail-opencode)) |
 
+### Attribution — the answer names the cell
+
+*The gateway attributes every openrouter answer to the provider that served it, per request* (operator
+ruling 2026-10-19: `:exacto` papered over the old router's inability to attribute provider problems —
+not ported). The answer itself says who served it: a chat completion's or a Messages answer's
+top-level `provider`, a stream's first data chunk that carries one, an error envelope's
+`error.metadata.provider_name` — read by the same bounded pass that reads the terminal usage, no
+`/generation` harvest, no after-the-fact join. The value is a DISPLAY name (`DeepInfra`); the cell's
+provider key is the endpoint tag's base **slug** (`deepinfra`), what `provider.order` names, joined
+through the [endpoint snapshot](#selection--the-gateways-own-evidence-never-exacto)'s `provider_name`.
+⚖ A name the snapshot lacks is slugged by RULE (lower-case, runs of non-alphanumerics → `-`), never
+a table — so it may differ from the vendor's tag (`OpenInference` → `openinference`, tag
+`open-inference`) until the snapshot covers the model. The slug rides on the request row
+(`requests.provider`), on the gateway's transport strikes and the consumer's cell-scoped outcomes
+([GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)) and on the 429 cooldown
+([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)): the cell is
+`(rail, model, provider)`, `''` when no answer named one.
+
+World `policy-default · openrouter-endpoints` ([worlds/README.md](../worlds/README.md#the-openrouter-endpoints-world)):
+the store holds the snapshot of `deepseek/deepseek-v4.1-flash` (M — the openrouter heavy tier; ten
+endpoints trimmed from the live answer of 2026-10-19); `deepseek/deepseek-v4-flash` (M′ — the standard
+tier) has no entry and rides unpinned. A worker with harness opencode, `rail: openrouter`.
+
+| description | ride | the answer names || request row `provider` | strike `provider` |
+|---|---|---||---|---|
+| "a chat completion's provider is the cell" | pinned deepinfra, upstream-ok | `provider: "DeepInfra"` || deepinfra | — |
+| "a stream's first chunk names the cell" | pinned deepinfra, upstream-stream | the first chunk's `provider: "DeepInfra"` || deepinfra | — |
+| "the snapshot joins the display name to the slug provider.order uses" | pinned inference-net (deepinfra, atlas-cloud, morph struck for the task) | `provider: "InferenceNet"` || inference-net | — |
+| "a name the snapshot lacks is slugged by rule ⚖" | unpinned (M′, no snapshot), upstream-ok | `provider: "Sail Research"` || sail-research | — |
+| "the rule is not the tag: a snapshot-less name may differ from its slug ⚖" | unpinned (M′), upstream-ok | `provider: "OpenInference"` || openinference (the tag reads `open-inference`) | — |
+| "an answer that names no provider is unattributed" | unpinned (M′), upstream-ok, no `provider` || `''` | — |
+| "the answer's name outranks the pin ⚖" | pinned deepinfra; the fake answers as AtlasCloud || atlas-cloud (logged) | — |
+| "a transport strike carries the provider" | unpinned (M′), upstream-stream-truncated, `provider: "Sail Research"` || sail-research | stream-incomplete @ sail-research |
+
+### Selection — the gateway's own evidence, never `:exacto`
+
+*The gateway selects the provider itself.* Candidates per model come from the **endpoint snapshot**
+(`$defs.endpoint_snapshot`: per model, the rows of `GET /api/v1/models/<id>/endpoints` — slug, display
+name, quantization, `supports_tool_choice` per mode, `uptime_last_1d`, p90 latency, prices — kept in
+the store's `catalog_snapshots` under `openrouter-endpoints`). Who writes it is the catalog leg
+(homelab#2742, [GW-CATALOG-GO](catalog.md#gw-catalog-go)'s "the OpenRouter rail's registry" row);
+this rule only reads it, and a model the snapshot does not cover rides **unpinned** — attribution
+only, the vendor's own routing, exactly as before. The policy's `rails.openrouter.providers` block
+(`$defs.providers_block`) holds the floors and the bound; the endpoints are never policy.
+
+⚖ **Eligibility**: one representative endpoint per PROVIDER (`provider.order` names the tag's base
+slug, so a provider's service tiers — `deepinfra/fp8`, `/flex`, `/priority` — are one entry; the
+representative is the vendor's default: no `service_tier`, then the shortest tag), kept only when it
+supports **every tool-choice mode the session's harness uses** (`providers.tool_choice.<harness>`),
+its **quantization** is on the policy ladder at or above the floor (`unknown` is off the ladder:
+excluded), its **`uptime_last_1d`** clears the floor, and its status is 0. ⚖ **Entry** ([GW-CATALOG-OR](catalog.md#gw-catalog-or)): of the endpoints that pass the floors, only the cells the
+catalog has admitted — a clean entry canary, state `eligible` — are pinned; a model with no eligible cell rides
+unpinned (the seeded worlds mark every snapshot cell eligible: already canaried). ⚖ **Order**: output price
+÷ the cell's **clean-ride rate** from the outcome store (a ride = a session the provider served a 2xx
+to whose latest outcome is reported; clean = that outcome is `clean`), the input price, p90 latency
+and the slug breaking ties; while a cell has fewer than `min_rides` judged rides, its uptime is the
+prior. Struck (for the task) and cooled provider cells are left out. ⚖ **The pin**: ONE provider per
+attempt — `provider: {order: [slug], allow_fallbacks: false}` on the body, the harness's other keys
+unchanged (the body is re-serialised) — so a failure is attributable; the gateway, not the vendor,
+moves to the next ([§Failover](#failover--before-the-first-byte-only)). The anthropic dialect's
+`/messages` takes the same block (verify during implementation, as the `anthropic-beta` row).
+
+The snapshot's ten endpoints, representatives by slug (quantization · tool-choice none/auto/required/function · uptime_1d · out $/M):
+open-inference fp4 ✓✓✓✓ 100 0.08 · morph fp8 ✓✓✗✗ 99.5 0.60 · inference-net fp8 ✓✓✓✓ 100 0.715 ·
+deepinfra fp8 ✓✓✓✓ 100 0.42 (its `/flex` 84.5 and `/priority` tiers beside it) · atlas-cloud fp8 ✓✓✓✓
+100 0.54 · alibaba unknown · baidu fp8 ✓✓✗✓ 100 1.20 · parasail fp8 ✗✓✗✗ 77.4 1.20.
+
+| description | harness | arrange || the order (`provider.order[0]` of successive attempts), or the pin |
+|---|---|---||---|
+| "the floors: ≥ fp8, every tool-choice mode the harness uses, uptime_1d ≥ 95, status 0 ⚖" | opencode | — || deepinfra, atlas-cloud, morph, inference-net, baidu (dropped: open-inference fp4, alibaba unknown, parasail uptime 77.4) |
+| "a harness that needs required + function drops the providers without them ⚖" | claude (anthropic dialect) | — || deepinfra, atlas-cloud, inference-net (morph, baidu dropped) |
+| "the pin is one provider with fallbacks off ⚖" | opencode | — || upstream body `provider = {order: [deepinfra], allow_fallbacks: false}`; model and messages unchanged |
+| "a provider's service tiers are one order entry: the default tag represents ⚖" | opencode | deepinfra/fp8, /flex (uptime 84.5), /priority in the snapshot || the deepinfra entry is `deepinfra/fp8` (out $0.42/M) |
+| "the order is price ÷ the cell's clean-ride rate ⚖" | opencode | 5 judged rides on deepinfra, 2 clean (rate 0.4: 0.42 ÷ 0.4 = 1.05) || atlas-cloud first (0.54), deepinfra 4th (before baidu's 1.2) |
+| "under min_rides the uptime is the prior ⚖" | opencode | 4 judged rides on deepinfra, 0 clean || deepinfra still first (prior: uptime 100) |
+| "a struck provider cell is left out for the task" | opencode | the task's earlier ride struck `harness-gave-up` on deepinfra || atlas-cloud first; another task still pins deepinfra |
+| "a cooled provider cell is left out" | opencode | deepinfra answered 429 (retry-after 30) on the previous request || atlas-cloud first; +30 s deepinfra again |
+| "no snapshot for the model: the request rides unpinned ⚖" | opencode (M′) | — || the upstream body carries no `provider` key |
+
+### Failover — before the first byte only
+
+*A failed provider is relaunched transparently, at the REQUEST level* (operator ruling 2026-10-19 —
+never at the ride level). A typed transport failure of a PINNED attempt **before any byte has been
+relayed** — an upstream 5xx, a 429 on that endpoint, a connect failure or timeout, a 2xx whose body
+is not one the dialect reads (`content-type` neither JSON nor SSE: an edge's page behind a 200), or a
+4xx whose JSON error names the provider that produced it (`error.metadata.provider_name` — OpenRouter's
+wrap of the provider's own refusal, a refused tool call among them) — strikes that `(model, provider)`
+cell (`provider-5xx` / `timeout` / `refused`; a 429 cools the cell instead) and **reissues the same
+request to the next provider in the order**, silently to the harness, ⚖ bounded by
+`providers.max_providers_per_request` (one pin + the failovers). Every attempt is a request row with its
+provider and status, and counts on `gateway_provider_requests_total{rail,model,provider,outcome}`; a
+move counts on `gateway_provider_failovers_total{model,from,to}` ([GW-METRICS](metrics.md#gw-metrics)).
+**After a byte has been relayed: never** — the stream-completeness outcome stands (the same line the
+codex rail draws). The order exhausted → the last attempt's answer is the typed outcome: a relayed
+5xx / 429 / 4xx, 502 `upstream-unreachable`, 504 `upstream-timeout`, or 502 `upstream-content-type` for
+an unreadable 2xx. ⚖ A request whose every eligible provider is cooled or struck mid-session rides
+unpinned rather than failing the ride.
+
+| description | provider_behaviours || upstream calls (pins, in order) | status | the harness sees | strikes (class @ provider) | `gateway_provider_failovers_total{model=M,from,to}` |
+|---|---||---|---|---|---|---|
+| "fails over once" | deepinfra: upstream-500 || deepinfra, atlas-cloud | 200 | one JSON answer, served by AtlasCloud | provider-5xx @ deepinfra | deepinfra→atlas-cloud 1 |
+| "fails over twice" | deepinfra: upstream-500, atlas-cloud: upstream-html || deepinfra, atlas-cloud, morph | 200 | served by Morph | provider-5xx @ deepinfra, provider-5xx @ atlas-cloud | deepinfra→atlas-cloud 1, atlas-cloud→morph 1 |
+| "exhausts the order: the last answer is the typed error, bounded by max_providers_per_request 3 ⚖" | deepinfra, atlas-cloud, morph: upstream-500 || deepinfra, atlas-cloud, morph (inference-net never asked) | 500 | the last provider's 500 body | provider-5xx @ deepinfra, @ atlas-cloud, @ morph | 2 series, 1 each |
+| "a 429 fails over and cools only that provider's cell ⚖" | deepinfra: upstream-429 || deepinfra, atlas-cloud | 200 | served by AtlasCloud | none (a 429 is a cooldown) | deepinfra→atlas-cloud 1 |
+| "the cooled provider's model still admits ⚖" | deepinfra: upstream-429 || deepinfra, atlas-cloud | 200 | served by AtlasCloud | none | `gateway_cells_cooled{rail=openrouter}` 1; `POST /sessions` worker, `rail: openrouter`, `tier: heavy` → dispatch M |
+| "a provider's own refusal (a 4xx naming it) fails over ⚖" | deepinfra: upstream-provider-400 || deepinfra, atlas-cloud | 200 | served by AtlasCloud | refused @ deepinfra | deepinfra→atlas-cloud 1 |
+| "a 2xx the dialect cannot read is a pre-byte failure ⚖" | deepinfra: upstream-html || deepinfra, atlas-cloud | 200 | served by AtlasCloud | provider-5xx @ deepinfra | deepinfra→atlas-cloud 1 |
+| "a post-byte failure never fails over" | deepinfra: upstream-stream-truncated || deepinfra | 200, incomplete (no-terminal) | the cut stream | stream-incomplete @ deepinfra | none |
+| "every provider cooled or struck mid-session: the request rides unpinned ⚖" | the five eligible cells cooled by 429s || the next request carries no `provider` key | 200 | served (the lottery) | — | — |
+
+### Named gaps
+
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: provider pin / `:exacto` on the body" | openrouter session, upstream-ok || the body carries no `provider` block and no suffix | ADR-096 M4 pin injection, `provider_policy: exacto` |
 | "⚑ gap: key headroom" | the stack key at its limit || dispatched, upstream answers 402/429 | the FU-088 headroom poll (`/api/v1/auth/key`) |
 | "⚑ gap: cost per request" | upstream-ok || tokens only, no USD | the `/generation` harvest and the cost ledger |
 | "⚑ gap: the [Zen rail](../../../docs/spikes/opencode-model-matrix.md)" | `rail: zen` || 400 `malformed-body` (not in the enum) | `opencode-zen` is declared `enabled: false` upstream; not a v0 rail |

@@ -388,6 +388,9 @@
             "credential-unresolved",
             "credential-rejected",
             "cells-exhausted",
+            "no-eligible-provider",
+            "canary-budget",
+            "canary-not-due",
             "quota-unknown",
             "quota-stale",
             "quota-limited"
@@ -788,7 +791,7 @@
       ]
     },
     "strike": {
-      "$comment": "the store's row (not served by an endpoint in this version): keyed (stack, task, rail, model, provider); provider is '' until admission pins providers; one per (session, class, source); source = outcome (the consumer) | gateway (a transport fact); refuted_at set by a later clean outcome on the same cell / model",
+      "$comment": "the store's row (not served by an endpoint in this version): keyed (stack, task, rail, model, provider); provider = the serving provider's slug on the openrouter rail (GW-RAIL-OPENROUTER §Attribution), '' where none was named or the rail pins none; one per (session, class, source, provider); source = outcome (the consumer) | gateway (a transport fact); refuted_at set by a later clean outcome on the same model / on a cell the clean ride rode",
       "x-requirements": [
         "GW-SESSIONS-OUTCOME"
       ]
