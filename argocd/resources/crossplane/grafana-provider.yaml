@@ -1,0 +1,41 @@
+# provider-grafana — Grafana state as Kubernetes CRs (upjet over terraform-provider-grafana). The
+# first consumer is the EXTERNALLY SHARED DASHBOARD: a login-less URL for one dashboard, declared
+# by the stack that owns the dashboard as a namespaced `DashboardPublic` in its -iac repo
+# (docs/patterns/observability.md §2 — the oracle jail's browser reading its gateway dashboard,
+# 2026-10-19). Why a share and not a Grafana login: Grafana OSS has no per-datasource
+# permissions, so ANY login can query the Loki datasource that reads every tenant; a share runs
+# only the panel queries saved in the dashboard JSON.
+#
+# Credential = the Grafana admin login (grafana-providerconfig.yaml). Crossplane 2.x: stacks
+# reference the cluster-scoped `ClusterProviderConfig` `grafana` from namespaced MRs.
+#
+# ⚠ COST: this package carries ~299 CRDs (every Grafana kind, cluster-scoped + namespaced
+# groups) against ~239 on the cluster today — a CRD apply is a control-plane memory event here
+# (FU-304, the GOMEMLIMIT=3200MiB guard on every CP absorbed the last one). Nothing in Crossplane
+# installs a subset of a provider's CRDs. Chosen over a provider-terraform Workspace (zero CRDs,
+# inline HCL) for the k8s-native shape — a namespaced CR a Kyverno fence can read, no TF state.
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-grafana
+spec:
+  package: xpkg.upbound.io/grafana/provider-grafana:v2.16.0
+  runtimeConfigRef: { name: grafana-runtime }
+---
+# Same shape as github-runtime: upjet spins per-resource terraform under the hood, so a request
+# + a limit with headroom rather than BestEffort (FU-082).
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: grafana-runtime
+spec:
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        spec:
+          containers:
+            - name: package-runtime
+              resources:
+                requests: { cpu: "100m", memory: "256Mi" }
+                limits: { memory: "512Mi" }

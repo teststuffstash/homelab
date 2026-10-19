@@ -22,6 +22,7 @@ endpoint, a Postgres URL) — nothing homelab-specific beyond the CR manifests i
 | **Garage bucket / key / grant** | `infra/garage-workspace.yaml` — Crossplane `Workspace` wrapping the `jkossis/garage` module | `provider-terraform` (admin cred ESO-injected platform-side) | connection `Secret` + **published to Infisical** by the Workspace itself (the `crossplane-tf-writer` identity) |
 | **OpenRouter API key** (budget-capped) | `infra/openrouter-key.yaml` — `OpenRouterKey` CR (`budgetUSD`, `resetInterval`; `ephemeral` for per-session breakers) | [`openrouter-operator`](https://github.com/teststuffstash/openrouter-operator) | `<project>-openrouter` Secret in your namespace |
 | **Postgres** (HA) | a `postgresql.cnpg.io/v1` `Cluster` CR in your namespace | CloudNativePG (ADR-046) | the operator's `<cluster>-app` secret (or supply your own) |
+| **Grafana shared dashboard** (a login-less URL for ONE of your dashboards — a stack jail's browser, a kiosk) | `infra/<dashboard>-share.yaml` — a `DashboardPublic` CR (provider-grafana), recipe + the no-Loki rule in [`observability.md`](observability.md) §2 | `provider-grafana` (admin cred ESO-injected platform-side; `ClusterProviderConfig` `grafana`) | no secret — the URL's token is `status.atProvider.accessToken` |
 | **Any secret** | an `ExternalSecret` against the `infisical` `ClusterSecretStore` | ESO (ADR-062, [`../secrets.md`](../secrets.md)) | a native `Secret` in your namespace |
 
 Worked examples (the CRs live in the stack's `-iac` repo since 2026-07-04 — the app-repo `infra/`
