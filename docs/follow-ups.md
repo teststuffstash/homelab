@@ -820,7 +820,7 @@ the block needs pruning, not more headings.
       pod pulls its env; control plane enforced (#2688; gap #2684 waits). Failure ownership LIVE 10-17, Go catalog LIVE
       10-18, **tier lists DERIVED from evidence (ruling 10-18, #2716; gaps → #2718)**. **Codex rail (rulings 10-19: native
       backend, gateway-local store, own login) — legs A–E + status in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)**
-      (A merged #2734; B #2735 / C #2736 in review; D, E unstarted). **Next (seat, no ruling — operator 10-19: "again
+      (A #2734, B #2735, C #2736 merged 10-19; D, E unstarted). **Next (seat, no ruling — operator 10-19: "again
       deciding on models?"):** (a) an OpenRouter catalog leg (the GW-CATALOG-GO gap row): candidates = vendor `/models` ∩
       AA-benched under the existing bands — the 11-id hand table is why kimi-k3 sits alone (#2718 item 4); (b) `wrong-verdict`
       fed by the one machine signal that exists (deploy-revert of an approved PR); (c) the loop flip into the session-pod

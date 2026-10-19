@@ -13798,3 +13798,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Live finding on A's deploy (#2737): `codex-seed` ExternalSecret `SecretSyncedError` (CODEX_SEED_RECORD not minted) →
   app Degraded. Probed `dataFrom.find` live (clean sync, no Secret, mount optional) → 218e1815 direct (quickfix class,
   pushed). FU-270 trimmed to a pointer; spike §Lighting the rail carries rulings + leg table.
+- 19:35Z #2735 merged; ~19:50Z #2736 merged (both: homelab-reviewer + specs reviewer approved on the re-review heads). Codex
+  legs A–C are in; D/E restart from the brief. OpenRouter MCP re-probed (operator reconnected it): weekly/programming/
+  tool_calling ranking slices exist now (model-routing.md corrected); price read: OpenRouter market 3–5× under Go's meter
+  per token, Go = $10 flat allowance; glm-5.3-flash invisible to the hand table. Operator: per-token is the wrong unit —
+  failed rides cost review + coordination (ADR-115); the gateway pins no provider yet (openai-chat gap row).

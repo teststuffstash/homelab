@@ -554,8 +554,8 @@ specs-review rounds):
 | Leg | What | State |
 |---|---|---|
 | A | `SqliteStore` + hash-gated seed import + `__main__` wiring + deploy manifests (ExternalSecret, env, optional mount) | **merged #2734**; the ExternalSecret switched to `dataFrom.find` the same hour (an absent Infisical key had kept the ArgoCD app Degraded) |
-| B | `x-codex-turn-state` round trip bound to session, account and `client_metadata.turn_id`; `turn-state-invalid` | PR #2735, rebased on A, in review |
-| C | same-pod token-only re-read on `POST /sessions/{id}/env` (the `auth.command` seam) | PR #2736, in review |
+| B | `x-codex-turn-state` round trip bound to session, account and `client_metadata.turn_id`; `turn-state-invalid` | **merged #2735** (19:35Z) |
+| C | same-pod token-only re-read on `POST /sessions/{id}/env` (the `auth.command` seam) | **merged #2736** (19:5xZ) |
 | D | headroom from the gateway's own usage poll → `gateway_subscription_*{rail="codex"}` + panels on UID `claude-subscription` | not started |
 | E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | not started |
 
