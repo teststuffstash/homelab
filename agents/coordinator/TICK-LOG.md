@@ -13842,5 +13842,10 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - 21:22Z: #2745 (stacked on #2744's branch) auto-merged INTO that branch within a minute of arming — no protection on a
   feature base, no review. #2744 now carries both legs (head 83759520); its body folded with #2745's so every ⚖ row is
   listed; round 3 reviews the combined diff. Lesson: stack nothing on a feature branch here.
+- 21:25Z: #2744 CI RED at the combined head — the ADR-103 ratchet (agent-session.sh + model-scout.sh are clause files;
+  the launcher's canary knobs changed the gateway-sessions clause with no replay row). Fixed: row `dispatch-canary` in
+  agents/replay/fixtures/gateway-sessions (role prober + `canary: {model, provider}` in the POST body; reds on base,
+  23/23 green on the branch) at ceff6f42. The local push gates ran clause-replay (the replays) but not the ratchet —
+  the ratchet is CI-only (`git diff` against the PR base).
 - Wound down at ~770k ctx with #2743 unstarted (the pickup names its design points); bookkeeping committed, pushed once.
 

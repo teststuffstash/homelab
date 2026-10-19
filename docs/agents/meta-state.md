@@ -26,7 +26,7 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   fixture, `gateway/scripts/canary-entrants.sh`, the `AGENT_GATEWAY_ROLE`/`AGENT_GATEWAY_CANARY` launcher knobs) —
   was STACKED on #2744 (base = its branch) and auto-MERGED INTO that branch at 21:22Z — a feature base carries no
   protection, so pr-wait's arming merged it unreviewed; **#2744 now carries both legs** (head 83759520, body folded, both
-  Spec-changes lists) and the specs reviewer's round 3 reads the combined diff. Both: `cd gateway && devbox run ci` green
+  Spec-changes lists) and the specs reviewer's round 3 reads the combined diff; CI was red there on the ADR-103 ratchet (a clause change with no replay row) — fixed at ceff6f42 (row `dispatch-canary`), CI + round 3 pending. Both: `cd gateway && devbox run ci` green
   (722 / 758), evidence packs clean for every new row. ⚠ lesson for #2743: never stack a PR on a feature branch here —
   base it on master once #2744 merges. Clones: `…/scratchpad/gw-2741`,
   `…/scratchpad/gw-2742` of THIS session (gone with it — re-clone the branches). **Live after both deploy: nothing
