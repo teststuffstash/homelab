@@ -1,0 +1,18 @@
+# FU-270: seed only; rotations belong to GATEWAY_DB. No write-back.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: codex-seed
+  namespace: agent-egress
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: infisical
+    kind: ClusterSecretStore
+  target:
+    name: codex-seed
+    creationPolicy: Owner
+  data:
+    - secretKey: record
+      remoteRef:
+        key: CODEX_SEED_RECORD
