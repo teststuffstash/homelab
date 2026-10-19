@@ -1,4 +1,9 @@
 # FU-270: seed only; rotations belong to GATEWAY_DB. No write-back.
+# `find` (not `data`): until the operator mints CODEX_SEED_RECORD (the spike's seed recipe), the key
+# is ABSENT in Infisical — a `data` ref then fails the sync and keeps the ArgoCD app Degraded for
+# days (seen 2026-10-19, the hour A landed). With `find`, no match = a clean sync and NO Secret;
+# the deployment mounts `codex-seed` optional, and the gateway's store simply has no seed file.
+# A present key lands as the `record` key the pod reads at CODEX_SEED_FILE.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -12,7 +17,11 @@ spec:
   target:
     name: codex-seed
     creationPolicy: Owner
-  data:
-    - secretKey: record
-      remoteRef:
-        key: CODEX_SEED_RECORD
+  dataFrom:
+    - find:
+        name:
+          regexp: "^CODEX_SEED_RECORD$"
+      rewrite:
+        - regexp:
+            source: "^CODEX_SEED_RECORD$"
+            target: "record"
