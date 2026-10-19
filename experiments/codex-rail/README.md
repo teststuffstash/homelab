@@ -80,3 +80,11 @@ and jail 0.163.0: direct replay succeeds, gateway replay is absent, although bot
 finish. `gateway_compatibility_gap: true` is a finding, not a passing compatibility claim.
 It demonstrates the existing header-policy gap under FU-270; it does not change that policy or
 close the native-CLI CI work in #2650. This is local binary evidence, not deployed-image evidence.
+
+### 2026-10-19 rerun
+
+The continuation evidence now records both 0.161.0 and 0.163.0 replaying upstream-issued
+turn state through the gateway as well as directly. The observer adds allowlisted header
+names (no values), body-mode checks and tool grouping counts. It records no unknown header
+names in these runs. New-turn clearing is a GW-RAIL-CODEX decision-table test; the CLI probe
+still covers one two-request tool turn. No live backend or native usage response was captured.

@@ -54,10 +54,10 @@ The `codex` rail serves one shape: **streaming** Responses with **`store: false`
 other mode is a 400 before the credential is touched. The body's `model` must equal the session's
 wire id exactly (absent = filled, as on every rail). Upstream: `<CODEX_UPSTREAM>/responses` — the
 upstream base has **no default**; the deployment selects the native Codex backend
-`https://chatgpt.com/backend-api/codex` (operator ruling 2026-10-19). SIWC is unselected. The upstream header set is **complete and
-fixed**: `authorization: Bearer <access token>`, `chatgpt-account-id: <the credential's account>`,
+`https://chatgpt.com/backend-api/codex` (operator ruling 2026-10-19). SIWC is unselected. The upstream base header set is **complete and
+fixed**, with the bounded turn-state exception below: `authorization: Bearer <access token>`, `chatgpt-account-id: <the credential's account>`,
 `content-type: application/json`, `accept: text/event-stream`, `accept-encoding: identity`,
-`user-agent: agent-gateway` — no inbound header crosses, so a caller can never select an account or smuggle a cookie. A 200 SSE
+`user-agent: agent-gateway` — only a previously issued turn-state may return, so a caller can never select an account or smuggle a cookie. A 200 SSE
 answer relays **byte-unchanged**; a parser bounded per event (1 MiB) watches for the terminal
 event and counts its `usage` **once** into the four token classes (`in` = `input_tokens` −
 `input_tokens_details.cached_tokens`, `cache_read` = the cached count, no cache-write class, `out` =
@@ -91,6 +91,28 @@ failure, client cancellation — and a generation is never retried once a byte r
 | "the account comes from the credential, never the caller" | `ChatGPT-Account-ID: attacker` || `chatgpt-account-id: dummy-account` |
 | "no inbound header crosses ⚖" | `Cookie`, `x-api-key`, `x-foo`, `User-Agent: codex_exec/…`, `OpenAI-Beta` || none of them (`user-agent: agent-gateway`) — the set is exactly the six above (+ the transport's `host`, `content-length`, `connection`) |
 | "the stream is asked for unencoded ⚖" | `Accept-Encoding: gzip` || `accept-encoding: identity`, `accept: text/event-stream` |
+
+### Opaque turn state
+
+`x-codex-turn-state` is the sole optional routing-header round trip. The gateway records only
+an upstream-issued value from a successful SSE response, bound to authenticated session,
+gateway-owned account, and the pinned client's `client_metadata.turn_id`. A new turn clears
+it. The first value wins within a turn (the native client's OnceLock behavior). A request may
+return only that exact value; otherwise 400 `turn-state-invalid`, without an inference call.
+No account header, cookie or other caller header crosses. A missing/invalid turn ID disables
+state issuance. Restart or eviction requires a fresh turn; state is not durable.
+⚖ Bounds: printable ASCII, 4096 bytes for state, 128 for turn ID, 1024 session entries (LRU).
+Oversized/invalid upstream state is dropped. A delayed old-turn response cannot install state
+into the newer turn. These are gateway judgments, not vendor limits.
+
+| description | sequence || replay |
+|---|---||---|
+| "same session and turn" | issue, replay || accepted |
+| "another session" | issue, cross session replay || refused |
+| "new turn clears state" | issue, next turn replay || refused |
+| "forged state" | no issue, replay || refused |
+| "oversized state" | upstream issues 4097 bytes || dropped |
+| "delayed old turn response" | new turn before old response || dropped |
 
 ### Streams and usage
 
@@ -137,7 +159,7 @@ failure, client cancellation — and a generation is never retried once a byte r
 | description | input || v0 answer | the gap |
 |---|---||---|---|
 | "⚑ gap: SIWC profile (unselected)" | SIWC credentials || unsupported | separate grant and tool-shape contract required |
-| "⚑ gap: vendor header compatibility" | the backend's session-affinity / identity headers || not sent (the fixed six) | reviewed against real backend fixtures before the canary |
+| "⚑ gap: live vendor header compatibility" | real native backend || offline round trip only | live canary must establish whether other headers are required |
 | "⚑ gap: the live canary" | a real account || never run | spike step 4 — a separately authorized maintenance window |
 | "⚖ local evidence: the pinned Codex CLI completes a turn through this gateway" | `experiments/codex-rail/compat.py` (codex-cli 0.161.0, the agent-runtime lock) || a completed `codex exec --json` turn, one rotation, one upstream close | not CI: the CLI is not in the CI toolchain — dated local evidence in `experiments/codex-rail/evidence.json` |
 
