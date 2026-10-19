@@ -95,6 +95,44 @@ Dashboards are **read-only from git**: an edit made in the Grafana UI is lost on
 Keeping the JSON beside the app's e2e tests (the 2026-09-01 oracle ruling: dashboards live in
 the stack repo under e2e) is the intended shape.
 
+### Sharing a dashboard to a login-less reader (a stack jail's browser, a kiosk)
+
+A stack never gets a Grafana login. Grafana OSS has no per-datasource permissions, so a login of
+*any* role can query every datasource through `/api/ds/query` — including the Loki datasource,
+which reads every tenant at once (`argocd/resources/loki/grafana-loki-datasource.yaml`), which
+would bypass the per-namespace Loki door of [`../loki-tenancy.md`](../loki-tenancy.md). What a
+stack gets is Grafana's **externally shared dashboard**: a login-less URL that runs exactly the
+panel queries saved in the dashboard JSON (the reader picks only the time range). Declare it in
+your `-iac` repo as a namespaced `DashboardPublic` CR (provider-grafana, platform-installed —
+`argocd/resources/crossplane/grafana-provider.yaml`; the `ClusterProviderConfig` `grafana` is
+the platform's promise, like the datasource uids):
+
+```yaml
+apiVersion: oss.grafana.m.crossplane.io/v1alpha1
+kind: DashboardPublic
+metadata: { name: oracle-gateway, namespace: oracle-fleet }
+spec:
+  forProvider:
+    dashboardUid: oracle-gateway
+    share: public
+    isEnabled: true
+    timeSelectionEnabled: true
+  providerConfigRef: { name: grafana, kind: ClusterProviderConfig }
+```
+
+The URL is `https://grafana.teststuff.net/public-dashboards/<accessToken>` — the token is read
+from `status.atProvider.accessToken` (set `forProvider.accessToken` yourself only if the URL
+must be stable across a recreate). Three rules hold the trust line:
+
+- **Panels bind `prometheus` or the stack's own datasources, never `loki`.** The share runs the
+  JSON's queries with no tenant check, and the JSON is the stack's to change *after* the share
+  exists — so a Loki panel is a standing cross-tenant read nobody re-reviews. Prometheus is
+  already an auth-free LAN read (§4), so a Prometheus-only share widens nothing.
+- **No template variables, no frontend datasources** — Grafana's own limits for shared
+  dashboards; a dashboard that needs either is not shareable, split it.
+- **LAN/VPN reachability is the only gate.** Same gate as the Prometheus API, and a token
+  committed to a public repo makes that explicit — read it from status instead when in doubt.
+
 ## 3. Alert rules — the stack ships them; here is what the platform does with them
 
 A `PrometheusRule` in the stack's namespace is loaded cluster-wide, exactly like the platform's
@@ -150,7 +188,7 @@ oracle-iac's pipeline alerts were shipped.
 | surface | LAN address | auth / scope | supported? |
 |---|---|---|---|
 | Prometheus HTTP API | `https://prometheus.teststuff.net/api/v1/query` (addresses: [`SERVICES.md`](../../SERVICES.md)) | none; **cluster-wide** — every stack's series | **yes**, as a LAN read (the platform's own watch scripts use it). No per-stack scoping exists or is planned: metrics carry no content the way logs do, so the Loki door's tenancy model was not copied |
-| Grafana | `https://grafana.teststuff.net` | Grafana login | yes |
+| Grafana | `https://grafana.teststuff.net` | Grafana login — the operator's; a stack reads ONE dashboard login-less through its **shared-dashboard URL** (§2) | yes (shared dashboards only) |
 | Alertmanager API | `https://alertmanager.teststuff.net` | none, LAN | yes (read; silences are operator-lane) |
 | Loki | `https://192.168.40.32:8443` + `X-Scope-OrgID` | SA token, per-namespace RBAC | yes — [`../loki-tenancy.md`](../loki-tenancy.md) §How a stack jail reads its logs |
 
