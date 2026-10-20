@@ -13933,7 +13933,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (GW-CATALOG-GO's named gap, a PR on the island); (2) grant `prober` to the dispatcher caller in policy.json (+ GW-ACCESS /
   GW-SESSIONS-AUTH rows) so the canary window can open.
 
-## 2026-10-20 ~21:30–22:45Z — seat: "pick up gateway from meta-state" — the two ordered island PRs opened (#2766 models.dev catalog + console overlay, #2767 prober grant)
+## 2026-10-20 ~17:30–18:45Z (time corrected) — seat: "pick up gateway from meta-state" — the two ordered island PRs opened (#2766 models.dev catalog + console overlay, #2767 prober grant)
 
 - Read: meta-state's 21:40Z pickup + TICK-LOG 21:00Z; the island (catalog.py, the GW-CATALOG-GO page, the fake vendor,
   policy.json/kustomization, GW-SESSIONS-AUTH/GW-ACCESS); live: models.dev `opencode-go` = 33 rows (4 `status: deprecated`
@@ -13956,7 +13956,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Both auto-merge armed via pr-wait (background). Bookkeeping: meta-state pickup collapsed to one bullet + a
   `dig-explained` for GoCatalogParseFailed/GoCatalogStale (clears with #2766's deploy); FU-270 next (0) → in review.
 
-## 2026-10-20 ~22:45–23:50Z — seat: #2766 round 1 → merged → deployed → verified; #2767 round 1 + an orphaned CI run
+## 2026-10-20 ~18:45–19:45Z (time corrected) — seat: #2766 round 1 → merged → deployed → verified; #2767 round 1 + an orphaned CI run
 
 - #2766 round 1 (specs reviewer, CHANGES_REQUESTED): all bookkeeping — ⚖ on the two console-only rows, the gap row's
   `⚑ gap (2026-10-20, PR #2766 → work #2768)` form (issue #2768 filed: the rail serves ids the catalog does not list,
@@ -13971,7 +13971,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Lesson (jail): zsh does not word-split a `K="devbox run -- kubectl …"` command variable — an `until $K …` loop spins
   forever (the deploy-verification task had to be stopped and run by hand).
 
-## 2026-10-20 ~23:50Z – 10-21 ~00:20Z — seat: #2767 merged + deployed + proven; the canary launcher's loop never ran (#2771)
+## 2026-10-20 ~19:45–20:05Z (time corrected) — seat: #2767 merged + deployed + proven; the canary launcher's loop never ran (#2771)
 
 - #2767 round 2 APPROVED after the CI re-run, merged 19:36:59Z; the policy ConfigMap hash rolled the pod 19:37:12Z
   (`agent-gateway-policy-hf5g456t77`: roles `['worker', 'prober']`). The image build for c846c660 opened #2770 (auto-bump,
@@ -13986,7 +13986,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   No canary has ever been launched by the script (the 10-19 window never opened), so nothing rode wrongly.
 - The canary WINDOW stays the operator's (budget-metered rides): after #2771, `--max 3`.
 
-## 2026-10-21 ~00:20–02:00Z — seat (unattended, operator: "run some yourself … use subagents"): the canary window ran, #2773, #2768 classified
+## 2026-10-20 ~20:05–20:45Z (time corrected) — seat (unattended, operator: "run some yourself … use subagents"): the canary window ran, #2773, #2768 classified
 
 - Operator 2026-10-21: run the entry canaries from the seat and continue unattended to ~500–600k ctx with subagents.
   Three fresh subagents: (A) the canary runner — clone with #2771, per-cell rides in the launcher's own shape for the

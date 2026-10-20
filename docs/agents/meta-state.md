@@ -24,8 +24,8 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
   it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
   box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
-- **⚑ PICKUP (2026-10-21 ~00:20Z — gateway: BOTH ordered PRs LANDED + DEPLOYED + VERIFIED; the canary window is the
-  operator's; TICK-LOG 10-20 21:30Z → 10-21 00:20Z):** **#2766** (the Go catalog's `config` source = models.dev's
+- **⚑ PICKUP (2026-10-20 ~20:45Z — gateway: BOTH ordered PRs LANDED + DEPLOYED + VERIFIED; the canary window is the
+  operator's; TICK-LOG 10-20 18:30Z → 20:45Z; earlier headings mis-clocked by ~+4 h, corrected):** **#2766** (the Go catalog's `config` source = models.dev's
   `opencode-go` rows — deprecated dropped, as the vendor's `plugin/models-dev.ts` — under the console's `/api/v2/config`
   OVERLAY, the vendor's own order; env `GATEWAY_GO_CATALOG_URL` = models.dev, new `GATEWAY_GO_CONFIG_URL`) deployed as
   #2769 (g618c588a6e15): `catalog: config refreshed — 29 models` 19:07Z, `GoCatalog*` clear; its gap → **#2768** (the rail
