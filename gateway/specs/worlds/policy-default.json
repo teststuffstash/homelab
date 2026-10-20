@@ -102,8 +102,8 @@
   },
   "control_plane_auth": "observe",
   "callers": {
-    "_comment": "GW-SESSIONS-AUTH — fixture identities (specs/worlds/README.md): the platform loop's dispatcher (worker admissions bound into its fixture worker namespace) and the specs reviewer's tick (reviewer + the worker-role shadow cell, never a bind), and a JUDGE (GW-SESSIONS-OUTCOME: admits nothing, `outcome: any` — may report an outcome on any platform session). `observe` here: a caller with no token is admitted and counted, so every row that does not test the caller check runs unchanged; the enforce rows ride the `policy-enforce` world.",
-    "system:serviceaccount:platform-agents:agentstack-loop": {"stacks": ["platform"], "roles": ["worker"], "bind_namespaces": ["platform-agents"]},
+    "_comment": "GW-SESSIONS-AUTH — fixture identities (specs/worlds/README.md): the platform loop's dispatcher (worker admissions bound into its fixture worker namespace, and the entry canary's prober rides \u2014 GW-CATALOG-OR \u00a7The entry canary \u2014 unbound) and the specs reviewer's tick (reviewer + the worker-role shadow cell, never a bind), and a JUDGE (GW-SESSIONS-OUTCOME: admits nothing, `outcome: any` — may report an outcome on any platform session). `observe` here: a caller with no token is admitted and counted, so every row that does not test the caller check runs unchanged; the enforce rows ride the `policy-enforce` world.",
+    "system:serviceaccount:platform-agents:agentstack-loop": {"stacks": ["platform"], "roles": ["worker", "prober"], "bind_namespaces": ["platform-agents"]},
     "system:serviceaccount:agent-coordinator:agent-coordinator": {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []},
     "system:serviceaccount:agent-coordinator:outcome-judge": {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"}
   },

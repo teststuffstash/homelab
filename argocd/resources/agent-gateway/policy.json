@@ -123,7 +123,7 @@
   "callers": {
     "system:serviceaccount:platform-agents:agentstack-loop": {
       "stacks": ["platform"],
-      "roles": ["worker"],
+      "roles": ["worker", "prober"],
       "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]
     },
     "system:serviceaccount:agent-coordinator:specs-review": {

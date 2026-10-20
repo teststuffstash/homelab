@@ -26,7 +26,7 @@ added 2026-10-16); a cell is what the launcher does, not what a doc says it shou
 | coordinator | allowed — `ref:agent-coordinator/coordinator-claude` | allowed — platform's `coordinatorModel: opencode-go/deepseek-v4.1-flash` | denied — class `dispatch` rails = subscription only | standing — `coordinator-git` Secret `GH_TOKEN` (ESO) | denied — none rendered | denied |
 | responder | allowed — `ref:agent-coordinator/coordinator-claude` | allowed — an `opencode-go/*` rail case in the triage step | denied — class `dispatch` | standing — `coordinator-git` `GH_TOKEN` | denied — none rendered | denied |
 | retro | allowed — cell A `claude:opus` on the subscription | denied — "add when its retro cell is first used" (`retro-session.sh`) | allowed — cell B `goose:deepseek/deepseek-v4-pro` on an ephemeral xs key | standing, read-only — `RETRO_GH_TOKEN` file mount (retro-git.yaml, #2171); the broker URL is not rendered | inherits the worker launcher's knob | denied |
-| prober | allowed — `ref:<loopns>/claude-session` | denied — not rendered | denied — not rendered | broker — the loop git token fetched with the pod's SA token | denied — none rendered | denied |
+| prober | allowed — `ref:<loopns>/claude-session` | denied — not rendered | denied — not rendered; **under the opt-in: the entry canary** ([GW-CATALOG-OR](endpoints/catalog.md#the-entry-canary)) — `gateway/scripts/canary-entrants.sh` admits one prober ride per candidate cell (`canary: {model, provider}`, harness opencode) as the dispatcher's ServiceAccount, whose `callers` entry grants `prober` beside `worker` ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth), 2026-10-20) — unbound | broker — the loop git token fetched with the pod's SA token | denied — none rendered | denied |
 | researcher | allowed — `claude/<alias>` draws on the claude harness | denied — class `research` rails = openrouter only | allowed — goose, pool draws on the stack key | broker — inherits the worker launcher | inherits the worker launcher's knob | denied |
 
 | column | enforced by v0? | enforcement point | what "enforced" would mean later |
@@ -36,6 +36,13 @@ added 2026-10-16); a cell is what the launcher does, not what a doc says it shou
 | git identity | no | the launchers render it; the broker is `openrouter-proxy`'s `/git-token` today and leaves for its own service (FU-269, ADR-139 step 1) | the broker consults the session's role before minting |
 | stack MCP | no | the launcher reads the claim knob and renders the harness config | the gateway's `env` carries the MCP config; the knob moves into the policy |
 | browser MCP | no (and not reachable) | the browser sidecar is a jail-host network (`jail-browser`); no cluster pod joins it | a decision, not a wiring — `🚧 WIP` until one exists |
+
+**Role × caller.** Which CALLER may ask for which role is the policy's `callers` map, per
+ServiceAccount ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)): the platform loop's
+dispatcher SA (`platform-agents:agentstack-loop`) `worker` + `prober` — its graduated workers and the
+entry canary's rides; the specs reviewer's SA (`agent-coordinator:specs-review`) `reviewer` +
+`worker` — the tick and its shadow cell. No other caller, no wildcard; the deployed map is
+`argocd/resources/agent-gateway/kustomization.yaml`'s `callers` comment.
 
 ## Per stack
 

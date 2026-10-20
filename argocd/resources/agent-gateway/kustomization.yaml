@@ -85,7 +85,10 @@ resources:
 # caller — worker admissions bound into the platform repo namespaces that hold an
 # `agentstack-worker` SA (agent-runtime, homelab, openrouter-operator; `agent-coordinator` holds
 # none, so a bind there could never be pulled ⚖); the jail canary mints this SA's token to act as
-# it. `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
+# it — and `prober` (2026-10-20): the ENTRY CANARY (gateway/scripts/canary-entrants.sh,
+# AGENT_GATEWAY_ROLE=prober, GW-CATALOG-OR §The entry canary) rides as this SA, so without the
+# role every canary admission was 403 caller-role-denied and no openrouter cell could become
+# eligible; `prober` binds nothing (the canary pod is unbound). `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
 # (agents/coordinator/specs-review-argo.yaml), their OWN ServiceAccount since #2685 (callers are
 # per SA; as `agent-coordinator` the key covered every workflow in that namespace): `reviewer`, and
 # `worker` for the goose@openrouter shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it

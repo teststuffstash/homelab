@@ -26,6 +26,7 @@ What a caller may ask for (policy-default):
 |---|---|---|---|---|
 | a stack outside the caller's entry | the platform loop | oracle worker + bind | 403 | caller-stack-denied |
 | a role outside the caller's entry | the platform loop | platform reviewer + bind | 403 | caller-role-denied |
+| the entry canary's role is inside the dispatcher's entry | the platform loop | platform prober, no bind | 200 | — |
 | a bind namespace outside the caller's entry | the platform loop | bind oracle-agents | 403 | caller-bind-denied |
 | a caller with no bind namespaces may not bind | the specs reviewer | platform reviewer + bind | 403 | caller-bind-denied |
 | an unbound admission needs no bind namespace | the specs reviewer | platform reviewer, no bind | 200 | dispatch with token + env |
@@ -213,6 +214,8 @@ ASK_ROWS = [
     ("a stack outside the caller's entry", "the platform loop",
      {**WORKER, "stack": "oracle", "bind": {"namespace": "platform-agents", "serviceaccount": "agentstack-worker"}}, 403, "caller-stack-denied"),
     ("a role outside the caller's entry", "the platform loop", {**WORKER, "role": "reviewer"}, 403, "caller-role-denied"),
+    ("the entry canary's role is inside the dispatcher's entry", "the platform loop",
+     {"stack": "platform", "role": "prober", "task": "canary-deepseek-v4-1-flash-atlas-cloud-fp8", "round": 0}, 200, "—"),
     ("a bind namespace outside the caller's entry", "the platform loop",
      {**WORKER, "bind": {"namespace": "oracle-agents", "serviceaccount": "agentstack-worker"}}, 403, "caller-bind-denied"),
     ("a caller with no bind namespaces may not bind", "the specs reviewer",
@@ -390,7 +393,7 @@ async def test_deployed_callers():
         check("control_plane_auth", p.control_plane_auth, "enforce")
     with then("callers = exactly the platform loop and the specs-review tick, with today's scopes"):
         check("callers", got, {
-            LOOP: {"stacks": ["platform"], "roles": ["worker"], "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]},
+            LOOP: {"stacks": ["platform"], "roles": ["prober", "worker"], "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]},
             DEPLOYED_SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []},
         })
 
