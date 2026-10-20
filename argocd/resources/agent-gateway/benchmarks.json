@@ -1,5 +1,5 @@
 {
-  "snapshot_at": "2026-10-20T17:23:40Z",
+  "snapshot_at": "2026-10-20T20:53:22Z",
   "sources": {
     "capability": {
       "source": "artificial-analysis",
@@ -7,15 +7,15 @@
       "rows": 345
     },
     "go_catalog": {
-      "fetched_at": "2026-10-20T11:02:31Z",
+      "fetched_at": "2026-10-20T20:42:31Z",
       "fee_usd_month": 10.0,
-      "draw_30d_usd": 0.002365
+      "draw_30d_usd": 0.00381
     },
     "openrouter_catalog": {
-      "fetched_at": "2026-10-20T17:16:56Z",
+      "fetched_at": "2026-10-20T20:42:31Z",
       "cells": {
-        "candidate": 248,
-        "eligible": 0,
+        "candidate": 239,
+        "eligible": 7,
         "excluded": 0
       }
     }
@@ -387,8 +387,8 @@
         "provider": null,
         "price_basis": "promise",
         "rides": {
-          "clean": 0,
-          "judged": 0,
+          "clean": 1,
+          "judged": 1,
           "prior": 1.0
         }
       },
@@ -607,14 +607,14 @@
         "intelligence": 24.4,
         "coding": 52.0,
         "agentic": 26.3,
-        "out_price": null,
-        "in_price": null,
+        "out_price": 0.1652,
+        "in_price": 0.0826,
         "monthly_limit_usd": null,
-        "provider": null,
-        "price_basis": null,
+        "provider": "streamlake",
+        "price_basis": "endpoint",
         "rides": {
-          "clean": 0,
-          "judged": 0,
+          "clean": 1,
+          "judged": 1,
           "prior": 1.0
         }
       },
@@ -639,14 +639,14 @@
         "intelligence": 24.7,
         "coding": null,
         "agentic": null,
-        "out_price": null,
-        "in_price": null,
+        "out_price": 0.1416,
+        "in_price": 0.0354,
         "monthly_limit_usd": null,
-        "provider": null,
-        "price_basis": null,
+        "provider": "baidu",
+        "price_basis": "endpoint",
         "rides": {
-          "clean": 0,
-          "judged": 0,
+          "clean": 1,
+          "judged": 1,
           "prior": 1.0
         }
       },
@@ -735,15 +735,15 @@
         "intelligence": 43.6,
         "coding": 76.2,
         "agentic": 50.0,
-        "out_price": null,
-        "in_price": null,
+        "out_price": 14.9,
+        "in_price": 0.973,
         "monthly_limit_usd": null,
-        "provider": null,
-        "price_basis": null,
+        "provider": "morph",
+        "price_basis": "endpoint",
         "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
+          "clean": 1,
+          "judged": 1,
+          "prior": 0.997865
         }
       },
       "nvidia/nemotron-3-ultra-550b-a55b:free": {
@@ -895,15 +895,15 @@
         "intelligence": 21.8,
         "coding": 56.8,
         "agentic": 15.8,
-        "out_price": null,
-        "in_price": null,
+        "out_price": 0.28,
+        "in_price": 0.14,
         "monthly_limit_usd": null,
-        "provider": null,
-        "price_basis": null,
+        "provider": "xiaomi",
+        "price_basis": "endpoint",
         "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
+          "clean": 1,
+          "judged": 1,
+          "prior": 0.997917
         }
       },
       "xiaomi/mimo-v2.6-flash": {
