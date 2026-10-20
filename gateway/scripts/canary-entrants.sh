@@ -54,19 +54,23 @@ n=0
 while IFS= read -r cell; do
   [ "$n" -lt "$MAX" ] || { echo "== --max $MAX reached"; break; }
   n=$((n + 1))
-  model="${cell%@*}"
   echo "== canary $n/$MAX: $cell"
   if [ "$DRY" = 1 ]; then continue; fi
-  # The ride (the scout's canary shape, agents/model-scout.sh scout_canary_ride): one trivial closed
-  # task that makes the harness call a tool — a headless `opencode run`; agent-session.sh builds the
-  # admission with `canary: {model, provider}` from the knob (harness opencode, the gateway's
-  # canary.harness) and reports the outcome on exit. A dispatch is the gateway's YES; a
-  # `canary-budget` / `canary-not-due` defer is its NO (the router-defer exit, no pod).
+  # The ride (the scout's canary shape, agents/model-scout.sh scout_canary_ride, minus its model
+  # arguments): one trivial closed task that makes the harness call a tool — a headless `opencode run`;
+  # agent-session.sh builds the admission with `canary: {model, provider}` from the knob (harness
+  # opencode, the gateway's canary.harness) and reports the outcome on exit. A dispatch is the
+  # gateway's YES; a `canary-budget` / `canary-not-due` defer is its NO (the router-defer exit, no pod).
+  # The ride names NO model: under AGENT_GATEWAY=sessions the gateway owns it (GW-SESSIONS-ADMIT —
+  # agent-session.sh's preflight refuses `--model` outright, FU-270), and the pod's provider + model
+  # ARE the admission's OPENCODE_CONFIG_CONTENT, so an `opencode run -m openrouter/…` would steer
+  # opencode at its unconfigured built-in provider instead of the pinned cell (the 2026-10-20 window
+  # rode this exact shape, homelab#2775).
   task="canary-$(printf '%s' "$cell" | tr '/:.@' '----')"
   prompt="Reply with ONLY the first markdown heading text of README.md (no other words)."
   if ! AGENT_GATEWAY_CANARY="$cell" bash agents/agent-session.sh "${CANARY_PROJECT:-homelab}" --harness opencode \
-       --model "openrouter/$model" --task "$task" --round 1 \
-       --run "opencode run -m \"openrouter/$model\" \"$prompt\"" 2>&1 | tail -n 5; then
+       --task "$task" --round 1 \
+       --run "opencode run \"$prompt\"" 2>&1 | tail -n 5; then
     echo "   ride did not dispatch — the gateway's answer is above"
     if [ "$(curl -fsS "$AGENT_GATEWAY_URL/catalog/openrouter" | jq -r '.canary.exhausted')" = "true" ]; then
       echo "== the canary budget is spent (GatewayCanaryBudgetExhausted) — stopping"; break
