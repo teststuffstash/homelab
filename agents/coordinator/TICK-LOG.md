@@ -13855,3 +13855,11 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Wound down at ~800k ctx with #2743 unstarted (the pickup names its design points and the deploy checks); bookkeeping
   committed, pushed once.
 
+
+## 2026-10-20 ~04:55–05:30Z — seat: "cluster down?" → wk-metal-04 died (incident response, no applies)
+
+- Alert flood since 01:26Z = one node: wk-metal-04 last heartbeat 01:11Z, :50000 + ARP dead from pve. Cluster 12/13 Ready.
+- WoL from pve (no effect); operator cable wiggle (link blinks, still no ARP); operator hard reset ×2 → no POST/display/beeps,
+  NIC LEDs dark, fans + PCIe card LED on → treated as hardware-dead; operator defers to the evening (NVMe swap or other).
+- Loki held no kmsg lines from the node in the last 6 h (query may be wrong — unverified). Garage 2/3 serving, writes OK;
+  garage-0 PVCs faulted (1-replica, on the box); registry-data degraded to 1 replica (no bulk disk to rebuild onto).
