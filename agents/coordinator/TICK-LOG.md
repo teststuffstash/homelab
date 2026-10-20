@@ -13932,3 +13932,56 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Next (operator's call): (1) build models.dev as the config source's catalog with the console answer as the override layer
   (GW-CATALOG-GO's named gap, a PR on the island); (2) grant `prober` to the dispatcher caller in policy.json (+ GW-ACCESS /
   GW-SESSIONS-AUTH rows) so the canary window can open.
+
+## 2026-10-20 ~21:30–22:45Z — seat: "pick up gateway from meta-state" — the two ordered island PRs opened (#2766 models.dev catalog + console overlay, #2767 prober grant)
+
+- Read: meta-state's 21:40Z pickup + TICK-LOG 21:00Z; the island (catalog.py, the GW-CATALOG-GO page, the fake vendor,
+  policy.json/kustomization, GW-SESSIONS-AUTH/GW-ACCESS); live: models.dev `opencode-go` = 33 rows (4 `status: deprecated`
+  → 29 = the Go page's count), every `context_over_200k` row also carries `tiers`; the console answer re-probed from the
+  gateway pod (200, 1.6 KB: `opencode` rows `disabled: true`, `opencode-go.models: {}`, the org-id header) → the fixture;
+  the vendor's `plugin/provider/opencode.ts` (each config field applied "if defined" onto the models.dev row, `cost`
+  replaces, `limit` merges, `enabled = !disabled`) and `plugin/models-dev.ts` (deprecated rows dropped before the overlay).
+- Design call: ONE source (`config`) with TWO reads, not a third source — the snapshot shape, store, metrics families,
+  alert exprs and admission reads stay as they are; the first failing read ends the refresh with its outcome and the log
+  line names the read. The "models.dev as a fallback" gap row becomes the rule; a new gap row names the rail-served-but-
+  unlisted ids (37 served vs 29 listed).
+- #2766 (`feat/go-catalog-models-dev`): parse_catalog (strict: cost + tiers ascending, limit, tool_call; legacy
+  `context_over_200k` alone = parse failure) + parse_config as overrides + merge; env `GATEWAY_GO_CATALOG_URL` → models.dev,
+  new `GATEWAY_GO_CONFIG_URL`; fixtures `models-dev.json` + the live override-only `config.json`; 20 refresh rows; glossary,
+  worlds README, sessions wording, spike §F4 settled; GoCatalogParseFailed / PolicyModelMissing annotations (rules re-copied,
+  promtool fixture re-rendered). Island ci 810 green; prometheus-rules-lint + docs-graph-lint green.
+- #2767 (`fix/gateway-prober-caller`): policy.json dispatcher caller `roles` += `prober`; fixture worlds + twins; a new
+  GW-SESSIONS-AUTH row (platform prober, no bind → 200 dispatch); the deployed-callers row/test re-pinned; GW-ACCESS prober
+  row + role × caller paragraph; the kustomization `callers` comment. Island ci 811 green.
+- Both auto-merge armed via pr-wait (background). Bookkeeping: meta-state pickup collapsed to one bullet + a
+  `dig-explained` for GoCatalogParseFailed/GoCatalogStale (clears with #2766's deploy); FU-270 next (0) → in review.
+
+## 2026-10-20 ~22:45–23:50Z — seat: #2766 round 1 → merged → deployed → verified; #2767 round 1 + an orphaned CI run
+
+- #2766 round 1 (specs reviewer, CHANGES_REQUESTED): all bookkeeping — ⚖ on the two console-only rows, the gap row's
+  `⚑ gap (2026-10-20, PR #2766 → work #2768)` form (issue #2768 filed: the rail serves ids the catalog does not list,
+  37 vs 29), a `Spec changes:` section with the removed-row → carrier map, *Listed* = the merged listing. Round 2
+  APPROVED, merged 19:02Z; the auto-bump #2769 merged; the pod rolled (image g618c588a6e15). **Verified from the pod**:
+  `catalog: config refreshed — 29 models` at 19:07:43Z (fetched_at 19:07Z, not the 11:02Z snapshot), docs ok,
+  policy models all listed with limits; Alertmanager: 0 active `GoCatalog*`.
+- #2767 round 1: only the missing `Spec changes:` section (the rows + evidence judged sound) — body edited, an empty
+  commit pushed for a new head. Its CI run then sat 35 min on "Mermaid parse lint" with no runner pod left in
+  `arc-runners` (ephemeral runners cycled normally around it; a 4-min run normally) — the TICK-LOG 8954 class:
+  cancel → force-cancel (`actions/runs/<id>/force-cancel`) → re-run; pr-wait re-armed. Single sighting, no FU.
+- Lesson (jail): zsh does not word-split a `K="devbox run -- kubectl …"` command variable — an `until $K …` loop spins
+  forever (the deploy-verification task had to be stopped and run by hand).
+
+## 2026-10-20 ~23:50Z – 10-21 ~00:20Z — seat: #2767 merged + deployed + proven; the canary launcher's loop never ran (#2771)
+
+- #2767 round 2 APPROVED after the CI re-run, merged 19:36:59Z; the policy ConfigMap hash rolled the pod 19:37:12Z
+  (`agent-gateway-policy-hf5g456t77`: roles `['worker', 'prober']`). The image build for c846c660 opened #2770 (auto-bump,
+  no src change) — pr-waited. **Proof without a ride:** dispatcher-SA token (`kubectl create token agentstack-loop
+  --audience agent-gateway`) → `POST /sessions {role: prober, harness: claude, rail: anthropic}` = 200 `defer
+  role-rail-denied` (the role check passed; the rail is outside the prober's set); control `role: reviewer` = 403
+  `caller-role-denied`. First attempt with the default harness answered 400 `harness-rail-mismatch` — the body check
+  precedes the role check, so a consistent body is needed to reach it.
+- `canary-entrants.sh --dry-run` printed the catalog line (28 models, 245 candidate cells, 0 eligible) and "after" with
+  NOTHING between: the `while read cell … done` had no `<<<"$cells"` — zero iterations under a closed stdin, a keyboard
+  wait on a terminal. #2771 opened (`done <<<"$cells"`; the dry-run with `< /dev/null` walks 3 cells under `--max 3`).
+  No canary has ever been launched by the script (the 10-19 window never opened), so nothing rode wrongly.
+- The canary WINDOW stays the operator's (budget-metered rides): after #2771, `--max 3`.
