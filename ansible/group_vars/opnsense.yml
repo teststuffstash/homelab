@@ -42,7 +42,7 @@ bgp_node_ips:
   # indistinguishable from the onboarding miss this list exists to prevent.
   - 192.168.2.182  # wk-metal-01
   - 192.168.2.184  # wk-metal-03 (kata node, onboarded 2026-07-13)
-  - 192.168.2.186  # wk-metal-04 (kata desktop i5-3570K/16GB, onboarded 2026-07-28)
+  - 192.168.2.186  # wk-metal-04 (kata desktop — Big Data HP i5-2500/24GB since 2026-10-20; onboarded 2026-07-28)
   - 192.168.2.56   # m70s (ThinkCentre M70s SFF, third physical Garage zone, onboarded 2026-09-07)
   - 192.168.2.58   # nx-01 (NX-6035-G5 node 1, onboarded 2026-09-15) — MISSED at onboarding (#1716),
                    # found 2026-09-15 by review: its CiliumBGPNodeConfig peer sat `idle` for 8 h.
