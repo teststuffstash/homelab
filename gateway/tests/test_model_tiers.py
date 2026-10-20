@@ -268,7 +268,7 @@ TWIN_ROWS = [
 @pytest.mark.parametrize(("a", "b", "expected"), [r[1:] for r in TWIN_ROWS], ids=[r[0] for r in TWIN_ROWS])
 def test_twins(a, b, expected):
     world(note="two hand-written policy ids")
-    with given(f"policy ids {a!r} and {b!r}"):
+    with given(f"policy ids {a!r} and {b!r}; expected twins: {expected}"):
         attach_json("ids", [a, b])
     with when(f"same_model({a!r}, {b!r}) and the reverse"):
         got = (same_model(a, b), same_model(b, a))
