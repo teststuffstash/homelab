@@ -13970,3 +13970,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   cancel → force-cancel (`actions/runs/<id>/force-cancel`) → re-run; pr-wait re-armed. Single sighting, no FU.
 - Lesson (jail): zsh does not word-split a `K="devbox run -- kubectl …"` command variable — an `until $K …` loop spins
   forever (the deploy-verification task had to be stopped and run by hand).
+
+## 2026-10-20 ~23:50Z – 10-21 ~00:20Z — seat: #2767 merged + deployed + proven; the canary launcher's loop never ran (#2771)
+
+- #2767 round 2 APPROVED after the CI re-run, merged 19:36:59Z; the policy ConfigMap hash rolled the pod 19:37:12Z
+  (`agent-gateway-policy-hf5g456t77`: roles `['worker', 'prober']`). The image build for c846c660 opened #2770 (auto-bump,
+  no src change) — pr-waited. **Proof without a ride:** dispatcher-SA token (`kubectl create token agentstack-loop
+  --audience agent-gateway`) → `POST /sessions {role: prober, harness: claude, rail: anthropic}` = 200 `defer
+  role-rail-denied` (the role check passed; the rail is outside the prober's set); control `role: reviewer` = 403
+  `caller-role-denied`. First attempt with the default harness answered 400 `harness-rail-mismatch` — the body check
+  precedes the role check, so a consistent body is needed to reach it.
+- `canary-entrants.sh --dry-run` printed the catalog line (28 models, 245 candidate cells, 0 eligible) and "after" with
+  NOTHING between: the `while read cell … done` had no `<<<"$cells"` — zero iterations under a closed stdin, a keyboard
+  wait on a terminal. #2771 opened (`done <<<"$cells"`; the dry-run with `< /dev/null` walks 3 cells under `--max 3`).
+  No canary has ever been launched by the script (the 10-19 window never opened), so nothing rode wrongly.
+- The canary WINDOW stays the operator's (budget-metered rides): after #2771, `--max 3`.

@@ -24,21 +24,20 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
   it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
   box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
-- **⚑ PICKUP (2026-10-20 ~23:50Z — gateway: #2766 MERGED + DEPLOYED + VERIFIED (19:07Z: config source `ok`, 29
-  models, `GoCatalog*` alerts clear); #2767 in review round 2 (its CI run lost its runner at 19:15Z — force-cancelled + re-run
-  ~19:50Z, pr-wait re-armed); TICK-LOG 10-20 21:30–23:50Z):** **#2766** — the Go catalog's `config` source = TWO reads merged into the unchanged
-  snapshot shape: models.dev `api.json` (`opencode-go`, no credential; `status: deprecated` dropped, as the vendor's
-  `plugin/models-dev.ts` does) then the console `/api/v2/config` as the workspace OVERLAY (`disabled` unlists; `cost` /
-  `limit` / `name` / `family` / `capabilities.tools` win; a console-only row listed only when complete) — the
-  vendor's own order (`plugin/provider/opencode.ts`); env `GATEWAY_GO_CATALOG_URL` = models.dev, new
-  `GATEWAY_GO_CONFIG_URL` = the console; fixtures from the live 2026-10-20 answers; alert annotations name both reads.
-  **#2767** — `callers[platform-agents:agentstack-loop].roles` = `["worker", "prober"]` (+ fixture worlds, a
-  GW-SESSIONS-AUTH row, GW-ACCESS role × caller). **#2766 is verified** (deploy #2769, image g618c588a6e15). **Verify after #2767's
-  deploy:** `kubectl -n agent-egress exec deploy/agent-gateway -- python3 -c` (no curl in the image) a GET of
-  `/catalog/opencode` still ok, then `bash gateway/scripts/canary-entrants.sh
-  --dry-run` admits (no 403) — the canary WINDOW itself is the operator's; after it the openrouter re-cut (FU-270 next
-  (a)). **If a review asks for rounds:** clone `scratchpad/hl-prober` (`fix/gateway-prober-caller`; `hl-gocat` is done) under this session's scratchpad; `cd gateway && devbox run ci`.
-  (#2718's #2764 status comment exists since 17:47Z — nothing left there.)
+- **⚑ PICKUP (2026-10-21 ~00:20Z — gateway: BOTH ordered PRs LANDED + DEPLOYED + VERIFIED; the canary window is the
+  operator's; TICK-LOG 10-20 21:30Z → 10-21 00:20Z):** **#2766** (the Go catalog's `config` source = models.dev's
+  `opencode-go` rows — deprecated dropped, as the vendor's `plugin/models-dev.ts` — under the console's `/api/v2/config`
+  OVERLAY, the vendor's own order; env `GATEWAY_GO_CATALOG_URL` = models.dev, new `GATEWAY_GO_CONFIG_URL`) deployed as
+  #2769 (g618c588a6e15): `catalog: config refreshed — 29 models` 19:07Z, `GoCatalog*` clear; its gap → **#2768** (the rail
+  serves 37 ids vs 29 listed). **#2767** (`callers[platform-agents:agentstack-loop].roles` = `["worker", "prober"]`)
+  deployed by the policy ConfigMap roll 19:37Z and PROVEN without a ride: a prober admission as the dispatcher SA on a
+  rail outside the prober's set answers 200 `defer role-rail-denied` (the reviewer control still 403 `caller-role-denied`).
+  **Open:** #2771 (`canary-entrants.sh` loop read stdin, never `$cells` — ran zero times; `done <<<"$cells"`, dry-run
+  proven) and #2770 (the auto-bump for the #2767 build; content-identical image) — both pr-waited. **Then the canary
+  WINDOW (operator):** `bash gateway/scripts/canary-entrants.sh --max 3` after #2771 lands (245 candidate cells, 0
+  eligible; the policy caps 3 per refresh / $1 per day; the first cells alphabetically are anthropic/claude-haiku-5.5's
+  three providers); after it the openrouter re-cut (FU-270 next (a)). Clone for #2771 rounds: `scratchpad/hl-prober`,
+  branch `fix/canary-entrants-loop-input`; `cd gateway && devbox run ci`.
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a
