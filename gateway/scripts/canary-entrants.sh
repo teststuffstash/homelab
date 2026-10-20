@@ -72,5 +72,5 @@ while IFS= read -r cell; do
       echo "== the canary budget is spent (GatewayCanaryBudgetExhausted) — stopping"; break
     fi
   fi
-done
+done <<<"$cells"
 echo "== after: $(curl -fsS "$AGENT_GATEWAY_URL/catalog/openrouter" | jq -c '{cells, canary}')"
