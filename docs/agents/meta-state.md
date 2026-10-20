@@ -32,12 +32,13 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   serves 37 ids vs 29 listed). **#2767** (`callers[platform-agents:agentstack-loop].roles` = `["worker", "prober"]`)
   deployed by the policy ConfigMap roll 19:37Z and PROVEN without a ride: a prober admission as the dispatcher SA on a
   rail outside the prober's set answers 200 `defer role-rail-denied` (the reviewer control still 403 `caller-role-denied`).
-  **Open:** #2771 (`canary-entrants.sh` loop read stdin, never `$cells` — ran zero times; `done <<<"$cells"`, dry-run
-  proven) and #2770 (the auto-bump for the #2767 build; content-identical image) — both pr-waited. **Then the canary
-  WINDOW (operator):** `bash gateway/scripts/canary-entrants.sh --max 3` after #2771 lands (245 candidate cells, 0
-  eligible; the policy caps 3 per refresh / $1 per day; the first cells alphabetically are anthropic/claude-haiku-5.5's
-  three providers); after it the openrouter re-cut (FU-270 next (a)). Clone for #2771 rounds: `scratchpad/hl-prober`,
-  branch `fix/canary-entrants-loop-input`; `cd gateway && devbox run ci`.
+  **#2771 + #2770 + #2773 (FU-270 (d): Go `context_tokens` from the catalog) + #2774 all MERGED + deployed.**
+  **The canary WINDOW RAN from the seat (operator 20:00Z: "run some yourself … continue unattended … use subagents"):**
+  7 eligible cells (v4.1-flash baidu/deepinfra/open-inference-fp4, v4-flash streamlake/baidu, kimi-k3 morph, mimo-v2.5
+  xiaomi), 2 rides 429'd (baseten, deepinfra — cells stay candidate), $0.096; gaps → **#2775**; #2768 classified in a
+  comment (ruling: the operator's). **In flight (subagents, pr-waited):** the openrouter RE-CUT PR (FU-270 (a) — read its
+  OLD→NEW table before trusting the live lists) and the launcher ride-shape + `⚑ gap` rows PR. **Next:** read both PRs'
+  outcomes in TICK-LOG; rulings for #2775 (a 429'd canary = strike or no-verdict?) and #2768 (rail-served-unlisted ids).
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a

@@ -14002,3 +14002,19 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `opencode-go/*` entry refuses the load (ruling 5); deployed policy `context_tokens: {}`; deploy #2774 pr-waited.
   Follow-on named, not built: openrouter `context_length` is per-(model, provider) in the endpoint snapshot.
 - Master pushed at 363ce974 after #2771 (pre-push lints green).
+
+## 2026-10-20 ~20:45–21:10Z — seat (unattended): the first entry-canary window's result, #2775, the re-cut + launcher PRs dispatched
+
+- Subagent A's window (19:40–20:50Z, 9 admissions, $0.096, no alert, gateway 0 restarts): v4.1-flash {open-inference ✓
+  (fp4 — eligible, never pinnable), baidu ✓, deepinfra ✓}, kimi-k3 {morph ✓ (~$0.03 a ride), baseten ✗ 2×200→7×429},
+  mimo-v2.5 {xiaomi ✓}, v4-flash {streamlake ✓, deepinfra ✗ 9×429, baidu ✓} → **7 eligible / 239 candidate / 0 excluded**.
+  Three machine findings → **#2775**: (1) a 429'd pinned canary spends the admission and judges nothing (cell stays
+  candidate — neither strike class fires); (2) every window was opened by a POD ROLL (19:40 / 20:22 / 20:42Z = the
+  #2767 / #2770 / #2774 deploys), `admitted_this_refresh` + `gateway_canary_*` counters are in-memory (spend + cell
+  states persisted); (3) the view carries no "passes the floors" flag — the launcher walks alphabetically. Plus: the
+  merged launcher's ride command is REFUSED by agent-session.sh's preflight (`--model` under AGENT_GATEWAY=sessions);
+  the rides ran with `--model` and the inner `-m` dropped.
+- Dispatched: subagent E = the openrouter RE-CUT (FU-270 next (a): `benchmarks-snapshot.sh` → `tiers apply` → `check`
+  → PR, then its deploy + live read-back); subagent D = the launcher ride-shape fix + #2775's three `⚑ gap` rows and the
+  GW-CATALOG-OR index clause (PR). #2774 (context-from-catalog image) deployed 20:42:31Z, catalog refreshed on start.
+- Context 425k at 21:05Z; wind-down planned ~550k.
