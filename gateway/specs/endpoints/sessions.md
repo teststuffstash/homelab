@@ -457,8 +457,13 @@ gateway hands it is a failed row, not a passed one:
 
 The model var carries the policy id with its rail prefix removed (`claude/sonnet` →
 `sonnet`, `opencode-go/deepseek-v4.1-flash` → `deepseek-v4.1-flash`; openrouter ids are bare) — the
-same strip `agents/agent-session.sh` performs today. `context_tokens` is the policy's per-model
-window or `null` — a null is "not declared", never a guess.
+same strip `agents/agent-session.sh` performs today. `context_tokens` is the harness window the
+launcher hands the CLI: on the Go rail it is the Go catalog's `context` for the wire model (models.dev's
+`limit.context` under the console's overlay — [GW-CATALOG-GO](catalog.md#gw-catalog-go) ruling 5: the
+vendor's fact lives in the snapshot, and a policy `context_tokens` entry for an `opencode-go/*` model
+refuses the load, so a stale hand copy can never shadow the catalog); on every other rail it is the
+policy's declared per-model window (the openrouter rail has no catalog context yet). `null` is "no
+catalog row" / "not declared", never a guess.
 
 **`codex`** (world `policy-codex` — the rail ships dark): the pinned CLI reads its provider from
 config, not from env — observed with codex-cli 0.161.0 (`experiments/codex-rail/compat.py`):
@@ -500,10 +505,16 @@ that block from a real dispatch answer; its run is the local-evidence row below.
 | "⚑ gap (2026-10-17, PR #2656 → work #2650): opencode's provider package under enforced egress" | opencode || the probe namespace (`agent-coordinator`) reached `registry.npmjs.org` and `models.dev` (HTTP 200), so whether opencode FETCHES `@ai-sdk/openai-compatible` at run time was not observed | a ride whose egress blocks npm (homelab#990's class) is unproven: it may wedge before the first request |
 | "⚖ local evidence: the pinned Codex CLI completes a turn from this env through the gateway" | codex (codex-cli 0.161.0) || the provider block rendered from the dispatch `env`; `OPENAI_API_KEY` in the child env | no `auth.json`, no operator config (a fresh `CODEX_HOME`) — `experiments/codex-rail/evidence.json`, not CI |
 
-| description | model (policy) || `context_tokens` |
+| description | world | model (policy) || `context_tokens` |
+|---|---|---||---|
+| "a Go model's context_tokens is the catalog's context ⚖" | `policy-default` + the seeded `catalog-ok` snapshot (`deepseek-v4.1-flash` `limit.context` 1000000) | opencode-go/deepseek-v4.1-flash || 1000000 — the snapshot's; the policy declares none |
+| "a Go model with no catalog row answers null, never a default" | `catalog-retired` refreshed (the catalog without `deepseek-v4.1-flash`) | opencode-go/deepseek-v4.1-flash || null from the catalog read (`GoCatalog.context_for`, the answer's source); the dispatch itself defers `not-in-catalog` ([GW-SESSIONS-ADMIT](#gw-sessions-admit)), so no answer ever carries a guessed window |
+| "a declared `context_tokens` is echoed" | `policy-default` (`deepseek/deepseek-v4.1-flash`: 163840 — a world value, not a vendor fact) | deepseek/deepseek-v4.1-flash (openrouter, `tier: heavy`) || 163840 |
+| "an undeclared `context_tokens` is null, never a default" | `policy-default` | claude/sonnet || null |
+
+| description | `context_tokens` in an otherwise `policy-default` document || the policy load |
 |---|---||---|
-| "a declared `context_tokens` is echoed" | opencode-go/deepseek-v4.1-flash || 1000000 |
-| "an undeclared `context_tokens` is null, never a default" | claude/sonnet || null |
+| "a declared `context_tokens` for a Go model refuses the load ⚖" | `{"opencode-go/deepseek-v4.1-flash": 1000000}` (the 2026-10-17 hand copy) || refused, naming `context_tokens` |
 
 <details markdown="1"><summary>Evidence</summary>
 

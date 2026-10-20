@@ -116,9 +116,7 @@
       "min_rides": 5
     }
   },
-  "context_tokens": {
-    "opencode-go/deepseek-v4.1-flash": 1000000
-  },
+  "context_tokens": {},
   "control_plane_auth": "enforce",
   "callers": {
     "system:serviceaccount:platform-agents:agentstack-loop": {

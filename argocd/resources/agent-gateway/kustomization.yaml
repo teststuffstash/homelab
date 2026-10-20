@@ -63,8 +63,11 @@ resources:
 # max_sessions: anthropic 5 = the old proxy's SUBSCRIPTION_MAX_RUNNING; opencode 3 =
 # model-classes.json `rails.opencode-go.concurrency` (the declared Go bound); openrouter 20
 # (per-token, bounded by key budgets not slots).
-# context_tokens: per-model harness window — the Go rail's deepseek-v4.1-flash = 1000000, the
-# console /api/v2/config `limit.context` (2026-10-17); absent = null, never a guess.
+# context_tokens: per-model harness window for the NON-Go rails — none declared today; absent =
+# null in the dispatch answer, never a guess. The Go rail's windows are NOT here: the gateway
+# answers the Go catalog's `context` (models.dev under the console overlay, GW-CATALOG-GO) and an
+# `opencode-go/*` entry here refuses the load (ruling 5; GW-SESSIONS-ENV). The 2026-10-17 hand copy
+# of deepseek-v4.1-flash's console `limit.context` (1000000) left with FU-270 (d).
 # admission (anthropic, opencode): the ladder's capacity half — RULES only: window utilization
 # thresholds, the 429 hold and its scope (opencode: `latch_scope: model` — a Go 429 cools its cell,
 # never the rail), the Go windows' thresholds + anchors (gateway/specs/endpoints/sessions.md

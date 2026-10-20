@@ -651,7 +651,7 @@ class SessionService:
                 "model": model,
                 "env_keys": list(assemble_env(self.self_url, adm.harness, "", wire_model(rail, model))),
                 "pull_url": f"{self.self_url}/sessions/{row.id}/env",
-                "context_tokens": self.policy.context_tokens_for(model),
+                "context_tokens": self._context_tokens(rail, model),
                 "rail_choice": choice,
             })
         token = new_token()
@@ -668,9 +668,20 @@ class SessionService:
             "harness": adm.harness,
             "model": model,
             "env": assemble_env(self.self_url, adm.harness, token, wire_model(rail, model)),
-            "context_tokens": self.policy.context_tokens_for(model),
+            "context_tokens": self._context_tokens(rail, model),
             "rail_choice": choice,
         })
+
+    def _context_tokens(self, rail: str, model: str) -> int | None:
+        """GW-SESSIONS-ENV: the dispatch answer's harness window. On the Go rail it is the Go
+        catalog's `context` for the wire model — null when the model has no catalog row, never a
+        default (GW-CATALOG-GO ruling 5: the vendor's fact lives in the snapshot, the policy loader
+        refuses a copy). Every other rail answers the policy's declared `context_tokens` (null =
+        not declared)."""
+        if rail == "opencode":
+            cat = self.capacity.catalog
+            return cat.context_for(wire_model(rail, model)) if cat is not None else None
+        return self.policy.context_tokens_for(model)
 
     async def pull_env(self, sid: str, presented: str | None) -> JSONResponse:
         """GW-SESSIONS-PULL, in order: the id (404) → the identity (403; a TokenReview the API

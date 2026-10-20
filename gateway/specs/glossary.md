@@ -91,8 +91,9 @@ The gateway's one configuration document, `/etc/agent-gateway/policy.json` (a Co
 homelab config; the test world is [worlds/policy-default.json](worlds/policy-default.json)):
 per-stack credential refs, per-role allowed rails in preference order with a default tier and
 harness, per-(rail, tier) ordered model list, per-rail `max_sessions` and `side_models` (the families a
-harness's side-calls may name on any session of that rail), per-model `context_tokens`,
-`session_ttl_s`. **No model id lives in code** — only here, copied from
+harness's side-calls may name on any session of that rail), per-model `context_tokens` (the
+non-Go rails only — a Go model's window is the Go catalog's `context`, ruling 5), `session_ttl_s`.
+**No model id lives in code** — only here, copied from
 `argocd/resources/openrouter-proxy/model-classes.json`; the deployed policy
 (`argocd/resources/agent-gateway/policy.json`, the source of the `agent-gateway-policy`
 configMapGenerator) has the same shape and is loaded by a

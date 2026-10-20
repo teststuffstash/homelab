@@ -544,6 +544,15 @@ class GoCatalog:
             await asyncio.sleep(self.refresh_s)
 
     # -- reads ----------------------------------------------------------------------------------
+    def context_for(self, model: str) -> int | None:
+        """GW-SESSIONS-ENV's read for a WIRE model id: the catalog's `context` (models.dev's
+        `limit.context` under the console's overlay) — the dispatch answer's `context_tokens` on the
+        Go rail. None when no config snapshot exists or the model has no row: never a default
+        (ruling 5 — the policy holds no copy of this fact, see Policy.from_dict)."""
+        cfg = self.snapshots.get("config")
+        row = cfg.body["models"].get(model) if cfg is not None else None
+        return row["context"] if row is not None else None
+
     def go_model(self, model: str) -> GoModel | str:
         """Admission's read for a WIRE model id: its facts, or why it is not in the catalog (the
         `not-in-catalog` defer's detail — ruling 4: never a fallback price)."""
