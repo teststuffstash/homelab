@@ -35,7 +35,7 @@ error), and no auth, like `/metrics` — it carries no credential.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
+| [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); a liveness signal and the rail-served-but-unlisted ids are `⚑ gap` (rows below) |
 | [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary) |
 | [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`, `gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers, the admission's rail choice between twin cells (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the strike overhead unmeasured, the Go cell's clean-rate prior (the "⚑ gap" rows below) |
 
@@ -44,12 +44,26 @@ error), and no auth, like `/metrics` — it carries no credential.
 Two **sources**, each refreshed every **21600 s** ⚖ (6 h; the first refresh runs at start) and
 each with its own snapshot:
 
-- **`config`** — `GET https://opencode.ai/console/api/v2/config`, the console's V2 config, which
-  any Go key can read. The leg keeps `providers["opencode-go"].models`: per model the `family`,
-  tool support, `limit.context` / `limit.output`, and `cost[]` (the base row, then each
-  `tier: {type: context, size}` row as the rate above that many tokens). A row marked
-  `"disabled": true` is not listed. The request carries the Go key as a bearer, a `User-Agent`
-  and a fresh `x-opencode-session` — Cloudflare answers 1010 to a bare client.
+- **`config`** — two reads, merged the way the vendor's own client merges them
+  (`packages/core/src/plugin/provider/opencode.ts`; ⚖ 2026-10-20). The **catalog read**:
+  `https://models.dev/api.json`, the vendor's own public registry (the spike's §F4) — the leg
+  keeps its `opencode-go.models`: per model the `name`, `family`, `tool_call`, `limit.context` /
+  `limit.output`, and `cost` (`input` / `output` / `cache_read` / `cache_write`, then each
+  `tiers[]` row with its `tier: {type: context, size}` as the rate above that many tokens; the
+  legacy `context_over_200k` spelling is not read, and alone it is a shape the parser does not
+  know). A row whose `status` is `deprecated` is not listed — the vendor's loader
+  (`plugin/models-dev.ts`) drops it before any overlay. Then the **console read**:
+  `GET https://opencode.ai/console/api/v2/config`, the console's V2 config, which any Go key can
+  read — since 2026-10-20 it carries the WORKSPACE'S OVERRIDES on that catalog, not the catalog
+  (`providers["opencode-go"].models` is `{}` for this account; until that day it carried every
+  row, which the 10-17 build read as the catalog): `"disabled": true` unlists the row; a `cost`
+  (the vendor's list-or-one-row spelling), a `limit` field, a `name`, `family` or
+  `capabilities.tools` present on a row wins over the catalog's; an override naming no catalog
+  row is listed only when it is a complete row of its own (a cost and both limits). The console
+  request carries the Go key as a bearer, a `User-Agent` and a fresh `x-opencode-session` —
+  Cloudflare answers 1010 to a bare client; the catalog read carries no credential. The two reads
+  are one source: the first that fails ends the refresh with its outcome (the log line names the
+  read), and the merged listing is the one snapshot admission reads.
 - **`docs`** — the vendor's Go page source, `go.mdx` on the vendor repo's default branch
   (`raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx`),
   fetched with no credential. The leg reads each plan's **monthly fee** (the page's Plan table —
@@ -72,27 +86,40 @@ vendor API says which plan a key is on (ruling 4).
 
 Rows run at T0 = 2027-01-15T08:00:00Z against the `policy-default` world and the fake vendor
 ([worlds/README.md §The Go catalog's fakes](../worlds/README.md#the-go-catalogs-fakes)): `catalog-ok`
-serves `tests/fixtures/go-catalog/config.json` (five listed models, one disabled row), `docs-ok`
-serves `tests/fixtures/go-catalog/go.mdx` (the same five models). Both are trimmed from the live
-answers of 2026-10-17.
+serves `tests/fixtures/go-catalog/models-dev.json` (models.dev's `opencode-go`: five listed models
+and one `status: deprecated` row), `config-ok` serves `tests/fixtures/go-catalog/config.json` (the
+console's override-only answer, `opencode-go.models: {}`), `docs-ok` serves
+`tests/fixtures/go-catalog/go.mdx` (the same five models). The first two are trimmed from the live
+answers of 2026-10-20, the page from 2026-10-17/20. The `catalog-*` knobs vary the models.dev
+read, the `config-*` knobs the console read; a refresh of the `config` source makes both.
 
 ### What a refresh keeps
 
 | description | last good (config) | the fake answers || outcome | snapshot | models |
 |---|---|---||---|---|---|
-| "a first good fetch becomes the snapshot" | none | `catalog-ok` || ok | the new one, `fetched_at` T0 | 5 |
-| "a disabled row is not listed" | none | `catalog-ok` (6 rows, `deepseek-v4-flash` disabled) || ok | `deepseek-v4-flash` absent | 5 |
-| "a later good fetch replaces it" | 5, fetched T0 | `catalog-ok` at T0 + 21600 s || ok | `fetched_at` T0 + 21600 s | 5 |
-| "an upstream error keeps the last good" | 5, fetched T0 | `catalog-503` || fetch-failed | the last good, `fetched_at` T0 | 5 |
-| "an unreachable vendor keeps the last good" | 5, fetched T0 | `catalog-down` || fetch-failed | the last good | 5 |
-| "a row without its cost is a parse failure" | 5, fetched T0 | `catalog-malformed` (`deepseek-v4-pro` has no `cost`) || parse-failed | the last good | 5 |
-| "a body without the Go provider is a parse failure" | 5, fetched T0 | `catalog-no-provider` || parse-failed | the last good | 5 |
+| "a first good fetch becomes the snapshot" | none | `catalog-ok` + `config-ok` || ok | the new one, `fetched_at` T0 | 5 |
+| "a deprecated catalog row is not listed" | none | `catalog-ok` (6 rows, `step-5-preview-free` `status: deprecated`) || ok | `step-5-preview-free` absent | 5 |
+| "an override-only console answer lists the catalog as is ⚖" | none | `config-ok` (`opencode-go.models: {}` — the live answer) || ok | the catalog's five | 5 |
+| "a disabled override unlists the row" | 5, fetched T0 | `config-disables` (`deepseek-v4-pro: {disabled: true}`) || ok | `deepseek-v4-pro` absent | 4 |
+| "a cost or limit override wins" | 5, fetched T0 | `config-reprices` (`claude-haiku-5-5`: two `cost` rows, `limit.context` 200000) || ok | its `cost` the override's two rows; `context` 200000, `output` the catalog's 128000 | 5 |
+| "a console-only row with a cost and both limits is listed" | 5, fetched T0 | `config-adds` (`deepseek-v4-flash`, no catalog row) || ok | `deepseek-v4-flash` listed with the override's cost, limits, family, tools | 6 |
+| "a console-only row without them lists nothing" | 5, fetched T0 | `config-adds-bare` (`deepseek-v4-flash: {disabled: false}`) || ok | `deepseek-v4-flash` absent | 5 |
+| "a later good fetch replaces it" | 5, fetched T0 | `catalog-ok` + `config-ok` at T0 + 21600 s || ok | `fetched_at` T0 + 21600 s | 5 |
+| "an upstream error on the catalog read keeps the last good" | 5, fetched T0 | `catalog-503` || fetch-failed | the last good, `fetched_at` T0 | 5 |
+| "an upstream error on the console read keeps the last good" | 5, fetched T0 | `config-503` || fetch-failed | the last good | 5 |
+| "an unreachable catalog host keeps the last good" | 5, fetched T0 | `catalog-down` || fetch-failed | the last good | 5 |
+| "an unreachable console keeps the last good" | 5, fetched T0 | `config-down` || fetch-failed | the last good | 5 |
+| "a catalog row without its cost is a parse failure" | 5, fetched T0 | `catalog-malformed` (`deepseek-v4-pro` has no `cost`) || parse-failed | the last good | 5 |
+| "a legacy context_over_200k row with no tiers is a parse failure ⚖" | 5, fetched T0 | `catalog-legacy-tier` || parse-failed | the last good | 5 |
+| "an override whose cost is not a cost is a parse failure" | 5, fetched T0 | `config-malformed` (`deepseek-v4-pro: {cost: "free"}`) || parse-failed | the last good | 5 |
+| "a catalog without the Go provider is a parse failure" | 5, fetched T0 | `catalog-no-provider` || parse-failed | the last good | 5 |
+| "a console answer without the Go provider is a parse failure" | 5, fetched T0 | `config-no-provider` || parse-failed | the last good | 5 |
 | "a drop below half the models is implausible ⚖" | 5, fetched T0 | `catalog-shrunk` (2 listed) || implausible | the last good | 5 |
 | "a drop to half or more is taken ⚖" | 5, fetched T0 | `catalog-trimmed` (3 listed) || ok | the new one | 3 |
 | "zero models is implausible with no last good" | none | `catalog-empty` || implausible | none | 0 |
 
 The `docs` source keeps its snapshot by the same rules; its model count is the number of model
-ids with a row in either plan tab.
+ids with a row in either plan tab. The `config` source's model count is the merged listing's.
 
 | description | last good (docs) | the fake answers || outcome | snapshot |
 |---|---|---||---|---|
@@ -123,7 +150,7 @@ docs snapshot (both plans):
 | "the plan fees come from the page ⚖" | `docs-ok`'s Plan table *"\| **Go** \| **$10/month** \|"* / *"\| **Go Plus** \| **$40/month** \|"* || `plan_fee_usd_month` 10 (plan `go`); the docs snapshot's `plan_fees` go 10 / go-plus 40 |
 | "the peak hours come from the page ⚖" | `docs-ok`'s *"Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday"* || `peak_hours_utc` `[[1, 4], [6, 10]]`, `peak_weekdays` mon–fri |
 | "the window shares come from the page ⚖" | *"5-hour — 20% of the monthly limit; weekly — 50%; and monthly — 100%"* || `window_shares` 5h 0.2 · 7d 0.5 · 30d 1.0; `deepseek-v4.1-flash` `windows_usd` 16 / 40 / 80 |
-| "the config's prices are the model's cost rows" | `catalog-ok`'s `claude-haiku-5-5` || `cost` base 0.10 / 0.50 / 0.01 / 0.125, above 100000 tokens 0.50 / 2.50 / 0.05 / 0.625 |
+| "the config's prices are the model's cost rows" | `catalog-ok`'s `claude-haiku-5-5` (models.dev's `cost` + its `tiers[0]`) || `cost` base 0.10 / 0.50 / 0.01 / 0.125, above 100000 tokens 0.50 / 2.50 / 0.05 / 0.625 |
 | "a model the page tabulates but the config does not list is shown unlisted" | `catalog-trimmed` (no `step-5-preview`) + `docs-ok` || `step-5-preview` `listed: false`, `monthly_limit_usd` 60 |
 | "the view's shape is the schema's" | `catalog-ok` + `docs-ok`, `GET /catalog/opencode` || exactly the `required` keys of `output`, of a model row and of a source state |
 
@@ -149,12 +176,13 @@ still carries one refuses to load — a stale hand copy can never shadow the cat
 
 ### What a fetch sends
 
-| description | source || `authorization` | `user-agent` | `x-opencode-session` |
+| description | read || `authorization` | `user-agent` | `x-opencode-session` |
 |---|---||---|---|---|
-| "the config fetch carries the key and a client identity" | config || `Bearer <the Go key>` | `agent-gateway/<version> (go-catalog)` | a UUID, new on every fetch |
+| "the console read carries the key and a client identity" | config (the console) || `Bearer <the Go key>` | `agent-gateway/<version> (go-catalog)` | a UUID, new on every fetch |
+| "the catalog read carries no credential" | catalog (models.dev) || absent | `agent-gateway/<version> (go-catalog)` | absent |
 | "the docs fetch carries no credential" | docs || absent | `agent-gateway/<version> (go-catalog)` | absent |
-| "no key, no config fetch" | config, `OPENCODE_GO_API_KEY` unset || — (no request is sent; outcome fetch-failed) | — | — |
-| "the key never reaches a log line" | config answering 401 with the key in its body || — (every `gateway.catalog` line is free of the key) | — | — |
+| "no key, no config fetch" | config, `OPENCODE_GO_API_KEY` unset || — (no request is sent on either read; outcome fetch-failed) | — | — |
+| "the key never reaches a log line" | the console answering 401 with the key in its body (`config-401-echo`) || — (every `gateway.catalog` line is free of the key) | — | — |
 
 ### Kept across a restart
 
@@ -188,7 +216,7 @@ families — `GoCatalogStale` (a source's last good snapshot older than 24 h ⚖
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: models.dev as a fallback" | the console config unreachable for a day || the last good snapshot, `GoCatalogStale` | the spike's §F4: `models.dev/api.json` mirrors the vendor and carries the only machine-readable `deprecated` marker |
+| "⚑ gap: a rail-served id the catalog does not list" | `/zen/go/v1/models` naming an id models.dev lacks (37 served against 29 listed, 2026-10-20) || not-in-catalog (ruling 4) | *listed* is the vendor's client view (models.dev minus deprecated, under the workspace's overrides), never the rail's model list — the rail's own `/models` answer is unread, and no price comes with it |
 | "⚑ gap: listed is not alive" | a listed id that answers 400 `Model is unavailable` || listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are |
 | "⚑ gap: a vendor reset time" | a Go 429 || — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed |
 | "⚑ gap: the OpenRouter rail's registry" | an openrouter session || no catalog | the old proxy reads `/api/v1/models/<id>/endpoints` for its provider pin and price (`compute_pin`, `MARKET_TTL_S`); the gateway's openrouter rail forwards the policy model with no registry (the spike's §Proposed design) |

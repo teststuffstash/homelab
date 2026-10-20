@@ -60,7 +60,7 @@ MODEL_CLASSES = ISLAND.parent / "argocd" / "resources" / "openrouter-proxy" / "m
 # the live router. Since the lists are DERIVED (GW-MODEL-TIERS, 2026-10-18) the catalog read is the
 # committed tier evidence: benchmarks.json's opencode rows are the live `GET /catalog/opencode`
 # answer (the leg's own parser in the running gateway) filtered to listed models with a monthly limit
-# — the candidate set every deployed Go id is drawn from. The world's five-model console fixture
+# — the candidate set every deployed Go id is drawn from. The world's five-model catalog fixture
 # (#2712) cannot hold a derivation over 29 live models; the static go-catalog.json snapshot retired
 # 2026-10-18 once the catalog leg landed.
 BENCHMARKS = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "benchmarks.json"

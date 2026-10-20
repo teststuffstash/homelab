@@ -46,8 +46,8 @@ logged, and `/healthz` says `db: memory`), `OPENCODE_GO_API_KEY` (the gateway's 
 key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Service name),
 `ANTHROPIC_UPSTREAM` / `OPENROUTER_UPSTREAM` / `OPENCODE_GO_UPSTREAM` (base URLs, overridable for
 tests), `CODEX_UPSTREAM` (native backend; no default), `CODEX_SEED_FILE` (ESO-mounted JSON seed; SHA-256-gated import into `GATEWAY_DB`), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20),
-`GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_DOCS_URL` (the Go catalog's two sources, overridable for
-tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule), `GATEWAY_OR_MCP_URL` (the OpenRouter
+`GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_CONFIG_URL` / `GATEWAY_GO_DOCS_URL` (the Go catalog's three
+reads — models.dev, the console overlay, the Go page — overridable for tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule), `GATEWAY_OR_MCP_URL` (the OpenRouter
 MCP the catalog's ranking + benchmark reads ride) and `GATEWAY_OR_CATALOG_REFRESH_S` (21600; 0 = no schedule),
 `GATEWAY_BENCHMARKS` (the committed tier-evidence snapshot mounted beside the policy; its age is a gauge).
 

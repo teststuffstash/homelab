@@ -161,8 +161,8 @@ never decides it.
 ## Go catalog
 
 The opencode rail's vendor facts as the gateway last read them: two **snapshots**, one per
-source — `config` (the console's V2 config: listed models, `cost[]` tiers, context/output limits,
-tool support) and `docs` (the vendor's Go page: each model's monthly limit per **plan**, promotion
+source — `config` (models.dev's `opencode-go` catalog with the console's V2 config as the
+workspace's overlay — listed models, cost tiers, context/output limits, tool support) and `docs` (the vendor's Go page: each model's monthly limit per **plan**, promotion
 multipliers, peak rows and hours, the 5h/weekly/monthly shares). Refreshed on a schedule; a failed,
 unparseable or implausible refresh keeps the last good snapshot, which the store persists
 ([GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go)). *Listed* means in the config snapshot — an
