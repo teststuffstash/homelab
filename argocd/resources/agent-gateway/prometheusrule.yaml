@@ -114,6 +114,28 @@ spec:
     #   GatewayCanaryBudgetExhausted  — the canary cap (per refresh or per day) is spent while
     #                                   candidate cells wait: entrants stay out of the order until
     #                                   the budget rolls — raise the knob or wait, never a code change.
+    # ── The tier evidence (GW-MODEL-TIERS, gateway/specs/endpoints/catalog.md) ─────────────────────
+    # The deployed tier lists and the admission's rail choice are priced from the committed
+    # benchmarks.json (mounted beside the policy); a comparison on a month-old price is a wrong
+    # answer with a confident face (#2718 item 3: the 10-18 snapshot read $0.144/M against a live
+    # $0.080/M a day later). Behaviour fixture: tier-evidence.promtool-{rules,test} beside this file.
+    #   TierEvidenceStale — the mounted snapshot's snapshot_at is older than 7 d (the AA pull behind
+    #                       it is weekly), or no snapshot is mounted at all: re-cut it
+    #                       (gateway/scripts/benchmarks-snapshot.sh → apply → PR).
+    - name: agent-gateway-tier-evidence
+      rules:
+        - alert: TierEvidenceStale
+          expr: |
+            (max(gateway_tier_evidence_age_seconds{job="agent-gateway"}) > 604800)
+            or
+            (absent(gateway_tier_evidence_age_seconds{job="agent-gateway"}) and on() (max(gateway_sessions_active{job="agent-gateway"}) >= 0))
+          for: 1h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'The gateway''s tier evidence (benchmarks.json) is older than 7 days, or none is mounted'
+            description: 'gateway_tier_evidence_age_seconds is past 7 d ({{ $value }}), or absent while the gateway serves: the deployed tier lists and the rail choice compare on stale prices. Re-cut it: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply, commit benchmarks.json + policy.json by PR (an undecided tier keeps its deployed list — check names it). Absent = argocd/resources/agent-gateway/kustomization.yaml no longer ships benchmarks.json in the policy ConfigMap, or GATEWAY_BENCHMARKS points elsewhere. The contract is gateway/specs/endpoints/catalog.md#gw-model-tiers.'
     - name: agent-gateway-openrouter-catalog
       rules:
         - alert: OpenRouterCatalogStale

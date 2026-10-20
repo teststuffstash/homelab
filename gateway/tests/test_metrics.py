@@ -42,7 +42,7 @@
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
 | source is the catalog source | go_catalog_refresh_total | source | config, docs |
 | the catalog outcome is the refresh outcome | go_catalog_refresh_total | outcome | ok, fetch-failed, parse-failed, implausible |
-| every family is declared with HELP and TYPE | — | — | 21 families |
+| every family is declared with HELP and TYPE | — | — | 23 families |
 
 The provider families (GW-RAIL-OPENROUTER; world policy-default · openrouter-endpoints — the snapshot of
 deepseek/deepseek-v4.1-flash, the openrouter heavy tier):
@@ -58,6 +58,7 @@ deepseek/deepseek-v4.1-flash, the openrouter heavy tier):
 |---|---||---|---|
 | model is a policy openrouter id | provider_requests_total, provider_failovers_total || model | the openrouter rail's policy models (wire ids); else other |
 | provider is a snapshot slug or unattributed | provider_requests_total (from, to on provider_failovers_total) || provider | the endpoint snapshot's tag-base slugs, unattributed; else other |
+| reason is why the rail choice fell | rail_choice_total || reason | price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint (model = a policy openrouter id, rail = the rail enum) |
 """
 
 from __future__ import annotations
@@ -82,6 +83,7 @@ FAMILIES = (
     "gateway_credential_probes_total", "gateway_sessions_reaped_total",
     "gateway_go_catalog_age_seconds", "gateway_go_catalog_models", "gateway_go_catalog_refresh_total",
     "gateway_go_catalog_last_outcome", "gateway_go_catalog_policy_models_missing",
+    "gateway_rail_choice_total", "gateway_tier_evidence_age_seconds",
 )
 
 
@@ -534,6 +536,27 @@ async def test_canary_outcome_labels(gw):
             (sorted({labels["outcome"] for fam, labels in rows if fam == "gateway_canary_rides_total"}),
              sorted({labels["outcome"] for fam, labels in rows if fam == "gateway_canary_admissions_total"})),
             (["eligible", "excluded"], ["budget", "dispatch", "not-due", "not-in-catalog"]))
+
+
+async def test_rail_choice_labels(gw, app, store, upstreams, policy):
+    """row: reason is why the rail choice fell"""
+    world(note="policy-default · openrouter-endpoints + the Go catalog: a worker at tier light names a twin on both rails")
+    await _provider_world(app, store, upstreams)
+    with given("one admission with a twin (worker, harness opencode, tier light: Go's promise price vs deepinfra's)"):
+        doc = await open_session(gw, role="worker", harness="opencode", tier="light")
+        attach_json("the answer's rail_choice", doc["rail_choice"])
+    with when("GET /metrics: every gateway_rail_choice_total series"):
+        rows = [(fam, labels) for fam, labels in await _series(gw) if fam == "gateway_rail_choice_total"]
+        attach_json("series", [labels for _, labels in rows])
+    or_ids = {m for lst in policy.rails["openrouter"].models.values() for m in lst}
+    with then("one series; its model a policy openrouter id, its rail the chosen rail, its reason in the enum",
+              series={"expected": {"model": "a policy openrouter id", "rail": doc["rail"], "reason": "one of price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint"},
+                      "actual": [labels for _, labels in rows]}):
+        assert len(rows) == 1, rows
+        labels = rows[0][1]
+        assert labels["model"] in or_ids and labels["rail"] == doc["rail"]
+        assert labels["reason"] in {"price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint"}
+        assert sorted(labels) == ["model", "rail", "reason"]
 
 
 UNPINNED_ROWS = [

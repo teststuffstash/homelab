@@ -65,6 +65,8 @@ the process is down.
 | `gateway_canary_budget_exhausted` | gauge | — | 1 while the canary cap (per refresh or per day) is spent and candidate cells wait — `GatewayCanaryBudgetExhausted` reads it |
 | `gateway_canary_rides_total` | counter | `outcome` | canary verdicts: `eligible` (a clean ride) or `excluded` (a struck one) |
 | `gateway_canary_admissions_total` | counter | `outcome` | canary admissions by answer: `dispatch`, `budget`, `not-due`, `not-in-catalog` |
+| `gateway_rail_choice_total` | counter | `model`, `rail`, `reason` | admissions where the tier named one model on two allowed rails ([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice)), by the rail that walked first and why — `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`; ⚖ `model` is the twin's openrouter spelling, the provider families' bound |
+| `gateway_tier_evidence_age_seconds` | gauge | — | seconds since the mounted tier-evidence snapshot's `snapshot_at` (`GATEWAY_BENCHMARKS`) — absent when none is mounted; `TierEvidenceStale` reads it |
 
 | description | event (world `policy-default`, upstream-ok) || series | value |
 |---|---||---|---|
@@ -119,9 +121,10 @@ The provider families (world `policy-default · openrouter-endpoints` — the sn
 | "state is a cell's entry state ⚖" | openrouter_cells || `state` | `candidate`, `eligible`, `excluded` |
 | "a canary outcome is a verdict, an admission an answer" | canary_rides_total / canary_admissions_total || `outcome` | `eligible`, `excluded` / `dispatch`, `budget`, `not-due`, `not-in-catalog` |
 | "the catalog outcome is the refresh outcome" | go_catalog_refresh_total || `outcome` | `ok`, `fetch-failed`, `parse-failed`, `implausible` |
-| "model is a policy openrouter id ⚖" | provider_requests_total, provider_failovers_total || `model` | the openrouter rail's policy models (wire ids); else `other` |
+| "model is a policy openrouter id ⚖" | provider_requests_total, provider_failovers_total, rail_choice_total || `model` | the openrouter rail's policy models (wire ids); else `other` |
+| "reason is why the rail choice fell ⚖" | rail_choice_total || `reason` | `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint` |
 | "provider is a snapshot slug or unattributed ⚖" | provider_requests_total (`from`, `to` on provider_failovers_total) || `provider` | the endpoint snapshot's tag-base slugs, `unattributed`; else `other` |
-| "no task label, ever" | any || — | no label named `task`, `session`, `id`, `token`; `model` only on the two provider families, bounded to the policy's set ⚖ |
+| "no task label, ever" | any || — | no label named `task`, `session`, `id`, `token`; `model` only on the two provider families and the rail choice, bounded to the policy's set ⚖ |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|

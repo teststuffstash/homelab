@@ -35,6 +35,7 @@ from .sessions import (
     post_sessions,
 )
 from .store import Store
+from .tiers import tier_evidence_age
 
 log = logging.getLogger("gateway.app")
 
@@ -47,8 +48,11 @@ async def healthz(request: Request) -> JSONResponse:
 
 
 async def catalog_opencode(request: Request) -> JSONResponse:
-    """GW-CATALOG-GO's read-only view: the snapshots admission reads, never a credential."""
-    return JSONResponse(request.app.state.catalog.view())
+    """GW-CATALOG-GO's read-only view: the snapshots admission reads, never a credential — with the
+    Go rail's price per model (GW-MODEL-TIERS §Cost per clean ride: the plan fee over what it bought)."""
+    svc: SessionService = request.app.state.sessions
+    pricing = svc.capacity.go_pricing("opencode", svc.clock()) if "opencode" in svc.policy.rails else None
+    return JSONResponse(request.app.state.catalog.view(pricing))
 
 
 async def catalog_openrouter(request: Request) -> JSONResponse:
@@ -137,6 +141,9 @@ def create_app(
     sessions.outcomes.judge = orcatalog.judge if orcatalog.enabled else None
     if orcatalog.enabled:
         m.bind_extra(orcatalog.render)
+    # GW-MODEL-TIERS: the committed tier-evidence snapshot rides beside the policy; its age is the
+    # staleness alert's signal (a comparison on a month-old price is a wrong answer — #2718 item 3).
+    m.bind_tier_evidence(lambda: tier_evidence_age(settings.benchmarks_path, clock()))
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when
     # one is handed in (tests: the FAKE store) — production passes none (⚑ gap), so it ships dark.

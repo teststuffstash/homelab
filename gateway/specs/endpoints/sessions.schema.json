@@ -7,6 +7,21 @@
     "UC-1"
   ],
   "$defs": {
+    "rail_choice": {
+      "$comment": "GW-MODEL-TIERS §The rail choice: when the tier named ONE model on two allowed rails, which rail's twin cell went first and why; null = no twin at this tier (the role's rail order alone)",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object", "additionalProperties": false, "required": ["rail", "over", "reason"],
+          "properties": {
+            "rail": { "$ref": "#/$defs/rail", "description": "the rail that walked first" },
+            "over": { "$ref": "#/$defs/rail", "description": "the rail whose twin cell lost (still walked when the first yields nothing)" },
+            "reason": { "enum": ["price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint"], "description": "price = cheaper per clean ride and by price alone (a tie goes to the role's order); clean-rate = the measured clean rate flipped the price order; headroom = the Go twin's window (or its 429 cooldown) holds it; not-in-catalog = the Go catalog does not price the twin; no-eligible-endpoint = the openrouter twin has no eligible endpoint to price" }
+          }
+        }
+      ],
+      "x-requirements": ["GW-MODEL-TIERS"]
+    },
     "stack": {
       "type": "string",
       "minLength": 1,
@@ -223,7 +238,8 @@
         "harness",
         "model",
         "env",
-        "context_tokens"
+        "context_tokens",
+        "rail_choice"
       ],
       "properties": {
         "decision": {
@@ -294,7 +310,8 @@
           "x-requirements": [
             "GW-SESSIONS-ENV"
           ]
-        }
+        },
+        "rail_choice": { "$ref": "#/$defs/rail_choice" }
       }
     },
     "dispatch_bound": {
@@ -320,8 +337,9 @@
           "additionalProperties": false,
           "required": [
             "id",
-            "expires_at"
-          ],
+            "expires_at",
+        "rail_choice"
+      ],
           "properties": {
             "id": {
               "$ref": "#/$defs/session_id"
@@ -358,7 +376,8 @@
             "null"
           ],
           "minimum": 1
-        }
+        },
+        "rail_choice": { "$ref": "#/$defs/rail_choice" }
       },
       "x-requirements": [
         "GW-SESSIONS-PULL"

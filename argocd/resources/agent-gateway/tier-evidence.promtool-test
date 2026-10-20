@@ -1,0 +1,82 @@
+# Behaviour fixture for the `agent-gateway-tier-evidence` alert (prometheusrule.yaml beside this
+# file) — GW-MODEL-TIERS, gateway/specs/endpoints/catalog.md.
+#
+#   devbox run prometheus-rules-lint      # runs this, and every other *.promtool-test under argocd/
+#
+# LABELS are the real scraped set of gateway_* (container, endpoint, instance, job, namespace, pod,
+# service — read off the live gateway_sessions_active series, 2026-10-17). The gauge is the
+# gateway's own: seconds since the mounted benchmarks.json's snapshot_at, read at every scrape.
+rule_files:
+  - tier-evidence.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ S1 — AGE: a snapshot cut 6 d ago keeps ageing; past 7 d (604800 s) the alert holds 1h, then fires ═
+  # age = 518400 + 60 × minute; crosses 604800 at minute 1440; with for: 1h → firing from 1500m.
+  - interval: 1m
+    name: S1 age — the snapshot passes 7 d, fires 1h later
+    input_series:
+      - series: 'gateway_tier_evidence_age_seconds{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "518400+60x1600"
+      - series: 'gateway_sessions_active{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="opencode"}'
+        values: "1x1600"
+    alert_rule_test:
+      - eval_time: 1439m
+        alertname: TierEvidenceStale
+        exp_alerts: []
+      - eval_time: 1480m
+        alertname: TierEvidenceStale
+        exp_alerts: []
+      - eval_time: 1520m
+        alertname: TierEvidenceStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway's tier evidence (benchmarks.json) is older than 7 days, or none is mounted"
+              description: "gateway_tier_evidence_age_seconds is past 7 d (609600), or absent while the gateway serves: the deployed tier lists and the rail choice compare on stale prices. Re-cut it: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply, commit benchmarks.json + policy.json by PR (an undecided tier keeps its deployed list — check names it). Absent = argocd/resources/agent-gateway/kustomization.yaml no longer ships benchmarks.json in the policy ConfigMap, or GATEWAY_BENCHMARKS points elsewhere. The contract is gateway/specs/endpoints/catalog.md#gw-model-tiers."
+
+  # ══ S2 — A RE-CUT CLEARS: the age drops back to minutes after a fresh snapshot rolls the pod ═════
+  - interval: 1m
+    name: S2 re-cut — a fresh snapshot clears the alert
+    input_series:
+      - series: 'gateway_tier_evidence_age_seconds{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "604860+60x120 60+60x60"
+      - series: 'gateway_sessions_active{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="opencode"}'
+        values: "1x181"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: TierEvidenceStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway's tier evidence (benchmarks.json) is older than 7 days, or none is mounted"
+              description: "gateway_tier_evidence_age_seconds is past 7 d (610260), or absent while the gateway serves: the deployed tier lists and the rail choice compare on stale prices. Re-cut it: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply, commit benchmarks.json + policy.json by PR (an undecided tier keeps its deployed list — check names it). Absent = argocd/resources/agent-gateway/kustomization.yaml no longer ships benchmarks.json in the policy ConfigMap, or GATEWAY_BENCHMARKS points elsewhere. The contract is gateway/specs/endpoints/catalog.md#gw-model-tiers."
+      - eval_time: 150m
+        alertname: TierEvidenceStale
+        exp_alerts: []
+
+  # ══ S3 — ABSENT: the gateway serves (sessions_active present) but no age series — nothing mounted ═
+  - interval: 1m
+    name: S3 absent — no snapshot mounted while the gateway serves fires after 1h
+    input_series:
+      - series: 'gateway_sessions_active{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="opencode"}'
+        values: "0x120"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: TierEvidenceStale
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: TierEvidenceStale
+        exp_alerts:
+          - exp_labels:
+              job: agent-gateway
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The gateway's tier evidence (benchmarks.json) is older than 7 days, or none is mounted"
+              description: "gateway_tier_evidence_age_seconds is past 7 d (1), or absent while the gateway serves: the deployed tier lists and the rail choice compare on stale prices. Re-cut it: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply, commit benchmarks.json + policy.json by PR (an undecided tier keeps its deployed list — check names it). Absent = argocd/resources/agent-gateway/kustomization.yaml no longer ships benchmarks.json in the policy ConfigMap, or GATEWAY_BENCHMARKS points elsewhere. The contract is gateway/specs/endpoints/catalog.md#gw-model-tiers."

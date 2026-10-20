@@ -79,12 +79,29 @@ def docs_text(behaviour: str) -> str:
         lines = [line for line in lines if not line.startswith(("Each model has the following usage limits", "weekly — 50%"))]
     elif behaviour == "docs-retired":  # the page drops claude-haiku-5-5's plan rows (the console still lists it)
         lines = [line for line in lines if not line.lstrip().startswith("| Claude Haiku 5.5 (")]
+    elif behaviour == "docs-no-plan-table":  # the page without its Plan | Price table (the fee's home)
+        lines = _drop_orphan_rules([line for line in lines if _first_cell(line) not in ("Plan", "**Go**", "**Go Plus**")])
     elif behaviour == "docs-shrunk":
         def keep(line: str) -> bool:
             cell = line.strip().strip("|").split("|")[0].strip() if line.lstrip().startswith("|") else None
-            return (cell is None or cell in ("Model",) or cell.startswith("-") or any(cell.startswith(n) for n in SHRUNK_NAMES))
+            return (cell is None or cell in ("Model", "Plan", "**Go**", "**Go Plus**") or cell.startswith("-")
+                    or any(cell.startswith(n) for n in SHRUNK_NAMES))
         lines = [line for line in lines if keep(line)]
     return "\n".join(lines) + "\n"
+
+
+def _first_cell(line: str) -> str | None:
+    return line.strip().strip("|").split("|")[0].strip() if line.lstrip().startswith("|") else None
+
+
+def _drop_orphan_rules(lines: list[str]) -> list[str]:
+    """A table rule line (`| --- |`) whose header was removed is dropped with it."""
+    out: list[str] = []
+    for line in lines:
+        if line.lstrip().startswith("| ---") and (not out or not out[-1].lstrip().startswith("|")):
+            continue
+        out.append(line)
+    return out
 
 
 class FakeVendor:

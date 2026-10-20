@@ -37,7 +37,7 @@ error), and no auth, like `/metrics` — it carries no credential.
 |---|---|---|---|
 | [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
 | [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary) |
-| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`) | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation, the committed snapshot and the equality check; `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, the snapshot hand-refreshed with no staleness alert, the openrouter candidate set = the old proxy's table, Go-only id spellings unbenched (the five "⚑ gap" rows below) |
+| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`, `gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers, the admission's rail choice between twin cells (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the strike overhead unmeasured, the Go cell's clean-rate prior (the "⚑ gap" rows below) |
 
 ## GW-CATALOG-GO
 
@@ -52,10 +52,12 @@ each with its own snapshot:
   and a fresh `x-opencode-session` — Cloudflare answers 1010 to a bare client.
 - **`docs`** — the vendor's Go page source, `go.mdx` on the vendor repo's default branch
   (`raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx`),
-  fetched with no credential. The leg reads each model's **monthly limit** under each plan tab
-  (`go`, `go-plus`), a promotion's multiplier, the `(Peak)` price rows, the peak-hours sentence and
-  the 5-hour / weekly / monthly share of the monthly limit. Rows are keyed by **model id** through
-  the page's own Endpoints table (display name → Model ID). ⚖ `go-models.ts` (the spike's second
+  fetched with no credential. The leg reads each plan's **monthly fee** (the page's Plan table —
+  `| **Go** | **$10/month** |`; the [Go price](../glossary.md#go-price) divides the policy plan's),
+  each model's **monthly limit** under each plan tab (`go`, `go-plus`), a promotion's multiplier,
+  the `(Peak)` price rows, the peak-hours sentence and the 5-hour / weekly / monthly share of the
+  monthly limit. Rows are keyed by **model id** through the page's own Endpoints table (display
+  name → Model ID); the fees by the Plan table's plan names. ⚖ `go-models.ts` (the spike's second
   file) is not read: it keys rows by family (`deepseek-flash`), and limits are per model (ruling 3);
   `go.mdx` carries every fact the leg needs.
 
@@ -101,6 +103,7 @@ ids with a row in either plan tab.
 | "a renamed limit column is a parse failure" | 5 | `docs-header-drift` (`Monthly limit` → `Limit`) || parse-failed | the last good |
 | "peak rows without the peak-hours sentence are a parse failure" | 5 | `docs-no-peak-hours` || parse-failed | the last good |
 | "no share sentence is a parse failure ⚖" | 5 | `docs-no-shares` || parse-failed | the last good |
+| "no plan table is a parse failure ⚖" | 5 | `docs-no-plan-table` || parse-failed | the last good |
 | "a drop below half the models is implausible" | 5 | `docs-shrunk` (2 models) || implausible | the last good |
 
 ### What the page says, per model
@@ -117,6 +120,7 @@ docs snapshot (both plans):
 
 | description | input || the snapshot reads |
 |---|---||---|
+| "the plan fees come from the page ⚖" | `docs-ok`'s Plan table *"\| **Go** \| **$10/month** \|"* / *"\| **Go Plus** \| **$40/month** \|"* || `plan_fee_usd_month` 10 (plan `go`); the docs snapshot's `plan_fees` go 10 / go-plus 40 |
 | "the peak hours come from the page ⚖" | `docs-ok`'s *"Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday"* || `peak_hours_utc` `[[1, 4], [6, 10]]`, `peak_weekdays` mon–fri |
 | "the window shares come from the page ⚖" | *"5-hour — 20% of the monthly limit; weekly — 50%; and monthly — 100%"* || `window_shares` 5h 0.2 · 7d 0.5 · 30d 1.0; `deepseek-v4.1-flash` `windows_usd` 16 / 40 / 80 |
 | "the config's prices are the model's cost rows" | `catalog-ok`'s `claude-haiku-5-5` || `cost` base 0.10 / 0.50 / 0.01 / 0.125, above 100000 tokens 0.50 / 2.50 / 0.05 / 0.625 |
@@ -343,30 +347,141 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 *The deployed policy's `rails.<rail>.models.{light,standard,heavy}` lists are the output of a
 derivation over benchmark evidence, not a hand-picked set* — the
-[tier evidence](../glossary.md#tier-evidence) (operator rulings 2026-10-18, FU-270). Three
+[tier evidence](../glossary.md#tier-evidence) (operator rulings 2026-10-18, FU-270) — *and the
+unit every cell is ordered and chosen by is its* [cost per clean ride](../glossary.md#cost-per-clean-ride)
+*, never a per-token price* (operator ruling 2026-10-19, homelab#2718; built as homelab#2743: on
+OpenRouter the headline price is a 1/price² lottery over 20+ providers and a failed ride bills a
+reviewer round + a coordinator re-entry on top; on the Go rail one flat fee buys every model). Three
 parts, each a reviewable file in git:
 
 - **The snapshot** — `argocd/resources/agent-gateway/benchmarks.json`
   (`$defs.benchmarks_snapshot`): per rail, every **candidate** policy id with its Artificial
-  Analysis row (joined by the rule below), its output/input price in $ per 1M tokens and its Go
-  monthly limit. Written by `scripts/benchmarks-snapshot.sh` from three live reads, and only
-  the candidate rows (not the capability table's 345). ⚖ The gateway itself never calls AA or
-  the OpenRouter MCP: the capability rows are the OLD proxy's weekly pull (`_capability_tick` →
-  its router store's `capability(model, source, intelligence, coding, agentic, updated_ts)`),
-  read out of that pod; the Go rows are the gateway's own `GET /catalog/opencode`
-  ([GW-CATALOG-GO](#gw-catalog-go) — the same snapshot admission reads); the OpenRouter prices
-  are the public `GET https://openrouter.ai/api/v1/models` (`pricing.completion` /
-  `pricing.prompt`, per token, scaled to $/1M; a negative = dynamic = no price).
+  Analysis row (joined by the rule below), its **price** — the openrouter model's SELECTED
+  endpoint's output/input price (`GET /catalog/openrouter` `selected`: after the floors and the
+  entry canary, [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto);
+  **null until a cell passed the canary — never the headline**), the Go model's
+  [Go price](../glossary.md#go-price) (`GET /catalog/opencode` `pricing`) — its clean-ride
+  evidence (`rides`: the cell's clean and judged rides from the outcome store, and the prior) and
+  its Go monthly limit. Written by `scripts/benchmarks-snapshot.sh` from three reads: the AA
+  capability rows (⚖ the gateway itself never calls AA: the rows are the OLD proxy's weekly pull,
+  `_capability_tick` → its router store's `capability(model, source, intelligence, coding, agentic,
+  updated_ts)`, read out of that pod) and the gateway's own two catalog views. The snapshot
+  rides beside the policy in the deploy (`GATEWAY_BENCHMARKS`): its age is
+  `gateway_tier_evidence_age_seconds`, and **`TierEvidenceStale`** fires past ⚖ 7 days (the AA
+  pull behind it is weekly; a comparison on a month-old price is a wrong answer with a confident
+  face — the 10-18 snapshot read $0.144/M against a live $0.080/M a day later), or when no
+  snapshot is mounted (`argocd/resources/agent-gateway/prometheusrule.yaml`, fixture
+  `tier-evidence.promtool-test`).
 - **The rules** — the policy's top-level `tiers` block (`$defs.tiers_block`), which the loader
   validates: `score` (one of `intelligence` | `coding` | `agentic`), `bands` (every tier, a
-  fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer). Unknown keys
-  refuse the load like every other policy block. The fixture worlds carry the same block so one
-  loader shape holds everywhere.
-- **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `check`,
-  `apply_text`; CLI `devbox run tiers -- snapshot | derive | check | apply`). The deployed
-  lists EQUAL the derivation, order included — a test row runs the check, so a hand edit of a
-  list fails the suite; `apply` rewrites exactly the three rails' `models` blocks in the
-  file's own layout.
+  fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer), and **`cost`** —
+  the cost-per-clean-ride terms (`ride_tokens_out_m`, `strike_overhead_usd`, `min_rides`;
+  [§Cost per clean ride](#cost-per-clean-ride)). Unknown keys refuse the load like every other
+  policy block. The fixture worlds carry the same block so one loader shape holds everywhere.
+- **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `same_model`,
+  `cost_per_clean_ride`, `check`, `undecided`, `apply_text`; CLI `devbox run tiers -- snapshot |
+  derive | check | apply`). The deployed lists EQUAL the derivation, order included — a test row
+  runs the check, so a hand edit of a list fails the suite; `apply` rewrites exactly the decided
+  tiers' lists in the file's own layout. ⚖ A tier whose derivation is **empty** — no benched,
+  priced candidate reaches its band (the openrouter rail before its first eligible cell) — is
+  **undecided**: the deployed list stands, `check` names it apart and never as a mismatch,
+  `apply` refuses to write it.
+
+### Cost per clean ride
+
+⚖ For a cell with price `p` ($ per 1M output tokens), clean-ride rate `r` and the policy's
+`tiers.cost` (`T` M output tokens a ride spends, `o` $ a failed ride costs on top of itself):
+**`cost = p × T ÷ r + o × (1 ÷ r − 1)`** — one clean ride takes `1 ÷ r` rides, each at the cell's
+price, and every failed one in between bills the strike overhead. `r` is **measured** from the
+outcome store (clean rides ÷ judged rides — a ride = a session the cell served a 2xx to whose
+latest outcome is reported, [GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)) once the
+cell has `min_rides` judged rides; before that a **prior** stands — the selected endpoint's
+`uptime_1d ÷ 100` on openrouter (the same prior [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)
+orders by), ⚖ 1.0 on the Go rail (one endpoint, no vendor uptime; the gap row). A rate of 0 is an
+unaffordable cell. The deployed terms: `T` 0.01 (10k output tokens — the 30-day mean per session
+of the two openai-dialect rails off the gateway's own ledger, 2026-10-20), `o` 0 (⚖ UNMEASURED:
+the term exists so the measurement has a home — the gap row; at 0 the order is price over clean
+rate), `min_rides` 5 (the same number as `providers.min_rides`; two knobs because two rules).
+
+| description | out $/M | rides (clean / judged, prior) | `tiers.cost` (T · overhead · min_rides) || rate (basis) | $ per clean ride |
+|---|---|---|---||---|---|
+| "a clean cell costs its price for one ride's tokens ⚖" | 0.42 | 0 / 0, prior 1.0 | 0.01 · 0 · 5 || 1 (prior) | 0.0042 |
+| "under min_rides the prior stands ⚖" | 0.42 | 2 / 4, prior 0.9 | 0.01 · 0 · 5 || 0.9 (prior) | 0.004667 |
+| "a measured clean rate of one half doubles the cost ⚖" | 0.42 | 3 / 6, prior 1.0 | 0.01 · 0 · 5 || 0.5 (measured) | 0.0084 |
+| "the strike overhead is paid once per failed ride ⚖" | 0.42 | 3 / 6, prior 1.0 | 0.01 · 0.10 · 5 || 0.5 (measured) | 0.1084 |
+| "a cell with no clean ride yet is unaffordable ⚖" | 0.42 | 0 / 5, prior 1.0 | 0.01 · 0 · 5 || 0 (measured) | ∞ |
+
+### The Go price
+
+⚖ The opencode rail has no per-token price: one monthly fee buys an allowance of every listed
+model at list prices. Its price per model is therefore DERIVED: **the list price × the plan's
+discount, `fee ÷ max(the rail's trailing-30-day list-priced draw, the model's monthly limit)`** —
+the fee buys at least the model's own allowance (`promise`), and a busier rail makes every Go
+token cheaper (`measured`); an unlimited model prices at 0 (`unlimited`). The fee is the Go
+page's Plan table ([GW-CATALOG-GO](#gw-catalog-go), never a policy copy — ruling 5); the draw is
+the gateway's own ledger at the catalog's list rates, the window draw's arithmetic
+([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); the model's
+windows stay the gate — a window at its threshold holds the cell whatever its price. Shown on
+`GET /catalog/opencode` `pricing` (`output.pricing`), read by the snapshot and the rail choice.
+Rows run against the world's Go catalog (plan `go`: fee $10/month; `deepseek-v4.1-flash` $80/month
+at list 0.15 in / 0.60 out; `claude-haiku-5-5` $15 at 0.10 / 0.50; `longcat-2.5-preview-free`
+unlimited), T0 = Fri 2027-01-15 08:00:00Z.
+
+| description | the rail's trailing-30-day ledger || model | discount | basis | out $/M · in $/M |
+|---|---||---|---|---|---|
+| "the plan's promise prices an idle rail ⚖" | nothing || `deepseek-v4.1-flash` | 10 ÷ 80 = 0.125 | promise | 0.075 · 0.01875 |
+| "each model's own allowance is its promise ⚖" | nothing || `claude-haiku-5-5` | 10 ÷ 15 = 0.666667 | promise | 0.333333 · 0.066667 |
+| "a rail drawing past the allowance is priced on the meter ⚖" | one worker ride at T0 + 2 h (off-peak) drawing in 1000M at $0.15 + out 100M at $0.60 = $210 at list || `deepseek-v4.1-flash` | 10 ÷ 210 = 0.047619 | measured | 0.028571 · 0.007143 |
+| "an unlimited model prices at 0 ⚖" | nothing || `longcat-2.5-preview-free` | 0 | unlimited | 0 · 0 |
+| "no fee read: no price ⚖" | the docs snapshot written before the Plan table (its body without `plan_fees`) || `deepseek-v4.1-flash` | null | null | null · null |
+| "the price shows on GET /catalog/opencode ⚖" | nothing || `pricing`: `fee_usd_month` 10, `draw_30d_usd` 0, `models[deepseek-v4.1-flash]` {out 0.075, in 0.01875, discount 0.125, basis promise, rides 0 / 0} | | | |
+
+### The rail choice
+
+*The gateway chooses between `openrouter` and `opencode-go` for one model on equal terms*
+(operator acceptance 2026-10-19, homelab#2743: every bad OpenRouter provider filtered out first —
+fp8 vs fp8, tool-call support, uptime — then price per CLEAN ride, a failed provider relaunched
+transparently). ⚖ When the admission's tier names ONE model on two of the role's allowed rails — a
+[twin](../glossary.md#twin): the same tail after the rail prefix, a `:variant` and the vendor
+are stripped, `-N-N` ↔ `-N.N` (`same_model`, one rule, no table; a `claude/` alias twins nothing)
+— the walk's rail order puts the rail whose twin cell costs less per clean ride FIRST, with that
+twin at the head of its list; everything else about [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s
+walk stands (the other rail is still walked when the first yields nothing; the tier's lists
+decide which models exist — the choice never adds one). Each twin's standing: the Go cell at the
+Go price, its window or its catalog standing holding it (`headroom` — a window at its threshold
+or a 429 cooldown; `not-in-catalog`); the openrouter cell at its SELECTED endpoint's price —
+the floors, the entry canary, the task's strikes and the cooldowns applied as [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)
+does (`no-eligible-endpoint` when nothing is left to price: no cell has passed the canary, or none
+clears the floors); each over the cell's clean-ride rate. A twin struck for the task is the retry
+contract's business, not the choice's (no choice; the walk skips it). Both unpriced → no choice:
+the role's order, and the walk's own defer. The answer carries **`rail_choice: {rail, over,
+reason}`** (`null` when no twin) and `gateway_rail_choice_total{model, rail, reason}` counts it
+(`model` = the twin's openrouter spelling, the provider families' bound). Reasons: `price` (cheaper
+per clean ride and by price alone; a tie goes to the role's order), `clean-rate` (the measured rate
+flipped the price order), `headroom`, `not-in-catalog`, `no-eligible-endpoint`. A failed-over
+request bills the serving provider: its row names that provider, its outcome judges that cell
+([§Failover](openai-chat.md#failover--before-the-first-byte-only) — the choice does not change it).
+
+World `policy-default · openrouter-endpoints` (the snapshot of `deepseek/deepseek-v4.1-flash` = M,
+every cell eligible) with the Go catalog above. A worker with harness opencode at tier **light**:
+opencode names `opencode-go/deepseek-v4.1-flash` (MG), openrouter `deepseek/deepseek-v4-flash`
+then M — M and MG are twins. Go's promise $0.075/M vs deepinfra's $0.42/M, both at the prior rate.
+
+| description | arrange | body || decision | rail | model | `rail_choice` | `gateway_rail_choice_total{model=M,rail,reason}` |
+|---|---|---||---|---|---|---|---|
+| "Go wins with free headroom and an equal clean rate ⚖" | — | worker, tier light || dispatch | opencode | MG | opencode over openrouter: `price` | `{rail="opencode",reason="price"}` 1 |
+| "openrouter wins when Go's window is near its share ⚖" | a worker ride on opencode drew in 30M / out 3.2M at T0 ($12.84 ≥ 0.80 × $16) | the same || dispatch | openrouter | M (the twin at the head, ahead of the list's first id) | openrouter over opencode: `headroom` | `{rail="openrouter",reason="headroom"}` 1 |
+| "openrouter wins when Go's clean rate is lower ⚖" | six judged Go rides on MG, one clean (rate ⅙: $0.075 ÷ 0.1667 = $0.45/M per clean ride, past deepinfra's $0.42) | the same || dispatch | openrouter | M | openrouter over opencode: `clean-rate` | `{rail="openrouter",reason="clean-rate"}` 1 |
+| "no eligible openrouter endpoint: Go ⚖" | the snapshot trimmed to the ineligible endpoints (`openrouter-endpoints-ineligible`) | the same || dispatch | opencode | MG | opencode over openrouter: `no-eligible-endpoint` | `{rail="opencode",reason="no-eligible-endpoint"}` 1 |
+| "no openrouter cell has passed the entry canary yet: Go ⚖" | every cell of M set back to `candidate` (the production state of 2026-10-20) | the same || dispatch | opencode | MG | opencode over openrouter: `no-eligible-endpoint` | `{rail="opencode",reason="no-eligible-endpoint"}` 1 |
+| "both twins held: no choice, the walk defers with the hold that lifts first ⚖" | the window draw above; the snapshot ineligible; the task's earlier ride struck `no-verdict` on `deepseek/deepseek-v4-flash` | the same, that task || defer | — | — | — (a defer) | no series; reason `no-eligible-provider`, `retry_after_s` 60 |
+| "no twin at the tier: the role's order, no choice" | — | worker, tier standard (opencode MG; openrouter `deepseek/deepseek-v4-flash`) || dispatch | opencode | MG | `null` | no series |
+| "the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell ⚖" | the window draw above; the openrouter fake's deepinfra attempt answers 500 | the same, then one ride and a `clean` outcome || dispatch | openrouter | M | `headroom` | the session's request rows deepinfra 500 then atlas-cloud 200; `GET /catalog/openrouter` rides: atlas-cloud 1 / 1, deepinfra 0 / 0 |
+
+| description | the mounted snapshot || `gateway_tier_evidence_age_seconds` |
+|---|---||---|
+| "age is seconds since snapshot_at ⚖" | a file with `snapshot_at` T0 − 600, `GATEWAY_BENCHMARKS` naming it || 600 |
+| "no snapshot mounted, no series" | `GATEWAY_BENCHMARKS` naming a missing file || absent |
 
 ### The rulings ⚖
 
@@ -378,11 +493,11 @@ the ⚖ rows of *The deployed policy* below.
 |---|---||---|
 | "the score is the Artificial Analysis intelligence index ⚖" | the one axis with full coverage: `coding` / `agentic` are null on most new rows (`claude-haiku-5.5`, `gpt-6-luna`, `mimo-v2.6-*` carry only `intelligence`) || `tiers.score: intelligence` in the deployed policy; every benched candidate row carries `intelligence`, at least one lacks `coding`; the other two axes are loadable, unused (gap row) |
 | "a tier is a band of the rail's best ⚖" | within a rail, a benched candidate is `heavy` when its score ≥ 0.90 × the rail's top score, `standard` when ≥ 0.75 ×, `light` when ≥ 0.50 ×; a model can sit in several tiers || `tiers.bands` `{heavy: 0.9, standard: 0.75, light: 0.5}` in the deployed policy; every id in a deployed list scores ≥ its band × its rail's top |
-| "each list is cheapest-first by output price, capped at 3 ⚖" | order = output price ascending, then input price, then score descending, then id (the last three break ties — the gateway's own choice); the list keeps the first `cap` || `tiers.cap: 3`; every deployed priced-rail list has ≤ 3 ids with non-decreasing `out_price`; the Go price is the catalog's base `cost[0].out`, the OpenRouter price `pricing.completion` × 1M |
+| "each list is cheapest per clean ride first, capped at 3 ⚖" | order = cost per clean ride ascending, then input price, then score descending, then id (the last three break ties — the gateway's own choice); the list keeps the first `cap` || `tiers.cap: 3`; every deployed DECIDED priced-rail list has ≤ 3 ids with non-decreasing cost per clean ride (`row_cost` over the snapshot row under the deployed `tiers.cost`) |
 | "the subscription rail has no price: score ascending is its cost proxy ⚖" | the `anthropic` rail's candidates carry no per-token price (one flat subscription); its lists are ordered by score ascending — the cheapest-capable first || `PRICELESS_RAILS = (anthropic,)` in `agent_gateway.tiers`; every anthropic snapshot row has no price and each deployed anthropic list is strictly score-ascending; the gap row below |
-| "the candidates per rail ⚖" | opencode = the Go catalog's `listed` models with a `monthly_limit_usd` under the deployed plan (`opencode-go/<id>`); openrouter = every `models.*.ids.openrouter` value of `model-classes.json` (the old proxy's table — gap row); anthropic = the policy's three aliases `claude/haiku`, `claude/sonnet`, `claude/opus` (an argument of the snapshot script, never code) || `build_snapshot`; in the snapshot every opencode key is `opencode-go/<id>`, the openrouter keys = `model-classes.json`'s `models.*.ids.openrouter` values, the anthropic keys = the deployed rail's `claude/` aliases, `sources.capability.source` = `artificial-analysis` |
+| "the candidates per rail ⚖" | opencode = the Go catalog's `listed` models with a `monthly_limit_usd` under the deployed plan (`opencode-go/<id>`), each at the Go price (`promise` / `measured` / `unlimited`, or unpriced before the fee is read); openrouter = the OpenRouter catalog's models ([GW-CATALOG-OR](#gw-catalog-or): the weekly ranking ∩ AA-benched), each at its SELECTED endpoint's price (`endpoint`, with the provider) or unpriced — never the headline, never the old proxy's table; anthropic = the policy's three aliases `claude/haiku`, `claude/sonnet`, `claude/opus` (an argument of the snapshot script, never code), unpriced || `build_snapshot`; in the snapshot every opencode key is `opencode-go/<id>` with `price_basis` in {promise, measured, unlimited, null}, every openrouter key is a `vendor/model` id with `price_basis` in {endpoint, null} and a `provider` exactly when priced, the anthropic keys = the deployed rail's `claude/` aliases, unpriced; `sources.capability.source` = `artificial-analysis`, `sources.openrouter_catalog.fetched_at` present |
 | "the join to the AA row is a rule, not a table ⚖" | AA ids are `vendor/model` with dotted versions; Go ids are bare: join on the part after the vendor `/` with `-N-N` ↔ `-N.N` normalisation, a `:variant` suffix dropped, the vendor kept when the policy id names one; the three aliases join the NEWEST `anthropic/claude-<alias>-<version>` row by version; no match, or more than one, = unbenched || `join_aa_id`; every snapshot row's `aa_id` is what `join_aa_id` returns over the snapshot's AA ids (no row is a hand-written pair); the rows below |
-| "unbenched never tiers ⚖" | a candidate with no AA row is in no list, whatever its price (the free `beam-free` and `longcat-2.5-preview-free` stay out); so does an unpriced candidate on a priced rail (`inclusionai/ling-3.0-flash:free` is benched but no longer on OpenRouter's list) || `derive`; no id in a deployed list has a null `aa_id`, nor a null `out_price` on a priced rail |
+| "unbenched never tiers ⚖" | a candidate with no AA row is in no list, whatever its price (the free `beam-free` and `longcat-2.5-preview-free` stay out); so does an unpriced candidate on a priced rail (every openrouter model until a cell passed the entry canary) || `derive`; no id in a deployed list has a null `aa_id`, nor a null `out_price` on a priced rail |
 
 ### The bands, on a hand-written rail
 
@@ -402,6 +517,20 @@ standard ≥ 37.5, light ≥ 25.
 | "the axis is the policy's: the same rail under `score: coding`" | `fx` with coding `top` 10, `near` 60, `mid` 55, `low` 50, `far` 5 || — | — | `fx/mid`, `fx/near` (top = 60, heavy ≥ 54) |
 | "the subscription rail orders by score ascending ⚖" | rail `anthropic`: `claude/fx-a` 40, `claude/fx-b` 55, `claude/fx-c` 60, no prices || `claude/fx-a`, `claude/fx-b`, `claude/fx-c` | `claude/fx-b`, `claude/fx-c` | `claude/fx-b`, `claude/fx-c` |
 | "no benched candidate: empty lists, which apply refuses to write" | rail `fx-empty`: `fx/none` only || `[]` — `apply_text` raises naming `fx-empty.light` | | |
+| "a measured clean rate reorders a list ⚖" | `fx` + `fx/mid` rides 2 / 6 (rate ⅓: $0.5 ÷ ⅓ = $1.5 per 1M of output, past `fx/near`'s $1.0) || — | `fx/near`, `fx/mid`, `fx/top` | — |
+| "a tier with no priced candidate is undecided: check passes it, apply refuses it ⚖" | rail `fx-unpriced`: `fx/a` 50 · no price || derive `[]` ×3; `undecided` names `fx-unpriced` light/standard/heavy; `check` = `{}` against a policy listing `fx/a`; `apply_text` raises naming `fx-unpriced.light` | | |
+
+### The twin rule
+
+| description | a | b || twins |
+|---|---|---||---|
+| "a Go id and its openrouter spelling are twins ⚖" | `opencode-go/deepseek-v4.1-flash` | `deepseek/deepseek-v4.1-flash` || yes |
+| "the dotted and the dashed version are twins" | `opencode-go/claude-haiku-5-5` | `anthropic/claude-haiku-5.5` || yes |
+| "a variant twins its family" | `inclusionai/ling-3.0-flash:free` | `inclusionai/ling-3.0-flash` || yes |
+| "two vendors' spellings are not twins ⚖" | `deepseek/deepseek-v4.1-flash` | `other/deepseek-v4.1-flash` || no |
+| "a suffix is not a twin" | `opencode-go/glm-5.3` | `z-ai/glm-5.3-flash` || no |
+| "an alias twins nothing ⚖" | `claude/haiku` | `opencode-go/claude-haiku-5-5` || no |
+| "the same id is not a twin" | `deepseek/deepseek-v4.1-flash` | `deepseek/deepseek-v4.1-flash` || no |
 
 ### The id join
 
@@ -430,6 +559,9 @@ standard ≥ 37.5, light ≥ 25.
 | "a missing tier band refuses the load" | `bands` without `light` || refused, naming `light` |
 | "a non-positive cap refuses the load" | `cap: 0` || refused, naming `tiers.cap` |
 | "no block: the policy loads with no rules, and the check refuses to run ⚖" | `tiers` absent || loads, `Policy.tiers` None; `check()` raises naming `tiers` |
+| "no cost terms refuse the load ⚖" | `cost` absent || refused, naming `tiers.cost` |
+| "a non-positive ride size refuses the load" | `cost.ride_tokens_out_m: 0` || refused, naming `tiers.cost.ride_tokens_out_m` |
+| "a non-positive min_rides refuses the load" | `cost.min_rides: 0` || refused, naming `tiers.cost.min_rides` |
 
 ### The deployed policy
 
@@ -441,16 +573,18 @@ Against `argocd/resources/agent-gateway/benchmarks.json` + `policy.json` (skippe
 | "a hand edit of a list fails the check" | the deployed policy with `rails.opencode.models.heavy` reversed || `check()` names `opencode.heavy` with the derived list as expected |
 | "the snapshot is the schema's shape" | the committed snapshot || exactly the `required` keys of `$defs.benchmarks_snapshot`, of a source and of a candidate row |
 | "the fixture worlds carry the block, not the derivation ⚖" | `policy-default` + the committed snapshot || the world's `tiers` = the deployed block; `check()` on the world is NOT empty (its lists are fixture ids) and no suite row runs it |
+| "an undecided tier keeps its deployed list ⚖" | the committed snapshot's undecided tiers (2026-10-20: every openrouter tier — no cell has passed the entry canary, so no openrouter price exists) || `check()` = `{}`; `undecided()` names them; each named tier's deployed list is non-empty (the last decided derivation stands until evidence exists) |
 
 ### Named gaps (rows that exist so the omission is visible)
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: no price for the subscription rail" | the `anthropic` rail || score ascending as the cost proxy | a subscription's marginal cost per model is not a per-token price; the gateway has no ledger for it (the cost ledger is a gap on [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)) |
+| "⚑ gap: no price for the subscription rail" | the `anthropic` rail || score ascending as the cost proxy | a subscription's marginal cost per model is not a per-token price and the subscription's fee buys no listed allowance to divide (the Go rail's derivation needs one); the gateway has no ledger for it (the cost ledger is a gap on [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)) |
 | "⚑ gap: coding / agentic unused" | `tiers.score: coding` || loads and derives — but most new rows carry null there (the ruling) | AA's task indices have no coverage on the newest models; revisit when they do |
-| "⚑ gap: the snapshot is hand-refreshed, nothing alerts on its age" | a `snapshot_at` a month old || the suite still passes | no schedule runs `benchmarks-snapshot.sh`, no `gateway_*` family carries the snapshot's age; the AA pull behind it is the old proxy's weekly tick |
-| "⚑ gap: the openrouter candidate set is the old proxy's table" | `model-classes.json` `models.*.ids.openrouter` || 11 ids, 6 benched, 5 priced — `moonshotai/kimi-k3` alone reaches `heavy` / `standard` | the gateway's openrouter rail has no registry of its own ([GW-CATALOG-GO](#gw-catalog-go) gap row); a Go-shaped catalog leg for OpenRouter would widen the set |
+| "⚑ gap: the snapshot is hand-refreshed" | a stale `snapshot_at` || `TierEvidenceStale` names it; nothing re-cuts it | no schedule runs `benchmarks-snapshot.sh`: the re-cut is a jail verb and a PR (the alert is the belt, the operator the hands) |
 | "⚑ gap: a Go-only id spelling joins nothing" | `gemini-4-argon-contributor`, `muse-spark-1.3-contributor`, `hy3`, `hy4-preview`, `qwen3.8-flash`, `space-bunny` || unbenched (9 of 29 listed Go models) | the vendor's `-contributor` / `-preview` suffixes and bare family ids have no AA spelling; a per-id alias would be a table, which the ruling forbids |
+| "⚑ gap: the Go rail's quantization is undeclared" | a Go cell beside an fp8 openrouter cell || compared as if on equal terms | the vendor states no quantization for its endpoints (checked 2026-10-19); the entry canary is the common yardstick both rails lack today ([GW-CATALOG-OR](#gw-catalog-or)'s "the Go rail's canary" row) — a Go cell gets no entry gate, its clean-rate prior is 1.0 |
+| "⚑ gap: the strike overhead is unmeasured" | a failed ride || `tiers.cost.strike_overhead_usd` 0: the order is price over clean rate | the reviewer round + the coordinator re-entry a failed ride costs ride the subscription (no per-token price) — the term has a home and no measurement |
 
 <details markdown="1"><summary>Evidence</summary>
 

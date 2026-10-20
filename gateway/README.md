@@ -27,7 +27,7 @@ it and production ownership is wired only behind explicit environment settings.
 | `POST /openai/v1/responses` — the dark codex rail (`GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-CODEX-OAUTH`) | [`specs/endpoints/openai-responses.md`](specs/endpoints/openai-responses.md) |
 | `GET /catalog/opencode` — the Go catalog leg: vendor models, prices and per-model plan limits, refreshed every 6 h (`GW-CATALOG-GO`) | [`specs/endpoints/catalog.md`](specs/endpoints/catalog.md) |
 | `GET /catalog/openrouter` — the OpenRouter catalog leg: the weekly ranking ∩ AA-benched, each candidate's endpoints, the cells' entry states and the budget-capped entry canary (`GW-CATALOG-OR`; the jail launcher `scripts/canary-entrants.sh`) | [`specs/endpoints/catalog.md#gw-catalog-or`](specs/endpoints/catalog.md#gw-catalog-or) |
-| The tier evidence — the deployed policy's per-(rail, tier) model lists derived from benchmark evidence, the committed snapshot, the equality check (`GW-MODEL-TIERS`; `devbox run tiers -- snapshot \| derive \| check \| apply`, `scripts/benchmarks-snapshot.sh`) | [`specs/endpoints/catalog.md#gw-model-tiers`](specs/endpoints/catalog.md#gw-model-tiers) |
+| The tier evidence — the deployed policy's per-(rail, tier) model lists derived from benchmark evidence, ordered by cost per clean ride (the openrouter model's selected endpoint, the Go plan's discounted price), the committed snapshot and its staleness alert, the equality check; the admission's rail choice between a model's twin cells (`GW-MODEL-TIERS`; `devbox run tiers -- snapshot \| derive \| check \| apply`, `scripts/benchmarks-snapshot.sh`) | [`specs/endpoints/catalog.md#gw-model-tiers`](specs/endpoints/catalog.md#gw-model-tiers) |
 | `GET /metrics` (`GW-METRICS`), `GET /healthz` (`GW-HEALTH`) | [`specs/endpoints/metrics.md`](specs/endpoints/metrics.md), [`specs/endpoints/health.md`](specs/endpoints/health.md) |
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
@@ -48,7 +48,8 @@ key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Se
 tests), `CODEX_UPSTREAM` (native backend; no default), `CODEX_SEED_FILE` (ESO-mounted JSON seed; SHA-256-gated import into `GATEWAY_DB`), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20),
 `GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_DOCS_URL` (the Go catalog's two sources, overridable for
 tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule), `GATEWAY_OR_MCP_URL` (the OpenRouter
-MCP the catalog's ranking + benchmark reads ride) and `GATEWAY_OR_CATALOG_REFRESH_S` (21600; 0 = no schedule).
+MCP the catalog's ranking + benchmark reads ride) and `GATEWAY_OR_CATALOG_REFRESH_S` (21600; 0 = no schedule),
+`GATEWAY_BENCHMARKS` (the committed tier-evidence snapshot mounted beside the policy; its age is a gauge).
 
 Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
 `agent-gateway.agent-egress.svc.cluster.local:8080`); image built by

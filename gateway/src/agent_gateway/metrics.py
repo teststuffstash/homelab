@@ -40,6 +40,11 @@ PROBE_OUTCOMES = ("cleared", "rejected", "inconclusive")
 # answers it never fails over on (`refused`, `auth`, `edge`).
 PROVIDER_OUTCOMES = ("ok", "incomplete", "5xx", "429", "unreachable", "timeout", "content-type", "provider-error",
                      "refused", "auth", "edge")
+# GW-MODEL-TIERS §The rail choice: why one rail's twin cell went first — `price` (cheaper per clean ride,
+# and by price alone), `clean-rate` (the measured clean rate flipped the price order), `headroom` (the Go
+# twin's window holds it), `not-in-catalog` (the Go twin is not priced by the catalog), `no-eligible-endpoint`
+# (the openrouter twin has no eligible endpoint to price), `order` (equal costs: the role's rail order).
+RAIL_CHOICE_REASONS = ("price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint", "order")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
 
@@ -86,6 +91,10 @@ class Metrics:
         self._cooled_source: Callable[[], dict[str, int]] | None = None
         self._rejected_source: Callable[[], dict[str, int]] | None = None
         self._extra: list[Callable[[], list[str]]] = []
+        # GW-MODEL-TIERS: the rail choice's counter (model bounded like the provider families) and the
+        # mounted tier-evidence snapshot's age (None = none mounted — no series).
+        self._rail_choices: dict[tuple[str, str, str], int] = {}
+        self._tier_evidence_age: Callable[[], float | None] = lambda: None
 
     def bind_active_sessions(self, source: Callable[[], dict[str, int]]) -> None:
         self._gauge_source = source
@@ -104,6 +113,17 @@ class Metrics:
                _bounded(provider, self._provider_slugs() | {"unattributed"}), _bounded(outcome, PROVIDER_OUTCOMES))
         with self._lock:
             self.provider_total[key] = self.provider_total.get(key, 0) + 1
+
+    def rail_choice(self, model: str, rail: str, reason: str) -> None:
+        """GW-MODEL-TIERS §The rail choice: one admission chose `rail` for the twin `model` (its
+        openrouter spelling — the same bound as the provider families) for `reason`."""
+        key = (_bounded(model, self._provider_models()), _bounded(rail, RAILS), _bounded(reason, RAIL_CHOICE_REASONS))
+        with self._lock:
+            self._rail_choices[key] = self._rail_choices.get(key, 0) + 1
+
+    def bind_tier_evidence(self, age: Callable[[], float | None]) -> None:
+        """GW-MODEL-TIERS: seconds since the mounted tier-evidence snapshot's `snapshot_at` (None = none mounted)."""
+        self._tier_evidence_age = age
 
     def failover(self, model: str, frm: str, to: str) -> None:
         slugs = self._provider_slugs()
@@ -250,6 +270,15 @@ class Metrics:
                       "# TYPE gateway_provider_failovers_total counter"]
             for (model, frm, to), n in sorted(self.failover_total.items()):
                 lines.append(f"gateway_provider_failovers_total{_fmt_labels({'model': model, 'from': frm, 'to': to})} {n}")
+            lines += ["# HELP gateway_rail_choice_total Admissions where the tier named one model on two allowed rails, by the rail chosen and why (GW-MODEL-TIERS).",
+                      "# TYPE gateway_rail_choice_total counter"]
+            for (model, rail, reason), n in sorted(self._rail_choices.items()):
+                lines.append(f"gateway_rail_choice_total{_fmt_labels({'model': model, 'rail': rail, 'reason': reason})} {n}")
+            lines += ["# HELP gateway_tier_evidence_age_seconds Seconds since the mounted tier-evidence snapshot's snapshot_at (absent: none mounted) (GW-MODEL-TIERS).",
+                      "# TYPE gateway_tier_evidence_age_seconds gauge"]
+            age = self._tier_evidence_age()
+            if age is not None:
+                lines.append(f"gateway_tier_evidence_age_seconds {age:.0f}")
             lines += ["# HELP gateway_sessions_reaped_total Sessions released because their pod was gone (GW-SESSIONS-LIVENESS).",
                       "# TYPE gateway_sessions_reaped_total counter"]
             lines += [f"gateway_sessions_reaped_total{_fmt_labels({'rail': rail})} {self.reaped_total.get(rail, 0)}" for rail in RAILS]

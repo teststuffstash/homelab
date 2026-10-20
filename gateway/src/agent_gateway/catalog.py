@@ -8,9 +8,10 @@ snapshot:
   User-Agent and a fresh `x-opencode-session`): the `opencode-go` provider's listed models, their
   `cost[]` tiers, context/output limits and tool support.
 - **docs** — the vendor's Go page source (`go.mdx`, fetched unauthenticated from the vendor repo):
-  each model's monthly limit per plan, the promotion multiplier, the peak price rows, the peak
-  hours and the 5h/weekly/monthly share of the monthly limit. Parsed strictly: any drift from the
-  shape this file knows is a parse failure, never a guess.
+  each plan's monthly fee (the page's Plan table — the Go rail's price, GW-MODEL-TIERS, divides
+  it by what the plan buys), each model's monthly limit per plan, the promotion multiplier, the
+  peak price rows, the peak hours and the 5h/weekly/monthly share of the monthly limit. Parsed
+  strictly: any drift from the shape this file knows is a parse failure, never a guess.
 
 A refresh that fails — the fetch, the parse, or an implausible drop in the model count — keeps
 the source's last good snapshot (persisted in the gateway's store, so a restart starts from it)
@@ -126,6 +127,9 @@ def parse_config(doc) -> dict:
 
 # -- docs: the vendor's go.mdx ----------------------------------------------------------------
 _PLAN_HEADER = ["Model", "Input", "Output", "Cached Read", "Cached Write", "Monthly limit"]
+_FEE_HEADER = ["Plan", "Price", "Included usage"]  # the page's Plan table: `| **Go** | **$10/month** | … |`
+_FEE_PLANS = {"**Go**": "go", "**Go Plus**": "go-plus"}
+_FEE = re.compile(r"^\*\*\$(?P<usd>[\d.]+)/month\*\*$")
 _SUFFIX = re.compile(r"^(?P<name>.+?)\s*\((?P<tag>Off-Peak|Peak|[≤>]\s*[\d.]+K tokens)\)$")
 _LIMIT = re.compile(r"^(?:~~\$[\d.]+~~\s*)?\*\*\$(?P<usd>[\d.]+)\*\*(?:<br\s*/>.*)?$")
 _UNLIMITED = re.compile(r"^\*\*Unlimited\*\*(?:<br\s*/>.*)?$")
@@ -182,20 +186,32 @@ def _hour(where: str, hhmm: str) -> int:
 
 
 def parse_docs(text: str) -> dict:
-    """The Go page → `{plans: {go: {id: usd | "unlimited"}, go-plus: {…}}, bonus: {id: x},
-    peak: {id: {in, out, cache_read, cache_write}}, peak_hours_utc, peak_weekdays, window_shares}`.
-    Rows are keyed by MODEL id through the page's own Endpoints table (display name → Model ID)."""
+    """The Go page → `{plan_fees: {go: usd, go-plus: usd}, plans: {go: {id: usd | "unlimited"},
+    go-plus: {…}}, bonus: {id: x}, peak: {id: {in, out, cache_read, cache_write}}, peak_hours_utc,
+    peak_weekdays, window_shares}`. Rows are keyed by MODEL id through the page's own Endpoints
+    table (display name → Model ID); the fees by the Plan table's plan names."""
     if not isinstance(text, str) or not text.strip():
         raise ParseError("empty page")
     ids: dict[str, str] = {}
+    fees: dict[str, float] = {}
     for header, rows in _tables(text):
         if header[:2] == ["Model", "Model ID"]:
             for r in rows:
                 if len(r) != len(header) or not r[0] or not r[1]:
                     raise ParseError(f"Endpoints row {r!r}: {len(r)} cells, expected {len(header)} with a name and an id")
                 ids[r[0]] = r[1]
+        elif header == _FEE_HEADER:
+            for r in rows:
+                if len(r) != len(_FEE_HEADER) or r[0] not in _FEE_PLANS:
+                    raise ParseError(f"Plan row {r!r}: expected {' | '.join(_FEE_HEADER)} naming {' / '.join(_FEE_PLANS)}")
+                m = _FEE.match(r[1])
+                if not m:
+                    raise ParseError(f"Plan row {r[0]}: price cell {r[1]!r} is not **$N/month**")
+                fees[_FEE_PLANS[r[0]]] = float(m.group("usd"))
     if not ids:
         raise ParseError("no Endpoints table (Model | Model ID)")
+    if set(fees) != set(PLANS):
+        raise ParseError(f"no Plan table ({' | '.join(_FEE_HEADER)}) pricing both plans — read {sorted(fees) or 'none'}")
     plans: dict[str, dict] = {}
     bonus: dict[str, int] = {}
     peak: dict[str, dict] = {}
@@ -254,7 +270,7 @@ def parse_docs(text: str) -> dict:
         days = order[a:b + 1]
     if peak and not hours:
         raise ParseError("peak rows but no 'Peak hours are … UTC, <day> through <day>' sentence")
-    return {"plans": plans, "bonus": bonus, "peak": peak, "peak_hours_utc": hours,
+    return {"plan_fees": fees, "plans": plans, "bonus": bonus, "peak": peak, "peak_hours_utc": hours,
             "peak_weekdays": days, "window_shares": window_shares}
 
 
@@ -411,6 +427,20 @@ class GoCatalog:
             return max(last + self.refresh_s, now + 1)
         return now + fallback_s
 
+    def plan_fee(self) -> float | None:
+        """The policy plan's monthly fee from the docs snapshot's Plan table (GW-MODEL-TIERS: the Go
+        rail's price divides it). None = no docs snapshot, or one written before the table was read."""
+        docs = self.snapshots.get("docs")
+        if docs is None or self.plan is None:
+            return None
+        fee = (docs.body.get("plan_fees") or {}).get(self.plan)
+        return float(fee) if isinstance(fee, (int, float)) else None
+
+    def listed(self) -> list[str]:
+        """The config snapshot's listed wire ids ([] = no snapshot)."""
+        cfg = self.snapshots.get("config")
+        return sorted(cfg.body["models"]) if cfg else []
+
     def monthly_limit(self, model: str) -> float | str | None:
         """The plan's monthly limit for a WIRE model id: usd, "unlimited", or None (no row)."""
         docs = self.snapshots.get("docs")
@@ -428,7 +458,9 @@ class GoCatalog:
             return [m for m in self.policy_models if m not in snap.body["models"]]
         return [m for m in self.policy_models if self.monthly_limit(m) is None]
 
-    def view(self) -> dict:
+    def view(self, pricing: dict | None = None) -> dict:
+        """`GET /catalog/opencode`; `pricing` = the Go rail's price per model (capacity.go_pricing —
+        the plan fee over what the plan bought; the app hands it in, this leg holds no ledger)."""
         now = self.clock()
         cfg, docs = self.snapshots.get("config"), self.snapshots.get("docs")
         listed = cfg.body["models"] if cfg else {}
@@ -452,6 +484,8 @@ class GoCatalog:
             }
         return {
             "plan": self.plan,
+            "plan_fee_usd_month": self.plan_fee(),
+            "pricing": pricing if pricing is not None else {"fee_usd_month": None, "draw_30d_usd": 0.0, "models": {}},
             "sources": {s: {"fetched_at": iso(self.snapshots[s].fetched_at) if s in self.snapshots else None,
                             "age_s": round(now - self.snapshots[s].fetched_at, 3) if s in self.snapshots else None,
                             "models": self.snapshots[s].models if s in self.snapshots else 0,

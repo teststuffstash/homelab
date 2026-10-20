@@ -33,20 +33,26 @@ resources:
 # is the stack's loop namespace (`<stack>-agents`); its `claude-session` exists for platform +
 # oracle only (the Composition renders the ExternalSecret for all four — sleep-agents and
 # circles-agents hold none live), so the policy does not lean on it.
-# models: DERIVED (GW-MODEL-TIERS, operator rulings 2026-10-18) — the three rails' tier lists are
-# the output of `devbox run tiers -- apply` over benchmarks.json beside this file (the committed
-# tier evidence: every candidate per rail with its Artificial Analysis row, price and Go limit;
-# the `tiers` block in policy.json holds the rules — intelligence bands 0.9/0.75/0.5 of the rail's
-# best, cheapest-first by output price, cap 3, the subscription rail by score ascending) and a
-# test row (gateway/tests/test_model_tiers.py) fails on a hand edit. Refresh = `gateway/scripts/
-# benchmarks-snapshot.sh`, then `apply`, commit both. The SPELLING stays model-classes.json's
+# models: DERIVED (GW-MODEL-TIERS, operator rulings 2026-10-18 + 2026-10-19) — the three rails'
+# tier lists are the output of `devbox run tiers -- apply` over benchmarks.json beside this file
+# (the committed tier evidence: every candidate per rail with its Artificial Analysis row, its
+# price, its clean-ride evidence and its Go limit; the `tiers` block in policy.json holds the
+# rules — intelligence bands 0.9/0.75/0.5 of the rail's best, cheapest per CLEAN ride first
+# (`tiers.cost`), cap 3, the subscription rail by score ascending) and a test row
+# (gateway/tests/test_model_tiers.py) fails on a hand edit. Refresh = `gateway/scripts/
+# benchmarks-snapshot.sh`, then `apply`, commit both; the snapshot ships in this ConfigMap too
+# (GATEWAY_BENCHMARKS) so its age alerts (TierEvidenceStale, 7 d). A tier with no priced
+# candidate is UNDECIDED and keeps its list. The SPELLING stays model-classes.json's
 # `models.*.ids` (`claude/<alias>`, `opencode-go/<id>`, bare openrouter ids); the gateway derives
 # the wire id by stripping the rail prefix (`claude/sonnet` → `sonnet`, which claude-code resolves
 # client-side; `opencode-go/mimo-v2.6-flash` → `mimo-v2.6-flash`), the same strip
 # agents/agent-session.sh performs today. Candidates: opencode = the Go catalog's listed models
 # with a monthly limit under `plan` (GW-CATALOG-GO's live read, kept in the snapshot — so the Go
 # rail's ids are never checked against model-classes.json, which carries no Go id for most of
-# them: the old proxy's table, untouched); openrouter = model-classes.json's openrouter ids;
+# them: the old proxy's table, untouched), each at the Go PRICE (the plan fee over what it bought:
+# list x fee / max(the rail's 30-day draw, the model's limit)); openrouter = the OpenRouter
+# catalog's models (GW-CATALOG-OR), each at its SELECTED endpoint's price — null until a cell
+# passed the entry canary (2026-10-20: all of them, so the openrouter lists stand as last derived);
 # anthropic = the three `claude/` aliases. History: opencode heavy first left model-classes.json's
 # opencode-go claude-sonnet id (#2663 — 400 "Model is unavailable" upstream, kimi-k3 rejected as
 # too expensive for review), then every tier sat on deepseek-v4.1-flash by hand (2026-10-17) once
@@ -102,6 +108,10 @@ configMapGenerator:
         app: agent-gateway
     files:
       - policy.json
+      # GW-MODEL-TIERS: the committed tier evidence rides beside the policy (GATEWAY_BENCHMARKS) so the
+      # gateway can say how old the prices it compares on are (gateway_tier_evidence_age_seconds →
+      # TierEvidenceStale); a re-cut rolls the pod like a policy edit.
+      - benchmarks.json
 
 # The image pin — the ONLY line .github/workflows/gateway-image.yaml's deploy/agent-gateway pin PR
 # edits (calver-gsha, `2026.<m>.<d>-g<sha12>`). 0.0.0-pending = no build has landed yet: the
