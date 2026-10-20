@@ -59,7 +59,9 @@ printf '%s\n' "kubectl $*" >> "$H/calls.log"
 case "$*" in
   *agentstacks*)                     exit 1 ;;                       # denied → stacks.json belt
   *"get applications.argoproj.io"*)  printf '{"items":[]}'; exit 0 ;; # no observation window open
-  *"get cm responder-seen -o json"*) printf '{"data":{}}'; exit 0 ;;  # ledger empty → budget clear
+  # The ledger read the FU-149 budget counts from: empty (budget clear) unless the scenario
+  # serves one — the budget scenarios need a real ledger shape to count against.
+  *"get cm responder-seen -o json"*) [ -f "$H/ledger.json" ] && { cat "$H/ledger.json"; exit 0; }; printf '{"data":{}}'; exit 0 ;;
   # FU-230 leg (b): the declared-window record. ABSENT by default — an unreadable/absent record
   # must read as NO window, so every other scenario exercises that path and a window can only ever
   # silence a name a person deliberately declared.
@@ -315,6 +317,53 @@ scenario multi-alert
 go '{"alerts":[{"status":"firing","fingerprint":"m1","labels":{"alertname":"AgentWorkerEgressDropped","source":"oracle-fleet"}},{"status":"firing","fingerprint":"m2","labels":{"alertname":"NodeNotReady","node":"hp-01"}}]}'
 want "multi-alert payload → first alert triaged" "subject=ns:oracle-fleet"
 want "multi-alert payload → SECOND alert triaged too (the </dev/null stdin belt holds)" "subject=node:hp-01"
+
+# ── ONE SESSION PER GROUP (2026-10-20): one Alertmanager payload, one dead node ─────────────────
+# The wk-metal-04 burst: every DaemonSet pod's KubePodNotReady started at the same instant and rode
+# one webhook; each used to get its own session. Same onset bucket + host (the deep dig's key) →
+# ONE session, its brief naming the siblings; an alert on another host still gets its own.
+scenario group-one-session
+go '{"alerts":[
+ {"status":"firing","fingerprint":"g0","startsAt":"2026-10-20T01:31:50.72Z","labels":{"alertname":"NodeNotReady","node":"hp-01","triage":"now"}},
+ {"status":"firing","fingerprint":"g1","startsAt":"2026-10-20T01:31:50.72Z","labels":{"alertname":"KubePodNotReady","namespace":"garage","pod":"garage-0","job":"kube-state-metrics","triage":"now"}},
+ {"status":"firing","fingerprint":"g2","startsAt":"2026-10-20T01:31:50.72Z","labels":{"alertname":"KubePodNotReady","namespace":"loki","pod":"alloy-mr2sh","job":"kube-state-metrics","triage":"now"}},
+ {"status":"firing","fingerprint":"g3","startsAt":"2026-10-20T01:31:51.10Z","labels":{"alertname":"KubePodNotReady","namespace":"kube-system","pod":"cilium-9p5ns","job":"kube-state-metrics","triage":"now"}}]}'
+n="$(grep -c '^claude -p' "$H/calls.log" 2>/dev/null || true)"
+[ "$n" = 2 ] && ok "4 alerts, 2 (onset,host) groups → exactly 2 sessions" || bad "4 alerts, 2 (onset,host) groups → exactly 2 sessions" "claude -p calls: $n"
+want      "the first pod alert LEADS its group" "(g1): leads group 2026-10-20T01:00:00Z|cluster — 2 sibling(s)"
+want      "…a sibling is recorded against the leader, no session" "(g2): same onset+host group (2026-10-20T01:00:00Z|cluster) as g1"
+want      "…and the other sibling too" "(g3): same onset+host group (2026-10-20T01:00:00Z|cluster) as g1"
+wantcall  "…marked TRIAGED (a repeat notification skips it), pointing at its leader" '"fp-g2":"'"$(date -u +%F)"'|grouped:g1"'
+wantbrief "the leader's brief says it carries the group" "THIS ALERT LEADS A GROUP"
+wantbrief "…and names each sibling" "KubePodNotReady (workload:kube-system/cilium) fp g3"
+wantnot   "the node alert on another host is NOT folded into the pod group" "(g0): same onset+host group"
+
+scenario group-no-onset-no-merge
+go '{"alerts":[{"status":"firing","fingerprint":"n1","labels":{"alertname":"KubePodNotReady","namespace":"garage","pod":"garage-0","job":"kube-state-metrics"}},{"status":"firing","fingerprint":"n2","labels":{"alertname":"KubePodNotReady","namespace":"loki","pod":"alloy-x","job":"kube-state-metrics"}}]}'
+n="$(grep -c '^claude -p' "$H/calls.log" 2>/dev/null || true)"
+[ "$n" = 2 ] && ok "no startsAt → no onset → no grouping (each alert its own session)" || bad "no startsAt → no onset → no grouping (each alert its own session)" "claude -p calls: $n"
+
+# ── FU-149 budget: counted from WRITE-ONCE spawn- keys (2026-10-20) ──────────────────────────────
+# The count used to read the fp- VALUES, which later runs re-mark (subjdup-/window-/…): 15 sessions
+# against a cap of 12 on 2026-10-20, gauge reading 12/12 remaining. These pin the new count.
+TD="$(date -u +%F)"
+scenario budget-spawn-keys-bind
+jq -n --arg d "$TD" '{data: ([range(12)] | map({key: "spawn-\($d)-x\(.)", value: "\($d)|KubePodNotReady/x"}) | from_entries)
+  + ([range(12)] | map({key: "fp-x\(.)", value: "subjdup-\($d)"}) | from_entries)}' > "$H/ledger.json"
+go "$(alert b1 '{"alertname":"KubePodNotReady","namespace":"garage","pod":"garage-0","job":"kube-state-metrics","triage":"now"}')"
+want       "12 spawn- keys today → budget exhausted, even though every fp- value was re-marked" "budget exhausted"
+wantnocall "…and no session spawns" "claude -p"
+
+scenario budget-fp-values-no-longer-count
+jq -n --arg d "$TD" '{data: ([range(12)] | map({key: "fp-x\(.)", value: "\($d)|KubePodNotReady/x"}) | from_entries)}' > "$H/ledger.json"
+go "$(alert b2 '{"alertname":"KubePodNotReady","namespace":"garage","pod":"garage-0","job":"kube-state-metrics","triage":"now"}')"
+wantcall "fp- values alone are not the count — clear to spawn" "claude -p"
+wantcall "…and the spawn writes its write-once key" "\"spawn-$TD-b2\":\"$TD|KubePodNotReady/garage\""
+
+scenario budget-prunes-old-spawn-keys
+jq -n '{data: {"spawn-2026-01-01-old": "2026-01-01|X/y"}}' > "$H/ledger.json"
+go "$(alert b3 '{"alertname":"KubePodNotReady","namespace":"garage","pod":"garage-0","job":"kube-state-metrics","triage":"now"}')"
+wantcall "an earlier day's spawn- key is pruned (json remove)" '"path":"/data/spawn-2026-01-01-old"'
 
 scenario selfref
 go "$(alert f13 '{"alertname":"AgentWorkerEgressDropped","source":"oracle-fleet"}')"

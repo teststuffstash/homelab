@@ -41,8 +41,9 @@
 #                three times each.
 #   capacity   = Sensor rateLimit 6/min + subscription-capacity semaphore (on the `respond` step) + the FU-088 latch
 #                + the FU-149 DAILY BUDGET LATCH (agents/responder-budget.sh): a binding
-#                RESPONDER_DAILY_MAX=12 sessions/day, checked before any per-alert work and again
-#                before each spawn, fail-CLOSED, with a gauge on the pushgateway and an INFO alert
+#                RESPONDER_DAILY_MAX=12 sessions/day — counted from WRITE-ONCE `spawn-<date>-<fp>`
+#                keys (2026-10-20; the old count read fp- values later runs overwrite) — checked
+#                before any per-alert work and again before each spawn, fail-CLOSED, with a gauge on the pushgateway and an INFO alert
 #                (ResponderTriageBudgetExhausted) when triage stops. It replaces the FU-113(c)
 #                incident cap, which had an `INC_SEEN == 0` escape hatch and so was never binding.
 #   window     = the DECLARED WINDOW (agents/seat-window.sh; FU-230, ruling 2026-10-09): a `now` alert a
@@ -171,7 +172,8 @@ spec:
             - src: { dependencyName: alert-dep, dataKey: body }
               dest: spec.arguments.parameters.0.value
 ---
-# The respond WorkflowTemplate — per NEW fingerprint: one inline triage session (model via /route
+# The respond WorkflowTemplate — per NEW fingerprint (or per same-onset+host GROUP of a payload's
+# fingerprints, the deep dig's key — see ONE SESSION PER GROUP): one inline triage session (model via /route
 # role:responder; fallback sonnet when the proxy is unreachable — G-A 9, issue #782).
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
@@ -768,6 +770,20 @@ spec:
               fi
             fi
 
+            # ── ONE SESSION PER GROUP (2026-10-20) ─────────────────────────────────────────────────────
+            # Alertmanager already GROUPS (FU-133 leg a): one dead node's 15 KubePodNotReady arrived in ONE
+            # payload, all started 01:31:50Z — and this loop used to spawn a session per member, so 15
+            # sessions each re-derived "node wk-metal-04 is down" while the budget gauge read 12/12 left.
+            # The grouping key is the deep dig's own (onset bucket + host, agents/deep-dig-select.sh
+            # group-keys), computed ONCE here. Every per-alert gate below still runs per member; only the
+            # SPAWN changes: the first member to reach it is the group's leader and its brief lists the
+            # others; a later member whose leader already ran is marked `<today>|grouped:<leader fp>` — a
+            # triaged value, so a repeat notification skips it like any other triaged alert. A size-1 group
+            # (and anything without a parseable onset) runs exactly as before. Unreadable ⇒ EMPTY ⇒
+            # per-alert, the old behaviour (rule #6: never fail INTO fewer sessions than the evidence).
+            GROUPKEYS="$(bash /work/homelab/agents/deep-dig-select.sh group-keys < "$SCRATCH/alerts.json" 2>/dev/null || true)"
+            : > "$SCRATCH/group-leaders"
+
             # </dev/null on the claude call below: a piped while-read loop's stdin IS the
             # remaining alerts — claude eats them and a multi-alert group triages only its
             # first member (found live 2026-07-27 by meta-alert-crosscheck.sh, run 1).
@@ -1144,11 +1160,24 @@ spec:
               fi
               # <<<REPLAY:responder-decided-once<<<
 
-              # Ledger dedup: one TRIAGE per fingerprint per 24h (value = date or date|incident;
-              # marker values — deferred-/cap-/none-/subjdup-/budget- prefixed — deliberately do
-              # NOT match, which is also what keeps them out of the FU-149 session count).
+              # Ledger dedup: one TRIAGE per fingerprint per 24h (value = date, date|incident, or
+              # date|grouped:<leader>; marker values — deferred-/cap-/none-/subjdup-/budget- prefixed —
+              # deliberately do NOT match). The FU-149 session count reads the spawn- keys, not these.
               SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.fp-$FP}" 2>/dev/null || true)"
               case "$SEEN" in "$TODAY"|"$TODAY|"*) echo "→ $NAME ($FP): triaged today — skip"; continue;; esac
+              # >>>REPLAY:responder-group>>>
+              # The group gate (see ONE SESSION PER GROUP above the loop). Only AFTER every per-alert gate:
+              # a member a window claimed, a subject already triaged, a decided-once — those keep their own
+              # markers. A leader is registered only once its session is actually spawned (below the budget),
+              # so a budget-blocked leader never makes its siblings read as judged.
+              GKEY="$(printf '%s\n' "$GROUPKEYS" | awk -F'\t' -v f="$FP" '$1 == f { print $2; exit }' || true)"
+              GLEADER=""; [ -z "$GKEY" ] || GLEADER="$(awk -F'\t' -v k="$GKEY" '$1 == k { print $2; exit }' "$SCRATCH/group-leaders" 2>/dev/null || true)"
+              if [ -n "$GLEADER" ]; then
+                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY|grouped:$GLEADER\",\"$SUBJ_KEY\":\"triaged-$TODAY\"}}" >/dev/null 2>&1 || true
+                echo "→ $NAME ($FP): same onset+host group ($GKEY) as $GLEADER — judged in that session, no session of its own"
+                continue
+              fi
+              # <<<REPLAY:responder-group<<<
               # The INCIDENT still names the ledger value (alertname/namespace) — it is what makes
               # a spawned session identifiable after the fact. It no longer GATES anything: the
               # `INC_SEEN == 0` clause it used to carry was the escape hatch that made the cap
@@ -1162,8 +1191,22 @@ spec:
                 kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"budget-$TODAY\"}}" >/dev/null 2>&1 || true
                 echo "⚠ daily LLM triage budget exhausted (FU-149) — $NAME ($FP) NOT triaged (marker written; raise RESPONDER_DAILY_MAX or fix the storm)"; continue
               fi
-              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY|$INCIDENT\"}}" >/dev/null 2>&1 \
+              # `spawn-<today>-<fp>` is WRITE-ONCE: the FU-149 budget counts these keys (responder-budget.sh),
+              # because the `fp-` value below is re-marked by later runs (subjdup-/window-/…) and used to take
+              # the spawn record with it — 15 sessions against a cap of 12 on 2026-10-20.
+              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY|$INCIDENT\",\"spawn-$TODAY-$FP\":\"$TODAY|$INCIDENT\"}}" >/dev/null 2>&1 \
                 || echo "WARN: ledger patch failed — fp-issue search is the remaining dedup belt"
+              # >>>REPLAY:responder-group-leader>>>
+              GROUP_NOTE=""
+              GSIBS=""; [ -z "$GKEY" ] || GSIBS="$(printf '%s\n' "$GROUPKEYS" | awk -F'\t' -v k="$GKEY" -v f="$FP" '$2 == k && $1 != f { printf "  - %s (%s) fp %s\n", $3, $4, $1 }' || true)"
+              if [ -n "$GSIBS" ]; then
+                printf '%s\t%s\n' "$GKEY" "$FP" >> "$SCRATCH/group-leaders"
+                GROUP_NOTE="
+            ⚠ THIS ALERT LEADS A GROUP. It arrived in one Alertmanager payload with the alerts below, same onset hour and same host ($GKEY) — the deep dig's correlation key. They get NO session of their own: YOUR triage is the record for all of them. Diagnose the group as one story first (a shared cause — a node, a dependency, a deploy — explains them all at once); if one of them is plainly a DIFFERENT problem, name it in its own line 'GROUP-OUTLIER: <fp> — <why>' so the record says so, and file for it separately only under its own subject (the one-subject-per-thread rule still holds):
+            $GSIBS"
+                echo "→ $NAME ($FP): leads group $GKEY — $(printf '%s' "$GSIBS" | grep -c .) sibling(s) ride this session"
+              fi
+              # <<<REPLAY:responder-group-leader<<<
               kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$SUBJ_KEY\":\"triaged-$TODAY\"}}" >/dev/null 2>&1 \
                 || echo "WARN: subject ledger patch failed — a repeat of $SUBJ may re-triage today"
 
@@ -1404,6 +1447,7 @@ spec:
             $EGRESS_NOTE
             $RECLOSE_NOTE
             $SEATWIN_NOTE
+            $GROUP_NOTE
 
             ${WIN:+⚠ OBSERVATION WINDOW: ArgoCD app '$WIN' synced into this namespace within the last 120 minutes, so a deploy is the prime suspect and the -iac lane already owns this symptom — its deterministic revert (FU-044) may be acting on it right now. Do NOT open a fix PR and do NOT propose one: a revert racing a fix at the same symptom is the failure this rule exists to prevent. Report your evidence, name the app, and stop.}
 

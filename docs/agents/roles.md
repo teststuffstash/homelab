@@ -261,7 +261,11 @@ never harder posture on quiet ones.
   reader. **The lesson is the order: read arrivals per SUBJECT before per series, then ask whether
   the rule says anything true — a deny is the last resort, not the first;**
   edge = Sensor `/alert` → `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`)
-  — per NEW fingerprint one INLINE sonnet triage session whose cheapest-sufficient outcome is
+  — per NEW fingerprint one INLINE sonnet triage session — or, when one webhook payload carries
+  several alerts with the same onset hour + host (the [deep dig](../glossary.md)'s key,
+  `agents/deep-dig-select.sh group-keys`), ONE session for that group whose brief lists the
+  siblings, each recorded `<date>|grouped:<leader>` (2026-10-20: one dead node's 15 pod alerts drew
+  15 sessions) — whose cheapest-sufficient outcome is
   report-only → GitOps quick fix on the stack's -iac (revert/pin PR, CI-only lane auto-merges)
   → ONE inert issue on the stack's -iac/app repo → homelab only for platform namespaces or
   needs-platform (routing = alert namespace → stacks.json); backstop = none (alerts refire
