@@ -95,7 +95,10 @@ def endpoints_answer(model: str, behaviour: str) -> Response:
     name = ENDPOINT_FIXTURES.get(model)
     if name is None:
         return PlainTextResponse("not found", status_code=404)
-    return JSONResponse(fixture(name))
+    doc = fixture(name)
+    if behaviour == "endpoints-null-uptime":  # the vendor's answer for a fresh or idle endpoint (seen live 2026-10-20)
+        doc["data"]["endpoints"][0]["uptime_last_1d"] = None
+    return JSONResponse(doc)
 
 
 class McpTransport(httpx.AsyncBaseTransport):

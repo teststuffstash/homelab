@@ -26,6 +26,7 @@ Selection — the gateway's own evidence, never `:exacto`:
 | description | harness | arrange || the order (`provider.order[0]` of successive attempts), or the pin |
 |---|---|---||---|
 | the floors: ≥ fp8, every tool-choice mode the harness uses, uptime_1d ≥ 95, status 0 | opencode | — || deepinfra, atlas-cloud, morph, inference-net, baidu (dropped: open-inference fp4, alibaba unknown, parasail uptime 77.4) |
+| an endpoint with no uptime figure is dropped, the model's other endpoints stand | opencode | the snapshot with atlas-cloud/fp8's uptime_last_1d null || deepinfra, morph, inference-net, baidu (dropped: atlas-cloud uptime_1d unknown, and the three above) |
 | a harness that needs required + function drops the providers without them | claude (anthropic dialect) | — || deepinfra, atlas-cloud, inference-net (morph, baidu dropped) |
 | the pin is one provider with fallbacks off | opencode | — || upstream body `provider = {order: [deepinfra], allow_fallbacks: false}`; model and messages unchanged |
 | a provider's service tiers are one order entry: the default tag represents | opencode | deepinfra/fp8, /flex (uptime 84.5), /priority in the snapshot || the deepinfra entry is `deepinfra/fp8` (out $0.42/M) |
@@ -54,12 +55,14 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import asdict
 
 import pytest
 
-from agent_gateway.providers import _row, eligible, representatives
+from agent_gateway.providers import _row, eligible, parse_endpoints, representatives
 
 from .conftest import (
+    OPENROUTER_ENDPOINTS_FIXTURES,
     attach_json,
     bearer,
     check,
@@ -237,6 +240,24 @@ async def test_floors(gw, upstreams, policy, orworld):
     then_eq("dropped, and why", dropped, {"open-inference": "quantization fp4 < fp8", "alibaba": "quantization unknown",
                                          "parasail": "uptime_1d 77.4359 < 95"})
     then_eq("kept", sorted(e.slug for e in kept), ["atlas-cloud", "baidu", "deepinfra", "inference-net", "morph"])
+
+
+async def test_floor_no_uptime(policy, orworld):
+    """row: an endpoint with no uptime figure is dropped, the model's other endpoints stand"""
+    world(note=f"{WORLD}; atlas-cloud/fp8's uptime_last_1d set to null (the vendor's answer for a fresh or idle endpoint)")
+    pol = policy.rails[RAIL].providers
+    with given("the snapshot's rows for M, atlas-cloud/fp8's `uptime_last_1d` null, re-parsed by parse_endpoints"):
+        raw = json.loads((OPENROUTER_ENDPOINTS_FIXTURES / "deepseek-v4.1-flash.json").read_text(encoding="utf-8"))
+        for e in raw["data"]["endpoints"]:
+            if e["tag"] == "atlas-cloud/fp8":
+                e["uptime_last_1d"] = None
+        rows = [_row(d) for d in parse_endpoints(raw)["endpoints"]]
+        attach_json("atlas-cloud/fp8 as parsed", next(asdict(r) for r in rows if r.tag == "atlas-cloud/fp8"))
+    with when("eligible() over those rows for harness opencode"):
+        kept, dropped = eligible(rows, pol, "opencode")
+    then_eq("dropped, and why", dropped, {"atlas-cloud": "uptime_1d unknown", "open-inference": "quantization fp4 < fp8",
+                                         "alibaba": "quantization unknown", "parasail": "uptime_1d 77.4359 < 95"})
+    then_eq("kept", sorted(e.slug for e in kept), ["baidu", "deepinfra", "inference-net", "morph"])
 
 
 async def test_floors_claude(gw, upstreams, orworld):

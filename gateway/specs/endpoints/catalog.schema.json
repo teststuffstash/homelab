@@ -248,7 +248,7 @@
                 "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier", "state", "class", "cooldown_until"],
                 "properties": {
                   "slug": { "type": "string" }, "tag": { "type": "string" }, "provider_name": { "type": "string" }, "quantization": { "type": "string" },
-                  "tool_choice": { "type": "object" }, "uptime_1d": { "type": "number" }, "p90_ms": { "type": ["number", "null"] },
+                  "tool_choice": { "type": "object" }, "uptime_1d": { "type": ["number", "null"] }, "p90_ms": { "type": ["number", "null"] },
                   "in_price": { "type": ["number", "null"] }, "out_price": { "type": ["number", "null"] }, "status": { "type": "integer" }, "service_tier": { "type": ["string", "null"] },
                   "state": { "$ref": "#/$defs/cell_state" }, "class": { "type": ["string", "null"], "description": "the strike class that excluded the cell" }, "cooldown_until": { "$ref": "#/$defs/timestamp" }
                 }

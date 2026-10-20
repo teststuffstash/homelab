@@ -18,6 +18,7 @@ The refresh:
 | rankings without dates are a parse failure | rankings-undated | 2 || parse-failed | 2 | — |
 | no benched candidate: implausible, nothing taken | benchmarks-empty | none || implausible | 0 | 0 |
 | a candidate whose endpoints read fails is absent; the refresh still lands | endpoints-503 for glm | none || ok | 1 (M) — 6 unreadable | 8 |
+| an endpoint without an uptime figure does not fail its model's parse | endpoints-null-uptime for glm (its first endpoint's uptime_last_1d null) | none || ok | 2 (M, G) — 5 unreadable; G's row carries uptime_1d null | 15 |
 | every endpoints read failing keeps the last good | endpoints-503 for both | 2 || implausible | 2 | — |
 | no account key: fetch-failed, no MCP call | the ref absent | none || fetch-failed | 0 (0 MCP calls) | — |
 | the MCP calls carry the account key and a client identity | mcp ok | — || — | authorization Bearer <the account key>; user-agent agent-gateway/<v> (openrouter-catalog); initialize then tools/call ×3 | — |
@@ -193,6 +194,19 @@ async def test_unreadable_candidate_absent(gw, app, upstreams):
     then_eq("outcome", outcome, "ok")
     v = await _view(gw)
     then_eq("models · unreadable · candidate cells", (sorted(v["models"]), v["endpoint_failures"], _cells(v)["candidate"]), ([M], 6, 8))
+
+
+async def test_null_uptime_kept(gw, app, upstreams):
+    """row: an endpoint without an uptime figure does not fail its model's parse"""
+    world(note=f"{WORLD}; endpoints-null-uptime for {G}")
+    upstreams[RAIL].endpoints_behaviour[G] = "endpoints-null-uptime"
+    outcome = await _refresh(app)
+    then_eq("outcome", outcome, "ok")
+    v = await _view(gw)
+    first = v["models"][G]["endpoints"][0]
+    attach_json(f"{G}'s first endpoint as the view shows it", first)
+    then_eq("models · unreadable · candidate cells", (sorted(v["models"]), v["endpoint_failures"], _cells(v)["candidate"]), ([M, G], 5, 15))
+    then_eq(f"{G}'s first endpoint's uptime_1d", first["uptime_1d"], None)
 
 
 async def test_no_account_key(gw, app, mcp, secrets):
