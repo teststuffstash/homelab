@@ -105,9 +105,11 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
   [`controlplane-ha.md`](controlplane-ha.md) §CP5. etcd sync-write ~1.6 ms (etcd's dd probe).
 - `wk-metal-03` — laptop i5-6200U, .184, `/dev/sda`, ephemeral tier, **kata node** (`kata: true`
   → the `metal_kata` install image + `homelab.io/kata` label).
-- `wk-metal-04` — desktop i5-3570K/16GB, .186, `/dev/sda`, ephemeral tier, **kata node**. The roomy
+- `wk-metal-04` — **HP "Big Data" (the retired router) since 2026-10-20**, i5-2500/24GB, .186,
+  `/dev/disk/by-id/wwn-0x500a0751e87b861f` (MX500 — `sdb` beside the two 7600p, hence the wwn; the
+  original i5-3570K box died and its 7600p pair moved over with the identity), ephemeral tier, **kata node**. The roomy
   one; deliberately left without `avx2: true`, so it is out of `local.avx2_nodes` (Ivy Bridge has no
-  AVX2, so goose rides schedule here but opencode SIGILLs) — see the comment on its
+  AVX2 — Sandy Bridge neither — so goose rides schedule here but opencode SIGILLs) — see the comment on its
   `machines/machines.yaml` entry, and `local.avx2_nodes` in `tofu/locals.tf`.
 - `hp-01` — .54, `/dev/sda`, Longhorn, WoL-capable.
 - `m70s` — Lenovo ThinkCentre M70s SFF, .56, **`/dev/disk/by-id/nvme-Micron_MTFDHBA512TDV_21052D0C4364`**

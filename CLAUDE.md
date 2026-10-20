@@ -38,7 +38,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 <!-- BEGIN GENERATED hosts — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
 | Host | IP | Role |
 |---|---|---|
-| OPNsense ("Big Data", HP desktop) | 192.168.2.1 | the PREVIOUS router — powered off since window 1 (2026-10-02), kept cabled as the fallback; `.1` is now the CARP pair's VIP (docs/router-move.md §Status) |
+| OPNsense ("Big Data", HP desktop) — RETIRED | 192.168.2.1 | the PREVIOUS router — RETIRED 2026-10-20 (the fallback period ended; its hardware is now `wk-metal-04`, OPNsense disk wiped); `.1` is the CARP pair's VIP (docs/router-move.md §Status). Row kept for `wan_mac` |
 | Proxmox `pve` (X99/Xeon, 128GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
 | Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
 | Backup Garage LXC (CTID 220) | 192.168.2.73 | Longhorn backup target — single-node Garage S3 (FU-299) |
@@ -54,7 +54,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | k8s worker, compute tier (tainted, 8GB) + Longhorn bulk tier + the garage-2 zone — NO rides |
 | `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | k8s control plane (ADR-133 — one CP per chassis, laptop battery = a UPS for etcd) |
 | `wk-metal-03` (ThinkPad X260, PXE) | 192.168.2.184 | k8s worker, ephemeral/compute tier (tainted; kata node) |
-| `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier |
+| `wk-metal-04` (HP desktop "Big Data" i5-2500 24GB, PXE) | 192.168.2.186 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier |
 | `nx-01` (Nutanix NX-6035-G5 node 1, 2U twin, PXE) | 192.168.2.58 | k8s worker, RIDE/ARC tier (tainted; kata node, EPHEMERAL on NVMe) — Longhorn SCRATCH only (`fast`) |
 | `nx-02` (Nutanix NX-6035-G5 node 2, same 2U twin) | 192.168.2.59 | Proxmox hypervisor — the SECOND one (ROADMAP §Hardware strategy); hosts `wk-04` |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
