@@ -284,6 +284,7 @@ fixture Secret `agent-egress/router-account-key`.
 | "rankings without dates are a parse failure" | rankings-undated | 2 || parse-failed | 2 | — |
 | "no benched candidate: implausible, nothing taken ⚖" | benchmarks-empty | none || implausible | 0 | 0 |
 | "a candidate whose endpoints read fails is absent; the refresh still lands ⚖" | endpoints-503 for G | none || ok | 1 (M) — 6 unreadable | 8 |
+| "an endpoint without an uptime figure does not fail its model's parse ⚖" | endpoints-null-uptime for G (its first endpoint's `uptime_last_1d` `null`) | none || ok | 2 (M, G) — 5 unreadable; G's row carries `uptime_1d` null | 15 |
 | "every endpoints read failing keeps the last good" | endpoints-503 for both | 2 || implausible | 2 | — |
 | "no account key: fetch-failed, no MCP call" | the ref absent | none || fetch-failed | 0 (0 MCP calls) | — |
 | "the MCP calls carry the account key and a client identity ⚖" | mcp ok | — || — | `authorization: Bearer <the account key>`; `user-agent: agent-gateway/<v> (openrouter-catalog)`; `initialize` then `tools/call` ×3 | — |
