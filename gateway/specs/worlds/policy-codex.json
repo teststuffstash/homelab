@@ -170,8 +170,8 @@
   },
   "tiers": {"score": "intelligence", "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5}, "cap": 3, "cost": {"ride_tokens_out_m": 0.01, "strike_overhead_usd": 0, "min_rides": 5}},
   "context_tokens": {
-    "_comment": "per-model harness window — the Go rail's deepseek-v4.1-flash = the console /api/v2/config `limit.context` (2026-10-17), as in the deployed policy; absent = null in the dispatch answer, never a guess.",
-    "opencode-go/deepseek-v4.1-flash": 1000000
+    "_comment": "per-model harness window for the NON-Go rails; absent = null in the dispatch answer, never a guess. A Go model's window is the Go catalog's `context` (GW-CATALOG-GO ruling 5, GW-SESSIONS-ENV) — an `opencode-go/*` entry here refuses the load. The openrouter value below is a WORLD value for the echo row, not a vendor fact (the openrouter rail has no catalog context yet).",
+    "deepseek/deepseek-v4.1-flash": 163840
   },
   "control_plane_auth": "observe",
   "callers": {

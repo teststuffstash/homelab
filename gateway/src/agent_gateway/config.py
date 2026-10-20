@@ -598,7 +598,7 @@ class Policy:
     rails: dict[str, RailPolicy]
     session_ttl_s: int
     defer_retry_s: int
-    context_tokens: dict[str, int]  # policy model id -> declared harness window; absent = null, never a guess
+    context_tokens: dict[str, int]  # policy model id -> declared harness window (non-Go rails); absent = null, never a guess
     raw: dict = field(repr=False, compare=False)
     # GW-SESSIONS-AUTH: who may call the control plane, and whether a caller without a valid token
     # is refused (`enforce`) or admitted, logged and counted (`observe`, the rollout mode).
@@ -609,6 +609,9 @@ class Policy:
     tiers: TiersPolicy | None = None  # GW-MODEL-TIERS: the derivation's rules; None = the policy carries none
 
     def context_tokens_for(self, model: str) -> int | None:
+        """The declared window for a policy model id, or None. Never asked for a Go model: the
+        loader refuses a `context_tokens` entry under `opencode-go/` (ruling 5), and GW-SESSIONS-ENV
+        answers the Go rail from the catalog's `context` (GoCatalog.context_for)."""
         return self.context_tokens.get(model)
 
     @staticmethod
@@ -628,6 +631,11 @@ class Policy:
         if not isinstance(ctx_raw, dict):
             raise PolicyError("policy: context_tokens must be an object {model id: window}")
         context_tokens = {k: int(v) for k, v in ctx_raw.items() if not k.startswith("_")}
+        # GW-CATALOG-GO ruling 5: a Go model's window is the catalog's `context` (GW-SESSIONS-ENV
+        # reads it from the snapshot); a policy copy would be a stale hand copy shadowing it.
+        if go_ctx := [k for k in context_tokens if k.startswith(RAIL_PREFIX["opencode"])]:
+            raise PolicyError(f"policy: context_tokens names the Go model(s) {', '.join(sorted(go_ctx))} — a Go model's window is "
+                              "the Go catalog's `context` (GW-CATALOG-GO ruling 5), never a policy copy; drop the entry")
         rails: dict[str, RailPolicy] = {}
         for name, r in (d.get("rails") or {}).items():
             if name not in RAILS:

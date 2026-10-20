@@ -306,7 +306,7 @@
             "null"
           ],
           "minimum": 1,
-          "description": "the policy's declared window for the model; null = not declared, never a guess",
+          "description": "the harness window for the model: on the opencode rail the Go catalog's `context` for the wire model (GW-CATALOG-GO ruling 5; null = no catalog row), elsewhere the policy's declared window (null = not declared) — never a guess",
           "x-requirements": [
             "GW-SESSIONS-ENV"
           ]

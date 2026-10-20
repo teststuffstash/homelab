@@ -174,6 +174,10 @@ still carries one refuses to load — a stale hand copy can never shadow the cat
 | "a window the vendor gives no share refuses the load" | `window_draw.windows.1d` || refused, naming `windows.1d` |
 | "an unknown latch scope refuses the load" | `latch_scope: rail` || refused, naming `latch_scope` |
 
+The same rule holds a Go model's harness window: the dispatch answer's `context_tokens` is the
+snapshot's `context`, and a policy `context_tokens` entry for an `opencode-go/*` model refuses the
+load — the rows live on [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
+
 ### What a fetch sends
 
 | description | read || `authorization` | `user-agent` | `x-opencode-session` |

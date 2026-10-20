@@ -27,10 +27,16 @@
 | no env value is a real key | any | every value (each leaf of opencode's config) is the token, a URL, a model name or a provider/package name | any value matching the GW-REDACT patterns |
 | codex's env is exactly three vars | codex | OPENAI_BASE_URL OPENAI_API_KEY CODEX_MODEL | any ANTHROPIC_*, any OPENROUTER_* |
 
-| description | model (policy) | context_tokens |
+| description | world | model (policy) | context_tokens |
+|---|---|---|---|
+| a Go model's context_tokens is the catalog's context ⚖ | policy-default + the seeded catalog-ok snapshot | opencode-go/deepseek-v4.1-flash | 1000000 — the snapshot's `context`; the policy declares none |
+| a Go model with no catalog row answers null, never a default | catalog-retired refreshed | opencode-go/deepseek-v4.1-flash | null from the catalog read (GoCatalog.context_for); the dispatch itself defers not-in-catalog |
+| a declared `context_tokens` is echoed | policy-default (deepseek/deepseek-v4.1-flash: 163840, a world value) | deepseek/deepseek-v4.1-flash (openrouter, tier heavy) | 163840 |
+| an undeclared `context_tokens` is null, never a default | policy-default | claude/sonnet | null |
+
+| description | context_tokens in an otherwise policy-default document | the policy load |
 |---|---|---|
-| a declared `context_tokens` is echoed | opencode-go/deepseek-v4.1-flash | 1000000 |
-| an undeclared `context_tokens` is null, never a default | claude/sonnet | null |
+| a declared `context_tokens` for a Go model refuses the load ⚖ | {"opencode-go/deepseek-v4.1-flash": 1000000} | refused, naming context_tokens |
 """
 
 from __future__ import annotations
@@ -42,7 +48,18 @@ import pytest
 from agent_gateway.logging import looks_like_credential
 
 from ._codex_world import fresh_report
-from .conftest import SELF_URL, attach_json, given, open_session, rule, then, then_eq, when, world
+from .conftest import (
+    POLICY_FIXTURE,
+    SELF_URL,
+    attach_json,
+    given,
+    open_session,
+    rule,
+    then,
+    then_eq,
+    when,
+    world,
+)
 
 pytestmark = rule("GW-SESSIONS-ENV")
 
@@ -50,6 +67,7 @@ CLAUDE = {"role": "reviewer", "harness": "claude"}
 CLAUDE_GO = {"role": "reviewer", "harness": "claude", "rail": "opencode"}
 OPENCODE = {"role": "worker", "harness": "opencode"}
 GOOSE = {"role": "worker", "harness": "goose", "rail": "openrouter"}
+GOOSE_HEAVY = {**GOOSE, "tier": "heavy"}  # openrouter heavy = deepseek/deepseek-v4.1-flash, the world's one declared context_tokens
 
 VAR_ROWS = [
     ("claude: the base url is this gateway's anthropic path", CLAUDE, "ANTHROPIC_BASE_URL", f"{SELF_URL}/anthropic"),
@@ -187,14 +205,62 @@ async def test_codex_env_shape(codex_app, codex_gw, clock):
         assert not any(k.startswith(("ANTHROPIC_", "OPENROUTER_")) for k in env), env
 
 
-CTX_ROWS = [("a declared `context_tokens` is echoed", OPENCODE, 1000000), ("an undeclared `context_tokens` is null, never a default", CLAUDE, None)]
+# context_tokens (GW-SESSIONS-ENV): the Go rail answers the catalog's `context` for the wire model
+# (GW-CATALOG-GO ruling 5 — the seeded catalog-ok snapshot, tests/fixtures/go-catalog/models-dev.json,
+# gives deepseek-v4.1-flash `limit.context` 1000000; the world's policy declares no Go entry); every
+# other rail answers the policy's declared window (the world declares the openrouter heavy model's,
+# a world value) or null.
+CTX_ROWS = [
+    ("a Go model's context_tokens is the catalog's context ⚖", OPENCODE, "the Go catalog's `context` for deepseek-v4.1-flash (the policy declares none)", 1000000),
+    ("a declared `context_tokens` is echoed", GOOSE_HEAVY, "the policy's declared window for deepseek/deepseek-v4.1-flash (openrouter)", 163840),
+    ("an undeclared `context_tokens` is null, never a default", CLAUDE, "nothing: the policy declares no window for claude/sonnet", None),
+]
 
 
-@pytest.mark.parametrize(("body", "ctx"), [r[1:] for r in CTX_ROWS], ids=[r[0] for r in CTX_ROWS])
-async def test_context_tokens(gw, body, ctx):
+@pytest.mark.parametrize(("body", "source", "ctx"), [r[1:] for r in CTX_ROWS], ids=[r[0] for r in CTX_ROWS])
+async def test_context_tokens(gw, body, source, ctx):
     world()
-    with given(f"policy: the dispatched model's declared ctx (context_tokens) is {ctx}"):
+    with given(f"the window's source is {source}"):
         pass
     with when(f"POST /sessions body {body} → dispatch"):
         doc = await open_session(gw, **body)
     then_eq("context_tokens", doc["context_tokens"], ctx, claim=f"ctx: context_tokens = {ctx}")
+
+
+async def test_context_tokens_no_catalog_row(gw, app, vendor):
+    """row: a Go model with no catalog row answers null, never a default"""
+    world(upstream="catalog-retired", note="the Go catalog's fake vendor answers the refresh without deepseek-v4.1-flash")
+    with given("the config source refreshes against catalog-retired: the catalog (models.dev) without deepseek-v4.1-flash"):
+        vendor.catalog = "catalog-retired"
+        outcome = await app.state.catalog.refresh_source("config")
+        attach_json("refresh outcome", {"source": "config", "behaviour": "catalog-retired", "outcome": outcome})
+        assert outcome == "ok", outcome
+    with when("GW-SESSIONS-ENV's catalog read for the wire model deepseek-v4.1-flash (GoCatalog.context_for)"):
+        read = app.state.catalog.context_for("deepseek-v4.1-flash")
+    then_eq("context_tokens", read, None, claim="the read is null — no row, no default")
+    body = {**OPENCODE, "rail": "opencode"}  # pinned to the Go rail: the policy walk would otherwise skip to openrouter
+    with when(f"POST /sessions body {body}"):
+        r = await gw.post("/sessions", json={"stack": "platform", "task": "homelab-2650-r1", **body})
+        doc = r.json()
+    with then("the dispatch itself never happens: admission defers it not-in-catalog (GW-SESSIONS-ADMIT), so no answer carries a guessed window",
+              decision={"expected": "defer / not-in-catalog", "actual": f"{doc.get('decision')} / {doc.get('reason')}"}):
+        assert (r.status_code, doc.get("decision"), doc.get("reason")) == (200, "defer", "not-in-catalog"), doc
+        assert "context_tokens" not in doc, doc
+
+
+def test_context_tokens_go_entry_refuses_the_load():
+    """row: a declared `context_tokens` for a Go model refuses the load ⚖"""
+    world()
+    from agent_gateway.config import Policy, PolicyError
+    doc = json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
+    with given('policy-default with context_tokens = {"opencode-go/deepseek-v4.1-flash": 1000000} (the 2026-10-17 hand copy of the console\'s limit.context)'):
+        doc["context_tokens"] = {"opencode-go/deepseek-v4.1-flash": 1000000}
+    with when("the policy loads"):
+        try:
+            Policy.from_dict(doc)
+            error = None
+        except PolicyError as e:
+            error = str(e)
+        attach_json("load result", {"error": error})
+    with then("refused, naming context_tokens (GW-CATALOG-GO ruling 5: the catalog's fact, never a policy copy)", refused={"expected": "context_tokens", "actual": error}):
+        assert error is not None and "context_tokens" in error, error
