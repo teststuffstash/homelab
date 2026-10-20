@@ -2,6 +2,7 @@
 # deep-dig-select — the deterministic half of the grouped deep dig (ADR-148 (3), FU-249 step 4).
 #
 #   bash agents/deep-dig-select.sh select [--out /tmp/dig.json]   # the digest: what to dig, grouped
+#   bash agents/deep-dig-select.sh group-keys < payload.json      # the responder's per-payload grouping (below)
 #   DIG_DIGEST=/tmp/dig.json bash agents/deep-dig-select.sh harvest <session-log> <outdir>   # finding blocks → files
 #
 # WHY A SEPARATE SCRIPT. The responder (agents/coordinator/responder-argo.yaml) is per-fingerprint
@@ -279,7 +280,7 @@ cmd_select() {
      --argjson p "$(jq -n --argjson sh "$DIG_STANDING_H" --argjson rd "$DIG_RECUR_DAYS" --argjson lb "$DIG_LOOKBACK_D" --argjson ob "$DIG_ONSET_BUCKET_MIN" --argjson mg "$DIG_MAX_GROUPS" --argjson rg "$DIG_REDIG_DAYS" \
         '{standing_h: $sh, recur_days: $rd, lookback_d: $lb, onset_bucket_min: $ob, max_groups: $mg, redig_days: $rg}')" '
     def onset: if .firing and .startsAt != "" then
-        ((.startsAt | fromdateiso8601? // $now) as $t | (($t / $b) | floor) * $b | todate)
+        ((.startsAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601? // $now) as $t | (($t / $b) | floor) * $b | todate)
       else "recurring" end;
     map(. + {onset: onset})
     | group_by(.onset + "|" + .host)
@@ -307,6 +308,29 @@ cmd_select() {
          , (.explained[] | "  explained \(.alertname) [\(.subject)] ← \(.explained_by)")
          , (.deferred[] | "  deferred \(.key): " + (.alerts | join("; ")))' "$tmp/digest.json" >&2
   rm -rf "$tmp"
+}
+
+# ── group-keys: the SAME grouping for the responder's `now` lane (2026-10-20) ───────────────────
+# The webhook delivers an Alertmanager GROUP — on 2026-10-20 one dead node's 15 KubePodNotReady
+# arrived in ONE payload, all started 01:31:50Z — and the respond loop used to give every member its
+# own session (15 sessions, one diagnosis). The responder calls this before its loop and runs ONE
+# session per (onset bucket, host) group; the rule is this file's, so the two lanes cannot drift.
+# Reads the payload ({"alerts":[…]}) on stdin; prints `<fp>\t<key>\t<alertname>\t<subject>` per
+# FIRING alert of the `now` lane (triage none|dig never reach a session, so they never form one).
+# An alert with no parseable startsAt keys to `solo:<fp>` — it groups with nothing.
+cmd_group_keys() {
+  local bucket=$(( DIG_ONSET_BUCKET_MIN * 60 )) a fp name sh key
+  jq -c '.alerts[]? | select(.status == "firing") | select((.labels.triage // "") | test("^(none|dig)$") | not)' \
+    | while read -r a; do
+        fp="$(printf '%s' "$a" | jq -r '.fingerprint // empty')"; [ -n "$fp" ] || continue
+        name="$(printf '%s' "$a" | jq -r '.labels.alertname // "unknown-alert"')"
+        sh="$(dig_subject "$a")"
+        key="$(printf '%s' "$a" | jq -r --argjson b "$bucket" '
+          (.startsAt // "" | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601?) as $t
+          | if $t == null then "" else ((($t / $b) | floor) * $b | todate) end')"
+        if [ -n "$key" ]; then key="$key|${sh#*	}"; else key="solo:$fp"; fi
+        printf '%s\t%s\t%s\t%s\n' "$fp" "$key" "$name" "${sh%	*}"
+      done
 }
 
 # ── harvest ──────────────────────────────────────────────────────────────────────────────────────
@@ -348,6 +372,7 @@ cmd_harvest() {
 
 case "${1:-}" in
   select)  shift; cmd_select "$@";;
+  group-keys) shift; cmd_group_keys;;
   harvest) shift; [ $# -eq 2 ] || { echo "usage: $0 harvest <session-log> <outdir>" >&2; exit 2; }; cmd_harvest "$@";;
-  *) echo "usage: $0 select [--out file] | harvest <log> <outdir>" >&2; exit 2;;
+  *) echo "usage: $0 select [--out file] | group-keys < payload | harvest <log> <outdir>" >&2; exit 2;;
 esac
