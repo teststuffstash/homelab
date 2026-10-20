@@ -14018,3 +14018,17 @@ updates or reverts as much as possible — mechanical revert or a responder."
   → PR, then its deploy + live read-back); subagent D = the launcher ride-shape fix + #2775's three `⚑ gap` rows and the
   GW-CATALOG-OR index clause (PR). #2774 (context-from-catalog image) deployed 20:42:31Z, catalog refreshed on start.
 - Context 425k at 21:05Z; wind-down planned ~550k.
+
+## 2026-10-20 ~21:10–21:30Z — seat (unattended): the openrouter RE-CUT landed (#2776) — lists unchanged, every tier DECIDED
+
+- Subagent E: `benchmarks-snapshot.sh` (snapshot_at 20:53:22Z; both catalogs fetched 20:42:31Z; AA rows of 10-17) →
+  `tiers apply` wrote NOTHING — the derivation over the 4 newly priced openrouter models reproduces the deployed lists
+  exactly, order included; `check` clean, no tier undecided. Priced at the SELECTED endpoint: v4.1-flash baidu fp8
+  $0.1416/M out → $0.001416 per clean ride (light); v4-flash streamlake $0.1652 → 0.001652 (light); mimo-v2.5 xiaomi
+  $0.28 → 0.002806 (light, exactly at the band); kimi-k3 morph $14.9 → 0.1493 (standard + heavy — the sole priced model
+  in those bands, ~100× the light cells; the derivation's call). Twin decided: openrouter/v4.1-flash ↔ opencode-go/
+  v4.1-flash at light — Go promise $0.00075 vs baidu $0.001416 → opencode first by `price` (was no-eligible-endpoint).
+  #2776 merged 21:06Z round 1 (both bots approve); deployed by the policy ConfigMap roll (no image change);
+  read back from the pod's mounted policy + benchmarks. Env note: `devbox run` drops KUBECONFIG — the snapshot script
+  needs the kubeconfig at the clone's `tofu/kubeconfig`.
+- FU-270 next (a) DONE. Open: #2777 (launcher ride shape + #2775's gap rows) in review.

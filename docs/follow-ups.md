@@ -822,8 +822,8 @@ the block needs pruning, not more headings.
       the openrouter tiers stay UNDECIDED until the entry canaries run (`gateway/scripts/canary-entrants.sh`, the
       operator's window); gaps → #2718. **Next (seat, ordered 10-20):** (0) DONE 10-20 — #2766 (the Go catalog's `config`
       source = models.dev under the console overlay; `GoCatalogParseFailed` cleared) + #2767 (the dispatcher caller
-      granted `prober`; proven past the caller check), both deployed; #2771 (the launcher's loop input) in review; (a) the canary window RAN 10-20 (7 eligible cells; gaps #2775) — the re-cut PR is in flight
-      (`benchmarks-snapshot.sh` → `tiers apply` → PR) so the openrouter tiers decide; (b) `wrong-verdict` fed by the deploy-revert signal; (c) the loop flip into the
+      granted `prober`; proven past the caller check), both deployed; #2771 (the launcher's loop input) in review; (a) DONE 10-20: the canary window ran from the seat (7 eligible cells; gaps #2775), the
+      re-cut #2776 decided every openrouter tier (lists unchanged, the v4.1-flash twin → Go first by price); (b) `wrong-verdict` fed by the deploy-revert signal; (c) the loop flip into the
       session-pod heredoc; (d) DONE 10-20 (#2773: a Go model's `context_tokens` = the catalog's; a policy copy refuses the load). **Operator-only:** FU-313, the codex login (leg E), the canary window.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
