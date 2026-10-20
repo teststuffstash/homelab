@@ -2,7 +2,7 @@
 # Built by .github/workflows/gateway-image.yaml on master pushes of gateway/**; the deploy pins
 # ghcr.io/teststuffstash/agent-gateway:<calver-gsha>. Non-root (uid 1000), uv-synced, frozen lock.
 FROM python:3.13-slim AS build
-COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.3 /uv /usr/local/bin/uv
 ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/app/.venv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
