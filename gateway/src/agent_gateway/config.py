@@ -41,10 +41,14 @@ UPSTREAM_DEFAULTS = {
     # (⚑ gap, GW-RAIL-CODEX); an unset CODEX_UPSTREAM leaves the rail without a backend.
     "codex": "",
 }
-# The Go catalog leg's two sources (GW-CATALOG-GO): the console's V2 config (the Go key reads it)
-# and the vendor's Go page source on its default branch (unauthenticated; the path moved once,
-# on 2026-10-12 — a move is a fetch failure, and GoCatalogStale names it).
+# The Go catalog leg's reads (GW-CATALOG-GO), one URL each. The `config` source = the `catalog`
+# read (models.dev's api.json — the vendor's own registry, public) overlaid by the `config` read
+# (the console's V2 config: the workspace's overrides, the Go key reads it — since 2026-10-20 it
+# carries ONLY the overrides); the `docs` source = the vendor's Go page source on its default
+# branch (unauthenticated; the path moved once, on 2026-10-12 — a move is a fetch failure, and
+# GoCatalogStale names it).
 GO_CATALOG_URLS = {
+    "catalog": "https://models.dev/api.json",
     "config": "https://opencode.ai/console/api/v2/config",
     "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx",
 }
@@ -741,7 +745,8 @@ class Settings:
             cred_negative_cache_s=int(e.get("GATEWAY_CRED_NEGATIVE_CACHE_S", "20")),
             connect_timeout_s=float(e.get("GATEWAY_CONNECT_TIMEOUT_S", "10")),
             read_timeout_s=float(e.get("GATEWAY_READ_TIMEOUT_S", "600")),
-            go_catalog_urls={"config": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["config"]),
+            go_catalog_urls={"catalog": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["catalog"]),
+                             "config": e.get("GATEWAY_GO_CONFIG_URL", GO_CATALOG_URLS["config"]),
                              "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),

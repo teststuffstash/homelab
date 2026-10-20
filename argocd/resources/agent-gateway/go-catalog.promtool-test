@@ -115,7 +115,7 @@ tests:
               triage: dig
             exp_annotations:
               summary: "The latest refresh of the gateway's Go catalog (docs) ended parse-failed — its last good snapshot is in use"
-              description: "parse-failed = the answer did not match the shape gateway/src/agent_gateway/catalog.py parses (parse_config / parse_docs); implausible = it carried fewer than half the last good snapshot's models. Either the vendor source or the parser may be what changed. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep \"catalog: docs\" names the line or count it stopped on; compare it with the vendor source (config: GET https://opencode.ai/console/api/v2/config; docs: anomalyco/opencode services/www/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart); GoCatalogStale follows at 24 h."
+              description: "parse-failed = the answer did not match the shape gateway/src/agent_gateway/catalog.py parses (parse_catalog / parse_config / parse_docs \u2014 the log line names the READ: the config source is models.dev's api.json overlaid by the console's config); implausible = it carried fewer than half the last good snapshot's models. Either the vendor source or the parser may be what changed. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep \"catalog: docs\" names the line or count it stopped on; compare it with the vendor source (config: https://models.dev/api.json `opencode-go`, then GET https://opencode.ai/console/api/v2/config \u2014 the workspace overrides; docs: anomalyco/opencode services/www/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart); GoCatalogStale follows at 24 h."
       - eval_time: 45m
         alertname: GoCatalogParseFailed
         exp_alerts: []
@@ -133,7 +133,7 @@ tests:
         alertname: GoCatalogParseFailed
         exp_alerts: []
 
-  # ══ M1 — THE F3 CASE: the policy's Go model leaves the console's list ═════════════════════════
+  # ══ M1 — THE F3 CASE: the policy's Go model leaves the catalog ═════════════════════════
   # missing{config} 0 → 1 at 10m (the vendor retires the model); fires at 25m (for: 15m); a policy
   # PR moving the tier to a listed model rolls the pod at 60m → 0, cleared.
   - interval: 1m
@@ -154,7 +154,7 @@ tests:
               triage: now
             exp_annotations:
               summary: "1 Go model(s) in the gateway policy are not covered by its Go catalog's config snapshot"
-              description: "config = a policy Go model is not listed in the console catalog snapshot; docs = it has no monthly-limit row under rails.opencode.plan in the Go page snapshot. Which ids: GET /catalog/opencode on the gateway, policy_models, or kubectl -n agent-egress logs deploy/agent-gateway | grep \"policy model(s) not covered\". Check the vendor source before acting: a model the vendor no longer lists needs a policy change (argocd/resources/agent-gateway/policy.json rails.opencode.models, by PR); a page or parser change also shows as GoCatalogParseFailed or as a drop in gateway_go_catalog_models."
+              description: "config = a policy Go model is not listed in the Go catalog snapshot (models.dev's opencode-go rows under the console's overrides); docs = it has no monthly-limit row under rails.opencode.plan in the Go page snapshot. Which ids: GET /catalog/opencode on the gateway, policy_models, or kubectl -n agent-egress logs deploy/agent-gateway | grep \"policy model(s) not covered\". Check the vendor source before acting: a model the vendor no longer lists needs a policy change (argocd/resources/agent-gateway/policy.json rails.opencode.models, by PR); a page or parser change also shows as GoCatalogParseFailed or as a drop in gateway_go_catalog_models."
       - eval_time: 75m
         alertname: GoCatalogPolicyModelMissing
         exp_alerts: []
