@@ -24,6 +24,30 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
   it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
   box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
+- **⚑ PICKUP (2026-10-20 ~21:40Z — operator-ordered, two gateway island PRs, in this order; TICK-LOG 10-20 21:00–21:25Z
+  has the read):**
+  **(1) The Go catalog's `config` source → models.dev, the console answer as the OVERLAY.** The vendor's console
+  `GET /api/v2/config` stopped carrying the Go catalog on 2026-10-20 (`opencode-go.models: {}`; the `opencode` provider =
+  `disabled: true` overrides only) — in the vendor's own client (`packages/core/src/plugin/provider/opencode.ts`) that
+  answer was always an overlay on the base catalog, models.dev; each config field is applied "if defined" onto the
+  models.dev row. The leg holds the 11:02Z snapshot (`implausible` guard); `GoCatalogParseFailed{source=config}` firing,
+  `GoCatalogStale` at 24 h (~11:00Z 10-21). Build: a strict parser for `https://models.dev/api.json` → `providers.opencode-go.models`
+  (33 today; `cost` {input, output, cache_read, cache_write, tiers[{tier:{type:context,size}, …}]}, `limit` {context,
+  output}, `tool_call`) = the config snapshot's rows (the same `cost[]`/`context`/`output`/`tools` shape — verified
+  deepseek-v4.1-flash 0.15/0.60/0.003 · 1M, haiku's 100k tier); then the console answer as the overlay: `disabled: true`
+  → unlisted, a `cost`/`limit` present → wins; the console still needs the key (401 without), models.dev none. The
+  GW-CATALOG-GO page: the `config` bullet + the "⚑ gap: models.dev as a fallback" row become the rule; `GATEWAY_GO_CATALOG_URL`
+  = models.dev, a new `GATEWAY_GO_CONFIG_URL` for the overlay (or one source with two reads — the parse-failure rows
+  decide); fixtures: trim the live models.dev `opencode-go` to the five fixture models + the live override-only config
+  answer; `tests/_catalog_world.py` variants; worlds/README. Monthly limits stay with the `docs` source (go.mdx).
+  Evidence the Go RAIL is fine: `/zen/go/v1/models` 37 models, a 1-token completion 200, a gateway worker session rode
+  mimo-v2.6-flash clean (session 70563bee…).
+  **(2) Grant `prober` to the dispatcher caller.** `policy.json` `callers["system:serviceaccount:platform-agents:agentstack-loop"].roles`
+  = `["worker"]` → a `prober` admission (the entry canary — `gateway/scripts/canary-entrants.sh`, and the jail session test)
+  answers 403 `caller-role-denied`; no entry canary can run until it reads `["worker", "prober"]`. Rows: GW-SESSIONS-AUTH
+  (the caller table / `callers` comment in kustomization.yaml) + `specs/access.md` GW-ACCESS (the role × caller inventory);
+  `prober` binds nothing new. Then the canary window is the operator's; after it, the openrouter re-cut (FU-270 next (a)).
+  Both PR lane, island context only (`gateway/specs` + `gateway/src`), clone under the scratchpad, `cd gateway && devbox run ci`.
 - **⚑ PICKUP (2026-10-20 ~20:55Z — the gateway build session; TICK-LOG 10-20 16:30–20:55Z): #2743 DONE as #2764
   (merged round 1, deployed 17:51Z-stamp g32a713a6208f, verified live — pricing / rides / age gauge serving) on top of #2762 (merged 17:12Z: an endpoint with a null `uptime_last_1d`
   no longer loses its model — two anthropic models were absent from every refresh).** #2764 = the rail choice by cost per
