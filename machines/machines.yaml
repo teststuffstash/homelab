@@ -151,14 +151,14 @@ reconcile_rollout:
 machines:
   - name: opnsense
     kind: metal
-    label: OPNsense ("Big Data", HP desktop)
-    role: the PREVIOUS router — powered off since window 1 (2026-10-02), kept cabled as the fallback; `.1` is now the CARP pair's VIP (docs/router-move.md §Status)
+    label: OPNsense ("Big Data", HP desktop) — RETIRED
+    role: the PREVIOUS router — RETIRED 2026-10-20 (the fallback period ended; its hardware is now `wk-metal-04`, OPNsense disk wiped); `.1` is the CARP pair's VIP (docs/router-move.md §Status). Row kept for `wan_mac`
     hardware: HP desktop ("Big Data")
     cpu_cores: 4         # i5-2500
     memory_gb: 8
     ip: 192.168.2.1
-    # The WAN NIC's (em0) hardware MAC — the ISP lease follows it, so the router's successor
-    # spoofs it (the router rehearsal, docs/opnsense-test-vm.md; read from the API 2026-09-29).
+    # The WAN NIC's (em0 — the ONBOARD port, wk-metal-04's eno1 since 2026-10-20) hardware MAC —
+    # the ISP lease follows it, so the router's successor spoofs it (the router rehearsal, docs/opnsense-test-vm.md; read from the API 2026-09-29).
     wan_mac: "00:22:4d:4f:ab:2e"
     plug: sensor.plug_opnsense_power
     idle_w: 57
@@ -563,11 +563,11 @@ machines:
   - name: wk-metal-04
     kind: metal
     zone: wk-metal-04
-    label: "`wk-metal-04` (desktop i5-3570K 16GB, PXE)"
+    label: "`wk-metal-04` (HP desktop \"Big Data\" i5-2500 24GB, PXE)"
     role: k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier
-    hardware: desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2)
+    hardware: HP desktop "Big Data" (the retired router), i5-2500 (Sandy Bridge, VT-x/VT-d, no AVX2)
     cpu_cores: 4
-    memory_gb: 16
+    memory_gb: 24
     ip: 192.168.2.186
     reconcile: auto
     plug: null
@@ -575,15 +575,19 @@ machines:
     load_w: null
     singlecore_bogo_s: null
     multicore_bogo_s: null
-    # Desktop i5-3570K (Ivy Bridge: VT-x + EPT → kata OK; VT-d absent on the K SKU but not needed
-    # for microVMs; NO AVX2 → intentionally left avx2-unset, so goose rides schedule here but
-    # opencode (Bun SIGILLs) does not). 16GB RAM = the roomy kata node: unlike the 8GB laptops a
-    # ~5Gi ride fits with ~7Gi to spare (the Playwright/Chrome gate's home — sleep#48).
-    # 500GB SATA SSD → /dev/sda (⚠ CONFIRM via `talosctl -n 192.168.2.186 get disks --insecure` at
-    # maintenance before install). kata=true → metal_kata install image + homelab.io/kata label +
-    # the FU-112b kubelet reservation (conservative on 16GB). Compute tier: tainted ephemeral.
+    # 2026-10-20: the node's identity moved onto NEW HARDWARE — the original i5-3570K desktop died
+    # (no POST, ~01:11Z), so the retired router "Big Data" (HP, i5-2500, onboard eno1
+    # 00:22:4d:4f:ab:2e — the same MAC the CARP pair spoofs on its WAN, harmless on the LAN) took
+    # the name, zone and both 7600p data disks; RAM = the dead box's 2×8G + Big Data's 2×4G.
+    # Sandy Bridge: VT-x + EPT → kata OK; NO AVX2 → intentionally left avx2-unset, so goose rides
+    # schedule here but opencode (Bun SIGILLs) does not — the same class as the i5-3570K.
+    # The roomy kata node (~5Gi ride + headroom — the Playwright/Chrome gate's home, sleep#48).
+    # Install disk = Big Data's Crucial MX500 250GB (DRAM-cached; it held the old router's ZFS),
+    # pinned by wwn: it enumerates as sdb with the two NVMe present. The dead box's SA400 (the old
+    # `slow-bulk` default disk) did NOT move. kata=true → metal_kata install image +
+    # homelab.io/kata label + the FU-112b kubelet reservation. Compute tier: tainted ephemeral.
     talos_metal_node: true
-    install_disk: /dev/sda
+    install_disk: /dev/disk/by-id/wwn-0x500a0751e87b861f # CT250MX500SSD1
     kata: true
     longhorn_default_disk: true
     # 2026-09-09: two Intel SSD Pro 7600p 256 GB (SSDPEKKF256G8L — SM2262, 2×256 MB DDR4 DRAM, 3D TLC;
@@ -598,8 +602,8 @@ machines:
       - { device: /dev/disk/by-id/nvme-eui.5cd2e42a81a35e16, name: intel1, tags: [bulk] } # serial BTHH817204JW256B
     ephemeral: true
     notes: >-
-      The roomy kata node (16GB — Playwright/Chrome gate home); 500GB SATA; no AVX2 so
-      opencode/Bun rides are excluded; onboarded 2026-07-28. Carries the THIRD bulk-tier
+      The roomy kata node (24GB — Playwright/Chrome gate home); 250GB MX500 system disk; no AVX2 so
+      opencode/Bun rides are excluded; onboarded 2026-07-28, moved onto Big Data 2026-10-20. Carries the THIRD bulk-tier
       Longhorn disk since 2026-08-07 (ADR-089 addendum): 150Gi reserved, because Longhorn shares
       the ephemeral partition with the containerd+kata image store and the kubelet's nodefs
       floor evicts pods when they collide.
