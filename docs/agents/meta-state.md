@@ -24,34 +24,26 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
   it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
   box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
-- **⚑ PICKUP (2026-10-19 ~21:55Z — the overnight gateway session; TICK-LOG 10-19 20:30–21:55Z): #2741 + #2742 MERGED
-  as #2744 (294c7b81, four specs-review rounds, all test/spec-text); #2743 NOT started.** What landed: provider
-  attribution / own selection / request-level failover on the openrouter rail (`providers.py`, the proxy attempt loop,
-  `strikes`/`requests.provider`, `rails.openrouter.providers`), and GW-CATALOG-OR (`orcatalog.py`: the MCP weekly ranking
-  ∩ AA-benched → endpoints per candidate, the persisted snapshot, cells candidate/eligible/excluded, the `canary: {model,
-  provider}` admission, `canary-budget`/`canary-not-due`, nine families, three alerts + promtool fixture,
-  `gateway/scripts/canary-entrants.sh`, `AGENT_GATEWAY_ROLE`/`AGENT_GATEWAY_CANARY` + the `dispatch-canary` replay row).
-  **Verify after the deploy (the image for 294c7b81 built 21:52Z; its auto-bump PR #2746 is the machine lane's; the policy ConfigMap roll follows):**
-  `kubectl -n agent-egress logs deploy/agent-gateway | grep orcatalog:` shows the first refresh (the account key resolves
-  through the new agent-egress Role; the MCP answers; N models with endpoints), `gateway_openrouter_catalog_models > 0`,
-  `gateway_openrouter_cells{state="candidate"}` > 0, no `OpenRouterCatalogStale`; **the data plane changes nothing by
-  itself** — every cell is `candidate`, every openrouter request rides unpinned until canaries make cells eligible:
-  `bash gateway/scripts/canary-entrants.sh --dry-run` lists them, without `--dry-run` rides them (jail, port-forward, the
-  prober role; ⚑ gap: no in-cluster trigger). **Lesson:** a PR stacked on a feature branch here auto-merges INTO it
-  unreviewed (no protection on a feature base) — #2745 did; base everything on master. **#2743 next (fresh session,
-  island context = `gateway/specs` + `gateway/src` + the issue + the #2718 plan comment):** the Go side's price (⚖ a policy
-  `plan_fee_usd_month` ÷ the gateway's metered monthly Go tokens; the window draw as the headroom gate — both in
-  capacity.py), Go quantization undeclared → ⚑ gap row, cost per clean ride per cell = price × (1 / clean rate from
-  `store.cell_outcomes`) + a ⚖ policy strike-overhead term, `tiers.py` ordering candidates across BOTH rails by it (the
-  openrouter candidates switch from `model-classes.json` to `GET /catalog/openrouter`'s `selected` endpoint — #2718 item 4
-  closes there; production has zero eligible cells until canaries run, so the re-cut waits on them), the
-  `(opencode-go/<id>, <vendor>/<id>)` same-model join by the GW-MODEL-TIERS tail rule, the admission answer's reason +
-  `gateway_rail_choice_total{model,rail,reason}`, the rows the issue lists. The specs reviewer's recurring asks this
-  session: every judgment row ⚖ + listed under `Spec changes:`; ≤ 8 attachments PER CASE (each then_eq is one); a
-  parametrize value must appear in a step text; a glossary term redefined must be re-read on every page that names it.
-  **Operator-only, untouched:** FU-313 Go key mint, the codex login (leg E), the canary window; #2741 item 4's
-  "sessions dashboard" does not exist in the repo (no dashboard carries a `gateway_*` series) — filing one is the
-  operator's call.
+- **⚑ PICKUP (2026-10-20 ~20:55Z — the gateway build session; TICK-LOG 10-20 16:30–20:55Z): #2743 DONE as #2764
+  (merged round 1, deployed 17:51Z-stamp g32a713a6208f, verified live — pricing / rides / age gauge serving) on top of #2762 (merged 17:12Z: an endpoint with a null `uptime_last_1d`
+  no longer loses its model — two anthropic models were absent from every refresh).** #2764 = the rail choice by cost per
+  clean ride (GW-MODEL-TIERS §Cost per clean ride / §The Go price / §The rail choice; `tiers.cost` in policy; the Go price =
+  the plan fee read from the Go page's Plan table over what it bought; the openrouter price = the SELECTED endpoint's — null
+  until a cell passed the entry canary, so every openrouter tier is UNDECIDED and its deployed list stands;
+  `TierEvidenceStale` at 7 d on `gateway_tier_evidence_age_seconds`, benchmarks.json now ships in the policy ConfigMap;
+  the Go lists re-derived under the promise prices — the PR body has the table). **Verify after the deploy:**
+  `GET /catalog/opencode` → `pricing.fee_usd_month` 10, 29 models priced `promise`; `gateway_tier_evidence_age_seconds`
+  present (the auto-bump PR rolls the policy ConfigMap with benchmarks.json); a light-tier worker admission answers
+  `rail_choice` (`no-eligible-endpoint` → Go, until canaries). **If the review asks for rounds:** findings are fixed IN
+  the PR (clone `scratchpad/hl-2743`, branch `feat/gateway-rail-choice`; `cd gateway && devbox run ci`). **Then:** the
+  #2718 comment (items 1-Go, 3, 4 closed by #2764; 2, 5, 1-anthropic stay), the canary window is the operator's, the
+  openrouter re-cut follows it (FU-270 next (a)).
+- **⚑ BOARD (2026-10-20 20:50Z, found verifying #2764; NOT acted on):** the OpenCode console config answers
+  `opencode-go.models: {}` to the gateway's key on every refresh since ≥ 17:16Z (200, 0 models; the Go page still lists 29);
+  the gateway serves on the 11:02Z config snapshot — `GoCatalogParseFailed{source=config,outcome=implausible}` pending →
+  firing, `GoCatalogStale` at 24 h. No Go traffic in 6 h (the rail's health unobserved), credentials rejected 0. Cause
+  unknown — not `dig-explained`; candidates: the account/plan state (FU-313's "Inference only" key mint is the operator's),
+  a vendor change. If Go rides start failing, GoRailCredentialRejected is the belt.
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a

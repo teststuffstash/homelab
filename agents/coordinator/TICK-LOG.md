@@ -13875,3 +13875,40 @@ updates or reverts as much as possible — mechanical revert or a responder."
   longhorn-tag-disks.sh (first run hit "disks syncing" between register and fence: ~30 s as bulk+schedulable, 0 replicas landed; retry fenced it).
 - garage-0 volumes auto-salvaged; garage-0 back with node id d93314cf…, GarageZone/ClusterDegraded cleared. #2758 merged 96227dc9.
 - Window force-closed: PodSigkilled claimed (reinstall-killed DaemonSet pods), NodeCPUHighUsage cp-01 handed to the responder.
+
+## 2026-10-20 ~16:30–20:45Z — seat: "pick up gateway build" → #2762 (null uptime) merged, #2743 built as #2764 (PR lane, island context)
+
+- Pickup read (meta-state's 10-19 bullet, #2743, the #2718 plan comment, gateway/specs + gateway/src, no corpus). Deploy
+  verification of the 10-19 catalog work: live, 26 models / 249 candidate cells / 0 eligible (no canary has run — the
+  operator's window); one defect in the refresh log: `uptime_last_1d: None` on two anthropic models' endpoints failed the
+  whole model's parse → #2762 (parsed as no uptime, dropped by the floor; both reviewers approved, merged 17:12Z; the next
+  refresh read 28 models).
+- Design settled from the issue + the ruling, no operator question: the Go price = the plan fee (the Go page's Plan table,
+  read by the docs source — no policy copy) over what it bought: list × fee ÷ max(the rail's 30-day list-priced draw, the
+  model's own limit) — `promise` until the rail out-draws the allowance, `measured` after, 0 for unlimited; the openrouter
+  price = the SELECTED endpoint's, null until a cell passed the entry canary (never the headline); cost per clean ride =
+  price × T ÷ rate + overhead × (1/rate − 1) with `tiers.cost` {T 0.01 M — the ledger's 30-day mean per session on the
+  openai-dialect rails (opencode 11.1k, openrouter 13.4k), overhead 0 (⚑ unmeasured), min_rides 5}; the rail choice
+  reorders the WALK (the cheaper twin's rail first, the twin at its head; the loser still walked), never adds a model.
+- Live ledger facts the knobs rest on: 30 d Go traffic 162 requests, 0.86M in / 0.28M out / 8.3M cache_read — 155 of them on
+  `deepseek-v4-flash`, which the catalog no longer prices, so the rail's priced draw is $0.002: every Go model prices at
+  its promise. The twin that exists in the fixture world is deepseek-v4.1-flash (opencode bare vs openrouter light list).
+- Snapshot re-cut without the new image: both catalog views rendered by the new code over a consistent sqlite backup of
+  the production store (docs refreshed live for the fee) — a scratchpad one-off; the Go lists re-derived under the promise
+  prices (deepseek-v4.1-flash and glm-5.3-flash enter light; step-5-preview enters heavy), openrouter undecided (0 of 28
+  priced), its deployed lists stand. `TierEvidenceStale` (7 d / absent) + promtool fixture; benchmarks.json joins the
+  policy ConfigMap (GATEWAY_BENCHMARKS).
+- #2764 open 20:35Z, auto-merge armed, pr-wait in the background; `devbox run ci` 799 rows green, spec gate 0 not passed,
+  rules + manifest lints green. Bookkeeping (FU-270, meta-state, this entry) committed, push at wind-down.
+- 20:47Z: #2764 MERGED on round 1 (both reviewers approved; CI green); image built 17:51Z-stamp g32a713a6208f, auto-bump
+  merged, pod rolled. Verified live: `/catalog/opencode` pricing fee 10 / 29 of 29 priced (promise; the 30-day priced draw
+  $0.002), openrouter rows carry `rides`, `gateway_tier_evidence_age_seconds` serving (1724 s at read), healthz ok, the
+  refresh read 28 models / 0 unreadable (the #2762 fix). #2718 commented (items 1-Go, 3, 4 closed; 2, 5 open).
+- Found while verifying (NOT acted on — the detector owns it): the console config source answers `opencode-go.models: {}`
+  (200, 1648 bytes, 0 models, 0 disabled) to the gateway's key on every refresh since at least the 17:16Z roll; the gateway
+  serves on the 11:02Z config snapshot (age 6.9 h), the Go page still lists 29 models; `GoCatalogParseFailed{source=config,
+  outcome=implausible}` pending → firing; `GoCatalogStale` at 24 h. No Go traffic in 6 h, credentials rejected 0 — the
+  rail's own health is unobserved. Cause unknown (an account/plan state? a vendor change?) — FU-313's key mint is the
+  operator's; the responder/dig reads the alert.
+- Wound down ~20:55Z: bookkeeping pushed once; the clone removed; memory (gateway-island) updated.
+

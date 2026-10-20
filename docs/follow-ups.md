@@ -818,16 +818,15 @@ the block needs pruning, not more headings.
       Deployment + Service in `agent-egress`, ≥2 replicas + PDB, its own SA with the Secret-read
       grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
       (retry) stays. Relates ADR-087, FU-089.
-- [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** `/sessions` consumers:
-      specs reviewer (ADR-155, own SA #2710) + the worker launcher behind `AGENT_GATEWAY=sessions` (platform only); the
-      pod pulls its env; control plane enforced (#2688; gap #2684 waits). Failure ownership LIVE 10-17, Go catalog LIVE
-      10-18, **tier lists DERIVED from evidence (ruling 10-18, #2716; gaps → #2718)**. **Codex rail (rulings 10-19: native
-      backend, gateway-local store, own login) — legs A–E + status in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)**
-      (A #2734, B #2735, C #2736 merged 10-19; D, E unstarted). **Next (seat, no ruling — operator 10-19: "again
-      deciding on models?"):** (a) an OpenRouter catalog leg (the GW-CATALOG-GO gap row): candidates = vendor `/models` ∩
-      AA-benched under the existing bands — the 11-id hand table is why kimi-k3 sits alone (#2718 item 4); (b) `wrong-verdict`
+- [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** Status + history: the
+      island's README/specs (`gateway/`) and the TICK-LOG; the codex rail's legs in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)
+      (A–C merged 10-19; D, E unstarted). Landed 10-20: **rail choice by cost per CLEAN ride (#2764; GW-MODEL-TIERS)** —
+      the openrouter tiers stay UNDECIDED until the entry canaries run (`gateway/scripts/canary-entrants.sh`, the
+      operator's window); gaps → #2718. **Next (seat):** (a) after the canary window, re-cut the snapshot
+      (`gateway/scripts/benchmarks-snapshot.sh` → `tiers apply` → PR) so the openrouter tiers decide; (b) `wrong-verdict`
       fed by the one machine signal that exists (deploy-revert of an approved PR); (c) the loop flip into the session-pod
-      heredoc; (d) `context_tokens` from the catalog. **Operator-only:** FU-313's Go key mint, the codex login (leg E), the canary window.
+      heredoc; (d) `context_tokens` from the catalog. **Operator-only:** FU-313's Go key mint, the codex login (leg E),
+      the canary window.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
