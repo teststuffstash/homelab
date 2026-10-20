@@ -13912,3 +13912,23 @@ updates or reverts as much as possible — mechanical revert or a responder."
   operator's; the responder/dig reads the alert.
 - Wound down ~20:55Z: bookkeeping pushed once; the clone removed; memory (gateway-island) updated.
 
+
+## 2026-10-20 ~21:00–21:25Z — seat: "look into the go leg" (operator) — the Go rail is fine, the console config changed shape; a gateway session rode Go clean
+
+- Probes from the gateway pod with its own key: `/zen/go/v1/models` 200 / 37 models; a 1-token chat on deepseek-v4.1-flash
+  200 with usage → the rail and the key are healthy. `GET /console/api/v2/config` 200 / 1648 bytes: `opencode-go.models: {}`,
+  every `opencode` row a `disabled: true` override → the endpoint now returns the WORKSPACE OVERRIDES on a default catalog,
+  not the catalog (the 10-17 spike read per-model `cost[]` rows there). The leg's `implausible` guard holds the 11:02Z
+  snapshot; `GoCatalogParseFailed{source=config}` pending → firing, `GoCatalogStale` at 24 h. models.dev's `opencode-go`
+  (the vendor's own repo; the spike's F4 / the "models.dev as a fallback" gap row) carries 33 models with `cost`
+  (in/out/cache_read/cache_write + context `tiers`) and `limit` — the same values the config used to carry (deepseek
+  0.15/0.60/0.003, 1M ctx; haiku's 100k tier row). The vendor repo's 17:05Z commit removed the website's legacy
+  `/zen/*` passthrough routes; the config handler is not in the public tree.
+- Session test (jail → port-forward → `agent-session.sh`, `AGENT_GATEWAY=sessions`, caller SA platform-agents/agentstack-loop):
+  role prober → 403 `caller-role-denied` (the deployed `callers` grant that SA `worker` only) — **the 10-19 canary launcher
+  (`canary-entrants.sh`, role prober, the same SA) is refused the same way: no entry canary can run until the policy grants
+  it.** Role worker → dispatch opencode-go/mimo-v2.6-flash (the re-derived standard head), env pulled, the ride answered
+  ("homelab"), outcome clean, released (session 70563bee…, pod agent-homelab-180142 on nx-01, 16 s). Pod deleted after.
+- Next (operator's call): (1) build models.dev as the config source's catalog with the console answer as the override layer
+  (GW-CATALOG-GO's named gap, a PR on the island); (2) grant `prober` to the dispatcher caller in policy.json (+ GW-ACCESS /
+  GW-SESSIONS-AUTH rows) so the canary window can open.
