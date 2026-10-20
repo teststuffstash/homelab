@@ -79,34 +79,44 @@ Headroom reports enter through the in-process seam (`app.state.codex.headroom.ob
 
 ## The Go catalog's fakes
 
-`tests/_catalog_world.py`'s `FakeVendor` answers both sources of
+`tests/_catalog_world.py`'s `FakeVendor` answers the three reads of
 [GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go) in process, on fixture hosts
-(`console.opencode.test`, `raw.vendor.test`). Its fixtures are trimmed from the **live answers of
-2026-10-17**: `tests/fixtures/go-catalog/config.json` is the `opencode-go` provider of
-`GET /console/api/v2/config` cut to five models (`claude-haiku-5-5`, `deepseek-v4-pro`,
-`deepseek-v4.1-flash`, `longcat-2.5-preview-free`, `step-5-preview`), the account's org-id header
-dropped; its one synthetic row is `deepseek-v4-flash` marked `"disabled": true` (the live answer
-carries such rows under the pay-as-you-go `opencode` provider only).
-`tests/fixtures/go-catalog/go.mdx` is the vendor's page cut to its Plan table (the two plans'
+(`models.dev.test`, `console.opencode.test`, `raw.vendor.test`). `tests/fixtures/go-catalog/models-dev.json`
+is models.dev's `api.json` cut to the `opencode-go` provider and six of its models — the five
+listed (`claude-haiku-5-5`, `deepseek-v4-pro`, `deepseek-v4.1-flash`, `longcat-2.5-preview-free`,
+`step-5-preview`) plus `step-5-preview-free`, a live `status: deprecated` row — from the **live
+answer of 2026-10-20**. `tests/fixtures/go-catalog/config.json` is `GET /console/api/v2/config` as
+the same day's live answer carries it: the workspace's OVERRIDES on a default catalog (the
+pay-as-you-go `opencode` provider's `disabled: true` rows, cut to five; `opencode-go` with
+`models: {}`), the account's org-id header dropped — every `config-*` variant adds one override to
+the Go provider in memory. `tests/fixtures/go-catalog/go.mdx` is the vendor's page cut to its Plan table (the two plans'
 monthly fees, verbatim from the live page of 2026-10-20 — the [Go price](../glossary.md#go-price)
 divides the policy plan's), its Usage-limits section and Endpoints table for the same five
 models, rows otherwise verbatim. Every variant below is derived
 from those two files in memory. **Every world's gateway starts from this catalog**:
-`conftest.seed_go_catalog` stores the `catalog-ok` + `docs-ok` snapshots (parsed by the leg's own
-parsers, fetched at T0) before the gateway is built, as a production gateway starts from its
+`conftest.seed_go_catalog` stores the `catalog-ok` + `config-ok` (merged) and `docs-ok` snapshots
+(parsed by the leg's own parsers, fetched at T0) before the gateway is built, as a production gateway starts from its
 persisted last good snapshot — so the opencode rail's admission rows price from it. A row that
 needs another catalog refreshes against the fake vendor first (`catalog-retired`, `docs-retired`).
 
 | behaviour | the fake answers |
 |---|---|
-| `catalog-ok` | 200, the config fixture |
+| `catalog-ok` | 200, the models.dev fixture (six rows, one deprecated) |
 | `catalog-trimmed` / `catalog-shrunk` | the fixture with 3 (`claude-haiku-5-5`, `deepseek-v4-pro`, `deepseek-v4.1-flash`) / 2 (`deepseek-v4-pro`, `deepseek-v4.1-flash`) models |
-| `catalog-retired` | the fixture without `deepseek-v4.1-flash` (the policy's model leaves the console list — the spike's §F3, replayed) |
+| `catalog-retired` | the fixture without `deepseek-v4.1-flash` (the policy's model leaves the catalog — the spike's §F3, replayed) |
 | `catalog-malformed` | the fixture with `deepseek-v4-pro`'s `cost` removed |
+| `catalog-legacy-tier` | `deepseek-v4-pro`'s cost carrying `context_over_200k` with no `tiers` (the legacy spelling alone) |
 | `catalog-no-provider` | the fixture's provider under the key `opencode` instead of `opencode-go` |
 | `catalog-empty` | the fixture with `models: {}` |
-| `catalog-503` / `catalog-down` | 503 / a connect failure |
-| `catalog-401-echo` | 401 whose body names the test Go key (the redaction row) |
+| `catalog-503` / `catalog-down` | 503 / a connect failure on the models.dev read |
+| `config-ok` | 200, the console fixture — overrides only, `opencode-go.models: {}` |
+| `config-disables` | + `deepseek-v4-pro: {disabled: true}` |
+| `config-reprices` | + `claude-haiku-5-5` with two `cost` rows (0.20/1.00, above 200000 tokens 1.00/5.00) and `limit.context` 200000 |
+| `config-adds` / `config-adds-bare` | + `deepseek-v4-flash` (no catalog row) as a full row (cost, both limits, family, tools) / as `{disabled: false}` alone |
+| `config-malformed` | + `deepseek-v4-pro: {cost: "free"}` |
+| `config-no-provider` | the console answer without its `opencode-go` provider |
+| `config-503` / `config-down` | 503 / a connect failure on the console read |
+| `config-401-echo` | 401 whose body names the test Go key (the redaction row) |
 | `docs-ok` | 200, the page fixture |
 | `docs-404` | 404 (the page moved) |
 | `docs-unknown-model` | a `DeepSeek V4.2 Flash` plan row the Endpoints table does not name |

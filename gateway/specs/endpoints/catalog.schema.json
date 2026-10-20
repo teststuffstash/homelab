@@ -207,6 +207,7 @@
       "x-requirements": ["GW-MODEL-TIERS"]
     },
     "config_snapshot": {
+      "description": "the config source's snapshot: the merged listing — models.dev's opencode-go rows (deprecated dropped) under the console's overrides (GW-CATALOG-GO, 2026-10-20)",
       "type": "object",
       "additionalProperties": false,
       "required": ["models"],

@@ -267,7 +267,7 @@ blocks lifts.
   at the model's first request after its previous one expired (`router.go_usage_chain_open`).
   Prices apply at READ time from the ledger (`requests` × `sessions.model`), so a catalog refresh
   re-prices the open windows. A model whose monthly limit is `unlimited` draws against no window.
-- **Not in the catalog** (`opencode`, per cell): a Go model the catalog's console snapshot does not
+- **Not in the catalog** (`opencode`, per cell): a Go model the catalog's config snapshot does not
   list, or that has no monthly-limit row under the policy's plan (or no snapshot exists yet), is
   refused — `not-in-catalog`, `retry_after_s` = the next scheduled catalog refresh — never priced at
   a fallback (operator ruling 4). This is the 2026-10-14 retirement (the spike's §F3) turned from
@@ -369,13 +369,13 @@ each row is computed in its test's comment.
 | "the 30d window binds once the week has reset" | worker in 220M (T0) — $66 | +230401 s | worker, `rail: opencode` || defer | — | rail-window | 2287799 |
 
 The catalog rows refresh the world's Go catalog against the fake vendor first: `catalog-retired`
-(the console list without `deepseek-v4.1-flash` — §F3 replayed) or `docs-retired` (the Go page
+(the catalog — models.dev — without `deepseek-v4.1-flash` — §F3 replayed) or `docs-retired` (the Go page
 without `claude-haiku-5-5`'s plan rows). `retry_after_s` = the next scheduled refresh (21600 s
 after the one just run).
 
 | description | the refresh | body || decision | rail | reason | retry_after_s |
 |---|---|---||---|---|---|---|
-| "a Go model the console no longer lists defers not-in-catalog ⚖" | `catalog-retired` | worker, `rail: opencode` || defer | — | not-in-catalog | 21600 |
+| "a Go model the catalog no longer lists defers not-in-catalog ⚖" | `catalog-retired` | worker, `rail: opencode` || defer | — | not-in-catalog | 21600 |
 | "a not-in-catalog model is skipped, the walk continues ⚖" | `catalog-retired` | worker (policy walk) || dispatch | openrouter | — | — |
 | "a listed model with no monthly limit under the plan defers not-in-catalog ⚖" | `docs-retired` | worker, `rail: opencode`, `tier: heavy` || defer | — | not-in-catalog | 21600 |
 | "the other Go models still admit ⚖" | `catalog-retired` | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |

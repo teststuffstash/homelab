@@ -149,6 +149,12 @@ The two catalogs differ in what they include:
 is the fallback, and its `status: deprecated` field is the only machine-readable deprecation
 marker.
 
+**Settled 2026-10-20** (GW-CATALOG-GO): that day the console answer became override-only
+(`opencode-go.models: {}`, every row a `disabled: true` override) — which is what it always was
+to the vendor's client (`packages/core/src/plugin/provider/opencode.ts` applies each config field
+"if defined" onto the models.dev row, after `plugin/models-dev.ts` dropped the `deprecated` rows).
+The leg now reads models.dev as the catalog and the console as the overlay, in that order.
+
 ### F5 — usage, allowance, key metadata: no API
 
 From the console API docs (`…/console/api/`, `…/api/budgets/`, `…/budgets/`, `…/billing/`,

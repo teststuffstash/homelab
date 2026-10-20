@@ -161,12 +161,13 @@ never decides it.
 ## Go catalog
 
 The opencode rail's vendor facts as the gateway last read them: two **snapshots**, one per
-source — `config` (the console's V2 config: listed models, `cost[]` tiers, context/output limits,
-tool support) and `docs` (the vendor's Go page: each model's monthly limit per **plan**, promotion
+source — `config` (models.dev's `opencode-go` catalog with the console's V2 config as the
+workspace's overlay — listed models, cost tiers, context/output limits, tool support) and `docs` (the vendor's Go page: each model's monthly limit per **plan**, promotion
 multipliers, peak rows and hours, the 5h/weekly/monthly shares). Refreshed on a schedule; a failed,
 unparseable or implausible refresh keeps the last good snapshot, which the store persists
-([GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go)). *Listed* means in the config snapshot — an
-account fact, not a liveness signal. **Plan** = `go` | `go-plus`, declared in the policy
+([GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go)). *Listed* means in the config snapshot — the merged
+listing, models.dev's rows under the workspace's **overrides** (the console's overlay) — an account
+fact, not a liveness signal. **Plan** = `go` | `go-plus`, declared in the policy
 (`rails.opencode.plan`) because no vendor API says which one a key is on.
 
 ## tier evidence
