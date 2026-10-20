@@ -815,7 +815,9 @@ runs unchanged without a caller token. **`policy-enforce`** is the same document
 ([worlds/README.md](../worlds/README.md)). Both hold three fixture callers; the third, the judge,
 admits nothing and is [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s.
 **The platform loop** = `system:serviceaccount:platform-agents:agentstack-loop` · stacks
-`[platform]` · roles `[worker]` · bind namespaces `[platform-agents]`. **The specs reviewer** =
+`[platform]` · roles `[worker, prober]` (the dispatcher's workers, and the entry canary's prober
+rides — [GW-CATALOG-OR §The entry canary](catalog.md#the-entry-canary) — which `canary-entrants.sh`
+admits as this SA) · bind namespaces `[platform-agents]`. **The specs reviewer** =
 `system:serviceaccount:agent-coordinator:agent-coordinator` · stacks `[platform]` · roles
 `[reviewer, worker]` · bind namespaces `[]`. The fake TokenReview answers a presented token as the
 `presented` cell says. A caller's name = authenticated · audiences `[agent-gateway]` · that
@@ -849,6 +851,7 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 |---|---|---||---|---|
 | "a stack outside the caller's entry" | the platform loop | stack `oracle`, worker, bind `{platform-agents, agentstack-worker}` || 403 | caller-stack-denied |
 | "a role outside the caller's entry" | the platform loop | platform `reviewer` + bind || 403 | caller-role-denied |
+| "the entry canary's role is inside the dispatcher's entry ⚖" | the platform loop | platform `prober`, no bind || 200 | `dispatch` — the caller check passes; the deployed `callers` grants the dispatcher SA `prober` beside `worker` (2026-10-20: without it every canary admission was 403, no openrouter cell could become eligible) |
 | "a bind namespace outside the caller's entry" | the platform loop | platform worker, bind `{oracle-agents, agentstack-worker}` || 403 | caller-bind-denied |
 | "a caller with no bind namespaces may not bind" | the specs reviewer | platform reviewer + bind `{platform-agents, agentstack-worker}` || 403 | caller-bind-denied |
 | "an unbound admission needs no bind namespace" | the specs reviewer | platform reviewer, no bind || 200 | `dispatch` with `session.token` + `env` ([GW-SESSIONS-ENV](#gw-sessions-env)) |
@@ -884,12 +887,14 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
 | "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
 | "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
-| "the deployed callers are today's two dispatchers, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`) |
+| "the deployed callers are today's two dispatchers, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker, prober]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
-is the one in-cluster caller of `agents/agent-session.sh`. It binds into the platform repo
-namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
+is the one in-cluster caller of `agents/agent-session.sh`; the jail's `canary-entrants.sh` mints
+the same SA's token to ride the entry canary, which is why its entry grants `prober` beside
+`worker` (2026-10-20 — until then every canary admission was 403 `caller-role-denied`). It binds
+into the platform repo namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
 no `agentstack-worker`, so a bind there could never be pulled and is not granted. The specs-review
 tick and its shadow cells run as their own SA `specs-review` (`agents/coordinator/specs-review-argo.yaml`;
 homelab#2685 — `callers` is per SA, and `agent-coordinator` is the SA every other workflow in that
