@@ -13,8 +13,6 @@ list every wind-down writes — does NOT count (#2526, 2026-10-12: `RegistryMirr
 dig for days by being listed). Write the marker only when the cause is known; the reason rides into the dig's record.
 
 
-dig-explained: GoCatalogParseFailed, GoCatalogStale — the OpenCode console's `/api/v2/config` became override-only on 2026-10-20 (`opencode-go.models: {}`), so the config source's refresh is `implausible` and the 11:02Z snapshot is served; the fix is #2766 (models.dev as the catalog, the console as the overlay). Delete this line once #2766 is deployed and the outcome reads ok.
-
 dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-side evidence in the OLD router's 7-day run_reports window (the class = #2555): the two 2026-10-11 probes (platform/worker v4-flash) plus, read 10-18 19:40Z, platform/worker v4-flash=4 / v4.1-flash=2 and oracle/worker v4-flash=1 — the 10-17 gateway canaries + v4.1-flash admissions (#2694/#2707) ride the gateway, which the proxy's harvest never sees (mechanism from TICK-LOG 10-17/18, NOT from the run_reports rows — a dig may confirm). Ages out ~2026-10-24. Delete this line once it clears.
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
@@ -26,20 +24,20 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
   it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
   box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
-- **⚑ PICKUP (2026-10-20 ~22:45Z — the two ordered gateway island PRs are OPEN, auto-merge armed, pr-wait ran;
-  TICK-LOG 10-20 21:30–22:45Z):** **#2766** — the Go catalog's `config` source = TWO reads merged into the unchanged
+- **⚑ PICKUP (2026-10-20 ~23:50Z — gateway: #2766 MERGED + DEPLOYED + VERIFIED (19:07Z: config source `ok`, 29
+  models, `GoCatalog*` alerts clear); #2767 in review round 2 (its CI run lost its runner at 19:15Z — force-cancelled + re-run
+  ~19:50Z, pr-wait re-armed); TICK-LOG 10-20 21:30–23:50Z):** **#2766** — the Go catalog's `config` source = TWO reads merged into the unchanged
   snapshot shape: models.dev `api.json` (`opencode-go`, no credential; `status: deprecated` dropped, as the vendor's
   `plugin/models-dev.ts` does) then the console `/api/v2/config` as the workspace OVERLAY (`disabled` unlists; `cost` /
   `limit` / `name` / `family` / `capabilities.tools` win; a console-only row listed only when complete) — the
   vendor's own order (`plugin/provider/opencode.ts`); env `GATEWAY_GO_CATALOG_URL` = models.dev, new
   `GATEWAY_GO_CONFIG_URL` = the console; fixtures from the live 2026-10-20 answers; alert annotations name both reads.
   **#2767** — `callers[platform-agents:agentstack-loop].roles` = `["worker", "prober"]` (+ fixture worlds, a
-  GW-SESSIONS-AUTH row, GW-ACCESS role × caller). **Verify after each deploy** (the auto-bump PR rolls the pod):
-  #2766 → `GET /catalog/opencode` `sources.config.last_outcome` ok, `models` 29, `GoCatalogParseFailed` clears
-  (`gateway_go_catalog_last_outcome{source="config",outcome="ok"}` 1); #2767 → `bash gateway/scripts/canary-entrants.sh
+  GW-SESSIONS-AUTH row, GW-ACCESS role × caller). **#2766 is verified** (deploy #2769, image g618c588a6e15). **Verify after #2767's
+  deploy:** `kubectl -n agent-egress exec deploy/agent-gateway -- python3 -c` (no curl in the image) a GET of
+  `/catalog/opencode` still ok, then `bash gateway/scripts/canary-entrants.sh
   --dry-run` admits (no 403) — the canary WINDOW itself is the operator's; after it the openrouter re-cut (FU-270 next
-  (a)). **If a review asks for rounds:** clones `scratchpad/hl-gocat` (branch `feat/go-catalog-models-dev`) and
-  `scratchpad/hl-prober` (`fix/gateway-prober-caller`) under this session's scratchpad; `cd gateway && devbox run ci`.
+  (a)). **If a review asks for rounds:** clone `scratchpad/hl-prober` (`fix/gateway-prober-caller`; `hl-gocat` is done) under this session's scratchpad; `cd gateway && devbox run ci`.
   (#2718's #2764 status comment exists since 17:47Z — nothing left there.)
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883

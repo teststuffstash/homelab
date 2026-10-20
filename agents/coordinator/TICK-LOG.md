@@ -13955,3 +13955,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   row + role × caller paragraph; the kustomization `callers` comment. Island ci 811 green.
 - Both auto-merge armed via pr-wait (background). Bookkeeping: meta-state pickup collapsed to one bullet + a
   `dig-explained` for GoCatalogParseFailed/GoCatalogStale (clears with #2766's deploy); FU-270 next (0) → in review.
+
+## 2026-10-20 ~22:45–23:50Z — seat: #2766 round 1 → merged → deployed → verified; #2767 round 1 + an orphaned CI run
+
+- #2766 round 1 (specs reviewer, CHANGES_REQUESTED): all bookkeeping — ⚖ on the two console-only rows, the gap row's
+  `⚑ gap (2026-10-20, PR #2766 → work #2768)` form (issue #2768 filed: the rail serves ids the catalog does not list,
+  37 vs 29), a `Spec changes:` section with the removed-row → carrier map, *Listed* = the merged listing. Round 2
+  APPROVED, merged 19:02Z; the auto-bump #2769 merged; the pod rolled (image g618c588a6e15). **Verified from the pod**:
+  `catalog: config refreshed — 29 models` at 19:07:43Z (fetched_at 19:07Z, not the 11:02Z snapshot), docs ok,
+  policy models all listed with limits; Alertmanager: 0 active `GoCatalog*`.
+- #2767 round 1: only the missing `Spec changes:` section (the rows + evidence judged sound) — body edited, an empty
+  commit pushed for a new head. Its CI run then sat 35 min on "Mermaid parse lint" with no runner pod left in
+  `arc-runners` (ephemeral runners cycled normally around it; a 4-min run normally) — the TICK-LOG 8954 class:
+  cancel → force-cancel (`actions/runs/<id>/force-cancel`) → re-run; pr-wait re-armed. Single sighting, no FU.
+- Lesson (jail): zsh does not word-split a `K="devbox run -- kubectl …"` command variable — an `until $K …` loop spins
+  forever (the deploy-verification task had to be stopped and run by hand).
