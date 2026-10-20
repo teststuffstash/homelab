@@ -41,6 +41,8 @@ spec:
           env:
             - name: GATEWAY_POLICY
               value: /etc/agent-gateway/policy.json
+            - name: GATEWAY_BENCHMARKS
+              value: /etc/agent-gateway/benchmarks.json
             # Unset/unwritable ⇒ :memory: degrade (healthz db: "memory") — never a hard dependency.
             - name: GATEWAY_DB
               value: /data/gateway.db

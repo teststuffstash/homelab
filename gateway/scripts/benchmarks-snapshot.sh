@@ -13,9 +13,12 @@
 #      weekly `_capability_tick` records; the gateway itself never calls AA or the MCP): read in
 #      the pod with python3 + sqlite3 over stdin (the pod has no shell tooling to lean on; ROUTER_DB
 #      defaults to /data/router.db as in openrouter-proxy.py), JSON on the last line;
-#   2. the Go catalog — the gateway's own `GET /catalog/opencode` (the snapshot admission reads),
-#      through a port-forward to svc/agent-gateway;
-#   3. OpenRouter's public model list — plain curl, unauthenticated.
+#   2. the Go catalog — the gateway's own `GET /catalog/opencode` (the snapshot admission reads,
+#      with `pricing`: the plan fee over what it bought), through a port-forward to svc/agent-gateway;
+#   3. the OpenRouter catalog — the gateway's own `GET /catalog/openrouter`: each model priced at
+#      its SELECTED endpoint (null until a cell passed the entry canary — never the headline) with
+#      the cell's clean-ride evidence, through the same port-forward.
+# A tier with no priced candidate is UNDECIDED: `apply` leaves its deployed list, `check` names it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$(cd .. && pwd)
@@ -51,19 +54,18 @@ for _ in $(seq 1 30); do
 done
 [ -n "$port" ] || { echo "port-forward to svc/agent-gateway did not come up:"; cat "$scratch/pf.log"; exit 1; }
 curl -fsS "http://127.0.0.1:$port/catalog/opencode" > "$scratch/go-catalog.json"
+python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); s=d['sources']['config']; p=d['pricing']; print('   plan %s, %s models, fetched %s; fee %s/month, 30d draw %s at list, %d priced' % (d['plan'], s['models'], s['fetched_at'], p['fee_usd_month'], p['draw_30d_usd'], sum(1 for m in p['models'].values() if m['out'] is not None)))" "$scratch/go-catalog.json"
+
+echo "== 3/3 the OpenRouter catalog via GET /catalog/openrouter (the same port-forward)"
+curl -fsS "http://127.0.0.1:$port/catalog/openrouter" > "$scratch/openrouter-catalog.json"
 kill "$pf" 2>/dev/null || true
 pf=""
-python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); s=d['sources']['config']; print('   plan %s, %s models, fetched %s' % (d['plan'], s['models'], s['fetched_at']))" "$scratch/go-catalog.json"
-
-echo "== 3/3 OpenRouter's public model list"
-curl -fsS -o "$scratch/openrouter-models.json" https://openrouter.ai/api/v1/models
-fetched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-python3 -I -c "import json,sys; print('   %d models' % len(json.load(open(sys.argv[1]))['data']))" "$scratch/openrouter-models.json"
+python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); print('   %d models, fetched %s, cells %s, %d with a selected endpoint' % (d['models_count'], d['fetched_at'], json.dumps(d['cells']), sum(1 for m in d['models'].values() if m['selected'])))" "$scratch/openrouter-catalog.json"
 
 echo "== snapshot → $OUT"
 devbox run tiers -- snapshot \
   --capability "$scratch/capability.json" --go-catalog "$scratch/go-catalog.json" \
-  --openrouter-models "$scratch/openrouter-models.json" --openrouter-fetched-at "$fetched_at" \
+  --openrouter-catalog "$scratch/openrouter-catalog.json" \
   --anthropic-aliases "$ALIASES" -o "$OUT"
 echo "== inputs kept under $scratch"
 echo "== derivation vs the deployed policy (apply with: devbox run tiers -- apply)"

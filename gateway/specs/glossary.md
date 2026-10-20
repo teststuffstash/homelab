@@ -174,13 +174,48 @@ account fact, not a liveness signal. **Plan** = `go` | `go-plus`, declared in th
 The benchmark rows the DEPLOYED policy's [tier](#tier) lists are derived from
 ([GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers)): a committed snapshot
 (`argocd/resources/agent-gateway/benchmarks.json`) of every candidate policy id per rail with its
-Artificial Analysis row (joined by rule, never a table), its price and its Go monthly limit, plus
-the policy's `tiers` block — the score axis, the per-tier **score bands** as fractions of the
-rail's top score, the cap. The lists are the derivation's output; a hand edit fails the suite.
+Artificial Analysis row (joined by rule, never a table), its price (the openrouter model's
+SELECTED endpoint's; the [Go price](#go-price)), its clean-ride evidence and its Go monthly
+limit, plus the policy's `tiers` block — the score axis, the per-tier **score bands** as
+fractions of the rail's top score, the cap, the `cost` terms. The lists are the derivation's output, each ordered by [cost per clean ride](#cost-per-clean-ride);
+a hand edit fails the suite. A tier with no priced candidate (the openrouter rail before its first
+eligible cell) is **undecided**: its deployed list stands, `apply` refuses to write it.
 *Score band* here is the `tiers.bands` fraction, not the ADR-104 curation band of
 [`docs/glossary.md`](../../docs/glossary.md) (`regular` / `premium` / `ultra` / `instrument`).
-Refreshed by hand (`scripts/benchmarks-snapshot.sh`); the fixture worlds carry the block but
-keep their fixture lists.
+Refreshed by hand (`scripts/benchmarks-snapshot.sh`), its age a gauge the `TierEvidenceStale`
+alert reads; the fixture worlds carry the block but keep their fixture lists.
+
+## cost per clean ride
+
+The one number a [cell](#cell) is ordered and chosen by ([GW-MODEL-TIERS §Cost per clean ride](endpoints/catalog.md#cost-per-clean-ride)):
+what one ride that ENDS CLEAN costs, counting the rides that did not — the cell's price for a
+ride's output tokens over its **clean-ride rate**, plus the strike overhead on every failed ride
+in between. The price is the cell's own: on the openrouter rail the SELECTED endpoint's (never
+the headline), on the Go rail the plan's fee over what the plan bought ([Go price](#go-price)).
+The clean-ride rate is measured from the outcome store once the cell has `tiers.cost.min_rides`
+judged rides, a prior before (the selected endpoint's uptime; 1.0 on the Go rail). The terms are
+the policy's `tiers.cost`. Operator ruling 2026-10-19 (homelab#2718): per-token prices are not
+the tier order.
+
+## Go price
+
+The opencode rail's price per model, derived rather than listed: the model's list price × the
+plan's **discount** = `fee ÷ max(the rail's trailing-30-day list-priced draw, the model's monthly
+limit)` — the fee buys at least the model's own allowance (`promise`), and a busier rail makes
+every Go token cheaper (`measured`); an unlimited model prices at 0. The fee is the Go page's
+Plan table ([Go catalog](#go-catalog)), the draw the gateway's own ledger at the catalog's list
+rates (the same arithmetic as the window draw). Shown on `GET /catalog/opencode` `pricing`
+([GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers)).
+
+## twin
+
+Two policy ids that name ONE model on two rails — the same tail after the rail prefix, a
+`:variant` and the vendor are stripped, in the AA spelling (`opencode-go/<id>` ↔ `<vendor>/<id>`;
+`tiers.same_model`, one rule, no table). When a tier's lists name a twin on two of the role's
+allowed rails, admission runs the **rail choice** ([GW-MODEL-TIERS §The rail choice](endpoints/catalog.md#the-rail-choice)):
+the rail whose twin cell costs less per clean ride walks first, with that twin at its list's
+head; the role's rail order stands for everything else. A `claude/` alias names a family, never a
+model: it twins nothing.
 
 ## canary
 

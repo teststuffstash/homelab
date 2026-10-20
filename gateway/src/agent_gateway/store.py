@@ -438,12 +438,14 @@ class Store:
     def cell_outcomes(self, rail: str, model: str) -> dict[str, tuple[int, int]]:
         """Per provider of (rail, model): (clean rides, judged rides) — a ride = a session whose
         2xx answers that provider served and whose LATEST outcome is reported; clean = that outcome
-        is `clean` (GW-RAIL-OPENROUTER §Selection: the clean-ride rate the order reads)."""
+        is `clean` (GW-RAIL-OPENROUTER §Selection: the clean-ride rate the order reads). Provider
+        `''` is the model's own cell — the only one on the rails that pin none (the Go rail's clean
+        rate, GW-MODEL-TIERS §The rail choice), the unattributed rides on openrouter."""
         with self._lock:
             rows = self._db.execute(
                 "SELECT p.provider, o.class, COUNT(*) FROM"
                 " (SELECT DISTINCT r.session_id, r.provider FROM requests r JOIN sessions s ON s.id = r.session_id"
-                "  WHERE s.rail = ? AND s.model = ? AND r.provider <> '' AND r.status BETWEEN 200 AND 299) p"
+                "  WHERE s.rail = ? AND s.model = ? AND r.status BETWEEN 200 AND 299) p"
                 " JOIN outcomes o ON o.id = (SELECT id FROM outcomes WHERE session_id = p.session_id ORDER BY id DESC LIMIT 1)"
                 " GROUP BY p.provider, o.class", (rail, model)).fetchall()
         out: dict[str, list[int]] = {}

@@ -87,8 +87,10 @@ Headroom reports enter through the in-process seam (`app.state.codex.headroom.ob
 `deepseek-v4.1-flash`, `longcat-2.5-preview-free`, `step-5-preview`), the account's org-id header
 dropped; its one synthetic row is `deepseek-v4-flash` marked `"disabled": true` (the live answer
 carries such rows under the pay-as-you-go `opencode` provider only).
-`tests/fixtures/go-catalog/go.mdx` is the vendor's page cut to its Usage-limits section and
-Endpoints table for the same five models, rows otherwise verbatim. Every variant below is derived
+`tests/fixtures/go-catalog/go.mdx` is the vendor's page cut to its Plan table (the two plans'
+monthly fees, verbatim from the live page of 2026-10-20 — the [Go price](../glossary.md#go-price)
+divides the policy plan's), its Usage-limits section and Endpoints table for the same five
+models, rows otherwise verbatim. Every variant below is derived
 from those two files in memory. **Every world's gateway starts from this catalog**:
 `conftest.seed_go_catalog` stores the `catalog-ok` + `docs-ok` snapshots (parsed by the leg's own
 parsers, fetched at T0) before the gateway is built, as a production gateway starts from its
@@ -111,6 +113,7 @@ needs another catalog refreshes against the fake vendor first (`catalog-retired`
 | `docs-short-endpoint-row` | the Endpoints table's `Step 5 Preview` row cut to one cell |
 | `docs-header-drift` | the plan tables' `Monthly limit` column renamed `Limit` |
 | `docs-no-peak-hours` / `docs-no-shares` | the peak-hours sentence / the 5-hour-weekly-monthly share sentence removed |
+| `docs-no-plan-table` | the Plan table (the fee's home) removed |
 | `docs-shrunk` | only the two DeepSeek models' rows |
 | `docs-retired` | the page without `claude-haiku-5-5`'s plan rows (still listed by the console: no monthly limit) |
 

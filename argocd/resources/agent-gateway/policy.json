@@ -65,9 +65,9 @@
       "plan": "go",
       "max_sessions": 3,
       "models": {
-        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/claude-haiku-5-5", "opencode-go/gpt-6-luna"],
-        "standard": ["opencode-go/mimo-v2.6-flash", "opencode-go/claude-haiku-5-5", "opencode-go/gpt-6-luna"],
-        "heavy":    ["opencode-go/claude-haiku-5-5", "opencode-go/glm-5.3-flash", "opencode-go/mimo-v2.6-pro"]
+        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/deepseek-v4.1-flash", "opencode-go/glm-5.3-flash"],
+        "standard": ["opencode-go/mimo-v2.6-flash", "opencode-go/glm-5.3-flash", "opencode-go/claude-haiku-5-5"],
+        "heavy":    ["opencode-go/glm-5.3-flash", "opencode-go/claude-haiku-5-5", "opencode-go/step-5-preview"]
       }
     },
     "openrouter": {
@@ -105,10 +105,16 @@
     }
   },
   "tiers": {
-    "_comment": "GW-MODEL-TIERS (operator rulings 2026-10-18): the three rails' tier LISTS above are DERIVED from benchmarks.json beside this file — `devbox run tiers -- apply` writes them, `-- check` (a test row) fails on a hand edit. score = the Artificial Analysis intelligence index (the one axis with full coverage); bands = a candidate is in a tier when its score >= the fraction x the rail's top score (a model can sit in several tiers); cap = each list's length, cheapest-first by output price (the subscription rail: score ascending as the cost proxy).",
+    "_comment": "GW-MODEL-TIERS (operator rulings 2026-10-18 + 2026-10-19): the three rails' tier LISTS above are DERIVED from benchmarks.json beside this file — `devbox run tiers -- apply` writes them, `-- check` (a test row) fails on a hand edit. score = the Artificial Analysis intelligence index (the one axis with full coverage); bands = a candidate is in a tier when its score >= the fraction x the rail's top score (a model can sit in several tiers); cap = each list's length, cheapest per CLEAN ride first (cost = price x a ride's output tokens / the cell's clean-ride rate + the strike overhead per failed ride; the subscription rail: score ascending as the cost proxy). A tier with no priced candidate is UNDECIDED and keeps its list (2026-10-20: every openrouter tier — no cell has passed the entry canary, so no openrouter price exists; `gateway/scripts/canary-entrants.sh` is what changes that).",
     "score": "intelligence",
     "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5},
-    "cap": 3
+    "cap": 3,
+    "cost": {
+      "_comment": "GW-MODEL-TIERS §Cost per clean ride (homelab#2743, operator ruling 2026-10-19: the unit is cost per CLEAN ride, never per token) — ⚖ every value: ride_tokens_out_m 0.01 = 10k output tokens per ride, the 30-day mean per session of the two openai-dialect rails read off the gateway's own ledger on 2026-10-20 (opencode 11.1k, openrouter 13.4k); strike_overhead_usd 0 = the reviewer round + coordinator re-entry a failed ride costs is UNMEASURED (⚑ gap row) — the term exists so the measurement has a home, at 0 the order is price over clean rate; min_rides 5 = judged rides before a cell's measured clean rate replaces its prior (the same number as rails.openrouter.providers.min_rides, two knobs because two rules read them).",
+      "ride_tokens_out_m": 0.01,
+      "strike_overhead_usd": 0,
+      "min_rides": 5
+    }
   },
   "context_tokens": {
     "opencode-go/deepseek-v4.1-flash": 1000000

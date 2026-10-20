@@ -26,7 +26,8 @@
     "provider_outcome": { "enum": ["ok", "incomplete", "5xx", "429", "unreachable", "timeout", "content-type", "provider-error", "refused", "auth", "edge"] },
     "cell_state": { "enum": ["candidate", "eligible", "excluded"] },
     "canary_outcome": { "enum": ["eligible", "excluded"] },
-    "canary_admission": { "enum": ["dispatch", "budget", "not-due", "not-in-catalog"] }
+    "canary_admission": { "enum": ["dispatch", "budget", "not-due", "not-in-catalog"] },
+    "rail_choice_reason": { "enum": ["price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint"], "description": "why one rail's twin cell went first (sessions.schema.json $defs.rail_choice.reason)" }
   },
   "families": {
     "gateway_sessions_active": {
@@ -187,9 +188,21 @@
       "labels": { "model": { "$ref": "#/$defs/openrouter_model" }, "from": { "$ref": "#/$defs/provider" }, "to": { "$ref": "#/$defs/provider" } },
       "description": "requests reissued to the next provider before the first byte (GW-RAIL-OPENROUTER)",
       "x-requirements": ["GW-METRICS", "GW-RAIL-OPENROUTER"]
+    },
+    "gateway_rail_choice_total": {
+      "type": "counter",
+      "labels": { "model": { "$ref": "#/$defs/openrouter_model" }, "rail": { "$ref": "#/$defs/rail" }, "reason": { "$ref": "#/$defs/rail_choice_reason" } },
+      "description": "admissions where the tier named one model on two allowed rails, by the rail chosen and why (GW-MODEL-TIERS §The rail choice); `model` is the twin's openrouter spelling, the provider families' bound",
+      "x-requirements": ["GW-METRICS", "GW-MODEL-TIERS"]
+    },
+    "gateway_tier_evidence_age_seconds": {
+      "type": "gauge",
+      "labels": {},
+      "description": "seconds since the mounted tier-evidence snapshot's snapshot_at; absent when none is mounted — TierEvidenceStale reads it (GW-MODEL-TIERS)",
+      "x-requirements": ["GW-METRICS", "GW-MODEL-TIERS"]
     }
   },
   "forbidden_labels": ["task", "session", "id", "token"],
-  "$comment_model_label": "`model` is permitted ONLY on the two provider families, bounded to the policy's openrouter ids (GW-RAIL-OPENROUTER); every other family stays without it",
+  "$comment_model_label": "`model` is permitted ONLY on the two provider families and the rail choice, bounded to the policy's openrouter ids (GW-RAIL-OPENROUTER, GW-MODEL-TIERS); every other family stays without it",
   "errors": {}
 }

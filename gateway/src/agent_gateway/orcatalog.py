@@ -337,10 +337,13 @@ class OpenRouterCatalog:
         models = {}
         for mid, m in sorted((body.get("models") or {}).items()):
             states = self.store.cell_states(mid)
+            rides = self.store.cell_outcomes("openrouter", mid)  # GW-MODEL-TIERS: the cell's clean-ride evidence
             eps = []
             for e in m["endpoints"]:
                 v = self.cell(mid, e["slug"], now)
-                eps.append({**e, "state": v.state, "class": v.klass, "cooldown_until": iso(v.cooldown_until)})
+                clean, judged = rides.get(e["slug"], (0, 0))
+                eps.append({**e, "state": v.state, "class": v.klass, "cooldown_until": iso(v.cooldown_until),
+                            "rides": {"clean": clean, "judged": judged}})
             ranked = order(mid)
             cells = {e["slug"]: e["state"] for e in eps}  # a provider's service tiers are ONE cell
             models[mid] = {"ranking": m.get("ranking") or {}, "aa": m.get("aa") or {}, "fetched_at": m.get("fetched_at"),

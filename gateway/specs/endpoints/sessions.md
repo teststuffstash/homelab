@@ -25,7 +25,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
@@ -45,8 +45,13 @@ ref the policy names unless a row says otherwise; the canonical end-to-end pair 
 
 ## GW-SESSIONS-ADMIT
 
-A `POST /sessions` body is admitted by walking `roles.<role>.rails` in order — and, inside each
-rail, the tier's ORDERED model list ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)) —
+A `POST /sessions` body is admitted by walking `roles.<role>.rails` in order — ⚖ the role's
+order yields once: when the tier's lists name ONE model on two allowed rails (a
+[twin](../glossary.md#twin)), the rail whose twin cell costs less per clean ride walks first,
+with that twin at its list's head, and the answer's `rail_choice` says why
+([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice) owns those rows; `null` when no
+twin) — and, inside each rail, the tier's ORDERED model list
+([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)) —
 and picking the **first rail** whose `active_sessions < rails.<rail>.max_sessions`, that is not
 capacity-blocked — the rail, or the [cell](../glossary.md#cell) its tier's model makes on it
 ([§Capacity](#capacity--the-ladders-capacity-half)) — AND whose credential for the stack resolves

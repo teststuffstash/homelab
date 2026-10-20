@@ -26,6 +26,7 @@ test clock, 2027-01-15T08:00:00Z.
 | a renamed limit column is a parse failure | 5 | docs-header-drift | parse-failed | the last good |
 | peak rows without the peak-hours sentence are a parse failure | 5 | docs-no-peak-hours | parse-failed | the last good |
 | no share sentence is a parse failure | 5 | docs-no-shares | parse-failed | the last good |
+| no plan table is a parse failure | 5 | docs-no-plan-table | parse-failed | the last good |
 | a drop below half the models is implausible | 5 | docs-shrunk (2) | implausible | the last good |
 
 | description | model | plan go | plan go-plus | bonus | peak row |
@@ -37,6 +38,7 @@ test clock, 2027-01-15T08:00:00Z.
 
 | description | input | the snapshot reads |
 |---|---|---|
+| the plan fees come from the page | docs-ok | plan_fee_usd_month 10 (plan go); the docs snapshot's plan_fees go 10 / go-plus 40 |
 | the peak hours come from the page | docs-ok | [[1, 4], [6, 10]], mon–fri |
 | the window shares come from the page | docs-ok | 0.2 / 0.5 / 1.0; deepseek-v4.1-flash windows 16 / 40 / 80 |
 | the config's prices are the model's cost rows | catalog-ok claude-haiku-5-5 | base 0.10/0.50/0.01/0.125, above 100000 0.50/2.50/0.05/0.625 |
@@ -190,6 +192,7 @@ DOCS_ROWS = [
     ("a renamed limit column is a parse failure", "5", "docs-header-drift", "parse-failed"),
     ("peak rows without the peak-hours sentence are a parse failure", "5", "docs-no-peak-hours", "parse-failed"),
     ("no share sentence is a parse failure", "5", "docs-no-shares", "parse-failed"),
+    ("no plan table is a parse failure", "5", "docs-no-plan-table", "parse-failed"),
     ("a drop below half the models is implausible", "5", "docs-shrunk", "implausible"),
 ]
 
@@ -251,6 +254,18 @@ async def test_peak_hours_from_page(cworld, vendor):
         v = await _view(app)
         check("peak_hours_utc", v["peak_hours_utc"], [[1, 4], [6, 10]])
         check("peak_weekdays", v["peak_weekdays"], ["mon", "tue", "wed", "thu", "fri"])
+
+
+async def test_plan_fees_from_page(cworld, vendor):
+    """row: the plan fees come from the page"""
+    world(upstream="docs-ok")
+    app = cworld.build()
+    with when("the docs source refreshes (docs-ok)"):
+        await app.state.catalog.refresh_source("docs")
+    with then("plan_fee_usd_month 10 (plan go); the docs snapshot's plan_fees go 10 / go-plus 40"):
+        v = await _view(app)
+        check("plan_fee_usd_month", v["plan_fee_usd_month"], 10.0)
+        check("docs snapshot plan_fees", app.state.catalog.snapshots["docs"].body["plan_fees"], {"go": 10.0, "go-plus": 40.0})
 
 
 async def test_window_shares_from_page(cworld, vendor):

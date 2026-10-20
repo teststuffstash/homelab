@@ -26,6 +26,11 @@ Three per-rail checks the admission walk consults after the slot count, each dri
   gateway's own request ledger; a window at/over `threshold × monthly limit × share` blocks the
   cell until that window resets. A model the catalog does not list (or gives no monthly limit
   under the policy's plan) is `not-in-catalog` — refused, never priced at a fallback.
+- **the Go price** (`go_pricing`, GW-MODEL-TIERS §Cost per clean ride): the plan's monthly fee
+  over what the plan bought — per model, the list price × `fee ÷ max(the rail's trailing-30-day
+  list-priced draw, the model's own monthly limit)`: the fee buys at least the model's allowance
+  (the `promise` basis), and a busier rail makes every Go token cheaper (`measured`). An
+  unlimited model prices at 0. The same ledger and the same list rates as the window draw.
 
 `blocked(rail, now, model)` answers `(reason, free_at, detail)` or None; the walk skips a blocked
 rail exactly like a full one.
@@ -42,7 +47,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .config import SUBSCRIPTION_WINDOWS, DrawWindow, Policy, PriceRow, WindowDraw, wire_model
+from .config import RAIL_PREFIX, SUBSCRIPTION_WINDOWS, DrawWindow, Policy, PriceRow, WindowDraw, wire_model
 from .store import Store
 
 if TYPE_CHECKING:
@@ -382,6 +387,44 @@ class Capacity:
             out[w.name] = (sum(draw_usd(price_row(facts, ts, tin + cr + cw), tin, cr, cw, tout)
                                for ts, _m, tin, cr, cw, tout in rows if start <= ts <= now), bounds)
         return out
+
+    # -- the Go price (GW-MODEL-TIERS §Cost per clean ride) ------------------------------------
+    def go_pricing(self, rail: str, now: float, lookback_s: float = 30 * 86400.0) -> dict:
+        """Every listed Go model's price: `{fee_usd_month, draw_30d_usd, models: {wire id: {out, in,
+        discount, basis, rides: {clean, judged}}}}`. `discount` = fee ÷ max(the rail's list-priced
+        draw over the trailing 30 d, the model's monthly limit) — `promise` while the draw is under
+        the model's allowance, `measured` past it, `unlimited` (0) for a model with no limit; no fee
+        (no docs snapshot carrying the Plan table) = no price, basis null."""
+        cat = self.catalog
+        fee = cat.plan_fee() if cat is not None else None
+        rows = self.store.rail_usage_since(rail, now - lookback_s)
+        draw = 0.0
+        facts_by: dict[str, GoModel | str] = {}
+        for ts, model, tin, cr, cw, tout in rows:
+            wire = wire_model(rail, model)
+            f = facts_by.get(wire)
+            if f is None:
+                f = facts_by[wire] = self.go_model(rail, model)
+            if isinstance(f, str):
+                continue  # a model the catalog no longer prices draws nothing here (never a fallback rate)
+            draw += draw_usd(price_row(f, ts, tin + cr + cw), tin, cr, cw, tout)
+        models: dict[str, dict] = {}
+        for wire in (cat.listed() if cat is not None else []):
+            pid = RAIL_PREFIX[rail] + wire
+            f = self.go_model(rail, pid)
+            rides = self.store.cell_outcomes(rail, pid).get("", (0, 0))
+            row: dict = {"out": None, "in": None, "discount": None, "basis": None, "rides": {"clean": rides[0], "judged": rides[1]}}
+            if not isinstance(f, str) and fee is not None:
+                base = f.cost[0][1]
+                if f.monthly_limit is None:
+                    row.update(out=0.0, in_=0.0, discount=0.0, basis="unlimited")
+                else:
+                    discount = fee / max(draw, f.monthly_limit)
+                    row.update(out=round(base.tokens_out * discount, 9), in_=round(base.tokens_in * discount, 9),
+                               discount=round(discount, 9), basis="measured" if draw >= f.monthly_limit else "promise")
+                row["in"] = row.pop("in_")
+            models[wire] = row
+        return {"fee_usd_month": fee, "draw_30d_usd": round(draw, 6), "models": models}
 
     def _draw_blocks(self, rail: str, wd: WindowDraw, now: float, model: str) -> list[Block]:
         facts = self.go_model(rail, model)

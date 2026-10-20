@@ -120,8 +120,8 @@ async def test_walk(gw, app, secrets, clock, body, state, expected):
                   keys={"expected": ["decision", "reason", "retry_after_s"], "actual": sorted(doc)}, retry_after_s=doc.get("retry_after_s")):
             assert set(doc) == {"decision", "reason", "retry_after_s"} and doc["retry_after_s"] >= 1
     else:
-        want = ["context_tokens", "decision", "env", "harness", "model", "rail", "session"]
-        with then("a dispatch carries exactly decision, session, rail, harness, model, env, context_tokens",
+        want = ["context_tokens", "decision", "env", "harness", "model", "rail", "rail_choice", "session"]
+        with then("a dispatch carries exactly decision, session, rail, harness, model, env, context_tokens, rail_choice",
                   keys={"expected": want, "actual": sorted(doc)}):
             assert set(doc) == set(want)
 

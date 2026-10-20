@@ -462,14 +462,27 @@ SCORE_AXES = ("intelligence", "coding", "agentic")  # the AA capability row's th
 
 
 @dataclass(frozen=True)
+class CostPolicy:
+    """`tiers.cost` (GW-MODEL-TIERS §Cost per clean ride): the terms that turn a cell's price and
+    clean-ride rate into one number — a ride's size in output tokens, what a struck ride costs on
+    top of itself, and how many judged rides a cell needs before its measured rate replaces its
+    prior. ⚖ every value is policy data; the formula is the spec's."""
+    ride_tokens_out_m: float  # M output tokens one ride spends (the 30-day mean of the openai-dialect rails, 2026-10-20)
+    strike_overhead_usd: float  # a failed ride's reviewer round + coordinator re-entry, in $ (0 = unmeasured ⚑)
+    min_rides: int  # judged rides before a cell's measured clean rate replaces its prior
+
+
+@dataclass(frozen=True)
 class TiersPolicy:
     """`tiers` (GW-MODEL-TIERS): how the DEPLOYED policy's per-(rail, tier) model lists are derived
     from the committed benchmark snapshot — the score axis, each tier's band as a fraction of the
-    rail's top score (heavy ≥ standard ≥ light), and the cap on a list's length. Rules only: the
-    scores and prices live in the snapshot, the lists are its output (`agent_gateway.tiers`)."""
+    rail's top score (heavy ≥ standard ≥ light), the cap on a list's length, and the cost terms
+    (`cost`) every list is ordered by and the admission's rail choice compares with. Rules only:
+    the scores and prices live in the snapshot, the lists are its output (`agent_gateway.tiers`)."""
     score: str
     bands: dict[str, float]  # tier -> fraction of the rail's top score a candidate must reach
     cap: int
+    cost: CostPolicy
 
 
 def tiers_policy(t) -> TiersPolicy | None:
@@ -480,7 +493,7 @@ def tiers_policy(t) -> TiersPolicy | None:
         return None
     if not isinstance(t, dict):
         raise PolicyError(f"policy: {where} must be an object {{score, bands, cap}}")
-    _keys(where, t, {"score", "bands", "cap"})
+    _keys(where, t, {"score", "bands", "cap", "cost"})
     score = t.get("score")
     if score not in SCORE_AXES:
         raise PolicyError(f"policy: {where}.score must be one of {', '.join(SCORE_AXES)}")
@@ -501,7 +514,18 @@ def tiers_policy(t) -> TiersPolicy | None:
     cap = t.get("cap")
     if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
         raise PolicyError(f"policy: {where}.cap must be a positive integer")
-    return TiersPolicy(score, fractions, cap)
+    c = t.get("cost")
+    if not isinstance(c, dict):
+        raise PolicyError(f"policy: {where}.cost must be an object {{ride_tokens_out_m, strike_overhead_usd, min_rides}}")
+    _keys(f"{where}.cost", c, {"ride_tokens_out_m", "strike_overhead_usd", "min_rides"})
+    ride = _num(f"{where}.cost.ride_tokens_out_m", c.get("ride_tokens_out_m"))
+    if ride <= 0:
+        raise PolicyError(f"policy: {where}.cost.ride_tokens_out_m must be a positive number")
+    overhead = _num(f"{where}.cost.strike_overhead_usd", c.get("strike_overhead_usd"))
+    rides = c.get("min_rides")
+    if isinstance(rides, bool) or not isinstance(rides, int) or rides < 1:
+        raise PolicyError(f"policy: {where}.cost.min_rides must be a positive integer")
+    return TiersPolicy(score, fractions, cap, CostPolicy(ride, overhead, rides))
 
 
 CONTROL_PLANE_AUTH_MODES = ("observe", "enforce")
@@ -695,6 +719,9 @@ class Settings:
     # its schedule (0 = no schedule). The endpoints read rides the openrouter rail's upstream base.
     or_mcp_url: str = "https://mcp.openrouter.ai/mcp"
     or_catalog_refresh_s: float = GO_CATALOG_REFRESH_S
+    # GW-MODEL-TIERS: the committed tier-evidence snapshot, mounted beside the policy; its age is a gauge
+    # (`gateway_tier_evidence_age_seconds`) so a stale comparison basis alerts. Absent file = no series.
+    benchmarks_path: str = "/etc/agent-gateway/benchmarks.json"
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> Settings:
@@ -719,4 +746,5 @@ class Settings:
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
+            benchmarks_path=e.get("GATEWAY_BENCHMARKS", "/etc/agent-gateway/benchmarks.json"),
         )

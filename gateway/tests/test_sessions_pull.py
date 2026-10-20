@@ -114,9 +114,9 @@ async def test_bound_answer_has_no_credential(gw):
     with when(f"POST /sessions (platform worker) with bind {BIND}"):
         r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "t", "bind": BIND})
     doc = r.json()
-    with then("status 200, keys exactly decision, session, rail, harness, model, env_keys, pull_url, context_tokens"):
+    with then("status 200, keys exactly decision, session, rail, harness, model, env_keys, pull_url, context_tokens, rail_choice"):
         check("(status, keys)", (r.status_code, sorted(doc)),
-              (200, sorted(["decision", "session", "rail", "harness", "model", "env_keys", "pull_url", "context_tokens"])))
+              (200, sorted(["decision", "session", "rail", "harness", "model", "env_keys", "pull_url", "context_tokens", "rail_choice"])))
     with then("session carries exactly id + expires_at (no token)"):
         check("session keys", sorted(doc["session"]), ["expires_at", "id"])
     with then("no gws_ anywhere in the body"):
