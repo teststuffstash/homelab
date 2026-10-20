@@ -13863,3 +13863,15 @@ updates or reverts as much as possible — mechanical revert or a responder."
   NIC LEDs dark, fans + PCIe card LED on → treated as hardware-dead; operator defers to the evening (NVMe swap or other).
 - Loki held no kmsg lines from the node in the last 6 h (query may be wrong — unverified). Garage 2/3 serving, writes OK;
   garage-0 PVCs faulted (1-replica, on the box); registry-data degraded to 1 replica (no bulk disk to rebuild onto).
+
+## 2026-10-20 ~14:30–15:25Z — seat: wk-metal-04 re-onboarded onto Big Data (window wk-metal-04-1792506831-3600)
+
+- Operator moved the dead box's two 7600p + 2×8G into Big Data (retired router; fallback period over), pulled the 4-port NIC.
+- .186 reservation → 00:22:4d:4f:ab:2e (Kea, both CARP nodes, run per node with the HA peer env); Matchbox flag (flags.local.tf) → PXE.
+- Maintenance read: MX500 = sdb, both 7600p with intact XFS. #2758 (machines.yaml/dnsmasq/docs) pushed first; mgmt-tf plan
+  20261020T145334Z-f10c1205 = one replace of talos_machine_configuration_apply.metal["wk-metal-04"] → installed to /dev/sdb; unflagged
+  before reboot (404). Node Ready, taint/zone/kata labels survived on the Node object, BGP established .70/.71.
+- Longhorn: intel0/1 kept their disk UUIDs → Ready; sata500 DiskFilesystemChanged (new MX500 /var/lib/longhorn) → removed + re-registered via
+  longhorn-tag-disks.sh (first run hit "disks syncing" between register and fence: ~30 s as bulk+schedulable, 0 replicas landed; retry fenced it).
+- garage-0 volumes auto-salvaged; garage-0 back with node id d93314cf…, GarageZone/ClusterDegraded cleared. #2758 merged 96227dc9.
+- Window force-closed: PodSigkilled claimed (reinstall-killed DaemonSet pods), NodeCPUHighUsage cp-01 handed to the responder.

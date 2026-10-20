@@ -17,12 +17,13 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-20 ~05:30Z) — wk-metal-04 HARDWARE-DEAD, operator acts this evening.** Hung ~01:11Z; hard reset
-  → fans + PCIe card LED only: no POST, no display, no beeps, NIC link LEDs dark (board/PSU/CPU suspect). Node left
-  NotReady as-is (not cordoned/deleted). Holding: Garage 2/3 (garage-1 m70s + garage-2 wk-metal-01; write probe OK) —
-  **one more zone loss = Garage writes down**; garage-0's two 1-replica PVCs FAULTED (data on that box's NVMe →
-  operator's option: move the NVMe to another box); `registry-data` (bulk, 2 replicas wanted) on 1 (hp-01), rebuild
-  blocked: no other bulk disk with room. Next: operator picks NVMe-swap vs other; then the ~40 cascade alerts clear.
+- **⚑ PICKUP (2026-10-20 ~15:25Z) — wk-metal-04 BACK on new hardware (Big Data, #2758).** The dead i5-3570K's 7600p
+  pair + 2×8G moved into the retired router (HP i5-2500, 24GB); Talos on its MX500 (wwn pin), node Ready, BGP up,
+  garage-0 rejoined with its old node id (1-replica PVCs auto-salvaged from intel1), registry-data rebuilding.
+  Open: (a) the MX500 reads 34 % lifetime used (attr 202) — fine for a system disk, watch it; (b) `sata500` Longhorn
+  disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
+  it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
+  box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
 - **⚑ PICKUP (2026-10-19 ~21:55Z — the overnight gateway session; TICK-LOG 10-19 20:30–21:55Z): #2741 + #2742 MERGED
   as #2744 (294c7b81, four specs-review rounds, all test/spec-text); #2743 NOT started.** What landed: provider
   attribution / own selection / request-level failover on the openrouter rail (`providers.py`, the proxy attempt loop,
