@@ -13933,7 +13933,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (GW-CATALOG-GO's named gap, a PR on the island); (2) grant `prober` to the dispatcher caller in policy.json (+ GW-ACCESS /
   GW-SESSIONS-AUTH rows) so the canary window can open.
 
-## 2026-10-20 ~21:30–22:45Z — seat: "pick up gateway from meta-state" — the two ordered island PRs opened (#2766 models.dev catalog + console overlay, #2767 prober grant)
+## 2026-10-20 ~17:30–18:45Z (time corrected) — seat: "pick up gateway from meta-state" — the two ordered island PRs opened (#2766 models.dev catalog + console overlay, #2767 prober grant)
 
 - Read: meta-state's 21:40Z pickup + TICK-LOG 21:00Z; the island (catalog.py, the GW-CATALOG-GO page, the fake vendor,
   policy.json/kustomization, GW-SESSIONS-AUTH/GW-ACCESS); live: models.dev `opencode-go` = 33 rows (4 `status: deprecated`
@@ -13956,7 +13956,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Both auto-merge armed via pr-wait (background). Bookkeeping: meta-state pickup collapsed to one bullet + a
   `dig-explained` for GoCatalogParseFailed/GoCatalogStale (clears with #2766's deploy); FU-270 next (0) → in review.
 
-## 2026-10-20 ~22:45–23:50Z — seat: #2766 round 1 → merged → deployed → verified; #2767 round 1 + an orphaned CI run
+## 2026-10-20 ~18:45–19:45Z (time corrected) — seat: #2766 round 1 → merged → deployed → verified; #2767 round 1 + an orphaned CI run
 
 - #2766 round 1 (specs reviewer, CHANGES_REQUESTED): all bookkeeping — ⚖ on the two console-only rows, the gap row's
   `⚑ gap (2026-10-20, PR #2766 → work #2768)` form (issue #2768 filed: the rail serves ids the catalog does not list,
@@ -13971,7 +13971,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Lesson (jail): zsh does not word-split a `K="devbox run -- kubectl …"` command variable — an `until $K …` loop spins
   forever (the deploy-verification task had to be stopped and run by hand).
 
-## 2026-10-20 ~23:50Z – 10-21 ~00:20Z — seat: #2767 merged + deployed + proven; the canary launcher's loop never ran (#2771)
+## 2026-10-20 ~19:45–20:05Z (time corrected) — seat: #2767 merged + deployed + proven; the canary launcher's loop never ran (#2771)
 
 - #2767 round 2 APPROVED after the CI re-run, merged 19:36:59Z; the policy ConfigMap hash rolled the pod 19:37:12Z
   (`agent-gateway-policy-hf5g456t77`: roles `['worker', 'prober']`). The image build for c846c660 opened #2770 (auto-bump,
@@ -13985,3 +13985,65 @@ updates or reverts as much as possible — mechanical revert or a responder."
   wait on a terminal. #2771 opened (`done <<<"$cells"`; the dry-run with `< /dev/null` walks 3 cells under `--max 3`).
   No canary has ever been launched by the script (the 10-19 window never opened), so nothing rode wrongly.
 - The canary WINDOW stays the operator's (budget-metered rides): after #2771, `--max 3`.
+
+## 2026-10-20 ~20:05–20:45Z (time corrected) — seat (unattended, operator: "run some yourself … use subagents"): the canary window ran, #2773, #2768 classified
+
+- Operator 2026-10-21: run the entry canaries from the seat and continue unattended to ~500–600k ctx with subagents.
+  Three fresh subagents: (A) the canary runner — clone with #2771, per-cell rides in the launcher's own shape for the
+  policy's openrouter models in order (v4.1-flash, kimi-k3, mimo-v2.5, v4-flash), 3 per refresh window; steered after
+  ride 1 to FILTER by the selection floors first (ride 1 went to `open-inference`, fp4 — eligible, but selection never
+  pins it): window 1 v4.1-flash {open-inference ✓, baidu, deepinfra}; window 2 kimi-k3@morph ✓ eligible (~$0.03 a
+  ride), kimi-k3@baseten 2×200 then 7×429, mimo-v2.5@xiaomi; window 3 (~02:22Z — the 20:22Z pod roll reset the
+  refresh clock) = v4-flash cells. Final table in A's report → next TICK-LOG entry. (B) #2768 classified in a comment:
+  of the 8 rail-served-unlisted ids ONE is deprecated-and-served (minimax-m2.7), 4 are PAYG carry-overs the console
+  `opencode` overlay disables, 1 PAYG-only (qwen3.6-plus), 2 with no vendor row anywhere (qwen3.7-max, omen-alpha);
+  the other 3 deprecated rows are NOT served; the issue body's "deprecated four" claim corrected. (C) FU-270 (d) as
+  #2773 — MERGED round 1, no findings: `GoCatalog.context_for`, Go-rail `context_tokens` from the catalog, a policy
+  `opencode-go/*` entry refuses the load (ruling 5); deployed policy `context_tokens: {}`; deploy #2774 pr-waited.
+  Follow-on named, not built: openrouter `context_length` is per-(model, provider) in the endpoint snapshot.
+- Master pushed at 363ce974 after #2771 (pre-push lints green).
+
+## 2026-10-20 ~20:45–21:10Z — seat (unattended): the first entry-canary window's result, #2775, the re-cut + launcher PRs dispatched
+
+- Subagent A's window (19:40–20:50Z, 9 admissions, $0.096, no alert, gateway 0 restarts): v4.1-flash {open-inference ✓
+  (fp4 — eligible, never pinnable), baidu ✓, deepinfra ✓}, kimi-k3 {morph ✓ (~$0.03 a ride), baseten ✗ 2×200→7×429},
+  mimo-v2.5 {xiaomi ✓}, v4-flash {streamlake ✓, deepinfra ✗ 9×429, baidu ✓} → **7 eligible / 239 candidate / 0 excluded**.
+  Three machine findings → **#2775**: (1) a 429'd pinned canary spends the admission and judges nothing (cell stays
+  candidate — neither strike class fires); (2) every window was opened by a POD ROLL (19:40 / 20:22 / 20:42Z = the
+  #2767 / #2770 / #2774 deploys), `admitted_this_refresh` + `gateway_canary_*` counters are in-memory (spend + cell
+  states persisted); (3) the view carries no "passes the floors" flag — the launcher walks alphabetically. Plus: the
+  merged launcher's ride command is REFUSED by agent-session.sh's preflight (`--model` under AGENT_GATEWAY=sessions);
+  the rides ran with `--model` and the inner `-m` dropped.
+- Dispatched: subagent E = the openrouter RE-CUT (FU-270 next (a): `benchmarks-snapshot.sh` → `tiers apply` → `check`
+  → PR, then its deploy + live read-back); subagent D = the launcher ride-shape fix + #2775's three `⚑ gap` rows and the
+  GW-CATALOG-OR index clause (PR). #2774 (context-from-catalog image) deployed 20:42:31Z, catalog refreshed on start.
+- Context 425k at 21:05Z; wind-down planned ~550k.
+
+## 2026-10-20 ~21:10–21:30Z — seat (unattended): the openrouter RE-CUT landed (#2776) — lists unchanged, every tier DECIDED
+
+- Subagent E: `benchmarks-snapshot.sh` (snapshot_at 20:53:22Z; both catalogs fetched 20:42:31Z; AA rows of 10-17) →
+  `tiers apply` wrote NOTHING — the derivation over the 4 newly priced openrouter models reproduces the deployed lists
+  exactly, order included; `check` clean, no tier undecided. Priced at the SELECTED endpoint: v4.1-flash baidu fp8
+  $0.1416/M out → $0.001416 per clean ride (light); v4-flash streamlake $0.1652 → 0.001652 (light); mimo-v2.5 xiaomi
+  $0.28 → 0.002806 (light, exactly at the band); kimi-k3 morph $14.9 → 0.1493 (standard + heavy — the sole priced model
+  in those bands, ~100× the light cells; the derivation's call). Twin decided: openrouter/v4.1-flash ↔ opencode-go/
+  v4.1-flash at light — Go promise $0.00075 vs baidu $0.001416 → opencode first by `price` (was no-eligible-endpoint).
+  #2776 merged 21:06Z round 1 (both bots approve); deployed by the policy ConfigMap roll (no image change);
+  read back from the pod's mounted policy + benchmarks. Env note: `devbox run` drops KUBECONFIG — the snapshot script
+  needs the kubeconfig at the clone's `tofu/kubeconfig`.
+- FU-270 next (a) DONE. Open: #2777 (launcher ride shape + #2775's gap rows) in review.
+
+## 2026-10-20 ~21:30–22:00Z — seat (unattended) wind-down: #2777 merged (round 3), the stretch's tally
+
+- #2777 (launcher ride shape: no `--model`, no inner `-m` — the gateway owns the model; + #2775's three `⚑ gap` rows and
+  the GW-CATALOG-OR index clause) MERGED 21:51Z at round 3: R1 = the PR body carried the SIBLING agent's `Spec changes:`
+  (two subagents shared `scratchpad/pr-body.md` — per-PR filenames from now on); R2 = `E-HYGIENE_REPEAT` on three
+  UNTOUCHED cases (the specs-reviewer.md l.235 belt) → one reporting-only test commit (attachments ≤8, steps ≤8, every
+  parametrize name in a step; rows byte-identical), approved by the seat after a scope check; R3 approved. Its deploy
+  #2780 auto-merge armed. Env lesson: the root devbox.json pins `KUBECONFIG=$PWD/tofu/kubeconfig` — a clone needs the
+  file there (symlink/copy).
+- Tally of the operator's "run some yourself, unattended, subagents" stretch (20:00–22:00Z): canary window 9 rides →
+  7 eligible cells, $0.096; PRs #2773 (Go context_tokens from the catalog), #2776 (re-cut: every openrouter tier DECIDED,
+  lists unchanged), #2777 (launcher + gaps) merged; issues #2768 (classified) + #2775 (canary gaps) await rulings.
+  FU-270 next: (b) wrong-verdict ← deploy-revert, (c) the loop flip into the session-pod heredoc, codex legs D/E
+  (operator). Ctx ~450k at wind-down; master pushed.
