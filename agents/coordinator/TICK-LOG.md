@@ -14032,3 +14032,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   read back from the pod's mounted policy + benchmarks. Env note: `devbox run` drops KUBECONFIG — the snapshot script
   needs the kubeconfig at the clone's `tofu/kubeconfig`.
 - FU-270 next (a) DONE. Open: #2777 (launcher ride shape + #2775's gap rows) in review.
+
+## 2026-10-20 ~21:30–22:00Z — seat (unattended) wind-down: #2777 merged (round 3), the stretch's tally
+
+- #2777 (launcher ride shape: no `--model`, no inner `-m` — the gateway owns the model; + #2775's three `⚑ gap` rows and
+  the GW-CATALOG-OR index clause) MERGED 21:51Z at round 3: R1 = the PR body carried the SIBLING agent's `Spec changes:`
+  (two subagents shared `scratchpad/pr-body.md` — per-PR filenames from now on); R2 = `E-HYGIENE_REPEAT` on three
+  UNTOUCHED cases (the specs-reviewer.md l.235 belt) → one reporting-only test commit (attachments ≤8, steps ≤8, every
+  parametrize name in a step; rows byte-identical), approved by the seat after a scope check; R3 approved. Its deploy
+  #2780 auto-merge armed. Env lesson: the root devbox.json pins `KUBECONFIG=$PWD/tofu/kubeconfig` — a clone needs the
+  file there (symlink/copy).
+- Tally of the operator's "run some yourself, unattended, subagents" stretch (20:00–22:00Z): canary window 9 rides →
+  7 eligible cells, $0.096; PRs #2773 (Go context_tokens from the catalog), #2776 (re-cut: every openrouter tier DECIDED,
+  lists unchanged), #2777 (launcher + gaps) merged; issues #2768 (classified) + #2775 (canary gaps) await rulings.
+  FU-270 next: (b) wrong-verdict ← deploy-revert, (c) the loop flip into the session-pod heredoc, codex legs D/E
+  (operator). Ctx ~450k at wind-down; master pushed.

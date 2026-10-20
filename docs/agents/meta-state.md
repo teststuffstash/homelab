@@ -38,8 +38,11 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   xiaomi), 2 rides 429'd (baseten, deepinfra — cells stay candidate), $0.096; gaps → **#2775**; #2768 classified in a
   comment (ruling: the operator's). **#2776 (the re-cut, FU-270 (a)) MERGED + deployed 21:06Z: every openrouter tier DECIDED, lists
   UNCHANGED (kimi-k3 holds standard/heavy as the sole priced model in band at ~100× the light cells' cost — the
-  derivation's call, worth a look), the v4.1-flash twin now walks Go first by price. In flight: #2777 (launcher ride
-  shape + `⚑ gap` rows). **Next:** read both PRs'
+  derivation's call, worth a look), the v4.1-flash twin now walks Go first by price. #2777 (launcher ride shape — the gateway owns the
+  model — + #2775's `⚑ gap` rows) MERGED 21:51Z, its deploy #2780 auto-merge armed (nothing to verify: scripts/specs/tests only).
+  **Nothing in flight.** Operator rulings wanted: #2775 (a 429'd pinned canary = strike with class 429, or a no-verdict that
+  must not consume an admission? + the per-refresh cap keyed on the persisted `fetched_at`; + a pinnable flag in the view)
+  and #2768 (the 8 rail-served-unlisted Go ids, classified). FU-270 next: (b), (c) the loop flip, codex legs D/E. **Next:** read both PRs'
   outcomes in TICK-LOG; rulings for #2775 (a 429'd canary = strike or no-verdict?) and #2768 (rail-served-unlisted ids).
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
