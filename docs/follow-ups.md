@@ -820,10 +820,9 @@ the block needs pruning, not more headings.
       island's README/specs (`gateway/`) and the TICK-LOG; the codex rail's legs in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)
       (A–C merged 10-19; D, E unstarted). Landed 10-20: **rail choice by cost per CLEAN ride (#2764; GW-MODEL-TIERS)** —
       the openrouter tiers stay UNDECIDED until the entry canaries run (`gateway/scripts/canary-entrants.sh`, the
-      operator's window); gaps → #2718. **Next (seat, ordered 10-20 — meta-state has the read):** (0) the Go catalog's
-      `config` source → models.dev with the console answer as the overlay (the console stopped carrying the catalog 10-20;
-      `GoCatalogParseFailed` firing) + grant `prober` to the dispatcher caller (403 `caller-role-denied` blocks every
-      entry canary); (a) after the canary window, re-cut the snapshot (`benchmarks-snapshot.sh` → `tiers apply` → PR) so
+      operator's window); gaps → #2718. **Next (seat, ordered 10-20):** (0) IN REVIEW — #2766 (the Go
+      catalog's `config` source = models.dev under the console overlay; clears `GoCatalogParseFailed`) and #2767 (the
+      dispatcher caller granted `prober`; un-403s the entry canary) — verify after their deploys (meta-state); (a) after the canary window, re-cut the snapshot (`benchmarks-snapshot.sh` → `tiers apply` → PR) so
       the openrouter tiers decide; (b) `wrong-verdict` fed by the deploy-revert signal; (c) the loop flip into the
       session-pod heredoc; (d) `context_tokens` from the catalog. **Operator-only:** FU-313, the codex login (leg E), the canary window.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
