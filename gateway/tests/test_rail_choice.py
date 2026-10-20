@@ -97,7 +97,7 @@ def test_cost_per_clean_ride(price, rides, terms, rate, cost):
     world(note="a hand-written cell")
     clean, judged, prior = rides
     pol = CostPolicy(*terms)
-    with given(f"a cell priced ${price}/M out with {clean} clean of {judged} judged rides (prior {prior}); tiers.cost T {terms[0]} · overhead {terms[1]} · min_rides {terms[2]}"):
+    with given(f"a cell priced ${price}/M out with {clean} clean of {judged} judged rides (prior {prior}); tiers.cost terms {terms} = T {terms[0]} · overhead {terms[1]} · min_rides {terms[2]}"):
         attach_json("cell", {"out_price": price, "rides": {"clean": clean, "judged": judged, "prior": prior}, "cost": dataclasses.asdict(pol)})
     with when("clean_rate(clean, judged, prior, min_rides), then cost_per_clean_ride(price, rate, cost)"):
         r, basis = clean_rate(clean, judged, prior, pol.min_rides)
@@ -328,18 +328,26 @@ async def test_choice_survives_failover(gw, app, store, upstreams):
     with given("the Go 5h window over its threshold; the openrouter fake's deepinfra behaviour upstream-500"):
         await _go_ride(gw, upstreams, {"input_tokens": 30_000_000, "output_tokens": 3_200_000})
         upstreams["openrouter"].provider_behaviours["deepinfra"] = "upstream-500"
-    doc = await _admit(gw, {"tier": "light"})
-    _verdict(doc, "dispatch", "openrouter", M, {"rail": "openrouter", "over": "opencode", "reason": "headroom"})
+    # Three phases at the top level (the admission, the ride, the view) — the verdicts of each phase
+    # are checks INSIDE its then step, never a flat run of then_eq steps (CONVENTIONS § STEP_NOISE).
+    body = {"tier": "light"}
+    with when(f"POST /sessions body {body}"):
+        r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "harness": "opencode", "task": "homelab-2743-choice", **body})
+    doc = r.json()
+    with then("status 200; decision dispatch, rail openrouter over opencode (headroom), model M"):
+        check("status · decision · rail · model · rail_choice", {"status": r.status_code, **{k: doc.get(k) for k in ("decision", "rail", "model", "rail_choice")}},
+              {"status": 200, "decision": "dispatch", "rail": "openrouter", "model": M, "rail_choice": {"rail": "openrouter", "over": "opencode", "reason": "headroom"}})
     with when("one ride (deepinfra 500 → atlas-cloud 200), then outcome clean"):
         r = await gw.post(CHAT, json={"model": M, "messages": []}, headers=bearer(doc))
         o = await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "clean"})
-    then_eq("ride status · outcome status", (r.status_code, o.status_code), (200, 200))
-    rows = [(x["provider"], x["status"]) for x in store.requests_for(doc["session"]["id"])]
-    then_eq("the session's request rows (provider, status)", rows, [("deepinfra", 500), ("atlas-cloud", 200)])
-    with when("GET /catalog/openrouter"):
-        v = (await gw.get("/catalog/openrouter")).json()
-    rides = {e["slug"]: e["rides"] for e in v["models"][M]["endpoints"] if e["service_tier"] is None}
-    then_eq("rides atlas-cloud · deepinfra", (rides["atlas-cloud"], rides["deepinfra"]), ({"clean": 1, "judged": 1}, {"clean": 0, "judged": 0}))
+    with then("ride 200 · outcome 200; the session's request rows (provider, status) deepinfra 500 then atlas-cloud 200"):
+        rows = [(x["provider"], x["status"]) for x in store.requests_for(doc["session"]["id"])]
+        check("ride status · outcome status · request rows", ((r.status_code, o.status_code), rows), ((200, 200), [("deepinfra", 500), ("atlas-cloud", 200)]))
+    with then("GET /catalog/openrouter rides: atlas-cloud 1 / 1, deepinfra 0 / 0"):
+        with quiet():  # the view read's exchange folds into the check (ATTACH_BULK)
+            v = (await gw.get("/catalog/openrouter")).json()
+        rides = {e["slug"]: e["rides"] for e in v["models"][M]["endpoints"] if e["service_tier"] is None}
+        check("rides atlas-cloud · deepinfra", (rides["atlas-cloud"], rides["deepinfra"]), ({"clean": 1, "judged": 1}, {"clean": 0, "judged": 0}))
 
 
 # ── the evidence age ────────────────────────────────────────────────────────────────────────

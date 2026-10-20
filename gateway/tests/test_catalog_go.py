@@ -191,7 +191,9 @@ async def test_config_refresh(cworld, vendor, vendor_transport, clock, last, kno
     with given(f"last good (config): {last}"):
         if last != "none":
             vendor.catalog, vendor.config = OK
-            assert await app.state.catalog.refresh_source("config") == "ok"
+            with quiet():  # the arrange's two vendor exchanges fold into one summary (ATTACH_BULK)
+                assert await app.state.catalog.refresh_source("config") == "ok"
+            attach_json("arranged: one good config refresh (catalog-ok · config-ok)", {"last_good": last, "outcome": "ok"})
     if at != "T0":
         clock.t = T0 + 21600
     with given(f"knobs = {knobs!r}: the fake vendor answers {catalog_b} (models.dev) and {config_b} (the console) at {at}"):
@@ -201,19 +203,20 @@ async def test_config_refresh(cworld, vendor, vendor_transport, clock, last, kno
                 vendor_transport.down.add(read)
     with when(f"the config source refreshes at {at}"):
         got = await app.state.catalog.refresh_source("config")
-    then_eq("outcome", got, outcome)
-    with then(f"GET /catalog/opencode: config fetched_at {fetched and _iso(fetched)}, {models} models, listed {listed}"):
+    with then(f"outcome {outcome}; GET /catalog/opencode: config fetched_at {fetched and _iso(fetched)}, {models} models, listed {listed}"):
         v = await _view(app)
         cfg = v["sources"]["config"]
-        check("sources.config", {k: cfg[k] for k in ("fetched_at", "models", "last_outcome")},
-              {"fetched_at": _iso(fetched) if fetched else None, "models": models, "last_outcome": outcome})
-        check("listed ids", sorted(m for m, r in v["models"].items() if r["listed"]), listed)
+        check("outcome · sources.config · listed ids",
+              {"outcome": got, "sources.config": {k: cfg[k] for k in ("fetched_at", "models", "last_outcome")},
+               "listed": sorted(m for m, r in v["models"].items() if r["listed"])},
+              {"outcome": outcome, "sources.config": {"fetched_at": _iso(fetched) if fetched else None, "models": models, "last_outcome": outcome},
+               "listed": listed})
     if config_b == "config-reprices":
         with then("claude-haiku-5-5: the override's two cost rows, context 200000 (the override), output 128000 (the catalog's)"):
             row = v["models"]["claude-haiku-5-5"]
-            check("cost", row["cost"], [{"above_tokens": 0, "in": 0.2, "out": 1.0, "cache_read": 0.02, "cache_write": 0.25},
-                                        {"above_tokens": 200000, "in": 1.0, "out": 5.0, "cache_read": 0.1, "cache_write": 1.25}])
-            check("(context, output)", (row["context"], row["output"]), (200000, 128000))
+            check("cost · (context, output)", (row["cost"], (row["context"], row["output"])),
+                  ([{"above_tokens": 0, "in": 0.2, "out": 1.0, "cache_read": 0.02, "cache_write": 0.25},
+                    {"above_tokens": 200000, "in": 1.0, "out": 5.0, "cache_read": 0.1, "cache_write": 1.25}], (200000, 128000)))
     if config_b == "config-adds":
         with then("deepseek-v4-flash: the console-only row's cost, limits, family and tools"):
             row = v["models"]["deepseek-v4-flash"]
@@ -437,11 +440,14 @@ async def test_config_fetch_identity(cworld, vendor):
     calls = [c for c in vendor.calls if c["source"] == "config"]
     then_eq("console reads seen", len(calls), 2)
     with then(f"authorization Bearer <the Go key>, user-agent {UA}, x-opencode-session a UUID new per fetch"):
-        check("authorization is the Go key", [c["headers"].get("authorization") == f"Bearer {GO_KEY}" for c in calls], [True, True])
-        check("user-agent", [c["headers"].get("user-agent") for c in calls], [UA, UA])
         sessions = [c["headers"].get("x-opencode-session") for c in calls]
-        check("x-opencode-session parse as UUIDs", [str(uuid.UUID(s)) == s for s in sessions], [True, True])
-        check("x-opencode-session differs per fetch", sessions[0] != sessions[1], True)
+        check("per read: authorization is the Go key · user-agent · x-opencode-session parses as a UUID · differs per fetch",
+              {"authorization is the Go key": [c["headers"].get("authorization") == f"Bearer {GO_KEY}" for c in calls],
+               "user-agent": [c["headers"].get("user-agent") for c in calls],
+               "x-opencode-session parse as UUIDs": [str(uuid.UUID(s)) == s for s in sessions],
+               "x-opencode-session differs per fetch": sessions[0] != sessions[1]},
+              {"authorization is the Go key": [True, True], "user-agent": [UA, UA],
+               "x-opencode-session parse as UUIDs": [True, True], "x-opencode-session differs per fetch": True})
 
 
 async def test_catalog_fetch_no_credential(cworld, vendor):
