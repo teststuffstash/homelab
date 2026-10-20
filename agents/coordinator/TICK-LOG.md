@@ -13985,3 +13985,20 @@ updates or reverts as much as possible — mechanical revert or a responder."
   wait on a terminal. #2771 opened (`done <<<"$cells"`; the dry-run with `< /dev/null` walks 3 cells under `--max 3`).
   No canary has ever been launched by the script (the 10-19 window never opened), so nothing rode wrongly.
 - The canary WINDOW stays the operator's (budget-metered rides): after #2771, `--max 3`.
+
+## 2026-10-21 ~00:20–02:00Z — seat (unattended, operator: "run some yourself … use subagents"): the canary window ran, #2773, #2768 classified
+
+- Operator 2026-10-21: run the entry canaries from the seat and continue unattended to ~500–600k ctx with subagents.
+  Three fresh subagents: (A) the canary runner — clone with #2771, per-cell rides in the launcher's own shape for the
+  policy's openrouter models in order (v4.1-flash, kimi-k3, mimo-v2.5, v4-flash), 3 per refresh window; steered after
+  ride 1 to FILTER by the selection floors first (ride 1 went to `open-inference`, fp4 — eligible, but selection never
+  pins it): window 1 v4.1-flash {open-inference ✓, baidu, deepinfra}; window 2 kimi-k3@morph ✓ eligible (~$0.03 a
+  ride), kimi-k3@baseten 2×200 then 7×429, mimo-v2.5@xiaomi; window 3 (~02:22Z — the 20:22Z pod roll reset the
+  refresh clock) = v4-flash cells. Final table in A's report → next TICK-LOG entry. (B) #2768 classified in a comment:
+  of the 8 rail-served-unlisted ids ONE is deprecated-and-served (minimax-m2.7), 4 are PAYG carry-overs the console
+  `opencode` overlay disables, 1 PAYG-only (qwen3.6-plus), 2 with no vendor row anywhere (qwen3.7-max, omen-alpha);
+  the other 3 deprecated rows are NOT served; the issue body's "deprecated four" claim corrected. (C) FU-270 (d) as
+  #2773 — MERGED round 1, no findings: `GoCatalog.context_for`, Go-rail `context_tokens` from the catalog, a policy
+  `opencode-go/*` entry refuses the load (ruling 5); deployed policy `context_tokens: {}`; deploy #2774 pr-waited.
+  Follow-on named, not built: openrouter `context_length` is per-(model, provider) in the endpoint snapshot.
+- Master pushed at 363ce974 after #2771 (pre-push lints green).

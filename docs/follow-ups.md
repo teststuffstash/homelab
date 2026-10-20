@@ -824,7 +824,7 @@ the block needs pruning, not more headings.
       source = models.dev under the console overlay; `GoCatalogParseFailed` cleared) + #2767 (the dispatcher caller
       granted `prober`; proven past the caller check), both deployed; #2771 (the launcher's loop input) in review; (a) after the canary window, re-cut the snapshot (`benchmarks-snapshot.sh` → `tiers apply` → PR) so
       the openrouter tiers decide; (b) `wrong-verdict` fed by the deploy-revert signal; (c) the loop flip into the
-      session-pod heredoc; (d) `context_tokens` from the catalog. **Operator-only:** FU-313, the codex login (leg E), the canary window.
+      session-pod heredoc; (d) DONE 10-20 (#2773: a Go model's `context_tokens` = the catalog's; a policy copy refuses the load). **Operator-only:** FU-313, the codex login (leg E), the canary window.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
