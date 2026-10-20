@@ -12,8 +12,8 @@ the test clock, 2027-01-15T08:00:00Z.
 | an override-only console answer lists the catalog as is | none | config-ok (opencode-go.models {}) | ok | the catalog's five | 5 |
 | a disabled override unlists the row | 5, fetched T0 | config-disables (deepseek-v4-pro) | ok | deepseek-v4-pro absent | 4 |
 | a cost or limit override wins | 5, fetched T0 | config-reprices (claude-haiku-5-5) | ok | the override's cost, context 200000, output the catalog's | 5 |
-| a console-only row with a cost and both limits is listed | 5, fetched T0 | config-adds (deepseek-v4-flash) | ok | deepseek-v4-flash listed | 6 |
-| a console-only row without them lists nothing | 5, fetched T0 | config-adds-bare | ok | deepseek-v4-flash absent | 5 |
+| a console-only row with a cost and both limits is listed ⚖ | 5, fetched T0 | config-adds (deepseek-v4-flash) | ok | deepseek-v4-flash listed | 6 |
+| a console-only row without them lists nothing ⚖ | 5, fetched T0 | config-adds-bare | ok | deepseek-v4-flash absent | 5 |
 | a later good fetch replaces it | 5, fetched T0 | catalog-ok + config-ok at T0 + 21600 s | ok | fetched_at T0 + 21600 s | 5 |
 | an upstream error on the catalog read keeps the last good | 5, fetched T0 | catalog-503 | fetch-failed | the last good | 5 |
 | an upstream error on the console read keeps the last good | 5, fetched T0 | config-503 | fetch-failed | the last good | 5 |
@@ -162,9 +162,9 @@ CONFIG_ROWS = [
     ("a disabled override unlists the row", LAST_GOOD, ("catalog-ok", "config-disables"), "T0", "ok", T0, 4,
      [m for m in LISTED_FIVE if m != "deepseek-v4-pro"]),
     ("a cost or limit override wins", LAST_GOOD, ("catalog-ok", "config-reprices"), "T0", "ok", T0, 5, LISTED_FIVE),
-    ("a console-only row with a cost and both limits is listed", LAST_GOOD, ("catalog-ok", "config-adds"), "T0", "ok", T0, 6,
+    ("a console-only row with a cost and both limits is listed ⚖", LAST_GOOD, ("catalog-ok", "config-adds"), "T0", "ok", T0, 6,
      sorted([*LISTED_FIVE, "deepseek-v4-flash"])),
-    ("a console-only row without them lists nothing", LAST_GOOD, ("catalog-ok", "config-adds-bare"), "T0", "ok", T0, 5, LISTED_FIVE),
+    ("a console-only row without them lists nothing ⚖", LAST_GOOD, ("catalog-ok", "config-adds-bare"), "T0", "ok", T0, 5, LISTED_FIVE),
     ("a later good fetch replaces it", LAST_GOOD, OK, "T0 + 21600 s", "ok", T0 + 21600, 5, LISTED_FIVE),
     ("an upstream error on the catalog read keeps the last good", LAST_GOOD, ("catalog-503", "config-ok"), "T0", "fetch-failed", T0, 5, LISTED_FIVE),
     ("an upstream error on the console read keeps the last good", LAST_GOOD, ("catalog-ok", "config-503"), "T0", "fetch-failed", T0, 5, LISTED_FIVE),
@@ -194,7 +194,7 @@ async def test_config_refresh(cworld, vendor, vendor_transport, clock, last, kno
             assert await app.state.catalog.refresh_source("config") == "ok"
     if at != "T0":
         clock.t = T0 + 21600
-    with given(f"the fake vendor answers {catalog_b} (models.dev) and {config_b} (the console) at {at}"):
+    with given(f"knobs = {knobs!r}: the fake vendor answers {catalog_b} (models.dev) and {config_b} (the console) at {at}"):
         vendor.catalog, vendor.config = catalog_b, config_b
         for read, b in (("catalog", catalog_b), ("config", config_b)):
             if b.endswith("-down"):
