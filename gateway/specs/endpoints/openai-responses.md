@@ -233,10 +233,31 @@ before the credential store is read, and it reserves nothing ⚖.
 | "the rail's session cap still applies" | fresh; 2 codex sessions active (`max_sessions` 2) || defer | rail-capacity | 60 |
 | "an admitted session is not re-gated on the data plane ⚖" | dispatched at 20 %, then a limited report || data plane 200 | — (an upstream 429 is the in-session signal) | — |
 
+### Gauges
+
+An ACCEPTED report — and only one — sets the two subscription gauges of
+[GW-METRICS](metrics.md#gw-metrics) for `rail="codex"`, one series per profile window:
+`gateway_subscription_utilization` = `used_percent / 100`, `gateway_subscription_reset_seconds` =
+`resets_at`. The `window` label is the profile's minutes spelled in the metrics vocabulary (300 →
+`5h`, 10080 → `7d`) — the policy profile decides which series exist, and a profile minute the
+vocabulary lacks renders `other` like any out-of-set label value ⚖. A refused report reaches no
+gauge; a fresh gateway renders no codex series until a report is accepted (the headroom is
+forgotten with the process — "a gateway restart forgets" above). The Grafana panels on UID
+`claude-subscription` (the "Codex subscription (gateway headroom)" row) read these series.
+
+| description | event (world `policy-codex`, now = 1800000000) || series | value |
+|---|---||---|---|
+| "an accepted report renders both gauges per window" | poll observed now−10, 20 % / 64 %, resets now+1000 / now+8000 — accepted || `gateway_subscription_utilization{rail="codex",window="5h"}` / `"7d"`; `gateway_subscription_reset_seconds{…}` | 0.2 / 0.64; 1800001000 / 1800008000 |
+| "a refused report leaves the gauges unchanged ⚖" | …then an older report 99 % / 99 %, limited — refused `quota-out-of-order` || the same four series | 0.2 / 0.64; 1800001000 / 1800008000 (unchanged) |
+| "a fresh gateway renders no codex series" | no report accepted || `gateway_subscription_*{rail="codex"}` | absent |
+
+| description | profile minutes || `window` label on `rail="codex"` |
+|---|---||---|
+| "the window label is the profile's minutes in the window vocabulary ⚖" | 300, 10080, 1440, 90 || `5h`, `7d`, `other` (1440 → `1d` and 90 → `90m` are outside the vocabulary, bounded like any out-of-set value) |
+
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: authenticated report ingress" | a poll of the account usage endpoint, a jail `rate_limits` event, upstream headers || none reach the gateway | the token-gated ingest + the usage poll (spike §Candidate shape) |
-| "⚑ gap: codex window gauges" | an accepted report || no `gateway_subscription_*{rail="codex"}` series | the report → gauge wiring and the dashboard panels |
+| "⚑ gap: authenticated report ingress ⚖" | a poll of the account usage endpoint, a jail `rate_limits` event, upstream headers || none reach the gateway — the gauges above stay absent in production | the token-gated ingest + the usage poll (spike §Candidate shape); the vendor payload is unobserved until the operator's codex login (leg E) |
 | "⚑ gap: reservation" | two admissions at 94 % || both dispatched | reports do not meter concurrent use; the session cap is the only bound |
 
 <details markdown="1"><summary>Evidence</summary>

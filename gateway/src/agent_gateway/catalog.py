@@ -460,6 +460,7 @@ class GoCatalog:
         self.refreshes: dict[tuple[str, str], int] = {(s, o): 0 for s in SOURCES for o in OUTCOMES}
         self.last_outcome: dict[str, str] = {}
         self.last_attempt: dict[str, float] = {}
+        self.served_from: float | None = None  # the oldest stored snapshot a restart serves instead of refreshing (startup_delay)
         for s in SOURCES:
             if (row := store.snapshot_load(s)) is not None:
                 snap = Snapshot(s, row[0], row[1])
@@ -534,8 +535,27 @@ class GoCatalog:
                 out[s] = "fetch-failed"
         return out
 
+    def startup_delay(self, now: float) -> float:
+        """Seconds the loop waits before its first refresh: 0 when a source has no stored snapshot,
+        there is no schedule, or the oldest snapshot is `refresh_s` old — else the rest of the oldest
+        one's interval (both sources refresh together, as every tick does), so a pod roll inside it
+        serves the stored snapshots instead of re-reading the vendor. The OpenRouter leg's
+        `OpenRouterCatalog.startup_delay` is the same rule (#2775 gap 2)."""
+        if self.refresh_s <= 0 or any(s not in self.snapshots for s in SOURCES):
+            return 0.0
+        oldest = min(self.snapshots[s].fetched_at for s in SOURCES)
+        delay = oldest + self.refresh_s - now
+        if delay <= 0:
+            return 0.0
+        self.served_from = oldest
+        log.info("catalog: stored snapshots are %.0fs old (the oldest) — next refresh at %s", now - oldest, iso(oldest + self.refresh_s))
+        return delay
+
     async def run(self) -> None:
-        """The schedule: one refresh of both sources at start, then every `refresh_s`."""
+        """The schedule: the first refresh of both sources after `startup_delay`, then every `refresh_s`."""
+        delay = self.startup_delay(self.clock())
+        if delay > 0:
+            await asyncio.sleep(delay)
         while True:
             try:
                 await self.refresh()
@@ -578,10 +598,12 @@ class GoCatalog:
         )
 
     def retry_at(self, now: float, fallback_s: float) -> float:
-        """When a `not-in-catalog` verdict may change: the next scheduled refresh, else `fallback_s`."""
-        last = max(self.last_attempt.values(), default=None)
-        if last is not None and self.refresh_s > 0:
-            return max(last + self.refresh_s, now + 1)
+        """When a `not-in-catalog` verdict may change: the next scheduled refresh — `refresh_s` after
+        this process's last attempt, or, before it attempts one, after the stored snapshot it serves
+        (startup_delay) — else `fallback_s`."""
+        anchor = max(self.last_attempt.values(), default=self.served_from)
+        if anchor is not None and self.refresh_s > 0:
+            return max(anchor + self.refresh_s, now + 1)
         return now + fallback_s
 
     def plan_fee(self) -> float | None:

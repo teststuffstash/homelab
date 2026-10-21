@@ -150,7 +150,7 @@ fi
 # there. Launcher-owned text, per ADR-094 — not something the session is expected to remember.
 if [ -n "$ITEM" ]; then
   [ -n "$RUN_CMD" ] && { echo "--item and --run/--run-tick are mutually exclusive" >&2; exit 2; }
-  RUN_CMD="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Reconcile EXACTLY ONE work unit as the coordinator, per your brief (agents/coordinator/README.md): ${ITEM} (format: repo, item, clause — the clause is WHY the deterministic scan dispatched you — and OPTIONALLY parent=<n>, meaning this item is one child of GOAL issue #<n>. When parent= is present, re-read that goal BEFORE acting and judge this item against the GOAL's acceptance, not only its own: the goal is what the work is finally measured against, and nothing else in the loop will reconnect the two. If finishing this child would leave the goal's acceptance unreachable, say so on the parent — do not silently widen this item.) FIRST re-read the item's live state (labels, PR/issue state, worker pods): dispatch is at-least-once and level-triggered, so if the unit is no longer actionable — already claimed with a live worker, already armed/approved/merged, labels moved on — say so and EXIT CLEAN having touched nothing. Otherwise CLAIM it (relabel + a one-line plan comment) and take exactly the next action its state calls for per the brief; the judgment calls (triage completeness, budget sizing, arbitration per the meta-4 doctrine) are yours, inside this one item. Do NOT go looking for other work — scheduling (which item, lanes, capacity) is the scan's job, not yours. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex's armed PRs. RAIL RULE (homelab#158, launcher-owned — it overrides any recollection of the brief's dispatch steps): if this repo's claim is claudeTier — its \`workerModel\` is a \`claude/*\` id — the OpenRouter key mint is that ride's FALLBACK rail, not its prerequisite. SKIP the estimate/mint steps entirely and dispatch on the subscription (no \`--openrouter-secret\`; agent-session.sh derives \`--harness claude\` from the model prefix). A failed, rate-limited or deferred key mint must NEVER defer a claude-tier dispatch: on 2026-08-08 four of them deferred on a mint they did not need while the subscription rail sat at 2 of 5 slots. The ONE capacity condition that defers a claude-tier ride is the FU-088 subscription latch, and the launcher probes that itself — so dispatch and let it decide."
+  RUN_CMD="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Reconcile EXACTLY ONE work unit as the coordinator, per your brief (agents/coordinator/README.md): ${ITEM} (format: repo, item, clause — the clause is WHY the deterministic scan dispatched you — and OPTIONALLY parent=<n>, meaning this item is one child of GOAL issue #<n>. When parent= is present, re-read that goal BEFORE acting and judge this item against the GOAL's acceptance, not only its own: the goal is what the work is finally measured against, and nothing else in the loop will reconnect the two. If finishing this child would leave the goal's acceptance unreachable, say so on the parent — do not silently widen this item.) FIRST re-read the item's live state (labels, PR/issue state, worker pods): dispatch is at-least-once and level-triggered, so if the unit is no longer actionable — already claimed with a live worker, already armed/approved/merged, labels moved on — say so and EXIT CLEAN having touched nothing. Otherwise CLAIM it (relabel + a one-line plan comment) and take exactly the next action its state calls for per the brief; the judgment calls (triage completeness, budget sizing, arbitration per the meta-4 doctrine) are yours, inside this one item. Do NOT go looking for other work — scheduling (which item, lanes, capacity) is the scan's job, not yours. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex's armed PRs. RAIL RULE (homelab#158, launcher-owned — it overrides any recollection of the brief's dispatch steps): if this repo's claim is claudeTier — its \`workerModel\` is a \`claude/*\` id — the OpenRouter key mint is that ride's FALLBACK rail, not its prerequisite. SKIP the estimate/mint steps entirely and dispatch on the subscription (no \`--openrouter-secret\`; agent-session.sh derives \`--harness claude\` from the model prefix). A failed, rate-limited or deferred key mint must NEVER defer a claude-tier dispatch: on 2026-08-08 four of them deferred on a mint they did not need while the subscription rail sat at 2 of 5 slots. The ONE capacity condition that defers a claude-tier ride is the FU-088 subscription latch, and the launcher probes that itself — so dispatch and let it decide. GATEWAY RULE (FU-270 (c), overrides the RAIL RULE): if AGENT_GATEWAY=sessions is in your env (the platform stack), SKIP the estimate/mint steps for EVERY ride and dispatch with NO \`--model\`, NO \`--harness\`, NO \`--openrouter-secret\` — the gateway admits, owns the model and resolves the credential; the launcher refuses \`--model\` there (brief step 5 §Gateway)."
 fi
 # FU-086(4) janitor mode: the ~daily REPORT-ONLY judgment tick (ADR-094 (4) — board-level
 # breadth the clause code can't have). Its entire write surface is INERT spec-gap drafts
@@ -527,6 +527,18 @@ esac
 # The rendered Pod IS the dispatch (agents/replay/fixtures/coordinator-pod-manifest pins it whole,
 # the kubectl stub's STDIN capture): the SA the gateway's TokenReview sees, the mounts the in-pod
 # launchers read, the env the session inherits.
+# FU-270 (c), the loop flip (2026-10-21): the PLATFORM stack's session pod carries
+# AGENT_GATEWAY=sessions, so the worker launcher that runs IN it (agents/agent-session.sh) admits
+# every ride through the agent-gateway's POST /sessions (gateway/specs/use-cases/uc-1-worker-ride.md)
+# instead of the old proxy's /route. Gated on STACK here — the same test the launcher's own
+# platform-only guard makes — so no other stack's coordinator brief ever sees the knob (PR#2788
+# review: an unconditional env line told oracle/circles/sleep to skip the mint their rides still
+# need). The knob is env-only, no claim field, by design.
+GW_KNOB_ENV=""
+if [ "${STACK:-}" = "platform" ]; then
+  GW_KNOB_ENV='        - name: AGENT_GATEWAY
+          value: "sessions"'
+fi
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" "$CREATE_CMD" -f - \
   || { echo "PREFLIGHT REFUSED (atomic): ${CREATE_CMD} of ${POD} failed — a racing dispatcher won the (repo, item) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
@@ -565,6 +577,9 @@ spec:
         # so the raise stays launcher-owned end-to-end — the LLM never assembles the number.
         - name: AGENT_WIP_LIMIT
           value: "${WIP_LIMIT}"
+        # FU-270 (c), the loop flip: AGENT_GATEWAY=sessions for the PLATFORM stack only (empty
+        # elsewhere — the GW_KNOB_ENV gate above; the launcher guards on the same stack name).
+${GW_KNOB_ENV}
         # Provenance for the transcript manifest (docs/agents/observability-and-retro.md §A1).
         - name: MODEL
           value: "${MODEL}"
@@ -627,8 +642,8 @@ spec:
         - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
         # GW-SESSIONS-AUTH (FU-270): the gateway caller token at the worker launcher's DEFAULT
         # AGENT_GATEWAY_CALLER_TOKEN_FILE path (agents/agent-session.sh, which runs IN this pod —
-        # the scan Workflow pod only spawns this one). INERT until AGENT_GATEWAY=sessions reaches
-        # this pod (the loop flip, the operator's later act — nothing here sets it).
+        # the scan Workflow pod only spawns this one). LIVE for the platform stack since the loop
+        # flip (AGENT_GATEWAY=sessions in the env above, FU-270 (c)); inert in any other stack's pod.
         - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
         # Persist Claude Code session transcripts (the interactive session's only "log"). Mounts a
         # subdir of ~/.claude so the image-baked settings.json / .claude.json are untouched.
@@ -658,8 +673,8 @@ spec:
     # agentstack-loop is a callers entry in the gateway policy), audience agent-gateway, the
     # shortest expiry the API allows; kubelet rotates the file and the launcher re-reads it per
     # call. Same shape as the gateway-token volume in agents/coordinator/specs-review-argo.yaml.
-    # Pod spec only: the gateway's TokenReview is its own RBAC. Inert until the
-    # AGENT_GATEWAY=sessions flip. (No backticks in this heredoc: it is UNQUOTED, they execute.)
+    # Pod spec only: the gateway's TokenReview is its own RBAC. Live where the env above carries
+    # AGENT_GATEWAY=sessions (platform, FU-270 (c)). (No backticks in this heredoc: it is UNQUOTED, they execute.)
     - name: gateway-token
       projected:
         sources:

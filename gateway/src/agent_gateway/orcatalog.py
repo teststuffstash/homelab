@@ -164,6 +164,9 @@ class OpenRouterCatalog:
         self.refreshes: dict[str, int] = {o: 0 for o in OUTCOMES}
         self.last_outcome: str | None = None
         self.last_attempt: float | None = None
+        # The stored snapshot a restart serves instead of refreshing (startup_delay): the schedule
+        # counts from its fetched_at until this process attempts a refresh of its own.
+        self.served_from: float | None = None
         self.last_refresh_at: float | None = store.meta_get("openrouter-catalog.refreshed_at")  # the per-refresh canary window's start
         self.endpoint_failures: int = 0  # candidates whose endpoints could not be read, last refresh
         self.canary_rides: dict[str, int] = {o: 0 for o in CANARY_OUTCOMES}
@@ -252,7 +255,28 @@ class OpenRouterCatalog:
                  len(ranked), len(aa), len(candidates), len(models), failures, entrants)
         return "ok"
 
+    def startup_delay(self, now: float) -> float:
+        """Seconds the loop waits before its first refresh: 0 when there is no stored snapshot, no
+        schedule, or the snapshot is `refresh_s` old — else the rest of the interval, so a pod roll
+        inside it serves the stored snapshot and keeps the persisted `refreshed_at` (the canary
+        window's start) where it was (#2775 gap 2: three windows in 70 min on 2026-10-20, none by
+        the timer). The Go leg's `GoCatalog.startup_delay` is the same rule."""
+        row = self.store.snapshot_load(SNAPSHOT_SOURCE)
+        if row is None or self.refresh_s <= 0:
+            return 0.0
+        fetched_at = row[0]
+        delay = fetched_at + self.refresh_s - now
+        if delay <= 0:
+            return 0.0
+        self.served_from = fetched_at
+        log.info("orcatalog: stored snapshot is %.0fs old — next refresh at %s", now - fetched_at, iso(fetched_at + self.refresh_s))
+        return delay
+
     async def run(self) -> None:
+        """The schedule: the first refresh after `startup_delay`, then every `refresh_s`."""
+        delay = self.startup_delay(self.clock())
+        if delay > 0:
+            await asyncio.sleep(delay)
         while True:
             try:
                 await self.refresh()
@@ -261,8 +285,11 @@ class OpenRouterCatalog:
             await asyncio.sleep(self.refresh_s)
 
     def retry_at(self, now: float, fallback_s: float) -> float:
-        if self.last_attempt is not None and self.refresh_s > 0:
-            return max(self.last_attempt + self.refresh_s, now + 1)
+        """The next scheduled refresh: `refresh_s` after this process's last attempt — or, before it
+        attempts one, after the stored snapshot it serves (startup_delay) — else `fallback_s`."""
+        anchor = self.last_attempt if self.last_attempt is not None else self.served_from
+        if anchor is not None and self.refresh_s > 0:
+            return max(anchor + self.refresh_s, now + 1)
         return now + fallback_s
 
     # -- the cells ------------------------------------------------------------------------------

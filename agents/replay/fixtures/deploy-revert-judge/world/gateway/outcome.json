@@ -1,0 +1,1 @@
+{"id": "7d3f2a1c", "outcome": {"class": "wrong-verdict", "subclass": null, "reporter": "system:serviceaccount:agent-coordinator:outcome-judge"}, "strike": {"class": "wrong-verdict", "scope": "model"}, "refuted": 0, "replay": false}

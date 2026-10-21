@@ -151,6 +151,10 @@ def create_app(
     codex = (CodexRail(policy.rails["codex"], clock, codex_backend, settings.upstreams.get("codex", ""))
              if "codex" in policy.rails else None)
     sessions.codex = codex
+    if codex is not None:
+        # GW-CODEX-HEADROOM §Gauges: an ACCEPTED report renders gateway_subscription_*{rail="codex"};
+        # a restart renders nothing until the next one (the headroom is forgotten with the process).
+        codex.headroom.on_accept = lambda snapshot: m.subscription_report("codex", snapshot.windows)
     codex_proxy = CodexProxy(sessions, m, codex, client)
 
     @contextlib.asynccontextmanager
@@ -161,10 +165,12 @@ def create_app(
         task = asyncio.create_task(_reprobe_loop(proxy)) if reprobe_every_s else None
         # A session whose pod is gone is reaped (GW-SESSIONS-LIVENESS).
         reaper = asyncio.create_task(_reap_loop(sessions, policy.liveness_check_s)) if policy.liveness_check_s else None
-        # The Go catalog's schedule (GW-CATALOG-GO): one refresh at start, then every go_catalog_refresh_s.
+        # The Go catalog's schedule (GW-CATALOG-GO): a refresh at start unless the stored snapshots are younger than
+        # go_catalog_refresh_s (then at fetched_at + the interval — a pod roll re-reads nothing), then every interval.
         refresher = (asyncio.create_task(catalog.run(), name="go-catalog")
                      if "opencode" in policy.rails and settings.go_catalog_refresh_s > 0 else None)
-        # The OpenRouter catalog's schedule (GW-CATALOG-OR): one refresh at start, then every or_catalog_refresh_s.
+        # The OpenRouter catalog's schedule (GW-CATALOG-OR): the same rule — a roll inside the interval keeps the
+        # persisted refreshed_at, i.e. the canary window (#2775 gap 2).
         or_refresher = (asyncio.create_task(orcatalog.run(), name="openrouter-catalog")
                         if orcatalog.enabled and settings.or_catalog_refresh_s > 0 else None)
         try:

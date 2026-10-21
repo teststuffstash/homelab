@@ -23,6 +23,8 @@ The refresh:
 | no account key: fetch-failed, no MCP call | the ref absent | none || fetch-failed | 0 (0 MCP calls) | — |
 | the MCP calls carry the account key and a client identity | mcp ok | — || — | authorization Bearer <the account key>; user-agent agent-gateway/<v> (openrouter-catalog); initialize then tools/call ×3 | — |
 | a PVC store keeps the snapshot and the cells across a restart | refresh, a new gateway on the same DB, +3600 s | — || — | age_s 3600; 2 models; 15 candidate cells | — |
+| a restart inside the interval refreshes nothing at start | refresh at T0, a new gateway on the same DB, +3600 s | 2 || — (the loop's first refresh waits 18000 s; last_attempt_at null; a not-in-catalog defer's retry_after_s 18000) | 2 | 15 |
+| a restart after the interval refreshes at start | refresh at T0, a new gateway on the same DB, +21600 s | 2 || ok (the loop refreshes at once; fetched_at T0 + 21600 s) | 2 | 15 |
 
 The entry canary (a canary = `POST /sessions` with `canary: {model, provider}`, the policy's canary role prober):
 
@@ -47,6 +49,8 @@ The budget (policy: max_per_refresh 3, usd_per_day 1.0, cooldown_s 86400):
 | under budget: N entrants are canaried | refresh | 3 canaries on three cells || dispatch ×3 | — | — | 0 |
 | at the cap the N+1th waits | 3 admitted this refresh | a 4th canary || defer | canary-budget | 3600 | 1 |
 | a refresh opens the next N | 3 admitted, then a refresh | a 4th canary || dispatch | — | — | 0 |
+| a pod roll inside the window keeps the count | 3 admitted, then a new gateway on the same DB +3600 s (no refresh at start) | a 4th canary || defer | canary-budget | 3600 | 1 (admitted_this_refresh 3) |
+| a pod roll after the interval refreshes and opens the next N | 3 admitted, then a new gateway on the same DB +21600 s, its refresh at start | a 4th canary || dispatch | — | — | 0 |
 | the day's spend at the cap defers | one canary ride metered $1.12 (in 5M, out 1M at deepinfra 0.14/0.42) | the next canary || defer | canary-budget | 3600 | 1 |
 | the day rolls over | the same, +86400 s | the next canary || dispatch | — | — | 0 |
 | spend is metered at the cell's endpoint price | the same ride || — | — | `gateway_canary_spend_usd` 1.12 | — |
@@ -68,6 +72,8 @@ import json
 from pathlib import Path
 
 import pytest
+
+from agent_gateway.store import iso
 
 from .conftest import attach_json, bearer, check, given, open_session, quiet, rule, then, then_eq, when, world
 
@@ -254,6 +260,60 @@ async def test_pvc_keeps_snapshot(gw, app, clock, settings, policy, secrets, mcp
     then_eq("age_s · models · candidate cells", (v["age_s"], len(v["models"]), _cells(v)["candidate"]), (3600.0, 2, 15))
 
 
+class _SecondGateway:
+    """A new gateway on the same DB (a pod roll): `startup_delay` is the loop's first decision —
+    `run()` is not started (ASGI transports run no lifespan), the test calls the helper it wraps."""
+
+    def __init__(self, settings, policy, secrets, mcp_transport, reviews, pods, clock):
+        import httpx
+
+        from agent_gateway.app import create_app
+        from agent_gateway.store import Store
+
+        from .conftest import ObservedAsyncClient
+
+        self.client = httpx.AsyncClient(transport=mcp_transport)
+        self.app = create_app(settings, policy=policy, source=secrets, store=Store(settings.db_path), client=self.client, clock=clock,
+                              reviewer=reviews, pods=pods)
+        self.gw = ObservedAsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://gw2")
+        self.delay = self.app.state.orcatalog.startup_delay(clock())
+        attach_json("the second gateway's startup_delay", {"startup_delay_s": self.delay, "served_from": iso(self.app.state.orcatalog.served_from)})
+
+    async def close(self) -> None:
+        await self.gw.aclose()
+        await self.client.aclose()
+
+
+async def test_restart_inside_interval(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods):
+    """row: a restart inside the interval refreshes nothing at start"""
+    world(note=f"{WORLD}; a second gateway on the same DB, refresh_s 21600")
+    await _refresh(app)
+    clock.advance(3600)
+    with given("a new gateway built on the same DB path, +3600 s"):
+        second = _SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+    r = await _canary(second.gw, M, "fireworks", " on the second gateway (a cell the snapshot lacks)")
+    v = await _view(second.gw)
+    await second.close()
+    then_eq("the loop's first refresh waits (startup_delay)", second.delay, 18000.0)
+    then_eq("last_attempt_at · models · candidate cells", (v["last_attempt_at"], len(v["models"]), _cells(v)["candidate"]), (None, 2, 15))
+    _verdict(r.json(), {"decision": "defer", "reason": "not-in-catalog", "retry_after_s": 18000})
+
+
+async def test_restart_after_interval(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods):
+    """row: a restart after the interval refreshes at start"""
+    world(note=f"{WORLD}; a second gateway on the same DB, refresh_s 21600")
+    await _refresh(app)
+    clock.advance(21600)
+    with given("a new gateway built on the same DB path, +21600 s"):
+        second = _SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+    then_eq("the loop refreshes at once (startup_delay)", second.delay, 0.0)
+    outcome = await _refresh(second.app, " on the second gateway, at start")
+    v = await _view(second.gw)
+    await second.close()
+    then_eq("outcome · fetched_at · models · candidate cells", (outcome, v["fetched_at"], len(v["models"]), _cells(v)["candidate"]),
+            ("ok", iso(T0 + 21600), 2, 15))
+
+
 # -- the entry canary --------------------------------------------------------------------------------
 async def test_new_cell_not_pinned(gw, app, upstreams):
     """row: a new cell is a candidate: selection does not pin it"""
@@ -428,6 +488,45 @@ async def test_budget_refresh_resets(gw, app, store, clock):
     r = await _canary(gw, M, "inference-net", " (the 4th, after the refresh)")
     _verdict(r.json(), {"decision": "dispatch", "rail": RAIL, "model": M})
     then_eq("gateway_canary_budget_exhausted", await _series(gw, "gateway_canary_budget_exhausted"), 0)
+
+
+async def _three_admitted(gw, app) -> None:
+    with given("3 canaries admitted this refresh"):
+        with quiet():
+            for p in ("deepinfra", "atlas-cloud", "morph"):
+                assert (await gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": f"c-{p}", "canary": {"model": M, "provider": p}})).json()["decision"] == "dispatch"
+
+
+async def test_budget_survives_roll(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods):
+    """row: a pod roll inside the window keeps the count"""
+    world(note=f"{WORLD}; a second gateway on the same DB, refresh_s 21600")
+    await _refresh(app)
+    await _three_admitted(gw, app)
+    clock.advance(3600)
+    with given("a new gateway built on the same DB path, +3600 s — no refresh at start"):
+        second = _SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+    r = await _canary(second.gw, M, "inference-net", " (the 4th, on the second gateway)")
+    v = await _view(second.gw)
+    exhausted = await _series(second.gw, "gateway_canary_budget_exhausted")
+    await second.close()
+    _verdict(r.json(), {"decision": "defer", "reason": "canary-budget", "retry_after_s": 3600})
+    then_eq("startup_delay · admitted_this_refresh · gateway_canary_budget_exhausted", (second.delay, v["canary"]["admitted_this_refresh"], exhausted), (18000.0, 3, 1))
+
+
+async def test_budget_roll_after_interval(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods):
+    """row: a pod roll after the interval refreshes and opens the next N"""
+    world(note=f"{WORLD}; a second gateway on the same DB, refresh_s 21600")
+    await _refresh(app)
+    await _three_admitted(gw, app)
+    clock.advance(21600)
+    with given("a new gateway built on the same DB path, +21600 s — its refresh at start"):
+        second = _SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+        await _refresh(second.app, " on the second gateway, at start")
+    r = await _canary(second.gw, M, "inference-net", " (the 4th, on the second gateway)")
+    exhausted = await _series(second.gw, "gateway_canary_budget_exhausted")
+    await second.close()
+    _verdict(r.json(), {"decision": "dispatch", "rail": RAIL, "model": M})
+    then_eq("startup_delay · gateway_canary_budget_exhausted", (second.delay, exhausted), (0.0, 0))
 
 
 async def _spend_ride(gw, app, upstreams) -> dict:

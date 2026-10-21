@@ -52,7 +52,7 @@ GO_CATALOG_URLS = {
     "config": "https://opencode.ai/console/api/v2/config",
     "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx",
 }
-GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start
+GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start unless the store's snapshot is younger
 
 
 class PolicyError(ValueError):

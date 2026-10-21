@@ -83,6 +83,7 @@ the test clock, 2027-01-15T08:00:00Z.
 |---|---|---|
 | a PVC store keeps the snapshot | ok + ok, new gateway on the same DB, +3600 s | both served; age_s 3600; models{config} 5 |
 | a corrupt stored snapshot is ignored | a stored config row that is not JSON | no config snapshot |
+| a restart inside the interval refreshes nothing at start | catalog-ok + docs-ok at T0, then a new gateway on the same DB at T0 + 3600 s, another at T0 + 21600 s | the loop's first refresh waits 18000 s on the first (last_attempt_at null; a not-in-catalog defer's retry_after_s 18000), 0 s on the second — it refreshes at once |
 
 | description | event | series | value |
 |---|---|---|---|
@@ -539,6 +540,28 @@ async def test_corrupt_snapshot_ignored(cworld, vendor):
         v = await _view(app)
     then_eq("sources.config.models", v["sources"]["config"]["models"], 0)
     then_eq("sources.config.fetched_at", v["sources"]["config"]["fetched_at"], None)
+
+
+async def test_restart_inside_interval(cworld, vendor, clock):
+    """row: a restart inside the interval refreshes nothing at start"""
+    world(upstream="catalog-ok · docs-ok", note="refresh_s 21600")
+    first = cworld.build()
+    with given("both sources refreshed at T0 on gateway #1"):
+        await first.state.catalog.refresh()
+    clock.advance(3600)
+    with when("gateway #2 starts on the same DB at T0 + 3600 s, gateway #3 at T0 + 21600 s — each asks startup_delay"):
+        second = cworld.build()
+        delay_2 = second.state.catalog.startup_delay(clock())
+        retry_2 = second.state.catalog.retry_at(clock(), 60) - clock()
+        v = await _view(second)
+        clock.advance(18000)
+        third = cworld.build()
+        delay_3 = third.state.catalog.startup_delay(clock())
+    with then("#2 waits 18000 s (last_attempt_at null, a not-in-catalog defer would say retry_after_s 18000); #3 refreshes at once"):
+        check("gateway #2 startup_delay", delay_2, 18000.0)
+        check("gateway #2 retry_at - now (the not-in-catalog defer's retry_after_s)", retry_2, 18000.0)
+        check("gateway #2 sources.config.last_attempt_at", v["sources"]["config"]["last_attempt_at"], None)
+        check("gateway #3 startup_delay", delay_3, 0.0)
 
 
 # ── What /metrics says ───────────────────────────────────────────────────────────────────────
