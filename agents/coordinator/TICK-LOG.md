@@ -14112,3 +14112,13 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (kind, key, until, stack, at, backoff)`, write-through under the lock, reload at start (expired dropped; `hold` = its
   own kind so the backoff doubling is unchanged; keys carry `sha256[:16]` fingerprints, never a credential); live:
   `capacity: reloaded 0 marks from the store`. The sessions.md "⚑ gap: a latch survives a restart" row closed (12 rows).
+- **#2791 (#2775 gap 3) MERGED 19:03Z** (R1 both approved; CONFLICTING after #2790 → rebased; the Go-catalog attachment
+  hygiene folded in; the updater merged master on top, re-approved), deploy #2797 live: `pinnable` + `floor` per endpoint
+  per harness from `providers.eligible()`; the launcher's dry run walks 71 pinnable of 241 candidate cells cheapest-first
+  (was 0 of 241). ⚠ The walk now starts at `v4-flash@deepinfra` — the shared-pool-429 cell — so gap 1's ruling gates the
+  next window (comment 2 on #2775). Seen: `nvfp4` off the policy ladder (8 cells, no eligibility change); every
+  `anthropic/*` OpenRouter cell is `quantization unknown` (never pinnable under fp8).
+- **#2796** (gateway evidence pack → the gateway-specs bucket, `GithubStorageHeldHigh`) was the OPERATOR's own PR
+  (18:47Z, merged 19:29Z), not this seat's; its deploy #2799 auto-merge armed. Gateway sessions since the flip: 5
+  specs-review rides only — NO platform worker ride yet (nothing queued on the platform board); the first ride through
+  `/sessions` remains unverified.
