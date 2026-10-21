@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   canary_provider TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
+CREATE INDEX IF NOT EXISTS sessions_task ON sessions (task);
 CREATE TABLE IF NOT EXISTS requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
@@ -314,6 +315,15 @@ class Store:
         with self._lock:
             row = self._db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
         return Session(**dict(row)) if row else None
+
+    def sessions_by_task(self, task: str) -> list[Session]:
+        """Every session carrying exactly `task` (GET /sessions?task= — GW-SESSIONS-AUTH), released
+        and expired included, oldest first. `task` is an original column, so the `sessions_task`
+        index lives in _SCHEMA (CREATE INDEX IF NOT EXISTS is idempotent on an existing table and
+        needs no _migrate step)."""
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM sessions WHERE task = ? ORDER BY created_at, id", (task,)).fetchall()
+        return [Session(**dict(r)) for r in rows]
 
     def get_by_token_hash(self, token_hash: str) -> Session | None:
         with self._lock:
