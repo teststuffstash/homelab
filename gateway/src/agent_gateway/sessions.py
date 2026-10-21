@@ -1,4 +1,5 @@
-"""The control plane: POST/GET/DELETE /sessions (GW-SESSIONS-ADMIT, -ENV, -TOKEN, -RELEASE) and
+"""The control plane: POST/GET/DELETE /sessions (GW-SESSIONS-ADMIT, -ENV, -TOKEN, -RELEASE), the
+judge's list GET /sessions?task= (GW-SESSIONS-AUTH) and
 the pod's env pull, POST /sessions/{id}/env (GW-SESSIONS-PULL — the identity half lives in pull.py).
 Every POST/GET/DELETE is caller-checked first (GW-SESSIONS-AUTH, control.py); the pull is not — its
 caller is the bound pod, checked against the bind.
@@ -36,7 +37,7 @@ from .config import (
     StackPolicy,
     wire_model,
 )
-from .control import ControlPlaneAuth, authorize_outcome
+from .control import ControlPlaneAuth, authorize_outcome, visible_to
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
 from .liveness import PodSource
 from .metrics import Metrics
@@ -822,11 +823,34 @@ async def _owned_row(request: Request, route: str) -> tuple[SessionService, Sess
     return svc, row, denied
 
 
+def _public_row(svc: SessionService, row: Session, now: float) -> dict:
+    """The GET /sessions/{id} row with its latest outcome (sessions.schema.json `get.output`)."""
+    return {**row.public(now), "outcome": public_outcome(svc.store.latest_outcome(row.id))}
+
+
 async def get_session(request: Request) -> JSONResponse:
     svc, row, refused = await _owned_row(request, "lookup")
     if refused is not None:
         return refused
-    return JSONResponse({**row.public(svc.clock()), "outcome": public_outcome(svc.store.latest_outcome(row.id))})
+    return JSONResponse(_public_row(svc, row, svc.clock()))
+
+
+async def list_sessions(request: Request) -> JSONResponse:
+    """GET /sessions?task=<exact task key> (GW-SESSIONS-AUTH, route `list`): the caller check
+    (401 / 403 / 503), the query (400), then every session of the task the caller may SEE —
+    its own, the ownerless, and as a judge every one of its stacks (control.visible_to) — oldest
+    first, released and expired included: a judge reads a verdict's fate after release."""
+    svc: SessionService = request.app.state.sessions
+    caller = await svc.auth.check("list", _bearer(request))
+    if isinstance(caller, JSONResponse):
+        return caller
+    task = request.query_params.get("task") or ""
+    if not task:
+        return error(400, "malformed-body", "GET /sessions needs ?task=<exact task key>")
+    now = svc.clock()
+    rows = [r for r in svc.store.sessions_by_task(task) if visible_to(caller, r.caller, r.stack)]
+    log.info("session: list task=%s caller=%s rows=%d", task, caller.identity or "(unauthenticated)", len(rows))
+    return JSONResponse({"sessions": [_public_row(svc, r, now) for r in rows]})
 
 
 async def post_session_outcome(request: Request) -> JSONResponse:

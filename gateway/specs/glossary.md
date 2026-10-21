@@ -240,11 +240,23 @@ implementation exists; the production one is a `⚑ gap`.
 
 ## control plane / data plane
 
-Control plane = `/sessions` (admission, lookup, release), `/healthz`, `/metrics`, `/catalog/opencode`. Data plane =
+Control plane = `/sessions` (admission, lookup, release, the [judge](#judge)'s list by task), `/healthz`, `/metrics`, `/catalog/opencode`. Data plane =
 the two dialect paths the pod's LLM traffic rides. `/sessions` is called by launchers with their
 projected ServiceAccount token, checked against the policy's `callers`
 ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth); `/healthz`, `/metrics` and `/catalog/opencode` stay open,
 in-cluster only); the data plane requires a session token.
+
+## judge
+
+A control-plane caller whose `callers` entry says **`outcome: any`**: it may report an outcome on
+any [session](#session) of its stacks, not only the ones it admitted, and `GET /sessions?task=`
+shows it every session of its stacks carrying that task
+([sessions.md §Who may report](endpoints/sessions.md#who-may-report), [§A judge finds a task's
+sessions](endpoints/sessions.md#a-judge-finds-a-tasks-sessions)). It exists because a reviewer
+cannot grade its own verdict: `wrong-verdict` is a judge's class only, written after a later check
+— the deployed judge is the deploy-revert chain's judge step, which reports it on the review
+sessions of a merge the chain reverted (FU-270 (b)). A judge admits nothing (roles `[]`, no bind);
+the key is optional and `own` by default, so an absent key grants nothing extra.
 
 ## world
 
