@@ -47,6 +47,7 @@ coordinator-pick-rail-go	coordinator-pick-rail
 coordinator-pick-rail-go-goal-lane	coordinator-pick-rail
 depends-on-retired-format	depends-on-retired-format
 deploy-revert-candidate	deploy-revert-candidate
+deploy-revert-judge	deploy-revert-judge
 deploy-revert-preexisting/degraded	deploy-revert-preexisting
 deploy-revert-preexisting/healthy	deploy-revert-preexisting
 deploy-revert-preexisting/unreadable	deploy-revert-preexisting
