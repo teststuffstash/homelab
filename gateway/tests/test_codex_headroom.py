@@ -46,16 +46,27 @@ Admission:
 | headroom is read before the credential store | none; store would fail | defer | quota-unknown, store never read | 60 |
 | the rail's session cap still applies | fresh; 2 active | defer | rail-capacity | 60 |
 | an admitted session is not re-gated on the data plane | dispatched, then limited | data plane 200 | - | - |
+
+Gauges (world policy-codex, now = 1800000000):
+
+| description | event | series | value |
+|---|---|---|---|
+| an accepted report renders both gauges per window | poll now-10, 20/64, resets now+1000/now+8000, accepted | gateway_subscription_utilization{rail="codex",window="5h"} / "7d"; gateway_subscription_reset_seconds{...} | 0.2 / 0.64; 1800001000 / 1800008000 |
+| a refused report leaves the gauges unchanged | ...then an older 99/99 limited report, refused quota-out-of-order | the same four series | 0.2 / 0.64; 1800001000 / 1800008000 (unchanged) |
+| a fresh gateway renders no codex series | no report accepted | gateway_subscription_*{rail="codex"} | absent |
+| the window label is the profile's minutes in the window vocabulary | windows of 300, 10080, 1440 and 90 minutes | window on rail="codex" | 5h, 7d, other |
 """
 
 from __future__ import annotations
 
 import copy
+import re
 
 import pytest
 
 from agent_gateway.config import Policy
-from agent_gateway.headroom import Headroom, ReportError, Verdict
+from agent_gateway.headroom import Headroom, ReportError, Verdict, Window
+from agent_gateway.metrics import Metrics, window_label
 
 from ._codex_world import (
     CODEX_POLICY,
@@ -307,3 +318,66 @@ async def test_no_regate_on_data_plane(codex_app, codex_gw, codex_upstream, cloc
     r = await ride(codex_gw, doc)
     then_eq("(headroom verdict now, status, upstream calls)",
             (codex_app.state.codex.headroom.verdict(), r.status_code, len(codex_upstream.calls)), (Verdict.LIMITED, 200, 1))
+
+
+# -- the gauges (§Gauges) ------------------------------------------------------------------------
+
+CODEX_SERIES = [f'gateway_subscription_{fam}{{rail="codex",window="{w}"}}'
+                for fam in ("utilization", "reset_seconds") for w in ("5h", "7d")]
+ACCEPTED = {CODEX_SERIES[0]: 0.2, CODEX_SERIES[1]: 0.64, CODEX_SERIES[2]: 1_800_001_000, CODEX_SERIES[3]: 1_800_008_000}
+
+
+def _sample(text: str, series: str) -> float | None:
+    m = re.search(r"^" + re.escape(series) + r" (\S+)$", text, re.M)
+    return float(m.group(1)) if m else None
+
+
+async def _codex_gauges(gw) -> dict[str, float | None]:
+    """When: GET /metrics — the four codex subscription series (None = absent)."""
+    with when("GET /metrics"):
+        with quiet():
+            text = (await gw.get("/metrics")).text
+        attach_json('sample: gateway_subscription_*{rail="codex"} lines',
+                    [line for line in text.splitlines() if line.startswith("gateway_subscription") and 'rail="codex"' in line])
+        return {s: _sample(text, s) for s in CODEX_SERIES}
+
+
+async def test_gauges_accepted(codex_app, codex_gw, clock):
+    """row: an accepted report renders both gauges per window"""
+    world("policy-codex")
+    observe(codex_app, fresh_report(clock))
+    got = await _codex_gauges(codex_gw)
+    then_eq("gateway_subscription_*{rail=codex}", got, ACCEPTED,
+            claim="utilization 5h / 7d = 0.2 / 0.64; reset_seconds = 1800001000 / 1800008000 (now+1000 / now+8000)")
+
+
+async def test_gauges_refused_unchanged(codex_app, codex_gw, clock):
+    """row: a refused report leaves the gauges unchanged"""
+    world("policy-codex")
+    observe(codex_app, fresh_report(clock))
+    with when("observe an OLDER report (now−11) at 99 % / 99 %, limited"):
+        _refused(codex_app.state.codex.headroom, fresh_report(clock, used=(99, 99), limited=True, age=11), "quota-out-of-order")
+    got = await _codex_gauges(codex_gw)
+    then_eq("gateway_subscription_*{rail=codex}", got, ACCEPTED, claim="the four series are unchanged (0.2 / 0.64; 1800001000 / 1800008000)")
+
+
+async def test_gauges_fresh_absent(codex_app, codex_gw):
+    """row: a fresh gateway renders no codex series"""
+    world("policy-codex")
+    with given("no report accepted (a fresh gateway)"):
+        pass
+    got = await _codex_gauges(codex_gw)
+    then_eq("gateway_subscription_*{rail=codex}", got, dict.fromkeys(CODEX_SERIES), claim="absent — every codex series is None")
+
+
+def test_gauges_window_vocabulary():
+    """row: the window label is the profile's minutes in the window vocabulary"""
+    world("policy-codex")
+    m = Metrics(("platform",))
+    with when("subscription_report codex: windows of 300, 10080, 1440 and 90 minutes"):
+        m.subscription_report("codex", [Window(0.2, T + 1000, 300), Window(0.64, T + 8000, 10080),
+                                        Window(0.5, T + 9000, 1440), Window(0.5, T + 9000, 90)])
+        labels = re.findall(r'^gateway_subscription_utilization\{rail="codex",window="([^"]+)"\}', m.render(), re.M)
+    then_eq("window_label(300, 10080, 1440, 90)", [window_label(n) for n in (300, 10080, 1440, 90)], ["5h", "7d", "1d", "90m"])
+    then_eq("window labels rendered", sorted(labels), ["5h", "7d", "other"],
+            claim="300 → 5h, 10080 → 7d; 1d and 90m are outside the vocabulary → other")

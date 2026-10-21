@@ -12,7 +12,7 @@
     "dialect": { "enum": ["anthropic", "openai", "responses"] },
     "status": { "type": "string", "pattern": "^[1-5][0-9][0-9]$" },
     "class": { "enum": ["in", "cache_read", "cache_write", "out"] },
-    "window": { "enum": ["5h", "7d"] },
+    "window": { "enum": ["5h", "7d", "other"], "description": "the subscription windows; `other` = a codex headroom profile minute outside the vocabulary (GW-CODEX-HEADROOM §Gauges)" },
     "outcome": { "enum": ["resolved", "definitive", "transient"] },
     "route": { "enum": ["admit", "lookup", "release", "outcome", "list"] },
     "reason": { "enum": ["absent", "invalid", "review-transient"] },
@@ -73,7 +73,7 @@
         "rail": { "$ref": "#/$defs/rail" },
         "window": { "$ref": "#/$defs/window" }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": ["GW-METRICS", "GW-CODEX-HEADROOM"]
     },
     "gateway_subscription_reset_seconds": {
       "type": "gauge",
@@ -81,7 +81,7 @@
         "rail": { "$ref": "#/$defs/rail" },
         "window": { "$ref": "#/$defs/window" }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": ["GW-METRICS", "GW-CODEX-HEADROOM"]
     },
     "gateway_credential_resolve_total": {
       "type": "counter",
