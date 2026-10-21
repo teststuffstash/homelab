@@ -1,4 +1,5 @@
-"""The control plane's caller check: POST /sessions, GET and DELETE /sessions/{id} (GW-SESSIONS-AUTH).
+"""The control plane's caller check: POST /sessions, GET and DELETE /sessions/{id}, and the judge's
+list `GET /sessions?task=` (GW-SESSIONS-AUTH).
 
 The caller presents its PROJECTED ServiceAccount token (audience `agent-gateway`) as
 `Authorization: Bearer`. The gateway reviews it with the SAME TokenReview path the env pull uses
@@ -35,7 +36,7 @@ from .pull import (
 
 log = logging.getLogger("gateway.control")
 
-ROUTES = ("admit", "lookup", "release", "outcome")  # POST /sessions · GET · DELETE · POST /sessions/{id}/outcome
+ROUTES = ("admit", "lookup", "release", "outcome", "list")  # POST /sessions · GET · DELETE · POST /sessions/{id}/outcome · GET /sessions?task=
 REASONS = ("absent", "invalid", "review-transient")
 
 
@@ -123,15 +124,26 @@ class ControlPlaneAuth:
         return _deny(caller, "caller-not-owner", f"session {sid} was admitted by another caller", route=route)
 
 
+def is_judge_of(caller: Caller, stack: str) -> bool:
+    """A JUDGE of `stack`: a caller whose entry says `outcome: any` and lists that stack."""
+    return bool(caller.policy is not None and caller.policy.outcome == "any" and stack in caller.policy.stacks)
+
+
 def authorize_outcome(caller: Caller, sid: str, owner: str | None, stack: str) -> tuple[JSONResponse | None, bool]:
     """POST /sessions/{id}/outcome: the DELETE rule (the admitting caller; a row with no recorded
-    caller has no owner), plus a JUDGE — a caller whose entry says `outcome: any` — on any session of
-    its stacks. Returns (refusal, reported-as-judge)."""
-    if caller.identity is None or owner is None or owner == caller.identity:
-        return None, bool(caller.policy and caller.policy.outcome == "any" and stack in caller.policy.stacks)
-    if caller.policy is not None and caller.policy.outcome == "any" and stack in caller.policy.stacks:
-        return None, True
+    caller has no owner), plus a JUDGE on any session of its stacks. Returns (refusal, reported-as-judge)."""
+    judge = is_judge_of(caller, stack)
+    if caller.identity is None or owner is None or owner == caller.identity or judge:
+        return None, judge
     return _deny(caller, "caller-not-owner", f"session {sid} was admitted by another caller", route="outcome"), False
+
+
+def visible_to(caller: Caller, owner: str | None, stack: str) -> bool:
+    """GET /sessions?task=: which rows of the task the caller SEES. The owner rule as GET's
+    (`authorize_owner`: the admitting caller; a row with no recorded caller is anyone's to read; no
+    identity under `observe` reads any row), plus a judge sees every session of its stacks ⚖. A row
+    outside that is simply not listed — never a 403, a list reveals nothing."""
+    return caller.identity is None or owner is None or owner == caller.identity or is_judge_of(caller, stack)
 
 
 def _deny(caller: Caller, code: str, message: str, route: str = "admit") -> JSONResponse:

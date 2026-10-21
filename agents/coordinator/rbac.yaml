@@ -108,6 +108,28 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows
 subjects:
   - { kind: ServiceAccount, name: specs-review, namespace: agent-coordinator }
 ---
+# The gateway's JUDGE identity (FU-270 (b), GW-SESSIONS-OUTCOME §Who may report): the policy's
+# `callers` entry `system:serviceaccount:agent-coordinator:outcome-judge` carries `outcome: any`
+# (stacks [platform], roles [] — it admits nothing), the one grant that may report the judge-only
+# class `wrong-verdict` on a session this SA never admitted. The deploy-revert chain's `judge`
+# step (deploy-revert-argo.yaml) runs as it, and ONLY that step: `callers` is per SA, so the
+# `revert` step stays on `agent-coordinator` and no other workflow in this namespace can report a
+# judge-only class by accident. Its kube grant is EXACTLY the executor's `workflowtaskresults`
+# binding, as `specs-review` above: the judge calls GitHub (one read) and the gateway (two
+# routes) and never kubectl.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: outcome-judge
+  namespace: agent-coordinator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: argo-workflows-workflow-outcome-judge, namespace: agent-coordinator }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows-workflow }
+subjects:
+  - { kind: ServiceAccount, name: outcome-judge, namespace: agent-coordinator }
+---
 # Responder fingerprint ledger (responder-argo.yaml): one triage per alert fp per 24h + the
 # daily cap live in the responder-seen ConfigMap — NAMESPACED on purpose (a cluster-wide cm
 # patch grant could touch other namespaces' config; the pods grant above is cluster-wide only

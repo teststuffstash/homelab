@@ -513,6 +513,13 @@ healthy / unreadable). The second finding of the same read: a MULTI-source app h
 `status.sync.revision`, so its `oncePer` key was `<nil>` and it notified once in its life —
 `tofu/argocd.tf` keys on `revisions` for those.
 
+**A landed revert also judges (FU-270 (b), 2026-10-21):** the chain's `judge` step (sentinel
+`deploy-revert-judge`, replay `agents/replay/fixtures/deploy-revert-judge/`, SA `outcome-judge`)
+reports the gateway's judge-only `wrong-verdict` on every reviewer session held for the reverted PR
+and the PRs a deploy bump shipped —
+[GW-SESSIONS-OUTCOME](../../gateway/specs/endpoints/sessions.md#gw-sessions-outcome) owns the class
+and who may report it.
+
 **⚠ The first hop never delivered until 2026-10-04.** The subscription named the recipient
 `webhook:agent-loop`; a webhook service is addressed by its own name, so every delivery since
 2026-07-27 failed (`notification service 'webhook' is not supported` — 150 failed / 0 succeeded on

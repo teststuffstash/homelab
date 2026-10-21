@@ -1,0 +1,18 @@
+# deploy-revert-judge — THE CONTRACT (FU-270 (b)): a landed revert of a deploy bump judges the
+# review rides that let it in. The hand-off names homelab#2780 (`deploy: agent-gateway
+# 2026.10.20-g0123456789ab`, reverted by #2791); the judge resolves the bump's commit to the PR
+# it shipped (`commits/<sha>/pulls` → #2766), asks the gateway for the sessions of each
+# `specs-review <slug>#<n>` key, and POSTs `wrong-verdict` on the REVIEWER rows only: #2766 holds
+# one reviewer row (judged) and one worker row (skipped — a worker ride carries no verdict to
+# refute); #2780 holds none (the one-line "nothing to judge"). Every call carries the projected
+# caller token (a plain fixture string, never JWT-shaped) as a header file, never argv. The stream
+# pins the gh lookup, one list GET per key, exactly one outcome POST, and exit 0.
+name: deploy-revert-judge
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+env:
+  - JUDGED={"slug":"teststuffstash/homelab","reverted_pr":2780,"revert_pr":2791,"app":"agent-gateway","revision":"0123456789abcdef0123456789abcdef01234567","title":"deploy: agent-gateway 2026.10.20-g0123456789ab"}
+  - GATEWAY_URL=http://agent-gateway.replay.invalid:8080
+parts:
+  - file:bridge.sh
+  - block:deploy-revert-judge

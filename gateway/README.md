@@ -21,7 +21,7 @@ it and production ownership is wired only behind explicit environment settings.
 | Process rules, how rows are gated | [`specs/README.md`](specs/README.md) |
 | Terms (session, rail, dialect, harness, credential ref, policy, defer, island) | [`specs/glossary.md`](specs/glossary.md) |
 | The spine: launcher → pod env → LLM calls → release | [`specs/use-cases/uc-1-worker-ride.md`](specs/use-cases/uc-1-worker-ride.md) |
-| `POST/GET/DELETE /sessions`, the bound pod's env pull `POST /sessions/{id}/env` (`GW-SESSIONS-*`, `GW-MODEL-RESOLVE`) | [`specs/endpoints/sessions.md`](specs/endpoints/sessions.md) |
+| `POST/GET/DELETE /sessions`, the bound pod's env pull `POST /sessions/{id}/env`, the judge's `GET /sessions?task=` (`GW-SESSIONS-*`, `GW-MODEL-RESOLVE`) | [`specs/endpoints/sessions.md`](specs/endpoints/sessions.md) |
 | `POST /anthropic/v1/messages` (`GW-RAIL-*`, `GW-CRED-*`) | [`specs/endpoints/anthropic-messages.md`](specs/endpoints/anthropic-messages.md) |
 | `POST /openai/v1/chat/completions`, `GET /openai/v1/models` — the OpenRouter rail and its provider axis (attribution, selection from the endpoint snapshot, request-level failover; `GW-RAIL-OPENROUTER`) | [`specs/endpoints/openai-chat.md`](specs/endpoints/openai-chat.md) |
 | `POST /openai/v1/responses` — the dark codex rail (`GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-CODEX-OAUTH`) | [`specs/endpoints/openai-responses.md`](specs/endpoints/openai-responses.md) |
