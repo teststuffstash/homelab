@@ -286,13 +286,16 @@
               "type": "array",
               "items": {
                 "type": "object", "additionalProperties": false,
-                "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier", "state", "class", "cooldown_until", "rides"],
+                "$comment": "openai-chat.schema.json $defs.endpoint_row plus the cell's entry state, its rides and the floors' verdict (GW-CATALOG-OR): `pinnable` / `floor` are what `canary-entrants.sh` walks by — a candidate that is not pinnable for the ride's harness is skipped (homelab#2775)",
+                "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier", "state", "class", "cooldown_until", "rides", "pinnable", "floor"],
                 "properties": {
                   "slug": { "type": "string" }, "tag": { "type": "string" }, "provider_name": { "type": "string" }, "quantization": { "type": "string" },
                   "tool_choice": { "type": "object" }, "uptime_1d": { "type": ["number", "null"] }, "p90_ms": { "type": ["number", "null"] },
                   "in_price": { "type": ["number", "null"] }, "out_price": { "type": ["number", "null"] }, "status": { "type": "integer" }, "service_tier": { "type": ["string", "null"] },
                   "state": { "$ref": "#/$defs/cell_state" }, "class": { "type": ["string", "null"], "description": "the strike class that excluded the cell" }, "cooldown_until": { "$ref": "#/$defs/timestamp" },
-                  "rides": { "type": "object", "additionalProperties": false, "required": ["clean", "judged"], "properties": { "clean": { "type": "integer" }, "judged": { "type": "integer" } }, "description": "the cell's clean-ride evidence (GW-MODEL-TIERS: a ride = a session this provider served a 2xx to whose latest outcome is reported)" }
+                  "rides": { "type": "object", "additionalProperties": false, "required": ["clean", "judged"], "properties": { "clean": { "type": "integer" }, "judged": { "type": "integer" } }, "description": "the cell's clean-ride evidence (GW-MODEL-TIERS: a ride = a session this provider served a 2xx to whose latest outcome is reported)" },
+                  "pinnable": { "type": "object", "additionalProperties": { "type": "boolean" }, "description": "per harness (the keys of the policy's `providers.tool_choice` — never a code list): whether this provider's representative endpoint clears the floors GW-RAIL-OPENROUTER §Selection pins by (quantization at or above the floor, every tool-choice mode the harness uses, uptime_1d at or above the floor — a null clears none, status 0), evaluated by the data plane's own predicate; `state` eligible AND pinnable[harness] true = selection can pin the cell; a provider's service tiers carry the representative's verdict; `{}` when the rail declares no providers policy (nothing is ever pinned)" },
+                  "floor": { "type": "object", "additionalProperties": { "type": "string" }, "description": "per harness that fails, the floor it fails (`quantization fp4 < fp8`, `no tool_choice required,function`, `uptime_1d unknown`, `uptime_1d 77.4 < 95`, `status 1`); `{}` when every harness passes" }
                 }
               }
             },

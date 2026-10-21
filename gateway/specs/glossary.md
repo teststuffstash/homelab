@@ -145,8 +145,11 @@ latency, prices) as the gateway last read them, kept in its store under
 reads it; [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) writes it (the vendor's weekly
 ranking ∩ the AA-benched set, then each candidate's endpoints) and keeps, beside it, each
 `(model, provider)` cell's **entry state** — `candidate` → `eligible` by one clean
-[canary](#canary), or `excluded` by a struck one. A model the snapshot does not cover, or none of
-whose cells is eligible, rides **unpinned**. Not the [Go catalog](#go-catalog) (the opencode
+[canary](#canary), or `excluded` by a struck one — and, on the view (`GET /catalog/openrouter`),
+whether the cell is **pinnable** per harness: the floors' verdict, the data plane's own predicate,
+so that an `eligible` cell selection could never pin is visible BEFORE a canary is spent on it
+(the launcher walks only pinnable candidates, cheapest first). A model the snapshot does not cover,
+or none of whose cells is eligible, rides **unpinned**. Not the [Go catalog](#go-catalog) (the opencode
 rail's vendor facts) and not the [tier evidence](#tier-evidence) (the benchmark snapshot the tier
 lists derive from).
 
