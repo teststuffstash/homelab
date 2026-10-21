@@ -36,12 +36,14 @@ error), and no auth, like `/metrics` — it carries no credential.
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); a liveness signal is `⚑ gap` (rows below); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread) |
-| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); ⚑ gap (2026-10-20, PR #2777 → work #2775): a 429'd canary spends an admission and judges nothing, a pod roll resets the per-refresh cap, the view does not say which cells selection could pin |
+| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); ⚑ gap (2026-10-20, PR #2777 → work #2775): a 429'd canary spends an admission and judges nothing, the view does not say which cells selection could pin |
 | [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`, `gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers, the admission's rail choice between twin cells (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the strike overhead unmeasured, the Go cell's clean-rate prior (the "⚑ gap" rows below) |
 
 ## GW-CATALOG-GO
 
-Two **sources**, each refreshed every **21600 s** ⚖ (6 h; the first refresh runs at start) and
+Two **sources**, each refreshed every **21600 s** ⚖ (6 h; the first refresh runs at start — unless
+the stored snapshots are younger than the interval, then at the oldest one's `fetched_at` + 21600 s:
+⚖ a pod roll re-reads nothing, [#2775](https://github.com/teststuffstash/homelab/issues/2775)) and
 each with its own snapshot:
 
 - **`config`** — two reads, merged the way the vendor's own client merges them
@@ -194,6 +196,7 @@ load — the rows live on [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
 |---|---||---|
 | "a PVC store keeps the snapshot" | `catalog-ok` + `docs-ok`, then a new gateway on the same DB, clock + 3600 s || both snapshots served; `age_s` 3600; `gateway_go_catalog_models{source="config"}` 5 |
 | "a corrupt stored snapshot is ignored" | a stored config row that is not JSON || no config snapshot; the next refresh replaces it |
+| "a restart inside the interval refreshes nothing at start ⚖" | `catalog-ok` + `docs-ok` at T0, then a new gateway on the same DB at T0 + 3600 s, another at T0 + 21600 s || the loop's first refresh waits 18000 s on the first (`last_attempt_at` null; a `not-in-catalog` defer's `retry_after_s` 18000), 0 s on the second — it refreshes at once |
 
 ### What `/metrics` says
 
@@ -240,7 +243,8 @@ after a clean canary through our stack* (operator rulings 2026-10-19: the candid
 a hand table; vendor numbers alone do not whitelist — laguna read 100 % up while we saw 81 % 429s;
 the canary is ON DEMAND, part of this catalog's update, and CAPPED by a budget). The leg mirrors
 [GW-CATALOG-GO](#gw-catalog-go): read on a schedule (⚖ `GATEWAY_OR_CATALOG_REFRESH_S`, 21600 s —
-6 h, the Go catalog's interval; the first refresh at start), parsed strictly, the last good
+6 h, the Go catalog's interval; the first refresh at start — unless the stored snapshot is younger
+than the interval, then at its `fetched_at` + 21600 s, the Go leg's rule), parsed strictly, the last good
 snapshot kept on any failure and persisted in the store, shown on `/metrics` and on
 `GET /catalog/openrouter`. What it reads:
 
@@ -304,7 +308,13 @@ candidates wait — `GatewayCanaryBudgetExhausted` fires on it
 (`argocd/resources/agent-gateway/prometheusrule.yaml`, promtool fixture
 `openrouter-catalog.promtool-test`), beside `OpenRouterCatalogStale` (no good refresh for 24 h, or
 no snapshot) and `OpenRouterCatalogParseFailed`. A failed canary excludes exactly its cell, never
-the model.
+the model. The window is the STORE's: its start is the persisted `refreshed_at` the refresh writes,
+`admitted_this_refresh` is the canary sessions since it, the spend the sessions' metered usage —
+nothing of the cap is in memory, so a restart inside the interval (which refreshes nothing at
+start) keeps the count and the defer; only a refresh opens the next window. ⚖ The per-process
+counters (`gateway_canary_rides_total`, `gateway_canary_admissions_total`,
+`gateway_openrouter_catalog_refresh_total`) restart at 0 with the process, as any Prometheus
+counter — `increase()` absorbs it; they gate nothing.
 
 World `policy-default · openrouter-catalog` ([worlds/README.md](../worlds/README.md#the-openrouter-catalog-world)):
 the fake MCP answers the two slices and the AA benchmarks from the live MCP answers of 2026-10-19,
@@ -328,6 +338,8 @@ fixture Secret `agent-egress/router-account-key`.
 | "no account key: fetch-failed, no MCP call" | the ref absent | none || fetch-failed | 0 (0 MCP calls) | — |
 | "the MCP calls carry the account key and a client identity ⚖" | mcp ok | — || — | `authorization: Bearer <the account key>`; `user-agent: agent-gateway/<v> (openrouter-catalog)`; `initialize` then `tools/call` ×3 | — |
 | "a PVC store keeps the snapshot and the cells across a restart" | refresh, a new gateway on the same DB, +3600 s | — || — | `age_s` 3600; 2 models; 15 candidate cells | — |
+| "a restart inside the interval refreshes nothing at start ⚖" | refresh at T0, a new gateway on the same DB, +3600 s | 2 || — (the loop's first refresh waits 18000 s; `last_attempt_at` null; a `not-in-catalog` defer's `retry_after_s` 18000) | 2 | 15 |
+| "a restart after the interval refreshes at start" | refresh at T0, a new gateway on the same DB, +21600 s | 2 || ok (the loop refreshes at once; `fetched_at` T0 + 21600 s) | 2 | 15 |
 
 | description | arrange | body || decision | rail / model / harness | reason | retry_after_s | the cell after |
 |---|---|---||---|---|---|---|---|
@@ -348,6 +360,8 @@ fixture Secret `agent-egress/router-account-key`.
 | "under budget: N entrants are canaried" | refresh | 3 canaries on three cells || dispatch ×3 | — | — | 0 |
 | "at the cap the N+1th waits ⚖" | 3 admitted this refresh | a 4th canary || defer | canary-budget | 3600 | 1 |
 | "a refresh opens the next N ⚖" | 3 admitted, then a refresh | a 4th canary || dispatch | — | — | 0 |
+| "a pod roll inside the window keeps the count ⚖" | 3 admitted, then a new gateway on the same DB +3600 s (no refresh at start) | a 4th canary || defer | canary-budget | 3600 | 1 (`admitted_this_refresh` 3) |
+| "a pod roll after the interval refreshes and opens the next N" | 3 admitted, then a new gateway on the same DB +21600 s, its refresh at start | a 4th canary || dispatch | — | — | 0 |
 | "the day's spend at the cap defers ⚖" | one canary ride metered $1.12 (in 5M, out 1M at deepinfra 0.14 / 0.42) | the next canary || defer | canary-budget | 3600 | 1 |
 | "the day rolls over" | the same, +86400 s | the next canary || dispatch | — | — | 0 |
 | "spend is metered at the cell's endpoint price ⚖" | the same ride || — | — | `gateway_canary_spend_usd` 1.12 | — |
@@ -370,7 +384,6 @@ fixture Secret `agent-egress/router-account-key`.
 | "⚑ gap: the Go rail's canary" | a new Go model in the Go catalog || no entry gate on the opencode rail | [#2743](https://github.com/teststuffstash/homelab/issues/2743): the same canary is the yardstick on both rails |
 | "⚑ gap: the ranking's `other` bucket and a `:free` family" | a `:free` id in the ranking || joins its family's AA row; `other` is dropped | no fixture row carries a `:free` candidate (the latest week had none in the top of either slice) |
 | "⚑ gap: a 429'd canary buys nothing" | a pinned canary whose every request is 429 — `kimi-k3@baseten` 2×200 then 7×429, `deepseek-v4-flash@deepinfra` 9×429 on 2026-10-20 || the cell stays `candidate`, judged 0, the admission spent | neither the consumer's class nor the gateway's transport class fires on a run of 429s; the ruling — a strike with class `429`, or a no-verdict that must not consume an admission — is [#2775](https://github.com/teststuffstash/homelab/issues/2775)'s |
-| "⚑ gap: a pod roll opens a new window" | a redeploy || the catalog re-fetches at start, `admitted_this_refresh` and `gateway_canary_rides_total` restart from 0 (three windows in 70 min on 2026-10-20, none by the 6 h timer); spend and cell states persist | the per-refresh count should key on the persisted snapshot's `fetched_at`, the counters on the store ([#2775](https://github.com/teststuffstash/homelab/issues/2775)) |
 | "⚑ gap: the view does not say which cells selection could pin" | `canary-entrants.sh` walking `candidate` cells || alphabetical, floors unknown to it — the first admission went to `open-inference`, fp4, eligible and never pinnable | a per-endpoint "passes the floors" flag in the view, or the launcher reading `rails.openrouter.providers` from the deployed policy, and a cheapest-first walk ([#2775](https://github.com/teststuffstash/homelab/issues/2775)) |
 
 <details markdown="1"><summary>Evidence</summary>
