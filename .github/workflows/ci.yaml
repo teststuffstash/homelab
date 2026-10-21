@@ -699,26 +699,21 @@ jobs:
       # writes gateway/allure-results/, environment.properties included) — allure-behavior-snippets
       # (pin: gateway/scripts/lib/snippets.sh) → gateway/allure-evidence/{allure-results/, evidence.json,
       # digest.md, <RULE>.md}. Runs on a red suite too (a failing row is evidence); skipped when the suite never
-      # ran. PR runs = the head under review; master push runs = the reviewer's baseline (published below).
+      # ran. PR runs = the head under review; master push runs = the reviewer's baseline.
       - name: Gateway evidence (devbox run gateway-evidence)
         id: gateway-evidence
         if: ${{ !cancelled() && steps.diff.outputs.gateway-evidence != 'false' && hashFiles('gateway/allure-results/*-result.json') != '' }}
         run: devbox run gateway-evidence
-      # The pack → OUR storage (the gateway-specs bucket, evidence/<pr-N|branch>/<head-sha>.tar.gz),
-      # not an Actions artifact: ~7 MB × every gateway run held ~2.1 GB of the org's 2 GB included
-      # Actions storage (GithubStorageHeldHigh, 2026-10-21). The specs reviewer reads it anonymously
-      # through the bucket's web endpoint (agents/specs-reviewer-session.sh evidence_fetch). Keyed by
-      # the PR HEAD sha (never the merge ref). Same writer key + soft-skip as the site publish below;
-      # with the secrets a rejected write FAILS `ci` (verify-own-write).
-      - name: Gateway evidence publish (devbox run gateway-evidence-publish)
-        if: ${{ !cancelled() && steps.diff.outputs.gateway-evidence-publish != 'false' && steps.gateway-evidence.outcome == 'success' }}
-        env:
-          GATEWAY_SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
-          GATEWAY_SPECS_S3_ACCESS_KEY_ID: ${{ secrets.GATEWAY_SPECS_S3_ACCESS_KEY_ID }}
-          GATEWAY_SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.GATEWAY_SPECS_S3_SECRET_ACCESS_KEY }}
-          EVIDENCE_PREFIX: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
-          EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: devbox run gateway-evidence-publish
+      - name: Upload gateway-evidence artifact
+        if: ${{ !cancelled() && steps.gateway-evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gateway-evidence
+          # The pack dir IS the artifact root: allure-results/ (raw, attachments, environment.properties),
+          # evidence.json, digest.md, GW-*.md — `gh run download <id> -n gateway-evidence`.
+          path: gateway/allure-evidence/
+          retention-days: 14
+          if-no-files-found: error
       # The island's browsable specs site (gateway/mkdocs.yml) → the `gateway-specs` bucket, served by
       # the homelab gateway (ADR-092): master runs → https://gateway-specs.homelab.teststuff.net, PR
       # runs → …/pr-<N>/ (by path under the same route; purged on close by gateway-specs-pr-purge.yaml).
