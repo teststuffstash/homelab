@@ -64,18 +64,55 @@ The budget (policy: max_per_refresh 3, usd_per_day 1.0, cooldown_s 86400):
 | cells are counted by state | refresh, one clean canary on (M, deepinfra), one struck on (M, atlas-cloud) || gateway_openrouter_cells{state="candidate"} / eligible / excluded | 13 / 1 / 1 |
 | canary verdicts are counted | the same || gateway_canary_rides_total{outcome="eligible"} / {outcome="excluded"} | 1 / 1 |
 | the view's shape is the schema's | refresh, GET /catalog/openrouter || exactly the schema's required keys | — |
+
+The floors' verdict on the view (homelab#2775 — operator ruling 2026-10-21, a bug: the view did not say which
+cells selection could pin): `pinnable` per harness — the policy's `providers.tool_choice` keys, opencode /
+goose / claude — and `floor`, the reason where it fails; `providers.eligible()`, the data plane's own predicate:
+
+| description | cell | arrange || pinnable (opencode / goose / claude) | floor |
+|---|---|---||---|---|
+| the view says which cells selection could pin: a cell without required/function is pinnable for opencode and goose, not claude | M@morph (fp8, uptime 99.5, tool_choice auto only) | refresh || true / true / false | {claude: no tool_choice required,function} |
+| the 2026-10-20 cell: fp4 is pinnable for no harness | M@open-inference (fp4) | refresh || false / false / false | {opencode, goose, claude: quantization fp4 < fp8} |
+| a cell clearing every floor is pinnable everywhere; its service tiers carry the representative's verdict | M@deepinfra (fp8; /flex uptime 84.5 and /priority beside it) | refresh || true / true / true on all three rows | {} |
+| a null uptime clears no floor on any harness | M@inference-net, endpoints-null-uptime@inference-net/fp8 | refresh || false / false / false | {opencode, goose, claude: uptime_1d unknown} |
+| the flag follows the policy, not the data | M@open-inference | a second gateway on the same DB, policy-default with quantization_floor fp4 || true / true / true | {} |
+| selected is always a pinnable cell: the cheaper eligible fp4 cell is passed over | M | clean canaries on (M, open-inference) 0.08 and (M, deepinfra) 0.42 || selected deepinfra; open-inference eligible, pinnable false | — |
+
+The launcher (`scripts/canary-entrants.sh --dry-run < /dev/null`, a fake HTTP server handing it the view):
+
+| description | the view || the walk (`== canary n/N: <cell>`, cheapest first) | the banner's skipped list |
+|---|---||---|---|
+| the launcher walks pinnable candidate cells cheapest-first; the skipped cells and their floor are in the banner | after a refresh: 15 candidate cells, 9 pinnable for opencode || M@deepinfra 0.42, G@near-ai 0.50, G@z-ai 0.50, M@atlas-cloud 0.54, M@morph 0.60, G@morph 0.65, G@inceptron 0.69, M@inference-net 0.715, M@baidu 1.20 — no ride (two GETs of the view, nothing else) | G@atlas-cloud (uptime_1d 77.8199 < 95), G@open-inference (quantization fp4 < fp8), G@reka (quantization unknown), M@alibaba (quantization unknown), M@open-inference (quantization fp4 < fp8), M@parasail (uptime_1d 77.4359 < 95) |
 """
 
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
 from agent_gateway.store import iso
 
-from .conftest import attach_json, bearer, check, given, open_session, quiet, rule, then, then_eq, when, world
+from .conftest import (
+    POLICY_FIXTURE,
+    attach_json,
+    bearer,
+    check,
+    given,
+    open_session,
+    quiet,
+    rule,
+    then,
+    then_eq,
+    when,
+    world,
+)
 
 pytestmark = rule("GW-CATALOG-OR")
 M = "deepseek/deepseek-v4.1-flash"
@@ -83,7 +120,10 @@ G = "z-ai/glm-5.3-flash"
 RAIL = "openrouter"
 WORLD = "openrouter-catalog"
 PATH = "/openai/v1/chat/completions"
-SCHEMA = json.loads((Path(__file__).resolve().parents[1] / "specs" / "endpoints" / "catalog.schema.json").read_text(encoding="utf-8"))
+ISLAND = Path(__file__).resolve().parents[1]
+SCHEMA = json.loads((ISLAND / "specs" / "endpoints" / "catalog.schema.json").read_text(encoding="utf-8"))
+LAUNCHER = ISLAND / "scripts" / "canary-entrants.sh"
+HARNESSES = ("opencode", "goose", "claude")  # the fixture policy's providers.tool_choice keys, in its order
 T0 = 1_800_000_000
 
 
@@ -96,10 +136,22 @@ async def _refresh(app, label: str = "") -> str:
         return outcome
 
 
+async def _refreshed(app, label: str = "a first good refresh (M and G, 15 candidate cells)") -> None:
+    """The refresh as ARRANGE (one given step, exchanges muted) — for the rows whose call under test is the view."""
+    with given(label):
+        with quiet():
+            assert await app.state.orcatalog.refresh() == "ok"
+
+
 async def _view(gw) -> dict:
     r = await gw.get("/catalog/openrouter")
     assert r.status_code == 200, r.text
     return r.json()
+
+
+def _verdicts(v: dict, model: str, slug: str) -> dict[str, dict]:
+    """`{tag: {pinnable, floor, state}}` of every view row of (model, slug) — a provider's service tiers are one cell."""
+    return {e["tag"]: {"pinnable": e["pinnable"], "floor": e["floor"], "state": e["state"]} for e in v["models"][model]["endpoints"] if e["slug"] == slug}
 
 
 def _cells(v: dict) -> dict[str, int]:
@@ -633,6 +685,143 @@ async def test_canary_rides_counted(gw, app, upstreams):
         await _canary_ride(gw, app, upstreams, "atlas-cloud", behaviour="upstream-500", outcome=None)
     then_eq("gateway_canary_rides_total eligible / excluded",
             (await _series(gw, 'gateway_canary_rides_total{outcome="eligible"}'), await _series(gw, 'gateway_canary_rides_total{outcome="excluded"}')), (1, 1))
+
+
+# -- the floors' verdict on the view (homelab#2775) ------------------------------------------------
+PINNABLE_ROWS = [
+    ("the view says which cells selection could pin: a cell without required/function is pinnable for opencode and goose, not claude",
+     "morph", {"opencode": True, "goose": True, "claude": False}, {"claude": "no tool_choice required,function"}),
+    ("the 2026-10-20 cell: fp4 is pinnable for no harness",
+     "open-inference", {"opencode": False, "goose": False, "claude": False}, {h: "quantization fp4 < fp8" for h in HARNESSES}),
+    ("a cell clearing every floor is pinnable everywhere; its service tiers carry the representative's verdict",
+     "deepinfra", {"opencode": True, "goose": True, "claude": True}, {}),
+]
+
+
+@pytest.mark.parametrize(("slug", "pinnable", "floor"), [r[1:] for r in PINNABLE_ROWS], ids=[r[0] for r in PINNABLE_ROWS])
+async def test_pinnable_per_harness(gw, app, slug, pinnable, floor):
+    world(note=f"{WORLD}; the floors of policy-default (fp8, uptime 95, tool_choice opencode/goose auto, claude auto+required+function)")
+    await _refreshed(app, f"a first good refresh; the rows of M@{slug!r} are read for pinnable = {pinnable}, floor = {floor}")
+    with when("GET /catalog/openrouter"):
+        v = await _view(gw)
+    rows = _verdicts(v, M, slug)
+    attach_json(f"the view's rows of M@{slug}", rows)
+    then_eq(f"every row of M@{slug}: (pinnable, floor)", {t: (r["pinnable"], r["floor"]) for t, r in rows.items()},
+            {t: (pinnable, floor) for t in rows})
+    then_eq("rows of the provider (its service tiers are one cell)", len(rows), 3 if slug == "deepinfra" else 1)
+
+
+async def test_pinnable_null_uptime(gw, app, upstreams):
+    """row: a null uptime clears no floor on any harness"""
+    world(note=f"{WORLD}; endpoints-null-uptime@inference-net/fp8 for M (the one M endpoint every harness could otherwise pin)")
+    upstreams[RAIL].endpoints_behaviour[M] = "endpoints-null-uptime@inference-net/fp8"
+    await _refreshed(app)
+    with when("GET /catalog/openrouter"):
+        v = await _view(gw)
+    row = _verdicts(v, M, "inference-net")["inference-net/fp8"]
+    attach_json("M@inference-net as the view shows it", next(e for e in v["models"][M]["endpoints"] if e["slug"] == "inference-net"))
+    then_eq("uptime_1d · pinnable · floor", (next(e["uptime_1d"] for e in v["models"][M]["endpoints"] if e["slug"] == "inference-net"), row["pinnable"], row["floor"]),
+            (None, {h: False for h in HARNESSES}, {h: "uptime_1d unknown" for h in HARNESSES}))
+
+
+async def test_pinnable_follows_policy(gw, app, clock, settings, secrets, mcp_transport, reviews, pods, tmp_path):
+    """row: the flag follows the policy, not the data"""
+    world(note=f"{WORLD}; a second gateway on the same DB, policy-default with providers.quantization_floor fp4")
+    await _refreshed(app)
+    import httpx
+
+    from agent_gateway.app import create_app
+    from agent_gateway.config import Policy
+    from agent_gateway.store import Store
+
+    from .conftest import ObservedAsyncClient
+
+    with given("a second gateway on the same DB and the same snapshot, its policy the fixture with quantization_floor = fp4 (the data untouched)"):
+        doc = json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
+        doc["rails"][RAIL]["providers"]["quantization_floor"] = "fp4"
+        path = tmp_path / "policy-floor-fp4.json"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        client = httpx.AsyncClient(transport=mcp_transport)
+        second = create_app(settings, policy=Policy.load(path), source=secrets, store=Store(settings.db_path), client=client, clock=clock,
+                            reviewer=reviews, pods=pods)
+    async with ObservedAsyncClient(transport=httpx.ASGITransport(app=second), base_url="http://gw2") as c:
+        with when("GET /catalog/openrouter on both gateways"):
+            low = (await c.get("/catalog/openrouter")).json()
+            with quiet():
+                default = await _view(gw)
+    await client.aclose()
+    then_eq("M@open-inference (fp4) under the fp8 floor: (pinnable, floor)", tuple(_verdicts(default, M, "open-inference")["open-inference/fp4"][k] for k in ("pinnable", "floor")),
+            ({h: False for h in HARNESSES}, {h: "quantization fp4 < fp8" for h in HARNESSES}))
+    then_eq("the same row under the fp4 floor", tuple(_verdicts(low, M, "open-inference")["open-inference/fp4"][k] for k in ("pinnable", "floor")),
+            ({h: True for h in HARNESSES}, {}))
+
+
+async def test_selected_is_pinnable(gw, app, upstreams):
+    """row: selected is always a pinnable cell: the cheaper eligible fp4 cell is passed over"""
+    world(upstream="upstream-ok", note=f"{WORLD}; clean canaries on (M, open-inference) and (M, deepinfra)")
+    await _refreshed(app)
+    with given("clean canary rides on (M, open-inference) — out $0.08/M, fp4 — and (M, deepinfra) — out $0.42/M, fp8"):
+        await _canary_ride(gw, app, upstreams, "open-inference")
+        await _canary_ride(gw, app, upstreams, "deepinfra")
+    with when("GET /catalog/openrouter"):
+        v = await _view(gw)
+    oi, di = _verdicts(v, M, "open-inference")["open-inference/fp4"], _verdicts(v, M, "deepinfra")["deepinfra/fp8"]
+    then_eq("(state, pinnable[opencode]) of M@open-inference · M@deepinfra", ((oi["state"], oi["pinnable"]["opencode"]), (di["state"], di["pinnable"]["opencode"])),
+            (("eligible", False), ("eligible", True)))
+    then_eq("M's selected · order", (v["models"][M]["selected"], v["models"][M]["order"]), ("deepinfra", ["deepinfra"]))
+    with then("every model's selected provider is an eligible row that is pinnable for the canary harness (opencode)"):
+        picked = {mid: next((e["state"], e["pinnable"]["opencode"]) for e in m["endpoints"] if e["slug"] == m["selected"])
+                  for mid, m in v["models"].items() if m["selected"] is not None}
+        check("(state, pinnable[opencode]) per selected", picked, {mid: ("eligible", True) for mid in picked})
+
+
+async def test_launcher_walk(gw, app):
+    """row: the launcher walks pinnable candidate cells cheapest-first; the skipped cells and their floor are in the banner"""
+    world(note=f"{WORLD}; a fake HTTP server hands scripts/canary-entrants.sh the view; stdin /dev/null; --dry-run")
+    await _refreshed(app)
+    body = json.dumps(await _view(gw)).encode()
+    seen: list[str] = []
+
+    class View(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(self.path)
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_):
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), View)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        with when("bash scripts/canary-entrants.sh --dry-run < /dev/null, AGENT_GATEWAY_URL = the fake serving the view"):
+            r = subprocess.run(["bash", str(LAUNCHER), "--dry-run"], env={**os.environ, "AGENT_GATEWAY_URL": f"http://127.0.0.1:{srv.server_port}"},
+                               stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120, check=False)
+            attach_json("the launcher's output", {"exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr})
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    then_eq("exit · the fake's requests (the view, then `== after:`) · ride attempts", (r.returncode, seen, r.stdout.count("ride did not dispatch")),
+            (0, ["/catalog/openrouter", "/catalog/openrouter"], 0))
+    then_eq("the walk, in order", re.findall(r"^== canary \d+/\d+: (\S+)$", r.stdout, re.M),
+            [f"{M}@deepinfra", f"{G}@near-ai", f"{G}@z-ai", f"{M}@atlas-cloud", f"{M}@morph", f"{G}@morph", f"{G}@inceptron", f"{M}@inference-net", f"{M}@baidu"])
+    then_eq("the banner's skipped cells, each with its floor", _banner_section(r.stdout, "== skipped"),
+            [f"{M}@alibaba (quantization unknown)", f"{M}@open-inference (quantization fp4 < fp8)", f"{M}@parasail (uptime_1d 77.4359 < 95)",
+             f"{G}@atlas-cloud (uptime_1d 77.8199 < 95)", f"{G}@open-inference (quantization fp4 < fp8)", f"{G}@reka (quantization unknown)"])
+
+
+def _banner_section(out: str, head: str) -> list[str]:
+    lines = out.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(head))
+    body = []
+    for line in lines[start + 1:]:
+        if line.startswith("=="):
+            break
+        body.append(line.strip())
+    return body
 
 
 async def test_view_keys_are_the_schema(gw, app):
