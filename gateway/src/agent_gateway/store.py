@@ -110,6 +110,15 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS capacity_marks (
+  kind TEXT NOT NULL,
+  key TEXT NOT NULL,
+  until REAL,
+  stack TEXT,
+  at REAL,
+  backoff REAL,
+  PRIMARY KEY (kind, key)
+);
 """
 _STRIKES_REBUILD = """
 BEGIN;
@@ -612,6 +621,34 @@ class Store:
     def meta_set(self, key: str, value: float) -> None:
         with self._lock:
             self._db.execute("INSERT INTO meta (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+    # -- the capacity marks (GW-SESSIONS-ADMIT §Capacity, "Kept across a restart") --------------
+    # One row per mark the admission's capacity state holds (capacity.py writes through under its own
+    # lock; a new gateway on the same DB reloads them at start): `kind` cooled (key `rail|model|provider`)
+    # | latched (the rail) | rejected (`rail|<credential fingerprint>`, with the mark's stack, at = since,
+    # backoff; until = its next re-verification) | hold (`rail|<fingerprint>`: the last backoff a
+    # credential's rejection doubled from — no expiry, so `until` is NULL; cleared by the same events
+    # that clear it in memory). Never a credential value: the fingerprint is a sha256 prefix. A new
+    # table, so `CREATE TABLE IF NOT EXISTS` in _SCHEMA builds it on an existing PVC (no _migrate step).
+    def mark_set(self, kind: str, key: str, until: float | None, stack: str | None = None, at: float | None = None,
+                 backoff: float | None = None) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO capacity_marks (kind, key, until, stack, at, backoff) VALUES (?,?,?,?,?,?)"
+                " ON CONFLICT(kind, key) DO UPDATE SET until = excluded.until, stack = excluded.stack, at = excluded.at,"
+                " backoff = excluded.backoff",
+                (kind, key, until, stack, at, backoff))
+
+    def mark_delete(self, kind: str, key: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM capacity_marks WHERE kind = ? AND key = ?", (kind, key))
+
+    def marks_load(self) -> list[dict]:
+        """Every stored mark, as written (the caller judges expiry: a cooldown's `until` is an expiry,
+        a probe rail's rejected `until` is a due time)."""
+        with self._lock:
+            rows = self._db.execute("SELECT kind, key, until, stack, at, backoff FROM capacity_marks ORDER BY kind, key").fetchall()
+        return [dict(r) for r in rows]
 
     def ping(self) -> bool:
         try:
