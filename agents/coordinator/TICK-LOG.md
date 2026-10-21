@@ -14093,3 +14093,11 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Operator ruling (18:4xZ): #2775 gap 2 is also a BUG** → build dispatched (skip the startup refresh while the stored
   snapshot is younger than `refresh_s`, so `meta.refreshed_at` — the window start — survives a roll; same shape on the Go
   leg). Gap 1 (the 429'd canary's verdict) is the only #2775 item still awaiting a ruling.
+- **#2788 (the loop flip) MERGED 18:10Z at round 2** — R1 finding: the env line was unconditional in the shared heredoc
+  (oracle/circles/sleep pods would have carried it while their rides still need `/route`); fixed by rendering the entry
+  for `STACK=platform` only (the launcher's own guard), fixture re-recorded (138→142 lines), README gateway branch + a
+  GATEWAY RULE sentence in the in-pod brief, model-routing.md sub-bullet. Nothing queued on the platform board — the first
+  ride through `/sessions` is the next organic dispatch; a background watch on the gateway store reports it.
+- **#2787 (the judge step) MERGED 17:56Z round 1**, synced 56 s later (app `agent-coordinator`); an `outcome-judge`
+  token lists sessions through the deployed gateway → FU-270 (b) done on both halves; the end-to-end proof is the first
+  real Degraded-after-deploy revert.

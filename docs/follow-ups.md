@@ -818,13 +818,14 @@ the block needs pruning, not more headings.
       (retry) stays. Relates ADR-087, FU-089.
 - [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** Status + history: the
       island's README/specs (`gateway/`) and the TICK-LOG; the codex rail's legs in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)
-      (A–C merged 10-19; D, E unstarted). Landed 10-20: **rail choice by cost per CLEAN ride (#2764; GW-MODEL-TIERS)** —
-      the openrouter tiers stay UNDECIDED until the entry canaries run (`gateway/scripts/canary-entrants.sh`, the
-      operator's window); gaps → #2718. **Next (seat, ordered 10-20):** (0) DONE 10-20 — #2766 (the Go catalog's `config`
-      source = models.dev under the console overlay; `GoCatalogParseFailed` cleared) + #2767 (the dispatcher caller
-      granted `prober`; proven past the caller check), both deployed; #2771 (the launcher's loop input) in review; (a) DONE 10-20: the canary window ran from the seat (7 eligible cells; gaps #2775), the
-      re-cut #2776 decided every openrouter tier (lists unchanged, the v4.1-flash twin → Go first by price); (b) `wrong-verdict` fed by the deploy-revert signal; (c) the loop flip into the
-      session-pod heredoc; (d) DONE 10-20 (#2773: a Go model's `context_tokens` = the catalog's; a policy copy refuses the load). **Operator-only:** FU-313, the codex login (leg E), the canary window.
+      (A–C merged 10-19; D's gauge half #2786 in review, its poll half waits on E; E = the operator's login). Landed
+      10-20: rail choice by cost per CLEAN ride (#2764), the first canary window (gaps #2775), the re-cut #2776 (every
+      openrouter tier decided). Landed 10-21: **(b) `wrong-verdict` ← deploy-revert** (#2785 the judge's list route +
+      caller, #2787 the judge step — proven to the first real revert); **(c) the loop flip** (#2788: the PLATFORM session
+      pod carries `AGENT_GATEWAY=sessions`; first ride through `/sessions` awaited). **Next (seat):** the #2775 fixes in
+      review (gap 2 startup refresh, gap 3 pinnable view #2791) + the capacity marks persisted (operator 10-21); gap 1
+      (a 429'd canary's verdict) awaits the operator; then the codex policy block after E. **Operator-only:** FU-313,
+      the codex login (leg E).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
