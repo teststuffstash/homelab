@@ -1,0 +1,33 @@
+# The Kargo controller's ONLY access to ArgoCD Applications (kargo.yaml turns the chart's
+# Application RBAC off). Read in argocd (its informer is namespace-scoped by
+# watchArgocdNamespaceOnly); write ONLY the named Applications Kargo promotes. RBAC resourceNames
+# do apply to patch/update; the admission policy additionally requires the
+# kargo.akuity.io/authorized-stage annotation on any Application the kargo SAs write.
+# A NEW promoted Application = one more name here (and its authorized-stage annotation).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-kargo-controller
+  namespace: argocd
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    resourceNames: [oracle-fleet-ingester, oracle-fleet-ingester-shadow]
+    verbs: [patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-controller
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-kargo-controller
+subjects:
+  - kind: ServiceAccount
+    name: kargo-controller
+    namespace: kargo

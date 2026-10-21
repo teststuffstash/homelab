@@ -1,0 +1,42 @@
+# EXPERIMENT — the hardened Kargo + Argo Rollouts proof in an ephemeral kind cluster
+# (tests/kind-kargo/e2e.sh). The PR run IS the experiment; not meant to merge as-is
+# (.github/workflows/** is a governance path — operator-direct class).
+# Thin: checkout + `devbox run` (the repo convention); only the artifact upload is a provided action.
+# Needs a real kernel + docker → the Proxmox VM runner (ADR-082, docs/patterns/kind-ci.md).
+name: platform-kind-kargo
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/platform-kind-kargo.yaml
+      - tests/kind-kargo/**
+      - argocd/platform/kargo.yaml
+      - argocd/platform/kargo-platform.yaml
+      - argocd/platform/argo-rollouts.yaml
+      - argocd/platform/oracle-namespaces.yaml
+      - argocd/resources/kargo/**
+  workflow_dispatch: {}
+
+concurrency:
+  group: platform-kind-kargo-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kind-kargo:
+    runs-on: [self-hosted, proxmox-vm]
+    # ~3× a healthy run's budget (kind + 5 charts + two promotion rounds); a wedged kind must not
+    # hold one of the VM's two slots for GitHub's 6 h default.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: kind e2e (hardened Kargo + Rollouts)
+        working-directory: tests/kind-kargo
+        run: yes 2>/dev/null | devbox run e2e
+      - name: upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kind-kargo-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e-evidence/
+          retention-days: 14
+          if-no-files-found: warn

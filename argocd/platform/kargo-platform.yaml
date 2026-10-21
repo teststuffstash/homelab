@@ -1,0 +1,26 @@
+# The platform-owned half of the hardened Kargo install (argocd/resources/kargo/: RBAC replacing
+# the chart's ClusterRoleBindings, the ArgoCD Role, the oracle Project, the kargo-write-guard
+# admission policy + KargoWriteDenied). EXPERIMENT (PR [experiment] kargo-kind).
+# Wave 2: after the Kargo chart (wave 1) — the Project needs Kargo's CRD + webhook, and the
+# RoleBindings land in the chart-created kargo-*-resources namespaces.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kargo-platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/kargo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kargo
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false
+      - SkipDryRunOnMissingResource=true

@@ -1,0 +1,154 @@
+# The CLUSTER-SCOPED grants the Kargo SAs need — hand-written, minimal, and the only cluster-wide
+# RBAC the hardened install has (the chart's ClusterRoleBindings are off; rbac-namespaced.yaml
+# holds the rest). Two kinds of rule live here, nothing else:
+#
+#  1. READS (get/list/watch) of what the components cache CLUSTER-WIDE — controller-runtime
+#     informers are cluster-scoped unless the binary narrows them, and Kargo narrows only Secrets/
+#     ConfigMaps (cmd/controlplane/*.go): Kargo's own kinds, Rollouts analysis kinds, namespaces,
+#     serviceaccounts, RBAC objects (the management controller's cached Gets).
+#  2. Writes on CLUSTER-SCOPED objects Kargo genuinely creates per Project:
+#     - projects update/patch/delete + projects/status, clusterconfigs/status (management ctl);
+#     - namespaces patch/update (the management controller finalizes the Project namespace) —
+#       NO create/delete: the platform pre-creates Project namespaces (oracle-namespaces.yaml);
+#     - clusterroles/clusterrolebindings create/update/delete — ONLY ever for the per-Project
+#       `kargo-project-admin-<project>` pair (projects.go ensureControllerPermissions); RBAC cannot
+#       scope `create` by name, so admission-policy.yaml pins the name AND the rule shape.
+#     - subjectaccessreviews/tokenreviews create (API + webhooks authz).
+#
+# Names are `platform-kargo-*`, NOT `kargo-*`: the admission policy lets the kargo SAs bind only
+# `kargo-*` roles, so they can never bind these to anything.
+#
+# EXPERIMENT: every grant here beyond the read set is listed in the PR body with the evidence
+# (kind audit-log 403s / controller logs) that proved it is needed.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-kargo-controller
+rules:
+  - apiGroups: [kargo.akuity.io]
+    resources: [clusterconfigs, clusterpromotiontasks, freights, projectconfigs, projects, promotionrequests, promotions, promotiontasks, stages, targets, warehouses]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [analysisruns, analysistemplates, clusteranalysistemplates]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-kargo-management-controller
+rules:
+  - apiGroups: [kargo.akuity.io]
+    resources: [clusterconfigs, projectconfigs, promotionrequests, stages, targets, warehouses]
+    verbs: [get, list, watch]
+  - apiGroups: [kargo.akuity.io]
+    resources: [projects]
+    verbs: [get, list, watch, update, patch, delete]
+  - apiGroups: [kargo.akuity.io]
+    resources: [projects/status, clusterconfigs/status]
+    verbs: [patch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [get, list, watch]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [roles, rolebindings]
+    verbs: [get, list, watch]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles, clusterrolebindings]
+    verbs: [get, list, watch, create, update, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-kargo-webhooks-server
+rules:
+  - apiGroups: [kargo.akuity.io]
+    resources: [clusterconfigs, clusterpromotiontasks, freights, projectconfigs, projects, promotiontasks, stages, targets, warehouses]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: [authorization.k8s.io]
+    resources: [subjectaccessreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-kargo-api
+rules:
+  - apiGroups: [kargo.akuity.io]
+    resources: [clusterconfigs, clusterpromotiontasks, freights, projectconfigs, projects, promotionrequests, promotions, promotiontasks, stages, targets, warehouses]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [analysisruns, analysistemplates, clusteranalysistemplates]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [namespaces, serviceaccounts]
+    verbs: [get, list, watch]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles, clusterrolebindings, roles, rolebindings]
+    verbs: [get, list, watch]
+  - apiGroups: [authorization.k8s.io]
+    resources: [subjectaccessreviews]
+    verbs: [create]
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-kargo-garbage-collector
+rules:
+  - apiGroups: [kargo.akuity.io]
+    resources: [freights, promotions, stages, warehouses]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-kargo-controller
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: platform-kargo-controller }
+subjects:
+  - { kind: ServiceAccount, name: kargo-controller, namespace: kargo }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-kargo-management-controller
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: platform-kargo-management-controller }
+subjects:
+  - { kind: ServiceAccount, name: kargo-management-controller, namespace: kargo }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-kargo-webhooks-server
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: platform-kargo-webhooks-server }
+subjects:
+  - { kind: ServiceAccount, name: kargo-webhooks-server, namespace: kargo }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-kargo-api
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: platform-kargo-api }
+subjects:
+  - { kind: ServiceAccount, name: kargo-api, namespace: kargo }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-kargo-garbage-collector
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: platform-kargo-garbage-collector }
+subjects:
+  - { kind: ServiceAccount, name: kargo-garbage-collector, namespace: kargo }
