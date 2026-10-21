@@ -314,15 +314,19 @@ k -n oracle-kargo annotate warehouse podinfo kargo.akuity.io/refresh="$(date +%s
 # Freight promotion is auto (newest first) — a promote of an OLDER freight proves the path too:
 OLD=$(k -n oracle-kargo get freight -o json | jq -r '[.items[] | select(.origin.name=="podinfo")] | sort_by(.metadata.creationTimestamp) | .[0].metadata.name')
 echo "deny-phase promotion freight: ${OLD:-<none>}" >> "$EVID/run.log"
+DENY_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 for st in smoke ingester; do
   [ -n "$OLD" ] && [ "$OLD" != null ] || break
   printf 'apiVersion: kargo.akuity.io/v1alpha1\nkind: Promotion\nmetadata:\n  name: deny-phase-%s\n  namespace: oracle-kargo\nspec:\n  stage: %s\n  freight: %s\n' \
     "$st" "$st" "$OLD" > "$EVID/promotion-$st.yaml"
   k apply -f "$EVID/promotion-$st.yaml" >>"$EVID/run.log" 2>&1
 done
-promo_ok() { kubectl --context "$CTX" -n oracle-kargo get promotion "$1" -o jsonpath='{.status.phase}' | grep -x Succeeded >/dev/null; }
-wait_for deny-promotion-smoke-succeeded 300 promo_ok deny-phase-smoke
-wait_for deny-promotion-ingester-succeeded 300 promo_ok deny-phase-ingester
+# Kargo's webhook renames a Promotion (<stage>.<ulid>.<freight>), so match by stage + freight +
+# created after the flip.
+promo_ok() { kubectl --context "$CTX" -n oracle-kargo get promotions -o json \
+  | jq -e --arg st "$1" --arg fr "$OLD" --arg ts "$DENY_TS" '[.items[] | select(.spec.stage==$st and .spec.freight==$fr and .metadata.creationTimestamp >= $ts and .status.phase=="Succeeded")] | length > 0'; }
+wait_for deny-promotion-smoke-succeeded 300 promo_ok smoke
+wait_for deny-promotion-ingester-succeeded 300 promo_ok ingester
 wait_for deny-stage-smoke-verified 300 stage_verified smoke
 wait_for deny-stage-ingester-verified 300 stage_verified ingester
 

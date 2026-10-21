@@ -17,6 +17,12 @@ rules:
     resources: [applications]
     resourceNames: [oracle-fleet-ingester, oracle-fleet-ingester-shadow]
     verbs: [patch, update]
+  # PROVEN NEEDED (kind run 39667752447): the argocd-update step records an Event on the
+  # Application it promotes (builtin/argocd_updater.go) — non-fatal without it, but a logged
+  # Forbidden on every promotion.
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
