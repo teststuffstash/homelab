@@ -14090,3 +14090,6 @@ updates or reverts as much as possible — mechanical revert or a responder."
   needed** → build dispatched: per-endpoint `pinnable`/`floor` per harness from the one `providers.eligible()` predicate;
   `canary-entrants.sh` walks pinnable candidates cheapest-first; the index-row clause trimmed to gaps 1–2.
 - Open: #2786 (codex gauges), #2787 (judge step), #2788 (loop flip) in review; 6 subagents used so far this session.
+- **Operator ruling (18:4xZ): #2775 gap 2 is also a BUG** → build dispatched (skip the startup refresh while the stored
+  snapshot is younger than `refresh_s`, so `meta.refreshed_at` — the window start — survives a roll; same shape on the Go
+  leg). Gap 1 (the 429'd canary's verdict) is the only #2775 item still awaiting a ruling.
