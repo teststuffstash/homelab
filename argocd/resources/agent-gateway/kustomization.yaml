@@ -82,8 +82,8 @@ resources:
 # roles: rails in preference order from model-classes.json's class table (role_defaults → classes
 # → rails), harness = what agents/agent-session.sh derives for that rail today.
 # callers + control_plane_auth (GW-SESSIONS-AUTH, FU-270): who may call POST /sessions and
-# GET/DELETE /sessions/{id}, keyed by the projected-token ServiceAccount username. Exactly today's
-# dispatchers, no wildcard: `platform-agents:agentstack-loop` = the platform stack's graduated
+# GET/DELETE /sessions/{id} and GET /sessions?task=, keyed by the projected-token ServiceAccount
+# username. Exactly today's dispatchers plus the judge, no wildcard: `platform-agents:agentstack-loop` = the platform stack's graduated
 # coordinator pod (agents/coordinator-session.sh --loop-ns), the one in-cluster agent-session.sh
 # caller — worker admissions bound into the platform repo namespaces that hold an
 # `agentstack-worker` SA (agent-runtime, homelab, openrouter-operator; `agent-coordinator` holds
@@ -95,7 +95,10 @@ resources:
 # (agents/coordinator/specs-review-argo.yaml), their OWN ServiceAccount since #2685 (callers are
 # per SA; as `agent-coordinator` the key covered every workflow in that namespace): `reviewer`, and
 # `worker` for the goose@openrouter shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it
-# never binds. `enforce` since 2026-10-17
+# never binds. `agent-coordinator:outcome-judge` = the deploy-revert chain's judge step
+# (agents/coordinator/deploy-revert-argo.yaml; FU-270 (b), #2785): admits nothing (no roles, no
+# binds), `outcome: any` — it lists a task's sessions and reports `wrong-verdict` on the review
+# sessions of a merge the chain reverted (GW-SESSIONS-OUTCOME). `enforce` since 2026-10-17
 # (after #2687 made every caller send its token and the unauthenticated series stayed flat): a
 # call with no valid caller token is 401; `observe` is the rollback knob.
 #
