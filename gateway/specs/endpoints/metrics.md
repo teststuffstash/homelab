@@ -28,6 +28,7 @@ the process is down.
 | [GW-CATALOG-GO](catalog.md#gw-catalog-go) (owned there) | `families.gateway_go_catalog_*` | — | linked — the Go catalog's freshness, size and refresh outcomes; their values are rows there |
 | [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned there) | `families.gateway_provider_requests_total`, `families.gateway_provider_failovers_total` | — | linked — the provider axis: attempts per cell and failovers; their values are rows there and below |
 | [GW-CATALOG-OR](catalog.md#gw-catalog-or) (owned there) | `families.gateway_openrouter_catalog_*`, `families.gateway_openrouter_cells`, `families.gateway_canary_*` | — | linked — the OpenRouter catalog's freshness and refresh outcomes, the cells by entry state, the canary meter and verdicts; their values are rows there |
+| [GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges) (owned there) | `families.gateway_subscription_utilization`, `families.gateway_subscription_reset_seconds` | — | linked — on the codex rail the two gauges come from an ACCEPTED headroom report, not from headers; their values are rows there |
 
 ## GW-METRICS
 
@@ -38,8 +39,8 @@ the process is down.
 | `gateway_requests_total` | counter | `rail`, `dialect`, `status` | every data-plane request, by the status the gateway returned |
 | `gateway_upstream_seconds` | histogram | `rail` | upstream round-trip, first byte to last |
 | `gateway_tokens_total` | counter | `rail`, `class` | usage recorded from upstream bodies in four classes: `in` (UNCACHED input — the openai dialect's `prompt_tokens` minus `cached_tokens`), `cache_read`, `cache_write`, `out` — the split the window draw and the cost ledger price from ⚖ |
-| `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖ |
-| `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds) |
+| `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖; on the codex rail the last ACCEPTED headroom report's `used_percent` / 100 ([GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)) |
+| `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds); on the codex rail the accepted report's `resets_at` |
 | `gateway_credential_resolve_total` | counter | `rail`, `outcome` | every ref resolution verdict |
 | `gateway_upstream_auth_rejected_total` | counter | `rail` | every upstream 401/403 the gateway reads as a CREDENTIAL verdict — the request answered 424 `upstream-auth` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary); a policy refusal, 403 `upstream-refused`, is not counted here): the event series the dead-key alert reads; `gateway_credentials_rejected` below is the state. Every rail renders from 0 ⚖ |
 | `gateway_cells_cooled` | gauge | `rail` | (rail, model, provider) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)); counted per rail (`model` is no label on this gauge); every rail renders from 0 |
@@ -111,7 +112,7 @@ The provider families (world `policy-default · openrouter-endpoints` — the sn
 | "dialect is the three paths" | requests_total || `dialect` | `anthropic`, `openai`, `responses` ([GW-RAIL-CODEX](openai-responses.md#gw-rail-codex)) |
 | "status is a numeric HTTP status" | requests_total || `status` | the codes this gateway returns (`200`, `400`, `401`, `403`, `424`, `429`, `501`, `502`, `503`, `504`) and the upstream statuses relayed |
 | "class is one of the four usage classes" | tokens_total || `class` | `in`, `cache_read`, `cache_write`, `out` |
-| "window is 5h or 7d" | subscription_utilization || `window` | `5h`, `7d` |
+| "window is 5h or 7d" | subscription_utilization || `window` | `5h`, `7d` — on the codex rail the headroom profile's minutes spelled in this vocabulary (300 → `5h`, 10080 → `7d`; a profile minute outside it renders `other` ⚖, [GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)) |
 | "outcome is the verdict class" | credential_resolve_total || `outcome` | `resolved`, `definitive`, `transient` |
 | "route is the control-plane route" | control_plane_unauthenticated_total || `route` | `admit` (`POST /sessions`), `lookup` (`GET`), `release` (`DELETE`), `outcome` (`POST /sessions/{id}/outcome`) |
 | "reason is why no caller identity was read" | control_plane_unauthenticated_total || `reason` | `absent` (no bearer), `invalid` (the review is not authenticated for audience `agent-gateway`), `review-transient` (the TokenReview API did not answer) |

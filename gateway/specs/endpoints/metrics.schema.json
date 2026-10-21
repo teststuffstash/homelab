@@ -73,7 +73,7 @@
         "rail": { "$ref": "#/$defs/rail" },
         "window": { "$ref": "#/$defs/window" }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": ["GW-METRICS", "GW-CODEX-HEADROOM"]
     },
     "gateway_subscription_reset_seconds": {
       "type": "gauge",
@@ -81,7 +81,7 @@
         "rail": { "$ref": "#/$defs/rail" },
         "window": { "$ref": "#/$defs/window" }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": ["GW-METRICS", "GW-CODEX-HEADROOM"]
     },
     "gateway_credential_resolve_total": {
       "type": "counter",

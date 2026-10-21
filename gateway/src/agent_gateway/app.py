@@ -150,6 +150,10 @@ def create_app(
     codex = (CodexRail(policy.rails["codex"], clock, codex_backend, settings.upstreams.get("codex", ""))
              if "codex" in policy.rails else None)
     sessions.codex = codex
+    if codex is not None:
+        # GW-CODEX-HEADROOM §Gauges: an ACCEPTED report renders gateway_subscription_*{rail="codex"};
+        # a restart renders nothing until the next one (the headroom is forgotten with the process).
+        codex.headroom.on_accept = lambda snapshot: m.subscription_report("codex", snapshot.windows)
     codex_proxy = CodexProxy(sessions, m, codex, client)
 
     @contextlib.asynccontextmanager

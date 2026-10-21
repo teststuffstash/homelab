@@ -8,7 +8,8 @@ the rail's credential is bad; every rail renders from 0),
 `gateway_control_plane_unauthenticated_total{route,reason}` (GW-SESSIONS-AUTH — every control-plane
 request without a valid caller token, admitted under `observe` or refused under `enforce`),
 `gateway_subscription_utilization{rail,window}` + `gateway_subscription_reset_seconds{rail,window}`
-(gauges, last seen on the subscription rail's `anthropic-ratelimit-unified-*` response headers).
+(gauges, last seen on the subscription rail's `anthropic-ratelimit-unified-*` response headers; on the
+codex rail the last ACCEPTED headroom report's windows — GW-CODEX-HEADROOM §Gauges).
 `gateway_cells_cooled{rail}` + `gateway_credentials_rejected{rail}` (gauges — the admission's transport
 facts, sessions.md §Capacity) and `gateway_requests_incomplete_total{rail,dialect,reason}` (a 2xx whose
 body stopped before its end, GW-RAIL-*).
@@ -22,7 +23,7 @@ import threading
 from collections.abc import Callable, Iterable
 
 from .capacity import subscription_windows  # one parser for the gauges and the admission reading
-from .config import DIALECTS, RAILS, ROLES
+from .config import DIALECTS, RAILS, ROLES, SUBSCRIPTION_WINDOWS
 from .outcomes import OUTCOME_CLASSES  # the one vocabulary (GW-SESSIONS-OUTCOME)
 
 OTHER = "other"
@@ -54,6 +55,18 @@ def _bounded(value: str, allowed: Iterable[str]) -> str:
 
 def _status_class(status: int) -> str:
     return str(status) if 100 <= status < 600 else OTHER
+
+
+def window_label(minutes: int) -> str:
+    """A headroom window's profile minutes in the `window` vocabulary: a whole number of days renders
+    `<n>d`, of hours `<n>h`, else `<n>m` (300 → `5h`, 10080 → `7d`). The policy profile, never a code
+    literal, decides which labels exist; one outside the schema's set is bounded to `other` like any
+    other label value (GW-CODEX-HEADROOM §Gauges ⚖)."""
+    if minutes % 1440 == 0:
+        return f"{minutes // 1440}d"
+    if minutes % 60 == 0:
+        return f"{minutes // 60}h"
+    return f"{minutes}m"
 
 
 def _fmt_labels(labels: dict[str, str]) -> str:
@@ -189,6 +202,18 @@ class Metrics:
             with self._lock:
                 self.sub_util[(r, w)] = util
                 self.sub_reset[(r, w)] = reset
+
+    def subscription_report(self, rail: str, windows: Iterable) -> None:
+        """GW-CODEX-HEADROOM §Gauges: an ACCEPTED headroom report's normalised windows (`minutes`,
+        `used` 0–1, `resets_at`) set the same two gauges the subscription rail renders from headers;
+        the caller (headroom's `on_accept`) never fires for a refused report, so a refusal changes
+        nothing here."""
+        r = _bounded(rail, RAILS)
+        with self._lock:
+            for w in windows:
+                label = _bounded(window_label(w.minutes), SUBSCRIPTION_WINDOWS)
+                self.sub_util[(r, label)] = w.used
+                self.sub_reset[(r, label)] = w.resets_at
 
     def credential(self, rail: str, outcome: str) -> None:
         key = (_bounded(rail, RAILS), _bounded(outcome, CRED_OUTCOMES))

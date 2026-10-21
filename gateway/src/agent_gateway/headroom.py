@@ -10,7 +10,9 @@ normalised schema, not a vendor payload:
 `observe()` is the seam: who may call it (an authenticated, account-bound producer) is a `⚑ gap`
 (no poll, no upstream-header reading, no jail ingress yet), so a fresh gateway answers
 `quota-unknown` and the rail defers — fail closed. Freshness, the ceiling and the window profile
-are policy (`rails.codex.headroom`), never code literals.
+are policy (`rails.codex.headroom`), never code literals. An ACCEPTED snapshot is handed to
+`on_accept` (§Gauges: `app.py` binds the metrics' two subscription gauges there); a refused report
+reaches no listener. No rendering lives here.
 """
 
 from __future__ import annotations
@@ -86,6 +88,7 @@ class Headroom:
     def __init__(self, clock: Callable[[], float], policy: HeadroomPolicy):
         self.clock, self.policy = clock, policy
         self.snapshot: Snapshot | None = None
+        self.on_accept: Callable[[Snapshot], None] | None = None  # bound by the composition, never a renderer
         self.lock = RLock()
 
     def observe(self, report) -> Snapshot:
@@ -98,6 +101,8 @@ class Headroom:
             if self.snapshot and snapshot.observed_at <= self.snapshot.observed_at:
                 raise ReportError("quota-out-of-order")
             self.snapshot = snapshot
+            if self.on_accept is not None:
+                self.on_accept(snapshot)
             return snapshot
 
     def verdict(self) -> Verdict:
