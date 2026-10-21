@@ -14101,3 +14101,10 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **#2787 (the judge step) MERGED 17:56Z round 1**, synced 56 s later (app `agent-coordinator`); an `outcome-judge`
   token lists sessions through the deployed gateway → FU-270 (b) done on both halves; the end-to-end proof is the first
   real Degraded-after-deploy revert.
+- **#2786 (codex leg D, gauge half) MERGED 18:15Z round 2** (R1: the specs reviewer wanted `other` declared in the
+  `window` enum), deploy #2793 live: `Headroom.on_accept` → `gateway_subscription_*{rail="codex"}`; the Codex row on the
+  `claude-subscription` dashboard synced; 0 codex series live until a report reaches the gateway (leg E).
+- **#2790 (#2775 gap 2) MERGED 18:27Z round 1**, deploy #2794 rolled 18:31Z and PROVED the fix on its own roll: both
+  catalogs "loaded from the store … next refresh at 00:20Z", no `refreshed —` at start, `fetched_at` unchanged
+  (18:20:58Z) — the old code had re-fetched on each of the 17:46 / 18:20 rolls. Advisory H-ATTACH_BULK on two
+  test_catalog_go.py cases → folded into #2791 (the belt makes it blocking next round).
