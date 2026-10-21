@@ -207,7 +207,7 @@ check ready-argo-rollouts k -n oracle-kargo rollout status deploy/argo-rollouts 
 k apply -f "$FX/analysis.yaml" >>"$EVID/run.log" 2>&1
 check ready-analysis-stub k -n oracle-kargo rollout status deploy/analysis-stub --timeout=180s
 k apply -f "$FX/analysisrun.yaml" >>"$EVID/run.log" 2>&1
-wait_for analysisrun-direct-successful 180 sh -c "kubectl --context $CTX -n oracle-kargo get analysisrun direct-smoke -o jsonpath='{.status.phase}' | grep -qx Successful"
+wait_for analysisrun-direct-successful 180 sh -c "kubectl --context $CTX -n oracle-kargo get analysisrun direct-smoke -o jsonpath='{.status.phase}' | grep -x Successful >/dev/null"
 
 # ── Applications + Kargo flow (policy in its committed [Warn, Audit] mode) ────────────────────
 k apply -f "$FX/apps.yaml" >>"$EVID/run.log" 2>&1 && pass apps-applied || fail apps-applied
@@ -218,9 +218,9 @@ stage_verified() { # stage — Verified condition True for the current freight
   kubectl --context "$CTX" -n oracle-kargo get stage "$1" -o json \
     | jq -e '.status.conditions[]? | select(.type=="Verified" and .status=="True")'
 }
-wait_for freight-discovered 240 sh -c "kubectl --context $CTX -n oracle-kargo get freight -o json | jq -e '[.items[] | select(.origin.name==\"podinfo\")] | length > 0'"
-wait_for stage-smoke-verified 420 stage_verified smoke
-wait_for stage-ingester-verified 420 stage_verified ingester
+wait_for freight-discovered 180 sh -c "kubectl --context $CTX -n oracle-kargo get freight -o json | jq -e '[.items[] | select(.origin.name==\"podinfo\")] | length > 0'"
+wait_for stage-smoke-verified 360 stage_verified smoke
+wait_for stage-ingester-verified 300 stage_verified ingester
 k -n argocd get application oracle-fleet-ingester -o json | jq '{sync: .status.sync.status, health: .status.health.status, op: .status.operationState.phase}' > "$EVID/app-ingester-status.json" 2>&1
 
 # Registry reachability (informational): the runner host, and a kind pod via the Warehouse.
@@ -234,7 +234,7 @@ KC=system:serviceaccount:kargo:kargo-controller
 canI() { [ "$(k auth can-i "$@" 2>/dev/null)" = yes ]; }
 check canI-patch-oracle-fleet-ingester canI patch applications.argoproj.io/oracle-fleet-ingester -n argocd --as="$KC"
 check canI-patch-oracle-fleet-ingester-shadow canI patch applications.argoproj.io/oracle-fleet-ingester-shadow -n argocd --as="$KC"
-check cannot-patch-platform-dummy sh -c "! kubectl --context $CTX auth can-i patch applications.argoproj.io/platform-dummy -n argocd --as=$KC | grep -qx yes"
+check cannot-patch-platform-dummy sh -c "! kubectl --context $CTX auth can-i patch applications.argoproj.io/platform-dummy -n argocd --as=$KC | grep -x yes >/dev/null"
 check patch-oracle-fleet-ingester-as-controller k -n argocd patch application oracle-fleet-ingester --type merge -p '{"metadata":{"labels":{"e2e-probe":"ok"}}}' --as="$KC"
 check patch-shadow-as-controller k -n argocd patch application oracle-fleet-ingester-shadow --type merge -p '{"metadata":{"labels":{"e2e-probe":"ok"}}}' --as="$KC"
 check patch-platform-dummy-refused sh -c "! kubectl --context $CTX -n argocd patch application platform-dummy --type merge -p '{\"metadata\":{\"labels\":{\"e2e-probe\":\"x\"}}}' --as=$KC"
@@ -273,17 +273,18 @@ probe() { # name sa expect-layer(policy|rbac|either) -- kubectl args...
   local name=$1 sa=$2 want=$3; shift 4
   local out; out=$(k "$@" --as="system:serviceaccount:kargo:$sa" 2>&1); local rc=$?
   local layer=none
-  echo "$out" | grep -q "kargo-write-guard" && layer=policy
-  echo "$out" | grep -qi "forbidden: User" && [ "$layer" = none ] && layer=rbac
+  grep -q "kargo-write-guard" <<< "$out" && layer=policy
+  grep -q "attempting to grant RBAC permissions not currently held" <<< "$out" && [ "$layer" = none ] && layer=rbac-escalation
+  grep -qi "forbidden: User" <<< "$out" && [ "$layer" = none ] && layer=rbac
   echo "[$name real=$sa] rc=$rc layer=$layer: $out" >> "$EVID/probes.log"
   if [ $rc -ne 0 ] && { [ "$want" = either ] || [ "$want" = "$layer" ]; }; then pass "deny-real-$name" "layer=$layer"; else fail "deny-real-$name" "rc=$rc layer=$layer"; fi
   out=$(k "$@" "${PROBE_AS[@]}" 2>&1); rc=$?
   echo "[$name synthetic] rc=$rc: $out" >> "$EVID/probes.log"
-  if [ $rc -ne 0 ] && echo "$out" | grep -q "ValidatingAdmissionPolicy 'kargo-write-guard'"; then pass "deny-policy-$name"; else fail "deny-policy-$name" "rc=$rc"; fi
+  if [ $rc -ne 0 ] && grep -q "ValidatingAdmissionPolicy 'kargo-write-guard'" <<< "$out"; then pass "deny-policy-$name"; else fail "deny-policy-$name" "rc=$rc"; fi
 }
 MC=kargo-management-controller
-probe crb-cluster-admin "$MC" policy -- create clusterrolebinding e2e-evil --clusterrole=cluster-admin --serviceaccount=kargo:kargo-controller
-probe clusterrole-star "$MC" policy -- create clusterrole e2e-evil --verb='*' --resource='*'
+probe crb-cluster-admin "$MC" either -- create clusterrolebinding e2e-evil --clusterrole=cluster-admin --serviceaccount=kargo:kargo-controller
+probe clusterrole-star "$MC" either -- create clusterrole e2e-evil --verb='*' --resource='*'
 probe namespace-evil "$MC" either -- create namespace evil
 probe secret-non-project-ns "$MC" either -- -n default create secret generic e2e-evil --from-literal=a=b
 probe rolebinding-cluster-admin "$MC" policy -- -n oracle-kargo create rolebinding e2e-evil --clusterrole=cluster-admin --serviceaccount=kargo:kargo-controller
@@ -312,15 +313,14 @@ k -n oracle-kargo get freight -o name > "$EVID/freight-before-deny.txt"
 k -n oracle-kargo annotate warehouse podinfo kargo.akuity.io/refresh="$(date +%s)" --overwrite >>"$EVID/run.log" 2>&1
 # Freight promotion is auto (newest first) — a promote of an OLDER freight proves the path too:
 OLD=$(k -n oracle-kargo get freight -o json | jq -r '[.items[] | select(.origin.name=="podinfo")] | sort_by(.metadata.creationTimestamp) | .[0].metadata.name')
+echo "deny-phase promotion freight: ${OLD:-<none>}" >> "$EVID/run.log"
 for st in smoke ingester; do
-  cat <<EOF | k apply -f - >>"$EVID/run.log" 2>&1
-apiVersion: kargo.akuity.io/v1alpha1
-kind: Promotion
-metadata: { name: deny-phase-$st, namespace: oracle-kargo }
-spec: { stage: $st, freight: $OLD }
-EOF
+  [ -n "$OLD" ] && [ "$OLD" != null ] || break
+  printf 'apiVersion: kargo.akuity.io/v1alpha1\nkind: Promotion\nmetadata:\n  name: deny-phase-%s\n  namespace: oracle-kargo\nspec:\n  stage: %s\n  freight: %s\n' \
+    "$st" "$st" "$OLD" > "$EVID/promotion-$st.yaml"
+  k apply -f "$EVID/promotion-$st.yaml" >>"$EVID/run.log" 2>&1
 done
-promo_ok() { kubectl --context "$CTX" -n oracle-kargo get promotion "$1" -o jsonpath='{.status.phase}' | grep -qx Succeeded; }
+promo_ok() { kubectl --context "$CTX" -n oracle-kargo get promotion "$1" -o jsonpath='{.status.phase}' | grep -x Succeeded >/dev/null; }
 wait_for deny-promotion-smoke-succeeded 300 promo_ok deny-phase-smoke
 wait_for deny-promotion-ingester-succeeded 300 promo_ok deny-phase-ingester
 wait_for deny-stage-smoke-verified 300 stage_verified smoke

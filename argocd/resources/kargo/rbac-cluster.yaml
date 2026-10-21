@@ -55,6 +55,15 @@ rules:
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch]
+  # PROVEN NEEDED (kind run 39660758441): at STARTUP the management controller lists EVERY Secret
+  # in the cluster once (legacysecrets.RemoveOrphanedFinalizers, cmd/controlplane/
+  # management_controller.go) and exits on failure — CrashLoopBackOff without this. `list` only
+  # (no get/watch); it returns contents, so this is the install's one cluster-wide secret READ.
+  # The follow-up finalizer UPDATE stays namespaced (and admission-guarded). Upstream ask: scope
+  # or skip that one-time cleanup.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [list]
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [roles, rolebindings]
     verbs: [get, list, watch]
@@ -88,8 +97,10 @@ rules:
   - apiGroups: [argoproj.io]
     resources: [analysisruns, analysistemplates, clusteranalysistemplates]
     verbs: [get, list, watch]
+  # events: PROVEN NEEDED (kind run 39660758441) — the API caches Events cluster-wide; without
+  # list/watch its cache never syncs and the pod never goes Ready.
   - apiGroups: [""]
-    resources: [namespaces, serviceaccounts]
+    resources: [namespaces, serviceaccounts, events]
     verbs: [get, list, watch]
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [clusterroles, clusterrolebindings, roles, rolebindings]
