@@ -250,11 +250,14 @@ forgotten with the process — "a gateway restart forgets" above). The Grafana p
 | "an accepted report renders both gauges per window" | poll observed now−10, 20 % / 64 %, resets now+1000 / now+8000 — accepted || `gateway_subscription_utilization{rail="codex",window="5h"}` / `"7d"`; `gateway_subscription_reset_seconds{…}` | 0.2 / 0.64; 1800001000 / 1800008000 |
 | "a refused report leaves the gauges unchanged ⚖" | …then an older report 99 % / 99 %, limited — refused `quota-out-of-order` || the same four series | 0.2 / 0.64; 1800001000 / 1800008000 (unchanged) |
 | "a fresh gateway renders no codex series" | no report accepted || `gateway_subscription_*{rail="codex"}` | absent |
-| "the window label is the profile's minutes in the window vocabulary ⚖" | windows of 300, 10080, 1440 and 90 minutes || `window` on `rail="codex"` | `5h`, `7d`, `other` (1440 → `1d` and 90 → `90m` are outside the vocabulary) |
+
+| description | profile minutes || `window` label on `rail="codex"` |
+|---|---||---|
+| "the window label is the profile's minutes in the window vocabulary ⚖" | 300, 10080, 1440, 90 || `5h`, `7d`, `other` (1440 → `1d` and 90 → `90m` are outside the vocabulary, bounded like any out-of-set value) |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: authenticated report ingress" | a poll of the account usage endpoint, a jail `rate_limits` event, upstream headers || none reach the gateway — the gauges above stay absent in production | the token-gated ingest + the usage poll (spike §Candidate shape); the vendor payload is unobserved until the operator's codex login (leg E) |
+| "⚑ gap: authenticated report ingress ⚖" | a poll of the account usage endpoint, a jail `rate_limits` event, upstream headers || none reach the gateway — the gauges above stay absent in production | the token-gated ingest + the usage poll (spike §Candidate shape); the vendor payload is unobserved until the operator's codex login (leg E) |
 | "⚑ gap: reservation" | two admissions at 94 % || both dispatched | reports do not meter concurrent use; the session cap is the only bound |
 
 <details markdown="1"><summary>Evidence</summary>
