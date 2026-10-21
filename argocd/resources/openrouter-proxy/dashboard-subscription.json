@@ -1314,7 +1314,244 @@
         },
         "textMode": "value_and_name"
       }
+    },
+    {
+      "id": 130,
+      "type": "row",
+      "title": "Codex subscription (gateway headroom)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "5h utilization",
+      "description": "The codex rail's last ACCEPTED headroom report: used_percent/100 of the 5-hour window (gateway_subscription_utilization{rail=\"codex\",window=\"5h\"}; GW-CODEX-HEADROOM \u00a7Gauges). Admission defers at the policy ceiling (rails.codex.headroom.ceiling). No data until a headroom report reaches the gateway (the report ingress is a spec gap; FU-270 leg D).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 45
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(gateway_subscription_utilization{rail=\"codex\",window=\"5h\"})",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.6
+              },
+              {
+                "color": "red",
+                "value": 0.8
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "7d utilization",
+      "description": "The codex rail's last ACCEPTED headroom report: used_percent/100 of the 7-day window \u2014 the scarce weekly pool. No data until a headroom report reaches the gateway (the report ingress is a spec gap; FU-270 leg D).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 45
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(gateway_subscription_utilization{rail=\"codex\",window=\"7d\"})",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.6
+              },
+              {
+                "color": "red",
+                "value": 0.8
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "5h window resets in",
+      "description": "Time until the accepted report's 5-hour window resets (gateway_subscription_reset_seconds{rail=\"codex\",window=\"5h\"}). A reset passing makes the headroom stale, not replenished \u2014 the rail waits for a new report. No data until a headroom report reaches the gateway (the report ingress is a spec gap; FU-270 leg D).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 45
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clamp_min(max(gateway_subscription_reset_seconds{rail=\"codex\",window=\"5h\"}) - time(), 0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Codex utilization by window (gateway headroom reports)",
+      "description": "gateway_subscription_utilization{rail=\"codex\"} per window \u2014 the gateway's own gauges, set only by an ACCEPTED headroom report (a refused report changes nothing; a gateway restart renders nothing until the next report). The deferral line is the policy ceiling (rails.codex.headroom.ceiling), not a series. No data until a headroom report reaches the gateway (the report ingress is a spec gap; FU-270 leg D).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (window) (gateway_subscription_utilization{rail=\"codex\"})",
+          "legendFormat": "{{window}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 3600000,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     }
   ],
-  "description": "Anthropic (Claude Code sessions) + OpenCode Go rail headroom: window utilization, dispatch gates, spend. Ledger = the proxy's PVC-backed go_usage (cluster + jail-shim ingest)."
+  "description": "Anthropic (Claude Code sessions) + OpenCode Go rail headroom + the codex rail's gateway-held headroom (gateway_subscription_*{rail=\"codex\"}, FU-270 leg D): window utilization, dispatch gates, spend. Ledger = the proxy's PVC-backed go_usage (cluster + jail-shim ingest)."
 }

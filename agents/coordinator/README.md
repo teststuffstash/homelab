@@ -139,7 +139,9 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 >   IS the strike store (state lives in GitHub, not your head) — grep it for what has already struck
 >   **for this task**; you do not pick a model from it, because there is no chain to walk: the
 >   launcher's `/route` call excludes the task's struck cells and owns the pick (ADR-094). Then
->   **re-dispatch the same round immediately** with a fresh session key. **Key-class errors**
+>   **re-dispatch the same round immediately** with a fresh session key (under
+>   `AGENT_GATEWAY=sessions` the launcher already re-admitted the round itself, up to 2 attempts —
+>   step 5 §Gateway; you act only on the strike it hands back). **Key-class errors**
 >   (`budget-403-key`, `budget-exhausted-key`) post a `KEY-RETRY:`
 >   marker instead of an `AGENT_STRIKE:` — they are mint defects, not model strikes, and the
 >   re-dispatch mints a fresh key.
@@ -176,6 +178,13 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > latch, which the launcher probes itself — you dispatch and let it decide. Full procedure:
 > step 5 §**Claude tier**.
 > An **OpenRouter-primary** ride (any non-`claude/` served model) takes steps 3–4 as written.
+> **GATEWAY — when `AGENT_GATEWAY=sessions` is in your pod env ([the platform
+> stack](../../docs/agents/agentstack.md) since the FU-270 (c) loop flip), the rail question is not
+> yours at all:** steps 3–4 are SKIPPED for every ride whatever
+> the served model — no estimator, no OpenRouterKey mint. The gateway admits the ride, picks rail +
+> model + harness per its policy and resolves the stack's credential
+> ([UC-1](../../gateway/specs/use-cases/uc-1-worker-ride.md)); the unit's served model is advisory
+> there. Procedure: step 5 §**Gateway**.
 
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
@@ -214,7 +223,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    sibling issue instead of widening — **the sibling's parent is this issue (the issue you are working on),
    bound at filing** (lineage contract rule 3; use the native `sub_issues` POST edge, regardless of door).
 3. **Read + estimate — OpenRouter-primary rides only** (a `claude/` served model skips this step
-   and the next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the
+   and the next, and so does EVERY ride under `AGENT_GATEWAY=sessions`; see the RAIL note above
+   and step 5 §Claude tier / §Gateway). Pipe the issue text into the
    budget estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
@@ -226,7 +236,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    can't cover the run so it would 403 unfinished, and a human must approve. A `$1.0/M` price in the
    verdict means the model was **unpriced** (you used the wrong one) — fix the model, don't escalate.
 4. **Mint the per-session budget IMMEDIATELY before dispatch — OpenRouter-primary rides only**
-   (a `claude/` served model has no key to mint; the turn cap is its spend bound — RAIL note above) — by
+   (a `claude/` served model has no key to mint; the turn cap is its spend bound — RAIL note above;
+   under `AGENT_GATEWAY=sessions` there is no per-session key at all, step 5 §Gateway) — by
    re-running the estimate command from step 3 with `| kubectl apply -f -` (it sets a fresh `expiresAt` each time). Hard `budgetUSD`,
    no reset, ~4h `expiresAt` (was 2h — a laguna:free ride at ~306s/turn outlasted its key,
    sleep-tracking#96 2026-08-02; slow free models need the headroom). The openrouter-operator mints the key and writes the Secret
@@ -269,6 +280,23 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
        --task issue-<N> --round <r> \
        --recipe /work/<project>/.agents/fix.yaml
    ```
+   **Gateway** (`AGENT_GATEWAY=sessions` in your pod env — the platform stack since the FU-270 (c)
+   loop flip): **skip steps 3–4 entirely** and pass **NO `--model`, NO `--harness`, NO
+   `--openrouter-secret`**. The launcher PREFLIGHT-REFUSES `--model` under the knob ("the gateway
+   owns the model" — the unit's served model is advisory), an explicit `--harness` would only
+   bound the gateway's pick, and there is no per-session key: the gateway resolves the stack's
+   standing `<repo>-openrouter` key, so the per-ride `budgetUSD` breaker does not apply to a
+   gateway ride (the `⚑ gap: labels, urgency, budget class` row of
+   [GW-SESSIONS-ADMIT](../../gateway/specs/endpoints/sessions.md) names it — the operator's known
+   trade). Same `--recipe` rule as above:
+   ```sh
+   bash agents/agent-session.sh <project> --task issue-<N> --round <r> \
+       --recipe /work/<project>/.agents/<class>.yaml
+   ```
+   A `→ gateway(sessions): defer — [reason]` exit IS the router-defer exit — requeue, not a
+   failure; the gateway's `retry_after_s` says when a later pass may retry. A counted strike
+   re-admits automatically INSIDE the launcher (the same round, up to 2 attempts, the struck cell
+   excluded) — you decide only after that, exactly as today.
    **Do NOT pass a base branch.** An issue carrying a `Base: <branch>` body line is handled by the
    LAUNCHER: it reads the line, clones/forks from that branch, tells the agent to open the PR
    against it, and refuses to arm auto-merge (issue-authoring.md §Base). Absent ⇒ master, i.e. every
@@ -409,8 +437,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
           task being right outweighs one ambiguity in the spec.
      - If a finding is genuinely **blocking-class** (secrets/blobs/CI-red/breaks master, or
        invariant-poisoning in a prod-serving repo) and `round < max` → bump the round and go to
-       **step 3** with a fresh pod + fresh session key (on a `claude/` served model, steps 3–4 are skipped
-       as always and you re-enter at **step 5**), **passing the reviewer's comments to the
+       **step 3** with a fresh pod + fresh session key (on a `claude/` served model, and on every ride under
+       `AGENT_GATEWAY=sessions`, steps 3–4 are skipped as always and you re-enter at **step 5**), **passing the reviewer's comments to the
        fixer** (feed `gh pr view <PR> --json reviews -q '.reviews[-1].body'` into its context).
        **Widen the footprint first when the review names paths outside the issue's `Touches`
        (ADR-127 amendment, 2026-09-11 — a containerless PR absorbs its out-of-diff findings in
@@ -1086,7 +1114,8 @@ Read the diff + the whole review thread, then rule — exactly one of:
   (`never_free`). The served flash pair (`deepseek-v4-flash`, `deepseek-v4.1-flash`) is
   `tier: cheap`, so `sm`→`md` changes only the $ cap, not the model; only `lg` moves a deepseek
   ride to a stronger model. To get a stronger model, re-grade to `lg` or pass `--model` on the
-  dispatch.
+  dispatch — neither under `AGENT_GATEWAY=sessions`, where the launcher refuses `--model` and the
+  gateway reads no label (step 5 §Gateway): the gateway owns the model there.
   This RESETS nothing — if it comes back a third time, escalate.
   Every ruling comment MUST carry ONE `ci-cause:` marker line — the grammar and its data-only
   contract live in §ci-cause below (one home; the ledger harvests it, homelab#1286).
@@ -1649,7 +1678,9 @@ a claim's `coordinatorModel` is a fail-open constraint and `--model` an explicit
 and `bash agents/agent-session.sh …` (it falls back to the pod's in-cluster ServiceAccount). Mint the
 session key by `kubectl apply`-ing the estimator's `--emit-cr` output, then **wait on the
 `OpenRouterKey` `.status` hash** (not the Secret), and dispatch the worker with
-`--openrouter-secret <project>-session-<id>-openrouter`.
+`--openrouter-secret <project>-session-<id>-openrouter` — none of which exists under
+`AGENT_GATEWAY=sessions` (the platform stack): the dispatch there is `--task`/`--round`/`--recipe`
+only, the brief's step 5 §Gateway.
 
 ## Bootstrap (one-time)
 
