@@ -78,6 +78,9 @@ MAP=(
   # rides the gateway-ci step's skip key in ci.yaml (no suite run, no results). WAN-bound (uv fetches
   # the pinned snippets wheel) → PUSH_HEAVY. Same trigger as gateway-ci (the suite it packs).
   "gateway-evidence:^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/resources/openrouter-proxy/model-classes\.json$)"
+  # …and its upload to the gateway-specs bucket (gateway/scripts/evidence-publish.sh; ci.yaml keys it
+  # off the gateway-evidence step's outcome). Soft-skips without creds; WAN/LAN-bound → PUSH_HEAVY.
+  "gateway-evidence-publish:^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/resources/openrouter-proxy/model-classes\.json$)"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
@@ -165,7 +168,7 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           anywhere" requirement outright.
 #   gateway-specs-publish   `uv run --no-project --with mkdocs…` resolves three pins from PyPI on a
 #                           cold cache — real WAN on the first run (measured 2026-10-16: ~40s cold).
-PUSH_HEAVY="argocd-validate-pins manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence"
+PUSH_HEAVY="argocd-validate-pins manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish"
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.

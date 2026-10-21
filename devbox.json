@@ -470,6 +470,9 @@
       "gateway-evidence": [
         "sh -c '[ -d gateway ] || { echo \"gateway-evidence: no gateway/ on this ref\"; exit 0; }; cd gateway && exec devbox run evidence'"
       ],
+      "gateway-evidence-publish": [
+        "sh -c 'cd gateway && exec devbox run evidence-publish'"
+      ],
       "gateway-specs-publish": [
         "sh -c 'cd gateway && exec devbox run specs-publish'"
       ],

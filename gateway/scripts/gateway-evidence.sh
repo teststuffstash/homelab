@@ -5,7 +5,8 @@
 #   devbox run evidence [-- <results-dir> [<out-dir>]]     (defaults: allure-results allure-evidence)
 #
 # Run AFTER pytest (pyproject addopts writes allure-results/). <out-dir> is the WHOLE reviewer
-# pack — the CI artifact `gateway-evidence` is exactly this directory, so its root holds:
+# pack — CI publishes exactly this directory (scripts/evidence-publish.sh → the gateway-specs bucket,
+# evidence/<pr-N|branch>/<sha>.tar.gz), so its root holds:
 #   allure-results/ a copy of the raw results (attachments, environment.properties, executor.json)
 #   evidence.json   every labelled record across the suite (+ the run's environment.properties)
 #   digest.md       every spec rule in page order — tables, findings (incl. the --spec join's
@@ -69,7 +70,7 @@ for page in "${pages[@]}"; do
 done
 
 # The raw results ride inside the pack: the reviewer reads <pack>/allure-results/ and
-# <pack>/evidence.json from one `gh run download <id> -n gateway-evidence`.
+# <pack>/evidence.json from one pack fetch (agents/specs-reviewer-session.sh evidence_fetch).
 cp -r "$RESULTS" "$OUT/allure-results"
 
 echo "== gateway-evidence: codes across digest.md"
