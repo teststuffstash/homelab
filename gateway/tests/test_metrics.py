@@ -35,7 +35,7 @@
 | class is one of the four usage classes | tokens_total | class | in, cache_read, cache_write, out |
 | window is 5h or 7d | subscription_utilization | window | 5h, 7d |
 | outcome is the verdict class | credential_resolve_total | outcome | resolved, definitive, transient |
-| route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release, outcome |
+| route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release, outcome, list |
 | reason is why no caller identity was read | control_plane_unauthenticated_total | reason | absent, invalid, review-transient |
 | class is a strike class, source the writer | strikes_total | class / source | the strike classes / outcome, gateway |
 | reason is why a 2xx body stopped before its end | requests_incomplete_total | reason | no-terminal, timeout, transport-error, client-closed |
@@ -408,7 +408,7 @@ LABEL_ROWS = [
     ("class is one of the four usage classes", "gateway_tokens_total", "class", {"in", "cache_read", "cache_write", "out"}),
     ("window is 5h or 7d", "gateway_subscription_utilization", "window", {"5h", "7d"}),
     ("outcome is the verdict class", "gateway_credential_resolve_total", "outcome", {"resolved", "definitive", "transient"}),
-    ("route is the control-plane route", "gateway_control_plane_unauthenticated_total", "route", {"admit", "lookup", "release", "outcome"}),
+    ("route is the control-plane route", "gateway_control_plane_unauthenticated_total", "route", {"admit", "lookup", "release", "outcome", "list"}),
     ("reason is why no caller identity was read", "gateway_control_plane_unauthenticated_total", "reason", {"absent", "invalid", "review-transient"}),
     ("class is a strike class, source the writer", "gateway_strikes_total", "class", {k for k, v in OUTCOME_CLASSES.items() if v}),
     ("reason is why a 2xx body stopped before its end", "gateway_requests_incomplete_total", "reason",

@@ -107,7 +107,7 @@
     }
   },
   "caller": {
-    "$comment": "GW-SESSIONS-AUTH \u2014 every POST /sessions, GET /sessions/{id} and DELETE /sessions/{id} carries `Authorization: Bearer <the caller's projected ServiceAccount token, audience agent-gateway>`, TokenReview'd through the same path as the pull. The reviewed username is looked up in the policy's `callers` map; under `control_plane_auth: observe` an absent or invalid token is admitted (and counted), under `enforce` it is refused. Not a body field: a header, so no request shape changes.",
+    "$comment": "GW-SESSIONS-AUTH \u2014 every POST /sessions, GET /sessions/{id}, DELETE /sessions/{id} and GET /sessions?task= carries `Authorization: Bearer <the caller's projected ServiceAccount token, audience agent-gateway>`, TokenReview'd through the same path as the pull. The reviewed username is looked up in the policy's `callers` map; under `control_plane_auth: observe` an absent or invalid token is admitted (and counted), under `enforce` it is refused. Not a body field: a header, so no request shape changes.",
     "x-requirements": [
       "GW-SESSIONS-AUTH"
     ]
@@ -816,12 +816,53 @@
       ]
     }
   },
+  "list": {
+    "$comment": "GET /sessions?task=<exact task key> \u2014 the judge's lookup (GW-SESSIONS-AUTH, route `list`; FU-270 (b)): every session carrying that task the caller may SEE, oldest first, released and expired included (a judge reads a verdict's fate after release \u2014 GW-SESSIONS-OUTCOME). Visibility is GET's owner rule (the admitting caller; a row with no recorded caller is anyone's), plus a judge (`callers` entry `outcome: any`) sees every session of its stacks; a row outside that is not listed \u2014 never a 403, a list reveals nothing. Caller-checked as every control-plane route.",
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task"
+      ],
+      "properties": {
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the query parameter: the exact task key the sessions were admitted with (post.input.task); absent or empty = 400 malformed-body"
+        }
+      },
+      "x-requirements": [
+        "GW-SESSIONS-AUTH"
+      ]
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessions"
+      ],
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/get/output"
+          },
+          "description": "the visible rows, each the GET /sessions/{id} row (its `outcome` = the latest reported), ordered by created_at; [] when none is visible"
+        }
+      },
+      "x-requirements": [
+        "GW-SESSIONS-AUTH",
+        "GW-SESSIONS-OUTCOME"
+      ]
+    }
+  },
   "errors": {
     "malformed-body": {
       "status": 400,
-      "description": "the request body fails this schema's `post.input` (missing field, enum miss, negative round)",
+      "description": "the request body fails this schema's `post.input` (missing field, enum miss, negative round), or a list without `task` (`list.input`)",
       "x-requirements": [
-        "GW-SESSIONS-ADMIT"
+        "GW-SESSIONS-ADMIT",
+        "GW-SESSIONS-AUTH"
       ]
     },
     "harness-rail-mismatch": {
