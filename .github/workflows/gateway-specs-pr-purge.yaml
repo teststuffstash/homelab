@@ -6,8 +6,10 @@
 # bucket `gateway-specs` prefix pr-<N>/, written by ci.yaml's `Gateway specs site publish` step
 # whenever the PR's skip map ran the gateway gate. Nothing is created when a PR opens — Garage
 # serves an index on any sub-prefix, so the prefix IS the preview; the one lifecycle event is
-# the close. `paths` mirrors the publish condition: gateway/** plus the files whose change makes
-# scripts/diff-ci.sh's skip map fail open (every gate runs, the publish included).
+# the close. The same close removes the PR's reviewer evidence packs (evidence/pr-<N>/, written by
+# ci.yaml's `Gateway evidence publish` step — gateway/scripts/evidence-publish.sh). `paths` mirrors
+# both publish conditions: gateway/** and the gateway-evidence row's two extra inputs, plus the
+# files whose change makes scripts/diff-ci.sh's skip map fail open (every gate runs).
 #
 # THIN workflow: logic lives in gateway/scripts/specs-pr-purge.sh (no `bash -c`, no error-swallow —
 # oracle-fleet#517/#529), tools come from devbox. A failed purge fails this step.
@@ -18,6 +20,8 @@ on:
     types: [closed]
     paths:
       - gateway/**
+      - argocd/resources/agent-gateway/policy.json
+      - argocd/resources/openrouter-proxy/model-classes.json
       - devbox.json
       - devbox.lock
       - .github/workflows/ci.yaml

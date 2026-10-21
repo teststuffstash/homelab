@@ -78,7 +78,9 @@ with every gateway and fake-upstream exchange attached under the step it support
 `environment.properties` stamps `git.commit` (the head sha — the pinned snippets key), policy sha256, timestamp and
 `artifact=pr-head (not the built image)`. `devbox run evidence` (`scripts/gateway-evidence.sh`,
 snippets pin in `scripts/lib/snippets.sh`) turns them into the reviewer's pack, joining each spec
-page's tables (`--spec`) where the tool can parse them; `evidence_render.py` and its
+page's tables (`--spec`) where the tool can parse them; CI publishes the pack to the `gateway-specs`
+bucket (`scripts/evidence-publish.sh`, `evidence/<pr-N|branch>/<sha>.tar.gz` — never an Actions
+artifact: the org's included Actions storage is 2 GB); `evidence_render.py` and its
 `evidence-render: BEGIN/END` log block are unchanged.
 `GATEWAY_SPECS_OPTIONAL=1` lets the rule check + gate skip with a warning when `specs/` is absent
 (only for a checkout that carries the service half alone — CI never sets it).

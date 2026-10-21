@@ -1,6 +1,6 @@
 {
   "$schema":  "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
-  "_comment": "agent-gateway island toolchain (P2, ADR-139): python 3.13 + uv, the oracle-fleet shape; minio-client (mc) for the specs-site publish (scripts/specs-publish.sh — mkdocs itself rides `uv run --no-project` with exact pins, see scripts/specs-build.sh). Run `devbox run ci` from THIS directory; the repo-root devbox.json reaches it through its `gateway-ci` script (diff-ci row `gateway-ci:^gateway/`). Nothing here is shared with the old openrouter-proxy, which stays on the repo-root toolchain untouched.",
+  "_comment": "agent-gateway island toolchain (P2, ADR-139): python 3.13 + uv, the oracle-fleet shape; minio-client (mc) for the specs-site + evidence publish (scripts/specs-publish.sh, scripts/evidence-publish.sh — mkdocs itself rides `uv run --no-project` with exact pins, see scripts/specs-build.sh). Run `devbox run ci` from THIS directory; the repo-root devbox.json reaches it through its `gateway-ci` script (diff-ci row `gateway-ci:^gateway/`). Nothing here is shared with the old openrouter-proxy, which stays on the repo-root toolchain untouched.",
   "packages": {
     "python":       "3.13",
     "uv":           "latest",
@@ -30,6 +30,9 @@
       ],
       "specs-build": [
         "bash scripts/specs-build.sh"
+      ],
+      "evidence-publish": [
+        "bash scripts/evidence-publish.sh \"$@\""
       ],
       "specs-publish": [
         "bash scripts/specs-publish.sh"

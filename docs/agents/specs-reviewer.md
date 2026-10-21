@@ -80,9 +80,12 @@ its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar
 `allure-behavior-snippets` wheel (`SNIPPETS_VERSION`, verified against `SNIPPETS_SHA256`, extracted
 and run with the image's stdlib `python3`); the round context the pack cannot fetch itself (PR body,
 `issue-intent.md` = each closing issue's `## Acceptance` section, `prior-review.md` = the newest own
-LLM review in any state, since a push dismisses it); the head's `ci` run artifact
-`gateway-evidence` (raw Allure results) and the base branch's newest artifact as baseline (its
-`evidence.json` + commit). `evidence-pack` turns these into the model's inputs dir: touched rules,
+LLM review in any state, since a push dismisses it); the head's evidence pack (raw Allure results
++ `evidence.json` + `digest.md`) and the newest first-parent base commit's pack as baseline (its
+`evidence.json` + commit) — both read anonymously from the `gateway-specs` bucket's web endpoint,
+`evidence/<pr-N|base>/<sha>.tar.gz`, written by ci (`gateway/scripts/evidence-publish.sh`; until
+2026-10-21 a `gateway-evidence` Actions artifact, which held ~2.1 GB of the org's 2 GB included
+storage — that artifact stays the read fallback until the old runs expire). `evidence-pack` turns these into the model's inputs dir: touched rules,
 their sections + the spec diff, the specs tree, `digest.md` (`Stamp:` / `Baseline:` + mechanical
 findings), per-rule tables, `evidence/<RULE>.json`, attachments, and `process/` (RULES, CONVENTIONS,
 briefs). A failed clone, wheel or pack is no review (fail CLOSED); ABSENT evidence is not a refusal:
@@ -254,8 +257,8 @@ and marks each of its findings `resolved` / `still open` before reading new beha
   mappings, so dispatch becomes "touches a rule", not "touches a specs path");
 - each touched rule's section + the spec diff, with the unchanged neighbouring specs as reference;
 - the closing issue's acceptance text (fetched, not just referenced);
-- `evidence.json` + `digest.md` + the raw Allure results and attachments, from a CI run artifact
-  the tick downloads into its read-only inputs dir (the model has no fetch);
+- `evidence.json` + `digest.md` + the raw Allure results and attachments, from the pack CI
+  publishes to the `gateway-specs` bucket, which the tick downloads into its read-only inputs dir (the model has no fetch);
 - the baseline: master's evidence, naming its commit and run scope, so a test that was not run is
   not read as a vanished proof;
 - the previous review.
@@ -272,7 +275,8 @@ report to record that digest (open question 2).
    (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join). oracle-fleet keeps its own process and v0.4.2
    until the gateway has proven this one (operator, 2026-10-16).
 4. Gateway tests on Allure, the raw results uploaded as the `gateway-evidence` CI artifact — DONE
-   2026-10-16 (#2623; ci.yaml c63dbe1).
+   2026-10-16 (#2623; ci.yaml c63dbe1); moved to the `gateway-specs` bucket 2026-10-21
+   (`gateway/scripts/evidence-publish.sh` — Actions storage quota).
 5. The evidence pass live — LIVE 2026-10-16 (#2624; first pass #2628: 3 rules, 9 turns, 34 s). Next:
    measure tokens, worker rounds, invalid findings and coordinator interventions per completed PR.
 
