@@ -14108,3 +14108,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   catalogs "loaded from the store … next refresh at 00:20Z", no `refreshed —` at start, `fetched_at` unchanged
   (18:20:58Z) — the old code had re-fetched on each of the 17:46 / 18:20 rolls. Advisory H-ATTACH_BULK on two
   test_catalog_go.py cases → folded into #2791 (the belt makes it blocking next round).
+- **#2792 (capacity marks persisted — operator ruling) MERGED 18:38Z round 1**, deploy #2795 rolled 18:40Z: `capacity_marks
+  (kind, key, until, stack, at, backoff)`, write-through under the lock, reload at start (expired dropped; `hold` = its
+  own kind so the backoff doubling is unchanged; keys carry `sha256[:16]` fingerprints, never a credential); live:
+  `capacity: reloaded 0 marks from the store`. The sessions.md "⚑ gap: a latch survives a restart" row closed (12 rows).
