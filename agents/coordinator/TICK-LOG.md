@@ -14047,3 +14047,21 @@ updates or reverts as much as possible — mechanical revert or a responder."
   lists unchanged), #2777 (launcher + gaps) merged; issues #2768 (classified) + #2775 (canary gaps) await rulings.
   FU-270 next: (b) wrong-verdict ← deploy-revert, (c) the loop flip into the session-pod heredoc, codex legs D/E
   (operator). Ctx ~450k at wind-down; master pushed.
+
+## 2026-10-21 ~morning — seat: "continue gateway build" — FU-270 (b) + (c) + codex leg D's gauge half dispatched (4 subagents)
+
+- Pickup read: #2780 merged 22:01Z; no operator ruling yet on #2775 / #2768 (no comments); master pulled to 371f172a.
+- (b) `wrong-verdict` ← deploy-revert, cut in two PRs: the gateway half (`GET /sessions?task=` — route `list`; a judge sees
+  every session of its stacks by task, any other caller only its own; the judge SA `agent-coordinator:outcome-judge` added
+  to the deployed policy `callers` with `outcome: any`) and the agents/ half (the `deploy-revert` WorkflowTemplate becomes
+  steps revert → judge; the judge runs as the new SA (executor RoleBinding only), resolves the reverted merge's source PRs
+  — the PR itself, plus the PRs of the sha an auto-bump title names — and reports `wrong-verdict` on each gateway REVIEW
+  session (`specs-review <slug>#<n>`; the review reflex is not on the gateway yet = the known limit); fail-soft, sentinel
+  + replay fixture).
+- (c) the loop flip: `AGENT_GATEWAY=sessions` into the coordinator session-pod heredoc (`coordinator-pod-manifest`
+  re-recorded) + the coordinator README's gateway branch (steps 3–4 skipped, no `--model`/`--harness`/`--openrouter-secret`;
+  the per-ride `budgetUSD` breaker does not apply to gateway rides — the spec's "labels, urgency, budget class" gap).
+- Codex leg D split: the POLL half stays a gap (the vendor usage payload is unobserved until the operator's login, leg E);
+  the GAUGE half builds — an accepted headroom report → `gateway_subscription_*{rail="codex"}` + Codex panels on the
+  `claude-subscription` dashboard.
+- Alertmanager at start: only `RouterRunModelUnverifiable` (explained, meta-state); gateway pod 0 restarts, 19 h.
