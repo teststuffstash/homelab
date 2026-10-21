@@ -11,9 +11,11 @@
 # agent-gateway, 600s, path token) mounted readOnly at /var/run/secrets/agent-gateway — the
 # launcher's DEFAULT AGENT_GATEWAY_CALLER_TOKEN_FILE. Red on base (no such volume: the
 # AGENT_GATEWAY=sessions flip would PREFLIGHT-REFUSE every dispatch for a missing token), green
-# after. The second row (FU-270 (c), the loop flip): the manifest's env SETS AGENT_GATEWAY=sessions,
-# so the in-pod launcher admits every platform ride through the gateway's POST /sessions — this
-# fixture pins the flip as much as the mount (an env line gone = the loop silently back on /route).
+# after. The second row (FU-270 (c), the loop flip): for STACK=platform (the bridge's pin) the
+# manifest's env SETS AGENT_GATEWAY=sessions, so the in-pod launcher admits every platform ride
+# through the gateway's POST /sessions — this fixture pins the flip as much as the mount (an env
+# line gone = the loop silently back on /route). Any other STACK renders no such entry (the
+# GW_KNOB_ENV gate in the block), which is the launcher's own platform-only guard made visible.
 #
 # One per-stack item dispatch (`--loop-ns`: POD_SA=agentstack-loop, CREATE_CMD=create) is the
 # rendered shape; the bridge pins every variable the heredoc expands so the recording is
