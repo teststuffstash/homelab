@@ -1,0 +1,9 @@
+CALL gh api repos/teststuffstash/homelab/commits/0123456789ab/pulls --jq .[].number
+CALL curl GET http://agent-gateway.replay.invalid:8080/sessions task=specs-review teststuffstash/homelab#2766 [auth: Bearer fake-judge-token-projected]
+CALL curl POST http://agent-gateway.replay.invalid:8080/sessions/7d3f2a1c/outcome [auth: Bearer fake-judge-token-projected] {"class":"wrong-verdict","evidence":{"revert_pr":"teststuffstash/homelab#2791","reverted_pr":"teststuffstash/homelab#2780","app":"agent-gateway","revision":"01234567"}}
+CALL curl GET http://agent-gateway.replay.invalid:8080/sessions task=specs-review teststuffstash/homelab#2780 [auth: Bearer fake-judge-token-projected]
+OUT → judge: specs-review teststuffstash/homelab#2766 session 7d3f2a1c (caller=system:serviceaccount:agent-coordinator:specs-review) wrong-verdict → strike.class=wrong-verdict replay=false
+OUT → judge: specs-review teststuffstash/homelab#2766 session b81e0c55 role=worker — not a review ride, skipped
+OUT → judge: specs-review teststuffstash/homelab#2780 — the gateway holds no session for it (nothing to judge)
+OUT → judge: teststuffstash/homelab#2791 reverted teststuffstash/homelab#2780 — 1 of 2 gateway session(s) judged wrong-verdict (review rides looked up on: 2766 2780)
+RC 0
