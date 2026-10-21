@@ -24,26 +24,20 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
   it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
   box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
-- **⚑ PICKUP (2026-10-20 ~20:45Z — gateway: BOTH ordered PRs LANDED + DEPLOYED + VERIFIED; the canary window is the
-  operator's; TICK-LOG 10-20 18:30Z → 20:45Z; earlier headings mis-clocked by ~+4 h, corrected):** **#2766** (the Go catalog's `config` source = models.dev's
-  `opencode-go` rows — deprecated dropped, as the vendor's `plugin/models-dev.ts` — under the console's `/api/v2/config`
-  OVERLAY, the vendor's own order; env `GATEWAY_GO_CATALOG_URL` = models.dev, new `GATEWAY_GO_CONFIG_URL`) deployed as
-  #2769 (g618c588a6e15): `catalog: config refreshed — 29 models` 19:07Z, `GoCatalog*` clear; its gap → **#2768** (the rail
-  serves 37 ids vs 29 listed). **#2767** (`callers[platform-agents:agentstack-loop].roles` = `["worker", "prober"]`)
-  deployed by the policy ConfigMap roll 19:37Z and PROVEN without a ride: a prober admission as the dispatcher SA on a
-  rail outside the prober's set answers 200 `defer role-rail-denied` (the reviewer control still 403 `caller-role-denied`).
-  **#2771 + #2770 + #2773 (FU-270 (d): Go `context_tokens` from the catalog) + #2774 all MERGED + deployed.**
-  **The canary WINDOW RAN from the seat (operator 20:00Z: "run some yourself … continue unattended … use subagents"):**
-  7 eligible cells (v4.1-flash baidu/deepinfra/open-inference-fp4, v4-flash streamlake/baidu, kimi-k3 morph, mimo-v2.5
-  xiaomi), 2 rides 429'd (baseten, deepinfra — cells stay candidate), $0.096; gaps → **#2775**; #2768 classified in a
-  comment (ruling: the operator's). **#2776 (the re-cut, FU-270 (a)) MERGED + deployed 21:06Z: every openrouter tier DECIDED, lists
-  UNCHANGED (kimi-k3 holds standard/heavy as the sole priced model in band at ~100× the light cells' cost — the
-  derivation's call, worth a look), the v4.1-flash twin now walks Go first by price. #2777 (launcher ride shape — the gateway owns the
-  model — + #2775's `⚑ gap` rows) MERGED 21:51Z, its deploy #2780 auto-merge armed (nothing to verify: scripts/specs/tests only).
-  **Nothing in flight.** Operator rulings wanted: #2775 (a 429'd pinned canary = strike with class 429, or a no-verdict that
-  must not consume an admission? + the per-refresh cap keyed on the persisted `fetched_at`; + a pinnable flag in the view)
-  and #2768 (the 8 rail-served-unlisted Go ids, classified). FU-270 next: (b), (c) the loop flip, codex legs D/E. **Next:** read both PRs'
-  outcomes in TICK-LOG; rulings for #2775 (a 429'd canary = strike or no-verdict?) and #2768 (rail-served-unlisted ids).
+- **⚑ PICKUP (2026-10-21 ~19:40Z — gateway: FU-270 (b) + (c) + codex leg D's gauge half + three rulings LANDED and
+  DEPLOYED; TICK-LOG 10-21):** #2785 (`GET /sessions?task=`, the judge caller) + #2787 (deploy-revert `judge` step, SA
+  `outcome-judge`) = (b) done — proof = the first real Degraded-after-deploy revert striking a `specs-review` session;
+  #2788 = (c) the loop flip, PLATFORM session pods only — **no platform worker ride has gone through `/sessions` yet**
+  (nothing queued; 5 specs-review rides since) — **read the first one**: `sessions where role='worker' and
+  caller=…agentstack-loop` in the gateway store, then the pod's `→ gateway(sessions):` lines; the launcher REFUSES
+  `--model` under the knob, so a coordinator that still passes it fails loudly (README gateway branch says not to).
+  #2786 codex gauges (0 series until a report reaches the gateway = leg E, operator). #2775: gap 2 (#2790) + gap 3
+  (#2791) FIXED; **gap 1 (a 429'd canary's verdict) is the one open ruling and now gates the next canary window** —
+  the cheapest-first walk starts at `v4-flash@deepinfra`, the shared-pool-429 cell (comments 1–2 on #2775: cause =
+  `limit_source: upstream_provider_shared_pool`, not our key; recommended no-verdict + persisted re-try horizon +
+  `limit_source` on the cell). #2792: capacity marks persisted (operator ruling). Open rulings: #2775 gap 1, #2768.
+  Operator-only: codex login (leg E) → then the codex policy block; FU-313. Seen, not actioned: `nvfp4` off the policy
+  ladder (cosmetic); #2796/#2799 were the operator's own gateway-evidence PR + its deploy.
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a
