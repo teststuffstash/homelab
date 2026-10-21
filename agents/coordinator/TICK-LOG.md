@@ -14065,3 +14065,28 @@ updates or reverts as much as possible — mechanical revert or a responder."
   the GAUGE half builds — an accepted headroom report → `gateway_subscription_*{rail="codex"}` + Codex panels on the
   `claude-subscription` dashboard.
 - Alertmanager at start: only `RouterRunModelUnverifiable` (explained, meta-state); gateway pod 0 restarts, 19 h.
+
+## 2026-10-21 ~17:30–18:30Z — seat: #2785 merged+deployed; the #2775 429 autopsy; two operator rulings → two more builds
+
+- **#2785 merged 9aa92817 (round 1, no findings), deploy #2789 live**: `GET /sessions?task=` (route `list`) + the judge
+  caller in the deployed policy; live: 200 `{"sessions":[]}` / 400 without task / 401 without bearer. The judge-visibility
+  path waits on the `outcome-judge` SA (#2787). The kustomization's callers comment was left stale → fixed direct (fe7406d4).
+- **#2775 gap 1 autopsied (comment on the issue):** both 429'd cells re-probed from the jail with the platform key, pinned +
+  fallbacks off, 21 h later — still 429, body `limit_source: upstream_provider_shared_pool` (DeepInfra
+  `engine_overloaded`, BaseTen `Retry-After: 30`): the provider throttles OpenRouter's SHARED pool, not our key (paid,
+  $4.92/$5 weekly left; account ~$6 credit; the same key served 200s on both providers minutes earlier). OpenRouter's
+  uptime history showed both endpoints at 100 % for the hour — the catalog's uptime signal is blind to this class. A
+  regular ride never sees it (request-level failover; a 429 = cooldown, no strike); the canary is that failover switched
+  off, so opencode retries the pinned cell 9× and exits 1 with no verdict. Operator's read: the canary is a one-shot entry
+  gate, the eligible providers fill with evidence anyway → the cheap answer is no-verdict + a long persisted re-try horizon
+  on the cell (and store the body's `limit_source` so key/free-tier 429s stay distinguishable). Not yet ruled.
+- **#2775 gap 2 re-read:** `admitted_this_refresh` is NOT in memory — it is `canary_sessions_since(meta.refreshed_at)` from
+  the store; the window resets because `OrCatalog.run()` refreshes unconditionally at start and moves `refreshed_at`.
+  Fix = skip the startup refresh while the stored snapshot is younger than `refresh_s`. Not yet built.
+- **Operator ruling (18:0xZ): the capacity state (per-cell 429 cooldowns, the subscription 429 latch, rejected-credential
+  marks + backoff) MUST survive a pod roll** → build dispatched (closes sessions.md "⚑ gap: a latch survives a restart";
+  a `capacity_marks` table, write-through, reload at start, expired rows dropped).
+- **Operator ruling (18:2xZ): #2775 gap 3 (the view does not say which cells selection could pin) is a BUG, no input
+  needed** → build dispatched: per-endpoint `pinnable`/`floor` per harness from the one `providers.eligible()` predicate;
+  `canary-entrants.sh` walks pinnable candidates cheapest-first; the index-row clause trimmed to gaps 1–2.
+- Open: #2786 (codex gauges), #2787 (judge step), #2788 (loop flip) in review; 6 subagents used so far this session.
