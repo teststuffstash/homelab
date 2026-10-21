@@ -36,7 +36,7 @@ error), and no auth, like `/metrics` — it carries no credential.
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); a liveness signal is `⚑ gap` (rows below); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread) |
-| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); ⚑ gap (2026-10-20, PR #2777 → work #2775): a 429'd canary spends an admission and judges nothing, the view does not say which cells selection could pin |
+| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); ⚑ gap (2026-10-20, PR #2777 → work #2775): a 429'd canary spends an admission and judges nothing (the other two of that day's gaps are closed — the pod-roll window by #2790; the view not saying which cells selection could pin as a bug, operator 2026-10-21: the `pinnable` / `floor` rows below) |
 | [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`, `gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers, the admission's rail choice between twin cells (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the strike overhead unmeasured, the Go cell's clean-rate prior (the "⚑ gap" rows below) |
 
 ## GW-CATALOG-GO
@@ -296,6 +296,23 @@ knob — the ride names no model: the launcher's preflight refuses `--model` und
 `OPENCODE_CONFIG_CONTENT`); FU-161's scout keeps its digest, its canary leg for OpenRouter entrants
 is superseded by this.
 
+⚖ **Which candidates, in what order** (operator ruling 2026-10-21, homelab#2775 — a bug, not a
+design question: the first canary admission of 2026-10-20 went to `deepseek-v4.1-flash@open-inference`,
+quantization fp4, below the fp8 floor — `eligible` after its clean ride, never pinnable, because the
+launcher walked candidate cells alphabetically with the floors unknown to it). The view says it:
+every endpoint row carries **`pinnable`** — per harness the policy's `providers.tool_choice` names
+(never a code list), the floors' verdict of [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)
+evaluated by the data plane's own predicate (`providers.eligible()`: quantization at or above the
+floor, every tool-choice mode the harness uses, `uptime_last_1d` at or above the floor — a `null`
+clears none — status 0; a provider's service tiers carry the representative's verdict) — and
+**`floor`**, the reason per harness that fails (`{}` when every harness passes). The deployed
+policy's floors decide, so the flag follows the policy, not the data; `selected` is always a cell
+that is both `eligible` and pinnable for the canary harness — an eligible cell the floors reject is
+passed over whatever its price. The launcher walks only the candidate cells that are **pinnable for
+its ride's harness** (`opencode`, the script's own `HARNESS`), **cheapest first** — the endpoint's
+output price, then its input price, then the model id — and names the cells it skipped, each with
+its `floor`, in its banner, so `--dry-run < /dev/null` shows the whole decision without a ride.
+
 ### The budget cap
 
 ⚖ Policy knobs, never code constants (`rails.openrouter.canary`): **`max_per_refresh`** canary
@@ -376,6 +393,28 @@ fixture Secret `agent-egress/router-account-key`.
 | "canary verdicts are counted" | the same || `gateway_canary_rides_total{outcome="eligible"}` / `{outcome="excluded"}` | 1 / 1 |
 | "the view's shape is the schema's" | refresh, `GET /catalog/openrouter` || exactly the `required` keys of `openrouter_output`, of a model row, of an endpoint row, of `canary` | — |
 
+### The floors' verdict on the view
+
+The policy's `providers.tool_choice` names three harnesses (`opencode` / `goose`: `auto`; `claude`:
+`auto`, `required`, `function`), its floors are fp8 and uptime 95 (the `policy-default` world);
+M's rows as [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto) lists them.
+
+| description | cell | arrange || `pinnable` (opencode / goose / claude) | `floor` |
+|---|---|---||---|---|
+| "the view says which cells selection could pin: a cell without required/function is pinnable for opencode and goose, not claude ⚖" | M@morph (fp8, uptime 99.5, tool_choice `auto` only) | refresh || true / true / false | `{claude: no tool_choice required,function}` |
+| "the 2026-10-20 cell: fp4 is pinnable for no harness" | M@open-inference (fp4) | refresh || false / false / false | `quantization fp4 < fp8` on all three |
+| "a cell clearing every floor is pinnable everywhere; its service tiers carry the representative's verdict ⚖" | M@deepinfra (fp8; `/flex` uptime 84.5 and `/priority` beside it) | refresh || true / true / true on all three rows | `{}` |
+| "a null uptime clears no floor on any harness ⚖" | M@inference-net, `endpoints-null-uptime@inference-net/fp8` | refresh || false / false / false | `uptime_1d unknown` on all three |
+| "the flag follows the policy, not the data ⚖" | M@open-inference | a second gateway on the same DB, `policy-default` with `quantization_floor` fp4 || true / true / true | `{}` |
+| "selected is always a pinnable cell: the cheaper eligible fp4 cell is passed over ⚖" | M | clean canaries on (M, open-inference) — out $0.08/M — and (M, deepinfra) — $0.42/M || `selected` deepinfra, `order` [deepinfra]; open-inference `eligible` yet pinnable false | — |
+
+The launcher — `scripts/canary-entrants.sh --dry-run < /dev/null`, a fake HTTP server handing it the
+view (the script needs only `bash`, `curl`, `jq` and a gateway URL; `--dry-run` rides nothing):
+
+| description | the view || the walk (`== canary n/N: <cell>`, cheapest first) | the banner's skipped list |
+|---|---||---|---|
+| "the launcher walks pinnable candidate cells cheapest-first; the skipped cells and their floor are in the banner ⚖" | after a refresh: 15 candidate cells, 9 pinnable for `opencode` || M@deepinfra 0.42, G@near-ai 0.50, G@z-ai 0.50, M@atlas-cloud 0.54, M@morph 0.60, G@morph 0.65, G@inceptron 0.69, M@inference-net 0.715, M@baidu 1.20 ($/M out; near-ai before z-ai on the input price) — no ride: two GETs of the view, nothing else | G@atlas-cloud `uptime_1d 77.8199 < 95`, G@open-inference `quantization fp4 < fp8`, G@reka `quantization unknown`, M@alibaba `quantization unknown`, M@open-inference `quantization fp4 < fp8`, M@parasail `uptime_1d 77.4359 < 95` |
+
 ### Named gaps (rows that exist so the omission is visible)
 
 | description | input || v0 answer | the gap |
@@ -384,7 +423,6 @@ fixture Secret `agent-egress/router-account-key`.
 | "⚑ gap: the Go rail's canary" | a new Go model in the Go catalog || no entry gate on the opencode rail | [#2743](https://github.com/teststuffstash/homelab/issues/2743): the same canary is the yardstick on both rails |
 | "⚑ gap: the ranking's `other` bucket and a `:free` family" | a `:free` id in the ranking || joins its family's AA row; `other` is dropped | no fixture row carries a `:free` candidate (the latest week had none in the top of either slice) |
 | "⚑ gap: a 429'd canary buys nothing" | a pinned canary whose every request is 429 — `kimi-k3@baseten` 2×200 then 7×429, `deepseek-v4-flash@deepinfra` 9×429 on 2026-10-20 || the cell stays `candidate`, judged 0, the admission spent | neither the consumer's class nor the gateway's transport class fires on a run of 429s; the ruling — a strike with class `429`, or a no-verdict that must not consume an admission — is [#2775](https://github.com/teststuffstash/homelab/issues/2775)'s |
-| "⚑ gap: the view does not say which cells selection could pin" | `canary-entrants.sh` walking `candidate` cells || alphabetical, floors unknown to it — the first admission went to `open-inference`, fp4, eligible and never pinnable | a per-endpoint "passes the floors" flag in the view, or the launcher reading `rails.openrouter.providers` from the deployed policy, and a cheapest-first walk ([#2775](https://github.com/teststuffstash/homelab/issues/2775)) |
 
 <details markdown="1"><summary>Evidence</summary>
 

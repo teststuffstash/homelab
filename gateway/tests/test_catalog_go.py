@@ -513,7 +513,9 @@ async def test_pvc_keeps_snapshot(cworld, vendor, clock):
     world(upstream="catalog-ok · docs-ok")
     first = cworld.build()
     with given("both sources refreshed at T0 on gateway #1"):
-        await first.state.catalog.refresh()
+        with quiet():  # the arrange's three vendor exchanges fold into one summary (ATTACH_BULK)
+            await first.state.catalog.refresh()
+        attach_json("arranged: both sources refreshed at T0 (catalog-ok · config-ok · docs-ok)", {"fetched_at": _iso(T0), "outcome": "ok"})
     clock.advance(3600)
     with when("gateway #2 starts on the same DB at T0 + 3600 s — no refresh"):
         second = cworld.build()
@@ -547,7 +549,9 @@ async def test_restart_inside_interval(cworld, vendor, clock):
     world(upstream="catalog-ok · docs-ok", note="refresh_s 21600")
     first = cworld.build()
     with given("both sources refreshed at T0 on gateway #1"):
-        await first.state.catalog.refresh()
+        with quiet():  # the arrange's three vendor exchanges fold into one summary (ATTACH_BULK)
+            await first.state.catalog.refresh()
+        attach_json("arranged: both sources refreshed at T0 (catalog-ok · config-ok · docs-ok)", {"fetched_at": _iso(T0), "outcome": "ok"})
     clock.advance(3600)
     with when("gateway #2 starts on the same DB at T0 + 3600 s, gateway #3 at T0 + 21600 s — each asks startup_delay"):
         second = cworld.build()
@@ -558,10 +562,9 @@ async def test_restart_inside_interval(cworld, vendor, clock):
         third = cworld.build()
         delay_3 = third.state.catalog.startup_delay(clock())
     with then("#2 waits 18000 s (last_attempt_at null, a not-in-catalog defer would say retry_after_s 18000); #3 refreshes at once"):
-        check("gateway #2 startup_delay", delay_2, 18000.0)
+        check("startup_delay (gateway #2, gateway #3)", (delay_2, delay_3), (18000.0, 0.0))
         check("gateway #2 retry_at - now (the not-in-catalog defer's retry_after_s)", retry_2, 18000.0)
         check("gateway #2 sources.config.last_attempt_at", v["sources"]["config"]["last_attempt_at"], None)
-        check("gateway #3 startup_delay", delay_3, 0.0)
 
 
 # ── What /metrics says ───────────────────────────────────────────────────────────────────────

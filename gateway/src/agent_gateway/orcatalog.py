@@ -21,6 +21,12 @@ CAPPED by a budget.
   exclusion after the cooldown), `eligible` (one canary ride completed clean on exactly that
   cell), `excluded` (a canary struck — with the class and a cooldown). Selection pins only
   `eligible` cells; a model with none rides unpinned.
+- **The view** (`GET /catalog/openrouter`) says, per endpoint row and per harness the policy's
+  `providers.tool_choice` names, whether the cell is `pinnable` — the floors' verdict from
+  `providers.eligible()`, THE one predicate selection uses — and `floor`, its reason where it is
+  not (homelab#2775: the first canary window of 2026-10-20 admitted `open-inference` fp4 first —
+  eligible after its clean ride, never pinnable, because the launcher walked candidates
+  alphabetically with the floors unknown to it).
 - **The canary** is a session (`POST /sessions` with `canary: {model, provider}`, the policy's
   canary role and harness, rail openrouter) pinned to that cell with no failover; its outcome is
   the verdict. Admission is capped: `canary.max_per_refresh` canaries between refreshes and
@@ -42,7 +48,7 @@ import httpx
 from . import __version__
 from .config import Policy
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
-from .providers import SNAPSHOT_SOURCE, EndpointSnapshot, ParseError, parse_endpoints
+from .providers import SNAPSHOT_SOURCE, EndpointSnapshot, ParseError, eligible, parse_endpoints
 from .store import Store, iso
 
 log = logging.getLogger("gateway.orcatalog")
@@ -354,23 +360,51 @@ class OpenRouterCatalog:
         return min(self.retry_at(now, fallback_s), now + 3600.0)
 
     # -- reads ----------------------------------------------------------------------------------
+    def floors(self, model: str) -> dict[str, tuple[dict[str, bool], dict[str, str]]]:
+        """Per provider slug of `model`, (`pinnable`, `floor`): for every harness the policy's
+        `providers.tool_choice` names, whether the provider's representative endpoint clears the
+        floors (`providers.eligible()` — the data plane's own predicate, never a second one) and,
+        where it does not, the reason. A provider's service tiers are one cell: they carry the
+        representative's verdict. No providers policy = nothing is ever pinned: both maps empty."""
+        rail = self.policy.rails.get("openrouter")
+        pol = rail.providers if rail else None
+        if pol is None:
+            return {}
+        eps = self.snapshot.endpoints(model) or []
+        out: dict[str, tuple[dict[str, bool], dict[str, str]]] = {}
+        for harness in pol.tool_choice:
+            kept, dropped = eligible(eps, pol, harness)
+            for e in kept:
+                out.setdefault(e.slug, ({}, {}))[0][harness] = True
+            for slug, why in dropped.items():
+                pinnable, floor = out.setdefault(slug, ({}, {}))
+                pinnable[harness] = False
+                floor[harness] = why
+        return out
+
     def view(self, order: Callable[[str], list[str]]) -> dict:
-        """`GET /catalog/openrouter`: the snapshot with every cell's state, the selected provider per
-        model (`order(model)[0]` — the eligible order the data plane would pin), the budget."""
+        """`GET /catalog/openrouter`: the snapshot with every cell's state and its floors verdict per
+        harness (`pinnable` / `floor`), the selected provider per model (`order(model)[0]` — the
+        eligible order the data plane would pin), the budget."""
         now = self.clock()
         row = self.store.snapshot_load(SNAPSHOT_SOURCE)
         fetched_at = row[0] if row else None
         body = row[1] if row else {}
+        rail = self.policy.rails.get("openrouter")
+        harnesses = tuple(rail.providers.tool_choice) if rail and rail.providers else ()
         models = {}
         for mid, m in sorted((body.get("models") or {}).items()):
             states = self.store.cell_states(mid)
             rides = self.store.cell_outcomes("openrouter", mid)  # GW-MODEL-TIERS: the cell's clean-ride evidence
+            verdicts = self.floors(mid)
             eps = []
             for e in m["endpoints"]:
                 v = self.cell(mid, e["slug"], now)
                 clean, judged = rides.get(e["slug"], (0, 0))
+                pinnable, floor = verdicts.get(e["slug"], ({h: False for h in harnesses}, {}))
                 eps.append({**e, "state": v.state, "class": v.klass, "cooldown_until": iso(v.cooldown_until),
-                            "rides": {"clean": clean, "judged": judged}})
+                            "rides": {"clean": clean, "judged": judged},
+                            "pinnable": {h: pinnable.get(h, False) for h in harnesses}, "floor": dict(floor)})
             ranked = order(mid)
             cells = {e["slug"]: e["state"] for e in eps}  # a provider's service tiers are ONE cell
             models[mid] = {"ranking": m.get("ranking") or {}, "aa": m.get("aa") or {}, "fetched_at": m.get("fetched_at"),

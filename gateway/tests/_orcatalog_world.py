@@ -96,8 +96,10 @@ def endpoints_answer(model: str, behaviour: str) -> Response:
     if name is None:
         return PlainTextResponse("not found", status_code=404)
     doc = fixture(name)
-    if behaviour == "endpoints-null-uptime":  # the vendor's answer for a fresh or idle endpoint (seen live 2026-10-20)
-        doc["data"]["endpoints"][0]["uptime_last_1d"] = None
+    if behaviour.startswith("endpoints-null-uptime"):  # the vendor's answer for a fresh or idle endpoint (seen live 2026-10-20)
+        tag = behaviour.partition("@")[2]  # `endpoints-null-uptime@<tag>` names the endpoint; bare = the first row
+        rows = doc["data"]["endpoints"]
+        (next(e for e in rows if e["tag"] == tag) if tag else rows[0])["uptime_last_1d"] = None
     return JSONResponse(doc)
 
 
