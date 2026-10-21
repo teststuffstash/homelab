@@ -3,7 +3,7 @@ id: EP-SESSIONS
 use-cases: [UC-1]
 schema: sessions.schema.json
 ---
-# POST /sessions · GET /sessions/{id} · DELETE /sessions/{id} · POST /sessions/{id}/env · POST /sessions/{id}/outcome — the launcher's one question
+# POST /sessions · GET /sessions/{id} · DELETE /sessions/{id} · POST /sessions/{id}/env · POST /sessions/{id}/outcome · GET /sessions?task= — the launcher's one question
 
 *May this unit run now, with which harness, and what goes in the pod's env.* The control-plane
 seam of the island ([UC-1](../use-cases/uc-1-worker-ride.md) steps ① and ④). The caller sends
@@ -31,7 +31,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
 | [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; Codex same-pod token re-read after first delivery (below) |
 | [GW-SESSIONS-LIVENESS](#gw-sessions-liveness) | `get.output.state`, `get.output.release_reason` | — | v0 |
-| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
+| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller`, `list.input`, `list.output` (the judge's `GET /sessions?task=` — [§A judge finds a task's sessions](#a-judge-finds-a-tasks-sessions)) | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found`, `malformed-body` (a list without `task`) | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
 | [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)); `⚑ gap` rows below |
 | [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
 | [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
@@ -791,8 +791,8 @@ Rendered by `scripts/evidence_render.py` from CI.
 ## GW-SESSIONS-AUTH
 
 *The control plane knows who is asking* (operator order 2026-10-17, FU-270). Every `POST /sessions`,
-`GET /sessions/{id}` and `DELETE /sessions/{id}` carries **`Authorization: Bearer <the caller's
-projected ServiceAccount token>`**, audience **`agent-gateway`**. The gateway reviews it through the
+`GET /sessions/{id}`, `DELETE /sessions/{id}` and `GET /sessions?task=` carries **`Authorization:
+Bearer <the caller's projected ServiceAccount token>`**, audience **`agent-gateway`**. The gateway reviews it through the
 **same** TokenReview path as [the env pull](#gw-sessions-pull) (`TokenReviewer`, `spec.audiences:
 [agent-gateway]`, one implementation) and reads the reviewed username,
 `system:serviceaccount:<ns>:<sa>`, as the caller. The policy's **`callers`** map, keyed by that
@@ -802,6 +802,17 @@ key that is not a ServiceAccount username refuses the policy load. So a wildcard
 written. The caller is stored on the session row (`caller`, returned by `GET`), and `GET` / `DELETE`
 belong to that caller. The env pull is NOT caller-checked here: its caller is the bound pod, which
 GW-SESSIONS-PULL checks against the bind.
+
+**`GET /sessions?task=<exact task key>`** (route `list`, FU-270 (b)) is the [judge](../glossary.md#judge)'s
+lookup: `{"sessions": [<the GET /sessions/{id} row, `outcome` included>…]}`, ordered by
+`created_at`, released and expired sessions INCLUDED — a judge reads a verdict's fate after
+release ([GW-SESSIONS-OUTCOME](#gw-sessions-outcome)). A missing or empty `task` is 400
+`malformed-body`. ⚖ Visibility is GET's owner rule, never a refusal: a caller whose entry says
+`outcome: any` sees every session of ITS stacks carrying the task; any other caller sees only the
+sessions it admitted; a row admitted with no caller (`observe`) is visible to any listed caller, as
+the owner rule already says for `GET`. A row outside that is simply not listed — an empty list,
+never a 403, since a list reveals nothing. The caller check is every control-plane route's (401 /
+403 / 503 under `enforce`; counted under `observe`, `{route="list"}`).
 
 ⚖ The checks run in a fixed order (an alternative would read the body first, or answer 404 before the caller check): the caller's token (401 / 503), its `callers` entry (403
 `caller-unknown`), the body (400, as [GW-SESSIONS-ADMIT](#gw-sessions-admit)), then the body against
@@ -823,8 +834,10 @@ during the rollout. It never waves through a known identity the policy does not 
 
 Rows run against two worlds. **`policy-default`** is `observe`, so every other row on this page
 runs unchanged without a caller token. **`policy-enforce`** is the same document with `enforce`
-([worlds/README.md](../worlds/README.md)). Both hold three fixture callers; the third, the judge,
-admits nothing and is [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s.
+([worlds/README.md](../worlds/README.md)). Both hold three fixture callers; the third, **the judge** =
+`system:serviceaccount:agent-coordinator:outcome-judge` · stacks `[platform]` · roles `[]` ·
+`outcome: any`, admits nothing: it is [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s reporter and
+the list's reader.
 **The platform loop** = `system:serviceaccount:platform-agents:agentstack-loop` · stacks
 `[platform]` · roles `[worker, prober]` (the dispatcher's workers, and the entry canary's prober
 rides — [GW-CATALOG-OR §The entry canary](catalog.md#the-entry-canary) — which `canary-entrants.sh`
@@ -882,6 +895,25 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "an unknown id is 404 only after the caller check ⚖" | policy-enforce | the platform loop GETs `/sessions/nope` || 404 | session-not-found |
 | "an unknown id without a bearer, under enforce ⚖" | policy-enforce | GET `/sessions/nope`, no bearer || 401 | caller-unauthenticated |
 
+### A judge finds a task's sessions
+
+`GET /sessions?task=` (route `list`). World `policy-enforce` unless noted; the task is the worker
+body's (`homelab-2588-r1`); the specs reviewer admits it unbound as `reviewer`. **An oracle
+dispatcher** = a session of stack `oracle` recorded as admitted by
+`system:serviceaccount:oracle-agents:agentstack-loop` (stored directly: no fixture caller may admit
+that stack).
+
+| description | world | sequence || status | result |
+|---|---|---||---|---|
+| "the judge lists a task two callers admitted" | policy-enforce | the platform loop admits and releases its own; the specs reviewer admits; the judge lists || 200 | both rows, oldest first: `(caller, state)` = the loop `released`, the specs reviewer `active` — each the `GET /sessions/{id}` row incl. `outcome`, no `token` |
+| "the admitting caller lists only its own" | policy-enforce | the platform loop and the specs reviewer admit; the platform loop lists || 200 | the loop's row only |
+| "another listed caller sees an empty list, never a 403" | policy-enforce | the platform loop admits; the specs reviewer lists || 200 | `[]` |
+| "the judge lists a task of a stack outside its entry ⚖" | policy-enforce | an oracle dispatcher's session; the judge lists || 200 | `[]` — `outcome: any` reaches the entry's stacks only |
+| "an unknown task is an empty list" | policy-enforce | the platform loop admits; the judge lists `task=nope` || 200 | `[]` |
+| "a list without a bearer, under observe, is served and counted ⚖" | policy-default | the platform loop admits; `GET /sessions?task=` with no bearer || 200 | the row (no identity reads any row, as `GET` without a bearer under `observe`); `{route="list",reason="absent"}` + 1 |
+| "no task is 400 malformed-body" | policy-enforce | the judge GETs `/sessions` with no `task` || 400 | malformed-body; the unauthenticated series unchanged |
+| "a list without a bearer, under enforce" | policy-enforce | `GET /sessions?task=` with no bearer || 401 | caller-unauthenticated; `{route="list",reason="absent"}` + 1 |
+
 ### One TokenReview path, and the pull stays the pod's
 
 | description | world | sequence || result |
@@ -898,7 +930,7 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
 | "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
 | "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
-| "the deployed callers are today's two dispatchers, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker, prober]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`) |
+| "the deployed callers are today's two dispatchers and the judge, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker, prober]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`, outcome `own`), `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`, `own`) and `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
@@ -912,7 +944,11 @@ homelab#2685 — `callers` is per SA, and `agent-coordinator` is the SA every ot
 namespace shares): role `reviewer`, plus ⚖ `worker` for the goose@openrouter shadow cell, which rode `--role worker`
 because the reviewer role has no openrouter rail
 ([specs-reviewer.md §Shadow runs](../../../docs/agents/specs-reviewer.md#shadow-runs--harness--rail-cells-gatewayplanmd-step-3)). A jail
-canary mints the loop SA's token (`kubectl create token`) and acts as that dispatcher.
+canary mints the loop SA's token (`kubectl create token`) and acts as that dispatcher. **The
+judge** `agent-coordinator:outcome-judge` admits nothing (roles `[]`, no bind): it is the
+deploy-revert chain's judge step (`agents/coordinator/deploy-revert-argo.yaml`, FU-270 (b)) —
+`outcome: any` lets it list a reverted merge's review sessions and report `wrong-verdict` on them
+([GW-SESSIONS-OUTCOME §Who may report](#who-may-report)).
 
 ### What the log says
 
@@ -948,7 +984,11 @@ check is [GW-SESSIONS-AUTH](#gw-sessions-auth)'s with the DELETE rule: the admit
 report. ⚖ A **judge** may report too: a `callers` entry with `outcome: any` may report on any
 session of its `stacks`, which a later check (did the APPROVE hold?) needs, since the reviewer
 cannot grade its own verdict. The key is optional and `own` by default, so an absent key grants
-nothing extra. The deployed policy lists no judge.
+nothing extra. The deployed judge is `system:serviceaccount:agent-coordinator:outcome-judge`
+(`argocd/resources/agent-gateway/policy.json`): the deploy-revert chain's judge step
+(`agents/coordinator/deploy-revert-argo.yaml`, FU-270 (b)), which finds the review sessions of a
+merge the chain reverted through `GET /sessions?task=` ([GW-SESSIONS-AUTH §A judge finds a task's
+sessions](#a-judge-finds-a-tasks-sessions)) and reports `wrong-verdict` on each.
 
 ⚖ **When:** before release, and after release or expiry for the policy's `outcome_window_s`
 (**86400 s**). The launcher reports before its DELETE; a judge reads a verdict's fate later, so a

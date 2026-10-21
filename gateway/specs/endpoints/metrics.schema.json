@@ -14,7 +14,7 @@
     "class": { "enum": ["in", "cache_read", "cache_write", "out"] },
     "window": { "enum": ["5h", "7d", "other"], "description": "the subscription windows; `other` = a codex headroom profile minute outside the vocabulary (GW-CODEX-HEADROOM §Gauges)" },
     "outcome": { "enum": ["resolved", "definitive", "transient"] },
-    "route": { "enum": ["admit", "lookup", "release", "outcome"] },
+    "route": { "enum": ["admit", "lookup", "release", "outcome", "list"] },
     "reason": { "enum": ["absent", "invalid", "review-transient"] },
     "incomplete_reason": { "enum": ["no-terminal", "timeout", "transport-error", "client-closed"] },
     "strike_class": { "enum": ["harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown", "turn-cap", "tool-loop", "no-verdict", "wrong-verdict", "invented-findings", "repetition", "harness-gave-up", "stream-incomplete", "refused"], "description": "the strike classes of sessions.schema.json outcome.class (clean writes no strike)" },

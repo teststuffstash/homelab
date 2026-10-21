@@ -392,6 +392,11 @@ and `subscription-fallback` (the §M12 degrade). The folded accounting view is i
   claim's per-stack ordering surviving as class policy, before the claim goes chainless).
   - anchor: `model-classes.json` → `classes`; `router.py:route`.
   - evidence: decision rows per role; `/router-status` → `decisions_24h`.
+  - **Except the platform stack's worker rides, flipped to the gateway (FU-270 (c), 2026-10-21):**
+    the coordinator session pod carries `AGENT_GATEWAY=sessions`, so
+    [`agents/agent-session.sh`](../../agents/agent-session.sh) admits them through the gateway's
+    `POST /sessions` ([UC-1](../../gateway/specs/use-cases/uc-1-worker-ride.md)) and never calls
+    `/route`; the knob is pod env, not a claim field.
 - **A platform claim is chainless when it has no chain** and refuses a chainless dispatch without
   an authoritative verdict.
   - **`unenforced`** for [the platform stack](agentstack.md) — Goal #1640 acceptance 6 (the claim still carries

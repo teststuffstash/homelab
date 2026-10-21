@@ -32,7 +32,7 @@ added 2026-10-16); a cell is what the launcher does, not what a doc says it shou
 | column | enforced by v0? | enforcement point | what "enforced" would mean later |
 |---|---|---|---|
 | rail `anthropic` / `opencode` / `openrouter` | **yes** | `POST /sessions` — `roles.<role>.rails`; a rail not listed is `defer: role-rail-denied`, and no session means no data-plane credential | — |
-| control-plane caller (who may call `/sessions`, for which stack, role and bind namespace) | **yes** (`enforce` since 2026-10-17) | `POST /sessions`, `GET` / `DELETE /sessions/{id}` — the policy's `callers`, keyed by the caller's reviewed ServiceAccount ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)); a known caller outside its entry is refused in both modes, a caller with no valid token is counted under `observe` and refused under `enforce` | — |
+| control-plane caller (who may call `/sessions`, for which stack, role and bind namespace; who may list and judge) | **yes** (`enforce` since 2026-10-17) | `POST /sessions`, `GET` / `DELETE /sessions/{id}`, `GET /sessions?task=` — the policy's `callers`, keyed by the caller's reviewed ServiceAccount ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)); a known caller outside its entry is refused in both modes, a caller with no valid token is counted under `observe` and refused under `enforce` | — |
 | git identity | no | the launchers render it; the broker is `openrouter-proxy`'s `/git-token` today and leaves for its own service (FU-269, ADR-139 step 1) | the broker consults the session's role before minting |
 | stack MCP | no | the launcher reads the claim knob and renders the harness config | the gateway's `env` carries the MCP config; the knob moves into the policy |
 | browser MCP | no (and not reachable) | the browser sidecar is a jail-host network (`jail-browser`); no cluster pod joins it | a decision, not a wiring — `🚧 WIP` until one exists |
@@ -41,8 +41,11 @@ added 2026-10-16); a cell is what the launcher does, not what a doc says it shou
 ServiceAccount ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)): the platform loop's
 dispatcher SA (`platform-agents:agentstack-loop`) `worker` + `prober` — its graduated workers and the
 entry canary's rides; the specs reviewer's SA (`agent-coordinator:specs-review`) `reviewer` +
-`worker` — the tick and its shadow cell. No other caller, no wildcard; the deployed map is
-`argocd/resources/agent-gateway/kustomization.yaml`'s `callers` comment.
+`worker` — the tick and its shadow cell; the [judge](glossary.md#judge)'s SA
+(`agent-coordinator:outcome-judge`, the deploy-revert chain's judge step, FU-270 (b)) no role at
+all — `outcome: any`, so it lists a task's sessions and reports `wrong-verdict` on them
+([GW-SESSIONS-OUTCOME](endpoints/sessions.md#gw-sessions-outcome)). No other caller, no wildcard;
+the deployed map is `argocd/resources/agent-gateway/policy.json` (`kustomization.yaml` comments it).
 
 ## Per stack
 

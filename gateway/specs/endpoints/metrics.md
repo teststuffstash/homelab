@@ -114,7 +114,7 @@ The provider families (world `policy-default · openrouter-endpoints` — the sn
 | "class is one of the four usage classes" | tokens_total || `class` | `in`, `cache_read`, `cache_write`, `out` |
 | "window is 5h or 7d" | subscription_utilization || `window` | `5h`, `7d`, `other` — on the codex rail the headroom profile's minutes spelled in this vocabulary (300 → `5h`, 10080 → `7d`; a profile minute outside it renders `other` ⚖, [GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)) |
 | "outcome is the verdict class" | credential_resolve_total || `outcome` | `resolved`, `definitive`, `transient` |
-| "route is the control-plane route" | control_plane_unauthenticated_total || `route` | `admit` (`POST /sessions`), `lookup` (`GET`), `release` (`DELETE`), `outcome` (`POST /sessions/{id}/outcome`) |
+| "route is the control-plane route" | control_plane_unauthenticated_total || `route` | `admit` (`POST /sessions`), `lookup` (`GET /sessions/{id}`), `release` (`DELETE`), `outcome` (`POST /sessions/{id}/outcome`), `list` (`GET /sessions?task=`) |
 | "reason is why no caller identity was read" | control_plane_unauthenticated_total || `reason` | `absent` (no bearer), `invalid` (the review is not authenticated for audience `agent-gateway`), `review-transient` (the TokenReview API did not answer) |
 | "class is a strike class, source the writer" | strikes_total || `class` / `source` | the strike classes of the vocabulary / `outcome`, `gateway` |
 | "reason is why a 2xx body stopped before its end" | requests_incomplete_total || `reason` | `no-terminal`, `timeout`, `transport-error`, `client-closed` |
