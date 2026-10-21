@@ -12,15 +12,19 @@ Three per-rail checks the admission walk consults after the slot count, each dri
   on that cell clears it. A 429 is a model's fact unless the rail is one account.
 - **429 latch** — the account-scope signal: a rail whose policy declares `latch_429_hold_s` (the
   subscription rails, one account each) is latched by a 429 for the same reset; any 2xx on the
-  rail clears it. In memory: a restart forgets, the next 429 re-latches.
+  rail clears it.
 - **credential rejected** — an upstream 401, or a 403 whose error names a credential reason, marks
   THAT credential (rail + sha256 of the value, never the value) rejected. It RECOVERS WITHOUT
   TRAFFIC: a rail with a policy `credential_probe` is re-verified by the gateway itself on a
   doubling backoff (`reprobe()`, the app's background loop) and cleared by the probe's 2xx; a rail
   without one is re-admitted half-open after `credential_hold_s` (a fresh rejection doubles the
-  hold). A 2xx on the credential clears it, and a changed value is a different fingerprint. In
-  memory only: a restart clears it, and the next rejection re-marks it (nothing unverified is
-  carried across a restart).
+  hold). A 2xx on the credential clears it, and a changed value is a different fingerprint.
+- **the marks survive a restart** (operator ruling 2026-10-21): every cooldown, latch, rejection and
+  the backoff it doubles from is written through to the store's `capacity_marks` table as it is set,
+  cleared or re-scheduled, and a new gateway on the same DB reloads them at start (`_reload`) —
+  minus what the in-memory logic would already have let go: a cooldown or latch past its `until`,
+  and a no-probe rail's rejection past its half-open (its hold stays, so a repeat still doubles).
+  A probe rail's rejection past its due time reloads as due: the first pass after the roll sends it.
 - **window draw** — the Go rail's spend per MODEL per subscription window, priced from the four
   token classes at the Go catalog's list rates (gometer `window_draw()` semantics), read from the
   gateway's own request ledger; a window at/over `threshold × monthly limit × share` blocks the
@@ -99,6 +103,16 @@ def reset_at(headers: Mapping[str, str], now: float) -> float | None:
 def fingerprint(credential: str) -> str:
     """The credential-rejected key: a short sha256 of the value — never the value (GW-REDACT)."""
     return hashlib.sha256(credential.encode()).hexdigest()[:16]
+
+
+def _cell_key(rail: str, model: str, provider: str) -> str:
+    """The stored `cooled` mark's key — `rail|model|provider` (no policy model id or slug carries `|`)."""
+    return f"{rail}|{model}|{provider}"
+
+
+def _cred_key(rail: str, fp: str) -> str:
+    """The stored `rejected` / `hold` mark's key — `rail|<fingerprint>`: the sha256 prefix, never the value."""
+    return f"{rail}|{fp}"
 
 
 @dataclass
@@ -185,7 +199,7 @@ def window_bounds(w: DrawWindow, now: float, request_ts: list[float]) -> tuple[f
 
 
 class Capacity:
-    def __init__(self, policy: Policy, store: Store, catalog: GoCatalog | None = None):
+    def __init__(self, policy: Policy, store: Store, catalog: GoCatalog | None = None, clock=time.time):
         self.policy = policy
         self.store = store
         self.catalog = catalog  # the Go catalog (GW-CATALOG-GO); None = every Go model is not-in-catalog
@@ -197,6 +211,46 @@ class Capacity:
         self.cooled_until: dict[tuple[str, str, str], float] = {}
         self.rejected: dict[tuple[str, str], Rejection] = {}  # (rail, credential fingerprint) -> the mark
         self._hold: dict[tuple[str, str], float] = {}  # the last hold/backoff per credential, for doubling
+        # The four dicts above are store-backed (`capacity_marks`): every set / pop below writes through
+        # under this lock, and a new gateway on the same DB starts from what the last one held.
+        self._reload(clock())
+
+    def _reload(self, now: float) -> None:
+        """Load the stored marks a restart must keep, dropping (and deleting) the ones the in-memory
+        logic would have let go by `now`: an expired cooldown or latch, a no-probe rail's rejection
+        past its half-open (the hold row stays: a repeat still doubles), anything on a rail the
+        policy no longer names. A probe rail's rejection past its due time is kept — the first
+        re-probe pass sends it."""
+        kept: dict[str, int] = {"cooled": 0, "latched": 0, "rejected": 0, "hold": 0}
+        dropped = 0
+        with self._lock:
+            for row in self.store.marks_load():
+                kind, key, until = row["kind"], row["key"], row["until"]
+                rail = key.split("|", 1)[0]
+                rp = self.policy.rails.get(rail)
+                keep = rp is not None and kind in kept
+                if keep and kind in ("cooled", "latched"):
+                    keep = until is not None and until > now
+                if keep and kind == "rejected":
+                    keep = until is not None and (rp.credential_probe is not None or until > now)
+                if not keep:
+                    self.store.mark_delete(kind, key)
+                    dropped += 1
+                    continue
+                if kind == "cooled":
+                    r, model, provider = key.split("|", 2)
+                    self.cooled_until[(r, model, provider)] = until
+                elif kind == "latched":
+                    self.latched_until[rail] = until
+                elif kind == "rejected":
+                    fp = key.split("|", 1)[1]
+                    self.rejected[(rail, fp)] = Rejection(row["stack"] or "", float(row["at"] or until), until, float(row["backoff"] or 0.0))
+                else:
+                    fp = key.split("|", 1)[1]
+                    self._hold[(rail, fp)] = float(row["backoff"] or 0.0)
+                kept[kind] += 1
+        log.info("capacity: reloaded %d marks from the store (%d cooled, %d latched, %d rejected, %d holds; %d dropped as expired)",
+                 sum(kept.values()), kept["cooled"], kept["latched"], kept["rejected"], kept["hold"], dropped)
 
     # -- the data plane reports --------------------------------------------------------------
     def observe(self, rail: str, status: int, headers: Mapping[str, str], now: float, model: str | None = None,
@@ -218,28 +272,37 @@ class Capacity:
             if model is not None:
                 with self._lock:
                     self.cooled_until[(rail, model, provider)] = until
+                    self.store.mark_set("cooled", _cell_key(rail, model, provider), until)
                 log.warning("capacity: %s 429 on %s%s — cell cooled for %.0f s", rail, model,
                             f" @{provider}" if provider else "", until - now)
                 note = "+cell-cooled"
             if adm.latch_429_hold_s and adm.latch_scope == "account":
                 with self._lock:
                     self.latched_until[rail] = until
+                    self.store.mark_set("latched", rail, until)
                 log.warning("capacity: %s 429 — rail latched for %.0f s (account scope: the rail declares latch_429_hold_s)",
                             rail, until - now)
                 note += "+429-latched"
         elif 200 <= status < 300:
             with self._lock:
-                if self.latched_until.pop(rail, 0.0) > now:
-                    log.info("capacity: %s 2xx while latched — latch cleared", rail)
-                    note = "+latch-cleared"
-                if model is not None and self.cooled_until.pop((rail, model, provider), 0.0) > now:
-                    log.info("capacity: %s 2xx on %s%s while cooled — cell cleared", rail, model, f" @{provider}" if provider else "")
-                    note += "+cell-cleared"
-                if credential is not None and self.rejected.pop((rail, fingerprint(credential)), None) is not None:
-                    log.info("capacity: %s 2xx on a rejected credential — credential cleared", rail)
-                    note += "+credential-cleared"
+                if rail in self.latched_until:
+                    if self.latched_until.pop(rail) > now:
+                        log.info("capacity: %s 2xx while latched — latch cleared", rail)
+                        note = "+latch-cleared"
+                    self.store.mark_delete("latched", rail)
+                if model is not None and (rail, model, provider) in self.cooled_until:
+                    if self.cooled_until.pop((rail, model, provider)) > now:
+                        log.info("capacity: %s 2xx on %s%s while cooled — cell cleared", rail, model, f" @{provider}" if provider else "")
+                        note += "+cell-cleared"
+                    self.store.mark_delete("cooled", _cell_key(rail, model, provider))
                 if credential is not None:
-                    self._hold.pop((rail, fingerprint(credential)), None)
+                    key = (rail, fingerprint(credential))
+                    if self.rejected.pop(key, None) is not None:
+                        log.info("capacity: %s 2xx on a rejected credential — credential cleared", rail)
+                        note += "+credential-cleared"
+                        self.store.mark_delete("rejected", _cred_key(*key))
+                    if self._hold.pop(key, None) is not None:
+                        self.store.mark_delete("hold", _cred_key(*key))
         return note
 
     def reject_credential(self, rail: str, credential: str, now: float, stack: str = "") -> None:
@@ -256,6 +319,8 @@ class Capacity:
             backoff = min(prev * 2, cap) if prev else first
             self._hold[key] = backoff
             self.rejected[key] = Rejection(stack, now, now + backoff, backoff)
+            self.store.mark_set("hold", _cred_key(*key), None, backoff=backoff)
+            self.store.mark_set("rejected", _cred_key(*key), now + backoff, stack=stack, at=now, backoff=backoff)
         log.error("capacity: %s credential %s rejected upstream — admission skips it; %s in %.0f s",
                   rail, key[1], "re-probed" if rp.credential_probe else "re-admitted half-open", backoff)
 
@@ -269,6 +334,7 @@ class Capacity:
                 return None
             if self.policy.rails[rail].credential_probe is None and now is not None and now >= mark.next_at:
                 del self.rejected[key]  # half-open; `_hold` keeps the backoff, so a repeat doubles it
+                self.store.mark_delete("rejected", _cred_key(*key))
                 log.info("capacity: %s credential %s re-admitted half-open after %.0f s", rail, key[1], mark.backoff)
                 return None
             return mark.next_at
@@ -288,13 +354,17 @@ class Capacity:
             if ok:
                 del self.rejected[(rail, fp)]
                 self._hold.pop((rail, fp), None)
+                self.store.mark_delete("rejected", _cred_key(rail, fp))
+                self.store.mark_delete("hold", _cred_key(rail, fp))
                 log.info("capacity: %s credential %s re-verified by the probe — cleared", rail, fp)
                 return
             if ok is False:
                 cap = self.policy.rails[rail].credential_probe.backoff_s[1]
                 mark.backoff = min(mark.backoff * 2, cap)
                 self._hold[(rail, fp)] = mark.backoff
+                self.store.mark_set("hold", _cred_key(rail, fp), None, backoff=mark.backoff)
             mark.next_at = now + mark.backoff
+            self.store.mark_set("rejected", _cred_key(rail, fp), mark.next_at, stack=mark.stack, at=mark.since, backoff=mark.backoff)
         log.warning("capacity: %s credential %s probe %s — next in %.0f s", rail, fp, "rejected again" if ok is False else "inconclusive",
                     mark.backoff)
 
@@ -302,6 +372,8 @@ class Capacity:
         with self._lock:
             self.rejected.pop((rail, fp), None)
             self._hold.pop((rail, fp), None)
+            self.store.mark_delete("rejected", _cred_key(rail, fp))
+            self.store.mark_delete("hold", _cred_key(rail, fp))
         log.info("capacity: %s credential %s cleared — %s", rail, fp, why)
 
     def cooled(self, rail: str, model: str, now: float, provider: str = "") -> float | None:
