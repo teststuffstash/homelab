@@ -250,7 +250,7 @@ class SessionService:
     ):
         self.policy = policy
         self.store = store
-        self.capacity = capacity or Capacity(policy, store)
+        self.capacity = capacity or Capacity(policy, store, clock=clock)
         self.resolver = resolver
         self.metrics = metrics
         self.self_url = self_url

@@ -124,7 +124,7 @@ def create_app(
     m.bind_extra(catalog.render)
     # GW-SESSIONS-PULL's identity check: the kube TokenReview API (tests hand a StaticTokenReviews in).
     sessions = SessionService(policy, store, resolver, m, settings.self_url, clock,
-                              capacity=Capacity(policy, store, catalog), reviewer=reviewer or KubeTokenReviews())
+                              capacity=Capacity(policy, store, catalog, clock), reviewer=reviewer or KubeTokenReviews())
     sessions.pods = pods or KubePods()
     m.bind_transport_facts(lambda: sessions.capacity.cooled_counts(clock()), sessions.capacity.rejected_counts)
     # The openrouter rail's provider axis (GW-RAIL-OPENROUTER): the endpoint snapshot the catalog leg

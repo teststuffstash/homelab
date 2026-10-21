@@ -250,8 +250,9 @@ blocks lifts.
     re-admitted **half-open** after `credential_hold_s` (**900 s**): the next ride is the probe, and
     a fresh rejection doubles the hold.
   A walk blocked only by rejected credentials defers `credential-rejected` with `retry_after_s` =
-  the earliest re-verification. ⚖ The marks live in memory: a restart forgets them, and the next
-  rejection re-marks. Nothing unverified is carried across a restart. A policy refusal or an edge
+  the earliest re-verification. The marks — the cooldowns, the latch, the rejections and the
+  backoff a repeat doubles from — are store-backed and survive a pod roll
+  ([§Kept across a restart](#kept-across-a-restart)). A policy refusal or an edge
   refusal ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)) rejects nothing.
 - **Go window draw** (`opencode`, per cell): each `window_draw.windows.<w>` (`5h` / `7d` / `30d`)
   sums the **model's** metered (2xx) requests inside the window open at `now`, priced from the
@@ -381,6 +382,44 @@ after the one just run).
 | "the other Go models still admit ⚖" | `catalog-retired` | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
 | "no catalog snapshot at all: every Go model is not-in-catalog ⚖" | none — a fresh store, no refresh yet | worker, `rail: opencode` || defer | — | not-in-catalog | 60 (`defer_retry_s`: no refresh is scheduled yet) |
 
+### Kept across a restart
+
+The capacity state is written through to the store's `capacity_marks` table as it changes — one row
+per mark: `cooled` (the cell `rail|model|provider`, until its reset), `latched` (the rail, until its
+reset), `rejected` (`rail|<credential fingerprint>` with the mark's stack, `at`, `backoff` and
+`until` = its next re-verification) and `hold` (the backoff a credential's next rejection doubles
+from; it has no expiry in memory, so none in the store) — never a credential value. A new gateway on
+the same DB reloads them at start and logs `capacity: reloaded N marks …`; the fail-open `:memory:`
+store ([GW-HEALTH](health.md#gw-health)) keeps none. Operator ruling 2026-10-21: the old proxy
+persisted its latches (`router.latch_save`), so a roll must not forget what a 429 or a 401 taught.
+⚖ What a reload drops is exactly what the in-memory logic would already have let go by then: a
+cooldown or latch past its `until`, a no-probe rail's rejection past its half-open (its `hold`
+stays, so a repeat still doubles), a mark on a rail the policy no longer names. ⚖ A probe rail's
+rejection past its due time reloads as due — the first re-probe pass after the roll sends it —
+because the in-memory mark waits for the probe's verdict, never a clock. The roll in every row:
+the first gateway's store closes, the clock advances, a second gateway starts on the same DB path.
+
+| description | arrange (the first gateway) | the roll | after the roll (the second gateway) | body || decision | rail | reason | retry_after_s |
+|---|---|---|---|---||---|---|---|---|
+| "a cooled cell survives a restart" | worker ride on openrouter → 429, reset T0 + 42 s | +10 s | — | worker, `rail: openrouter` || defer | — | cell-cooled | 32 |
+| "a 429 latch on the subscription survives a restart" | reviewer ride on anthropic → 429 (`retry-after: 30`) | +10 s | — | reviewer, `rail: anthropic` || defer | — | rail-latched | 20 |
+| "a rejected credential's mark survives with its backoff" | worker ride on opencode → `upstream-401-key-expired` | +10 s | — | worker, `rail: opencode` || defer | — | credential-rejected | 50 |
+| "a mark cleared by a 2xx before the roll is gone after it" | worker ride on openrouter → 429 (reset T0 + 42 s), the same session → 200 | +10 s | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
+| "a half-open hold survives: a repeat rejection after the roll doubles the hold ⚖" | prober ride on anthropic → `upstream-401` | +900 s | a prober ride on anthropic → `upstream-401` (admitted half-open, then rejected again) | prober || defer | — | credential-rejected | 1800 |
+
+| description | arrange (the first gateway) | the roll | the probe answers || probes sent | decision | reason | retry_after_s |
+|---|---|---|---||---|---|---|---|
+| "the re-probe schedule continues after the roll: a probe rejected again doubles" | worker ride on opencode → `upstream-401-key-expired` | +60 s | `upstream-401-key-expired` || 1 | defer | credential-rejected | 120 |
+| "a probe due while the gateway was down is sent on the first pass after the roll ⚖" | the same | +90 s | `upstream-ok` || 1 | dispatch (opencode) | — | — |
+| "a probe is not sent before it is due, across the roll" | the same | +30 s | `upstream-ok` || 0 | defer | credential-rejected | 30 |
+
+| description | arrange (the first gateway) | the roll || observed on the second gateway |
+|---|---|---||---|
+| "an expired mark is not reloaded" | worker ride on openrouter → 429, reset T0 + 42 s | +42 s || `capacity_marks` holds no row after the load (the expired cooldown deleted); worker, `rail: openrouter` → dispatch openrouter |
+| "the gauges show the reloaded counts on the first scrape ⚖" | worker ride on openrouter → 429 (reset T0 + 42 s); worker ride on opencode → `upstream-401-key-expired` | +10 s || `gateway_cells_cooled{rail="openrouter"}` 1, `gateway_credentials_rejected{rail="opencode"}` 1 — `GET /metrics` before any admission |
+| "the reload is logged" | the same | +10 s || `capacity: reloaded 3 marks from the store (1 cooled, 0 latched, 1 rejected, 1 holds; 0 dropped as expired)` |
+| "the memory store keeps no mark ⚖" | worker ride on openrouter → 429 (reset T0 + 42 s) on a `:memory:` gateway | +10 s, a new `:memory:` store || dispatch openrouter |
+
 ### The provider axis (openrouter)
 
 Once the endpoint snapshot covers a model ([GW-RAIL-OPENROUTER §Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto),
@@ -412,7 +451,6 @@ parasail/fp8, none of which clears the floors ([worlds/README.md](../worlds/READ
 | description | input || v0 answer | the gap |
 |---|---||---|---|
 | "⚑ gap: FU-109 tier thresholds" | a dispatch-unit tier asking past the 5h threshold || deferred at the per-window threshold | the old proxy RAISES a window's threshold per consumer tier (`model-classes.json` `tier_thresholds`); the gateway's `light`/`standard`/`heavy` is not that vocabulary |
-| "⚑ gap: a latch survives a restart" | a 429 latch, a cooled cell or a rejected credential, then a gateway roll || forgotten; the next 429 / 401 marks it again | the old proxy persists its latches (`router.latch_save`); these are in memory |
 | "⚑ gap: the OpenRouter account latch" | 402s / credit below the floor on a stack key || no latch | the old proxy's `rpd` / `credit` / hard-402 legs (homelab#158) and the key headroom poll ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)); cross-model 429s are per-cell facts here (§Capacity), not an account signal |
 | "⚑ gap: the free-tier key budget spans every `:free` cell" | a 429 whose body says `limit_source: openrouter_free_tier_per_minute` || only the cell that saw it cools; the next `:free` cell 429s once and cools itself | the limit is the key's across `:free` models (20 req/min in the experiment's headers); reading the body's `limit_source` would cool them as one group — not built |
 | "⚑ gap: a Go 402" | an upstream 402 on opencode || no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
