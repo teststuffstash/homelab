@@ -35,6 +35,13 @@ STDIN         # session's agent-session.sh invocations inherit it (its WIP pre-f
 STDIN         # so the raise stays launcher-owned end-to-end — the LLM never assembles the number.
 STDIN         - name: AGENT_WIP_LIMIT
 STDIN           value: "2"
+STDIN         # FU-270 (c), the loop flip (2026-10-21): the worker launcher that runs IN this pod
+STDIN         # (agents/agent-session.sh) admits every ride through the agent-gateway's POST /sessions
+STDIN         # (gateway/specs/use-cases/uc-1-worker-ride.md) instead of the old proxy's /route. The
+STDIN         # launcher honours the knob for the PLATFORM stack only and takes today's /route path
+STDIN         # elsewhere with a WARN line; the knob is env-only — no claim field — by design.
+STDIN         - name: AGENT_GATEWAY
+STDIN           value: "sessions"
 STDIN         # Provenance for the transcript manifest (docs/agents/observability-and-retro.md §A1).
 STDIN         - name: MODEL
 STDIN           value: "fable"
@@ -97,8 +104,8 @@ STDIN       volumeMounts:
 STDIN         - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
 STDIN         # GW-SESSIONS-AUTH (FU-270): the gateway caller token at the worker launcher's DEFAULT
 STDIN         # AGENT_GATEWAY_CALLER_TOKEN_FILE path (agents/agent-session.sh, which runs IN this pod —
-STDIN         # the scan Workflow pod only spawns this one). INERT until AGENT_GATEWAY=sessions reaches
-STDIN         # this pod (the loop flip, the operator's later act — nothing here sets it).
+STDIN         # the scan Workflow pod only spawns this one). LIVE since the loop flip: AGENT_GATEWAY=sessions
+STDIN         # is set in this pod's env above (FU-270 (c)), so every platform dispatch reads this token.
 STDIN         - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
 STDIN         # Persist Claude Code session transcripts (the interactive session's only "log"). Mounts a
 STDIN         # subdir of ~/.claude so the image-baked settings.json / .claude.json are untouched.
@@ -128,8 +135,8 @@ STDIN     # GW-SESSIONS-AUTH (FU-270): this pod's projected ServiceAccount token
 STDIN     # agentstack-loop is a callers entry in the gateway policy), audience agent-gateway, the
 STDIN     # shortest expiry the API allows; kubelet rotates the file and the launcher re-reads it per
 STDIN     # call. Same shape as the gateway-token volume in agents/coordinator/specs-review-argo.yaml.
-STDIN     # Pod spec only: the gateway's TokenReview is its own RBAC. Inert until the
-STDIN     # AGENT_GATEWAY=sessions flip. (No backticks in this heredoc: it is UNQUOTED, they execute.)
+STDIN     # Pod spec only: the gateway's TokenReview is its own RBAC. Live since the AGENT_GATEWAY=sessions
+STDIN     # flip in the env above (FU-270 (c)). (No backticks in this heredoc: it is UNQUOTED, they execute.)
 STDIN     - name: gateway-token
 STDIN       projected:
 STDIN         sources:
