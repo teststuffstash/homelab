@@ -636,6 +636,31 @@ session held the rail's one slot until a hand `DELETE` (now the verb re-opens a 
 releases any still-active session of its task); and a `ControlPlaneNodeMemoryLow` on wk-metal-02
 fired inside the window — not the window's (the gateway rides wk-04), handed off to the responder.
 
+### The second ride — 2026-10-22 22:26–22:27Z: the capture decides it (FU-270, step 4)
+
+Same window, the capture live (#2835, image `gb29f204a6273`): admitted on live headroom, the
+same 502 `upstream-content-type` in 1.3 s — and this time the ERROR line carried the answer.
+**The backend's body IS a Responses event stream** (`event: response.created` … `"status":
+"in_progress"`, `"model": "gpt-6-astra"`, `"access_programs": {"cyber": "standard"}`,
+4,125 bytes read) — sent with **no `Content-Type` header at all** (`content-type=''`,
+`transfer-encoding: chunked`, Cloudflare in front: `cf-ray`, `cf-cache-status`, `server`). The
+gateway's strict rule (a 200 must say `text/event-stream`) refused a good stream. So the
+**vendor-header hypothesis is wrong**: the fixed six request headers were enough for the backend
+to answer a stream — "observed ≠ required" held. Fixed as: a 200 whose content-type is PRESENT
+and not SSE is refused; one with NO content-type is relayed (the bounded parser fails closed on
+a non-SSE body) — a ⚖ GW-RAIL-CODEX row with the live shape as its fixture.
+
+**Two more live facts from the same header list**, both for the gap rows: the streaming answer
+carries the account's headroom as response headers — `x-codex-primary-used-percent`,
+`x-codex-primary-window-minutes`, `x-codex-primary-reset-at` / `-reset-after-seconds`, the
+`secondary` set, `x-codex-primary-over-secondary-limit-percent`, `x-codex-active-limit`,
+`x-codex-plan-type`, `x-codex-credits-*` — the "upstream headers" headroom source
+(`GW-CODEX-HEADROOM`'s `source: upstream`, today a ⚑ gap) exists on the wire; and
+`x-codex-turn-state` is issued on the very first turn (leg B's round trip has something to
+carry). Also `x-codex-safety-buffering-enabled` / `-faster-model` and `x-models-etag`. Values
+were not captured (names only — the capture's rule); the usage poll stays the admission source.
+The release worked this time (the hardened verb, #2830); the session row: 1 request, released.
+
 ## Recorded live protocol experiment — 2026-10-22 (FU-270)
 
 **Plan, not implemented or live evidence.** The operator asked for captured requests/responses

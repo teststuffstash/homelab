@@ -191,8 +191,14 @@ class CodexProxy:
         status = resp.status_code
         refusal = responses.http_failure(status)
         ctype = resp.headers.get("content-type", "").split(";")[0].strip()
-        if refusal is None and status == 200 and ctype != "text/event-stream":
+        # A 200 whose content-type is PRESENT and not an event stream is refused; a 200 with NO
+        # content-type is relayed as a stream — the live backend omits the header on its streaming
+        # answer (2026-10-22 22:27Z, the second ride's capture: a real Responses stream behind
+        # Cloudflare with no Content-Type; the bounded parser fails closed on a non-SSE body).
+        if refusal is None and status == 200 and ctype and ctype != "text/event-stream":
             refusal = "upstream-content-type"
+        if refusal is None and status == 200 and not ctype:
+            log.info("codex upstream 200 without a content-type — relayed as a stream session=%s", row.id)
         if refusal:
             # An auth refusal's body is never read (GW-RAIL-CODEX: 401/403 never relay a body — not into a log either).
             preview = await _preview(resp) if refusal != "upstream-auth" else "<not read: auth>"

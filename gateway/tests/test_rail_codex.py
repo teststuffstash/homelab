@@ -50,6 +50,7 @@ Upstream failures:
 | an upstream 5xx is typed | upstream-500 | 502 | upstream-http-error | 1 |
 | a redirect is never followed | upstream-302 | 502 | upstream-http-error | 1 |
 | a non-SSE 200 is refused | upstream-wrong-type | 502 | upstream-content-type | 1 |
+| a 200 with no content-type is relayed as a stream | upstream-ok-no-ctype | 200, the stream completes | — | 1 |
 | a refused answer is captured: content-type, header names, a bounded preview | upstream-wrong-type / upstream-500 | the ERROR line carries them | — | 1 |
 | an auth refusal's body is never read, not even into the log | upstream-401 | the ERROR line says <not read: auth>; the body's marker is nowhere | — | 1 |
 | an unreachable upstream is typed | upstream-down | 502 | upstream-unreachable | 0 |
@@ -431,3 +432,21 @@ async def test_auth_refusal_body_never_read(codex_app, codex_gw, codex_upstream,
     with then("the ERROR line says the body was not read; the marker appears in no log line", line={"actual": line}):
         assert "<not read: auth>" in line
         assert not any("DUMMY-SECRET-LEAK" in rec.getMessage() for rec in caplog.records)
+
+
+async def test_stream_without_content_type(codex_app, codex_gw, codex_upstream, clock, caplog):
+    """row: a 200 with no content-type is relayed as a stream"""
+    world("policy-codex", "upstream-ok-no-ctype")
+    codex_upstream.behaviour = "upstream-ok-no-ctype"
+    with given("a codex session"):
+        doc = await _admitted(codex_app, codex_gw, clock)
+    with when("POST /openai/v1/responses — the upstream streams SSE with NO content-type header (the live backend's shape)"), \
+         caplog.at_level("INFO", logger="gateway.codex"):
+        r = await ride(codex_gw, doc, body(), label="no-ctype")
+    then_eq("status", r.status_code, 200)
+    terminal = [ln for ln in r.text.splitlines() if ln.startswith("event: ")][-1] if "event: " in r.text else ""
+    then_eq("stream completed", terminal, "event: response.completed", claim="the stream is relayed to its completion (terminal event = response.completed)")
+    info = next((rec.getMessage() for rec in caplog.records if "without a content-type" in rec.getMessage()), "")
+    with then("INFO line says the content-type was absent", info={"expected": "codex upstream 200 without a content-type — relayed as a stream session=<id>", "actual": info}):
+        assert info.startswith("codex upstream 200 without a content-type — relayed as a stream session=")
+    then_eq("upstream calls", len(codex_upstream.calls), 1)
