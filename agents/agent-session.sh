@@ -1580,12 +1580,12 @@ if [ -n "${RECIPE:-}" ]; then
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_GOOSE_FLAG}";;
-    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
+    opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP wired via OPENCODE_CONFIG (merged into /tmp/opencode-session.json in the opencode-session-config block above) — #1276
     # codex (FU-270, the explicit canary cell): the image's agent-codex seam runs `codex exec --json` in
     # the prepared workdir and renders the gateway provider block from the pulled env (GW-SESSIONS-ENV);
     # the pod IS the sandbox, as for claude's --dangerously-skip-permissions. MCP is not wired for codex
     # yet (the spike's open list) — a codex ride gets no --mcp attach.
-    codex) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP wired via OPENCODE_CONFIG (merged into /tmp/opencode-session.json in the opencode-session-config block above) — #1276
+    codex) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
   esac
   # <<<REPLAY:harness-run-cmd<<<
 fi

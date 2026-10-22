@@ -36,7 +36,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
-case "$PROMPT" in *\"*|*\\*|*$'\n'*) echo "the prompt must carry no double quote, backslash or newline (it rides inside the pod's run command)" >&2; exit 2;; esac
+case "$PROMPT" in *\"*|*\\*|*\$*|*\`*|*$'\n'*) echo "the prompt must carry no double quote, backslash, dollar, backtick or newline (it rides inside the pod's run command, which the pod's shell expands)" >&2; exit 2;; esac
 pf=""
 cleanup() { [ -n "$pf" ] && kill "$pf" 2>/dev/null || true; }
 trap cleanup EXIT
