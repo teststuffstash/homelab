@@ -17,6 +17,7 @@ from . import __version__
 from .capacity import Capacity
 from .catalog import GoCatalog
 from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
+from .codex_usage import UsagePoll
 from .config import Policy, Settings, wire_model
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
 from .liveness import KubePods, PodSource
@@ -156,6 +157,12 @@ def create_app(
         # a restart renders nothing until the next one (the headroom is forgotten with the process).
         codex.headroom.on_accept = lambda snapshot: m.subscription_report("codex", snapshot.windows)
     codex_proxy = CodexProxy(sessions, m, codex, client)
+    # GW-CODEX-HEADROOM §Poll: the gateway's own usage observation — the only report producer today.
+    # Runs on the lifespan when the rail has a credential backend AND CODEX_USAGE_URL names the endpoint.
+    codex_poll = UsagePoll(codex, client, settings.codex_usage_url, m, clock) if codex is not None else None
+    if codex is not None and not (codex_poll and codex_poll.enabled):
+        log.warning("codex usage poll dark: %s — the rail answers quota-unknown",
+                    "CODEX_USAGE_URL unset" if not settings.codex_usage_url else "no credential backend")
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -173,10 +180,14 @@ def create_app(
         # persisted refreshed_at, i.e. the canary window (#2775 gap 2).
         or_refresher = (asyncio.create_task(orcatalog.run(), name="openrouter-catalog")
                         if orcatalog.enabled and settings.or_catalog_refresh_s > 0 else None)
+        # The codex usage poll's schedule (GW-CODEX-HEADROOM §Poll): a poll at start (a restart needs a fresh
+        # report — the headroom is forgotten with the process), then every poll_interval_s.
+        poller = (asyncio.create_task(codex_poll.run(), name="codex-usage-poll")
+                  if codex_poll is not None and codex_poll.enabled else None)
         try:
             yield
         finally:
-            for t in (task, reaper, refresher, or_refresher):
+            for t in (task, reaper, refresher, or_refresher, poller):
                 if t is not None:
                     t.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -222,6 +233,7 @@ def create_app(
     app.state.proxy = proxy
     app.state.codex = codex
     app.state.codex_proxy = codex_proxy
+    app.state.codex_poll = codex_poll
     app.state.catalog = catalog
     app.state.providers = providers
     app.state.orcatalog = orcatalog

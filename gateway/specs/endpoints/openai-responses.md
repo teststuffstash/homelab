@@ -33,7 +33,7 @@ admission reasons and the error envelope.
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, dark — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP`; `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
-| [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `admission.reasons` | — | v0, dark — authenticated report ingress and the codex window gauges are `⚑ gap` |
+| [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `headroom.poll`, `admission.reasons` | — | v0, dark — the gateway's own usage poll is the report producer (§Poll); the jail ingress and upstream-header reading stay `⚑ gap` |
 | [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | gateway-local SQLite with hash-gated seed recovery; live durability remains unverified |
 | [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport wired; rail absent from policy |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked — exact on this rail |
@@ -233,6 +233,45 @@ before the credential store is read, and it reserves nothing ⚖.
 | "the rail's session cap still applies" | fresh; 2 codex sessions active (`max_sessions` 2) || defer | rail-capacity | 60 |
 | "an admitted session is not re-gated on the data plane ⚖" | dispatched at 20 %, then a limited report || data plane 200 | — (an upstream 429 is the in-session signal) | — |
 
+### Poll
+
+The gateway polls the account usage endpoint **itself** — the one credential owner observes its
+own account (the operator ruling of 2026-10-19: the account is enrolled in the gateway, so no second
+reader holds its token). Every `poll_interval_s` (policy, required, strictly below `max_age_s` so a
+healthy schedule never goes stale — `policy-codex`: 30 s under 120 s ⚖; the deployed value is the
+policy's) one `GET CODEX_USAGE_URL` (no default; unset = no poll, the rail stays `quota-unknown`)
+goes out with `authorization: Bearer <access_token>` and `chatgpt-account-id`, through
+`Lifecycle.acquire()` — so a poll inside the refresh margin rotates the credential exactly like a
+request would, under the same lock. The answer is translated into the report above (`source:
+poll`, `observed_at` = now): `rate_limit.limit_reached || !allowed` → `limited`; each of
+`primary_window` / `secondary_window` → `{used_percent, resets_at: reset_at, window_minutes:
+limit_window_seconds / 60}` (the native client's basis is the absolute `reset_at`, so is this
+one's ⚖). A null window is **omitted**, which the profile check refuses whole — a missing window is
+unknown, never zero. The payload shape is the 2026-10-22 observation (the spike §Live usage payload
+shape; `tests/fixtures/codex-usage-observed.json` mirrors it with synthetic values); the identity
+fields it carries (`account_id`, `email`, `user_id`) are never read, logged, attached or rendered.
+Every outcome is counted on `gateway_codex_usage_poll_total{outcome}` ([GW-METRICS](metrics.md#gw-metrics)),
+every outcome from 0; a refused or failed poll leaves the last ACCEPTED report standing.
+
+| description | the endpoint answers (world `policy-codex`, now T; the stored credential expires at T+1) || outcome | verdict after |
+|---|---||---|---|
+| "the observed shape is accepted, admits and renders the gauges" | 200, 20 % / 64 % (5h / 7d), allowed || accepted | admit — `gateway_subscription_utilization{rail="codex",window="5h"}` 0.2, `"7d"` 0.64 |
+| "the poll rides the lifecycle: one owner rotates once, the rotated bearer and the account header go out ⚖" | 200 || accepted — the exchange ran once, the request carried the ROTATED bearer, `chatgpt-account-id`, `accept: application/json`; the store is `ready` | admit |
+| "a missing window is refused whole — unknown, never zero ⚖" | 200, `secondary_window: null` || quota-invalid | quota-unknown |
+| "a window outside the profile is refused" | 200, `limit_window_seconds: 86400` || quota-invalid | quota-unknown |
+| "the vendor's limit flags limit" | 200, `limit_reached: true` / `allowed: false` || accepted | quota-limited |
+| "a non-bool flag or a non-integer window field is refused" | 200, `allowed: 1` / `used_percent: 20.5` / `reset_at: "soon"` / `rate_limit: []` || quota-invalid | quota-unknown |
+| "an upstream 401 is counted and changes nothing ⚖" | 401 after one accepted || upstream-auth (not a credential verdict — a usage 401 alone is no revocation evidence, spike §Refresh and headroom implications) | admit (the last accepted report stands) |
+| "a 429 or 500 is an http error, nothing accepted" | 429 / 500 || upstream-http-error | quota-unknown |
+| "an unreachable endpoint and a timeout are told apart" | connect error / read timeout || upstream-unreachable / upstream-timeout | quota-unknown |
+| "a non-JSON, wrong-type or oversize body is refused ⚖" | `text/html`; `application/json` that is not JSON; 70 KiB (bound 64 KiB) || upstream-content-type | quota-unknown |
+| "a store that does not answer is transient; a recovery marker is unresolved" | (the store) || credential-transient / credential-unresolved — the endpoint is never contacted | quota-unknown |
+| "identity never leaves the poll" | 200 with DUMMY account / email / user ids || accepted — the report carries exactly `observed_at`, `source`, `limited`, `windows`; no log line at DEBUG carries an identity value | admit |
+| "a dark rail has no poll" | no `CODEX_USAGE_URL`, or no credential backend || not enabled — a forced poll contacts nothing | quota-unknown |
+| "the schedule polls at start, before the first interval ⚖" | `run()` || one poll before any sleep (a restart needs a fresh report) | admit |
+| "poll_interval_s is required and sits below max_age_s" | policy `120` / `0` / absent / `true` (max_age_s 120) || PolicyError | — |
+| "the counter's label set is the poll's outcome set" | — || `gateway_codex_usage_poll_total`'s `outcome` values = the poll's outcomes | — |
+
 ### Gauges
 
 An ACCEPTED report — and only one — sets the two subscription gauges of
@@ -257,7 +296,7 @@ forgotten with the process — "a gateway restart forgets" above). The Grafana p
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: authenticated report ingress ⚖" | a poll of the account usage endpoint, a jail `rate_limits` event, upstream headers || none reach the gateway — the gauges above stay absent in production | the token-gated ingest + the usage poll (spike §Candidate shape); the vendor payload's SHAPE was observed once — the operator's leg-E login probe, host, 2026-10-22 ~20:00Z, recorded (field/type structure only) in `docs/spikes/codex-subscription-rail.md` §Live usage payload shape: both windows, integer `used_percent`, absolute `reset_at`, `rate_limit_reached_type` — the poll itself is still unbuilt |
+| "⚑ gap: authenticated report ingress ⚖" | a jail `rate_limits` event, upstream headers || neither reaches the gateway — the §Poll above is the only producer | the token-gated jail ingest (spike §Candidate shape) and upstream-header reading; the poll's LIVE answer on the enrolled account is the canary's to observe (the shape is known — the spike §Live usage payload shape, 2026-10-22 — the values are not) |
 | "⚑ gap: reservation" | two admissions at 94 % || both dispatched | reports do not meter concurrent use; the session cap is the only bound |
 
 <details markdown="1"><summary>Evidence</summary>

@@ -29,6 +29,7 @@ the process is down.
 | [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned there) | `families.gateway_provider_requests_total`, `families.gateway_provider_failovers_total` | — | linked — the provider axis: attempts per cell and failovers; their values are rows there and below |
 | [GW-CATALOG-OR](catalog.md#gw-catalog-or) (owned there) | `families.gateway_openrouter_catalog_*`, `families.gateway_openrouter_cells`, `families.gateway_canary_*` | — | linked — the OpenRouter catalog's freshness and refresh outcomes, the cells by entry state, the canary meter and verdicts; their values are rows there |
 | [GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges) (owned there) | `families.gateway_subscription_utilization`, `families.gateway_subscription_reset_seconds` | — | linked — on the codex rail the two gauges come from an ACCEPTED headroom report, not from headers; their values are rows there |
+| [GW-CODEX-HEADROOM §Poll](openai-responses.md#poll) (owned there) | `families.gateway_codex_usage_poll_total` | — | linked — the gateway's own usage poll by outcome, every outcome from 0; its values are rows there |
 
 ## GW-METRICS
 
@@ -47,6 +48,7 @@ the process is down.
 | `gateway_credentials_rejected` | gauge | `rail` | rail credentials an upstream 401/403 rejected, until a 2xx on them or a new value — the alert hook for a dead key; every rail renders from 0 ⚖ |
 | `gateway_strikes_total` | counter | `class`, `source` | strikes written to the store ([GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)): `class` a strike class of the one vocabulary, `source` `outcome` (the consumer) or `gateway` (a transport fact) |
 | `gateway_sessions_reaped_total` | counter | `rail` | sessions released because their pod was gone ([GW-SESSIONS-LIVENESS](sessions.md#gw-sessions-liveness)); every rail renders from 0 |
+| `gateway_codex_usage_poll_total` | counter | `outcome` | the codex rail's usage polls by outcome ([GW-CODEX-HEADROOM §Poll](openai-responses.md#poll)): `accepted` = the headroom took the report; the rest name why it did not. Every outcome renders from 0 ⚖ — the staleness alert reads `increase()` of `accepted` |
 | `gateway_credential_probes_total` | counter | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
 | `gateway_requests_incomplete_total` | counter | `rail`, `dialect`, `reason` | 2xx answers whose body stopped before its end — `no-terminal`, `timeout`, `transport-error`, `client-closed` ([GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)) |
 | `gateway_go_catalog_age_seconds` | gauge | `source` | seconds since the source's last good snapshot was fetched — absent until one exists ([GW-CATALOG-GO](catalog.md#gw-catalog-go)) |

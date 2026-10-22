@@ -1,0 +1,30 @@
+{
+  "_comment": "The account usage payload's SHAPE as observed on 2026-10-22 by the leg-E login probe (docs/spikes/codex-subscription-rail.md §Live usage payload shape) — field names and types only; every value here is synthetic, identity fields are DUMMY strings. The poll reads rate_limit.{allowed,limit_reached,primary_window,secondary_window} and nothing else (GW-CODEX-HEADROOM §Poll).",
+  "account_id": "DUMMY-SECRET-account-id",
+  "email": "DUMMY-SECRET-email@example.test",
+  "user_id": "DUMMY-SECRET-user-id",
+  "plan_type": "plus",
+  "additional_rate_limits": null,
+  "code_review_rate_limit": null,
+  "credits": {
+    "approx_cloud_messages": [0, 0],
+    "approx_local_messages": [0, 0],
+    "balance": "0",
+    "has_credits": false,
+    "overage_limit_reached": false,
+    "unlimited": false
+  },
+  "model_usage": {
+    "fixture-model": {"available": true, "available_at": null, "credits_would_enable": false}
+  },
+  "promo": null,
+  "rate_limit": {
+    "allowed": true,
+    "limit_reached": false,
+    "primary_window": {"used_percent": 20, "limit_window_seconds": 18000, "reset_after_seconds": 1000, "reset_at": 0},
+    "secondary_window": {"used_percent": 64, "limit_window_seconds": 604800, "reset_after_seconds": 8000, "reset_at": 0}
+  },
+  "rate_limit_reached_type": null,
+  "rate_limit_reset_credits": {"applicable_available_count": 0, "available_count": 0},
+  "spend_control": {"individual_limit": null, "reached": false}
+}
