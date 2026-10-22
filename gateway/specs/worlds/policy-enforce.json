@@ -85,7 +85,9 @@
         "harness": "opencode",
         "max_per_refresh": 3,
         "usd_per_day": 1.0,
-        "cooldown_s": 86400
+        "cooldown_s": 86400,
+        "backoff_s": 3600,
+        "backoff_max_s": 14400
       },
       "max_sessions": 20,
       "models": {

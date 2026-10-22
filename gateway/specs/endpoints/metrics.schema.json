@@ -25,7 +25,7 @@
     "provider": { "type": "string", "description": "a slug of the endpoint snapshot (openai-chat.schema.json $defs.provider_slug) or `unattributed`; any other value renders `other`" },
     "provider_outcome": { "enum": ["ok", "incomplete", "5xx", "429", "unreachable", "timeout", "content-type", "provider-error", "refused", "auth", "edge"] },
     "cell_state": { "enum": ["candidate", "eligible", "excluded"] },
-    "canary_outcome": { "enum": ["eligible", "excluded"] },
+    "canary_outcome": { "enum": ["eligible", "excluded", "no-verdict"] },
     "canary_admission": { "enum": ["dispatch", "budget", "not-due", "not-in-catalog"] },
     "rail_choice_reason": { "enum": ["price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint"], "description": "why one rail's twin cell went first (sessions.schema.json $defs.rail_choice.reason)" }
   },

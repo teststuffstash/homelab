@@ -104,6 +104,9 @@ CREATE TABLE IF NOT EXISTS provider_cells (
   class TEXT,
   since REAL NOT NULL,
   cooldown_until REAL,
+  retry_at REAL,
+  backoff_s REAL,
+  limit_source TEXT,
   PRIMARY KEY (model, provider)
 );
 CREATE TABLE IF NOT EXISTS meta (
@@ -160,6 +163,10 @@ _ADDED_COLUMNS = {
                  "canary_provider": "TEXT"},  # GW-CATALOG-OR: the cell a canary session is pinned to (NULL = not a canary)
     "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "incomplete": "TEXT",
                  "provider": "TEXT NOT NULL DEFAULT ''"},  # GW-RAIL-OPENROUTER: the serving provider's slug ('' = none named)
+    # GW-CATALOG-OR §The entry canary (operator 2026-10-22): a 429'd canary's re-try horizon on its cell —
+    # `retry_at` (the horizon's end), `backoff_s` (the step it doubled to), `limit_source` (the 429 body's);
+    # all NULL once a verdict lands. The cell stays `candidate` throughout.
+    "provider_cells": {"retry_at": "REAL", "backoff_s": "REAL", "limit_source": "TEXT"},
 }
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
 # column (NOT NULL UNIQUE) holds this prefix + the id, which no sha256 hex digest can equal.
@@ -581,12 +588,27 @@ class Store:
         return {r["provider"]: dict(r) for r in rows}
 
     def cell_set(self, model: str, provider: str, state: str, klass: str | None, now: float, cooldown_until: float | None) -> None:
+        """A verdict on the cell: its state, class and cooldown — and the re-try horizon of any 429'd
+        canary before it is cleared (a verdict resets the backoff)."""
         with self._lock:
             self._db.execute(
                 "INSERT INTO provider_cells (model, provider, state, class, since, cooldown_until) VALUES (?,?,?,?,?,?)"
                 " ON CONFLICT(model, provider) DO UPDATE SET state = excluded.state, class = excluded.class,"
-                " since = excluded.since, cooldown_until = excluded.cooldown_until",
+                " since = excluded.since, cooldown_until = excluded.cooldown_until,"
+                " retry_at = NULL, backoff_s = NULL, limit_source = NULL",
                 (model, provider, state, klass, now, cooldown_until))
+
+    def cell_throttle(self, model: str, provider: str, retry_at: float, backoff_s: float, limit_source: str | None,
+                      now: float) -> None:
+        """A 429'd canary on the cell (GW-CATALOG-OR §The entry canary, operator 2026-10-22): no verdict —
+        the state is untouched (a new row enters as `candidate`), the horizon and its step are written."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO provider_cells (model, provider, state, class, since, cooldown_until, retry_at, backoff_s, limit_source)"
+                " VALUES (?,?,'candidate',NULL,?,NULL,?,?,?)"
+                " ON CONFLICT(model, provider) DO UPDATE SET retry_at = excluded.retry_at, backoff_s = excluded.backoff_s,"
+                " limit_source = excluded.limit_source",
+                (model, provider, now, retry_at, backoff_s, limit_source))
 
     def cells_count(self, now: float) -> dict[str, int]:
         """Cells by state at `now` — an exclusion past its cooldown counts as a candidate."""
@@ -599,9 +621,22 @@ class Store:
         return out
 
     def canary_sessions_since(self, since: float) -> int:
+        """The canary admissions the per-refresh cap counts: canary sessions since `since`, minus those
+        with no verdict — a 429 on the ride and no `clean` outcome after it (GW-CATALOG-OR §The entry
+        canary, operator 2026-10-22: a 429'd canary consumes no admission)."""
         with self._lock:
-            (n,) = self._db.execute("SELECT COUNT(*) FROM sessions WHERE canary_provider IS NOT NULL AND created_at >= ?", (since,)).fetchone()
+            (n,) = self._db.execute(
+                "SELECT COUNT(*) FROM sessions s WHERE s.canary_provider IS NOT NULL AND s.created_at >= ?"
+                " AND NOT (EXISTS (SELECT 1 FROM requests r WHERE r.session_id = s.id AND r.status = 429)"
+                "          AND NOT EXISTS (SELECT 1 FROM outcomes o WHERE o.session_id = s.id AND o.class = 'clean'))",
+                (since,)).fetchone()
         return int(n)
+
+    def session_throttled(self, session_id: str) -> bool:
+        """Whether the session's ride saw an upstream 429 (the ledger's fact) — a canary's no-verdict."""
+        with self._lock:
+            row = self._db.execute("SELECT 1 FROM requests WHERE session_id = ? AND status = 429 LIMIT 1", (session_id,)).fetchone()
+        return row is not None
 
     def canary_usage_since(self, since: float) -> list[tuple[str, str, int, int, int, int]]:
         """The canary sessions' 2xx requests since `since`: (model, provider, tokens_in, cache_read,

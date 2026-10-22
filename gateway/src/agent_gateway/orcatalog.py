@@ -55,7 +55,7 @@ log = logging.getLogger("gateway.orcatalog")
 
 OUTCOMES = ("ok", "fetch-failed", "parse-failed", "implausible")
 CELL_STATES = ("candidate", "eligible", "excluded")
-CANARY_OUTCOMES = ("eligible", "excluded")
+CANARY_OUTCOMES = ("eligible", "excluded", "no-verdict")  # no-verdict: a 429'd canary (operator 2026-10-22)
 CANARY_ADMISSIONS = ("dispatch", "budget", "not-due", "not-in-catalog")
 # The ranking slices the policy may name → the MCP tool's arguments (period week on both).
 SLICES: dict[str, dict] = {"programming": {"period": "week", "category": "programming"},
@@ -147,6 +147,9 @@ class CellVerdict:
     state: str
     klass: str | None
     cooldown_until: float | None
+    retry_at: float | None = None  # a 429'd canary's re-try horizon (candidate cells only; None = none)
+    backoff_s: float | None = None  # the step the horizon doubled to
+    limit_source: str | None = None  # the 429 body's `error.metadata.limit_source`
 
 
 class OpenRouterCatalog:
@@ -306,7 +309,8 @@ class OpenRouterCatalog:
             return CellVerdict("candidate", None, None)
         if row["state"] == "excluded" and row["cooldown_until"] is not None and now >= row["cooldown_until"]:
             return CellVerdict("candidate", row["class"], None)
-        return CellVerdict(row["state"], row["class"], row["cooldown_until"])
+        return CellVerdict(row["state"], row["class"], row["cooldown_until"],
+                           row.get("retry_at"), row.get("backoff_s"), row.get("limit_source"))
 
     def eligible_slugs(self, model: str, now: float) -> set[str]:
         return {p for p, r in self.store.cell_states(model).items() if r["state"] == "eligible"}
@@ -322,6 +326,25 @@ class OpenRouterCatalog:
             self.store.cell_set(model, provider, "excluded", klass, now, cooldown)
             self.canary_rides["excluded"] += 1
             log.warning("orcatalog: canary struck %s — (%s, %s) excluded until %s", klass, model, provider, iso(cooldown))
+
+    def throttle(self, model: str, provider: str, limit_source: str | None, now: float) -> float:
+        """A 429 on a canary ride's pinned cell (GW-CATALOG-OR §The entry canary, operator ruling
+        2026-10-22): NO verdict — the cell stays `candidate`, its re-try horizon is `canary.backoff_s`
+        on the first 429'd canary and doubles per consecutive one up to `canary.backoff_max_s`; a
+        verdict resets it (cell_set). Returns the horizon's end. The admission is not consumed
+        (store.canary_sessions_since skips the session)."""
+        can = self.canary
+        base = can.backoff_s if can else 0.0
+        cap = can.backoff_max_s if can else 0.0
+        row = self.store.cell_get(model, provider)
+        prev = row.get("backoff_s") if row else None
+        step = base if not prev else min(prev * 2, cap)
+        retry_at = now + step
+        self.store.cell_throttle(model, provider, retry_at, step, limit_source, now)
+        self.canary_rides["no-verdict"] += 1
+        log.warning("orcatalog: canary 429 on (%s, %s) — no verdict (%s); candidate again at %s (backoff %.0f s)",
+                    model, provider, limit_source or "limit_source unnamed", iso(retry_at), step)
+        return retry_at
 
     # -- the budget -----------------------------------------------------------------------------
     def prices(self, model: str, provider: str) -> tuple[float, float] | None:
@@ -347,13 +370,14 @@ class OpenRouterCatalog:
     def budget(self, now: float) -> dict:
         can = self.canary
         if can is None:
-            return {"max_per_refresh": None, "usd_per_day": None, "admitted_this_refresh": 0, "spend_usd_1d": 0.0, "exhausted": False}
+            return {"max_per_refresh": None, "usd_per_day": None, "admitted_this_refresh": 0, "spend_usd_1d": 0.0, "exhausted": False,
+                    "cooldown_s": None, "backoff_s": None, "backoff_max_s": None}
         since = self.last_refresh_at if self.last_refresh_at is not None else 0.0
         admitted = self.store.canary_sessions_since(since)
         spend = self.spend_1d(now)
         return {"max_per_refresh": can.max_per_refresh, "usd_per_day": can.usd_per_day, "admitted_this_refresh": admitted,
                 "spend_usd_1d": round(spend, 6), "exhausted": admitted >= can.max_per_refresh or spend >= can.usd_per_day,
-                "cooldown_s": can.cooldown_s}
+                "cooldown_s": can.cooldown_s, "backoff_s": can.backoff_s, "backoff_max_s": can.backoff_max_s}
 
     def budget_retry(self, now: float, fallback_s: float) -> float:
         """When asking again may help: the next refresh (the per-refresh cap) or the hour (the day roll) ⚖."""
@@ -403,6 +427,7 @@ class OpenRouterCatalog:
                 clean, judged = rides.get(e["slug"], (0, 0))
                 pinnable, floor = verdicts.get(e["slug"], ({h: False for h in harnesses}, {}))
                 eps.append({**e, "state": v.state, "class": v.klass, "cooldown_until": iso(v.cooldown_until),
+                            "retry_at": iso(v.retry_at), "backoff_s": v.backoff_s, "limit_source": v.limit_source,
                             "rides": {"clean": clean, "judged": judged},
                             "pinnable": {h: pinnable.get(h, False) for h in harnesses}, "floor": dict(floor)})
             ranked = order(mid)

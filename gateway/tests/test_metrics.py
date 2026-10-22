@@ -535,7 +535,7 @@ async def test_canary_outcome_labels(gw):
     then_eq("gateway_canary_rides_total{outcome} · gateway_canary_admissions_total{outcome}",
             (sorted({labels["outcome"] for fam, labels in rows if fam == "gateway_canary_rides_total"}),
              sorted({labels["outcome"] for fam, labels in rows if fam == "gateway_canary_admissions_total"})),
-            (["eligible", "excluded"], ["budget", "dispatch", "not-due", "not-in-catalog"]))
+            (["eligible", "excluded", "no-verdict"], ["budget", "dispatch", "not-due", "not-in-catalog"]))
 
 
 async def test_rail_choice_labels(gw, app, store, upstreams, policy):

@@ -553,7 +553,8 @@ class SessionService:
     async def _admit_canary(self, adm: Admission) -> JSONResponse:
         """GW-CATALOG-OR §The entry canary: a prober-role session pinned to one `(model, provider)` cell
         of the openrouter rail. In order: the cell is in the snapshot (`not-in-catalog`), it is a
-        `candidate` (`canary-not-due`: already eligible, or excluded inside its cooldown), the budget
+        `candidate` (`canary-not-due`: already eligible, excluded inside its cooldown, or a 429'd
+        canary's re-try horizon still ahead — no verdict, operator 2026-10-22), the budget
         (`canary-budget`: the per-refresh count or the day's spend at the cap), then the rail's slot
         count and credential as any admission."""
         model, provider = adm.canary
@@ -572,6 +573,12 @@ class SessionService:
             until = cell.cooldown_until if cell.cooldown_until is not None else cat.retry_at(now, self.policy.defer_retry_s)
             return self._defer(adm, "canary-not-due", f"({model}, {provider}) is {cell.state}" + (f" ({cell.klass})" if cell.klass else ""),
                                retry_after_s=max(1, math.ceil(until - now)))
+        if cell.retry_at is not None and now < cell.retry_at:  # a 429'd canary's horizon (operator 2026-10-22): no verdict yet
+            cat.canary_admissions["not-due"] += 1
+            return self._defer(adm, "canary-not-due",
+                               f"({model}, {provider}) is candidate, a 429'd canary ({cell.limit_source or 'limit_source unnamed'}) "
+                               f"backs it off {cell.backoff_s:.0f} s until {iso(cell.retry_at)}",
+                               retry_after_s=max(1, math.ceil(cell.retry_at - now)))
         budget = cat.budget(now)
         if budget["exhausted"]:
             cat.canary_admissions["budget"] += 1

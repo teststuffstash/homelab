@@ -30,7 +30,7 @@ from . import rails
 from .config import model_matches, wire_model
 from .credentials import CredentialTransient, CredentialUnresolved
 from .metrics import Metrics
-from .providers import UNATTRIBUTED, Endpoint, attribute, pin, provider_error
+from .providers import UNATTRIBUTED, Endpoint, attribute, limit_source, pin, provider_error
 from .sessions import SessionService, error
 from .store import Session, Usage
 
@@ -536,6 +536,11 @@ class Proxy:
                     self.sessions.outcomes.transport(row, "timeout", provider)
                 elif incomplete in ("no-terminal", "transport-error"):
                     self.sessions.outcomes.transport(row, "stream-incomplete", provider)
+                elif status == 429 and row.canary_provider and self.sessions.orcatalog is not None:
+                    # GW-CATALOG-OR §The entry canary (operator 2026-10-22): a 429 on the canary's pinned
+                    # cell is no verdict — the cell backs off (its horizon doubles per consecutive 429'd
+                    # canary) and stays candidate; the body's limit_source rides onto the cell.
+                    self.sessions.orcatalog.throttle(row.model, row.canary_provider, limit_source(plain), self.sessions.clock())
                 self._provider_outcome(row, wire, ep, ("5xx" if status >= 500 else "429" if status == 429 else
                                                        "incomplete" if incomplete else "ok" if status < 300 else
                                                        "provider-error" if provider_error(plain) else "other"),

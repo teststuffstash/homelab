@@ -80,12 +80,14 @@
         "ranking_top_n": 30
       },
       "canary": {
-        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again.",
+        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again; backoff_s 3600 / backoff_max_s 14400 = a 429'd canary's re-try horizon (operator 2026-10-22: no verdict, exponential backoff, the walk moves on) — the world's cap is low so four rides show it (prod: a day).",
         "role": "prober",
         "harness": "opencode",
         "max_per_refresh": 3,
         "usd_per_day": 1.0,
-        "cooldown_s": 86400
+        "cooldown_s": 86400,
+        "backoff_s": 3600,
+        "backoff_max_s": 14400
       },
       "max_sessions": 20,
       "models": {

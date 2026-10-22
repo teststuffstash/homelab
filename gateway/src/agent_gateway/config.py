@@ -215,6 +215,8 @@ class CanaryPolicy:
     max_per_refresh: int
     usd_per_day: float
     cooldown_s: float  # an excluded cell is a candidate again after this
+    backoff_s: float  # a 429'd canary's first re-try horizon (operator 2026-10-22: no verdict, back off, move on)
+    backoff_max_s: float  # the horizon doubles per consecutive 429'd canary up to this
 
 
 def _catalog(rail: str, c) -> CatalogPolicy | None:
@@ -247,7 +249,7 @@ def _canary(rail: str, c, roles: set[str]) -> CanaryPolicy | None:
         raise PolicyError(f"policy: {where} is an openrouter-only key")
     if not isinstance(c, dict):
         raise PolicyError(f"policy: {where} must be an object")
-    _keys(where, c, {"role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s"})
+    _keys(where, c, {"role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s", "backoff_s", "backoff_max_s"})
     role = c.get("role")
     if role not in ROLES:
         raise PolicyError(f"policy: {where}.role must be one of {', '.join(ROLES)}")
@@ -259,7 +261,11 @@ def _canary(rail: str, c, roles: set[str]) -> CanaryPolicy | None:
         raise PolicyError(f"policy: {where}.max_per_refresh must be a positive integer")
     usd = _num(f"{where}.usd_per_day", c.get("usd_per_day"))
     cooldown = _num(f"{where}.cooldown_s", c.get("cooldown_s"))
-    return CanaryPolicy(role, harness, n, usd, cooldown)
+    backoff = _num(f"{where}.backoff_s", c.get("backoff_s"))
+    backoff_max = _num(f"{where}.backoff_max_s", c.get("backoff_max_s"))
+    if backoff <= 0 or backoff_max < backoff:
+        raise PolicyError(f"policy: {where}.backoff_s must be positive and at most backoff_max_s")
+    return CanaryPolicy(role, harness, n, usd, cooldown, backoff, backoff_max)
 
 
 def _providers(rail: str, p) -> ProvidersPolicy | None:

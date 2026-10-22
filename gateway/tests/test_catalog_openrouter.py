@@ -41,6 +41,13 @@ The entry canary (a canary = `POST /sessions` with `canary: {model, provider}`, 
 | a canary names a model the snapshot lacks | refresh | prober, canary {moonshotai/kimi-k3, deepinfra} || defer | — | not-in-catalog | 21600 | — |
 | the canary role is the policy's | refresh | worker, canary {M, deepinfra} || 400 | — | malformed-body | — | — |
 | a canary never fails over | the canary ride answered upstream-500 | — || 500 | the upstream calls: deepinfra only | — | — | — |
+| a 429'd canary is no verdict: the cell backs off | the canary ride answered upstream-429-shared-pool, no consumer outcome | — || 429 | — | — | — | (M, deepinfra) candidate, retry_at T0 + 3600, backoff_s 3600, limit_source upstream_provider_shared_pool; (M, atlas-cloud) untouched; gateway_canary_rides_total{outcome="no-verdict"} 1 |
+| a backed-off cell is not due until its horizon | the same | prober, canary {M, deepinfra} || defer | — | canary-not-due | 3600 | — |
+| at the horizon the cell is due again | the same, +3600 s | prober, canary {M, deepinfra} || dispatch | openrouter / M | — | — | — |
+| a consecutive 429'd canary doubles the horizon; the policy caps it | four 429'd canaries on (M, deepinfra), each ridden at the previous horizon | — || — | — | — | — | backoff_s after each: 3600, 7200, 14400, 14400 (backoff_max_s) |
+| a verdict resets the backoff | two 429'd canaries on (M, deepinfra), then a clean canary ride on it | — || — | — | — | — | eligible; retry_at / backoff_s / limit_source null |
+| a strike on a ride that saw a 429 is not the cell's verdict | the canary ride answered 429, then the consumer reports harness-gave-up | — || — | — | — | — | (M, deepinfra) candidate (not excluded), retry_at T0 + 3600; the task's strike counted |
+| a clean finish after a 429 on the same ride: the cell enters | the canary ride answered 429, the same session then 200, outcome clean | — || — | — | — | — | eligible; admitted_this_refresh 1 |
 
 The budget (policy: max_per_refresh 3, usd_per_day 1.0, cooldown_s 86400):
 
@@ -49,6 +56,7 @@ The budget (policy: max_per_refresh 3, usd_per_day 1.0, cooldown_s 86400):
 | under budget: N entrants are canaried | refresh | 3 canaries on three cells || dispatch ×3 | — | — | 0 |
 | at the cap the N+1th waits | 3 admitted this refresh | a 4th canary || defer | canary-budget | 3600 | 1 |
 | a refresh opens the next N | 3 admitted, then a refresh | a 4th canary || dispatch | — | — | 0 |
+| a 429'd canary consumes no admission | 3 admitted this refresh, the first of them answered upstream-429-shared-pool (no outcome) | a 4th canary, another cell || dispatch | — | — | 0 before it (admitted_this_refresh 2) |
 | a pod roll inside the window keeps the count | 3 admitted, then a new gateway on the same DB +3600 s (no refresh at start) | a 4th canary || defer | canary-budget | 3600 | 1 (admitted_this_refresh 3) |
 | a pod roll after the interval refreshes and opens the next N | 3 admitted, then a new gateway on the same DB +21600 s, its refresh at start | a 4th canary || dispatch | — | — | 0 |
 | the day's spend at the cap defers | one canary ride metered $1.12 (in 5M, out 1M at deepinfra 0.14/0.42) | the next canary || defer | canary-budget | 3600 | 1 |
@@ -83,6 +91,7 @@ The launcher (`scripts/canary-entrants.sh --dry-run < /dev/null`, a fake HTTP se
 | description | the view || the walk (`== canary n/N: <cell>`, cheapest first) | the banner's skipped list |
 |---|---||---|---|
 | the launcher walks pinnable candidate cells cheapest-first; the skipped cells and their floor are in the banner | after a refresh: 15 candidate cells, 9 pinnable for opencode || M@deepinfra 0.42, G@near-ai 0.50, G@z-ai 0.50, M@atlas-cloud 0.54, M@morph 0.60, G@morph 0.65, G@inceptron 0.69, M@inference-net 0.715, M@baidu 1.20 — no ride (two GETs of the view, nothing else) | G@atlas-cloud (uptime_1d 77.8199 < 95), G@open-inference (quantization fp4 < fp8), G@reka (quantization unknown), M@alibaba (quantization unknown), M@open-inference (quantization fp4 < fp8), M@parasail (uptime_1d 77.4359 < 95) |
+| the launcher skips a backed-off cell and names it in `== throttled` | the same view after a 429'd canary on M@deepinfra (retry_at T0 + 3600 — T0 is 2027-01-15, ahead of the wall clock) || G@near-ai first — M@deepinfra absent from the walk (8 of 15); the skipped list unchanged | == throttled: M@deepinfra (upstream_provider_shared_pool; candidate again at <T0 + 3600>, backoff 3600 s) |
 """
 
 from __future__ import annotations
@@ -501,6 +510,118 @@ async def test_canary_never_fails_over(gw, app, upstreams):
     then_eq("the upstream calls (pins)", [((c["body"] or {}).get("provider") or {}).get("order", [None])[0] for c in upstreams[RAIL].calls if c["path"] == "/v1/chat/completions"], ["deepinfra"])
 
 
+THROTTLED = "upstream-429-shared-pool"
+
+
+def _horizon(store, provider: str = "deepinfra") -> tuple[str, float | None, float | None, str | None]:
+    row = store.cell_get(M, provider)
+    return (row["state"], row["retry_at"], row["backoff_s"], row["limit_source"])
+
+
+async def test_canary_429_no_verdict(gw, app, store, upstreams):
+    """row: a 429'd canary is no verdict: the cell backs off"""
+    world(upstream=THROTTLED, note=f"{WORLD}; deepinfra answers OpenRouter's shared-pool 429 to the canary")
+    await _refresh(app)
+    with given("a canary ride on (M, deepinfra) answered upstream-429-shared-pool, no consumer outcome"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    then_eq("(M, deepinfra): (state, retry_at, backoff_s, limit_source)", _horizon(store),
+            ("candidate", T0 + 3600, 3600, "upstream_provider_shared_pool"))
+    then_eq("(M, atlas-cloud): (state, retry_at, backoff_s, limit_source)", _horizon(store, "atlas-cloud"), ("candidate", None, None, None))
+    then_eq('gateway_canary_rides_total{outcome="no-verdict"}', await _series(gw, 'gateway_canary_rides_total{outcome="no-verdict"}'), 1)
+
+
+async def test_backed_off_cell_not_due(gw, app, store, upstreams):
+    """row: a backed-off cell is not due until its horizon"""
+    world(upstream=THROTTLED, note=WORLD)
+    await _refresh(app)
+    with given("(M, deepinfra) backed off by a 429'd canary at T0 (horizon T0 + 3600)"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    r = await _canary(gw, M, "deepinfra")
+    _verdict(r.json(), {"decision": "defer", "reason": "canary-not-due", "retry_after_s": 3600})
+
+
+async def test_backed_off_cell_due_at_horizon(gw, app, store, upstreams, clock):
+    """row: at the horizon the cell is due again"""
+    world(upstream=THROTTLED, note=f"{WORLD}; the horizon (backoff_s 3600) passes")
+    await _refresh(app)
+    with given("(M, deepinfra) backed off by a 429'd canary at T0"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    clock.advance(3600)
+    r = await _canary(gw, M, "deepinfra", " (+3600 s)")
+    _verdict(r.json(), {"decision": "dispatch", "rail": RAIL, "model": M})
+
+
+async def test_backoff_doubles_to_the_cap(gw, app, store, upstreams, clock):
+    """row: a consecutive 429'd canary doubles the horizon; the policy caps it"""
+    world(upstream=THROTTLED, note=f"{WORLD}; backoff_s 3600, backoff_max_s 14400 (the world's cap)")
+    await _refresh(app)
+    seen = []
+    with given("four 429'd canaries on (M, deepinfra), each ridden at the previous horizon"):
+        for _ in range(4):
+            await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            _state, retry_at, backoff, _src = _horizon(store)
+            seen.append((backoff, retry_at - clock.t))
+            clock.advance(backoff)
+    then_eq("(backoff_s, retry_at − the ride's time) after each", seen, [(3600, 3600), (7200, 7200), (14400, 14400), (14400, 14400)])
+    then_eq("the policy's cap", app.state.policy.rails[RAIL].canary.backoff_max_s, 14400)
+
+
+async def test_verdict_resets_backoff(gw, app, store, upstreams, clock):
+    """row: a verdict resets the backoff"""
+    world(upstream=THROTTLED, note=f"{WORLD}; two 429'd canaries, then deepinfra serves")
+    await _refresh(app)
+    with given("two 429'd canaries on (M, deepinfra) (backoff 7200), then a clean canary ride on it at its horizon"):
+        for _ in range(2):
+            await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            clock.advance(_horizon(store)[2])
+        before = _horizon(store)
+        await _canary_ride(gw, app, upstreams, behaviour="upstream-ok", outcome="clean")
+    then_eq("before the clean ride: (state, backoff_s)", (before[0], before[2]), ("candidate", 7200))
+    then_eq("(M, deepinfra): (state, retry_at, backoff_s, limit_source)", _horizon(store), ("eligible", None, None, None))
+
+
+async def test_strike_after_429_not_the_verdict(gw, app, store, upstreams):
+    """row: a strike on a ride that saw a 429 is not the cell's verdict"""
+    world(upstream=THROTTLED, note=f"{WORLD}; the canary's harness gives up after the 429")
+    await _refresh(app)
+    with given("a canary ride on (M, deepinfra) answered 429, then the consumer reports harness-gave-up"):
+        with quiet():
+            doc = await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            ro = await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "harness-gave-up"})
+        attach_json("the outcome answer", ro.json())
+    then_eq("(M, deepinfra): (state, retry_at, backoff_s, limit_source)", _horizon(store), ("candidate", T0 + 3600, 3600, "upstream_provider_shared_pool"))
+    then_eq("the task's strike (the outcome answer)", ro.json().get("strike"), {"class": "harness-gave-up", "scope": "cell"})
+    then_eq('gateway_canary_rides_total{outcome="excluded"}', await _series(gw, 'gateway_canary_rides_total{outcome="excluded"}'), 0)
+
+
+async def test_clean_after_429_enters(gw, app, store, upstreams):
+    """row: a clean finish after a 429 on the same ride: the cell enters"""
+    world(upstream=THROTTLED, note=f"{WORLD}; deepinfra 429s once, then serves the same session")
+    await _refresh(app)
+    with given("a canary ride on (M, deepinfra) answered 429; the same session then 200; outcome clean"):
+        with quiet():
+            doc = await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            rr = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))
+            assert rr.status_code == 200, rr.text
+            await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "clean"})
+    then_eq("(M, deepinfra): (state, retry_at, backoff_s, limit_source)", _horizon(store), ("eligible", None, None, None))
+    then_eq("canary.admitted_this_refresh (a verdict landed: the admission counts)", (await _view(gw))["canary"]["admitted_this_refresh"], 1)
+
+
+async def test_no_verdict_consumes_no_admission(gw, app, store, upstreams):
+    """row: a 429'd canary consumes no admission"""
+    world(upstream=THROTTLED, note=f"{WORLD}; max_per_refresh 3; the first canary 429s")
+    await _refresh(app)
+    with given("3 canaries admitted this refresh: (M, deepinfra) answered upstream-429-shared-pool (no outcome), then (M, atlas-cloud) and (M, morph) clean"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+        await _canary_ride(gw, app, upstreams, "atlas-cloud")
+        await _canary_ride(gw, app, upstreams, "morph")
+    then_eq("before the 4th: (admitted_this_refresh, gateway_canary_budget_exhausted)",
+            ((await _view(gw))["canary"]["admitted_this_refresh"], await _series(gw, "gateway_canary_budget_exhausted")), (2, 0))
+    r = await _canary(gw, M, "inference-net", " (a 4th canary, another cell)")
+    _verdict(r.json(), {"decision": "dispatch", "rail": RAIL, "model": M})
+
+
 # -- the budget ----------------------------------------------------------------------------------------
 async def test_budget_under(gw, app, store):
     """row: under budget: N entrants are canaried"""
@@ -811,6 +932,49 @@ async def test_launcher_walk(gw, app):
     then_eq("the banner's skipped cells, each with its floor", _banner_section(r.stdout, "== skipped"),
             [f"{M}@alibaba (quantization unknown)", f"{M}@open-inference (quantization fp4 < fp8)", f"{M}@parasail (uptime_1d 77.4359 < 95)",
              f"{G}@atlas-cloud (uptime_1d 77.8199 < 95)", f"{G}@open-inference (quantization fp4 < fp8)", f"{G}@reka (quantization unknown)"])
+
+
+async def test_launcher_skips_throttled(gw, app, upstreams):
+    """row: the launcher skips a backed-off cell and names it in `== throttled`"""
+    world(upstream=THROTTLED, note=f"{WORLD}; a 429'd canary on M@deepinfra; the fake HTTP server hands the launcher the view; --dry-run")
+    await _refreshed(app)
+    with given("a canary ride on (M, deepinfra) answered upstream-429-shared-pool (retry_at T0 + 3600, ahead of the wall clock)"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    view = await _view(gw)
+    r = _run_launcher(view, "bash scripts/canary-entrants.sh --dry-run < /dev/null, AGENT_GATEWAY_URL = the fake serving the view")
+    then_eq("exit · ride attempts", (r.returncode, r.stdout.count("ride did not dispatch")), (0, 0))
+    then_eq("the walk, in order (M@deepinfra absent)", re.findall(r"^== canary \d+/\d+: (\S+)$", r.stdout, re.M),
+            [f"{G}@near-ai", f"{G}@z-ai", f"{M}@atlas-cloud", f"{M}@morph", f"{G}@morph", f"{G}@inceptron", f"{M}@inference-net", f"{M}@baidu"])
+    then_eq("the banner's throttled cells", _banner_section(r.stdout, "== throttled"),
+            [f"{M}@deepinfra (upstream_provider_shared_pool; candidate again at {iso(T0 + 3600)}, backoff 3600 s)"])
+    then_eq("the banner's skipped cells, unchanged", len(_banner_section(r.stdout, "== skipped")), 6)
+
+
+def _run_launcher(view: dict, label: str) -> subprocess.CompletedProcess:
+    body = json.dumps(view).encode()
+
+    class View(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_):
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), View)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        with when(label):
+            r = subprocess.run(["bash", str(LAUNCHER), "--dry-run"], env={**os.environ, "AGENT_GATEWAY_URL": f"http://127.0.0.1:{srv.server_port}"},
+                               stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120, check=False)
+            attach_json("the launcher's output", {"exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr})
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    return r
 
 
 def _banner_section(out: str, head: str) -> list[str]:

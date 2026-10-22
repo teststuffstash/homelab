@@ -465,6 +465,14 @@ class FakeUpstream:
         if behaviour == "upstream-429":
             return JSONResponse({"error": {"type": "rate_limit_error", "message": "slow down"}}, status_code=429,
                                 headers={"retry-after": "30"})
+        if behaviour == "upstream-429-shared-pool":  # the provider throttles OpenRouter's shared pool (the 2026-10-22 tap, homelab#2775)
+            return JSONResponse({"error": {"message": "Provider returned error", "code": 429,
+                                           "metadata": {"raw": f"{((call or {}).get('body') or {}).get('model') or 'the model'} is temporarily rate-limited upstream. Please retry shortly, "
+                                                               "or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations",
+                                                        "provider_name": served or "Unknown", "is_byok": False,
+                                                        "limit_source": "upstream_provider_shared_pool",
+                                                        "retry_after_seconds": 30, "retry_after_seconds_raw": 30, "headers": {"Retry-After": "30"}}}},
+                                status_code=429, headers={"retry-after": "30"})
         if self.behaviour == "upstream-429-no-header":
             return JSONResponse({"error": {"type": "rate_limit_error"}}, status_code=429)
         if self.behaviour == "upstream-429-reset":

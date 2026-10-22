@@ -36,7 +36,7 @@ error), and no auth, like `/metrics` — it carries no credential.
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); a liveness signal is `⚑ gap` (rows below); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread) |
-| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); ⚑ gap (2026-10-20, PR #2777 → work #2775): a 429'd canary spends an admission and judges nothing (the other two of that day's gaps are closed — the pod-roll window by #2790; the view not saying which cells selection could pin as a bug, operator 2026-10-21: the `pinnable` / `floor` rows below) |
+| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed: the `retry_at` / `backoff_s` rows below; the pod-roll window #2790 and the `pinnable` / `floor` rows #2791 were that issue's other two gaps) |
 | [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`, `gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers, the admission's rail choice between twin cells (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the strike overhead unmeasured, the Go cell's clean-rate prior (the "⚑ gap" rows below) |
 
 ## GW-CATALOG-GO
@@ -313,6 +313,26 @@ its ride's harness** (`opencode`, the script's own `HARNESS`), **cheapest first*
 output price, then its input price, then the model id — and names the cells it skipped, each with
 its `floor`, in its banner, so `--dry-run < /dev/null` shows the whole decision without a ride.
 
+⚖ **A 429'd canary is no verdict** (operator ruling 2026-10-22, homelab#2775: *exponential backoff
+for providers — skip and move on, eventual consistency*). The 2026-10-20 window's 429s were the
+PINNED provider throttling OpenRouter's **shared** upstream account (`error.metadata.limit_source:
+upstream_provider_shared_pool` — the key was fine, the same cell served 200s minutes earlier and
+again a day later), which a regular ride never sees (request-level failover) and a pinned canary with
+fallbacks off cannot avoid; the catalog's `uptime_1d` reads 100 % through it. So a 429 on the canary
+ride's cell judges nothing: the cell stays **`candidate`**, the ride **consumes no admission** (the
+per-refresh count skips a canary session whose 429 was the last word — one with no `clean` outcome
+after it), and the cell gets a persisted **re-try horizon** — `retry_at` = now + `canary.backoff_s`
+on the first 429'd canary, the step **doubling per consecutive one** up to `canary.backoff_max_s`
+(⚖ policy knobs; prod 3600 s → 86400 s: the budget's own retry unit up to the catalog's stale
+horizon); the 429 body's `limit_source` rides onto the cell so a key-level 429 stays telling. Inside
+the horizon a canary on the cell defers **`canary-not-due`** (`retry_after_s` = the horizon's end)
+and the launcher skips it, naming it in a `== throttled` banner section; at the horizon it is due
+again — judged whenever the provider serves our traffic, never escalated. Any verdict (a clean ride,
+a strike) resets the horizon and the step; a strike reported on a ride that saw a 429 on its cell is
+the task's strike as ever but **not** the cell's verdict — the 429 is the likelier cause. The
+capacity half's own 30/60 s cell cooldown ([sessions.md §Capacity](sessions.md#capacity--the-ladders-capacity-half))
+is untouched by this: that is selection's signal, this is the entry gate's.
+
 ### The budget cap
 
 ⚖ Policy knobs, never code constants (`rails.openrouter.canary`): **`max_per_refresh`** canary
@@ -371,12 +391,20 @@ fixture Secret `agent-egress/router-account-key`.
 | "a canary names a model the snapshot lacks" | refresh | prober, `canary: {moonshotai/kimi-k3, deepinfra}` || defer | — | not-in-catalog | 21600 | — |
 | "the canary role is the policy's ⚖" | refresh | worker, `canary: {M, deepinfra}` || 400 | — | malformed-body | — | — |
 | "a canary never fails over ⚖" | the canary ride answered upstream-500 | — || 500 | the upstream calls: deepinfra only | — | — | — |
+| "a 429'd canary is no verdict: the cell backs off ⚖" | the canary ride answered upstream-429-shared-pool, no consumer outcome | — || 429 | — | — | — | (M, deepinfra) `candidate`, `retry_at` T0 + 3600, `backoff_s` 3600, `limit_source` upstream_provider_shared_pool; (M, atlas-cloud) untouched; `gateway_canary_rides_total{outcome="no-verdict"}` 1 |
+| "a backed-off cell is not due until its horizon ⚖" | the same | prober, `canary: {M, deepinfra}` || defer | — | canary-not-due | 3600 | — |
+| "at the horizon the cell is due again" | the same, +3600 s | prober, `canary: {M, deepinfra}` || dispatch | openrouter / M | — | — | — |
+| "a consecutive 429'd canary doubles the horizon; the policy caps it ⚖" | four 429'd canaries on (M, deepinfra), each ridden at the previous horizon | — || — | — | — | — | `backoff_s` after each: 3600, 7200, 14400, 14400 (`backoff_max_s`); `retry_at` = the ride's time + that |
+| "a verdict resets the backoff ⚖" | two 429'd canaries on (M, deepinfra), then a clean canary ride on it | — || — | — | — | — | eligible; `retry_at` / `backoff_s` / `limit_source` null |
+| "a strike on a ride that saw a 429 is not the cell's verdict ⚖" | the canary ride answered 429, then the consumer reports harness-gave-up | — || — | — | — | — | (M, deepinfra) `candidate` (not excluded), `retry_at` T0 + 3600; the task's strike counted (`strike: {class: harness-gave-up, scope: cell}`) |
+| "a clean finish after a 429 on the same ride: the cell enters" | the canary ride answered 429, the same session then 200, outcome clean | — || — | — | — | — | eligible; `admitted_this_refresh` 1 (the admission counts — a verdict landed) |
 
 | description | arrange | body || decision | reason | retry_after_s | `gateway_canary_budget_exhausted` |
 |---|---|---||---|---|---|---|
 | "under budget: N entrants are canaried" | refresh | 3 canaries on three cells || dispatch ×3 | — | — | 0 |
 | "at the cap the N+1th waits ⚖" | 3 admitted this refresh | a 4th canary || defer | canary-budget | 3600 | 1 |
 | "a refresh opens the next N ⚖" | 3 admitted, then a refresh | a 4th canary || dispatch | — | — | 0 |
+| "a 429'd canary consumes no admission ⚖" | 3 admitted this refresh, the first of them answered upstream-429-shared-pool (no outcome) | a 4th canary, another cell || dispatch | — | — | 0 before it (`admitted_this_refresh` 2) |
 | "a pod roll inside the window keeps the count ⚖" | 3 admitted, then a new gateway on the same DB +3600 s (no refresh at start) | a 4th canary || defer | canary-budget | 3600 | 1 (`admitted_this_refresh` 3) |
 | "a pod roll after the interval refreshes and opens the next N" | 3 admitted, then a new gateway on the same DB +21600 s, its refresh at start | a 4th canary || dispatch | — | — | 0 |
 | "the day's spend at the cap defers ⚖" | one canary ride metered $1.12 (in 5M, out 1M at deepinfra 0.14 / 0.42) | the next canary || defer | canary-budget | 3600 | 1 |
@@ -414,6 +442,7 @@ view (the script needs only `bash`, `curl`, `jq` and a gateway URL; `--dry-run` 
 | description | the view || the walk (`== canary n/N: <cell>`, cheapest first) | the banner's skipped list |
 |---|---||---|---|
 | "the launcher walks pinnable candidate cells cheapest-first; the skipped cells and their floor are in the banner ⚖" | after a refresh: 15 candidate cells, 9 pinnable for `opencode` || M@deepinfra 0.42, G@near-ai 0.50, G@z-ai 0.50, M@atlas-cloud 0.54, M@morph 0.60, G@morph 0.65, G@inceptron 0.69, M@inference-net 0.715, M@baidu 1.20 ($/M out; near-ai before z-ai on the input price) — no ride: two GETs of the view, nothing else | G@atlas-cloud `uptime_1d 77.8199 < 95`, G@open-inference `quantization fp4 < fp8`, G@reka `quantization unknown`, M@alibaba `quantization unknown`, M@open-inference `quantization fp4 < fp8`, M@parasail `uptime_1d 77.4359 < 95` |
+| "the launcher skips a backed-off cell and names it in `== throttled`" | the same view after a 429'd canary on M@deepinfra (`retry_at` T0 + 3600 — T0 is 2027-01-15, ahead of the wall clock) || G@near-ai 0.50 first — M@deepinfra absent from the walk (8 of 15); the skipped list unchanged | `== throttled`: M@deepinfra (upstream_provider_shared_pool; candidate again at `<T0 + 3600>`, backoff 3600 s) |
 
 ### Named gaps (rows that exist so the omission is visible)
 
@@ -422,7 +451,6 @@ view (the script needs only `bash`, `curl`, `jq` and a gateway URL; `--dry-run` 
 | "⚑ gap: no in-cluster canary trigger" | a refresh lands N candidate cells || they wait for the jail's `canary-entrants.sh` | the on-demand launcher is a jail verb; a cluster-side trigger (a CronWorkflow reading the view) is unbuilt |
 | "⚑ gap: the Go rail's canary" | a new Go model in the Go catalog || no entry gate on the opencode rail | [#2743](https://github.com/teststuffstash/homelab/issues/2743): the same canary is the yardstick on both rails |
 | "⚑ gap: the ranking's `other` bucket and a `:free` family" | a `:free` id in the ranking || joins its family's AA row; `other` is dropped | no fixture row carries a `:free` candidate (the latest week had none in the top of either slice) |
-| "⚑ gap: a 429'd canary buys nothing" | a pinned canary whose every request is 429 — `kimi-k3@baseten` 2×200 then 7×429, `deepseek-v4-flash@deepinfra` 9×429 on 2026-10-20 || the cell stays `candidate`, judged 0, the admission spent | neither the consumer's class nor the gateway's transport class fires on a run of 429s; the ruling — a strike with class `429`, or a no-verdict that must not consume an admission — is [#2775](https://github.com/teststuffstash/homelab/issues/2775)'s |
 
 <details markdown="1"><summary>Evidence</summary>
 

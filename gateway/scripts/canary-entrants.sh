@@ -6,7 +6,9 @@
 # that cell through agents/agent-session.sh, CHEAPEST FIRST (the endpoint's output price, then its
 # input price, then the model id). A candidate the floors reject is skipped and named in the banner
 # with its `floor` reason: a canary on it would buy an `eligible` cell selection never pins (the
-# first admission of 2026-10-20 went to deepseek-v4.1-flash@open-inference, fp4 — homelab#2775).
+# first admission of 2026-10-20 went to deepseek-v4.1-flash@open-inference, fp4 — homelab#2775). A
+# candidate a 429'd canary backed off (`retry_at` ahead) is skipped and named too: no verdict yet,
+# the walk moves on (operator 2026-10-22).
 # The gateway is the gate and the judge: it admits a canary only while its budget holds (the
 # per-refresh cap, the day's metered spend — a `canary-budget` defer otherwise, which this script
 # reports and stops on), pins the ride to exactly that provider with no failover, and flips the cell
@@ -60,20 +62,28 @@ echo "== catalog: $(jq -r '"\(.models_count) models, fetched \(.fetched_at // "n
 # The candidate cells, one per (model, provider): a provider's service tiers are ONE cell, priced by
 # its representative (no service_tier, then the shortest tag — providers.representatives). Split by
 # the view's floors verdict for THIS harness: the pinnable ones are the walk, cheapest first; the
-# rest are skipped and named with their `floor`.
+# rest are skipped and named with their `floor`. A pinnable candidate inside a 429'd canary's re-try
+# horizon (the view's `retry_at` ahead of the wall clock — operator 2026-10-22: no verdict, exponential
+# backoff, move on) is skipped too and named with its `limit_source` and horizon: the gateway would
+# defer it `canary-not-due` anyway; naming it here keeps the dry run the whole decision.
 candidates=$(jq -c --arg only "$ONLY" --arg h "$HARNESS" '
   [ .models | to_entries[] | select($only == "" or .key == $only) | .key as $m
     | (.value.endpoints | map(select(.state == "candidate")) | group_by(.slug)
        | map(sort_by([(.service_tier != null), (.tag | length), .tag]) | .[0]) | .[])
     | {cell: "\($m)@\(.slug)", pinnable: ((.pinnable // {})[$h] // false), floor: ((.floor // {})[$h] // "no verdict"),
-       out: (.out_price // 1e9), in: (.in_price // 1e9)} ]' <<<"$view")
-cells=$(jq -r 'map(select(.pinnable)) | sort_by([.out, .in, .cell]) | .[] | "\(.cell)"' <<<"$candidates")
-walk=$(jq -r 'map(select(.pinnable)) | sort_by([.out, .in, .cell]) | .[] | "\(.cell) (out \(.out) / in \(.in) $/M)"' <<<"$candidates")
+       out: (.out_price // 1e9), in: (.in_price // 1e9),
+       throttled: ((.retry_at // null) != null and ((.retry_at | fromdateiso8601) > now)),
+       retry_at: (.retry_at // null), backoff_s: (.backoff_s // null), limit_source: (.limit_source // "limit_source unnamed")} ]' <<<"$view")
+cells=$(jq -r 'map(select(.pinnable and (.throttled | not))) | sort_by([.out, .in, .cell]) | .[] | "\(.cell)"' <<<"$candidates")
+walk=$(jq -r 'map(select(.pinnable and (.throttled | not))) | sort_by([.out, .in, .cell]) | .[] | "\(.cell) (out \(.out) / in \(.in) $/M)"' <<<"$candidates")
 skipped=$(jq -r 'map(select(.pinnable | not)) | sort_by(.cell) | .[] | "\(.cell) (\(.floor))"' <<<"$candidates")
-echo "== walk (harness $HARNESS, pinnable candidate cells cheapest-first): $(jq -r 'map(select(.pinnable)) | length' <<<"$candidates") of $(jq -r 'length' <<<"$candidates") candidate cells"
+throttled=$(jq -r 'map(select(.pinnable and .throttled)) | sort_by(.cell) | .[] | "\(.cell) (\(.limit_source); candidate again at \(.retry_at), backoff \((.backoff_s // 0) | floor) s)"' <<<"$candidates")
+echo "== walk (harness $HARNESS, pinnable candidate cells cheapest-first): $(jq -r 'map(select(.pinnable and (.throttled | not))) | length' <<<"$candidates") of $(jq -r 'length' <<<"$candidates") candidate cells"
 [ -z "$walk" ] || while IFS= read -r line; do echo "   $line"; done <<<"$walk"
 echo "== skipped (not pinnable for $HARNESS — a canary would buy a cell selection never pins): $(jq -r 'map(select(.pinnable | not)) | length' <<<"$candidates")"
 [ -z "$skipped" ] || while IFS= read -r line; do echo "   $line"; done <<<"$skipped"
+echo "== throttled (a 429'd canary backs the cell off — no verdict; the gateway defers it canary-not-due until then): $(jq -r 'map(select(.pinnable and .throttled)) | length' <<<"$candidates")"
+[ -z "$throttled" ] || while IFS= read -r line; do echo "   $line"; done <<<"$throttled"
 [ -n "$cells" ] || { echo "== no pinnable candidate cell — nothing to canary"; exit 0; }
 n=0
 while IFS= read -r cell; do
