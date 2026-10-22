@@ -13,7 +13,7 @@
 # image before a pod asks — a first pull cost 429–909 s and failed a sentinel run, 2026-09-03).
 # Phase 2 (FU-015): a warm /nix store layer per devbox.lock closure.
 # The baked lock (FU-305, 2026-10-10): /opt/baked/<repo>/devbox.{json,lock} = the pair that realised.
-FROM ghcr.io/actions/actions-runner:2.338.0
+FROM ghcr.io/actions/actions-runner:2.338.1
 
 USER root
 RUN apt-get update \
