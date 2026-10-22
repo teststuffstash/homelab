@@ -67,7 +67,7 @@
       "models": {
         "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/deepseek-v4.1-flash", "opencode-go/glm-5.3-flash"],
         "standard": ["opencode-go/mimo-v2.6-flash", "opencode-go/glm-5.3-flash", "opencode-go/claude-haiku-5-5"],
-        "heavy":    ["opencode-go/glm-5.3-flash", "opencode-go/claude-haiku-5-5", "opencode-go/step-5-preview"]
+        "heavy":    ["opencode-go/glm-5.3-flash", "opencode-go/claude-haiku-5-5", "opencode-go/mimo-v2.6-pro"]
       }
     },
     "openrouter": {
@@ -100,9 +100,9 @@
       },
       "max_sessions": 20,
       "models": {
-        "light":    ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-flash", "xiaomi/mimo-v2.5"],
-        "standard": ["moonshotai/kimi-k3"],
-        "heavy":    ["moonshotai/kimi-k3"]
+        "light":    ["z-ai/glm-5.3-flash", "deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash"],
+        "standard": ["z-ai/glm-5.3-flash", "moonshotai/kimi-k3"],
+        "heavy":    ["z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]
       }
     }
   },
