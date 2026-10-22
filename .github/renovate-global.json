@@ -353,7 +353,7 @@
       "description": "Class 17 — the helm `scripts/upstream-alerts-refresh.sh` installs at runtime for the G12 postUpgradeTasks rule (`HELM_VERSION=v<x.y.z>`, `install-tool helm`): the one customManager that moves it (depName helm/helm, github-releases; the `v` stays in the file, the digits are the value). Lane: the custom.regex automerge rule above — `scripts/` has no codeowner row. Until 2026-10-22 the pin lived in THIS file as two halves (the command string + its regex-escaped `allowedCommands` entry, two managers so the pair moved together) under the `/.github/` CODEOWNERS row, which parked every helm patch on the operator (#2804).",
       "customType": "regex",
       "managerFilePatterns": ["/^scripts\\/upstream-alerts-refresh\\.sh$/"],
-      "matchStrings": ["^HELM_VERSION=v(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)$"],
+      "matchStrings": ["HELM_VERSION=v(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"],
       "depNameTemplate": "helm/helm",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.*)$"
