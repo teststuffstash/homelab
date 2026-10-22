@@ -1,5 +1,5 @@
 {
-  "snapshot_at": "2026-10-20T20:53:22Z",
+  "snapshot_at": "2026-10-22T07:03:19Z",
   "sources": {
     "capability": {
       "source": "artificial-analysis",
@@ -7,15 +7,15 @@
       "rows": 345
     },
     "go_catalog": {
-      "fetched_at": "2026-10-20T20:42:31Z",
+      "fetched_at": "2026-10-22T06:20:59Z",
       "fee_usd_month": 10.0,
       "draw_30d_usd": 0.00381
     },
     "openrouter_catalog": {
-      "fetched_at": "2026-10-20T20:42:31Z",
+      "fetched_at": "2026-10-22T06:21:03Z",
       "cells": {
-        "candidate": 239,
-        "eligible": 7,
+        "candidate": 235,
+        "eligible": 9,
         "excluded": 0
       }
     }
@@ -328,22 +328,6 @@
           "prior": 1.0
         }
       },
-      "opencode-go/longcat-2.5-preview-free": {
-        "aa_id": null,
-        "intelligence": null,
-        "coding": null,
-        "agentic": null,
-        "out_price": 0.0,
-        "in_price": 0.0,
-        "monthly_limit_usd": "unlimited",
-        "provider": null,
-        "price_basis": "unlimited",
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
       "opencode-go/mimo-v2.5": {
         "aa_id": "xiaomi/mimo-v2.5",
         "intelligence": 21.8,
@@ -525,9 +509,9 @@
         "intelligence": 43.7,
         "coding": null,
         "agentic": null,
-        "out_price": 0.45,
-        "in_price": 0.166666667,
-        "monthly_limit_usd": 60.0,
+        "out_price": 1.8,
+        "in_price": 0.666666667,
+        "monthly_limit_usd": 15.0,
         "provider": null,
         "price_basis": "promise",
         "rides": {
@@ -607,15 +591,15 @@
         "intelligence": 24.4,
         "coding": 52.0,
         "agentic": 26.3,
-        "out_price": 0.1652,
-        "in_price": 0.0826,
+        "out_price": 0.18,
+        "in_price": 0.09,
         "monthly_limit_usd": null,
-        "provider": "streamlake",
+        "provider": "deepinfra",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 1.0
+          "prior": 0.997044
         }
       },
       "deepseek/deepseek-v4-pro": {
@@ -639,10 +623,10 @@
         "intelligence": 24.7,
         "coding": null,
         "agentic": null,
-        "out_price": 0.1416,
-        "in_price": 0.0354,
+        "out_price": 0.42,
+        "in_price": 0.14,
         "monthly_limit_usd": null,
-        "provider": "baidu",
+        "provider": "deepinfra",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
@@ -736,14 +720,14 @@
         "coding": 76.2,
         "agentic": 50.0,
         "out_price": 14.9,
-        "in_price": 0.973,
+        "in_price": 0.894,
         "monthly_limit_usd": null,
         "provider": "morph",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 0.997865
+          "prior": 0.986034
         }
       },
       "nvidia/nemotron-3-ultra-550b-a55b:free": {
@@ -890,22 +874,6 @@
           "prior": 1.0
         }
       },
-      "xiaomi/mimo-v2.5": {
-        "aa_id": "xiaomi/mimo-v2.5",
-        "intelligence": 21.8,
-        "coding": 56.8,
-        "agentic": 15.8,
-        "out_price": 0.28,
-        "in_price": 0.14,
-        "monthly_limit_usd": null,
-        "provider": "xiaomi",
-        "price_basis": "endpoint",
-        "rides": {
-          "clean": 1,
-          "judged": 1,
-          "prior": 0.997917
-        }
-      },
       "xiaomi/mimo-v2.6-flash": {
         "aa_id": "xiaomi/mimo-v2.6-flash",
         "intelligence": 37.9,
@@ -975,15 +943,15 @@
         "intelligence": 41.8,
         "coding": 71.5,
         "agentic": 50.9,
-        "out_price": null,
-        "in_price": null,
+        "out_price": 0.145,
+        "in_price": 0.0435,
         "monthly_limit_usd": null,
-        "provider": null,
-        "price_basis": null,
+        "provider": "streamlake",
+        "price_basis": "endpoint",
         "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
+          "clean": 1,
+          "judged": 1,
+          "prior": 0.98125
         }
       }
     }
