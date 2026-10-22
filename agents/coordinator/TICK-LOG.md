@@ -14286,3 +14286,11 @@ updates or reverts as much as possible — mechanical revert or a responder."
   **#2837**: absent content-type → relay (parser guards), present-and-wrong → refuse; fixture = the live shape. Also on
   the wire (names only): `x-codex-primary/secondary-*` headroom headers (the "upstream headers" source exists),
   `x-codex-turn-state` on turn 1, `x-codex-safety-buffering-*`. Release worked (hardened verb). Third ride after #2837's image.
+- **THIRD RIDE 22:56Z — THE CANARY COMPLETED** (#2837's image g6cb409d3): admitted, env pulled, provider block rendered,
+  `codex exec --json` ran a real TOOL TURN (`rg -m 1 '^#{1,6} ' README.md` → `# homelab`), answered `homelab`,
+  `turn.completed` usage 21,422 in / 18,176 cached / 47 out; 2 requests on the rail (the tool continuation rode the
+  x-codex-turn-state round trip), outcome CLEAN reported, released. Spike step 4 = DONE: the ChatGPT subscription
+  serves cluster rides through the gateway with no credential in the pod. One metrics finding: both requests
+  recorded `outcome=cancelled status=499` — the native CLI closes the connection right after `response.completed`
+  while the vendor holds it open, so the relay's CancelledError overwrote a terminal outcome it had already seen
+  (usage WAS counted). Fix next: a cancellation after the terminal event stays `completed` (200).
