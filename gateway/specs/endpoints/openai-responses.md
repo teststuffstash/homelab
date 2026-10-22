@@ -3,15 +3,17 @@ id: EP-OPENAI-RESPONSES
 use-cases: [UC-1]
 schema: openai-responses.schema.json
 ---
-# POST /openai/v1/responses — the `responses` dialect, on the codex rail (ships dark)
+# POST /openai/v1/responses — the `responses` dialect, on the codex rail (lit 2026-10-22, prober-only)
 
 The data-plane path a `codex` harness rides: OpenAI **Responses** over SSE (today's `openai`
 dialect stays Chat Completions — [glossary: dialect](../glossary.md#dialect)). Only the `codex`
-rail serves it — the operator's ChatGPT subscription — and that rail **ships dark**: the deployed
-policy (`argocd/resources/agent-gateway/policy.json`) declares no codex rail, and even a
-policy that declares one gets a credential backend only when `create_app` is handed a credential
-store. Production wiring now uses gateway-local SQLite; the policy still keeps the rail dark. Rows run
-offline against fake upstreams and dummy credentials; no real Codex/OpenAI credential exists in it.
+rail serves it — the operator's ChatGPT subscription. The rail was **lit on 2026-10-22** (FU-270)
+as the explicit canary cell: the deployed policy (`argocd/resources/agent-gateway/policy.json`)
+declares `rails.codex` for the `prober` role only, last in its list — only `harness: codex` speaks
+this dialect, so no role lands on it by default. A policy that declares the rail gets a credential
+backend only when `create_app` is handed a credential store: production wires gateway-local SQLite
+seeded from the gateway's own login (`devbox run codex-seed`) and the native refresh. Rows run
+offline against fake upstreams and dummy credentials; no real Codex/OpenAI credential exists in them.
 The design and the prototype it was ported from:
 [the Codex subscription-rail spike](../../../docs/spikes/codex-subscription-rail.md#gateway-prototype--isolated-build-2026-10-16-fu-270)
 (FU-270) and `experiments/codex-rail/` (its native-CLI compat harness remains there).
@@ -322,7 +324,7 @@ and returns the replacement only after saving it `ready`. A persisted `refreshin
 uncertain exchange, an invalid replacement — fails closed as `credential-recovery-required` and is
 never retried automatically (replaying a rotated refresh token is the one unrecoverable move). An
 authoritative revocation persists `revoked`. No failure carries a credential in its message, its
-exception chain or any repr. The durable store and seed recovery are specified below. The deployed policy still omits Codex.
+exception chain or any repr. The durable store and seed recovery are specified below. The deployed policy declares the rail since 2026-10-22 (prober-only).
 
 On the data plane a lifecycle failure answers before upstream is contacted:
 `credential-store-unavailable` → 503 with `retry-after` (the store may answer next time); every
@@ -387,7 +389,7 @@ Recreate on the PVC; distributed fencing remains FU-271. No credential memory fa
 | "an uncertain refresh refuses, then stays refused" | the exchange times out || — | 401 `credential-refresh-uncertain`, then 401 `credential-recovery-required` |
 | "a store fault on the data plane is retriable ⚖" | the marker save raises || — | 503 `credential-store-unavailable`, `retry-after: 60` |
 | "no backend: the rail is a definitive miss" | `policy-codex`, `create_app` without a store || defer `credential-unresolved` | — |
-| "the deployed policy declares no codex rail" | `argocd/resources/agent-gateway/policy.json` || `rails` has no `codex` key — the rail ships dark | — |
+| "the deployed policy declares the codex rail, prober-only ⚖" | `argocd/resources/agent-gateway/policy.json` || `rails.codex` with its `headroom` and `oauth` blocks (lit 2026-10-22, FU-270: the seed minted in #2826, the poll in #2828); only `prober` lists the rail, and LAST — the explicit canary cell (`harness: codex` narrows the walk to the responses dialect); no other role routes to it, an opencode-harness prober never lands on it | — |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|

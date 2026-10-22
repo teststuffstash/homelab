@@ -1,5 +1,5 @@
 {
-  "snapshot_at": "2026-10-22T17:30:58Z",
+  "snapshot_at": "2026-10-22T20:55:59Z",
   "sources": {
     "capability": {
       "source": "artificial-analysis",
@@ -7,15 +7,15 @@
       "rows": 345
     },
     "go_catalog": {
-      "fetched_at": "2026-10-22T12:20:59Z",
+      "fetched_at": "2026-10-22T18:21:00Z",
       "fee_usd_month": 10.0,
       "draw_30d_usd": 0.00381
     },
     "openrouter_catalog": {
-      "fetched_at": "2026-10-22T12:21:03Z",
+      "fetched_at": "2026-10-22T18:21:03Z",
       "cells": {
-        "candidate": 232,
-        "eligible": 12,
+        "candidate": 233,
+        "eligible": 15,
         "excluded": 0
       }
     }
@@ -408,16 +408,16 @@
           "prior": 1.0
         }
       },
-      "opencode-go/minimax-m3.1-flash-free": {
+      "opencode-go/minimax-m3.1-flash": {
         "aa_id": null,
         "intelligence": null,
         "coding": null,
         "agentic": null,
-        "out_price": 0.0,
-        "in_price": 0.0,
-        "monthly_limit_usd": "unlimited",
+        "out_price": 0.3,
+        "in_price": 0.075,
+        "monthly_limit_usd": 20.0,
         "provider": null,
-        "price_basis": "unlimited",
+        "price_basis": "promise",
         "rides": {
           "clean": 0,
           "judged": 0,
@@ -623,10 +623,10 @@
         "intelligence": 24.7,
         "coding": null,
         "agentic": null,
-        "out_price": 0.42,
-        "in_price": 0.14,
+        "out_price": 0.3,
+        "in_price": 0.075,
         "monthly_limit_usd": null,
-        "provider": "deepinfra",
+        "provider": "baidu",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
@@ -698,36 +698,20 @@
           "prior": 1.0
         }
       },
-      "minimax/minimax-m3.1-flash:free": {
-        "aa_id": null,
-        "intelligence": null,
-        "coding": null,
-        "agentic": null,
-        "out_price": null,
-        "in_price": null,
-        "monthly_limit_usd": null,
-        "provider": null,
-        "price_basis": null,
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
       "moonshotai/kimi-k3": {
         "aa_id": "moonshotai/kimi-k3",
         "intelligence": 43.6,
         "coding": 76.2,
         "agentic": 50.0,
         "out_price": 14.9,
-        "in_price": 0.892,
+        "in_price": 0.943,
         "monthly_limit_usd": null,
         "provider": "morph",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 0.988827
+          "prior": 0.991655
         }
       },
       "nvidia/nemotron-3-ultra-550b-a55b:free": {
@@ -879,15 +863,15 @@
         "intelligence": 37.9,
         "coding": null,
         "agentic": null,
-        "out_price": 0.266,
-        "in_price": 0.133,
+        "out_price": 0.28,
+        "in_price": 0.13,
         "monthly_limit_usd": null,
-        "provider": "deepinfra",
+        "provider": "makora",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 0.99375
+          "prior": 0.965254
         }
       },
       "xiaomi/mimo-v2.6-pro": {
@@ -943,15 +927,33 @@
         "intelligence": 41.8,
         "coding": 71.5,
         "agentic": 50.9,
-        "out_price": 0.145,
-        "in_price": 0.0435,
+        "out_price": 0.25,
+        "in_price": 0.075,
         "monthly_limit_usd": null,
-        "provider": "streamlake",
+        "provider": "gmicloud",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 0.992361
+          "prior": 0.970833
+        }
+      }
+    },
+    "codex": {
+      "codex/gpt-6-astra": {
+        "aa_id": "openai/gpt-6-astra",
+        "intelligence": 52.7,
+        "coding": 76.9,
+        "agentic": 51.0,
+        "out_price": null,
+        "in_price": null,
+        "monthly_limit_usd": null,
+        "provider": null,
+        "price_basis": null,
+        "rides": {
+          "clean": 0,
+          "judged": 0,
+          "prior": 1.0
         }
       }
     }

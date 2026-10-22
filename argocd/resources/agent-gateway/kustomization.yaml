@@ -33,7 +33,7 @@ resources:
 # is the stack's loop namespace (`<stack>-agents`); its `claude-session` exists for platform +
 # oracle only (the Composition renders the ExternalSecret for all four — sleep-agents and
 # circles-agents hold none live), so the policy does not lean on it.
-# models: DERIVED (GW-MODEL-TIERS, operator rulings 2026-10-18 + 2026-10-19) — the three rails'
+# models: DERIVED (GW-MODEL-TIERS, operator rulings 2026-10-18 + 2026-10-19) — the four rails'
 # tier lists are the output of `devbox run tiers -- apply` over benchmarks.json beside this file
 # (the committed tier evidence: every candidate per rail with its Artificial Analysis row, its
 # price, its clean-ride evidence and its Go limit; the `tiers` block in policy.json holds the
@@ -53,13 +53,17 @@ resources:
 # list x fee / max(the rail's 30-day draw, the model's limit)); openrouter = the OpenRouter
 # catalog's models (GW-CATALOG-OR), each at its SELECTED endpoint's price — null until a cell
 # passed the entry canary (2026-10-20: all of them, so the openrouter lists stand as last derived);
-# anthropic = the three `claude/` aliases. History: opencode heavy first left model-classes.json's
+# anthropic = the three `claude/` aliases; codex = the ENROLLED account's model evidence (CODEX_CANDIDATES
+# of benchmarks-snapshot.sh: 2026-10-22 one id, gpt-6-astra, from the leg-E usage probe — FU-270). History: opencode heavy first left model-classes.json's
 # opencode-go claude-sonnet id (#2663 — 400 "Model is unavailable" upstream, kimi-k3 rejected as
 # too expensive for review), then every tier sat on deepseek-v4.1-flash by hand (2026-10-17) once
 # deepseek-v4-flash left the Go catalog (docs/spikes/opencode-go-catalog.md); the derivation
 # replaces both hand picks.
 # side_models (anthropic): claude-code's small side-calls name the haiku family
 # (ANTHROPIC_SMALL_FAST_MODEL default) under a sonnet session — admitted ⚖ (GW-MODEL-RESOLVE).
+# codex (LIT 2026-10-22, FU-270): the ChatGPT-subscription rail as the explicit canary cell — only `prober`
+# lists it, LAST, and only `harness: codex` speaks its responses dialect (the block's _comment cites every
+# ⚖ value; the credential is the gateway's own login, `devbox run codex-seed`).
 # max_sessions: anthropic 5 = the old proxy's SUBSCRIPTION_MAX_RUNNING; opencode 3 =
 # model-classes.json `rails.opencode-go.concurrency` (the declared Go bound); openrouter 20
 # (per-token, bounded by key budgets not slots).
