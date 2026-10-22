@@ -38,7 +38,7 @@ spec:
 
     - name: pins
       container:
-        image: python:3.15-slim@sha256:7bd9bc5a5ebfe5f5cae5419bbb7fceee8b74d6049893fc39549ebfdcb0a5151d
+        image: python:3.15-slim@sha256:b23bb42e5298783f81e7e6f09e1175f68eb46000a789b3ee272ac231c212c4cf
         command: [python3, /probe/probe.py, pins, --consumers-out, /tmp/consumers.json]
         env:
           - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
