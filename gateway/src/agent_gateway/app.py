@@ -148,7 +148,7 @@ def create_app(
     m.bind_tier_evidence(lambda: tier_evidence_age(settings.benchmarks_path, clock()))
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when
-    # one is handed in (tests: the FAKE store) — production passes none (⚑ gap), so it ships dark.
+    # one is handed in (tests: the FAKE store; production: __main__'s SqliteStore + NativeRefresh).
     codex = (CodexRail(policy.rails["codex"], clock, codex_backend, settings.upstreams.get("codex", ""))
              if "codex" in policy.rails else None)
     sessions.codex = codex

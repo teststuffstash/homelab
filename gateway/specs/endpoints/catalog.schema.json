@@ -197,12 +197,13 @@
         "rails": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["anthropic", "opencode", "openrouter"],
-          "description": "per rail, the CANDIDATE rows keyed by POLICY model id (the rail's spelling: claude/<alias>, opencode-go/<id>, a bare openrouter id)",
+          "required": ["anthropic", "opencode", "openrouter", "codex"],
+          "description": "per rail, the CANDIDATE rows keyed by POLICY model id (the rail's spelling: claude/<alias>, opencode-go/<id>, a bare openrouter id, codex/<id>)",
           "properties": {
             "anthropic": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
             "opencode": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
-            "openrouter": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } }
+            "openrouter": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
+            "codex": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" }, "description": "the ChatGPT-subscription rail's candidates: the ENROLLED account's model evidence (FU-270), unpriced like the anthropic aliases" }
           }
         }
       },

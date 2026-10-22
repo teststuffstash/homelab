@@ -1,11 +1,13 @@
 """The codex rail (GW-RAIL-CODEX, GW-CODEX-HEADROOM, GW-CODEX-OAUTH) — the ChatGPT subscription,
 spoken by the `codex` harness in the `responses` dialect at `POST /openai/v1/responses`.
 
-Ships DARK: the deployed policy declares no codex rail, and even with one `create_app` wires a
-backend only when it is handed a credential `Store` + refresh `exchange` AND `CODEX_UPSTREAM` is
-set. The only Store is the tests' FAKE; the production write-back and the upstream profile are
-`⚑ gap` rows. Without a backend the rail is a definitive credential miss: admission skips it
-(`credential-unresolved`) and the data plane answers 401 `credential-unresolved`.
+Lit 2026-10-22 (FU-270) as the explicit canary cell: the deployed policy declares the rail for the
+`prober` role only (last in its list — only `harness: codex` speaks responses, so nothing lands on it
+by default). `create_app` wires a backend only when it is handed a credential `Store` + refresh
+`exchange` AND `CODEX_UPSTREAM` is set — production: the SQLite store seeded from the gateway's own
+login (`devbox run codex-seed`), the native refresh. Without a backend the rail is a definitive
+credential miss: admission skips it (`credential-unresolved`) and the data plane answers 401
+`credential-unresolved`.
 
 Per admission (`SessionService.admit`, on the codex rail): backend present → headroom verdict →
 the lifecycle's durable state. Per request: session → dialect → body (model, mode, input) →

@@ -21,7 +21,7 @@
 | the dispatch answer names the policy id for (rail, tier) | policy-default | model == rails.<rail>.models.<tier> for every role |
 | no model id from the policy appears in src/ | policy-default | grep finds none |
 | the anthropic body is forwarded byte-untouched | policy-default | upstream body == inbound body |
-| the deployed policy loads under the island's loader, every id known | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same rails + roles as policy-default; every anthropic model/side-model id is a models.*.ids value of model-classes.json; every opencode id is an opencode candidate row of the committed tier evidence benchmarks.json (the gateway's own GET /catalog/opencode read — listed, with a monthly limit under the plan; GW-MODEL-TIERS) and every openrouter id an openrouter candidate row of it (the gateway's own GET /catalog/openrouter read: ranked ∩ benched — never the old proxy's table, 2026-10-22) ⚖; opencode max_sessions = rails.opencode-go.concurrency |
+| the deployed policy loads under the island's loader, every id known | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same roles as policy-default and the policy-codex world's rails (policy-default's + codex, lit 2026-10-22); every codex id a codex candidate row of benchmarks.json; every anthropic model/side-model id is a models.*.ids value of model-classes.json; every opencode id is an opencode candidate row of the committed tier evidence benchmarks.json (the gateway's own GET /catalog/opencode read — listed, with a monthly limit under the plan; GW-MODEL-TIERS) and every openrouter id an openrouter candidate row of it (the gateway's own GET /catalog/openrouter read: ranked ∩ benched — never the old proxy's table, 2026-10-22) ⚖; opencode max_sessions = rails.opencode-go.concurrency |
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ import pytest
 
 from agent_gateway.config import Policy
 
+from ._codex_world import CODEX_POLICY
 from .conftest import (
     ISLAND,
     attach_json,
@@ -150,7 +151,10 @@ def test_deployed_policy_loads(policy):
         bench = json.loads(BENCHMARKS.read_text(encoding="utf-8"))
         go = set(bench["rails"]["opencode"])
         ranked = set(bench["rails"]["openrouter"])
-        attach_json("tier-evidence candidates per rail", {"snapshot_at": bench["snapshot_at"], "opencode": sorted(go), "openrouter": sorted(ranked)})
+        enrolled = set(bench["rails"]["codex"])
+        attach_json("tier-evidence candidates per rail", {"snapshot_at": bench["snapshot_at"], "opencode": sorted(go), "openrouter": sorted(ranked),
+                                                          "codex": sorted(enrolled)})
+        rails_world = Policy.load(CODEX_POLICY)  # the policy-codex world: policy-default's rails + codex (lit in the deployed policy 2026-10-22)
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
         deployed = Policy.from_dict(json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")))
 
@@ -158,11 +162,11 @@ def test_deployed_policy_loads(policy):
         r = deployed.rails[rail]
         return {m for m in (*(x for lst in r.models.values() for x in lst), *r.side_models)}
 
-    with then("the deployed policy's shape is the test policy's: the same rails and roles, every rail's models = {light, standard, heavy}",
-              shape={"rails": {"expected": sorted(policy.rails), "actual": sorted(deployed.rails)},
+    with then("the deployed policy's shape is the worlds': policy-codex's rails, policy-default's roles, every rail's models = {light, standard, heavy}",
+              shape={"rails": {"expected": sorted(rails_world.rails), "actual": sorted(deployed.rails)},
                      "roles": {"expected": sorted(policy.roles), "actual": sorted(deployed.roles)},
                      "models": {r: sorted(v.models) for r, v in deployed.rails.items()}}):
-        assert set(deployed.rails) == set(policy.rails) and set(deployed.roles) == set(policy.roles)
+        assert set(deployed.rails) == set(rails_world.rails) and set(deployed.roles) == set(policy.roles)
         assert all(set(r.models) == {"light", "standard", "heavy"} for r in deployed.rails.values())
     with then("opencode: every deployed model and side-model id is an opencode candidate row of the committed tier evidence ⚖",
               opencode={"checked": sorted(ids_of("opencode")), "unknown": {"expected": [], "actual": sorted(ids_of("opencode") - go)}}):
@@ -170,10 +174,13 @@ def test_deployed_policy_loads(policy):
     with then("openrouter: every deployed model and side-model id is an openrouter candidate row of the committed tier evidence ⚖",
               openrouter={"checked": sorted(ids_of("openrouter")), "unknown": {"expected": [], "actual": sorted(ids_of("openrouter") - ranked)}}):
         assert ids_of("openrouter") <= ranked, sorted(ids_of("openrouter") - ranked)
+    with then("codex: every deployed model id is a codex candidate row of the committed tier evidence — the enrolled account's model evidence ⚖",
+              codex={"checked": sorted(ids_of("codex")), "unknown": {"expected": [], "actual": sorted(ids_of("codex") - enrolled)}}):
+        assert ids_of("codex") <= enrolled, sorted(ids_of("codex") - enrolled)
     if MODEL_CLASSES.exists():
         mc = json.loads(MODEL_CLASSES.read_text(encoding="utf-8"))
         known = {wire for m in mc["models"].values() if isinstance(m, dict) for wire in m["ids"].values()}
-        others = set().union(*(ids_of(r) for r in deployed.rails if r not in ("opencode", "openrouter")))
+        others = set().union(*(ids_of(r) for r in deployed.rails if r not in ("opencode", "openrouter", "codex")))
         concurrency = mc["rails"]["opencode-go"]["concurrency"]
         with then(f"anthropic (and any further rail): every deployed id is spelled as in model-classes.json; opencode max_sessions = its opencode-go concurrency ({concurrency})",
                   model_classes={"checked": sorted(others), "unknown": {"expected": [], "actual": sorted(others - known)},

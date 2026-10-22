@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The tier-evidence CLI (GW-MODEL-TIERS) — the thin shell over `agent_gateway.tiers`:
 
-  devbox run tiers -- snapshot --capability C --go-catalog G --openrouter-catalog O [-o benchmarks.json]
+  devbox run tiers -- snapshot --capability C --go-catalog G --openrouter-catalog O --anthropic-aliases A [--codex-candidates X] [-o benchmarks.json]
   devbox run tiers -- derive   [--benchmarks B] [--policy P]      print {rail: {tier: [ids]}} (+ the undecided tiers on stderr)
   devbox run tiers -- check    [--benchmarks B] [--policy P]      exit 1 + the mismatches when a list is not the derivation;
                                                                   an UNDECIDED tier (no priced candidate) is named, never a mismatch
@@ -40,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     snap.add_argument("--go-catalog", required=True, help="the gateway's GET /catalog/opencode answer (with `pricing`)")
     snap.add_argument("--openrouter-catalog", required=True, help="the gateway's GET /catalog/openrouter answer (the selected endpoint prices)")
     snap.add_argument("--anthropic-aliases", required=True, help="comma-separated `claude/<alias>` policy ids (ruling 4)")
+    snap.add_argument("--codex-candidates", default="", help="comma-separated `codex/<id>` policy ids — the enrolled account's model evidence (FU-270)")
     snap.add_argument("-o", "--out", default=str(DEPLOY / "benchmarks.json"))
     for name in ("derive", "check", "apply"):
         p = sub.add_parser(name)
@@ -51,7 +52,8 @@ def main(argv: list[str] | None = None) -> int:
         now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
         doc = build_snapshot(capability=_load(a.capability), go_catalog=_load(a.go_catalog),
                              openrouter_catalog=_load(a.openrouter_catalog),
-                             anthropic_aliases=[x for x in a.anthropic_aliases.split(",") if x], snapshot_at=now)
+                             anthropic_aliases=[x for x in a.anthropic_aliases.split(",") if x], snapshot_at=now,
+                             codex_candidates=[x for x in a.codex_candidates.split(",") if x])
         Path(a.out).write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
         counts = {rail: f"{sum(1 for r in rows.values() if r['aa_id'])}/{len(rows)} benched, {sum(1 for r in rows.values() if r['out_price'] is not None)} priced"
                   for rail, rows in doc["rails"].items()}
