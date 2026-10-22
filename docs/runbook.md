@@ -104,6 +104,55 @@ fresh pod's very first 2xx is not yet an `increase()`, so expect one request of 
 is quiet, check by hand: `gateway_requests_total{rail="opencode",status="200"}` rises on the next
 Go session.
 
+### Enrol the gateway's own Codex login (the codex seed — FU-270 leg E)
+
+The codex rail (`gateway/`, [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270))
+runs on the operator's ChatGPT subscription through a login that belongs to the **gateway alone**:
+Infisical key `CODEX_SEED_RECORD` → ESO → Secret `agent-egress/codex-seed` (key `record`,
+`argocd/resources/agent-gateway/codex-seed.yaml`) → the gateway imports it **once per content
+hash** into `GATEWAY_DB` (SQLite on its PVC) and owns every rotation from then on. Infisical holds
+the **seed only** — no write-back; a changed seed (a fresh login) **is** the lost-rotation recovery
+operation (`credential-recovery-required` clears on it). The record is exactly the four
+`Credential` fields of `gateway/src/agent_gateway/oauth.py`: `access_token`, `refresh_token`,
+`account_id`, `expires_at` (the access JWT's `exp`); `id_token`/`last_refresh` are dropped.
+`scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed`) is the recipe; the browser consent
+inside it is the **third-party console** class ([docs/secrets.md §Minting doctrine](secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret)).
+
+Two rules the script enforces, and why:
+
+- **Never the homelab-codex jail's `auth.json`.** Native refresh rotates the refresh token with
+  reuse detection, so two refreshers on one token set revoke each other. The login happens in a
+  throwaway `CODEX_HOME` that is shredded before the script exits; the record file (0600) is
+  shredded after the cluster readback matches.
+- **Verify before and after storing.** Before: the fresh access token is probed once against the
+  account usage endpoint (`GET …/backend-api/wham/usage`, the pinned client's path — a 401 aborts;
+  the payload's field/type structure is printed, no values: it is the first live observation the
+  spike's `GW-CODEX-HEADROOM` row lacks, so record the status + shape there). After: the k8s
+  Secret is read back and hash-compared to the local record — the `$`-expansion corruption class
+  of `scripts/infisical-secret.sh` cannot pass silently (the record is refused outright if a token
+  contains `$`).
+
+```bash
+# in the mono jail (needs tofu/kubeconfig; the codex CLI resolves from CODEX_BIN, PATH, or the nix store)
+devbox run codex-seed                 # = login + store
+#   login : codex login --device-auth in a throwaway home → open the printed URL in YOUR browser,
+#           enter the code → record written to ~/.cache/codex-seed/record.json → usage probe
+#   store : → Infisical CODEX_SEED_RECORD → force-sync ExternalSecret agent-egress/codex-seed →
+#           readback hash check → local record shredded
+devbox run codex-seed verify          # later: the Secret's structure (names, expiry, lengths — never a value)
+```
+
+Nothing to restart: the gateway imports the seed on the codex rail's first use, and the deployed
+policy still omits the codex rail — the policy block is the step after this one (the spike's list
+after leg E). **Unverified, watch for it:** whether a second device login on the same account
+invalidates the first (the jail's). If the homelab-codex jail asks to log in again in the days
+after the mint, that settles it — record the observation in the spike either way.
+
+Rotation / recovery = re-run `devbox run codex-seed`: a fresh login gives a new hash, the
+gateway replaces its record (and any `refreshing` marker) at the next use. The seeded access
+token expiring is expected and harmless after import (`verify` says so); the seed is only re-read
+on a hash change.
+
 ## OPNsense as code
 
 OPNsense (router @ `.1` — the CARP pair's VIP since 2026-10-09, nodes on 26.7.x) is managed with the `oxlorg.opnsense` Ansible collection.

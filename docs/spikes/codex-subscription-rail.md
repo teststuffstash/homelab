@@ -557,7 +557,34 @@ specs-review rounds):
 | B | `x-codex-turn-state` round trip bound to session, account and `client_metadata.turn_id`; `turn-state-invalid` | **merged #2735** (19:35Z) |
 | C | same-pod token-only re-read on `POST /sessions/{id}/env` (the `auth.command` seam) | **merged #2736** (19:5xZ) |
 | D | headroom from the gateway's own usage poll → `gateway_subscription_*{rail="codex"}` + panels on UID `claude-subscription` | not started |
-| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | not started |
+| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | **recipe landed 2026-10-22**: `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed`) + [runbook §Enrol the gateway's own Codex login](../runbook.md#enrol-the-gateways-own-codex-login-the-codex-seed--fu-270-leg-e) — login in a throwaway home, usage-endpoint probe (structure only), Infisical → force-sync → readback hash check, shred. **Minted 2026-10-22 ~20:00Z** on the host (`store` verified the Secret's record hash `a1e1523e…`; the seeded access JWT expires 2026-11-01T20:00Z — a 10-day native access-token lifetime, observed). The `login` probe's live usage payload shape is below. Open: the second-login revocation question (watch the jail's codex for a re-login prompt) |
+
+### Live usage payload shape — 2026-10-22 (FU-270 leg E)
+
+The leg-E `login` probe (one `GET https://chatgpt.com/backend-api/wham/usage` with the fresh seed
+token + `ChatGPT-Account-ID`, Plus account) answered **200**. Field/type structure only — no values
+were captured — so this verifies the source-derived window schema above and nothing about limits:
+
+```text
+account_id: str            email: str            user_id: str            plan_type: str
+rate_limit: {allowed: bool, limit_reached: bool,
+             primary_window:   {used_percent: int, limit_window_seconds: int, reset_after_seconds: int, reset_at: int},
+             secondary_window: {same four}}
+rate_limit_reached_type: null        additional_rate_limits: null        code_review_rate_limit: null
+rate_limit_reset_credits: {applicable_available_count: int, available_count: int}
+credits: {balance: str, has_credits: bool, unlimited: bool, overage_limit_reached: bool,
+          approx_cloud_messages: [2], approx_local_messages: [2]}
+model_usage: {gpt-6-astra: {available: bool, available_at: null, credits_would_enable: bool}}
+spend_control: {individual_limit: null, reached: bool}        promo: null
+```
+
+What this settles for `GW-CODEX-HEADROOM`: both windows are present on this account with integer
+`used_percent` and absolute `reset_at` (the native client's basis), `allowed`/`limit_reached` are
+booleans, and `rate_limit_reached_type` is a field the gateway's admission can map (null here).
+What it does not: `account_id`/`email`/`user_id` are identity values the poll must never persist or
+export; `model_usage` keys are **account-specific model evidence** (one key, `gpt-6-astra`, on this
+Plus account) — a hint for the explicit canary model, not a pin or an entitlement proof; the
+`credits`/`spend_control` blocks are unmodelled. The window values themselves were not read.
 
 After E: the codex rail block in the deployed policy (tier lists derived — `benchmarks.json` needs
 `codex/<id>` spellings), the `codex` cell in the launcher, the agent-runtime `agent-codex` wrapper

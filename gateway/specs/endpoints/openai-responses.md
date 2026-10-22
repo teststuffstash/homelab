@@ -257,7 +257,7 @@ forgotten with the process — "a gateway restart forgets" above). The Grafana p
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: authenticated report ingress ⚖" | a poll of the account usage endpoint, a jail `rate_limits` event, upstream headers || none reach the gateway — the gauges above stay absent in production | the token-gated ingest + the usage poll (spike §Candidate shape); the vendor payload is unobserved until the operator's codex login (leg E) |
+| "⚑ gap: authenticated report ingress ⚖" | a poll of the account usage endpoint, a jail `rate_limits` event, upstream headers || none reach the gateway — the gauges above stay absent in production | the token-gated ingest + the usage poll (spike §Candidate shape); the vendor payload's SHAPE was observed once — the operator's leg-E login probe, host, 2026-10-22 ~20:00Z, recorded (field/type structure only) in `docs/spikes/codex-subscription-rail.md` §Live usage payload shape: both windows, integer `used_percent`, absolute `reset_at`, `rate_limit_reached_type` — the poll itself is still unbuilt |
 | "⚑ gap: reservation" | two admissions at 94 % || both dispatched | reports do not meter concurrent use; the session cap is the only bound |
 
 <details markdown="1"><summary>Evidence</summary>
