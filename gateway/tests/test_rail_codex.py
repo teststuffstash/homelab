@@ -70,6 +70,7 @@ The relay seam:
 | a non-object event is invalid | data: [] | protocol-error | none | 1 |
 | a transport fault mid-stream is sanitised | chunk, then raise | transport-error | first chunk | 1 |
 | a cancelled download closes upstream without draining | consumer stops after chunk 1 | cancelled | first chunk | 1 |
+| a consumer that stops after the terminal event keeps the terminal outcome | consumer stops after the completed event, the upstream still open | completed, usage 7 / 3 | the event | 1; the trailer is never pulled |
 """
 
 from __future__ import annotations
@@ -385,6 +386,16 @@ async def test_transport_fault():
         obs, out, closes, _ = await _drive([b": first\n\n", TimeoutError("DUMMY-SECRET upstream details")])
     then_eq("(outcome, bytes out, closes)", (obs.outcome, out, closes), ("transport-error", b": first\n\n", 1))
     then_eq("observation carries no secret", "DUMMY-SECRET" in repr(obs), False)
+
+
+async def test_cancel_after_terminal():
+    """row: a consumer that stops after the terminal event keeps the terminal outcome"""
+    world("policy-codex")
+    with when("the consumer stops right after the completed event while the upstream still holds the stream open (the live CLI's shape)"):
+        obs, out, closes, pulled = await _drive([_event(), b": trailer\n\n"], stop_after=1)
+    then_eq("(outcome, usage, closes)", (obs.outcome, (obs.input_tokens, obs.output_tokens), closes), ("completed", (7, 3), 1))
+    then_eq("bytes out", out, _event(), claim="the completed event reached the consumer")
+    then_eq("chunks pulled from upstream", pulled, [0], claim="the trailer is never pulled")
 
 
 async def test_cancellation():

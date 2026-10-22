@@ -661,6 +661,34 @@ carry). Also `x-codex-safety-buffering-enabled` / `-faster-model` and `x-models-
 were not captured (names only — the capture's rule); the usage poll stays the admission source.
 The release worked this time (the hardened verb, #2830); the session row: 1 request, released.
 
+### The third ride — 2026-10-22 22:56–22:57Z: the canary completed (FU-270, step 4 DONE)
+
+On #2837's image: admitted on live headroom, env pulled, provider block rendered, and
+`codex exec --json` ran a **real tool turn** — `command_execution` `rg -m 1 '^#{1,6} ' README.md`
+→ `# homelab` — then answered `homelab`; `turn.completed` with usage 21,422 input (18,176
+cached) / 47 output; the launcher reported the outcome **clean**, the session released. Two
+requests on the rail (the tool continuation rode the `x-codex-turn-state` round trip of leg B;
+the gateway's `codex upstream 200 without a content-type — relayed` on both). **Step 4's
+acceptance is met**: the operator's ChatGPT subscription serves a cluster ride through the
+gateway with no credential in the pod, on live headroom the gateway observed itself (poll), with
+tool use, finalisation and release. Evidence: the session row (`requests 2`, `tokens_in 3246`,
+`tokens_out 47`, `outcome clean`), `gateway_tokens_total{rail="codex"}` in / cache_read / out =
+3246 / 18176 / 47, the ride pod's `run.log` at
+`s3://agent-transcripts/homelab/canary-codex-20261022T225609Z/…`.
+
+One classification finding, fixed in the same slice: both requests were recorded
+`outcome=cancelled status=499` although each stream's `response.completed` had been observed
+(usage counted) — the native CLI closes the connection as soon as it has the terminal event
+while the vendor holds the stream open, so the relay's cancellation branch overwrote an earned
+outcome. A consumer that goes away after the terminal event now keeps that outcome (200); only a
+still-pending stream is a cancellation (a ⚖ relay-seam row with the live shape as its fixture).
+
+What remains under FU-270 after step 4: the role routing question (who may ride codex beyond
+the explicit canary cell — the spike's "initial eligibility" row), the `x-codex-*` response
+headers as a second headroom source, MCP for the codex harness, the second-login revocation
+watch, and the recorded-protocol experiment proper (the four-boundary capture — this slice's
+refusal capture is its first piece).
+
 ## Recorded live protocol experiment — 2026-10-22 (FU-270)
 
 **Plan, not implemented or live evidence.** The operator asked for captured requests/responses

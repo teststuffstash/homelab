@@ -158,6 +158,7 @@ into the newer turn. These are gateway judgments, not vendor limits.
 | "a non-object event is invalid" | `data: []` || protocol-error | none of it | 1 |
 | "a transport fault mid-stream is sanitised" | one chunk, then the transport raises with secret text || transport-error | the first chunk | 1 |
 | "a cancelled download closes upstream without draining" | the consumer stops after the first chunk || cancelled | the first chunk | 1; the second chunk is never pulled |
+| "a consumer that stops after the terminal event keeps the terminal outcome ⚖" | the consumer stops right after the completed event while the upstream still holds the stream open (the live native CLI's shape — 2026-10-22 22:57Z: both requests of the first completed canary turn were recorded `cancelled` / 499 with their usage counted) || completed, usage 7 / 3 | the event | 1; the trailer is never pulled |
 
 ### Named gaps and local evidence
 
