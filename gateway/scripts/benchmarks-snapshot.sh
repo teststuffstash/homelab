@@ -7,6 +7,9 @@
 #   kubectl on PATH (from the repo root: `devbox run -- bash gateway/scripts/benchmarks-snapshot.sh`)
 #   KUBECONFIG      the cluster (default: tofu/kubeconfig at the repo root)
 #   ANTHROPIC_ALIASES  the subscription rail's candidate aliases (ruling 4: the policy's three)
+#   CODEX_CANDIDATES   the codex rail's candidates (`codex/<id>`): the ENROLLED account's model evidence —
+#                      2026-10-22 the leg-E usage probe's `model_usage` named one key, gpt-6-astra
+#                      (docs/spikes/codex-subscription-rail.md §Live usage payload shape); not a catalog
 #
 # Inputs (each saved beside the output under /tmp for the record of this run):
 #   1. the capability rows — the OLD proxy's router store, table `capability` (the AA pull its
@@ -24,6 +27,7 @@ cd "$(dirname "$0")/.."
 ROOT=$(cd .. && pwd)
 export KUBECONFIG="${KUBECONFIG:-$ROOT/tofu/kubeconfig}"
 ALIASES="${ANTHROPIC_ALIASES:-claude/haiku,claude/sonnet,claude/opus}"
+CODEX="${CODEX_CANDIDATES:-codex/gpt-6-astra}"
 OUT="${1:-$ROOT/argocd/resources/agent-gateway/benchmarks.json}"
 scratch=$(mktemp -d /tmp/benchmarks-snapshot.XXXXXX)
 pf=""
@@ -66,7 +70,7 @@ echo "== snapshot → $OUT"
 devbox run tiers -- snapshot \
   --capability "$scratch/capability.json" --go-catalog "$scratch/go-catalog.json" \
   --openrouter-catalog "$scratch/openrouter-catalog.json" \
-  --anthropic-aliases "$ALIASES" -o "$OUT"
+  --anthropic-aliases "$ALIASES" --codex-candidates "$CODEX" -o "$OUT"
 echo "== inputs kept under $scratch"
 echo "== derivation vs the deployed policy (apply with: devbox run tiers -- apply)"
 devbox run tiers -- check --benchmarks "$OUT" || true

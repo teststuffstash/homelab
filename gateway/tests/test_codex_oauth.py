@@ -35,7 +35,7 @@ Through the gateway:
 | an uncertain refresh refuses, then stays refused | exchange times out | - | 401 refresh-uncertain, then 401 recovery-required |
 | a store fault on the data plane is retriable | marker save raises | - | 503 credential-store-unavailable, retry-after 60 |
 | no backend: the rail is a definitive miss | create_app without a store | defer credential-unresolved | - |
-| the deployed policy declares no codex rail | argocd/resources/agent-gateway/policy.json | no codex rail | - |
+| the deployed policy declares the codex rail, prober-only | argocd/resources/agent-gateway/policy.json | rails.codex with headroom + oauth; only prober lists it, last | - |
 """
 
 from __future__ import annotations
@@ -431,12 +431,15 @@ DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "po
 
 
 @pytest.mark.skipif(not DEPLOYED_POLICY.exists(), reason="deploy manifests absent (service-only checkout)")
-def test_deployed_policy_is_dark():
-    """row: the deployed policy declares no codex rail"""
+def test_deployed_policy_lit():
+    """row: the deployed policy declares the codex rail, prober-only"""
     world("policy-default")
     with when("Policy.from_dict(the deployed policy.json) — the island's loader, the GW-MODEL-RESOLVE reader"):
         policy = Policy.from_dict(json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")))
         attach_json("deployed rails", sorted(policy.rails))
-    with then("rails has no codex key — the rail ships dark"):
-        check("codex in rails", "codex" in policy.rails, False)
-        check("codex in any role's rails", any("codex" in r.rails for r in policy.roles.values()), False)
+    with then("rails.codex is declared with its headroom and oauth blocks (lit 2026-10-22, FU-270)"):
+        check("codex in rails", "codex" in policy.rails, True)
+        check("headroom + refresh margin present", (policy.rails["codex"].headroom is not None, policy.rails["codex"].refresh_margin_s is not None), (True, True))
+    with then("only the prober lists the rail, and last — the explicit canary cell, no role routes to it by default"):
+        check("roles listing codex", sorted(n for n, r in policy.roles.items() if "codex" in r.rails), ["prober"])
+        check("codex is the prober's last rail", policy.roles["prober"].rails[-1], "codex")
