@@ -503,7 +503,7 @@ refuses the load, so a stale hand copy can never shadow the catalog); on every o
 policy's declared per-model window (the openrouter rail has no catalog context yet). `null` is "no
 catalog row" / "not declared", never a guess.
 
-**`codex`** (world `policy-codex` — the rail ships dark): the pinned CLI reads its provider from
+**`codex`** (world `policy-codex`; the deployed rail is lit prober-only since 2026-10-22): the pinned CLI reads its provider from
 config, not from env — observed with codex-cli 0.161.0 (`experiments/codex-rail/compat.py`):
 a bare `OPENAI_BASE_URL` + `OPENAI_API_KEY` with no provider block is ignored (the CLI dialled
 `api.openai.com`, refused by the fixture's closed proxy), while a `[model_providers.<id>]` block

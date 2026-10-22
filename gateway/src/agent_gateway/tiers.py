@@ -43,8 +43,9 @@ from .config import RAIL_PREFIX, TIERS, CostPolicy, TiersPolicy, tiers_policy
 AA_SOURCE = "artificial-analysis"
 ALIAS_PREFIX = RAIL_PREFIX["anthropic"]  # `claude/<alias>`: the subscription rail's family aliases
 ALIAS_VENDOR = "anthropic"  # the AA vendor those aliases join under
-# ⚖ ruling 3: the subscription rail has no per-token price — score ascending stands in for cost.
-PRICELESS_RAILS = ("anthropic",)
+# ⚖ ruling 3: a subscription rail has no per-token price — score ascending stands in for cost.
+# codex joined 2026-10-22 (FU-270): the ChatGPT subscription, one flat fee like the anthropic one.
+PRICELESS_RAILS = ("anthropic", "codex")
 _VERSION_PAIR = re.compile(r"-(\d+)-(\d+)(?=-|$)")  # the Go spelling `-5-5` → the AA spelling `-5.5`
 _VARIANT = re.compile(r":[a-z0-9-]+$")  # `:free` / `:exacto` — a variant of its family (model-classes.json)
 _VERSION = re.compile(r"\d+(?:\.\d+)*")
@@ -246,15 +247,18 @@ def _iso(ts: float) -> str:
 
 
 def build_snapshot(*, capability: list, go_catalog: dict, openrouter_catalog: dict, anthropic_aliases: list[str],
-                   snapshot_at: str) -> dict:
+                   snapshot_at: str, codex_candidates: list[str] = ()) -> dict:
     """The benchmarks snapshot from its three inputs (the shape: catalog.schema.json
     `$defs.benchmarks_snapshot`). Candidates: the Go catalog's listed models with a monthly limit
     under the deployed plan (`opencode-go/<id>`), priced at the plan's discounted list price
     (`GET /catalog/opencode` `pricing`); the OpenRouter catalog's models (`GET /catalog/openrouter`),
     priced at the SELECTED endpoint — null until a cell passed the entry canary (never the
-    headline); the subscription rail's aliases as given, unpriced. Prices are $ per 1M tokens."""
+    headline); the subscription rails' candidates as given, unpriced — the anthropic aliases, and the
+    codex ids (`codex/<id>`: the ENROLLED account's model evidence, never a catalog — the spike
+    §Live usage payload shape; they join the AA row by tail, `codex/gpt-6-astra` ↔ `openai/gpt-6-astra`).
+    Prices are $ per 1M tokens."""
     aa = {row[0]: row for row in capability if row[1] == AA_SOURCE}
-    rails: dict[str, dict[str, dict]] = {"anthropic": {}, "opencode": {}, "openrouter": {}}
+    rails: dict[str, dict[str, dict]] = {"anthropic": {}, "opencode": {}, "openrouter": {}, "codex": {}}
 
     def row(pid: str, *, out_price=None, in_price=None, limit=None, provider=None, basis=None, rides=None) -> dict:
         aa_id = join_aa_id(pid, aa)
@@ -266,6 +270,10 @@ def build_snapshot(*, capability: list, go_catalog: dict, openrouter_catalog: di
 
     for alias in anthropic_aliases:
         rails["anthropic"][alias] = row(alias)
+    for pid in codex_candidates:
+        if not pid.startswith(RAIL_PREFIX["codex"]):
+            raise ValueError(f"codex candidate {pid!r} is not spelled codex/<id>")
+        rails["codex"][pid] = row(pid)
     pricing = (go_catalog.get("pricing") or {}).get("models") or {}
     for mid, m in sorted(go_catalog["models"].items()):
         if m.get("listed") and m.get("monthly_limit_usd") is not None:

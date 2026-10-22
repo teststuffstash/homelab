@@ -66,8 +66,8 @@ fx/none unbenched · 0/0.
 | the score is the Artificial Analysis intelligence index | tiers.score intelligence; every benched row has it, some lack coding |
 | a tier is a band of the rail's best | bands 0.9/0.75/0.5; every listed id scores ≥ band × its rail's top |
 | each list is cheapest per clean ride first, capped at 3 | cap 3; priced-rail lists ≤ 3, cost per clean ride non-decreasing |
-| the subscription rail has no price: score ascending is its cost proxy | anthropic rows unpriced; lists strictly score-ascending |
-| the candidates per rail | opencode keys opencode-go/<id> priced promise/measured/unlimited or unpriced; openrouter keys = the OpenRouter catalog's vendor/model ids, priced at the selected endpoint (basis endpoint with its provider) or unpriced; anthropic keys = the rail's claude/ aliases, unpriced; source artificial-analysis |
+| the subscription rail has no price: score ascending is its cost proxy | anthropic and codex rows unpriced; lists strictly score-ascending |
+| the candidates per rail | opencode keys opencode-go/<id> priced promise/measured/unlimited or unpriced; openrouter keys = the OpenRouter catalog's vendor/model ids, priced at the selected endpoint (basis endpoint with its provider) or unpriced; anthropic keys = the rail's claude/ aliases, unpriced; codex keys = the deployed codex rail's ids, unpriced; source artificial-analysis |
 | the join to the AA row is a rule, not a table | every row's aa_id == join_aa_id over the snapshot's AA ids |
 | unbenched never tiers | no listed id has a null aa_id, nor a null out_price on a priced rail |
 
@@ -491,15 +491,17 @@ def test_ruling_subscription_proxy():
     world(note="against the committed snapshot + the deployed policy")
     policy, bench = _deployed()
     axis = policy["tiers"]["score"]
-    with given("the anthropic snapshot rows and the deployed anthropic lists"):
-        rows = bench["rails"]["anthropic"]
-        scored = {tier: [(pid, rows[pid][axis]) for pid in ids] for tier, ids in _listed(policy, "anthropic").items()}
-        attach_json("anthropic lists with scores", scored)
+    priced, not_ascending = {}, {}
+    with given("the anthropic and codex snapshot rows and the deployed anthropic and codex lists (the two subscription rails)"):
+        scored = {rail: {tier: [(pid, bench["rails"][rail][pid][axis]) for pid in ids] for tier, ids in _listed(policy, rail).items()}
+                  for rail in ("anthropic", "codex")}
+        attach_json("subscription lists with scores", scored)
     with when("the rows' prices and each list's score order are read"):
-        priced = [pid for pid, r in rows.items() if r["out_price"] is not None or r["in_price"] is not None]
-        not_ascending = [tier for tier, ids in scored.items() if [s for _, s in ids] != sorted({s for _, s in ids})]
-    then_eq("anthropic rows carrying a price", priced, [])
-    then_eq("anthropic lists not strictly score-ascending", not_ascending, [])
+        for rail, lists in scored.items():
+            priced[rail] = [pid for pid, r in bench["rails"][rail].items() if r["out_price"] is not None or r["in_price"] is not None]
+            not_ascending[rail] = [tier for tier, ids in lists.items() if [s for _, s in ids] != sorted({s for _, s in ids})]
+    then_eq("subscription rows carrying a price", priced, {"anthropic": [], "codex": []})
+    then_eq("subscription lists not strictly score-ascending", not_ascending, {"anthropic": [], "codex": []})
 
 
 @deployed
@@ -529,7 +531,7 @@ def test_ruling_unbenched_never_tiers():
         attach_json("undecided (unchecked here)", und)
     with when("the unbenched and the unpriced-on-a-priced-rail are counted"):
         unbenched = sorted(k for k, v in listed.items() if v["aa_id"] is None)
-        unpriced = sorted(k for k, v in listed.items() if not k.startswith("anthropic.") and v["out_price"] is None)
+        unpriced = sorted(k for k, v in listed.items() if not k.startswith(("anthropic.", "codex.")) and v["out_price"] is None)
     then_eq("listed ids with no AA row", unbenched, [])
     then_eq("listed ids with no price on a priced rail", unpriced, [])
 
@@ -556,6 +558,9 @@ def test_snapshot_candidates():
             claim="every openrouter row is priced at its selected endpoint (basis endpoint, with the provider) or unpriced")
     then_eq("anthropic keys", sorted(rails["anthropic"]), aliases, claim="the anthropic keys = the deployed rail's claude/ aliases")
     then_eq("anthropic rows priced", [k for k, r in rails["anthropic"].items() if r["out_price"] is not None], [])
+    codex_ids = sorted({x for lst in policy["rails"]["codex"]["models"].values() for x in ([lst] if isinstance(lst, str) else lst)})
+    then_eq("codex keys", sorted(rails["codex"]), codex_ids, claim="the codex keys = the deployed codex rail's ids (the enrolled account's model evidence)")
+    then_eq("codex rows priced", [k for k, r in rails["codex"].items() if r["out_price"] is not None], [])
     then_eq("capability source · openrouter catalog fetched_at present",
             (bench["sources"]["capability"]["source"], bench["sources"]["openrouter_catalog"]["fetched_at"] is not None), ("artificial-analysis", True))
 
