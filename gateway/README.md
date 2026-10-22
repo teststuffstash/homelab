@@ -93,7 +93,11 @@ the wire id by stripping the rail prefix. The deployed policy
 (`argocd/resources/agent-gateway/policy.json`, generated into the `agent-gateway-policy`
 ConfigMap by a hash-suffixed configMapGenerator, so an edit rolls the pod) carries the same shape; a
 `GW-MODEL-RESOLVE` row loads it through the same loader and checks its ids against
-`model-classes.json`. Its three rails' tier LISTS are not hand-picked: `GW-MODEL-TIERS` derives them
+`model-classes.json`. **A key NEW to the loader lands in a second PR, after the image that reads it
+is deployed** — the ConfigMap rolls on sync, the image only after the deploy auto-bump (~10 min
+behind), and the loader refuses unknown keys by design (`_keys`): #2810 shipped `canary.backoff_s`
+beside its parser and the old image crash-looped the single Recreate replica for the whole gap
+(2026-10-22 06:55–07:0xZ). Values of known keys roll freely. Its three rails' tier LISTS are not hand-picked: `GW-MODEL-TIERS` derives them
 from `argocd/resources/agent-gateway/benchmarks.json` (the committed tier evidence) under the
 policy's `tiers` block, and a row fails the suite when a list drifts from the derivation.
 
