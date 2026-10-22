@@ -146,11 +146,14 @@ archived). A red ARMED `automerge` PR still simply **parks** (docs/dependency-up
   command string must match the global `allowedCommands` exactly (compiled as a Handlebars template
   first), and `fileFilters` is the ONLY way a generated file reaches the commit (never `git add`). The
   one consumer today: the kube-prometheus-stack rule re-rendering the upstream alert list on its branch
-  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). The `install-tool helm`
-  version is Renovate-proposed (2026-10-10): two `customManagers` over `renovate-global.json` itself
-  (depName `helm/helm`) rewrite the command AND its regex-escaped `allowedCommands` entry in one branch
-  (`currentValueTemplate` + `autoReplaceStringTemplate` for the escaped half), so the pair never drifts
-  apart; the PR is codeowner-gated (`/.github/`). A dry run
+  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). The helm itself
+  is installed BY the script (`HELM_VERSION=v<x.y.z>` + `install-tool helm`, a no-op for the seat where
+  `install-tool` is absent) and Renovate-proposed through one `customManager` over that line (depName
+  `helm/helm`, class 17 of docs/dependency-classes.yaml; 2026-10-22). Until then the version sat in
+  `renovate-global.json` itself as two halves — the command and its regex-escaped `allowedCommands`
+  entry, two managers with `currentValueTemplate` + `autoReplaceStringTemplate` to move the pair —
+  which put every helm patch under the `/.github/` codeowner row (#2804 parked on 4.3.0 → 4.3.1);
+  `scripts/` has no row, so the bump now rides the custom.regex automerge lane. A dry run
   (`workflow_dispatch` → `dryRun`) still executes the commands and logs `DRY-RUN: Would commit files`,
   but only when a branch is (re)built — an up-to-date branch runs nothing, so the proof is the next bump.
 - **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
