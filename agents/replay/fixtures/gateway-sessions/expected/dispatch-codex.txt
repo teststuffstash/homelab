@@ -1,0 +1,10 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"prober","task":"adhoc","round":1,"harness":"codex","bind":{"namespace":"homelab","serviceaccount":"agentstack-worker","pod":"agent-homelab-120000"}}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): dispatch codex/gpt-6-astra [rail=codex,harness=codex,session=0123abcd,context_tokens=null] (task=adhoc, round=1) — bound to homelab/agentstack-worker pod agent-homelab-120000; the pod pulls env OPENAI_BASE_URL,OPENAI_API_KEY,CODEX_MODEL; caller the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)
+OUT GW_SESSIONS='1' HARNESS='codex' MODEL='codex/gpt-6-astra'
+OUT GW_RAIL='codex' GW_CONTEXT_TOKENS='' GW_CLAUDE_MODEL='' OPENCODE_MODEL='codex/gpt-6-astra'
+OUT AGENT_ROUTER='off' OR_CREDITS='' STRUCK_MODEL='codex/gpt-6-astra'
+OUT GW_POD='agent-homelab-120000' GW_ENV_KEYS='OPENAI_BASE_URL,OPENAI_API_KEY,CODEX_MODEL' GW_PULL_URL='http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env' GW_PULL_PRELUDE set: yes
+OUT gws_ in launcher state: 0
+OUT → gateway(sessions): released 0123abcd
+RC 0

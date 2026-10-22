@@ -591,6 +591,17 @@ After E: the codex rail block in the deployed policy (tier lists derived — `be
 rendering the provider block from the dispatch env, and the live canary in a declared maintenance
 window (step 4 above). The mint and the window are the operator's.
 
+**Built 2026-10-22/23 (seat, unattended):** leg D's poll half — the gateway polls the usage
+endpoint itself (`GW-CODEX-HEADROOM §Poll`, two alerts; #2828); the policy block, prober-only,
+with the codex list derived from the enrolled account's one model (`CODEX_CANDIDATES`, the
+usage probe's `model_usage`; stacked on #2828); the launcher's `codex` cell (`--harness codex` →
+`agent-codex --dangerously-bypass-approvals-and-sandbox …`, the key-ref / subscription-arm
+exemptions) + `gateway/scripts/canary-codex.sh`, the one-ride canary verb for the
+[declared window](../glossary.md#declared-window); the
+runtime wrapper rendering the provider block from the pulled env
+([agent-runtime#179](https://github.com/teststuffstash/agent-runtime/pull/179)). The canary
+itself waits for all four to land and for a declared window.
+
 ### The first live ride — 2026-10-22 21:47–21:54Z (FU-270, step 4, window `seat-1792705075-7945`)
 
 **The rail lit at 21:47:46Z**: the policy block (#2832) rolled the gateway; its first act was

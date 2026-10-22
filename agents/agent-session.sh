@@ -11,7 +11,7 @@
 #       --run "goose run --recipe .agents/fix.yaml --params issue=42"
 #       → headless: runs the recipe to a branch+PR, streams logs, pod self-terminates.
 #
-# Flags: --run "<cmd>"  --ref <base-branch>  --repo <git-url>  --harness goose|opencode|claude  --model provider/model
+# Flags: --run "<cmd>"  --ref <base-branch>  --repo <git-url>  --harness goose|opencode|claude|codex  --model provider/model
 #
 # FU-019 (ADR-078): migrate Pod → agent-sandbox Sandbox CR; scoped SA + RBAC. FU-020/FU-018
 # (ADR-081): Cilium egress policy + auth-injecting proxy so the git/LLM tokens are INJECTED, never
@@ -82,9 +82,9 @@ ib_refuse_malformed() {   # <key> <ref>
 # advance (same --round, same task) and no label is touched — an infra failure consumes no logic
 # round (ADR-127).
 ORIG_ARGS=("$@")
-PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
+PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude|codex] [--model provider/model]}"
 case "$PROJECT" in --help|-h)  # a bare --help used to be swallowed as the PROJECT name (junk /route + ref-resolve rows, seen live 2026-08-02)
-  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--max-turns <n>] [--size standard|large] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
+  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude|codex] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--max-turns <n>] [--size standard|large] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
   exit 0
 ;; esac
 shift || true
@@ -412,6 +412,7 @@ if [ -n "${GW_SESSIONS:-}" ]; then
   case "$GW_RAIL" in
     anthropic) _gw_wire="${MODEL#claude/}";;
     opencode)  _gw_wire="${MODEL#opencode-go/}";;
+    codex)     _gw_wire="${MODEL#codex/}";;
     *)         _gw_wire="$MODEL";;
   esac
   case "$HARNESS" in
@@ -420,7 +421,8 @@ if [ -n "${GW_SESSIONS:-}" ]; then
     opencode) OPENCODE_MODEL="gateway/${_gw_wire}"
               [[ ",${GW_ENV_KEYS}," == *",OPENCODE_CONFIG_CONTENT,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks OPENCODE_CONFIG_CONTENT";;
     goose)    [[ ",${GW_ENV_KEYS}," == *",GOOSE_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks GOOSE_MODEL";;
-    *)        _gw_bad="${_gw_bad:+$_gw_bad, }harness '${HARNESS}' (this launcher runs claude|opencode|goose)";;
+    codex)    [[ ",${GW_ENV_KEYS}," == *",CODEX_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks CODEX_MODEL";;  # the codex cell (FU-270): the pod's agent-codex renders the provider block from the pulled OPENAI_BASE_URL / CODEX_MODEL (GW-SESSIONS-ENV)
+    *)        _gw_bad="${_gw_bad:+$_gw_bad, }harness '${HARNESS}' (this launcher runs claude|opencode|goose|codex)";;
   esac
   if [ -n "$_gw_bad" ]; then
     echo "→ gateway(sessions): defer — [dispatch-unusable: ${_gw_bad}] retry_after=?s — FAIL CLOSED, releasing and not dispatching." >&2
@@ -482,7 +484,7 @@ if [ "$AGENT_ROUTER" != "off" ]; then
   _keyref="${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}"
   # Subscription-rail rides (Anthropic AND opencode-go) carry no OpenRouter key ref — the Go rail's
   # credential lives proxy-side (ADR-107 chunk C), exactly like the claude oauth.
-  case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*) _keyref="";; esac
+  case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*|codex:*|*:codex/*) _keyref="";; esac
   _req="$(jq -nc --arg stack "$(printf '%s' "$_srow" | jq -r '.name // ""')" \
       --arg task "${TASK:-adhoc}" --arg session "agent-${PROJECT}-${TASK:-adhoc}-r${ROUND}" \
       --arg key_ref "$_keyref" \
@@ -575,7 +577,7 @@ _sub_rail_ride=""
 # opencode-go/* joins the arm (2026-08-17, the platform Go-flash dogfood): a Go ride buys nothing
 # from OpenRouter either — no credit probe, no #158 degrade (its own capacity gate is the
 # /opencode-limit latch at the FU-088 gate below).
-case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*) _sub_rail_ride=1;; esac
+case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*|codex:*|*:codex/*) _sub_rail_ride=1;; esac  # codex (FU-270): the ChatGPT subscription — no OpenRouter credit, no key ref
 _or_probe_url="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
 if [ -z "$_sub_rail_ride" ] && [ -z "$OR_CAPACITY_DOWN" ] \
    && [ -n "$_or_probe_url" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ]; then
@@ -835,7 +837,7 @@ if [ -n "${RECIPE:-}" ]; then
   # first exposed on goose). The RUN_CMD is BUILT below, after the environment knobs (--docker,
   # egress) are known — so the platform environment card (FU-114 L1) can be composed from them and
   # injected into the recipe. Here we only VALIDATE and derive launcher-owned flags.
-  case "$HARNESS" in claude|goose|opencode) ;; *) echo "FATAL: --recipe supports the claude/goose/opencode harnesses (got '${HARNESS}')" >&2; exit 2;; esac
+  case "$HARNESS" in claude|goose|opencode|codex) ;; *) echo "FATAL: --recipe supports the claude/goose/opencode/codex harnesses (got '${HARNESS}')" >&2; exit 2;; esac
   [ -f "$RECIPE" ] || { echo "FATAL: --recipe ${RECIPE} not found (pass the dispatcher-side clone's path)" >&2; exit 2; }
   [ -z "$RUN_CMD" ] || { echo "--recipe and --run are mutually exclusive" >&2; exit 2; }
   # Task key → issue number. `issue-<N>` is the fixer shape; `research-<N>-<slug>` is the
@@ -1579,6 +1581,11 @@ if [ -n "${RECIPE:-}" ]; then
     claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_GOOSE_FLAG}";;
     opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP wired via OPENCODE_CONFIG (merged into /tmp/opencode-session.json in the opencode-session-config block above) — #1276
+    # codex (FU-270, the explicit canary cell): the image's agent-codex seam runs `codex exec --json` in
+    # the prepared workdir and renders the gateway provider block from the pulled env (GW-SESSIONS-ENV);
+    # the pod IS the sandbox, as for claude's --dangerously-skip-permissions. MCP is not wired for codex
+    # yet (the spike's open list) — a codex ride gets no --mcp attach.
+    codex) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
   esac
   # <<<REPLAY:harness-run-cmd<<<
 fi
