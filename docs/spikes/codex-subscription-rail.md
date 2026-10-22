@@ -596,7 +596,8 @@ endpoint itself (`GW-CODEX-HEADROOM §Poll`, two alerts; #2828); the policy bloc
 with the codex list derived from the enrolled account's one model (`CODEX_CANDIDATES`, the
 usage probe's `model_usage`; stacked on #2828); the launcher's `codex` cell (`--harness codex` →
 `agent-codex --dangerously-bypass-approvals-and-sandbox …`, the key-ref / subscription-arm
-exemptions) + `gateway/scripts/canary-codex.sh`, the one-ride canary verb for the window; the
+exemptions) + `gateway/scripts/canary-codex.sh`, the one-ride canary verb for the
+[declared window](../glossary.md#declared-window); the
 runtime wrapper rendering the provider block from the pulled env
 ([agent-runtime#179](https://github.com/teststuffstash/agent-runtime/pull/179)). The canary
 itself waits for all four to land and for a declared window.
