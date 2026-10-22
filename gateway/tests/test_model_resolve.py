@@ -145,41 +145,41 @@ def test_no_model_id_in_code(policy):
 def test_deployed_policy_loads(policy):
     """row: the deployed policy loads under the island's loader, every id known"""
     world(note="against the deployed policy (the configMapGenerator source)")
-    with given(f"the opencode candidate rows of the committed tier evidence {BENCHMARKS.relative_to(ISLAND.parent)} "
-               "— the gateway's own GET /catalog/opencode read: listed models with a monthly limit under the plan (GW-MODEL-TIERS)"):
+    with given(f"the committed tier evidence {BENCHMARKS.relative_to(ISLAND.parent)} — the gateway's own catalog reads: the opencode "
+               "candidates (listed, with a monthly limit under the plan) and the openrouter candidates (ranked ∩ benched); GW-MODEL-TIERS"):
         bench = json.loads(BENCHMARKS.read_text(encoding="utf-8"))
-        listed = sorted(bench["rails"]["opencode"])
-        attach_json("opencode candidates (benchmarks.json)", {"snapshot_at": bench["snapshot_at"], "ids": listed})
-    with given("the openrouter candidate rows of the same evidence — the gateway's own GET /catalog/openrouter read (ranked ∩ benched, GW-CATALOG-OR)"):
-        ranked = sorted(bench["rails"]["openrouter"])
-        attach_json("openrouter candidates (benchmarks.json)", {"snapshot_at": bench["snapshot_at"], "ids": ranked})
+        go = set(bench["rails"]["opencode"])
+        ranked = set(bench["rails"]["openrouter"])
+        attach_json("tier-evidence candidates per rail", {"snapshot_at": bench["snapshot_at"], "opencode": sorted(go), "openrouter": sorted(ranked)})
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
-        raw = json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8"))
-        deployed = Policy.from_dict(raw)
-    with then("deployed rails and roles = the test policy's",
-              rails={"expected": sorted(policy.rails), "actual": sorted(deployed.rails)},
-              roles={"expected": sorted(policy.roles), "actual": sorted(deployed.roles)}):
+        deployed = Policy.from_dict(json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")))
+
+    def ids_of(rail: str) -> set[str]:
+        r = deployed.rails[rail]
+        return {m for m in (*(x for lst in r.models.values() for x in lst), *r.side_models)}
+
+    with then("the deployed policy's shape is the test policy's: the same rails and roles, every rail's models = {light, standard, heavy}",
+              shape={"rails": {"expected": sorted(policy.rails), "actual": sorted(deployed.rails)},
+                     "roles": {"expected": sorted(policy.roles), "actual": sorted(deployed.roles)},
+                     "models": {r: sorted(v.models) for r, v in deployed.rails.items()}}):
         assert set(deployed.rails) == set(policy.rails) and set(deployed.roles) == set(policy.roles)
-    with then("every deployed rail's models = {light, standard, heavy}",
-              models={r: sorted(v.models) for r, v in deployed.rails.items()}):
         assert all(set(r.models) == {"light", "standard", "heavy"} for r in deployed.rails.values())
-    go = set(listed)
-    go_ids = {m for m in (*(x for lst in deployed.rails["opencode"].models.values() for x in lst), *deployed.rails["opencode"].side_models)}
-    with then("every opencode deployed model id is an opencode candidate row of the committed tier evidence ⚖",
-              checked=sorted(go_ids), unknown={"expected": [], "actual": sorted(go_ids - go)}):
-        assert go_ids <= go, sorted(go_ids - go)
-    or_ids = {m for m in (*(x for lst in deployed.rails["openrouter"].models.values() for x in lst), *deployed.rails["openrouter"].side_models)}
-    with then("every openrouter deployed model id is an openrouter candidate row of the committed tier evidence ⚖",
-              checked=sorted(or_ids), unknown={"expected": [], "actual": sorted(or_ids - set(ranked))}):
-        assert or_ids <= set(ranked), sorted(or_ids - set(ranked))
+    with then("opencode: every deployed model and side-model id is an opencode candidate row of the committed tier evidence ⚖",
+              opencode={"checked": sorted(ids_of("opencode")), "unknown": {"expected": [], "actual": sorted(ids_of("opencode") - go)}}):
+        assert ids_of("opencode") <= go, sorted(ids_of("opencode") - go)
+    with then("openrouter: every deployed model and side-model id is an openrouter candidate row of the committed tier evidence ⚖",
+              openrouter={"checked": sorted(ids_of("openrouter")), "unknown": {"expected": [], "actual": sorted(ids_of("openrouter") - ranked)}}):
+        assert ids_of("openrouter") <= ranked, sorted(ids_of("openrouter") - ranked)
     if MODEL_CLASSES.exists():
         mc = json.loads(MODEL_CLASSES.read_text(encoding="utf-8"))
         known = {wire for m in mc["models"].values() if isinstance(m, dict) for wire in m["ids"].values()}
-        ids = {m for name, r in deployed.rails.items() if name not in ("opencode", "openrouter") for m in (*(x for lst in r.models.values() for x in lst), *r.side_models)}
-        with then("every anthropic deployed model id is spelled as in model-classes.json", unknown={"expected": [], "actual": sorted(ids - known)}):
-            assert ids <= known, sorted(ids - known)
-        then_eq("opencode max_sessions", deployed.rails["opencode"].max_sessions, mc["rails"]["opencode-go"]["concurrency"],
-                claim=f"opencode max_sessions = model-classes.json opencode-go concurrency ({mc['rails']['opencode-go']['concurrency']})")
+        others = set().union(*(ids_of(r) for r in deployed.rails if r not in ("opencode", "openrouter")))
+        concurrency = mc["rails"]["opencode-go"]["concurrency"]
+        with then(f"anthropic (and any further rail): every deployed id is spelled as in model-classes.json; opencode max_sessions = its opencode-go concurrency ({concurrency})",
+                  model_classes={"checked": sorted(others), "unknown": {"expected": [], "actual": sorted(others - known)},
+                                 "max_sessions": {"expected": concurrency, "actual": deployed.rails["opencode"].max_sessions}}):
+            assert others <= known, sorted(others - known)
+            assert deployed.rails["opencode"].max_sessions == concurrency
 
 
 async def test_anthropic_body_untouched(gw, upstreams):
