@@ -21,7 +21,7 @@
 | the dispatch answer names the policy id for (rail, tier) | policy-default | model == rails.<rail>.models.<tier> for every role |
 | no model id from the policy appears in src/ | policy-default | grep finds none |
 | the anthropic body is forwarded byte-untouched | policy-default | upstream body == inbound body |
-| the deployed policy loads under the island's loader, every id known | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same rails + roles as policy-default; every non-opencode model/side-model id is a models.*.ids value of model-classes.json; every opencode id is an opencode candidate row of the committed tier evidence benchmarks.json (the gateway's own GET /catalog/opencode read — listed, with a monthly limit under the plan; GW-MODEL-TIERS) ⚖; opencode max_sessions = rails.opencode-go.concurrency |
+| the deployed policy loads under the island's loader, every id known | argocd/resources/agent-gateway/policy.json (skipped when absent) | loads; same rails + roles as policy-default; every anthropic model/side-model id is a models.*.ids value of model-classes.json; every opencode id is an opencode candidate row of the committed tier evidence benchmarks.json (the gateway's own GET /catalog/opencode read — listed, with a monthly limit under the plan; GW-MODEL-TIERS) and every openrouter id an openrouter candidate row of it (the gateway's own GET /catalog/openrouter read: ranked ∩ benched — never the old proxy's table, 2026-10-22) ⚖; opencode max_sessions = rails.opencode-go.concurrency |
 """
 
 from __future__ import annotations
@@ -150,6 +150,9 @@ def test_deployed_policy_loads(policy):
         bench = json.loads(BENCHMARKS.read_text(encoding="utf-8"))
         listed = sorted(bench["rails"]["opencode"])
         attach_json("opencode candidates (benchmarks.json)", {"snapshot_at": bench["snapshot_at"], "ids": listed})
+    with given("the openrouter candidate rows of the same evidence — the gateway's own GET /catalog/openrouter read (ranked ∩ benched, GW-CATALOG-OR)"):
+        ranked = sorted(bench["rails"]["openrouter"])
+        attach_json("openrouter candidates (benchmarks.json)", {"snapshot_at": bench["snapshot_at"], "ids": ranked})
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
         raw = json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8"))
         deployed = Policy.from_dict(raw)
@@ -165,11 +168,15 @@ def test_deployed_policy_loads(policy):
     with then("every opencode deployed model id is an opencode candidate row of the committed tier evidence ⚖",
               checked=sorted(go_ids), unknown={"expected": [], "actual": sorted(go_ids - go)}):
         assert go_ids <= go, sorted(go_ids - go)
+    or_ids = {m for m in (*(x for lst in deployed.rails["openrouter"].models.values() for x in lst), *deployed.rails["openrouter"].side_models)}
+    with then("every openrouter deployed model id is an openrouter candidate row of the committed tier evidence ⚖",
+              checked=sorted(or_ids), unknown={"expected": [], "actual": sorted(or_ids - set(ranked))}):
+        assert or_ids <= set(ranked), sorted(or_ids - set(ranked))
     if MODEL_CLASSES.exists():
         mc = json.loads(MODEL_CLASSES.read_text(encoding="utf-8"))
         known = {wire for m in mc["models"].values() if isinstance(m, dict) for wire in m["ids"].values()}
-        ids = {m for name, r in deployed.rails.items() if name != "opencode" for m in (*(x for lst in r.models.values() for x in lst), *r.side_models)}
-        with then("every non-opencode deployed model id is spelled as in model-classes.json", unknown={"expected": [], "actual": sorted(ids - known)}):
+        ids = {m for name, r in deployed.rails.items() if name not in ("opencode", "openrouter") for m in (*(x for lst in r.models.values() for x in lst), *r.side_models)}
+        with then("every anthropic deployed model id is spelled as in model-classes.json", unknown={"expected": [], "actual": sorted(ids - known)}):
             assert ids <= known, sorted(ids - known)
         then_eq("opencode max_sessions", deployed.rails["opencode"].max_sessions, mc["rails"]["opencode-go"]["concurrency"],
                 claim=f"opencode max_sessions = model-classes.json opencode-go concurrency ({mc['rails']['opencode-go']['concurrency']})")
