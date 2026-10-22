@@ -14280,3 +14280,9 @@ updates or reverts as much as possible — mechanical revert or a responder."
   still-active session of its task. Window: `ControlPlaneNodeMemoryLow` (wk-metal-02) HANDED OFF to the responder
   (gateway rides wk-04); scrape targets 196→195 = the rolled pod's series expiring. #2830 awaits re-review (stale
   CHANGES_REQUESTED on an old head).
+- **Second ride 22:26Z** (capture live, #2835 → image #2836): same 502, and the ERROR line SETTLED it — the backend's
+  body IS a Responses SSE stream (`response.created`, gpt-6-astra, in_progress) with NO Content-Type header (chunked,
+  Cloudflare); the strict ctype rule refused a good stream. Vendor-header hypothesis WRONG (six fixed headers suffice).
+  **#2837**: absent content-type → relay (parser guards), present-and-wrong → refuse; fixture = the live shape. Also on
+  the wire (names only): `x-codex-primary/secondary-*` headroom headers (the "upstream headers" source exists),
+  `x-codex-turn-state` on turn 1, `x-codex-safety-buffering-*`. Release worked (hardened verb). Third ride after #2837's image.
