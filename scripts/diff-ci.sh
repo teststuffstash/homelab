@@ -33,6 +33,10 @@ cd "$(dirname "$0")/.."
 # these verbatim (the #518 flip, live 2026-08-31); keep them one line, single-quoted, eval-safe.
 PROM_PATHS='^(argocd/|tofu/|scripts/prometheus-rules-lint\.sh|devbox\.(json|lock)$)'
 CLAUSE_PATHS='^(agents/|devbox\.(json|lock)$)'
+# The agent-gateway island's suite + everything it feeds (gateway-ci, gateway-evidence and its
+# bucket publish): gateway/ plus the two JSON files outside it the tests read. ONE copy — the
+# PR-close purge (gateway-specs-pr-purge.yaml) deliberately has no paths filter so it cannot drift.
+GATEWAY_PATHS='^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/resources/openrouter-proxy/model-classes\.json$)'
 # #1315: the Composition, the two cluster pins it renders with (functions + provider version),
 # the gate's own script/fixtures, and the devbox closure that ships the nix provider.
 PUBLICROUTE_PATHS='^(argocd/resources/publicroute/|argocd/resources/crossplane/(providerconfig|functions)\.yaml$|argocd/platform/crossplane\.yaml$|scripts/publicroute-tf-validate\.sh$|scripts/xr-render-lib\.sh$|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
@@ -68,7 +72,7 @@ MAP=(
   # the deployed policy the suite loads (test_model_resolve / test_codex_oauth read
   # argocd/resources/agent-gateway/policy.json, and test_model_resolve checks every id against
   # openrouter-proxy/model-classes.json — an edit to either must run the rows that check it).
-  "gateway-ci:^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/resources/openrouter-proxy/model-classes\.json$)"
+  "gateway-ci:$GATEWAY_PATHS"
   # The island's specs-site publish (gateway/scripts/specs-publish.sh — mkdocs build + mirror to the
   # gateway-specs bucket; soft-skips without GATEWAY_SPECS_S3_* creds, so locally it is the dogfood
   # build). Same trigger as the gate it rides behind in ci.yaml. WAN-bound (uv fetches the mkdocs
@@ -77,10 +81,10 @@ MAP=(
   # ADR-156 step 4: the reviewer's evidence pack from the gateway suite's raw Allure results; it
   # rides the gateway-ci step's skip key in ci.yaml (no suite run, no results). WAN-bound (uv fetches
   # the pinned snippets wheel) → PUSH_HEAVY. Same trigger as gateway-ci (the suite it packs).
-  "gateway-evidence:^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/resources/openrouter-proxy/model-classes\.json$)"
+  "gateway-evidence:$GATEWAY_PATHS"
   # …and its upload to the gateway-specs bucket (gateway/scripts/evidence-publish.sh; ci.yaml keys it
   # off the gateway-evidence step's outcome). Soft-skips without creds; WAN/LAN-bound → PUSH_HEAVY.
-  "gateway-evidence-publish:^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/resources/openrouter-proxy/model-classes\.json$)"
+  "gateway-evidence-publish:$GATEWAY_PATHS"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
