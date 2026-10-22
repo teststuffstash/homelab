@@ -76,6 +76,7 @@ CACHED_USAGE = {"input_tokens": 312, "output_tokens": 7, "input_tokens_details":
 BEHAVIOURS = {  # name → (status, content-type, extra headers, body chunks)
     "upstream-ok": lambda: (200, "text/event-stream", {}, completion()),
     "upstream-ok-cached": lambda: (200, "text/event-stream", {}, completion(CACHED_USAGE)),
+    "upstream-ok-no-ctype": lambda: (200, "", {}, completion()),  # the live backend's shape (2026-10-22): an SSE stream with NO content-type header
     "upstream-stream-failed": lambda: (200, "text/event-stream", {}, completion(terminal="response.failed", status="failed")),
     "upstream-stream-incomplete": lambda: (200, "text/event-stream", {}, completion(terminal="response.incomplete", status="incomplete")),
     "upstream-stream-truncated": lambda: (200, "text/event-stream", {}, completion(terminal="")),
@@ -114,12 +115,13 @@ class FakeCodexUpstream:
         status, ctype, extra, chunks = BEHAVIOURS[self.behaviour]()
         issued = self.response_headers(call) if callable(self.response_headers) else self.response_headers
         extra = {**extra, **issued}
-        if ctype == "text/event-stream" and status == 200:
+        if ctype in ("text/event-stream", "") and status == 200:
             async def gen():
                 for c in chunks:
                     yield c
-            resp: Response = StreamingResponse(gen(), status_code=status, media_type=ctype, headers=extra)
-            shown = f"<{len(chunks)} SSE events — {self.behaviour}>"
+            # ctype "" = no content-type header at all (StreamingResponse sets none without a media_type)
+            resp: Response = StreamingResponse(gen(), status_code=status, media_type=ctype or None, headers=extra)
+            shown = f"<{len(chunks)} SSE events — {self.behaviour}{'' if ctype else ', no content-type'}>"
         else:
             resp = Response(b"".join(chunks), status_code=status, media_type=ctype, headers=extra)
             shown = _body_of(b"".join(chunks), ctype)
