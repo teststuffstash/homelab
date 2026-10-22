@@ -9,11 +9,11 @@
       ],
       "human_rows": 0,
       "id": 1,
-      "last_proven": "2026-10-17T02:50:05Z",
-      "last_proven_pr": 2653,
+      "last_proven": "2026-10-21T11:17:18Z",
+      "last_proven_pr": 2784,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
-      "rows": 15
+      "rows": 17
     },
     {
       "complete": false,
@@ -25,8 +25,8 @@
       ],
       "human_rows": 0,
       "id": 2,
-      "last_proven": "2026-10-17T02:40:13Z",
-      "last_proven_pr": 2652,
+      "last_proven": "2026-10-21T11:06:24Z",
+      "last_proven_pr": 2783,
       "name": "In-cluster images, GitOps",
       "owner_may_leave": false,
       "rows": 17
@@ -40,8 +40,8 @@
       ],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-10-15T20:01:45Z",
-      "last_proven_pr": 2598,
+      "last_proven": "2026-10-20T03:50:21Z",
+      "last_proven_pr": 2752,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 5
@@ -56,8 +56,8 @@
       ],
       "human_rows": 0,
       "id": 4,
-      "last_proven": "2026-10-16T16:11:52Z",
-      "last_proven_pr": 2633,
+      "last_proven": "2026-10-19T18:16:00Z",
+      "last_proven_pr": 2733,
       "name": "Helm charts, tofu-managed",
       "owner_may_leave": false,
       "rows": 3
@@ -71,8 +71,8 @@
       ],
       "human_rows": 0,
       "id": 5,
-      "last_proven": "2026-10-14T03:11:36Z",
-      "last_proven_pr": 2551,
+      "last_proven": "2026-10-21T02:57:42Z",
+      "last_proven_pr": 2778,
       "name": "Tofu providers",
       "owner_may_leave": false,
       "rows": 14
@@ -103,8 +103,8 @@
       ],
       "human_rows": 0,
       "id": 7,
-      "last_proven": "2026-10-12T10:14:18Z",
-      "last_proven_pr": 2513,
+      "last_proven": "2026-10-19T08:40:35Z",
+      "last_proven_pr": 2726,
       "name": "devbox/nix toolchain",
       "owner_may_leave": false,
       "rows": 42
@@ -116,8 +116,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 8,
-      "last_proven": "2026-10-16T21:13:02Z",
-      "last_proven_pr": 2632,
+      "last_proven": "2026-10-20T03:05:45Z",
+      "last_proven_pr": 2747,
       "name": "GitHub Actions",
       "owner_may_leave": true,
       "rows": 6
@@ -179,8 +179,8 @@
       "human_cells": [],
       "human_rows": 0,
       "id": 12,
-      "last_proven": "2026-10-11T09:51:27Z",
-      "last_proven_pr": 2100,
+      "last_proven": "2026-10-20T16:20:37Z",
+      "last_proven_pr": 2755,
       "name": "JS CI tooling (Deno)",
       "owner_may_leave": true,
       "rows": 2
@@ -267,9 +267,9 @@
   "proofs": {
     "classes": {
       "1": {
-        "merged_at": "2026-10-17T02:50:05Z",
-        "pr": 2653,
-        "title": "chore(deps): update helm release kube-prometheus-stack to v92.3.0"
+        "merged_at": "2026-10-21T11:17:18Z",
+        "pr": 2784,
+        "title": "chore(deps): update helm release kube-prometheus-stack to v92.6.0"
       },
       "10": {
         "merged_at": "2026-10-06T22:26:00Z",
@@ -277,29 +277,29 @@
         "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.338.0"
       },
       "12": {
-        "merged_at": "2026-10-11T09:51:27Z",
-        "pr": 2100,
-        "title": "chore(deps): update dependency mermaid to v12"
+        "merged_at": "2026-10-20T16:20:37Z",
+        "pr": 2755,
+        "title": "chore(deps): update dependency mermaid to v12.2.0"
       },
       "2": {
-        "merged_at": "2026-10-17T02:40:13Z",
-        "pr": 2652,
-        "title": "chore(deps): update python:3.15-slim docker digest to a83d68d"
+        "merged_at": "2026-10-21T11:06:24Z",
+        "pr": 2783,
+        "title": "chore(deps): update python:3.15-slim docker digest to 7bd9bc5"
       },
       "3": {
-        "merged_at": "2026-10-15T20:01:45Z",
-        "pr": 2598,
-        "title": "deploy: agent-base 2026.10.15-gd10904baa8fa"
+        "merged_at": "2026-10-20T03:50:21Z",
+        "pr": 2752,
+        "title": "deploy: agent-base 2026.10.20-g123832721273"
       },
       "4": {
-        "merged_at": "2026-10-16T16:11:52Z",
-        "pr": 2633,
-        "title": "chore(deps): update helm release argo-cd to v10.10.2"
+        "merged_at": "2026-10-19T18:16:00Z",
+        "pr": 2733,
+        "title": "chore(deps): update helm release argo-cd to v10.10.3"
       },
       "5": {
-        "merged_at": "2026-10-14T03:11:36Z",
-        "pr": 2551,
-        "title": "chore(deps): update terraform proxmox to ~> 0.116"
+        "merged_at": "2026-10-21T02:57:42Z",
+        "pr": 2778,
+        "title": "chore(deps): update terraform cloudflare to v5.28.0"
       },
       "6": {
         "merged_at": "2026-09-22T00:00:00Z",
@@ -307,14 +307,14 @@
         "title": "capability ledger — Talos install rollout, workers + CPs (`mgmt-reconcile`): #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last"
       },
       "7": {
-        "merged_at": "2026-10-12T10:14:18Z",
-        "pr": 2513,
+        "merged_at": "2026-10-19T08:40:35Z",
+        "pr": 2726,
         "title": "chore: devbox update (align toolchain lock)"
       },
       "8": {
-        "merged_at": "2026-10-16T21:13:02Z",
-        "pr": 2632,
-        "title": "chore(deps): update actions/upload-artifact action to v7.0.2"
+        "merged_at": "2026-10-20T03:05:45Z",
+        "pr": 2747,
+        "title": "chore(deps): update actions/create-github-app-token digest to 64ab729"
       },
       "9": {
         "merged_at": "2026-09-29T18:49:44Z",
@@ -334,9 +334,9 @@
         "title": "Update dependency jetify-com/devbox to v0.18.4"
       },
       "12:mermaid": {
-        "merged_at": "2026-10-11T09:51:27Z",
-        "pr": 2100,
-        "title": "chore(deps): update dependency mermaid to v12"
+        "merged_at": "2026-10-20T16:20:37Z",
+        "pr": 2755,
+        "title": "chore(deps): update dependency mermaid to v12.2.0"
       },
       "1:argo-events": {
         "merged_at": "2026-10-04T21:46:07Z",
@@ -374,9 +374,9 @@
         "title": "chore(deps): update helm release infisical-standalone to v1.11.0"
       },
       "1:kube-prometheus-stack": {
-        "merged_at": "2026-10-17T02:50:05Z",
-        "pr": 2653,
-        "title": "chore(deps): update helm release kube-prometheus-stack to v92.3.0"
+        "merged_at": "2026-10-21T11:17:18Z",
+        "pr": 2784,
+        "title": "chore(deps): update helm release kube-prometheus-stack to v92.6.0"
       },
       "1:metrics-server": {
         "merged_at": "2026-10-09T05:28:58Z",
@@ -409,9 +409,9 @@
         "title": "chore(deps): update grafana/alloy docker tag to v1.20.1"
       },
       "2:grafana/loki": {
-        "merged_at": "2026-10-05T03:52:17Z",
-        "pr": 2237,
-        "title": "chore(deps): update grafana/loki docker tag to v3.7.8"
+        "merged_at": "2026-10-21T03:03:16Z",
+        "pr": 2781,
+        "title": "chore(deps): update grafana/loki docker tag to v3.7.9"
       },
       "2:nginx": {
         "merged_at": "2026-10-05T06:48:50Z",
@@ -434,9 +434,9 @@
         "title": "chore(deps): update prom/pushgateway docker tag to v1.11.4"
       },
       "2:python": {
-        "merged_at": "2026-10-17T02:40:13Z",
-        "pr": 2652,
-        "title": "chore(deps): update python:3.15-slim docker digest to a83d68d"
+        "merged_at": "2026-10-21T11:06:24Z",
+        "pr": 2783,
+        "title": "chore(deps): update python:3.15-slim docker digest to 7bd9bc5"
       },
       "2:quay.io/brancz/kube-rbac-proxy": {
         "merged_at": "2026-10-05T07:20:40Z",
@@ -454,24 +454,24 @@
         "title": "chore(deps): update registry docker tag to v3.1.2"
       },
       "3:agent-base": {
-        "merged_at": "2026-10-15T20:01:45Z",
-        "pr": 2598,
-        "title": "deploy: agent-base 2026.10.15-gd10904baa8fa"
+        "merged_at": "2026-10-20T03:50:21Z",
+        "pr": 2752,
+        "title": "deploy: agent-base 2026.10.20-g123832721273"
       },
       "3:agent-coordinator": {
-        "merged_at": "2026-10-15T18:49:26Z",
-        "pr": 2592,
-        "title": "deploy: agent-coordinator 2026.10.15-g45292680478f"
+        "merged_at": "2026-10-20T03:42:13Z",
+        "pr": 2751,
+        "title": "deploy: agent-coordinator 2026.10.20-g950b7f0b8201"
       },
       "3:homelab/arc-runner": {
-        "merged_at": "2026-10-12T10:43:12Z",
-        "pr": 2516,
-        "title": "arc-runners: pin runner image 2026.10.12-ge3b95ff847b2"
+        "merged_at": "2026-10-20T03:32:50Z",
+        "pr": 2750,
+        "title": "arc-runners: pin runner image 2026.10.20-gdbefb3a34f48"
       },
       "4:argo-cd": {
-        "merged_at": "2026-10-16T16:11:52Z",
-        "pr": 2633,
-        "title": "chore(deps): update helm release argo-cd to v10.10.2"
+        "merged_at": "2026-10-19T18:16:00Z",
+        "pr": 2733,
+        "title": "chore(deps): update helm release argo-cd to v10.10.3"
       },
       "4:longhorn": {
         "merged_at": "2026-10-10T21:13:14Z",
@@ -494,9 +494,9 @@
         "title": "chore(deps): update terraform proxmox to ~> 0.116"
       },
       "5:cloudflare/cloudflare@tofu/cloudflare": {
-        "merged_at": "2026-10-10T11:52:34Z",
-        "pr": 2426,
-        "title": "chore(deps): update terraform cloudflare to v5.27.0"
+        "merged_at": "2026-10-21T02:57:42Z",
+        "pr": 2778,
+        "title": "chore(deps): update terraform cloudflare to v5.28.0"
       },
       "5:hashicorp/helm@tofu": {
         "merged_at": "2026-10-02T19:55:23Z",
@@ -564,9 +564,9 @@
         "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:cloudflared": {
-        "merged_at": "2026-10-07T20:11:25Z",
-        "pr": 2362,
-        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+        "merged_at": "2026-10-19T08:40:35Z",
+        "pr": 2726,
+        "title": "chore: devbox update (align toolchain lock)"
       },
       "7:curl": {
         "merged_at": "2026-10-07T20:11:25Z",
@@ -579,9 +579,9 @@
         "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:gh": {
-        "merged_at": "2026-10-07T20:11:25Z",
-        "pr": 2362,
-        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+        "merged_at": "2026-10-19T08:40:35Z",
+        "pr": 2726,
+        "title": "chore: devbox update (align toolchain lock)"
       },
       "7:gitleaks": {
         "merged_at": "2026-10-07T20:11:25Z",
@@ -624,9 +624,9 @@
         "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:kubernetes-helm": {
-        "merged_at": "2026-10-07T20:11:25Z",
-        "pr": 2362,
-        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+        "merged_at": "2026-10-19T08:40:35Z",
+        "pr": 2726,
+        "title": "chore: devbox update (align toolchain lock)"
       },
       "7:kyverno": {
         "merged_at": "2026-10-07T20:11:25Z",
@@ -649,9 +649,9 @@
         "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:opentofu": {
-        "merged_at": "2026-10-07T20:11:25Z",
-        "pr": 2362,
-        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+        "merged_at": "2026-10-19T08:40:35Z",
+        "pr": 2726,
+        "title": "chore: devbox update (align toolchain lock)"
       },
       "7:prometheus": {
         "merged_at": "2026-10-07T20:11:25Z",
@@ -669,9 +669,9 @@
         "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
       },
       "7:renovate": {
-        "merged_at": "2026-10-07T20:11:25Z",
-        "pr": 2362,
-        "title": "chore: devbox update — MAJOR bump, human review (align toolchain lock)"
+        "merged_at": "2026-10-19T08:40:35Z",
+        "pr": 2726,
+        "title": "chore: devbox update (align toolchain lock)"
       },
       "7:sops": {
         "merged_at": "2026-10-07T20:11:25Z",
@@ -699,9 +699,9 @@
         "title": "Update github-actions (major)"
       },
       "8:actions/create-github-app-token": {
-        "merged_at": "2026-09-27T17:20:35Z",
-        "pr": 2038,
-        "title": "Update github-actions (major)"
+        "merged_at": "2026-10-20T03:05:45Z",
+        "pr": 2747,
+        "title": "chore(deps): update actions/create-github-app-token digest to 64ab729"
       },
       "8:actions/upload-artifact": {
         "merged_at": "2026-10-16T21:13:02Z",
@@ -719,9 +719,9 @@
         "title": "Update github-actions (major)"
       },
       "8:renovatebot/github-action": {
-        "merged_at": "2026-10-12T03:50:44Z",
-        "pr": 2511,
-        "title": "chore(deps): update renovatebot/github-action action to v46.3.7"
+        "merged_at": "2026-10-19T02:51:38Z",
+        "pr": 2723,
+        "title": "chore(deps): update renovatebot/github-action action to v46.3.8"
       },
       "9:oxlorg.opnsense": {
         "merged_at": "2026-09-29T18:49:44Z",
@@ -740,6 +740,17 @@
       "version": "2.4.27",
       "where": [
         "argocd/platform/argo-events.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [],
+      "key": "1:argo-rollouts",
+      "last_proven": null,
+      "name": "argo-rollouts",
+      "version": "2.43.8",
+      "where": [
+        "argocd/platform/argo-rollouts.yaml"
       ]
     },
     {
@@ -856,10 +867,21 @@
     {
       "class": 1,
       "gap_columns": [],
+      "key": "1:kargo",
+      "last_proven": null,
+      "name": "kargo",
+      "version": "1.12.4",
+      "where": [
+        "argocd/platform/kargo.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [],
       "key": "1:kube-prometheus-stack",
-      "last_proven": "2026-10-17T02:50:05Z",
+      "last_proven": "2026-10-21T11:17:18Z",
       "name": "kube-prometheus-stack",
-      "version": "92.3.0",
+      "version": "92.6.0",
       "where": [
         "argocd/platform/kube-prometheus-stack.yaml"
       ]
@@ -981,9 +1003,9 @@
       "class": 2,
       "gap_columns": [],
       "key": "2:grafana/loki",
-      "last_proven": "2026-10-05T03:52:17Z",
+      "last_proven": "2026-10-21T03:03:16Z",
       "name": "grafana/loki",
-      "version": "3.7.8",
+      "version": "3.7.9",
       "where": [
         "argocd/resources/loki/loki.yaml"
       ]
@@ -1040,9 +1062,9 @@
       "class": 2,
       "gap_columns": [],
       "key": "2:python",
-      "last_proven": "2026-10-17T02:40:13Z",
+      "last_proven": "2026-10-21T11:06:24Z",
       "name": "python",
-      "version": "3.15-slim, 3.15-slim@sha256:a83d68dc3d8f",
+      "version": "3.15-slim, 3.15-slim@sha256:7bd9bc5a5ebf",
       "where": [
         "argocd/resources/cloudflare-exporter/credential-expiry-probe-deployment.yaml",
         "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
@@ -1109,9 +1131,9 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:agent-base",
-      "last_proven": "2026-10-15T20:01:45Z",
+      "last_proven": "2026-10-20T03:50:21Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.10.15-gd10904baa8fa",
+      "version": "`AGENT_BASE_IMAGE`=2026.10.20-g123832721273",
       "where": [
         "agents/images.env"
       ]
@@ -1122,9 +1144,9 @@
         "deploy_edge"
       ],
       "key": "3:agent-coordinator",
-      "last_proven": "2026-10-15T18:49:26Z",
+      "last_proven": "2026-10-20T03:42:13Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.15-g45292680478f; 34 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.20-g950b7f0b8201; 35 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1179,9 +1201,9 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:homelab/arc-runner",
-      "last_proven": "2026-10-12T10:43:12Z",
+      "last_proven": "2026-10-20T03:32:50Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.12-ge3b95ff847b2 (×3)",
+      "version": "2026.10.20-gdbefb3a34f48 (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1191,9 +1213,9 @@
       "class": 4,
       "gap_columns": [],
       "key": "4:argo-cd",
-      "last_proven": "2026-10-16T16:11:52Z",
+      "last_proven": "2026-10-19T18:16:00Z",
       "name": "argo-cd",
-      "version": "10.10.2",
+      "version": "10.10.3",
       "where": [
         "tofu/argocd.tf",
         "tofu/variables.tf"
@@ -1250,9 +1272,9 @@
       "class": 5,
       "gap_columns": [],
       "key": "5:cloudflare/cloudflare@tofu/cloudflare",
-      "last_proven": "2026-10-10T11:52:34Z",
+      "last_proven": "2026-10-21T02:57:42Z",
       "name": "cloudflare/cloudflare",
-      "version": "5.27.0 (`~> 5.0`)",
+      "version": "5.28.0 (`~> 5.0`)",
       "where": [
         "tofu/cloudflare/versions.tf",
         "tofu/cloudflare/.terraform.lock.hcl"
@@ -1523,7 +1545,7 @@
       "key": "7:claude-code@version-sets",
       "last_proven": null,
       "name": "claude-code",
-      "version": "2.1.293",
+      "version": "2.1.300",
       "where": [
         "version-sets/devbox.lock"
       ]
@@ -1532,9 +1554,9 @@
       "class": 7,
       "gap_columns": [],
       "key": "7:cloudflared",
-      "last_proven": "2026-10-07T20:11:25Z",
+      "last_proven": "2026-10-19T08:40:35Z",
       "name": "cloudflared",
-      "version": "2026.9.3",
+      "version": "2026.10.0",
       "where": [
         "devbox.lock"
       ]
@@ -1576,7 +1598,7 @@
       "class": 7,
       "gap_columns": [],
       "key": "7:gh",
-      "last_proven": "2026-10-07T20:11:25Z",
+      "last_proven": "2026-10-19T08:40:35Z",
       "name": "gh",
       "version": "2.102.0",
       "where": [
@@ -1697,9 +1719,9 @@
       "class": 7,
       "gap_columns": [],
       "key": "7:kubernetes-helm",
-      "last_proven": "2026-10-07T20:11:25Z",
+      "last_proven": "2026-10-19T08:40:35Z",
       "name": "kubernetes-helm",
-      "version": "4.3.0",
+      "version": "4.3.1",
       "where": [
         "devbox.lock"
       ]
@@ -1732,7 +1754,7 @@
       "key": "7:nixpkgs-unstable",
       "last_proven": null,
       "name": "nixpkgs-unstable",
-      "version": "nixpkgs@8edc0c72e3a3",
+      "version": "nixpkgs@f20cd90e28fe",
       "where": [
         "devbox.lock"
       ]
@@ -1743,7 +1765,7 @@
       "key": "7:nixpkgs-unstable@version-sets",
       "last_proven": null,
       "name": "nixpkgs-unstable",
-      "version": "nixpkgs@8edc0c72e3a3",
+      "version": "nixpkgs@f20cd90e28fe",
       "where": [
         "version-sets/devbox.lock"
       ]
@@ -1785,7 +1807,7 @@
       "class": 7,
       "gap_columns": [],
       "key": "7:opentofu",
-      "last_proven": "2026-10-07T20:11:25Z",
+      "last_proven": "2026-10-19T08:40:35Z",
       "name": "opentofu",
       "version": "1.13.1",
       "where": [
@@ -1829,9 +1851,9 @@
       "class": 7,
       "gap_columns": [],
       "key": "7:renovate",
-      "last_proven": "2026-10-07T20:11:25Z",
+      "last_proven": "2026-10-19T08:40:35Z",
       "name": "renovate",
-      "version": "44.126.1",
+      "version": "44.151.2",
       "where": [
         "devbox.lock"
       ]
@@ -1916,6 +1938,7 @@
         ".github/workflows/gateway-image.yaml",
         ".github/workflows/gateway-specs-pr-purge.yaml",
         ".github/workflows/pin-only.reusable.yml",
+        ".github/workflows/platform-kind-kargo.yaml",
         ".github/workflows/renovate.yaml",
         ".github/workflows/runner-image.yaml"
       ]
@@ -1924,9 +1947,9 @@
       "class": 8,
       "gap_columns": [],
       "key": "8:actions/create-github-app-token",
-      "last_proven": "2026-09-27T17:20:35Z",
+      "last_proven": "2026-10-20T03:05:45Z",
       "name": "actions/create-github-app-token",
-      "version": "bcd2ba49218906704ab6c1aa796996da409d3eb1 (v3)",
+      "version": "64ab729a6294000f5aa4a4bc0b73d1f32bc45510 (v3)",
       "where": [
         ".github/workflows/devbox-update.yaml",
         ".github/workflows/gateway-image.yaml",
@@ -1944,7 +1967,8 @@
       "name": "actions/upload-artifact",
       "version": "cf430e030ddbb5b0abf93d22962f4752f3646cd9 (v7.0.2)",
       "where": [
-        ".github/workflows/ci.yaml"
+        ".github/workflows/ci.yaml",
+        ".github/workflows/platform-kind-kargo.yaml"
       ]
     },
     {
@@ -1976,9 +2000,9 @@
       "class": 8,
       "gap_columns": [],
       "key": "8:renovatebot/github-action",
-      "last_proven": "2026-10-12T03:50:44Z",
+      "last_proven": "2026-10-19T02:51:38Z",
       "name": "renovatebot/github-action",
-      "version": "230ce922b08968d0a4f6f70f295601daff09ef1d (v46.3.7)",
+      "version": "f0f41e5f2e706165f6814b1d0f0d0e319de7d1d9 (v46.3.8)",
       "where": [
         ".github/workflows/renovate.yaml"
       ]
@@ -2047,9 +2071,9 @@
       "class": 12,
       "gap_columns": [],
       "key": "12:mermaid",
-      "last_proven": "2026-10-11T09:51:27Z",
+      "last_proven": "2026-10-20T16:20:37Z",
       "name": "mermaid",
-      "version": "12.1.0",
+      "version": "12.2.0",
       "where": [
         "scripts/mermaid-lint/deno.json"
       ]
@@ -2071,7 +2095,7 @@
       "key": "13:NixOS/nixpkgs",
       "last_proven": null,
       "name": "NixOS/nixpkgs",
-      "version": "nixos-26.05@6fcc160353f6",
+      "version": "nixos-26.05@8ce73368d1ef",
       "where": [
         "mgmt/nixos/flake.lock"
       ]

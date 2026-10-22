@@ -1,0 +1,124 @@
+# Kargo OSS — the promotion engine for oracle (Warehouse → Freight → Stage, verified by Argo
+# Rollouts analysis, promoting by patching named ArgoCD Applications). HARDENED install.
+#
+# EXPERIMENT (PR [experiment] kargo-kind): proven in kind by tests/kind-kargo/e2e.sh before any of
+# this reaches prod — the test renders THESE values (yq .spec.source.helm.valuesObject).
+#
+# The hardening, and where the rest of it lives:
+#  - rbac.installClusterRoleBindings: false — the chart's ClusterRoles are rendered but bound
+#    NOWHERE by the chart. Upstream binds them cluster-wide, which hands the management controller
+#    `*` on secrets/serviceaccounts/(cluster)roles/(cluster)rolebindings + namespace create/delete
+#    everywhere, and the controller patch on EVERY Application. The platform binds them itself in
+#    argocd/resources/kargo/ (kargo-platform.yaml): RoleBindings only in the Kargo namespaces + the
+#    project namespace, a small cluster-scoped read set, a resourceNames-scoped Role in argocd, and
+#    a ValidatingAdmissionPolicy over everything the kargo SAs write.
+#  - argocd.dataPlane.install: false — no chart RBAC on Applications at all (upstream: patch on
+#    every Application cluster-wide, or on every one in argocd with watchArgocdNamespaceOnly); the
+#    controller's ArgoCD access is the resourceNames-scoped Role in
+#    argocd/resources/kargo/argocd-role.yaml, and watchArgocdNamespaceOnly keeps its Application
+#    informer inside the argocd namespace.
+#  - externalWebhooksServer off (no inbound Git/registry webhooks; Warehouses poll), Dex/OIDC off
+#    (no IdP is live), api.secretManagementEnabled off (Projects are GitOps-declared; the API need
+#    not write Secrets).
+#  - api.secret.name: the admin-account bcrypt hash + token signing key come from a Secret
+#    `kargo-api` in ns kargo. PROD: an ExternalSecret from Infisical (not created by this PR); the
+#    kind test generates both in-run.
+#
+# ⚠ cert-manager: Kargo needs it for its self-signed webhook/API certs (namespaced Issuer). The
+# cert-manager.yaml header scopes cert-manager to the Barman Cloud plugin ONLY (ADR-147) — this
+# WIDENS that scope; amend the header/ADR if this lands.
+#
+# Wave 1: after cert-manager + the Rollouts CRDs (wave 0) — Kargo checks for the Rollouts CRDs
+# once at startup. Its pods cannot go Ready until kargo-platform (wave 2) binds their RBAC.
+# PROD prerequisite not in this PR: ArgoCD pulls OCI charts only from a registered `enableOCI`
+# repository (tofu/argocd.tf, the anonymous forgejo-helm shape) — ghcr.io/akuity/kargo-charts
+# needs one.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kargo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/akuity/kargo-charts
+    chart: kargo
+    targetRevision: 1.12.4
+    helm:
+      valuesObject:
+        crds:
+          install: true
+          keep: true
+        rbac:
+          installClusterRoles: true
+          installClusterRoleBindings: false
+        argocd:
+          dataPlane:
+            install: false # the chart's Role: patch on EVERY Application in argocd
+            kargoController:
+              install: false # its RoleBinding to that Role (would dangle)
+        externalWebhooksServer:
+          enabled: false
+        api:
+          secretManagementEnabled: false
+          secret:
+            name: kargo-api # PROD: ExternalSecret ← Infisical (ADMIN_ACCOUNT_PASSWORD_HASH, ADMIN_ACCOUNT_TOKEN_SIGNING_KEY)
+          adminAccount:
+            enabled: true
+          oidc:
+            enabled: false
+            dex:
+              enabled: false
+          rollouts:
+            integrationEnabled: true
+          # FU-082 shape: requests + memory limits, nothing BestEffort.
+          resources:
+            requests: { cpu: "10m", memory: "64Mi" }
+            limits: { memory: "256Mi" }
+        controller:
+          argocd:
+            integrationEnabled: true
+            namespace: argocd
+            watchArgocdNamespaceOnly: true
+          rollouts:
+            integrationEnabled: true
+          resources:
+            requests: { cpu: "20m", memory: "128Mi" }
+            limits: { memory: "512Mi" }
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+        managementController:
+          resources:
+            requests: { cpu: "10m", memory: "64Mi" }
+            limits: { memory: "256Mi" }
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+        webhooksServer:
+          resources:
+            requests: { cpu: "10m", memory: "64Mi" }
+            limits: { memory: "256Mi" }
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+        garbageCollector:
+          resources:
+            requests: { cpu: "10m", memory: "64Mi" }
+            limits: { memory: "256Mi" }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kargo
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

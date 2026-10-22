@@ -1,0 +1,14 @@
+# KargoWriteDenied lifted out of prometheusrule.yaml (annotations stripped — the CR is their one
+# home) — the rules file kargo-write-denied.promtool-test loads. Not a manifest; drift-pinned against
+# the CR by prometheus-rules-lint. Re-copy the expr after editing it there.
+groups:
+  - name: kargo-admission
+    rules:
+      - alert: KargoWriteDenied
+        expr: |
+          sum by (policy, enforcement_action) (
+            increase(apiserver_validating_admission_policy_check_total{policy=~"kargo.*", enforcement_action=~"deny|warn"}[10m])
+          ) > 0
+        labels:
+          severity: warning
+          triage: dig
