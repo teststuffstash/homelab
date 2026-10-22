@@ -14216,3 +14216,17 @@ updates or reverts as much as possible — mechanical revert or a responder."
   morning), Go `minimax-m3.1-flash` lost its free tier ($0.30 out over a $20 limit). Next window: the 00:21Z refresh.
 - Jail gotcha (seat, self-inflicted twice): `pkill -f '<pattern>'` from a command whose own line carries the pattern (the exec
   that follows it) kills the wrapper shell — exit 144, the tracked waiter dies; never pkill and launch in one command.
+
+## 2026-10-22 ~19:45Z – ~20:10Z — codex rail leg E as code: `scripts/codex-seed-bootstrap.sh` + runbook (#2826)
+
+- Operator (from the codex session that merged #2809, the recorded-live-protocol plan): "start building, give me a script to
+  run to save the auth and a readme around it". The auth = the gateway's OWN ChatGPT/Codex login (spike §Lighting the rail,
+  leg E — the one manual step left before the policy block). Built as **#2826**: `devbox run codex-seed` = `login` (device
+  auth in a throwaway `CODEX_HOME`, shredded on exit; 4-field Credential record 0600; one usage-endpoint probe printing
+  field/type STRUCTURE only — the first live observation GW-CODEX-HEADROOM lacks) → `store` (infisical-secret →
+  force-sync `agent-egress/codex-seed` → k8s Secret readback hash check, the `$`-expansion class → shred) ; `verify` =
+  the Secret's structure, never a value. The readme = runbook §Secrets "Enrol the gateway's own Codex login"; the spike's
+  leg-E row + gateway README point at it. Tested offline with a stub codex + loopback usage server; `verify` against the
+  live cluster reports the absent Secret. No live credential touched. Nothing to restart: the policy still omits the rail.
+- Open until the operator's run: does the second device login revoke the homelab-codex jail's (unverified since 10-19)?
+  The script and runbook both say what to watch. FU-270 line points at #2826 (local bookkeeping commit, pushed at wind-down).

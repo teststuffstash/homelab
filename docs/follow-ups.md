@@ -823,7 +823,7 @@ the block needs pruning, not more headings.
       (retry) stays. Relates ADR-087, FU-089.
 - [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** Status + history: the
       island's README/specs (`gateway/`) and the TICK-LOG; the codex rail's legs in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)
-      (A–C merged 10-19; D's gauge half #2786 in review, its poll half waits on E; E = the operator's login). Landed
+      (A–C merged 10-19; D's gauge half #2786 in review, its poll half waits on E; E's recipe = #2826, `devbox run codex-seed` + runbook §Enrol the gateway's own Codex login; the mint is the operator's). Landed
       10-20: rail choice by cost per CLEAN ride (#2764), the first canary window (gaps #2775), the re-cut #2776 (every
       openrouter tier decided). Landed 10-21: **(b) `wrong-verdict` ← deploy-revert** (#2785 the judge's list route +
       caller, #2787 the judge step — proven to the first real revert); **(c) the loop flip** (#2788: the PLATFORM session
