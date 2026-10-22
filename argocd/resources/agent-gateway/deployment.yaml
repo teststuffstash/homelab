@@ -50,6 +50,10 @@ spec:
               value: https://chatgpt.com/backend-api/codex
             - name: CODEX_SEED_FILE
               value: /var/run/codex-seed/record
+            # GW-CODEX-HEADROOM §Poll: the native backend's account usage endpoint (the pinned client's
+            # path; shape observed 2026-10-22, spike §Live usage payload shape). Unset = no poll = quota-unknown.
+            - name: CODEX_USAGE_URL
+              value: https://chatgpt.com/backend-api/wham/usage
             # The opencode rail's credential — the EXISTING ESO-materialized Secret the old proxy
             # consumes too (ADR-107 chunk C). optional: true — the pod keeps serving the anthropic
             # and openrouter rails if ESO has not materialized it; the rail fails closed per request

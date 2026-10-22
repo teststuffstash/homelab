@@ -163,6 +163,7 @@ class HeadroomPolicy:
     max_age_s: float
     ceiling: float
     windows_minutes: tuple[int, ...]
+    poll_interval_s: float  # the gateway's own usage poll (§Poll); must leave room under max_age_s
 
 
 @dataclass(frozen=True)
@@ -461,11 +462,14 @@ def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
     if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
             or any(type(w) is not int or w <= 0 for w in windows)):
         raise PolicyError("policy: rails.codex.headroom.windows_minutes must be distinct positive integers")
+    interval = h.get("poll_interval_s")
+    if not _finite(interval) or not 0 < interval < max_age:
+        raise PolicyError("policy: rails.codex.headroom.poll_interval_s must be a positive number below max_age_s")
     oauth = r.get("oauth")
     margin = oauth.get("refresh_margin_s") if isinstance(oauth, dict) else None
     if not _finite(margin) or margin < 0:
         raise PolicyError("policy: rails.codex.oauth.refresh_margin_s must be a non-negative number")
-    return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows))), float(margin)
+    return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows)), float(interval)), float(margin)
 
 
 SCORE_AXES = ("intelligence", "coding", "agentic")  # the AA capability row's three indices (GW-MODEL-TIERS)
@@ -737,6 +741,10 @@ class Settings:
     # its schedule (0 = no schedule). The endpoints read rides the openrouter rail's upstream base.
     or_mcp_url: str = "https://mcp.openrouter.ai/mcp"
     or_catalog_refresh_s: float = GO_CATALOG_REFRESH_S
+    # GW-CODEX-HEADROOM §Poll: the account usage endpoint the gateway polls with its own credential.
+    # NO default — like CODEX_UPSTREAM it names a vendor profile (the native backend's usage path);
+    # unset = no poll, the rail stays `quota-unknown` (fail closed).
+    codex_usage_url: str = ""
     # GW-MODEL-TIERS: the committed tier-evidence snapshot, mounted beside the policy; its age is a gauge
     # (`gateway_tier_evidence_age_seconds`) so a stale comparison basis alerts. Absent file = no series.
     benchmarks_path: str = "/etc/agent-gateway/benchmarks.json"
@@ -763,6 +771,7 @@ class Settings:
                              "config": e.get("GATEWAY_GO_CONFIG_URL", GO_CATALOG_URLS["config"]),
                              "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
+            codex_usage_url=e.get("CODEX_USAGE_URL", "").strip(),
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             benchmarks_path=e.get("GATEWAY_BENCHMARKS", "/etc/agent-gateway/benchmarks.json"),

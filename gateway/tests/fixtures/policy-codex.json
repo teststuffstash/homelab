@@ -163,7 +163,8 @@
         "windows_minutes": [
           300,
           10080
-        ]
+        ],
+        "poll_interval_s": 30
       },
       "oauth": {
         "refresh_margin_s": 30
