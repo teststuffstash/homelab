@@ -14294,3 +14294,9 @@ updates or reverts as much as possible — mechanical revert or a responder."
   recorded `outcome=cancelled status=499` — the native CLI closes the connection right after `response.completed`
   while the vendor holds it open, so the relay's CancelledError overwrote a terminal outcome it had already seen
   (usage WAS counted). Fix next: a cancellation after the terminal event stays `completed` (200).
+- **#2840** (a consumer stopping after the terminal event keeps `completed` — the 499 class) opened; window
+  `seat-1792705075-7945` CLOSED 23:03Z with `--force` (said so: the only delta was scrape targets 196→195 = the pod #2831
+  rolled, double-counted in the baseline; the handed-off ControlPlaneNodeMemoryLow had cleared). Box apply loop
+  released. Bookkeeping push after #2840 merges. Rail summary for the next seat: LIT, prober-only, poll every 60 s
+  (0 %/0 % live), every codex ride = `AGENT_GATEWAY_ROLE=prober --harness codex` through `canary-codex.sh` or the
+  launcher; the vendor streams WITHOUT Content-Type; the CLI closes after `response.completed`.
