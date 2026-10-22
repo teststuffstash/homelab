@@ -30,7 +30,7 @@ cd "$(dirname "$0")/.."
 # customManagers to move the pair — under the `/.github/` CODEOWNERS row, so every helm patch parked
 # on the operator (#2804). Here it rides the custom.regex automerge lane; the proof stays the next
 # kube-prometheus-stack branch's run. Keep the `v`: Renovate captures the digits after it.
-HELM_VERSION=v4.3.0
+HELM_VERSION=v4.3.1
 if command -v install-tool >/dev/null 2>&1; then install-tool helm "$HELM_VERSION"; fi
 app=argocd/platform/kube-prometheus-stack.yaml
 values=argocd/platform/values/kube-prometheus-stack.yaml
