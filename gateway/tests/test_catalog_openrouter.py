@@ -43,6 +43,7 @@ The entry canary (a canary = `POST /sessions` with `canary: {model, provider}`, 
 | a canary never fails over | the canary ride answered upstream-500 | — || 500 | the upstream calls: deepinfra only | — | — | — |
 | a 429'd canary is no verdict: the cell backs off | the canary ride answered upstream-429-shared-pool, no consumer outcome | — || 429 | — | — | — | (M, deepinfra) candidate, retry_at T0 + 3600, backoff_s 3600, limit_source upstream_provider_shared_pool; (M, atlas-cloud) untouched; gateway_canary_rides_total{outcome="no-verdict"} 1 |
 | a backed-off cell is not due until its horizon | the same | prober, canary {M, deepinfra} || defer | — | canary-not-due | 3600 | — |
+| a cell back from exclusion backs off the same way | (M, deepinfra) excluded at T0 (a struck canary), +86400 s a canary on it answered upstream-429-shared-pool | prober, canary {M, deepinfra} || defer | — | canary-not-due | 3600 | the row reads candidate, class null, retry_at T0 + 90000, backoff_s 3600 (the view says the same) |
 | at the horizon the cell is due again | the same, +3600 s | prober, canary {M, deepinfra} || dispatch | openrouter / M | — | — | — |
 | a consecutive 429'd canary doubles the horizon; the policy caps it | four 429'd canaries on (M, deepinfra), each ridden at the previous horizon | — || — | — | — | — | backoff_s after each: 3600, 7200, 14400, 14400 (backoff_max_s) |
 | a verdict resets the backoff | two 429'd canaries on (M, deepinfra), then a clean canary ride on it | — || — | — | — | — | eligible; retry_at / backoff_s / limit_source null |
@@ -538,6 +539,24 @@ async def test_backed_off_cell_not_due(gw, app, store, upstreams):
         await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
     r = await _canary(gw, M, "deepinfra")
     _verdict(r.json(), {"decision": "defer", "reason": "canary-not-due", "retry_after_s": 3600})
+
+
+async def test_back_from_exclusion_backs_off(gw, app, store, upstreams, clock):
+    """row: a cell back from exclusion backs off the same way"""
+    world(upstream=THROTTLED, note=f"{WORLD}; a struck canary at T0, its cooldown passes, then deepinfra 429s the next canary")
+    await _refresh(app)
+    with given("(M, deepinfra) excluded at T0 by a struck canary; +86400 s (the cooldown) a canary on it answered upstream-429-shared-pool"):
+        await _canary_ride(gw, app, upstreams, behaviour="upstream-500", outcome=None)
+        clock.advance(86400)
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    r = await _canary(gw, M, "deepinfra", " (+86400 s)")
+    _verdict(r.json(), {"decision": "defer", "reason": "canary-not-due", "retry_after_s": 3600})
+    row = store.cell_get(M, "deepinfra")
+    then_eq("the row: (state, class, cooldown_until, retry_at, backoff_s)", (row["state"], row["class"], row["cooldown_until"], row["retry_at"], row["backoff_s"]),
+            ("candidate", None, None, T0 + 90000, 3600))
+    v = _verdicts(await _view(gw), M, "deepinfra")["deepinfra/fp8"]
+    e = next(e for e in (await _view(gw))["models"][M]["endpoints"] if e["tag"] == "deepinfra/fp8")
+    then_eq("the view's row: (state, retry_at, backoff_s)", (v["state"], e["retry_at"], e["backoff_s"]), ("candidate", iso(T0 + 90000), 3600))
 
 
 async def test_backed_off_cell_due_at_horizon(gw, app, store, upstreams, clock):

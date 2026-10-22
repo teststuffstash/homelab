@@ -601,13 +601,15 @@ class Store:
     def cell_throttle(self, model: str, provider: str, retry_at: float, backoff_s: float, limit_source: str | None,
                       now: float) -> None:
         """A 429'd canary on the cell (GW-CATALOG-OR §The entry canary, operator 2026-10-22): no verdict —
-        the state is untouched (a new row enters as `candidate`), the horizon and its step are written."""
+        the row reads `candidate` (a canary rides only a candidate cell: a new row enters as one, a row
+        back from exclusion is written as one — its old class and cooldown cleared, since a verdict is
+        what re-excludes it), the horizon and its step are written."""
         with self._lock:
             self._db.execute(
                 "INSERT INTO provider_cells (model, provider, state, class, since, cooldown_until, retry_at, backoff_s, limit_source)"
                 " VALUES (?,?,'candidate',NULL,?,NULL,?,?,?)"
-                " ON CONFLICT(model, provider) DO UPDATE SET retry_at = excluded.retry_at, backoff_s = excluded.backoff_s,"
-                " limit_source = excluded.limit_source",
+                " ON CONFLICT(model, provider) DO UPDATE SET state = 'candidate', class = NULL, cooldown_until = NULL,"
+                " retry_at = excluded.retry_at, backoff_s = excluded.backoff_s, limit_source = excluded.limit_source",
                 (model, provider, now, retry_at, backoff_s, limit_source))
 
     def cells_count(self, now: float) -> dict[str, int]:

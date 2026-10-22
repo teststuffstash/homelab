@@ -307,10 +307,10 @@ class OpenRouterCatalog:
         row = self.store.cell_get(model, provider)
         if row is None:
             return CellVerdict("candidate", None, None)
+        horizon = (row.get("retry_at"), row.get("backoff_s"), row.get("limit_source"))  # a 429'd canary's, whatever the row's state
         if row["state"] == "excluded" and row["cooldown_until"] is not None and now >= row["cooldown_until"]:
-            return CellVerdict("candidate", row["class"], None)
-        return CellVerdict(row["state"], row["class"], row["cooldown_until"],
-                           row.get("retry_at"), row.get("backoff_s"), row.get("limit_source"))
+            return CellVerdict("candidate", row["class"], None, *horizon)
+        return CellVerdict(row["state"], row["class"], row["cooldown_until"], *horizon)
 
     def eligible_slugs(self, model: str, now: float) -> set[str]:
         return {p for p, r in self.store.cell_states(model).items() if r["state"] == "eligible"}
