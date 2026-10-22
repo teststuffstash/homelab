@@ -97,6 +97,17 @@ locals {
   # has a per-platform variant (cp_vip_patch vs cp_vip_patch_dhcp).
   cp_common_patches = [local.sa_issuer_patch, local.cp_cluster_patch]
 
+  # The VM control planes (cp-01, cp-02: 11.7 GiB each) outgrew the shared 3200MiB GOMEMLIMIT: on
+  # 2026-10-20 ~14Z cp-01's live heap reached ~2.7 GiB against it and its apiserver pinned 3.5 of 4
+  # cores in back-to-back GC (~1 cycle/s vs ~0.06 on the other members) for two days, latency
+  # unaffected — the soft limit turning into a CPU tax once the LIVE heap nears it. 5000MiB gives
+  # the VMs ~2.3 GiB of GC headroom above today's heap and still leaves >4 GiB MemAvailable. Laid
+  # over cp_cluster_patch (Talos merges the env map; the later patch's key wins). An env change
+  # restarts the apiserver on the members whose value changes — the two VMs — in a window.
+  cp_vm_apiserver_patch = yamlencode({
+    cluster = { apiServer = { env = { GOMEMLIMIT = "5000MiB" } } }
+  })
+
   # ADR-133's control-plane endpoint VIP (local.cp_vip, ruled in docs/ip-plan.md). Carried by
   # EVERY control plane — VM (below) and metal (metal.tf) alike — because a Talos shared VIP is
   # elected through etcd: the CP that wins the campaign puts the address on its own NIC and
@@ -327,7 +338,10 @@ data "talos_machine_configuration" "node" {
     # The endpoint VIP — control planes only (see local.cp_vip_patch).
     each.value.role == "controlplane" ? [local.cp_vip_patch] : [],
     # The patches EVERY control plane carries, VM and metal alike (local.cp_common_patches).
-    each.value.role == "controlplane" ? local.cp_common_patches : []
+    each.value.role == "controlplane" ? local.cp_common_patches : [],
+    # The VM control planes' larger GOMEMLIMIT — AFTER the common patch, so its env key wins the
+    # merge (see local.cp_vm_apiserver_patch). Metal (the 7.45 GiB X250) keeps the common 3200MiB.
+    each.value.role == "controlplane" ? [local.cp_vm_apiserver_patch] : []
   )
 }
 
