@@ -14237,3 +14237,27 @@ updates or reverts as much as possible — mechanical revert or a responder."
   keys, access JWT expires 2026-11-01T20:00Z (a 10-day lifetime), refresh 196 chars. Nothing restarted — the policy still
   omits the rail. **Next (seat):** the codex policy block (tier lists derived — `benchmarks.json` needs `codex/<id>`
   spellings), the launcher cell, the live canary in a window. Open: the second-login revocation watch (jail codex).
+
+## 2026-10-22 ~20:45Z – 2026-10-23 ~00:10Z — codex rail, unattended build: poll → policy block → launcher cell → runtime wrapper
+
+- Operator: "continue building codex rail unattended" (after leg E minted). Four slices, each its own PR, offline-tested
+  (gateway CI green locally each time; no live call, no credential read):
+  1. **#2828 the usage poll** (`codex_usage.py`, GW-CODEX-HEADROOM §Poll, 16 rows + 2 alerts `CodexUsagePollStale`/`Silent`
+     with fixture P1–P4). Reviewer finding, fixed: the counter family rendered at 0 unconditionally → the silent alert
+     would have fired on merge; now `bind_codex_rail` gates the family on a declared rail (+ a row). Specs reviewer
+     on #2826 earlier: a changed ⚖ row needs `Spec changes:` + an intent source — done, merged 20:14Z.
+  2. **the policy block** (clone `homelab-policy`, stacked on #2828, NOT yet opened): `rails.codex` prober-only/last
+     (max_sessions 1, headroom 900/0.95/[300,10080]/poll 60, margin 300 — every value cited), codex joins
+     PRICELESS_RAILS, `CODEX_CANDIDATES=codex/gpt-6-astra` (the account's model_usage) → benchmarks.json rebuilt from
+     the 18:21Z inputs (check: no re-cut; AA 52.7 by tail join), GW-MODEL-RESOLVE/-TIERS/-OAUTH deployed rows moved.
+     Opens once #2828 lands — its merge rolls the pod and LIGHTS the rail (first live poll): wrap in a window.
+  3. **#2830 the launcher cell** (`--harness codex`, CODEX_MODEL env key, `codex/` strip, sub-rail exemptions,
+     `agent-codex --dangerously-bypass-approvals-and-sandbox` recipe cmd) + `gateway/scripts/canary-codex.sh` (one
+     prober ride, structure-only evidence). Path gates green.
+  4. **agent-runtime#179** `agent-codex` renders the provider block from the pulled env (0600, token never in the file,
+     TOML-breaking values refused); 21 seam tests.
+- Jail gotchas: two concurrent `devbox run`s race `.devbox/gen/scripts/.cmd.sh` (fixed in infisical-secret.sh, #2826);
+  a clone's devbox env lacks promtool — run `prometheus-rules-lint` with the main checkout's profile bin on PATH; a
+  python heredoc inside a bash heredoc needs a distinct terminator (an inner `EOF` ended the outer).
+- **Next:** #2828 merge (BEHIND, re-review pending) → open the policy PR inside a declared maintenance window → #179
+  image → canary (`canary-codex.sh`) in the window → evidence to the spike. Open: the second-login revocation watch.

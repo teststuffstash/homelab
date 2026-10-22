@@ -829,8 +829,9 @@ the block needs pruning, not more headings.
       caller, #2787 the judge step — proven to the first real revert); **(c) the loop flip** (#2788: the PLATFORM session
       pod carries `AGENT_GATEWAY=sessions`; first ride through `/sessions` awaited). Landed 10-22: #2775 closed (gap 1 ruled —
       a 429'd canary is no verdict, exponential backoff, #2810), first window 3/3 clean, re-cut #2813. **Next (seat):** the
-      canary windows (one per refresh, re-cut when the lists move); read the first platform worker ride; then the codex
-      policy block after E. **Operator-only:** FU-313, the codex login (leg E); ruling #2768.
+      canary windows (one per refresh, re-cut when the lists move); read the first platform worker ride. Codex rail
+      10-22/23: poll #2828 → policy block (stacked) → launcher cell #2830 + canary verb → runtime wrapper agent-runtime#179;
+      then the live canary in a declared window (`gateway/scripts/canary-codex.sh`). **Operator-only:** FU-313; ruling #2768.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
