@@ -100,8 +100,8 @@
       },
       "max_sessions": 20,
       "models": {
-        "light":    ["z-ai/glm-5.3-flash", "deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash"],
-        "standard": ["z-ai/glm-5.3-flash", "moonshotai/kimi-k3"],
+        "light":    ["deepseek/deepseek-v4-flash", "z-ai/glm-5.3-flash", "xiaomi/mimo-v2.6-flash"],
+        "standard": ["z-ai/glm-5.3-flash", "xiaomi/mimo-v2.6-flash", "moonshotai/kimi-k3"],
         "heavy":    ["z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]
       }
     }
