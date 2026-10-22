@@ -444,7 +444,9 @@ async def test_stream_without_content_type(codex_app, codex_gw, codex_upstream, 
          caplog.at_level("INFO", logger="gateway.codex"):
         r = await ride(codex_gw, doc, body(), label="no-ctype")
     then_eq("status", r.status_code, 200)
-    with then("the stream is relayed to its completion and the relay said why", text={"actual": r.text[-120:]}):
-        assert "response.completed" in r.text
-        assert any("without a content-type" in rec.getMessage() for rec in caplog.records)
+    terminal = [ln for ln in r.text.splitlines() if ln.startswith("event: ")][-1] if "event: " in r.text else ""
+    then_eq("stream completed", terminal, "event: response.completed", claim="the stream is relayed to its completion (terminal event = response.completed)")
+    info = next((rec.getMessage() for rec in caplog.records if "without a content-type" in rec.getMessage()), "")
+    with then("INFO line says the content-type was absent", info={"expected": "codex upstream 200 without a content-type — relayed as a stream session=<id>", "actual": info}):
+        assert info.startswith("codex upstream 200 without a content-type — relayed as a stream session=")
     then_eq("upstream calls", len(codex_upstream.calls), 1)
