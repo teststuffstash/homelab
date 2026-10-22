@@ -60,7 +60,7 @@ codex_series() {  # the rail's state as the gateway renders it — gauges, the p
 }
 echo "== codex rail before the ride ($(date -u +%FT%TZ))"
 before="$(codex_series)"; printf '%s\n' "$before" | sed 's/^/   /'
-if ! printf '%s' "$before" | grep -q 'gateway_codex_usage_poll_total{outcome="accepted"} [1-9]'; then
+if ! grep -q 'gateway_codex_usage_poll_total{outcome="accepted"} [1-9]' <<< "$before"; then
   echo "   NOTE: no accepted usage poll yet — the gateway will defer quota-unknown / quota-stale; a dispatch means the poll caught up."
 fi
 task="canary-codex-$(date -u +%Y%m%dT%H%M%SZ)"
