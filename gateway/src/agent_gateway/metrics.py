@@ -35,6 +35,11 @@ CP_REASONS = ("absent", "invalid", "review-transient")
 INCOMPLETE_REASONS = ("no-terminal", "timeout", "transport-error", "client-closed")
 STRIKE_SOURCES = ("outcome", "gateway")
 PROBE_OUTCOMES = ("cleared", "rejected", "inconclusive")
+# GW-CODEX-HEADROOM §Poll — codex_usage.OUTCOMES (not imported: codex_usage imports nothing from here, but the
+# label set is the schema's, spelled once per side like the others)
+POLL_OUTCOMES = ("accepted", "quota-invalid", "quota-time-invalid", "quota-out-of-order", "credential-unresolved",
+                 "credential-transient", "upstream-auth", "upstream-http-error", "upstream-content-type",
+                 "upstream-unreachable", "upstream-timeout")
 # GW-RAIL-OPENROUTER: how one attempt on a (rail, model, provider) cell ended — `ok` (a complete 2xx),
 # `incomplete` (a 2xx whose body stopped early), the pre-byte failures the gateway fails over on
 # (`5xx`, `429`, `unreachable`, `timeout`, `content-type`, `provider-error`), and the request-scoped
@@ -84,6 +89,8 @@ class Metrics:
         self.tokens_total: dict[tuple[str, str], int] = {}
         self.cred_total: dict[tuple[str, str], int] = {}
         self.upstream_auth_total: dict[str, int] = {}
+        self.poll_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Poll
+        self.codex_declared = False  # the family renders only for a declared codex rail (bind_codex_rail)
         self.cp_unauth_total: dict[tuple[str, str], int] = {}
         self.sub_util: dict[tuple[str, str], float] = {}
         self.sub_reset: dict[tuple[str, str], float] = {}
@@ -220,6 +227,17 @@ class Metrics:
         with self._lock:
             self.cred_total[key] = self.cred_total.get(key, 0) + 1
 
+    def bind_codex_rail(self, declared: bool) -> None:
+        """GW-CODEX-HEADROOM §Poll: `gateway_codex_usage_poll_total` exists only while the policy declares the
+        codex rail — an undeclared rail renders no series, so CodexUsagePollSilent cannot fire on it."""
+        self.codex_declared = declared
+
+    def codex_poll(self, outcome: str) -> None:
+        """GW-CODEX-HEADROOM §Poll: one usage poll's bounded outcome (`accepted` = a report the headroom took)."""
+        o = _bounded(outcome, POLL_OUTCOMES)
+        with self._lock:
+            self.poll_total[o] = self.poll_total.get(o, 0) + 1
+
     def upstream_auth_rejected(self, rail: str) -> None:
         """The upstream answered 401/403 to the gateway's own credential (502 `upstream-auth`)."""
         r = _bounded(rail, RAILS)
@@ -279,6 +297,14 @@ class Metrics:
                       "# TYPE gateway_upstream_auth_rejected_total counter"]
             for rail in RAILS:
                 lines.append(f"gateway_upstream_auth_rejected_total{_fmt_labels({'rail': rail})} {self.upstream_auth_total.get(rail, 0)}")
+            # Only for a DECLARED codex rail (bind_codex_rail): an undeclared rail renders no series at all, so the
+            # silent-poll alert cannot fire on it. Once declared, every outcome renders from 0 (the alerts read
+            # increase(): a fresh pod's first `accepted` must count).
+            if self.codex_declared:
+                lines += ["# HELP gateway_codex_usage_poll_total The codex rail's usage polls by outcome (GW-CODEX-HEADROOM §Poll); accepted = the headroom took the report.",
+                          "# TYPE gateway_codex_usage_poll_total counter"]
+                for outcome in POLL_OUTCOMES:
+                    lines.append(f"gateway_codex_usage_poll_total{_fmt_labels({'outcome': outcome})} {self.poll_total.get(outcome, 0)}")
             lines += ["# HELP gateway_requests_incomplete_total 2xx answers whose body stopped before its end, by reason.",
                       "# TYPE gateway_requests_incomplete_total counter"]
             for (rail, dialect, reason), n in sorted(self.incomplete_total.items()):
