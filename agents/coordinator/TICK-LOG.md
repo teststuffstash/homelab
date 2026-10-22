@@ -14122,3 +14122,19 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (18:47Z, merged 19:29Z), not this seat's; its deploy #2799 auto-merge armed. Gateway sessions since the flip: 5
   specs-review rides only — NO platform worker ride yet (nothing queued on the platform board); the first ride through
   `/sessions` remains unverified.
+
+## 2026-10-21 ~19:00Z – 2026-10-22 ~06:05Z — second jail → primary: GithubStorageHeldHigh + cp-01 apiserver GC thrash
+- **GithubStorageHeldHigh** (~2.7 GB held vs 2 GB): homelab `gateway-evidence` 1.75 GB + oracle-fleet 0.92 GB.
+  Deleted 587 dead oracle-fleet artifacts (09-21..27, pre-`retention-days: 1`, 90-day expiry; operator-asked) and
+  312 homelab `gateway-evidence` (kept open-PR heads + newest master). Held ≈105 MB. #2796 (bucket publish +
+  reviewer reads anonymously via Garage web :3902) merged; workflow half 421f51aa operator-ordered DIRECT
+  (pin-only-lint); purge workflow lost its `paths` filter (4th copy of the trigger set); #2806 = `GATEWAY_PATHS`.
+  First master pack live `evidence/master/421f51aa…` (200). Fallback removal → FU-314.
+- **NodeCPUHighUsage cp-01 97%**: kube-apiserver 3.5/4 cores since 10-20 ~14Z — live heap ~2.7 GiB at
+  GOMEMLIMIT 3200MiB → GC ~1.1/s (others ~0.06); objects flat, p99 79 ms. Window seat-1792648298-24:
+  `talosctl restart -k` cp-01 apiserver 05:52Z → #2807 (VM CPs 5000MiB via a VM-only patch after the common one)
+  applied from the branch (plan 20261022T055321Z, cp-01+cp-02 in-place), merged; master plan `No changes`. wk-metal-02
+  (3200MiB) spiked to 1.8 cores as clients moved → restarted 05:57Z too. 06:03Z: all three ≤0.4 cores, GC ≤0.04/s,
+  cilium 13/13. Claims: ControlPlaneComponentRestarted + PodSigkilled (apiserver pods). Laptop residual → FU-315.
+  Not built: a GC-thrash detector (`rate(go_gc_duration_seconds_count{job="apiserver"}[10m]) > 0.5`) — proposed
+  to the operator, would fire before the node CPU alert.
