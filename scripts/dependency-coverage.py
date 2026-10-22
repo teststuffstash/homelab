@@ -472,6 +472,19 @@ def extract_arc_runner():
     return rows
 
 
+def extract_renovate_tools():
+    """Class 17: the tool versions Renovate installs at runtime for its postUpgradeTasks — today the
+    helm of scripts/upstream-alerts-refresh.sh (`HELM_VERSION=v<x.y.z>`, renovate-global.json's
+    helm/helm customManager reads the same line)."""
+    path = os.path.join(ROOT, "scripts", "upstream-alerts-refresh.sh")
+    src = read(path)
+    rows = []
+    for m in re.finditer(r"^HELM_VERSION=v([0-9]+\.[0-9]+\.[0-9]+)$", src, re.M):
+        rows.append({"name": "helm/helm", "version": m.group(1), "where": [rel(path)],
+                     "match": ["helm/helm", "HELM_VERSION="]})
+    return rows
+
+
 def extract_deno():
     rows = []
     for path in repo_files("scripts/*/deno.json"):
@@ -517,6 +530,7 @@ def extract_all(registry):
         "matchbox": extract_matchbox,
         "arc_runner": extract_arc_runner,
         "deno": extract_deno,
+        "renovate_tools": extract_renovate_tools,
         "mgmt_flake": extract_mgmt_flake,
         "none": lambda: [],
     }
