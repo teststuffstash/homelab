@@ -250,8 +250,10 @@ one's ⚖). A null window is **omitted**, which the profile check refuses whole 
 unknown, never zero. The payload shape is the 2026-10-22 observation (the spike §Live usage payload
 shape; `tests/fixtures/codex-usage-observed.json` mirrors it with synthetic values); the identity
 fields it carries (`account_id`, `email`, `user_id`) are never read, logged, attached or rendered.
-Every outcome is counted on `gateway_codex_usage_poll_total{outcome}` ([GW-METRICS](metrics.md#gw-metrics)),
-every outcome from 0; a refused or failed poll leaves the last ACCEPTED report standing.
+Every outcome is counted on `gateway_codex_usage_poll_total{outcome}` ([GW-METRICS](metrics.md#gw-metrics)):
+the family exists only while the policy DECLARES the codex rail (an undeclared rail renders no series,
+so the silent-poll alert cannot fire on it) and then every outcome renders from 0; a refused or failed
+poll leaves the last ACCEPTED report standing.
 
 | description | the endpoint answers (world `policy-codex`, now T; the stored credential expires at T+1) || outcome | verdict after |
 |---|---||---|---|
@@ -271,6 +273,7 @@ every outcome from 0; a refused or failed poll leaves the last ACCEPTED report s
 | "the schedule polls at start, before the first interval ⚖" | `run()` || one poll before any sleep (a restart needs a fresh report) | admit |
 | "poll_interval_s is required and sits below max_age_s" | policy `120` / `0` / absent / `true` (max_age_s 120) || PolicyError | — |
 | "the counter's label set is the poll's outcome set" | — || `gateway_codex_usage_poll_total`'s `outcome` values = the poll's outcomes | — |
+| "an undeclared rail renders no poll family; a declared one renders every outcome from 0 ⚖" | `GET /metrics` under `policy-default` (no codex rail) / under `policy-codex` (declared, nothing polled) || no `gateway_codex_usage_poll_total` series at all / the 11 outcomes, each 0 | — |
 
 ### Gauges
 

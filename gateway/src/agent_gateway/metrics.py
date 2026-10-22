@@ -90,6 +90,7 @@ class Metrics:
         self.cred_total: dict[tuple[str, str], int] = {}
         self.upstream_auth_total: dict[str, int] = {}
         self.poll_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Poll
+        self.codex_declared = False  # the family renders only for a declared codex rail (bind_codex_rail)
         self.cp_unauth_total: dict[tuple[str, str], int] = {}
         self.sub_util: dict[tuple[str, str], float] = {}
         self.sub_reset: dict[tuple[str, str], float] = {}
@@ -226,6 +227,11 @@ class Metrics:
         with self._lock:
             self.cred_total[key] = self.cred_total.get(key, 0) + 1
 
+    def bind_codex_rail(self, declared: bool) -> None:
+        """GW-CODEX-HEADROOM §Poll: `gateway_codex_usage_poll_total` exists only while the policy declares the
+        codex rail — an undeclared rail renders no series, so CodexUsagePollSilent cannot fire on it."""
+        self.codex_declared = declared
+
     def codex_poll(self, outcome: str) -> None:
         """GW-CODEX-HEADROOM §Poll: one usage poll's bounded outcome (`accepted` = a report the headroom took)."""
         o = _bounded(outcome, POLL_OUTCOMES)
@@ -291,11 +297,14 @@ class Metrics:
                       "# TYPE gateway_upstream_auth_rejected_total counter"]
             for rail in RAILS:
                 lines.append(f"gateway_upstream_auth_rejected_total{_fmt_labels({'rail': rail})} {self.upstream_auth_total.get(rail, 0)}")
-            # Every outcome renders from 0 (the alert reads increase(): a fresh pod's first `accepted` must count).
-            lines += ["# HELP gateway_codex_usage_poll_total The codex rail's usage polls by outcome (GW-CODEX-HEADROOM §Poll); accepted = the headroom took the report.",
-                      "# TYPE gateway_codex_usage_poll_total counter"]
-            for outcome in POLL_OUTCOMES:
-                lines.append(f"gateway_codex_usage_poll_total{_fmt_labels({'outcome': outcome})} {self.poll_total.get(outcome, 0)}")
+            # Only for a DECLARED codex rail (bind_codex_rail): an undeclared rail renders no series at all, so the
+            # silent-poll alert cannot fire on it. Once declared, every outcome renders from 0 (the alerts read
+            # increase(): a fresh pod's first `accepted` must count).
+            if self.codex_declared:
+                lines += ["# HELP gateway_codex_usage_poll_total The codex rail's usage polls by outcome (GW-CODEX-HEADROOM §Poll); accepted = the headroom took the report.",
+                          "# TYPE gateway_codex_usage_poll_total counter"]
+                for outcome in POLL_OUTCOMES:
+                    lines.append(f"gateway_codex_usage_poll_total{_fmt_labels({'outcome': outcome})} {self.poll_total.get(outcome, 0)}")
             lines += ["# HELP gateway_requests_incomplete_total 2xx answers whose body stopped before its end, by reason.",
                       "# TYPE gateway_requests_incomplete_total counter"]
             for (rail, dialect, reason), n in sorted(self.incomplete_total.items()):

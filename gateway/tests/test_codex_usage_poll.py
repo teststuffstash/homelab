@@ -23,6 +23,8 @@ Poll (now T = the world clock; the stored credential expires at T+1, so the firs
 | a dark rail has no poll | no CODEX_USAGE_URL, or no credential backend | — (not enabled) | quota-unknown |
 | the schedule polls at start, before the first interval | run() | one poll before any sleep | admit |
 | poll_interval_s is required and sits below max_age_s | policy 120 / absent | PolicyError | — |
+| the counter's label set is the poll's outcome set | — | — | — |
+| an undeclared rail renders no poll family; a declared one renders every outcome from 0 | policy-default vs policy-codex /metrics | — | the family absent / 11 series at 0 |
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ import asyncio
 import copy
 import json
 import logging
+import re
 
 import httpx
 import pytest
@@ -96,6 +99,7 @@ def usage(clock) -> FakeUsage:
 async def poll(clock, codex_store, exchange, usage):
     client = httpx.AsyncClient(transport=httpx.MockTransport(usage.handler))
     rail, metrics = _rail(clock, codex_store, exchange), Metrics(["platform"])
+    metrics.bind_codex_rail(True)  # as app.py binds it for a declared rail
     rail.headroom.on_accept = lambda snapshot: metrics.subscription_report("codex", snapshot.windows)  # as app.py binds it
     p = UsagePoll(rail, client, USAGE_URL, metrics, clock)
     yield p
@@ -328,6 +332,22 @@ def test_policy_interval(interval):
     with when(f"the policy loads with poll_interval_s = {interval!r} (max_age_s 120)"), pytest.raises(PolicyError) as e:
         Policy.from_dict(doc)
     then_eq("error", "poll_interval_s" in str(e.value), True)
+
+
+async def test_family_only_when_declared(settings, policy, codex_policy, secrets, store, clock, codex_store, exchange):
+    """row: an undeclared rail renders no poll family; a declared one renders every outcome from 0"""
+    world("policy-default")
+    from agent_gateway.app import create_app
+    with when("GET /metrics on an app under policy-default (no codex rail) and one under policy-codex (declared, nothing polled)"):
+        texts = {}
+        for name, pol, backend in (("policy-default", policy, None), ("policy-codex", codex_policy, CodexBackend(codex_store, exchange))):
+            app = create_app(settings, policy=pol, source=secrets, store=store, clock=clock, codex_backend=backend)
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as c:
+                texts[name] = (await c.get("/metrics")).text
+    then_eq("series under policy-default", texts["policy-default"].count("gateway_codex_usage_poll_total{"), 0,
+            claim="an undeclared rail renders no gateway_codex_usage_poll_total series — CodexUsagePollSilent cannot fire on it")
+    then_eq("series under policy-codex", sorted(re.findall(r'gateway_codex_usage_poll_total\{outcome="([^"]+)"\} 0', texts["policy-codex"])),
+            sorted(OUTCOMES), claim="a declared rail renders every outcome from 0")
 
 
 def test_outcome_sets_agree():

@@ -159,6 +159,7 @@ def create_app(
     codex_proxy = CodexProxy(sessions, m, codex, client)
     # GW-CODEX-HEADROOM §Poll: the gateway's own usage observation — the only report producer today.
     # Runs on the lifespan when the rail has a credential backend AND CODEX_USAGE_URL names the endpoint.
+    m.bind_codex_rail(codex is not None)  # the poll counter family exists only for a declared rail
     codex_poll = UsagePoll(codex, client, settings.codex_usage_url, m, clock) if codex is not None else None
     if codex is not None and not (codex_poll and codex_poll.enabled):
         log.warning("codex usage poll dark: %s — the rail answers quota-unknown",

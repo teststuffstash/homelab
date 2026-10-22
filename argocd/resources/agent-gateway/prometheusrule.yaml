@@ -175,8 +175,9 @@ spec:
     # the account usage endpoint and the headroom keeps the last ACCEPTED report; past max_age_s the
     # rail defers `quota-stale`, and a declared rail with no poll at all sits on `quota-unknown`
     # forever. gateway_codex_usage_poll_total{outcome} counts every poll (every outcome renders from
-    # 0 once the rail is declared; the family is ABSENT while the policy omits the rail, so neither
-    # alert can fire on an undeclared rail). Behaviour fixture: codex-headroom.promtool-{rules,test}.
+    # 0 once the rail is declared; the family is ABSENT while the policy omits the rail — metrics.py
+    # bind_codex_rail, the §Poll row "an undeclared rail renders no poll family" — so neither alert
+    # can fire on an undeclared rail; fixture P4). Behaviour fixture: codex-headroom.promtool-{rules,test}.
     #   CodexUsagePollStale  — polls run but none was accepted for 15 m (401s, a changed payload,
     #                          windows off the profile, a store failure…): the rail is deferring.
     #   CodexUsagePollSilent — the rail is declared but no poll ran for 15 m: the poll is dark
