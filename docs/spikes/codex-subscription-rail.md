@@ -563,3 +563,113 @@ After E: the codex rail block in the deployed policy (tier lists derived — `be
 `codex/<id>` spellings), the `codex` cell in the launcher, the agent-runtime `agent-codex` wrapper
 rendering the provider block from the dispatch env, and the live canary in a declared maintenance
 window (step 4 above). The mint and the window are the operator's.
+
+## Recorded live protocol experiment — 2026-10-22 (FU-270)
+
+**Plan, not implemented or live evidence.** The operator asked for captured requests/responses
+from in-cluster Codex to improve the requirements, beyond a canary that merely completes.
+This extends FU-270's existing vendor-header and live-canary gaps; it does not enable the rail
+or authorize enrollment in this documentation session. The native profile selected above stays
+selected. The [gateway spec process](../../gateway/specs/README.md) and
+[Responses requirements](../../gateway/specs/endpoints/openai-responses.md) own the resulting
+contract; the [existing CLI probes](../../experiments/codex-rail/README.md) are the starting point.
+
+### Credential ownership and experiment boundary
+
+Use leg E's **separate gateway login**, imported through `CODEX_SEED_RECORD` → Infisical → ESO
+→ the gateway's durable SQLite store. The worker receives only its gateway session token;
+the gateway alone owns upstream renewal. Never copy the active jail's renewable login to a
+second refresher. A short-lived access token can establish inference behavior, but cannot
+establish renewal/recovery. Independent-login revocation semantics remain unverified as noted
+above; enrollment must record that uncertainty and the observed effect on the existing login.
+The login's browser consent is the third-party-console class under the
+[minting doctrine](../secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret);
+credential transfer and cleanup belong to the coded enrollment recipe.
+
+Run a bounded experiment with a pinned agent-runtime image, an explicitly selected model,
+synthetic prompts and a disposable workspace containing only experiment fixtures. Scope capture
+to the experiment's sessions, with duration/byte limits and an explicit completion or truncation
+marker. Declare the [maintenance window](../../.claude/skills/maintenance-window/SKILL.md) before
+deploying/running the live experiment. Ordinary fleet traffic is outside this capture scope.
+
+### Capture before and after gateway transformations
+
+Record four correlated boundaries: **client request received**, **upstream request sent**,
+**upstream response received**, and **client response sent**. Egress-only capture cannot show
+what the gateway discarded; ingress-only capture cannot show what the backend actually saw.
+The observer must preserve streaming and cancellation behavior, avoid whole-response buffering,
+and never replay a request as a side effect of recording. Recorder loss/overflow is explicit
+in the evidence; a missing capture is not an observed absence of a header or event.
+
+| Capture | Evidence retained |
+|---|---|
+| HTTP request/response at each boundary | method, destination/path, status, header names and approved non-sensitive values; added/dropped/rewritten fields |
+| Request JSON and ordered SSE events | sanitized bodies for the synthetic task, tool definitions/calls/results, continuation inputs, terminal status, error codes and usage; event order and relative times |
+| Opaque identifiers and routing state | run-local aliases preserving equality across all four boundaries, turn boundaries and retries; no account or routing-state values in published evidence |
+| Lifecycle | request/turn/session correlation, attempt count, cancellation, disconnect, EOF, parser failure and capture completeness |
+| Usage polling and refresh | separately instrumented gateway-owned calls: sanitized field/type structure, status, timing, window/reset observations and replacement-token presence; never token values |
+| Provenance | runtime image digest, Codex version, gateway revision/image digest, model, provider/transport configuration, scenario, timestamp and capture format version |
+
+Sanitize **before persistence**, including error paths: remove authorization, cookies, session
+tokens, OAuth token values, account identifiers and sensitive URL/query values. Use structured
+capture sanitization, not the existing log formatter's token-pattern matching. Unknown fields
+must not silently become public attachments: retain their structural presence/type and mark
+their values withheld until a safe export rule exists. Synthetic prompts/tool results can be
+retained after checking them; redaction must preserve the structures the requirement relies on.
+Prove these rules with dummy secret canaries before introducing a real credential.
+
+Keep the sanitized experiment bundle in restricted storage with bounded retention; log only its
+reference and summary. The anonymously readable gateway-specs site receives only reviewed,
+sanitized evidence exports. Replay fixtures replace opaque IDs/state consistently and retain
+the event/body structure needed to exercise the gateway. Do not replay credentials or refresh
+calls against the real backend. Sanitization and any normalization must be described alongside
+the fixture, so the artifact never claims byte-for-byte fidelity it does not have.
+
+### Establish a baseline, then test the gateway's choices
+
+First record a native-client baseline through an isolated recording forwarder that preserves
+the native request semantics. Verify the pinned client's supported routing configuration before
+choosing the capture mechanism; a custom provider can itself change emitted headers/tools.
+Document that configuration and any deviation from the native path. The baseline's credential
+ownership must be explicit and exclusive too: no baseline client and gateway refreshing the
+same token chain concurrently. This baseline is an experiment, not a production passthrough
+exception to the gateway's credential/header boundary.
+
+Then run the same scenario/configuration through the gateway and compare all four boundaries.
+**Observed is not required:** seeing a header establishes presence; successful inference with
+it establishes compatibility for that run. Necessity requires a controlled comparison changing
+one header/behavior at a time, repeated where variability matters. Keep inconclusive results
+inconclusive. Never infer native-backend requirements from SIWC documentation alone.
+
+| Scenario | Observation needed | Requirement home |
+|---|---|---|
+| Tool turn, then another turn | actual tool call, result submission, terminal completion; state reuse within the turn and clearing between turns | `GW-RAIL-CODEX` |
+| Cancellation/interrupted stream | client cancellation propagation, upstream closure, partial events and distinct terminal/transport outcomes | `GW-RAIL-CODEX`, `GW-METRICS` |
+| Natural renewal, then gateway restart | one refresh owner, persisted replacement before use, subsequent use after restart; no credential in artifacts | `GW-CODEX-OAUTH`, `GW-CODEX-REFRESH`, `GW-REDACT` |
+| Real account usage observation | payload field types, available windows, absolute reset semantics and freshness; missing/unknown windows remain unknown | `GW-CODEX-HEADROOM` |
+| Observed limit/auth/backend failure | HTTP status plus SSE error/terminal data, resulting admission/accounting behavior; HTTP 200 alone is not success | `GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-SESSIONS-ADMIT`, `GW-METRICS` |
+
+Do not burn through account quota or revoke a working login to manufacture a failure. A failure
+not encountered live stays unobserved. Exercise such paths offline with explicitly synthetic
+faults; distinguish them from captured vendor behavior. In particular, OpenAI's
+[Responses events](https://developers.openai.com/api/reference/resources/responses/streaming-events)
+distinguish failed, incomplete and completed responses; preserve that distinction through
+capture, the gateway ledger and metrics instead of treating every HTTP 200 as completion.
+
+### Build order and acceptance
+
+Under FU-270: specify the capture/export contract and prove sanitization offline; implement
+the scoped observer and coded enrollment recipe; run the baseline and gateway scenarios in the
+maintenance window; review the bundle; then derive requirement rows and deterministic offline
+replay fixtures. Leg D's gauges landed in #2786; the real usage poll is still part of this work.
+Do not inject fake healthy headroom into a live run to bypass the missing poll. Establish the
+account-bound observation path before claiming production admission has been exercised.
+
+Acceptance is an **evidence bundle linked to requirement rows**, not a successful CLI exit.
+Each row identifies its provenance as official documentation, pinned client-source behavior,
+live observation, controlled comparison, replay evidence or synthetic fault. It states the
+tested version/configuration and remaining uncertainty. Captured failures count as findings,
+not failed experiments to discard. The built-image run complements the existing PR-head fake
+tests; its sanitized fixtures must replay offline without credentials or external requests.
+Header-policy or lifecycle changes discovered here land through the normal spec/review lane;
+unobserved cases remain named gaps. No new tracker item is needed for this FU-270 extension.
