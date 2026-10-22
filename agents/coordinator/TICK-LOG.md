@@ -14216,3 +14216,87 @@ updates or reverts as much as possible — mechanical revert or a responder."
   morning), Go `minimax-m3.1-flash` lost its free tier ($0.30 out over a $20 limit). Next window: the 00:21Z refresh.
 - Jail gotcha (seat, self-inflicted twice): `pkill -f '<pattern>'` from a command whose own line carries the pattern (the exec
   that follows it) kills the wrapper shell — exit 144, the tracked waiter dies; never pkill and launch in one command.
+
+## 2026-10-22 ~19:45Z – ~20:10Z — codex rail leg E as code: `scripts/codex-seed-bootstrap.sh` + runbook (#2826)
+
+- Operator (from the codex session that merged #2809, the recorded-live-protocol plan): "start building, give me a script to
+  run to save the auth and a readme around it". The auth = the gateway's OWN ChatGPT/Codex login (spike §Lighting the rail,
+  leg E — the one manual step left before the policy block). Built as **#2826**: `devbox run codex-seed` = `login` (device
+  auth in a throwaway `CODEX_HOME`, shredded on exit; 4-field Credential record 0600; one usage-endpoint probe printing
+  field/type STRUCTURE only — the first live observation GW-CODEX-HEADROOM lacks) → `store` (infisical-secret →
+  force-sync `agent-egress/codex-seed` → k8s Secret readback hash check, the `$`-expansion class → shred) ; `verify` =
+  the Secret's structure, never a value. The readme = runbook §Secrets "Enrol the gateway's own Codex login"; the spike's
+  leg-E row + gateway README point at it. Tested offline with a stub codex + loopback usage server; `verify` against the
+  live cluster reports the absent Secret. No live credential touched. Nothing to restart: the policy still omits the rail.
+- Open until the operator's run: does the second device login revoke the homelab-codex jail's (unverified since 10-19)?
+  The script and runbook both say what to watch. FU-270 line points at #2826 (local bookkeeping commit, pushed at wind-down).
+- **Leg E MINTED (operator, host, ~20:00Z):** first `store` died — two concurrent `devbox run`s inside `infisical-secret.sh`
+  (the backgrounded port-forward + the readiness loop) race on `.devbox/gen/scripts/.cmd.sh`, the port-forward got
+  `kubectl: not found` (127); fixed in #2826 (resolve the binaries once, call them directly). Re-run: Infisical
+  `CODEX_SEED_RECORD` created, force-sync, Secret readback hash `a1e1523e…` == local, record shredded. Jail `verify`: the 4
+  keys, access JWT expires 2026-11-01T20:00Z (a 10-day lifetime), refresh 196 chars. Nothing restarted — the policy still
+  omits the rail. **Next (seat):** the codex policy block (tier lists derived — `benchmarks.json` needs `codex/<id>`
+  spellings), the launcher cell, the live canary in a window. Open: the second-login revocation watch (jail codex).
+
+## 2026-10-22 ~20:45Z – 2026-10-23 ~00:10Z — codex rail, unattended build: poll → policy block → launcher cell → runtime wrapper
+
+- Operator: "continue building codex rail unattended" (after leg E minted). Four slices, each its own PR, offline-tested
+  (gateway CI green locally each time; no live call, no credential read):
+  1. **#2828 the usage poll** (`codex_usage.py`, GW-CODEX-HEADROOM §Poll, 16 rows + 2 alerts `CodexUsagePollStale`/`Silent`
+     with fixture P1–P4). Reviewer finding, fixed: the counter family rendered at 0 unconditionally → the silent alert
+     would have fired on merge; now `bind_codex_rail` gates the family on a declared rail (+ a row). Specs reviewer
+     on #2826 earlier: a changed ⚖ row needs `Spec changes:` + an intent source — done, merged 20:14Z.
+  2. **the policy block** (clone `homelab-policy`, stacked on #2828, NOT yet opened): `rails.codex` prober-only/last
+     (max_sessions 1, headroom 900/0.95/[300,10080]/poll 60, margin 300 — every value cited), codex joins
+     PRICELESS_RAILS, `CODEX_CANDIDATES=codex/gpt-6-astra` (the account's model_usage) → benchmarks.json rebuilt from
+     the 18:21Z inputs (check: no re-cut; AA 52.7 by tail join), GW-MODEL-RESOLVE/-TIERS/-OAUTH deployed rows moved.
+     Opens once #2828 lands — its merge rolls the pod and LIGHTS the rail (first live poll): wrap in a window.
+  3. **#2830 the launcher cell** (`--harness codex`, CODEX_MODEL env key, `codex/` strip, sub-rail exemptions,
+     `agent-codex --dangerously-bypass-approvals-and-sandbox` recipe cmd) + `gateway/scripts/canary-codex.sh` (one
+     prober ride, structure-only evidence). Path gates green.
+  4. **agent-runtime#179** `agent-codex` renders the provider block from the pulled env (0600, token never in the file,
+     TOML-breaking values refused); 21 seam tests.
+- Jail gotchas: two concurrent `devbox run`s race `.devbox/gen/scripts/.cmd.sh` (fixed in infisical-secret.sh, #2826);
+  a clone's devbox env lacks promtool — run `prometheus-rules-lint` with the main checkout's profile bin on PATH; a
+  python heredoc inside a bash heredoc needs a distinct terminator (an inner `EOF` ended the outer).
+- **Next:** #2828 merge (BEHIND, re-review pending) → open the policy PR inside a declared maintenance window → #179
+  image → canary (`canary-codex.sh`) in the window → evidence to the spike. Open: the second-login revocation watch.
+
+## 2026-10-22 ~21:30Z – ~22:05Z — the codex rail LIT; the first live ride (window seat-1792705075-7945)
+
+- #2828 merged 21:3xZ (image #2831 rolled 21:37Z). Window opened 21:37:55Z (`maint open`, Monitor watch + lease renew
+  every 5 min). **#2832 the policy block merged → the gateway rolled 21:47:42Z with rails.codex: first act
+  `codex usage poll: accepted`** — live headroom 0 % / 0 % (5h resets 22:48Z, 7d 10-29 13:48Z), the seeded token
+  served without a refresh. agent-runtime#179 merged, agent-base `2026.10.22-gd4edaec9b5a8` built, pin #2833 merged.
+- **Canary ride 21:49:44Z** (`canary-codex.sh` from the #2830 clone, HARNESS_IMAGE = the new agent-base): admitted
+  (session 57b32b9d…, prober, codex/gpt-6-astra), env pulled, provider block rendered, `codex exec --json` hit
+  `/openai/v1/responses` → the upstream POST chatgpt.com/backend-api/codex/responses answered **200 with a NON-SSE
+  body in 1.29 s → 502 upstream-content-type**; the client `turn.failed`. Everything up to the vendor's answer works;
+  the gateway logged only "upstream 200" → **#2835**: a bounded redacted capture (content-type, header names, ≤512-byte
+  preview; auth bodies never read) + the spike §The first live ride. Hypothesis: the vendor-header gap (originator,
+  session-id, x-codex-*). Second ride once #2835's image rolls, same window.
+- Findings fixed in #2830: the jail port-forward died during the 254 s image pull → the launcher's EXIT-trap release
+  failed, the session held the rail's ONE slot (hand DELETE'd) → the verb re-opens a dead forward + releases any
+  still-active session of its task. Window: `ControlPlaneNodeMemoryLow` (wk-metal-02) HANDED OFF to the responder
+  (gateway rides wk-04); scrape targets 196→195 = the rolled pod's series expiring. #2830 awaits re-review (stale
+  CHANGES_REQUESTED on an old head).
+- **Second ride 22:26Z** (capture live, #2835 → image #2836): same 502, and the ERROR line SETTLED it — the backend's
+  body IS a Responses SSE stream (`response.created`, gpt-6-astra, in_progress) with NO Content-Type header (chunked,
+  Cloudflare); the strict ctype rule refused a good stream. Vendor-header hypothesis WRONG (six fixed headers suffice).
+  **#2837**: absent content-type → relay (parser guards), present-and-wrong → refuse; fixture = the live shape. Also on
+  the wire (names only): `x-codex-primary/secondary-*` headroom headers (the "upstream headers" source exists),
+  `x-codex-turn-state` on turn 1, `x-codex-safety-buffering-*`. Release worked (hardened verb). Third ride after #2837's image.
+- **THIRD RIDE 22:56Z — THE CANARY COMPLETED** (#2837's image g6cb409d3): admitted, env pulled, provider block rendered,
+  `codex exec --json` ran a real TOOL TURN (`rg -m 1 '^#{1,6} ' README.md` → `# homelab`), answered `homelab`,
+  `turn.completed` usage 21,422 in / 18,176 cached / 47 out; 2 requests on the rail (the tool continuation rode the
+  x-codex-turn-state round trip), outcome CLEAN reported, released. Spike step 4 = DONE: the ChatGPT subscription
+  serves cluster rides through the gateway with no credential in the pod. One metrics finding: both requests
+  recorded `outcome=cancelled status=499` — the native CLI closes the connection right after `response.completed`
+  while the vendor holds it open, so the relay's CancelledError overwrote a terminal outcome it had already seen
+  (usage WAS counted). Fix next: a cancellation after the terminal event stays `completed` (200).
+- **#2840** (a consumer stopping after the terminal event keeps `completed` — the 499 class) opened; window
+  `seat-1792705075-7945` CLOSED 23:03Z with `--force` (said so: the only delta was scrape targets 196→195 = the pod #2831
+  rolled, double-counted in the baseline; the handed-off ControlPlaneNodeMemoryLow had cleared). Box apply loop
+  released. Bookkeeping push after #2840 merges. Rail summary for the next seat: LIT, prober-only, poll every 60 s
+  (0 %/0 % live), every codex ride = `AGENT_GATEWAY_ROLE=prober --harness codex` through `canary-codex.sh` or the
+  launcher; the vendor streams WITHOUT Content-Type; the CLI closes after `response.completed`.
