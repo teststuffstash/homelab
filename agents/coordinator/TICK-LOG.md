@@ -14230,3 +14230,10 @@ updates or reverts as much as possible — mechanical revert or a responder."
   live cluster reports the absent Secret. No live credential touched. Nothing to restart: the policy still omits the rail.
 - Open until the operator's run: does the second device login revoke the homelab-codex jail's (unverified since 10-19)?
   The script and runbook both say what to watch. FU-270 line points at #2826 (local bookkeeping commit, pushed at wind-down).
+- **Leg E MINTED (operator, host, ~20:00Z):** first `store` died — two concurrent `devbox run`s inside `infisical-secret.sh`
+  (the backgrounded port-forward + the readiness loop) race on `.devbox/gen/scripts/.cmd.sh`, the port-forward got
+  `kubectl: not found` (127); fixed in #2826 (resolve the binaries once, call them directly). Re-run: Infisical
+  `CODEX_SEED_RECORD` created, force-sync, Secret readback hash `a1e1523e…` == local, record shredded. Jail `verify`: the 4
+  keys, access JWT expires 2026-11-01T20:00Z (a 10-day lifetime), refresh 196 chars. Nothing restarted — the policy still
+  omits the rail. **Next (seat):** the codex policy block (tier lists derived — `benchmarks.json` needs `codex/<id>`
+  spellings), the launcher cell, the live canary in a window. Open: the second-login revocation watch (jail codex).
