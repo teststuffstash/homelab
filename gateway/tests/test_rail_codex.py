@@ -50,6 +50,8 @@ Upstream failures:
 | an upstream 5xx is typed | upstream-500 | 502 | upstream-http-error | 1 |
 | a redirect is never followed | upstream-302 | 502 | upstream-http-error | 1 |
 | a non-SSE 200 is refused | upstream-wrong-type | 502 | upstream-content-type | 1 |
+| a refused answer is captured: content-type, header names, a bounded preview | upstream-wrong-type / upstream-500 | the ERROR line carries them | — | 1 |
+| an auth refusal's body is never read, not even into the log | upstream-401 | the ERROR line says <not read: auth>; the body's marker is nowhere | — | 1 |
 | an unreachable upstream is typed | upstream-down | 502 | upstream-unreachable | 0 |
 | a read past the read timeout (WIP: clock-faked) | upstream-slow | 504 | upstream-timeout | 0 |
 
@@ -391,3 +393,41 @@ async def test_cancellation():
         obs, out, closes, pulled = await _drive([b": first\n\n", _event()], stop_after=1)
     then_eq("(outcome, bytes out, closes)", (obs.outcome, out, closes), ("cancelled", b": first\n\n", 1))
     then_eq("chunks pulled from upstream", pulled, [0], claim="the second chunk is never pulled")
+
+
+async def test_refused_answer_captured(codex_app, codex_gw, codex_upstream, clock, caplog):
+    """row: a refused answer is captured: content-type, header names, a bounded preview"""
+    world("policy-codex", "upstream-wrong-type")
+    codex_upstream.behaviour = "upstream-wrong-type"
+    with given("a codex session"):
+        doc = await _admitted(codex_app, codex_gw, clock)
+    with when("POST /openai/v1/responses — the upstream answers 200 application/json"), caplog.at_level("ERROR", logger="gateway.codex"):
+        r = await ride(codex_gw, doc, body(), label="wrong-type")
+    then_eq("status", r.status_code, 502)
+    line = next((rec.getMessage() for rec in caplog.records if "upstream-content-type codex 200" in rec.getMessage()), "")
+    with then("the ERROR line names the content-type, the header names and a preview of the body", line={"actual": line}):
+        assert "content-type='application/json'" in line
+        assert "headers=[" in line and "content-type" in line.split("headers=[", 1)[1].split("]", 1)[0]
+        assert "body='{\"output\":[]}'" in line
+    codex_upstream.behaviour = "upstream-500"
+    with when("the next request, the upstream answering 500"), caplog.at_level("ERROR", logger="gateway.codex"):
+        r = await ride(codex_gw, doc, body(), label="500")
+    then_eq("status", r.status_code, 502)
+    line = next((rec.getMessage() for rec in caplog.records if "upstream-http-error codex 500" in rec.getMessage()), "")
+    with then("the 5xx body is previewed too", line={"actual": line}):
+        assert "body='{\"error\":\"boom\"}'" in line
+
+
+async def test_auth_refusal_body_never_read(codex_app, codex_gw, codex_upstream, clock, caplog):
+    """row: an auth refusal's body is never read, not even into the log"""
+    world("policy-codex", "upstream-401")
+    codex_upstream.behaviour = "upstream-401"
+    with given("a codex session"):
+        doc = await _admitted(codex_app, codex_gw, clock)
+    with when("POST /openai/v1/responses — the upstream answers 401 with a marker in its body"), caplog.at_level("DEBUG"):
+        r = await ride(codex_gw, doc, body(), label="401")
+    then_eq("status", r.status_code, 502)
+    line = next((rec.getMessage() for rec in caplog.records if "upstream-auth codex 401" in rec.getMessage()), "")
+    with then("the ERROR line says the body was not read; the marker appears in no log line", line={"actual": line}):
+        assert "<not read: auth>" in line
+        assert not any("DUMMY-SECRET-LEAK" in rec.getMessage() for rec in caplog.records)

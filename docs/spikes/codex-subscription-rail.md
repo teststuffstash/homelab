@@ -602,6 +602,40 @@ runtime wrapper rendering the provider block from the pulled env
 ([agent-runtime#179](https://github.com/teststuffstash/agent-runtime/pull/179)). The canary
 itself waits for all four to land and for a declared window.
 
+### The first live ride — 2026-10-22 21:47–21:54Z (FU-270, step 4, window `seat-1792705075-7945`)
+
+**The rail lit at 21:47:46Z**: the policy block (#2832) rolled the gateway; its first act was
+`codex usage poll: accepted` — the enrolled account's live headroom: both windows at 0 % used,
+`reset_at` 5h = 2026-10-22T22:48Z, 7d = 2026-10-29T13:48Z (the gauges on UID
+`claude-subscription`), two accepted polls before the ride, no refresh (the seeded access token
+served; `gateway_credential_resolve_total{rail="codex",outcome="resolved"} 1`).
+
+**The ride** (`gateway/scripts/canary-codex.sh`, #2830; prober, `harness: codex`, agent-base
+`2026.10.22-gd4edaec9b5a8` with agent-runtime#179): admitted at 21:49:44Z (session
+`57b32b9d…`, `codex/gpt-6-astra`), the pod pulled exactly `OPENAI_BASE_URL`, `OPENAI_API_KEY`,
+`CODEX_MODEL`, `agent-codex` rendered the provider block, `codex exec --json` posted
+`/openai/v1/responses` — and the gateway's upstream POST to
+`https://chatgpt.com/backend-api/codex/responses` answered **HTTP 200 in 1.29 s with a body that
+was not an event stream**, refused as 502 `upstream-content-type` (the client saw
+`turn.failed: unexpected status 502 … upstream 200`; `AGENT_RUN_STATS exit_status=failed`, 8 s in
+the LLM loop, 254 s queue wait = the new image's pull). No auth rejection, no 429, no refresh.
+The transcript: `s3://agent-transcripts/homelab/canary-codex-20261022T214944Z/…`.
+
+**What this settles:** the whole chain through the gateway works up to the vendor's answer —
+enrolment, seed import, the poll, admission on live headroom, the env pull, the wrapper's
+rendering, the responses dialect on the wire. **What it does not:** what the backend answered.
+The gateway logged only "upstream 200" — the capture of the "upstream response received"
+boundary (above) did not exist yet; the next ride runs with it (content-type, header names, a
+bounded redacted preview). The open hypothesis is the vendor-header gap (§Native header
+compatibility): the gateway sends its fixed six headers, the native client also sends
+`originator`, `session-id`, `x-codex-*`. Observed ≠ required — the preview decides.
+
+Two operational findings, both fixed in #2830: the launcher's session release rides its EXIT
+trap through the jail's port-forward, which had died during the 4-minute image pull — the
+session held the rail's one slot until a hand `DELETE` (now the verb re-opens a dead forward and
+releases any still-active session of its task); and a `ControlPlaneNodeMemoryLow` on wk-metal-02
+fired inside the window — not the window's (the gateway rides wk-04), handed off to the responder.
+
 ## Recorded live protocol experiment — 2026-10-22 (FU-270)
 
 **Plan, not implemented or live evidence.** The operator asked for captured requests/responses

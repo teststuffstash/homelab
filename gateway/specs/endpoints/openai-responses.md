@@ -138,6 +138,8 @@ into the newer turn. These are gateway judgments, not vendor limits.
 | "an upstream 5xx is typed ⚖" | upstream-500 || 502 | `upstream-http-error` | 1 |
 | "a redirect is never followed" | upstream-302 (`Location` → loopback) || 502 | `upstream-http-error` | 1 — the location is never fetched |
 | "a non-SSE 200 is refused ⚖" | upstream-wrong-type (`application/json`) || 502 | `upstream-content-type` | 1 |
+| "a refused answer is captured: content-type, header names, a bounded preview ⚖" | upstream-wrong-type / upstream-500 || the ERROR line carries `content-type=`, `length=`, the response header NAMES and `body=` (≤ 512 printable bytes of ≤ 4 KiB read, non-printables escaped, `…(+N bytes)` when cut; the GW-REDACT formatter scrubs the rendered line) — the live-canary capture at the "upstream response received" boundary (spike §Recorded live protocol experiment; the first ride, 2026-10-22 21:54Z, answered 200 non-SSE and the log said only "upstream 200") | — | 1 |
+| "an auth refusal's body is never read, not even into the log" | upstream-401 (a marker in the body) || the ERROR line says `<not read: auth>`; the marker appears in no log line | — | 1 |
 | "an unreachable upstream is typed" | upstream-down || 502 | `upstream-unreachable` | 0 |
 | "🚧 WIP: a read past the read timeout" | upstream-slow (clock-faked) || 504 | `upstream-timeout` | 0 |
 

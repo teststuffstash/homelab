@@ -46,6 +46,14 @@ UPSTREAM_PATH = "/responses"
 # Lifecycle failure → data-plane answer. A store that does not answer may answer next time (503,
 # retry); every other code is a durable state only an operator act changes (401, typed).
 FAILURE_STATUS = {Code.STORE: 503, Code.RECOVERY: 401, Code.REVOKED: 401, Code.REFRESH: 401, Code.INVALID: 401}
+# The live-canary capture (spike §Recorded live protocol experiment, the "upstream response received"
+# boundary): a 200 that is not an event stream, or a typed non-2xx, is the vendor telling us something
+# the fixtures never saw — the first live ride (2026-10-22 21:54Z) answered 200 with a non-SSE body and
+# the log said only "upstream 200". Bounded read, response header NAMES only, a short preview with
+# non-printables escaped; the formatter (GW-REDACT) scrubs the rendered line, so no credential shape
+# survives even if the vendor echoed one. Never the request, never a stream (a 200 SSE is relayed, not read).
+PREVIEW_BYTES = 512
+PREVIEW_READ_BYTES = 4096
 # Stream outcome → the status the request row and gateway_requests_total record. The client got
 # 200 + bytes in every case; a broken stream is recorded as the gateway's 502, a client that went
 # away as 499 (⚖ GW-RAIL-CODEX).
@@ -96,6 +104,22 @@ def usage_of(obs: responses.Observation) -> Usage:
         return Usage(tokens_out=obs.output_tokens or 0)
     cached = min(obs.cached_tokens or 0, obs.input_tokens)
     return Usage(tokens_in=obs.input_tokens - cached, tokens_cache_read=cached, tokens_out=obs.output_tokens or 0)
+
+
+async def _preview(resp: httpx.Response) -> str:
+    """At most PREVIEW_READ_BYTES of a refused answer's body, rendered as PREVIEW_BYTES of printable
+    text (non-printables escaped) with a `…(+N bytes)` tail when cut. Read errors yield `<unreadable>`."""
+    try:
+        body = bytearray()
+        async for chunk in resp.aiter_bytes():
+            body += chunk
+            if len(body) >= PREVIEW_READ_BYTES:
+                break
+    except httpx.HTTPError:
+        return "<unreadable>"
+    text = bytes(body[:PREVIEW_BYTES]).decode("utf-8", "replace")
+    text = "".join(c if c.isprintable() else f"\\x{ord(c):02x}" for c in text)
+    return text + (f"…(+{len(body) - PREVIEW_BYTES} bytes)" if len(body) > PREVIEW_BYTES else "")
 
 
 class CodexProxy:
@@ -170,8 +194,11 @@ class CodexProxy:
         if refusal is None and status == 200 and ctype != "text/event-stream":
             refusal = "upstream-content-type"
         if refusal:
+            # An auth refusal's body is never read (GW-RAIL-CODEX: 401/403 never relay a body — not into a log either).
+            preview = await _preview(resp) if refusal != "upstream-auth" else "<not read: auth>"
             await resp.aclose()
-            log.error("%s codex %d session=%s", refusal, status, row.id)
+            log.error("%s codex %d session=%s content-type=%r length=%s headers=[%s] body=%r", refusal, status, row.id,
+                      ctype, resp.headers.get("content-length", "?"), ",".join(sorted(set(resp.headers.keys()))), preview)
             if refusal == "upstream-auth":
                 self.metrics.upstream_auth_rejected(row.rail)
             return self._upstream_error(row, 502, refusal, f"upstream {status}", t0)
