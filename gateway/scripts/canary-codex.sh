@@ -37,12 +37,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$PROMPT" in *\"*|*\\*|*\$*|*\`*|*$'\n'*) echo "the prompt must carry no double quote, backslash, dollar, backtick or newline (it rides inside the pod's run command, which the pod's shell expands)" >&2; exit 2;; esac
-pf=""
+pf=""; OWN_PF=""
 cleanup() { [ -n "$pf" ] && kill "$pf" 2>/dev/null || true; }
 trap cleanup EXIT
-if [ -z "${AGENT_GATEWAY_URL:-}" ]; then
-  log=$(mktemp); kubectl -n agent-egress port-forward svc/agent-gateway :8080 >"$log" 2>&1 & pf=$!
-  port=""
+# The port-forward is re-opened whenever it is found dead: the first ride (2026-10-22) pulled a new
+# agent-base image for ~4 min and the forward had died by the time the launcher's EXIT trap tried to
+# release the session — the slot (max_sessions 1) was held until a hand DELETE. Same port every time
+# (`:$port`), so AGENT_GATEWAY_URL stays valid for the launcher's own calls too.
+open_pf() {
+  [ -n "$OWN_PF" ] || return 0
+  curl -fsS -o /dev/null --max-time 3 "$AGENT_GATEWAY_URL/healthz" 2>/dev/null && return 0
+  [ -n "$pf" ] && kill "$pf" 2>/dev/null || true
+  local log; log=$(mktemp)
+  kubectl -n agent-egress port-forward svc/agent-gateway "${port:-0}:8080" >"$log" 2>&1 & pf=$!
   for _ in $(seq 1 30); do
     port=$(sed -nE 's/^Forwarding from 127\.0\.0\.1:([0-9]+) -> 8080$/\1/p' "$log" | head -n 1)
     [ -n "$port" ] && curl -fsS -o /dev/null "http://127.0.0.1:$port/healthz" 2>/dev/null && break
@@ -50,7 +57,9 @@ if [ -z "${AGENT_GATEWAY_URL:-}" ]; then
   done
   [ -n "$port" ] || { echo "port-forward to svc/agent-gateway did not come up:"; cat "$log"; exit 1; }
   export AGENT_GATEWAY_URL="http://127.0.0.1:$port"
-fi
+}
+port=""
+if [ -z "${AGENT_GATEWAY_URL:-}" ]; then OWN_PF=1; AGENT_GATEWAY_URL="http://127.0.0.1:0"; open_pf; fi
 export AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=prober
 export AGENT_GATEWAY_CALLER_SA="${AGENT_GATEWAY_CALLER_SA:-platform-agents/agentstack-loop}"
 PROJECT="${CANARY_PROJECT:-homelab}"
@@ -73,8 +82,24 @@ rc=0
 bash agents/agent-session.sh "$PROJECT" --harness codex --task "$task" --round 1 \
   --run "agent-codex --dangerously-bypass-approvals-and-sandbox \"$PROMPT\"" </dev/null 2>&1 | tail -n 40 || rc=$?
 echo "== launcher exit: ${rc} (0 = the pod ran to its finalize; a router-defer exit = the gateway's NO, its reason is above)"
+open_pf
+# The session rows need the CALLER's token (GW-SESSIONS-AUTH: a judge/dispatcher sees its own); mint the
+# same SA token the launcher used (the jail canary rule) — short-lived, never printed. Any session of
+# this task still `active` is released here: the launcher's own release rides its EXIT trap through
+# AGENT_GATEWAY_URL, which a dead forward silently fails (the 2026-10-22 ride).
+tok="$(kubectl -n "${AGENT_GATEWAY_CALLER_SA%%/*}" create token "${AGENT_GATEWAY_CALLER_SA#*/}" --audience agent-gateway --duration 10m 2>/dev/null || true)"
 echo "== the session rows for task=${task} (no token in a list — GW-SESSIONS-TOKEN)"
-curl -fsS "$AGENT_GATEWAY_URL/sessions?task=${task}" | jq . 2>/dev/null | sed 's/^/   /' || echo "   (no rows / the list needs the caller token — read it from the gateway log instead)"
+rows="$(curl -fsS "$AGENT_GATEWAY_URL/sessions?task=${task}" ${tok:+-H "Authorization: Bearer $tok"} 2>/dev/null || true)"
+if [ -n "$rows" ]; then
+  printf '%s\n' "$rows" | jq -c '(.sessions // .)[]? // . | {id, rail, harness, model, state, requests, tokens_in, tokens_out, requests_incomplete, outcome, released_at}' 2>/dev/null | sed 's/^/   /'
+  for sid in $(printf '%s\n' "$rows" | jq -r '(.sessions // .)[]? | select(.state=="active") | .id' 2>/dev/null); do
+    printf '   releasing still-active session %s → ' "$sid"
+    curl -s -o /dev/null -w '%{http_code}\n' -X DELETE "$AGENT_GATEWAY_URL/sessions/$sid" ${tok:+-H "Authorization: Bearer $tok"}
+  done
+else
+  echo "   (no rows — read the gateway log: kubectl -n agent-egress logs deploy/agent-gateway | grep ${task})"
+fi
+unset tok
 echo "== codex rail after the ride ($(date -u +%FT%TZ))"
 after="$(codex_series)"; printf '%s\n' "$after" | sed 's/^/   /'
 echo "== deltas (after − before) on rail=\"codex\" counters"
