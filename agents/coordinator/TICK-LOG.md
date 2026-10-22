@@ -14261,3 +14261,22 @@ updates or reverts as much as possible — mechanical revert or a responder."
   python heredoc inside a bash heredoc needs a distinct terminator (an inner `EOF` ended the outer).
 - **Next:** #2828 merge (BEHIND, re-review pending) → open the policy PR inside a declared maintenance window → #179
   image → canary (`canary-codex.sh`) in the window → evidence to the spike. Open: the second-login revocation watch.
+
+## 2026-10-22 ~21:30Z – ~22:05Z — the codex rail LIT; the first live ride (window seat-1792705075-7945)
+
+- #2828 merged 21:3xZ (image #2831 rolled 21:37Z). Window opened 21:37:55Z (`maint open`, Monitor watch + lease renew
+  every 5 min). **#2832 the policy block merged → the gateway rolled 21:47:42Z with rails.codex: first act
+  `codex usage poll: accepted`** — live headroom 0 % / 0 % (5h resets 22:48Z, 7d 10-29 13:48Z), the seeded token
+  served without a refresh. agent-runtime#179 merged, agent-base `2026.10.22-gd4edaec9b5a8` built, pin #2833 merged.
+- **Canary ride 21:49:44Z** (`canary-codex.sh` from the #2830 clone, HARNESS_IMAGE = the new agent-base): admitted
+  (session 57b32b9d…, prober, codex/gpt-6-astra), env pulled, provider block rendered, `codex exec --json` hit
+  `/openai/v1/responses` → the upstream POST chatgpt.com/backend-api/codex/responses answered **200 with a NON-SSE
+  body in 1.29 s → 502 upstream-content-type**; the client `turn.failed`. Everything up to the vendor's answer works;
+  the gateway logged only "upstream 200" → **#2835**: a bounded redacted capture (content-type, header names, ≤512-byte
+  preview; auth bodies never read) + the spike §The first live ride. Hypothesis: the vendor-header gap (originator,
+  session-id, x-codex-*). Second ride once #2835's image rolls, same window.
+- Findings fixed in #2830: the jail port-forward died during the 254 s image pull → the launcher's EXIT-trap release
+  failed, the session held the rail's ONE slot (hand DELETE'd) → the verb re-opens a dead forward + releases any
+  still-active session of its task. Window: `ControlPlaneNodeMemoryLow` (wk-metal-02) HANDED OFF to the responder
+  (gateway rides wk-04); scrape targets 196→195 = the rolled pod's series expiring. #2830 awaits re-review (stale
+  CHANGES_REQUESTED on an old head).
