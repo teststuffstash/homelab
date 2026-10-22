@@ -64,7 +64,7 @@ the process is down.
 | `gateway_openrouter_cells` | gauge | `state` | (model, provider) cells of the catalog by entry state — `candidate`, `eligible`, `excluded`; a provider's service tiers are one cell |
 | `gateway_canary_spend_usd` | gauge | — | metered canary spend over the trailing day at the cell's endpoint price |
 | `gateway_canary_budget_exhausted` | gauge | — | 1 while the canary cap (per refresh or per day) is spent and candidate cells wait — `GatewayCanaryBudgetExhausted` reads it |
-| `gateway_canary_rides_total` | counter | `outcome` | canary verdicts: `eligible` (a clean ride) or `excluded` (a struck one) |
+| `gateway_canary_rides_total` | counter | `outcome` | canary verdicts: `eligible` (a clean ride), `excluded` (a struck one) — and `no-verdict` (a 429'd one: the cell backs off, nothing is judged) |
 | `gateway_canary_admissions_total` | counter | `outcome` | canary admissions by answer: `dispatch`, `budget`, `not-due`, `not-in-catalog` |
 | `gateway_rail_choice_total` | counter | `model`, `rail`, `reason` | admissions where the tier named one model on two allowed rails ([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice)), by the rail that walked first and why — `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`; ⚖ `model` is the twin's openrouter spelling, the provider families' bound |
 | `gateway_tier_evidence_age_seconds` | gauge | — | seconds since the mounted tier-evidence snapshot's `snapshot_at` (`GATEWAY_BENCHMARKS`) — absent when none is mounted; `TierEvidenceStale` reads it |
@@ -120,7 +120,7 @@ The provider families (world `policy-default · openrouter-endpoints` — the sn
 | "reason is why a 2xx body stopped before its end" | requests_incomplete_total || `reason` | `no-terminal`, `timeout`, `transport-error`, `client-closed` |
 | "source is the catalog source" | go_catalog_refresh_total || `source` | `config` (the console's V2 config), `docs` (the vendor's Go page) |
 | "state is a cell's entry state ⚖" | openrouter_cells || `state` | `candidate`, `eligible`, `excluded` |
-| "a canary outcome is a verdict, an admission an answer" | canary_rides_total / canary_admissions_total || `outcome` | `eligible`, `excluded` / `dispatch`, `budget`, `not-due`, `not-in-catalog` |
+| "a canary outcome is a verdict, an admission an answer" | canary_rides_total / canary_admissions_total || `outcome` | `eligible`, `excluded`, `no-verdict` / `dispatch`, `budget`, `not-due`, `not-in-catalog` |
 | "the catalog outcome is the refresh outcome" | go_catalog_refresh_total || `outcome` | `ok`, `fetch-failed`, `parse-failed`, `implausible` |
 | "model is a policy openrouter id ⚖" | provider_requests_total, provider_failovers_total, rail_choice_total || `model` | the openrouter rail's policy models (wire ids); else `other` |
 | "reason is why the rail choice fell ⚖" | rail_choice_total || `reason` | `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint` |

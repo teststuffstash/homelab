@@ -162,8 +162,14 @@ class Outcomes:
         self._strike(row, klass, scope, "gateway", self.clock(), provider)
 
     def _strike(self, row: Session, klass: str, scope: str, source: str, now: float, provider: str = "") -> dict | None:
-        if row.canary_provider and self.judge is not None:  # any strike on a canary ride excludes its cell
-            self.judge(row.model, row.canary_provider, False, klass, now)
+        if row.canary_provider and self.judge is not None:
+            # Any strike on a canary ride excludes its cell — unless the ride saw a 429 on it: then the 429
+            # is the word (GW-CATALOG-OR §The entry canary, operator 2026-10-22: no verdict, the cell backs
+            # off and stays candidate); the strike still counts on the task.
+            if self.store.session_throttled(row.id):
+                log.info("outcome: session=%s %s on a 429'd canary — no verdict on (%s, %s)", row.id, klass, row.model, row.canary_provider)
+            else:
+                self.judge(row.model, row.canary_provider, False, klass, now)
         if self.store.add_strike(row.stack, row.task, row.rail, row.model, provider, klass, scope, source, row.id, now):
             self.metrics.strike(klass, source)
             log.warning("strike: %s/%s %s on %s %s%s (scope %s, source %s, session %s)",

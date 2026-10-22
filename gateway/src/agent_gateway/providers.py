@@ -201,6 +201,20 @@ def _provider_of(doc) -> str | None:
     return None
 
 
+def limit_source(body: bytes) -> str | None:
+    """A 429 envelope's `error.metadata.limit_source` — OpenRouter names what throttled the request
+    (`upstream_provider_shared_pool`: the provider throttles OpenRouter's shared upstream account, the
+    2026-10-21 tap on homelab#2775; `openrouter_free_tier_per_minute`: the key's own tier). None = unnamed."""
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return None
+    err = doc.get("error") if isinstance(doc, dict) else None
+    meta = err.get("metadata") if isinstance(err, dict) else None
+    src = meta.get("limit_source") if isinstance(meta, dict) else None
+    return src if isinstance(src, str) and src else None
+
+
 def provider_error(body: bytes) -> bool:
     """A 4xx whose JSON error names the provider that produced it (`error.metadata.provider_name`
     — OpenRouter's wrap of a provider's own refusal, a refused tool call among them)."""

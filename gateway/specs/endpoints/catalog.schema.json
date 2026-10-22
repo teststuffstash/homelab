@@ -64,13 +64,15 @@
       "$comment": "the policy's `rails.openrouter.canary` (GW-CATALOG-OR §The entry canary): who rides a canary and the cap — never code constants",
       "type": "object",
       "additionalProperties": false,
-      "required": ["role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s"],
+      "required": ["role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s", "backoff_s", "backoff_max_s"],
       "properties": {
         "role": { "enum": ["worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher"] },
         "harness": { "enum": ["opencode", "goose", "claude"], "description": "the harness the openrouter cells serve; a canary body may name another the rail speaks" },
         "max_per_refresh": { "type": "integer", "minimum": 1, "description": "canary admissions between two catalog refreshes" },
         "usd_per_day": { "type": "number", "minimum": 0, "description": "metered canary spend over the trailing day, at the cell's endpoint price" },
-        "cooldown_s": { "type": "number", "minimum": 0, "description": "an excluded cell is a candidate again after this" }
+        "cooldown_s": { "type": "number", "minimum": 0, "description": "an excluded cell is a candidate again after this" },
+        "backoff_s": { "type": "number", "exclusiveMinimum": 0, "description": "a 429'd canary's first re-try horizon on its cell (operator 2026-10-22: no verdict — the cell stays candidate, the admission is not consumed, the walk moves on)" },
+        "backoff_max_s": { "type": "number", "minimum": 0, "description": "the horizon doubles per consecutive 429'd canary up to this; a verdict resets it" }
       },
       "x-requirements": ["GW-CATALOG-OR"]
     },
@@ -287,12 +289,15 @@
               "items": {
                 "type": "object", "additionalProperties": false,
                 "$comment": "openai-chat.schema.json $defs.endpoint_row plus the cell's entry state, its rides and the floors' verdict (GW-CATALOG-OR): `pinnable` / `floor` are what `canary-entrants.sh` walks by — a candidate that is not pinnable for the ride's harness is skipped (homelab#2775)",
-                "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier", "state", "class", "cooldown_until", "rides", "pinnable", "floor"],
+                "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier", "state", "class", "cooldown_until", "retry_at", "backoff_s", "limit_source", "rides", "pinnable", "floor"],
                 "properties": {
                   "slug": { "type": "string" }, "tag": { "type": "string" }, "provider_name": { "type": "string" }, "quantization": { "type": "string" },
                   "tool_choice": { "type": "object" }, "uptime_1d": { "type": ["number", "null"] }, "p90_ms": { "type": ["number", "null"] },
                   "in_price": { "type": ["number", "null"] }, "out_price": { "type": ["number", "null"] }, "status": { "type": "integer" }, "service_tier": { "type": ["string", "null"] },
                   "state": { "$ref": "#/$defs/cell_state" }, "class": { "type": ["string", "null"], "description": "the strike class that excluded the cell" }, "cooldown_until": { "$ref": "#/$defs/timestamp" },
+                  "retry_at": { "$ref": "#/$defs/timestamp", "description": "a candidate cell a 429'd canary backed off: the horizon's end, before which a canary on it defers canary-not-due and the launcher skips it; null = none (every verdict resets it)" },
+                  "backoff_s": { "type": ["number", "null"], "description": "the step the horizon doubled to (canary.backoff_s on the first 429'd canary, ×2 per consecutive one, capped at canary.backoff_max_s)" },
+                  "limit_source": { "type": ["string", "null"], "description": "the 429 body's error.metadata.limit_source — upstream_provider_shared_pool (the provider throttles OpenRouter's shared account: a cell fact), openrouter_free_tier_per_minute (the key's tier); null = unnamed" },
                   "rides": { "type": "object", "additionalProperties": false, "required": ["clean", "judged"], "properties": { "clean": { "type": "integer" }, "judged": { "type": "integer" } }, "description": "the cell's clean-ride evidence (GW-MODEL-TIERS: a ride = a session this provider served a 2xx to whose latest outcome is reported)" },
                   "pinnable": { "type": "object", "additionalProperties": { "type": "boolean" }, "description": "per harness (the keys of the policy's `providers.tool_choice` — never a code list): whether this provider's representative endpoint clears the floors GW-RAIL-OPENROUTER §Selection pins by (quantization at or above the floor, every tool-choice mode the harness uses, uptime_1d at or above the floor — a null clears none, status 0), evaluated by the data plane's own predicate; `state` eligible AND pinnable[harness] true = selection can pin the cell; a provider's service tiers carry the representative's verdict; `{}` when the rail declares no providers policy (nothing is ever pinned)" },
                   "floor": { "type": "object", "additionalProperties": { "type": "string" }, "description": "per harness that fails, the floor it fails (`quantization fp4 < fp8`, `no tool_choice required,function`, `uptime_1d unknown`, `uptime_1d 77.4 < 95`, `status 1`); `{}` when every harness passes" }
@@ -308,10 +313,11 @@
       "cells": { "type": "object", "additionalProperties": false, "required": ["candidate", "eligible", "excluded"], "properties": { "candidate": { "type": "integer" }, "eligible": { "type": "integer" }, "excluded": { "type": "integer" } } },
       "canary": {
         "type": "object", "additionalProperties": false,
-        "required": ["max_per_refresh", "usd_per_day", "admitted_this_refresh", "spend_usd_1d", "exhausted", "cooldown_s"],
+        "required": ["max_per_refresh", "usd_per_day", "admitted_this_refresh", "spend_usd_1d", "exhausted", "cooldown_s", "backoff_s", "backoff_max_s"],
         "properties": {
           "max_per_refresh": { "type": ["integer", "null"] }, "usd_per_day": { "type": ["number", "null"] }, "admitted_this_refresh": { "type": "integer" },
-          "spend_usd_1d": { "type": "number" }, "exhausted": { "type": "boolean" }, "cooldown_s": { "type": ["number", "null"] }
+          "spend_usd_1d": { "type": "number" }, "exhausted": { "type": "boolean" }, "cooldown_s": { "type": ["number", "null"] },
+          "backoff_s": { "type": ["number", "null"] }, "backoff_max_s": { "type": ["number", "null"] }
         }
       }
     },
