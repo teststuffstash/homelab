@@ -14192,3 +14192,27 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Read, not actioned: `gateway_sessions_total` 2d = prober 9, reviewer 6 (anthropic), **worker 0** — still no platform worker
   ride through `/sessions`; #2768 still awaits a ruling. Origin had moved 8 commits (Renovate wave + two auto-bumps, gateway
   on `2026.10.22-ge4775298aed2` since ~16:53Z, healthy).
+
+## 2026-10-22 ~18:00Z – ~19:20Z — the helm install-tool pin leaves `.github/` (#2825); the 18:21Z window, no re-cut
+- **Operator question on #2804 ("no carve-out for a version bump here?") → the read:** none existed — the pin was minted
+  2026-10-10 (#2432) INSIDE `renovate-global.json` as two halves (postUpgradeTasks command + regex-escaped `allowedCommands`
+  twin) under the `/.github/` CODEOWNERS row, its own text naming the operator's approval as the gate; AND it had no
+  dependency-register row (`dependency-coverage.py` never read the config's customManagers). Operator: "do the move."
+- **#2825 (built, lane-linted, merged 19:15Z `dafa8862`, R1 both bots):** `scripts/upstream-alerts-refresh.sh` installs its own
+  helm (`HELM_VERSION=v4.3.0` + `install-tool helm` when containerbase's binary exists; no-op for the seat — verified, same
+  135-name render for chart 92.8.0); `allowedCommands` = the one script; ONE customManager over the script's line; class 17
+  "Renovate runtime tools" in `dependency-classes.yaml` + `extract_renovate_tools` (table regenerated: 118 rows / 17 classes,
+  the diff also carried today's version currency); renovate.md + the G12 row rewritten. `scripts/` has no codeowner row → the
+  custom.regex `automerge` lane. **Lesson, found by `--dry-run=extract` before the lane lint:** the first head's matchString
+  carried `^`/`$` anchors and extracted NOTHING — Renovate's regex manager does not match them mid-file (no house manager
+  anchors); fixed, then `renovate-lane-lint` showed `renovate/helm-helm-4.3.x arm=T lane=automerge`, OK.
+  **Proof owed (class 17, §Last proven):** #2804 keeps its number — Renovate reuses the `renovate/helm-helm-4.3.x` branch, so the
+  22:25Z run rebases it onto the script's line (its `automerge`+`dependencies` labels already fit the lane) and it should merge
+  unattended on the bot approval; the deploy proof stays the next kube-prometheus-stack branch's postUpgradeTasks run.
+- **Third canary window (19:00Z, the 18:21Z catalog): 3/3 clean** — `v4-flash@siliconflow`, `mimo-v2.6-flash@makora`,
+  `v4-flash@parasail`; cells 236/12/0 → 233/15/0, spend $0.027/1d, exhausted for the refresh, throttled 0. Snapshot 19:1xZ:
+  **`check: every decided tier list equals the derivation` → no re-cut**, snapshot not committed. Moved underneath: glm-5.3-flash
+  selected gmicloud ($0.25 out), mimo makora ($0.28), **baidu repriced v4.1-flash back to $0.30 out** (selected again; $1.20 this
+  morning), Go `minimax-m3.1-flash` lost its free tier ($0.30 out over a $20 limit). Next window: the 00:21Z refresh.
+- Jail gotcha (seat, self-inflicted twice): `pkill -f '<pattern>'` from a command whose own line carries the pattern (the exec
+  that follows it) kills the wrapper shell — exit 144, the tracked waiter dies; never pkill and launch in one command.
