@@ -1016,11 +1016,13 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** Rule, history, meters, status:
       [`docs/storage-ledger.md`](storage-ledger.md). Shipped: Longhorn + Garage metering, pve fstrim, thin-pool
-      meter (`PveThinPool*`, PR#1367). Standing `LonghornDiskBelowSchedulingFloor` ×2: hp-01/hg5d (57 GB = a
-      Longhorn REBUILD snapshot that merges itself — never clear it; alert text wrongly blames the image store)
-      and, new 10-14, wk-metal-04 `intel1` 75 % (garage-0 + registry-data; ledger L121 still says intel0 —
-      shared with FU-280). **Next:** fix the alert text; (a) Longhorn `filesystem-trim` RecurringJob; (b) metal
-      fstrim for the image store (SA400 holds no replica since 09-09). Relates ADR-089, ADR-114, FU-211, homelab#934.
+      meter (`PveThinPool*`, PR#1367). Under the 25 % floor 2026-10-22: hp-01 75 % (hg5d = a Longhorn REBUILD
+      snapshot that merges itself — never clear it; alert text wrongly blames the image store), wk-metal-01/mx500
+      72 %, and wk-04/`sn530` 76.6 % (+2 %/day) — `mirror-ghcr-data` holds 171 GB actual for 23 GB of filesystem: a
+      133 GB `markRemoved` snapshot (10-13) sits as volume-head's parent (purge complete, nothing coalesces it) and
+      the weekly mirror GC frees blocks no trim returns — the ledger's unbuilt "second layer". **Next:** fix the alert
+      text; (a) Longhorn `filesystem-trim` RecurringJob + `remove-snapshots-during-filesystem-trim` (today false;
+      ~140 GB back on sn530); (b) metal fstrim for the image store. Relates ADR-089, ADR-114, FU-211, homelab#934.
 - [ ] **FU-211** — **The storage ledger's numbers are hand-typed — generate them.** PR#1368 took three bot rounds on
       transposed figures in the buy-a-disk cell; "Current shape" is a 08-25 snapshot. Truth is LIVE (Longhorn
       disk status, `pve_lvm_thin_lv_size_bytes`, ResourceQuotas, Garage Workspaces — `scripts/storage-ledger-check.sh`

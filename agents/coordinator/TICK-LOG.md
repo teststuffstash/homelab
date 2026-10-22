@@ -14169,3 +14169,26 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Read, not actioned: **no platform worker ride through `/sessions` yet** (7 specs-review rides since 10-21, nothing
   queued); #2768 (Go rail serves unlisted ids) still awaits a ruling; `nvfp4` off the ladder (cosmetic).
 
+
+## 2026-10-22 ~17:24Z – ~17:50Z — gateway: the 12:21Z window run, re-cut #2824 deployed; board read
+- **Second canary window on #2810's code (17:24Z, `canary-entrants.sh --max 3` against the 12:21Z catalog): 3/3 clean** —
+  `glm-5.3-flash@gmicloud`, `mimo-v2.6-flash@deepinfra`, `glm-5.3-flash@novita`; cells 235/9/0 → 232/12/0, spend
+  $0.0143/1d, `exhausted: true` for the refresh (by design), `== throttled` bucket 0 — still no live 429, the backoff path
+  stays row-pinned. **Re-cut → #2824** (snapshot 17:30Z, `tiers apply`+`check` green in a clone; the `tiers` devbox script
+  lives in `gateway/`, not the root): mimo-v2.6-flash priced $0.266 out at deepinfra → openrouter light
+  `[v4-flash, glm-5.3-flash, mimo-v2.6-flash]` (v4-flash reselected streamlake $0.14, heads the list; v4.1-flash out —
+  deepinfra $0.42 loses to mimo in the same band), standard `[glm-5.3-flash, mimo-v2.6-flash, kimi-k3]`; heavy, anthropic,
+  Go unchanged. Values only, no loader-new key (#2812 rule n/a). Merged 17:47Z (R1 both bots), ArgoCD synced `12ccf8dd`,
+  new pod up 17:48:06Z 0 restarts, live ConfigMap carries the lists. Next window: the 18:21Z refresh.
+- **Board:** `LonghornDiskBelowSchedulingFloor wk-04/sn530` 76.6 % (+2 %/day) read to mechanism — `mirror-ghcr-data` 171 GB
+  actual for 23 GB of filesystem; a 133 GB `markRemoved` snapshot (10-13) is volume-head's parent with purge "complete" and
+  the weekly mirror GC frees blocks nothing trims (`remove-snapshots-during-filesystem-trim=false`, no trim RecurringJob) —
+  FU-093's "(a)" with a number (~140 GB), item extended (no new FU). `ControlPlaneNodeMemoryLow wk-metal-02` = FU-315
+  (operator-blocked). `CodeownerParkWaiting homelab#2804` (helm/helm 4.3.0 → 4.3.1 in renovate-global.json): NOT merged —
+  no corpus here and the config's own 10-10 text makes the operator's approval the gate; read for the operator: no carve-out
+  exists, `helm/helm` has NO dependency-register row (the coverage generator never reads renovate-global.json customManagers),
+  house-shape fix = move `install-tool helm vX` into un-owned `scripts/upstream-alerts-refresh.sh` under a `# renovate:`
+  annotation (custom.regex automerge lane) + a register row; or declare 👤 and merge. Operator's pick pending.
+- Read, not actioned: `gateway_sessions_total` 2d = prober 9, reviewer 6 (anthropic), **worker 0** — still no platform worker
+  ride through `/sessions`; #2768 still awaits a ruling. Origin had moved 8 commits (Renovate wave + two auto-bumps, gateway
+  on `2026.10.22-ge4775298aed2` since ~16:53Z, healthy).

@@ -24,14 +24,16 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
   it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
   box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
-- **⚑ PICKUP (2026-10-22 ~07:30Z — gateway: #2775 CLOSED (gap 1 ruled: 429'd canary = no verdict + exponential backoff,
-  #2810 deployed #2811), first window on the fixed code 3/3 clean, re-cut #2813 MERGED (openrouter light = glm-5.3-flash first),
-  README rule #2812 merged; TICK-LOG 10-22):** **Next windows are the seat's** (operator 10-20): after each 6 h refresh (next 12:21Z) run
+- **⚑ PICKUP (2026-10-22 ~17:50Z — gateway: two windows on #2810's code both 3/3 clean (07:00Z, 17:24Z), re-cuts #2813 +
+  #2824 DEPLOYED (openrouter light = v4-flash, glm-5.3-flash, mimo-v2.6-flash; standard adds mimo), cells 232/12/0, no live
+  429 yet; TICK-LOG 10-22):** **Next windows are the seat's** (operator 10-20): after each 6 h refresh (next 18:21Z) run
   `devbox run -- bash gateway/scripts/canary-entrants.sh --max 3 < /dev/null` from the repo root, then
-  `benchmarks-snapshot.sh` → `tiers apply` → PR when the lists move. **Still unverified: the first platform worker ride
-  through `/sessions`** (only specs-review rides since the flip; read it when the platform board queues one). Open ruling:
-  #2768. Operator-only: codex login (leg E) → codex policy block; FU-313. Deploy rule learned the hard way: a policy key
-  NEW to the loader ships AFTER its image (#2812) — the ConfigMap rolls the old image first.
+  `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers -- apply` → PR when the lists move (values only roll freely; a
+  key NEW to the loader ships AFTER its image, #2812). **Still unverified: the first platform worker ride through
+  `/sessions`** (2d: prober 9, reviewer 6, worker 0). Open ruling: #2768. **Operator:** homelab#2804 (helm/helm pin in
+  renovate-global.json, parked on the `/.github/` row by the 10-10 text) — pick: move the `install-tool` call into un-owned
+  `scripts/upstream-alerts-refresh.sh` (custom.regex lane) + a register row, or declare 👤 and merge (TICK-LOG 10-22 evening).
+  Operator-only: codex login (leg E) → codex policy block; FU-313.
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a
