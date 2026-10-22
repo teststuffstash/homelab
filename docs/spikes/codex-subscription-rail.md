@@ -557,7 +557,7 @@ specs-review rounds):
 | B | `x-codex-turn-state` round trip bound to session, account and `client_metadata.turn_id`; `turn-state-invalid` | **merged #2735** (19:35Z) |
 | C | same-pod token-only re-read on `POST /sessions/{id}/env` (the `auth.command` seam) | **merged #2736** (19:5xZ) |
 | D | headroom from the gateway's own usage poll → `gateway_subscription_*{rail="codex"}` + panels on UID `claude-subscription` | not started |
-| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | not started |
+| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | **recipe landed 2026-10-22**: `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed`) + [runbook §Enrol the gateway's own Codex login](../runbook.md#enrol-the-gateways-own-codex-login-the-codex-seed--fu-270-leg-e) — login in a throwaway home, usage-endpoint probe (structure only), Infisical → force-sync → readback hash check, shred. The mint itself (the device-auth consent) is the operator's; the second-login revocation question stays open until that run |
 
 After E: the codex rail block in the deployed policy (tier lists derived — `benchmarks.json` needs
 `codex/<id>` spellings), the `codex` cell in the launcher, the agent-runtime `agent-codex` wrapper

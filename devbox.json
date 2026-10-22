@@ -361,6 +361,9 @@
       "infisical-secret": [
         "bash scripts/infisical-secret.sh \"$@\""
       ],
+      "codex-seed": [
+        "bash scripts/codex-seed-bootstrap.sh \"$@\""
+      ],
       "github-runner-bootstrap": [
         "bash scripts/github-runner-bootstrap.sh \"$@\""
       ],

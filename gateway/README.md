@@ -110,6 +110,8 @@ policy's `tiers` block, and a row fails the suite when a list drifts from the de
 - The codex rail uses gateway-local SQLite in `GATEWAY_DB`; `CODEX_UPSTREAM` and
   `CODEX_SEED_FILE` enable the executable's native backend. The mounted seed is imported only
   when its content hash changes; rotations and recovery markers remain local and durable.
+  The seed is minted by `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed` — the
+  gateway's OWN device login, never the jail's; runbook §Enrol the gateway's own Codex login).
   The deployed policy still omits Codex. Native-CLI evidence lives in `experiments/codex-rail/`.
 - The `upstream-slow` world is clock-faked (the fake transport raises `ReadTimeout`), so the
   `upstream-timeout` rows prove the 504 mapping, not the 600 s budget itself (specs: `🚧 WIP`).
