@@ -14138,3 +14138,34 @@ updates or reverts as much as possible — mechanical revert or a responder."
   cilium 13/13. Claims: ControlPlaneComponentRestarted + PodSigkilled (apiserver pods). Laptop residual → FU-315.
   Not built: a GC-thrash detector (`rate(go_gc_duration_seconds_count{job="apiserver"}[10m]) > 0.5`) — proposed
   to the operator, would fire before the node CPU alert.
+
+## 2026-10-22 ~06:10Z – ~07:30Z — gateway: #2775 gap 1 ruled + built, first window on the fixed code, re-cut
+- **Operator ruling on #2775 gap 1 (06:10Z): "exponential backoff for providers — skip and move on, eventual consistency."**
+  Built as **#2810** (R1: the cooldown-expired branch of `cell()` dropped the horizon — fixed both reads; merged 06:51Z,
+  deploy #2811): a 429 on a canary's pinned cell = NO verdict — `provider_cells.retry_at/backoff_s/limit_source`
+  (additive migration, seen live `db: migrated provider_cells.*`), horizon `canary.backoff_s` 3600 ×2 per consecutive
+  429'd canary up to `backoff_max_s` 86400 (prod; worlds 14400), any verdict resets, `canary-not-due` inside it, the
+  per-refresh count skips a 429'd-without-clean session, a strike after a 429 on the ride is the task's not the cell's,
+  `gateway_canary_rides_total{outcome="no-verdict"}`, launcher `== throttled` bucket. Fake `upstream-429-shared-pool` =
+  the 06:30Z tap on `kimi-k3@baseten` (`error.metadata.limit_source`, `retry_after_seconds`). Live premise held:
+  `v4-flash@deepinfra` answered **200** at 06:30Z with the same key (the 10-20/21 shared-pool throttle cleared itself).
+- **⚠ ~13 min gateway outage (06:55–07:08Z), self-inflicted:** #2810's two NEW policy keys rolled the pod (hash-suffixed
+  ConfigMap) on the OLD image, whose loader refuses unknown keys by design — the single Recreate replica crash-looped
+  (`PolicyError: … unknown key(s) backoff_max_s, backoff_s`) until Renovate's auto-bump #2811 synced. Rule → **#2812**
+  (README: a key new to the loader ships in a second PR after its image; values of known keys roll freely).
+- **First canary window on the fixed code (07:00Z, `canary-entrants.sh --max 3`): 3/3 clean** — `glm-5.3-flash@streamlake`,
+  `v4-flash@deepinfra`, `v4-flash@gmicloud`; cells 235/9/0, spend $0.0055, budget spent until the 12:21Z refresh. No 429
+  seen, so the backoff path is pinned by rows only. **Re-cut → #2813** (snapshot 07:03Z, `tiers apply`+`check` green):
+  openrouter light `[glm-5.3-flash, v4-flash, v4.1-flash]`, standard/heavy `[glm-5.3-flash, kimi-k3]` — glm-5.3-flash
+  priced $0.145 at streamlake; baidu repriced v4.1-flash $0.14 → **$1.20** out (deepinfra $0.42 selected); Go
+  `step-5-preview` $0.45 → **$1.80** over $15 (was $60) → `mimo-v2.6-pro` takes the heavy slot; mimo-v2.5 and
+  longcat-2.5-preview-free left the candidate sets.
+  #2813's rounds: R1 CI red — GW-MODEL-RESOLVE's deployed-policy row checked openrouter ids against the OLD proxy's
+  `model-classes.json` (never had glm-5.3-flash; untouched by ruling) → the openrouter half now reads the tier evidence's
+  candidate rows like the opencode half (⚖ row changed); R2 — the changed ⚖ row needed a `Spec changes:` section (my
+  zsh `${//}` body edit had silently not applied — edit bodies with `--body-file`) + the hygiene notes (one step per rail,
+  one attachment) folded in.
+  #2813 merged 07:4xZ (R3 approved); #2812 merged (+ its auto-bump #2814). Bookkeeping: FU-232's expired archive entry deleted.
+- Read, not actioned: **no platform worker ride through `/sessions` yet** (7 specs-review rides since 10-21, nothing
+  queued); #2768 (Go rail serves unlisted ids) still awaits a ruling; `nvfp4` off the ladder (cosmetic).
+

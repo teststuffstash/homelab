@@ -24,20 +24,14 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
   it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
   box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
-- **⚑ PICKUP (2026-10-21 ~19:40Z — gateway: FU-270 (b) + (c) + codex leg D's gauge half + three rulings LANDED and
-  DEPLOYED; TICK-LOG 10-21):** #2785 (`GET /sessions?task=`, the judge caller) + #2787 (deploy-revert `judge` step, SA
-  `outcome-judge`) = (b) done — proof = the first real Degraded-after-deploy revert striking a `specs-review` session;
-  #2788 = (c) the loop flip, PLATFORM session pods only — **no platform worker ride has gone through `/sessions` yet**
-  (nothing queued; 5 specs-review rides since) — **read the first one**: `sessions where role='worker' and
-  caller=…agentstack-loop` in the gateway store, then the pod's `→ gateway(sessions):` lines; the launcher REFUSES
-  `--model` under the knob, so a coordinator that still passes it fails loudly (README gateway branch says not to).
-  #2786 codex gauges (0 series until a report reaches the gateway = leg E, operator). #2775: gap 2 (#2790) + gap 3
-  (#2791) FIXED; **gap 1 (a 429'd canary's verdict) is the one open ruling and now gates the next canary window** —
-  the cheapest-first walk starts at `v4-flash@deepinfra`, the shared-pool-429 cell (comments 1–2 on #2775: cause =
-  `limit_source: upstream_provider_shared_pool`, not our key; recommended no-verdict + persisted re-try horizon +
-  `limit_source` on the cell). #2792: capacity marks persisted (operator ruling). Open rulings: #2775 gap 1, #2768.
-  Operator-only: codex login (leg E) → then the codex policy block; FU-313. Seen, not actioned: `nvfp4` off the policy
-  ladder (cosmetic); #2796/#2799 were the operator's own gateway-evidence PR + its deploy.
+- **⚑ PICKUP (2026-10-22 ~07:30Z — gateway: #2775 CLOSED (gap 1 ruled: 429'd canary = no verdict + exponential backoff,
+  #2810 deployed #2811), first window on the fixed code 3/3 clean, re-cut #2813 MERGED (openrouter light = glm-5.3-flash first),
+  README rule #2812 merged; TICK-LOG 10-22):** **Next windows are the seat's** (operator 10-20): after each 6 h refresh (next 12:21Z) run
+  `devbox run -- bash gateway/scripts/canary-entrants.sh --max 3 < /dev/null` from the repo root, then
+  `benchmarks-snapshot.sh` → `tiers apply` → PR when the lists move. **Still unverified: the first platform worker ride
+  through `/sessions`** (only specs-review rides since the flip; read it when the platform board queues one). Open ruling:
+  #2768. Operator-only: codex login (leg E) → codex policy block; FU-313. Deploy rule learned the hard way: a policy key
+  NEW to the loader ships AFTER its image (#2812) — the ConfigMap rolls the old image first.
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a

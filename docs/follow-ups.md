@@ -827,10 +827,10 @@ the block needs pruning, not more headings.
       10-20: rail choice by cost per CLEAN ride (#2764), the first canary window (gaps #2775), the re-cut #2776 (every
       openrouter tier decided). Landed 10-21: **(b) `wrong-verdict` ← deploy-revert** (#2785 the judge's list route +
       caller, #2787 the judge step — proven to the first real revert); **(c) the loop flip** (#2788: the PLATFORM session
-      pod carries `AGENT_GATEWAY=sessions`; first ride through `/sessions` awaited). **Next (seat):** the #2775 fixes in
-      review (gap 2 startup refresh, gap 3 pinnable view #2791) + the capacity marks persisted (operator 10-21); gap 1
-      (a 429'd canary's verdict) awaits the operator; then the codex policy block after E. **Operator-only:** FU-313,
-      the codex login (leg E).
+      pod carries `AGENT_GATEWAY=sessions`; first ride through `/sessions` awaited). Landed 10-22: #2775 closed (gap 1 ruled —
+      a 429'd canary is no verdict, exponential backoff, #2810), first window 3/3 clean, re-cut #2813. **Next (seat):** the
+      canary windows (one per refresh, re-cut when the lists move); read the first platform worker ride; then the codex
+      policy block after E. **Operator-only:** FU-313, the codex login (leg E); ruling #2768.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
