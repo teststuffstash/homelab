@@ -34,10 +34,11 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   `scripts/upstream-alerts-refresh.sh` at Renovate's 22:25Z run and merge unattended = class 17's first proof (#2825 moved the
   pin out of `/.github/`); if it parks or reds, read why before touching it. Operator-only: FU-313.
 - **⚑ PICKUP (2026-10-23 ~09:00Z — codex rail: role routing RULED; TICK-LOG 10-23 ~09:00Z):** #2842 MERGED 08:51Z (3 review rounds);
-  **#2845** = the ruling built (walk's harness follows the rail + every role lists the subscription rails), **#2844** = the
-  launcher's `CODEX_MCP_URL` export, **agent-runtime#180** = the seam's `[mcp_servers.stack-mcp]` block — all three armed, pr-wait
-  from the seat; #2844 is inert until the runtime image with #180 is pinned (`AGENT_BASE_IMAGE` bump = the next step after #180
-  merges). Clones: `/workspace/homelab-clones/{hr-roles,hr-mcp,ar-codex-mcp}` (remove when merged). **Watch:** the jail's codex REFRESH ~2026-10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`,
+  #2845 (role routing) MERGED ~09:15Z; agent-runtime#180 MERGED 09:00Z → its pin PR **#2846** armed; **#2844** (launcher
+  `CODEX_MCP_URL`) approved, merging; **#2848** = the four-boundary capture (GW-CODEX-CAPTURE), armed. **Then (seat, the operator's
+  "do it"):** once #2848's image deploys (auto-bump PR after the build), `devbox run maint -- open --reason "codex capture ride"`,
+  `bash gateway/scripts/canary-codex.sh --capture < /dev/null`, review `~/.claude/codex-capture/<task>-<sid>.json`, derive rows +
+  offline fixtures into the spec, close the window. Clones: `/workspace/homelab-clones/{hr-roles,hr-mcp,hr-capture,ar-codex-mcp}`. **Watch:** the jail's codex REFRESH ~2026-10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`,
   status codes only) = the revocation watch's second half; `gateway_codex_upstream_headroom_total{outcome}` on the next codex ride
   (expect `accepted` — a `quota-invalid` means the live header grammar differs from the CLI's reader; the poll still carries admission).
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python

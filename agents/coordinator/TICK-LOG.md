@@ -14370,4 +14370,13 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `| tail` (the card's own warning), caught on the re-run, fixed in the PR). Stale watcher gotcha: a `while pgrep -f
   'pr-wait.sh N'` loop matches ITSELF (the zsh wrapper carries the pattern) and never exits — pr-wait EXITS on CHANGES_REQUESTED
   (rc 2); re-run it per round, never wrap it in a pgrep loop.
+- **~09:10Z–09:25Z — the four-boundary capture (operator: "do it"):** #2845 MERGED ~09:15Z; agent-base pin #2846 opened by
+  the image build (armed from here). Built **#2848** GW-CODEX-CAPTURE: `capture.py` (Capture/Recorder/Splitter — scope by task
+  prefix, structural sanitization: allowlisted header values, strings → lengths, vocabulary keys kept, `*_id` → aliases equal
+  across boundaries, byte bound + `truncated` marker), store table `captures` (7-day purge at start), the tee in `_stream`
+  (yield before split), `GET /sessions/{id}/capture` under the lookup rule, env `CODEX_CAPTURE_TASK_PREFIX=capture-codex-`,
+  `canary-codex.sh --capture` (task prefix + bundle pull into `~/.claude/codex-capture/`, summary only printed), 10 rows, the
+  spike §The scoped observer. Gotchas: a new `rule("GW-…")` needs its `## GW-…` heading in specs FIRST (conftest fails loudly);
+  the policy-codex world's control plane OBSERVES, so a "refused by the lookup rule" row cannot be proven there — the row
+  compares the capture's answer with `GET /sessions/{id}`'s instead. Not built: the native-client baseline forwarder.
 
