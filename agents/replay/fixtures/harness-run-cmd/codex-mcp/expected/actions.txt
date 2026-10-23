@@ -1,0 +1,2 @@
+OUT RUN_CMD: mkdir -p /work/context; git clone --depth 1 --quiet https://github.com/teststuffstash/circles.git /work/context/circles || echo "WARN: context clone failed: https://github.com/teststuffstash/circles.git"; printf '%s' 'UkVDSVBF' | base64 -d > /tmp/fix-recipe.yaml; CODEX_MCP_URL='https://mcp.oracle.teststuff.net/mcp' agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '19'.'
+RC 0

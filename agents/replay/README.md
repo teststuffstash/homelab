@@ -320,6 +320,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/claude-gateway` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/codex-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |
