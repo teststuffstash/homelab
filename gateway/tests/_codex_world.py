@@ -254,7 +254,8 @@ async def admitted(app, gw, clock, **extra) -> dict:
 
 
 async def codex_session(gw, **extra) -> dict:
-    return await open_session(gw, role="prober", harness="codex", task="oracle-562-probe", **extra)
+    task = extra.pop("task", "oracle-562-probe")  # a capture row names its own (GW-CODEX-CAPTURE scopes by task)
+    return await open_session(gw, role="prober", harness="codex", task=task, **extra)
 
 
 def body(**over) -> dict:

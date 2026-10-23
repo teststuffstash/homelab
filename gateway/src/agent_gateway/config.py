@@ -758,6 +758,11 @@ class Settings:
     # NO default — like CODEX_UPSTREAM it names a vendor profile (the native backend's usage path);
     # unset = no poll, the rail stays `quota-unknown` (fail closed).
     codex_usage_url: str = ""
+    # GW-CODEX-CAPTURE: the four-boundary recorder's scope (a task-key prefix; "" = off) and its byte
+    # bound per request; retention of persisted records in days (the bundle is pulled and reviewed, not kept).
+    codex_capture_task_prefix: str = ""
+    codex_capture_max_bytes: int = 262144
+    codex_capture_retention_days: float = 7.0
     # GW-MODEL-TIERS: the committed tier-evidence snapshot, mounted beside the policy; its age is a gauge
     # (`gateway_tier_evidence_age_seconds`) so a stale comparison basis alerts. Absent file = no series.
     benchmarks_path: str = "/etc/agent-gateway/benchmarks.json"
@@ -785,6 +790,9 @@ class Settings:
                              "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             codex_usage_url=e.get("CODEX_USAGE_URL", "").strip(),
+            codex_capture_task_prefix=e.get("CODEX_CAPTURE_TASK_PREFIX", "").strip(),
+            codex_capture_max_bytes=int(e.get("CODEX_CAPTURE_MAX_BYTES", "262144")),
+            codex_capture_retention_days=float(e.get("CODEX_CAPTURE_RETENTION_DAYS", "7")),
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             benchmarks_path=e.get("GATEWAY_BENCHMARKS", "/etc/agent-gateway/benchmarks.json"),

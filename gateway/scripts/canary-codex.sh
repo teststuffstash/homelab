@@ -5,7 +5,14 @@
 # canary-entrants.sh; run it INSIDE a declared maintenance window (.claude/skills/maintenance-window):
 # the ride is the first live use of the operator's ChatGPT subscription through the gateway.
 #
-#   bash gateway/scripts/canary-codex.sh [--dry-run] [--prompt "<text>"] < /dev/null
+#   bash gateway/scripts/canary-codex.sh [--dry-run] [--prompt "<text>"] [--capture] < /dev/null
+#
+# --capture (GW-CODEX-CAPTURE, the spike §Recorded live protocol experiment): the task is named
+# `capture-codex-<ts>` — the prefix the deployed recorder is scoped to — and after the ride the
+# session's sanitized four-boundary bundle is pulled (GET /sessions/{id}/capture, the caller's token)
+# into CODEX_CAPTURE_DIR (default ~/.claude/codex-capture — restricted storage, never the repo) and
+# summarised here: boundaries, header names, event types in order, the terminal's usage. The bundle
+# carries no credential by construction; review it before any excerpt reaches the spike or a fixture.
 #
 # The gateway is the gate and the judge: it admits the ride only on fresh account headroom (its own
 # usage poll — GW-CODEX-HEADROOM §Poll; `quota-unknown` / `quota-stale` / `quota-limited` defer), on
@@ -27,11 +34,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 export KUBECONFIG="${KUBECONFIG:-$PWD/tofu/kubeconfig}"
-DRY=0
+DRY=0; CAPTURE=0
 PROMPT="Reply with ONLY the first markdown heading text of README.md (no other words)."
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1; shift;;
+    --capture) CAPTURE=1; shift;;
     --prompt) PROMPT="$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -72,7 +80,7 @@ before="$(codex_series)"; printf '%s\n' "$before" | sed 's/^/   /'
 if ! grep -q 'gateway_codex_usage_poll_total{outcome="accepted"} [1-9]' <<< "$before"; then
   echo "   NOTE: no accepted usage poll yet — the gateway will defer quota-unknown / quota-stale; a dispatch means the poll caught up."
 fi
-task="canary-codex-$(date -u +%Y%m%dT%H%M%SZ)"
+task="$([ "$CAPTURE" = 1 ] && echo capture-codex || echo canary-codex)-$(date -u +%Y%m%dT%H%M%SZ)"
 echo "== the ride: project=${PROJECT} role=prober harness=codex task=${task} caller=${AGENT_GATEWAY_CALLER_SA}"
 echo "   prompt: ${PROMPT}"
 if [ "$DRY" = 1 ]; then echo "== dry run — nothing dispatched"; exit 0; fi
@@ -96,6 +104,42 @@ if [ -n "$rows" ]; then
     printf '   releasing still-active session %s → ' "$sid"
     curl -s -o /dev/null -w '%{http_code}\n' -X DELETE "$AGENT_GATEWAY_URL/sessions/$sid" ${tok:+-H "Authorization: Bearer $tok"}
   done
+  if [ "$CAPTURE" = 1 ]; then
+    dir="${CODEX_CAPTURE_DIR:-$HOME/.claude/codex-capture}"; mkdir -p "$dir"; chmod 700 "$dir"
+    echo "== the capture bundles (GET /sessions/{id}/capture → ${dir}/, restricted; summary only here)"
+    for sid in $(printf '%s\n' "$rows" | jq -r '(.sessions // .)[]? | .id' 2>/dev/null); do
+      out="$dir/${task}-${sid}.json"
+      code="$(curl -s -o "$out" -w '%{http_code}' "$AGENT_GATEWAY_URL/sessions/$sid/capture" ${tok:+-H "Authorization: Bearer $tok"})"
+      if [ "$code" != 200 ]; then echo "   session $sid: HTTP $code — $(head -c 200 "$out")"; rm -f "$out"; continue; fi
+      chmod 600 "$out"; echo "   session $sid → $out"
+      python3 -I - "$out" <<'PY'
+import json, sys
+b = json.load(open(sys.argv[1]))
+recs = b["records"]
+print(f"   format={b['format']} complete={b['complete']} records={len(recs)} boundaries={b['boundaries']}")
+for r in recs:
+    kind = r["boundary"]
+    if kind == "upstream-event":
+        continue
+    hdrs = sorted(r.get("headers", {}))
+    if kind == "client-request":
+        print(f"   [{r['t_ms']:>6} ms] {kind}: {r['method']} {r['path']} body={r['body_bytes']}B headers={hdrs}")
+    elif kind == "upstream-request":
+        print(f"   [{r['t_ms']:>6} ms] {kind}: {r['method']} {r['host']}{r['path']} body={r['body_bytes']}B added={r['headers_added']} dropped={r['headers_dropped']}")
+    elif kind == "upstream-response":
+        kept = {k: v for k, v in r.get("headers", {}).items() if not isinstance(v, dict)}
+        print(f"   [{r['t_ms']:>6} ms] {kind}: {r['status']} refusal={r.get('refusal')} first_byte={r['first_byte_ms']}ms headers={hdrs}")
+        print(f"            kept values: {kept}")
+    elif kind == "client-response":
+        print(f"   [{r['t_ms']:>6} ms] {kind}: {r['status']} outcome={r['outcome']} events={r['events']} relayed={r['relayed_bytes']}B usage={r['usage']} cancelled={r['cancelled']} headers={hdrs}")
+    else:
+        print(f"   [{r['t_ms']:>6} ms] {kind}: {r}")
+types = [e.get("event", {}).get("type", "<invalid>" if e.get("invalid") else "[DONE]" if e.get("done") else "?") for e in recs if e["boundary"] == "upstream-event"]
+from collections import Counter
+print(f"   events ({len(types)}): first {types[:4]} … last {types[-3:]}; by type: {dict(Counter(types))}")
+PY
+    done
+  fi
 else
   echo "   (no rows — read the gateway log: kubectl -n agent-egress logs deploy/agent-gateway | grep ${task})"
 fi

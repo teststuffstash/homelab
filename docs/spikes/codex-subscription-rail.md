@@ -872,6 +872,24 @@ faults; distinguish them from captured vendor behavior. In particular, OpenAI's
 distinguish failed, incomplete and completed responses; preserve that distinction through
 capture, the gateway ledger and metrics instead of treating every HTTP 200 as completion.
 
+### The scoped observer — built 2026-10-23 (FU-270)
+
+The recorder of the plan above is in the gateway: [GW-CODEX-CAPTURE](../../gateway/specs/endpoints/openai-responses.md#gw-codex-capture).
+Scoped by task prefix (`CODEX_CAPTURE_TASK_PREFIX=capture-codex-` in the deployment; off by
+default), passive (the relay yields each chunk before the tap splits it; a recorder fault is a
+log line), sanitized structurally before persistence (header names with values only for an
+allowlist; strings as lengths except vocabulary keys; ids aliased, equal across boundaries;
+proven with `DUMMY-SECRET` canaries offline, as the plan asked), bounded per request with an
+explicit `truncated` marker, persisted in the gateway's own store with a 7-day retention, and
+read back as one bundle by `GET /sessions/{id}/capture` under the session's lookup rule. The jail
+verb is `gateway/scripts/canary-codex.sh --capture`: the ride's task is `capture-codex-<ts>`, the
+bundle lands in `~/.claude/codex-capture/` (restricted, never the repo) and the summary prints
+here. The usage poll is not in the bundle (its own log lines and counters are its instrumentation).
+Not built: the native-client **baseline** through a recording forwarder (the plan's first step
+of §Establish a baseline) — the pinned CLI's `chatgpt_base_url` config key could point the native
+auth path at an in-jail forwarder with the jail's own login, but the forwarder is its own piece
+and the comparison needs the gateway bundle first.
+
 ### Build order and acceptance
 
 Under FU-270: specify the capture/export contract and prove sanitization offline; implement

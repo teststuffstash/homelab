@@ -575,6 +575,126 @@
       "x-requirements": [
         "GW-RAIL-CODEX"
       ]
+    },
+    "capture-not-found": {
+      "status": 404,
+      "description": "the session recorded nothing: not a scoped task, or the recorder is off",
+      "x-requirements": [
+        "GW-CODEX-CAPTURE"
+      ]
+    }
+  },
+  "capture": {
+    "description": "GET /sessions/{id}/capture — the sanitized four-boundary bundle of a scoped codex session (GW-CODEX-CAPTURE); 404 capture-not-found when the session recorded nothing",
+    "x-requirements": [
+      "GW-CODEX-CAPTURE"
+    ],
+    "scope": {
+      "description": "env CODEX_CAPTURE_TASK_PREFIX: a task-key prefix; unset = the recorder is off",
+      "x-requirements": [
+        "GW-CODEX-CAPTURE"
+      ]
+    },
+    "bundle": {
+      "type": "object",
+      "required": [
+        "format",
+        "session",
+        "task",
+        "records",
+        "complete",
+        "boundaries"
+      ],
+      "properties": {
+        "format": {
+          "const": "codex-capture/1"
+        },
+        "session": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "false when any record is a `truncated` marker (the byte bound was hit)"
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "client-request",
+              "upstream-request",
+              "upstream-response",
+              "upstream-event",
+              "client-response"
+            ]
+          }
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/capture/record"
+          }
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "required": [
+        "boundary",
+        "t_ms"
+      ],
+      "properties": {
+        "boundary": {
+          "enum": [
+            "client-request",
+            "upstream-request",
+            "upstream-response",
+            "upstream-event",
+            "client-response"
+          ]
+        },
+        "t_ms": {
+          "type": "integer",
+          "description": "milliseconds since the client request was received"
+        },
+        "headers": {
+          "type": "object",
+          "description": "name → value for the allowlisted non-sensitive names, else {withheld: true, len}",
+          "additionalProperties": true
+        },
+        "body": {
+          "description": "the sanitized skeleton: strings → {len}, vocabulary keys verbatim, id keys → aliases, numbers/booleans/structure kept"
+        },
+        "event": {
+          "description": "one relayed SSE event's sanitized skeleton (upstream-event)"
+        },
+        "refusal": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "upstream-response: the gateway's typed refusal of this answer, or null"
+        },
+        "outcome": {
+          "type": "string",
+          "description": "client-response: the relay outcome (completed | failed | incomplete | truncated | protocol-error | transport-error | cancelled | rate-limited | the refusal code)"
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "the one overflow marker"
+        }
+      },
+      "x-requirements": [
+        "GW-CODEX-CAPTURE"
+      ]
+    },
+    "bounds": {
+      "description": "env CODEX_CAPTURE_MAX_BYTES per request (default 262144); CODEX_CAPTURE_RETENTION_DAYS (default 7) for persisted records",
+      "x-requirements": [
+        "GW-CODEX-CAPTURE"
+      ]
     }
   }
 }
