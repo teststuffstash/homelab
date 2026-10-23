@@ -834,8 +834,9 @@ the block needs pruning, not more headings.
       a tool turn completed clean through the gateway — spike §The third ride; #2840 merged). 10-23: **#2842** = the `x-codex-*` headers as
       the second headroom source (GW-CODEX-HEADROOM §Upstream headers) + the revocation watch's first reading (the jail's login survived the
       gateway's; its REFRESH half answers itself ~10-26 — re-read the jail's codex log then) + the codex MCP shape (verified, not built: waits on
-      the role-routing ruling, spike §MCP for the codex harness). **Left (operator ruling):** who may ride codex beyond the prober cell (the
-      spike's "initial eligibility" row — the seat has the inputs, see TICK-LOG 10-23); then codex MCP + the four-boundary capture (a window). **Operator-only:** FU-313; ruling #2768.
+      the role-routing ruling, spike §MCP for the codex harness). **RULED 10-23: subscriptions go to all roles** — built on branch
+      `fix/codex-role-routing` (the walk's harness follows the rail; every role lists anthropic/opencode/codex; spike §Role routing); opens after #2842 merges. **Next:** codex MCP
+      (runtime half first), the four-boundary capture (a window), the jail's refresh reading ~10-26. **Operator-only:** FU-313; ruling #2768.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).

@@ -33,10 +33,10 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   (2d: prober, reviewer only). Open ruling: #2768. **Watch, not act:** #2804 (helm/helm 4.3.0 → 4.3.1) should rebase onto
   `scripts/upstream-alerts-refresh.sh` at Renovate's 22:25Z run and merge unattended = class 17's first proof (#2825 moved the
   pin out of `/.github/`); if it parks or reds, read why before touching it. Operator-only: FU-313.
-- **⚑ PICKUP (2026-10-23 ~07:30Z — codex rail after step 4; TICK-LOG 10-23):** **#2842** (headers as the second headroom source +
-  the revocation watch's first reading + the codex MCP shape) armed, pr-wait running from the seat. **Needs the operator: the
-  role-routing ruling** (who may ride codex beyond the prober cell — inputs in TICK-LOG 10-23); codex MCP builds after it (two-sided,
-  spike §MCP for the codex harness). **Watch:** the jail's codex REFRESH ~2026-10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`,
+- **⚑ PICKUP (2026-10-23 ~09:00Z — codex rail: role routing RULED; TICK-LOG 10-23 ~09:00Z):** **#2842** (headers source + revocation
+  first reading + codex MCP shape) in its review rounds, pr-wait from the seat; **branch `fix/codex-role-routing`** (clone
+  `/workspace/homelab-clones/hr-roles`, stacked on #2842's head) = the ruling built — rebase onto master and open it (with its
+  `## Spec changes:` body, drafted in the seat's scratchpad) once #2842 merges; then codex MCP (runtime half first). **Watch:** the jail's codex REFRESH ~2026-10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`,
   status codes only) = the revocation watch's second half; `gateway_codex_upstream_headroom_total{outcome}` on the next codex ride
   (expect `accepted` — a `quota-invalid` means the live header grammar differs from the CLI's reader; the poll still carries admission).
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python

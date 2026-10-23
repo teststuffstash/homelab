@@ -14334,3 +14334,32 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Four-boundary capture: unchanged (plan in the spike; the refusal capture #2835 is piece one; needs a recorder + a declared
   window) — not started this session.
 
+## 2026-10-23 ~07:30Z – ~09:00Z — the role-routing ruling: subscriptions go to all roles
+
+- **The operator's ruling (07:3xZ):** "subscriptions go to all roles" — mix and re-arrange week by week (one week the reviewer is
+  sonnet, the next codex, or alternating days); a week's subscription may be drained dry on purpose for a special use and the
+  other subscriptions take over automatically; variation — always the same reviewer makes the platform blind to certain classes
+  of problem. Options (a)/(b)/(c) of the 07:30Z entry are superseded: ALL roles, the per-role rail ORDER is the weekly knob.
+  Memory: `subscriptions-to-all-roles`.
+- **#2842 review round:** CHANGES_REQUESTED ×2 (07:31Z: the PR body lacked `Spec changes:` + the `unreadable` parametrization shared
+  the one-window row's case name; 08:35Z: the attachment belt — the reached-type and ceiling cases held 12 > 8). Fixed in the PR:
+  `ids=` per row (the suite's row-table convention), `## Spec changes:` with every ⚖ row's choice vs alternative, the release step
+  muted + per-claim `then_eq` folded into one verdict attachment per block (0152196e, 140d3a28). Lesson: a ⚖ row set needs its
+  `Spec changes:` list at OPEN, and a case = ≤ 8 attachments (arrange muted, one verdict) — the hygiene note escalates on resight.
+- **Built — branch `fix/codex-role-routing` (clone hr-roles, stacked on #2842's head; opens against master after #2842 merges):**
+  the structural wall was `roles.<role>.harness` FILTERING the walk (a claude-harness reviewer could never reach codex); the cut:
+  **the walk's harness follows the rail** — no `harness` in the body = every allowed rail walked in order, the dispatch names the
+  picked rail's harness (`config.DIALECT_HARNESS`: a rail serving the role's harness dialect keeps it; anthropic → claude, codex →
+  codex); explicit `harness` keeps its narrowing; explicit `rail` without a harness takes the rail's; `_for_rail()` replaces the
+  Admission per candidate so `provider_plan` + `_dispatch` + `assemble_env` see the rail's harness. No launcher change (#2830's
+  gateway-sessions block already runs the harness the answer names). Deployed `policy.json`: every role lists anthropic, opencode,
+  codex; openrouter last where listed (prober keeps it first); claude-harness roles anthropic → opencode → codex, opencode-harness
+  roles opencode → codex → anthropic → openrouter; `rails.codex.max_sessions` stays 1. Safe in either deploy order (the old walk
+  never picks the added rails). Six rows GW-SESSIONS-ADMIT §The harness follows the rail (`test_sessions_harness.py`, policy-codex
+  world reshaped to the ruling); the GW-CODEX-OAUTH deployed row re-stated; spike §Role routing — ruled 2026-10-23 (the ruling, the
+  change, what to watch: first non-prober ride on codex = the recipe path's live proof; `codex exec` has no `--max-turns` bound;
+  one codex model in the evidence). Gateway ci green; docs-graph/follow-ups/py-compile green.
+- **Next under FU-270:** codex MCP (now reachable: runtime half `agent-codex` renders `[mcp_servers.stack-mcp]` from `CODEX_MCP_URL`
+  first, then the launcher export — no stack on `/sessions` declares `spec.mcp` today, so no false env-card claim meanwhile); the
+  four-boundary capture (a window); the revocation watch's refresh half ~10-26.
+
