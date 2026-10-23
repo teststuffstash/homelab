@@ -14379,4 +14379,12 @@ updates or reverts as much as possible — mechanical revert or a responder."
   spike §The scoped observer. Gotchas: a new `rule("GW-…")` needs its `## GW-…` heading in specs FIRST (conftest fails loudly);
   the policy-codex world's control plane OBSERVES, so a "refused by the lookup rule" row cannot be proven there — the row
   compares the capture's answer with `GET /sessions/{id}`'s instead. Not built: the native-client baseline forwarder.
+- **~09:25Z–10:05Z:** #2848 review rounds: code review (two blocking: gateway-side refusals left no record; concurrent requests
+  of one session overwrote rows) → `forward()` wraps `_forward()` and persists a `client-response` for any typed JSON answer,
+  seq allocated at persist under a lock with plain INSERT, per-record `request` ordinal, sticky truncation, bounded maps, 2 rows;
+  specs review (R2 the ⚖ refusal row missing from `Spec changes:`, R4 record fields the rows name undeclared in the schema) →
+  schema declares every field, prose ⚖ on the poll sentence, hygiene (outcome in the then, lookup row muted). One CI red = the
+  runner's uv cache lock I/O error (`/uv-cache/sdists-v9/.../.lock: Input/output error`) — `gh run rerun --failed`, green.
+  #2846 MERGED 09:35Z, #2844 MERGED, **#2848 MERGED 10:01Z** (merge 15c9a49a). Waiting on the deploy (tag `…-g15c9a49a3958` +
+  `CODEX_CAPTURE_TASK_PREFIX` in the pod env) before the window + the capture ride.
 
