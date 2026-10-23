@@ -890,6 +890,71 @@ of §Establish a baseline) — the pinned CLI's `chatgpt_base_url` config key co
 auth path at an in-jail forwarder with the jail's own login, but the forwarder is its own piece
 and the comparison needs the gateway bundle first.
 
+### The capture ride — 2026-10-23 10:12Z (FU-270)
+
+Window `seat-1792750015-3165` (10:06:55Z–10:21Z), the gateway at `2026.10.23-g15c9a49a3958` with the
+recorder scoped to `capture-codex-*`; one prober ride (`canary-codex.sh --capture`, a two-command
+prompt), pod `agent-homelab-100750` on nx-01, session `ca646f1be25b40a69fb59079957fc0a7`: **2 requests,
+both completed**, outcome clean, 100 records, bundle `complete: true` (50 KB + 36 KB), tokens
+1595 + 1779 in, 9088 cached ×2, 83 + 9 out. The CLI ran `rg` then `wc -l` and answered. The bundle
+is in the jail's `~/.claude/codex-capture/` (restricted); the reviewed structure is the fixture
+`gateway/tests/fixtures/codex-live/turn-2026-10-23.json` behind
+[GW-RAIL-CODEX §Live grammar](../../gateway/specs/endpoints/openai-responses.md#live-grammar--captured-2026-10-23).
+
+What the four boundaries showed (names and shapes; values withheld by construction):
+
+- **Client request received:** the pinned CLI sends, beside the standard six, `originator`,
+  `session-id`, `thread-id`, `x-client-request-id`, `x-codex-beta-features`,
+  `x-codex-turn-metadata`, `x-codex-window-id` and `x-openai-internal-codex-responses-lite` — and
+  on the continuation `x-codex-turn-state` (the state the first answer issued). Body 55 KB:
+  `model`, `stream: true`, `store: false`, `include`, `reasoning`, `text`, `tool_choice: auto`,
+  `parallel_tool_calls: false`, `prompt_cache_key` (a string), `client_metadata`; **no top-level
+  `tools`** — the tools ride INSIDE `input` as an `additional_tools` item (the "lite" protocol), then
+  developer and user `message` items; the continuation appends the `custom_tool_call` and its
+  `custom_tool_call_output` (57 KB — the whole history is resent, `previous_response_id` null).
+- **Upstream request sent:** the gateway dropped every CLI-own header above (and `host`,
+  `content-length`), added `chatgpt-account-id` and `accept-encoding: identity`, replaced
+  `user-agent`; the body crossed unchanged. **The backend answered 200 both times** — presence of
+  those headers is established, their necessity is not (the plan's "observed ≠ required"; a
+  controlled comparison would be the next experiment, not this one).
+- **Upstream response received:** first byte 1446 ms / 852 ms, **no `Content-Type`** (again),
+  `transfer-encoding: chunked`, Cloudflare; the headroom set with values (used 0 % / 0 %, windows
+  300 / 10080 min, `reset-after-seconds` 18000 / 564306, `reset-at` epochs), `x-codex-plan-type: plus`,
+  `x-codex-active-limit: premium`, `x-codex-safety-buffering-enabled: true`; names only for
+  `x-codex-credits-*`, `x-codex-safety-buffering-faster-model`, `x-models-etag`, `x-oai-request-id`,
+  `x-openai-proxy-wasm`, `cf-ray`, the security headers — and **`x-codex-turn-state` on the first
+  answer only** (leg B: issued once per turn, echoed by the client on the continuation; the gateway
+  round-trips it: the first `client-response` carries it, the second does not).
+- **The stream:** 78 events / 103 KB then 14 / 86 KB (the events carry the whole response
+  object). Grammar of a tool-call turn: `response.created` → `response.in_progress` → a `message`
+  item (`output_item.added`, `content_part.added`, `output_text.delta` ×9, `output_text.done`,
+  `content_part.done`, `output_item.done`) → a `custom_tool_call` item named **`exec`**
+  (`custom_tool_call_input.delta` ×57, `…_input.done`, `output_item.done`) → **`response.metadata`**
+  (a vendor event outside the public Responses grammar — the parser passes unknown types through)
+  → `response.completed`. The terminal `usage` carries the standard fields (`input_tokens` 10683,
+  `input_tokens_details.cached_tokens` 9088 + `cache_write_tokens` 0, `output_tokens` 83,
+  `reasoning_tokens` 0) **plus a vendor `attribution` sub-object** (per-item token attribution,
+  ids) the parser never reads. `response.created` names the response's knobs: `service_tier: auto`,
+  `temperature 1.0`, `top_p 0.98`, `truncation: disabled`, `store: false`, `prompt_cache_retention`,
+  `safety_identifier`, `access_programs`, `tool_usage` keys. No reasoning items were emitted.
+- **Client response sent:** 200, outcome `completed`, bytes relayed = bytes received, usage
+  counted 1595 / 9088 / 83 — reproduced offline from the fixture's type sequence (the §Live grammar
+  row). Neither request was cancelled this time (the 10-22 499s were the CLI closing after the
+  terminal; this ride's CLI read both streams to EOF within the relay).
+
+Two findings outside the bundle: (1) **`AgentWorkerEgressDropped` fired at 10:12:47Z** — ~17 TCP
+SYNs from the ride pod to `chatgpt.com` / `ab.chatgpt.com` POLICY_DENIED while the CLI ran: the
+pinned CLI makes direct backend calls beside the provider block (a models list, a rate-limit read,
+telemetry — unknown), the enforced egress denied them and the ride completed, so they are not
+needed for inference; what they would carry is a ⚑ gap row (the native-client baseline forwarder
+is the instrument). (2) The window's `check` read scrape targets 196 → 195 with nothing down: the
+pre-window gateway rollout (10:05:48Z) left the old pod's target in the set at the baseline read;
+closed `--force` with that said.
+
+What the ride did NOT exercise (named, not claimed): cancellation mid-stream, a failed /
+incomplete terminal, a 429, a refresh during a ride, a second turn (a new `codex exec`) reusing
+state — each stays an offline synthetic row until observed live.
+
 ### Build order and acceptance
 
 Under FU-270: specify the capture/export contract and prove sanitization offline; implement
