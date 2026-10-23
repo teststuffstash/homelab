@@ -186,22 +186,28 @@ def join_counts(cases: dict[str, list[dict]]) -> tuple[dict[str, dict[str, int]]
     for md in spec_pages():
         where = md.relative_to(ISLAND)
         for rule, line_no, header, rows in rule_tables(md):
-            by_case = {c["case"]: c for c in cases.get(rule, [])}
+            # every record of a case id together (a row id reused across tests or worlds): a column is
+            # threaded when ANY of them carries it, a cell matches when ANY of them equals it — the
+            # result-file order (random UUIDs) must never decide the count
+            by_case: dict[str, list[dict]] = {}
+            for c in cases.get(rule, []):
+                by_case.setdefault(c["case"], []).append(c)
             unthreaded_cols: set[str] = set()
             for row in rows:
                 desc = norm_cell(row[0]) if row else ""
                 if desc.startswith(WIP_MARKS):
                     continue  # rendered incompleteness (rule 10) — no case is expected
-                rec = by_case.get(desc)
-                if rec is None:
+                recs = by_case.get(desc)
+                if not recs:
                     bump(rule, "row-unkeyed", f"{where}:{line_no} `{desc}` equals no case id of this rule")
                     continue
                 seen_cases.setdefault(rule, set()).add(desc)
                 for name, spec_cell in zip(header[1:], row[1:], strict=False):
-                    if name not in rec["params"]:
+                    values = sorted({r["params"][name] for r in recs if name in r["params"]})
+                    if not values:
                         unthreaded_cols.add(name)
-                    elif norm_cell(spec_cell) != norm_cell(rec["params"][name]):
-                        bump(rule, "cell-mismatch", f"`{desc}` · {name}: spec {spec_cell!r} ⇢ test {rec['params'][name]!r}")
+                    elif norm_cell(spec_cell) not in {norm_cell(v) for v in values}:
+                        bump(rule, "cell-mismatch", f"`{desc}` · {name}: spec {spec_cell!r} ⇢ test {values!r}")
             for name in sorted(unthreaded_cols):
                 bump(rule, "header-unthreaded", f"{where}:{line_no} column `{name}` is no parameter of its cases")
         # a rule with no decision table at all: every labelled case is unspecified (counted below)
