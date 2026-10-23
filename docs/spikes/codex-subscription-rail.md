@@ -691,6 +691,21 @@ second-login revocation watch (first reading below), and the recorded-protocol e
 response headers as a second headroom source landed 2026-10-23 (GW-CODEX-HEADROOM §Upstream
 headers).
 
+### MCP for the codex harness — the shape, verified 2026-10-23 (FU-270, not built)
+
+The pinned CLI (rust-v0.163.0, `codex-rs/config/src/mcp_types.rs`) takes a remote MCP server as
+`[mcp_servers.<name>]` with `url = "…"` (its `StreamableHttp` transport; optional
+`bearer_token_env_var`, `http_headers`, `env_http_headers` — the stack knob needs none: the
+endpoint is the stack-wide `spec.mcp.endpoint` of #1041, unauthenticated inside the cluster as for
+the other three harnesses). So the attach is the same two-sided move the gateway cell was: the
+launcher's codex arm exports the knob (`CODEX_MCP_URL=<endpoint>`, quoted like `MCP_GOOSE_FLAG`)
+and `agent-codex` appends that block to the provider block it already renders (same
+quote/backslash/newline refusal; no env = no block). It is not built because no codex ride can
+carry a recipe today — the rail is the prober's canary cell, and MCP attaches only on the recipe
+path — so it waits on the role-routing ruling below; until then the env card's "feedback tool:
+available on any harness with the knob" line would be false for a codex ride, which the
+prober-only policy makes unreachable rather than wrong.
+
 ### The second-login revocation watch — first reading 2026-10-23 (FU-270, leg E)
 
 The question leg E left open: does the gateway's own device login (minted 2026-10-22 ~20:00Z)
