@@ -112,10 +112,15 @@ async def test_absent(codex_app, codex_gw, codex_upstream, clock):
         assert 'gateway_subscription_utilization{rail="codex",window="7d"} 0.64' in text
 
 
-@pytest.mark.parametrize("case", ["one-window", "unreadable"])
+REFUSED_ROWS = [
+    ("one window's headers alone are refused whole — unknown, never zero", "one-window"),
+    ("an unreadable value is refused and the ride is unaffected", "unreadable"),
+]
+
+
+@pytest.mark.parametrize("case", [r[1] for r in REFUSED_ROWS], ids=[r[0] for r in REFUSED_ROWS])
 async def test_refused(codex_app, codex_gw, codex_upstream, clock, case):
-    """row: one window's headers alone are refused whole — unknown, never zero
-    row: an unreadable value is refused and the ride is unaffected"""
+    """Two rows: a parametrized case's id is its row description (the evidence row's case)."""
     world("policy-codex")
     doc = await admitted(codex_app, codex_gw, clock)
     issued = (windows(clock, used=("30", None), minutes=("300", None)) if case == "one-window"
