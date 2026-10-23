@@ -14300,3 +14300,37 @@ updates or reverts as much as possible — mechanical revert or a responder."
   released. Bookkeeping push after #2840 merges. Rail summary for the next seat: LIT, prober-only, poll every 60 s
   (0 %/0 % live), every codex ride = `AGENT_GATEWAY_ROLE=prober --harness codex` through `canary-codex.sh` or the
   launcher; the vendor streams WITHOUT Content-Type; the CLI closes after `response.completed`.
+
+## 2026-10-23 ~06:00Z – ~07:30Z — codex rail after step 4: the headers source (#2842), the revocation watch's first reading, the MCP shape
+
+- Fresh session on the FU-270 open list (role routing, `x-codex-*` headers, codex MCP, the four-boundary capture, the revocation
+  watch). Tree clean, #2840 merged 23:11Z, bookkeeping pushed.
+- **#2842 (PR, armed):** the relayed answer's `x-codex-*` headers → `Headroom.observe(source=upstream)` at the "upstream response
+  received" boundary of every relayed 200 — the pinned CLI's own grammar (codex-rs `rate_limits.rs` @ rust-v0.163.0: float
+  percent, integer minutes + epoch reset, a window present iff its used-percent header is; `x-codex-rate-limit-reached-type`
+  present = limited). Missing window = refused whole; unreadable = quota-invalid; the ride never depends on the read; a refused
+  answer / 429 not read. New declared-gated family `gateway_codex_upstream_headroom_total{outcome}`. 11 spec rows
+  (`test_codex_upstream_headers.py`), schema `headroom.upstream`, the ⚑ gap row now = the jail ingress only. Gateway ci green
+  locally (ruff, 600+ tests, spec gate); docs-graph/follow-ups/py-compile lints green.
+- **Revocation watch, first reading** (from the homelab-codex jail's own `logs_2.sqlite`, status codes + feedback tags only — no
+  token value read): the jail's `auth.json` last refreshed 10-16 12:54Z (access JWT to 10-26 12:54Z, the same 10-day lifetime as
+  the gateway's seed); after the gateway's 10-22 20:00Z login the jail's Codex made 77 `GET …/codex/models` 01:11–01:56Z
+  10-23, all 200, `auth_retry_after_unauthorized=""` throughout, no re-login prompt → a second device login does NOT revoke the
+  first's access token. The 3 `account/rateLimits/read failed` WARNs = the TUI panel, no 401 near them. **Refresh half pending**
+  (the jail has not rotated since 10-16; its token expires 10-26) — written into the spike §The second-login revocation watch.
+- **Codex MCP — shape verified, not built:** rust-v0.163.0 `mcp_types.rs` takes `[mcp_servers.<name>] url = …` (StreamableHttp;
+  optional `bearer_token_env_var`/`http_headers`). Attach = launcher exports `CODEX_MCP_URL` from the stack knob + `agent-codex`
+  appends the block (two repos, ~30 min). Not built: no codex ride carries a recipe today (prober-only cell; MCP attaches on the
+  recipe path), so it waits on the role-routing ruling. oracle-fleet is the one stack declaring `spec.mcp`.
+- **Role routing — the operator's ruling, inputs:** today `prober: [openrouter, opencode, codex]` (last; only `harness: codex`
+  reaches it; `max_sessions 1`; ceiling 0.95 both windows; live headroom 0 %/0 % on 10-22). The spike's "initial eligibility"
+  row = explicit canary cell BEFORE general role routing. Options the seat sees: (a) `reviewer` adds codex beside the claude
+  subscription rail (both subscription, both "the safety net" per the 09-11 tiering ruling — cost per CLEAN ride decides the
+  order, #2764 needs codex rows in benchmarks.json for that); (b) `worker` adds codex LAST as the overflow after the metered
+  rails (free rides on headroom the account otherwise idles); (c) stay prober-only until the four-boundary capture has run. Each
+  needs `harness: codex` on the role's cell (the `harness` field is per role today — a second harness per role = a policy shape
+  change) and the recipe path proven on a codex ride (agent-codex gets the recipe as its prompt; no `--max-turns`-class bound
+  exists on `codex exec` — the pod's `AGENT_MAX_SECONDS` is the only cap). Not decided here.
+- Four-boundary capture: unchanged (plan in the spike; the refusal capture #2835 is piece one; needs a recorder + a declared
+  window) — not started this session.
+
