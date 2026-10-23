@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """evidence/evidence.json → markdown tables (stdlib only).
 
-Writes `evidence/evidence.md` (every rule) and, when `specs/evidence/` exists, one
-`specs/evidence/<RULE>.md` per rule; appends the summary to `$GITHUB_STEP_SUMMARY` when set and
-prints the whole render to stdout between `evidence-render: BEGIN` / `END` (the run log is the
-only CI output a reader outside the job can fetch).
+Writes `evidence/evidence.md` (every rule); appends the summary to `$GITHUB_STEP_SUMMARY` when set
+and prints the whole render to stdout between `evidence-render: BEGIN` / `END` (the run log is the
+only CI output a reader outside the job can fetch). The specs SITE no longer transcludes this
+render: its per-rule fragments are the pinned allure-evidence tool's (scripts/gateway-evidence.sh →
+allure-evidence/<RULE>.md, staged by scripts/specs-build.sh); the former `specs/evidence/` dir is
+retired.
 Each table is sha-stamped (git sha + the test policy's sha256) so a spec row can say which
 revision earned its evidence.
 """
@@ -19,7 +21,6 @@ from pathlib import Path
 ISLAND = Path(__file__).resolve().parent.parent
 EVIDENCE = ISLAND / "evidence" / "evidence.json"
 OUT_ALL = ISLAND / "evidence" / "evidence.md"
-SPECS_EVIDENCE = ISLAND / "specs" / "evidence"
 
 MARK = {"passed": "✅", "failed": "❌", "skipped": "⏭"}
 
@@ -48,18 +49,13 @@ def main() -> int:
     OUT_ALL.parent.mkdir(exist_ok=True)
     OUT_ALL.write_text(body, encoding="utf-8")
     print(f"evidence-render: wrote {OUT_ALL.relative_to(ISLAND)} ({len(rules)} rules)")
-    if SPECS_EVIDENCE.is_dir():
-        for rid in rules:
-            if rid.startswith("GW-"):
-                (SPECS_EVIDENCE / f"{rid}.md").write_text(render_rule(rid, rules[rid], stamp), encoding="utf-8")
-        print(f"evidence-render: wrote per-rule pages under {SPECS_EVIDENCE.relative_to(ISLAND)}/")
     if step := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(step, "a", encoding="utf-8") as fh:
             fh.write("\n".join(summary) + "\n")
     # The whole render ALSO goes to stdout, between markers, so the CI run LOG carries it: the
-    # step summary has no API, `specs/evidence/` is gitignored, and the specs reviewer (ADR-155,
-    # agents/specs-reviewer-session.sh) reads evidence from `gh run view --log` — it counts a
-    # table only when the stamp names the PR head it is reviewing.
+    # step summary has no API; the specs reviewer's primary input is the published pack
+    # (scripts/evidence-publish.sh), the run log (`gh run view --log`, agents/specs-reviewer-session.sh)
+    # its fallback — it counts a table only when the stamp names the PR head it is reviewing.
     print("evidence-render: BEGIN")
     print(body, end="")
     print("evidence-render: END")

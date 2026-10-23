@@ -1,6 +1,44 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "allure@2.46.1": {
+      "last_modified": "2026-10-02T22:55:44Z",
+      "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#allure",
+      "source": "devbox-search",
+      "version": "2.46.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/avix3550njhjlwi74fn2zrcipzrdnjzm-allure-2.46.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/avix3550njhjlwi74fn2zrcipzrdnjzm-allure-2.46.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/446hnsxsd6c8n0151v9jna62c1axypqw-allure-2.46.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/446hnsxsd6c8n0151v9jna62c1axypqw-allure-2.46.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1asdpdf70c0khp1y34jwbyv7qzi6lmcn-allure-2.46.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1asdpdf70c0khp1y34jwbyv7qzi6lmcn-allure-2.46.1"
+        }
+      }
+    },
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
       "last_modified": "2026-10-14T08:20:44Z",
       "resolved": "github:NixOS/nixpkgs/319e4cebef10cbb636c6ea392137b52ad105336a?lastModified=1791966044&narHash=sha256-t1hT8UW97rFCWCJO7%2FpClvu0AhLN5V3uir2M0ic4w%2FQ%3D"

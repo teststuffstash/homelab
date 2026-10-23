@@ -100,9 +100,10 @@ def tables(md: Path):
 
 
 def spec_pages() -> list[Path]:
-    """Every authored spec page. specs/evidence/ is GENERATED (evidence_render.py writes one
-    `## <RULE>` page per rule there, gitignored), so reading it would make a second run of the
-    gate see every heading twice and fail on a dirty tree that a fresh checkout passes."""
+    """Every authored spec page. specs/evidence/ was evidence_render.py's GENERATED fragment dir
+    (one `## <RULE>` page per rule, gitignored; retired — the site transcludes the pinned tool's
+    fragments from allure-evidence/ now): a stale checkout may still carry it, and reading it would
+    make the gate see every heading twice and fail on a dirty tree that a fresh checkout passes."""
     generated = SPECS / "evidence"
     return [md for md in sorted(SPECS.rglob("*.md")) if generated not in md.parents]
 

@@ -31,8 +31,8 @@ it and production ownership is wired only behind explicit environment settings.
 | `GET /metrics` (`GW-METRICS`), `GET /healthz` (`GW-HEALTH`) | [`specs/endpoints/metrics.md`](specs/endpoints/metrics.md), [`specs/endpoints/health.md`](specs/endpoints/health.md) |
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
-| Evidence (rendered per requirement by `devbox run ci`; gitignored, read it in the CI job summary) | `specs/evidence/` |
-| **The browsable site** — this README + `specs/` with the evidence fragments transcluded; master at the root, PR previews at `/pr-<N>/` (LAN/VPN; `mkdocs.yml`, `scripts/specs-publish.sh`, bucket `gateway-specs`) | [`gateway-specs.homelab.teststuff.net`](https://gateway-specs.homelab.teststuff.net) |
+| Evidence (`devbox run evidence` after a run; gitignored): the pinned tool's per-rule fragments + `evidence.json` + `digest.md`, and the run's one-file **Allure report** (`devbox run report`, open `allure-report-single/index.html`) | `allure-evidence/`, `allure-report-single/` |
+| **The browsable site** — this README + `specs/` with each rule's decision tables joined to the run's evidence (descriptions link into the report), the fragment transcluded where a table joins nothing, and the Allure report at `report/index.html`; master at the root, PR previews at `/pr-<N>/` (LAN/VPN; `mkdocs.yml`, `scripts/specs-build.sh`, `scripts/specs-publish.sh`, bucket `gateway-specs`) | [`gateway-specs.homelab.teststuff.net`](https://gateway-specs.homelab.teststuff.net) · [`…/report/index.html`](https://gateway-specs.homelab.teststuff.net/report/index.html) |
 
 ## Run
 
@@ -59,9 +59,10 @@ Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
 
 ```sh
 cd gateway
-devbox run ci             # THE gate: uv sync --frozen, ruff, pytest (+ evidence), spec gate, evidence render
+devbox run ci             # THE gate: uv sync --frozen, ruff, pytest (+ evidence), spec gate, evidence render, the Allure report
 devbox run test -- -k admit   # one table
-devbox run evidence       # after a test run: allure-results/ → allure-evidence/ (evidence.json, digest.md, <RULE>.md, allure-results/)
+devbox run evidence       # after a test run: allure-results/ → allure-report-single/index.html + allure-evidence/ (evidence.json, digest.md, <RULE>.md, allure-results/)
+devbox run specs-build    # the site as CI publishes it (specs-site/, joined tables + report/index.html) — open specs-site/index.html
 ```
 
 Every test module is a decision table (`@pytest.mark.parametrize(..., ids=[row descriptions])`
@@ -80,8 +81,11 @@ with every gateway and fake-upstream exchange attached under the step it support
 snippets pin in `scripts/lib/snippets.sh`) turns them into the reviewer's pack, joining each spec
 page's tables (`--spec`) where the tool can parse them; CI publishes the pack to the `gateway-specs`
 bucket (`scripts/evidence-publish.sh`, `evidence/<pr-N|branch>/<sha>.tar.gz` — never an Actions
-artifact: the org's included Actions storage is 2 GB); `evidence_render.py` and its
-`evidence-render: BEGIN/END` log block are unchanged.
+artifact: the org's included Actions storage is 2 GB). The same run's single-file Allure report
+(`scripts/allure-report.sh`) is what every row links into: `scripts/specs-build.sh` rewrites each
+joined rule's staged page (`allure-evidence --spec-page-out`) and ships the report beside the site
+at `report/index.html` (`scripts/lib/site.sh` names the URL; `scripts/specs-publish.sh` gzips it);
+`evidence_render.py` keeps only `evidence/evidence.md` + its `evidence-render: BEGIN/END` log block.
 `GATEWAY_SPECS_OPTIONAL=1` lets the rule check + gate skip with a warning when `specs/` is absent
 (only for a checkout that carries the service half alone — CI never sets it).
 
