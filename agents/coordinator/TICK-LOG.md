@@ -14452,3 +14452,15 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (handoff §4.2) dispatched to a background subagent as a seat PR; the mint gate held an FU for it
   (decided + bounded = do it). Handoff items 4–5 (∅ ratchet, parametrize-from-spec — snippets-shaped,
   ⚖ tool flag vs repo gate) → specs-reviewer.md open question in that PR. Handoff closed to done/.
+- **Loop closed the cycle (18:00–18:43Z).** #2860's Go-rail rides struck 3× on the recipe path (the
+  FU-270 finding above — external_directory /tmp auto-reject, haiku-on-Go protocol); the claude-harness
+  ride then shipped **#2862** (3 commits), both reviewers APPROVED under process 0.6.1, GW-REDACT's
+  ratchet line 0/0/0/0. Shape produced: 5 real-path rows, header `path | log_line | never_logged` ==
+  argnames, ids verbatim, `…` legend; the 8 formatter rows + the %-arg case ruled ⚖ OUT of the evidence
+  (unlabelled chassis guards). **#2861** (subagent-built): Allure single-file report live at
+  gateway-specs…/report/index.html, the joined render on every rule page (322 row links on
+  sessions.html); its ci.yaml hunk (SITE_PREFIX) pushed direct as 2662b784 (pin-only-lint refuses
+  workflow edits in the PR lane). Iteration findings for the operator: (a) the prose still introduces
+  its rows ("The rows below observe…") — rule 11 passes it; (b) `log_line` fronts a substring check
+  under an equality-shaped name — R9 passed it; (c) the six credential kinds the prose claims now have
+  NO system-level row (the reviewer's "prose claim without a row" is advisory) — the fork to rule on.
