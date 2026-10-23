@@ -32,8 +32,17 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   NEW to the loader ships AFTER its image, #2812). **Still unverified: the first platform worker ride through `/sessions`**
   (2d: prober, reviewer only). Open ruling: #2768. **Watch, not act:** #2804 (helm/helm 4.3.0 → 4.3.1) should rebase onto
   `scripts/upstream-alerts-refresh.sh` at Renovate's 22:25Z run and merge unattended = class 17's first proof (#2825 moved the
-  pin out of `/.github/`); if it parks or reds, read why before touching it. Operator-only: codex login (leg E) → codex policy
-  block; FU-313.
+  pin out of `/.github/`); if it parks or reds, read why before touching it. Operator-only: FU-313.
+- **⚑ PICKUP (2026-10-23 ~09:00Z — codex rail: role routing RULED; TICK-LOG 10-23 ~09:00Z):** #2842 MERGED 08:51Z (3 review rounds);
+  #2845 (role routing) MERGED ~09:15Z; agent-runtime#180 MERGED 09:00Z → its pin PR **#2846** armed; **#2844** (launcher
+  `CODEX_MCP_URL`) approved, merging; **#2848** = the four-boundary capture (GW-CODEX-CAPTURE), armed. **Capture ride DONE 10:12Z** (window
+  closed `--force`: targets 196→195 = the pre-window rollout's old pod leaving the set, nothing down; `AgentWorkerEgressDropped` fired
+  — the ride pod's codex CLI phoned chatgpt.com directly, denied, ride unaffected → a ⚑ gap row); #2850 (the evidence rows,
+  GW-RAIL-CODEX §Live grammar + fixture `tests/fixtures/codex-live/turn-2026-10-23.json`) MERGED; the bundle stays in
+  `~/.claude/codex-capture/` (restricted). FU-270 open items: the jail's refresh reading ~10-26, the first non-prober codex ride, the
+  native-client baseline forwarder (not built). **Watch:** the jail's codex REFRESH ~2026-10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`,
+  status codes only) = the revocation watch's second half; `gateway_codex_upstream_headroom_total{outcome}` on the next codex ride
+  (expect `accepted` — a `quota-invalid` means the live header grammar differs from the CLI's reader; the poll still carries admission).
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a

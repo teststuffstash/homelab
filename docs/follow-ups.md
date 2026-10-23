@@ -831,8 +831,12 @@ the block needs pruning, not more headings.
       a 429'd canary is no verdict, exponential backoff, #2810), first window 3/3 clean, re-cut #2813. **Next (seat):** the
       canary windows (one per refresh, re-cut when the lists move); read the first platform worker ride. **Codex rail LIT
       10-22** (#2828 poll, #2832 policy prober-only, #2830 launcher+verb, agent-runtime#179, #2835/#2837 live-ride fixes; **step 4 met 22:57Z**:
-      a tool turn completed clean through the gateway — spike §The third ride). Left: #2840 (499-after-terminal), role routing beyond the
-      canary cell, `x-codex-*` headers as a headroom source, codex MCP, the revocation watch. **Operator-only:** FU-313; ruling #2768.
+      a tool turn completed clean through the gateway — spike §The third ride; #2840 merged). 10-23: **#2842** = the `x-codex-*` headers as
+      the second headroom source (GW-CODEX-HEADROOM §Upstream headers) + the revocation watch's first reading (the jail's login survived the
+      gateway's; its REFRESH half answers itself ~10-26 — re-read the jail's codex log then) + the codex MCP shape (verified, not built: waits on
+      the role-routing ruling, spike §MCP for the codex harness). **RULED 10-23: subscriptions go to all roles** — **#2845** (the walk's
+      harness follows the rail; every role lists anthropic/opencode/codex; spike §Role routing); codex MCP = agent-runtime#180 (seam) + **#2844** (launcher);
+      #2842 merged 08:51Z, #2845 merged ~09:15Z. **#2848** = the four-boundary capture (GW-CODEX-CAPTURE, operator "do it" 10-23) MERGED 10:01Z; agent-base pin #2846 merged, #2844 merged (codex MCP live end to end). **Capture ride RAN 10-23 10:12Z** (window seat-1792750015-3165, 2 requests completed, bundle complete) → **#2850 MERGED** (GW-RAIL-CODEX §Live grammar rows + the ⚑ gap: the CLI's direct chatgpt.com calls, egress-denied). **Next:** the jail's refresh reading ~10-26; the first non-prober codex ride; the native-client baseline forwarder (the plan's §Establish a baseline — not built). **Operator-only:** FU-313; ruling #2768.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).

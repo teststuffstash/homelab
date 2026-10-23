@@ -14300,3 +14300,107 @@ updates or reverts as much as possible — mechanical revert or a responder."
   released. Bookkeeping push after #2840 merges. Rail summary for the next seat: LIT, prober-only, poll every 60 s
   (0 %/0 % live), every codex ride = `AGENT_GATEWAY_ROLE=prober --harness codex` through `canary-codex.sh` or the
   launcher; the vendor streams WITHOUT Content-Type; the CLI closes after `response.completed`.
+
+## 2026-10-23 ~06:00Z – ~07:30Z — codex rail after step 4: the headers source (#2842), the revocation watch's first reading, the MCP shape
+
+- Fresh session on the FU-270 open list (role routing, `x-codex-*` headers, codex MCP, the four-boundary capture, the revocation
+  watch). Tree clean, #2840 merged 23:11Z, bookkeeping pushed.
+- **#2842 (PR, armed):** the relayed answer's `x-codex-*` headers → `Headroom.observe(source=upstream)` at the "upstream response
+  received" boundary of every relayed 200 — the pinned CLI's own grammar (codex-rs `rate_limits.rs` @ rust-v0.163.0: float
+  percent, integer minutes + epoch reset, a window present iff its used-percent header is; `x-codex-rate-limit-reached-type`
+  present = limited). Missing window = refused whole; unreadable = quota-invalid; the ride never depends on the read; a refused
+  answer / 429 not read. New declared-gated family `gateway_codex_upstream_headroom_total{outcome}`. 11 spec rows
+  (`test_codex_upstream_headers.py`), schema `headroom.upstream`, the ⚑ gap row now = the jail ingress only. Gateway ci green
+  locally (ruff, 600+ tests, spec gate); docs-graph/follow-ups/py-compile lints green.
+- **Revocation watch, first reading** (from the homelab-codex jail's own `logs_2.sqlite`, status codes + feedback tags only — no
+  token value read): the jail's `auth.json` last refreshed 10-16 12:54Z (access JWT to 10-26 12:54Z, the same 10-day lifetime as
+  the gateway's seed); after the gateway's 10-22 20:00Z login the jail's Codex made 77 `GET …/codex/models` 01:11–01:56Z
+  10-23, all 200, `auth_retry_after_unauthorized=""` throughout, no re-login prompt → a second device login does NOT revoke the
+  first's access token. The 3 `account/rateLimits/read failed` WARNs = the TUI panel, no 401 near them. **Refresh half pending**
+  (the jail has not rotated since 10-16; its token expires 10-26) — written into the spike §The second-login revocation watch.
+- **Codex MCP — shape verified, not built:** rust-v0.163.0 `mcp_types.rs` takes `[mcp_servers.<name>] url = …` (StreamableHttp;
+  optional `bearer_token_env_var`/`http_headers`). Attach = launcher exports `CODEX_MCP_URL` from the stack knob + `agent-codex`
+  appends the block (two repos, ~30 min). Not built: no codex ride carries a recipe today (prober-only cell; MCP attaches on the
+  recipe path), so it waits on the role-routing ruling. oracle-fleet is the one stack declaring `spec.mcp`.
+- **Role routing — the operator's ruling, inputs:** today `prober: [openrouter, opencode, codex]` (last; only `harness: codex`
+  reaches it; `max_sessions 1`; ceiling 0.95 both windows; live headroom 0 %/0 % on 10-22). The spike's "initial eligibility"
+  row = explicit canary cell BEFORE general role routing. Options the seat sees: (a) `reviewer` adds codex beside the claude
+  subscription rail (both subscription, both "the safety net" per the 09-11 tiering ruling — cost per CLEAN ride decides the
+  order, #2764 needs codex rows in benchmarks.json for that); (b) `worker` adds codex LAST as the overflow after the metered
+  rails (free rides on headroom the account otherwise idles); (c) stay prober-only until the four-boundary capture has run. Each
+  needs `harness: codex` on the role's cell (the `harness` field is per role today — a second harness per role = a policy shape
+  change) and the recipe path proven on a codex ride (agent-codex gets the recipe as its prompt; no `--max-turns`-class bound
+  exists on `codex exec` — the pod's `AGENT_MAX_SECONDS` is the only cap). Not decided here.
+- Four-boundary capture: unchanged (plan in the spike; the refusal capture #2835 is piece one; needs a recorder + a declared
+  window) — not started this session.
+
+## 2026-10-23 ~07:30Z – ~09:00Z — the role-routing ruling: subscriptions go to all roles
+
+- **The operator's ruling (07:3xZ):** "subscriptions go to all roles" — mix and re-arrange week by week (one week the reviewer is
+  sonnet, the next codex, or alternating days); a week's subscription may be drained dry on purpose for a special use and the
+  other subscriptions take over automatically; variation — always the same reviewer makes the platform blind to certain classes
+  of problem. Options (a)/(b)/(c) of the 07:30Z entry are superseded: ALL roles, the per-role rail ORDER is the weekly knob.
+  Memory: `subscriptions-to-all-roles`.
+- **#2842 review round:** CHANGES_REQUESTED ×2 (07:31Z: the PR body lacked `Spec changes:` + the `unreadable` parametrization shared
+  the one-window row's case name; 08:35Z: the attachment belt — the reached-type and ceiling cases held 12 > 8). Fixed in the PR:
+  `ids=` per row (the suite's row-table convention), `## Spec changes:` with every ⚖ row's choice vs alternative, the release step
+  muted + per-claim `then_eq` folded into one verdict attachment per block (0152196e, 140d3a28). Lesson: a ⚖ row set needs its
+  `Spec changes:` list at OPEN, and a case = ≤ 8 attachments (arrange muted, one verdict) — the hygiene note escalates on resight.
+- **Built — branch `fix/codex-role-routing` (clone hr-roles, stacked on #2842's head; opens against master after #2842 merges):**
+  the structural wall was `roles.<role>.harness` FILTERING the walk (a claude-harness reviewer could never reach codex); the cut:
+  **the walk's harness follows the rail** — no `harness` in the body = every allowed rail walked in order, the dispatch names the
+  picked rail's harness (`config.DIALECT_HARNESS`: a rail serving the role's harness dialect keeps it; anthropic → claude, codex →
+  codex); explicit `harness` keeps its narrowing; explicit `rail` without a harness takes the rail's; `_for_rail()` replaces the
+  Admission per candidate so `provider_plan` + `_dispatch` + `assemble_env` see the rail's harness. No launcher change (#2830's
+  gateway-sessions block already runs the harness the answer names). Deployed `policy.json`: every role lists anthropic, opencode,
+  codex; openrouter last where listed (prober keeps it first); claude-harness roles anthropic → opencode → codex, opencode-harness
+  roles opencode → codex → anthropic → openrouter; `rails.codex.max_sessions` stays 1. Safe in either deploy order (the old walk
+  never picks the added rails). Six rows GW-SESSIONS-ADMIT §The harness follows the rail (`test_sessions_harness.py`, policy-codex
+  world reshaped to the ruling); the GW-CODEX-OAUTH deployed row re-stated; spike §Role routing — ruled 2026-10-23 (the ruling, the
+  change, what to watch: first non-prober ride on codex = the recipe path's live proof; `codex exec` has no `--max-turns` bound;
+  one codex model in the evidence). Gateway ci green; docs-graph/follow-ups/py-compile green.
+- **Next under FU-270:** codex MCP (now reachable: runtime half `agent-codex` renders `[mcp_servers.stack-mcp]` from `CODEX_MCP_URL`
+  first, then the launcher export — no stack on `/sessions` declares `spec.mcp` today, so no false env-card claim meanwhile); the
+  four-boundary capture (a window); the revocation watch's refresh half ~10-26.
+- **~08:50Z–09:10Z:** #2842 MERGED 08:51Z (third round clean). Opened **#2845** (role routing, rebased onto master — a first
+  push carried #2842's pre-squash commits because the clone lacked its last hygiene commit; `rebase --onto origin/master
+  0152196e` + force-with-lease fixed the PR to its one commit), **agent-runtime#180** (agent-codex appends `[mcp_servers.stack-mcp]
+  url` from `CODEX_MCP_URL`, 3 tests), **#2844** (launcher codex arm prefixes the @sh-quoted `CODEX_MCP_URL=`; replay row
+  `harness-run-cmd-codex-mcp`; README index regenerated — the first push went out with the replay suite's exit masked by a
+  `| tail` (the card's own warning), caught on the re-run, fixed in the PR). Stale watcher gotcha: a `while pgrep -f
+  'pr-wait.sh N'` loop matches ITSELF (the zsh wrapper carries the pattern) and never exits — pr-wait EXITS on CHANGES_REQUESTED
+  (rc 2); re-run it per round, never wrap it in a pgrep loop.
+- **~09:10Z–09:25Z — the four-boundary capture (operator: "do it"):** #2845 MERGED ~09:15Z; agent-base pin #2846 opened by
+  the image build (armed from here). Built **#2848** GW-CODEX-CAPTURE: `capture.py` (Capture/Recorder/Splitter — scope by task
+  prefix, structural sanitization: allowlisted header values, strings → lengths, vocabulary keys kept, `*_id` → aliases equal
+  across boundaries, byte bound + `truncated` marker), store table `captures` (7-day purge at start), the tee in `_stream`
+  (yield before split), `GET /sessions/{id}/capture` under the lookup rule, env `CODEX_CAPTURE_TASK_PREFIX=capture-codex-`,
+  `canary-codex.sh --capture` (task prefix + bundle pull into `~/.claude/codex-capture/`, summary only printed), 10 rows, the
+  spike §The scoped observer. Gotchas: a new `rule("GW-…")` needs its `## GW-…` heading in specs FIRST (conftest fails loudly);
+  the policy-codex world's control plane OBSERVES, so a "refused by the lookup rule" row cannot be proven there — the row
+  compares the capture's answer with `GET /sessions/{id}`'s instead. Not built: the native-client baseline forwarder.
+- **~09:25Z–10:05Z:** #2848 review rounds: code review (two blocking: gateway-side refusals left no record; concurrent requests
+  of one session overwrote rows) → `forward()` wraps `_forward()` and persists a `client-response` for any typed JSON answer,
+  seq allocated at persist under a lock with plain INSERT, per-record `request` ordinal, sticky truncation, bounded maps, 2 rows;
+  specs review (R2 the ⚖ refusal row missing from `Spec changes:`, R4 record fields the rows name undeclared in the schema) →
+  schema declares every field, prose ⚖ on the poll sentence, hygiene (outcome in the then, lookup row muted). One CI red = the
+  runner's uv cache lock I/O error (`/uv-cache/sdists-v9/.../.lock: Input/output error`) — `gh run rerun --failed`, green.
+  #2846 MERGED 09:35Z, #2844 MERGED, **#2848 MERGED 10:01Z** (merge 15c9a49a). Waiting on the deploy (tag `…-g15c9a49a3958` +
+  `CODEX_CAPTURE_TASK_PREFIX` in the pod env) before the window + the capture ride.
+- **10:05Z–10:35Z — the capture ride (operator: "do it"):** #2848's image `2026.10.23-g15c9a49a3958` rolled 10:05:48Z, the pod logged
+  `codex capture: ON for tasks 'capture-codex-'*`. `devbox run maint -- open` (window seat-1792750015-3165, baseline targets 196) +
+  a Monitor alert watch; `devbox run -- bash gateway/scripts/canary-codex.sh --capture --prompt "<rg heading, then wc -l>"` (the
+  verb needs devbox: bare `kubectl` is not on PATH — first run died on the port-forward). Ride: session ca646f1be25b40a69fb59079957fc0a7,
+  pod agent-homelab-100750 (nx-01), **2 requests completed** (78 + 14 events, 103 + 86 KB, first byte 1446 / 852 ms), outcome clean,
+  bundle 100 records complete (50 + 36 KB), tokens 1595+1779 in / 9088×2 cached / 83+9 out; the CLI ran `rg` then `wc -l` and
+  answered "homelab 220". Findings → spike §The capture ride + GW-RAIL-CODEX §Live grammar (#2850, 3 rows + fixture): the CLI's own
+  request headers (originator, session-id, thread-id, x-client-request-id, x-codex-beta-features, x-codex-turn-metadata,
+  x-codex-window-id, x-openai-internal-codex-responses-lite) all dropped by the gateway, backend 200 regardless; tools ride INSIDE
+  `input` as `additional_tools` (lite protocol), `custom_tool_call`/`_output` on the continuation, whole history resent; no
+  Content-Type again; `x-codex-turn-state` issued on the first answer only; a vendor `response.metadata` event + `usage.attribution`
+  extension, both passed through unread; usage reproduced offline from the type sequence. **Alert:** `AgentWorkerEgressDropped` 10:12:47Z
+  — ~17 SYNs ride-pod → chatgpt.com/ab.chatgpt.com POLICY_DENIED while the CLI ran (direct backend calls beside the provider: models /
+  rate limits / telemetry — unknown), ride unaffected → a ⚑ gap row (the baseline forwarder is the instrument); left to the responder.
+  **Window check:** targets 196→195 with nothing down = the 10:05 rollout's old pod still in the set at the baseline read; closed
+  `--force`, said so. Monitor stopped. Not exercised live: cancellation, failed/incomplete terminals, 429, refresh mid-ride, a 2nd turn.
+
