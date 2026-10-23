@@ -34,6 +34,10 @@ testpaths = ["tests"]
 # flat attachment is what ATTACH_BULK counts past the step-bound exchanges (CONVENTIONS.md § Hygiene codes).
 # Captured logs still print in pytest's own failure output; rows that claim a log line read caplog.
 addopts = "--alluredir=allure-results --clean-alluredir --allure-no-capture"
+# Row ids ARE the spec's description cells (CONVENTIONS.md § The intent column), and those carry
+# `⚖` and `—`; without this pytest escapes every non-ASCII id, so the case id the join matches on
+# (and the one the fragment renders) would no longer equal the cell.
+disable_test_id_escaping_and_forfeit_all_rights_to_community_support = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

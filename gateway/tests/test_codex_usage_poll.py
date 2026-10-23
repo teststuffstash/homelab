@@ -231,7 +231,8 @@ async def test_transport(poll, usage, fault, expected):
 
 
 @pytest.mark.parametrize("ctype,body", [("text/html", b"<html>DUMMY</html>"), ("application/json", b"{not json"),
-                                        ("application/json", b"[" + b"1," * 40000 + b"1]")])
+                                        ("application/json", b"[" + b"1," * 40000 + b"1]")],
+                         ids=["html body", "not json", "oversize json"])
 async def test_body_refused(poll, usage, ctype, body):
     """row: a non-JSON, wrong-type or oversize body is refused"""
     world("policy-codex")

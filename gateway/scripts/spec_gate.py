@@ -8,7 +8,13 @@ Red when:
   - a `## GW-…` heading anywhere in specs/ has zero rows in evidence/evidence.json, unless its
     index row (specs/README.md) or heading line carries `🚧 WIP` / `⚑ gap`;
   - evidence names a rule that has no heading (a ghost rule);
-  - a policy world `specs/worlds/policy-*.json` and its `tests/fixtures/` twin differ (or one lacks the other).
+  - a policy world `specs/worlds/policy-*.json` and its `tests/fixtures/` twin differ (or one lacks the other);
+  - the spec ⇄ test JOIN ratchet (CONVENTIONS.md § The intent column, § The lint gate): per rule, the
+    count of `row-unkeyed` (a description cell no case id equals exactly), `header-unthreaded` (a
+    column name no matched case carries as a parameter), `cell-mismatch` (a cell ≠ the same-named
+    parameter's value) and `case-unspecified` (a labelled case no table row names) may never
+    EXCEED the committed `scripts/spec-gate-baseline.json`; equal or lower passes, lower says so.
+    `--write-baseline` re-records today's counts — a rule's fix lowers its line, never raises one.
 Report-only: table-shape split candidates (> ~6 columns, > ~12 rows, a column constant across
 all rows) — the specs reviewer reads WHY, the gate never demands a size.
 
@@ -27,12 +33,15 @@ from pathlib import Path
 ISLAND = Path(__file__).resolve().parent.parent
 SPECS = ISLAND / "specs"
 EVIDENCE = ISLAND / "evidence" / "evidence.json"
+ALLURE_RESULTS = ISLAND / "allure-results"
+BASELINE = ISLAND / "scripts" / "spec-gate-baseline.json"
 FIXTURE_POLICY = ISLAND / "tests" / "fixtures" / "policy-default.json"
 WORLD_POLICY = SPECS / "worlds" / "policy-default.json"
 
 RULE_RE = re.compile(r"^#{2,6}\s+(GW-[A-Z0-9-]+)(?:\s|$)")
 ID_RE = re.compile(r"\bGW-[A-Z0-9-]+\b")
 WIP_MARKS = ("🚧", "⚑")
+JOIN_CODES = ("row-unkeyed", "header-unthreaded", "cell-mismatch", "case-unspecified")
 
 red: list[str] = []
 warn: list[str] = []
@@ -67,17 +76,22 @@ def walk_errors(node, out: set[str]) -> None:
             walk_errors(v, out)
 
 
+def split_cells(line: str) -> list[str]:
+    """A pipe-table line's cells: `|` inside backticks is text, not a border."""
+    return [c.strip() for c in re.split(r"\|(?=(?:[^`]*`[^`]*`)*[^`]*$)", line.strip().strip("|"))]
+
+
 def tables(md: Path):
     """Yield (line_no, header cells, rows) for every pipe table."""
     lines = md.read_text(encoding="utf-8").splitlines()
     i = 0
     while i < len(lines):
         if lines[i].lstrip().startswith("|") and i + 1 < len(lines) and re.match(r"^\s*\|?\s*:?-{2,}", lines[i + 1]):
-            header = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+            header = split_cells(lines[i])
             rows = []
             j = i + 2
             while j < len(lines) and lines[j].lstrip().startswith("|"):
-                rows.append([c.strip() for c in lines[j].strip().strip("|").split("|")])
+                rows.append(split_cells(lines[j]))
                 j += 1
             yield i + 1, header, rows
             i = j
@@ -104,7 +118,102 @@ def wip_ids() -> set[str]:
     return out
 
 
+def norm_cell(text: str) -> str:
+    """A spec cell / an Allure parameter value as the pinned join compares them
+    (allure_behavior_snippets.evidence.norm_cell): backticks gone, a markdown link is its text,
+    one pair of surrounding quotes gone (the spec quotes literals, allure-pytest records
+    `repr()`), whitespace folded."""
+    s = str(text).replace("`", "").strip()
+    s = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", s)
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        s = s[1:-1]
+    return " ".join(s.split())
+
+
+def allure_cases() -> dict[str, list[dict]]:
+    """rule → [{case, params}] from the raw Allure results (one result file per executed test):
+    the story label is the rule, the case is the parametrize id (`name[...]`) or the test's
+    dynamic title (a function-per-row case's `row:` docstring), params by their argnames."""
+    out: dict[str, list[dict]] = {}
+    if not ALLURE_RESULTS.is_dir():
+        return out
+    for p in sorted(ALLURE_RESULTS.glob("*-result.json")):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        rule = next((lab["value"] for lab in d.get("labels", []) if lab.get("name") == "story"), None)
+        if not rule or not rule.startswith("GW-"):
+            continue
+        name = d.get("name", "")
+        m = re.search(r"\[(.*)\]$", name)
+        case = m.group(1) if m else name
+        params = {str(prm["name"]): str(prm.get("value", "")) for prm in d.get("parameters", []) if prm.get("name")}
+        out.setdefault(rule, []).append({"case": case, "params": params})
+    return out
+
+
+def rule_tables(md: Path):
+    """Yield (rule, line_no, header, rows) for every decision table (header[0] == `description`)
+    under a `## GW-…` heading; the `||` divider's empty cell is dropped from header and rows alike."""
+    lines = md.read_text(encoding="utf-8").splitlines()
+    rule_at: list[str | None] = []
+    current: str | None = None
+    for line in lines:
+        if (m := RULE_RE.match(line)):
+            current = m.group(1)
+        elif re.match(r"^#{1,2}\s", line):
+            current = None  # a page- or section-level heading that names no rule ends the section
+        rule_at.append(current)
+    for line_no, header, rows in tables(md):
+        rule = rule_at[line_no - 1]
+        if rule is None or not header or header[0].lower() != "description":
+            continue
+        keep = [i for i, h in enumerate(header) if h != ""]
+        yield rule, line_no, [header[i] for i in keep], [[r[i] if i < len(r) else "" for i in keep] for r in rows]
+
+
+def join_counts(cases: dict[str, list[dict]]) -> tuple[dict[str, dict[str, int]], list[str]]:
+    """Per rule, the four join codes counted over its decision tables, plus one detail line each."""
+    counts: dict[str, dict[str, int]] = {}
+    detail: list[str] = []
+    seen_cases: dict[str, set[str]] = {}
+
+    def bump(rule: str, code: str, line: str) -> None:
+        counts.setdefault(rule, dict.fromkeys(JOIN_CODES, 0))[code] += 1
+        detail.append(f"{code} {rule}: {line}")
+
+    for md in spec_pages():
+        where = md.relative_to(ISLAND)
+        for rule, line_no, header, rows in rule_tables(md):
+            by_case = {c["case"]: c for c in cases.get(rule, [])}
+            unthreaded_cols: set[str] = set()
+            for row in rows:
+                desc = norm_cell(row[0]) if row else ""
+                if desc.startswith(WIP_MARKS):
+                    continue  # rendered incompleteness (rule 10) — no case is expected
+                rec = by_case.get(desc)
+                if rec is None:
+                    bump(rule, "row-unkeyed", f"{where}:{line_no} `{desc}` equals no case id of this rule")
+                    continue
+                seen_cases.setdefault(rule, set()).add(desc)
+                for name, spec_cell in zip(header[1:], row[1:], strict=False):
+                    if name not in rec["params"]:
+                        unthreaded_cols.add(name)
+                    elif norm_cell(spec_cell) != norm_cell(rec["params"][name]):
+                        bump(rule, "cell-mismatch", f"`{desc}` · {name}: spec {spec_cell!r} ⇢ test {rec['params'][name]!r}")
+            for name in sorted(unthreaded_cols):
+                bump(rule, "header-unthreaded", f"{where}:{line_no} column `{name}` is no parameter of its cases")
+        # a rule with no decision table at all: every labelled case is unspecified (counted below)
+    for rule, recs in cases.items():
+        for c in recs:
+            if c["case"] not in seen_cases.get(rule, set()):
+                bump(rule, "case-unspecified", f"case `{c['case']}` names no table row")
+    return counts, detail
+
+
 def main() -> int:
+    write_baseline = "--write-baseline" in sys.argv[1:]
     if not SPECS.is_dir():
         msg = f"specs/ absent at {SPECS}"
         if os.environ.get("GATEWAY_SPECS_OPTIONAL") == "1":
@@ -195,6 +304,29 @@ def main() -> int:
                     col = [r[ci] for r in rows if ci < len(r)]
                     if len(col) == len(rows) and len(set(col)) == 1 and col[0] not in ("", "—", "-"):
                         info.append(f"split-candidate {where}: column `{name}` is constant ({col[0]!r}) across all rows — mixed questions?")
+
+    # 5. the spec ⇄ test join ratchet (CONVENTIONS.md § The lint gate: exceeding fails, equal or lower passes)
+    cases = allure_cases()
+    if not cases:
+        warn.append(f"{ALLURE_RESULTS.relative_to(ISLAND)}/ holds no rule-labelled results — the join ratchet is unchecked (run pytest first)")
+    else:
+        counts, detail = join_counts(cases)
+        baseline: dict[str, dict[str, int]] = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else {}
+        if write_baseline:
+            BASELINE.write_text(json.dumps({r: counts[r] for r in sorted(counts)}, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+            info.append(f"join ratchet: baseline written to {BASELINE.relative_to(ISLAND)} ({len(counts)} rules)")
+            baseline = counts
+        for rule in sorted(set(counts) | set(baseline)):
+            now, was = counts.get(rule, dict.fromkeys(JOIN_CODES, 0)), baseline.get(rule, dict.fromkeys(JOIN_CODES, 0))
+            for code in JOIN_CODES:
+                n, b = now.get(code, 0), was.get(code, 0)
+                if n > b:
+                    red.append(f"join ratchet {rule} {code}: {n} > baseline {b} — "
+                               + "; ".join(d.removeprefix(f"{code} {rule}: ") for d in detail if d.startswith(f"{code} {rule}: ")))
+                elif n < b and not write_baseline:
+                    info.append(f"join ratchet {rule} {code}: {n} < baseline {b} — lower it (`spec_gate.py --write-baseline`)")
+        total = {code: sum(c[code] for c in counts.values()) for code in JOIN_CODES}
+        info.append("join ratchet: " + ", ".join(f"{code} {n}" for code, n in total.items()) + f" across {len(counts)} rules")
 
     for line in info:
         print(f"spec-gate: {line}")
