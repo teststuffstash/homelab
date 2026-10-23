@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -53,10 +54,12 @@ class Capture:
     """One scoped request's records, persisted at the client-response boundary (or on refusal)."""
     session_id: str
     task: str
-    seq_base: int
+    request_no: int  # the session's request ordinal (concurrent requests interleave; each record carries it)
     max_bytes: int
     aliases: dict[str, str]
+    lock: threading.Lock
     t0: float = field(default_factory=time.monotonic)
+    persisted: bool = False
     records: list[dict] = field(default_factory=list)
     bytes: int = 0
     complete: bool = True
@@ -134,22 +137,25 @@ class Capture:
         return value  # int, float, bool, None
 
     def _alias(self, key: str, value: str) -> str:
-        if value not in self.aliases:
-            stem = key[:-3] if key.endswith("_id") else key[:-4] if key.endswith("_ids") else "id"
-            self.aliases[value] = f"{stem or 'id'}#{len(self.aliases) + 1}"
-        return self.aliases[value]
+        with self.lock:  # the alias map is the SESSION's (equality across its requests), shared by concurrent captures
+            if value not in self.aliases:
+                stem = key[:-3] if key.endswith("_id") else key[:-4] if key.endswith("_ids") else "id"
+                self.aliases[value] = f"{stem or 'id'}#{len(self.aliases) + 1}"
+            return self.aliases[value]
 
     # -- the ledger ----------------------------------------------------------------------------
     def _ms(self) -> int:
         return int((time.monotonic() - self.t0) * 1000)
 
     def _add(self, boundary: str, record: dict) -> None:
-        line = json.dumps({"boundary": boundary, "t_ms": self._ms(), **record}, separators=(",", ":"), sort_keys=True)
+        if not self.complete:
+            return  # the bound tripped: the marker is the LAST record, nothing smaller slips in behind it
+        line = json.dumps({"boundary": boundary, "request": self.request_no, "t_ms": self._ms(), **record},
+                          separators=(",", ":"), sort_keys=True)
         if self.bytes + len(line) > self.max_bytes:
-            if self.complete:
-                self.complete = False
-                self.records.append({"boundary": boundary, "t_ms": self._ms(), "truncated": True,
-                                     "reason": f"capture over {self.max_bytes} bytes"})
+            self.complete = False
+            self.records.append({"boundary": boundary, "request": self.request_no, "t_ms": self._ms(), "truncated": True,
+                                 "reason": f"capture over {self.max_bytes} bytes"})
             return
         self.bytes += len(line)
         self.records.append(json.loads(line))
@@ -188,13 +194,16 @@ class Recorder:
     """The recorder the codex proxy consults per request: scope by task prefix, aliases per session,
     persistence through the store (table `captures`), read-back for the bundle endpoint."""
 
+    MAX_SESSIONS = 64  # the in-memory alias maps and ordinals are per capture session; the oldest go when full
+
     def __init__(self, store, task_prefix: str, max_bytes: int, clock=None):
         self.store = store
         self.task_prefix = task_prefix
         self.max_bytes = max_bytes
         self.clock = clock or time.time
+        self._lock = threading.Lock()
         self._aliases: dict[str, dict[str, str]] = {}
-        self._seq: dict[str, int] = {}
+        self._requests: dict[str, int] = {}
 
     @property
     def enabled(self) -> bool:
@@ -206,21 +215,32 @@ class Recorder:
     def start(self, session_id: str, task: str) -> Capture | None:
         if not self.scoped(task):
             return None
-        base = self._seq.get(session_id)
-        if base is None:
-            base = self.store.capture_count(session_id)
-        return Capture(session_id, task, base, self.max_bytes, self._aliases.setdefault(session_id, {}))
+        with self._lock:
+            while len(self._aliases) >= self.MAX_SESSIONS and session_id not in self._aliases:
+                oldest = next(iter(self._aliases))
+                self._aliases.pop(oldest, None)
+                self._requests.pop(oldest, None)
+            no = self._requests.get(session_id, 0) + 1
+            self._requests[session_id] = no
+            aliases = self._aliases.setdefault(session_id, {})
+        return Capture(session_id, task, no, self.max_bytes, aliases, self._lock)
 
     def persist(self, cap: Capture) -> None:
+        """The records go to the store in one go, their `seq` allocated NOW under the lock from the
+        store's count — two requests of one session in flight persist back to back, never over each
+        other (a collision is a loud INSERT failure, never a silent replace)."""
+        if cap.persisted:
+            return
+        cap.persisted = True
         try:
-            seq = cap.seq_base
             ts = self.clock()
-            for rec in cap.records:
-                self.store.record_capture(cap.session_id, seq, rec["boundary"], ts, json.dumps(rec, separators=(",", ":"), sort_keys=True))
-                seq += 1
-            self._seq[cap.session_id] = seq
-            log.info("capture: session=%s task=%s records=%d bytes=%d complete=%s", cap.session_id, cap.task,
-                     len(cap.records), cap.bytes, cap.complete)
+            with self._lock:
+                seq = self.store.capture_count(cap.session_id)
+                for rec in cap.records:
+                    self.store.record_capture(cap.session_id, seq, rec["boundary"], ts, json.dumps(rec, separators=(",", ":"), sort_keys=True))
+                    seq += 1
+            log.info("capture: session=%s task=%s request=%d records=%d bytes=%d complete=%s", cap.session_id, cap.task,
+                     cap.request_no, len(cap.records), cap.bytes, cap.complete)
         except Exception as e:  # noqa: BLE001 — a recorder fault never reaches the ride
             log.warning("capture: persist failed session=%s: %s", cap.session_id, type(e).__name__)
 
@@ -230,5 +250,6 @@ class Recorder:
             return None
         records = [json.loads(r) for r in rows]
         return {"format": FORMAT, "session": session_id, "task": task, "records": records,
+                "requests": max((r.get("request", 0) for r in records), default=0),
                 "complete": not any(r.get("truncated") for r in records),
                 "boundaries": sorted({r["boundary"] for r in records}, key=BOUNDARIES.index)}

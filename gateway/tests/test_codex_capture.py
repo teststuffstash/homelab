@@ -13,11 +13,14 @@ world with the recorder scoped to tasks `capture-*`.
 | the capture is bounded; overflow marks the bundle incomplete and the ride is unaffected | capture-t1 | max 600 bytes || `complete: false`, a `truncated` marker, the ride 200 with the whole stream |
 | a refused answer is captured as a refusal | capture-t1 | upstream-wrong-type || upstream-response carries `refusal`, client-response status 502 `upstream-content-type` |
 | a 429 is captured as the rate limit it is | capture-t1 | upstream-429 || upstream-response 429, client-response 429 outcome rate-limited |
+| a gateway-side refusal is captured as a refusal | capture-t1 | a body naming another model || client-request then client-response 403 outcome model-not-session — the gateway's own NO leaves a record |
+| two requests in flight in one session persist back to back | capture-t1 | the first held until the second completes || both requests' records present, `request` ordinals 1 and 2, nothing replaced |
 | the bundle is read under the session's lookup rule | capture-t1 | an unknown id; a token GET /sessions/{id} refuses || 404 session-not-found; the same status and code GET /sessions/{id} answers |
 """
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 
@@ -212,3 +215,50 @@ async def test_lookup_rule(cap_app, cap_gw, clock):
               lookup=probe.status_code, capture=bundle.status_code):
         then_eq("unknown id", (unknown.status_code, err(unknown)), (404, "session-not-found"))
         check("same status as GET /sessions/{id}", bundle.status_code, probe.status_code)
+
+
+async def test_gateway_refusal_captured(cap_app, cap_gw, codex_upstream, clock):
+    """row: a gateway-side refusal is captured as a refusal"""
+    world("policy-codex")
+    doc = await admitted(cap_app, cap_gw, clock, task="capture-t1")
+    r = await ride(cap_gw, doc, body(model="some-other-model"), label="a body naming another model")
+    b = (await _bundle(cap_gw, doc)).json()
+    seq = [x["boundary"] for x in b["records"]]
+    last = b["records"][-1]
+    with then("the gateway's own 403 leaves client-request + client-response, nothing upstream", ride_status=r.status_code,
+              boundaries=seq, client_response=last):
+        assert r.status_code == 403 and err(r) == "model-not-session"
+        assert seq == ["client-request", "client-response"]
+        assert last["status"] == 403 and last["outcome"] == "model-not-session"
+        assert codex_upstream.calls == []
+
+
+async def test_concurrent_requests(cap_app, cap_gw, codex_upstream, clock):
+    """row: two requests in flight in one session persist back to back"""
+    world("policy-codex")
+    doc = await admitted(cap_app, cap_gw, clock, task="capture-t1")
+    codex_upstream.hold_first = asyncio.Event()
+    with given("the backend holds the FIRST request's answer until released"):
+        pass
+    with when("request 1 starts and waits; request 2 runs to completion; request 1 is released"):
+        first = asyncio.ensure_future(ride(cap_gw, doc, label="request 1 (held)"))
+        await asyncio.sleep(0)
+        for _ in range(50):
+            if len(codex_upstream.calls) >= 1:
+                break
+            await asyncio.sleep(0.01)
+        second = await ride(cap_gw, doc, label="request 2 (completes first)")
+        codex_upstream.hold_first.set()
+        r1 = await first
+    b = (await _bundle(cap_gw, doc)).json()
+    by_req = {}
+    for x in b["records"]:
+        by_req.setdefault(x["request"], []).append(x["boundary"])
+    with then("both requests' four boundaries are in the bundle under their own ordinal; nothing replaced",
+              requests=b["requests"], per_request={k: {"records": len(v), "first": v[0], "last": v[-1]} for k, v in by_req.items()}):
+        assert r1.status_code == 200 and second.status_code == 200
+        assert sorted(by_req) == [1, 2]
+        for v in by_req.values():
+            assert v[0] == "client-request" and v[-1] == "client-response" and "upstream-response" in v
+        assert b["complete"] is True and b["requests"] == 2
+

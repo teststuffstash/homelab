@@ -452,7 +452,7 @@ class Store:
     # -- captures (GW-CODEX-CAPTURE: the four-boundary records of a scoped codex ride) ------------
     def record_capture(self, session_id: str, seq: int, boundary: str, ts: float, record: str) -> None:
         with self._lock:
-            self._db.execute("INSERT OR REPLACE INTO captures (session_id, seq, boundary, ts, record) VALUES (?,?,?,?,?)",
+            self._db.execute("INSERT INTO captures (session_id, seq, boundary, ts, record) VALUES (?,?,?,?,?)",
                              (session_id, seq, boundary, ts, record))
 
     def capture_count(self, session_id: str) -> int:

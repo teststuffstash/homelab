@@ -603,7 +603,8 @@
         "task",
         "records",
         "complete",
-        "boundaries"
+        "boundaries",
+        "requests"
       ],
       "properties": {
         "format": {
@@ -636,6 +637,10 @@
           "items": {
             "$ref": "#/capture/record"
           }
+        },
+        "requests": {
+          "type": "integer",
+          "description": "the highest request ordinal in the bundle"
         }
       }
     },
@@ -684,6 +689,10 @@
         "truncated": {
           "type": "boolean",
           "description": "the one overflow marker"
+        },
+        "request": {
+          "type": "integer",
+          "description": "the session's request ordinal this record belongs to (concurrent requests interleave)"
         }
       },
       "x-requirements": [

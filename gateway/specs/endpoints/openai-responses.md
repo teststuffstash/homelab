@@ -522,7 +522,9 @@ public names, and identifier keys (`id`, `*_id`) whose values become run-local a
 equal across all four boundaries of a session; numbers, booleans and structure stay; unknown keys
 keep their presence and type. It is **bounded**: `CODEX_CAPTURE_MAX_BYTES` per request (default
 256 KiB); overflow writes one `truncated` marker and the bundle says `complete: false` — a missing
-record is never an observed absence. Records persist in the gateway's own store (table `captures`,
+record is never an observed absence; a ride the gateway itself refuses persists its `client-response`
+too, and concurrent requests of one session (a side call beside the main stream) persist back to
+back under their own `request` ordinal. Records persist in the gateway's own store (table `captures`,
 `CODEX_CAPTURE_RETENTION_DAYS`, default 7) and are read back as one bundle by
 `GET /sessions/{id}/capture` under the session's lookup rule ([GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth)
 route `lookup`: the admitting caller or a judge). The bundle is pulled into restricted storage and
@@ -543,5 +545,7 @@ Rows run in the `policy-codex` world with the recorder scoped to tasks `capture-
 | "the capture is bounded; overflow marks the bundle incomplete and the ride is unaffected ⚖" | `capture-t1` | max 600 bytes || `complete: false`, one `truncated` marker; the ride 200 with the whole stream |
 | "a refused answer is captured as a refusal" | `capture-t1` | upstream-wrong-type || `upstream-response.refusal = upstream-content-type`, `client-response` 502 |
 | "a 429 is captured as the rate limit it is" | `capture-t1` | upstream-429 || `upstream-response` 429, `client-response` 429 outcome `rate-limited` |
+| "a gateway-side refusal is captured as a refusal ⚖" | `capture-t1` | a body naming another model || `client-request` then `client-response` 403 outcome `model-not-session`, nothing upstream — the gateway's own NO leaves a record (the plan: a missing record is never an observed absence) |
+| "two requests in flight in one session persist back to back" | `capture-t1` | the first held until the second completes || both requests' boundaries present under their own `request` ordinal (1, 2); `requests: 2`; nothing replaced (the `seq` range is allocated at persist time under a lock, a collision is a loud INSERT failure) |
 | "the bundle is read under the session's lookup rule" | `capture-t1` | an unknown id; a token that is no caller's || 404 `session-not-found`; the same status `GET /sessions/{id}` answers that token (the world's control plane observes; an enforcing one refuses both alike — [GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth)) |
 

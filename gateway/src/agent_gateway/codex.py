@@ -18,6 +18,7 @@ the allowlisted upstream headers → stream with the bounded parser → one acco
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -135,6 +136,20 @@ class CodexProxy:
         return error(status, code, message, headers)
 
     async def forward(self, request: Request) -> Response:
+        """The relay; a scoped session's capture (GW-CODEX-CAPTURE) rides along — a gateway-side
+        refusal (a typed JSON answer) persists its record here, a stream persists at its close."""
+        cap_box: list[Capture] = []
+        resp = await self._forward(request, cap_box)
+        if cap_box and not isinstance(resp, StreamingResponse) and not cap_box[0].persisted:
+            cap = cap_box[0]
+            code = "?"
+            with contextlib.suppress(Exception):
+                code = json.loads(bytes(resp.body))["error"]["code"]
+            self._record(cap, "client-response", resp.status_code, dict(resp.headers), code, len(bytes(resp.body)), None)
+            self.recorder.persist(cap)
+        return resp
+
+    async def _forward(self, request: Request, cap_box: list[Capture]) -> Response:
         row, code = self.sessions.authenticate(inbound_token(request))
         if code:
             log.info("%s %s → 401 %s", request.method, request.url.path, code)
@@ -151,6 +166,7 @@ class CodexProxy:
             return self._refuse(row.rail, 400, "malformed-body", "body must be a JSON object")
         cap = self.recorder.start(row.id, row.task) if self.recorder is not None else None
         if cap is not None:
+            cap_box.append(cap)
             self._record(cap, "client-request", request.method, request.url.path, request.headers, raw, doc)
         wire = wire_model(row.rail, row.model)
         asked = doc.get("model")
