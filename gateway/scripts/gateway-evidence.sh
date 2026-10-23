@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Raw Allure results → the reviewer's evidence (ADR-156 step 4; oracle-fleet allure-publish.sh's
-# `allure_evidence` stage, minus the report/publish half):
+# `allure_evidence` stage: the single-file report + the fragments; the upload is
+# scripts/evidence-publish.sh for the pack, scripts/specs-publish.sh for the report + site):
 #
 #   devbox run evidence [-- <results-dir> [<out-dir>]]     (defaults: allure-results allure-evidence)
 #
@@ -15,14 +16,20 @@
 #                   the tool can parse them (`--spec`), the plain evidence table otherwise
 # and prints the hygiene/finding code counts. The tool runs ONCE PER SPEC PAGE: `--spec` takes one
 # page and joins only the --rules headed on it. Pin: scripts/lib/snippets.sh.
-# Independent of scripts/evidence_render.py (evidence/evidence.json + its BEGIN/END log block),
-# which keeps feeding the live specs-reviewer tick until the seat switches it over.
+# The report leg: scripts/allure-report.sh generates allure-report-single/index.html from the same
+# results first (reused when fresh — Allure uids are per-generate), and every fragment's row links
+# into it at REPORT_URL (scripts/lib/site.sh — SITE_PREFIX picks the master root or the pr-<N>/
+# preview), where scripts/specs-build.sh ships that very index.html beside the site. The site's
+# `<details>` fragments are these <RULE>.md (specs-build.sh); scripts/evidence_render.py keeps only
+# evidence/evidence.md + its BEGIN/END log block.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RESULTS="${1:-allure-results}"
 OUT="${2:-allure-evidence}"
 # shellcheck source=lib/snippets.sh
 source scripts/lib/snippets.sh
+# shellcheck source=lib/site.sh
+source scripts/lib/site.sh
 
 if ! ls "$RESULTS"/*-result.json >/dev/null 2>&1; then
   echo "gateway-evidence: no Allure results under $RESULTS/ — run the suite first (devbox run test)" >&2
@@ -32,8 +39,13 @@ rm -rf "$OUT" && mkdir -p "$OUT"
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
+# The report every row link resolves against — generated once per results set.
+bash scripts/allure-report.sh "$RESULTS" allure-report-single
+REPORT=allure-report-single/index.html
+echo "== gateway-evidence: row links → $REPORT_URL"
+
 # Spec pages that head rules, and their rules in page order.
-# specs/evidence/ is GENERATED (evidence_render.py fragments, gitignored) — never a spec page.
+# (specs/evidence/ was the retired evidence_render.py fragment dir — a stale checkout may still carry it.)
 mapfile -t pages < <(grep -rlE '^#{2,6} GW-[A-Z0-9-]+\s*$' specs --include='*.md' --exclude-dir=evidence | sort)
 all_rules=()
 for page in "${pages[@]}"; do
@@ -43,7 +55,8 @@ done
 csv() { local IFS=,; echo "$*"; }
 
 echo "== gateway-evidence: suite-wide evidence.json + fragments ($RESULTS → $OUT)"
-allure_evidence --results "$RESULTS" --out "$OUT" --rules "$(csv "${all_rules[@]}")"
+allure_evidence --results "$RESULTS" --out "$OUT" --rules "$(csv "${all_rules[@]}")" \
+  --report "$REPORT" --report-url "$REPORT_URL"
 mv "$OUT/digest.md" "$scratch/digest-unjoined.md"
 
 {
@@ -61,7 +74,8 @@ for page in "${pages[@]}"; do
   mapfile -t rules < <(sed -nE 's/^#{2,6} (GW-[A-Z0-9-]+)\s*$/\1/p' "$page")
   slug=$(echo "${page#specs/}" | tr '/' '_')
   echo "== gateway-evidence: join $page (${rules[*]})"
-  allure_evidence --results "$RESULTS" --out "$scratch/$slug" --spec "$page" --rules "$(csv "${rules[@]}")"
+  allure_evidence --results "$RESULTS" --out "$scratch/$slug" --spec "$page" --rules "$(csv "${rules[@]}")" \
+    --report "$REPORT" --report-url "$REPORT_URL"
   # A joined fragment replaces the plain one; a rule whose tables the tool could not parse keeps it.
   for r in "${rules[@]}"; do
     [ -f "$scratch/$slug/$r.md" ] && cp "$scratch/$slug/$r.md" "$OUT/$r.md"

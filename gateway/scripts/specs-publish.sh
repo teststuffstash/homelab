@@ -8,8 +8,12 @@
 #      Garage serves an index on any sub-prefix; the prefix is purged on PR close by
 #      scripts/specs-pr-purge.sh via .github/workflows/gateway-specs-pr-purge.yaml)
 #
-# The oracle-fleet scripts/specs-publish.sh shape, minus the Allure report leg (this island's
-# evidence is markdown fragments rendered INTO the pages). Infra: bucket + writer key in
+# The oracle-fleet scripts/specs-publish.sh shape, report leg included: the run's single-file
+# Allure report (scripts/allure-report.sh, staged by specs-build.sh at specs-site/report/index.html)
+# rides beside the site at <prefix>/report/index.html — the URL the joined spec tables link into
+# (scripts/lib/site.sh REPORT_URL) — GZIPPED (oracle-fleet#547: ~22 MiB → ~3 MiB there) and put
+# apart from the mirror, because Content-Encoding needs --attr, which a mirror cannot set. One copy
+# per site, overwritten by every publish. Infra: bucket + writer key in
 # argocd/resources/agent-gateway/garage-workspace.yaml (connection Secret gateway-specs-s3 in
 # agent-egress → GitHub Actions secrets GATEWAY_SPECS_S3_* via scripts/github-secrets-sync.sh).
 # Soft-skips when creds are absent (local runs, forks) — the oracle convention.
@@ -26,21 +30,39 @@ if [ -z "${GATEWAY_SPECS_S3_ACCESS_KEY_ID:-}" ] || [ -z "${GATEWAY_SPECS_S3_SECR
   echo "specs-publish: no S3 credentials in env (GATEWAY_SPECS_S3_*) — skipping (local run?)"
   exit 0
 fi
+# shellcheck disable=SC1091
+source scripts/lib/site.sh
 ENDPOINT="${GATEWAY_SPECS_S3_ENDPOINT:-https://s3.teststuff.net}"
 BUCKET=gateway-specs
-PREFIX="${SITE_PREFIX:-}"
-SITE_URL="https://gateway-specs.homelab.teststuff.net"
+PREFIX="$SITE_PREFIX"
+DEST="specs/$BUCKET${PREFIX:+/$PREFIX}"
 
 bash scripts/specs-build.sh
 
 echo "== upload =="
 s3_publish_alias specs "$ENDPOINT" "$GATEWAY_SPECS_S3_ACCESS_KEY_ID" "$GATEWAY_SPECS_S3_SECRET_ACCESS_KEY"
+# report/* stays out of the mirror (never uploaded without its headers) and is put below; whichever
+# side mc applies --exclude to under --remove, the put after the mirror is what lands the report.
 if [ -n "$PREFIX" ]; then
   # A PR prefix is wholly owned by its PR: --remove keeps it an exact mirror of this build.
-  s3_publish_mirror --overwrite --remove specs-site/ "specs/$BUCKET/$PREFIX/"
-  echo "published: $SITE_URL/${PREFIX}/  (bucket $BUCKET/$PREFIX via $ENDPOINT)"
+  s3_publish_mirror --overwrite --remove --exclude 'report/*' specs-site/ "$DEST/"
 else
   # NEVER --remove on the root: we own the root, not the pr-*/ directories PR runs write.
-  s3_publish_mirror --overwrite --exclude 'pr-*' specs-site/ "specs/$BUCKET/"
-  echo "published: $SITE_URL/  (bucket $BUCKET via $ENDPOINT)"
+  s3_publish_mirror --overwrite --exclude 'pr-*' --exclude 'report/*' specs-site/ "$DEST/"
 fi
+if [ -f specs-site/report/index.html ]; then
+  echo "== upload: the run's Allure report (gzipped single-file) → report/index.html =="
+  scratch=$(mktemp -d)
+  trap 'rm -rf "$scratch"' EXIT
+  mkdir -p "$scratch/report"
+  gzip -9 -c specs-site/report/index.html > "$scratch/report/index.html"
+  echo "   $(stat --format=%s specs-site/report/index.html) bytes → $(stat --format=%s "$scratch/report/index.html") bytes gzipped"
+  # Garage's streaming-signature check REQUIRES a custom Content-Encoding prefixed "aws-chunked,"
+  # (order-sensitive) and strips that prefix before storing — the object is served with
+  # Content-Encoding: gzip; "gzip" alone is rejected (oracle-fleet PR #551 arbitration).
+  s3_publish_put --attr "Content-Encoding=aws-chunked,gzip;Content-Type=text/html" \
+    "$scratch/report/index.html" "$DEST/report/index.html"
+else
+  echo "specs-publish: no Allure report in this build (no allure-results/) — report/ left as is"
+fi
+echo "published: $SITE_BASE_URL/  (bucket $BUCKET${PREFIX:+/$PREFIX} via $ENDPOINT; report: $REPORT_URL)"
