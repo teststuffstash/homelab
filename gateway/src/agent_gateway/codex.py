@@ -28,9 +28,9 @@ import httpx
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 
-from . import responses
+from . import codex_headers, responses
 from .config import RailPolicy, model_matches, wire_model
-from .headroom import Headroom, Verdict
+from .headroom import Headroom, ReportError, Verdict
 from .metrics import Metrics
 from .oauth import Code, Credential, Failure, Lifecycle, Store
 from .proxy import inbound_token  # one token rule for every dialect (GW-CRED-BOUNDARY)
@@ -218,7 +218,24 @@ class CodexProxy:
                    "retry-after": resp.headers.get("retry-after", "30")}
             return Response(body, status_code=429, headers=out)
         state = self.turn_states.response(row.id, turn_key, resp.headers.get(HEADER))
+        self._headroom_headers(row, resp.headers)
         return self._stream(resp, row, t0, {HEADER: state} if state else {})
+
+    def _headroom_headers(self, row, headers) -> None:
+        """GW-CODEX-HEADROOM §Upstream headers: the relayed answer's `x-codex-*` windows are the second
+        observation source. Read on the relayed 200 only (a refused answer and a 429 are not read); the
+        outcome is counted and logged, never the request's — a malformed header leaves the ride alone."""
+        try:
+            report = codex_headers.translate(headers, self.rail.headroom.clock())
+            if report is None:
+                outcome = "absent"
+            else:
+                self.rail.headroom.observe(report)
+                outcome = "accepted"
+        except ReportError as e:
+            outcome = str(e)
+        self.metrics.codex_upstream_headroom(outcome)
+        (log.info if outcome in ("accepted", "absent") else log.warning)("codex upstream headroom headers: %s session=%s", outcome, row.id)
 
     def _upstream_error(self, row, status: int, code: str, detail: str, t0: float) -> Response:
         elapsed = time.monotonic() - t0

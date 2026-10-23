@@ -433,6 +433,24 @@
         "GW-CODEX-HEADROOM"
       ]
     },
+    "gateway_codex_upstream_headroom_total": {
+      "type": "counter",
+      "labels": {
+        "outcome": {
+          "enum": [
+            "accepted",
+            "absent",
+            "quota-invalid",
+            "quota-time-invalid",
+            "quota-out-of-order"
+          ]
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CODEX-HEADROOM"
+      ]
+    },
     "gateway_requests_incomplete_total": {
       "type": "counter",
       "labels": {

@@ -267,7 +267,7 @@ kept on a separate branch/PR. These are proposed contracts, not new enforced GW 
 | Cancellation | Close upstream on downstream cancellation; never replay a partially delivered generation. |
 | OAuth | Central refresh with one owner per account, durable rotation and restart recovery. The current read-only Secret resolver is insufficient. |
 | Headroom | Account-wide observations with source/time/reset, freshness and out-of-order checks; gateway state drives admission, Prometheus observes. |
-| Initial eligibility | Explicit canary cell before general role routing; no implicit paid fallback. |
+| Initial eligibility | Explicit canary cell before general role routing; no implicit paid fallback. Ruled 2026-10-23 — [§Role routing](#role-routing--ruled-2026-10-23-fu-270): every role lists the rail. |
 
 Refresh persistence is an unresolved implementation decision: Infisical remains the source of
 truth under [the secrets doctrine](../secrets.md). Updating only its ESO-generated Kubernetes
@@ -557,7 +557,7 @@ specs-review rounds):
 | B | `x-codex-turn-state` round trip bound to session, account and `client_metadata.turn_id`; `turn-state-invalid` | **merged #2735** (19:35Z) |
 | C | same-pod token-only re-read on `POST /sessions/{id}/env` (the `auth.command` seam) | **merged #2736** (19:5xZ) |
 | D | headroom from the gateway's own usage poll → `gateway_subscription_*{rail="codex"}` + panels on UID `claude-subscription` | not started |
-| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | **recipe landed 2026-10-22**: `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed`) + [runbook §Enrol the gateway's own Codex login](../runbook.md#enrol-the-gateways-own-codex-login-the-codex-seed--fu-270-leg-e) — login in a throwaway home, usage-endpoint probe (structure only), Infisical → force-sync → readback hash check, shred. **Minted 2026-10-22 ~20:00Z** on the host (`store` verified the Secret's record hash `a1e1523e…`; the seeded access JWT expires 2026-11-01T20:00Z — a 10-day native access-token lifetime, observed). The `login` probe's live usage payload shape is below. Open: the second-login revocation question (watch the jail's codex for a re-login prompt) |
+| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | **recipe landed 2026-10-22**: `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed`) + [runbook §Enrol the gateway's own Codex login](../runbook.md#enrol-the-gateways-own-codex-login-the-codex-seed--fu-270-leg-e) — login in a throwaway home, usage-endpoint probe (structure only), Infisical → force-sync → readback hash check, shred. **Minted 2026-10-22 ~20:00Z** on the host (`store` verified the Secret's record hash `a1e1523e…`; the seeded access JWT expires 2026-11-01T20:00Z — a 10-day native access-token lifetime, observed). The `login` probe's live usage payload shape is below. The second-login revocation question: first reading 2026-10-23 (§The second-login revocation watch) — the jail's login survived the gateway's; the refresh half waits for the jail's next rotation |
 
 ### Live usage payload shape — 2026-10-22 (FU-270 leg E)
 
@@ -655,7 +655,8 @@ carries the account's headroom as response headers — `x-codex-primary-used-per
 `x-codex-primary-window-minutes`, `x-codex-primary-reset-at` / `-reset-after-seconds`, the
 `secondary` set, `x-codex-primary-over-secondary-limit-percent`, `x-codex-active-limit`,
 `x-codex-plan-type`, `x-codex-credits-*` — the "upstream headers" headroom source
-(`GW-CODEX-HEADROOM`'s `source: upstream`, today a ⚑ gap) exists on the wire; and
+(`GW-CODEX-HEADROOM`'s `source: upstream`; a ⚑ gap until 2026-10-23, now §Upstream headers — the
+relayed answer's windows feed the same snapshot the poll does, strictly by time) exists on the wire; and
 `x-codex-turn-state` is issued on the very first turn (leg B's round trip has something to
 carry). Also `x-codex-safety-buffering-enabled` / `-faster-model` and `x-models-etag`. Values
 were not captured (names only — the capture's rule); the usage poll stays the admission source.
@@ -683,11 +684,100 @@ while the vendor holds the stream open, so the relay's cancellation branch overw
 outcome. A consumer that goes away after the terminal event now keeps that outcome (200); only a
 still-pending stream is a cancellation (a ⚖ relay-seam row with the live shape as its fixture).
 
-What remains under FU-270 after step 4: the role routing question (who may ride codex beyond
-the explicit canary cell — the spike's "initial eligibility" row), the `x-codex-*` response
-headers as a second headroom source, MCP for the codex harness, the second-login revocation
-watch, and the recorded-protocol experiment proper (the four-boundary capture — this slice's
-refusal capture is its first piece).
+What remains under FU-270 after step 4: MCP for the codex harness (the shape below, buildable
+now that a codex ride can carry a recipe), the second-login revocation watch's refresh half (first
+reading below), and the recorded-protocol experiment proper (the four-boundary capture — this
+slice's refusal capture is its first piece). Landed 2026-10-23: the `x-codex-*` response headers
+as a second headroom source (GW-CODEX-HEADROOM §Upstream headers) and the role-routing ruling
+([§Role routing](#role-routing--ruled-2026-10-23-fu-270) — every role lists the rail).
+
+### MCP for the codex harness — the shape, verified 2026-10-23 (FU-270, not built)
+
+The pinned CLI (rust-v0.163.0, `codex-rs/config/src/mcp_types.rs`) takes a remote MCP server as
+`[mcp_servers.<name>]` with `url = "…"` (its `StreamableHttp` transport; optional
+`bearer_token_env_var`, `http_headers`, `env_http_headers` — the stack knob needs none: the
+endpoint is the stack-wide `spec.mcp.endpoint` of #1041, unauthenticated inside the cluster as for
+the other three harnesses). So the attach is the same two-sided move the gateway cell was: the
+launcher's codex arm exports the knob (`CODEX_MCP_URL=<endpoint>`, quoted like `MCP_GOOSE_FLAG`)
+and `agent-codex` appends that block to the provider block it already renders (same
+quote/backslash/newline refusal; no env = no block). It is not built because no codex ride can
+carry a recipe today — the rail is the prober's canary cell, and MCP attaches only on the recipe
+path — so it waited on the role-routing ruling ([§Role routing](#role-routing--ruled-2026-10-23-fu-270),
+same day: every role lists the rail, so a reviewer or worker ride CAN land on codex with a recipe).
+Built the same day: the runtime half (agent-runtime#180 — `agent-codex` appends the block from
+`CODEX_MCP_URL`, inert until exported) and the launcher's export (homelab#2844 — the codex arm
+prefixes `CODEX_MCP_URL='<endpoint>'` to the seam, replay row `harness-run-cmd-codex-mcp`); live
+once the runtime image carrying #180 is pinned. Until it lands the env card's "feedback tool:
+available on any harness with the knob" line would be false for a codex ride on a stack that
+declares `spec.mcp.endpoint` — none of the stacks on `/sessions` does today (the platform stack
+declares no MCP knob), so the claim is unreachable rather than wrong.
+
+### The second-login revocation watch — first reading 2026-10-23 (FU-270, leg E)
+
+The question leg E left open: does the gateway's own device login (minted 2026-10-22 ~20:00Z)
+invalidate the homelab-codex jail's earlier login on the same account? Read from the jail's own
+Codex log store (`logs_2.sqlite`, structure and status codes only — no token value was read or
+printed): the jail's `auth.json` was last refreshed 2026-10-16T12:54Z and its access JWT runs to
+2026-10-26T12:54Z (the same 10-day lifetime the gateway's seed showed); after the gateway's login
+the jail's Codex kept calling the backend with that week-old token — 77 `GET
+…/backend-api/codex/models` between 01:11Z and 01:56Z on 2026-10-23, every one `200`, every
+feedback tag `auth_retry_after_unauthorized=""` (no 401, no recovery) — and no re-login prompt.
+The three `account/rateLimits/read failed during TUI refresh` warnings in the same hour are the
+TUI's rate-limit panel, not an auth failure (no 401 anywhere in the window). **What this settles:**
+a second device login does NOT revoke the first login's access token. **What it does not:** whether
+the first login's REFRESH still works — the jail has not rotated since 10-16, so the refresh half
+of the question answers itself when its token expires (2026-10-26) or the CLI refreshes early;
+re-read the log for a `refresh` outcome then. Until that reading, the enrolment doctrine stands:
+one refresher per token set, the gateway's login is its own.
+
+### Role routing — ruled 2026-10-23 (FU-270)
+
+**The ruling (operator, 2026-10-23): subscriptions go to all roles.** Three reasons, in the
+operator's words: the roles can be mixed and re-arranged week by week — one week the reviewer is
+sonnet, the next codex, or alternating days; tokens are spent efficiently — a week's subscription
+may be drained dry on purpose for a special use and the other subscriptions take over
+automatically; and the system keeps some variation — always the same reviewer makes the platform
+blind to certain classes of problem. The "initial eligibility" row above (the explicit canary cell
+first) is therefore closed: the cell proved the rail (step 4), and the ruling opens it.
+
+What it changed (homelab PR, the GW-SESSIONS-ADMIT §The harness follows the rail rows):
+
+- **The walk crosses the dialect boundary on its own.** Before, `roles.<role>.harness` filtered the
+  walk to the rails its dialect could speak, so a claude-harness reviewer could never reach codex
+  and a codex-harness ride could reach nothing else — "subscriptions on every role" was
+  unreachable without a second harness per role. Now a body that names no `harness` walks every
+  allowed rail in the role's order, and the dispatch's `harness` is the picked rail's: a rail
+  serving the role's harness dialect keeps the role's harness (the dual-dialect Go and openrouter
+  rails), a rail that does not names the harness of its own dialect (anthropic → claude, codex →
+  codex; `config.DIALECT_HARNESS`, one harness per dialect — the launcher's baked defaults). An
+  explicit `harness` keeps the old narrowing. The launcher already runs the harness the answer
+  names (`agents/agent-session.sh`, the `gateway-sessions` block — #2830's codex arm), so no
+  launcher change was needed.
+- **The deployed lists.** Every role lists `anthropic`, `opencode` and `codex`; the metered
+  openrouter rail, where listed, walks last (the prober keeps it first — its probes are that
+  rail's cells). The claude-harness roles (reviewer, coordinator, responder): anthropic → opencode
+  → codex. The opencode-harness roles (worker, retro, researcher): opencode → codex → anthropic →
+  openrouter. **The order per role is the weekly knob** — a `policy.json` edit, which rolls the
+  pod (the configMapGenerator); no code moves when a role changes rail.
+- **`rails.codex.max_sessions` stays 1** (the canary's bound) — one codex ride at a time across
+  all roles; a full rail falls through to the next. Raise it once live rides show the account's
+  room (the Plus account read 0 % / 0 % on 10-22).
+
+What it did not change, and what to watch:
+
+- **No rotation machinery.** The variation the operator wants is the operator's weekly re-order,
+  not a scheduler; a rotation knob would be a new ⚖ (which roles rotate, on what period, how the
+  evidence of "blind spots" is read) and nothing today asks for it.
+- **The recipe path on codex is unproven live** — the three rides so far were the prober's
+  structure-only canary. The first reviewer or worker ride that lands on codex (anthropic AND Go
+  full, or an operator re-order putting codex first) is the proof; read it in the gateway log
+  (`session: dispatch … rail=codex harness=codex`) and the ride's outcome.
+- **`codex exec` has no `--max-turns`-class bound** — only `AGENT_MAX_SECONDS` bounds a codex
+  ride (#2830). A runaway recipe ride on codex spends the subscription's window until the wall
+  clock cuts it; the headroom ceiling (0.95) is the backstop at admission, not mid-ride.
+- **The benchmarks evidence has one codex row** (`gpt-6-astra`, score 52.7 by AA tail) — the
+  tier lists all name it, so a heavy-tier reviewer on codex rides the same model a light-tier
+  prober does. #2764's cost-per-clean-ride choice compares twins only; codex has none.
 
 ## Recorded live protocol experiment — 2026-10-22 (FU-270)
 
@@ -705,8 +795,9 @@ Use leg E's **separate gateway login**, imported through `CODEX_SEED_RECORD` →
 → the gateway's durable SQLite store. The worker receives only its gateway session token;
 the gateway alone owns upstream renewal. Never copy the active jail's renewable login to a
 second refresher. A short-lived access token can establish inference behavior, but cannot
-establish renewal/recovery. Independent-login revocation semantics remain unverified as noted
-above; enrollment must record that uncertainty and the observed effect on the existing login.
+establish renewal/recovery. Independent-login revocation semantics are half-verified (§The
+second-login revocation watch: the access token survives, the refresh half is pending); enrollment
+records that uncertainty and the observed effect on the existing login.
 The login's browser consent is the third-party-console class under the
 [minting doctrine](../secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret);
 credential transfer and cleanup belong to the coded enrollment recipe.
