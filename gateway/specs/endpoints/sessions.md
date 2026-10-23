@@ -1248,19 +1248,19 @@ Rendered by `scripts/evidence_render.py` from CI.
 ## GW-REDACT
 
 No log line the gateway emits contains a credential value: a bearer value, a `gws_` token, an
-`sk-ant-oat…` OAuth token, an `sk-or-v1-…` OpenRouter key, a JWT (the projected ServiceAccount
-token a pod presents to [the env pull](#gw-sessions-pull)), or the Go key's value. The log
-formatter replaces any such substring with `<redacted>` before the line is written, whatever
-the call site passed — the precedent is the old proxy's `_looks_like_credential`. A ref or a
-model id is not a credential and is logged verbatim. The rows below observe the formatter on
-the gateway's own log lines, on the paths a credential is most likely to reach: an upstream's
-401 body, a malformed inbound header, a session's dispatch, and the env pull with its presented
-identity.
+`sk-ant-oat…` OAuth token, an `sk-or-v1-…` OpenRouter key (unverified — expected to be masked
+like the bearer value), a JWT (the projected ServiceAccount token a pod presents to
+[the env pull](#gw-sessions-pull)), or the Go key's value (unverified — expected to be masked
+like the bearer value). The log formatter replaces any such substring with `<redacted>` before
+the line is written, whatever the call site passed — the precedent is the old proxy's
+`_looks_like_credential`. A ref or a model id is not a credential and is logged verbatim
+(unverified — expected to be logged verbatim).
 
 `…` in a cell stands for the session id the row's own admission returned. A cell that lists
 several fragments separated by `, ` names each one; none of them may appear on any log line.
+`log_line_contains` is the fragment a log line must contain (a containment check, not equality).
 
-| description | path | log_line | never_logged |
+| description | path | log_line_contains | never_logged |
 |---|---|---|---|
 | "an upstream 401 body is summarised, not copied" | `upstream-401` on openrouter | upstream-auth openrouter 401 | LEAK, sk-ant-oat, invalid x-api-key |
 | "a bad inbound header is logged by shape" | Authorization: Bearer notatoken | session-unknown | notatoken |
