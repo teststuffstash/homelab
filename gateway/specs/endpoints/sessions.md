@@ -23,20 +23,21 @@ data-plane request is resolved from the session identity
 response and error shapes; the service **imports it**. Coupling is enforced by
 `scripts/spec_gate.py` in `devbox run ci` (rule 7).
 
-| Requirement | Governs (schema) | Error codes | Status |
-|---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
-| [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
-| [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
-| [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
-| [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; Codex same-pod token re-read after first delivery (below) |
-| [GW-SESSIONS-LIVENESS](#gw-sessions-liveness) | `get.output.state`, `get.output.release_reason` | — | v0 |
-| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller`, `list.input`, `list.output` (the judge's `GET /sessions?task=` — [§A judge finds a task's sessions](#a-judge-finds-a-tasks-sessions)) | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found`, `malformed-body` (a list without `task`) | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
-| [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)); `⚑ gap` rows below |
-| [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
-| [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
-| [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
-| [GW-ACCESS](../access.md#gw-access) (owned there) | `post.input.role` | — | linked — the role's rail set is the inventory's enforced column |
+| Requirement | operation | Governs (schema) | Error codes | Status |
+|---|---|---|---|---|
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
+| [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
+| [GW-SESSIONS-TOKEN](#gw-sessions-token) | `POST /sessions`, `GET /sessions/{id}` | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
+| [GW-SESSIONS-RELEASE](#gw-sessions-release) | `DELETE /sessions/{id}`, `GET /sessions/{id}` | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
+| [GW-SESSIONS-PULL](#gw-sessions-pull) | `POST /sessions` (`bind`), `POST /sessions/{id}/env` | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; Codex same-pod token re-read after first delivery (below) |
+| [GW-SESSIONS-LIVENESS](#gw-sessions-liveness) | `GET /sessions/{id}` | `get.output.state`, `get.output.release_reason` | — | v0 |
+| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `all` | `caller`, `get.output.caller`, `list.input`, `list.output` (the judge's `GET /sessions?task=` — [§A judge finds a task's sessions](#a-judge-finds-a-tasks-sessions)) | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found`, `malformed-body` (a list without `task`) | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
+| [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `POST /sessions/{id}/outcome`, `GET /sessions/{id}` | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)); `⚑ gap` rows below |
+| [GW-CRED-RESOLVE](#gw-cred-resolve) | `POST /sessions` | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
+| [GW-REDACT](#gw-redact) | `all` | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
+| [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `POST /sessions` | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
+| [GW-ACCESS](../access.md#gw-access) (owned there) | `POST /sessions` | `post.input.role` | — | linked — the role's rail set is the inventory's enforced column |
+| [GW-CODEX-CAPTURE](openai-responses.md#gw-codex-capture) (owned there) | `GET /sessions/{id}/capture` | `capture` (the bundle — owned there, not in this schema) | `capture-not-found` | linked — the bundle is read under this page's lookup rule ([GW-SESSIONS-AUTH](#gw-sessions-auth)); its records and sanitization are [GW-CODEX-CAPTURE](openai-responses.md#gw-codex-capture)'s |
 
 Rows below run against the **`policy-default` world**
 ([worlds/policy-default.json](../worlds/policy-default.json)) with `FakeSecrets` holding every
@@ -502,7 +503,7 @@ digest · date`); unrendered here = unverified.
 
 ## GW-SESSIONS-ENV
 
-A `dispatch` answer carries `env`: the pod's **complete** LLM environment for that harness,
+`POST /sessions` answers a `dispatch` that carries `env`: the pod's **complete** LLM environment for that harness,
 pointing at THIS gateway with the session token as the credential — the launcher copies it
 verbatim and adds nothing LLM-shaped. Var names mirror what each harness consumes today
 (`agents/agent-session.sh`): `claude` reads `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`
@@ -595,8 +596,8 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-TOKEN
 
-The session token is `gws_` + 32 url-safe random characters, minted from a CSPRNG once per
-dispatch and returned **once** — in the `dispatch` body. The DB stores `sha256(token)` and never
+`POST /sessions` mints the session token as `gws_` + 32 url-safe random characters from a CSPRNG, once
+per dispatch, and returns it **once** — in the `dispatch` body. The DB stores `sha256(token)` and never
 the token; `GET /sessions/{id}` returns the row without it. The data plane accepts the token as
 `Authorization: Bearer gws_…` or `x-api-key: gws_…` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)).
 `expires_at = created_at + session_ttl_s`.
@@ -646,7 +647,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-PULL
 
-*The pod pulls its own env; the launcher never holds the session token* (operator ruling
+*The pod pulls its own env through `POST /sessions/{id}/env`; the launcher never holds the session token* (operator ruling
 2026-10-17, FU-270). A `POST /sessions` body may carry **`bind: {namespace, serviceaccount, pod?}`**
 — the identity of the pod the launcher is about to create. A bound `dispatch` carries **no
 credential**: `session.id`, `session.expires_at`, `rail`, `harness`, `model`, `context_tokens`,
@@ -790,7 +791,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-LIVENESS
 
-*A session whose pod is gone is reaped* (operator ruling 2026-10-17, FU-270). A ride whose pod is
+*A session whose pod is gone is reaped; `GET /sessions/{id}` reports the reap as `state` and `release_reason`* (operator ruling 2026-10-17, FU-270). A ride whose pod is
 SIGKILLed never sends its DELETE, and without liveness its session would hold the rail slot until the
 TTL. The 2026-10-17 experiment's probe left one active for its whole TTL
 (`docs/spikes/gateway-free-models-2026-10-17/cells.tsv`, probe-c: `released_at: null` at
@@ -859,7 +860,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-AUTH
 
-*The control plane knows who is asking* (operator order 2026-10-17, FU-270). Every `POST /sessions`,
+*The control plane knows who is asking, for every verb of `/sessions`* (operator order 2026-10-17, FU-270). Every `POST /sessions`,
 `GET /sessions/{id}`, `DELETE /sessions/{id}` and `GET /sessions?task=` carries **`Authorization:
 Bearer <the caller's projected ServiceAccount token>`**, audience **`agent-gateway`**. The gateway reviews it through the
 **same** TokenReview path as [the env pull](#gw-sessions-pull) (`TokenReviewer`, `spec.audiences:
@@ -1043,7 +1044,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-OUTCOME
 
-*The consumer classifies its own output; the gateway owns what it sees first-hand; one store, one
+*The consumer classifies its own output through `POST /sessions/{id}/outcome`; the gateway owns what it sees first-hand; one store, one
 vocabulary* (operator ruling 2026-10-17, FU-270). `POST /sessions/{id}/outcome {class, subclass?,
 evidence?}` is how a consumer says how its ride ended. The gateway can see a 429, a 401 or a cut
 stream ([§Capacity](#capacity--the-ladders-capacity-half)), but not a review that returned no
@@ -1203,7 +1204,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-CRED-RESOLVE
 
-A credential ref (`namespace/name`) is resolved by reading the Secret through the gateway's
+Under `POST /sessions`, a credential ref (`namespace/name`) is resolved by reading the Secret through the gateway's
 ServiceAccount (`/var/run/secrets/kubernetes.io/serviceaccount`). The read is a verdict in
 three classes: **resolved** (the Secret exists, carries the label
 `openrouter.teststuff.net/session-key=true`, and the rail's key is present), **definitive miss**
@@ -1247,7 +1248,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-REDACT
 
-No log line the gateway emits contains a credential value: a bearer value, a `gws_` token, an
+On every operation (`all`), no log line the gateway emits contains a credential value: a bearer value, a `gws_` token, an
 `sk-ant-oat…` OAuth token, an `sk-or-v1-…` OpenRouter key, a JWT (the projected ServiceAccount
 token a pod presents to [the env pull](#gw-sessions-pull)), or the Go key's value. The log
 formatter replaces any such substring with `<redacted>` before the line is written, whatever
