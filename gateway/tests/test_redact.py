@@ -63,7 +63,7 @@ def test_arg_token_masked():
 
 
 @pytest.mark.parametrize(
-    ("path", "log_line", "never_logged"),
+    ("path", "log_line_contains", "never_logged"),
     [
         pytest.param(
             "upstream-401 on openrouter",
@@ -98,7 +98,7 @@ def test_arg_token_masked():
     ],
 )
 @_system_row
-async def test_real_path_log_lines(path, log_line, never_logged, gw, upstreams, reviews, caplog):
+async def test_real_path_log_lines(path, log_line_contains, never_logged, gw, upstreams, reviews, caplog):
     caplog.set_level(logging.INFO)
     session_id = ""
     if path == "upstream-401 on openrouter":
@@ -141,7 +141,7 @@ async def test_real_path_log_lines(path, log_line, never_logged, gw, upstreams, 
     else:
         raise ValueError(f"no real path named {path!r}")
 
-    needle = log_line.replace("…", session_id)
+    needle = log_line_contains.replace("…", session_id)
     messages = [rec.getMessage() for rec in caplog.records]
     with then(f"a log line holds {needle!r}", log_lines={"actual": messages}):
         assert any(needle in m for m in messages), messages
