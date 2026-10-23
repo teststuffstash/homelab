@@ -528,7 +528,7 @@ back under their own `request` ordinal. Records persist in the gateway's own sto
 `CODEX_CAPTURE_RETENTION_DAYS`, default 7) and are read back as one bundle by
 `GET /sessions/{id}/capture` under the session's lookup rule ([GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth)
 route `lookup`: the admitting caller or a judge). The bundle is pulled into restricted storage and
-REVIEWED before any excerpt becomes a spike paragraph or a fixture; the gateway-owned usage poll is
+REVIEWED before any excerpt becomes a spike paragraph or a fixture; ⚖ the gateway-owned usage poll is
 not in it (its own log lines and counters are its instrumentation, §Poll).
 
 Rows run in the `policy-codex` world with the recorder scoped to tasks `capture-*`

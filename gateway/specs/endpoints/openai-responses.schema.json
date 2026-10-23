@@ -693,6 +693,84 @@
         "request": {
           "type": "integer",
           "description": "the session's request ordinal this record belongs to (concurrent requests interleave)"
+        },
+        "status": {
+          "type": "integer",
+          "description": "upstream-response: the backend's status; client-response: the status the client got (the relay outcome's, GW-RAIL-CODEX)"
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string",
+          "description": "upstream-request: the backend host"
+        },
+        "body_bytes": {
+          "type": "integer",
+          "description": "client-request / upstream-request: the raw body size"
+        },
+        "headers_added": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "upstream-request: header names the gateway added versus the client request"
+        },
+        "headers_dropped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "upstream-request: client header names the gateway did not forward"
+        },
+        "first_byte_ms": {
+          "type": "integer",
+          "description": "upstream-response: time to the backend's status line"
+        },
+        "n": {
+          "type": "integer",
+          "description": "upstream-event: the event's ordinal in the relayed stream, 1…N"
+        },
+        "bytes": {
+          "type": "integer",
+          "description": "upstream-event: the event data's size"
+        },
+        "done": {
+          "type": "boolean",
+          "description": "upstream-event: the `[DONE]` sentinel"
+        },
+        "invalid": {
+          "type": "boolean",
+          "description": "upstream-event: data that is not JSON (recorded by size only)"
+        },
+        "relayed_bytes": {
+          "type": "integer",
+          "description": "client-response: the bytes the client received"
+        },
+        "events": {
+          "type": "integer",
+          "description": "client-response: the number of upstream-event records (N)"
+        },
+        "usage": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "client-response: the terminal's usage as counted (in, cache_read, out), null when none"
+        },
+        "cancelled": {
+          "type": "boolean",
+          "description": "client-response: the client went away before a terminal event"
+        },
+        "elapsed_ms": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string",
+          "description": "the truncated marker's reason"
         }
       },
       "x-requirements": [

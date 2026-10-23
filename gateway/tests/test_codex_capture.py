@@ -31,7 +31,7 @@ from agent_gateway.app import create_app
 from agent_gateway.codex import CodexBackend
 
 from ._codex_world import CODEX_BASE, admitted, body, ride
-from .conftest import ObservedAsyncClient, check, err, given, rule, then, then_eq, when, world
+from .conftest import ObservedAsyncClient, check, err, given, quiet, rule, then, then_eq, when, world
 
 pytestmark = rule("GW-CODEX-CAPTURE")
 
@@ -194,7 +194,7 @@ async def test_refusals_captured(cap_app, cap_gw, codex_upstream, clock, behavio
     b = (await _bundle(cap_gw, doc)).json()
     up = _by(b["records"], "upstream-response")[0]
     last = _by(b["records"], "client-response")[0]
-    with then(f"upstream-response and client-response carry the {status}", upstream_response=up, client_response=last, ride_status=r.status_code):
+    with then(f"upstream-response and client-response carry the {status}, outcome {outcome}", upstream_response=up, client_response=last, ride_status=r.status_code):
         assert r.status_code == status
         assert last["status"] == status and last["outcome"] == outcome
         assert up["refusal"] == (outcome if status == 502 else None)
@@ -204,12 +204,13 @@ async def test_lookup_rule(cap_app, cap_gw, clock):
     """row: the bundle is read under the session's lookup rule"""
     world("policy-codex")
     doc = await admitted(cap_app, cap_gw, clock, task="capture-t1")
-    await ride(cap_gw, doc, label="the ride")
-    with when("GET /sessions/nope/capture"):
-        unknown = await cap_gw.get("/sessions/nope/capture", headers={"authorization": f"Bearer {doc['session']['token']}"})
-    with when("GET /sessions/{id} and GET /sessions/{id}/capture with a token that is no caller's (the world's control plane: observe)"):
-        probe = await cap_gw.get(f"/sessions/{doc['session']['id']}", headers={"authorization": "Bearer not-a-caller-token"})
-        bundle = await cap_gw.get(f"/sessions/{doc['session']['id']}/capture", headers={"authorization": "Bearer not-a-caller-token"})
+    with quiet():
+        await ride(cap_gw, doc, label="the ride")
+    with when("GET /sessions/nope/capture; GET /sessions/{id} and GET /sessions/{id}/capture with a token that is no caller's (the world's control plane: observe)"):
+        with quiet():  # three exchanges, one summary below (report hygiene)
+            unknown = await cap_gw.get("/sessions/nope/capture", headers={"authorization": f"Bearer {doc['session']['token']}"})
+            probe = await cap_gw.get(f"/sessions/{doc['session']['id']}", headers={"authorization": "Bearer not-a-caller-token"})
+            bundle = await cap_gw.get(f"/sessions/{doc['session']['id']}/capture", headers={"authorization": "Bearer not-a-caller-token"})
     with then("an unknown id is 404 session-not-found; the capture answers exactly as the lookup does",
               unknown={"status": unknown.status_code, "code": err(unknown)},
               lookup=probe.status_code, capture=bundle.status_code):
