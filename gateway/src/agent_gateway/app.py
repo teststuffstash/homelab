@@ -15,8 +15,9 @@ from starlette.routing import Route
 
 from . import __version__
 from .capacity import Capacity
+from .capture import Recorder
 from .catalog import GoCatalog
-from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
+from .codex import CodexBackend, CodexProxy, CodexRail, get_session_capture, openai_responses
 from .codex_usage import UsagePoll
 from .config import Policy, Settings, wire_model
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
@@ -156,7 +157,12 @@ def create_app(
         # GW-CODEX-HEADROOM §Gauges: an ACCEPTED report renders gateway_subscription_*{rail="codex"};
         # a restart renders nothing until the next one (the headroom is forgotten with the process).
         codex.headroom.on_accept = lambda snapshot: m.subscription_report("codex", snapshot.windows)
-    codex_proxy = CodexProxy(sessions, m, codex, client)
+    recorder = Recorder(store, settings.codex_capture_task_prefix, settings.codex_capture_max_bytes, clock)
+    if recorder.enabled:
+        purged = store.purge_captures(clock() - settings.codex_capture_retention_days * 86400)
+        log.info("codex capture: ON for tasks %r* (max %d bytes/request, retention %gd, %d old records purged)",
+                 recorder.task_prefix, recorder.max_bytes, settings.codex_capture_retention_days, purged)
+    codex_proxy = CodexProxy(sessions, m, codex, client, recorder)
     # GW-CODEX-HEADROOM §Poll: the gateway's own usage observation — the only report producer today.
     # Runs on the lifespan when the rail has a credential backend AND CODEX_USAGE_URL names the endpoint.
     m.bind_codex_rail(codex is not None)  # the poll counter family exists only for a declared rail
@@ -212,6 +218,7 @@ def create_app(
             Route("/sessions/{id}", delete_session, methods=["DELETE"]),
             Route("/sessions/{id}/env", post_session_env, methods=["POST"]),
             Route("/sessions/{id}/outcome", post_session_outcome, methods=["POST"]),
+            Route("/sessions/{id}/capture", get_session_capture, methods=["GET"]),
             Route("/anthropic/v1/messages", anthropic_messages, methods=["POST"]),
             # The OpenAI dialect under its contract prefix AND the OpenRouter-shaped `/api/v1`
             # alias: goose computes `$OPENROUTER_HOST/api/v1/…` and opencode's provider baseURL

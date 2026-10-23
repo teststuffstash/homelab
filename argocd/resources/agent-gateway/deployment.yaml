@@ -54,6 +54,12 @@ spec:
             # path; shape observed 2026-10-22, spike §Live usage payload shape). Unset = no poll = quota-unknown.
             - name: CODEX_USAGE_URL
               value: https://chatgpt.com/backend-api/wham/usage
+            # GW-CODEX-CAPTURE: the four-boundary recorder is SCOPED to tasks with this prefix (the jail's
+            # `canary-codex.sh --capture` names them); every other codex ride records nothing. Sanitized before
+            # persistence (header names, string lengths, aliased ids — never a value that could be a credential),
+            # bounded per request, 7-day retention in GATEWAY_DB; read back via GET /sessions/{id}/capture.
+            - name: CODEX_CAPTURE_TASK_PREFIX
+              value: capture-codex-
             # The opencode rail's credential — the EXISTING ESO-materialized Secret the old proxy
             # consumes too (ADR-107 chunk C). optional: true — the pod keeps serving the anthropic
             # and openrouter rails if ESO has not materialized it; the rail fails closed per request

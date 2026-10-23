@@ -40,6 +40,7 @@ admission reasons and the error envelope.
 | [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `headroom.poll`, `headroom.upstream`, `admission.reasons` | — | v0 — two report producers, both the gateway's own: its usage poll (§Poll) and the relayed answers' `x-codex-*` headers (§Upstream headers); the jail ingress stays `⚑ gap` |
 | [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | gateway-local SQLite with hash-gated seed recovery; live durability remains unverified |
 | [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport wired; rail absent from policy |
+| [GW-CODEX-CAPTURE](#gw-codex-capture) | `capture` (the bundle `GET /sessions/{id}/capture` answers; its records, sanitization rules and bounds) | `capture-not-found` | v0 — the scoped observer (FU-270, the spike §Recorded live protocol experiment): off unless `CODEX_CAPTURE_TASK_PREFIX` names a task prefix; the live bundle and the rows derived from it are the spike's |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked — exact on this rail |
 | [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization` | `session-unknown`, `session-expired`, `session-released` | linked |
 | [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) (owned there) | `admission.reasons` | — | linked — the headroom defers are three more `defer.reason` values |
@@ -499,3 +500,52 @@ HTTP fake reached through the real transport adapter and lifecycle; no live cred
 --8<-- "GW-CODEX-REFRESH.md"
 
 </details>
+
+## GW-CODEX-CAPTURE
+
+The four-boundary capture of a codex ride ([the spike §Recorded live protocol experiment](../../../docs/spikes/codex-subscription-rail.md#recorded-live-protocol-experiment--2026-10-22-fu-270),
+FU-270): the observer the experiment plan asked for, so a live ride yields evidence at **client
+request received**, **upstream request sent**, **upstream response received** (its status and
+headers, then every SSE event as it is relayed) and **client response sent** — egress-only capture
+cannot show what the gateway discarded, ingress-only cannot show what the backend saw. The recorder
+is **scoped**: only a session whose task carries the configured prefix (`CODEX_CAPTURE_TASK_PREFIX`;
+unset = off, the default) is recorded; the jail's `canary-codex.sh --capture` names its task so.
+It is **passive**: the relay yields every chunk unchanged before the tap splits it into events; it
+never buffers a response, never delays or replays a request, and a recorder fault is a log line, not
+a ride outcome. It **sanitizes before persistence, structurally** (⚖ never the log formatter's
+pattern matching, GW-REDACT is the second belt): header values are kept only for an allowlist of
+non-sensitive names (content negotiation, transport, the `x-codex-*` headroom percentages the gateway
+already reads as a report, the plan vocabulary) — every other header keeps its name with its value
+withheld and its length; in bodies and events every string becomes its length except the vocabulary
+keys (`type`, `status`, `role`, `name`, `model`, `object`, `code`, …) whose values are enumerations or
+public names, and identifier keys (`id`, `*_id`) whose values become run-local aliases (`call#1`)
+equal across all four boundaries of a session; numbers, booleans and structure stay; unknown keys
+keep their presence and type. It is **bounded**: `CODEX_CAPTURE_MAX_BYTES` per request (default
+256 KiB); overflow writes one `truncated` marker and the bundle says `complete: false` — a missing
+record is never an observed absence; a ride the gateway itself refuses persists its `client-response`
+too, and concurrent requests of one session (a side call beside the main stream) persist back to
+back under their own `request` ordinal. Records persist in the gateway's own store (table `captures`,
+`CODEX_CAPTURE_RETENTION_DAYS`, default 7) and are read back as one bundle by
+`GET /sessions/{id}/capture` under the session's lookup rule ([GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth)
+route `lookup`: the admitting caller or a judge). The bundle is pulled into restricted storage and
+REVIEWED before any excerpt becomes a spike paragraph or a fixture; ⚖ the gateway-owned usage poll is
+not in it (its own log lines and counters are its instrumentation, §Poll).
+
+Rows run in the `policy-codex` world with the recorder scoped to tasks `capture-*`
+(`tests/test_codex_capture.py`); every value a row shows is the fake backend's.
+
+| description | task | the ride || the bundle (`GET /sessions/{id}/capture`) |
+|---|---|---||---|
+| "a scoped ride is recorded at the four boundaries, in order" | `capture-t1` | upstream-ok || `client-request`, `upstream-request`, `upstream-response`, `upstream-event`…, `client-response`; `t_ms` ascending; `complete: true`; `format: codex-capture/1` |
+| "an unscoped session has no capture" | the probe task | upstream-ok || 404 `capture-not-found` |
+| "the recorder off by default captures nothing ⚖" | `capture-t1`, no prefix configured | upstream-ok || 404 `capture-not-found` — a deployment opts in by naming the prefix |
+| "credentials never land in the capture ⚖" | `capture-t1` | the backend echoes a `DUMMY-SECRET` cookie and request id || `authorization` and `chatgpt-account-id` present, withheld; the cookie and request id withheld; neither canary nor the session token anywhere in the bundle; `content-type` / `accept` values kept |
+| "strings are lengths, vocabulary is kept, identifiers are aliases ⚖" | `capture-t1` | input text `hi`, a `function_call_output` with `call_id`, a tool `rg` || `{"len": 2}`; `type` / `role` / `name` verbatim; `call_id` → `call#1` at both request boundaries; the raw id nowhere |
+| "the stream's events are recorded in order with their usage" | `capture-t1` | upstream-ok || event `n` 1…N, types in relay order (`response.created` … `response.completed`), the terminal's `usage` numbers; `client-response.relayed_bytes` = the client's bytes, `events` = N |
+| "the capture is bounded; overflow marks the bundle incomplete and the ride is unaffected ⚖" | `capture-t1` | max 600 bytes || `complete: false`, one `truncated` marker; the ride 200 with the whole stream |
+| "a refused answer is captured as a refusal" | `capture-t1` | upstream-wrong-type || `upstream-response.refusal = upstream-content-type`, `client-response` 502 |
+| "a 429 is captured as the rate limit it is" | `capture-t1` | upstream-429 || `upstream-response` 429, `client-response` 429 outcome `rate-limited` |
+| "a gateway-side refusal is captured as a refusal ⚖" | `capture-t1` | a body naming another model || `client-request` then `client-response` 403 outcome `model-not-session`, nothing upstream — the gateway's own NO leaves a record (the plan: a missing record is never an observed absence) |
+| "two requests in flight in one session persist back to back" | `capture-t1` | the first held until the second completes || both requests' boundaries present under their own `request` ordinal (1, 2); `requests: 2`; nothing replaced (the `seq` range is allocated at persist time under a lock, a collision is a loud INSERT failure) |
+| "the bundle is read under the session's lookup rule" | `capture-t1` | an unknown id; a token that is no caller's || 404 `session-not-found`; the same status `GET /sessions/{id}` answers that token (the world's control plane observes; an enforcing one refuses both alike — [GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth)) |
+

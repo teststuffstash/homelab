@@ -109,6 +109,14 @@ CREATE TABLE IF NOT EXISTS provider_cells (
   limit_source TEXT,
   PRIMARY KEY (model, provider)
 );
+CREATE TABLE IF NOT EXISTS captures (
+    session_id TEXT NOT NULL,
+    seq        INTEGER NOT NULL,
+    boundary   TEXT NOT NULL,
+    ts         REAL NOT NULL,
+    record     TEXT NOT NULL,
+    PRIMARY KEY (session_id, seq)
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value REAL NOT NULL
@@ -440,6 +448,29 @@ class Store:
                 " requests_incomplete = requests_incomplete + ? WHERE id = ?",
                 (u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write, 1 if incomplete else 0, session_id),
             )
+
+    # -- captures (GW-CODEX-CAPTURE: the four-boundary records of a scoped codex ride) ------------
+    def record_capture(self, session_id: str, seq: int, boundary: str, ts: float, record: str) -> None:
+        with self._lock:
+            self._db.execute("INSERT INTO captures (session_id, seq, boundary, ts, record) VALUES (?,?,?,?,?)",
+                             (session_id, seq, boundary, ts, record))
+
+    def capture_count(self, session_id: str) -> int:
+        with self._lock:
+            (n,) = self._db.execute("SELECT COUNT(*) FROM captures WHERE session_id = ?", (session_id,)).fetchone()
+        return int(n)
+
+    def captures(self, session_id: str) -> list[str]:
+        with self._lock:
+            rows = self._db.execute("SELECT record FROM captures WHERE session_id = ? ORDER BY seq", (session_id,)).fetchall()
+        return [r[0] for r in rows]
+
+    def purge_captures(self, before: float) -> int:
+        """Bounded retention: records older than `before` go (the bundle lives in restricted storage
+        for review, never here for long)."""
+        with self._lock:
+            cur = self._db.execute("DELETE FROM captures WHERE ts < ?", (before,))
+        return cur.rowcount
 
     def rail_usage_since(self, rail: str, since: float) -> list[tuple[float, str, int, int, int, int]]:
         """The rail's metered (2xx) requests since `since`, ascending: (ts, session model, tokens_in,
