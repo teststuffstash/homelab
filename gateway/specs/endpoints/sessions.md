@@ -1251,28 +1251,22 @@ No log line the gateway emits contains a credential value: a bearer value, a `gw
 `sk-ant-oat…` OAuth token, an `sk-or-v1-…` OpenRouter key, a JWT (the projected ServiceAccount
 token a pod presents to [the env pull](#gw-sessions-pull)), or the Go key's value. The log
 formatter replaces any such substring with `<redacted>` before the line is written, whatever
-the call site passed — the precedent is the old proxy's `_looks_like_credential`. A test row
-feeds each pattern through the formatter directly; a second set proves the formatter is on the
-real paths (an upstream 401 body, a malformed header, a debug line of the resolved ref).
+the call site passed — the precedent is the old proxy's `_looks_like_credential`. A ref or a
+model id is not a credential and is logged verbatim. The rows below observe the formatter on
+the gateway's own log lines, on the paths a credential is most likely to reach: an upstream's
+401 body, a malformed inbound header, a session's dispatch, and the env pull with its presented
+identity.
 
-| description | the formatter is given || the line contains | the line does not contain |
-|---|---||---|---|
-| "a session token in a message" | `"auth ok gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"` || `auth ok <redacted>` | `gws_` |
-| "an OAuth token" | `"inject sk-ant-oat01-FAKE…"` || `inject <redacted>` | `sk-ant-oat` |
-| "an OpenRouter key" | `"inject sk-or-v1-FAKE…"` || `inject <redacted>` | `sk-or-v1-` |
-| "a bearer header value" | `"Authorization: Bearer abc.def.ghi"` || `Authorization: Bearer <redacted>` | `abc.def.ghi` |
-| "the Go key's value" | the `OPENCODE_GO_API_KEY` fixture value || `<redacted>` | the value |
-| "a ref is not a credential" | `"ref platform-agents/claude-session unresolved"` || the ref verbatim | `<redacted>` |
-| "a model id is not a credential" | `"model opencode-go/deepseek-v4.1-flash"` || the id verbatim | `<redacted>` |
-| "a projected ServiceAccount token (a JWT)" | `"review eyJhbGciOiJSUzI1NiJ9.eyJGQUtFIjoxfQ.RkFLRS1TSUc"` || `review <redacted>` | `eyJ` |
+`…` in a cell stands for the session id the row's own admission returned. A cell that lists
+several fragments separated by `, ` names each one; none of them may appear on any log line.
 
-| description | path || the log holds | the log does not hold |
-|---|---||---|---|
-| "an upstream 401 body is summarised, not copied" | `upstream-401` on openrouter || `upstream-auth openrouter 401` | the upstream body, the key |
-| "a bad inbound header is logged by shape" | `Authorization: Bearer notatoken` || `session-unknown` | `notatoken` |
-| "a dispatch line names the session id, never the token" | dispatch || the session id | the token |
-| "a pull line names the session and the identity, never either token" | a bound dispatch → its pull ([GW-SESSIONS-PULL](#gw-sessions-pull)) || `env pulled id=«id» by system:serviceaccount:platform-agents:agentstack-worker` | the presented ServiceAccount token, the minted `gws_` token |
-| "a refused pull never logs the presented token" | a pull whose token reviews as another ServiceAccount || `pull-identity-refused` | the presented token |
+| description | path | log_line | never_logged |
+|---|---|---|---|
+| "an upstream 401 body is summarised, not copied" | `upstream-401` on openrouter | upstream-auth openrouter 401 | LEAK, sk-ant-oat, invalid x-api-key |
+| "a bad inbound header is logged by shape" | Authorization: Bearer notatoken | session-unknown | notatoken |
+| "a dispatch line names the session id, never the token" | POST /sessions | id=… | gws_ |
+| "a pull line names the session and the identity, never either token" | a bound dispatch, then its pull | env pulled id=… by system:serviceaccount:platform-agents:agentstack-worker | eyJ, gws_ |
+| "a refused pull never logs the presented token" | a pull whose token reviews as another ServiceAccount | pull-identity-refused | eyJ |
 
 <details markdown="1"><summary>Evidence</summary>
 

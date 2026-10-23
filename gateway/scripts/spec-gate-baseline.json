@@ -103,9 +103,9 @@
  },
  "GW-REDACT": {
   "row-unkeyed": 0,
-  "header-unthreaded": 6,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
-  "case-unspecified": 1
+  "case-unspecified": 0
  },
  "GW-SESSIONS-ADMIT": {
   "row-unkeyed": 34,

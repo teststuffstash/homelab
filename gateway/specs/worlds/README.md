@@ -188,7 +188,7 @@ the pod-name extra); any other token reviews as unauthenticated, and `transient`
 review raise. One fake serves both readers of a projected token: the env pull
 ([GW-SESSIONS-PULL](../endpoints/sessions.md#gw-sessions-pull)) and the control plane's caller
 ([GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth)). Fixture tokens are plain
-`fake-…` strings, never JWT-shaped (the one JWT-shaped literal is GW-REDACT's masking row).
+`fake-…` strings, never JWT-shaped (the one JWT-shaped literal is the presented ServiceAccount token in [GW-REDACT](../endpoints/sessions.md#gw-redact)'s pull rows).
 
 ## The credential source (`FakeSecrets`)
 
