@@ -1,7 +1,7 @@
 # ── observation point ── not launcher code. OC_SETUP is the observable outcome of the opencode
 # session config construction: it is the base64-encoded config write command that reaches the pod
-# args. If OC_SETUP is empty, the headless run gets no autoApprove and fails (#792 gap 2).
-# Emit the decoded config JSON so the assertion can verify autoApprove and MCP are present.
+# args. If OC_SETUP is empty, the headless run gets no permission grant and fails (#792 gap 2).
+# Emit the decoded config JSON so the assertion can verify the permission grant and MCP are present.
 if [ -n "$OC_SETUP" ]; then
   echo "OC_SETUP: SET"
   # Extract the base64 payload from the setup command and decode it

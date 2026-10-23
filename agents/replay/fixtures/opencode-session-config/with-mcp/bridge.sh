@@ -2,11 +2,12 @@
 #
 # CONDITION UNDER REPLAY: a recipe dispatch on the opencode harness, where the provider pin
 # lookup returns NO pinned provider, cred injection is NOT active, AND MCP_ENDPOINT is set.
-# The MCP config should be deep-merged into OC_CONFIG alongside autoApprove.
+# The MCP config should be deep-merged into OC_CONFIG alongside the permission grant.
 #
 # THE CONTRACT:
 #   1. `OC_SETUP` is non-empty — the base64 config write is always produced.
-#   2. The decoded config JSON carries `mode.autoApprove` (with empty permission+options).
+#   2. The decoded config JSON carries `permission: {"*": "allow"}` (the headless grant; the old
+#      `mode.autoApprove` shape is an agent definition on opencode 1.19.0 and grants nothing — FU-270).
 #   3. The decoded config JSON carries `mcp.stack-mcp` with type "remote" and the endpoint URL.
 #   4. The config JSON carries the `$schema` key.
 OC_SETUP=""; OC_ENV=""
