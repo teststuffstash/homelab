@@ -1138,8 +1138,9 @@ render_env_card() {
   # WHY: version skew — production serves the pinned release over the released corpus; a worktree
   # runs HEAD. Name the pin so a prod/worktree behavioral diff is interpretable rather than mysterious.
   # Both lines are gated on the MCP knob being present AND the harness actually attaching the
-  # config (no MCP = no feedback tool to direct). All three harnesses (claude, goose, opencode)
-  # now attach MCP (#1276), so the card claims the tool is available on any harness with the knob.
+  # config (no MCP = no feedback tool to direct). All four harnesses attach MCP (claude, goose,
+  # opencode since #1276; codex via CODEX_MCP_URL → agent-codex, agent-runtime#180), so the card
+  # claims the tool is available on any harness with the knob.
   # ADR-135: one line per declared image volume — mounted, or declared-but-not (never silent).
   [ -n "${IV_CARD:-}" ] && printf '%s' "$IV_CARD"
   if [ -n "${MCP_ENDPOINT:-}" ]; then
@@ -1528,7 +1529,7 @@ if [ -n "${RECIPE:-}" ]; then
   # helper defined at the script top is invisible to them (proven by RC-127). MCP_PRELUDE,
   # MCP_CONFIG_B64, MCP_GOOSE_FLAG and MCP_OPENCODE_CONFIG_JSON are consumed by the case arms
   # below (or the opencode-session-config block), inside the same region.
-  MCP_PRELUDE=""; MCP_GOOSE_FLAG=""; MCP_OPENCODE_CONFIG_JSON=""
+  MCP_PRELUDE=""; MCP_GOOSE_FLAG=""; MCP_OPENCODE_CONFIG_JSON=""; MCP_CODEX_ENV=""
   if [ -n "${MCP_ENDPOINT:-}" ]; then
     MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcpServers: {"stack-mcp": {type: "http", url: $url}}}' 2>/dev/null)" || MCP_CONFIG_JSON=""
     MCP_OPENCODE_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" '{mcp: {"stack-mcp": {type: "remote", url: $url}}}' 2>/dev/null)" || MCP_OPENCODE_CONFIG_JSON=""
@@ -1540,6 +1541,9 @@ if [ -n "${RECIPE:-}" ]; then
       # (reviewer catch, PR#1186). The claude arm never touches the shell with it (jq --arg) and
       # the opencode arm embeds it via jq --arg into the config JSON.
       MCP_GOOSE_FLAG=" --with-streamable-http-extension $(printf '%s' "$MCP_ENDPOINT" | jq -Rr @sh)"
+      # codex: the env var the image's agent-codex renders into `[mcp_servers.stack-mcp] url` (the pinned
+      # CLI's remote-server shape; agent-runtime#180) — @sh-quoted like the goose flag, prefixed to the seam.
+      MCP_CODEX_ENV="CODEX_MCP_URL=$(printf '%s' "$MCP_ENDPOINT" | jq -Rr @sh) "
     else
       MCP_OPENCODE_CONFIG_JSON=""
       echo "agent-session: MCP tools knob unparseable — dispatching WITHOUT MCP attach" >&2
@@ -1583,9 +1587,10 @@ if [ -n "${RECIPE:-}" ]; then
     opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP wired via OPENCODE_CONFIG (merged into /tmp/opencode-session.json in the opencode-session-config block above) — #1276
     # codex (FU-270, the explicit canary cell): the image's agent-codex seam runs `codex exec --json` in
     # the prepared workdir and renders the gateway provider block from the pulled env (GW-SESSIONS-ENV);
-    # the pod IS the sandbox, as for claude's --dangerously-skip-permissions. MCP is not wired for codex
-    # yet (the spike's open list) — a codex ride gets no --mcp attach.
-    codex) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
+    # the pod IS the sandbox, as for claude's --dangerously-skip-permissions. MCP (#1041): the stack knob
+    # rides as CODEX_MCP_URL in the seam's env — agent-codex appends `[mcp_servers.stack-mcp] url` to the
+    # provider block it renders (agent-runtime#180); no knob = no env = no block.
+    codex) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${MCP_CODEX_ENV}agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
   esac
   # <<<REPLAY:harness-run-cmd<<<
 fi
