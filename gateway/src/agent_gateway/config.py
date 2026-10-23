@@ -31,6 +31,19 @@ RAIL_DIALECTS = {
     "openrouter": ("anthropic", "openai"),
     "codex": ("responses",),
 }
+# The harness a rail names when the caller names none (GW-SESSIONS-ADMIT §The harness follows the
+# rail, operator ruling 2026-10-23: every subscription rail is every role's, the walk crosses the
+# dialect boundary on its own): a rail serving the role's harness's dialect keeps the role's harness;
+# a rail that does not (anthropic for an openai-harness role, codex for any role) names the harness
+# of its FIRST dialect — ⚖ one harness per dialect, the baked defaults the launcher runs.
+DIALECT_HARNESS = {"anthropic": "claude", "openai": "opencode", "responses": "codex"}
+
+
+def harness_for(rail: str, preferred: str) -> str:
+    """The harness a dispatch on `rail` names for a role whose policy harness is `preferred`."""
+    if HARNESS_DIALECT[preferred] in RAIL_DIALECTS[rail]:
+        return preferred
+    return DIALECT_HARNESS[RAIL_DIALECTS[rail][0]]
 
 SELF_URL_DEFAULT = "http://agent-gateway.agent-egress.svc.cluster.local:8080"
 UPSTREAM_DEFAULTS = {

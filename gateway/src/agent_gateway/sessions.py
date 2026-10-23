@@ -35,6 +35,7 @@ from .config import (
     Policy,
     RolePolicy,
     StackPolicy,
+    harness_for,
     wire_model,
 )
 from .control import ControlPlaneAuth, authorize_outcome, visible_to
@@ -123,6 +124,7 @@ class Admission:
     harness: str
     rail_override: str | None
     bind: Bind | None = None
+    harness_explicit: bool = False  # GW-SESSIONS-ADMIT §The harness follows the rail: the body named it
     canary: tuple[str, str] | None = None  # GW-CATALOG-OR: (model, provider) — a canary session on that cell
     caller: str | None = None  # GW-SESSIONS-AUTH: the reviewed caller identity, stored on the row
     caller_pod: str | None = None  # GW-SESSIONS-LIVENESS: the caller's pod (a pod-bound caller token)
@@ -154,12 +156,13 @@ def parse_admission(policy: Policy, body: object) -> Admission:
     if tier not in TIERS:
         raise BadRequest("malformed-body", f"tier {tier!r} is not one of {', '.join(TIERS)}")
     harness = body.get("harness", role.harness)
+    harness_explicit = "harness" in body  # absent: the harness follows the rail the walk picks (§The harness follows the rail)
     if harness not in HARNESSES:
         raise BadRequest("malformed-body", f"harness {harness!r} is not one of {', '.join(HARNESSES)}")
     rail = body.get("rail")
     if rail is not None and rail not in RAILS:
         raise BadRequest("malformed-body", f"rail {rail!r} is not one of {', '.join(RAILS)}")
-    if rail is not None and HARNESS_DIALECT[harness] not in RAIL_DIALECTS[rail]:
+    if rail is not None and harness_explicit and HARNESS_DIALECT[harness] not in RAIL_DIALECTS[rail]:
         raise BadRequest(
             "harness-rail-mismatch",
             f"harness {harness} speaks {HARNESS_DIALECT[harness]}; rail {rail} serves {', '.join(RAIL_DIALECTS[rail])}",
@@ -187,7 +190,8 @@ def parse_admission(policy: Policy, body: object) -> Admission:
         rail = "openrouter"
         canary = (c["model"], c["provider"])
     stack = policy.stacks.get(body["stack"]) or StackPolicy(body["stack"], "", None, None)
-    return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind, canary=canary, attempt=attempt)
+    return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind, canary=canary, attempt=attempt,
+                     harness_explicit=harness_explicit)
 
 
 def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str, str]:
@@ -322,10 +326,14 @@ class SessionService:
             if adm.rail_override not in adm.role.rails:
                 return self._defer(adm, "role-rail-denied", f"role {adm.role.name} may not ride rail {adm.rail_override}")
             candidates = [adm.rail_override]
-        else:
+        elif adm.harness_explicit:
             candidates = [r for r in adm.role.rails if HARNESS_DIALECT[adm.harness] in RAIL_DIALECTS[r]]
             if not candidates:
                 return self._defer(adm, "role-rail-denied", f"no rail allowed for role {adm.role.name} serves harness {adm.harness}")
+        else:
+            # ⚖ §The harness follows the rail (operator ruling 2026-10-23): no harness named = every
+            # allowed rail is walked, and the dispatch's harness is the picked rail's (`harness_for`).
+            candidates = list(adm.role.rails)
         # ⚖ The same (stack, task, round, attempt) from the same caller, for the same pod (or both
         # unbound), while the earlier session is still active = a re-run of THAT admission (a killed
         # pod's re-run, a leaked slot): the earlier session is SUPERSEDED — released now, its token
@@ -355,6 +363,7 @@ class SessionService:
             log.info("session: rail choice %s over %s for %s (%s) — %s", choice["rail"], choice["over"], choice["label"],
                      choice["reason"], choice["detail"])
         for rail in candidates:
+            radm = self._for_rail(adm, rail)
             rp = self.policy.rails[rail]
             models = rp.models.get(adm.tier)
             if not models:
@@ -386,7 +395,7 @@ class SessionService:
                     continue
                 # The provider axis (GW-RAIL-OPENROUTER §Selection): with a snapshot, the model admits
                 # only while an eligible provider is neither struck for this task nor cooled.
-                verdict, detail = self.provider_plan(rail, m, adm.harness, adm.stack.name, adm.task, now)
+                verdict, detail = self.provider_plan(rail, m, radm.harness, adm.stack.name, adm.task, now)
                 if verdict == "unpinned" and any(r == rail and mm == m for r, mm, _p in struck_cells):
                     # ⚖ a provider-scoped strike with no snapshot to steer by: nothing can route around it
                     exhausted.append(f"{rail} {m}")
@@ -420,7 +429,7 @@ class SessionService:
                 blocked = self.codex.admission(self.policy.defer_retry_s) if self.codex else ("credential-unresolved", 0)
                 if blocked is None:
                     self.metrics.credential(rail, "resolved")
-                    return self._dispatch(adm, rail, model, now, answer_choice)
+                    return self._dispatch(radm, rail, model, now, answer_choice)
                 if blocked[0] == "credential-transient":
                     self.metrics.credential(rail, "transient")
                     return error(503, "credential-transient", "the codex credential store does not answer — retry",
@@ -449,7 +458,7 @@ class SessionService:
                          rail, adm.stack.name, iso(due))
                 cred_rejected.append((rail, due))
                 continue
-            return self._dispatch(adm, rail, model, now, answer_choice)
+            return self._dispatch(radm, rail, model, now, answer_choice)
         if capacity_blocked:
             rail, reason, free_at, _ = min(capacity_blocked, key=lambda b: b[2])  # ties: walk order (min is stable)
             return self._defer(adm, reason, "every allowed rail is blocked: " + "; ".join(b[3] for b in capacity_blocked),
@@ -466,6 +475,15 @@ class SessionService:
             return self._defer(adm, "cells-exhausted", "this task's strikes exclude every cell: " + ", ".join(exhausted),
                                retry_after_s=None, escalate=True)
         return self._defer(adm, "role-rail-denied", f"no allowed rail of role {adm.role.name} names a model for tier {adm.tier}")
+
+    @staticmethod
+    def _for_rail(adm: Admission, rail: str) -> Admission:
+        """The admission as `rail` would dispatch it: an explicit harness is the caller's and stands;
+        otherwise the harness follows the rail (GW-SESSIONS-ADMIT §The harness follows the rail)."""
+        if adm.harness_explicit:
+            return adm
+        h = harness_for(rail, adm.harness)
+        return adm if h == adm.harness else replace(adm, harness=h)
 
     def rail_choice(self, adm: Admission, candidates: list[str], struck_models: set[str],
                     struck_cells: set[tuple[str, str, str]], now: float) -> dict | None:
@@ -523,7 +541,7 @@ class SessionService:
         cost = self.policy.tiers.cost
         rp = self.policy.rails[rail]
         if rp.providers is not None:  # the openrouter rail: the selected endpoint prices the cell
-            verdict, plan = self.provider_plan(rail, model, adm.harness, adm.stack.name, adm.task, now)
+            verdict, plan = self.provider_plan(rail, model, self._for_rail(adm, rail).harness, adm.stack.name, adm.task, now)
             if verdict != "pinned" or not plan or plan[0].out_price is None:
                 return {"cost": None, "price": None, "rate": None, "held": "no-eligible-endpoint",
                         "detail": f"no eligible endpoint to price ({verdict}: {plan if isinstance(plan, str) else '-'})"}
