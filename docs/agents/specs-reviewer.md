@@ -304,3 +304,15 @@ decision; adopting the briefs does not remove it.
 4. **Reach.** Oracle-fleet keeps its rule-1 codeowner gate; replacing it is per island, operator's
    call: install the App there, add the repo to the `specs-reviewer-git` chain's `repositories` + `SPECS_REVIEW_REPOS`,
    set `required_approvals = 2` in `tofu/github`.
+5. **The half-join guard and parametrize-from-spec — tool flag or repo gate?** The oracle handoff
+   (`.handoff/oracle/done/20261020-2107-specs-ruleset-and-golden-example-for-the-specs-reviewer.md`
+   §4 items 4–5, 2026-10-20) names the hazard the joined render carries: a rule joins as soon as ONE
+   description cell keys a case and every other row paints `∅ unproven` — rows that mostly do have
+   tests under ids that differ from the cell — and nothing gates it. Two snippets-shaped remedies,
+   both undecided (⚖): a ratchet on `∅` rows inside a joined table (per rule, baseline = today's
+   count, never up; `allure-evidence` already computes `stats["unproven"]`), and a
+   parametrize-from-spec helper that reads the GFM table under a rule heading into `pytest.param`s
+   (ids = description cells, argnames = header) so the rows live once, in the .md. Whether each is a
+   tool flag both repos get from the pin (`gateway/specs/README.md` §Rules) or a repo gate beside
+   `spec_gate.py`'s join ratchet is the open fork; homelab#2860 (GW-REDACT rewritten to v0.6.1) is the
+   rule where they would first apply. File them in the snippets repo when the pin moves.
