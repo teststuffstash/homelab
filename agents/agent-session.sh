@@ -2258,8 +2258,8 @@ if [ "$HARNESS" = "opencode" ]; then
   # FU-270: a /sessions ride's provider + model ARE the gateway's OPENCODE_CONFIG_CONTENT, which
   # opencode 1.18.35 deep-merges OVER this OPENCODE_CONFIG file (probed in-cluster 2026-10-17 with
   # `opencode debug config`: file-only → mode+mcp; content-only → model+provider.gateway; both →
-  # all four keys). So the file keeps only what the gateway does not own (autoApprove, MCP): no
-  # OpenRouter pin, no proxy baseURL. (Not re-indented: the else arm closes after the pin echo.)
+  # all four keys). So the file keeps only what the gateway does not own (the headless permission
+  # grant, MCP): no OpenRouter pin, no proxy baseURL. (Not re-indented: the else arm closes after the pin echo.)
   if [ -n "${GW_SESSIONS:-}" ]; then
     OC_CONFIG=""
     echo "→ opencode: provider + model = the gateway's OPENCODE_CONFIG_CONTENT (${OPENCODE_MODEL:-?}); no OpenRouter pin"
@@ -2296,17 +2296,24 @@ if [ "$HARNESS" = "opencode" ]; then
     echo "→ opencode via egress proxy: baseURL ${PROXY_URL}/api/v1 (ADR-087)"
   fi
   # Headless mode: auto-approve tool calls (read/write/bash) — matching goose's GOOSE_MODE=auto.
-  # Without this, an unattended opencode run prompts "user rejected permission" (homelab#792 gap 2).
-  # The base is seeded when OC_CONFIG is empty (unpinned + no injection) so the guard never
-  # fails open on the headless path — every --recipe opencode ride gets mode.autoApprove.
-  # The correct shape for the pinned opencode binary (v1.18.13) is a sub-object under mode:
-  #   mode.autoApprove.permission and mode.autoApprove.options (each {} = approve all).
-  # The root-level autoApprove: true used in PR#800 was rejected at config validation
-  # (homelab#804). Verified against the pinned binary on 2026-08-23.
+  # Without this, an unattended `opencode run` auto-rejects every permission it would otherwise ask
+  # for (homelab#792 gap 2). The base is seeded when OC_CONFIG is empty (unpinned + no injection) so
+  # the guard never fails open on the headless path — every --recipe opencode ride gets the grant.
+  # The knob is the top-level `permission` map ("*" = every permission, `external_directory`
+  # included — the one the recipe read at /tmp/fix-recipe.yaml needs, the pod's cwd being the repo).
+  # The OLD shape, `mode.autoApprove.{permission,options}` (verified on v1.18.13, 2026-08-23; the
+  # root-level `autoApprove: true` of PR#800 was rejected at validation, homelab#804), is parsed by
+  # the pinned 1.19.0 as an AGENT named autoApprove and grants nothing: the ride then dies on
+  # `permission requested: external_directory (/tmp/*); auto-rejecting` before reading the recipe
+  # (FU-270 — the 2026-10-23 round-1 strikes on homelab#2860 and agent-runtime#181). Probed
+  # in-cluster the same day (agent-base:latest, `opencode debug config` + a fake provider that
+  # calls `read` on /tmp): the old shape auto-rejects, `permission: {"*": "allow"}` reads. The
+  # gateway's OPENCODE_CONFIG_CONTENT (deep-merged OVER this file) carries no `permission` key, so
+  # the grant survives a /sessions ride (the probe ran with both set).
   if [ -n "$RUN_CMD" ]; then
     OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" '
       ($base // {"$schema": "https://opencode.ai/config.json"})
-      * {mode: {autoApprove: {permission: {}, options: {}}}}')"
+      * {permission: {"*": "allow"}}')"
   fi
   # homelab#1276: merge the MCP server config into the opencode session config when the stack
   # declares spec.mcp.endpoint. The opencode config format uses a top-level "mcp" key with

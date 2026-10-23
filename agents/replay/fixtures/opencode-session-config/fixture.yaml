@@ -9,7 +9,8 @@
 # THE CONTRACT:
 #   1. `OC_SETUP` is non-empty — the base64 config write is always produced for a --recipe
 #      opencode ride regardless of pin/injection state.
-#   2. The decoded config JSON carries `mode.autoApprove` (with empty permission+options).
+#   2. The decoded config JSON carries `permission: {"*": "allow"}` (the headless grant; the old
+#      `mode.autoApprove` shape is an agent definition on opencode 1.19.0 and grants nothing — FU-270).
 #   3. The config JSON carries the `$schema` key.
 #   homelab#804: root-level autoApprove:true (PR#800) was rejected by the pinned binary.
 name: opencode-session-config
