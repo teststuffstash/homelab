@@ -1,24 +1,7 @@
-"""GW-REDACT — no credential value in any log line (specs/endpoints/sessions.md).
+"""Credential redaction in the gateway's log lines (specs/endpoints/sessions.md §GW-REDACT).
 
-| description | the formatter is given | the line contains | the line does not contain |
-|---|---|---|---|
-| a session token in a message | "auth ok gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" | auth ok <redacted> | gws_ |
-| an OAuth token | "inject sk-ant-oat01-FAKE..." | inject <redacted> | sk-ant-oat |
-| an OpenRouter key | "inject sk-or-v1-FAKE..." | inject <redacted> | sk-or-v1- |
-| a bearer header value | "Authorization: Bearer abc.def.ghi" | Authorization: Bearer <redacted> | abc.def.ghi |
-| the Go key's value | the OPENCODE_GO_API_KEY fixture value | <redacted> | the value |
-| a ref is not a credential | "ref platform-agents/claude-session unresolved" | the ref verbatim | <redacted> |
-| a model id is not a credential | "model opencode-go/deepseek-v4.1-flash" | the id verbatim | <redacted> |
-| a %-arg carrying a token is masked | "ride %s" % token | ride <redacted> | gws_ |
-| a projected ServiceAccount token (a JWT) | "review eyJ….eyJ….sig" | review <redacted> | eyJ |
-
-| description | path | the log holds | the log does not hold |
-|---|---|---|---|
-| an upstream 401 body is summarised, not copied | upstream-401 on openrouter | upstream-auth openrouter 401 | the upstream body, the key |
-| a bad inbound header is logged by shape | Authorization: Bearer notatoken | session-unknown | notatoken |
-| a dispatch line names the session id, never the token | dispatch | the session id | the token |
-| a pull line names the session and the identity, never either token | a bound dispatch -> its pull | env pulled id=<id> by system:serviceaccount:platform-agents:agentstack-worker | the presented SA token, the minted gws_ token |
-| a refused pull never logs the presented token | a pull whose token reviews as another ServiceAccount | pull-identity-refused | the presented token |
+The real-path log lines are the GW-REDACT rows; the formatter's own patterns, fed a bare string,
+are unlabelled chassis guards (conventions § Allure taxonomy: only system-level cases are evidence).
 """
 
 from __future__ import annotations
@@ -28,10 +11,9 @@ import logging
 import pytest
 
 from agent_gateway.logging import REDACTED, RedactingFormatter, redact, register_literal
+from agent_gateway.pull import POD_NAME_EXTRA, Review
 
 from .conftest import GO_KEY, attach_json, bearer, given, open_session, rule, then, when, world
-
-pytestmark = rule("GW-REDACT")
 
 TOKEN = "gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 FMT = RedactingFormatter("%(message)s")
@@ -49,6 +31,13 @@ ROWS = [
 ]
 
 
+def _system_row(fn):
+    """Label a case as a GW-REDACT row: it observes a log line the gateway writes."""
+    for mark in rule("GW-REDACT"):
+        fn = mark(fn)
+    return fn
+
+
 @pytest.mark.parametrize(("line", "contains", "absent"), [r[1:] for r in ROWS], ids=[r[0] for r in ROWS])
 def test_formatter_rows(line, contains, absent):
     world()
@@ -64,7 +53,7 @@ def test_formatter_rows(line, contains, absent):
 
 
 def test_arg_token_masked():
-    """row: a %-arg carrying a token is masked"""
+    """Chassis guard: a %-arg carrying a token is masked."""
     world()
     with when("format LogRecord 'ride %s' with args (session token,)"):
         out = FMT.format(logging.LogRecord("t", logging.INFO, __file__, 1, "ride %s", (TOKEN,), None))
@@ -73,88 +62,89 @@ def test_arg_token_masked():
         assert out == "ride <redacted>" and "gws_" not in out
 
 
-def _lines(caplog) -> list[str]:
-    return [FMT.format(rec) for rec in caplog.records]
-
-
-async def test_upstream_401_summarised(gw, upstreams, caplog):
-    """row: an upstream 401 body is summarised, not copied"""
-    world(upstream="upstream-401")
+@pytest.mark.parametrize(
+    ("path", "log_line", "never_logged"),
+    [
+        pytest.param(
+            "upstream-401 on openrouter",
+            "upstream-auth openrouter 401",
+            "LEAK, sk-ant-oat, invalid x-api-key",
+            id="an upstream 401 body is summarised, not copied",
+        ),
+        pytest.param(
+            "Authorization: Bearer notatoken",
+            "session-unknown",
+            "notatoken",
+            id="a bad inbound header is logged by shape",
+        ),
+        pytest.param(
+            "POST /sessions",
+            "id=…",
+            "gws_",
+            id="a dispatch line names the session id, never the token",
+        ),
+        pytest.param(
+            "a bound dispatch, then its pull",
+            "env pulled id=… by system:serviceaccount:platform-agents:agentstack-worker",
+            "eyJ, gws_",
+            id="a pull line names the session and the identity, never either token",
+        ),
+        pytest.param(
+            "a pull whose token reviews as another ServiceAccount",
+            "pull-identity-refused",
+            "eyJ",
+            id="a refused pull never logs the presented token",
+        ),
+    ],
+)
+@_system_row
+async def test_real_path_log_lines(path, log_line, never_logged, gw, upstreams, reviews, caplog):
     caplog.set_level(logging.INFO)
-    upstreams["openrouter"].behaviour = "upstream-401"
-    with given("a session on rail openrouter (worker, harness goose)"):
-        doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
-    with when("POST /openai/v1/chat/completions on the openrouter session (upstream answers 401)"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-    lines = _lines(caplog)
-    with then("status = 424", status={"expected": 424, "actual": r.status_code}):
-        assert r.status_code == 424
-    with then("a log line starts 'upstream-auth openrouter 401' and none copies the upstream body (LEAK / sk-ant-oat / invalid x-api-key)",
-              log_lines={"actual": lines}):
-        assert any(line.startswith("upstream-auth openrouter 401") for line in lines), lines
-        assert not any("LEAK" in line or "sk-ant-oat" in line or "invalid x-api-key" in line for line in lines)
+    session_id = ""
+    if path == "upstream-401 on openrouter":
+        world(upstream="upstream-401")
+        upstreams["openrouter"].behaviour = "upstream-401"
+        with given("a session on rail openrouter (worker, harness goose)"):
+            doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
+        with when("POST /openai/v1/chat/completions on the openrouter session (upstream answers 401)"):
+            r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+        with then("status = 424", status={"expected": 424, "actual": r.status_code}):
+            assert r.status_code == 424
+    elif path == "Authorization: Bearer notatoken":
+        world()
+        with when("POST /openai/v1/chat/completions with authorization 'Bearer notatoken'"):
+            r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": "Bearer notatoken"})
+        with then("status = 401", status={"expected": 401, "actual": r.status_code}):
+            assert r.status_code == 401
+    elif path == "POST /sessions":
+        world()
+        with when("POST /sessions (platform worker) → dispatch"):
+            doc = await open_session(gw)
+        session_id = doc["session"]["id"]
+    elif path == "a bound dispatch, then its pull":
+        world()
+        user = "system:serviceaccount:platform-agents:agentstack-worker"
+        with given("a session bound to platform-agents/agentstack-worker pod fixer-1; the fake TokenReview answers that identity"):
+            reviews.tokens[JWT] = Review(True, user, ("agent-gateway",), {POD_NAME_EXTRA: ("fixer-1",)})
+            doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker", "pod": "fixer-1"})
+        session_id = doc["session"]["id"]
+        with when(f"POST /sessions/{session_id}/env with the pod's projected token"):
+            await gw.post(f"/sessions/{session_id}/env", headers={"authorization": f"Bearer {JWT}"})
+    elif path == "a pull whose token reviews as another ServiceAccount":
+        world()
+        with given("a bound session; the presented token reviews as system:serviceaccount:platform-agents:default"):
+            reviews.tokens[JWT] = Review(True, "system:serviceaccount:platform-agents:default", ("agent-gateway",), {})
+            doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker"})
+        session_id = doc["session"]["id"]
+        with when(f"POST /sessions/{session_id}/env with that token"):
+            await gw.post(f"/sessions/{session_id}/env", headers={"authorization": f"Bearer {JWT}"})
+    else:
+        raise ValueError(f"no real path named {path!r}")
 
-
-async def test_bad_inbound_header_logged_by_shape(gw, caplog):
-    """row: a bad inbound header is logged by shape"""
-    world()
-    caplog.set_level(logging.INFO)
-    with when("POST /openai/v1/chat/completions with authorization 'Bearer notatoken'"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": "Bearer notatoken"})
-    lines = _lines(caplog)
-    with then("status = 401", status={"expected": 401, "actual": r.status_code}):
-        assert r.status_code == 401
-    with then("a log line names session-unknown, none carries 'notatoken'", log_lines={"actual": lines}):
-        assert any("session-unknown" in line for line in lines), lines
-        assert not any("notatoken" in line for line in lines)
-
-
-async def test_dispatch_line_names_id_not_token(gw, caplog):
-    """row: a dispatch line names the session id, never the token"""
-    world()
-    caplog.set_level(logging.INFO)
-    with when("POST /sessions (platform worker) → dispatch"):
-        doc = await open_session(gw)
-    lines = _lines(caplog)
-    with then(f"a log line names id={doc['session']['id']}, no record carries the token or gws_", log_lines={"actual": lines}):
-        assert any(f"id={doc['session']['id']}" in line for line in lines), lines
-        for rec in caplog.records:
-            assert doc["session"]["token"] not in rec.getMessage() and "gws_" not in rec.getMessage()
-
-
-async def test_pull_line_names_identity_not_tokens(gw, reviews, caplog):
-    """row: a pull line names the session and the identity, never either token"""
-    from agent_gateway.pull import POD_NAME_EXTRA, Review
-
-    world()
-    caplog.set_level(logging.INFO)
-    user = "system:serviceaccount:platform-agents:agentstack-worker"
-    with given("a session bound to platform-agents/agentstack-worker pod fixer-1; the fake TokenReview answers that identity"):
-        reviews.tokens[JWT] = Review(True, user, ("agent-gateway",), {POD_NAME_EXTRA: ("fixer-1",)})
-        doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker", "pod": "fixer-1"})
-    with when(f"POST /sessions/{doc['session']['id']}/env with the pod's projected token"):
-        r = await gw.post(f"/sessions/{doc['session']['id']}/env", headers={"authorization": f"Bearer {JWT}"})
-    token = r.json()["env"]["OPENCODE_CONFIG_CONTENT"].split('"apiKey":"', 1)[1].split('"', 1)[0]
-    lines = _lines(caplog)
-    with then(f"a log line reads 'env pulled id={doc['session']['id']} by {user}'", log_lines={"actual": lines}):
-        assert any(f"env pulled id={doc['session']['id']} by {user}" in line for line in lines), lines
-    with then("no record carries the presented SA token or the minted gws_ token"):
-        for rec in caplog.records:
-            assert JWT not in rec.getMessage() and token not in rec.getMessage() and "gws_" not in rec.getMessage()
-
-
-async def test_refused_pull_never_logs_token(gw, reviews, caplog):
-    """row: a refused pull never logs the presented token"""
-    from agent_gateway.pull import Review
-
-    world()
-    caplog.set_level(logging.INFO)
-    with given("a bound session; the presented token reviews as system:serviceaccount:platform-agents:default"):
-        reviews.tokens[JWT] = Review(True, "system:serviceaccount:platform-agents:default", ("agent-gateway",), {})
-        doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker"})
-    with when(f"POST /sessions/{doc['session']['id']}/env with that token"):
-        await gw.post(f"/sessions/{doc['session']['id']}/env", headers={"authorization": f"Bearer {JWT}"})
-    lines = _lines(caplog)
-    with then("a log line names pull-identity-refused, none carries the presented token", log_lines={"actual": lines}):
-        assert any("pull-identity-refused" in line for line in lines), lines
-        assert not any(JWT in rec.getMessage() for rec in caplog.records)
+    needle = log_line.replace("…", session_id)
+    messages = [rec.getMessage() for rec in caplog.records]
+    with then(f"a log line holds {needle!r}", log_lines={"actual": messages}):
+        assert any(needle in m for m in messages), messages
+    with then(f"no log line holds any of {never_logged!r}", log_lines={"actual": messages}):
+        for fragment in never_logged.split(", "):
+            assert not any(fragment in m for m in messages), (fragment, messages)
