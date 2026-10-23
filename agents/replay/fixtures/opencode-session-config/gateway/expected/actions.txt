@@ -1,4 +1,4 @@
 OUT → opencode: provider + model = the gateway's OPENCODE_CONFIG_CONTENT (gateway/deepseek-v4-flash); no OpenRouter pin
 OUT OC_SETUP: SET
-OUT CONFIG_JSON: {"$schema":"https://opencode.ai/config.json","mode":{"autoApprove":{"permission":{},"options":{}}}}
+OUT CONFIG_JSON: {"$schema":"https://opencode.ai/config.json","permission":{"*":"allow"}}
 RC 0
