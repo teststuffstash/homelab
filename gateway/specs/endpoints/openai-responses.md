@@ -163,10 +163,28 @@ into the newer turn. These are gateway judgments, not vendor limits.
 | "a cancelled download closes upstream without draining" | the consumer stops after the first chunk || cancelled | the first chunk | 1; the second chunk is never pulled |
 | "a consumer that stops after the terminal event keeps the terminal outcome ⚖" | the consumer stops right after the completed event while the upstream still holds the stream open (the live native CLI's shape — 2026-10-22 22:57Z: both requests of the first completed canary turn were recorded `cancelled` / 499 with their usage counted) || completed, usage 7 / 3 | the event | 1; the trailer is never pulled |
 
+### Live grammar — captured 2026-10-23
+
+The rows the first [four-boundary capture](#gw-codex-capture) derived (the spike
+[§The capture ride](../../../docs/spikes/codex-subscription-rail.md#the-capture-ride--2026-10-23-1012z-fu-270):
+a tool-call turn and its continuation through the live backend, task `capture-codex-20261023T100750Z`).
+The fixture [`tests/fixtures/codex-live/turn-2026-10-23.json`](../../tests/fixtures/codex-live/turn-2026-10-23.json)
+is the reviewed bundle's STRUCTURE — header names, event types / sizes / relative times, item types
+and tool names, the terminal's usage numbers; no prompt text, no identifier, no credential (the bundle
+withholds them by construction). Provenance of each row: live observation, replayed offline against the
+fake backend — presence and compatibility for that run, never necessity (the plan's rule).
+
+| description | the fixture says || the row proves (offline) |
+|---|---||---|
+| "the pinned CLI's own request headers never cross — the live set ⚖" | the CLI sent `originator`, `session-id`, `thread-id`, `x-client-request-id`, `x-codex-beta-features`, `x-codex-turn-metadata`, `x-codex-window-id`, `x-openai-internal-codex-responses-lite` (+ `x-codex-turn-state` on the continuation); the backend answered 200 without any of them, twice || a ride carrying every one of them: the upstream saw none, the set is exactly the six (+ transport) — the §Header replacement rule, now with the live names behind it |
+| "the lite protocol's input items pass the body check" | `input` = an `additional_tools` item, developer and user `message` items, then on the continuation a `custom_tool_call` and its `custom_tool_call_output`; no top-level `tools`; `include`, `reasoning`, `text`, `prompt_cache_key`, `client_metadata`, `parallel_tool_calls: false`, `tool_choice: auto`, `store: false`, `stream: true` || the same shape rides: 200, the body crosses unchanged (the model the session's) |
+| "the live turn's event grammar relays and completes with the ledger's usage" | 78 events: `response.created` → `in_progress` → a `message` item (`output_text.delta` ×9) → a `custom_tool_call` item named `exec` (`custom_tool_call_input.delta` ×57) → `response.metadata` (a vendor event outside the public grammar) → `response.completed`; usage 10683 in / 9088 cached / 83 out, plus a vendor `usage.attribution` extension || the type sequence synthesized relays byte-identical: completed, counted in 1595 / cache_read 9088 / out 83 = the live `client-response` usage; the unknown event type and the extension pass through unread |
+
 ### Named gaps and local evidence
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
+| "⚑ gap: the CLI's direct backend calls beside the relay" | the pinned CLI, in the ride pod, under enforced egress || ~17 TCP SYNs to `chatgpt.com` / `ab.chatgpt.com` POLICY_DENIED during the 2026-10-23 capture ride (`AgentWorkerEgressDropped` fired); the ride completed — the calls are not needed for inference | what they are (a models list, a rate-limit read, telemetry) and what they would carry is unobserved: the pod cannot reach the backend, and the gateway sees only what is sent to it — the native-client baseline forwarder (the spike's plan) is the instrument |
 | "⚑ gap: SIWC profile (unselected)" | SIWC credentials || unsupported | separate grant and tool-shape contract required |
 | "⚑ gap: live vendor header compatibility" | real native backend || offline round trip only | live canary must establish whether other headers are required |
 | "⚑ gap: the live canary" | a real account || never run | spike step 4 — a separately authorized maintenance window |

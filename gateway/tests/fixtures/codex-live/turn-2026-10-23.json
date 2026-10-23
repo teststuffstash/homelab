@@ -1,0 +1,854 @@
+{
+ "source": "capture-codex-20261023T100750Z, request 1 (a tool-call turn) and 2 (its continuation), sanitized bundle \u2014 event TYPES, item types/names, sizes and relative times only",
+ "requests": [
+  {
+   "client_headers": [
+    "accept",
+    "authorization",
+    "content-length",
+    "content-type",
+    "host",
+    "originator",
+    "session-id",
+    "thread-id",
+    "user-agent",
+    "x-client-request-id",
+    "x-codex-beta-features",
+    "x-codex-turn-metadata",
+    "x-codex-window-id",
+    "x-openai-internal-codex-responses-lite"
+   ],
+   "upstream_headers": [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "chatgpt-account-id",
+    "content-type",
+    "user-agent"
+   ],
+   "headers_added": [
+    "accept-encoding",
+    "chatgpt-account-id"
+   ],
+   "headers_dropped": [
+    "content-length",
+    "host",
+    "originator",
+    "session-id",
+    "thread-id",
+    "x-client-request-id",
+    "x-codex-beta-features",
+    "x-codex-turn-metadata",
+    "x-codex-window-id",
+    "x-openai-internal-codex-responses-lite"
+   ],
+   "body_top_level": {
+    "client_metadata": "dict",
+    "include": "list",
+    "input": "list",
+    "model": "gpt-6-astra",
+    "parallel_tool_calls": false,
+    "prompt_cache_key": "string(len)",
+    "reasoning": "dict",
+    "store": false,
+    "stream": true,
+    "text": "dict",
+    "tool_choice": "auto"
+   },
+   "input_items": [
+    {
+     "type": "additional_tools",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "user"
+    },
+    {
+     "type": "message",
+     "role": "user"
+    }
+   ],
+   "response_headers_withheld": [
+    "cf-ray",
+    "cross-origin-opener-policy",
+    "nel",
+    "referrer-policy",
+    "report-to",
+    "strict-transport-security",
+    "x-codex-credits-balance",
+    "x-codex-credits-has-credits",
+    "x-codex-credits-unlimited",
+    "x-codex-safety-buffering-faster-model",
+    "x-codex-turn-state",
+    "x-content-type-options",
+    "x-models-etag",
+    "x-oai-request-id",
+    "x-openai-proxy-wasm"
+   ],
+   "first_byte_ms": 1446,
+   "events": [
+    {
+     "n": 1,
+     "t_ms": 1469,
+     "bytes": 26318,
+     "type": "response.created"
+    },
+    {
+     "n": 2,
+     "t_ms": 1480,
+     "bytes": 26322,
+     "type": "response.in_progress"
+    },
+    {
+     "n": 3,
+     "t_ms": 3362,
+     "bytes": 396,
+     "type": "response.output_item.added",
+     "item_type": "message",
+     "item_name": null
+    },
+    {
+     "n": 4,
+     "t_ms": 3362,
+     "bytes": 231,
+     "type": "response.content_part.added"
+    },
+    {
+     "n": 5,
+     "t_ms": 3362,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 6,
+     "t_ms": 3362,
+     "bytes": 244,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 7,
+     "t_ms": 3362,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 8,
+     "t_ms": 3362,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 9,
+     "t_ms": 3677,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 10,
+     "t_ms": 3677,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 11,
+     "t_ms": 3677,
+     "bytes": 243,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 12,
+     "t_ms": 3751,
+     "bytes": 243,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 13,
+     "t_ms": 3751,
+     "bytes": 244,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 14,
+     "t_ms": 3966,
+     "bytes": 225,
+     "type": "response.output_text.done"
+    },
+    {
+     "n": 15,
+     "t_ms": 3966,
+     "bytes": 273,
+     "type": "response.content_part.done"
+    },
+    {
+     "n": 16,
+     "t_ms": 3966,
+     "bytes": 532,
+     "type": "response.output_item.done",
+     "item_type": "message",
+     "item_name": null
+    },
+    {
+     "n": 17,
+     "t_ms": 3967,
+     "bytes": 428,
+     "type": "response.output_item.added",
+     "item_type": "custom_tool_call",
+     "item_name": "exec"
+    },
+    {
+     "n": 18,
+     "t_ms": 3971,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 19,
+     "t_ms": 3971,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 20,
+     "t_ms": 4236,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 21,
+     "t_ms": 4236,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 22,
+     "t_ms": 4236,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 23,
+     "t_ms": 4236,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 24,
+     "t_ms": 4236,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 25,
+     "t_ms": 4236,
+     "bytes": 198,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 26,
+     "t_ms": 4236,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 27,
+     "t_ms": 4236,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 28,
+     "t_ms": 4428,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 29,
+     "t_ms": 4429,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 30,
+     "t_ms": 4429,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 31,
+     "t_ms": 4429,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 32,
+     "t_ms": 4429,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 33,
+     "t_ms": 4647,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 34,
+     "t_ms": 4647,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 35,
+     "t_ms": 4647,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 36,
+     "t_ms": 4647,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 37,
+     "t_ms": 4647,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 38,
+     "t_ms": 4647,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 39,
+     "t_ms": 4647,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 40,
+     "t_ms": 4647,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 41,
+     "t_ms": 4810,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 42,
+     "t_ms": 5017,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 43,
+     "t_ms": 5017,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 44,
+     "t_ms": 5017,
+     "bytes": 199,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 45,
+     "t_ms": 5017,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 46,
+     "t_ms": 5017,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 47,
+     "t_ms": 5017,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 48,
+     "t_ms": 5017,
+     "bytes": 198,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 49,
+     "t_ms": 5017,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 50,
+     "t_ms": 5215,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 51,
+     "t_ms": 5215,
+     "bytes": 198,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 52,
+     "t_ms": 5215,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 53,
+     "t_ms": 5215,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 54,
+     "t_ms": 5215,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 55,
+     "t_ms": 5215,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 56,
+     "t_ms": 5216,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 57,
+     "t_ms": 5216,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 58,
+     "t_ms": 5405,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 59,
+     "t_ms": 5406,
+     "bytes": 198,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 60,
+     "t_ms": 5406,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 61,
+     "t_ms": 5406,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 62,
+     "t_ms": 5406,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 63,
+     "t_ms": 5406,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 64,
+     "t_ms": 5406,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 65,
+     "t_ms": 5406,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 66,
+     "t_ms": 5625,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 67,
+     "t_ms": 5625,
+     "bytes": 199,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 68,
+     "t_ms": 5625,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 69,
+     "t_ms": 5625,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 70,
+     "t_ms": 5625,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 71,
+     "t_ms": 5625,
+     "bytes": 198,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 72,
+     "t_ms": 5625,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 73,
+     "t_ms": 5625,
+     "bytes": 197,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 74,
+     "t_ms": 5713,
+     "bytes": 198,
+     "type": "response.custom_tool_call_input.delta"
+    },
+    {
+     "n": 75,
+     "t_ms": 5728,
+     "bytes": 361,
+     "type": "response.custom_tool_call_input.done"
+    },
+    {
+     "n": 76,
+     "t_ms": 5729,
+     "bytes": 655,
+     "type": "response.output_item.done",
+     "item_type": "custom_tool_call",
+     "item_name": "exec"
+    },
+    {
+     "n": 77,
+     "t_ms": 5776,
+     "bytes": 863,
+     "type": "response.metadata"
+    },
+    {
+     "n": 78,
+     "t_ms": 5797,
+     "bytes": 29492,
+     "type": "response.completed"
+    }
+   ],
+   "terminal_usage_standard": {
+    "input_tokens": 10683,
+    "output_tokens": 83,
+    "total_tokens": 10766,
+    "input_tokens_details": {
+     "cache_write_tokens": 0,
+     "cached_tokens": 9088
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    }
+   },
+   "client_response": {
+    "status": 200,
+    "outcome": "completed",
+    "events": 78,
+    "relayed_bytes": 103397,
+    "usage": {
+     "cache_read": 9088,
+     "in": 1595,
+     "out": 83
+    },
+    "cancelled": false,
+    "headers": {
+     "x-codex-turn-state": {
+      "len": 780,
+      "withheld": true
+     }
+    }
+   },
+   "terminal_usage_extra_keys": [
+    "attribution"
+   ]
+  },
+  {
+   "client_headers": [
+    "accept",
+    "authorization",
+    "content-length",
+    "content-type",
+    "host",
+    "originator",
+    "session-id",
+    "thread-id",
+    "user-agent",
+    "x-client-request-id",
+    "x-codex-beta-features",
+    "x-codex-turn-metadata",
+    "x-codex-turn-state",
+    "x-codex-window-id",
+    "x-openai-internal-codex-responses-lite"
+   ],
+   "upstream_headers": [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "chatgpt-account-id",
+    "content-type",
+    "user-agent",
+    "x-codex-turn-state"
+   ],
+   "headers_added": [
+    "accept-encoding",
+    "chatgpt-account-id"
+   ],
+   "headers_dropped": [
+    "content-length",
+    "host",
+    "originator",
+    "session-id",
+    "thread-id",
+    "x-client-request-id",
+    "x-codex-beta-features",
+    "x-codex-turn-metadata",
+    "x-codex-window-id",
+    "x-openai-internal-codex-responses-lite"
+   ],
+   "body_top_level": {
+    "client_metadata": "dict",
+    "include": "list",
+    "input": "list",
+    "model": "gpt-6-astra",
+    "parallel_tool_calls": false,
+    "prompt_cache_key": "string(len)",
+    "reasoning": "dict",
+    "store": false,
+    "stream": true,
+    "text": "dict",
+    "tool_choice": "auto"
+   },
+   "input_items": [
+    {
+     "type": "additional_tools",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "developer"
+    },
+    {
+     "type": "message",
+     "role": "user"
+    },
+    {
+     "type": "message",
+     "role": "user"
+    },
+    {
+     "type": "message",
+     "role": "assistant"
+    },
+    {
+     "type": "custom_tool_call",
+     "role": null
+    },
+    {
+     "type": "custom_tool_call_output",
+     "role": null
+    }
+   ],
+   "response_headers_withheld": [
+    "cf-ray",
+    "cross-origin-opener-policy",
+    "nel",
+    "referrer-policy",
+    "report-to",
+    "strict-transport-security",
+    "x-codex-credits-balance",
+    "x-codex-credits-has-credits",
+    "x-codex-credits-unlimited",
+    "x-codex-safety-buffering-faster-model",
+    "x-content-type-options",
+    "x-models-etag",
+    "x-oai-request-id",
+    "x-openai-proxy-wasm"
+   ],
+   "first_byte_ms": 852,
+   "events": [
+    {
+     "n": 1,
+     "t_ms": 869,
+     "bytes": 26318,
+     "type": "response.created"
+    },
+    {
+     "n": 2,
+     "t_ms": 879,
+     "bytes": 26322,
+     "type": "response.in_progress"
+    },
+    {
+     "n": 3,
+     "t_ms": 1898,
+     "bytes": 398,
+     "type": "response.output_item.added",
+     "item_type": "message",
+     "item_name": null
+    },
+    {
+     "n": 4,
+     "t_ms": 1898,
+     "bytes": 231,
+     "type": "response.content_part.added"
+    },
+    {
+     "n": 5,
+     "t_ms": 1903,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 6,
+     "t_ms": 1903,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 7,
+     "t_ms": 1903,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 8,
+     "t_ms": 1903,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 9,
+     "t_ms": 1904,
+     "bytes": 242,
+     "type": "response.output_text.delta"
+    },
+    {
+     "n": 10,
+     "t_ms": 1966,
+     "bytes": 862,
+     "type": "response.metadata"
+    },
+    {
+     "n": 11,
+     "t_ms": 1967,
+     "bytes": 194,
+     "type": "response.output_text.done"
+    },
+    {
+     "n": 12,
+     "t_ms": 1967,
+     "bytes": 242,
+     "type": "response.content_part.done"
+    },
+    {
+     "n": 13,
+     "t_ms": 1967,
+     "bytes": 503,
+     "type": "response.output_item.done",
+     "item_type": "message",
+     "item_name": null
+    },
+    {
+     "n": 14,
+     "t_ms": 1987,
+     "bytes": 29485,
+     "type": "response.completed"
+    }
+   ],
+   "terminal_usage_standard": {
+    "input_tokens": 10867,
+    "output_tokens": 9,
+    "total_tokens": 10876,
+    "input_tokens_details": {
+     "cache_write_tokens": 0,
+     "cached_tokens": 9088
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    }
+   },
+   "client_response": {
+    "status": 200,
+    "outcome": "completed",
+    "events": 14,
+    "relayed_bytes": 86319,
+    "usage": {
+     "cache_read": 9088,
+     "in": 1779,
+     "out": 9
+    },
+    "cancelled": false,
+    "headers": {}
+   },
+   "terminal_usage_extra_keys": [
+    "attribution"
+   ]
+  }
+ ],
+ "_comment": "GW-RAIL-CODEX \u00a7Live grammar \u2014 from the 2026-10-23 10:12Z capture ride (GW-CODEX-CAPTURE bundle capture-codex-20261023T100750Z, reviewed): header names, the allowlisted non-sensitive header values, event types/sizes/relative times, item types and tool names, the terminal usage numbers. No prompt text, no identifier, no credential \u2014 the bundle withholds them by construction."
+}
