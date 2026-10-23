@@ -14464,3 +14464,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   its rows ("The rows below observe…") — rule 11 passes it; (b) `log_line` fronts a substring check
   under an equality-shaped name — R9 passed it; (c) the six credential kinds the prose claims now have
   NO system-level row (the reviewer's "prose claim without a row" is advisory) — the fork to rule on.
+- **Operator rulings on the first v0.6 output (19:10–20:00Z).** (1) Page cut = OPTION B: one page per
+  resource, each requirement names the operation that drives it (Swagger UI's tag=resource shape; option
+  A = page per path+method rejected — few consumers, operator controls them). (2) No OpenAPI yaml now:
+  complementary not duplicating (consumers vs developers), but worth it only when free/generated from the
+  sibling schema. (3) Prose rules start SOFT: "prose claims without a row" = a visible MARK
+  (`unverified — expected to …` / rule 10 flags), "facts in prose have rows" is the end state, never a
+  gate — my proposed blocking check reversed. → allure-behavior-snippets **v0.6.2** (#34: rule 11 mark
+  clause + "prose does not introduce its rows"; lint item 7 withdrawn; rows check 8 → ADVISORY; inverse
+  column-naming case), pinned by **#2865** (version + wheel sha together). Queued **#2867** (GW-REDACT:
+  each named credential kind has a row or the mark; worker's ⚖ prove-vs-mark, worlds named) and **#2868**
+  (sessions.md `operation` column + verb in each rule's first sentence; ADMIT sub-section split NOT in
+  scope). Both touch sessions.md in different regions — watch for a BEHIND/conflict round.
+- Rail of #2862's successful ride: anthropic subscription, harness claude, claude/haiku — after 3 Go-rail
+  strikes (mimo, glm, haiku-on-Go); mimo heads the Go lists because the snapshot prices it cheapest per
+  clean ride (promise prices, 1 judged ride) — today's strike is not in that snapshot yet.
