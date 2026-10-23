@@ -272,7 +272,7 @@ report to record that digest (open question 2).
 2. The homelab launcher inputs that need no Allure (issue acceptance text, previous review,
    baseline, finding contract with round tracking) — DONE 2026-10-16 (#2622).
 3. Snippets v0.5 carries the briefs, conventions, `touched-rules` and the pack builder — DONE
-   (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join; v0.6.1 (2026-10-23, the GW-REDACT walkthrough) adds rule 11 — the requirement describes the system, never its tests — the header-is-the-parameter-list convention, rows-brief checks 8–9 and the `ROW_UNKEYED` / `HEADER_UNTHREADED` digest codes; homelab's `spec_gate.py` ratchets the same four join counts). oracle-fleet keeps its own process and v0.4.2
+   (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join; v0.6.1 (2026-10-23, the GW-REDACT walkthrough) adds rule 11 — the requirement describes the system, never its tests — the header-is-the-parameter-list convention, rows-brief checks 8–9 and the `ROW_UNKEYED` / `HEADER_UNTHREADED` digest codes; homelab's `spec_gate.py` ratchets the same four join counts; v0.6.2 (operator ruling on #2862, the first v0.6 rewrite): prose rules start SOFT — rule 11's unproven facts are MARKED in place, not gated; rows-brief check 8 advisory, lint item 7 withdrawn). oracle-fleet keeps its own process and v0.4.2
    until the gateway has proven this one (operator, 2026-10-16).
 4. Gateway tests on Allure, the raw results uploaded as the `gateway-evidence` CI artifact — DONE
    2026-10-16 (#2623; ci.yaml c63dbe1); moved to the `gateway-specs` bucket 2026-10-21
