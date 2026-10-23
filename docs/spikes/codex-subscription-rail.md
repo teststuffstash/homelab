@@ -267,7 +267,7 @@ kept on a separate branch/PR. These are proposed contracts, not new enforced GW 
 | Cancellation | Close upstream on downstream cancellation; never replay a partially delivered generation. |
 | OAuth | Central refresh with one owner per account, durable rotation and restart recovery. The current read-only Secret resolver is insufficient. |
 | Headroom | Account-wide observations with source/time/reset, freshness and out-of-order checks; gateway state drives admission, Prometheus observes. |
-| Initial eligibility | Explicit canary cell before general role routing; no implicit paid fallback. |
+| Initial eligibility | Explicit canary cell before general role routing; no implicit paid fallback. Ruled 2026-10-23 — [§Role routing](#role-routing--ruled-2026-10-23-fu-270): every role lists the rail. |
 
 Refresh persistence is an unresolved implementation decision: Infisical remains the source of
 truth under [the secrets doctrine](../secrets.md). Updating only its ESO-generated Kubernetes
@@ -684,12 +684,12 @@ while the vendor holds the stream open, so the relay's cancellation branch overw
 outcome. A consumer that goes away after the terminal event now keeps that outcome (200); only a
 still-pending stream is a cancellation (a ⚖ relay-seam row with the live shape as its fixture).
 
-What remains under FU-270 after step 4: the role routing question (who may ride codex beyond
-the explicit canary cell — the spike's "initial eligibility" row), MCP for the codex harness, the
-second-login revocation watch (first reading below), and the recorded-protocol experiment proper
-(the four-boundary capture — this slice's refusal capture is its first piece). The `x-codex-*`
-response headers as a second headroom source landed 2026-10-23 (GW-CODEX-HEADROOM §Upstream
-headers).
+What remains under FU-270 after step 4: MCP for the codex harness (the shape below, buildable
+now that a codex ride can carry a recipe), the second-login revocation watch's refresh half (first
+reading below), and the recorded-protocol experiment proper (the four-boundary capture — this
+slice's refusal capture is its first piece). Landed 2026-10-23: the `x-codex-*` response headers
+as a second headroom source (GW-CODEX-HEADROOM §Upstream headers) and the role-routing ruling
+([§Role routing](#role-routing--ruled-2026-10-23-fu-270) — every role lists the rail).
 
 ### MCP for the codex harness — the shape, verified 2026-10-23 (FU-270, not built)
 
@@ -702,9 +702,15 @@ launcher's codex arm exports the knob (`CODEX_MCP_URL=<endpoint>`, quoted like `
 and `agent-codex` appends that block to the provider block it already renders (same
 quote/backslash/newline refusal; no env = no block). It is not built because no codex ride can
 carry a recipe today — the rail is the prober's canary cell, and MCP attaches only on the recipe
-path — so it waits on the role-routing ruling below; until then the env card's "feedback tool:
-available on any harness with the knob" line would be false for a codex ride, which the
-prober-only policy makes unreachable rather than wrong.
+path — so it waited on the role-routing ruling ([§Role routing](#role-routing--ruled-2026-10-23-fu-270),
+same day: every role lists the rail, so a reviewer or worker ride CAN land on codex with a recipe).
+Built the same day: the runtime half (agent-runtime#180 — `agent-codex` appends the block from
+`CODEX_MCP_URL`, inert until exported) and the launcher's export (homelab#2844 — the codex arm
+prefixes `CODEX_MCP_URL='<endpoint>'` to the seam, replay row `harness-run-cmd-codex-mcp`); live
+once the runtime image carrying #180 is pinned. Until it lands the env card's "feedback tool:
+available on any harness with the knob" line would be false for a codex ride on a stack that
+declares `spec.mcp.endpoint` — none of the stacks on `/sessions` does today (the platform stack
+declares no MCP knob), so the claim is unreachable rather than wrong.
 
 ### The second-login revocation watch — first reading 2026-10-23 (FU-270, leg E)
 
@@ -723,6 +729,55 @@ the first login's REFRESH still works — the jail has not rotated since 10-16, 
 of the question answers itself when its token expires (2026-10-26) or the CLI refreshes early;
 re-read the log for a `refresh` outcome then. Until that reading, the enrolment doctrine stands:
 one refresher per token set, the gateway's login is its own.
+
+### Role routing — ruled 2026-10-23 (FU-270)
+
+**The ruling (operator, 2026-10-23): subscriptions go to all roles.** Three reasons, in the
+operator's words: the roles can be mixed and re-arranged week by week — one week the reviewer is
+sonnet, the next codex, or alternating days; tokens are spent efficiently — a week's subscription
+may be drained dry on purpose for a special use and the other subscriptions take over
+automatically; and the system keeps some variation — always the same reviewer makes the platform
+blind to certain classes of problem. The "initial eligibility" row above (the explicit canary cell
+first) is therefore closed: the cell proved the rail (step 4), and the ruling opens it.
+
+What it changed (homelab PR, the GW-SESSIONS-ADMIT §The harness follows the rail rows):
+
+- **The walk crosses the dialect boundary on its own.** Before, `roles.<role>.harness` filtered the
+  walk to the rails its dialect could speak, so a claude-harness reviewer could never reach codex
+  and a codex-harness ride could reach nothing else — "subscriptions on every role" was
+  unreachable without a second harness per role. Now a body that names no `harness` walks every
+  allowed rail in the role's order, and the dispatch's `harness` is the picked rail's: a rail
+  serving the role's harness dialect keeps the role's harness (the dual-dialect Go and openrouter
+  rails), a rail that does not names the harness of its own dialect (anthropic → claude, codex →
+  codex; `config.DIALECT_HARNESS`, one harness per dialect — the launcher's baked defaults). An
+  explicit `harness` keeps the old narrowing. The launcher already runs the harness the answer
+  names (`agents/agent-session.sh`, the `gateway-sessions` block — #2830's codex arm), so no
+  launcher change was needed.
+- **The deployed lists.** Every role lists `anthropic`, `opencode` and `codex`; the metered
+  openrouter rail, where listed, walks last (the prober keeps it first — its probes are that
+  rail's cells). The claude-harness roles (reviewer, coordinator, responder): anthropic → opencode
+  → codex. The opencode-harness roles (worker, retro, researcher): opencode → codex → anthropic →
+  openrouter. **The order per role is the weekly knob** — a `policy.json` edit, which rolls the
+  pod (the configMapGenerator); no code moves when a role changes rail.
+- **`rails.codex.max_sessions` stays 1** (the canary's bound) — one codex ride at a time across
+  all roles; a full rail falls through to the next. Raise it once live rides show the account's
+  room (the Plus account read 0 % / 0 % on 10-22).
+
+What it did not change, and what to watch:
+
+- **No rotation machinery.** The variation the operator wants is the operator's weekly re-order,
+  not a scheduler; a rotation knob would be a new ⚖ (which roles rotate, on what period, how the
+  evidence of "blind spots" is read) and nothing today asks for it.
+- **The recipe path on codex is unproven live** — the three rides so far were the prober's
+  structure-only canary. The first reviewer or worker ride that lands on codex (anthropic AND Go
+  full, or an operator re-order putting codex first) is the proof; read it in the gateway log
+  (`session: dispatch … rail=codex harness=codex`) and the ride's outcome.
+- **`codex exec` has no `--max-turns`-class bound** — only `AGENT_MAX_SECONDS` bounds a codex
+  ride (#2830). A runaway recipe ride on codex spends the subscription's window until the wall
+  clock cuts it; the headroom ceiling (0.95) is the backstop at admission, not mid-ride.
+- **The benchmarks evidence has one codex row** (`gpt-6-astra`, score 52.7 by AA tail) — the
+  tier lists all name it, so a heavy-tier reviewer on codex rides the same model a light-tier
+  prober does. #2764's cost-per-clean-ride choice compares twins only; codex has none.
 
 ## Recorded live protocol experiment — 2026-10-22 (FU-270)
 
