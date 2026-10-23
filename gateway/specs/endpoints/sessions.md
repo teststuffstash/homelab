@@ -59,13 +59,15 @@ capacity-blocked — the rail, or the [cell](../glossary.md#cell) its tier's mod
 `retry_after_s` are those of the blocked rail that frees **first** (a full rail frees after the
 policy's `defer_retry_s`, 60 s; ties go to walk order — ⚖ a gateway choice, the old proxy has no multi-rail answer); a walk blocked only on credentials
 defers `credential-unresolved`, or `credential-rejected` when any of its credentials was rejected
-upstream (⚖ the rejection outranks: it names the operator act, a rotation). The walk is filtered
-by the harness first: `claude` speaks the anthropic dialect (rails `anthropic`, `opencode`);
-`opencode` / `goose` speak openai (rails `openrouter`, `opencode`); `codex` speaks responses
-(rail `codex` only — gated by account headroom, [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom),
-whose admission rows live there); a rail the harness
-cannot speak is skipped, and an **explicit** `harness` × `rail` pair that cannot speak is a 400
-`harness-rail-mismatch`, never a silent skip. `defer` is HTTP 200 — a normal answer the caller
+upstream (⚖ the rejection outranks: it names the operator act, a rotation). An **explicit**
+`harness` filters the walk to the rails that serve its dialect: `claude` speaks the anthropic
+dialect (rails `anthropic`, `opencode`); `opencode` / `goose` speak openai (rails `openrouter`,
+`opencode`); `codex` speaks responses (rail `codex` only — gated by account headroom,
+[GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom), whose admission rows live there); a
+rail the harness cannot speak is skipped, and an explicit `harness` × `rail` pair that cannot
+speak is a 400 `harness-rail-mismatch`, never a silent skip. Without one, **the harness follows
+the rail** ([§The harness follows the rail](#the-harness-follows-the-rail)): every allowed rail is
+walked in the role's order and the dispatch names the harness the picked rail serves. `defer` is HTTP 200 — a normal answer the caller
 polls after `retry_after_s`; only a malformed body or a transient credential fault is an HTTP
 error. ⚖ The gateway admits on count, capacity and credential: no strikes, no cooldowns, no
 provider pins — the rest of the ADR-096 ladder is a gap, rendered as rows, not omitted. The
@@ -90,6 +92,35 @@ caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limi
 | "an explicit rail the role is not allowed" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: anthropic` || defer | — | — | role-rail-denied |
 | "an explicit rail the role is allowed is taken even when later in the list (logged as an override) ⚖" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: openrouter` || dispatch | openrouter | deepseek/deepseek-v4-flash | — |
 | "an unknown stack" | worker (stack `nope`) | (policy) | (policy) | 0 / 0 / 0 | — || defer | — | — | stack-unknown |
+
+### The harness follows the rail
+
+⚖ Operator ruling 2026-10-23 (FU-270, [the spike §Role routing](../../../docs/spikes/codex-subscription-rail.md#role-routing--ruled-2026-10-23-fu-270)):
+**every subscription rail is every role's.** The role's rail ORDER is the operator's weekly knob —
+one week the reviewer rides claude, the next codex; a week's tokens drained on purpose for a
+special use are made up by the next rail with no policy edit; and a reviewer that is always the
+same model is blind to the same classes of problem. The walk therefore crosses the dialect
+boundary on its own: with no `harness` in the body every allowed rail is a candidate, and the
+dispatch's `harness` is the picked rail's — a rail that serves the dialect of
+`roles.<role>.harness` keeps the role's harness (the dual-dialect `opencode` / `openrouter`
+rails), a rail that does not names the harness of its own dialect (`anthropic` → `claude`,
+`codex` → `codex`; ⚖ one harness per dialect, the launcher's baked defaults —
+`config.DIALECT_HARNESS`). `roles.<role>.harness` is thus the role's harness on the rails that
+can serve it, no longer a filter; the env follows the harness ([GW-SESSIONS-ENV](#gw-sessions-env)),
+and the launcher runs the harness the answer names (`agents/agent-session.sh`, the
+`gateway-sessions` block). An explicit `harness` keeps its meaning above: it narrows the walk, and
+a rail it cannot speak is never picked; an explicit `rail` without a harness takes the rail's.
+Rows run in the **`policy-codex` world** (roles shaped as the ruling — every role lists
+`anthropic`, `opencode` and `codex`; codex `max_sessions` 2) with codex headroom fresh at 20 % / 64 %.
+
+| description | role | body | active on rails (anthropic / opencode / codex) || decision | rail | harness | model |
+|---|---|---|---||---|---|---|---|
+| "without a harness the walk crosses the dialect boundary: the reviewer reaches codex ⚖" | reviewer | (defaults) | 5 / 3 / 0 || dispatch | codex | codex | codex/fixture-model |
+| "a dual-dialect rail keeps the role's harness" | reviewer | (defaults) | 5 / 0 / 0 || dispatch | opencode | claude | opencode-go/claude-haiku-5-5 |
+| "an opencode-harness worker reaching the anthropic rail rides claude ⚖" | worker | (defaults) | 0 / 3 / 2 || dispatch | anthropic | claude | claude/sonnet |
+| "an explicit harness still narrows the walk to its dialect" | reviewer | `harness: claude` | 5 / 3 / 0 || defer | — | — | — (`rail-capacity`: codex is not walked) |
+| "an explicit rail without a harness takes the rail's harness ⚖" | reviewer | `rail: codex` | 0 / 0 / 0 || dispatch | codex | codex | codex/fixture-model |
+| "the env is the picked harness's" | worker | (defaults) | 0 / 3 / 2 || dispatch | anthropic | claude | the env names `ANTHROPIC_MODEL`, never `CODEX_MODEL` / `OPENCODE_CONFIG_CONTENT` |
 
 ### The retry contract — model lists, strikes, `attempt`
 

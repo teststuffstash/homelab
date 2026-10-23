@@ -13,62 +13,13 @@
     }
   },
   "roles": {
-    "worker": {
-      "rails": [
-        "opencode",
-        "openrouter"
-      ],
-      "tier": "standard",
-      "harness": "opencode"
-    },
-    "reviewer": {
-      "rails": [
-        "anthropic",
-        "opencode"
-      ],
-      "tier": "heavy",
-      "harness": "claude"
-    },
-    "coordinator": {
-      "rails": [
-        "anthropic",
-        "opencode"
-      ],
-      "tier": "standard",
-      "harness": "claude"
-    },
-    "responder": {
-      "rails": [
-        "anthropic",
-        "opencode"
-      ],
-      "tier": "standard",
-      "harness": "claude"
-    },
-    "retro": {
-      "rails": [
-        "anthropic",
-        "openrouter"
-      ],
-      "tier": "heavy",
-      "harness": "claude"
-    },
-    "prober": {
-      "rails": [
-        "anthropic",
-        "codex"
-      ],
-      "tier": "light",
-      "harness": "claude"
-    },
-    "researcher": {
-      "rails": [
-        "openrouter",
-        "anthropic"
-      ],
-      "tier": "heavy",
-      "harness": "goose"
-    }
+    "worker": {"rails": ["opencode", "codex", "anthropic", "openrouter"], "tier": "standard", "harness": "opencode"},
+    "reviewer": {"rails": ["anthropic", "opencode", "codex"], "tier": "heavy", "harness": "claude"},
+    "coordinator": {"rails": ["anthropic", "opencode", "codex"], "tier": "standard", "harness": "claude"},
+    "responder": {"rails": ["anthropic", "opencode", "codex"], "tier": "standard", "harness": "claude"},
+    "retro": {"rails": ["anthropic", "codex", "openrouter"], "tier": "heavy", "harness": "claude"},
+    "prober": {"rails": ["anthropic", "codex"], "tier": "light", "harness": "claude"},
+    "researcher": {"rails": ["openrouter", "anthropic", "codex"], "tier": "heavy", "harness": "goose"}
   },
   "rails": {
     "anthropic": {

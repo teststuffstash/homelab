@@ -169,7 +169,7 @@
         },
         "harness": {
           "$ref": "#/$defs/harness",
-          "description": "default from policy roles.<role>.harness; fixes the dialect the walk may use",
+          "description": "optional: present, it fixes the dialect the walk may use (an explicit narrowing); absent, the harness follows the rail the walk picks (sessions.md \u00a7The harness follows the rail), policy roles.<role>.harness being the role's harness on the rails that serve its dialect",
           "x-requirements": [
             "GW-SESSIONS-ADMIT",
             "GW-SESSIONS-ENV"
