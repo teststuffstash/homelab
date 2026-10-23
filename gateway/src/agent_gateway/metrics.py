@@ -40,6 +40,8 @@ PROBE_OUTCOMES = ("cleared", "rejected", "inconclusive")
 POLL_OUTCOMES = ("accepted", "quota-invalid", "quota-time-invalid", "quota-out-of-order", "credential-unresolved",
                  "credential-transient", "upstream-auth", "upstream-http-error", "upstream-content-type",
                  "upstream-unreachable", "upstream-timeout")
+# GW-CODEX-HEADROOM §Upstream headers — codex_headers.OUTCOMES, spelled once per side like the poll's
+HEADROOM_HEADER_OUTCOMES = ("accepted", "absent", "quota-invalid", "quota-time-invalid", "quota-out-of-order")
 # GW-RAIL-OPENROUTER: how one attempt on a (rail, model, provider) cell ended — `ok` (a complete 2xx),
 # `incomplete` (a 2xx whose body stopped early), the pre-byte failures the gateway fails over on
 # (`5xx`, `429`, `unreachable`, `timeout`, `content-type`, `provider-error`), and the request-scoped
@@ -90,6 +92,7 @@ class Metrics:
         self.cred_total: dict[tuple[str, str], int] = {}
         self.upstream_auth_total: dict[str, int] = {}
         self.poll_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Poll
+        self.headroom_header_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Upstream headers
         self.codex_declared = False  # the family renders only for a declared codex rail (bind_codex_rail)
         self.cp_unauth_total: dict[tuple[str, str], int] = {}
         self.sub_util: dict[tuple[str, str], float] = {}
@@ -238,6 +241,13 @@ class Metrics:
         with self._lock:
             self.poll_total[o] = self.poll_total.get(o, 0) + 1
 
+    def codex_upstream_headroom(self, outcome: str) -> None:
+        """GW-CODEX-HEADROOM §Upstream headers: one relayed answer's headroom-header read (`accepted` = a
+        report the headroom took, `absent` = no window header on the answer)."""
+        o = _bounded(outcome, HEADROOM_HEADER_OUTCOMES)
+        with self._lock:
+            self.headroom_header_total[o] = self.headroom_header_total.get(o, 0) + 1
+
     def upstream_auth_rejected(self, rail: str) -> None:
         """The upstream answered 401/403 to the gateway's own credential (502 `upstream-auth`)."""
         r = _bounded(rail, RAILS)
@@ -305,6 +315,10 @@ class Metrics:
                           "# TYPE gateway_codex_usage_poll_total counter"]
                 for outcome in POLL_OUTCOMES:
                     lines.append(f"gateway_codex_usage_poll_total{_fmt_labels({'outcome': outcome})} {self.poll_total.get(outcome, 0)}")
+                lines += ["# HELP gateway_codex_upstream_headroom_total The codex rail's relayed answers read for their x-codex-* headroom headers, by outcome (GW-CODEX-HEADROOM §Upstream headers); accepted = the headroom took the report, absent = no window header.",
+                          "# TYPE gateway_codex_upstream_headroom_total counter"]
+                for outcome in HEADROOM_HEADER_OUTCOMES:
+                    lines.append(f"gateway_codex_upstream_headroom_total{_fmt_labels({'outcome': outcome})} {self.headroom_header_total.get(outcome, 0)}")
             lines += ["# HELP gateway_requests_incomplete_total 2xx answers whose body stopped before its end, by reason.",
                       "# TYPE gateway_requests_incomplete_total counter"]
             for (rail, dialect, reason), n in sorted(self.incomplete_total.items()):

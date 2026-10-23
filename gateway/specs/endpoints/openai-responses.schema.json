@@ -280,6 +280,54 @@
       "x-requirements": [
         "GW-CODEX-HEADROOM"
       ]
+    },
+    "upstream": {
+      "$comment": "GW-CODEX-HEADROOM §Upstream headers — what the gateway READS of a relayed 200 answer's response headers (the second report producer); read on the relayed 200 only, never on a refused answer or a 429. Names observed on the wire 2026-10-22 (the spike §The second ride); the value grammar is the pinned CLI's reader (codex-rs codex-api/src/rate_limits.rs @ rust-v0.163.0).",
+      "reads": {
+        "x-codex-primary-used-percent": {
+          "type": "number",
+          "description": "a float; the window is present iff this header is → used_percent"
+        },
+        "x-codex-primary-window-minutes": {
+          "type": "integer",
+          "description": "→ window_minutes"
+        },
+        "x-codex-primary-reset-at": {
+          "type": "integer",
+          "description": "epoch seconds → resets_at"
+        },
+        "x-codex-secondary-used-percent": {
+          "type": "number"
+        },
+        "x-codex-secondary-window-minutes": {
+          "type": "integer"
+        },
+        "x-codex-secondary-reset-at": {
+          "type": "integer"
+        },
+        "x-codex-rate-limit-reached-type": {
+          "type": "string",
+          "description": "present and non-empty → limited; its value is not interpreted"
+        }
+      },
+      "never_read": [
+        "x-codex-plan-type",
+        "x-codex-credits-*",
+        "x-codex-primary-over-secondary-limit-percent",
+        "x-codex-active-limit",
+        "x-codex-*-reset-after-seconds",
+        "x-codex-safety-*"
+      ],
+      "outcomes": [
+        "accepted",
+        "absent",
+        "quota-invalid",
+        "quota-time-invalid",
+        "quota-out-of-order"
+      ],
+      "x-requirements": [
+        "GW-CODEX-HEADROOM"
+      ]
     }
   },
   "admission": {
