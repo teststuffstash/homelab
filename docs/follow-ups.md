@@ -829,7 +829,9 @@ the block needs pruning, not more headings.
       caller, #2787 the judge step — proven to the first real revert); **(c) the loop flip** (#2788: the PLATFORM session
       pod carries `AGENT_GATEWAY=sessions`; first ride through `/sessions` awaited). Landed 10-22: #2775 closed (gap 1 ruled —
       a 429'd canary is no verdict, exponential backoff, #2810), first window 3/3 clean, re-cut #2813. **Next (seat):** the
-      canary windows (one per refresh, re-cut when the lists move); read the first platform worker ride. **Codex rail LIT
+      canary windows (one per refresh, re-cut when the lists move); read the first platform worker ride; **specs: the
+      v0.6 wording's first test is #2860's PR + reviewer rounds (10-23 walkthrough, oracle handoff 20261020-2107) — re-pin
+      from what they do; the report leg/joined render PR is in flight.** **Codex rail LIT
       10-22** (#2828 poll, #2832 policy prober-only, #2830 launcher+verb, agent-runtime#179, #2835/#2837 live-ride fixes; **step 4 met 22:57Z**:
       a tool turn completed clean through the gateway — spike §The third ride; #2840 merged). 10-23: **#2842** = the `x-codex-*` headers as
       the second headroom source (GW-CODEX-HEADROOM §Upstream headers) + the revocation watch's first reading (the jail's login survived the

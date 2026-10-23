@@ -14404,3 +14404,51 @@ updates or reverts as much as possible — mechanical revert or a responder."
   **Window check:** targets 196→195 with nothing down = the 10:05 rollout's old pod still in the set at the baseline read; closed
   `--force`, said so. Monitor stopped. Not exercised live: cancellation, failed/incomplete terminals, 429, refresh mid-ride, a 2nd turn.
 
+## 2026-10-23 16:08Z onward — Codex configuration-first opt-outs, platform implementation (FU-270)
+
+- Operator: write the spec, queue the platform implementation, then review. Filed and queued
+  [agent-runtime#181](https://github.com/teststuffstash/agent-runtime/issues/181): six explicit
+  gateway-worker opt-outs (updates, analytics, feedback, plugins, apps, API-key model discovery),
+  child-visible TOML regression rows, preserved provider/MCP/credential/exit contracts, runtime
+  documentation, no egress change. Spec is in the issue; worker publishes its durable doc.
+  Current runtime lock = Codex 0.162.1; source confirms the active flags, removed remote_models,
+  metrics/analytics destinations and gated plugin-sync fallback. Destination matches are candidate
+  attribution only; the capture's denied SYNs do not reveal HTTP paths.
+- Seat baseline in isolated /tmp/codex-config-review: devbox run ci, 500 passed. Footprint classifier:
+  machine-merge. No parallel issue matched the topic; this extends FU-270.
+- Manual normal coordinator invocation coordinate-platform-p2xnr, after dry-run, in maintenance
+  window seat-1792771898-2743. Event-driven scan already held the mutex; manual scan waited.
+  Closed normally at ~16:15Z: 195 scrape targets, 13 nodes/Cilium API backends, 1 pre-existing
+  hard-failed pod, no new firing alerts or stranded CI; background watch stopped.
+- First worker attempts never reached the recipe: OpenCode mimo-v2.6-flash and glm-5.3-flash
+  auto-rejected external_directory (/tmp/*) for /tmp/fix-recipe.yaml; claude-haiku-5-5 on that
+  path rejected the protocol. No commits. Posted evidence on #181 and directed the next dispatch
+  to an existing alternate harness, leaving the issue scope unchanged. Coordinator switched to
+  --harness claude at 16:19Z; replacement pod pulled the gateway Anthropic env. This is a live
+  recipe-path finding under FU-270, not evidence against the Codex opt-out implementation.
+
+## 2026-10-23 — seat: the GW-REDACT walkthrough → the join ratchet, process v0.6.x, #2860 (oracle handoff 20261020-2107)
+
+- Walked one rule (GW-REDACT, row "a session token in a message") end to end: requirement text,
+  table, the Allure record behind the row. Findings: every header column unthreaded (`the formatter is
+  given` vs argname `line`), `contains` asserting equality, three cells diverging from test values,
+  prose narrating its tests, one labelled case keying no row, the test helper's spec link pointing at
+  the rendered evidence page. Why the reviewer missed it: never read the rule (#2606 pre-dates the App,
+  #2623 pre-dates the tests-path trigger, #2672 reviewed PULL only) and no v0.5.2 code fires on any of it
+  (CELL_MISMATCH needs a same-named parameter).
+- Operator split: seat-authored mechanics vs a new ruleset for worker + reviewer; "the requirement must
+  not describe its tests — the tests describe themselves" (rule 11).
+- Shipped: #2856 (spec_gate §5 join ratchet, four counts/rule against a committed baseline; conftest
+  rule_pages skips specs/evidence; pytest id escaping off; fix.yaml worker pointer) — CI found my
+  order-dependence (random Allure UUIDs picked the record), fixed by merging every record of a case.
+  allure-behavior-snippets v0.6.0 (#32: rule 11, header == parameter list, column naming, lint items
+  6–7, rows checks 8–9, ROW_UNKEYED/HEADER_UNTHREADED in the digest) + v0.6.1 (#33: the `||` divider
+  cell is not a column). #2857 pins v0.6.1 on both consumers — the code reviewer caught the unbumped
+  SNIPPETS_SHA256 (would have silenced the specs reviewer on every PR); hashed the wheel myself.
+- Queued #2860 (agent/queued, md): GW-REDACT to v0.6.1 — acceptance = its ratchet line at 0/0/0/0,
+  no test words in prose, header == argnames, every case keyed; the formatter rows' fate is the worker's
+  ⚖. The loop's PR + the reviewer's rounds are the test of the wording; re-pin from what they do.
+- No Allure report exists for the gateway today (operator asked): the report leg + joined render
+  (handoff §4.2) dispatched to a background subagent as a seat PR; the mint gate held an FU for it
+  (decided + bounded = do it). Handoff items 4–5 (∅ ratchet, parametrize-from-spec — snippets-shaped,
+  ⚖ tool flag vs repo gate) → specs-reviewer.md open question in that PR. Handoff closed to done/.
