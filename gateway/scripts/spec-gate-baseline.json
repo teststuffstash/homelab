@@ -1,0 +1,158 @@
+{
+ "GW-ACCESS": {
+  "row-unkeyed": 13,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
+  "case-unspecified": 21
+ },
+ "GW-CATALOG-GO": {
+  "row-unkeyed": 10,
+  "header-unthreaded": 24,
+  "cell-mismatch": 0,
+  "case-unspecified": 9
+ },
+ "GW-CATALOG-OR": {
+  "row-unkeyed": 32,
+  "header-unthreaded": 25,
+  "cell-mismatch": 0,
+  "case-unspecified": 32
+ },
+ "GW-CODEX-CAPTURE": {
+  "row-unkeyed": 5,
+  "header-unthreaded": 3,
+  "cell-mismatch": 0,
+  "case-unspecified": 5
+ },
+ "GW-CODEX-HEADROOM": {
+  "row-unkeyed": 21,
+  "header-unthreaded": 17,
+  "cell-mismatch": 0,
+  "case-unspecified": 24
+ },
+ "GW-CODEX-OAUTH": {
+  "row-unkeyed": 8,
+  "header-unthreaded": 9,
+  "cell-mismatch": 0,
+  "case-unspecified": 8
+ },
+ "GW-CODEX-REFRESH": {
+  "row-unkeyed": 2,
+  "header-unthreaded": 7,
+  "cell-mismatch": 0,
+  "case-unspecified": 2
+ },
+ "GW-CRED-BOUNDARY": {
+  "row-unkeyed": 4,
+  "header-unthreaded": 14,
+  "cell-mismatch": 0,
+  "case-unspecified": 4
+ },
+ "GW-CRED-RESOLVE": {
+  "row-unkeyed": 3,
+  "header-unthreaded": 7,
+  "cell-mismatch": 2,
+  "case-unspecified": 3
+ },
+ "GW-HEALTH": {
+  "row-unkeyed": 3,
+  "header-unthreaded": 9,
+  "cell-mismatch": 0,
+  "case-unspecified": 3
+ },
+ "GW-METRICS": {
+  "row-unkeyed": 8,
+  "header-unthreaded": 9,
+  "cell-mismatch": 1,
+  "case-unspecified": 9
+ },
+ "GW-MODEL-RESOLVE": {
+  "row-unkeyed": 5,
+  "header-unthreaded": 7,
+  "cell-mismatch": 0,
+  "case-unspecified": 5
+ },
+ "GW-MODEL-TIERS": {
+  "row-unkeyed": 47,
+  "header-unthreaded": 21,
+  "cell-mismatch": 0,
+  "case-unspecified": 47
+ },
+ "GW-RAIL-ANTHROPIC": {
+  "row-unkeyed": 1,
+  "header-unthreaded": 10,
+  "cell-mismatch": 0,
+  "case-unspecified": 3
+ },
+ "GW-RAIL-CODEX": {
+  "row-unkeyed": 16,
+  "header-unthreaded": 21,
+  "cell-mismatch": 2,
+  "case-unspecified": 16
+ },
+ "GW-RAIL-OPENCODE": {
+  "row-unkeyed": 4,
+  "header-unthreaded": 8,
+  "cell-mismatch": 0,
+  "case-unspecified": 5
+ },
+ "GW-RAIL-OPENROUTER": {
+  "row-unkeyed": 22,
+  "header-unthreaded": 26,
+  "cell-mismatch": 0,
+  "case-unspecified": 22
+ },
+ "GW-REDACT": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 6,
+  "cell-mismatch": 0,
+  "case-unspecified": 1
+ },
+ "GW-SESSIONS-ADMIT": {
+  "row-unkeyed": 34,
+  "header-unthreaded": 93,
+  "cell-mismatch": 72,
+  "case-unspecified": 36
+ },
+ "GW-SESSIONS-AUTH": {
+  "row-unkeyed": 1,
+  "header-unthreaded": 20,
+  "cell-mismatch": 6,
+  "case-unspecified": 1
+ },
+ "GW-SESSIONS-ENV": {
+  "row-unkeyed": 9,
+  "header-unthreaded": 10,
+  "cell-mismatch": 3,
+  "case-unspecified": 7
+ },
+ "GW-SESSIONS-LIVENESS": {
+  "row-unkeyed": 5,
+  "header-unthreaded": 7,
+  "cell-mismatch": 1,
+  "case-unspecified": 5
+ },
+ "GW-SESSIONS-OUTCOME": {
+  "row-unkeyed": 11,
+  "header-unthreaded": 12,
+  "cell-mismatch": 7,
+  "case-unspecified": 11
+ },
+ "GW-SESSIONS-PULL": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 12,
+  "cell-mismatch": 0,
+  "case-unspecified": 0
+ },
+ "GW-SESSIONS-RELEASE": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 4,
+  "cell-mismatch": 0,
+  "case-unspecified": 0
+ },
+ "GW-SESSIONS-TOKEN": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 2,
+  "cell-mismatch": 0,
+  "case-unspecified": 1
+ }
+}

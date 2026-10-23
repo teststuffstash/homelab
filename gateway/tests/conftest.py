@@ -76,7 +76,13 @@ def rule_pages() -> dict[str, tuple[str, str]] | None:
     if not SPECS.is_dir():
         return None
     index: dict[str, tuple[str, str]] = {}
+    generated = SPECS / "evidence"  # evidence_render.py's per-rule pages: a second `## GW-…` heading per rule
     for md in sorted(SPECS.rglob("*.md")):
+        if generated in md.parents:
+            # Sorted after endpoints/, so on a tree with rendered evidence its heading overwrote the
+            # authored page's entry: every record's epic/feature/spec link pointed at
+            # evidence/<RULE>, never at the rule (spec_gate.spec_pages excludes the dir for the same reason).
+            continue
         page = md.relative_to(SPECS).with_suffix("").as_posix()
         sections: dict[int, str] = {}
         for line in md.read_text(encoding="utf-8").splitlines():
