@@ -14362,4 +14362,12 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Next under FU-270:** codex MCP (now reachable: runtime half `agent-codex` renders `[mcp_servers.stack-mcp]` from `CODEX_MCP_URL`
   first, then the launcher export — no stack on `/sessions` declares `spec.mcp` today, so no false env-card claim meanwhile); the
   four-boundary capture (a window); the revocation watch's refresh half ~10-26.
+- **~08:50Z–09:10Z:** #2842 MERGED 08:51Z (third round clean). Opened **#2845** (role routing, rebased onto master — a first
+  push carried #2842's pre-squash commits because the clone lacked its last hygiene commit; `rebase --onto origin/master
+  0152196e` + force-with-lease fixed the PR to its one commit), **agent-runtime#180** (agent-codex appends `[mcp_servers.stack-mcp]
+  url` from `CODEX_MCP_URL`, 3 tests), **#2844** (launcher codex arm prefixes the @sh-quoted `CODEX_MCP_URL=`; replay row
+  `harness-run-cmd-codex-mcp`; README index regenerated — the first push went out with the replay suite's exit masked by a
+  `| tail` (the card's own warning), caught on the re-run, fixed in the PR). Stale watcher gotcha: a `while pgrep -f
+  'pr-wait.sh N'` loop matches ITSELF (the zsh wrapper carries the pattern) and never exits — pr-wait EXITS on CHANGES_REQUESTED
+  (rc 2); re-run it per round, never wrap it in a pgrep loop.
 
