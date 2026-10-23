@@ -14387,4 +14387,20 @@ updates or reverts as much as possible — mechanical revert or a responder."
   runner's uv cache lock I/O error (`/uv-cache/sdists-v9/.../.lock: Input/output error`) — `gh run rerun --failed`, green.
   #2846 MERGED 09:35Z, #2844 MERGED, **#2848 MERGED 10:01Z** (merge 15c9a49a). Waiting on the deploy (tag `…-g15c9a49a3958` +
   `CODEX_CAPTURE_TASK_PREFIX` in the pod env) before the window + the capture ride.
+- **10:05Z–10:35Z — the capture ride (operator: "do it"):** #2848's image `2026.10.23-g15c9a49a3958` rolled 10:05:48Z, the pod logged
+  `codex capture: ON for tasks 'capture-codex-'*`. `devbox run maint -- open` (window seat-1792750015-3165, baseline targets 196) +
+  a Monitor alert watch; `devbox run -- bash gateway/scripts/canary-codex.sh --capture --prompt "<rg heading, then wc -l>"` (the
+  verb needs devbox: bare `kubectl` is not on PATH — first run died on the port-forward). Ride: session ca646f1be25b40a69fb59079957fc0a7,
+  pod agent-homelab-100750 (nx-01), **2 requests completed** (78 + 14 events, 103 + 86 KB, first byte 1446 / 852 ms), outcome clean,
+  bundle 100 records complete (50 + 36 KB), tokens 1595+1779 in / 9088×2 cached / 83+9 out; the CLI ran `rg` then `wc -l` and
+  answered "homelab 220". Findings → spike §The capture ride + GW-RAIL-CODEX §Live grammar (#2850, 3 rows + fixture): the CLI's own
+  request headers (originator, session-id, thread-id, x-client-request-id, x-codex-beta-features, x-codex-turn-metadata,
+  x-codex-window-id, x-openai-internal-codex-responses-lite) all dropped by the gateway, backend 200 regardless; tools ride INSIDE
+  `input` as `additional_tools` (lite protocol), `custom_tool_call`/`_output` on the continuation, whole history resent; no
+  Content-Type again; `x-codex-turn-state` issued on the first answer only; a vendor `response.metadata` event + `usage.attribution`
+  extension, both passed through unread; usage reproduced offline from the type sequence. **Alert:** `AgentWorkerEgressDropped` 10:12:47Z
+  — ~17 SYNs ride-pod → chatgpt.com/ab.chatgpt.com POLICY_DENIED while the CLI ran (direct backend calls beside the provider: models /
+  rate limits / telemetry — unknown), ride unaffected → a ⚑ gap row (the baseline forwarder is the instrument); left to the responder.
+  **Window check:** targets 196→195 with nothing down = the 10:05 rollout's old pod still in the set at the baseline read; closed
+  `--force`, said so. Monitor stopped. Not exercised live: cancellation, failed/incomplete terminals, 429, refresh mid-ride, a 2nd turn.
 
