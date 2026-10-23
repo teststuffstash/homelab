@@ -557,7 +557,7 @@ specs-review rounds):
 | B | `x-codex-turn-state` round trip bound to session, account and `client_metadata.turn_id`; `turn-state-invalid` | **merged #2735** (19:35Z) |
 | C | same-pod token-only re-read on `POST /sessions/{id}/env` (the `auth.command` seam) | **merged #2736** (19:5xZ) |
 | D | headroom from the gateway's own usage poll → `gateway_subscription_*{rail="codex"}` + panels on UID `claude-subscription` | not started |
-| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | **recipe landed 2026-10-22**: `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed`) + [runbook §Enrol the gateway's own Codex login](../runbook.md#enrol-the-gateways-own-codex-login-the-codex-seed--fu-270-leg-e) — login in a throwaway home, usage-endpoint probe (structure only), Infisical → force-sync → readback hash check, shred. **Minted 2026-10-22 ~20:00Z** on the host (`store` verified the Secret's record hash `a1e1523e…`; the seeded access JWT expires 2026-11-01T20:00Z — a 10-day native access-token lifetime, observed). The `login` probe's live usage payload shape is below. Open: the second-login revocation question (watch the jail's codex for a re-login prompt) |
+| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | **recipe landed 2026-10-22**: `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed`) + [runbook §Enrol the gateway's own Codex login](../runbook.md#enrol-the-gateways-own-codex-login-the-codex-seed--fu-270-leg-e) — login in a throwaway home, usage-endpoint probe (structure only), Infisical → force-sync → readback hash check, shred. **Minted 2026-10-22 ~20:00Z** on the host (`store` verified the Secret's record hash `a1e1523e…`; the seeded access JWT expires 2026-11-01T20:00Z — a 10-day native access-token lifetime, observed). The `login` probe's live usage payload shape is below. The second-login revocation question: first reading 2026-10-23 (§The second-login revocation watch) — the jail's login survived the gateway's; the refresh half waits for the jail's next rotation |
 
 ### Live usage payload shape — 2026-10-22 (FU-270 leg E)
 
@@ -655,7 +655,8 @@ carries the account's headroom as response headers — `x-codex-primary-used-per
 `x-codex-primary-window-minutes`, `x-codex-primary-reset-at` / `-reset-after-seconds`, the
 `secondary` set, `x-codex-primary-over-secondary-limit-percent`, `x-codex-active-limit`,
 `x-codex-plan-type`, `x-codex-credits-*` — the "upstream headers" headroom source
-(`GW-CODEX-HEADROOM`'s `source: upstream`, today a ⚑ gap) exists on the wire; and
+(`GW-CODEX-HEADROOM`'s `source: upstream`; a ⚑ gap until 2026-10-23, now §Upstream headers — the
+relayed answer's windows feed the same snapshot the poll does, strictly by time) exists on the wire; and
 `x-codex-turn-state` is issued on the very first turn (leg B's round trip has something to
 carry). Also `x-codex-safety-buffering-enabled` / `-faster-model` and `x-models-etag`. Values
 were not captured (names only — the capture's rule); the usage poll stays the admission source.
@@ -684,10 +685,29 @@ outcome. A consumer that goes away after the terminal event now keeps that outco
 still-pending stream is a cancellation (a ⚖ relay-seam row with the live shape as its fixture).
 
 What remains under FU-270 after step 4: the role routing question (who may ride codex beyond
-the explicit canary cell — the spike's "initial eligibility" row), the `x-codex-*` response
-headers as a second headroom source, MCP for the codex harness, the second-login revocation
-watch, and the recorded-protocol experiment proper (the four-boundary capture — this slice's
-refusal capture is its first piece).
+the explicit canary cell — the spike's "initial eligibility" row), MCP for the codex harness, the
+second-login revocation watch (first reading below), and the recorded-protocol experiment proper
+(the four-boundary capture — this slice's refusal capture is its first piece). The `x-codex-*`
+response headers as a second headroom source landed 2026-10-23 (GW-CODEX-HEADROOM §Upstream
+headers).
+
+### The second-login revocation watch — first reading 2026-10-23 (FU-270, leg E)
+
+The question leg E left open: does the gateway's own device login (minted 2026-10-22 ~20:00Z)
+invalidate the homelab-codex jail's earlier login on the same account? Read from the jail's own
+Codex log store (`logs_2.sqlite`, structure and status codes only — no token value was read or
+printed): the jail's `auth.json` was last refreshed 2026-10-16T12:54Z and its access JWT runs to
+2026-10-26T12:54Z (the same 10-day lifetime the gateway's seed showed); after the gateway's login
+the jail's Codex kept calling the backend with that week-old token — 77 `GET
+…/backend-api/codex/models` between 01:11Z and 01:56Z on 2026-10-23, every one `200`, every
+feedback tag `auth_retry_after_unauthorized=""` (no 401, no recovery) — and no re-login prompt.
+The three `account/rateLimits/read failed during TUI refresh` warnings in the same hour are the
+TUI's rate-limit panel, not an auth failure (no 401 anywhere in the window). **What this settles:**
+a second device login does NOT revoke the first login's access token. **What it does not:** whether
+the first login's REFRESH still works — the jail has not rotated since 10-16, so the refresh half
+of the question answers itself when its token expires (2026-10-26) or the CLI refreshes early;
+re-read the log for a `refresh` outcome then. Until that reading, the enrolment doctrine stands:
+one refresher per token set, the gateway's login is its own.
 
 ## Recorded live protocol experiment — 2026-10-22 (FU-270)
 
@@ -705,8 +725,9 @@ Use leg E's **separate gateway login**, imported through `CODEX_SEED_RECORD` →
 → the gateway's durable SQLite store. The worker receives only its gateway session token;
 the gateway alone owns upstream renewal. Never copy the active jail's renewable login to a
 second refresher. A short-lived access token can establish inference behavior, but cannot
-establish renewal/recovery. Independent-login revocation semantics remain unverified as noted
-above; enrollment must record that uncertainty and the observed effect on the existing login.
+establish renewal/recovery. Independent-login revocation semantics are half-verified (§The
+second-login revocation watch: the access token survives, the refresh half is pending); enrollment
+records that uncertainty and the observed effect on the existing login.
 The login's browser consent is the third-party-console class under the
 [minting doctrine](../secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret);
 credential transfer and cleanup belong to the coded enrollment recipe.

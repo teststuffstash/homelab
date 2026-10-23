@@ -113,6 +113,8 @@ policy's `tiers` block, and a row fails the suite when a list drifts from the de
   The seed is minted by `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed` — the
   gateway's OWN device login, never the jail's; runbook §Enrol the gateway's own Codex login).
   The deployed policy declares the rail since 2026-10-22 as the explicit canary cell (`prober` only,
-  last; only `harness: codex` reaches it). Native-CLI evidence lives in `experiments/codex-rail/`.
+  last; only `harness: codex` reaches it). Headroom comes from two gateway-owned producers: the
+  usage poll (`CODEX_USAGE_URL`) and the `x-codex-*` headers of every relayed answer
+  (GW-CODEX-HEADROOM §Upstream headers). Native-CLI evidence lives in `experiments/codex-rail/`.
 - The `upstream-slow` world is clock-faked (the fake transport raises `ReadTimeout`), so the
   `upstream-timeout` rows prove the 504 mapping, not the 600 s budget itself (specs: `🚧 WIP`).

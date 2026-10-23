@@ -35,7 +35,7 @@ admission reasons and the error envelope.
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, dark — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP`; `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
-| [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `headroom.poll`, `admission.reasons` | — | v0, dark — the gateway's own usage poll is the report producer (§Poll); the jail ingress and upstream-header reading stay `⚑ gap` |
+| [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `headroom.poll`, `headroom.upstream`, `admission.reasons` | — | v0 — two report producers, both the gateway's own: its usage poll (§Poll) and the relayed answers' `x-codex-*` headers (§Upstream headers); the jail ingress stays `⚑ gap` |
 | [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | gateway-local SQLite with hash-gated seed recovery; live durability remains unverified |
 | [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport wired; rail absent from policy |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked — exact on this rail |
@@ -182,9 +182,10 @@ Rendered by `scripts/evidence_render.py` from CI.
 The rail is admitted on **account headroom**, held by the gateway itself (no Prometheus read,
 ADR-108): one immutable snapshot of normalised windows, replaced only by a **strictly newer**,
 valid report. The report schema is the gateway's own (`headroom.report` in the schema), not a
-vendor payload; its producer must be authenticated and account-bound — that ingress is a `⚑ gap`,
-so today reports enter only through the in-process seam and a fresh gateway answers
-`quota-unknown` (fail closed). Freshness (`max_age_s`), the ceiling and the window profile are
+vendor payload; a producer must be authenticated and account-bound. Two producers exist today, both
+the gateway's own and account-bound by construction — the usage poll (§Poll) and the headroom
+headers of every relayed answer (§Upstream headers); a third, the jail's own `rate_limits` report,
+is a `⚑ gap`. A fresh gateway answers `quota-unknown` until a report is accepted (fail closed). Freshness (`max_age_s`), the ceiling and the window profile are
 policy (`rails.codex.headroom`) — in `policy-codex` the experiment's fixture values (120 s, 0.95,
 the 300- and 10080-minute windows) ⚖ — never code literals. Verdicts: `admit`, `quota-unknown`,
 `quota-stale` (past freshness, a clock rollback, or a window's reset passed — a reset passing is
@@ -281,9 +282,43 @@ poll leaves the last ACCEPTED report standing.
 | "the counter's label set is the poll's outcome set" | — || `gateway_codex_usage_poll_total`'s `outcome` values = the poll's outcomes | — |
 | "an undeclared rail renders no poll family; a declared one renders every outcome from 0 ⚖" | `GET /metrics` under `policy-default` (no codex rail) / under `policy-codex` (declared, nothing polled) || no `gateway_codex_usage_poll_total` series at all / the 11 outcomes, each 0 | — |
 
+### Upstream headers
+
+Every relayed 200 stream carries the account's windows as response headers — observed on the wire
+2026-10-22 (the spike §The second ride): `x-codex-primary-used-percent`, `-window-minutes`,
+`-reset-at`, the `secondary` set, and `x-codex-rate-limit-reached-type` when a limit is hit. The
+gateway reads them at the "upstream response received" boundary, on the **relayed 200 only** (a
+refused answer and a 429 are not read — the 429's verdict is its body's, and the next poll is at
+most `poll_interval_s` away), and translates them into the report above (`source: upstream`,
+`observed_at` = now; `limited` = the reached-type header present). The value grammar is the pinned
+CLI's own reader (codex-rs `codex-api/src/rate_limits.rs` @ rust-v0.163.0): used-percent a float,
+window-minutes and reset-at integers (epoch seconds), a window present iff its used-percent header
+is ⚖ — a window with no used-percent header is OMITTED, which the profile check refuses whole
+(unknown, never zero); a value the grammar cannot read is `quota-invalid`. The read never touches
+the ride: the stream is relayed whole whatever the headers say, and a refused report leaves the
+last accepted one standing. Both producers feed the ONE snapshot by the strictly-newer rule, so
+they compete only by time — a poll in the same instant is `quota-out-of-order`. Every read is
+counted on `gateway_codex_upstream_headroom_total{outcome}` ([GW-METRICS](metrics.md#gw-metrics)),
+declared-gated like the poll family. Nothing else in the header set is read (plan type, credits,
+the over-secondary percent, the safety flags).
+
+| description | the relayed answer's headers (world `policy-codex`, admitted on a poll report 20 % / 64 % at T−10) || outcome | verdict after |
+|---|---||---|---|
+| "the relayed answer's windows are the second observation" | 30 % / 70 %, minutes 300 / 10080, resets T+900 / T+7000 || accepted | admit — the snapshot's `source` is `upstream`; `gateway_subscription_utilization{rail="codex"}` 0.3 / 0.7 |
+| "the pinned CLI's value grammar ⚖" | `12.5` / `0`, integer minutes, epoch resets || accepted | admit — 0.125 / 0 (a float percent and a zero read as the CLI reads them) |
+| "an answer without window headers is absent, the last report stands" | no `x-codex-*` window header || absent | admit — gauges 0.2 / 0.64 unchanged |
+| "one window's headers alone are refused whole — unknown, never zero ⚖" | the primary set only || quota-invalid | admit (the poll's report stands) — the ride still 200 |
+| "an unreadable value is refused and the ride is unaffected ⚖" | `lots` / `5h` / `soon` || quota-invalid | admit (unchanged) — the stream completes |
+| "the reached-type header limits the next admission" | 30 % / 70 % + `x-codex-rate-limit-reached-type: primary` || accepted | quota-limited — the next `POST /sessions` defers `quota-limited` |
+| "a window at the ceiling in the headers limits until its reset" | 96 % / 64 %, 5h resets T+1000 || accepted | quota-limited — defer, `retry_after_s` 1000 |
+| "the two producers replace each other strictly by time ⚖" | headers at T; then a poll report at T, then one at T+1 || accepted; quota-out-of-order; accepted | admit — the newer poll's report |
+| "only a relayed answer is read ⚖" | a 429 and a wrong-type 200 carrying exhausted windows || — (not read, nothing counted) | admit (unchanged) |
+| "an undeclared rail renders no header family; a declared one renders every outcome from 0 ⚖" | `GET /metrics` under `policy-default` / `policy-codex` || no `gateway_codex_upstream_headroom_total` series / the 5 outcomes, each 0 | — |
+| "the counter's label set is the reader's outcome set" | — || `gateway_codex_upstream_headroom_total`'s `outcome` values = the reader's outcomes | — |
+
 ### Gauges
 
-An ACCEPTED report — and only one — sets the two subscription gauges of
+An ACCEPTED report from either producer — and only one — sets the two subscription gauges of
 [GW-METRICS](metrics.md#gw-metrics) for `rail="codex"`, one series per profile window:
 `gateway_subscription_utilization` = `used_percent / 100`, `gateway_subscription_reset_seconds` =
 `resets_at`. The `window` label is the profile's minutes spelled in the metrics vocabulary (300 →
@@ -305,7 +340,7 @@ forgotten with the process — "a gateway restart forgets" above). The Grafana p
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: authenticated report ingress ⚖" | a jail `rate_limits` event, upstream headers || neither reaches the gateway — the §Poll above is the only producer | the token-gated jail ingest (spike §Candidate shape) and upstream-header reading; the poll's LIVE answer on the enrolled account is the canary's to observe (the shape is known — the spike §Live usage payload shape, 2026-10-22 — the values are not) |
+| "⚑ gap: authenticated report ingress ⚖" | a jail `rate_limits` event || does not reach the gateway — §Poll and §Upstream headers are the producers | the token-gated jail ingest (spike §Candidate shape) |
 | "⚑ gap: reservation" | two admissions at 94 % || both dispatched | reports do not meter concurrent use; the session cap is the only bound |
 
 <details markdown="1"><summary>Evidence</summary>
