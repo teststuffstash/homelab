@@ -15,8 +15,8 @@ and stamp the commit they ran at (rule 5 below). What the gateway *is* lives one
 The numbered rules 1–11, the test & evidence conventions and the reviewer briefs are NOT kept here:
 they live ONCE in [allure-behavior-snippets](https://github.com/teststuffstash/allure-behavior-snippets)
 ([ADR-156](../../docs/adr.md#adr-156--one-portable-specevidence-process-homed-in-allure-behavior-snippets-one-reviewer-runs-two-briefs-2026-10-16)),
-pinned by version: **[RULES.md @ v0.6.1](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.1/allure_behavior_snippets/process/RULES.md)**,
-**[CONVENTIONS.md @ v0.6.1](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.1/allure_behavior_snippets/process/CONVENTIONS.md)**.
+pinned by version: **[RULES.md @ v0.6.2](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.2/allure_behavior_snippets/process/RULES.md)**,
+**[CONVENTIONS.md @ v0.6.2](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.2/allure_behavior_snippets/process/CONVENTIONS.md)**.
 "Rule N" anywhere in this island means rule N there. The pins: `../scripts/lib/snippets.sh` (CI
 evidence) and `agents/specs-reviewer-session.sh` (the reviewer's context pack); bump them together.
 
