@@ -1,0 +1,27 @@
+# ReferenceGrant: lets oracle's HTTPRoute for the Kargo UI (`kargo.oracle.teststuff.net`, declared in
+# oracle-iac on `oracle-gateway`, ns oracle-fleet — whose listener admits Same-namespace routes only)
+# reach the kargo-api Service in ns kargo. Same shape as oracle-gateway-refgrant.yaml: the grant lives
+# in the TARGET namespace and is platform-owned (the oracle AppProject cannot write ns kargo).
+# LAN-only: no PublicRoute ever points here (the admin UI is a promotion lever).
+#
+# NOT needed for the shadow MIRROR: the RequestMirror route, the stable Service and the shadow
+# release's Service all live in ns oracle-fleet (oracle-fleet DEP-SHADOW; oracle-iac
+# httproute-shadow-trial.yaml) — a same-namespace backendRef needs no grant.
+#
+# ⚠ kargo-api serves TLS (chart api.tls default; Service appProtocol https, port 443) while
+# oracle-gateway's listener is plain HTTP — the route needs either api.tls off in kargo.yaml (the
+# LAN convention: TLS terminates at HAProxy) or a BackendTLSPolicy. Held for the shape ruling.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: oracle-fleet-httproute-to-kargo-api
+  namespace: kargo
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: oracle-fleet
+  to:
+    - group: ""
+      kind: Service
+      name: kargo-api

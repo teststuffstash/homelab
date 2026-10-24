@@ -9,7 +9,9 @@
 # What it allows — deliberately narrow:
 #  - sourceRepos: ONLY the oracle-iac repo + the ghcr OCI chart registry (the fleet's charts land
 #    there once its deploy pipeline exists). The app repo (oracle-fleet) is never an ArgoCD source.
-#  - destinations: ONLY the oracle-fleet namespace, in-cluster.
+#  - destinations: the oracle-fleet namespace + oracle-kargo (the Kargo Project namespace — the
+#    stack's Warehouses/Stages and the chart-rendered AnalysisTemplate land there; argocd/platform/
+#    kargo.yaml), in-cluster.
 #  - clusterResourceWhitelist: ONLY the Crossplane `Workspace` (cluster-scoped; the stack will own
 #    its Garage buckets the ADR-076 way). `Namespace` intentionally absent → the tenant cannot
 #    create namespaces; they're platform-precreated (oracle-namespaces.yaml) and child apps run
@@ -29,6 +31,8 @@ spec:
   destinations:
     - server: https://kubernetes.default.svc
       namespace: oracle-fleet
+    - server: https://kubernetes.default.svc
+      namespace: oracle-kargo
   clusterResourceWhitelist:
     - group: tf.upbound.io
       kind: Workspace

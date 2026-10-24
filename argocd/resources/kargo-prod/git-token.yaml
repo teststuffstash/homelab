@@ -1,0 +1,177 @@
+# The oracle-kargo Project's git credential: a 1-hour homelab-deploy installation token, scoped to
+# oracle-iac with contents+pull_requests write — Kargo commits the shadow pin on the `kargo/shadow`
+# stage branch and opens the prod pin PR (oracle-fleet DEP-PROMOTE). It CANNOT push oracle-iac's
+# protected default branch, by design (the ruleset is the gate, not this token).
+#
+# Central mint, the retro-git.yaml / AgentStack readOnlyGrants shape (agents/coordinator/
+# retro-git.yaml — read it first): the App private key + generator + minted Secret live in
+# agent-coordinator (FU-089: an App key never enters a stack namespace), and a kubernetes-provider
+# ClusterSecretStore whose SA can read EXACTLY the minted Secret mirrors the token into
+# oracle-kargo. Same 30m/5m clocks, so the GithubTokenMirrorBehind / GithubTokenMintStale belts
+# (argocd/resources/agentstack/prometheusrule.yaml) cover this pair with no new rule.
+#
+# ⚠ Placement limits who can read the KEY among the Project's tenants (kargo-admin in
+# oracle-kargo), NOT Kargo itself: the management controller holds a cluster-wide `list secrets`
+# (argocd/resources/kargo/rbac-cluster.yaml, proven needed by #2798's kind run) — it can read this
+# key wherever it lives. Upstream ask recorded there.
+#
+# App identity: docs/github-apps.yaml slug homelab-deploy (installed on homelab, sleep-iac,
+# oracle-iac); key from Infisical DEPLOY_GH_APP_PRIVATE_KEY (already there — the github-exporter's
+# rl-deploy-github-app reads it), so no operator bootstrap step.
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: kargo-deploy-github-app
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: kargo-deploy-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: DEPLOY_GH_APP_PRIVATE_KEY }
+---
+# The generator: oracle-iac ONLY (a repo named here but not installed would 422 the whole mint —
+# homelab-deploy's install list is verified in docs/github-apps.yaml bootstrap.verify_repos).
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: kargo-git-oracle-iac-gen
+  namespace: agent-coordinator
+spec:
+  appID: "4214796"         # homelab-deploy (docs/github-apps.yaml)
+  installID: "144355858"   # the teststuffstash installation
+  auth:
+    privateKey:
+      secretRef: { name: kargo-deploy-github-app, key: privateKey }
+  permissions:
+    contents: write        # the shadow pin commit on kargo/shadow; the prod pin PR's branch
+    pull_requests: write   # git-open-pr (the prod pin PR, auto-merge armed by its label)
+  repositories: [oracle-iac]
+---
+# Central minted Secret. 30m, not 45m: the token lives 60m and the mirror below copies it on its own
+# clock (retro-git.yaml: 45m/45m served a dead token for ~44 min of every cycle, homelab#1900).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: kargo-git-oracle-iac
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 30m
+  target:
+    name: kargo-git-oracle-iac
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        token: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: kargo-git-oracle-iac-gen
+---
+# ── The mirror plumbing: exactly ONE secret readable, by name ────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-kargo-git-reader
+  namespace: agent-coordinator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: eso-kargo-git-reader
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["kargo-git-oracle-iac"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eso-kargo-git-reader
+  namespace: agent-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: eso-kargo-git-reader
+subjects:
+  - kind: ServiceAccount
+    name: eso-kargo-git-reader
+    namespace: agent-coordinator
+---
+# ESO's kubernetes provider validates itself with a SelfSubjectRulesReview — the generic ClusterRole
+# the transcripts store ships (argocd/resources/agentstack/transcripts-store.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: eso-kargo-git-reader-ssrr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: eso-transcripts-reader-ssrr
+subjects:
+  - kind: ServiceAccount
+    name: eso-kargo-git-reader
+    namespace: agent-coordinator
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: kargo-git
+spec:
+  # Only oracle-kargo may reference this store (a ClusterSecretStore is otherwise usable from any
+  # namespace — the token would be one ExternalSecret away for every tenant).
+  conditions:
+    - namespaces: [oracle-kargo]
+  provider:
+    kubernetes:
+      remoteNamespace: agent-coordinator
+      server:
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+          namespace: agent-coordinator
+      auth:
+        serviceAccount:
+          name: eso-kargo-git-reader
+          namespace: agent-coordinator
+---
+# The Kargo credential in the Project namespace: Kargo finds repo creds by the cred-type label and
+# matches `repoURL` exactly. username is ignored by GitHub for an installation token (password).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: kargo-git-oracle-iac
+  namespace: oracle-kargo
+spec:
+  # 5m: one apiserver read per copy; how long oracle-kargo can keep the PREVIOUS token after a mint.
+  refreshInterval: 5m
+  secretStoreRef: { name: kargo-git, kind: ClusterSecretStore }
+  target:
+    name: kargo-git-oracle-iac
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      metadata:
+        labels:
+          kargo.akuity.io/cred-type: git
+      data:
+        repoURL: https://github.com/teststuffstash/oracle-iac.git
+        username: x-access-token
+        password: '{{ .token }}'
+  data:
+    - secretKey: token
+      remoteRef: { key: kargo-git-oracle-iac, property: token }

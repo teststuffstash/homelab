@@ -279,6 +279,25 @@ resource "kubernetes_secret" "argocd_repo_forgejo_oci" {
   depends_on = [helm_release.argocd]
 }
 
+# Kargo's Helm chart is published ONLY as an OCI artifact (ghcr.io/akuity/kargo-charts) — the
+# forgejo-helm shape above: an anonymous `enableOCI` pointer, no credential (the package is public).
+# Consumer: argocd/platform/kargo.yaml. A DIFFERENT registry path from repo-ghcr-charts-oci
+# (ghcr.io/teststuffstash/charts), so that authenticated entry does not cover it.
+resource "kubernetes_secret" "argocd_repo_kargo_oci" {
+  metadata {
+    name      = "repo-kargo-charts-oci"
+    namespace = "argocd"
+    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+  }
+  data = {
+    type      = "helm"
+    name      = "kargo-charts"
+    url       = "ghcr.io/akuity/kargo-charts"
+    enableOCI = "true"
+  }
+  depends_on = [helm_release.argocd]
+}
+
 # ---------------------------------------------------------------------------
 # 2 · Infisical bootstrap secrets (seeded here; ArgoCD/CNPG reference them by name)
 #     These are NOT in git and NOT ArgoCD-managed, so ArgoCD never prunes them.

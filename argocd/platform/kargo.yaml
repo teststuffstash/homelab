@@ -1,0 +1,146 @@
+# Kargo OSS — the promotion engine for oracle (Warehouse → Freight → Stage, verified by Argo
+# Rollouts analysis, promoting by patching named ArgoCD Applications). HARDENED install, proven in
+# kind first (homelab#2798, run 39670423170; the e2e is tests/kind-kargo/e2e.sh, which renders THESE
+# values from the chart source below via yq).
+#
+# The hardening, and where the rest of it lives:
+#  - rbac.installClusterRoleBindings: false — the chart's ClusterRoles are rendered but bound
+#    NOWHERE by the chart. Upstream binds them cluster-wide, which hands the management controller
+#    `*` on secrets/serviceaccounts/(cluster)roles/(cluster)rolebindings + namespace create/delete
+#    everywhere, and the controller patch on EVERY Application. The platform binds them itself in
+#    argocd/resources/kargo/ (the second source below): RoleBindings only in the Kargo namespaces +
+#    the project namespace, a small cluster-scoped read set, a resourceNames-scoped Role in argocd,
+#    and a ValidatingAdmissionPolicy over everything the kargo SAs write.
+#  - argocd.dataPlane.install: false — no chart RBAC on Applications at all (upstream: patch on
+#    every Application cluster-wide, or on every one in argocd with watchArgocdNamespaceOnly); the
+#    controller's ArgoCD access is the resourceNames-scoped Role in
+#    argocd/resources/kargo/argocd-role.yaml, and watchArgocdNamespaceOnly keeps its Application
+#    informer inside the argocd namespace.
+#  - externalWebhooksServer off (no inbound Git/registry webhooks; Warehouses poll), Dex/OIDC off
+#    (no IdP is live, ADR-055), api.secretManagementEnabled off (Projects are GitOps-declared; the
+#    API need not write Secrets).
+#  - api.secret.name: the admin-account bcrypt hash + token signing key come from the Secret
+#    `kargo-api` in ns kargo — an ExternalSecret from Infisical (argocd/resources/kargo-prod/, the
+#    third source; the kind test generates both in-run instead).
+#
+# cert-manager: Kargo's self-signed webhook/API certs come from a namespaced cert-manager Issuer —
+# Kargo is cert-manager's SECOND consumer (cert-manager.yaml's header is the scope's one home).
+#
+# ORDERING — ONE Application, three sources, so the ordering is ArgoCD's IN-APP wave + kind order,
+# which DOES wait on health (the parent `platform` app's waves do NOT: argocd-cm carries no
+# Application health check, so a parent wave only orders Application CREATION):
+#   wave 0 — the chart, the platform RBAC (argocd/resources/kargo/) and the ExternalSecrets
+#            (argocd/resources/kargo-prod/). Within one wave ArgoCD applies by kind: CRDs →
+#            Namespaces (the chart's kargo-shared-/system-resources) → ServiceAccounts → (Cluster)
+#            Roles/Bindings → … → Deployments, so the RBAC the pods need (they cannot go Ready
+#            without it — PR #2798's report) is in place BEFORE the first Kargo pod starts.
+#   wave 1 — the oracle-kargo Project (project.yaml): needs Kargo's CRD + its Fail-policy webhook
+#            Ready, i.e. wave 0 Healthy.
+# The Rollouts CRDs (argo-rollouts.yaml, parent wave 0) are a CROSS-Application dependency the
+# parent cannot gate: Kargo probes for them ONCE at startup and silently disables the integration
+# if absent. First install only — the apply plan (PR body) checks the CRDs before the kargo
+# controller's first start and restarts it if it lost the race; any later restart sees them.
+#
+# OCI chart: ArgoCD pulls OCI charts only from a registered `enableOCI` repository —
+# tofu/argocd.tf `repo-kargo-charts-oci` (anonymous; a mgmt-tf apply, the main root).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kargo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    - repoURL: ghcr.io/akuity/kargo-charts
+      chart: kargo
+      targetRevision: 1.12.4
+      helm:
+        valuesObject:
+          crds:
+            install: true
+            keep: true
+          rbac:
+            installClusterRoles: true
+            installClusterRoleBindings: false
+          argocd:
+            dataPlane:
+              install: false # the chart's Role: patch on EVERY Application in argocd
+              kargoController:
+                install: false # its RoleBinding to that Role (would dangle)
+          externalWebhooksServer:
+            enabled: false
+          api:
+            secretManagementEnabled: false
+            secret:
+              name: kargo-api # ExternalSecret ← Infisical (argocd/resources/kargo-prod/kargo-api.yaml)
+            adminAccount:
+              enabled: true
+            oidc:
+              enabled: false
+              dex:
+                enabled: false
+            rollouts:
+              integrationEnabled: true
+            # FU-082 shape: requests + memory limits, nothing BestEffort.
+            resources:
+              requests: { cpu: "10m", memory: "64Mi" }
+              limits: { memory: "256Mi" }
+          controller:
+            argocd:
+              integrationEnabled: true
+              namespace: argocd
+              watchArgocdNamespaceOnly: true
+            rollouts:
+              integrationEnabled: true
+            resources:
+              requests: { cpu: "20m", memory: "128Mi" }
+              limits: { memory: "512Mi" }
+            metrics:
+              enabled: true
+              serviceMonitor:
+                enabled: true
+          managementController:
+            resources:
+              requests: { cpu: "10m", memory: "64Mi" }
+              limits: { memory: "256Mi" }
+            metrics:
+              enabled: true
+              serviceMonitor:
+                enabled: true
+          webhooksServer:
+            resources:
+              requests: { cpu: "10m", memory: "64Mi" }
+              limits: { memory: "256Mi" }
+            metrics:
+              enabled: true
+              serviceMonitor:
+                enabled: true
+          garbageCollector:
+            resources:
+              requests: { cpu: "10m", memory: "64Mi" }
+              limits: { memory: "256Mi" }
+    # The platform half: RBAC replacing the chart's ClusterRoleBindings, the ArgoCD Role, the
+    # oracle-kargo Project (in-app wave 1), the kargo-write-guard VAP + KargoWriteDenied. The kind
+    # e2e applies exactly this kustomization.
+    - repoURL: https://github.com/teststuffstash/homelab.git
+      targetRevision: master
+      path: argocd/resources/kargo
+    # Prod-only objects the kind e2e has no CRDs/backends for: the kargo-api ExternalSecret, the
+    # oracle-kargo git credential (ESO-minted homelab-deploy token), the UI ReferenceGrant.
+    - repoURL: https://github.com/teststuffstash/homelab.git
+      targetRevision: master
+      path: argocd/resources/kargo-prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kargo
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true # the Project CR + VAP-adjacent kinds before Kargo's CRDs exist
+    retry:
+      limit: 10
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }
