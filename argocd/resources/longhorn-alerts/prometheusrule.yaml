@@ -57,12 +57,15 @@ spec:
             summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is {{ $value | humanizePercentage }} used — under the 25% free floor, Longhorn will not place new replicas on it"
             description: >-
               New volumes whose diskSelector needs this disk (bulk/scratch on the two laptops)
-              fault with ReplicaSchedulingFailure while existing ones keep working. On the
-              bulk-tier nodes the usual eater is the container image store sharing the partition
-              (per-build arc-runner/agent-base images) — kubelet image GC is pinned to 60/50 on
-              kata nodes (tofu/metal.tf) for exactly this; if it fires anyway, check
-              `kubectl get --raw /api/v1/nodes/<n>/proxy/stats/summary | jq .node.runtime.imageFs`
-              first, then docs/storage-ledger.md.
+              fault with ReplicaSchedulingFailure while existing ones keep working. Check the
+              disk's Longhorn snapshots first (`kubectl -n longhorn-system get snapshots.longhorn.io`
+              by size): a REBUILD snapshot merges itself — never clear it; a `markRemoved` snapshot
+              left as volume-head's parent holds its blocks until a filesystem-trim. Then, on the
+              bulk-tier nodes, the other eater is the container image store sharing the partition
+              (per-build arc-runner/agent-base images; kubelet image GC is pinned to 60/50 on kata
+              nodes, tofu/metal.tf) —
+              `kubectl get --raw /api/v1/nodes/<n>/proxy/stats/summary | jq .node.runtime.imageFs`.
+              Ledger: docs/storage-ledger.md.
         - alert: LonghornDiskAlmostFull
           expr: |
             longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.93
