@@ -40,7 +40,8 @@ added 2026-10-16); a cell is what the launcher does, not what a doc says it shou
 **Role × caller.** Which CALLER may ask for which role is the policy's `callers` map, per
 ServiceAccount ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)): the platform loop's
 dispatcher SA (`platform-agents:agentstack-loop`) `worker` + `prober` — its graduated workers and the
-entry canary's rides; the specs reviewer's SA (`agent-coordinator:specs-review`) `reviewer` +
+entry canary's rides; the oracle loop's SA (`oracle-agents:agentstack-loop`) `prober` only, no bind —
+the `probe-oracle` tick's nested mission child on the codex rail (operator ruling 2026-10-24); the specs reviewer's SA (`agent-coordinator:specs-review`) `reviewer` +
 `worker` — the tick and its shadow cell; the [judge](glossary.md#judge)'s SA
 (`agent-coordinator:outcome-judge`, the deploy-revert chain's judge step, FU-270 (b)) no role at
 all — `outcome: any`, so it lists a task's sessions and reports `wrong-verdict` on them

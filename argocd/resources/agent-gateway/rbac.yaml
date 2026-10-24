@@ -257,6 +257,26 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-
 subjects:
   - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
 ---
+# The oracle loop's caller namespace (the probe-oracle tick's unbound codex session, FU-270 2026-10-24).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-gateway-session-pods
+  namespace: oracle-agents
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-gateway-session-pods
+  namespace: oracle-agents
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agent-gateway-session-pods }
+subjects:
+  - { kind: ServiceAccount, name: agent-gateway, namespace: agent-egress }
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

@@ -472,7 +472,7 @@ async def test_policy_shape(kind):
 
 
 async def test_deployed_callers():
-    """row: the deployed callers are today's two dispatchers and the judge, under enforce"""
+    """row: the deployed callers are today's three dispatchers and the judge, under enforce ⚖"""
     world(note="the DEPLOYED policy is read, not the world's")
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
         p = Policy.from_dict(json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")))
@@ -480,9 +480,10 @@ async def test_deployed_callers():
                for k, c in p.callers.items()}
     with then("control_plane_auth = enforce"):
         check("control_plane_auth", p.control_plane_auth, "enforce")
-    with then("callers = exactly the platform loop, the specs-review tick and the outcome judge, with today's scopes"):
+    with then("callers = exactly the platform loop, the oracle prober, the specs-review tick and the outcome judge, with today's scopes"):
         check("callers", got, {
             LOOP: {"stacks": ["platform"], "roles": ["prober", "worker"], "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"], "outcome": "own"},
+            ORACLE_LOOP: {"stacks": ["oracle"], "roles": ["prober"], "bind_namespaces": [], "outcome": "own"},
             DEPLOYED_SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": [], "outcome": "own"},
             JUDGE: {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"},
         })
