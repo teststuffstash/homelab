@@ -173,3 +173,4 @@ workflow-pin-revert-candidate	workflow-pin-revert-candidate
 workflow-pin-revert-lock-candidate	workflow-pin-revert-lock-candidate
 workflow-pin-revert-lock-flake-candidate	workflow-pin-revert-lock-flake-candidate
 workflow-pin-revert-merge-lane	workflow-pin-revert-merge-lane
+workflow-pin-revert-restore-lane	workflow-pin-revert-restore-lane

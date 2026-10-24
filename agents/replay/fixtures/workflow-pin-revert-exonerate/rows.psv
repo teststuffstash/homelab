@@ -1,0 +1,11 @@
+# workflow-pin-revert-exonerate — the decision table (family contract in fixture.yaml). Base world =
+# snore-recorder 2026-10-20: two firing build-image alerts in one delivery — run 25 on #63's merge
+# 161afc12 (the original failure) and run 26 on revert #64's merge 1ceaa31c (the control).
+# id                 | world             | patch                                    | env                                                                      | expect       | params
+snore-recorder-64    | snore-recorder-64 |                                          |                                                                          | exonerated   |
+restore-never        | snore-recorder-64 | gh/pr-list.json @ restore-body.jq        |                                                                          | restore      |
+already-exonerated   | snore-recorder-64 | gh/pr-list.json @ already-exonerated.jq  |                                                                          | already      |
+other-workflow       | snore-recorder-64 | alert.json @ other-workflow.jq           |                                                                          | mismatch     |
+ledger-seen          | snore-recorder-64 |                                          |                                                                          | seen         |
+run-unreadable       | snore-recorder-64 |                                          | STUB_GH_api_repos_teststuffstash_snore_recorder_actions_runs_39363243469=fail | unreadable |
+edit-refused         | snore-recorder-64 |                                          | STUB_GH_pr_edit_64=fail                                                  | edit-refused |
