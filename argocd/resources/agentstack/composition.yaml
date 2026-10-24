@@ -1127,6 +1127,18 @@ spec:
             # .agents/probe.md in mainRepo — LOCATION is the only contract; content shape waits
             # for a second stack's probe (the ≥2-projects rule). Missing brief = loud no-op.
             # The post-deploy edge (sync-succeeded doorbell) is FU-102's remaining machinery.
+            # IMAGE = agent-base (operator ruling 2026-10-24, FU-270 fork C): it carries the outer
+            # `claude` AND `codex` + agent-codex, python3, s5cmd, jq, curl, git (verified in-cluster
+            # 2026-10-24); its user is devbox, so HOME=/home/devbox. ⚠ The literal below is NOT
+            # bumped by agent-runtime's deploy-pin (that edits agents/images.env only) — keep it equal
+            # to images.env AGENT_BASE_IMAGE by hand until the pin flow seds this file too.
+            # prober.childRail: codex (FU-270 fork B): the brief's NESTED mission child rides the
+            # agent-gateway's codex rail — this pod admits ONE unbound prober session as its loop SA
+            # (policy callers: oracle-agents:agentstack-loop → [prober], no bind), renders the codex
+            # provider block through agent-codex, hands the child's env to the outer session and
+            # releases the session on exit. A defer (headroom, cap, credential) is not a failed tick:
+            # the child falls back to claude and the report names the harness it ran (⚖).
+            {{- $childRail := default "" (get $pr "childRail") }}
             apiVersion: argoproj.io/v1alpha1
             kind: CronWorkflow
             metadata:
@@ -1147,15 +1159,23 @@ spec:
                 entrypoint: main
                 volumes:
                   - { name: work, emptyDir: {} }
+                  {{- if $childRail }}
+                  # GW-SESSIONS-AUTH: the caller token, audience agent-gateway, pod-bound (the reaper's pod).
+                  - name: gateway-token
+                    projected:
+                      sources:
+                        - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 3600, path: token }
+                  {{- end }}
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.10.20-g950b7f0b8201
+                      image: ghcr.io/teststuffstash/agent-base:2026.10.23-g79d146c8caac
                       command: ["bash", "-lc"]
                       args:
                         - |
                           set -e
-                          rm -rf /work/homelab /work/main
+                          rm -rf /work/homelab /work/main /work/artifacts
+                          mkdir -p "$PROBE_ARTIFACTS"
                           # 2026-09-02 (the #1136 idiom sweep, incident postmortem): SOFT token fetch — this
                           # template had no GH_TOKEN at all, and anonymous git from our IP 401-throttles under
                           # load. Absent/refused token degrades to the old anonymous clone, never a new FATAL.
@@ -1170,9 +1190,30 @@ spec:
                           if [ ! -f /work/main/.agents/probe.md ]; then
                             echo "NO PROBE BRIEF: {{ $mainRepo }}/.agents/probe.md does not exist — the prober is enabled but has nothing to run. Write the brief (roles.md §prober; oracle UC-1 probe-e2e is the donor shape)."; exit 0
                           fi
+                          # The nested child's rail (prober.childRail). Default: a claude child on this pod's env.
+                          export PROBE_CHILD_HARNESS=claude PROBE_CHILD_MODEL="$PROBE_MODEL"
+                          if [ -n "${PROBE_CHILD_RAIL:-}" ]; then
+                            _gw_hdr() { printf 'Authorization: Bearer %s\n' "$(cat /var/run/secrets/agent-gateway/token)"; }
+                            _gw_sid=""
+                            _gw_release() { [ -n "$_gw_sid" ] && curl -fsS --max-time 10 -o /dev/null -X DELETE -H @<(_gw_hdr) "$AGENT_GATEWAY_URL/sessions/$_gw_sid" && echo "→ gateway(sessions): released $_gw_sid" || true; }
+                            trap _gw_release EXIT
+                            _gw_req="$(jq -nc --arg task "probe-{{ $stack }}-$(hostname)" --arg rail "$PROBE_CHILD_RAIL" '{stack: "{{ $stack }}", role: "prober", task: $task, round: 0, rail: $rail}')"
+                            _gw_http="$(curl -sS --max-time 20 -o /work/gw-admit.json -w '%{http_code}' -H 'Content-Type: application/json' -H @<(_gw_hdr) -X POST "$AGENT_GATEWAY_URL/sessions" -d "$_gw_req" 2>/dev/null)" || _gw_http=000
+                            if [ "$_gw_http" = 200 ] && [ "$(jq -r '.decision' /work/gw-admit.json)" = dispatch ] && [ "$(jq -r '.harness' /work/gw-admit.json)" = codex ]; then
+                              _gw_sid="$(jq -r '.session.id' /work/gw-admit.json)"
+                              for _k in OPENAI_BASE_URL OPENAI_API_KEY CODEX_MODEL; do export "$_k=$(jq -er --arg k "$_k" '.env[$k]' /work/gw-admit.json)"; done
+                              # agent-codex is the ONE renderer of the gateway provider block; CODEX_BIN=true makes it render and exit.
+                              WORKDIR=/work CODEX_BIN=true RUN_LOG=/dev/null agent-codex
+                              export PROBE_CHILD_HARNESS=codex PROBE_CHILD_MODEL="$CODEX_MODEL"
+                              echo "→ gateway(sessions): dispatch $(jq -r '.model' /work/gw-admit.json) [rail=codex, session=$_gw_sid] — the nested mission child rides codex"
+                            else
+                              echo "→ gateway(sessions): child on ${PROBE_CHILD_RAIL} NOT admitted [http ${_gw_http}: $(jq -r '.reason // .error // "?"' /work/gw-admit.json 2>/dev/null)] — this tick's child is claude"
+                            fi
+                            rm -f /work/gw-admit.json
+                          fi
                           # Run the probe session, capturing the full report
                           CLAUDE_EXIT=0
-                          claude -p "You are the PROBER for stack {{ $stack }} (homelab docs/agents/roles.md §prober): an agentic canary probing the LIVE product contract, prod-READ and report-only. Your brief follows between the BEGIN/END markers. You hold NO git or GitHub credentials by construction — your entire output is this session's stdout report: state what you probed, what answered correctly, and what broke, with evidence. Never mutate anything.
+                          claude -p "You are the PROBER for stack {{ $stack }} (homelab docs/agents/roles.md §prober): an agentic canary probing the LIVE product contract, prod-READ and report-only. Your brief follows between the BEGIN/END markers. You hold NO git or GitHub credentials by construction — your entire output is this session's stdout report: state what you probed, what answered correctly, and what broke, with evidence. Never mutate anything. The platform hands you, in env: PROBE_CHILD_HARNESS (claude|codex) and PROBE_CHILD_MODEL — the harness and model of any nested client the brief starts (a codex child is already configured for its provider; never print OPENAI_API_KEY) — and PROBE_ARTIFACTS, a directory uploaded verbatim beside your report: put the files the brief names there.
                           ----BEGIN BRIEF----
                           $(cat /work/main/.agents/probe.md)
                           ----END BRIEF----" \
@@ -1193,9 +1234,20 @@ spec:
                             echo "FATAL: probe report upload FAILED — the report is the product (homelab#1275)"
                             exit 1
                           fi
+                          # The brief's artifacts (the tick's report.json, the child transcript), beside report.md (oracle-fleet#931).
+                          if [ -n "$(ls -A "$PROBE_ARTIFACTS" 2>/dev/null)" ]; then
+                            s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$PROBE_ARTIFACTS/*" "${DEST%/report.md}/" \
+                              && echo "probe artifacts uploaded: ${DEST%/report.md}/ ($(ls "$PROBE_ARTIFACTS" | tr '\n' ' '))" \
+                              || echo "WARN: probe artifact upload FAILED — report.md stands, the artifacts are lost"
+                          fi
                       env:
-                        - { name: HOME, value: "/home/node" }
+                        - { name: HOME, value: "/home/devbox" }
                         - { name: PROBE_MODEL, value: {{ default "haiku" (get $pr "model") | quote }} }
+                        - { name: PROBE_ARTIFACTS, value: "/work/artifacts" }
+                        {{- if $childRail }}
+                        - { name: PROBE_CHILD_RAIL, value: {{ $childRail | quote }} }
+                        - { name: AGENT_GATEWAY_URL, value: "http://agent-gateway.agent-egress.svc.cluster.local:8080" }
+                        {{- end }}
                         - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
                         - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:{{ $loopns }}/claude-session" }
                         - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
@@ -1208,6 +1260,9 @@ spec:
                             secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key }
                       volumeMounts:
                         - { name: work, mountPath: /work }
+                        {{- if $childRail }}
+                        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
+                        {{- end }}
                       resources:
                         requests: { cpu: "100m", memory: "256Mi" }
                         limits: { memory: "1Gi" }
