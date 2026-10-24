@@ -204,6 +204,17 @@ spec:
                     model:
                       type: string
                       description: Claude model alias for the probe session (subscription rail).
+                    childRail:
+                      type: string
+                      enum: [codex]
+                      description: >-
+                        FU-270 (operator ruling 2026-10-24) — the rail the brief's NESTED client
+                        rides. Absent = the child is `claude` on the probe pod's own env, pinned to
+                        `model`. `codex` = the probe pod admits one unbound prober session through
+                        the agent-gateway (`rail: codex`; the stack's loop SA must be a policy
+                        caller with role `prober`), renders the codex provider block and exports
+                        PROBE_CHILD_HARNESS=codex / PROBE_CHILD_MODEL; a gateway defer falls the
+                        tick back to a claude child. The outer session stays claude either way.
                 lenses:
                   type: object
                   description: >-
