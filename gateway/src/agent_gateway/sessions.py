@@ -383,7 +383,9 @@ class SessionService:
         # GW-MODEL-TIERS §The rail choice: when the tier names ONE model on two allowed rails, the rail
         # whose twin cell costs less per clean ride walks first, with that twin at its list's head; the
         # role's order stands for everything else (the other rail is still walked when the first yields nothing).
-        choice = self.rail_choice(adm, [r for r in candidates if self._for_rail(adm, r).harness not in struck_harnesses],
+        choice = self.rail_choice(adm, [r for r in candidates
+                                        if any(self._for_cell(adm, r, m).harness not in struck_harnesses
+                                               for m in (self.policy.rails[r].models.get(adm.tier) or ()))],
                                   struck_models, struck_cells, now)
         promoted: dict[str, str] = {}
         answer_choice: dict | None = None
@@ -402,14 +404,6 @@ class SessionService:
                 continue
             if rail in promoted:
                 models = [promoted[rail]] + [m for m in models if m != promoted[rail]]
-            if radm.harness in struck_harnesses:
-                # §Harness-scoped strikes (operator 2026-10-24): the harness this rail would ride is struck for
-                # the task — every cell of the rail is excluded, the walk takes a rail another harness rides.
-                # ⚖ A dual-dialect rail is NOT re-dispatched on another harness: whether its models answer the
-                # other dialect is per model and unrecorded, so the conservative answer is to skip it.
-                exhausted.extend(f"{rail} {m} (harness {radm.harness})" for m in models)
-                log.info("session: rail %s skipped — harness %s is struck for task %s", rail, radm.harness, adm.task)
-                continue
             if self.store.active_count(rail, now) >= rp.max_sessions:
                 capacity_blocked.append((rail, "rail-capacity", now + self.policy.defer_retry_s, f"{rail} at max_sessions"))
                 continue
@@ -425,6 +419,16 @@ class SessionService:
             model = None
             held: list[tuple[float, str, str, str]] = []  # (free_at, reason, model, detail)
             for m in models:
+                cell_harness = self._for_cell(adm, rail, m).harness
+                if cell_harness in struck_harnesses:
+                    # §Harness-scoped strikes (operator 2026-10-24), read at the CELL: the harness this
+                    # cell would ride is struck for the task, so the cell is excluded — the strike still
+                    # excludes no model (a cell another harness speaks stays a candidate), and a mixed
+                    # Go rail keeps walking its other-dialect cells (§The harness follows the cell).
+                    exhausted.append(f"{rail} {m} (harness {cell_harness})")
+                    log.info("session: rail %s cell %s skipped — harness %s is struck for task %s",
+                             rail, m, cell_harness, adm.task)
+                    continue
                 if adm.harness_explicit and not self._cell_speaks(rail, m, adm.harness):
                     # GW-SESSIONS-ADMIT: the explicit harness filters CELLS — this one speaks
                     # another dialect, so it is no candidate for THIS admission (not struck, not
