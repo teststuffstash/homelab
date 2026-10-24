@@ -14512,3 +14512,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   lands as `unknown` (model scope, model-routing.md §The strike ladder) and walks to the next model;
   version drift — the ENV evidence row + launcher comment name opencode 1.18.35 (agent-base 2026.10.15),
   the floating `agent-base:latest` carries 1.19.0.
+- **Rulings 10-24**: (1) the harness follows the CELL (role+tier → rails/capacity → model → the cell's
+  dialect's harness) — written to #2870 as acceptance, queued (`agent/queued`, `md`). (2) harness-scoped
+  strike class `harness-fault` — spec on `fix/harness-scoped-strike` (b4d24e0, GW-SESSIONS-ADMIT
+  §Harness-scoped strikes + the vocabulary/store rows); a seat subagent carries schema/code/tests/launcher
+  classifier into one PR. The two compose; second to land rebases.
