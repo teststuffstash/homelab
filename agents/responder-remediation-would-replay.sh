@@ -59,7 +59,8 @@ want "A4: at-most-one-per-session guard"           "At most one per distinct rem
 # mechanical imperative remediation applies".
 want    "A5: marker is independent of fix-verdict"          "This line is INDEPENDENT of your fix-verdict"
 want    "A5b: report-only + imperative remediation MUST carry it" "a report-only verdict that names an imperative remediation MUST still carry the line"
-want    "A6: the only omit condition is no imperative remediation" "The ONLY reason to omit it: no mechanical imperative remediation applies."
+want    "A6: the only omit condition is no imperative remediation" "The ONLY reason to omit it: no mechanical imperative remediation applies"
+want    "A6c: no action = no marker at all (never a 'none' line)" "then print NO marker at all"
 wantnot "A6b: the report-only suppression is gone"          "Do NOT emit this line when your verdict is report-only"
 want "A7: GitOps class excluded (dial class only)" "takes NO marker"
 

@@ -1067,7 +1067,8 @@ scenario remediation-would-marker
 go "$(alert rw1 '{"alertname":"AgentWorkerEgressDropped","source":"oracle-fleet","severity":"warning"}')"
 wantbrief "remediation-would → brief carries the REMEDIATION-WOULD instruction" "REMEDIATION-WOULD MARKER"
 wantbrief "remediation-would → instruction names the marker format" "REMEDIATION-WOULD: <verb>"
-wantbrief "remediation-would → ABSENT only when no imperative remediation applies" "The ONLY reason to omit it: no mechanical imperative remediation applies."
+wantbrief "remediation-would → ABSENT only when no imperative remediation applies" "The ONLY reason to omit it: no mechanical imperative remediation applies"
+wantbrief "remediation-would → no action = NO marker (never a 'none' line)" "then print NO marker at all (never 'REMEDIATION-WOULD: none'"
 wantbrief "remediation-would → the marker is independent of fix-verdict" "This line is INDEPENDENT of your fix-verdict"
 wantbrief "remediation-would → PRESENT on a report-only verdict that names one" "a report-only verdict that names an imperative remediation MUST still carry the line"
 grep -qF -- "Do NOT emit this line when your verdict is report-only" "$H/brief.txt" 2>/dev/null \

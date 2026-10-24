@@ -8,7 +8,8 @@
 #
 # WHAT IT REDS ON. A writer that drops the field, asks the model for JSON instead of harvesting,
 # harvests a mid-line mention, loses a malformed line (it must stay `raw` so it is still scored),
-# or double-counts an echoed line. Scoring home: docs/agents/remediation-would-scoreboard.md.
+# double-counts an echoed line, or scores a declared non-action (`REMEDIATION-WOULD: none …`,
+# `n/a`, `no action` — the session saying it would do nothing; dropped, never `raw`). Scoring home: docs/agents/remediation-would-scoreboard.md.
 #
 # THE CONTRACT: `remediation_would` = one {verb,target,reason,raw} per DISTINCT line-anchored
 # marker, in order; `[]` when none (the `uploads` twin's `remediation_would=0`); schema id stays
