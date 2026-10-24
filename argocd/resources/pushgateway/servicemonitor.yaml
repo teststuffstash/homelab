@@ -16,3 +16,13 @@ spec:
     - port: http
       interval: 30s
       honorLabels: true
+      # registry_mirror_store_used_percent was pushed once per mirror pod start by the registry-cache
+      # store-maintenance init until 2026-10-24 — a pod-start snapshot that read frozen (0 % on a
+      # ~2 GB store). The name is a live kubelet-based recording rule now
+      # (argocd/resources/registry-cache/prometheusrule.yaml); the pushgateway keeps the old
+      # pushed values in its groups forever (POST never removes a name), so drop them here or they
+      # sit beside the live series under the same name.
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: registry_mirror_store_used_percent
+          action: drop

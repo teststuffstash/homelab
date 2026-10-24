@@ -1,0 +1,23 @@
+# registry_mirror_store_used_percent (2026-10-24) — the recording rule lifted VERBATIM out of
+# prometheusrule.yaml (the manifest is its one home; its comment block carries the why). The
+# rules file store-used.promtool-test loads; .promtool-rules rather than .yaml because
+# manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# ⚠ THIS COPY IS NOT DRIFT-PINNED: prometheus-rules-lint's copy↔CR pin compares ALERT rules only,
+# and this file holds a recording rule — a stale copy passes vacuously. Re-copy after editing it:
+#
+#   yq -o=json '{"groups": [{"name": "registry-cache", "rules": [.spec.groups[].rules[] | select(.record == "registry_mirror_store_used_percent")]}]}' argocd/resources/registry-cache/prometheusrule.yaml | yq -P '.'
+#   (one line on purpose — a wrapped yq program string is the #344 lexer bug)
+groups:
+  - name: registry-cache
+    rules:
+      - record: registry_mirror_store_used_percent
+        expr: |
+          100 * max by (mirror) (
+            label_replace(
+              kubelet_volume_stats_used_bytes{namespace="registry-cache", persistentvolumeclaim=~"mirror-.+-data"}
+                / (kubelet_volume_stats_used_bytes{namespace="registry-cache", persistentvolumeclaim=~"mirror-.+-data"}
+                   + kubelet_volume_stats_available_bytes{namespace="registry-cache", persistentvolumeclaim=~"mirror-.+-data"}),
+              "mirror", "$1", "persistentvolumeclaim", "(mirror-.+)-data"
+            )
+          )

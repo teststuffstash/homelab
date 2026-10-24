@@ -1,0 +1,66 @@
+# Behaviour fixture for the registry_mirror_store_used_percent recording rule (2026-10-24 — the
+# pushed pod-start snapshot read 0 % on mirror-mcr for 3 days; prometheusrule.yaml has the why).
+#
+#   devbox run -- promtool test rules argocd/resources/registry-cache/store-used.promtool-test
+#
+# Input labels are the LIVE kubelet series' label set (read off Prometheus 2026-10-24):
+#   kubelet_volume_stats_*{endpoint="https-metrics",instance="192.168.2.64:10250",job="kubelet",
+#     metrics_path="/metrics",namespace="registry-cache",node="wk-04",
+#     persistentvolumeclaim="mirror-mcr-data",service="kube-prometheus-stack-kubelet"}
+#
+# WHAT IS BEING PINNED:
+#   1. LIVE — the value follows the volume's fill between restarts (the bug was a frozen value).
+#   2. df's Use% — used / (used + available), so the number is the one the init's 90 %
+#      WIPE_THRESHOLD_PCT compares against (ext4's reserve is in capacity, not in either term).
+#   3. IDENTITY — `mirror` is the PVC name minus `-data` (= the init's MIRROR_NAME), one series
+#      per mirror even while a node move briefly yields two kubelet series; non-mirror PVCs
+#      (ns registry's `registry-data`) are excluded.
+rule_files:
+  - store-used.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: live fill per mirror, df Use% arithmetic, mirror label from the PVC name
+    input_series:
+      # mcr: 0.5e9 used of 40e9 (avail 39.5e9) at t=0, then +1e9 used / -1e9 avail per minute.
+      - series: 'kubelet_volume_stats_used_bytes{endpoint="https-metrics",instance="192.168.2.64:10250",job="kubelet",metrics_path="/metrics",namespace="registry-cache",node="wk-04",persistentvolumeclaim="mirror-mcr-data",service="kube-prometheus-stack-kubelet"}'
+        values: "500000000+1000000000x4"
+      - series: 'kubelet_volume_stats_available_bytes{endpoint="https-metrics",instance="192.168.2.64:10250",job="kubelet",metrics_path="/metrics",namespace="registry-cache",node="wk-04",persistentvolumeclaim="mirror-mcr-data",service="kube-prometheus-stack-kubelet"}'
+        values: "39500000000-1000000000x4"
+      # ghcr: 27e9 used, 123e9 available, steady.
+      - series: 'kubelet_volume_stats_used_bytes{endpoint="https-metrics",instance="192.168.2.64:10250",job="kubelet",metrics_path="/metrics",namespace="registry-cache",node="wk-04",persistentvolumeclaim="mirror-ghcr-data",service="kube-prometheus-stack-kubelet"}'
+        values: "27000000000x4"
+      - series: 'kubelet_volume_stats_available_bytes{endpoint="https-metrics",instance="192.168.2.64:10250",job="kubelet",metrics_path="/metrics",namespace="registry-cache",node="wk-04",persistentvolumeclaim="mirror-ghcr-data",service="kube-prometheus-stack-kubelet"}'
+        values: "123000000000x4"
+      # ghcr's previous node still reporting the pre-move reading for a scrape (a node move) — the
+      # higher reading wins (max), never a second ghcr series.
+      - series: 'kubelet_volume_stats_used_bytes{endpoint="https-metrics",instance="192.168.2.61:10250",job="kubelet",metrics_path="/metrics",namespace="registry-cache",node="wk-01",persistentvolumeclaim="mirror-ghcr-data",service="kube-prometheus-stack-kubelet"}'
+        values: "15000000000"
+      - series: 'kubelet_volume_stats_available_bytes{endpoint="https-metrics",instance="192.168.2.61:10250",job="kubelet",metrics_path="/metrics",namespace="registry-cache",node="wk-01",persistentvolumeclaim="mirror-ghcr-data",service="kube-prometheus-stack-kubelet"}'
+        values: "135000000000"
+      # not a mirror store: ns registry's own PVC — must not appear.
+      - series: 'kubelet_volume_stats_used_bytes{endpoint="https-metrics",instance="192.168.2.64:10250",job="kubelet",metrics_path="/metrics",namespace="registry",node="wk-04",persistentvolumeclaim="registry-data",service="kube-prometheus-stack-kubelet"}'
+        values: "50000000000x4"
+      - series: 'kubelet_volume_stats_available_bytes{endpoint="https-metrics",instance="192.168.2.64:10250",job="kubelet",metrics_path="/metrics",namespace="registry",node="wk-04",persistentvolumeclaim="registry-data",service="kube-prometheus-stack-kubelet"}'
+        values: "100000000000x4"
+    promql_expr_test:
+      # t=0: mcr 0.5e9/(0.5e9+39.5e9) = 1.25 %; ghcr max(27/150, 15/150) = 18 %.
+      - expr: registry_mirror_store_used_percent
+        eval_time: 0m
+        exp_samples:
+          - labels: 'registry_mirror_store_used_percent{mirror="mirror-ghcr"}'
+            value: 18
+          - labels: 'registry_mirror_store_used_percent{mirror="mirror-mcr"}'
+            value: 1.25
+      # t=3m: mcr 3.5e9/(3.5e9+36.5e9) = 8.75 % — it MOVED without any restart (the bug's
+      # opposite); ghcr's wk-01 sample (10 %) is still inside the 5m lookback, and max keeps it
+      # ONE ghcr series at wk-04's 18 %.
+      - expr: registry_mirror_store_used_percent
+        eval_time: 3m
+        exp_samples:
+          - labels: 'registry_mirror_store_used_percent{mirror="mirror-ghcr"}'
+            value: 18
+          - labels: 'registry_mirror_store_used_percent{mirror="mirror-mcr"}'
+            value: 8.75
