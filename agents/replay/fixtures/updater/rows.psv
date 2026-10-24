@@ -65,3 +65,15 @@ renovate-untouched-red-no-update | board | gh/pr-list.json @ patches/add-renovat
 # Login shape (homelab#2007): the rows carry the REAL `app/homelab-renovate-1234` list shape — the raw-prefix
 # test missed it and the updater edited a live grouped-Actions branch; `renovate-untouched-cr-no-update`
 # keeps the plain `homelab-renovate-1234[bot]` shape so both spellings stay pinned.
+# ── The hand-back (2026-10-24): the merge-ready exception's update MISSED (master moved again / the
+# update pulled a red in), so the branch now carries the updater's MERGE commit — Renovate's edited-PR
+# rule has disowned it, while `renovate_untouched` still reads untouched. Not merge-ready → tick
+# Renovate's rebase box (its next run rebuilds the branch, the PR is Renovate's again). RED on the
+# pre-hand-back source, which printed the "Renovate's to rebase" skip and left the zombie
+# (homelab#2754, sleep-tracking#203 — 2026-10-20). `-ticked-noop` is the idempotence pin; `-cr-` is
+# leg 2's twin. `renovate-superseded-cancel-green-update` is #2754's rollup: a CANCELLED duplicate `ci`
+# beside its SUCCESS sibling is green (RED on the old `renovate_green`, which counted the CANCELLED).
+renovate-updater-merged-red-handback   | board | gh/pr-list.json @ patches/add-renovate-approved.jq |  | renovate-handback-probe1 | p1=150
+renovate-updater-merged-ticked-noop    | board | gh/pr-list.json @ patches/add-renovate-approved.jq |  | renovate-handback-ticked-probe1 | p1=150
+renovate-updater-merged-cr-handback    | board | gh/pr-list.json @ patches/add-renovate-cr-behind.jq |  | unstrand-renovate-handback | n=151
+renovate-superseded-cancel-green-update | board | gh/pr-list.json @ patches/add-renovate-approved.jq |  | picks-probe1-renovate | p1=150 n=150 oid=ren150oid789

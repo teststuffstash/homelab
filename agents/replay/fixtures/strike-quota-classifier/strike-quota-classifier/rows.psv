@@ -31,3 +31,10 @@ rawlog-output-token-content-echo      |       |       |     | rawlog-output-toke
 rawlog-output-token-cap-claude-harness |       |       |     | rawlog-output-token-cap-claude-harness |
 rawlog-add-more-credits               |       |       |     | rawlog-add-more-credits               |
 stats-turn-cap                        |       |       |     | stats-turn-cap                        |
+# FU-270 / homelab#2867 (operator ruling 2026-10-24): opencode auto-rejected its own permission —
+# `harness-fault` (gateway scope harness), in BOTH branches; the pair quoted in content (indented)
+# is text, and the pair is opencode's, so another harness's log never matches it.
+stats-harness-fault                   |       |       |     | stats-harness-fault                   |
+rawlog-harness-fault                  |       |       |     | rawlog-harness-fault                  |
+rawlog-harness-fault-content-echo     |       |       |     | rawlog-harness-fault-content-echo     |
+rawlog-harness-fault-goose-harness    |       |       |     | rawlog-harness-fault-goose-harness    |
