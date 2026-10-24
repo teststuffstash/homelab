@@ -1,0 +1,37 @@
+# The `agent-gateway-codex-headroom` group, lifted VERBATIM out of prometheusrule.yaml (comments
+# stripped — the manifest is their one home) — the rules file codex-headroom.promtool-test loads.
+# Not a manifest: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml because
+# manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions), so a stale
+# copy reds instead of passing vacuously. RE-COPY AFTER EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway-codex-headroom","rules":[.spec.groups[] | select(.name == "agent-gateway-codex-headroom") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway-codex-headroom
+    rules:
+      - alert: CodexUsagePollStale
+        expr: |
+          (sum(increase(gateway_codex_usage_poll_total{job="agent-gateway",outcome="accepted"}[15m])) == 0)
+          and
+          (sum(increase(gateway_codex_usage_poll_total{job="agent-gateway"}[15m])) > 0)
+        for: 5m
+        labels:
+          severity: warning
+          triage: now
+          rail: codex
+        annotations:
+          summary: The gateway's codex usage poll has accepted nothing for 15 m — the codex rail is deferring (quota-stale)
+          description: 'gateway_codex_usage_poll_total counts polls but none ended accepted in 15 m, so the headroom report is past rails.codex.headroom.max_age_s and admission answers quota-stale. Check: (1) sum by (outcome) (increase(gateway_codex_usage_poll_total[15m])) names the outcome — upstream-auth = the usage endpoint rejects the credential (not by itself a revocation: see the request log), quota-invalid = the payload no longer matches the profile the poll translates (gateway/src/agent_gateway/codex_usage.py; the shape is docs/spikes/codex-subscription-rail.md §Live usage payload shape), credential-* = the lifecycle (GW-CODEX-OAUTH; credential-recovery-required needs a re-seed: devbox run codex-seed); (2) kubectl -n agent-egress logs deploy/agent-gateway | grep "codex usage poll". Clears on the next accepted poll.'
+      - alert: CodexUsagePollSilent
+        expr: |
+          sum(increase(gateway_codex_usage_poll_total{job="agent-gateway"}[15m])) == 0
+        for: 15m
+        labels:
+          severity: warning
+          triage: dig
+          rail: codex
+        annotations:
+          summary: The codex rail is declared but its usage poll has not run for 15 m — the rail sits on quota-unknown
+          description: 'gateway_codex_usage_poll_total renders (the policy declares the codex rail) but no poll ran in 15 m. The poll runs only with CODEX_USAGE_URL set AND a credential backend (CODEX_UPSTREAM + CODEX_SEED_FILE with a mounted seed — ESO Secret agent-egress/codex-seed): kubectl -n agent-egress logs deploy/agent-gateway | grep "codex usage poll dark" names which is missing; a live schedule that died logs "codex usage poll: one pass failed". Until a poll is accepted every codex admission defers quota-unknown.'

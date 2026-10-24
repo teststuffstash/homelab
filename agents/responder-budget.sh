@@ -16,10 +16,15 @@
 #     triage is visible (marker + meta-alert-crosscheck.sh reports the alert as UNTRIAGED, which
 #     is its "the machinery is stuck" signal); an unbounded burn is not.
 #
-# The counter is DERIVED, not stored: every spawned triage writes `fp-<fp> = "<date>|<incident>"`
-# into the responder-seen ledger, so entries whose value starts with "<today>|" ARE the sessions
-# launched today. Nothing to reset at midnight and nothing to race — the marker values that mean
-# "skipped" (deferred-/cap-/none-/subjdup-/budget-) deliberately do not match this prefix.
+# The counter is DERIVED, not stored: every spawned triage writes a WRITE-ONCE key
+# `spawn-<date>-<fp> = "<date>|<incident>"` into the responder-seen ledger, so the `spawn-<today>-`
+# keys ARE the sessions launched today. Nothing to reset at midnight and nothing to race.
+# Until 2026-10-20 the count read the `fp-<fp>` VALUES instead (those starting "<today>|") — and
+# every later run re-marks that same key (`subjdup-`, `window-`, `claimed-` …), which erased the
+# spawn record: the wk-metal-04 burst spawned 15 sessions against a cap of 12 while the gauge read
+# 12/12 remaining, with ZERO "<today>|" values left in the ledger by the afternoon. A key nothing
+# else writes is the only count no other branch can undo. Older days' spawn- keys are pruned here
+# (best-effort), so the ledger carries at most one day of them.
 #
 # exit 0 = clear to spawn. exit 1 = blocked (reason on stderr). Metrics are pushed on BOTH paths,
 # because the dashboard's job is to show the budget draining, not only to show it empty.
@@ -83,7 +88,7 @@ if [ -z "$json" ]; then
   exit 0
 fi
 
-used="$(printf '%s' "$json" | jq -r --arg t "$TODAY|" '[(.data // {}) | to_entries[] | select(.value | startswith($t))] | length' 2>/dev/null)" || used=""
+used="$(printf '%s' "$json" | jq -r --arg t "spawn-$TODAY-" '[(.data // {}) | keys[] | select(startswith($t))] | length' 2>/dev/null)" || used=""
 case "$used" in
   ''|*[!0-9]*)
     echo "responder-budget: PROBE-FAIL — could not count today's sessions from $NS/$CM; blocking triage fail-closed" >&2
@@ -92,6 +97,13 @@ case "$used" in
 esac
 
 remaining=$(( MAX - used )); [ "$remaining" -lt 0 ] && remaining=0
+
+# Prune the spawn- keys of EARLIER days — they count nothing any more. Best-effort and after the
+# count, so a failed patch can never change the verdict (a leftover key is only a few bytes).
+stale="$(printf '%s' "$json" | jq -c --arg t "spawn-$TODAY-" \
+  '[(.data // {}) | keys[] | select(startswith("spawn-") and (startswith($t) | not)) | {op: "remove", path: "/data/\(.)"}]' 2>/dev/null)" || stale=""
+case "$stale" in ''|'[]') ;; *) kubectl -n "$NS" patch cm "$CM" --type json -p "$stale" >/dev/null 2>&1 \
+  || echo "responder-budget: could not prune earlier days' spawn- keys — harmless, retried next run" >&2 ;; esac
 
 if [ "$used" -ge "$MAX" ]; then
   echo "responder-budget: BUDGET EXHAUSTED — $used/$MAX LLM triage sessions spawned today (UTC $TODAY); no further sessions will be launched until 00:00Z. Alerts still fire and still route to Home Assistant; raise RESPONDER_DAILY_MAX or fix the storm." >&2

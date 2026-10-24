@@ -91,8 +91,9 @@ The gateway's one configuration document, `/etc/agent-gateway/policy.json` (a Co
 homelab config; the test world is [worlds/policy-default.json](worlds/policy-default.json)):
 per-stack credential refs, per-role allowed rails in preference order with a default tier and
 harness, per-(rail, tier) ordered model list, per-rail `max_sessions` and `side_models` (the families a
-harness's side-calls may name on any session of that rail), per-model `context_tokens`,
-`session_ttl_s`. **No model id lives in code** — only here, copied from
+harness's side-calls may name on any session of that rail), per-model `context_tokens` (the
+non-Go rails only — a Go model's window is the Go catalog's `context`, ruling 5), `session_ttl_s`.
+**No model id lives in code** — only here, copied from
 `argocd/resources/openrouter-proxy/model-classes.json`; the deployed policy
 (`argocd/resources/agent-gateway/policy.json`, the source of the `agent-gateway-policy`
 configMapGenerator) has the same shape and is loaded by a
@@ -144,8 +145,11 @@ latency, prices) as the gateway last read them, kept in its store under
 reads it; [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) writes it (the vendor's weekly
 ranking ∩ the AA-benched set, then each candidate's endpoints) and keeps, beside it, each
 `(model, provider)` cell's **entry state** — `candidate` → `eligible` by one clean
-[canary](#canary), or `excluded` by a struck one. A model the snapshot does not cover, or none of
-whose cells is eligible, rides **unpinned**. Not the [Go catalog](#go-catalog) (the opencode
+[canary](#canary), or `excluded` by a struck one — and, on the view (`GET /catalog/openrouter`),
+whether the cell is **pinnable** per harness: the floors' verdict, the data plane's own predicate,
+so that an `eligible` cell selection could never pin is visible BEFORE a canary is spent on it
+(the launcher walks only pinnable candidates, cheapest first). A model the snapshot does not cover,
+or none of whose cells is eligible, rides **unpinned**. Not the [Go catalog](#go-catalog) (the opencode
 rail's vendor facts) and not the [tier evidence](#tier-evidence) (the benchmark snapshot the tier
 lists derive from).
 
@@ -161,12 +165,13 @@ never decides it.
 ## Go catalog
 
 The opencode rail's vendor facts as the gateway last read them: two **snapshots**, one per
-source — `config` (the console's V2 config: listed models, `cost[]` tiers, context/output limits,
-tool support) and `docs` (the vendor's Go page: each model's monthly limit per **plan**, promotion
+source — `config` (models.dev's `opencode-go` catalog with the console's V2 config as the
+workspace's overlay — listed models, cost tiers, context/output limits, tool support) and `docs` (the vendor's Go page: each model's monthly limit per **plan**, promotion
 multipliers, peak rows and hours, the 5h/weekly/monthly shares). Refreshed on a schedule; a failed,
 unparseable or implausible refresh keeps the last good snapshot, which the store persists
-([GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go)). *Listed* means in the config snapshot — an
-account fact, not a liveness signal. **Plan** = `go` | `go-plus`, declared in the policy
+([GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go)). *Listed* means in the config snapshot — the merged
+listing, models.dev's rows under the workspace's **overrides** (the console's overlay) — an account
+fact, not a liveness signal. **Plan** = `go` | `go-plus`, declared in the policy
 (`rails.opencode.plan`) because no vendor API says which one a key is on.
 
 ## tier evidence
@@ -174,13 +179,48 @@ account fact, not a liveness signal. **Plan** = `go` | `go-plus`, declared in th
 The benchmark rows the DEPLOYED policy's [tier](#tier) lists are derived from
 ([GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers)): a committed snapshot
 (`argocd/resources/agent-gateway/benchmarks.json`) of every candidate policy id per rail with its
-Artificial Analysis row (joined by rule, never a table), its price and its Go monthly limit, plus
-the policy's `tiers` block — the score axis, the per-tier **score bands** as fractions of the
-rail's top score, the cap. The lists are the derivation's output; a hand edit fails the suite.
+Artificial Analysis row (joined by rule, never a table), its price (the openrouter model's
+SELECTED endpoint's; the [Go price](#go-price)), its clean-ride evidence and its Go monthly
+limit, plus the policy's `tiers` block — the score axis, the per-tier **score bands** as
+fractions of the rail's top score, the cap, the `cost` terms. The lists are the derivation's output, each ordered by [cost per clean ride](#cost-per-clean-ride);
+a hand edit fails the suite. A tier with no priced candidate (the openrouter rail before its first
+eligible cell) is **undecided**: its deployed list stands, `apply` refuses to write it.
 *Score band* here is the `tiers.bands` fraction, not the ADR-104 curation band of
 [`docs/glossary.md`](../../docs/glossary.md) (`regular` / `premium` / `ultra` / `instrument`).
-Refreshed by hand (`scripts/benchmarks-snapshot.sh`); the fixture worlds carry the block but
-keep their fixture lists.
+Refreshed by hand (`scripts/benchmarks-snapshot.sh`), its age a gauge the `TierEvidenceStale`
+alert reads; the fixture worlds carry the block but keep their fixture lists.
+
+## cost per clean ride
+
+The one number a [cell](#cell) is ordered and chosen by ([GW-MODEL-TIERS §Cost per clean ride](endpoints/catalog.md#cost-per-clean-ride)):
+what one ride that ENDS CLEAN costs, counting the rides that did not — the cell's price for a
+ride's output tokens over its **clean-ride rate**, plus the strike overhead on every failed ride
+in between. The price is the cell's own: on the openrouter rail the SELECTED endpoint's (never
+the headline), on the Go rail the plan's fee over what the plan bought ([Go price](#go-price)).
+The clean-ride rate is measured from the outcome store once the cell has `tiers.cost.min_rides`
+judged rides, a prior before (the selected endpoint's uptime; 1.0 on the Go rail). The terms are
+the policy's `tiers.cost`. Operator ruling 2026-10-19 (homelab#2718): per-token prices are not
+the tier order.
+
+## Go price
+
+The opencode rail's price per model, derived rather than listed: the model's list price × the
+plan's **discount** = `fee ÷ max(the rail's trailing-30-day list-priced draw, the model's monthly
+limit)` — the fee buys at least the model's own allowance (`promise`), and a busier rail makes
+every Go token cheaper (`measured`); an unlimited model prices at 0. The fee is the Go page's
+Plan table ([Go catalog](#go-catalog)), the draw the gateway's own ledger at the catalog's list
+rates (the same arithmetic as the window draw). Shown on `GET /catalog/opencode` `pricing`
+([GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers)).
+
+## twin
+
+Two policy ids that name ONE model on two rails — the same tail after the rail prefix, a
+`:variant` and the vendor are stripped, in the AA spelling (`opencode-go/<id>` ↔ `<vendor>/<id>`;
+`tiers.same_model`, one rule, no table). When a tier's lists name a twin on two of the role's
+allowed rails, admission runs the **rail choice** ([GW-MODEL-TIERS §The rail choice](endpoints/catalog.md#the-rail-choice)):
+the rail whose twin cell costs less per clean ride walks first, with that twin at its list's
+head; the role's rail order stands for everything else. A `claude/` alias names a family, never a
+model: it twins nothing.
 
 ## canary
 
@@ -203,11 +243,23 @@ implementation exists; the production one is a `⚑ gap`.
 
 ## control plane / data plane
 
-Control plane = `/sessions` (admission, lookup, release), `/healthz`, `/metrics`, `/catalog/opencode`. Data plane =
+Control plane = `/sessions` (admission, lookup, release, the [judge](#judge)'s list by task), `/healthz`, `/metrics`, `/catalog/opencode`. Data plane =
 the two dialect paths the pod's LLM traffic rides. `/sessions` is called by launchers with their
 projected ServiceAccount token, checked against the policy's `callers`
 ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth); `/healthz`, `/metrics` and `/catalog/opencode` stay open,
 in-cluster only); the data plane requires a session token.
+
+## judge
+
+A control-plane caller whose `callers` entry says **`outcome: any`**: it may report an outcome on
+any [session](#session) of its stacks, not only the ones it admitted, and `GET /sessions?task=`
+shows it every session of its stacks carrying that task
+([sessions.md §Who may report](endpoints/sessions.md#who-may-report), [§A judge finds a task's
+sessions](endpoints/sessions.md#a-judge-finds-a-tasks-sessions)). It exists because a reviewer
+cannot grade its own verdict: `wrong-verdict` is a judge's class only, written after a later check
+— the deployed judge is the deploy-revert chain's judge step, which reports it on the review
+sessions of a merge the chain reverted (FU-270 (b)). A judge admits nothing (roles `[]`, no bind);
+the key is optional and `own` by default, so an absent key grants nothing extra.
 
 ## world
 

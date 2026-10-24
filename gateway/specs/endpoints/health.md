@@ -8,8 +8,9 @@ schema: health.schema.json
 The probe target and the one place the store mode is visible. `{ok: true, db: "pvc"}` is the
 normal answer. ADR-139 keeps the gateway single-replica on SQLite at `/data/gateway.db` (a 1Gi
 Longhorn PVC); when the PVC is unusable at start the gateway **fails open** to an in-memory
-store, logs it loudly, and says so here (`db: "memory"`) — sessions then live only until the
-next restart. HA (FU-271) is a gap.
+store, logs it loudly, and says so here (`db: "memory"`) — sessions, and the admission's capacity
+marks ([GW-SESSIONS-ADMIT §Kept across a restart](sessions.md#kept-across-a-restart)), then live only
+until the next restart. HA (FU-271) is a gap.
 
 ## Interface — the machine half
 

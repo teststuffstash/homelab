@@ -1,0 +1,25 @@
+# The `agent-gateway-tier-evidence` group, lifted VERBATIM out of prometheusrule.yaml (comments
+# stripped — the manifest is their one home) — the rules file tier-evidence.promtool-test loads.
+# Not a manifest: `promtool test rules` needs upstream-format rules (top-level `groups:`). Named
+# .promtool-rules rather than .yaml because manifest-lint kubeconforms every *.yaml under
+# argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions). RE-COPY AFTER
+# EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway-tier-evidence","rules":[.spec.groups[] | select(.name == "agent-gateway-tier-evidence") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway-tier-evidence
+    rules:
+      - alert: TierEvidenceStale
+        expr: |
+          (max(gateway_tier_evidence_age_seconds{job="agent-gateway"}) > 604800)
+          or
+          (absent(gateway_tier_evidence_age_seconds{job="agent-gateway"}) and on() (max(gateway_sessions_active{job="agent-gateway"}) >= 0))
+        for: 1h
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: 'The gateway''s tier evidence (benchmarks.json) is older than 7 days, or none is mounted'
+          description: 'gateway_tier_evidence_age_seconds is past 7 d ({{ $value }}), or absent while the gateway serves: the deployed tier lists and the rail choice compare on stale prices. Re-cut it: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply, commit benchmarks.json + policy.json by PR (an undecided tier keeps its deployed list — check names it). Absent = argocd/resources/agent-gateway/kustomization.yaml no longer ships benchmarks.json in the policy ConfigMap, or GATEWAY_BENCHMARKS points elsewhere. The contract is gateway/specs/endpoints/catalog.md#gw-model-tiers.'

@@ -267,7 +267,7 @@ kept on a separate branch/PR. These are proposed contracts, not new enforced GW 
 | Cancellation | Close upstream on downstream cancellation; never replay a partially delivered generation. |
 | OAuth | Central refresh with one owner per account, durable rotation and restart recovery. The current read-only Secret resolver is insufficient. |
 | Headroom | Account-wide observations with source/time/reset, freshness and out-of-order checks; gateway state drives admission, Prometheus observes. |
-| Initial eligibility | Explicit canary cell before general role routing; no implicit paid fallback. |
+| Initial eligibility | Explicit canary cell before general role routing; no implicit paid fallback. Ruled 2026-10-23 — [§Role routing](#role-routing--ruled-2026-10-23-fu-270): every role lists the rail. |
 
 Refresh persistence is an unresolved implementation decision: Infisical remains the source of
 truth under [the secrets doctrine](../secrets.md). Updating only its ESO-generated Kubernetes
@@ -557,9 +557,446 @@ specs-review rounds):
 | B | `x-codex-turn-state` round trip bound to session, account and `client_metadata.turn_id`; `turn-state-invalid` | **merged #2735** (19:35Z) |
 | C | same-pod token-only re-read on `POST /sessions/{id}/env` (the `auth.command` seam) | **merged #2736** (19:5xZ) |
 | D | headroom from the gateway's own usage poll → `gateway_subscription_*{rail="codex"}` + panels on UID `claude-subscription` | not started |
-| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | not started |
+| E | the seed recipe as code: `codex login` into a throwaway `CODEX_HOME` → `infisical-secret` → delete; runbook entry (third-party-console class) | **recipe landed 2026-10-22**: `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed`) + [runbook §Enrol the gateway's own Codex login](../runbook.md#enrol-the-gateways-own-codex-login-the-codex-seed--fu-270-leg-e) — login in a throwaway home, usage-endpoint probe (structure only), Infisical → force-sync → readback hash check, shred. **Minted 2026-10-22 ~20:00Z** on the host (`store` verified the Secret's record hash `a1e1523e…`; the seeded access JWT expires 2026-11-01T20:00Z — a 10-day native access-token lifetime, observed). The `login` probe's live usage payload shape is below. The second-login revocation question: first reading 2026-10-23 (§The second-login revocation watch) — the jail's login survived the gateway's; the refresh half waits for the jail's next rotation |
+
+### Live usage payload shape — 2026-10-22 (FU-270 leg E)
+
+The leg-E `login` probe (one `GET https://chatgpt.com/backend-api/wham/usage` with the fresh seed
+token + `ChatGPT-Account-ID`, Plus account) answered **200**. Field/type structure only — no values
+were captured — so this verifies the source-derived window schema above and nothing about limits:
+
+```text
+account_id: str            email: str            user_id: str            plan_type: str
+rate_limit: {allowed: bool, limit_reached: bool,
+             primary_window:   {used_percent: int, limit_window_seconds: int, reset_after_seconds: int, reset_at: int},
+             secondary_window: {same four}}
+rate_limit_reached_type: null        additional_rate_limits: null        code_review_rate_limit: null
+rate_limit_reset_credits: {applicable_available_count: int, available_count: int}
+credits: {balance: str, has_credits: bool, unlimited: bool, overage_limit_reached: bool,
+          approx_cloud_messages: [2], approx_local_messages: [2]}
+model_usage: {gpt-6-astra: {available: bool, available_at: null, credits_would_enable: bool}}
+spend_control: {individual_limit: null, reached: bool}        promo: null
+```
+
+What this settles for `GW-CODEX-HEADROOM`: both windows are present on this account with integer
+`used_percent` and absolute `reset_at` (the native client's basis), `allowed`/`limit_reached` are
+booleans, and `rate_limit_reached_type` is a field the gateway's admission can map (null here).
+What it does not: `account_id`/`email`/`user_id` are identity values the poll must never persist or
+export; `model_usage` keys are **account-specific model evidence** (one key, `gpt-6-astra`, on this
+Plus account) — a hint for the explicit canary model, not a pin or an entitlement proof; the
+`credits`/`spend_control` blocks are unmodelled. The window values themselves were not read.
 
 After E: the codex rail block in the deployed policy (tier lists derived — `benchmarks.json` needs
 `codex/<id>` spellings), the `codex` cell in the launcher, the agent-runtime `agent-codex` wrapper
 rendering the provider block from the dispatch env, and the live canary in a declared maintenance
 window (step 4 above). The mint and the window are the operator's.
+
+**Built 2026-10-22/23 (seat, unattended):** leg D's poll half — the gateway polls the usage
+endpoint itself (`GW-CODEX-HEADROOM §Poll`, two alerts; #2828); the policy block, prober-only,
+with the codex list derived from the enrolled account's one model (`CODEX_CANDIDATES`, the
+usage probe's `model_usage`; stacked on #2828); the launcher's `codex` cell (`--harness codex` →
+`agent-codex --dangerously-bypass-approvals-and-sandbox …`, the key-ref / subscription-arm
+exemptions) + `gateway/scripts/canary-codex.sh`, the one-ride canary verb for the
+[declared window](../glossary.md#declared-window); the
+runtime wrapper rendering the provider block from the pulled env
+([agent-runtime#179](https://github.com/teststuffstash/agent-runtime/pull/179)). The canary
+itself waits for all four to land and for a declared window.
+
+### The first live ride — 2026-10-22 21:47–21:54Z (FU-270, step 4, window `seat-1792705075-7945`)
+
+**The rail lit at 21:47:46Z**: the policy block (#2832) rolled the gateway; its first act was
+`codex usage poll: accepted` — the enrolled account's live headroom: both windows at 0 % used,
+`reset_at` 5h = 2026-10-22T22:48Z, 7d = 2026-10-29T13:48Z (the gauges on UID
+`claude-subscription`), two accepted polls before the ride, no refresh (the seeded access token
+served; `gateway_credential_resolve_total{rail="codex",outcome="resolved"} 1`).
+
+**The ride** (`gateway/scripts/canary-codex.sh`, #2830; prober, `harness: codex`, agent-base
+`2026.10.22-gd4edaec9b5a8` with agent-runtime#179): admitted at 21:49:44Z (session
+`57b32b9d…`, `codex/gpt-6-astra`), the pod pulled exactly `OPENAI_BASE_URL`, `OPENAI_API_KEY`,
+`CODEX_MODEL`, `agent-codex` rendered the provider block, `codex exec --json` posted
+`/openai/v1/responses` — and the gateway's upstream POST to
+`https://chatgpt.com/backend-api/codex/responses` answered **HTTP 200 in 1.29 s with a body that
+was not an event stream**, refused as 502 `upstream-content-type` (the client saw
+`turn.failed: unexpected status 502 … upstream 200`; `AGENT_RUN_STATS exit_status=failed`, 8 s in
+the LLM loop, 254 s queue wait = the new image's pull). No auth rejection, no 429, no refresh.
+The transcript: `s3://agent-transcripts/homelab/canary-codex-20261022T214944Z/…`.
+
+**What this settles:** the whole chain through the gateway works up to the vendor's answer —
+enrolment, seed import, the poll, admission on live headroom, the env pull, the wrapper's
+rendering, the responses dialect on the wire. **What it does not:** what the backend answered.
+The gateway logged only "upstream 200" — the capture of the "upstream response received"
+boundary (above) did not exist yet; the next ride runs with it (content-type, header names, a
+bounded redacted preview). The open hypothesis is the vendor-header gap (§Native header
+compatibility): the gateway sends its fixed six headers, the native client also sends
+`originator`, `session-id`, `x-codex-*`. Observed ≠ required — the preview decides.
+
+Two operational findings, both fixed in #2830: the launcher's session release rides its EXIT
+trap through the jail's port-forward, which had died during the 4-minute image pull — the
+session held the rail's one slot until a hand `DELETE` (now the verb re-opens a dead forward and
+releases any still-active session of its task); and a `ControlPlaneNodeMemoryLow` on wk-metal-02
+fired inside the window — not the window's (the gateway rides wk-04), handed off to the responder.
+
+### The second ride — 2026-10-22 22:26–22:27Z: the capture decides it (FU-270, step 4)
+
+Same window, the capture live (#2835, image `gb29f204a6273`): admitted on live headroom, the
+same 502 `upstream-content-type` in 1.3 s — and this time the ERROR line carried the answer.
+**The backend's body IS a Responses event stream** (`event: response.created` … `"status":
+"in_progress"`, `"model": "gpt-6-astra"`, `"access_programs": {"cyber": "standard"}`,
+4,125 bytes read) — sent with **no `Content-Type` header at all** (`content-type=''`,
+`transfer-encoding: chunked`, Cloudflare in front: `cf-ray`, `cf-cache-status`, `server`). The
+gateway's strict rule (a 200 must say `text/event-stream`) refused a good stream. So the
+**vendor-header hypothesis is wrong**: the fixed six request headers were enough for the backend
+to answer a stream — "observed ≠ required" held. Fixed as: a 200 whose content-type is PRESENT
+and not SSE is refused; one with NO content-type is relayed (the bounded parser fails closed on
+a non-SSE body) — a ⚖ GW-RAIL-CODEX row with the live shape as its fixture.
+
+**Two more live facts from the same header list**, both for the gap rows: the streaming answer
+carries the account's headroom as response headers — `x-codex-primary-used-percent`,
+`x-codex-primary-window-minutes`, `x-codex-primary-reset-at` / `-reset-after-seconds`, the
+`secondary` set, `x-codex-primary-over-secondary-limit-percent`, `x-codex-active-limit`,
+`x-codex-plan-type`, `x-codex-credits-*` — the "upstream headers" headroom source
+(`GW-CODEX-HEADROOM`'s `source: upstream`; a ⚑ gap until 2026-10-23, now §Upstream headers — the
+relayed answer's windows feed the same snapshot the poll does, strictly by time) exists on the wire; and
+`x-codex-turn-state` is issued on the very first turn (leg B's round trip has something to
+carry). Also `x-codex-safety-buffering-enabled` / `-faster-model` and `x-models-etag`. Values
+were not captured (names only — the capture's rule); the usage poll stays the admission source.
+The release worked this time (the hardened verb, #2830); the session row: 1 request, released.
+
+### The third ride — 2026-10-22 22:56–22:57Z: the canary completed (FU-270, step 4 DONE)
+
+On #2837's image: admitted on live headroom, env pulled, provider block rendered, and
+`codex exec --json` ran a **real tool turn** — `command_execution` `rg -m 1 '^#{1,6} ' README.md`
+→ `# homelab` — then answered `homelab`; `turn.completed` with usage 21,422 input (18,176
+cached) / 47 output; the launcher reported the outcome **clean**, the session released. Two
+requests on the rail (the tool continuation rode the `x-codex-turn-state` round trip of leg B;
+the gateway's `codex upstream 200 without a content-type — relayed` on both). **Step 4's
+acceptance is met**: the operator's ChatGPT subscription serves a cluster ride through the
+gateway with no credential in the pod, on live headroom the gateway observed itself (poll), with
+tool use, finalisation and release. Evidence: the session row (`requests 2`, `tokens_in 3246`,
+`tokens_out 47`, `outcome clean`), `gateway_tokens_total{rail="codex"}` in / cache_read / out =
+3246 / 18176 / 47, the ride pod's `run.log` at
+`s3://agent-transcripts/homelab/canary-codex-20261022T225609Z/…`.
+
+One classification finding, fixed in the same slice: both requests were recorded
+`outcome=cancelled status=499` although each stream's `response.completed` had been observed
+(usage counted) — the native CLI closes the connection as soon as it has the terminal event
+while the vendor holds the stream open, so the relay's cancellation branch overwrote an earned
+outcome. A consumer that goes away after the terminal event now keeps that outcome (200); only a
+still-pending stream is a cancellation (a ⚖ relay-seam row with the live shape as its fixture).
+
+What remains under FU-270 after step 4: MCP for the codex harness (the shape below, buildable
+now that a codex ride can carry a recipe), the second-login revocation watch's refresh half (first
+reading below), and the recorded-protocol experiment proper (the four-boundary capture — this
+slice's refusal capture is its first piece). Landed 2026-10-23: the `x-codex-*` response headers
+as a second headroom source (GW-CODEX-HEADROOM §Upstream headers) and the role-routing ruling
+([§Role routing](#role-routing--ruled-2026-10-23-fu-270) — every role lists the rail).
+
+### MCP for the codex harness — the shape, verified 2026-10-23 (FU-270, not built)
+
+The pinned CLI (rust-v0.163.0, `codex-rs/config/src/mcp_types.rs`) takes a remote MCP server as
+`[mcp_servers.<name>]` with `url = "…"` (its `StreamableHttp` transport; optional
+`bearer_token_env_var`, `http_headers`, `env_http_headers` — the stack knob needs none: the
+endpoint is the stack-wide `spec.mcp.endpoint` of #1041, unauthenticated inside the cluster as for
+the other three harnesses). So the attach is the same two-sided move the gateway cell was: the
+launcher's codex arm exports the knob (`CODEX_MCP_URL=<endpoint>`, quoted like `MCP_GOOSE_FLAG`)
+and `agent-codex` appends that block to the provider block it already renders (same
+quote/backslash/newline refusal; no env = no block). It is not built because no codex ride can
+carry a recipe today — the rail is the prober's canary cell, and MCP attaches only on the recipe
+path — so it waited on the role-routing ruling ([§Role routing](#role-routing--ruled-2026-10-23-fu-270),
+same day: every role lists the rail, so a reviewer or worker ride CAN land on codex with a recipe).
+Built the same day: the runtime half (agent-runtime#180 — `agent-codex` appends the block from
+`CODEX_MCP_URL`, inert until exported) and the launcher's export (homelab#2844 — the codex arm
+prefixes `CODEX_MCP_URL='<endpoint>'` to the seam, replay row `harness-run-cmd-codex-mcp`); live
+once the runtime image carrying #180 is pinned. Until it lands the env card's "feedback tool:
+available on any harness with the knob" line would be false for a codex ride on a stack that
+declares `spec.mcp.endpoint` — none of the stacks on `/sessions` does today (the platform stack
+declares no MCP knob), so the claim is unreachable rather than wrong.
+
+### The second-login revocation watch — first reading 2026-10-23 (FU-270, leg E)
+
+The question leg E left open: does the gateway's own device login (minted 2026-10-22 ~20:00Z)
+invalidate the homelab-codex jail's earlier login on the same account? Read from the jail's own
+Codex log store (`logs_2.sqlite`, structure and status codes only — no token value was read or
+printed): the jail's `auth.json` was last refreshed 2026-10-16T12:54Z and its access JWT runs to
+2026-10-26T12:54Z (the same 10-day lifetime the gateway's seed showed); after the gateway's login
+the jail's Codex kept calling the backend with that week-old token — 77 `GET
+…/backend-api/codex/models` between 01:11Z and 01:56Z on 2026-10-23, every one `200`, every
+feedback tag `auth_retry_after_unauthorized=""` (no 401, no recovery) — and no re-login prompt.
+The three `account/rateLimits/read failed during TUI refresh` warnings in the same hour are the
+TUI's rate-limit panel, not an auth failure (no 401 anywhere in the window). **What this settles:**
+a second device login does NOT revoke the first login's access token. **What it does not:** whether
+the first login's REFRESH still works — the jail has not rotated since 10-16, so the refresh half
+of the question answers itself when its token expires (2026-10-26) or the CLI refreshes early;
+re-read the log for a `refresh` outcome then. Until that reading, the enrolment doctrine stands:
+one refresher per token set, the gateway's login is its own.
+
+### Role routing — ruled 2026-10-23 (FU-270)
+
+**The ruling (operator, 2026-10-23): subscriptions go to all roles.** Three reasons, in the
+operator's words: the roles can be mixed and re-arranged week by week — one week the reviewer is
+sonnet, the next codex, or alternating days; tokens are spent efficiently — a week's subscription
+may be drained dry on purpose for a special use and the other subscriptions take over
+automatically; and the system keeps some variation — always the same reviewer makes the platform
+blind to certain classes of problem. The "initial eligibility" row above (the explicit canary cell
+first) is therefore closed: the cell proved the rail (step 4), and the ruling opens it.
+
+What it changed (homelab PR, the GW-SESSIONS-ADMIT §The harness follows the rail rows):
+
+- **The walk crosses the dialect boundary on its own.** Before, `roles.<role>.harness` filtered the
+  walk to the rails its dialect could speak, so a claude-harness reviewer could never reach codex
+  and a codex-harness ride could reach nothing else — "subscriptions on every role" was
+  unreachable without a second harness per role. Now a body that names no `harness` walks every
+  allowed rail in the role's order, and the dispatch's `harness` is the picked rail's: a rail
+  serving the role's harness dialect keeps the role's harness (the dual-dialect Go and openrouter
+  rails), a rail that does not names the harness of its own dialect (anthropic → claude, codex →
+  codex; `config.DIALECT_HARNESS`, one harness per dialect — the launcher's baked defaults). An
+  explicit `harness` keeps the old narrowing. The launcher already runs the harness the answer
+  names (`agents/agent-session.sh`, the `gateway-sessions` block — #2830's codex arm), so no
+  launcher change was needed.
+- **The deployed lists.** Every role lists `anthropic`, `opencode` and `codex`; the metered
+  openrouter rail, where listed, walks last (the prober keeps it first — its probes are that
+  rail's cells). The claude-harness roles (reviewer, coordinator, responder): anthropic → opencode
+  → codex. The opencode-harness roles (worker, retro, researcher): opencode → codex → anthropic →
+  openrouter. **The order per role is the weekly knob** — a `policy.json` edit, which rolls the
+  pod (the configMapGenerator); no code moves when a role changes rail.
+- **`rails.codex.max_sessions` stays 1** (the canary's bound) — one codex ride at a time across
+  all roles; a full rail falls through to the next. Raise it once live rides show the account's
+  room (the Plus account read 0 % / 0 % on 10-22).
+
+What it did not change, and what to watch:
+
+- **No rotation machinery.** The variation the operator wants is the operator's weekly re-order,
+  not a scheduler; a rotation knob would be a new ⚖ (which roles rotate, on what period, how the
+  evidence of "blind spots" is read) and nothing today asks for it.
+- **The recipe path on codex is unproven live** — the three rides so far were the prober's
+  structure-only canary. The first reviewer or worker ride that lands on codex (anthropic AND Go
+  full, or an operator re-order putting codex first) is the proof; read it in the gateway log
+  (`session: dispatch … rail=codex harness=codex`) and the ride's outcome.
+- **`codex exec` has no `--max-turns`-class bound** — only `AGENT_MAX_SECONDS` bounds a codex
+  ride (#2830). A runaway recipe ride on codex spends the subscription's window until the wall
+  clock cuts it; the headroom ceiling (0.95) is the backstop at admission, not mid-ride.
+- **The benchmarks evidence has one codex row** (`gpt-6-astra`, score 52.7 by AA tail) — the
+  tier lists all name it, so a heavy-tier reviewer on codex rides the same model a light-tier
+  prober does. #2764's cost-per-clean-ride choice compares twins only; codex has none.
+
+## Recorded live protocol experiment — 2026-10-22 (FU-270)
+
+**Plan, not implemented or live evidence.** The operator asked for captured requests/responses
+from in-cluster Codex to improve the requirements, beyond a canary that merely completes.
+This extends FU-270's existing vendor-header and live-canary gaps; it does not enable the rail
+or authorize enrollment in this documentation session. The native profile selected above stays
+selected. The [gateway spec process](../../gateway/specs/README.md) and
+[Responses requirements](../../gateway/specs/endpoints/openai-responses.md) own the resulting
+contract; the [existing CLI probes](../../experiments/codex-rail/README.md) are the starting point.
+
+### Credential ownership and experiment boundary
+
+Use leg E's **separate gateway login**, imported through `CODEX_SEED_RECORD` → Infisical → ESO
+→ the gateway's durable SQLite store. The worker receives only its gateway session token;
+the gateway alone owns upstream renewal. Never copy the active jail's renewable login to a
+second refresher. A short-lived access token can establish inference behavior, but cannot
+establish renewal/recovery. Independent-login revocation semantics are half-verified (§The
+second-login revocation watch: the access token survives, the refresh half is pending); enrollment
+records that uncertainty and the observed effect on the existing login.
+The login's browser consent is the third-party-console class under the
+[minting doctrine](../secrets.md#minting-doctrine--a-tokens-scope-is-config-not-a-secret);
+credential transfer and cleanup belong to the coded enrollment recipe.
+
+Run a bounded experiment with a pinned agent-runtime image, an explicitly selected model,
+synthetic prompts and a disposable workspace containing only experiment fixtures. Scope capture
+to the experiment's sessions, with duration/byte limits and an explicit completion or truncation
+marker. Declare the [maintenance window](../../.claude/skills/maintenance-window/SKILL.md) before
+deploying/running the live experiment. Ordinary fleet traffic is outside this capture scope.
+
+### Capture before and after gateway transformations
+
+Record four correlated boundaries: **client request received**, **upstream request sent**,
+**upstream response received**, and **client response sent**. Egress-only capture cannot show
+what the gateway discarded; ingress-only capture cannot show what the backend actually saw.
+The observer must preserve streaming and cancellation behavior, avoid whole-response buffering,
+and never replay a request as a side effect of recording. Recorder loss/overflow is explicit
+in the evidence; a missing capture is not an observed absence of a header or event.
+
+| Capture | Evidence retained |
+|---|---|
+| HTTP request/response at each boundary | method, destination/path, status, header names and approved non-sensitive values; added/dropped/rewritten fields |
+| Request JSON and ordered SSE events | sanitized bodies for the synthetic task, tool definitions/calls/results, continuation inputs, terminal status, error codes and usage; event order and relative times |
+| Opaque identifiers and routing state | run-local aliases preserving equality across all four boundaries, turn boundaries and retries; no account or routing-state values in published evidence |
+| Lifecycle | request/turn/session correlation, attempt count, cancellation, disconnect, EOF, parser failure and capture completeness |
+| Usage polling and refresh | separately instrumented gateway-owned calls: sanitized field/type structure, status, timing, window/reset observations and replacement-token presence; never token values |
+| Provenance | runtime image digest, Codex version, gateway revision/image digest, model, provider/transport configuration, scenario, timestamp and capture format version |
+
+Sanitize **before persistence**, including error paths: remove authorization, cookies, session
+tokens, OAuth token values, account identifiers and sensitive URL/query values. Use structured
+capture sanitization, not the existing log formatter's token-pattern matching. Unknown fields
+must not silently become public attachments: retain their structural presence/type and mark
+their values withheld until a safe export rule exists. Synthetic prompts/tool results can be
+retained after checking them; redaction must preserve the structures the requirement relies on.
+Prove these rules with dummy secret canaries before introducing a real credential.
+
+Keep the sanitized experiment bundle in restricted storage with bounded retention; log only its
+reference and summary. The anonymously readable gateway-specs site receives only reviewed,
+sanitized evidence exports. Replay fixtures replace opaque IDs/state consistently and retain
+the event/body structure needed to exercise the gateway. Do not replay credentials or refresh
+calls against the real backend. Sanitization and any normalization must be described alongside
+the fixture, so the artifact never claims byte-for-byte fidelity it does not have.
+
+### Establish a baseline, then test the gateway's choices
+
+First record a native-client baseline through an isolated recording forwarder that preserves
+the native request semantics. Verify the pinned client's supported routing configuration before
+choosing the capture mechanism; a custom provider can itself change emitted headers/tools.
+Document that configuration and any deviation from the native path. The baseline's credential
+ownership must be explicit and exclusive too: no baseline client and gateway refreshing the
+same token chain concurrently. This baseline is an experiment, not a production passthrough
+exception to the gateway's credential/header boundary.
+
+Then run the same scenario/configuration through the gateway and compare all four boundaries.
+**Observed is not required:** seeing a header establishes presence; successful inference with
+it establishes compatibility for that run. Necessity requires a controlled comparison changing
+one header/behavior at a time, repeated where variability matters. Keep inconclusive results
+inconclusive. Never infer native-backend requirements from SIWC documentation alone.
+
+| Scenario | Observation needed | Requirement home |
+|---|---|---|
+| Tool turn, then another turn | actual tool call, result submission, terminal completion; state reuse within the turn and clearing between turns | `GW-RAIL-CODEX` |
+| Cancellation/interrupted stream | client cancellation propagation, upstream closure, partial events and distinct terminal/transport outcomes | `GW-RAIL-CODEX`, `GW-METRICS` |
+| Natural renewal, then gateway restart | one refresh owner, persisted replacement before use, subsequent use after restart; no credential in artifacts | `GW-CODEX-OAUTH`, `GW-CODEX-REFRESH`, `GW-REDACT` |
+| Real account usage observation | payload field types, available windows, absolute reset semantics and freshness; missing/unknown windows remain unknown | `GW-CODEX-HEADROOM` |
+| Observed limit/auth/backend failure | HTTP status plus SSE error/terminal data, resulting admission/accounting behavior; HTTP 200 alone is not success | `GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-SESSIONS-ADMIT`, `GW-METRICS` |
+
+Do not burn through account quota or revoke a working login to manufacture a failure. A failure
+not encountered live stays unobserved. Exercise such paths offline with explicitly synthetic
+faults; distinguish them from captured vendor behavior. In particular, OpenAI's
+[Responses events](https://developers.openai.com/api/reference/resources/responses/streaming-events)
+distinguish failed, incomplete and completed responses; preserve that distinction through
+capture, the gateway ledger and metrics instead of treating every HTTP 200 as completion.
+
+### The scoped observer — built 2026-10-23 (FU-270)
+
+The recorder of the plan above is in the gateway: [GW-CODEX-CAPTURE](../../gateway/specs/endpoints/openai-responses.md#gw-codex-capture).
+Scoped by task prefix (`CODEX_CAPTURE_TASK_PREFIX=capture-codex-` in the deployment; off by
+default), passive (the relay yields each chunk before the tap splits it; a recorder fault is a
+log line), sanitized structurally before persistence (header names with values only for an
+allowlist; strings as lengths except vocabulary keys; ids aliased, equal across boundaries;
+proven with `DUMMY-SECRET` canaries offline, as the plan asked), bounded per request with an
+explicit `truncated` marker, persisted in the gateway's own store with a 7-day retention, and
+read back as one bundle by `GET /sessions/{id}/capture` under the session's lookup rule. The jail
+verb is `gateway/scripts/canary-codex.sh --capture`: the ride's task is `capture-codex-<ts>`, the
+bundle lands in `~/.claude/codex-capture/` (restricted, never the repo) and the summary prints
+here. The usage poll is not in the bundle (its own log lines and counters are its instrumentation).
+Not built: the native-client **baseline** through a recording forwarder (the plan's first step
+of §Establish a baseline) — the pinned CLI's `chatgpt_base_url` config key could point the native
+auth path at an in-jail forwarder with the jail's own login, but the forwarder is its own piece
+and the comparison needs the gateway bundle first.
+
+### The capture ride — 2026-10-23 10:12Z (FU-270)
+
+Window `seat-1792750015-3165` (10:06:55Z–10:21Z), the gateway at `2026.10.23-g15c9a49a3958` with the
+recorder scoped to `capture-codex-*`; one prober ride (`canary-codex.sh --capture`, a two-command
+prompt), pod `agent-homelab-100750` on nx-01, session `ca646f1be25b40a69fb59079957fc0a7`: **2 requests,
+both completed**, outcome clean, 100 records, bundle `complete: true` (50 KB + 36 KB), tokens
+1595 + 1779 in, 9088 cached ×2, 83 + 9 out. The CLI ran `rg` then `wc -l` and answered. The bundle
+is in the jail's `~/.claude/codex-capture/` (restricted); the reviewed structure is the fixture
+`gateway/tests/fixtures/codex-live/turn-2026-10-23.json` behind
+[GW-RAIL-CODEX §Live grammar](../../gateway/specs/endpoints/openai-responses.md#live-grammar--captured-2026-10-23).
+
+What the four boundaries showed (names and shapes; values withheld by construction):
+
+- **Client request received:** the pinned CLI sends, beside the standard six, `originator`,
+  `session-id`, `thread-id`, `x-client-request-id`, `x-codex-beta-features`,
+  `x-codex-turn-metadata`, `x-codex-window-id` and `x-openai-internal-codex-responses-lite` — and
+  on the continuation `x-codex-turn-state` (the state the first answer issued). Body 55 KB:
+  `model`, `stream: true`, `store: false`, `include`, `reasoning`, `text`, `tool_choice: auto`,
+  `parallel_tool_calls: false`, `prompt_cache_key` (a string), `client_metadata`; **no top-level
+  `tools`** — the tools ride INSIDE `input` as an `additional_tools` item (the "lite" protocol), then
+  developer and user `message` items; the continuation appends the `custom_tool_call` and its
+  `custom_tool_call_output` (57 KB — the whole history is resent, `previous_response_id` null).
+- **Upstream request sent:** the gateway dropped every CLI-own header above (and `host`,
+  `content-length`), added `chatgpt-account-id` and `accept-encoding: identity`, replaced
+  `user-agent`; the body crossed unchanged. **The backend answered 200 both times** — presence of
+  those headers is established, their necessity is not (the plan's "observed ≠ required"; a
+  controlled comparison would be the next experiment, not this one).
+- **Upstream response received:** first byte 1446 ms / 852 ms, **no `Content-Type`** (again),
+  `transfer-encoding: chunked`, Cloudflare; the headroom set with values (used 0 % / 0 %, windows
+  300 / 10080 min, `reset-after-seconds` 18000 / 564306, `reset-at` epochs), `x-codex-plan-type: plus`,
+  `x-codex-active-limit: premium`, `x-codex-safety-buffering-enabled: true`; names only for
+  `x-codex-credits-*`, `x-codex-safety-buffering-faster-model`, `x-models-etag`, `x-oai-request-id`,
+  `x-openai-proxy-wasm`, `cf-ray`, the security headers — and **`x-codex-turn-state` on the first
+  answer only** (leg B: issued once per turn, echoed by the client on the continuation; the gateway
+  round-trips it: the first `client-response` carries it, the second does not).
+- **The stream:** 78 events / 103 KB then 14 / 86 KB (the events carry the whole response
+  object). Grammar of a tool-call turn: `response.created` → `response.in_progress` → a `message`
+  item (`output_item.added`, `content_part.added`, `output_text.delta` ×9, `output_text.done`,
+  `content_part.done`, `output_item.done`) → a `custom_tool_call` item named **`exec`**
+  (`custom_tool_call_input.delta` ×57, `…_input.done`, `output_item.done`) → **`response.metadata`**
+  (a vendor event outside the public Responses grammar — the parser passes unknown types through)
+  → `response.completed`. The terminal `usage` carries the standard fields (`input_tokens` 10683,
+  `input_tokens_details.cached_tokens` 9088 + `cache_write_tokens` 0, `output_tokens` 83,
+  `reasoning_tokens` 0) **plus a vendor `attribution` sub-object** (per-item token attribution,
+  ids) the parser never reads. `response.created` names the response's knobs: `service_tier: auto`,
+  `temperature 1.0`, `top_p 0.98`, `truncation: disabled`, `store: false`, `prompt_cache_retention`,
+  `safety_identifier`, `access_programs`, `tool_usage` keys. No reasoning items were emitted.
+- **Client response sent:** 200, outcome `completed`, bytes relayed = bytes received, usage
+  counted 1595 / 9088 / 83 — reproduced offline from the fixture's type sequence (the §Live grammar
+  row). Neither request was cancelled this time (the 10-22 499s were the CLI closing after the
+  terminal; this ride's CLI read both streams to EOF within the relay).
+
+Two findings outside the bundle: (1) **`AgentWorkerEgressDropped` fired at 10:12:47Z** — ~17 TCP
+SYNs from the ride pod to `chatgpt.com` / `ab.chatgpt.com` POLICY_DENIED while the CLI ran: the
+pinned CLI makes direct backend calls beside the provider block (a models list, a rate-limit read,
+telemetry — unknown), the enforced egress denied them and the ride completed, so they are not
+needed for inference; what they would carry is a ⚑ gap row (the native-client baseline forwarder
+is the instrument). (2) The window's `check` read scrape targets 196 → 195 with nothing down: the
+pre-window gateway rollout (10:05:48Z) left the old pod's target in the set at the baseline read;
+closed `--force` with that said.
+
+What the ride did NOT exercise (named, not claimed): cancellation mid-stream, a failed /
+incomplete terminal, a 429, a refresh during a ride, a second turn (a new `codex exec`) reusing
+state — each stays an offline synthetic row until observed live.
+
+### The opt-out ride — 2026-10-23 20:09Z (FU-270)
+
+Window `seat-1792786159-4202` (20:09:20Z–20:12:03Z), one prober ride (`canary-codex.sh`) on
+agent-base `2026.10.23-g79d146c8caac` (`sha256:0ede69bb…`), the first image carrying
+agent-runtime#181's phone-home opt-outs (PR agent-runtime#182); pod `agent-homelab-200922` on nx-01,
+harness codex, model `codex/gpt-6-astra`. Two `/openai/v1/responses` turns, both 200; the pod
+answered the prompt exactly (`codex-cli 0.162.1`; `86 README.md`), clean, 13 s in the loop.
+Upstream headers: plan `plus`, primary window 0 % used; both gateway windows read 0.
+
+- **No direct backend calls.** POLICY_DENIED from the ride pod (Prometheus): `chatgpt.com` 0 and
+  `ab.chatgpt.com` 0, against 14.2 each over the capture ride's window (10-23 10:12–10:22Z, the
+  previous image). Every other homelab-source drop series read 0; no alert changed state. This is
+  agent-runtime#181's acceptance item 4, met live — the calls the capture ride saw were the
+  optional update/analytics/telemetry activity the opt-outs disable, so the §Named gaps row
+  about them is resolved.
+- **The hubble attribution leg produced nothing** — `scripts/hubble-observe.sh` probed
+  `127.0.0.1` but dialled `localhost`, which resolved to `::1` and was refused; fixed on master
+  (the script now dials `127.0.0.1`). Prometheus carried the evidence.
+- **A jail-launched ride neither reports nor releases at finalize**: the launcher logged "router
+  report unreachable — non-fatal, jail runs land here" (`agents/agent-session.sh`, the jail-run
+  branch) and the session release failed; the canary released the session itself (200). So a
+  jail ride counts no strike and holds its rail slot until the script's explicit release —
+  the expected jail shape, recorded, not changed.
+
+Evidence: the secondary session's `REPORT.md` + `ride-attempt-1.log`, the capture bundle for
+session `71111e9d…` in the jail's `~/.claude/codex-capture/`, transcripts at
+`s3://agent-transcripts/homelab/capture-codex-20261023T200921Z/`.
+
+### Build order and acceptance
+
+Under FU-270: specify the capture/export contract and prove sanitization offline; implement
+the scoped observer and coded enrollment recipe; run the baseline and gateway scenarios in the
+maintenance window; review the bundle; then derive requirement rows and deterministic offline
+replay fixtures. Leg D's gauges landed in #2786; the real usage poll is still part of this work.
+Do not inject fake healthy headroom into a live run to bypass the missing poll. Establish the
+account-bound observation path before claiming production admission has been exercised.
+
+Acceptance is an **evidence bundle linked to requirement rows**, not a successful CLI exit.
+Each row identifies its provenance as official documentation, pinned client-source behavior,
+live observation, controlled comparison, replay evidence or synthetic fault. It states the
+tested version/configuration and remaining uncertainty. Captured failures count as findings,
+not failed experiments to discard. The built-image run complements the existing PR-head fake
+tests; its sanitized fixtures must replay offline without credentials or external requests.
+Header-policy or lifecycle changes discovered here land through the normal spec/review lane;
+unobserved cases remain named gaps. No new tracker item is needed for this FU-270 extension.

@@ -3,7 +3,7 @@ id: EP-SESSIONS
 use-cases: [UC-1]
 schema: sessions.schema.json
 ---
-# POST /sessions · GET /sessions/{id} · DELETE /sessions/{id} · POST /sessions/{id}/env · POST /sessions/{id}/outcome — the launcher's one question
+# POST /sessions · GET /sessions/{id} · DELETE /sessions/{id} · POST /sessions/{id}/env · POST /sessions/{id}/outcome · GET /sessions?task= — the launcher's one question
 
 *May this unit run now, with which harness, and what goes in the pod's env.* The control-plane
 seam of the island ([UC-1](../use-cases/uc-1-worker-ride.md) steps ① and ④). The caller sends
@@ -23,20 +23,21 @@ data-plane request is resolved from the session identity
 response and error shapes; the service **imports it**. Coupling is enforced by
 `scripts/spec_gate.py` in `devbox run ci` (rule 7).
 
-| Requirement | Governs (schema) | Error codes | Status |
-|---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
-| [GW-SESSIONS-ENV](#gw-sessions-env) | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
-| [GW-SESSIONS-TOKEN](#gw-sessions-token) | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
-| [GW-SESSIONS-RELEASE](#gw-sessions-release) | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
-| [GW-SESSIONS-PULL](#gw-sessions-pull) | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; Codex same-pod token re-read after first delivery (below) |
-| [GW-SESSIONS-LIVENESS](#gw-sessions-liveness) | `get.output.state`, `get.output.release_reason` | — | v0 |
-| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `caller`, `get.output.caller` | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found` | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
-| [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)); `⚑ gap` rows below |
-| [GW-CRED-RESOLVE](#gw-cred-resolve) | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
-| [GW-REDACT](#gw-redact) | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
-| [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
-| [GW-ACCESS](../access.md#gw-access) (owned there) | `post.input.role` | — | linked — the role's rail set is the inventory's enforced column |
+| Requirement | operation | Governs (schema) | Error codes | Status |
+|---|---|---|---|---|
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
+| [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
+| [GW-SESSIONS-TOKEN](#gw-sessions-token) | `POST /sessions`, `GET /sessions/{id}` | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
+| [GW-SESSIONS-RELEASE](#gw-sessions-release) | `DELETE /sessions/{id}`, `GET /sessions/{id}` | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
+| [GW-SESSIONS-PULL](#gw-sessions-pull) | `POST /sessions` (`bind`), `POST /sessions/{id}/env` | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; Codex same-pod token re-read after first delivery (below) |
+| [GW-SESSIONS-LIVENESS](#gw-sessions-liveness) | `GET /sessions/{id}` | `get.output.state`, `get.output.release_reason` | — | v0 |
+| [GW-SESSIONS-AUTH](#gw-sessions-auth) | `all` | `caller`, `get.output.caller`, `list.input`, `list.output` (the judge's `GET /sessions?task=` — [§A judge finds a task's sessions](#a-judge-finds-a-tasks-sessions)) | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found`, `malformed-body` (a list without `task`) | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller (the "⚑ gap: a bind's ServiceAccount" row); `⚑ gap (2026-10-17, PR #2683 → work #2685)`: `agent-coordinator` is one SA for many workflows (the "⚑ gap: one ServiceAccount" row) |
+| [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `POST /sessions/{id}/outcome`, `GET /sessions/{id}` | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)); `⚑ gap` rows below |
+| [GW-CRED-RESOLVE](#gw-cred-resolve) | `POST /sessions` | `post.output.defer.reason` (`credential-unresolved`) | `credential-transient` | v0 |
+| [GW-REDACT](#gw-redact) | `all` | `$defs.error_envelope.error.message` (the one wire surface a log-shaped string reaches) + log lines (a formatter invariant) | — | v0 |
+| [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `POST /sessions` | `post.output.dispatch.model` | — | linked — the model a dispatch names is the one every data-plane request must carry |
+| [GW-ACCESS](../access.md#gw-access) (owned there) | `POST /sessions` | `post.input.role` | — | linked — the role's rail set is the inventory's enforced column |
+| [GW-CODEX-CAPTURE](openai-responses.md#gw-codex-capture) (owned there) | `GET /sessions/{id}/capture` | `capture` (the bundle — owned there, not in this schema) | `capture-not-found` | linked — the bundle is read under this page's lookup rule ([GW-SESSIONS-AUTH](#gw-sessions-auth)); its records and sanitization are [GW-CODEX-CAPTURE](openai-responses.md#gw-codex-capture)'s |
 
 Rows below run against the **`policy-default` world**
 ([worlds/policy-default.json](../worlds/policy-default.json)) with `FakeSecrets` holding every
@@ -45,8 +46,13 @@ ref the policy names unless a row says otherwise; the canonical end-to-end pair 
 
 ## GW-SESSIONS-ADMIT
 
-A `POST /sessions` body is admitted by walking `roles.<role>.rails` in order — and, inside each
-rail, the tier's ORDERED model list ([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)) —
+A `POST /sessions` body is admitted by walking `roles.<role>.rails` in order — ⚖ the role's
+order yields once: when the tier's lists name ONE model on two allowed rails (a
+[twin](../glossary.md#twin)), the rail whose twin cell costs less per clean ride walks first,
+with that twin at its list's head, and the answer's `rail_choice` says why
+([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice) owns those rows; `null` when no
+twin) — and, inside each rail, the tier's ORDERED model list
+([§The retry contract](#the-retry-contract--model-lists-strikes-attempt)) —
 and picking the **first rail** whose `active_sessions < rails.<rail>.max_sessions`, that is not
 capacity-blocked — the rail, or the [cell](../glossary.md#cell) its tier's model makes on it
 ([§Capacity](#capacity--the-ladders-capacity-half)) — AND whose credential for the stack resolves
@@ -54,13 +60,15 @@ capacity-blocked — the rail, or the [cell](../glossary.md#cell) its tier's mod
 `retry_after_s` are those of the blocked rail that frees **first** (a full rail frees after the
 policy's `defer_retry_s`, 60 s; ties go to walk order — ⚖ a gateway choice, the old proxy has no multi-rail answer); a walk blocked only on credentials
 defers `credential-unresolved`, or `credential-rejected` when any of its credentials was rejected
-upstream (⚖ the rejection outranks: it names the operator act, a rotation). The walk is filtered
-by the harness first: `claude` speaks the anthropic dialect (rails `anthropic`, `opencode`);
-`opencode` / `goose` speak openai (rails `openrouter`, `opencode`); `codex` speaks responses
-(rail `codex` only — gated by account headroom, [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom),
-whose admission rows live there); a rail the harness
-cannot speak is skipped, and an **explicit** `harness` × `rail` pair that cannot speak is a 400
-`harness-rail-mismatch`, never a silent skip. `defer` is HTTP 200 — a normal answer the caller
+upstream (⚖ the rejection outranks: it names the operator act, a rotation). An **explicit**
+`harness` filters the walk to the rails that serve its dialect: `claude` speaks the anthropic
+dialect (rails `anthropic`, `opencode`); `opencode` / `goose` speak openai (rails `openrouter`,
+`opencode`); `codex` speaks responses (rail `codex` only — gated by account headroom,
+[GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom), whose admission rows live there); a
+rail the harness cannot speak is skipped, and an explicit `harness` × `rail` pair that cannot
+speak is a 400 `harness-rail-mismatch`, never a silent skip. Without one, **the harness follows
+the rail** ([§The harness follows the rail](#the-harness-follows-the-rail)): every allowed rail is
+walked in the role's order and the dispatch names the harness the picked rail serves. `defer` is HTTP 200 — a normal answer the caller
 polls after `retry_after_s`; only a malformed body or a transient credential fault is an HTTP
 error. ⚖ The gateway admits on count, capacity and credential: no strikes, no cooldowns, no
 provider pins — the rest of the ADR-096 ladder is a gap, rendered as rows, not omitted. The
@@ -86,6 +94,35 @@ caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limi
 | "an explicit rail the role is allowed is taken even when later in the list (logged as an override) ⚖" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: openrouter` || dispatch | openrouter | deepseek/deepseek-v4-flash | — |
 | "an unknown stack" | worker (stack `nope`) | (policy) | (policy) | 0 / 0 / 0 | — || defer | — | — | stack-unknown |
 
+### The harness follows the rail
+
+⚖ Operator ruling 2026-10-23 (FU-270, [the spike §Role routing](../../../docs/spikes/codex-subscription-rail.md#role-routing--ruled-2026-10-23-fu-270)):
+**every subscription rail is every role's.** The role's rail ORDER is the operator's weekly knob —
+one week the reviewer rides claude, the next codex; a week's tokens drained on purpose for a
+special use are made up by the next rail with no policy edit; and a reviewer that is always the
+same model is blind to the same classes of problem. The walk therefore crosses the dialect
+boundary on its own: with no `harness` in the body every allowed rail is a candidate, and the
+dispatch's `harness` is the picked rail's — a rail that serves the dialect of
+`roles.<role>.harness` keeps the role's harness (the dual-dialect `opencode` / `openrouter`
+rails), a rail that does not names the harness of its own dialect (`anthropic` → `claude`,
+`codex` → `codex`; ⚖ one harness per dialect, the launcher's baked defaults —
+`config.DIALECT_HARNESS`). `roles.<role>.harness` is thus the role's harness on the rails that
+can serve it, no longer a filter; the env follows the harness ([GW-SESSIONS-ENV](#gw-sessions-env)),
+and the launcher runs the harness the answer names (`agents/agent-session.sh`, the
+`gateway-sessions` block). An explicit `harness` keeps its meaning above: it narrows the walk, and
+a rail it cannot speak is never picked; an explicit `rail` without a harness takes the rail's.
+Rows run in the **`policy-codex` world** (roles shaped as the ruling — every role lists
+`anthropic`, `opencode` and `codex`; codex `max_sessions` 2) with codex headroom fresh at 20 % / 64 %.
+
+| description | role | body | active on rails (anthropic / opencode / codex) || decision | rail | harness | model |
+|---|---|---|---||---|---|---|---|
+| "without a harness the walk crosses the dialect boundary: the reviewer reaches codex ⚖" | reviewer | (defaults) | 5 / 3 / 0 || dispatch | codex | codex | codex/fixture-model |
+| "a dual-dialect rail keeps the role's harness" | reviewer | (defaults) | 5 / 0 / 0 || dispatch | opencode | claude | opencode-go/claude-haiku-5-5 |
+| "an opencode-harness worker reaching the anthropic rail rides claude ⚖" | worker | (defaults) | 0 / 3 / 2 || dispatch | anthropic | claude | claude/sonnet |
+| "an explicit harness still narrows the walk to its dialect" | reviewer | `harness: claude` | 5 / 3 / 0 || defer | — | — | — (`rail-capacity`: codex is not walked) |
+| "an explicit rail without a harness takes the rail's harness ⚖" | reviewer | `rail: codex` | 0 / 0 / 0 || dispatch | codex | codex | codex/fixture-model |
+| "the env is the picked harness's" | worker | (defaults) | 0 / 3 / 2 || dispatch | anthropic | claude | the env names `ANTHROPIC_MODEL`, never `CODEX_MODEL` / `OPENCODE_CONFIG_CONTENT` |
+
 ### The retry contract — model lists, strikes, `attempt`
 
 *A failed attempt costs a re-dispatch, never a round* ([model-routing.md §The design's three
@@ -94,7 +131,8 @@ an **ordered list** of models, `rails.<rail>.models.<tier>: [id, …]`; a bare s
 one-item list (every policy written before this keeps loading). The walk reads the task's
 **counted strikes** ([GW-SESSIONS-OUTCOME](#gw-sessions-outcome)) and takes, rail by rail, the
 first model of the tier's list that the task has not struck: a cell-scoped strike excludes that
-(rail, model), a model-scoped one excludes the model id on every rail, and a cooled cell
+(rail, model), a model-scoped one excludes the model id on every rail, a harness-scoped one excludes
+every cell the struck harness would ride (§Harness-scoped strikes below), and a cooled cell
 ([§Capacity](#capacity--the-ladders-capacity-half)) is skipped as well. A rail with no admissible
 model is passed over, and the walk moves on to the role's next rail. ⚖ When every candidate cell is
 **struck**, and no rail is held only by time (capacity, latch, window, cooldown — those defer as
@@ -103,6 +141,35 @@ before, because waiting helps there), the answer is `defer` **`cells-exhausted` 
 with the strike list"). ⚖ Model identity is the policy id: the same model on another rail is
 another id, so a model strike on `claude/sonnet` does not exclude `opencode-go/claude-haiku-5-5`
 (a gap row below).
+
+#### Harness-scoped strikes
+
+⚖ Operator ruling 2026-10-24 (FU-270, homelab#2867's round 1): a fault in the **harness** is not a
+verdict on the model. Two of #2867's three strikes were the launcher's dead opencode permission grant
+(opencode 1.19.0 read `mode.autoApprove` as an agent and auto-rejected the recipe read). They would
+have killed any model, yet as `unknown` (model-scoped) the walk moved to the next model, twice, and
+burned a ride each time. A **harness-scoped** strike excludes the struck harness for the task on
+every cell. The walk then takes the first admissible cell that **another** harness speaks (the harness
+follows the cell, homelab#2870). With an **explicit** `harness` that is struck for the task, nothing
+is admissible: the answer is `defer` `cells-exhausted`, because the platform has to fix the
+harness and waiting does not help. A clean outcome on the same harness refutes the strike.
+
+⚖ The harness a rail would ride is the one the walk derives today ([§The harness follows the
+rail](#the-harness-follows-the-rail)), and a rail whose derived harness is struck is passed over
+whole: a dual-dialect rail (`opencode`, `openrouter`) is **not** re-dispatched on another harness of
+its other dialect, because whether each of its models answers that dialect is per model and recorded
+nowhere. With an explicit `harness` that is not struck, the struck harness's own cells stay
+admissible to it: the strike names no model and no cell.
+
+World `policy-codex`, codex headroom fresh at 20 % / 64 %. T = the worker task `homelab-2867-r1`;
+its attempt 1 rode (opencode, `opencode-go/deepseek-v4.1-flash`) on the `opencode` harness.
+
+| description | arrange | body || decision | rail | harness | model | reason |
+|---|---|---||---|---|---|---|---|
+| "a harness strike moves the walk to a cell another harness speaks ⚖" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | codex | codex | codex/fixture-model | — |
+| "a harness strike excludes no model" | `harness-fault` on harness opencode | worker, T, `harness: goose`, `attempt: 2` || dispatch | opencode | goose | opencode-go/deepseek-v4.1-flash | — |
+| "an explicit harness that is struck defers ⚖" | `harness-fault` on harness opencode | worker, T, `harness: opencode`, `attempt: 2` || defer (`{decision, reason}` only) | — | — | — | cells-exhausted |
+| "a refuted harness strike excludes nothing" | `harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session (tier heavy, admitted before the strike) | worker, T, `attempt: 3` || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash | — |
 
 `POST /sessions` carries **`attempt`** (default 1): the consumer's automatic re-admission counter at
 this round. Strikes are keyed by TASK, not by attempt, so the exclusion holds however the attempt is
@@ -245,8 +312,9 @@ blocks lifts.
     re-admitted **half-open** after `credential_hold_s` (**900 s**): the next ride is the probe, and
     a fresh rejection doubles the hold.
   A walk blocked only by rejected credentials defers `credential-rejected` with `retry_after_s` =
-  the earliest re-verification. ⚖ The marks live in memory: a restart forgets them, and the next
-  rejection re-marks. Nothing unverified is carried across a restart. A policy refusal or an edge
+  the earliest re-verification. The marks — the cooldowns, the latch, the rejections and the
+  backoff a repeat doubles from — are store-backed and survive a pod roll
+  ([§Kept across a restart](#kept-across-a-restart)). A policy refusal or an edge
   refusal ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)) rejects nothing.
 - **Go window draw** (`opencode`, per cell): each `window_draw.windows.<w>` (`5h` / `7d` / `30d`)
   sums the **model's** metered (2xx) requests inside the window open at `now`, priced from the
@@ -262,7 +330,7 @@ blocks lifts.
   at the model's first request after its previous one expired (`router.go_usage_chain_open`).
   Prices apply at READ time from the ledger (`requests` × `sessions.model`), so a catalog refresh
   re-prices the open windows. A model whose monthly limit is `unlimited` draws against no window.
-- **Not in the catalog** (`opencode`, per cell): a Go model the catalog's console snapshot does not
+- **Not in the catalog** (`opencode`, per cell): a Go model the catalog's config snapshot does not
   list, or that has no monthly-limit row under the policy's plan (or no snapshot exists yet), is
   refused — `not-in-catalog`, `retry_after_s` = the next scheduled catalog refresh — never priced at
   a fallback (operator ruling 4). This is the 2026-10-14 retirement (the spike's §F3) turned from
@@ -364,17 +432,55 @@ each row is computed in its test's comment.
 | "the 30d window binds once the week has reset" | worker in 220M (T0) — $66 | +230401 s | worker, `rail: opencode` || defer | — | rail-window | 2287799 |
 
 The catalog rows refresh the world's Go catalog against the fake vendor first: `catalog-retired`
-(the console list without `deepseek-v4.1-flash` — §F3 replayed) or `docs-retired` (the Go page
+(the catalog — models.dev — without `deepseek-v4.1-flash` — §F3 replayed) or `docs-retired` (the Go page
 without `claude-haiku-5-5`'s plan rows). `retry_after_s` = the next scheduled refresh (21600 s
 after the one just run).
 
 | description | the refresh | body || decision | rail | reason | retry_after_s |
 |---|---|---||---|---|---|---|
-| "a Go model the console no longer lists defers not-in-catalog ⚖" | `catalog-retired` | worker, `rail: opencode` || defer | — | not-in-catalog | 21600 |
+| "a Go model the catalog no longer lists defers not-in-catalog ⚖" | `catalog-retired` | worker, `rail: opencode` || defer | — | not-in-catalog | 21600 |
 | "a not-in-catalog model is skipped, the walk continues ⚖" | `catalog-retired` | worker (policy walk) || dispatch | openrouter | — | — |
 | "a listed model with no monthly limit under the plan defers not-in-catalog ⚖" | `docs-retired` | worker, `rail: opencode`, `tier: heavy` || defer | — | not-in-catalog | 21600 |
 | "the other Go models still admit ⚖" | `catalog-retired` | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
 | "no catalog snapshot at all: every Go model is not-in-catalog ⚖" | none — a fresh store, no refresh yet | worker, `rail: opencode` || defer | — | not-in-catalog | 60 (`defer_retry_s`: no refresh is scheduled yet) |
+
+### Kept across a restart
+
+The capacity state is written through to the store's `capacity_marks` table as it changes — one row
+per mark: `cooled` (the cell `rail|model|provider`, until its reset), `latched` (the rail, until its
+reset), `rejected` (`rail|<credential fingerprint>` with the mark's stack, `at`, `backoff` and
+`until` = its next re-verification) and `hold` (the backoff a credential's next rejection doubles
+from; it has no expiry in memory, so none in the store) — never a credential value. A new gateway on
+the same DB reloads them at start and logs `capacity: reloaded N marks …`; the fail-open `:memory:`
+store ([GW-HEALTH](health.md#gw-health)) keeps none. Operator ruling 2026-10-21: the old proxy
+persisted its latches (`router.latch_save`), so a roll must not forget what a 429 or a 401 taught.
+⚖ What a reload drops is exactly what the in-memory logic would already have let go by then: a
+cooldown or latch past its `until`, a no-probe rail's rejection past its half-open (its `hold`
+stays, so a repeat still doubles), a mark on a rail the policy no longer names. ⚖ A probe rail's
+rejection past its due time reloads as due — the first re-probe pass after the roll sends it —
+because the in-memory mark waits for the probe's verdict, never a clock. The roll in every row:
+the first gateway's store closes, the clock advances, a second gateway starts on the same DB path.
+
+| description | arrange (the first gateway) | the roll | after the roll (the second gateway) | body || decision | rail | reason | retry_after_s |
+|---|---|---|---|---||---|---|---|---|
+| "a cooled cell survives a restart" | worker ride on openrouter → 429, reset T0 + 42 s | +10 s | — | worker, `rail: openrouter` || defer | — | cell-cooled | 32 |
+| "a 429 latch on the subscription survives a restart" | reviewer ride on anthropic → 429 (`retry-after: 30`) | +10 s | — | reviewer, `rail: anthropic` || defer | — | rail-latched | 20 |
+| "a rejected credential's mark survives with its backoff" | worker ride on opencode → `upstream-401-key-expired` | +10 s | — | worker, `rail: opencode` || defer | — | credential-rejected | 50 |
+| "a mark cleared by a 2xx before the roll is gone after it" | worker ride on openrouter → 429 (reset T0 + 42 s), the same session → 200 | +10 s | — | worker, `rail: openrouter` || dispatch | openrouter | — | — |
+| "a half-open hold survives: a repeat rejection after the roll doubles the hold ⚖" | prober ride on anthropic → `upstream-401` | +900 s | a prober ride on anthropic → `upstream-401` (admitted half-open, then rejected again) | prober || defer | — | credential-rejected | 1800 |
+
+| description | arrange (the first gateway) | the roll | the probe answers || probes sent | decision | reason | retry_after_s |
+|---|---|---|---||---|---|---|---|
+| "the re-probe schedule continues after the roll: a probe rejected again doubles" | worker ride on opencode → `upstream-401-key-expired` | +60 s | `upstream-401-key-expired` || 1 | defer | credential-rejected | 120 |
+| "a probe due while the gateway was down is sent on the first pass after the roll ⚖" | the same | +90 s | `upstream-ok` || 1 | dispatch (opencode) | — | — |
+| "a probe is not sent before it is due, across the roll" | the same | +30 s | `upstream-ok` || 0 | defer | credential-rejected | 30 |
+
+| description | arrange (the first gateway) | the roll || observed on the second gateway |
+|---|---|---||---|
+| "an expired mark is not reloaded" | worker ride on openrouter → 429, reset T0 + 42 s | +42 s || `capacity_marks` holds no row after the load (the expired cooldown deleted); worker, `rail: openrouter` → dispatch openrouter |
+| "the gauges show the reloaded counts on the first scrape ⚖" | worker ride on openrouter → 429 (reset T0 + 42 s); worker ride on opencode → `upstream-401-key-expired` | +10 s || `gateway_cells_cooled{rail="openrouter"}` 1, `gateway_credentials_rejected{rail="opencode"}` 1 — `GET /metrics` before any admission |
+| "the reload is logged" | the same | +10 s || `capacity: reloaded 3 marks from the store (1 cooled, 0 latched, 1 rejected, 1 holds; 0 dropped as expired)` |
+| "the memory store keeps no mark ⚖" | worker ride on openrouter → 429 (reset T0 + 42 s) on a `:memory:` gateway | +10 s, a new `:memory:` store || dispatch openrouter |
 
 ### The provider axis (openrouter)
 
@@ -407,7 +513,6 @@ parasail/fp8, none of which clears the floors ([worlds/README.md](../worlds/READ
 | description | input || v0 answer | the gap |
 |---|---||---|---|
 | "⚑ gap: FU-109 tier thresholds" | a dispatch-unit tier asking past the 5h threshold || deferred at the per-window threshold | the old proxy RAISES a window's threshold per consumer tier (`model-classes.json` `tier_thresholds`); the gateway's `light`/`standard`/`heavy` is not that vocabulary |
-| "⚑ gap: a latch survives a restart" | a 429 latch, a cooled cell or a rejected credential, then a gateway roll || forgotten; the next 429 / 401 marks it again | the old proxy persists its latches (`router.latch_save`); these are in memory |
 | "⚑ gap: the OpenRouter account latch" | 402s / credit below the floor on a stack key || no latch | the old proxy's `rpd` / `credit` / hard-402 legs (homelab#158) and the key headroom poll ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)); cross-model 429s are per-cell facts here (§Capacity), not an account signal |
 | "⚑ gap: the free-tier key budget spans every `:free` cell" | a 429 whose body says `limit_source: openrouter_free_tier_per_minute` || only the cell that saw it cools; the next `:free` cell 429s once and cools itself | the limit is the key's across `:free` models (20 req/min in the experiment's headers); reading the body's `limit_source` would cool them as one group — not built |
 | "⚑ gap: a Go 402" | an upstream 402 on opencode || no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
@@ -428,7 +533,7 @@ digest · date`); unrendered here = unverified.
 
 ## GW-SESSIONS-ENV
 
-A `dispatch` answer carries `env`: the pod's **complete** LLM environment for that harness,
+`POST /sessions` answers a `dispatch` that carries `env`: the pod's **complete** LLM environment for that harness,
 pointing at THIS gateway with the session token as the credential — the launcher copies it
 verbatim and adds nothing LLM-shaped. Var names mirror what each harness consumes today
 (`agents/agent-session.sh`): `claude` reads `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`
@@ -452,10 +557,15 @@ gateway hands it is a failed row, not a passed one:
 
 The model var carries the policy id with its rail prefix removed (`claude/sonnet` →
 `sonnet`, `opencode-go/deepseek-v4.1-flash` → `deepseek-v4.1-flash`; openrouter ids are bare) — the
-same strip `agents/agent-session.sh` performs today. `context_tokens` is the policy's per-model
-window or `null` — a null is "not declared", never a guess.
+same strip `agents/agent-session.sh` performs today. `context_tokens` is the harness window the
+launcher hands the CLI: on the Go rail it is the Go catalog's `context` for the wire model (models.dev's
+`limit.context` under the console's overlay — [GW-CATALOG-GO](catalog.md#gw-catalog-go) ruling 5: the
+vendor's fact lives in the snapshot, and a policy `context_tokens` entry for an `opencode-go/*` model
+refuses the load, so a stale hand copy can never shadow the catalog); on every other rail it is the
+policy's declared per-model window (the openrouter rail has no catalog context yet). `null` is "no
+catalog row" / "not declared", never a guess.
 
-**`codex`** (world `policy-codex` — the rail ships dark): the pinned CLI reads its provider from
+**`codex`** (world `policy-codex`; the deployed rail is lit prober-only since 2026-10-22): the pinned CLI reads its provider from
 config, not from env — observed with codex-cli 0.161.0 (`experiments/codex-rail/compat.py`):
 a bare `OPENAI_BASE_URL` + `OPENAI_API_KEY` with no provider block is ignored (the CLI dialled
 `api.openai.com`, refused by the fixture's closed proxy), while a `[model_providers.<id>]` block
@@ -495,10 +605,16 @@ that block from a real dispatch answer; its run is the local-evidence row below.
 | "⚑ gap (2026-10-17, PR #2656 → work #2650): opencode's provider package under enforced egress" | opencode || the probe namespace (`agent-coordinator`) reached `registry.npmjs.org` and `models.dev` (HTTP 200), so whether opencode FETCHES `@ai-sdk/openai-compatible` at run time was not observed | a ride whose egress blocks npm (homelab#990's class) is unproven: it may wedge before the first request |
 | "⚖ local evidence: the pinned Codex CLI completes a turn from this env through the gateway" | codex (codex-cli 0.161.0) || the provider block rendered from the dispatch `env`; `OPENAI_API_KEY` in the child env | no `auth.json`, no operator config (a fresh `CODEX_HOME`) — `experiments/codex-rail/evidence.json`, not CI |
 
-| description | model (policy) || `context_tokens` |
+| description | world | model (policy) || `context_tokens` |
+|---|---|---||---|
+| "a Go model's context_tokens is the catalog's context ⚖" | `policy-default` + the seeded `catalog-ok` snapshot (`deepseek-v4.1-flash` `limit.context` 1000000) | opencode-go/deepseek-v4.1-flash || 1000000 — the snapshot's; the policy declares none |
+| "a Go model with no catalog row answers null, never a default" | `catalog-retired` refreshed (the catalog without `deepseek-v4.1-flash`) | opencode-go/deepseek-v4.1-flash || null from the catalog read (`GoCatalog.context_for`, the answer's source); the dispatch itself defers `not-in-catalog` ([GW-SESSIONS-ADMIT](#gw-sessions-admit)), so no answer ever carries a guessed window |
+| "a declared `context_tokens` is echoed" | `policy-default` (`deepseek/deepseek-v4.1-flash`: 163840 — a world value, not a vendor fact) | deepseek/deepseek-v4.1-flash (openrouter, `tier: heavy`) || 163840 |
+| "an undeclared `context_tokens` is null, never a default" | `policy-default` | claude/sonnet || null |
+
+| description | `context_tokens` in an otherwise `policy-default` document || the policy load |
 |---|---||---|
-| "a declared `context_tokens` is echoed" | opencode-go/deepseek-v4.1-flash || 1000000 |
-| "an undeclared `context_tokens` is null, never a default" | claude/sonnet || null |
+| "a declared `context_tokens` for a Go model refuses the load ⚖" | `{"opencode-go/deepseek-v4.1-flash": 1000000}` (the 2026-10-17 hand copy) || refused, naming `context_tokens` |
 
 <details markdown="1"><summary>Evidence</summary>
 
@@ -510,8 +626,8 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-TOKEN
 
-The session token is `gws_` + 32 url-safe random characters, minted from a CSPRNG once per
-dispatch and returned **once** — in the `dispatch` body. The DB stores `sha256(token)` and never
+`POST /sessions` mints the session token as `gws_` + 32 url-safe random characters from a CSPRNG, once
+per dispatch, and returns it **once** — in the `dispatch` body. The DB stores `sha256(token)` and never
 the token; `GET /sessions/{id}` returns the row without it. The data plane accepts the token as
 `Authorization: Bearer gws_…` or `x-api-key: gws_…` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)).
 `expires_at = created_at + session_ttl_s`.
@@ -561,7 +677,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-PULL
 
-*The pod pulls its own env; the launcher never holds the session token* (operator ruling
+*The pod pulls its own env through `POST /sessions/{id}/env`; the launcher never holds the session token* (operator ruling
 2026-10-17, FU-270). A `POST /sessions` body may carry **`bind: {namespace, serviceaccount, pod?}`**
 — the identity of the pod the launcher is about to create. A bound `dispatch` carries **no
 credential**: `session.id`, `session.expires_at`, `rail`, `harness`, `model`, `context_tokens`,
@@ -705,7 +821,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-LIVENESS
 
-*A session whose pod is gone is reaped* (operator ruling 2026-10-17, FU-270). A ride whose pod is
+*A session whose pod is gone is reaped; `GET /sessions/{id}` reports the reap as `state` and `release_reason`* (operator ruling 2026-10-17, FU-270). A ride whose pod is
 SIGKILLed never sends its DELETE, and without liveness its session would hold the rail slot until the
 TTL. The 2026-10-17 experiment's probe left one active for its whole TTL
 (`docs/spikes/gateway-free-models-2026-10-17/cells.tsv`, probe-c: `released_at: null` at
@@ -774,9 +890,9 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-AUTH
 
-*The control plane knows who is asking* (operator order 2026-10-17, FU-270). Every `POST /sessions`,
-`GET /sessions/{id}` and `DELETE /sessions/{id}` carries **`Authorization: Bearer <the caller's
-projected ServiceAccount token>`**, audience **`agent-gateway`**. The gateway reviews it through the
+*The control plane knows who is asking, for every verb of `/sessions`* (operator order 2026-10-17, FU-270). Every `POST /sessions`,
+`GET /sessions/{id}`, `DELETE /sessions/{id}` and `GET /sessions?task=` carries **`Authorization:
+Bearer <the caller's projected ServiceAccount token>`**, audience **`agent-gateway`**. The gateway reviews it through the
 **same** TokenReview path as [the env pull](#gw-sessions-pull) (`TokenReviewer`, `spec.audiences:
 [agent-gateway]`, one implementation) and reads the reviewed username,
 `system:serviceaccount:<ns>:<sa>`, as the caller. The policy's **`callers`** map, keyed by that
@@ -786,6 +902,17 @@ key that is not a ServiceAccount username refuses the policy load. So a wildcard
 written. The caller is stored on the session row (`caller`, returned by `GET`), and `GET` / `DELETE`
 belong to that caller. The env pull is NOT caller-checked here: its caller is the bound pod, which
 GW-SESSIONS-PULL checks against the bind.
+
+**`GET /sessions?task=<exact task key>`** (route `list`, FU-270 (b)) is the [judge](../glossary.md#judge)'s
+lookup: `{"sessions": [<the GET /sessions/{id} row, `outcome` included>…]}`, ordered by
+`created_at`, released and expired sessions INCLUDED — a judge reads a verdict's fate after
+release ([GW-SESSIONS-OUTCOME](#gw-sessions-outcome)). A missing or empty `task` is 400
+`malformed-body`. ⚖ Visibility is GET's owner rule, never a refusal: a caller whose entry says
+`outcome: any` sees every session of ITS stacks carrying the task; any other caller sees only the
+sessions it admitted; a row admitted with no caller (`observe`) is visible to any listed caller, as
+the owner rule already says for `GET`. A row outside that is simply not listed — an empty list,
+never a 403, since a list reveals nothing. The caller check is every control-plane route's (401 /
+403 / 503 under `enforce`; counted under `observe`, `{route="list"}`).
 
 ⚖ The checks run in a fixed order (an alternative would read the body first, or answer 404 before the caller check): the caller's token (401 / 503), its `callers` entry (403
 `caller-unknown`), the body (400, as [GW-SESSIONS-ADMIT](#gw-sessions-admit)), then the body against
@@ -807,10 +934,14 @@ during the rollout. It never waves through a known identity the policy does not 
 
 Rows run against two worlds. **`policy-default`** is `observe`, so every other row on this page
 runs unchanged without a caller token. **`policy-enforce`** is the same document with `enforce`
-([worlds/README.md](../worlds/README.md)). Both hold three fixture callers; the third, the judge,
-admits nothing and is [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s.
+([worlds/README.md](../worlds/README.md)). Both hold three fixture callers; the third, **the judge** =
+`system:serviceaccount:agent-coordinator:outcome-judge` · stacks `[platform]` · roles `[]` ·
+`outcome: any`, admits nothing: it is [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s reporter and
+the list's reader.
 **The platform loop** = `system:serviceaccount:platform-agents:agentstack-loop` · stacks
-`[platform]` · roles `[worker]` · bind namespaces `[platform-agents]`. **The specs reviewer** =
+`[platform]` · roles `[worker, prober]` (the dispatcher's workers, and the entry canary's prober
+rides — [GW-CATALOG-OR §The entry canary](catalog.md#the-entry-canary) — which `canary-entrants.sh`
+admits as this SA) · bind namespaces `[platform-agents]`. **The specs reviewer** =
 `system:serviceaccount:agent-coordinator:agent-coordinator` · stacks `[platform]` · roles
 `[reviewer, worker]` · bind namespaces `[]`. The fake TokenReview answers a presented token as the
 `presented` cell says. A caller's name = authenticated · audiences `[agent-gateway]` · that
@@ -844,6 +975,7 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 |---|---|---||---|---|
 | "a stack outside the caller's entry" | the platform loop | stack `oracle`, worker, bind `{platform-agents, agentstack-worker}` || 403 | caller-stack-denied |
 | "a role outside the caller's entry" | the platform loop | platform `reviewer` + bind || 403 | caller-role-denied |
+| "the entry canary's role is inside the dispatcher's entry ⚖" | the platform loop | platform `prober`, no bind || 200 | `dispatch` — the caller check passes; the deployed `callers` grants the dispatcher SA `prober` beside `worker` (2026-10-20: without it every canary admission was 403, no openrouter cell could become eligible) |
 | "a bind namespace outside the caller's entry" | the platform loop | platform worker, bind `{oracle-agents, agentstack-worker}` || 403 | caller-bind-denied |
 | "a caller with no bind namespaces may not bind" | the specs reviewer | platform reviewer + bind `{platform-agents, agentstack-worker}` || 403 | caller-bind-denied |
 | "an unbound admission needs no bind namespace" | the specs reviewer | platform reviewer, no bind || 200 | `dispatch` with `session.token` + `env` ([GW-SESSIONS-ENV](#gw-sessions-env)) |
@@ -863,6 +995,25 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "an unknown id is 404 only after the caller check ⚖" | policy-enforce | the platform loop GETs `/sessions/nope` || 404 | session-not-found |
 | "an unknown id without a bearer, under enforce ⚖" | policy-enforce | GET `/sessions/nope`, no bearer || 401 | caller-unauthenticated |
 
+### A judge finds a task's sessions
+
+`GET /sessions?task=` (route `list`). World `policy-enforce` unless noted; the task is the worker
+body's (`homelab-2588-r1`); the specs reviewer admits it unbound as `reviewer`. **An oracle
+dispatcher** = a session of stack `oracle` recorded as admitted by
+`system:serviceaccount:oracle-agents:agentstack-loop` (stored directly: no fixture caller may admit
+that stack).
+
+| description | world | sequence || status | result |
+|---|---|---||---|---|
+| "the judge lists a task two callers admitted" | policy-enforce | the platform loop admits and releases its own; the specs reviewer admits; the judge lists || 200 | both rows, oldest first: `(caller, state)` = the loop `released`, the specs reviewer `active` — each the `GET /sessions/{id}` row incl. `outcome`, no `token` |
+| "the admitting caller lists only its own" | policy-enforce | the platform loop and the specs reviewer admit; the platform loop lists || 200 | the loop's row only |
+| "another listed caller sees an empty list, never a 403" | policy-enforce | the platform loop admits; the specs reviewer lists || 200 | `[]` |
+| "the judge lists a task of a stack outside its entry ⚖" | policy-enforce | an oracle dispatcher's session; the judge lists || 200 | `[]` — `outcome: any` reaches the entry's stacks only |
+| "an unknown task is an empty list" | policy-enforce | the platform loop admits; the judge lists `task=nope` || 200 | `[]` |
+| "a list without a bearer, under observe, is served and counted ⚖" | policy-default | the platform loop admits; `GET /sessions?task=` with no bearer || 200 | the row (no identity reads any row, as `GET` without a bearer under `observe`); `{route="list",reason="absent"}` + 1 |
+| "no task is 400 malformed-body" | policy-enforce | the judge GETs `/sessions` with no `task` || 400 | malformed-body; the unauthenticated series unchanged |
+| "a list without a bearer, under enforce" | policy-enforce | `GET /sessions?task=` with no bearer || 401 | caller-unauthenticated; `{route="list",reason="absent"}` + 1 |
+
 ### One TokenReview path, and the pull stays the pod's
 
 | description | world | sequence || result |
@@ -879,19 +1030,25 @@ World `policy-default` (the same answers under `policy-enforce`: a known caller 
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
 | "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
 | "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
-| "the deployed callers are today's two dispatchers, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`) and `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`) |
+| "the deployed callers are today's two dispatchers and the judge, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker, prober]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`, outcome `own`), `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`, `own`) and `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
-is the one in-cluster caller of `agents/agent-session.sh`. It binds into the platform repo
-namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
+is the one in-cluster caller of `agents/agent-session.sh`; the jail's `canary-entrants.sh` mints
+the same SA's token to ride the entry canary, which is why its entry grants `prober` beside
+`worker` (2026-10-20 — until then every canary admission was 403 `caller-role-denied`). It binds
+into the platform repo namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
 no `agentstack-worker`, so a bind there could never be pulled and is not granted. The specs-review
 tick and its shadow cells run as their own SA `specs-review` (`agents/coordinator/specs-review-argo.yaml`;
 homelab#2685 — `callers` is per SA, and `agent-coordinator` is the SA every other workflow in that
 namespace shares): role `reviewer`, plus ⚖ `worker` for the goose@openrouter shadow cell, which rode `--role worker`
 because the reviewer role has no openrouter rail
 ([specs-reviewer.md §Shadow runs](../../../docs/agents/specs-reviewer.md#shadow-runs--harness--rail-cells-gatewayplanmd-step-3)). A jail
-canary mints the loop SA's token (`kubectl create token`) and acts as that dispatcher.
+canary mints the loop SA's token (`kubectl create token`) and acts as that dispatcher. **The
+judge** `agent-coordinator:outcome-judge` admits nothing (roles `[]`, no bind): it is the
+deploy-revert chain's judge step (`agents/coordinator/deploy-revert-argo.yaml`, FU-270 (b)) —
+`outcome: any` lets it list a reverted merge's review sessions and report `wrong-verdict` on them
+([GW-SESSIONS-OUTCOME §Who may report](#who-may-report)).
 
 ### What the log says
 
@@ -917,7 +1074,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-SESSIONS-OUTCOME
 
-*The consumer classifies its own output; the gateway owns what it sees first-hand; one store, one
+*The consumer classifies its own output through `POST /sessions/{id}/outcome`; the gateway owns what it sees first-hand; one store, one
 vocabulary* (operator ruling 2026-10-17, FU-270). `POST /sessions/{id}/outcome {class, subclass?,
 evidence?}` is how a consumer says how its ride ended. The gateway can see a 429, a 401 or a cut
 stream ([§Capacity](#capacity--the-ladders-capacity-half)), but not a review that returned no
@@ -927,7 +1084,11 @@ check is [GW-SESSIONS-AUTH](#gw-sessions-auth)'s with the DELETE rule: the admit
 report. ⚖ A **judge** may report too: a `callers` entry with `outcome: any` may report on any
 session of its `stacks`, which a later check (did the APPROVE hold?) needs, since the reviewer
 cannot grade its own verdict. The key is optional and `own` by default, so an absent key grants
-nothing extra. The deployed policy lists no judge.
+nothing extra. The deployed judge is `system:serviceaccount:agent-coordinator:outcome-judge`
+(`argocd/resources/agent-gateway/policy.json`): the deploy-revert chain's judge step
+(`agents/coordinator/deploy-revert-argo.yaml`, FU-270 (b)), which finds the review sessions of a
+merge the chain reverted through `GET /sessions?task=` ([GW-SESSIONS-AUTH §A judge finds a task's
+sessions](#a-judge-finds-a-tasks-sessions)) and reports `wrong-verdict` on each.
 
 ⚖ **When:** before release, and after release or expiry for the policy's `outcome_window_s`
 (**86400 s**). The launcher reports before its DELETE; a judge reads a verdict's fate later, so a
@@ -949,8 +1110,9 @@ the consumer's round counter. It is **no class here**, and saying one is 400
 copy (`outcomes.py` `OUTCOME_CLASSES`) is pinned to it by a row. **Scope** is the old router's rule
 ([model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder)): a
 **cell**-scoped (serving-shaped) strike excludes that (rail, model, provider) [cell](../glossary.md#cell) for
-the task; a **model**-scoped one excludes the model on every rail for the task. ⚖ Each new class's
-scope is a judgment, marked.
+the task; a **model**-scoped one excludes the model on every rail for the task; a **harness**-scoped
+one excludes the session's harness on every cell for the task (§Harness-scoped strikes). ⚖ Each new
+class's scope is a judgment, marked.
 
 | class | scope | who writes it | what it means |
 |---|---|---|---|
@@ -970,20 +1132,23 @@ scope is a judgment, marked.
 | `harness-gave-up` | cell ⚖ | consumer | the harness abandoned after the upstream kept failing (retries exhausted) — a serving shape |
 | `stream-incomplete` | cell ⚖ | **gateway** (a 2xx with `incomplete` = `no-terminal` / `transport-error`) | the stream ended before its terminal event |
 | `refused` | cell ⚖ | **gateway** (403 `upstream-refused`) | the upstream refused this model for this caller (OpenRouter's harness gate) |
+| `harness-fault` | harness ⚖ | consumer | the harness failed on its own machinery and would fail the same way on any model: a config it did not honour, a permission it auto-rejected, a crash before its first model call (homelab#2867's dead opencode grant) |
 
 ### The store
 
-A strike is a row keyed **(stack, task, rail, model, provider)** with its class, scope and
+A strike is a row keyed **(stack, task, rail, model, provider, harness)** with its class, scope and
 **source** (`outcome` = the consumer, `gateway` = a transport fact); `provider` is the serving
 provider's slug on the openrouter rail ([GW-RAIL-OPENROUTER §Attribution](openai-chat.md#attribution--the-answer-names-the-cell)),
 `''` where none was named — a cell-scoped class lands on the provider(s) the ride rode, a
-model-scoped one carries none. ⚖ At most one per
+model-scoped one carries none. `harness` is the session's harness, written on every strike. Only a
+harness-scoped strike is matched on it. ⚖ At most one per
 (session, class, source, provider): nine 502s on one ride are one `provider-5xx`, not nine — and a
 failed-over ride strikes each provider it tried, one per cell. ⚖ A 429 writes
 **no** strike: the cell cooldown is that fact's whole answer, and a rate limit says nothing about
 this task. ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
 consumer's to say. **A clean outcome refutes** the task's counted strikes on the same cell
-(cell-scoped) and the same model (model-scoped): they stay as history, with `refuted_at` set.
+(cell-scoped), the same model (model-scoped) and the same harness (harness-scoped): they stay as
+history, with `refuted_at` set.
 **A bare 2xx refutes nothing**: a provider serving badly behind HTTP 200 is exactly what a strike
 routes around (the old router's refutation rule). ⚖ A clean outcome refutes cell strikes only on
 the cells the ride rode CLEAN (the providers that served it a 2xx, and the model's own cell): a
@@ -1035,6 +1200,7 @@ World `policy-default`.
 |---|---||---|---|
 | "a model-scoped class strikes the model" | report `no-verdict` || `{opencode, opencode-go/deepseek-v4.1-flash, no-verdict, model, outcome}` | `{class="no-verdict",source="outcome"}` 1 |
 | "a serving-scoped class strikes the cell" | report `harness-gave-up` || `{…, harness-gave-up, cell, outcome}` | `{class="harness-gave-up",source="outcome"}` 1 |
+| "a harness-scoped class strikes the harness" | report `harness-fault` || `{…, harness-fault, harness, outcome}` with harness `opencode` | `{class="harness-fault",source="outcome"}` 1 |
 | "the gateway writes its own transport class" | the session's request answered `upstream-401` || `{…, auth-storm, cell, gateway}` | `{class="auth-storm",source="gateway"}` 1 |
 | "one transport strike per session and class ⚖" | three `upstream-500` answers on one session || one `provider-5xx` | `{class="provider-5xx",source="gateway"}` 1 |
 | "a 429 is a cooldown, not a strike ⚖" | the session's request answered `upstream-429` || none | — |
@@ -1073,7 +1239,7 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-CRED-RESOLVE
 
-A credential ref (`namespace/name`) is resolved by reading the Secret through the gateway's
+Under `POST /sessions`, a credential ref (`namespace/name`) is resolved by reading the Secret through the gateway's
 ServiceAccount (`/var/run/secrets/kubernetes.io/serviceaccount`). The read is a verdict in
 three classes: **resolved** (the Secret exists, carries the label
 `openrouter.teststuff.net/session-key=true`, and the rail's key is present), **definitive miss**
@@ -1117,32 +1283,26 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 ## GW-REDACT
 
-No log line the gateway emits contains a credential value: a bearer value, a `gws_` token, an
-`sk-ant-oat…` OAuth token, an `sk-or-v1-…` OpenRouter key, a JWT (the projected ServiceAccount
-token a pod presents to [the env pull](#gw-sessions-pull)), or the Go key's value. The log
-formatter replaces any such substring with `<redacted>` before the line is written, whatever
-the call site passed — the precedent is the old proxy's `_looks_like_credential`. A test row
-feeds each pattern through the formatter directly; a second set proves the formatter is on the
-real paths (an upstream 401 body, a malformed header, a debug line of the resolved ref).
+On every operation (`all`), no log line the gateway emits contains a credential value: a bearer value, a `gws_` token, an
+`sk-ant-oat…` OAuth token, an `sk-or-v1-…` OpenRouter key (unverified — expected to be masked
+like the bearer value), a JWT (the projected ServiceAccount token a pod presents to
+[the env pull](#gw-sessions-pull)), or the Go key's value (unverified — expected to be masked
+like the bearer value). The log formatter replaces any such substring with `<redacted>` before
+the line is written, whatever the call site passed — the precedent is the old proxy's
+`_looks_like_credential`. A ref or a model id is not a credential and is logged verbatim
+(unverified — expected to be logged verbatim).
 
-| description | the formatter is given || the line contains | the line does not contain |
-|---|---||---|---|
-| "a session token in a message" | `"auth ok gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"` || `auth ok <redacted>` | `gws_` |
-| "an OAuth token" | `"inject sk-ant-oat01-FAKE…"` || `inject <redacted>` | `sk-ant-oat` |
-| "an OpenRouter key" | `"inject sk-or-v1-FAKE…"` || `inject <redacted>` | `sk-or-v1-` |
-| "a bearer header value" | `"Authorization: Bearer abc.def.ghi"` || `Authorization: Bearer <redacted>` | `abc.def.ghi` |
-| "the Go key's value" | the `OPENCODE_GO_API_KEY` fixture value || `<redacted>` | the value |
-| "a ref is not a credential" | `"ref platform-agents/claude-session unresolved"` || the ref verbatim | `<redacted>` |
-| "a model id is not a credential" | `"model opencode-go/deepseek-v4.1-flash"` || the id verbatim | `<redacted>` |
-| "a projected ServiceAccount token (a JWT)" | `"review eyJhbGciOiJSUzI1NiJ9.eyJGQUtFIjoxfQ.RkFLRS1TSUc"` || `review <redacted>` | `eyJ` |
+`…` in a cell stands for the session id the row's own admission returned. A cell that lists
+several fragments separated by `, ` names each one; none of them may appear on any log line.
+`log_line_contains` is the fragment a log line must contain (a containment check, not equality).
 
-| description | path || the log holds | the log does not hold |
-|---|---||---|---|
-| "an upstream 401 body is summarised, not copied" | `upstream-401` on openrouter || `upstream-auth openrouter 401` | the upstream body, the key |
-| "a bad inbound header is logged by shape" | `Authorization: Bearer notatoken` || `session-unknown` | `notatoken` |
-| "a dispatch line names the session id, never the token" | dispatch || the session id | the token |
-| "a pull line names the session and the identity, never either token" | a bound dispatch → its pull ([GW-SESSIONS-PULL](#gw-sessions-pull)) || `env pulled id=«id» by system:serviceaccount:platform-agents:agentstack-worker` | the presented ServiceAccount token, the minted `gws_` token |
-| "a refused pull never logs the presented token" | a pull whose token reviews as another ServiceAccount || `pull-identity-refused` | the presented token |
+| description | path | log_line_contains | never_logged |
+|---|---|---|---|
+| "an upstream 401 body is summarised, not copied" | `upstream-401` on openrouter | upstream-auth openrouter 401 | LEAK, sk-ant-oat, invalid x-api-key |
+| "a bad inbound header is logged by shape" | Authorization: Bearer notatoken | session-unknown | notatoken |
+| "a dispatch line names the session id, never the token" | POST /sessions | id=… | gws_ |
+| "a pull line names the session and the identity, never either token" | a bound dispatch, then its pull | env pulled id=… by system:serviceaccount:platform-agents:agentstack-worker | eyJ, gws_ |
+| "a refused pull never logs the presented token" | a pull whose token reviews as another ServiceAccount | pull-identity-refused | eyJ |
 
 <details markdown="1"><summary>Evidence</summary>
 

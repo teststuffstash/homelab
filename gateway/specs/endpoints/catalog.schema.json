@@ -64,13 +64,15 @@
       "$comment": "the policy's `rails.openrouter.canary` (GW-CATALOG-OR §The entry canary): who rides a canary and the cap — never code constants",
       "type": "object",
       "additionalProperties": false,
-      "required": ["role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s"],
+      "required": ["role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s", "backoff_s", "backoff_max_s"],
       "properties": {
         "role": { "enum": ["worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher"] },
         "harness": { "enum": ["opencode", "goose", "claude"], "description": "the harness the openrouter cells serve; a canary body may name another the rail speaks" },
         "max_per_refresh": { "type": "integer", "minimum": 1, "description": "canary admissions between two catalog refreshes" },
         "usd_per_day": { "type": "number", "minimum": 0, "description": "metered canary spend over the trailing day, at the cell's endpoint price" },
-        "cooldown_s": { "type": "number", "minimum": 0, "description": "an excluded cell is a candidate again after this" }
+        "cooldown_s": { "type": "number", "minimum": 0, "description": "an excluded cell is a candidate again after this" },
+        "backoff_s": { "type": "number", "exclusiveMinimum": 0, "description": "a 429'd canary's first re-try horizon on its cell (operator 2026-10-22: no verdict — the cell stays candidate, the admission is not consumed, the walk moves on)" },
+        "backoff_max_s": { "type": "number", "minimum": 0, "description": "the horizon doubles per consecutive 429'd canary up to this; a verdict resets it" }
       },
       "x-requirements": ["GW-CATALOG-OR"]
     },
@@ -118,20 +120,42 @@
           "properties": { "light": { "$ref": "#/$defs/band" }, "standard": { "$ref": "#/$defs/band" }, "heavy": { "$ref": "#/$defs/band" } },
           "description": "a candidate is in a tier when its score >= band x the rail's top score; heavy >= standard >= light"
         },
-        "cap": { "type": "integer", "minimum": 1, "description": "each tier list keeps this many, cheapest-first" }
+        "cap": { "type": "integer", "minimum": 1, "description": "each tier list keeps this many, cheapest-first" },
+        "cost": {
+          "$comment": "GW-MODEL-TIERS §Cost per clean ride: the terms the derivation orders by and the rail choice compares with — never code constants",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ride_tokens_out_m", "strike_overhead_usd", "min_rides"],
+          "properties": {
+            "ride_tokens_out_m": { "type": "number", "exclusiveMinimum": 0, "description": "M output tokens one ride spends" },
+            "strike_overhead_usd": { "type": "number", "minimum": 0, "description": "what a failed ride costs on top of itself (the reviewer round + the coordinator re-entry); 0 = unmeasured" },
+            "min_rides": { "type": "integer", "minimum": 1, "description": "judged rides before a cell's measured clean rate replaces its prior" }
+          }
+        }
       },
       "x-requirements": ["GW-MODEL-TIERS"]
+    },
+    "price_basis": { "enum": ["endpoint", "promise", "measured", "unlimited", null], "description": "where a candidate row's price comes from: `endpoint` = the openrouter model's SELECTED endpoint; `promise` / `measured` = the Go plan's discount over the model's allowance / over the rail's trailing-30-day draw; `unlimited` = a Go model with no monthly limit (0); null = unpriced" },
+    "rides": {
+      "type": "object", "additionalProperties": false, "required": ["clean", "judged", "prior"],
+      "properties": {
+        "clean": { "type": "integer", "minimum": 0 }, "judged": { "type": "integer", "minimum": 0 },
+        "prior": { "type": "number", "minimum": 0, "maximum": 1, "description": "the clean-rate prior while judged < tiers.cost.min_rides: the selected endpoint's uptime_1d / 100 on openrouter, 1.0 on the Go rail" }
+      }
     },
     "candidate_row": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["aa_id", "intelligence", "coding", "agentic", "out_price", "in_price", "monthly_limit_usd"],
+      "required": ["aa_id", "intelligence", "coding", "agentic", "out_price", "in_price", "monthly_limit_usd", "provider", "price_basis", "rides"],
       "properties": {
         "aa_id": { "type": ["string", "null"], "description": "the Artificial Analysis id the policy id joins (join_aa_id); null = unbenched" },
         "intelligence": { "type": ["number", "null"] }, "coding": { "type": ["number", "null"] }, "agentic": { "type": ["number", "null"] },
-        "out_price": { "$ref": "#/$defs/rate", "description": "$ per 1M output tokens (the Go base cost row's out / OpenRouter pricing.completion x 1M); null = none (the subscription rail; a dynamic OpenRouter price)" },
+        "out_price": { "$ref": "#/$defs/rate", "description": "$ per 1M output tokens: the openrouter model's SELECTED endpoint's price (null until a cell passed the entry canary — never the headline), the Go model's list price x the plan's discount (GET /catalog/opencode pricing); null = unpriced (the subscription rail)" },
         "in_price": { "$ref": "#/$defs/rate" },
-        "monthly_limit_usd": { "$ref": "#/$defs/limit", "description": "the Go plan's monthly limit; null on the other rails" }
+        "monthly_limit_usd": { "$ref": "#/$defs/limit", "description": "the Go plan's monthly limit; null on the other rails" },
+        "provider": { "type": ["string", "null"], "description": "the openrouter model's selected provider slug (the cell the price and the rides belong to); null elsewhere" },
+        "price_basis": { "$ref": "#/$defs/price_basis" },
+        "rides": { "$ref": "#/$defs/rides", "description": "the cell's clean-ride evidence from the gateway's outcome store at snapshot time" }
       }
     },
     "benchmarks_snapshot": {
@@ -143,7 +167,7 @@
         "sources": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["capability", "go_catalog", "openrouter_models"],
+          "required": ["capability", "go_catalog", "openrouter_catalog"],
           "properties": {
             "capability": {
               "type": "object", "additionalProperties": false, "required": ["source", "pulled_at", "rows"],
@@ -153,25 +177,40 @@
                 "rows": { "type": "integer", "minimum": 0, "description": "the capability table's row count (the snapshot keeps only the candidates)" }
               }
             },
-            "go_catalog": { "type": "object", "additionalProperties": false, "required": ["fetched_at"], "properties": { "fetched_at": { "$ref": "#/$defs/timestamp", "description": "GET /catalog/opencode sources.config.fetched_at" } } },
-            "openrouter_models": { "type": "object", "additionalProperties": false, "required": ["fetched_at"], "properties": { "fetched_at": { "$ref": "#/$defs/timestamp" } } }
+            "go_catalog": {
+              "type": "object", "additionalProperties": false, "required": ["fetched_at", "fee_usd_month", "draw_30d_usd"],
+              "properties": {
+                "fetched_at": { "$ref": "#/$defs/timestamp", "description": "GET /catalog/opencode sources.config.fetched_at" },
+                "fee_usd_month": { "type": ["number", "null"], "description": "pricing.fee_usd_month — the plan's monthly fee the Go prices divide" },
+                "draw_30d_usd": { "type": ["number", "null"], "description": "pricing.draw_30d_usd — the rail's list-priced draw over the trailing 30 days at snapshot time" }
+              }
+            },
+            "openrouter_catalog": {
+              "type": "object", "additionalProperties": false, "required": ["fetched_at", "cells"],
+              "properties": {
+                "fetched_at": { "$ref": "#/$defs/timestamp", "description": "GET /catalog/openrouter fetched_at" },
+                "cells": { "type": "object", "description": "the view's cells by entry state at snapshot time — how many openrouter prices could exist" }
+              }
+            }
           }
         },
         "rails": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["anthropic", "opencode", "openrouter"],
-          "description": "per rail, the CANDIDATE rows keyed by POLICY model id (the rail's spelling: claude/<alias>, opencode-go/<id>, a bare openrouter id)",
+          "required": ["anthropic", "opencode", "openrouter", "codex"],
+          "description": "per rail, the CANDIDATE rows keyed by POLICY model id (the rail's spelling: claude/<alias>, opencode-go/<id>, a bare openrouter id, codex/<id>)",
           "properties": {
             "anthropic": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
             "opencode": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
-            "openrouter": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } }
+            "openrouter": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
+            "codex": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" }, "description": "the ChatGPT-subscription rail's candidates: the ENROLLED account's model evidence (FU-270), unpriced like the anthropic aliases" }
           }
         }
       },
       "x-requirements": ["GW-MODEL-TIERS"]
     },
     "config_snapshot": {
+      "description": "the config source's snapshot: the merged listing — models.dev's opencode-go rows (deprecated dropped) under the console's overrides (GW-CATALOG-GO, 2026-10-20)",
       "type": "object",
       "additionalProperties": false,
       "required": ["models"],
@@ -196,7 +235,7 @@
     "docs_snapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["plans", "bonus", "peak", "peak_hours_utc", "peak_weekdays", "window_shares"],
+      "required": ["plan_fees", "plans", "bonus", "peak", "peak_hours_utc", "peak_weekdays", "window_shares"],
       "properties": {
         "plans": {
           "type": "object",
@@ -206,6 +245,11 @@
             "go": { "type": "object", "additionalProperties": { "$ref": "#/$defs/limit" } },
             "go-plus": { "type": "object", "additionalProperties": { "$ref": "#/$defs/limit" } }
           }
+        },
+        "plan_fees": {
+          "type": "object", "additionalProperties": false, "required": ["go", "go-plus"],
+          "properties": { "go": { "type": "number", "minimum": 0 }, "go-plus": { "type": "number", "minimum": 0 } },
+          "description": "the page's Plan table: each plan's monthly fee in USD (GW-MODEL-TIERS divides it)"
         },
         "bonus": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
         "peak": { "type": "object", "additionalProperties": { "$ref": "#/$defs/price_row" } },
@@ -245,12 +289,19 @@
               "type": "array",
               "items": {
                 "type": "object", "additionalProperties": false,
-                "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier", "state", "class", "cooldown_until"],
+                "$comment": "openai-chat.schema.json $defs.endpoint_row plus the cell's entry state, its rides and the floors' verdict (GW-CATALOG-OR): `pinnable` / `floor` are what `canary-entrants.sh` walks by — a candidate that is not pinnable for the ride's harness is skipped (homelab#2775)",
+                "required": ["slug", "tag", "provider_name", "quantization", "tool_choice", "uptime_1d", "p90_ms", "in_price", "out_price", "status", "service_tier", "state", "class", "cooldown_until", "retry_at", "backoff_s", "limit_source", "rides", "pinnable", "floor"],
                 "properties": {
                   "slug": { "type": "string" }, "tag": { "type": "string" }, "provider_name": { "type": "string" }, "quantization": { "type": "string" },
-                  "tool_choice": { "type": "object" }, "uptime_1d": { "type": "number" }, "p90_ms": { "type": ["number", "null"] },
+                  "tool_choice": { "type": "object" }, "uptime_1d": { "type": ["number", "null"] }, "p90_ms": { "type": ["number", "null"] },
                   "in_price": { "type": ["number", "null"] }, "out_price": { "type": ["number", "null"] }, "status": { "type": "integer" }, "service_tier": { "type": ["string", "null"] },
-                  "state": { "$ref": "#/$defs/cell_state" }, "class": { "type": ["string", "null"], "description": "the strike class that excluded the cell" }, "cooldown_until": { "$ref": "#/$defs/timestamp" }
+                  "state": { "$ref": "#/$defs/cell_state" }, "class": { "type": ["string", "null"], "description": "the strike class that excluded the cell" }, "cooldown_until": { "$ref": "#/$defs/timestamp" },
+                  "retry_at": { "$ref": "#/$defs/timestamp", "description": "a candidate cell a 429'd canary backed off: the horizon's end, before which a canary on it defers canary-not-due and the launcher skips it; null = none (every verdict resets it)" },
+                  "backoff_s": { "type": ["number", "null"], "description": "the step the horizon doubled to (canary.backoff_s on the first 429'd canary, ×2 per consecutive one, capped at canary.backoff_max_s)" },
+                  "limit_source": { "type": ["string", "null"], "description": "the 429 body's error.metadata.limit_source — upstream_provider_shared_pool (the provider throttles OpenRouter's shared account: a cell fact), openrouter_free_tier_per_minute (the key's tier); null = unnamed" },
+                  "rides": { "type": "object", "additionalProperties": false, "required": ["clean", "judged"], "properties": { "clean": { "type": "integer" }, "judged": { "type": "integer" } }, "description": "the cell's clean-ride evidence (GW-MODEL-TIERS: a ride = a session this provider served a 2xx to whose latest outcome is reported)" },
+                  "pinnable": { "type": "object", "additionalProperties": { "type": "boolean" }, "description": "per harness (the keys of the policy's `providers.tool_choice` — never a code list): whether this provider's representative endpoint clears the floors GW-RAIL-OPENROUTER §Selection pins by (quantization at or above the floor, every tool-choice mode the harness uses, uptime_1d at or above the floor — a null clears none, status 0), evaluated by the data plane's own predicate; `state` eligible AND pinnable[harness] true = selection can pin the cell; a provider's service tiers carry the representative's verdict; `{}` when the rail declares no providers policy (nothing is ever pinned)" },
+                  "floor": { "type": "object", "additionalProperties": { "type": "string" }, "description": "per harness that fails, the floor it fails (`quantization fp4 < fp8`, `no tool_choice required,function`, `uptime_1d unknown`, `uptime_1d 77.4 < 95`, `status 1`); `{}` when every harness passes" }
                 }
               }
             },
@@ -263,10 +314,11 @@
       "cells": { "type": "object", "additionalProperties": false, "required": ["candidate", "eligible", "excluded"], "properties": { "candidate": { "type": "integer" }, "eligible": { "type": "integer" }, "excluded": { "type": "integer" } } },
       "canary": {
         "type": "object", "additionalProperties": false,
-        "required": ["max_per_refresh", "usd_per_day", "admitted_this_refresh", "spend_usd_1d", "exhausted", "cooldown_s"],
+        "required": ["max_per_refresh", "usd_per_day", "admitted_this_refresh", "spend_usd_1d", "exhausted", "cooldown_s", "backoff_s", "backoff_max_s"],
         "properties": {
           "max_per_refresh": { "type": ["integer", "null"] }, "usd_per_day": { "type": ["number", "null"] }, "admitted_this_refresh": { "type": "integer" },
-          "spend_usd_1d": { "type": "number" }, "exhausted": { "type": "boolean" }, "cooldown_s": { "type": ["number", "null"] }
+          "spend_usd_1d": { "type": "number" }, "exhausted": { "type": "boolean" }, "cooldown_s": { "type": ["number", "null"] },
+          "backoff_s": { "type": ["number", "null"] }, "backoff_max_s": { "type": ["number", "null"] }
         }
       }
     },
@@ -275,9 +327,32 @@
   "output": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["plan", "sources", "peak_hours_utc", "peak_weekdays", "window_shares", "models", "policy_models"],
+    "required": ["plan", "plan_fee_usd_month", "pricing", "sources", "peak_hours_utc", "peak_weekdays", "window_shares", "models", "policy_models"],
     "properties": {
       "plan": { "oneOf": [{ "$ref": "#/$defs/plan" }, { "type": "null" }], "description": "rails.opencode.plan; null = the policy has no opencode rail" },
+      "plan_fee_usd_month": { "type": ["number", "null"], "description": "the docs snapshot's Plan table fee for `plan`; null = no docs snapshot carrying the table yet" },
+      "pricing": {
+        "$comment": "GW-MODEL-TIERS §Cost per clean ride — the Go rail's price per model: list price x fee / max(the rail's trailing-30-day list-priced draw, the model's monthly limit)",
+        "type": "object", "additionalProperties": false, "required": ["fee_usd_month", "draw_30d_usd", "models"],
+        "properties": {
+          "fee_usd_month": { "type": ["number", "null"] },
+          "draw_30d_usd": { "type": "number", "minimum": 0, "description": "the opencode rail's metered 2xx requests over the trailing 30 days at the catalog's list rates (the window draw's pricing)" },
+          "models": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object", "additionalProperties": false, "required": ["out", "in", "discount", "basis", "rides"],
+              "properties": {
+                "out": { "$ref": "#/$defs/rate", "description": "$ per 1M output tokens after the discount; null = unpriced (no fee, not in the catalog)" },
+                "in": { "$ref": "#/$defs/rate" },
+                "discount": { "type": ["number", "null"], "minimum": 0, "description": "fee / max(draw_30d_usd, the model's monthly limit); 0 for an unlimited model" },
+                "basis": { "$ref": "#/$defs/price_basis" },
+                "rides": { "type": "object", "additionalProperties": false, "required": ["clean", "judged"], "properties": { "clean": { "type": "integer" }, "judged": { "type": "integer" } } }
+              }
+            }
+          }
+        },
+        "x-requirements": ["GW-MODEL-TIERS"]
+      },
       "sources": {
         "type": "object",
         "additionalProperties": false,

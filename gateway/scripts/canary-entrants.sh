@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 # The ENTRY CANARY's launcher (GW-CATALOG-OR §The entry canary, gateway/specs/endpoints/catalog.md;
 # homelab#2742) — a JAIL verb: read the gateway's OpenRouter catalog, and for every (model, provider)
-# cell still `candidate` launch ONE prober ride pinned to that cell through agents/agent-session.sh.
+# cell still `candidate` that selection COULD pin — the view's `pinnable[<this ride's harness>]`, the
+# policy floors' verdict (quantization, tool-choice modes, uptime) — launch ONE prober ride pinned to
+# that cell through agents/agent-session.sh, CHEAPEST FIRST (the endpoint's output price, then its
+# input price, then the model id). A candidate the floors reject is skipped and named in the banner
+# with its `floor` reason: a canary on it would buy an `eligible` cell selection never pins (the
+# first admission of 2026-10-20 went to deepseek-v4.1-flash@open-inference, fp4 — homelab#2775). A
+# candidate a 429'd canary backed off (`retry_at` ahead) is skipped and named too: no verdict yet,
+# the walk moves on (operator 2026-10-22).
 # The gateway is the gate and the judge: it admits a canary only while its budget holds (the
 # per-refresh cap, the day's metered spend — a `canary-budget` defer otherwise, which this script
 # reports and stops on), pins the ride to exactly that provider with no failover, and flips the cell
 # to `eligible` on a clean outcome or `excluded` on a strike. Nothing here decides anything.
 #
-#   bash gateway/scripts/canary-entrants.sh [--max N] [--model <id>] [--dry-run]
+#   bash gateway/scripts/canary-entrants.sh [--max N] [--model <id>] [--dry-run] < /dev/null
+#
+#   --dry-run prints the banner and the walk (the cells, in order) and rides nothing. The ride's
+#   stdin is /dev/null (a `while read` loop's body must never eat the list it walks — 2026-10-20).
 #
 #   AGENT_GATEWAY_URL        the control plane (default: a port-forward this script opens to svc/agent-gateway)
 #   AGENT_GATEWAY_CALLER_SA  the dispatcher SA the jail impersonates for the admission (agent-session.sh's
@@ -46,31 +56,60 @@ if [ -z "${AGENT_GATEWAY_URL:-}" ]; then
 fi
 export AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=prober
 export AGENT_GATEWAY_CALLER_SA="${AGENT_GATEWAY_CALLER_SA:-platform-agents/agentstack-loop}"
+HARNESS=opencode  # the ride's harness (the gateway's canary.harness) — the `pinnable` key this walk reads
 view=$(curl -fsS "$AGENT_GATEWAY_URL/catalog/openrouter")
 echo "== catalog: $(jq -r '"\(.models_count) models, fetched \(.fetched_at // "never"); cells \(.cells | tojson); canary \(.canary | tojson)"' <<<"$view")"
-cells=$(jq -r --arg only "$ONLY" '.models | to_entries[] | select($only == "" or .key == $only) | .key as $m | .value.endpoints[] | select(.state == "candidate") | "\($m)@\(.slug)"' <<<"$view" | sort -u)
-[ -n "$cells" ] || { echo "== no candidate cell — nothing to canary"; exit 0; }
+# The candidate cells, one per (model, provider): a provider's service tiers are ONE cell, priced by
+# its representative (no service_tier, then the shortest tag — providers.representatives). Split by
+# the view's floors verdict for THIS harness: the pinnable ones are the walk, cheapest first; the
+# rest are skipped and named with their `floor`. A pinnable candidate inside a 429'd canary's re-try
+# horizon (the view's `retry_at` ahead of the wall clock — operator 2026-10-22: no verdict, exponential
+# backoff, move on) is skipped too and named with its `limit_source` and horizon: the gateway would
+# defer it `canary-not-due` anyway; naming it here keeps the dry run the whole decision.
+candidates=$(jq -c --arg only "$ONLY" --arg h "$HARNESS" '
+  [ .models | to_entries[] | select($only == "" or .key == $only) | .key as $m
+    | (.value.endpoints | map(select(.state == "candidate")) | group_by(.slug)
+       | map(sort_by([(.service_tier != null), (.tag | length), .tag]) | .[0]) | .[])
+    | {cell: "\($m)@\(.slug)", pinnable: ((.pinnable // {})[$h] // false), floor: ((.floor // {})[$h] // "no verdict"),
+       out: (.out_price // 1e9), in: (.in_price // 1e9),
+       throttled: ((.retry_at // null) != null and ((.retry_at | fromdateiso8601) > now)),
+       retry_at: (.retry_at // null), backoff_s: (.backoff_s // null), limit_source: (.limit_source // "limit_source unnamed")} ]' <<<"$view")
+cells=$(jq -r 'map(select(.pinnable and (.throttled | not))) | sort_by([.out, .in, .cell]) | .[] | "\(.cell)"' <<<"$candidates")
+walk=$(jq -r 'map(select(.pinnable and (.throttled | not))) | sort_by([.out, .in, .cell]) | .[] | "\(.cell) (out \(.out) / in \(.in) $/M)"' <<<"$candidates")
+skipped=$(jq -r 'map(select(.pinnable | not)) | sort_by(.cell) | .[] | "\(.cell) (\(.floor))"' <<<"$candidates")
+throttled=$(jq -r 'map(select(.pinnable and .throttled)) | sort_by(.cell) | .[] | "\(.cell) (\(.limit_source); candidate again at \(.retry_at), backoff \((.backoff_s // 0) | floor) s)"' <<<"$candidates")
+echo "== walk (harness $HARNESS, pinnable candidate cells cheapest-first): $(jq -r 'map(select(.pinnable and (.throttled | not))) | length' <<<"$candidates") of $(jq -r 'length' <<<"$candidates") candidate cells"
+[ -z "$walk" ] || while IFS= read -r line; do echo "   $line"; done <<<"$walk"
+echo "== skipped (not pinnable for $HARNESS — a canary would buy a cell selection never pins): $(jq -r 'map(select(.pinnable | not)) | length' <<<"$candidates")"
+[ -z "$skipped" ] || while IFS= read -r line; do echo "   $line"; done <<<"$skipped"
+echo "== throttled (a 429'd canary backs the cell off — no verdict; the gateway defers it canary-not-due until then): $(jq -r 'map(select(.pinnable and .throttled)) | length' <<<"$candidates")"
+[ -z "$throttled" ] || while IFS= read -r line; do echo "   $line"; done <<<"$throttled"
+[ -n "$cells" ] || { echo "== no pinnable candidate cell — nothing to canary"; exit 0; }
 n=0
 while IFS= read -r cell; do
   [ "$n" -lt "$MAX" ] || { echo "== --max $MAX reached"; break; }
   n=$((n + 1))
-  model="${cell%@*}"
   echo "== canary $n/$MAX: $cell"
   if [ "$DRY" = 1 ]; then continue; fi
-  # The ride (the scout's canary shape, agents/model-scout.sh scout_canary_ride): one trivial closed
-  # task that makes the harness call a tool — a headless `opencode run`; agent-session.sh builds the
-  # admission with `canary: {model, provider}` from the knob (harness opencode, the gateway's
-  # canary.harness) and reports the outcome on exit. A dispatch is the gateway's YES; a
-  # `canary-budget` / `canary-not-due` defer is its NO (the router-defer exit, no pod).
+  # The ride (the scout's canary shape, agents/model-scout.sh scout_canary_ride, minus its model
+  # arguments): one trivial closed task that makes the harness call a tool — a headless `opencode run`;
+  # agent-session.sh builds the admission with `canary: {model, provider}` from the knob (harness
+  # opencode, the gateway's canary.harness) and reports the outcome on exit. A dispatch is the
+  # gateway's YES; a `canary-budget` / `canary-not-due` defer is its NO (the router-defer exit, no pod).
+  # The ride names NO model: under AGENT_GATEWAY=sessions the gateway owns it (GW-SESSIONS-ADMIT —
+  # agent-session.sh's preflight refuses `--model` outright, FU-270), and the pod's provider + model
+  # ARE the admission's OPENCODE_CONFIG_CONTENT, so an `opencode run -m openrouter/…` would steer
+  # opencode at its unconfigured built-in provider instead of the pinned cell (the 2026-10-20 window
+  # rode this exact shape, homelab#2775).
   task="canary-$(printf '%s' "$cell" | tr '/:.@' '----')"
   prompt="Reply with ONLY the first markdown heading text of README.md (no other words)."
-  if ! AGENT_GATEWAY_CANARY="$cell" bash agents/agent-session.sh "${CANARY_PROJECT:-homelab}" --harness opencode \
-       --model "openrouter/$model" --task "$task" --round 1 \
-       --run "opencode run -m \"openrouter/$model\" \"$prompt\"" 2>&1 | tail -n 5; then
+  if ! AGENT_GATEWAY_CANARY="$cell" bash agents/agent-session.sh "${CANARY_PROJECT:-homelab}" --harness "$HARNESS" \
+       --task "$task" --round 1 \
+       --run "opencode run \"$prompt\"" </dev/null 2>&1 | tail -n 5; then
     echo "   ride did not dispatch — the gateway's answer is above"
     if [ "$(curl -fsS "$AGENT_GATEWAY_URL/catalog/openrouter" | jq -r '.canary.exhausted')" = "true" ]; then
       echo "== the canary budget is spent (GatewayCanaryBudgetExhausted) — stopping"; break
     fi
   fi
-done
+done <<<"$cells"
 echo "== after: $(curl -fsS "$AGENT_GATEWAY_URL/catalog/openrouter" | jq -c '{cells, canary}')"

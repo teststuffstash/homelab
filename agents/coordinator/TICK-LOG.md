@@ -13855,3 +13855,644 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Wound down at ~800k ctx with #2743 unstarted (the pickup names its design points and the deploy checks); bookkeeping
   committed, pushed once.
 
+
+## 2026-10-20 ~04:55–05:30Z — seat: "cluster down?" → wk-metal-04 died (incident response, no applies)
+
+- Alert flood since 01:26Z = one node: wk-metal-04 last heartbeat 01:11Z, :50000 + ARP dead from pve. Cluster 12/13 Ready.
+- WoL from pve (no effect); operator cable wiggle (link blinks, still no ARP); operator hard reset ×2 → no POST/display/beeps,
+  NIC LEDs dark, fans + PCIe card LED on → treated as hardware-dead; operator defers to the evening (NVMe swap or other).
+- Loki held no kmsg lines from the node in the last 6 h (query may be wrong — unverified). Garage 2/3 serving, writes OK;
+  garage-0 PVCs faulted (1-replica, on the box); registry-data degraded to 1 replica (no bulk disk to rebuild onto).
+
+## 2026-10-20 ~14:30–15:25Z — seat: wk-metal-04 re-onboarded onto Big Data (window wk-metal-04-1792506831-3600)
+
+- Operator moved the dead box's two 7600p + 2×8G into Big Data (retired router; fallback period over), pulled the 4-port NIC.
+- .186 reservation → 00:22:4d:4f:ab:2e (Kea, both CARP nodes, run per node with the HA peer env); Matchbox flag (flags.local.tf) → PXE.
+- Maintenance read: MX500 = sdb, both 7600p with intact XFS. #2758 (machines.yaml/dnsmasq/docs) pushed first; mgmt-tf plan
+  20261020T145334Z-f10c1205 = one replace of talos_machine_configuration_apply.metal["wk-metal-04"] → installed to /dev/sdb; unflagged
+  before reboot (404). Node Ready, taint/zone/kata labels survived on the Node object, BGP established .70/.71.
+- Longhorn: intel0/1 kept their disk UUIDs → Ready; sata500 DiskFilesystemChanged (new MX500 /var/lib/longhorn) → removed + re-registered via
+  longhorn-tag-disks.sh (first run hit "disks syncing" between register and fence: ~30 s as bulk+schedulable, 0 replicas landed; retry fenced it).
+- garage-0 volumes auto-salvaged; garage-0 back with node id d93314cf…, GarageZone/ClusterDegraded cleared. #2758 merged 96227dc9.
+- Window force-closed: PodSigkilled claimed (reinstall-killed DaemonSet pods), NodeCPUHighUsage cp-01 handed to the responder.
+
+## 2026-10-20 ~16:30–20:45Z — seat: "pick up gateway build" → #2762 (null uptime) merged, #2743 built as #2764 (PR lane, island context)
+
+- Pickup read (meta-state's 10-19 bullet, #2743, the #2718 plan comment, gateway/specs + gateway/src, no corpus). Deploy
+  verification of the 10-19 catalog work: live, 26 models / 249 candidate cells / 0 eligible (no canary has run — the
+  operator's window); one defect in the refresh log: `uptime_last_1d: None` on two anthropic models' endpoints failed the
+  whole model's parse → #2762 (parsed as no uptime, dropped by the floor; both reviewers approved, merged 17:12Z; the next
+  refresh read 28 models).
+- Design settled from the issue + the ruling, no operator question: the Go price = the plan fee (the Go page's Plan table,
+  read by the docs source — no policy copy) over what it bought: list × fee ÷ max(the rail's 30-day list-priced draw, the
+  model's own limit) — `promise` until the rail out-draws the allowance, `measured` after, 0 for unlimited; the openrouter
+  price = the SELECTED endpoint's, null until a cell passed the entry canary (never the headline); cost per clean ride =
+  price × T ÷ rate + overhead × (1/rate − 1) with `tiers.cost` {T 0.01 M — the ledger's 30-day mean per session on the
+  openai-dialect rails (opencode 11.1k, openrouter 13.4k), overhead 0 (⚑ unmeasured), min_rides 5}; the rail choice
+  reorders the WALK (the cheaper twin's rail first, the twin at its head; the loser still walked), never adds a model.
+- Live ledger facts the knobs rest on: 30 d Go traffic 162 requests, 0.86M in / 0.28M out / 8.3M cache_read — 155 of them on
+  `deepseek-v4-flash`, which the catalog no longer prices, so the rail's priced draw is $0.002: every Go model prices at
+  its promise. The twin that exists in the fixture world is deepseek-v4.1-flash (opencode bare vs openrouter light list).
+- Snapshot re-cut without the new image: both catalog views rendered by the new code over a consistent sqlite backup of
+  the production store (docs refreshed live for the fee) — a scratchpad one-off; the Go lists re-derived under the promise
+  prices (deepseek-v4.1-flash and glm-5.3-flash enter light; step-5-preview enters heavy), openrouter undecided (0 of 28
+  priced), its deployed lists stand. `TierEvidenceStale` (7 d / absent) + promtool fixture; benchmarks.json joins the
+  policy ConfigMap (GATEWAY_BENCHMARKS).
+- #2764 open 20:35Z, auto-merge armed, pr-wait in the background; `devbox run ci` 799 rows green, spec gate 0 not passed,
+  rules + manifest lints green. Bookkeeping (FU-270, meta-state, this entry) committed, push at wind-down.
+- 20:47Z: #2764 MERGED on round 1 (both reviewers approved; CI green); image built 17:51Z-stamp g32a713a6208f, auto-bump
+  merged, pod rolled. Verified live: `/catalog/opencode` pricing fee 10 / 29 of 29 priced (promise; the 30-day priced draw
+  $0.002), openrouter rows carry `rides`, `gateway_tier_evidence_age_seconds` serving (1724 s at read), healthz ok, the
+  refresh read 28 models / 0 unreadable (the #2762 fix). #2718 commented (items 1-Go, 3, 4 closed; 2, 5 open).
+- Found while verifying (NOT acted on — the detector owns it): the console config source answers `opencode-go.models: {}`
+  (200, 1648 bytes, 0 models, 0 disabled) to the gateway's key on every refresh since at least the 17:16Z roll; the gateway
+  serves on the 11:02Z config snapshot (age 6.9 h), the Go page still lists 29 models; `GoCatalogParseFailed{source=config,
+  outcome=implausible}` pending → firing; `GoCatalogStale` at 24 h. No Go traffic in 6 h, credentials rejected 0 — the
+  rail's own health is unobserved. Cause unknown (an account/plan state? a vendor change?) — FU-313's key mint is the
+  operator's; the responder/dig reads the alert.
+- Wound down ~20:55Z: bookkeeping pushed once; the clone removed; memory (gateway-island) updated.
+
+
+## 2026-10-20 ~21:00–21:25Z — seat: "look into the go leg" (operator) — the Go rail is fine, the console config changed shape; a gateway session rode Go clean
+
+- Probes from the gateway pod with its own key: `/zen/go/v1/models` 200 / 37 models; a 1-token chat on deepseek-v4.1-flash
+  200 with usage → the rail and the key are healthy. `GET /console/api/v2/config` 200 / 1648 bytes: `opencode-go.models: {}`,
+  every `opencode` row a `disabled: true` override → the endpoint now returns the WORKSPACE OVERRIDES on a default catalog,
+  not the catalog (the 10-17 spike read per-model `cost[]` rows there). The leg's `implausible` guard holds the 11:02Z
+  snapshot; `GoCatalogParseFailed{source=config}` pending → firing, `GoCatalogStale` at 24 h. models.dev's `opencode-go`
+  (the vendor's own repo; the spike's F4 / the "models.dev as a fallback" gap row) carries 33 models with `cost`
+  (in/out/cache_read/cache_write + context `tiers`) and `limit` — the same values the config used to carry (deepseek
+  0.15/0.60/0.003, 1M ctx; haiku's 100k tier row). The vendor repo's 17:05Z commit removed the website's legacy
+  `/zen/*` passthrough routes; the config handler is not in the public tree.
+- Session test (jail → port-forward → `agent-session.sh`, `AGENT_GATEWAY=sessions`, caller SA platform-agents/agentstack-loop):
+  role prober → 403 `caller-role-denied` (the deployed `callers` grant that SA `worker` only) — **the 10-19 canary launcher
+  (`canary-entrants.sh`, role prober, the same SA) is refused the same way: no entry canary can run until the policy grants
+  it.** Role worker → dispatch opencode-go/mimo-v2.6-flash (the re-derived standard head), env pulled, the ride answered
+  ("homelab"), outcome clean, released (session 70563bee…, pod agent-homelab-180142 on nx-01, 16 s). Pod deleted after.
+- Next (operator's call): (1) build models.dev as the config source's catalog with the console answer as the override layer
+  (GW-CATALOG-GO's named gap, a PR on the island); (2) grant `prober` to the dispatcher caller in policy.json (+ GW-ACCESS /
+  GW-SESSIONS-AUTH rows) so the canary window can open.
+
+## 2026-10-20 ~17:30–18:45Z (time corrected) — seat: "pick up gateway from meta-state" — the two ordered island PRs opened (#2766 models.dev catalog + console overlay, #2767 prober grant)
+
+- Read: meta-state's 21:40Z pickup + TICK-LOG 21:00Z; the island (catalog.py, the GW-CATALOG-GO page, the fake vendor,
+  policy.json/kustomization, GW-SESSIONS-AUTH/GW-ACCESS); live: models.dev `opencode-go` = 33 rows (4 `status: deprecated`
+  → 29 = the Go page's count), every `context_over_200k` row also carries `tiers`; the console answer re-probed from the
+  gateway pod (200, 1.6 KB: `opencode` rows `disabled: true`, `opencode-go.models: {}`, the org-id header) → the fixture;
+  the vendor's `plugin/provider/opencode.ts` (each config field applied "if defined" onto the models.dev row, `cost`
+  replaces, `limit` merges, `enabled = !disabled`) and `plugin/models-dev.ts` (deprecated rows dropped before the overlay).
+- Design call: ONE source (`config`) with TWO reads, not a third source — the snapshot shape, store, metrics families,
+  alert exprs and admission reads stay as they are; the first failing read ends the refresh with its outcome and the log
+  line names the read. The "models.dev as a fallback" gap row becomes the rule; a new gap row names the rail-served-but-
+  unlisted ids (37 served vs 29 listed).
+- #2766 (`feat/go-catalog-models-dev`): parse_catalog (strict: cost + tiers ascending, limit, tool_call; legacy
+  `context_over_200k` alone = parse failure) + parse_config as overrides + merge; env `GATEWAY_GO_CATALOG_URL` → models.dev,
+  new `GATEWAY_GO_CONFIG_URL`; fixtures `models-dev.json` + the live override-only `config.json`; 20 refresh rows; glossary,
+  worlds README, sessions wording, spike §F4 settled; GoCatalogParseFailed / PolicyModelMissing annotations (rules re-copied,
+  promtool fixture re-rendered). Island ci 810 green; prometheus-rules-lint + docs-graph-lint green.
+- #2767 (`fix/gateway-prober-caller`): policy.json dispatcher caller `roles` += `prober`; fixture worlds + twins; a new
+  GW-SESSIONS-AUTH row (platform prober, no bind → 200 dispatch); the deployed-callers row/test re-pinned; GW-ACCESS prober
+  row + role × caller paragraph; the kustomization `callers` comment. Island ci 811 green.
+- Both auto-merge armed via pr-wait (background). Bookkeeping: meta-state pickup collapsed to one bullet + a
+  `dig-explained` for GoCatalogParseFailed/GoCatalogStale (clears with #2766's deploy); FU-270 next (0) → in review.
+
+## 2026-10-20 ~18:45–19:45Z (time corrected) — seat: #2766 round 1 → merged → deployed → verified; #2767 round 1 + an orphaned CI run
+
+- #2766 round 1 (specs reviewer, CHANGES_REQUESTED): all bookkeeping — ⚖ on the two console-only rows, the gap row's
+  `⚑ gap (2026-10-20, PR #2766 → work #2768)` form (issue #2768 filed: the rail serves ids the catalog does not list,
+  37 vs 29), a `Spec changes:` section with the removed-row → carrier map, *Listed* = the merged listing. Round 2
+  APPROVED, merged 19:02Z; the auto-bump #2769 merged; the pod rolled (image g618c588a6e15). **Verified from the pod**:
+  `catalog: config refreshed — 29 models` at 19:07:43Z (fetched_at 19:07Z, not the 11:02Z snapshot), docs ok,
+  policy models all listed with limits; Alertmanager: 0 active `GoCatalog*`.
+- #2767 round 1: only the missing `Spec changes:` section (the rows + evidence judged sound) — body edited, an empty
+  commit pushed for a new head. Its CI run then sat 35 min on "Mermaid parse lint" with no runner pod left in
+  `arc-runners` (ephemeral runners cycled normally around it; a 4-min run normally) — the TICK-LOG 8954 class:
+  cancel → force-cancel (`actions/runs/<id>/force-cancel`) → re-run; pr-wait re-armed. Single sighting, no FU.
+- Lesson (jail): zsh does not word-split a `K="devbox run -- kubectl …"` command variable — an `until $K …` loop spins
+  forever (the deploy-verification task had to be stopped and run by hand).
+
+## 2026-10-20 ~19:45–20:05Z (time corrected) — seat: #2767 merged + deployed + proven; the canary launcher's loop never ran (#2771)
+
+- #2767 round 2 APPROVED after the CI re-run, merged 19:36:59Z; the policy ConfigMap hash rolled the pod 19:37:12Z
+  (`agent-gateway-policy-hf5g456t77`: roles `['worker', 'prober']`). The image build for c846c660 opened #2770 (auto-bump,
+  no src change) — pr-waited. **Proof without a ride:** dispatcher-SA token (`kubectl create token agentstack-loop
+  --audience agent-gateway`) → `POST /sessions {role: prober, harness: claude, rail: anthropic}` = 200 `defer
+  role-rail-denied` (the role check passed; the rail is outside the prober's set); control `role: reviewer` = 403
+  `caller-role-denied`. First attempt with the default harness answered 400 `harness-rail-mismatch` — the body check
+  precedes the role check, so a consistent body is needed to reach it.
+- `canary-entrants.sh --dry-run` printed the catalog line (28 models, 245 candidate cells, 0 eligible) and "after" with
+  NOTHING between: the `while read cell … done` had no `<<<"$cells"` — zero iterations under a closed stdin, a keyboard
+  wait on a terminal. #2771 opened (`done <<<"$cells"`; the dry-run with `< /dev/null` walks 3 cells under `--max 3`).
+  No canary has ever been launched by the script (the 10-19 window never opened), so nothing rode wrongly.
+- The canary WINDOW stays the operator's (budget-metered rides): after #2771, `--max 3`.
+
+## 2026-10-20 ~20:05–20:45Z (time corrected) — seat (unattended, operator: "run some yourself … use subagents"): the canary window ran, #2773, #2768 classified
+
+- Operator 2026-10-21: run the entry canaries from the seat and continue unattended to ~500–600k ctx with subagents.
+  Three fresh subagents: (A) the canary runner — clone with #2771, per-cell rides in the launcher's own shape for the
+  policy's openrouter models in order (v4.1-flash, kimi-k3, mimo-v2.5, v4-flash), 3 per refresh window; steered after
+  ride 1 to FILTER by the selection floors first (ride 1 went to `open-inference`, fp4 — eligible, but selection never
+  pins it): window 1 v4.1-flash {open-inference ✓, baidu, deepinfra}; window 2 kimi-k3@morph ✓ eligible (~$0.03 a
+  ride), kimi-k3@baseten 2×200 then 7×429, mimo-v2.5@xiaomi; window 3 (~02:22Z — the 20:22Z pod roll reset the
+  refresh clock) = v4-flash cells. Final table in A's report → next TICK-LOG entry. (B) #2768 classified in a comment:
+  of the 8 rail-served-unlisted ids ONE is deprecated-and-served (minimax-m2.7), 4 are PAYG carry-overs the console
+  `opencode` overlay disables, 1 PAYG-only (qwen3.6-plus), 2 with no vendor row anywhere (qwen3.7-max, omen-alpha);
+  the other 3 deprecated rows are NOT served; the issue body's "deprecated four" claim corrected. (C) FU-270 (d) as
+  #2773 — MERGED round 1, no findings: `GoCatalog.context_for`, Go-rail `context_tokens` from the catalog, a policy
+  `opencode-go/*` entry refuses the load (ruling 5); deployed policy `context_tokens: {}`; deploy #2774 pr-waited.
+  Follow-on named, not built: openrouter `context_length` is per-(model, provider) in the endpoint snapshot.
+- Master pushed at 363ce974 after #2771 (pre-push lints green).
+
+## 2026-10-20 ~20:45–21:10Z — seat (unattended): the first entry-canary window's result, #2775, the re-cut + launcher PRs dispatched
+
+- Subagent A's window (19:40–20:50Z, 9 admissions, $0.096, no alert, gateway 0 restarts): v4.1-flash {open-inference ✓
+  (fp4 — eligible, never pinnable), baidu ✓, deepinfra ✓}, kimi-k3 {morph ✓ (~$0.03 a ride), baseten ✗ 2×200→7×429},
+  mimo-v2.5 {xiaomi ✓}, v4-flash {streamlake ✓, deepinfra ✗ 9×429, baidu ✓} → **7 eligible / 239 candidate / 0 excluded**.
+  Three machine findings → **#2775**: (1) a 429'd pinned canary spends the admission and judges nothing (cell stays
+  candidate — neither strike class fires); (2) every window was opened by a POD ROLL (19:40 / 20:22 / 20:42Z = the
+  #2767 / #2770 / #2774 deploys), `admitted_this_refresh` + `gateway_canary_*` counters are in-memory (spend + cell
+  states persisted); (3) the view carries no "passes the floors" flag — the launcher walks alphabetically. Plus: the
+  merged launcher's ride command is REFUSED by agent-session.sh's preflight (`--model` under AGENT_GATEWAY=sessions);
+  the rides ran with `--model` and the inner `-m` dropped.
+- Dispatched: subagent E = the openrouter RE-CUT (FU-270 next (a): `benchmarks-snapshot.sh` → `tiers apply` → `check`
+  → PR, then its deploy + live read-back); subagent D = the launcher ride-shape fix + #2775's three `⚑ gap` rows and the
+  GW-CATALOG-OR index clause (PR). #2774 (context-from-catalog image) deployed 20:42:31Z, catalog refreshed on start.
+- Context 425k at 21:05Z; wind-down planned ~550k.
+
+## 2026-10-20 ~21:10–21:30Z — seat (unattended): the openrouter RE-CUT landed (#2776) — lists unchanged, every tier DECIDED
+
+- Subagent E: `benchmarks-snapshot.sh` (snapshot_at 20:53:22Z; both catalogs fetched 20:42:31Z; AA rows of 10-17) →
+  `tiers apply` wrote NOTHING — the derivation over the 4 newly priced openrouter models reproduces the deployed lists
+  exactly, order included; `check` clean, no tier undecided. Priced at the SELECTED endpoint: v4.1-flash baidu fp8
+  $0.1416/M out → $0.001416 per clean ride (light); v4-flash streamlake $0.1652 → 0.001652 (light); mimo-v2.5 xiaomi
+  $0.28 → 0.002806 (light, exactly at the band); kimi-k3 morph $14.9 → 0.1493 (standard + heavy — the sole priced model
+  in those bands, ~100× the light cells; the derivation's call). Twin decided: openrouter/v4.1-flash ↔ opencode-go/
+  v4.1-flash at light — Go promise $0.00075 vs baidu $0.001416 → opencode first by `price` (was no-eligible-endpoint).
+  #2776 merged 21:06Z round 1 (both bots approve); deployed by the policy ConfigMap roll (no image change);
+  read back from the pod's mounted policy + benchmarks. Env note: `devbox run` drops KUBECONFIG — the snapshot script
+  needs the kubeconfig at the clone's `tofu/kubeconfig`.
+- FU-270 next (a) DONE. Open: #2777 (launcher ride shape + #2775's gap rows) in review.
+
+## 2026-10-20 ~21:30–22:00Z — seat (unattended) wind-down: #2777 merged (round 3), the stretch's tally
+
+- #2777 (launcher ride shape: no `--model`, no inner `-m` — the gateway owns the model; + #2775's three `⚑ gap` rows and
+  the GW-CATALOG-OR index clause) MERGED 21:51Z at round 3: R1 = the PR body carried the SIBLING agent's `Spec changes:`
+  (two subagents shared `scratchpad/pr-body.md` — per-PR filenames from now on); R2 = `E-HYGIENE_REPEAT` on three
+  UNTOUCHED cases (the specs-reviewer.md l.235 belt) → one reporting-only test commit (attachments ≤8, steps ≤8, every
+  parametrize name in a step; rows byte-identical), approved by the seat after a scope check; R3 approved. Its deploy
+  #2780 auto-merge armed. Env lesson: the root devbox.json pins `KUBECONFIG=$PWD/tofu/kubeconfig` — a clone needs the
+  file there (symlink/copy).
+- Tally of the operator's "run some yourself, unattended, subagents" stretch (20:00–22:00Z): canary window 9 rides →
+  7 eligible cells, $0.096; PRs #2773 (Go context_tokens from the catalog), #2776 (re-cut: every openrouter tier DECIDED,
+  lists unchanged), #2777 (launcher + gaps) merged; issues #2768 (classified) + #2775 (canary gaps) await rulings.
+  FU-270 next: (b) wrong-verdict ← deploy-revert, (c) the loop flip into the session-pod heredoc, codex legs D/E
+  (operator). Ctx ~450k at wind-down; master pushed.
+
+## 2026-10-21 ~morning — seat: "continue gateway build" — FU-270 (b) + (c) + codex leg D's gauge half dispatched (4 subagents)
+
+- Pickup read: #2780 merged 22:01Z; no operator ruling yet on #2775 / #2768 (no comments); master pulled to 371f172a.
+- (b) `wrong-verdict` ← deploy-revert, cut in two PRs: the gateway half (`GET /sessions?task=` — route `list`; a judge sees
+  every session of its stacks by task, any other caller only its own; the judge SA `agent-coordinator:outcome-judge` added
+  to the deployed policy `callers` with `outcome: any`) and the agents/ half (the `deploy-revert` WorkflowTemplate becomes
+  steps revert → judge; the judge runs as the new SA (executor RoleBinding only), resolves the reverted merge's source PRs
+  — the PR itself, plus the PRs of the sha an auto-bump title names — and reports `wrong-verdict` on each gateway REVIEW
+  session (`specs-review <slug>#<n>`; the review reflex is not on the gateway yet = the known limit); fail-soft, sentinel
+  + replay fixture).
+- (c) the loop flip: `AGENT_GATEWAY=sessions` into the coordinator session-pod heredoc (`coordinator-pod-manifest`
+  re-recorded) + the coordinator README's gateway branch (steps 3–4 skipped, no `--model`/`--harness`/`--openrouter-secret`;
+  the per-ride `budgetUSD` breaker does not apply to gateway rides — the spec's "labels, urgency, budget class" gap).
+- Codex leg D split: the POLL half stays a gap (the vendor usage payload is unobserved until the operator's login, leg E);
+  the GAUGE half builds — an accepted headroom report → `gateway_subscription_*{rail="codex"}` + Codex panels on the
+  `claude-subscription` dashboard.
+- Alertmanager at start: only `RouterRunModelUnverifiable` (explained, meta-state); gateway pod 0 restarts, 19 h.
+
+## 2026-10-21 ~17:30–18:30Z — seat: #2785 merged+deployed; the #2775 429 autopsy; two operator rulings → two more builds
+
+- **#2785 merged 9aa92817 (round 1, no findings), deploy #2789 live**: `GET /sessions?task=` (route `list`) + the judge
+  caller in the deployed policy; live: 200 `{"sessions":[]}` / 400 without task / 401 without bearer. The judge-visibility
+  path waits on the `outcome-judge` SA (#2787). The kustomization's callers comment was left stale → fixed direct (fe7406d4).
+- **#2775 gap 1 autopsied (comment on the issue):** both 429'd cells re-probed from the jail with the platform key, pinned +
+  fallbacks off, 21 h later — still 429, body `limit_source: upstream_provider_shared_pool` (DeepInfra
+  `engine_overloaded`, BaseTen `Retry-After: 30`): the provider throttles OpenRouter's SHARED pool, not our key (paid,
+  $4.92/$5 weekly left; account ~$6 credit; the same key served 200s on both providers minutes earlier). OpenRouter's
+  uptime history showed both endpoints at 100 % for the hour — the catalog's uptime signal is blind to this class. A
+  regular ride never sees it (request-level failover; a 429 = cooldown, no strike); the canary is that failover switched
+  off, so opencode retries the pinned cell 9× and exits 1 with no verdict. Operator's read: the canary is a one-shot entry
+  gate, the eligible providers fill with evidence anyway → the cheap answer is no-verdict + a long persisted re-try horizon
+  on the cell (and store the body's `limit_source` so key/free-tier 429s stay distinguishable). Not yet ruled.
+- **#2775 gap 2 re-read:** `admitted_this_refresh` is NOT in memory — it is `canary_sessions_since(meta.refreshed_at)` from
+  the store; the window resets because `OrCatalog.run()` refreshes unconditionally at start and moves `refreshed_at`.
+  Fix = skip the startup refresh while the stored snapshot is younger than `refresh_s`. Not yet built.
+- **Operator ruling (18:0xZ): the capacity state (per-cell 429 cooldowns, the subscription 429 latch, rejected-credential
+  marks + backoff) MUST survive a pod roll** → build dispatched (closes sessions.md "⚑ gap: a latch survives a restart";
+  a `capacity_marks` table, write-through, reload at start, expired rows dropped).
+- **Operator ruling (18:2xZ): #2775 gap 3 (the view does not say which cells selection could pin) is a BUG, no input
+  needed** → build dispatched: per-endpoint `pinnable`/`floor` per harness from the one `providers.eligible()` predicate;
+  `canary-entrants.sh` walks pinnable candidates cheapest-first; the index-row clause trimmed to gaps 1–2.
+- Open: #2786 (codex gauges), #2787 (judge step), #2788 (loop flip) in review; 6 subagents used so far this session.
+- **Operator ruling (18:4xZ): #2775 gap 2 is also a BUG** → build dispatched (skip the startup refresh while the stored
+  snapshot is younger than `refresh_s`, so `meta.refreshed_at` — the window start — survives a roll; same shape on the Go
+  leg). Gap 1 (the 429'd canary's verdict) is the only #2775 item still awaiting a ruling.
+- **#2788 (the loop flip) MERGED 18:10Z at round 2** — R1 finding: the env line was unconditional in the shared heredoc
+  (oracle/circles/sleep pods would have carried it while their rides still need `/route`); fixed by rendering the entry
+  for `STACK=platform` only (the launcher's own guard), fixture re-recorded (138→142 lines), README gateway branch + a
+  GATEWAY RULE sentence in the in-pod brief, model-routing.md sub-bullet. Nothing queued on the platform board — the first
+  ride through `/sessions` is the next organic dispatch; a background watch on the gateway store reports it.
+- **#2787 (the judge step) MERGED 17:56Z round 1**, synced 56 s later (app `agent-coordinator`); an `outcome-judge`
+  token lists sessions through the deployed gateway → FU-270 (b) done on both halves; the end-to-end proof is the first
+  real Degraded-after-deploy revert.
+- **#2786 (codex leg D, gauge half) MERGED 18:15Z round 2** (R1: the specs reviewer wanted `other` declared in the
+  `window` enum), deploy #2793 live: `Headroom.on_accept` → `gateway_subscription_*{rail="codex"}`; the Codex row on the
+  `claude-subscription` dashboard synced; 0 codex series live until a report reaches the gateway (leg E).
+- **#2790 (#2775 gap 2) MERGED 18:27Z round 1**, deploy #2794 rolled 18:31Z and PROVED the fix on its own roll: both
+  catalogs "loaded from the store … next refresh at 00:20Z", no `refreshed —` at start, `fetched_at` unchanged
+  (18:20:58Z) — the old code had re-fetched on each of the 17:46 / 18:20 rolls. Advisory H-ATTACH_BULK on two
+  test_catalog_go.py cases → folded into #2791 (the belt makes it blocking next round).
+- **#2792 (capacity marks persisted — operator ruling) MERGED 18:38Z round 1**, deploy #2795 rolled 18:40Z: `capacity_marks
+  (kind, key, until, stack, at, backoff)`, write-through under the lock, reload at start (expired dropped; `hold` = its
+  own kind so the backoff doubling is unchanged; keys carry `sha256[:16]` fingerprints, never a credential); live:
+  `capacity: reloaded 0 marks from the store`. The sessions.md "⚑ gap: a latch survives a restart" row closed (12 rows).
+- **#2791 (#2775 gap 3) MERGED 19:03Z** (R1 both approved; CONFLICTING after #2790 → rebased; the Go-catalog attachment
+  hygiene folded in; the updater merged master on top, re-approved), deploy #2797 live: `pinnable` + `floor` per endpoint
+  per harness from `providers.eligible()`; the launcher's dry run walks 71 pinnable of 241 candidate cells cheapest-first
+  (was 0 of 241). ⚠ The walk now starts at `v4-flash@deepinfra` — the shared-pool-429 cell — so gap 1's ruling gates the
+  next window (comment 2 on #2775). Seen: `nvfp4` off the policy ladder (8 cells, no eligibility change); every
+  `anthropic/*` OpenRouter cell is `quantization unknown` (never pinnable under fp8).
+- **#2796** (gateway evidence pack → the gateway-specs bucket, `GithubStorageHeldHigh`) was the OPERATOR's own PR
+  (18:47Z, merged 19:29Z), not this seat's; its deploy #2799 auto-merge armed. Gateway sessions since the flip: 5
+  specs-review rides only — NO platform worker ride yet (nothing queued on the platform board); the first ride through
+  `/sessions` remains unverified.
+
+## 2026-10-21 ~19:00Z – 2026-10-22 ~06:05Z — second jail → primary: GithubStorageHeldHigh + cp-01 apiserver GC thrash
+- **GithubStorageHeldHigh** (~2.7 GB held vs 2 GB): homelab `gateway-evidence` 1.75 GB + oracle-fleet 0.92 GB.
+  Deleted 587 dead oracle-fleet artifacts (09-21..27, pre-`retention-days: 1`, 90-day expiry; operator-asked) and
+  312 homelab `gateway-evidence` (kept open-PR heads + newest master). Held ≈105 MB. #2796 (bucket publish +
+  reviewer reads anonymously via Garage web :3902) merged; workflow half 421f51aa operator-ordered DIRECT
+  (pin-only-lint); purge workflow lost its `paths` filter (4th copy of the trigger set); #2806 = `GATEWAY_PATHS`.
+  First master pack live `evidence/master/421f51aa…` (200). Fallback removal → FU-314.
+- **NodeCPUHighUsage cp-01 97%**: kube-apiserver 3.5/4 cores since 10-20 ~14Z — live heap ~2.7 GiB at
+  GOMEMLIMIT 3200MiB → GC ~1.1/s (others ~0.06); objects flat, p99 79 ms. Window seat-1792648298-24:
+  `talosctl restart -k` cp-01 apiserver 05:52Z → #2807 (VM CPs 5000MiB via a VM-only patch after the common one)
+  applied from the branch (plan 20261022T055321Z, cp-01+cp-02 in-place), merged; master plan `No changes`. wk-metal-02
+  (3200MiB) spiked to 1.8 cores as clients moved → restarted 05:57Z too. 06:03Z: all three ≤0.4 cores, GC ≤0.04/s,
+  cilium 13/13. Claims: ControlPlaneComponentRestarted + PodSigkilled (apiserver pods). Laptop residual → FU-315.
+  Not built: a GC-thrash detector (`rate(go_gc_duration_seconds_count{job="apiserver"}[10m]) > 0.5`) — proposed
+  to the operator, would fire before the node CPU alert.
+
+## 2026-10-22 ~06:10Z – ~07:30Z — gateway: #2775 gap 1 ruled + built, first window on the fixed code, re-cut
+- **Operator ruling on #2775 gap 1 (06:10Z): "exponential backoff for providers — skip and move on, eventual consistency."**
+  Built as **#2810** (R1: the cooldown-expired branch of `cell()` dropped the horizon — fixed both reads; merged 06:51Z,
+  deploy #2811): a 429 on a canary's pinned cell = NO verdict — `provider_cells.retry_at/backoff_s/limit_source`
+  (additive migration, seen live `db: migrated provider_cells.*`), horizon `canary.backoff_s` 3600 ×2 per consecutive
+  429'd canary up to `backoff_max_s` 86400 (prod; worlds 14400), any verdict resets, `canary-not-due` inside it, the
+  per-refresh count skips a 429'd-without-clean session, a strike after a 429 on the ride is the task's not the cell's,
+  `gateway_canary_rides_total{outcome="no-verdict"}`, launcher `== throttled` bucket. Fake `upstream-429-shared-pool` =
+  the 06:30Z tap on `kimi-k3@baseten` (`error.metadata.limit_source`, `retry_after_seconds`). Live premise held:
+  `v4-flash@deepinfra` answered **200** at 06:30Z with the same key (the 10-20/21 shared-pool throttle cleared itself).
+- **⚠ ~13 min gateway outage (06:55–07:08Z), self-inflicted:** #2810's two NEW policy keys rolled the pod (hash-suffixed
+  ConfigMap) on the OLD image, whose loader refuses unknown keys by design — the single Recreate replica crash-looped
+  (`PolicyError: … unknown key(s) backoff_max_s, backoff_s`) until Renovate's auto-bump #2811 synced. Rule → **#2812**
+  (README: a key new to the loader ships in a second PR after its image; values of known keys roll freely).
+- **First canary window on the fixed code (07:00Z, `canary-entrants.sh --max 3`): 3/3 clean** — `glm-5.3-flash@streamlake`,
+  `v4-flash@deepinfra`, `v4-flash@gmicloud`; cells 235/9/0, spend $0.0055, budget spent until the 12:21Z refresh. No 429
+  seen, so the backoff path is pinned by rows only. **Re-cut → #2813** (snapshot 07:03Z, `tiers apply`+`check` green):
+  openrouter light `[glm-5.3-flash, v4-flash, v4.1-flash]`, standard/heavy `[glm-5.3-flash, kimi-k3]` — glm-5.3-flash
+  priced $0.145 at streamlake; baidu repriced v4.1-flash $0.14 → **$1.20** out (deepinfra $0.42 selected); Go
+  `step-5-preview` $0.45 → **$1.80** over $15 (was $60) → `mimo-v2.6-pro` takes the heavy slot; mimo-v2.5 and
+  longcat-2.5-preview-free left the candidate sets.
+  #2813's rounds: R1 CI red — GW-MODEL-RESOLVE's deployed-policy row checked openrouter ids against the OLD proxy's
+  `model-classes.json` (never had glm-5.3-flash; untouched by ruling) → the openrouter half now reads the tier evidence's
+  candidate rows like the opencode half (⚖ row changed); R2 — the changed ⚖ row needed a `Spec changes:` section (my
+  zsh `${//}` body edit had silently not applied — edit bodies with `--body-file`) + the hygiene notes (one step per rail,
+  one attachment) folded in.
+  #2813 merged 07:4xZ (R3 approved); #2812 merged (+ its auto-bump #2814). Bookkeeping: FU-232's expired archive entry deleted.
+- Read, not actioned: **no platform worker ride through `/sessions` yet** (7 specs-review rides since 10-21, nothing
+  queued); #2768 (Go rail serves unlisted ids) still awaits a ruling; `nvfp4` off the ladder (cosmetic).
+
+
+## 2026-10-22 ~17:24Z – ~17:50Z — gateway: the 12:21Z window run, re-cut #2824 deployed; board read
+- **Second canary window on #2810's code (17:24Z, `canary-entrants.sh --max 3` against the 12:21Z catalog): 3/3 clean** —
+  `glm-5.3-flash@gmicloud`, `mimo-v2.6-flash@deepinfra`, `glm-5.3-flash@novita`; cells 235/9/0 → 232/12/0, spend
+  $0.0143/1d, `exhausted: true` for the refresh (by design), `== throttled` bucket 0 — still no live 429, the backoff path
+  stays row-pinned. **Re-cut → #2824** (snapshot 17:30Z, `tiers apply`+`check` green in a clone; the `tiers` devbox script
+  lives in `gateway/`, not the root): mimo-v2.6-flash priced $0.266 out at deepinfra → openrouter light
+  `[v4-flash, glm-5.3-flash, mimo-v2.6-flash]` (v4-flash reselected streamlake $0.14, heads the list; v4.1-flash out —
+  deepinfra $0.42 loses to mimo in the same band), standard `[glm-5.3-flash, mimo-v2.6-flash, kimi-k3]`; heavy, anthropic,
+  Go unchanged. Values only, no loader-new key (#2812 rule n/a). Merged 17:47Z (R1 both bots), ArgoCD synced `12ccf8dd`,
+  new pod up 17:48:06Z 0 restarts, live ConfigMap carries the lists. Next window: the 18:21Z refresh.
+- **Board:** `LonghornDiskBelowSchedulingFloor wk-04/sn530` 76.6 % (+2 %/day) read to mechanism — `mirror-ghcr-data` 171 GB
+  actual for 23 GB of filesystem; a 133 GB `markRemoved` snapshot (10-13) is volume-head's parent with purge "complete" and
+  the weekly mirror GC frees blocks nothing trims (`remove-snapshots-during-filesystem-trim=false`, no trim RecurringJob) —
+  FU-093's "(a)" with a number (~140 GB), item extended (no new FU). `ControlPlaneNodeMemoryLow wk-metal-02` = FU-315
+  (operator-blocked). `CodeownerParkWaiting homelab#2804` (helm/helm 4.3.0 → 4.3.1 in renovate-global.json): NOT merged —
+  no corpus here and the config's own 10-10 text makes the operator's approval the gate; read for the operator: no carve-out
+  exists, `helm/helm` has NO dependency-register row (the coverage generator never reads renovate-global.json customManagers),
+  house-shape fix = move `install-tool helm vX` into un-owned `scripts/upstream-alerts-refresh.sh` under a `# renovate:`
+  annotation (custom.regex automerge lane) + a register row; or declare 👤 and merge. Operator's pick pending.
+- Read, not actioned: `gateway_sessions_total` 2d = prober 9, reviewer 6 (anthropic), **worker 0** — still no platform worker
+  ride through `/sessions`; #2768 still awaits a ruling. Origin had moved 8 commits (Renovate wave + two auto-bumps, gateway
+  on `2026.10.22-ge4775298aed2` since ~16:53Z, healthy).
+
+## 2026-10-22 ~18:00Z – ~19:20Z — the helm install-tool pin leaves `.github/` (#2825); the 18:21Z window, no re-cut
+- **Operator question on #2804 ("no carve-out for a version bump here?") → the read:** none existed — the pin was minted
+  2026-10-10 (#2432) INSIDE `renovate-global.json` as two halves (postUpgradeTasks command + regex-escaped `allowedCommands`
+  twin) under the `/.github/` CODEOWNERS row, its own text naming the operator's approval as the gate; AND it had no
+  dependency-register row (`dependency-coverage.py` never read the config's customManagers). Operator: "do the move."
+- **#2825 (built, lane-linted, merged 19:15Z `dafa8862`, R1 both bots):** `scripts/upstream-alerts-refresh.sh` installs its own
+  helm (`HELM_VERSION=v4.3.0` + `install-tool helm` when containerbase's binary exists; no-op for the seat — verified, same
+  135-name render for chart 92.8.0); `allowedCommands` = the one script; ONE customManager over the script's line; class 17
+  "Renovate runtime tools" in `dependency-classes.yaml` + `extract_renovate_tools` (table regenerated: 118 rows / 17 classes,
+  the diff also carried today's version currency); renovate.md + the G12 row rewritten. `scripts/` has no codeowner row → the
+  custom.regex `automerge` lane. **Lesson, found by `--dry-run=extract` before the lane lint:** the first head's matchString
+  carried `^`/`$` anchors and extracted NOTHING — Renovate's regex manager does not match them mid-file (no house manager
+  anchors); fixed, then `renovate-lane-lint` showed `renovate/helm-helm-4.3.x arm=T lane=automerge`, OK.
+  **Proof owed (class 17, §Last proven):** #2804 keeps its number — Renovate reuses the `renovate/helm-helm-4.3.x` branch, so the
+  22:25Z run rebases it onto the script's line (its `automerge`+`dependencies` labels already fit the lane) and it should merge
+  unattended on the bot approval; the deploy proof stays the next kube-prometheus-stack branch's postUpgradeTasks run.
+- **Third canary window (19:00Z, the 18:21Z catalog): 3/3 clean** — `v4-flash@siliconflow`, `mimo-v2.6-flash@makora`,
+  `v4-flash@parasail`; cells 236/12/0 → 233/15/0, spend $0.027/1d, exhausted for the refresh, throttled 0. Snapshot 19:1xZ:
+  **`check: every decided tier list equals the derivation` → no re-cut**, snapshot not committed. Moved underneath: glm-5.3-flash
+  selected gmicloud ($0.25 out), mimo makora ($0.28), **baidu repriced v4.1-flash back to $0.30 out** (selected again; $1.20 this
+  morning), Go `minimax-m3.1-flash` lost its free tier ($0.30 out over a $20 limit). Next window: the 00:21Z refresh.
+- Jail gotcha (seat, self-inflicted twice): `pkill -f '<pattern>'` from a command whose own line carries the pattern (the exec
+  that follows it) kills the wrapper shell — exit 144, the tracked waiter dies; never pkill and launch in one command.
+
+## 2026-10-22 ~19:45Z – ~20:10Z — codex rail leg E as code: `scripts/codex-seed-bootstrap.sh` + runbook (#2826)
+
+- Operator (from the codex session that merged #2809, the recorded-live-protocol plan): "start building, give me a script to
+  run to save the auth and a readme around it". The auth = the gateway's OWN ChatGPT/Codex login (spike §Lighting the rail,
+  leg E — the one manual step left before the policy block). Built as **#2826**: `devbox run codex-seed` = `login` (device
+  auth in a throwaway `CODEX_HOME`, shredded on exit; 4-field Credential record 0600; one usage-endpoint probe printing
+  field/type STRUCTURE only — the first live observation GW-CODEX-HEADROOM lacks) → `store` (infisical-secret →
+  force-sync `agent-egress/codex-seed` → k8s Secret readback hash check, the `$`-expansion class → shred) ; `verify` =
+  the Secret's structure, never a value. The readme = runbook §Secrets "Enrol the gateway's own Codex login"; the spike's
+  leg-E row + gateway README point at it. Tested offline with a stub codex + loopback usage server; `verify` against the
+  live cluster reports the absent Secret. No live credential touched. Nothing to restart: the policy still omits the rail.
+- Open until the operator's run: does the second device login revoke the homelab-codex jail's (unverified since 10-19)?
+  The script and runbook both say what to watch. FU-270 line points at #2826 (local bookkeeping commit, pushed at wind-down).
+- **Leg E MINTED (operator, host, ~20:00Z):** first `store` died — two concurrent `devbox run`s inside `infisical-secret.sh`
+  (the backgrounded port-forward + the readiness loop) race on `.devbox/gen/scripts/.cmd.sh`, the port-forward got
+  `kubectl: not found` (127); fixed in #2826 (resolve the binaries once, call them directly). Re-run: Infisical
+  `CODEX_SEED_RECORD` created, force-sync, Secret readback hash `a1e1523e…` == local, record shredded. Jail `verify`: the 4
+  keys, access JWT expires 2026-11-01T20:00Z (a 10-day lifetime), refresh 196 chars. Nothing restarted — the policy still
+  omits the rail. **Next (seat):** the codex policy block (tier lists derived — `benchmarks.json` needs `codex/<id>`
+  spellings), the launcher cell, the live canary in a window. Open: the second-login revocation watch (jail codex).
+
+## 2026-10-22 ~20:45Z – 2026-10-23 ~00:10Z — codex rail, unattended build: poll → policy block → launcher cell → runtime wrapper
+
+- Operator: "continue building codex rail unattended" (after leg E minted). Four slices, each its own PR, offline-tested
+  (gateway CI green locally each time; no live call, no credential read):
+  1. **#2828 the usage poll** (`codex_usage.py`, GW-CODEX-HEADROOM §Poll, 16 rows + 2 alerts `CodexUsagePollStale`/`Silent`
+     with fixture P1–P4). Reviewer finding, fixed: the counter family rendered at 0 unconditionally → the silent alert
+     would have fired on merge; now `bind_codex_rail` gates the family on a declared rail (+ a row). Specs reviewer
+     on #2826 earlier: a changed ⚖ row needs `Spec changes:` + an intent source — done, merged 20:14Z.
+  2. **the policy block** (clone `homelab-policy`, stacked on #2828, NOT yet opened): `rails.codex` prober-only/last
+     (max_sessions 1, headroom 900/0.95/[300,10080]/poll 60, margin 300 — every value cited), codex joins
+     PRICELESS_RAILS, `CODEX_CANDIDATES=codex/gpt-6-astra` (the account's model_usage) → benchmarks.json rebuilt from
+     the 18:21Z inputs (check: no re-cut; AA 52.7 by tail join), GW-MODEL-RESOLVE/-TIERS/-OAUTH deployed rows moved.
+     Opens once #2828 lands — its merge rolls the pod and LIGHTS the rail (first live poll): wrap in a window.
+  3. **#2830 the launcher cell** (`--harness codex`, CODEX_MODEL env key, `codex/` strip, sub-rail exemptions,
+     `agent-codex --dangerously-bypass-approvals-and-sandbox` recipe cmd) + `gateway/scripts/canary-codex.sh` (one
+     prober ride, structure-only evidence). Path gates green.
+  4. **agent-runtime#179** `agent-codex` renders the provider block from the pulled env (0600, token never in the file,
+     TOML-breaking values refused); 21 seam tests.
+- Jail gotchas: two concurrent `devbox run`s race `.devbox/gen/scripts/.cmd.sh` (fixed in infisical-secret.sh, #2826);
+  a clone's devbox env lacks promtool — run `prometheus-rules-lint` with the main checkout's profile bin on PATH; a
+  python heredoc inside a bash heredoc needs a distinct terminator (an inner `EOF` ended the outer).
+- **Next:** #2828 merge (BEHIND, re-review pending) → open the policy PR inside a declared maintenance window → #179
+  image → canary (`canary-codex.sh`) in the window → evidence to the spike. Open: the second-login revocation watch.
+
+## 2026-10-22 ~21:30Z – ~22:05Z — the codex rail LIT; the first live ride (window seat-1792705075-7945)
+
+- #2828 merged 21:3xZ (image #2831 rolled 21:37Z). Window opened 21:37:55Z (`maint open`, Monitor watch + lease renew
+  every 5 min). **#2832 the policy block merged → the gateway rolled 21:47:42Z with rails.codex: first act
+  `codex usage poll: accepted`** — live headroom 0 % / 0 % (5h resets 22:48Z, 7d 10-29 13:48Z), the seeded token
+  served without a refresh. agent-runtime#179 merged, agent-base `2026.10.22-gd4edaec9b5a8` built, pin #2833 merged.
+- **Canary ride 21:49:44Z** (`canary-codex.sh` from the #2830 clone, HARNESS_IMAGE = the new agent-base): admitted
+  (session 57b32b9d…, prober, codex/gpt-6-astra), env pulled, provider block rendered, `codex exec --json` hit
+  `/openai/v1/responses` → the upstream POST chatgpt.com/backend-api/codex/responses answered **200 with a NON-SSE
+  body in 1.29 s → 502 upstream-content-type**; the client `turn.failed`. Everything up to the vendor's answer works;
+  the gateway logged only "upstream 200" → **#2835**: a bounded redacted capture (content-type, header names, ≤512-byte
+  preview; auth bodies never read) + the spike §The first live ride. Hypothesis: the vendor-header gap (originator,
+  session-id, x-codex-*). Second ride once #2835's image rolls, same window.
+- Findings fixed in #2830: the jail port-forward died during the 254 s image pull → the launcher's EXIT-trap release
+  failed, the session held the rail's ONE slot (hand DELETE'd) → the verb re-opens a dead forward + releases any
+  still-active session of its task. Window: `ControlPlaneNodeMemoryLow` (wk-metal-02) HANDED OFF to the responder
+  (gateway rides wk-04); scrape targets 196→195 = the rolled pod's series expiring. #2830 awaits re-review (stale
+  CHANGES_REQUESTED on an old head).
+- **Second ride 22:26Z** (capture live, #2835 → image #2836): same 502, and the ERROR line SETTLED it — the backend's
+  body IS a Responses SSE stream (`response.created`, gpt-6-astra, in_progress) with NO Content-Type header (chunked,
+  Cloudflare); the strict ctype rule refused a good stream. Vendor-header hypothesis WRONG (six fixed headers suffice).
+  **#2837**: absent content-type → relay (parser guards), present-and-wrong → refuse; fixture = the live shape. Also on
+  the wire (names only): `x-codex-primary/secondary-*` headroom headers (the "upstream headers" source exists),
+  `x-codex-turn-state` on turn 1, `x-codex-safety-buffering-*`. Release worked (hardened verb). Third ride after #2837's image.
+- **THIRD RIDE 22:56Z — THE CANARY COMPLETED** (#2837's image g6cb409d3): admitted, env pulled, provider block rendered,
+  `codex exec --json` ran a real TOOL TURN (`rg -m 1 '^#{1,6} ' README.md` → `# homelab`), answered `homelab`,
+  `turn.completed` usage 21,422 in / 18,176 cached / 47 out; 2 requests on the rail (the tool continuation rode the
+  x-codex-turn-state round trip), outcome CLEAN reported, released. Spike step 4 = DONE: the ChatGPT subscription
+  serves cluster rides through the gateway with no credential in the pod. One metrics finding: both requests
+  recorded `outcome=cancelled status=499` — the native CLI closes the connection right after `response.completed`
+  while the vendor holds it open, so the relay's CancelledError overwrote a terminal outcome it had already seen
+  (usage WAS counted). Fix next: a cancellation after the terminal event stays `completed` (200).
+- **#2840** (a consumer stopping after the terminal event keeps `completed` — the 499 class) opened; window
+  `seat-1792705075-7945` CLOSED 23:03Z with `--force` (said so: the only delta was scrape targets 196→195 = the pod #2831
+  rolled, double-counted in the baseline; the handed-off ControlPlaneNodeMemoryLow had cleared). Box apply loop
+  released. Bookkeeping push after #2840 merges. Rail summary for the next seat: LIT, prober-only, poll every 60 s
+  (0 %/0 % live), every codex ride = `AGENT_GATEWAY_ROLE=prober --harness codex` through `canary-codex.sh` or the
+  launcher; the vendor streams WITHOUT Content-Type; the CLI closes after `response.completed`.
+
+## 2026-10-23 ~06:00Z – ~07:30Z — codex rail after step 4: the headers source (#2842), the revocation watch's first reading, the MCP shape
+
+- Fresh session on the FU-270 open list (role routing, `x-codex-*` headers, codex MCP, the four-boundary capture, the revocation
+  watch). Tree clean, #2840 merged 23:11Z, bookkeeping pushed.
+- **#2842 (PR, armed):** the relayed answer's `x-codex-*` headers → `Headroom.observe(source=upstream)` at the "upstream response
+  received" boundary of every relayed 200 — the pinned CLI's own grammar (codex-rs `rate_limits.rs` @ rust-v0.163.0: float
+  percent, integer minutes + epoch reset, a window present iff its used-percent header is; `x-codex-rate-limit-reached-type`
+  present = limited). Missing window = refused whole; unreadable = quota-invalid; the ride never depends on the read; a refused
+  answer / 429 not read. New declared-gated family `gateway_codex_upstream_headroom_total{outcome}`. 11 spec rows
+  (`test_codex_upstream_headers.py`), schema `headroom.upstream`, the ⚑ gap row now = the jail ingress only. Gateway ci green
+  locally (ruff, 600+ tests, spec gate); docs-graph/follow-ups/py-compile lints green.
+- **Revocation watch, first reading** (from the homelab-codex jail's own `logs_2.sqlite`, status codes + feedback tags only — no
+  token value read): the jail's `auth.json` last refreshed 10-16 12:54Z (access JWT to 10-26 12:54Z, the same 10-day lifetime as
+  the gateway's seed); after the gateway's 10-22 20:00Z login the jail's Codex made 77 `GET …/codex/models` 01:11–01:56Z
+  10-23, all 200, `auth_retry_after_unauthorized=""` throughout, no re-login prompt → a second device login does NOT revoke the
+  first's access token. The 3 `account/rateLimits/read failed` WARNs = the TUI panel, no 401 near them. **Refresh half pending**
+  (the jail has not rotated since 10-16; its token expires 10-26) — written into the spike §The second-login revocation watch.
+- **Codex MCP — shape verified, not built:** rust-v0.163.0 `mcp_types.rs` takes `[mcp_servers.<name>] url = …` (StreamableHttp;
+  optional `bearer_token_env_var`/`http_headers`). Attach = launcher exports `CODEX_MCP_URL` from the stack knob + `agent-codex`
+  appends the block (two repos, ~30 min). Not built: no codex ride carries a recipe today (prober-only cell; MCP attaches on the
+  recipe path), so it waits on the role-routing ruling. oracle-fleet is the one stack declaring `spec.mcp`.
+- **Role routing — the operator's ruling, inputs:** today `prober: [openrouter, opencode, codex]` (last; only `harness: codex`
+  reaches it; `max_sessions 1`; ceiling 0.95 both windows; live headroom 0 %/0 % on 10-22). The spike's "initial eligibility"
+  row = explicit canary cell BEFORE general role routing. Options the seat sees: (a) `reviewer` adds codex beside the claude
+  subscription rail (both subscription, both "the safety net" per the 09-11 tiering ruling — cost per CLEAN ride decides the
+  order, #2764 needs codex rows in benchmarks.json for that); (b) `worker` adds codex LAST as the overflow after the metered
+  rails (free rides on headroom the account otherwise idles); (c) stay prober-only until the four-boundary capture has run. Each
+  needs `harness: codex` on the role's cell (the `harness` field is per role today — a second harness per role = a policy shape
+  change) and the recipe path proven on a codex ride (agent-codex gets the recipe as its prompt; no `--max-turns`-class bound
+  exists on `codex exec` — the pod's `AGENT_MAX_SECONDS` is the only cap). Not decided here.
+- Four-boundary capture: unchanged (plan in the spike; the refusal capture #2835 is piece one; needs a recorder + a declared
+  window) — not started this session.
+
+## 2026-10-23 ~07:30Z – ~09:00Z — the role-routing ruling: subscriptions go to all roles
+
+- **The operator's ruling (07:3xZ):** "subscriptions go to all roles" — mix and re-arrange week by week (one week the reviewer is
+  sonnet, the next codex, or alternating days); a week's subscription may be drained dry on purpose for a special use and the
+  other subscriptions take over automatically; variation — always the same reviewer makes the platform blind to certain classes
+  of problem. Options (a)/(b)/(c) of the 07:30Z entry are superseded: ALL roles, the per-role rail ORDER is the weekly knob.
+  Memory: `subscriptions-to-all-roles`.
+- **#2842 review round:** CHANGES_REQUESTED ×2 (07:31Z: the PR body lacked `Spec changes:` + the `unreadable` parametrization shared
+  the one-window row's case name; 08:35Z: the attachment belt — the reached-type and ceiling cases held 12 > 8). Fixed in the PR:
+  `ids=` per row (the suite's row-table convention), `## Spec changes:` with every ⚖ row's choice vs alternative, the release step
+  muted + per-claim `then_eq` folded into one verdict attachment per block (0152196e, 140d3a28). Lesson: a ⚖ row set needs its
+  `Spec changes:` list at OPEN, and a case = ≤ 8 attachments (arrange muted, one verdict) — the hygiene note escalates on resight.
+- **Built — branch `fix/codex-role-routing` (clone hr-roles, stacked on #2842's head; opens against master after #2842 merges):**
+  the structural wall was `roles.<role>.harness` FILTERING the walk (a claude-harness reviewer could never reach codex); the cut:
+  **the walk's harness follows the rail** — no `harness` in the body = every allowed rail walked in order, the dispatch names the
+  picked rail's harness (`config.DIALECT_HARNESS`: a rail serving the role's harness dialect keeps it; anthropic → claude, codex →
+  codex); explicit `harness` keeps its narrowing; explicit `rail` without a harness takes the rail's; `_for_rail()` replaces the
+  Admission per candidate so `provider_plan` + `_dispatch` + `assemble_env` see the rail's harness. No launcher change (#2830's
+  gateway-sessions block already runs the harness the answer names). Deployed `policy.json`: every role lists anthropic, opencode,
+  codex; openrouter last where listed (prober keeps it first); claude-harness roles anthropic → opencode → codex, opencode-harness
+  roles opencode → codex → anthropic → openrouter; `rails.codex.max_sessions` stays 1. Safe in either deploy order (the old walk
+  never picks the added rails). Six rows GW-SESSIONS-ADMIT §The harness follows the rail (`test_sessions_harness.py`, policy-codex
+  world reshaped to the ruling); the GW-CODEX-OAUTH deployed row re-stated; spike §Role routing — ruled 2026-10-23 (the ruling, the
+  change, what to watch: first non-prober ride on codex = the recipe path's live proof; `codex exec` has no `--max-turns` bound;
+  one codex model in the evidence). Gateway ci green; docs-graph/follow-ups/py-compile green.
+- **Next under FU-270:** codex MCP (now reachable: runtime half `agent-codex` renders `[mcp_servers.stack-mcp]` from `CODEX_MCP_URL`
+  first, then the launcher export — no stack on `/sessions` declares `spec.mcp` today, so no false env-card claim meanwhile); the
+  four-boundary capture (a window); the revocation watch's refresh half ~10-26.
+- **~08:50Z–09:10Z:** #2842 MERGED 08:51Z (third round clean). Opened **#2845** (role routing, rebased onto master — a first
+  push carried #2842's pre-squash commits because the clone lacked its last hygiene commit; `rebase --onto origin/master
+  0152196e` + force-with-lease fixed the PR to its one commit), **agent-runtime#180** (agent-codex appends `[mcp_servers.stack-mcp]
+  url` from `CODEX_MCP_URL`, 3 tests), **#2844** (launcher codex arm prefixes the @sh-quoted `CODEX_MCP_URL=`; replay row
+  `harness-run-cmd-codex-mcp`; README index regenerated — the first push went out with the replay suite's exit masked by a
+  `| tail` (the card's own warning), caught on the re-run, fixed in the PR). Stale watcher gotcha: a `while pgrep -f
+  'pr-wait.sh N'` loop matches ITSELF (the zsh wrapper carries the pattern) and never exits — pr-wait EXITS on CHANGES_REQUESTED
+  (rc 2); re-run it per round, never wrap it in a pgrep loop.
+- **~09:10Z–09:25Z — the four-boundary capture (operator: "do it"):** #2845 MERGED ~09:15Z; agent-base pin #2846 opened by
+  the image build (armed from here). Built **#2848** GW-CODEX-CAPTURE: `capture.py` (Capture/Recorder/Splitter — scope by task
+  prefix, structural sanitization: allowlisted header values, strings → lengths, vocabulary keys kept, `*_id` → aliases equal
+  across boundaries, byte bound + `truncated` marker), store table `captures` (7-day purge at start), the tee in `_stream`
+  (yield before split), `GET /sessions/{id}/capture` under the lookup rule, env `CODEX_CAPTURE_TASK_PREFIX=capture-codex-`,
+  `canary-codex.sh --capture` (task prefix + bundle pull into `~/.claude/codex-capture/`, summary only printed), 10 rows, the
+  spike §The scoped observer. Gotchas: a new `rule("GW-…")` needs its `## GW-…` heading in specs FIRST (conftest fails loudly);
+  the policy-codex world's control plane OBSERVES, so a "refused by the lookup rule" row cannot be proven there — the row
+  compares the capture's answer with `GET /sessions/{id}`'s instead. Not built: the native-client baseline forwarder.
+- **~09:25Z–10:05Z:** #2848 review rounds: code review (two blocking: gateway-side refusals left no record; concurrent requests
+  of one session overwrote rows) → `forward()` wraps `_forward()` and persists a `client-response` for any typed JSON answer,
+  seq allocated at persist under a lock with plain INSERT, per-record `request` ordinal, sticky truncation, bounded maps, 2 rows;
+  specs review (R2 the ⚖ refusal row missing from `Spec changes:`, R4 record fields the rows name undeclared in the schema) →
+  schema declares every field, prose ⚖ on the poll sentence, hygiene (outcome in the then, lookup row muted). One CI red = the
+  runner's uv cache lock I/O error (`/uv-cache/sdists-v9/.../.lock: Input/output error`) — `gh run rerun --failed`, green.
+  #2846 MERGED 09:35Z, #2844 MERGED, **#2848 MERGED 10:01Z** (merge 15c9a49a). Waiting on the deploy (tag `…-g15c9a49a3958` +
+  `CODEX_CAPTURE_TASK_PREFIX` in the pod env) before the window + the capture ride.
+- **10:05Z–10:35Z — the capture ride (operator: "do it"):** #2848's image `2026.10.23-g15c9a49a3958` rolled 10:05:48Z, the pod logged
+  `codex capture: ON for tasks 'capture-codex-'*`. `devbox run maint -- open` (window seat-1792750015-3165, baseline targets 196) +
+  a Monitor alert watch; `devbox run -- bash gateway/scripts/canary-codex.sh --capture --prompt "<rg heading, then wc -l>"` (the
+  verb needs devbox: bare `kubectl` is not on PATH — first run died on the port-forward). Ride: session ca646f1be25b40a69fb59079957fc0a7,
+  pod agent-homelab-100750 (nx-01), **2 requests completed** (78 + 14 events, 103 + 86 KB, first byte 1446 / 852 ms), outcome clean,
+  bundle 100 records complete (50 + 36 KB), tokens 1595+1779 in / 9088×2 cached / 83+9 out; the CLI ran `rg` then `wc -l` and
+  answered "homelab 220". Findings → spike §The capture ride + GW-RAIL-CODEX §Live grammar (#2850, 3 rows + fixture): the CLI's own
+  request headers (originator, session-id, thread-id, x-client-request-id, x-codex-beta-features, x-codex-turn-metadata,
+  x-codex-window-id, x-openai-internal-codex-responses-lite) all dropped by the gateway, backend 200 regardless; tools ride INSIDE
+  `input` as `additional_tools` (lite protocol), `custom_tool_call`/`_output` on the continuation, whole history resent; no
+  Content-Type again; `x-codex-turn-state` issued on the first answer only; a vendor `response.metadata` event + `usage.attribution`
+  extension, both passed through unread; usage reproduced offline from the type sequence. **Alert:** `AgentWorkerEgressDropped` 10:12:47Z
+  — ~17 SYNs ride-pod → chatgpt.com/ab.chatgpt.com POLICY_DENIED while the CLI ran (direct backend calls beside the provider: models /
+  rate limits / telemetry — unknown), ride unaffected → a ⚑ gap row (the baseline forwarder is the instrument); left to the responder.
+  **Window check:** targets 196→195 with nothing down = the 10:05 rollout's old pod still in the set at the baseline read; closed
+  `--force`, said so. Monitor stopped. Not exercised live: cancellation, failed/incomplete terminals, 429, refresh mid-ride, a 2nd turn.
+
+## 2026-10-23 16:08Z onward — Codex configuration-first opt-outs, platform implementation (FU-270)
+
+- Operator: write the spec, queue the platform implementation, then review. Filed and queued
+  [agent-runtime#181](https://github.com/teststuffstash/agent-runtime/issues/181): six explicit
+  gateway-worker opt-outs (updates, analytics, feedback, plugins, apps, API-key model discovery),
+  child-visible TOML regression rows, preserved provider/MCP/credential/exit contracts, runtime
+  documentation, no egress change. Spec is in the issue; worker publishes its durable doc.
+  Current runtime lock = Codex 0.162.1; source confirms the active flags, removed remote_models,
+  metrics/analytics destinations and gated plugin-sync fallback. Destination matches are candidate
+  attribution only; the capture's denied SYNs do not reveal HTTP paths.
+- Seat baseline in isolated /tmp/codex-config-review: devbox run ci, 500 passed. Footprint classifier:
+  machine-merge. No parallel issue matched the topic; this extends FU-270.
+- Manual normal coordinator invocation coordinate-platform-p2xnr, after dry-run, in maintenance
+  window seat-1792771898-2743. Event-driven scan already held the mutex; manual scan waited.
+  Closed normally at ~16:15Z: 195 scrape targets, 13 nodes/Cilium API backends, 1 pre-existing
+  hard-failed pod, no new firing alerts or stranded CI; background watch stopped.
+- First worker attempts never reached the recipe: OpenCode mimo-v2.6-flash and glm-5.3-flash
+  auto-rejected external_directory (/tmp/*) for /tmp/fix-recipe.yaml; claude-haiku-5-5 on that
+  path rejected the protocol. No commits. Posted evidence on #181 and directed the next dispatch
+  to an existing alternate harness, leaving the issue scope unchanged. Coordinator switched to
+  --harness claude at 16:19Z; replacement pod pulled the gateway Anthropic env. This is a live
+  recipe-path finding under FU-270, not evidence against the Codex opt-out implementation.
+
+## 2026-10-23 — seat: the GW-REDACT walkthrough → the join ratchet, process v0.6.x, #2860 (oracle handoff 20261020-2107)
+
+- Walked one rule (GW-REDACT, row "a session token in a message") end to end: requirement text,
+  table, the Allure record behind the row. Findings: every header column unthreaded (`the formatter is
+  given` vs argname `line`), `contains` asserting equality, three cells diverging from test values,
+  prose narrating its tests, one labelled case keying no row, the test helper's spec link pointing at
+  the rendered evidence page. Why the reviewer missed it: never read the rule (#2606 pre-dates the App,
+  #2623 pre-dates the tests-path trigger, #2672 reviewed PULL only) and no v0.5.2 code fires on any of it
+  (CELL_MISMATCH needs a same-named parameter).
+- Operator split: seat-authored mechanics vs a new ruleset for worker + reviewer; "the requirement must
+  not describe its tests — the tests describe themselves" (rule 11).
+- Shipped: #2856 (spec_gate §5 join ratchet, four counts/rule against a committed baseline; conftest
+  rule_pages skips specs/evidence; pytest id escaping off; fix.yaml worker pointer) — CI found my
+  order-dependence (random Allure UUIDs picked the record), fixed by merging every record of a case.
+  allure-behavior-snippets v0.6.0 (#32: rule 11, header == parameter list, column naming, lint items
+  6–7, rows checks 8–9, ROW_UNKEYED/HEADER_UNTHREADED in the digest) + v0.6.1 (#33: the `||` divider
+  cell is not a column). #2857 pins v0.6.1 on both consumers — the code reviewer caught the unbumped
+  SNIPPETS_SHA256 (would have silenced the specs reviewer on every PR); hashed the wheel myself.
+- Queued #2860 (agent/queued, md): GW-REDACT to v0.6.1 — acceptance = its ratchet line at 0/0/0/0,
+  no test words in prose, header == argnames, every case keyed; the formatter rows' fate is the worker's
+  ⚖. The loop's PR + the reviewer's rounds are the test of the wording; re-pin from what they do.
+- No Allure report exists for the gateway today (operator asked): the report leg + joined render
+  (handoff §4.2) dispatched to a background subagent as a seat PR; the mint gate held an FU for it
+  (decided + bounded = do it). Handoff items 4–5 (∅ ratchet, parametrize-from-spec — snippets-shaped,
+  ⚖ tool flag vs repo gate) → specs-reviewer.md open question in that PR. Handoff closed to done/.
+- **Loop closed the cycle (18:00–18:43Z).** #2860's Go-rail rides struck 3× on the recipe path (the
+  FU-270 finding above — external_directory /tmp auto-reject, haiku-on-Go protocol); the claude-harness
+  ride then shipped **#2862** (3 commits), both reviewers APPROVED under process 0.6.1, GW-REDACT's
+  ratchet line 0/0/0/0. Shape produced: 5 real-path rows, header `path | log_line | never_logged` ==
+  argnames, ids verbatim, `…` legend; the 8 formatter rows + the %-arg case ruled ⚖ OUT of the evidence
+  (unlabelled chassis guards). **#2861** (subagent-built): Allure single-file report live at
+  gateway-specs…/report/index.html, the joined render on every rule page (322 row links on
+  sessions.html); its ci.yaml hunk (SITE_PREFIX) pushed direct as 2662b784 (pin-only-lint refuses
+  workflow edits in the PR lane). Iteration findings for the operator: (a) the prose still introduces
+  its rows ("The rows below observe…") — rule 11 passes it; (b) `log_line` fronts a substring check
+  under an equality-shaped name — R9 passed it; (c) the six credential kinds the prose claims now have
+  NO system-level row (the reviewer's "prose claim without a row" is advisory) — the fork to rule on.
+- **Operator rulings on the first v0.6 output (19:10–20:00Z).** (1) Page cut = OPTION B: one page per
+  resource, each requirement names the operation that drives it (Swagger UI's tag=resource shape; option
+  A = page per path+method rejected — few consumers, operator controls them). (2) No OpenAPI yaml now:
+  complementary not duplicating (consumers vs developers), but worth it only when free/generated from the
+  sibling schema. (3) Prose rules start SOFT: "prose claims without a row" = a visible MARK
+  (`unverified — expected to …` / rule 10 flags), "facts in prose have rows" is the end state, never a
+  gate — my proposed blocking check reversed. → allure-behavior-snippets **v0.6.2** (#34: rule 11 mark
+  clause + "prose does not introduce its rows"; lint item 7 withdrawn; rows check 8 → ADVISORY; inverse
+  column-naming case), pinned by **#2865** (version + wheel sha together). Queued **#2867** (GW-REDACT:
+  each named credential kind has a row or the mark; worker's ⚖ prove-vs-mark, worlds named) and **#2868**
+  (sessions.md `operation` column + verb in each rule's first sentence; ADMIT sub-section split NOT in
+  scope). Both touch sessions.md in different regions — watch for a BEHIND/conflict round.
+- Rail of #2862's successful ride: anthropic subscription, harness claude, claude/haiku — after 3 Go-rail
+  strikes (mimo, glm, haiku-on-Go); mimo heads the Go lists because the snapshot prices it cheapest per
+  clean ride (promise prices, 1 judged ride) — today's strike is not in that snapshot yet.
+
+## 2026-10-24 — read of the v0.6.2 soft-wording test (#2871, #2872)
+
+- **Both landed 2026-10-23.** #2871 (#2868, operation column + verb per rule + capture interface row;
+  merged 20:42Z) and #2872 (#2867, GW-REDACT marks; merged 21:35Z after one `merge-conflict` arbitrate
+  round — #2871 rewrote the same GW-REDACT opening paragraph; the regions overlapped after all, the
+  arbiter kept both sides). Round 1 on both issues struck on the Go rail (haiku-on-Go, upstream 400);
+  the rides that shipped ran claude/haiku on the subscription.
+- **Soft wording held.** Worker on #2867 proved 4 kinds by existing rows and MARKED 3 in place
+  (`sk-or-v1-…`, the Go key value, "ref/model id logged verbatim") — no fake worlds, no blocking ask from
+  either reviewer; specs reviewer accounted per kind against rule 11. Baseline byte-identical on both.
+- **Issue-authoring miss (mine):** #2867 asserted the openrouter `upstream-401` world echoes an
+  `sk-or-v1-…` string; it echoes `sk-ant-oat-LEAK` (`gateway/tests/conftest.py:503`, verified). The
+  worker caught it and declined the fake-world fix. The Go-key row (drive the catalog refresh from
+  `test_redact.py`) stays as the in-place mark — the mark is the record, no FU (FU-270 stint).
+- Specs reviewer hygiene notes on #2872: 3× H-THREAD_BROKEN (path / log_line_contains cells not named
+  in the steps) — advisory, the next GW-REDACT touch picks them up.

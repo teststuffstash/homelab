@@ -33,16 +33,16 @@
 | dialect is the three paths | requests_total | dialect | anthropic, openai, responses |
 | status is a numeric HTTP status | requests_total | status | ^[1-5][0-9][0-9]$ |
 | class is one of the four usage classes | tokens_total | class | in, cache_read, cache_write, out |
-| window is 5h or 7d | subscription_utilization | window | 5h, 7d |
+| window is 5h or 7d | subscription_utilization | window | 5h, 7d, other |
 | outcome is the verdict class | credential_resolve_total | outcome | resolved, definitive, transient |
-| route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release, outcome |
+| route is the control-plane route | control_plane_unauthenticated_total | route | admit, lookup, release, outcome, list |
 | reason is why no caller identity was read | control_plane_unauthenticated_total | reason | absent, invalid, review-transient |
 | class is a strike class, source the writer | strikes_total | class / source | the strike classes / outcome, gateway |
 | reason is why a 2xx body stopped before its end | requests_incomplete_total | reason | no-terminal, timeout, transport-error, client-closed |
 | no task label, ever | any | — | no label named task, session, id, model, token; no task key / session id / token / model string in the text |
 | source is the catalog source | go_catalog_refresh_total | source | config, docs |
 | the catalog outcome is the refresh outcome | go_catalog_refresh_total | outcome | ok, fetch-failed, parse-failed, implausible |
-| every family is declared with HELP and TYPE | — | — | 21 families |
+| every family is declared with HELP and TYPE | — | — | 23 families |
 
 The provider families (GW-RAIL-OPENROUTER; world policy-default · openrouter-endpoints — the snapshot of
 deepseek/deepseek-v4.1-flash, the openrouter heavy tier):
@@ -58,6 +58,7 @@ deepseek/deepseek-v4.1-flash, the openrouter heavy tier):
 |---|---||---|---|
 | model is a policy openrouter id | provider_requests_total, provider_failovers_total || model | the openrouter rail's policy models (wire ids); else other |
 | provider is a snapshot slug or unattributed | provider_requests_total (from, to on provider_failovers_total) || provider | the endpoint snapshot's tag-base slugs, unattributed; else other |
+| reason is why the rail choice fell | rail_choice_total || reason | price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint (model = a policy openrouter id, rail = the rail enum) |
 """
 
 from __future__ import annotations
@@ -82,6 +83,7 @@ FAMILIES = (
     "gateway_credential_probes_total", "gateway_sessions_reaped_total",
     "gateway_go_catalog_age_seconds", "gateway_go_catalog_models", "gateway_go_catalog_refresh_total",
     "gateway_go_catalog_last_outcome", "gateway_go_catalog_policy_models_missing",
+    "gateway_rail_choice_total", "gateway_tier_evidence_age_seconds",
 )
 
 
@@ -404,9 +406,9 @@ LABEL_ROWS = [
     ("dialect is the three paths", "gateway_requests_total", "dialect", {"anthropic", "openai", "responses"}),
     ("status is a numeric HTTP status", "gateway_requests_total", "status", None),
     ("class is one of the four usage classes", "gateway_tokens_total", "class", {"in", "cache_read", "cache_write", "out"}),
-    ("window is 5h or 7d", "gateway_subscription_utilization", "window", {"5h", "7d"}),
+    ("window is 5h or 7d", "gateway_subscription_utilization", "window", {"5h", "7d", "other"}),
     ("outcome is the verdict class", "gateway_credential_resolve_total", "outcome", {"resolved", "definitive", "transient"}),
-    ("route is the control-plane route", "gateway_control_plane_unauthenticated_total", "route", {"admit", "lookup", "release", "outcome"}),
+    ("route is the control-plane route", "gateway_control_plane_unauthenticated_total", "route", {"admit", "lookup", "release", "outcome", "list"}),
     ("reason is why no caller identity was read", "gateway_control_plane_unauthenticated_total", "reason", {"absent", "invalid", "review-transient"}),
     ("class is a strike class, source the writer", "gateway_strikes_total", "class", {k for k, v in OUTCOME_CLASSES.items() if v}),
     ("reason is why a 2xx body stopped before its end", "gateway_requests_incomplete_total", "reason",
@@ -533,7 +535,28 @@ async def test_canary_outcome_labels(gw):
     then_eq("gateway_canary_rides_total{outcome} · gateway_canary_admissions_total{outcome}",
             (sorted({labels["outcome"] for fam, labels in rows if fam == "gateway_canary_rides_total"}),
              sorted({labels["outcome"] for fam, labels in rows if fam == "gateway_canary_admissions_total"})),
-            (["eligible", "excluded"], ["budget", "dispatch", "not-due", "not-in-catalog"]))
+            (["eligible", "excluded", "no-verdict"], ["budget", "dispatch", "not-due", "not-in-catalog"]))
+
+
+async def test_rail_choice_labels(gw, app, store, upstreams, policy):
+    """row: reason is why the rail choice fell"""
+    world(note="policy-default · openrouter-endpoints + the Go catalog: a worker at tier light names a twin on both rails")
+    await _provider_world(app, store, upstreams)
+    with given("one admission with a twin (worker, harness opencode, tier light: Go's promise price vs deepinfra's)"):
+        doc = await open_session(gw, role="worker", harness="opencode", tier="light")
+        attach_json("the answer's rail_choice", doc["rail_choice"])
+    with when("GET /metrics: every gateway_rail_choice_total series"):
+        rows = [(fam, labels) for fam, labels in await _series(gw) if fam == "gateway_rail_choice_total"]
+        attach_json("series", [labels for _, labels in rows])
+    or_ids = {m for lst in policy.rails["openrouter"].models.values() for m in lst}
+    with then("one series; its model a policy openrouter id, its rail the chosen rail, its reason in the enum",
+              series={"expected": {"model": "a policy openrouter id", "rail": doc["rail"], "reason": "one of price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint"},
+                      "actual": [labels for _, labels in rows]}):
+        assert len(rows) == 1, rows
+        labels = rows[0][1]
+        assert labels["model"] in or_ids and labels["rail"] == doc["rail"]
+        assert labels["reason"] in {"price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint"}
+        assert sorted(labels) == ["model", "rail", "reason"]
 
 
 UNPINNED_ROWS = [

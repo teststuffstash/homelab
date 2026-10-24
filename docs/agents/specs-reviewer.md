@@ -80,9 +80,12 @@ its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar
 `allure-behavior-snippets` wheel (`SNIPPETS_VERSION`, verified against `SNIPPETS_SHA256`, extracted
 and run with the image's stdlib `python3`); the round context the pack cannot fetch itself (PR body,
 `issue-intent.md` = each closing issue's `## Acceptance` section, `prior-review.md` = the newest own
-LLM review in any state, since a push dismisses it); the head's `ci` run artifact
-`gateway-evidence` (raw Allure results) and the base branch's newest artifact as baseline (its
-`evidence.json` + commit). `evidence-pack` turns these into the model's inputs dir: touched rules,
+LLM review in any state, since a push dismisses it); the head's evidence pack (raw Allure results
++ `evidence.json` + `digest.md`) and the newest first-parent base commit's pack as baseline (its
+`evidence.json` + commit) — both read anonymously from the `gateway-specs` bucket's web endpoint,
+`evidence/<pr-N|base>/<sha>.tar.gz`, written by ci (`gateway/scripts/evidence-publish.sh`; until
+2026-10-21 a `gateway-evidence` Actions artifact, which held ~2.1 GB of the org's 2 GB included
+storage — that artifact stays the read fallback until the old runs expire). `evidence-pack` turns these into the model's inputs dir: touched rules,
 their sections + the spec diff, the specs tree, `digest.md` (`Stamp:` / `Baseline:` + mechanical
 findings), per-rule tables, `evidence/<RULE>.json`, attachments, and `process/` (RULES, CONVENTIONS,
 briefs). A failed clone, wheel or pack is no review (fail CLOSED); ABSENT evidence is not a refusal:
@@ -254,8 +257,8 @@ and marks each of its findings `resolved` / `still open` before reading new beha
   mappings, so dispatch becomes "touches a rule", not "touches a specs path");
 - each touched rule's section + the spec diff, with the unchanged neighbouring specs as reference;
 - the closing issue's acceptance text (fetched, not just referenced);
-- `evidence.json` + `digest.md` + the raw Allure results and attachments, from a CI run artifact
-  the tick downloads into its read-only inputs dir (the model has no fetch);
+- `evidence.json` + `digest.md` + the raw Allure results and attachments, from the pack CI
+  publishes to the `gateway-specs` bucket, which the tick downloads into its read-only inputs dir (the model has no fetch);
 - the baseline: master's evidence, naming its commit and run scope, so a test that was not run is
   not read as a vanished proof;
 - the previous review.
@@ -269,10 +272,11 @@ report to record that digest (open question 2).
 2. The homelab launcher inputs that need no Allure (issue acceptance text, previous review,
    baseline, finding contract with round tracking) — DONE 2026-10-16 (#2622).
 3. Snippets v0.5 carries the briefs, conventions, `touched-rules` and the pack builder — DONE
-   (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join). oracle-fleet keeps its own process and v0.4.2
+   (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join; v0.6.1 (2026-10-23, the GW-REDACT walkthrough) adds rule 11 — the requirement describes the system, never its tests — the header-is-the-parameter-list convention, rows-brief checks 8–9 and the `ROW_UNKEYED` / `HEADER_UNTHREADED` digest codes; homelab's `spec_gate.py` ratchets the same four join counts; v0.6.2 (operator ruling on #2862, the first v0.6 rewrite): prose rules start SOFT — rule 11's unproven facts are MARKED in place, not gated; rows-brief check 8 advisory, lint item 7 withdrawn). oracle-fleet keeps its own process and v0.4.2
    until the gateway has proven this one (operator, 2026-10-16).
 4. Gateway tests on Allure, the raw results uploaded as the `gateway-evidence` CI artifact — DONE
-   2026-10-16 (#2623; ci.yaml c63dbe1).
+   2026-10-16 (#2623; ci.yaml c63dbe1); moved to the `gateway-specs` bucket 2026-10-21
+   (`gateway/scripts/evidence-publish.sh` — Actions storage quota).
 5. The evidence pass live — LIVE 2026-10-16 (#2624; first pass #2628: 3 rules, 9 turns, 34 s). Next:
    measure tokens, worker rounds, invalid findings and coordinator interventions per completed PR.
 
@@ -300,3 +304,15 @@ decision; adopting the briefs does not remove it.
 4. **Reach.** Oracle-fleet keeps its rule-1 codeowner gate; replacing it is per island, operator's
    call: install the App there, add the repo to the `specs-reviewer-git` chain's `repositories` + `SPECS_REVIEW_REPOS`,
    set `required_approvals = 2` in `tofu/github`.
+5. **The half-join guard and parametrize-from-spec — tool flag or repo gate?** The oracle handoff
+   (`.handoff/oracle/done/20261020-2107-specs-ruleset-and-golden-example-for-the-specs-reviewer.md`
+   §4 items 4–5, 2026-10-20) names the hazard the joined render carries: a rule joins as soon as ONE
+   description cell keys a case and every other row paints `∅ unproven` — rows that mostly do have
+   tests under ids that differ from the cell — and nothing gates it. Two snippets-shaped remedies,
+   both undecided (⚖): a ratchet on `∅` rows inside a joined table (per rule, baseline = today's
+   count, never up; `allure-evidence` already computes `stats["unproven"]`), and a
+   parametrize-from-spec helper that reads the GFM table under a rule heading into `pytest.param`s
+   (ids = description cells, argnames = header) so the rows live once, in the .md. Whether each is a
+   tool flag both repos get from the pin (`gateway/specs/README.md` §Rules) or a repo gate beside
+   `spec_gate.py`'s join ratchet is the open fork; homelab#2860 (GW-REDACT rewritten to v0.6.1) is the
+   rule where they would first apply. File them in the snippets repo when the pin moves.

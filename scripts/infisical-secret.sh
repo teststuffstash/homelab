@@ -31,7 +31,13 @@ PROJECT_ID="$(devbox run --quiet -- kubectl "${KC[@]}" -n infisical exec "$PGPOD
   psql -U postgres -d infisical -tAc "select id from projects where slug='homelab';" | tr -d '[:space:]')"
 [ -n "$PROJECT_ID" ] || { echo "homelab project not found" >&2; exit 1; }
 
-devbox run --quiet -- kubectl "${KC[@]}" -n infisical port-forward "$SVC" "$PORT:8080" >/tmp/inf-secret-pf.log 2>&1 &
+# The port-forward and the readiness loop call the RESOLVED binaries, not `devbox run`: two devbox
+# runs at once (a backgrounded one + the loop) race on `.devbox/gen/scripts/.cmd.sh` and one of them
+# gets `eval: kubectl: not found` (exit 127) — the port-forward died that way on the host, 2026-10-22.
+KUBECTL="$(devbox run --quiet -- sh -c 'command -v kubectl')"
+CURL="$(devbox run --quiet -- sh -c 'command -v curl')"
+[ -x "$KUBECTL" ] && [ -x "$CURL" ] || { echo "infisical-secret: could not resolve kubectl/curl from the devbox env" >&2; exit 1; }
+"$KUBECTL" "${KC[@]}" -n infisical port-forward "$SVC" "$PORT:8080" >/tmp/inf-secret-pf.log 2>&1 &
 PF=$!; trap 'kill $PF 2>/dev/null || true' EXIT
 # BOUNDED wait + liveness check (2026-08-09): the old bare `until curl` spun FOREVER when the
 # Infisical pod restarted mid-store and took the port-forward with it — the token store hung for
@@ -39,7 +45,7 @@ PF=$!; trap 'kill $PF 2>/dev/null || true' EXIT
 # abort". A wait that cannot fail defeats the caller's degrade path. 30s covers every healthy
 # bring-up; a dead forward or a dead pod now exits loudly with the forward's own log.
 tries=0
-until devbox run --quiet -- curl -sf "http://127.0.0.1:$PORT/api/status" >/dev/null 2>&1; do
+until "$CURL" -sf "http://127.0.0.1:$PORT/api/status" >/dev/null 2>&1; do
   kill -0 "$PF" 2>/dev/null || { echo "infisical-secret: port-forward DIED — $(tail -2 /tmp/inf-secret-pf.log 2>/dev/null | tr '\n' ' ')" >&2; exit 1; }
   tries=$((tries+1))
   [ "$tries" -ge 30 ] && { echo "infisical-secret: Infisical not reachable through the port-forward after 30s — see /tmp/inf-secret-pf.log" >&2; exit 1; }

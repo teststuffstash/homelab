@@ -90,7 +90,7 @@ spec:
             triage: dig
           annotations:
             summary: 'The latest refresh of the gateway''s Go catalog ({{ $labels.source }}) ended {{ $labels.outcome }} — its last good snapshot is in use'
-            description: 'parse-failed = the answer did not match the shape gateway/src/agent_gateway/catalog.py parses (parse_config / parse_docs); implausible = it carried fewer than half the last good snapshot''s models. Either the vendor source or the parser may be what changed. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep "catalog: {{ $labels.source }}" names the line or count it stopped on; compare it with the vendor source (config: GET https://opencode.ai/console/api/v2/config; docs: anomalyco/opencode services/www/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart); GoCatalogStale follows at 24 h.'
+            description: 'parse-failed = the answer did not match the shape gateway/src/agent_gateway/catalog.py parses (parse_catalog / parse_config / parse_docs — the log line names the READ: the config source is models.dev''s api.json overlaid by the console''s config); implausible = it carried fewer than half the last good snapshot''s models. Either the vendor source or the parser may be what changed. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep "catalog: {{ $labels.source }}" names the line or count it stopped on; compare it with the vendor source (config: https://models.dev/api.json `opencode-go`, then GET https://opencode.ai/console/api/v2/config — the workspace overrides; docs: anomalyco/opencode services/www/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart); GoCatalogStale follows at 24 h.'
         - alert: GoCatalogPolicyModelMissing
           expr: |
             max by (source) (gateway_go_catalog_policy_models_missing{job="agent-gateway"}) > 0
@@ -100,7 +100,7 @@ spec:
             triage: now
           annotations:
             summary: '{{ $value }} Go model(s) in the gateway policy are not covered by its Go catalog''s {{ $labels.source }} snapshot'
-            description: 'config = a policy Go model is not listed in the console catalog snapshot; docs = it has no monthly-limit row under rails.opencode.plan in the Go page snapshot. Which ids: GET /catalog/opencode on the gateway, policy_models, or kubectl -n agent-egress logs deploy/agent-gateway | grep "policy model(s) not covered". Check the vendor source before acting: a model the vendor no longer lists needs a policy change (argocd/resources/agent-gateway/policy.json rails.opencode.models, by PR); a page or parser change also shows as GoCatalogParseFailed or as a drop in gateway_go_catalog_models.'
+            description: 'config = a policy Go model is not listed in the Go catalog snapshot (models.dev''s opencode-go rows under the console''s overrides); docs = it has no monthly-limit row under rails.opencode.plan in the Go page snapshot. Which ids: GET /catalog/opencode on the gateway, policy_models, or kubectl -n agent-egress logs deploy/agent-gateway | grep "policy model(s) not covered". Check the vendor source before acting: a model the vendor no longer lists needs a policy change (argocd/resources/agent-gateway/policy.json rails.opencode.models, by PR); a page or parser change also shows as GoCatalogParseFailed or as a drop in gateway_go_catalog_models.'
     # ── The OpenRouter catalog leg (GW-CATALOG-OR, gateway/specs/endpoints/catalog.md) ────────────
     # The gateway reads the openrouter rail's registry on a 6 h schedule (the weekly ranking ∩ the
     # AA-benched set over the MCP, then each candidate's endpoints) and keeps the last good snapshot
@@ -114,6 +114,28 @@ spec:
     #   GatewayCanaryBudgetExhausted  — the canary cap (per refresh or per day) is spent while
     #                                   candidate cells wait: entrants stay out of the order until
     #                                   the budget rolls — raise the knob or wait, never a code change.
+    # ── The tier evidence (GW-MODEL-TIERS, gateway/specs/endpoints/catalog.md) ─────────────────────
+    # The deployed tier lists and the admission's rail choice are priced from the committed
+    # benchmarks.json (mounted beside the policy); a comparison on a month-old price is a wrong
+    # answer with a confident face (#2718 item 3: the 10-18 snapshot read $0.144/M against a live
+    # $0.080/M a day later). Behaviour fixture: tier-evidence.promtool-{rules,test} beside this file.
+    #   TierEvidenceStale — the mounted snapshot's snapshot_at is older than 7 d (the AA pull behind
+    #                       it is weekly), or no snapshot is mounted at all: re-cut it
+    #                       (gateway/scripts/benchmarks-snapshot.sh → apply → PR).
+    - name: agent-gateway-tier-evidence
+      rules:
+        - alert: TierEvidenceStale
+          expr: |
+            (max(gateway_tier_evidence_age_seconds{job="agent-gateway"}) > 604800)
+            or
+            (absent(gateway_tier_evidence_age_seconds{job="agent-gateway"}) and on() (max(gateway_sessions_active{job="agent-gateway"}) >= 0))
+          for: 1h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'The gateway''s tier evidence (benchmarks.json) is older than 7 days, or none is mounted'
+            description: 'gateway_tier_evidence_age_seconds is past 7 d ({{ $value }}), or absent while the gateway serves: the deployed tier lists and the rail choice compare on stale prices. Re-cut it: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply, commit benchmarks.json + policy.json by PR (an undecided tier keeps its deployed list — check names it). Absent = argocd/resources/agent-gateway/kustomization.yaml no longer ships benchmarks.json in the policy ConfigMap, or GATEWAY_BENCHMARKS points elsewhere. The contract is gateway/specs/endpoints/catalog.md#gw-model-tiers.'
     - name: agent-gateway-openrouter-catalog
       rules:
         - alert: OpenRouterCatalogStale
@@ -148,3 +170,41 @@ spec:
           annotations:
             summary: 'The gateway''s canary budget is spent while candidate OpenRouter cells wait'
             description: 'gateway_canary_budget_exhausted is 1: the per-refresh cap (rails.openrouter.canary.max_per_refresh) or the day''s metered spend (canary.usd_per_day) is reached and candidate cells stay out of selection until it rolls (the next catalog refresh, or the trailing day). GET /catalog/openrouter on the gateway shows canary.admitted_this_refresh, canary.spend_usd_1d and the candidate cells. Nothing is tried over budget by design (operator 2026-10-19); a higher cap is a policy edit (argocd/resources/agent-gateway/policy.json, by PR), never a code change.'
+    # ── The codex rail's usage poll (GW-CODEX-HEADROOM §Poll, gateway/specs/endpoints/openai-responses.md) ──
+    # The gateway admits the codex rail on ITS OWN account observation: every poll_interval_s it polls
+    # the account usage endpoint and the headroom keeps the last ACCEPTED report; past max_age_s the
+    # rail defers `quota-stale`, and a declared rail with no poll at all sits on `quota-unknown`
+    # forever. gateway_codex_usage_poll_total{outcome} counts every poll (every outcome renders from
+    # 0 once the rail is declared; the family is ABSENT while the policy omits the rail — metrics.py
+    # bind_codex_rail, the §Poll row "an undeclared rail renders no poll family" — so neither alert
+    # can fire on an undeclared rail; fixture P4). Behaviour fixture: codex-headroom.promtool-{rules,test}.
+    #   CodexUsagePollStale  — polls run but none was accepted for 15 m (401s, a changed payload,
+    #                          windows off the profile, a store failure…): the rail is deferring.
+    #   CodexUsagePollSilent — the rail is declared but no poll ran for 15 m: the poll is dark
+    #                          (CODEX_USAGE_URL unset, no credential backend) or the schedule died.
+    - name: agent-gateway-codex-headroom
+      rules:
+        - alert: CodexUsagePollStale
+          expr: |
+            (sum(increase(gateway_codex_usage_poll_total{job="agent-gateway",outcome="accepted"}[15m])) == 0)
+            and
+            (sum(increase(gateway_codex_usage_poll_total{job="agent-gateway"}[15m])) > 0)
+          for: 5m
+          labels:
+            severity: warning
+            triage: now
+            rail: codex
+          annotations:
+            summary: 'The gateway''s codex usage poll has accepted nothing for 15 m — the codex rail is deferring (quota-stale)'
+            description: 'gateway_codex_usage_poll_total counts polls but none ended accepted in 15 m, so the headroom report is past rails.codex.headroom.max_age_s and admission answers quota-stale. Check: (1) sum by (outcome) (increase(gateway_codex_usage_poll_total[15m])) names the outcome — upstream-auth = the usage endpoint rejects the credential (not by itself a revocation: see the request log), quota-invalid = the payload no longer matches the profile the poll translates (gateway/src/agent_gateway/codex_usage.py; the shape is docs/spikes/codex-subscription-rail.md §Live usage payload shape), credential-* = the lifecycle (GW-CODEX-OAUTH; credential-recovery-required needs a re-seed: devbox run codex-seed); (2) kubectl -n agent-egress logs deploy/agent-gateway | grep "codex usage poll". Clears on the next accepted poll.'
+        - alert: CodexUsagePollSilent
+          expr: |
+            sum(increase(gateway_codex_usage_poll_total{job="agent-gateway"}[15m])) == 0
+          for: 15m
+          labels:
+            severity: warning
+            triage: dig
+            rail: codex
+          annotations:
+            summary: 'The codex rail is declared but its usage poll has not run for 15 m — the rail sits on quota-unknown'
+            description: 'gateway_codex_usage_poll_total renders (the policy declares the codex rail) but no poll ran in 15 m. The poll runs only with CODEX_USAGE_URL set AND a credential backend (CODEX_UPSTREAM + CODEX_SEED_FILE with a mounted seed — ESO Secret agent-egress/codex-seed): kubectl -n agent-egress logs deploy/agent-gateway | grep "codex usage poll dark" names which is missing; a live schedule that died logs "codex usage poll: one pass failed". Until a poll is accepted every codex admission defers quota-unknown.'

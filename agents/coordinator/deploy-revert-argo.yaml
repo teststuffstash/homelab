@@ -9,6 +9,13 @@
 # Roll-FORWARD (dispatch a worker against the app repo) stays the LLM half — the responder /
 # coordinator lanes own it; a revert PR here never blocks that (revert-then-fix composes).
 #
+# SINCE 2026-10-21 THE CHAIN ALSO JUDGES (FU-270 (b)): a landed revert is the deploy-revert signal
+# for the gateway's judge-only `wrong-verdict` class. The `judge` step (SA `outcome-judge`,
+# rbac.yaml) strikes every REVIEWER session the gateway holds for the reverted PR — and, for a
+# deploy bump, for the PRs that commit shipped — through POST /sessions/{id}/outcome
+# (GW-SESSIONS-OUTCOME, gateway/specs/endpoints/sessions.md). Fail-soft: the revert never waits
+# on it, and the judge's own failures are one WARN line each. Replay: deploy-revert-judge.
+#
 # PLATFORM SCOPE (IAC-G09, operator 2026-08-04): homelab is wired in too, but NOT under the blanket
 # rule — only for the REVERSIBLE CLASS. A candidate merge qualifies only if every content line of
 # its diff is a first-party image pin; chart bumps, values edits and anything with CRD/schema or
@@ -156,7 +163,7 @@ metadata:
   name: deploy-revert
   namespace: agent-coordinator
 spec:
-  entrypoint: revert
+  entrypoint: revert-then-judge
   serviceAccountName: agent-coordinator
   # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate (coordinate-argo.yaml — was `coordinate`, ADR-120)
   # (coordinate-argo.yaml). Verbatim copy; keep in sync.
@@ -186,13 +193,45 @@ spec:
   volumes:
     - { name: work, emptyDir: {} }
     - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    # GW-SESSIONS-AUTH (FU-270 (b)): the `judge` step's caller token — the POD's projected SA token
+    # (outcome-judge there; the specs-review-argo.yaml shape), audience agent-gateway, shortest expiry.
+    # Workflow-level: kubelet projects whichever SA the pod runs as; only `judge` mounts it.
+    - name: gateway-token
+      projected:
+        sources:
+          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
   templates:
+    # FU-270 (b): two steps since 2026-10-21 — `revert` (its script unchanged; the three replay
+    # blocks inside it are byte-identical) hands a landed revert to `judge` through its `judged`
+    # output. Empty (every report-only exit, and `default: ""`) SKIPS the judge, so a report-only
+    # run spawns one pod as before. `when` is the EXPRESSION form on purpose: it compares the
+    # output's VALUE in the expression env, where the simple-tag form would splice the hand-off's
+    # JSON (quotes, spaces) into a govaluate expression and fail to parse on exactly the runs that
+    # matter.
+    - name: revert-then-judge
+      steps:
+        - - name: revert
+            template: revert
+            arguments:
+              parameters:
+                - { name: payload, value: "{{workflow.parameters.payload}}" }
+        - - name: judge
+            template: judge
+            when: "{{=steps.revert.outputs.parameters.judged != ''}}"
+            arguments:
+              parameters:
+                - { name: judged, value: "{{steps.revert.outputs.parameters.judged}}" }
     - name: revert
       inputs:
         parameters:
           - { name: payload }
       metadata:
         labels: { app: deploy-revert-workflow }
+      outputs:
+        parameters:
+          # the judge's hand-off (written at the end of the script, ONLY once the revert PR is
+          # armed): empty on every report-only exit, which skips the `judge` step
+          - { name: judged, valueFrom: { path: /tmp/judged.json, default: "" } }
       container:
         image: ghcr.io/teststuffstash/agent-coordinator
         env:
@@ -359,6 +398,13 @@ spec:
               | grep -oE '[0-9]+$')"
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
             echo "→ revert PR $SLUG#$PR armed (auto-merges on CI green)"
+            # The judge's hand-off (FU-270 (b)): written ONLY here, once the revert PR is armed — the
+            # `judge` step reads it as this template's `judged` output and is skipped when empty.
+            # Compact, no secrets: the identifiers the judge needs to find and name the review rides.
+            jq -nc --arg slug "$SLUG" --argjson reverted "$PRNUM" --argjson revert "$PR" --arg app "$APP" \
+              --arg revision "$REVISION" --arg title "$TITLE" \
+              '{slug: $slug, reverted_pr: $reverted, revert_pr: $revert, app: $app, revision: $revision, title: $title}' > /tmp/judged.json \
+              || echo "WARN: could not write the judge hand-off (the revert PR stands; nothing judged)"
             # The stack reads its own deploy PR, not the -iac revert queue (oracle-iac#1094 went unseen
             # for eight hours): say it where the deploy was.
             gh pr comment "$PRNUM" --repo "$SLUG" --body "FU-044 auto-rollback: **reverted by #${PR}** — ArgoCD app \`${APP}\` went Degraded on revision \`${REVISION:0:8}\` within ${REVERT_WINDOW_MIN} min of this merge, after reading Healthy for the ${PRE_MERGE_WINDOW_MIN} min before it. Roll-forward (a fix in the app repo) composes on top." >/dev/null 2>&1 \
@@ -366,6 +412,109 @@ spec:
         resources:
           requests: { cpu: "50m", memory: "128Mi" }
           limits: { memory: "512Mi" }
+    # ── the judge (FU-270 (b)) ─────────────────────────────────────────────────────────────────
+    # A landed revert refutes the verdicts that let the reverted change in. This step reports
+    # `wrong-verdict` — the gateway's JUDGE-ONLY class (GW-SESSIONS-OUTCOME: a `callers` entry with
+    # `outcome: any` may report on any session of its stacks; nobody else may say it) — on every
+    # REVIEWER session the gateway holds for the reverted PR and, when the reverted merge is a
+    # deploy bump, for the PRs that commit shipped. It runs as `outcome-judge` (rbac.yaml), the
+    # template-level SA override: the policy's judge grant is keyed to that SA alone, and the
+    # `revert` step keeps `agent-coordinator`. The caller token is the pod's projected SA token
+    # (`gateway-token`, audience agent-gateway — the specs-review-argo.yaml shape); GH_TOKEN is for
+    # the one GitHub READ (commits/<sha>/pulls), optional like everywhere in this file.
+    # FAIL-SOFT, BY DESIGN: the revert already landed and this is an independent second write, so
+    # every failure here is one loud WARN line and exit 0 — never a failed workflow.
+    - name: judge
+      inputs:
+        parameters:
+          - { name: judged }
+      metadata:
+        labels: { app: deploy-revert-workflow }
+      serviceAccountName: outcome-judge
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: JUDGED, value: "{{inputs.parameters.judged}}" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+          - { name: GATEWAY_URL, value: "http://agent-gateway.agent-egress.svc.cluster.local:8080" }
+          - { name: GATEWAY_TOKEN_FILE, value: "/var/run/secrets/agent-gateway/token" }
+        volumeMounts:
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
+        command: [bash, -lc]
+        args:
+          - |
+            set -euo pipefail
+            # >>>REPLAY:deploy-revert-judge>>>
+            # Fail-soft: ONE WARN line and exit 0 for anything that goes wrong, the ERR trap included
+            # (so a `set -e` death is a WARN line too, never a failed workflow after a landed revert).
+            warn() { echo "WARN: judge: $* (the revert stands)"; exit 0; }
+            trap 'warn "unexpected failure at line $LINENO"' ERR
+            [ -n "${JUDGED:-}" ] || { echo "→ judge: no revert landed this run — nothing to judge"; exit 0; }
+            SLUG="$(printf '%s' "$JUDGED" | jq -r '.slug // empty')"
+            REVERTED="$(printf '%s' "$JUDGED" | jq -r '.reverted_pr // empty')"
+            REVERT="$(printf '%s' "$JUDGED" | jq -r '.revert_pr // empty')"
+            APP="$(printf '%s' "$JUDGED" | jq -r '.app // empty')"
+            REV="$(printf '%s' "$JUDGED" | jq -r '.revision // empty' | cut -c1-8)"
+            TITLE="$(printf '%s' "$JUDGED" | jq -r '.title // empty')"
+            [ -n "$SLUG" ] && [ -n "$REVERTED" ] && [ -n "$REVERT" ] || warn "hand-off lacks slug/reverted_pr/revert_pr: $JUDGED"
+            GW="${GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local:8080}"
+            TOKF="${GATEWAY_TOKEN_FILE:-/var/run/secrets/agent-gateway/token}"
+            [ -s "$TOKF" ] || warn "no caller token at $TOKF — the judge cannot authenticate to the gateway"
+            # the token rides a header FILE (the specs reviewer's gw_curl shape), never argv
+            gw_curl() { curl -sS --max-time 20 -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$TOKF")") "$@"; }
+            # ── resolve: the PRs whose review rides a landed revert refutes ──────────────────────
+            # The reverted -iac merge itself and, when it is a deploy bump (`deploy: <app> <ver>-g<sha>`,
+            # the title gateway-image.yaml and the runner-image loop open), the PRs that commit shipped:
+            # `commits/<sha>/pulls`. Unreadable (a stack bump's sha lives in the APP repo, which the
+            # hand-off does not name; or an API fault) narrows to the reverted PR, loudly.
+            SRC="$REVERTED"
+            BUMP_SHA="$(printf '%s' "$TITLE" | sed -nE 's/^deploy: [A-Za-z0-9._-]+ [A-Za-z0-9.]+-g([0-9a-f]{7,40})( .*)?$/\1/p')"
+            if [ -n "$BUMP_SHA" ]; then
+              if _built="$(gh api "repos/${SLUG}/commits/${BUMP_SHA}/pulls" --jq '.[].number' 2>/dev/null)"; then
+                SRC="$(printf '%s\n%s\n' "$SRC" "$_built" | grep -E '^[0-9]+$' | sort -un)"
+              else
+                echo "WARN: judge: commits/${BUMP_SHA}/pulls on ${SLUG} unreadable — judging the reverted PR alone"
+              fi
+            fi
+            # ── report: one wrong-verdict per REVIEWER session on each task key ─────────────────
+            # `specs-review <slug>#<n>` is today's ONLY review-role task shape on the gateway
+            # (agents/specs-reviewer-session.sh admits it). KNOWN GAP: the review reflex
+            # (agents/reviewer-session.sh) is NOT on the gateway yet, so a reflex APPROVE a revert
+            # refutes has no session row to strike until the reflex admits through /sessions.
+            RESP="$(mktemp)"; N_SESS=0; N_JUDGED=0
+            for n in $SRC; do
+              key="specs-review ${SLUG}#${n}"
+              http="$(gw_curl -o "$RESP" -w '%{http_code}' -G --data-urlencode "task=${key}" "${GW}/sessions" 2>/dev/null)" || http="000"
+              # 404 = a gateway without the list route (older than the FU-270 (b) sibling); 000 = unreachable
+              [ "$http" = 200 ] || warn "GET /sessions?task=${key} answered HTTP ${http} (an older gateway without the list route, or unreachable) — nothing judged"
+              rows="$(jq -r '.sessions[]? | [.id, .role, (.caller // "-")] | @tsv' "$RESP" 2>/dev/null)" || warn "GET /sessions?task=${key} answered a body that is not the list shape"
+              [ -n "$rows" ] || { echo "→ judge: ${key} — the gateway holds no session for it (nothing to judge)"; continue; }
+              while IFS=$'\t' read -r sid role caller; do
+                [ -n "$sid" ] || continue
+                N_SESS=$((N_SESS + 1))
+                # only the REVIEW rides: a worker ride on the same task carries no verdict to refute
+                [ "$role" = reviewer ] || { echo "→ judge: ${key} session ${sid} role=${role} — not a review ride, skipped"; continue; }
+                # evidence: identifiers only (≤ 4096 bytes, nothing credential-shaped — GW-SESSIONS-OUTCOME)
+                body="$(jq -nc --arg rp "${SLUG}#${REVERT}" --arg rv "${SLUG}#${REVERTED}" --arg app "$APP" --arg rev "$REV" \
+                  '{class: "wrong-verdict", evidence: {revert_pr: $rp, reverted_pr: $rv, app: $app, revision: $rev}}')"
+                http="$(gw_curl -o "$RESP" -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data-binary "$body" "${GW}/sessions/${sid}/outcome" 2>/dev/null)" || http="000"
+                if [ "$http" = 200 ]; then
+                  echo "→ judge: ${key} session ${sid} (caller=${caller}) wrong-verdict → strike.class=$(jq -r '.strike.class // "-"' "$RESP") replay=$(jq -r '.replay // false' "$RESP")"
+                  N_JUDGED=$((N_JUDGED + 1))
+                else
+                  echo "WARN: judge: ${key} session ${sid} POST /outcome HTTP ${http} error=$(jq -r '.error.code // "-"' "$RESP" 2>/dev/null || echo '-')"
+                fi
+              done <<< "$rows"
+            done
+            echo "→ judge: ${SLUG}#${REVERT} reverted ${SLUG}#${REVERTED} — ${N_JUDGED} of ${N_SESS} gateway session(s) judged wrong-verdict (review rides looked up on: $(printf '%s' "$SRC" | tr '\n' ' '))"
+            # <<<REPLAY:deploy-revert-judge<<<
+        resources:
+          requests: { cpu: "25m", memory: "64Mi" }
+          limits: { memory: "256Mi" }
 ---
 # workflow-pin-revert — FU-1990 part 2: deterministic revert of a pin-only workflow PR whose CI
 # just failed on master. The trigger is GithubWorkflowRunFailed on master/main branch; the workflow

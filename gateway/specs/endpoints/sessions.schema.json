@@ -7,6 +7,21 @@
     "UC-1"
   ],
   "$defs": {
+    "rail_choice": {
+      "$comment": "GW-MODEL-TIERS §The rail choice: when the tier named ONE model on two allowed rails, which rail's twin cell went first and why; null = no twin at this tier (the role's rail order alone)",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object", "additionalProperties": false, "required": ["rail", "over", "reason"],
+          "properties": {
+            "rail": { "$ref": "#/$defs/rail", "description": "the rail that walked first" },
+            "over": { "$ref": "#/$defs/rail", "description": "the rail whose twin cell lost (still walked when the first yields nothing)" },
+            "reason": { "enum": ["price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint"], "description": "price = cheaper per clean ride and by price alone (a tie goes to the role's order); clean-rate = the measured clean rate flipped the price order; headroom = the Go twin's window (or its 429 cooldown) holds it; not-in-catalog = the Go catalog does not price the twin; no-eligible-endpoint = the openrouter twin has no eligible endpoint to price" }
+          }
+        }
+      ],
+      "x-requirements": ["GW-MODEL-TIERS"]
+    },
     "stack": {
       "type": "string",
       "minLength": 1,
@@ -92,7 +107,7 @@
     }
   },
   "caller": {
-    "$comment": "GW-SESSIONS-AUTH \u2014 every POST /sessions, GET /sessions/{id} and DELETE /sessions/{id} carries `Authorization: Bearer <the caller's projected ServiceAccount token, audience agent-gateway>`, TokenReview'd through the same path as the pull. The reviewed username is looked up in the policy's `callers` map; under `control_plane_auth: observe` an absent or invalid token is admitted (and counted), under `enforce` it is refused. Not a body field: a header, so no request shape changes.",
+    "$comment": "GW-SESSIONS-AUTH \u2014 every POST /sessions, GET /sessions/{id}, DELETE /sessions/{id} and GET /sessions?task= carries `Authorization: Bearer <the caller's projected ServiceAccount token, audience agent-gateway>`, TokenReview'd through the same path as the pull. The reviewed username is looked up in the policy's `callers` map; under `control_plane_auth: observe` an absent or invalid token is admitted (and counted), under `enforce` it is refused. Not a body field: a header, so no request shape changes.",
     "x-requirements": [
       "GW-SESSIONS-AUTH"
     ]
@@ -154,7 +169,7 @@
         },
         "harness": {
           "$ref": "#/$defs/harness",
-          "description": "default from policy roles.<role>.harness; fixes the dialect the walk may use",
+          "description": "optional: present, it fixes the dialect the walk may use (an explicit narrowing); absent, the harness follows the rail the walk picks (sessions.md \u00a7The harness follows the rail), policy roles.<role>.harness being the role's harness on the rails that serve its dialect",
           "x-requirements": [
             "GW-SESSIONS-ADMIT",
             "GW-SESSIONS-ENV"
@@ -223,7 +238,8 @@
         "harness",
         "model",
         "env",
-        "context_tokens"
+        "context_tokens",
+        "rail_choice"
       ],
       "properties": {
         "decision": {
@@ -290,11 +306,12 @@
             "null"
           ],
           "minimum": 1,
-          "description": "the policy's declared window for the model; null = not declared, never a guess",
+          "description": "the harness window for the model: on the opencode rail the Go catalog's `context` for the wire model (GW-CATALOG-GO ruling 5; null = no catalog row), elsewhere the policy's declared window (null = not declared) — never a guess",
           "x-requirements": [
             "GW-SESSIONS-ENV"
           ]
-        }
+        },
+        "rail_choice": { "$ref": "#/$defs/rail_choice" }
       }
     },
     "dispatch_bound": {
@@ -320,8 +337,9 @@
           "additionalProperties": false,
           "required": [
             "id",
-            "expires_at"
-          ],
+            "expires_at",
+        "rail_choice"
+      ],
           "properties": {
             "id": {
               "$ref": "#/$defs/session_id"
@@ -358,7 +376,8 @@
             "null"
           ],
           "minimum": 1
-        }
+        },
+        "rail_choice": { "$ref": "#/$defs/rail_choice" }
       },
       "x-requirements": [
         "GW-SESSIONS-PULL"
@@ -637,7 +656,7 @@
     }
   },
   "outcome": {
-    "$comment": "POST /sessions/{id}/outcome \u2014 the consumer's classification of its own ride (GW-SESSIONS-OUTCOME). Caller-checked as DELETE is (the admitting caller), plus a judge: a `callers` entry with `outcome: any` may report on any session of its stacks. `class` is THE vocabulary (one home): `x-scope` maps each class to `cell` (serving-shaped: the (rail, model) for this task), `model` (the model on every rail for this task) or null (`clean`, which refutes).",
+    "$comment": "POST /sessions/{id}/outcome \u2014 the consumer's classification of its own ride (GW-SESSIONS-OUTCOME). Caller-checked as DELETE is (the admitting caller), plus a judge: a `callers` entry with `outcome: any` may report on any session of its stacks. `class` is THE vocabulary (one home): `x-scope` maps each class to `cell` (serving-shaped: the (rail, model) for this task), `model` (the model on every rail for this task), `harness` (the session's harness on every cell for this task \u2014 a fault of the harness's own machinery, sessions.md \u00a7Harness-scoped strikes) or null (`clean`, which refutes).",
     "input": {
       "type": "object",
       "additionalProperties": false,
@@ -663,7 +682,8 @@
             "repetition",
             "harness-gave-up",
             "stream-incomplete",
-            "refused"
+            "refused",
+            "harness-fault"
           ],
           "x-scope": {
             "clean": null,
@@ -681,7 +701,8 @@
             "repetition": "model",
             "harness-gave-up": "cell",
             "stream-incomplete": "cell",
-            "refused": "cell"
+            "refused": "cell",
+            "harness-fault": "harness"
           },
           "x-judge-only": [
             "wrong-verdict"
@@ -768,7 +789,8 @@
                 "scope": {
                   "enum": [
                     "cell",
-                    "model"
+                    "model",
+                    "harness"
                   ]
                 }
               }
@@ -791,8 +813,48 @@
       ]
     },
     "strike": {
-      "$comment": "the store's row (not served by an endpoint in this version): keyed (stack, task, rail, model, provider); provider = the serving provider's slug on the openrouter rail (GW-RAIL-OPENROUTER §Attribution), '' where none was named or the rail pins none; one per (session, class, source, provider); source = outcome (the consumer) | gateway (a transport fact); refuted_at set by a later clean outcome on the same model / on a cell the clean ride rode",
+      "$comment": "the store's row (not served by an endpoint in this version): keyed (stack, task, rail, model, provider, harness); harness = the session's harness, written on every strike and matched only by a harness-scoped one; provider = the serving provider's slug on the openrouter rail (GW-RAIL-OPENROUTER §Attribution), '' where none was named or the rail pins none; one per (session, class, source, provider); source = outcome (the consumer) | gateway (a transport fact); refuted_at set by a later clean outcome on the same model / on a cell the clean ride rode / on the same harness (harness scope)",
       "x-requirements": [
+        "GW-SESSIONS-OUTCOME"
+      ]
+    }
+  },
+  "list": {
+    "$comment": "GET /sessions?task=<exact task key> \u2014 the judge's lookup (GW-SESSIONS-AUTH, route `list`; FU-270 (b)): every session carrying that task the caller may SEE, oldest first, released and expired included (a judge reads a verdict's fate after release \u2014 GW-SESSIONS-OUTCOME). Visibility is GET's owner rule (the admitting caller; a row with no recorded caller is anyone's), plus a judge (`callers` entry `outcome: any`) sees every session of its stacks; a row outside that is not listed \u2014 never a 403, a list reveals nothing. Caller-checked as every control-plane route.",
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task"
+      ],
+      "properties": {
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the query parameter: the exact task key the sessions were admitted with (post.input.task); absent or empty = 400 malformed-body"
+        }
+      },
+      "x-requirements": [
+        "GW-SESSIONS-AUTH"
+      ]
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessions"
+      ],
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/get/output"
+          },
+          "description": "the visible rows, each the GET /sessions/{id} row (its `outcome` = the latest reported), ordered by created_at; [] when none is visible"
+        }
+      },
+      "x-requirements": [
+        "GW-SESSIONS-AUTH",
         "GW-SESSIONS-OUTCOME"
       ]
     }
@@ -800,9 +862,10 @@
   "errors": {
     "malformed-body": {
       "status": 400,
-      "description": "the request body fails this schema's `post.input` (missing field, enum miss, negative round)",
+      "description": "the request body fails this schema's `post.input` (missing field, enum miss, negative round), or a list without `task` (`list.input`)",
       "x-requirements": [
-        "GW-SESSIONS-ADMIT"
+        "GW-SESSIONS-ADMIT",
+        "GW-SESSIONS-AUTH"
       ]
     },
     "harness-rail-mismatch": {

@@ -12,7 +12,9 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; 
 2026-08-12 (operator cabling + live guest-agent reads: the wk-metal fleet, hp-01, ci-runner-01).
 Operator corrections 2026-10-13: `m70s` (.56) is on the office 5-port; `wk-metal-03` (.184) moved to
 the basement (which switch is not recorded, so it is off both diagrams). The nx-01/nx-02 twin is
-not captured either.
+not captured either. Operator 2026-10-20: `wk-metal-04` (.186) is now the Big Data box (the old
+desktop died) and hangs off the **basement 8-port switch** — that switch's uplink is not recorded,
+so it too is off both diagrams.
 
 ```
                          Internet (fibre)
@@ -39,8 +41,8 @@ not captured either.
      │  wk-01 .61     │   │   │   │        └─► Office: 5-port (UNMANAGED)
      │  wk-02 .62     │   │   │   │             ├─► Office AP (UAP-AC-Lite, .14)
      │  wk-03 .63     │   │   │   │             ├─► pop-os (.57)
-     ├ ci-runner-01   │   │   │   │             ├─► m70s (.56)
-     │  (VM 9001, .55)│   │   │   │             └─► wk-metal-04 (.186)
+     ├ ci-runner-01   │   │   │   │             └─► m70s (.56)
+     │  (VM 9001, .55)│   │   │   │
      └ Matchbox .30   │   │   │   │
                       │   │   │   └─► hp-01 (.54)
    ThinkCentre Edge ◄─┘   │   └─► wk-metal-02 (.183)
@@ -92,6 +94,5 @@ graph TD
   SW5 --> APO["Office AP (.14)"]
   SW5 --> POP["pop-os (.57)"]
   SW5 --> M70S["m70s (.56)"]
-  SW5 --> WM4["wk-metal-04 (.186)"]
   PVE --- VMS["Talos VMs .51/.61/.62/.63 + ci-runner-01 .55 + Matchbox LXC .30 (vmbr0)"]
 ```

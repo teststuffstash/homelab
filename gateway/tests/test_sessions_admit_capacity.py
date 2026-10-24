@@ -56,11 +56,11 @@ $64); worker tier heavy / reviewer = opencode-go/claude-haiku-5-5 ($15/month →
 | the 30d window binds once the week has reset | worker in 220M (T0) — $66 | +230401 s | worker, rail opencode || defer | — | rail-window | 2287799 |
 
 Not in the catalog (ruling 4): a refresh against the fake vendor (`catalog-retired` drops
-deepseek-v4.1-flash from the console list; `docs-retired` drops claude-haiku-5-5's plan rows), then:
+deepseek-v4.1-flash from the catalog; `docs-retired` drops claude-haiku-5-5's plan rows), then:
 
 | description | the refresh || body || decision | rail | reason | retry_after_s |
 |---|---|---|---||---|---|---|---|
-| a Go model the console no longer lists defers not-in-catalog | catalog-retired | — | worker, rail opencode || defer | — | not-in-catalog | 21600 |
+| a Go model the catalog no longer lists defers not-in-catalog | catalog-retired | — | worker, rail opencode || defer | — | not-in-catalog | 21600 |
 | a not-in-catalog model is skipped, the walk continues | catalog-retired | — | worker (policy walk) || dispatch | openrouter | — | — |
 | a listed model with no monthly limit under the plan defers not-in-catalog | docs-retired | — | worker, rail opencode, tier heavy || defer | — | not-in-catalog | 21600 |
 | the other Go models still admit | catalog-retired | — | worker, rail opencode, tier heavy || dispatch | opencode | — | — |
@@ -302,11 +302,11 @@ async def test_window_draw(gw, upstreams, clock, ride, advance, body, expected):
 
 # -- not in the catalog (GW-CATALOG-GO ruling 4) ----------------------------------------------------
 # The world's catalog is refreshed against the fake vendor (tests/_catalog_world.py) before the ask:
-# `catalog-retired` = the console list without deepseek-v4.1-flash; `docs-retired` = the Go page
-# without claude-haiku-5-5's plan rows (listed by the console, but no monthly limit). retry =
+# `catalog-retired` = the catalog (models.dev) without deepseek-v4.1-flash; `docs-retired` = the Go
+# page without claude-haiku-5-5's plan rows (listed by the catalog, but no monthly limit). retry =
 # the next scheduled refresh: the refresh at T0 + GATEWAY_GO_CATALOG_REFRESH_S (21600, the default).
 CATALOG_ROWS = [
-    ("a Go model the console no longer lists defers not-in-catalog", ("config", "catalog-retired"),
+    ("a Go model the catalog no longer lists defers not-in-catalog", ("config", "catalog-retired"),
      {"rail": "opencode"}, {"decision": "defer", "reason": "not-in-catalog", "retry_after_s": 21600}),
     ("a not-in-catalog model is skipped, the walk continues", ("config", "catalog-retired"),
      {}, {"decision": "dispatch", "rail": "openrouter"}),
@@ -322,7 +322,7 @@ async def test_not_in_catalog(gw, app, vendor, refresh, body, expected):
     source, behaviour = refresh
     world(upstream=behaviour, note="the Go catalog's fake vendor answers the refresh")
     with given(f"refresh = {refresh!r}: the {source} source refreshes against {behaviour}"):
-        setattr(vendor, source, behaviour)
+        setattr(vendor, "catalog" if behaviour.startswith("catalog-") else source, behaviour)
         outcome = await app.state.catalog.refresh_source(source)
         attach_json("refresh outcome", {"source": source, "behaviour": behaviour, "outcome": outcome})
         assert outcome == "ok", outcome

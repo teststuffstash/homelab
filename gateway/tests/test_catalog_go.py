@@ -1,18 +1,29 @@
 """GW-CATALOG-GO — the Go rail's vendor facts, read from the vendor (specs/endpoints/catalog.md).
 
-World: policy-default (plan go; Go ids deepseek-v4-flash, claude-sonnet-4-6) · the fake vendor
-(tests/_catalog_world.py): catalog-* answers the console config, docs-* the Go page. T0 = the
-test clock, 2027-01-15T08:00:00Z.
+World: policy-default (plan go; Go ids deepseek-v4.1-flash, claude-haiku-5-5) · the fake vendor
+(tests/_catalog_world.py): catalog-* answers models.dev's api.json (the catalog read), config-* the
+console config (the overlay read) — together the `config` source — and docs-* the Go page. T0 =
+the test clock, 2027-01-15T08:00:00Z.
 
 | description | last good (config) | the fake answers | outcome | snapshot | models |
 |---|---|---|---|---|---|
-| a first good fetch becomes the snapshot | none | catalog-ok | ok | the new one, fetched_at T0 | 5 |
-| a disabled row is not listed | none | catalog-ok (6 rows, deepseek-v4-flash disabled) | ok | deepseek-v4-flash absent | 5 |
-| a later good fetch replaces it | 5, fetched T0 | catalog-ok at T0 + 21600 s | ok | fetched_at T0 + 21600 s | 5 |
-| an upstream error keeps the last good | 5, fetched T0 | catalog-503 | fetch-failed | the last good | 5 |
-| an unreachable vendor keeps the last good | 5, fetched T0 | catalog-down | fetch-failed | the last good | 5 |
-| a row without its cost is a parse failure | 5, fetched T0 | catalog-malformed | parse-failed | the last good | 5 |
-| a body without the Go provider is a parse failure | 5, fetched T0 | catalog-no-provider | parse-failed | the last good | 5 |
+| a first good fetch becomes the snapshot | none | catalog-ok + config-ok | ok | the new one, fetched_at T0 | 5 |
+| a deprecated catalog row is not listed | none | catalog-ok (6 rows, step-5-preview-free deprecated) | ok | step-5-preview-free absent | 5 |
+| an override-only console answer lists the catalog as is | none | config-ok (opencode-go.models {}) | ok | the catalog's five | 5 |
+| a disabled override unlists the row | 5, fetched T0 | config-disables (deepseek-v4-pro) | ok | deepseek-v4-pro absent | 4 |
+| a cost or limit override wins | 5, fetched T0 | config-reprices (claude-haiku-5-5) | ok | the override's cost, context 200000, output the catalog's | 5 |
+| a console-only row with a cost and both limits is listed ⚖ | 5, fetched T0 | config-adds (deepseek-v4-flash) | ok | deepseek-v4-flash listed | 6 |
+| a console-only row without them lists nothing ⚖ | 5, fetched T0 | config-adds-bare | ok | deepseek-v4-flash absent | 5 |
+| a later good fetch replaces it | 5, fetched T0 | catalog-ok + config-ok at T0 + 21600 s | ok | fetched_at T0 + 21600 s | 5 |
+| an upstream error on the catalog read keeps the last good | 5, fetched T0 | catalog-503 | fetch-failed | the last good | 5 |
+| an upstream error on the console read keeps the last good | 5, fetched T0 | config-503 | fetch-failed | the last good | 5 |
+| an unreachable catalog host keeps the last good | 5, fetched T0 | catalog-down | fetch-failed | the last good | 5 |
+| an unreachable console keeps the last good | 5, fetched T0 | config-down | fetch-failed | the last good | 5 |
+| a catalog row without its cost is a parse failure | 5, fetched T0 | catalog-malformed | parse-failed | the last good | 5 |
+| a legacy context_over_200k row with no tiers is a parse failure | 5, fetched T0 | catalog-legacy-tier | parse-failed | the last good | 5 |
+| an override whose cost is not a cost is a parse failure | 5, fetched T0 | config-malformed | parse-failed | the last good | 5 |
+| a catalog without the Go provider is a parse failure | 5, fetched T0 | catalog-no-provider | parse-failed | the last good | 5 |
+| a console answer without the Go provider is a parse failure | 5, fetched T0 | config-no-provider | parse-failed | the last good | 5 |
 | a drop below half the models is implausible | 5, fetched T0 | catalog-shrunk (2) | implausible | the last good | 5 |
 | a drop to half or more is taken | 5, fetched T0 | catalog-trimmed (3) | ok | the new one | 3 |
 | zero models is implausible with no last good | none | catalog-empty | implausible | none | 0 |
@@ -26,6 +37,7 @@ test clock, 2027-01-15T08:00:00Z.
 | a renamed limit column is a parse failure | 5 | docs-header-drift | parse-failed | the last good |
 | peak rows without the peak-hours sentence are a parse failure | 5 | docs-no-peak-hours | parse-failed | the last good |
 | no share sentence is a parse failure | 5 | docs-no-shares | parse-failed | the last good |
+| no plan table is a parse failure | 5 | docs-no-plan-table | parse-failed | the last good |
 | a drop below half the models is implausible | 5 | docs-shrunk (2) | implausible | the last good |
 
 | description | model | plan go | plan go-plus | bonus | peak row |
@@ -37,6 +49,7 @@ test clock, 2027-01-15T08:00:00Z.
 
 | description | input | the snapshot reads |
 |---|---|---|
+| the plan fees come from the page | docs-ok | plan_fee_usd_month 10 (plan go); the docs snapshot's plan_fees go 10 / go-plus 40 |
 | the peak hours come from the page | docs-ok | [[1, 4], [6, 10]], mon–fri |
 | the window shares come from the page | docs-ok | 0.2 / 0.5 / 1.0; deepseek-v4.1-flash windows 16 / 40 / 80 |
 | the config's prices are the model's cost rows | catalog-ok claude-haiku-5-5 | base 0.10/0.50/0.01/0.125, above 100000 0.50/2.50/0.05/0.625 |
@@ -60,15 +73,17 @@ test clock, 2027-01-15T08:00:00Z.
 
 | description | source | authorization | user-agent | x-opencode-session |
 |---|---|---|---|---|
-| the config fetch carries the key and a client identity | config | Bearer <key> | agent-gateway/<v> (go-catalog) | a UUID, new per fetch |
+| the console read carries the key and a client identity | config | Bearer <key> | agent-gateway/<v> (go-catalog) | a UUID, new per fetch |
+| the catalog read carries no credential | catalog | absent | agent-gateway/<v> (go-catalog) | absent |
 | the docs fetch carries no credential | docs | absent | agent-gateway/<v> (go-catalog) | absent |
-| no key, no config fetch | config, no key | — no request; fetch-failed | — | — |
-| the key never reaches a log line | catalog-401-echo | — every gateway.catalog line free of the key | — | — |
+| no key, no config fetch | config, no key | — no request on either read; fetch-failed | — | — |
+| the key never reaches a log line | config-401-echo | — every gateway.catalog line free of the key | — | — |
 
 | description | sequence | after the restart |
 |---|---|---|
 | a PVC store keeps the snapshot | ok + ok, new gateway on the same DB, +3600 s | both served; age_s 3600; models{config} 5 |
 | a corrupt stored snapshot is ignored | a stored config row that is not JSON | no config snapshot |
+| a restart inside the interval refreshes nothing at start | catalog-ok + docs-ok at T0, then a new gateway on the same DB at T0 + 3600 s, another at T0 + 21600 s | the loop's first refresh waits 18000 s on the first (last_attempt_at null; a not-in-catalog defer's retry_after_s 18000), 0 s on the second — it refreshes at once |
 
 | description | event | series | value |
 |---|---|---|---|
@@ -130,55 +145,85 @@ async def _arrange_good(app, vendor, source: str) -> None:
     """The last good snapshot: one ok refresh at T0 (the fixture's five models)."""
     with given(f"last good ({source}): one refresh at T0 answered by the fixture — 5 models"):
         if source == "config":
-            vendor.config = "catalog-ok"
+            vendor.catalog, vendor.config = "catalog-ok", "config-ok"
         else:
             vendor.docs = "docs-ok"
         assert await app.state.catalog.refresh_source(source) == "ok"
 
 
-# ── What a refresh keeps: config ─────────────────────────────────────────────────────────────
+# ── What a refresh keeps: config (the catalog read + the console overlay) ─────────────────────
 LAST_GOOD = "5, fetched T0"
+OK = ("catalog-ok", "config-ok")
+LISTED_FIVE = ["claude-haiku-5-5", "deepseek-v4-pro", "deepseek-v4.1-flash", "longcat-2.5-preview-free", "step-5-preview"]
+# (description, last good, (catalog knob, config knob), at, outcome, fetched_at, models, listed ids after)
 CONFIG_ROWS = [
-    ("a first good fetch becomes the snapshot", "none", "catalog-ok", "T0", "ok", T0, 5),
-    ("a disabled row is not listed", "none", "catalog-ok", "T0", "ok", T0, 5),
-    ("a later good fetch replaces it", LAST_GOOD, "catalog-ok", "T0 + 21600 s", "ok", T0 + 21600, 5),
-    ("an upstream error keeps the last good", LAST_GOOD, "catalog-503", "T0", "fetch-failed", T0, 5),
-    ("an unreachable vendor keeps the last good", LAST_GOOD, "catalog-down", "T0", "fetch-failed", T0, 5),
-    ("a row without its cost is a parse failure", LAST_GOOD, "catalog-malformed", "T0", "parse-failed", T0, 5),
-    ("a body without the Go provider is a parse failure", LAST_GOOD, "catalog-no-provider", "T0", "parse-failed", T0, 5),
-    ("a drop below half the models is implausible", LAST_GOOD, "catalog-shrunk", "T0", "implausible", T0, 5),
-    ("a drop to half or more is taken", LAST_GOOD, "catalog-trimmed", "T0", "ok", T0, 3),
-    ("zero models is implausible with no last good", "none", "catalog-empty", "T0", "implausible", None, 0),
+    ("a first good fetch becomes the snapshot", "none", OK, "T0", "ok", T0, 5, LISTED_FIVE),
+    ("a deprecated catalog row is not listed", "none", OK, "T0", "ok", T0, 5, LISTED_FIVE),
+    ("an override-only console answer lists the catalog as is", "none", OK, "T0", "ok", T0, 5, LISTED_FIVE),
+    ("a disabled override unlists the row", LAST_GOOD, ("catalog-ok", "config-disables"), "T0", "ok", T0, 4,
+     [m for m in LISTED_FIVE if m != "deepseek-v4-pro"]),
+    ("a cost or limit override wins", LAST_GOOD, ("catalog-ok", "config-reprices"), "T0", "ok", T0, 5, LISTED_FIVE),
+    ("a console-only row with a cost and both limits is listed ⚖", LAST_GOOD, ("catalog-ok", "config-adds"), "T0", "ok", T0, 6,
+     sorted([*LISTED_FIVE, "deepseek-v4-flash"])),
+    ("a console-only row without them lists nothing ⚖", LAST_GOOD, ("catalog-ok", "config-adds-bare"), "T0", "ok", T0, 5, LISTED_FIVE),
+    ("a later good fetch replaces it", LAST_GOOD, OK, "T0 + 21600 s", "ok", T0 + 21600, 5, LISTED_FIVE),
+    ("an upstream error on the catalog read keeps the last good", LAST_GOOD, ("catalog-503", "config-ok"), "T0", "fetch-failed", T0, 5, LISTED_FIVE),
+    ("an upstream error on the console read keeps the last good", LAST_GOOD, ("catalog-ok", "config-503"), "T0", "fetch-failed", T0, 5, LISTED_FIVE),
+    ("an unreachable catalog host keeps the last good", LAST_GOOD, ("catalog-down", "config-ok"), "T0", "fetch-failed", T0, 5, LISTED_FIVE),
+    ("an unreachable console keeps the last good", LAST_GOOD, ("catalog-ok", "config-down"), "T0", "fetch-failed", T0, 5, LISTED_FIVE),
+    ("a catalog row without its cost is a parse failure", LAST_GOOD, ("catalog-malformed", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
+    ("a legacy context_over_200k row with no tiers is a parse failure", LAST_GOOD, ("catalog-legacy-tier", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
+    ("an override whose cost is not a cost is a parse failure", LAST_GOOD, ("catalog-ok", "config-malformed"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
+    ("a catalog without the Go provider is a parse failure", LAST_GOOD, ("catalog-no-provider", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
+    ("a console answer without the Go provider is a parse failure", LAST_GOOD, ("catalog-ok", "config-no-provider"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
+    ("a drop below half the models is implausible", LAST_GOOD, ("catalog-shrunk", "config-ok"), "T0", "implausible", T0, 5, LISTED_FIVE),
+    ("a drop to half or more is taken", LAST_GOOD, ("catalog-trimmed", "config-ok"), "T0", "ok", T0, 3,
+     ["claude-haiku-5-5", "deepseek-v4-pro", "deepseek-v4.1-flash"]),
+    ("zero models is implausible with no last good", "none", ("catalog-empty", "config-ok"), "T0", "implausible", None, 0, []),
 ]
 
 
-@pytest.mark.parametrize(("last", "behaviour", "at", "outcome", "fetched", "models"),
+@pytest.mark.parametrize(("last", "knobs", "at", "outcome", "fetched", "models", "listed"),
                          [r[1:] for r in CONFIG_ROWS], ids=[r[0] for r in CONFIG_ROWS])
-async def test_config_refresh(cworld, vendor, vendor_transport, clock, last, behaviour, at, outcome, fetched, models):
-    world(upstream=behaviour)
+async def test_config_refresh(cworld, vendor, vendor_transport, clock, last, knobs, at, outcome, fetched, models, listed):
+    catalog_b, config_b = knobs
+    world(upstream=f"{catalog_b} · {config_b}")
     app = cworld.build()
     with given(f"last good (config): {last}"):
         if last != "none":
-            vendor.config = "catalog-ok"
-            assert await app.state.catalog.refresh_source("config") == "ok"
+            vendor.catalog, vendor.config = OK
+            with quiet():  # the arrange's two vendor exchanges fold into one summary (ATTACH_BULK)
+                assert await app.state.catalog.refresh_source("config") == "ok"
+            attach_json("arranged: one good config refresh (catalog-ok · config-ok)", {"last_good": last, "outcome": "ok"})
     if at != "T0":
         clock.t = T0 + 21600
-    with given(f"the fake vendor's config answers {behaviour} at {at}"):
-        vendor.config = behaviour
-        if behaviour == "catalog-down":
-            vendor_transport.down.add("config")
+    with given(f"knobs = {knobs!r}: the fake vendor answers {catalog_b} (models.dev) and {config_b} (the console) at {at}"):
+        vendor.catalog, vendor.config = catalog_b, config_b
+        for read, b in (("catalog", catalog_b), ("config", config_b)):
+            if b.endswith("-down"):
+                vendor_transport.down.add(read)
     with when(f"the config source refreshes at {at}"):
         got = await app.state.catalog.refresh_source("config")
-    then_eq("outcome", got, outcome)
-    with then(f"GET /catalog/opencode: config fetched_at {fetched and _iso(fetched)}, {models} models"):
+    with then(f"outcome {outcome}; GET /catalog/opencode: config fetched_at {fetched and _iso(fetched)}, {models} models, listed {listed}"):
         v = await _view(app)
         cfg = v["sources"]["config"]
-        check("sources.config", {k: cfg[k] for k in ("fetched_at", "models", "last_outcome")},
-              {"fetched_at": _iso(fetched) if fetched else None, "models": models, "last_outcome": outcome})
-    if behaviour == "catalog-ok" and last == "none":
-        with then("deepseek-v4-flash (disabled in the fixture) is not a listed model"):
-            check("listed ids", sorted(m for m, r in v["models"].items() if r["listed"]),
-                  ["claude-haiku-5-5", "deepseek-v4-pro", "deepseek-v4.1-flash", "longcat-2.5-preview-free", "step-5-preview"])
+        check("outcome · sources.config · listed ids",
+              {"outcome": got, "sources.config": {k: cfg[k] for k in ("fetched_at", "models", "last_outcome")},
+               "listed": sorted(m for m, r in v["models"].items() if r["listed"])},
+              {"outcome": outcome, "sources.config": {"fetched_at": _iso(fetched) if fetched else None, "models": models, "last_outcome": outcome},
+               "listed": listed})
+    if config_b == "config-reprices":
+        with then("claude-haiku-5-5: the override's two cost rows, context 200000 (the override), output 128000 (the catalog's)"):
+            row = v["models"]["claude-haiku-5-5"]
+            check("cost · (context, output)", (row["cost"], (row["context"], row["output"])),
+                  ([{"above_tokens": 0, "in": 0.2, "out": 1.0, "cache_read": 0.02, "cache_write": 0.25},
+                    {"above_tokens": 200000, "in": 1.0, "out": 5.0, "cache_read": 0.1, "cache_write": 1.25}], (200000, 128000)))
+    if config_b == "config-adds":
+        with then("deepseek-v4-flash: the console-only row's cost, limits, family and tools"):
+            row = v["models"]["deepseek-v4-flash"]
+            check("row", {k: row[k] for k in ("family", "tools", "context", "output", "cost")},
+                  {"family": "deepseek-flash", "tools": True, "context": 1000000, "output": 384000,
+                   "cost": [{"above_tokens": 0, "in": 0.14, "out": 0.28, "cache_read": 0.028, "cache_write": None}]})
 
 
 # ── What a refresh keeps: docs ───────────────────────────────────────────────────────────────
@@ -190,6 +235,7 @@ DOCS_ROWS = [
     ("a renamed limit column is a parse failure", "5", "docs-header-drift", "parse-failed"),
     ("peak rows without the peak-hours sentence are a parse failure", "5", "docs-no-peak-hours", "parse-failed"),
     ("no share sentence is a parse failure", "5", "docs-no-shares", "parse-failed"),
+    ("no plan table is a parse failure", "5", "docs-no-plan-table", "parse-failed"),
     ("a drop below half the models is implausible", "5", "docs-shrunk", "implausible"),
 ]
 
@@ -253,6 +299,18 @@ async def test_peak_hours_from_page(cworld, vendor):
         check("peak_weekdays", v["peak_weekdays"], ["mon", "tue", "wed", "thu", "fri"])
 
 
+async def test_plan_fees_from_page(cworld, vendor):
+    """row: the plan fees come from the page"""
+    world(upstream="docs-ok")
+    app = cworld.build()
+    with when("the docs source refreshes (docs-ok)"):
+        await app.state.catalog.refresh_source("docs")
+    with then("plan_fee_usd_month 10 (plan go); the docs snapshot's plan_fees go 10 / go-plus 40"):
+        v = await _view(app)
+        check("plan_fee_usd_month", v["plan_fee_usd_month"], 10.0)
+        check("docs snapshot plan_fees", app.state.catalog.snapshots["docs"].body["plan_fees"], {"go": 10.0, "go-plus": 40.0})
+
+
 async def test_window_shares_from_page(cworld, vendor):
     """row: the window shares come from the page"""
     world(upstream="catalog-ok · docs-ok")
@@ -283,7 +341,7 @@ async def test_tabulated_but_unlisted(cworld, vendor):
     world(upstream="catalog-trimmed · docs-ok")
     app = cworld.build()
     with given("the config answers catalog-trimmed (no step-5-preview), the page docs-ok"):
-        vendor.config = "catalog-trimmed"
+        vendor.catalog = "catalog-trimmed"
     with when("both sources refresh"):
         await app.state.catalog.refresh()
     with then("step-5-preview: listed false, monthly_limit_usd 60"):
@@ -374,19 +432,36 @@ UA = f"agent-gateway/{__version__} (go-catalog)"
 
 
 async def test_config_fetch_identity(cworld, vendor):
-    """row: the config fetch carries the key and a client identity"""
-    world(upstream="catalog-ok")
+    """row: the console read carries the key and a client identity"""
+    world(upstream="catalog-ok · config-ok")
     app = cworld.build()
     with when("the config source refreshes twice"):
         await app.state.catalog.refresh_source("config")
         await app.state.catalog.refresh_source("config")
     calls = [c for c in vendor.calls if c["source"] == "config"]
+    then_eq("console reads seen", len(calls), 2)
     with then(f"authorization Bearer <the Go key>, user-agent {UA}, x-opencode-session a UUID new per fetch"):
-        check("authorization is the Go key", [c["headers"].get("authorization") == f"Bearer {GO_KEY}" for c in calls], [True, True])
-        check("user-agent", [c["headers"].get("user-agent") for c in calls], [UA, UA])
         sessions = [c["headers"].get("x-opencode-session") for c in calls]
-        check("x-opencode-session parse as UUIDs", [str(uuid.UUID(s)) == s for s in sessions], [True, True])
-        check("x-opencode-session differs per fetch", sessions[0] != sessions[1], True)
+        check("per read: authorization is the Go key · user-agent · x-opencode-session parses as a UUID · differs per fetch",
+              {"authorization is the Go key": [c["headers"].get("authorization") == f"Bearer {GO_KEY}" for c in calls],
+               "user-agent": [c["headers"].get("user-agent") for c in calls],
+               "x-opencode-session parse as UUIDs": [str(uuid.UUID(s)) == s for s in sessions],
+               "x-opencode-session differs per fetch": sessions[0] != sessions[1]},
+              {"authorization is the Go key": [True, True], "user-agent": [UA, UA],
+               "x-opencode-session parse as UUIDs": [True, True], "x-opencode-session differs per fetch": True})
+
+
+async def test_catalog_fetch_no_credential(cworld, vendor):
+    """row: the catalog read carries no credential"""
+    world(upstream="catalog-ok · config-ok")
+    app = cworld.build()
+    with when("the config source refreshes"):
+        await app.state.catalog.refresh_source("config")
+    (call,) = [c for c in vendor.calls if c["source"] == "catalog"]
+    with then(f"no authorization, no x-opencode-session; user-agent {UA}"):
+        check("authorization", call["headers"].get("authorization"), None)
+        check("x-opencode-session", call["headers"].get("x-opencode-session"), None)
+        check("user-agent", call["headers"].get("user-agent"), UA)
 
 
 async def test_docs_fetch_no_credential(cworld, vendor):
@@ -404,22 +479,22 @@ async def test_docs_fetch_no_credential(cworld, vendor):
 
 async def test_no_key_no_fetch(cworld, vendor):
     """row: no key, no config fetch"""
-    world(upstream="catalog-ok", note="OPENCODE_GO_API_KEY unset")
+    world(upstream="catalog-ok · config-ok", note="OPENCODE_GO_API_KEY unset")
     app = cworld.build(key=None)
     with when("the config source refreshes with no key"):
         got = await app.state.catalog.refresh_source("config")
     then_eq("outcome", got, "fetch-failed")
-    then_eq("requests the vendor saw", len(vendor.calls), 0)
+    then_eq("requests the vendor saw (models.dev or the console)", len(vendor.calls), 0)
 
 
 async def test_key_never_logged(cworld, vendor, caplog):
     """row: the key never reaches a log line"""
-    world(upstream="catalog-401-echo")
+    world(upstream="catalog-ok · config-401-echo")
     from agent_gateway.logging import RedactingFormatter
     caplog.set_level(logging.DEBUG, logger="gateway.catalog")
     app = cworld.build()
-    with given("the config answers 401 with the key in its body (catalog-401-echo)"):
-        vendor.config = "catalog-401-echo"
+    with given("the console answers 401 with the key in its body (config-401-echo)"):
+        vendor.config = "config-401-echo"
     with when("the config source refreshes"):
         got = await app.state.catalog.refresh_source("config")
     fmt = RedactingFormatter("%(message)s")
@@ -438,7 +513,9 @@ async def test_pvc_keeps_snapshot(cworld, vendor, clock):
     world(upstream="catalog-ok · docs-ok")
     first = cworld.build()
     with given("both sources refreshed at T0 on gateway #1"):
-        await first.state.catalog.refresh()
+        with quiet():  # the arrange's three vendor exchanges fold into one summary (ATTACH_BULK)
+            await first.state.catalog.refresh()
+        attach_json("arranged: both sources refreshed at T0 (catalog-ok · config-ok · docs-ok)", {"fetched_at": _iso(T0), "outcome": "ok"})
     clock.advance(3600)
     with when("gateway #2 starts on the same DB at T0 + 3600 s — no refresh"):
         second = cworld.build()
@@ -465,6 +542,29 @@ async def test_corrupt_snapshot_ignored(cworld, vendor):
         v = await _view(app)
     then_eq("sources.config.models", v["sources"]["config"]["models"], 0)
     then_eq("sources.config.fetched_at", v["sources"]["config"]["fetched_at"], None)
+
+
+async def test_restart_inside_interval(cworld, vendor, clock):
+    """row: a restart inside the interval refreshes nothing at start"""
+    world(upstream="catalog-ok · docs-ok", note="refresh_s 21600")
+    first = cworld.build()
+    with given("both sources refreshed at T0 on gateway #1"):
+        with quiet():  # the arrange's three vendor exchanges fold into one summary (ATTACH_BULK)
+            await first.state.catalog.refresh()
+        attach_json("arranged: both sources refreshed at T0 (catalog-ok · config-ok · docs-ok)", {"fetched_at": _iso(T0), "outcome": "ok"})
+    clock.advance(3600)
+    with when("gateway #2 starts on the same DB at T0 + 3600 s, gateway #3 at T0 + 21600 s — each asks startup_delay"):
+        second = cworld.build()
+        delay_2 = second.state.catalog.startup_delay(clock())
+        retry_2 = second.state.catalog.retry_at(clock(), 60) - clock()
+        v = await _view(second)
+        clock.advance(18000)
+        third = cworld.build()
+        delay_3 = third.state.catalog.startup_delay(clock())
+    with then("#2 waits 18000 s (last_attempt_at null, a not-in-catalog defer would say retry_after_s 18000); #3 refreshes at once"):
+        check("startup_delay (gateway #2, gateway #3)", (delay_2, delay_3), (18000.0, 0.0))
+        check("gateway #2 retry_at - now (the not-in-catalog defer's retry_after_s)", retry_2, 18000.0)
+        check("gateway #2 sources.config.last_attempt_at", v["sources"]["config"]["last_attempt_at"], None)
 
 
 # ── What /metrics says ───────────────────────────────────────────────────────────────────────
@@ -498,7 +598,7 @@ async def test_metric_models_and_outcomes(cworld, vendor):
     app = cworld.build()
     await _arrange_good(app, vendor, "config")
     with when("the config answers catalog-shrunk and refreshes"):
-        vendor.config = "catalog-shrunk"
+        vendor.catalog = "catalog-shrunk"
         await app.state.catalog.refresh_source("config")
         text = await _metrics(app)
     then_eq('gateway_go_catalog_models{source="config"}', _value(text, 'gateway_go_catalog_models{source="config"}'), 5)
@@ -510,7 +610,7 @@ async def test_metric_refresh_counted(cworld, vendor):
     app = cworld.build()
     await _arrange_good(app, vendor, "config")
     with when("the config answers catalog-malformed and refreshes"):
-        vendor.config = "catalog-malformed"
+        vendor.catalog = "catalog-malformed"
         await app.state.catalog.refresh_source("config")
         text = await _metrics(app)
     with then("refresh_total{config,ok} 1 · {config,parse-failed} 1"):
@@ -524,7 +624,7 @@ async def test_metric_last_outcome(cworld, vendor):
     app = cworld.build()
     await _arrange_good(app, vendor, "config")
     with when("the config answers catalog-malformed and refreshes"):
-        vendor.config = "catalog-malformed"
+        vendor.catalog = "catalog-malformed"
         await app.state.catalog.refresh_source("config")
         text = await _metrics(app)
     with then("last_outcome{config,parse-failed} 1 · {config,ok} 0"):
@@ -546,7 +646,7 @@ async def test_metric_policy_missing(cworld, vendor, policy, source, behaviour, 
     ids = app.state.catalog.policy_models
     with given(f"policy-default's Go ids (tiers + side_models, wire spelling): {', '.join(ids)}; the {source} source answers {behaviour}"):
         attach_json("policy Go ids", list(ids))
-        setattr(vendor, source, behaviour)
+        setattr(vendor, "catalog" if behaviour.startswith("catalog-") else source, behaviour)
     with when(f"the {source} source refreshes ({behaviour}); GET /metrics + /catalog/opencode"):
         await app.state.catalog.refresh_source(source)
         text = await _metrics(app)

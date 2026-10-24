@@ -11,7 +11,7 @@
 #       --run "goose run --recipe .agents/fix.yaml --params issue=42"
 #       → headless: runs the recipe to a branch+PR, streams logs, pod self-terminates.
 #
-# Flags: --run "<cmd>"  --ref <base-branch>  --repo <git-url>  --harness goose|opencode|claude  --model provider/model
+# Flags: --run "<cmd>"  --ref <base-branch>  --repo <git-url>  --harness goose|opencode|claude|codex  --model provider/model
 #
 # FU-019 (ADR-078): migrate Pod → agent-sandbox Sandbox CR; scoped SA + RBAC. FU-020/FU-018
 # (ADR-081): Cilium egress policy + auth-injecting proxy so the git/LLM tokens are INJECTED, never
@@ -82,9 +82,9 @@ ib_refuse_malformed() {   # <key> <ref>
 # advance (same --round, same task) and no label is touched — an infra failure consumes no logic
 # round (ADR-127).
 ORIG_ARGS=("$@")
-PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
+PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude|codex] [--model provider/model]}"
 case "$PROJECT" in --help|-h)  # a bare --help used to be swallowed as the PROJECT name (junk /route + ref-resolve rows, seen live 2026-08-02)
-  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--max-turns <n>] [--size standard|large] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
+  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude|codex] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--max-turns <n>] [--size standard|large] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
   exit 0
 ;; esac
 shift || true
@@ -412,6 +412,7 @@ if [ -n "${GW_SESSIONS:-}" ]; then
   case "$GW_RAIL" in
     anthropic) _gw_wire="${MODEL#claude/}";;
     opencode)  _gw_wire="${MODEL#opencode-go/}";;
+    codex)     _gw_wire="${MODEL#codex/}";;
     *)         _gw_wire="$MODEL";;
   esac
   case "$HARNESS" in
@@ -420,7 +421,8 @@ if [ -n "${GW_SESSIONS:-}" ]; then
     opencode) OPENCODE_MODEL="gateway/${_gw_wire}"
               [[ ",${GW_ENV_KEYS}," == *",OPENCODE_CONFIG_CONTENT,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks OPENCODE_CONFIG_CONTENT";;
     goose)    [[ ",${GW_ENV_KEYS}," == *",GOOSE_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks GOOSE_MODEL";;
-    *)        _gw_bad="${_gw_bad:+$_gw_bad, }harness '${HARNESS}' (this launcher runs claude|opencode|goose)";;
+    codex)    [[ ",${GW_ENV_KEYS}," == *",CODEX_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks CODEX_MODEL";;  # the codex cell (FU-270): the pod's agent-codex renders the provider block from the pulled OPENAI_BASE_URL / CODEX_MODEL (GW-SESSIONS-ENV)
+    *)        _gw_bad="${_gw_bad:+$_gw_bad, }harness '${HARNESS}' (this launcher runs claude|opencode|goose|codex)";;
   esac
   if [ -n "$_gw_bad" ]; then
     echo "→ gateway(sessions): defer — [dispatch-unusable: ${_gw_bad}] retry_after=?s — FAIL CLOSED, releasing and not dispatching." >&2
@@ -482,7 +484,7 @@ if [ "$AGENT_ROUTER" != "off" ]; then
   _keyref="${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}"
   # Subscription-rail rides (Anthropic AND opencode-go) carry no OpenRouter key ref — the Go rail's
   # credential lives proxy-side (ADR-107 chunk C), exactly like the claude oauth.
-  case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*) _keyref="";; esac
+  case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*|codex:*|*:codex/*) _keyref="";; esac
   _req="$(jq -nc --arg stack "$(printf '%s' "$_srow" | jq -r '.name // ""')" \
       --arg task "${TASK:-adhoc}" --arg session "agent-${PROJECT}-${TASK:-adhoc}-r${ROUND}" \
       --arg key_ref "$_keyref" \
@@ -575,7 +577,7 @@ _sub_rail_ride=""
 # opencode-go/* joins the arm (2026-08-17, the platform Go-flash dogfood): a Go ride buys nothing
 # from OpenRouter either — no credit probe, no #158 degrade (its own capacity gate is the
 # /opencode-limit latch at the FU-088 gate below).
-case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*) _sub_rail_ride=1;; esac
+case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*|codex:*|*:codex/*) _sub_rail_ride=1;; esac  # codex (FU-270): the ChatGPT subscription — no OpenRouter credit, no key ref
 _or_probe_url="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
 if [ -z "$_sub_rail_ride" ] && [ -z "$OR_CAPACITY_DOWN" ] \
    && [ -n "$_or_probe_url" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ]; then
@@ -835,7 +837,7 @@ if [ -n "${RECIPE:-}" ]; then
   # first exposed on goose). The RUN_CMD is BUILT below, after the environment knobs (--docker,
   # egress) are known — so the platform environment card (FU-114 L1) can be composed from them and
   # injected into the recipe. Here we only VALIDATE and derive launcher-owned flags.
-  case "$HARNESS" in claude|goose|opencode) ;; *) echo "FATAL: --recipe supports the claude/goose/opencode harnesses (got '${HARNESS}')" >&2; exit 2;; esac
+  case "$HARNESS" in claude|goose|opencode|codex) ;; *) echo "FATAL: --recipe supports the claude/goose/opencode/codex harnesses (got '${HARNESS}')" >&2; exit 2;; esac
   [ -f "$RECIPE" ] || { echo "FATAL: --recipe ${RECIPE} not found (pass the dispatcher-side clone's path)" >&2; exit 2; }
   [ -z "$RUN_CMD" ] || { echo "--recipe and --run are mutually exclusive" >&2; exit 2; }
   # Task key → issue number. `issue-<N>` is the fixer shape; `research-<N>-<slug>` is the
@@ -1136,8 +1138,9 @@ render_env_card() {
   # WHY: version skew — production serves the pinned release over the released corpus; a worktree
   # runs HEAD. Name the pin so a prod/worktree behavioral diff is interpretable rather than mysterious.
   # Both lines are gated on the MCP knob being present AND the harness actually attaching the
-  # config (no MCP = no feedback tool to direct). All three harnesses (claude, goose, opencode)
-  # now attach MCP (#1276), so the card claims the tool is available on any harness with the knob.
+  # config (no MCP = no feedback tool to direct). All four harnesses attach MCP (claude, goose,
+  # opencode since #1276; codex via CODEX_MCP_URL → agent-codex, agent-runtime#180), so the card
+  # claims the tool is available on any harness with the knob.
   # ADR-135: one line per declared image volume — mounted, or declared-but-not (never silent).
   [ -n "${IV_CARD:-}" ] && printf '%s' "$IV_CARD"
   if [ -n "${MCP_ENDPOINT:-}" ]; then
@@ -1526,7 +1529,7 @@ if [ -n "${RECIPE:-}" ]; then
   # helper defined at the script top is invisible to them (proven by RC-127). MCP_PRELUDE,
   # MCP_CONFIG_B64, MCP_GOOSE_FLAG and MCP_OPENCODE_CONFIG_JSON are consumed by the case arms
   # below (or the opencode-session-config block), inside the same region.
-  MCP_PRELUDE=""; MCP_GOOSE_FLAG=""; MCP_OPENCODE_CONFIG_JSON=""
+  MCP_PRELUDE=""; MCP_GOOSE_FLAG=""; MCP_OPENCODE_CONFIG_JSON=""; MCP_CODEX_ENV=""
   if [ -n "${MCP_ENDPOINT:-}" ]; then
     MCP_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" --argjson tools "${MCP_TOOLS:-[]}" '{mcpServers: {"stack-mcp": {type: "http", url: $url}}}' 2>/dev/null)" || MCP_CONFIG_JSON=""
     MCP_OPENCODE_CONFIG_JSON="$(jq -cn --arg url "$MCP_ENDPOINT" '{mcp: {"stack-mcp": {type: "remote", url: $url}}}' 2>/dev/null)" || MCP_OPENCODE_CONFIG_JSON=""
@@ -1538,6 +1541,9 @@ if [ -n "${RECIPE:-}" ]; then
       # (reviewer catch, PR#1186). The claude arm never touches the shell with it (jq --arg) and
       # the opencode arm embeds it via jq --arg into the config JSON.
       MCP_GOOSE_FLAG=" --with-streamable-http-extension $(printf '%s' "$MCP_ENDPOINT" | jq -Rr @sh)"
+      # codex: the env var the image's agent-codex renders into `[mcp_servers.stack-mcp] url` (the pinned
+      # CLI's remote-server shape; agent-runtime#180) — @sh-quoted like the goose flag, prefixed to the seam.
+      MCP_CODEX_ENV="CODEX_MCP_URL=$(printf '%s' "$MCP_ENDPOINT" | jq -Rr @sh) "
     else
       MCP_OPENCODE_CONFIG_JSON=""
       echo "agent-session: MCP tools knob unparseable — dispatching WITHOUT MCP attach" >&2
@@ -1579,6 +1585,12 @@ if [ -n "${RECIPE:-}" ]; then
     claude) RUN_CMD="${CTX_PRELUDE}${MCP_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${_go_ctx}claude -p --model ${_claude_model}${MCP_CONFIG_B64:+ --mcp-config /tmp/mcp-config.json} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}${MCP_GOOSE_FLAG}";;
     opencode) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; opencode run -m ${OPENCODE_MODEL} 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;  # MCP wired via OPENCODE_CONFIG (merged into /tmp/opencode-session.json in the opencode-session-config block above) — #1276
+    # codex (FU-270, the explicit canary cell): the image's agent-codex seam runs `codex exec --json` in
+    # the prepared workdir and renders the gateway provider block from the pulled env (GW-SESSIONS-ENV);
+    # the pod IS the sandbox, as for claude's --dangerously-skip-permissions. MCP (#1041): the stack knob
+    # rides as CODEX_MCP_URL in the seam's env — agent-codex appends `[mcp_servers.stack-mcp] url` to the
+    # provider block it renders (agent-runtime#180); no knob = no env = no block.
+    codex) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${MCP_CODEX_ENV}agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
   esac
   # <<<REPLAY:harness-run-cmd<<<
 fi
@@ -2246,8 +2258,8 @@ if [ "$HARNESS" = "opencode" ]; then
   # FU-270: a /sessions ride's provider + model ARE the gateway's OPENCODE_CONFIG_CONTENT, which
   # opencode 1.18.35 deep-merges OVER this OPENCODE_CONFIG file (probed in-cluster 2026-10-17 with
   # `opencode debug config`: file-only → mode+mcp; content-only → model+provider.gateway; both →
-  # all four keys). So the file keeps only what the gateway does not own (autoApprove, MCP): no
-  # OpenRouter pin, no proxy baseURL. (Not re-indented: the else arm closes after the pin echo.)
+  # all four keys). So the file keeps only what the gateway does not own (the headless permission
+  # grant, MCP): no OpenRouter pin, no proxy baseURL. (Not re-indented: the else arm closes after the pin echo.)
   if [ -n "${GW_SESSIONS:-}" ]; then
     OC_CONFIG=""
     echo "→ opencode: provider + model = the gateway's OPENCODE_CONFIG_CONTENT (${OPENCODE_MODEL:-?}); no OpenRouter pin"
@@ -2284,17 +2296,24 @@ if [ "$HARNESS" = "opencode" ]; then
     echo "→ opencode via egress proxy: baseURL ${PROXY_URL}/api/v1 (ADR-087)"
   fi
   # Headless mode: auto-approve tool calls (read/write/bash) — matching goose's GOOSE_MODE=auto.
-  # Without this, an unattended opencode run prompts "user rejected permission" (homelab#792 gap 2).
-  # The base is seeded when OC_CONFIG is empty (unpinned + no injection) so the guard never
-  # fails open on the headless path — every --recipe opencode ride gets mode.autoApprove.
-  # The correct shape for the pinned opencode binary (v1.18.13) is a sub-object under mode:
-  #   mode.autoApprove.permission and mode.autoApprove.options (each {} = approve all).
-  # The root-level autoApprove: true used in PR#800 was rejected at config validation
-  # (homelab#804). Verified against the pinned binary on 2026-08-23.
+  # Without this, an unattended `opencode run` auto-rejects every permission it would otherwise ask
+  # for (homelab#792 gap 2). The base is seeded when OC_CONFIG is empty (unpinned + no injection) so
+  # the guard never fails open on the headless path — every --recipe opencode ride gets the grant.
+  # The knob is the top-level `permission` map ("*" = every permission, `external_directory`
+  # included — the one the recipe read at /tmp/fix-recipe.yaml needs, the pod's cwd being the repo).
+  # The OLD shape, `mode.autoApprove.{permission,options}` (verified on v1.18.13, 2026-08-23; the
+  # root-level `autoApprove: true` of PR#800 was rejected at validation, homelab#804), is parsed by
+  # the pinned 1.19.0 as an AGENT named autoApprove and grants nothing: the ride then dies on
+  # `permission requested: external_directory (/tmp/*); auto-rejecting` before reading the recipe
+  # (FU-270 — the 2026-10-23 round-1 strikes on homelab#2860 and agent-runtime#181). Probed
+  # in-cluster the same day (agent-base:latest, `opencode debug config` + a fake provider that
+  # calls `read` on /tmp): the old shape auto-rejects, `permission: {"*": "allow"}` reads. The
+  # gateway's OPENCODE_CONFIG_CONTENT (deep-merged OVER this file) carries no `permission` key, so
+  # the grant survives a /sessions ride (the probe ran with both set).
   if [ -n "$RUN_CMD" ]; then
     OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" '
       ($base // {"$schema": "https://opencode.ai/config.json"})
-      * {mode: {autoApprove: {permission: {}, options: {}}}}')"
+      * {permission: {"*": "allow"}}')"
   fi
   # homelab#1276: merge the MCP server config into the opencode session config when the stack
   # declares spec.mcp.endpoint. The opencode config format uses a top-level "mcp" key with
@@ -3376,6 +3395,22 @@ if [ -n "$RUN_CMD" ]; then
   case "$TASK" in issue-*|pr-*) STRIKE_APPLIES=1;; *) STRIKE_APPLIES="";; esac
   if [ -n "$STRIKE_APPLIES" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
     # >>>REPLAY:strike-classifier>>>
+    # FU-270 / homelab#2867 (operator ruling 2026-10-24) — the `harness-fault` signature: opencode's
+    # headless `run` auto-rejected a permission it would otherwise ask for and the tool call died on
+    # it, before the ride did any work (homelab#2869: the grant was dead on opencode 1.19.0). Verbatim
+    # from #2867's AGENT_STRIKE log tails / #2869's body:
+    #   ! permission requested: external_directory (/tmp/*); auto-rejecting
+    #   Error: The user rejected permission to use this specific tool call.
+    # Matched as the PAIR, each line at column 0 (opencode's ANSI colour codes allowed), and only on
+    # an opencode ride — a quoted copy in content an agent reads (an issue body, this comment) is
+    # indented or prefixed, never both lines at column 0 (the homelab#1705 content-echo class).
+    harness_fault_sig() {
+      local esc ansi
+      esc="$(printf '\033')"; ansi="(${esc}\[[0-9;]*m)*"
+      [ "${HARNESS:-}" = "opencode" ] || return 1
+      grep -qE "^${ansi}! ${ansi}permission requested: .*; auto-rejecting" "$1" 2>/dev/null \
+        && grep -qE "^${ansi}Error: ${ansi}The user rejected permission to use this specific tool call" "$1" 2>/dev/null
+    }
     if [ -n "$STATS" ]; then
       # >>>REPLAY:strike-stats-classifier>>>
       # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
@@ -3396,6 +3431,11 @@ if [ -n "$RUN_CMD" ]; then
         2>/dev/null || echo unknown)"
       if [ "$ERR_CLASS" = "unknown" ] && grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG" 2>/dev/null; then
         ERR_CLASS="harness-death"
+      fi
+      # FU-270 / homelab#2867 (operator ruling 2026-10-24): the harness auto-rejected its own permission —
+      # a fault of the harness, not a verdict on the model (gateway class `harness-fault`, scope harness).
+      if [ "$ERR_CLASS" = "unknown" ] && harness_fault_sig "$RUNLOG"; then
+        ERR_CLASS="harness-fault"
       fi
       # homelab#866: provider-5xx error signature (harness-side UnknownError from the model API).
       # Zero cost, sub-30s duration, no new artifact — a startup death like config-invalid.
@@ -3418,6 +3458,9 @@ if [ -n "$RUN_CMD" ]; then
       # with this signature is a harness-startup death — should never be classified "clean".
       elif grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG"; then
         ERR_CLASS="harness-death"
+      # FU-270 / homelab#2867: the harness auto-rejected its own permission (harness_fault_sig below).
+      elif harness_fault_sig "$RUNLOG"; then
+        ERR_CLASS="harness-fault"
       # homelab#1705: `-32602` is goose's MCP JSON-RPC code — only a goose ride can die of it, and
       # only in its real shape (`-32602: <msg>` / `"code": -32602`), never the class NAME echoed
       # in content (an issue body, docs, router tests, the ride's own report). Mirrors
@@ -3478,7 +3521,7 @@ if [ -n "$RUN_CMD" ]; then
     EMIT_STRIKE=""
     EMIT_KEY_RETRY=""
     case "$ERR_CLASS" in
-      harness-death|auth-storm|timeout|quota|budget-403-account|http-403-other|turn-cap) EMIT_STRIKE=1;;
+      harness-death|harness-fault|auth-storm|timeout|quota|budget-403-account|http-403-other|turn-cap) EMIT_STRIKE=1;;
       budget-403-key|budget-exhausted-key) EMIT_KEY_RETRY=1;;
       budget-403) ;;  # residual — estimator/cap problem → escalate (neither strike nor key-retry)
     esac
@@ -3518,8 +3561,9 @@ if [ -n "$RUN_CMD" ]; then
     # cut streams — its own transport strikes); THIS launcher classifies its own ride and reports it
     # BEFORE the DELETE, in the gateway's one vocabulary:
     #   • a TASKED ride (issue-*/pr-*) that struck → the strike's class when it is a vocabulary
-    #     member (quota → harness-gave-up: the harness gave up on a limited upstream; anything else
-    #     → unknown); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
+    #     member (quota → harness-gave-up: the harness gave up on a limited upstream; harness-fault →
+    #     itself, a harness-scoped strike: the walk moves to another harness, not another model;
+    #     anything else → unknown); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
     #     strike — rounds are the scan's);
     #   • an AD-HOC ride → clean when agent-finalize's stats line says `exit_status: clean` or its pod
     #     Succeeded, else NOTHING: its task key is shared by every ad-hoc ride, and a strike there would
@@ -3540,7 +3584,7 @@ if [ -n "$RUN_CMD" ]; then
             | if ((.exit_status // "") == "failed" or (.exit_status // "") == "ci-failed") then "unknown"
               elif $e == "" then "unknown" else $e end' 2>/dev/null || echo unknown)"
           case "${ERR_CLASS:-unknown}" in
-            harness-death|auth-storm|timeout|provider-5xx|no-pr|unknown|turn-cap|tool-loop) GW_OUTCOME="${ERR_CLASS:-unknown}";;
+            harness-death|harness-fault|auth-storm|timeout|provider-5xx|no-pr|unknown|turn-cap|tool-loop) GW_OUTCOME="${ERR_CLASS:-unknown}";;
             quota) GW_OUTCOME="harness-gave-up";;
             *) GW_OUTCOME="unknown";;
           esac

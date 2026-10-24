@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-314** (2026-10-17: FU-313 minted for the 30-day OpenCode Go key (expires 2026-11-16) + the service-account move. 2026-10-13: FU-312 minted for in-cluster pulls of registry.teststuff.net stalling mid-stream on the router hairpin (oracle handoff, the ert-corpus roll). 2026-10-10: FU-311 minted for the jails' shared user-PAT rate pool (#2442, claude-jail#4). 2026-10-09: FU-310 minted for dind's HTTPS-first probe of the HTTP-only registry mirrors (a drop + dial timeout per pull, `AgentWorkerEgressDropped`) — operator weighing hosts.toml vs mirror TLS. FU-309 minted for the descheduler — displaced pods never move back after a window, operator-deferred. FU-307 minted for the "MASTER with WAN down" belt the pair lacks — blocked on an attended gate restart; FU-308 for a dead-man `leave` on unattended router proofs — both from the 2026-10-08 incident. 2026-10-08: FU-306 minted for the ci-runner VM replace the box cannot yet run itself — the attended verb is proven. 2026-10-07: FU-305 minted for the box loops a devbox bump wedged — sentinel silent). (2026-10-05: FU-304 minted for the laptop CP that cannot hold the apiserver — the sizing lever is the operator's, the detector shipped first (PR#2264). 2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-316** (2026-10-22: FU-314 minted for the specs reviewer's legacy-artifact read fallback (#2796), FU-315 for wk-metal-02's apiserver re-converging on the 3200MiB GOMEMLIMIT. 2026-10-17: FU-313 minted for the 30-day OpenCode Go key (expires 2026-11-16) + the service-account move. 2026-10-13: FU-312 minted for in-cluster pulls of registry.teststuff.net stalling mid-stream on the router hairpin (oracle handoff, the ert-corpus roll). 2026-10-10: FU-311 minted for the jails' shared user-PAT rate pool (#2442, claude-jail#4). 2026-10-09: FU-310 minted for dind's HTTPS-first probe of the HTTP-only registry mirrors (a drop + dial timeout per pull, `AgentWorkerEgressDropped`) — operator weighing hosts.toml vs mirror TLS. FU-309 minted for the descheduler — displaced pods never move back after a window, operator-deferred. FU-307 minted for the "MASTER with WAN down" belt the pair lacks — blocked on an attended gate restart; FU-308 for a dead-man `leave` on unattended router proofs — both from the 2026-10-08 incident. 2026-10-08: FU-306 minted for the ci-runner VM replace the box cannot yet run itself — the attended verb is proven. 2026-10-07: FU-305 minted for the box loops a devbox bump wedged — sentinel silent). (2026-10-05: FU-304 minted for the laptop CP that cannot hold the apiserver — the sizing lever is the operator's, the detector shipped first (PR#2264). 2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -459,6 +459,11 @@ six OVERSIZE items pointer-ized into
       standing warnings burnt down in the same PR. Relates ADR-113, ADR-103, #854.
 
 ## Agents
+- [ ] **FU-314** — **The specs reviewer still reads the legacy `gateway-evidence` Actions artifact as a fallback.**
+      Packs moved to the `gateway-specs` bucket 2026-10-21/22 (#2796 + 421f51aa; Actions storage quota);
+      `evidence_download`/`evidence_baseline_download` in `agents/specs-reviewer-session.sh` keep the
+      `gh run download` path until pre-move runs expire (14 d). **Next (≥2026-11-05):** delete the fallback
+      + `EVIDENCE_ARTIFACT` + the `run download` shadow allow-list row, keep the bucket path only.
 - [ ] **FU-293** — **`scripts/` is one flat directory and path-based ownership cannot cut it.**
       Inventory by executor 2026-09-28 (~26 CI gates, 16 box, 1 cluster pod, ~45 seat-only; 143/146
       commits in a month seat-authored). First cuts the same day: the box's closure → `mgmt/`
@@ -770,17 +775,15 @@ the block needs pruning, not more headings.
       half is a design sitting before any Goal whose `Budget:` must be real. Relates FU-088.
 
 - [ ] **FU-161** — **Scout v3: POINTER.** Design + mechanism (variant filter, benchmark
-      cross-check, typed cell-keyed canary verdicts, the ⚖ filing gate's evidence-bearing
-      partition): [`model-routing-history.md`](spikes/model-routing-history.md) §M7. Legs 1–2 shipped 2026-08-11
-      (#282); legs 3–4 + the filing gate (operator, 2026-08-17: an all-unbenched, uncanaried
-      digest posts nowhere but the log) shipped via #469→PR#499 + #506's whole-set common-cause
-      rule. **First fire PROVEN** — weekly organic digests (#1647/#1821/#2053), #2053 with three typed
-      `clean` canaries. #778 released unbuilt 2026-09-02 (Go cells mooted by the 08-25 ruling; hygiene →
-      FU-181). **Next:** rung-2/FU-095(c), pool depth, void the tainted 08-10..08-17 rotation rows (no
-      owner since #778). Related: #235's belt (machine lane owns it).
-      **2026-10-19:** the canary leg for OPENROUTER entrants is superseded by the agent-gateway's entry canary
-      (GW-CATALOG-OR, #2745 — a (model, provider) cell enters the gateway's order only after one clean prober ride);
-      the digest stays.
+      cross-check, typed cell-keyed canary verdicts, the ⚖ filing gate's evidence-bearing partition):
+      [`model-routing-history.md`](spikes/model-routing-history.md) §M7. Legs 1–2 shipped 2026-08-11
+      (#282); legs 3–4 + the filing gate (operator 08-17: an all-unbenched, uncanaried digest posts
+      nowhere but the log) shipped via #469→PR#499 + #506's whole-set common-cause rule. **First fire
+      PROVEN** — weekly organic digests (#1647/#1821/#2053), #2053 with three typed `clean` canaries.
+      #778 released unbuilt 2026-09-02 (Go cells mooted by the 08-25 ruling; hygiene → FU-181). 10-19:
+      the OPENROUTER canary leg is superseded by the gateway's entry canary (GW-CATALOG-OR, #2745); the
+      digest stays. **Next:** rung-2/FU-095(c), pool depth, void the tainted 08-10..08-17 rotation rows
+      (no owner since #778).
 
 - [ ] **FU-186** — **Provider selection priced per successful job (ADR-115): POINTER.** Design +
       evidence + 4-step build order: [`docs/spikes/model-routing-history.md`](spikes/model-routing-history.md)
@@ -818,16 +821,24 @@ the block needs pruning, not more headings.
       Deployment + Service in `agent-egress`, ≥2 replicas + PDB, its own SA with the Secret-read
       grant (removed from the proxy's), launcher `GIT_CRED_BROKER_URL` repointed; agent-runtime#144
       (retry) stays. Relates ADR-087, FU-089.
-- [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** `/sessions` consumers:
-      specs reviewer (ADR-155, own SA #2710) + the worker launcher behind `AGENT_GATEWAY=sessions` (platform only); the
-      pod pulls its env; control plane enforced (#2688; gap #2684 waits). Failure ownership LIVE 10-17, Go catalog LIVE
-      10-18, **tier lists DERIVED from evidence (ruling 10-18, #2716; gaps → #2718)**. **Codex rail (rulings 10-19: native
-      backend, gateway-local store, own login) — legs A–E + status in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)**
-      (A #2734, B #2735, C #2736 merged 10-19; D, E unstarted). **Next (seat, no ruling — operator 10-19: "again
-      deciding on models?"):** (a) an OpenRouter catalog leg (the GW-CATALOG-GO gap row): candidates = vendor `/models` ∩
-      AA-benched under the existing bands — the 11-id hand table is why kimi-k3 sits alone (#2718 item 4); (b) `wrong-verdict`
-      fed by the one machine signal that exists (deploy-revert of an approved PR); (c) the loop flip into the session-pod
-      heredoc; (d) `context_tokens` from the catalog. **Operator-only:** FU-313's Go key mint, the codex login (leg E), the canary window.
+- [ ] **FU-270** — **`agent-gateway` LIVE in parallel to the untouched old proxy (#2606).** Status + history: the
+      island's README/specs (`gateway/`) and the TICK-LOG; the codex rail's legs in [the spike §Lighting the rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270)
+      (A–C merged 10-19; D's gauge half #2786 in review, its poll half waits on E; E's recipe = #2826, `devbox run codex-seed` + runbook §Enrol the gateway's own Codex login; **minted 10-22 20:00Z** — Secret `agent-egress/codex-seed` verified). Landed
+      10-20: rail choice by cost per CLEAN ride (#2764), the first canary window (gaps #2775), the re-cut #2776 (every
+      openrouter tier decided). Landed 10-21: **(b) `wrong-verdict` ← deploy-revert** (#2785 the judge's list route +
+      caller, #2787 the judge step — proven to the first real revert); **(c) the loop flip** (#2788: the PLATFORM session
+      pod carries `AGENT_GATEWAY=sessions`; first ride through `/sessions` awaited). Landed 10-22: #2775 closed (gap 1 ruled —
+      a 429'd canary is no verdict, exponential backoff, #2810), first window 3/3 clean, re-cut #2813. **Next (seat):** the
+      canary windows (one per refresh, re-cut when the lists move); read the first platform worker ride; **specs: the
+      v0.6 wording's first test is #2860's PR + reviewer rounds (10-23 walkthrough, oracle handoff 20261020-2107) — re-pin
+      from what they do; the report leg/joined render PR is in flight.** **Codex rail LIT
+      10-22** (#2828 poll, #2832 policy prober-only, #2830 launcher+verb, agent-runtime#179, #2835/#2837 live-ride fixes; **step 4 met 22:57Z**:
+      a tool turn completed clean through the gateway — spike §The third ride; #2840 merged). 10-23: **#2842** = the `x-codex-*` headers as
+      the second headroom source (GW-CODEX-HEADROOM §Upstream headers) + the revocation watch's first reading (the jail's login survived the
+      gateway's; its REFRESH half answers itself ~10-26 — re-read the jail's codex log then) + the codex MCP shape (verified, not built: waits on
+      the role-routing ruling, spike §MCP for the codex harness). **RULED 10-23: subscriptions go to all roles** — **#2845** (the walk's
+      harness follows the rail; every role lists anthropic/opencode/codex; spike §Role routing); codex MCP = agent-runtime#180 (seam) + **#2844** (launcher);
+      #2842 merged 08:51Z, #2845 merged ~09:15Z. **#2848** = the four-boundary capture (GW-CODEX-CAPTURE, operator "do it" 10-23) MERGED 10:01Z; agent-base pin #2846 merged, #2844 merged (codex MCP live end to end). **Capture ride RAN 10-23 10:12Z** (window seat-1792750015-3165, 2 requests completed, bundle complete) → **#2850 MERGED** (GW-RAIL-CODEX §Live grammar rows + the ⚑ gap: the CLI's direct chatgpt.com calls, egress-denied). **Next:** the jail's refresh reading ~10-26; the first non-prober codex ride; the native-client baseline forwarder (the plan's §Establish a baseline — not built). **Operator-only:** FU-313; ruling #2768.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
@@ -1013,11 +1024,13 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** Rule, history, meters, status:
       [`docs/storage-ledger.md`](storage-ledger.md). Shipped: Longhorn + Garage metering, pve fstrim, thin-pool
-      meter (`PveThinPool*`, PR#1367). Standing `LonghornDiskBelowSchedulingFloor` ×2: hp-01/hg5d (57 GB = a
-      Longhorn REBUILD snapshot that merges itself — never clear it; alert text wrongly blames the image store)
-      and, new 10-14, wk-metal-04 `intel1` 75 % (garage-0 + registry-data; ledger L121 still says intel0 —
-      shared with FU-280). **Next:** fix the alert text; (a) Longhorn `filesystem-trim` RecurringJob; (b) metal
-      fstrim for the image store (SA400 holds no replica since 09-09). Relates ADR-089, ADR-114, FU-211, homelab#934.
+      meter (`PveThinPool*`, PR#1367). Under the 25 % floor 2026-10-22: hp-01 75 % (hg5d = a Longhorn REBUILD
+      snapshot that merges itself — never clear it; alert text wrongly blames the image store), wk-metal-01/mx500
+      72 %, and wk-04/`sn530` 76.6 % (+2 %/day) — `mirror-ghcr-data` holds 171 GB actual for 23 GB of filesystem: a
+      133 GB `markRemoved` snapshot (10-13) sits as volume-head's parent (purge complete, nothing coalesces it) and
+      the weekly mirror GC frees blocks no trim returns — the ledger's unbuilt "second layer". **Next:** fix the alert
+      text; (a) Longhorn `filesystem-trim` RecurringJob + `remove-snapshots-during-filesystem-trim` (today false;
+      ~140 GB back on sn530); (b) metal fstrim for the image store. Relates ADR-089, ADR-114, FU-211, homelab#934.
 - [ ] **FU-211** — **The storage ledger's numbers are hand-typed — generate them.** PR#1368 took three bot rounds on
       transposed figures in the buy-a-disk cell; "Current shape" is a 08-25 snapshot. Truth is LIVE (Longhorn
       disk status, `pve_lvm_thin_lv_size_bytes`, ResourceQuotas, Garage Workspaces — `scripts/storage-ledger-check.sh`
@@ -1069,6 +1082,13 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
+- [ ] **FU-315** — **wk-metal-02's apiserver re-converges on its 3200MiB GOMEMLIMIT and GC-thrashes.**
+      2026-10-22: cp-01 burned 3.5/4 cores in GC for two days at the shared limit (live heap ~2.7 GiB);
+      the VMs now run 5000MiB (#2807), the X250 (7.45 GiB, `ControlPlaneNodeMemoryLow` standing) cannot
+      take that. Its apiserver hit 1.8 cores the moment the VMs restarted (heap 2.78 GiB); restarted
+      05:57Z, so it refills on the same ~weeks clock. Blocked on the operator: the FU-304 probation
+      ruling (CP role → a 16 GB box). **Next:** that ruling; until then a refill = another apiserver
+      restart in a window. Relates FU-304.
 
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
       [Diagnosis, counters, placement, detectors, boot-disk move, the DIMM window](spikes/nx-02-numa-placement.md).

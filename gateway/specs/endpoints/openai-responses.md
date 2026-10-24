@@ -3,15 +3,19 @@ id: EP-OPENAI-RESPONSES
 use-cases: [UC-1]
 schema: openai-responses.schema.json
 ---
-# POST /openai/v1/responses — the `responses` dialect, on the codex rail (ships dark)
+# POST /openai/v1/responses — the `responses` dialect, on the codex rail (lit 2026-10-22, prober-only)
 
 The data-plane path a `codex` harness rides: OpenAI **Responses** over SSE (today's `openai`
 dialect stays Chat Completions — [glossary: dialect](../glossary.md#dialect)). Only the `codex`
-rail serves it — the operator's ChatGPT subscription — and that rail **ships dark**: the deployed
-policy (`argocd/resources/agent-gateway/policy.json`) declares no codex rail, and even a
-policy that declares one gets a credential backend only when `create_app` is handed a credential
-store. Production wiring now uses gateway-local SQLite; the policy still keeps the rail dark. Rows run
-offline against fake upstreams and dummy credentials; no real Codex/OpenAI credential exists in it.
+rail serves it — the operator's ChatGPT subscription. The rail was **lit on 2026-10-22** (FU-270)
+as the explicit canary cell (the deployed policy, `argocd/resources/agent-gateway/policy.json`,
+listed `rails.codex` for the `prober` role only); **since 2026-10-23 every role lists it** — the
+operator's ruling that subscriptions go to all roles — and the walk reaches it without an explicit
+`harness: codex` ([GW-SESSIONS-ADMIT §The harness follows the rail](sessions.md#the-harness-follows-the-rail)).
+A policy that declares the rail gets a credential
+backend only when `create_app` is handed a credential store: production wires gateway-local SQLite
+seeded from the gateway's own login (`devbox run codex-seed`) and the native refresh. Rows run
+offline against fake upstreams and dummy credentials; no real Codex/OpenAI credential exists in them.
 The design and the prototype it was ported from:
 [the Codex subscription-rail spike](../../../docs/spikes/codex-subscription-rail.md#gateway-prototype--isolated-build-2026-10-16-fu-270)
 (FU-270) and `experiments/codex-rail/` (its native-CLI compat harness remains there).
@@ -33,9 +37,10 @@ admission reasons and the error envelope.
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
 | [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, dark — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP`; `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
-| [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `admission.reasons` | — | v0, dark — authenticated report ingress and the codex window gauges are `⚑ gap` |
+| [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `headroom.poll`, `headroom.upstream`, `admission.reasons` | — | v0 — two report producers, both the gateway's own: its usage poll (§Poll) and the relayed answers' `x-codex-*` headers (§Upstream headers); the jail ingress stays `⚑ gap` |
 | [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | gateway-local SQLite with hash-gated seed recovery; live durability remains unverified |
 | [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport wired; rail absent from policy |
+| [GW-CODEX-CAPTURE](#gw-codex-capture) | `capture` (the bundle `GET /sessions/{id}/capture` answers; its records, sanitization rules and bounds) | `capture-not-found` | v0 — the scoped observer (FU-270, the spike §Recorded live protocol experiment): off unless `CODEX_CAPTURE_TASK_PREFIX` names a task prefix; the live bundle and the rows derived from it are the spike's |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked — exact on this rail |
 | [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization` | `session-unknown`, `session-expired`, `session-released` | linked |
 | [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) (owned there) | `admission.reasons` | — | linked — the headroom defers are three more `defer.reason` values |
@@ -136,6 +141,9 @@ into the newer turn. These are gateway judgments, not vendor limits.
 | "an upstream 5xx is typed ⚖" | upstream-500 || 502 | `upstream-http-error` | 1 |
 | "a redirect is never followed" | upstream-302 (`Location` → loopback) || 502 | `upstream-http-error` | 1 — the location is never fetched |
 | "a non-SSE 200 is refused ⚖" | upstream-wrong-type (`application/json`) || 502 | `upstream-content-type` | 1 |
+| "a 200 with no content-type is relayed as a stream ⚖" | upstream-ok-no-ctype (SSE, no `content-type` header at all) || 200 — the stream completes; an INFO line says the header was absent | — (the bounded parser's `protocol-error` is the guard against a non-SSE body) | 1 |
+| "a refused answer is captured: content-type, header names, a bounded preview ⚖" | upstream-wrong-type / upstream-500 || the ERROR line carries `content-type=`, `length=`, the response header NAMES and `body=` (≤ 512 printable bytes of ≤ 4 KiB read, non-printables escaped, `…(+N bytes)` when cut; the GW-REDACT formatter scrubs the rendered line) — the live-canary capture at the "upstream response received" boundary (spike §Recorded live protocol experiment; the first ride, 2026-10-22 21:54Z, answered 200 non-SSE and the log said only "upstream 200") | — | 1 |
+| "an auth refusal's body is never read, not even into the log" | upstream-401 (a marker in the body) || the ERROR line says `<not read: auth>`; the marker appears in no log line | — | 1 |
 | "an unreachable upstream is typed" | upstream-down || 502 | `upstream-unreachable` | 0 |
 | "🚧 WIP: a read past the read timeout" | upstream-slow (clock-faked) || 504 | `upstream-timeout` | 0 |
 
@@ -153,6 +161,24 @@ into the newer turn. These are gateway judgments, not vendor limits.
 | "a non-object event is invalid" | `data: []` || protocol-error | none of it | 1 |
 | "a transport fault mid-stream is sanitised" | one chunk, then the transport raises with secret text || transport-error | the first chunk | 1 |
 | "a cancelled download closes upstream without draining" | the consumer stops after the first chunk || cancelled | the first chunk | 1; the second chunk is never pulled |
+| "a consumer that stops after the terminal event keeps the terminal outcome ⚖" | the consumer stops right after the completed event while the upstream still holds the stream open (the live native CLI's shape — 2026-10-22 22:57Z: both requests of the first completed canary turn were recorded `cancelled` / 499 with their usage counted) || completed, usage 7 / 3 | the event | 1; the trailer is never pulled |
+
+### Live grammar — captured 2026-10-23
+
+The rows the first [four-boundary capture](#gw-codex-capture) derived (the spike
+[§The capture ride](../../../docs/spikes/codex-subscription-rail.md#the-capture-ride--2026-10-23-1012z-fu-270):
+a tool-call turn and its continuation through the live backend, task `capture-codex-20261023T100750Z`).
+The fixture [`tests/fixtures/codex-live/turn-2026-10-23.json`](../../tests/fixtures/codex-live/turn-2026-10-23.json)
+is the reviewed bundle's STRUCTURE — header names, event types / sizes / relative times, item types
+and tool names, the terminal's usage numbers; no prompt text, no identifier, no credential (the bundle
+withholds them by construction). Provenance of each row: live observation, replayed offline against the
+fake backend — presence and compatibility for that run, never necessity (the plan's rule).
+
+| description | the fixture says || the row proves (offline) |
+|---|---||---|
+| "the pinned CLI's own request headers never cross — the live set ⚖" | the CLI sent `originator`, `session-id`, `thread-id`, `x-client-request-id`, `x-codex-beta-features`, `x-codex-turn-metadata`, `x-codex-window-id`, `x-openai-internal-codex-responses-lite` (+ `x-codex-turn-state` on the continuation); the backend answered 200 without any of them, twice || a ride carrying every one of them: the upstream saw none, the set is exactly the six (+ transport) — the §Header replacement rule, now with the live names behind it |
+| "the lite protocol's input items pass the body check" | `input` = an `additional_tools` item, developer and user `message` items, then on the continuation a `custom_tool_call` and its `custom_tool_call_output`; no top-level `tools`; `include`, `reasoning`, `text`, `prompt_cache_key`, `client_metadata`, `parallel_tool_calls: false`, `tool_choice: auto`, `store: false`, `stream: true` || the same shape rides: 200, the body crosses unchanged (the model the session's) |
+| "the live turn's event grammar relays and completes with the ledger's usage" | 78 events: `response.created` → `in_progress` → a `message` item (`output_text.delta` ×9) → a `custom_tool_call` item named `exec` (`custom_tool_call_input.delta` ×57) → `response.metadata` (a vendor event outside the public grammar) → `response.completed`; usage 10683 in / 9088 cached / 83 out, plus a vendor `usage.attribution` extension || the type sequence synthesized relays byte-identical: completed, counted in 1595 / cache_read 9088 / out 83 = the live `client-response` usage; the unknown event type and the extension pass through unread |
 
 ### Named gaps and local evidence
 
@@ -162,6 +188,8 @@ into the newer turn. These are gateway judgments, not vendor limits.
 | "⚑ gap: live vendor header compatibility" | real native backend || offline round trip only | live canary must establish whether other headers are required |
 | "⚑ gap: the live canary" | a real account || never run | spike step 4 — a separately authorized maintenance window |
 | "⚖ local evidence: the pinned Codex CLI completes a turn through this gateway" | `experiments/codex-rail/compat.py` (codex-cli 0.161.0, the agent-runtime lock) || a completed `codex exec --json` turn, one rotation, one upstream close | not CI: the CLI is not in the CI toolchain — dated local evidence in `experiments/codex-rail/evidence.json` |
+
+The pinned CLI's direct backend calls beside the relay (the 2026-10-23 capture ride: 14.2 POLICY_DENIED SYNs each to `chatgpt.com` / `ab.chatgpt.com`) are gone since the gateway-render opt-outs (agent-runtime#181, agent-base `2026.10.23-g79d146c8caac`): 0 by the same query on the 20:09Z ride, both turns completed — live evidence from one dated ride, not a row ([the spike §The opt-out ride](../../../docs/spikes/codex-subscription-rail.md#the-opt-out-ride--2026-10-23-2009z-fu-270)); a CLI bump that adds a call is caught by `AgentWorkerEgressDropped`.
 
 <details markdown="1"><summary>Evidence</summary>
 
@@ -176,9 +204,10 @@ Rendered by `scripts/evidence_render.py` from CI.
 The rail is admitted on **account headroom**, held by the gateway itself (no Prometheus read,
 ADR-108): one immutable snapshot of normalised windows, replaced only by a **strictly newer**,
 valid report. The report schema is the gateway's own (`headroom.report` in the schema), not a
-vendor payload; its producer must be authenticated and account-bound — that ingress is a `⚑ gap`,
-so today reports enter only through the in-process seam and a fresh gateway answers
-`quota-unknown` (fail closed). Freshness (`max_age_s`), the ceiling and the window profile are
+vendor payload; a producer must be authenticated and account-bound. Two producers exist today, both
+the gateway's own and account-bound by construction — the usage poll (§Poll) and the headroom
+headers of every relayed answer (§Upstream headers); a third, the jail's own `rate_limits` report,
+is a `⚑ gap`. A fresh gateway answers `quota-unknown` until a report is accepted (fail closed). Freshness (`max_age_s`), the ceiling and the window profile are
 policy (`rails.codex.headroom`) — in `policy-codex` the experiment's fixture values (120 s, 0.95,
 the 300- and 10080-minute windows) ⚖ — never code literals. Verdicts: `admit`, `quota-unknown`,
 `quota-stale` (past freshness, a clock rollback, or a window's reset passed — a reset passing is
@@ -233,10 +262,107 @@ before the credential store is read, and it reserves nothing ⚖.
 | "the rail's session cap still applies" | fresh; 2 codex sessions active (`max_sessions` 2) || defer | rail-capacity | 60 |
 | "an admitted session is not re-gated on the data plane ⚖" | dispatched at 20 %, then a limited report || data plane 200 | — (an upstream 429 is the in-session signal) | — |
 
+### Poll
+
+The gateway polls the account usage endpoint **itself** — the one credential owner observes its
+own account (the operator ruling of 2026-10-19: the account is enrolled in the gateway, so no second
+reader holds its token). Every `poll_interval_s` (policy, required, strictly below `max_age_s` so a
+healthy schedule never goes stale — `policy-codex`: 30 s under 120 s ⚖; the deployed value is the
+policy's) one `GET CODEX_USAGE_URL` (no default; unset = no poll, the rail stays `quota-unknown`)
+goes out with `authorization: Bearer <access_token>` and `chatgpt-account-id`, through
+`Lifecycle.acquire()` — so a poll inside the refresh margin rotates the credential exactly like a
+request would, under the same lock. The answer is translated into the report above (`source:
+poll`, `observed_at` = now): `rate_limit.limit_reached || !allowed` → `limited`; each of
+`primary_window` / `secondary_window` → `{used_percent, resets_at: reset_at, window_minutes:
+limit_window_seconds / 60}` (the native client's basis is the absolute `reset_at`, so is this
+one's ⚖). A null window is **omitted**, which the profile check refuses whole — a missing window is
+unknown, never zero. The payload shape is the 2026-10-22 observation (the spike §Live usage payload
+shape; `tests/fixtures/codex-usage-observed.json` mirrors it with synthetic values); the identity
+fields it carries (`account_id`, `email`, `user_id`) are never read, logged, attached or rendered.
+Every outcome is counted on `gateway_codex_usage_poll_total{outcome}` ([GW-METRICS](metrics.md#gw-metrics)):
+the family exists only while the policy DECLARES the codex rail (an undeclared rail renders no series,
+so the silent-poll alert cannot fire on it) and then every outcome renders from 0; a refused or failed
+poll leaves the last ACCEPTED report standing.
+
+| description | the endpoint answers (world `policy-codex`, now T; the stored credential expires at T+1) || outcome | verdict after |
+|---|---||---|---|
+| "the observed shape is accepted, admits and renders the gauges" | 200, 20 % / 64 % (5h / 7d), allowed || accepted | admit — `gateway_subscription_utilization{rail="codex",window="5h"}` 0.2, `"7d"` 0.64 |
+| "the poll rides the lifecycle: one owner rotates once, the rotated bearer and the account header go out ⚖" | 200 || accepted — the exchange ran once, the request carried the ROTATED bearer, `chatgpt-account-id`, `accept: application/json`; the store is `ready` | admit |
+| "a missing window is refused whole — unknown, never zero ⚖" | 200, `secondary_window: null` || quota-invalid | quota-unknown |
+| "a window outside the profile is refused" | 200, `limit_window_seconds: 86400` || quota-invalid | quota-unknown |
+| "the vendor's limit flags limit" | 200, `limit_reached: true` / `allowed: false` || accepted | quota-limited |
+| "a non-bool flag or a non-integer window field is refused" | 200, `allowed: 1` / `used_percent: 20.5` / `reset_at: "soon"` / `rate_limit: []` || quota-invalid | quota-unknown |
+| "an upstream 401 is counted and changes nothing ⚖" | 401 after one accepted || upstream-auth (not a credential verdict — a usage 401 alone is no revocation evidence, spike §Refresh and headroom implications) | admit (the last accepted report stands) |
+| "a 429 or 500 is an http error, nothing accepted" | 429 / 500 || upstream-http-error | quota-unknown |
+| "an unreachable endpoint and a timeout are told apart" | connect error / read timeout || upstream-unreachable / upstream-timeout | quota-unknown |
+| "a non-JSON, wrong-type or oversize body is refused ⚖" | `text/html`; `application/json` that is not JSON; 70 KiB (bound 64 KiB) || upstream-content-type | quota-unknown |
+| "a store that does not answer is transient; a recovery marker is unresolved" | (the store) || credential-transient / credential-unresolved — the endpoint is never contacted | quota-unknown |
+| "identity never leaves the poll" | 200 with DUMMY account / email / user ids || accepted — the report carries exactly `observed_at`, `source`, `limited`, `windows`; no log line at DEBUG carries an identity value | admit |
+| "a dark rail has no poll" | no `CODEX_USAGE_URL`, or no credential backend || not enabled — a forced poll contacts nothing | quota-unknown |
+| "the schedule polls at start, before the first interval ⚖" | `run()` || one poll before any sleep (a restart needs a fresh report) | admit |
+| "poll_interval_s is required and sits below max_age_s" | policy `120` / `0` / absent / `true` (max_age_s 120) || PolicyError | — |
+| "the counter's label set is the poll's outcome set" | — || `gateway_codex_usage_poll_total`'s `outcome` values = the poll's outcomes | — |
+| "an undeclared rail renders no poll family; a declared one renders every outcome from 0 ⚖" | `GET /metrics` under `policy-default` (no codex rail) / under `policy-codex` (declared, nothing polled) || no `gateway_codex_usage_poll_total` series at all / the 11 outcomes, each 0 | — |
+
+### Upstream headers
+
+Every relayed 200 stream carries the account's windows as response headers — observed on the wire
+2026-10-22 (the spike §The second ride): `x-codex-primary-used-percent`, `-window-minutes`,
+`-reset-at`, the `secondary` set, and `x-codex-rate-limit-reached-type` when a limit is hit. The
+gateway reads them at the "upstream response received" boundary, on the **relayed 200 only** (a
+refused answer and a 429 are not read — the 429's verdict is its body's, and the next poll is at
+most `poll_interval_s` away), and translates them into the report above (`source: upstream`,
+`observed_at` = now; `limited` = the reached-type header present). The value grammar is the pinned
+CLI's own reader (codex-rs `codex-api/src/rate_limits.rs` @ rust-v0.163.0): used-percent a float,
+window-minutes and reset-at integers (epoch seconds), a window present iff its used-percent header
+is ⚖ — a window with no used-percent header is OMITTED, which the profile check refuses whole
+(unknown, never zero); a value the grammar cannot read is `quota-invalid`. The read never touches
+the ride: the stream is relayed whole whatever the headers say, and a refused report leaves the
+last accepted one standing. Both producers feed the ONE snapshot by the strictly-newer rule, so
+they compete only by time — a poll in the same instant is `quota-out-of-order`. Every read is
+counted on `gateway_codex_upstream_headroom_total{outcome}` ([GW-METRICS](metrics.md#gw-metrics)),
+declared-gated like the poll family. Nothing else in the header set is read (plan type, credits,
+the over-secondary percent, the safety flags).
+
+| description | the relayed answer's headers (world `policy-codex`, admitted on a poll report 20 % / 64 % at T−10) || outcome | verdict after |
+|---|---||---|---|
+| "the relayed answer's windows are the second observation" | 30 % / 70 %, minutes 300 / 10080, resets T+900 / T+7000 || accepted | admit — the snapshot's `source` is `upstream`; `gateway_subscription_utilization{rail="codex"}` 0.3 / 0.7 |
+| "the pinned CLI's value grammar ⚖" | `12.5` / `0`, integer minutes, epoch resets || accepted | admit — 0.125 / 0 (a float percent and a zero read as the CLI reads them) |
+| "an answer without window headers is absent, the last report stands" | no `x-codex-*` window header || absent | admit — gauges 0.2 / 0.64 unchanged |
+| "one window's headers alone are refused whole — unknown, never zero ⚖" | the primary set only || quota-invalid | admit (the poll's report stands) — the ride still 200 |
+| "an unreadable value is refused and the ride is unaffected ⚖" | `lots` / `5h` / `soon` || quota-invalid | admit (unchanged) — the stream completes |
+| "the reached-type header limits the next admission" | 30 % / 70 % + `x-codex-rate-limit-reached-type: primary` || accepted | quota-limited — the next `POST /sessions` defers `quota-limited` |
+| "a window at the ceiling in the headers limits until its reset" | 96 % / 64 %, 5h resets T+1000 || accepted | quota-limited — defer, `retry_after_s` 1000 |
+| "the two producers replace each other strictly by time ⚖" | headers at T; then a poll report at T, then one at T+1 || accepted; quota-out-of-order; accepted | admit — the newer poll's report |
+| "only a relayed answer is read ⚖" | a 429 and a wrong-type 200 carrying exhausted windows || — (not read, nothing counted) | admit (unchanged) |
+| "an undeclared rail renders no header family; a declared one renders every outcome from 0 ⚖" | `GET /metrics` under `policy-default` / `policy-codex` || no `gateway_codex_upstream_headroom_total` series / the 5 outcomes, each 0 | — |
+| "the counter's label set is the reader's outcome set" | — || `gateway_codex_upstream_headroom_total`'s `outcome` values = the reader's outcomes | — |
+
+### Gauges
+
+An ACCEPTED report from either producer — and only one — sets the two subscription gauges of
+[GW-METRICS](metrics.md#gw-metrics) for `rail="codex"`, one series per profile window:
+`gateway_subscription_utilization` = `used_percent / 100`, `gateway_subscription_reset_seconds` =
+`resets_at`. The `window` label is the profile's minutes spelled in the metrics vocabulary (300 →
+`5h`, 10080 → `7d`) — the policy profile decides which series exist, and a profile minute the
+vocabulary lacks renders `other` like any out-of-set label value ⚖. A refused report reaches no
+gauge; a fresh gateway renders no codex series until a report is accepted (the headroom is
+forgotten with the process — "a gateway restart forgets" above). The Grafana panels on UID
+`claude-subscription` (the "Codex subscription (gateway headroom)" row) read these series.
+
+| description | event (world `policy-codex`, now = 1800000000) || series | value |
+|---|---||---|---|
+| "an accepted report renders both gauges per window" | poll observed now−10, 20 % / 64 %, resets now+1000 / now+8000 — accepted || `gateway_subscription_utilization{rail="codex",window="5h"}` / `"7d"`; `gateway_subscription_reset_seconds{…}` | 0.2 / 0.64; 1800001000 / 1800008000 |
+| "a refused report leaves the gauges unchanged ⚖" | …then an older report 99 % / 99 %, limited — refused `quota-out-of-order` || the same four series | 0.2 / 0.64; 1800001000 / 1800008000 (unchanged) |
+| "a fresh gateway renders no codex series" | no report accepted || `gateway_subscription_*{rail="codex"}` | absent |
+
+| description | profile minutes || `window` label on `rail="codex"` |
+|---|---||---|
+| "the window label is the profile's minutes in the window vocabulary ⚖" | 300, 10080, 1440, 90 || `5h`, `7d`, `other` (1440 → `1d` and 90 → `90m` are outside the vocabulary, bounded like any out-of-set value) |
+
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: authenticated report ingress" | a poll of the account usage endpoint, a jail `rate_limits` event, upstream headers || none reach the gateway | the token-gated ingest + the usage poll (spike §Candidate shape) |
-| "⚑ gap: codex window gauges" | an accepted report || no `gateway_subscription_*{rail="codex"}` series | the report → gauge wiring and the dashboard panels |
+| "⚑ gap: authenticated report ingress ⚖" | a jail `rate_limits` event || does not reach the gateway — §Poll and §Upstream headers are the producers | the token-gated jail ingest (spike §Candidate shape) |
 | "⚑ gap: reservation" | two admissions at 94 % || both dispatched | reports do not meter concurrent use; the session cap is the only bound |
 
 <details markdown="1"><summary>Evidence</summary>
@@ -259,7 +385,7 @@ and returns the replacement only after saving it `ready`. A persisted `refreshin
 uncertain exchange, an invalid replacement — fails closed as `credential-recovery-required` and is
 never retried automatically (replaying a rotated refresh token is the one unrecoverable move). An
 authoritative revocation persists `revoked`. No failure carries a credential in its message, its
-exception chain or any repr. The durable store and seed recovery are specified below. The deployed policy still omits Codex.
+exception chain or any repr. The durable store and seed recovery are specified below. The deployed policy declares the rail since 2026-10-22 (prober-only).
 
 On the data plane a lifecycle failure answers before upstream is contacted:
 `credential-store-unavailable` → 503 with `retry-after` (the store may answer next time); every
@@ -324,7 +450,7 @@ Recreate on the PVC; distributed fencing remains FU-271. No credential memory fa
 | "an uncertain refresh refuses, then stays refused" | the exchange times out || — | 401 `credential-refresh-uncertain`, then 401 `credential-recovery-required` |
 | "a store fault on the data plane is retriable ⚖" | the marker save raises || — | 503 `credential-store-unavailable`, `retry-after: 60` |
 | "no backend: the rail is a definitive miss" | `policy-codex`, `create_app` without a store || defer `credential-unresolved` | — |
-| "the deployed policy declares no codex rail" | `argocd/resources/agent-gateway/policy.json` || `rails` has no `codex` key — the rail ships dark | — |
+| "the deployed policy lists the subscription rails for every role ⚖" | `argocd/resources/agent-gateway/policy.json` || `rails.codex` with its `headroom` and `oauth` blocks (lit 2026-10-22, FU-270: the seed minted in #2826, the poll in #2828); every role's `rails` holds `anthropic`, `opencode` AND `codex` (operator ruling 2026-10-23: subscriptions go to all roles, the per-role order is the weekly knob — [GW-SESSIONS-ADMIT §The harness follows the rail](sessions.md#the-harness-follows-the-rail)); the metered `openrouter` rail, where listed, walks LAST — except for the `prober`, whose probes are that rail's | — |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
@@ -393,3 +519,52 @@ HTTP fake reached through the real transport adapter and lifecycle; no live cred
 --8<-- "GW-CODEX-REFRESH.md"
 
 </details>
+
+## GW-CODEX-CAPTURE
+
+The four-boundary capture of a codex ride ([the spike §Recorded live protocol experiment](../../../docs/spikes/codex-subscription-rail.md#recorded-live-protocol-experiment--2026-10-22-fu-270),
+FU-270): the observer the experiment plan asked for, so a live ride yields evidence at **client
+request received**, **upstream request sent**, **upstream response received** (its status and
+headers, then every SSE event as it is relayed) and **client response sent** — egress-only capture
+cannot show what the gateway discarded, ingress-only cannot show what the backend saw. The recorder
+is **scoped**: only a session whose task carries the configured prefix (`CODEX_CAPTURE_TASK_PREFIX`;
+unset = off, the default) is recorded; the jail's `canary-codex.sh --capture` names its task so.
+It is **passive**: the relay yields every chunk unchanged before the tap splits it into events; it
+never buffers a response, never delays or replays a request, and a recorder fault is a log line, not
+a ride outcome. It **sanitizes before persistence, structurally** (⚖ never the log formatter's
+pattern matching, GW-REDACT is the second belt): header values are kept only for an allowlist of
+non-sensitive names (content negotiation, transport, the `x-codex-*` headroom percentages the gateway
+already reads as a report, the plan vocabulary) — every other header keeps its name with its value
+withheld and its length; in bodies and events every string becomes its length except the vocabulary
+keys (`type`, `status`, `role`, `name`, `model`, `object`, `code`, …) whose values are enumerations or
+public names, and identifier keys (`id`, `*_id`) whose values become run-local aliases (`call#1`)
+equal across all four boundaries of a session; numbers, booleans and structure stay; unknown keys
+keep their presence and type. It is **bounded**: `CODEX_CAPTURE_MAX_BYTES` per request (default
+256 KiB); overflow writes one `truncated` marker and the bundle says `complete: false` — a missing
+record is never an observed absence; a ride the gateway itself refuses persists its `client-response`
+too, and concurrent requests of one session (a side call beside the main stream) persist back to
+back under their own `request` ordinal. Records persist in the gateway's own store (table `captures`,
+`CODEX_CAPTURE_RETENTION_DAYS`, default 7) and are read back as one bundle by
+`GET /sessions/{id}/capture` under the session's lookup rule ([GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth)
+route `lookup`: the admitting caller or a judge). The bundle is pulled into restricted storage and
+REVIEWED before any excerpt becomes a spike paragraph or a fixture; ⚖ the gateway-owned usage poll is
+not in it (its own log lines and counters are its instrumentation, §Poll).
+
+Rows run in the `policy-codex` world with the recorder scoped to tasks `capture-*`
+(`tests/test_codex_capture.py`); every value a row shows is the fake backend's.
+
+| description | task | the ride || the bundle (`GET /sessions/{id}/capture`) |
+|---|---|---||---|
+| "a scoped ride is recorded at the four boundaries, in order" | `capture-t1` | upstream-ok || `client-request`, `upstream-request`, `upstream-response`, `upstream-event`…, `client-response`; `t_ms` ascending; `complete: true`; `format: codex-capture/1` |
+| "an unscoped session has no capture" | the probe task | upstream-ok || 404 `capture-not-found` |
+| "the recorder off by default captures nothing ⚖" | `capture-t1`, no prefix configured | upstream-ok || 404 `capture-not-found` — a deployment opts in by naming the prefix |
+| "credentials never land in the capture ⚖" | `capture-t1` | the backend echoes a `DUMMY-SECRET` cookie and request id || `authorization` and `chatgpt-account-id` present, withheld; the cookie and request id withheld; neither canary nor the session token anywhere in the bundle; `content-type` / `accept` values kept |
+| "strings are lengths, vocabulary is kept, identifiers are aliases ⚖" | `capture-t1` | input text `hi`, a `function_call_output` with `call_id`, a tool `rg` || `{"len": 2}`; `type` / `role` / `name` verbatim; `call_id` → `call#1` at both request boundaries; the raw id nowhere |
+| "the stream's events are recorded in order with their usage" | `capture-t1` | upstream-ok || event `n` 1…N, types in relay order (`response.created` … `response.completed`), the terminal's `usage` numbers; `client-response.relayed_bytes` = the client's bytes, `events` = N |
+| "the capture is bounded; overflow marks the bundle incomplete and the ride is unaffected ⚖" | `capture-t1` | max 600 bytes || `complete: false`, one `truncated` marker; the ride 200 with the whole stream |
+| "a refused answer is captured as a refusal" | `capture-t1` | upstream-wrong-type || `upstream-response.refusal = upstream-content-type`, `client-response` 502 |
+| "a 429 is captured as the rate limit it is" | `capture-t1` | upstream-429 || `upstream-response` 429, `client-response` 429 outcome `rate-limited` |
+| "a gateway-side refusal is captured as a refusal ⚖" | `capture-t1` | a body naming another model || `client-request` then `client-response` 403 outcome `model-not-session`, nothing upstream — the gateway's own NO leaves a record (the plan: a missing record is never an observed absence) |
+| "two requests in flight in one session persist back to back" | `capture-t1` | the first held until the second completes || both requests' boundaries present under their own `request` ordinal (1, 2); `requests: 2`; nothing replaced (the `seq` range is allocated at persist time under a lock, a collision is a loud INSERT failure) |
+| "the bundle is read under the session's lookup rule" | `capture-t1` | an unknown id; a token that is no caller's || 404 `session-not-found`; the same status `GET /sessions/{id}` answers that token (the world's control plane observes; an enforcing one refuses both alike — [GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth)) |
+

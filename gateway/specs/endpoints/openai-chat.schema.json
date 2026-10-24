@@ -69,7 +69,7 @@
         "provider_name": { "type": "string", "description": "the display name a response's `provider` carries" },
         "quantization": { "type": "string", "description": "the vendor's value (`fp4`, `fp8`, `mxfp4`, `unknown`, …); eligibility reads it against the policy ladder" },
         "tool_choice": { "type": "object", "additionalProperties": false, "required": ["none", "auto", "required", "function"], "properties": { "none": { "type": "boolean" }, "auto": { "type": "boolean" }, "required": { "type": "boolean" }, "function": { "type": "boolean" } }, "description": "`supports_tool_choice` per mode" },
-        "uptime_1d": { "type": "number", "minimum": 0, "maximum": 100, "description": "`uptime_last_1d`, percent" },
+        "uptime_1d": { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "`uptime_last_1d`, percent; null = the vendor reports none for the endpoint (fresh or idle) — eligibility drops it" },
         "p90_ms": { "type": ["number", "null"], "description": "`latency_last_30m.p90`; null on the public API (the MCP carries it)" },
         "in_price": { "type": ["number", "null"], "description": "$ per 1M prompt tokens; null = dynamic / unpriced" },
         "out_price": { "type": ["number", "null"], "description": "$ per 1M completion tokens" },

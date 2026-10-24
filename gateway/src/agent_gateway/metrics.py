@@ -8,7 +8,8 @@ the rail's credential is bad; every rail renders from 0),
 `gateway_control_plane_unauthenticated_total{route,reason}` (GW-SESSIONS-AUTH — every control-plane
 request without a valid caller token, admitted under `observe` or refused under `enforce`),
 `gateway_subscription_utilization{rail,window}` + `gateway_subscription_reset_seconds{rail,window}`
-(gauges, last seen on the subscription rail's `anthropic-ratelimit-unified-*` response headers).
+(gauges, last seen on the subscription rail's `anthropic-ratelimit-unified-*` response headers; on the
+codex rail the last ACCEPTED headroom report's windows — GW-CODEX-HEADROOM §Gauges).
 `gateway_cells_cooled{rail}` + `gateway_credentials_rejected{rail}` (gauges — the admission's transport
 facts, sessions.md §Capacity) and `gateway_requests_incomplete_total{rail,dialect,reason}` (a 2xx whose
 body stopped before its end, GW-RAIL-*).
@@ -22,24 +23,36 @@ import threading
 from collections.abc import Callable, Iterable
 
 from .capacity import subscription_windows  # one parser for the gauges and the admission reading
-from .config import DIALECTS, RAILS, ROLES
+from .config import DIALECTS, RAILS, ROLES, SUBSCRIPTION_WINDOWS
 from .outcomes import OUTCOME_CLASSES  # the one vocabulary (GW-SESSIONS-OUTCOME)
 
 OTHER = "other"
 DECISIONS = ("dispatch", "defer")
 TOKEN_CLASSES = ("in", "cache_read", "cache_write", "out")
 CRED_OUTCOMES = ("resolved", "definitive", "transient")
-CP_ROUTES = ("admit", "lookup", "release", "outcome")  # control.ROUTES (not imported: control imports this module)
+CP_ROUTES = ("admit", "lookup", "release", "outcome", "list")  # control.ROUTES (not imported: control imports this module)
 CP_REASONS = ("absent", "invalid", "review-transient")
 INCOMPLETE_REASONS = ("no-terminal", "timeout", "transport-error", "client-closed")
 STRIKE_SOURCES = ("outcome", "gateway")
 PROBE_OUTCOMES = ("cleared", "rejected", "inconclusive")
+# GW-CODEX-HEADROOM §Poll — codex_usage.OUTCOMES (not imported: codex_usage imports nothing from here, but the
+# label set is the schema's, spelled once per side like the others)
+POLL_OUTCOMES = ("accepted", "quota-invalid", "quota-time-invalid", "quota-out-of-order", "credential-unresolved",
+                 "credential-transient", "upstream-auth", "upstream-http-error", "upstream-content-type",
+                 "upstream-unreachable", "upstream-timeout")
+# GW-CODEX-HEADROOM §Upstream headers — codex_headers.OUTCOMES, spelled once per side like the poll's
+HEADROOM_HEADER_OUTCOMES = ("accepted", "absent", "quota-invalid", "quota-time-invalid", "quota-out-of-order")
 # GW-RAIL-OPENROUTER: how one attempt on a (rail, model, provider) cell ended — `ok` (a complete 2xx),
 # `incomplete` (a 2xx whose body stopped early), the pre-byte failures the gateway fails over on
 # (`5xx`, `429`, `unreachable`, `timeout`, `content-type`, `provider-error`), and the request-scoped
 # answers it never fails over on (`refused`, `auth`, `edge`).
 PROVIDER_OUTCOMES = ("ok", "incomplete", "5xx", "429", "unreachable", "timeout", "content-type", "provider-error",
                      "refused", "auth", "edge")
+# GW-MODEL-TIERS §The rail choice: why one rail's twin cell went first — `price` (cheaper per clean ride,
+# and by price alone), `clean-rate` (the measured clean rate flipped the price order), `headroom` (the Go
+# twin's window holds it), `not-in-catalog` (the Go twin is not priced by the catalog), `no-eligible-endpoint`
+# (the openrouter twin has no eligible endpoint to price), `order` (equal costs: the role's rail order).
+RAIL_CHOICE_REASONS = ("price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint", "order")
 BUCKETS = (0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
 
 
@@ -49,6 +62,18 @@ def _bounded(value: str, allowed: Iterable[str]) -> str:
 
 def _status_class(status: int) -> str:
     return str(status) if 100 <= status < 600 else OTHER
+
+
+def window_label(minutes: int) -> str:
+    """A headroom window's profile minutes in the `window` vocabulary: a whole number of days renders
+    `<n>d`, of hours `<n>h`, else `<n>m` (300 → `5h`, 10080 → `7d`). The policy profile, never a code
+    literal, decides which labels exist; one outside the schema's set is bounded to `other` like any
+    other label value (GW-CODEX-HEADROOM §Gauges ⚖)."""
+    if minutes % 1440 == 0:
+        return f"{minutes // 1440}d"
+    if minutes % 60 == 0:
+        return f"{minutes // 60}h"
+    return f"{minutes}m"
 
 
 def _fmt_labels(labels: dict[str, str]) -> str:
@@ -66,6 +91,9 @@ class Metrics:
         self.tokens_total: dict[tuple[str, str], int] = {}
         self.cred_total: dict[tuple[str, str], int] = {}
         self.upstream_auth_total: dict[str, int] = {}
+        self.poll_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Poll
+        self.headroom_header_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Upstream headers
+        self.codex_declared = False  # the family renders only for a declared codex rail (bind_codex_rail)
         self.cp_unauth_total: dict[tuple[str, str], int] = {}
         self.sub_util: dict[tuple[str, str], float] = {}
         self.sub_reset: dict[tuple[str, str], float] = {}
@@ -86,6 +114,10 @@ class Metrics:
         self._cooled_source: Callable[[], dict[str, int]] | None = None
         self._rejected_source: Callable[[], dict[str, int]] | None = None
         self._extra: list[Callable[[], list[str]]] = []
+        # GW-MODEL-TIERS: the rail choice's counter (model bounded like the provider families) and the
+        # mounted tier-evidence snapshot's age (None = none mounted — no series).
+        self._rail_choices: dict[tuple[str, str, str], int] = {}
+        self._tier_evidence_age: Callable[[], float | None] = lambda: None
 
     def bind_active_sessions(self, source: Callable[[], dict[str, int]]) -> None:
         self._gauge_source = source
@@ -104,6 +136,17 @@ class Metrics:
                _bounded(provider, self._provider_slugs() | {"unattributed"}), _bounded(outcome, PROVIDER_OUTCOMES))
         with self._lock:
             self.provider_total[key] = self.provider_total.get(key, 0) + 1
+
+    def rail_choice(self, model: str, rail: str, reason: str) -> None:
+        """GW-MODEL-TIERS §The rail choice: one admission chose `rail` for the twin `model` (its
+        openrouter spelling — the same bound as the provider families) for `reason`."""
+        key = (_bounded(model, self._provider_models()), _bounded(rail, RAILS), _bounded(reason, RAIL_CHOICE_REASONS))
+        with self._lock:
+            self._rail_choices[key] = self._rail_choices.get(key, 0) + 1
+
+    def bind_tier_evidence(self, age: Callable[[], float | None]) -> None:
+        """GW-MODEL-TIERS: seconds since the mounted tier-evidence snapshot's `snapshot_at` (None = none mounted)."""
+        self._tier_evidence_age = age
 
     def failover(self, model: str, frm: str, to: str) -> None:
         slugs = self._provider_slugs()
@@ -170,10 +213,40 @@ class Metrics:
                 self.sub_util[(r, w)] = util
                 self.sub_reset[(r, w)] = reset
 
+    def subscription_report(self, rail: str, windows: Iterable) -> None:
+        """GW-CODEX-HEADROOM §Gauges: an ACCEPTED headroom report's normalised windows (`minutes`,
+        `used` 0–1, `resets_at`) set the same two gauges the subscription rail renders from headers;
+        the caller (headroom's `on_accept`) never fires for a refused report, so a refusal changes
+        nothing here."""
+        r = _bounded(rail, RAILS)
+        with self._lock:
+            for w in windows:
+                label = _bounded(window_label(w.minutes), SUBSCRIPTION_WINDOWS)
+                self.sub_util[(r, label)] = w.used
+                self.sub_reset[(r, label)] = w.resets_at
+
     def credential(self, rail: str, outcome: str) -> None:
         key = (_bounded(rail, RAILS), _bounded(outcome, CRED_OUTCOMES))
         with self._lock:
             self.cred_total[key] = self.cred_total.get(key, 0) + 1
+
+    def bind_codex_rail(self, declared: bool) -> None:
+        """GW-CODEX-HEADROOM §Poll: `gateway_codex_usage_poll_total` exists only while the policy declares the
+        codex rail — an undeclared rail renders no series, so CodexUsagePollSilent cannot fire on it."""
+        self.codex_declared = declared
+
+    def codex_poll(self, outcome: str) -> None:
+        """GW-CODEX-HEADROOM §Poll: one usage poll's bounded outcome (`accepted` = a report the headroom took)."""
+        o = _bounded(outcome, POLL_OUTCOMES)
+        with self._lock:
+            self.poll_total[o] = self.poll_total.get(o, 0) + 1
+
+    def codex_upstream_headroom(self, outcome: str) -> None:
+        """GW-CODEX-HEADROOM §Upstream headers: one relayed answer's headroom-header read (`accepted` = a
+        report the headroom took, `absent` = no window header on the answer)."""
+        o = _bounded(outcome, HEADROOM_HEADER_OUTCOMES)
+        with self._lock:
+            self.headroom_header_total[o] = self.headroom_header_total.get(o, 0) + 1
 
     def upstream_auth_rejected(self, rail: str) -> None:
         """The upstream answered 401/403 to the gateway's own credential (502 `upstream-auth`)."""
@@ -234,6 +307,18 @@ class Metrics:
                       "# TYPE gateway_upstream_auth_rejected_total counter"]
             for rail in RAILS:
                 lines.append(f"gateway_upstream_auth_rejected_total{_fmt_labels({'rail': rail})} {self.upstream_auth_total.get(rail, 0)}")
+            # Only for a DECLARED codex rail (bind_codex_rail): an undeclared rail renders no series at all, so the
+            # silent-poll alert cannot fire on it. Once declared, every outcome renders from 0 (the alerts read
+            # increase(): a fresh pod's first `accepted` must count).
+            if self.codex_declared:
+                lines += ["# HELP gateway_codex_usage_poll_total The codex rail's usage polls by outcome (GW-CODEX-HEADROOM §Poll); accepted = the headroom took the report.",
+                          "# TYPE gateway_codex_usage_poll_total counter"]
+                for outcome in POLL_OUTCOMES:
+                    lines.append(f"gateway_codex_usage_poll_total{_fmt_labels({'outcome': outcome})} {self.poll_total.get(outcome, 0)}")
+                lines += ["# HELP gateway_codex_upstream_headroom_total The codex rail's relayed answers read for their x-codex-* headroom headers, by outcome (GW-CODEX-HEADROOM §Upstream headers); accepted = the headroom took the report, absent = no window header.",
+                          "# TYPE gateway_codex_upstream_headroom_total counter"]
+                for outcome in HEADROOM_HEADER_OUTCOMES:
+                    lines.append(f"gateway_codex_upstream_headroom_total{_fmt_labels({'outcome': outcome})} {self.headroom_header_total.get(outcome, 0)}")
             lines += ["# HELP gateway_requests_incomplete_total 2xx answers whose body stopped before its end, by reason.",
                       "# TYPE gateway_requests_incomplete_total counter"]
             for (rail, dialect, reason), n in sorted(self.incomplete_total.items()):
@@ -250,6 +335,15 @@ class Metrics:
                       "# TYPE gateway_provider_failovers_total counter"]
             for (model, frm, to), n in sorted(self.failover_total.items()):
                 lines.append(f"gateway_provider_failovers_total{_fmt_labels({'model': model, 'from': frm, 'to': to})} {n}")
+            lines += ["# HELP gateway_rail_choice_total Admissions where the tier named one model on two allowed rails, by the rail chosen and why (GW-MODEL-TIERS).",
+                      "# TYPE gateway_rail_choice_total counter"]
+            for (model, rail, reason), n in sorted(self._rail_choices.items()):
+                lines.append(f"gateway_rail_choice_total{_fmt_labels({'model': model, 'rail': rail, 'reason': reason})} {n}")
+            lines += ["# HELP gateway_tier_evidence_age_seconds Seconds since the mounted tier-evidence snapshot's snapshot_at (absent: none mounted) (GW-MODEL-TIERS).",
+                      "# TYPE gateway_tier_evidence_age_seconds gauge"]
+            age = self._tier_evidence_age()
+            if age is not None:
+                lines.append(f"gateway_tier_evidence_age_seconds {age:.0f}")
             lines += ["# HELP gateway_sessions_reaped_total Sessions released because their pod was gone (GW-SESSIONS-LIVENESS).",
                       "# TYPE gateway_sessions_reaped_total counter"]
             lines += [f"gateway_sessions_reaped_total{_fmt_labels({'rail': rail})} {self.reaped_total.get(rail, 0)}" for rail in RAILS]

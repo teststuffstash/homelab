@@ -155,7 +155,13 @@ async def relay(chunks: AsyncIterator[bytes], observation: Observation, close: C
             yield chunk
         events.finish()
     except (GeneratorExit, asyncio.CancelledError):
-        observation.outcome = "cancelled"
+        # A consumer that goes away AFTER the terminal event has everything: the outcome it earned
+        # stands. The live native CLI closes the connection right after `response.completed` while
+        # the vendor holds the stream open (2026-10-22 22:57Z — both requests of the first completed
+        # canary turn were recorded cancelled/499 with their usage counted). Only a stream still
+        # pending (no terminal seen) is a cancellation.
+        if observation.outcome == "pending":
+            observation.outcome = "cancelled"
         raise
     except Refused:
         if observation.outcome == "pending":

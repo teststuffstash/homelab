@@ -50,6 +50,9 @@ Upstream failures:
 | an upstream 5xx is typed | upstream-500 | 502 | upstream-http-error | 1 |
 | a redirect is never followed | upstream-302 | 502 | upstream-http-error | 1 |
 | a non-SSE 200 is refused | upstream-wrong-type | 502 | upstream-content-type | 1 |
+| a 200 with no content-type is relayed as a stream | upstream-ok-no-ctype | 200, the stream completes | — | 1 |
+| a refused answer is captured: content-type, header names, a bounded preview | upstream-wrong-type / upstream-500 | the ERROR line carries them | — | 1 |
+| an auth refusal's body is never read, not even into the log | upstream-401 | the ERROR line says <not read: auth>; the body's marker is nowhere | — | 1 |
 | an unreachable upstream is typed | upstream-down | 502 | upstream-unreachable | 0 |
 | a read past the read timeout (WIP: clock-faked) | upstream-slow | 504 | upstream-timeout | 0 |
 
@@ -67,6 +70,7 @@ The relay seam:
 | a non-object event is invalid | data: [] | protocol-error | none | 1 |
 | a transport fault mid-stream is sanitised | chunk, then raise | transport-error | first chunk | 1 |
 | a cancelled download closes upstream without draining | consumer stops after chunk 1 | cancelled | first chunk | 1 |
+| a consumer that stops after the terminal event keeps the terminal outcome | consumer stops after the completed event, the upstream still open | completed, usage 7 / 3 | the event | 1; the trailer is never pulled |
 """
 
 from __future__ import annotations
@@ -384,6 +388,16 @@ async def test_transport_fault():
     then_eq("observation carries no secret", "DUMMY-SECRET" in repr(obs), False)
 
 
+async def test_cancel_after_terminal():
+    """row: a consumer that stops after the terminal event keeps the terminal outcome"""
+    world("policy-codex")
+    with when("the consumer stops right after the completed event while the upstream still holds the stream open (the live CLI's shape)"):
+        obs, out, closes, pulled = await _drive([_event(), b": trailer\n\n"], stop_after=1)
+    then_eq("(outcome, usage, closes)", (obs.outcome, (obs.input_tokens, obs.output_tokens), closes), ("completed", (7, 3), 1))
+    then_eq("bytes out", out, _event(), claim="the completed event reached the consumer")
+    then_eq("chunks pulled from upstream", pulled, [0], claim="the trailer is never pulled")
+
+
 async def test_cancellation():
     """row: a cancelled download closes upstream without draining"""
     world("policy-codex")
@@ -391,3 +405,59 @@ async def test_cancellation():
         obs, out, closes, pulled = await _drive([b": first\n\n", _event()], stop_after=1)
     then_eq("(outcome, bytes out, closes)", (obs.outcome, out, closes), ("cancelled", b": first\n\n", 1))
     then_eq("chunks pulled from upstream", pulled, [0], claim="the second chunk is never pulled")
+
+
+async def test_refused_answer_captured(codex_app, codex_gw, codex_upstream, clock, caplog):
+    """row: a refused answer is captured: content-type, header names, a bounded preview"""
+    world("policy-codex", "upstream-wrong-type")
+    codex_upstream.behaviour = "upstream-wrong-type"
+    with given("a codex session"):
+        doc = await _admitted(codex_app, codex_gw, clock)
+    with when("POST /openai/v1/responses — the upstream answers 200 application/json"), caplog.at_level("ERROR", logger="gateway.codex"):
+        r = await ride(codex_gw, doc, body(), label="wrong-type")
+    then_eq("status", r.status_code, 502)
+    line = next((rec.getMessage() for rec in caplog.records if "upstream-content-type codex 200" in rec.getMessage()), "")
+    with then("the ERROR line names the content-type, the header names and a preview of the body", line={"actual": line}):
+        assert "content-type='application/json'" in line
+        assert "headers=[" in line and "content-type" in line.split("headers=[", 1)[1].split("]", 1)[0]
+        assert "body='{\"output\":[]}'" in line
+    codex_upstream.behaviour = "upstream-500"
+    with when("the next request, the upstream answering 500"), caplog.at_level("ERROR", logger="gateway.codex"):
+        r = await ride(codex_gw, doc, body(), label="500")
+    then_eq("status", r.status_code, 502)
+    line = next((rec.getMessage() for rec in caplog.records if "upstream-http-error codex 500" in rec.getMessage()), "")
+    with then("the 5xx body is previewed too", line={"actual": line}):
+        assert "body='{\"error\":\"boom\"}'" in line
+
+
+async def test_auth_refusal_body_never_read(codex_app, codex_gw, codex_upstream, clock, caplog):
+    """row: an auth refusal's body is never read, not even into the log"""
+    world("policy-codex", "upstream-401")
+    codex_upstream.behaviour = "upstream-401"
+    with given("a codex session"):
+        doc = await _admitted(codex_app, codex_gw, clock)
+    with when("POST /openai/v1/responses — the upstream answers 401 with a marker in its body"), caplog.at_level("DEBUG"):
+        r = await ride(codex_gw, doc, body(), label="401")
+    then_eq("status", r.status_code, 502)
+    line = next((rec.getMessage() for rec in caplog.records if "upstream-auth codex 401" in rec.getMessage()), "")
+    with then("the ERROR line says the body was not read; the marker appears in no log line", line={"actual": line}):
+        assert "<not read: auth>" in line
+        assert not any("DUMMY-SECRET-LEAK" in rec.getMessage() for rec in caplog.records)
+
+
+async def test_stream_without_content_type(codex_app, codex_gw, codex_upstream, clock, caplog):
+    """row: a 200 with no content-type is relayed as a stream"""
+    world("policy-codex", "upstream-ok-no-ctype")
+    codex_upstream.behaviour = "upstream-ok-no-ctype"
+    with given("a codex session"):
+        doc = await _admitted(codex_app, codex_gw, clock)
+    with when("POST /openai/v1/responses — the upstream streams SSE with NO content-type header (the live backend's shape)"), \
+         caplog.at_level("INFO", logger="gateway.codex"):
+        r = await ride(codex_gw, doc, body(), label="no-ctype")
+    then_eq("status", r.status_code, 200)
+    terminal = [ln for ln in r.text.splitlines() if ln.startswith("event: ")][-1] if "event: " in r.text else ""
+    then_eq("stream completed", terminal, "event: response.completed", claim="the stream is relayed to its completion (terminal event = response.completed)")
+    info = next((rec.getMessage() for rec in caplog.records if "without a content-type" in rec.getMessage()), "")
+    with then("INFO line says the content-type was absent", info={"expected": "codex upstream 200 without a content-type — relayed as a stream session=<id>", "actual": info}):
+        assert info.startswith("codex upstream 200 without a content-type — relayed as a stream session=")
+    then_eq("upstream calls", len(codex_upstream.calls), 1)

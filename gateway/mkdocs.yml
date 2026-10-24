@@ -34,12 +34,13 @@ markdown_extensions:
   - md_in_html
   - toc:
       permalink: true
-  # Evidence transclusion: spec pages pull in per-rule fragments (`--8<-- "<RULE>.md"`) that
-  # scripts/evidence_render.py writes to specs/evidence/<RULE>.md from the pytest run
-  # (`devbox run ci`). A missing fragment renders as nothing — specs/README.md rule 5's
-  # "missing evidence = visibly unverified", not a build failure.
+  # Evidence transclusion: spec pages pull in per-rule fragments (`--8<-- "<RULE>.md"`) — the
+  # pinned allure-evidence tool's <RULE>.md (scripts/gateway-evidence.sh → allure-evidence/), staged
+  # into .site-evidence/ by scripts/specs-build.sh, which also rewrites a joined rule's staged page
+  # so its `<details>` embed is gone. A missing fragment renders as nothing — specs/README.md rule
+  # 5's "missing evidence = visibly unverified", not a build failure.
   - pymdownx.snippets:
-      base_path: [specs/evidence]
+      base_path: [.site-evidence]
       check_paths: false
   - pymdownx.superfences:
       custom_fences:

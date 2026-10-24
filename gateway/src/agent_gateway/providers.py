@@ -13,8 +13,8 @@ level, before the first byte, never after one was relayed.
 - **Eligibility** (`eligible`): one representative endpoint per PROVIDER (the tag's base slug,
   what `provider.order` names — `deepinfra`, never the display name; the 2026-07-09 lesson), kept
   only when it supports every tool-choice mode the session's harness uses, its quantization
-  clears the policy floor (`unknown` is excluded), its uptime_last_1d clears the floor and its
-  status is 0. Every threshold is `rails.openrouter.providers` policy data.
+  clears the policy floor (`unknown` is excluded), its uptime_last_1d clears the floor (a `null`
+  figure — the vendor's answer for a fresh or idle endpoint — clears none) and its status is 0. Every threshold is `rails.openrouter.providers` policy data.
 - **Order** (`order`): price × (1 / the cell's clean-ride rate from the outcome store); while a
   cell has fewer than `min_rides` judged rides, its uptime is the prior; p90 latency breaks ties.
 - **Attribution** (`attribute`, `slug_for`): the response's `provider` (a chat completion's top
@@ -51,7 +51,7 @@ class Endpoint:
     provider_name: str  # the display name a response's `provider` carries
     quantization: str
     tool_choice: dict[str, bool]
-    uptime_1d: float
+    uptime_1d: float | None  # `uptime_last_1d`; None = the vendor reports none (a fresh or idle endpoint) — clears no floor
     p90_ms: float | None
     in_price: float | None  # $ per 1M tokens
     out_price: float | None
@@ -127,7 +127,7 @@ def parse_endpoints(doc) -> dict:
             "provider_name": name,
             "quantization": quant,
             "tool_choice": {m: tc[m] for m in TOOL_CHOICE_MODES},
-            "uptime_1d": _num(f"{where}.uptime_last_1d", e.get("uptime_last_1d")),
+            "uptime_1d": _num(f"{where}.uptime_last_1d", e.get("uptime_last_1d"), optional=True),
             "p90_ms": _num(f"{where}.latency_last_30m.p90", (lat or {}).get("p90"), optional=True),
             "in_price": _per_million(f"{where}.pricing.prompt", pricing.get("prompt")),
             "out_price": _per_million(f"{where}.pricing.completion", pricing.get("completion")),
@@ -138,7 +138,8 @@ def parse_endpoints(doc) -> dict:
 
 
 def _row(d: dict) -> Endpoint:
-    return Endpoint(d["slug"], d["tag"], d["provider_name"], d["quantization"], dict(d["tool_choice"]), float(d["uptime_1d"]),
+    return Endpoint(d["slug"], d["tag"], d["provider_name"], d["quantization"], dict(d["tool_choice"]),
+                    None if d.get("uptime_1d") is None else float(d["uptime_1d"]),
                     d.get("p90_ms"), d.get("in_price"), d.get("out_price"), int(d["status"]), d.get("service_tier"))
 
 
@@ -198,6 +199,20 @@ def _provider_of(doc) -> str | None:
         if isinstance(meta, dict) and isinstance(meta.get("provider_name"), str) and meta["provider_name"]:
             return meta["provider_name"]
     return None
+
+
+def limit_source(body: bytes) -> str | None:
+    """A 429 envelope's `error.metadata.limit_source` — OpenRouter names what throttled the request
+    (`upstream_provider_shared_pool`: the provider throttles OpenRouter's shared upstream account, the
+    2026-10-21 tap on homelab#2775; `openrouter_free_tier_per_minute`: the key's own tier). None = unnamed."""
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return None
+    err = doc.get("error") if isinstance(doc, dict) else None
+    meta = err.get("metadata") if isinstance(err, dict) else None
+    src = meta.get("limit_source") if isinstance(meta, dict) else None
+    return src if isinstance(src, str) and src else None
 
 
 def provider_error(body: bytes) -> bool:
@@ -266,6 +281,8 @@ def eligible(endpoints: list[Endpoint], pol, harness: str) -> tuple[list[Endpoin
             dropped[slug] = f"quantization {e.quantization}"
         elif ladder[e.quantization] < floor:
             dropped[slug] = f"quantization {e.quantization} < {pol.quantization_floor}"
+        elif e.uptime_1d is None:  # ⚖ no figure clears no floor (the vendor answers null for a fresh or idle endpoint)
+            dropped[slug] = "uptime_1d unknown"
         elif e.uptime_1d < pol.uptime_1d_floor:
             dropped[slug] = f"uptime_1d {e.uptime_1d:g} < {pol.uptime_1d_floor:g}"
         elif e.status != 0:
@@ -281,6 +298,8 @@ def clean_rate(e: Endpoint, stats: dict[str, tuple[int, int]], min_rides: int) -
     clean, total = stats.get(e.slug, (0, 0))
     if total >= min_rides:
         return clean / total, f"measured {clean}/{total}"
+    if e.uptime_1d is None:  # never ordered: eligibility dropped it — the prior of no figure is 0
+        return 0.0, f"prior uptime unknown ({total} judged rides)"
     return e.uptime_1d / 100.0, f"prior uptime {e.uptime_1d:g} ({total} judged rides)"
 
 

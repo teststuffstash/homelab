@@ -26,6 +26,7 @@ What a caller may ask for (policy-default):
 |---|---|---|---|---|
 | a stack outside the caller's entry | the platform loop | oracle worker + bind | 403 | caller-stack-denied |
 | a role outside the caller's entry | the platform loop | platform reviewer + bind | 403 | caller-role-denied |
+| the entry canary's role is inside the dispatcher's entry | the platform loop | platform prober, no bind | 200 | — |
 | a bind namespace outside the caller's entry | the platform loop | bind oracle-agents | 403 | caller-bind-denied |
 | a caller with no bind namespaces may not bind | the specs reviewer | platform reviewer + bind | 403 | caller-bind-denied |
 | an unbound admission needs no bind namespace | the specs reviewer | platform reviewer, no bind | 200 | dispatch with token + env |
@@ -44,6 +45,19 @@ Lookup and release belong to the admitting caller:
 | a session admitted with no caller is released by any listed caller ⚖ | policy-default | no-bearer admit; specs reviewer DELETEs | 200 | released_at set |
 | an unknown id is 404 only after the caller check ⚖ | policy-enforce | loop GETs /sessions/nope | 404 | session-not-found |
 | an unknown id without a bearer, under enforce ⚖ | policy-enforce | GET /sessions/nope, no bearer | 401 | caller-unauthenticated |
+
+A judge finds a task's sessions (GET /sessions?task=, route `list`):
+
+| description | world | sequence | status | result |
+|---|---|---|---|---|
+| the judge lists a task two callers admitted | policy-enforce | loop admits + releases, specs reviewer admits; the judge lists | 200 | both rows, oldest first (released, active) |
+| the admitting caller lists only its own | policy-enforce | loop + specs reviewer admit; the loop lists | 200 | the loop's row |
+| another listed caller sees an empty list, never a 403 | policy-enforce | loop admits; the specs reviewer lists | 200 | [] |
+| the judge lists a task of a stack outside its entry ⚖ | policy-enforce | an oracle dispatcher's session; the judge lists | 200 | [] |
+| an unknown task is an empty list | policy-enforce | loop admits; the judge lists task nope | 200 | [] |
+| a list without a bearer, under observe, is served and counted ⚖ | policy-default | loop admits; list with no bearer | 200 | the row; list/absent + 1 |
+| no task is 400 malformed-body | policy-enforce | the judge GETs /sessions | 400 | malformed-body |
+| a list without a bearer, under enforce | policy-enforce | GET /sessions?task= with no bearer | 401 | caller-unauthenticated; list/absent + 1 |
 
 One TokenReview path; the policy shape; the log: see the spec page's tables (one test each).
 """
@@ -84,17 +98,22 @@ ENFORCE_POLICY = POLICY_FIXTURE.parent / "policy-enforce.json"
 LOOP = "system:serviceaccount:platform-agents:agentstack-loop"
 SPECS = "system:serviceaccount:agent-coordinator:agent-coordinator"   # the fixture world's specs reviewer
 DEPLOYED_SPECS = "system:serviceaccount:agent-coordinator:specs-review"   # the deployed tick's own SA (#2685)
+JUDGE = "system:serviceaccount:agent-coordinator:outcome-judge"   # the fixture AND deployed judge (`outcome: any`, admits nothing)
+ORACLE_LOOP = "system:serviceaccount:oracle-agents:agentstack-loop"   # not a fixture caller: an oracle session's recorded admitter
 UNLISTED = "system:serviceaccount:platform-agents:default"
 # Fixture caller tokens: plain strings, never JWT-shaped (the masking row lives in test_redact.py).
 TOKENS = {
     "the platform loop": "fake-caller-token-platform-loop",
     "the specs reviewer": "fake-caller-token-specs-reviewer",
+    "the judge": "fake-caller-token-judge",
     "an unlisted ServiceAccount": "fake-caller-token-unlisted",
     "unauthenticated": "fake-caller-token-unauthenticated",
     "the kube API audience": "fake-caller-token-kube-audience",
 }
 BIND = {"namespace": "platform-agents", "serviceaccount": "agentstack-worker", "pod": "fixer-1"}
-WORKER = {"stack": "platform", "role": "worker", "task": "homelab-2588-r1", "round": 1, "bind": BIND}
+TASK = "homelab-2588-r1"
+WORKER = {"stack": "platform", "role": "worker", "task": TASK, "round": 1, "bind": BIND}
+REVIEWER = {"stack": "platform", "role": "reviewer", "task": TASK, "round": 0}   # the specs reviewer's unbound body
 
 
 def _review(user: str, audiences=("agent-gateway",)) -> Review:
@@ -107,6 +126,7 @@ def _callers(reviews):
     reviews.tokens.update({
         TOKENS["the platform loop"]: _review(LOOP),
         TOKENS["the specs reviewer"]: _review(SPECS),
+        TOKENS["the judge"]: _review(JUDGE),
         TOKENS["an unlisted ServiceAccount"]: _review(UNLISTED),
         TOKENS["unauthenticated"]: Review(False),
         TOKENS["the kube API audience"]: _review(LOOP, ("https://kubernetes.default.svc",)),
@@ -213,6 +233,8 @@ ASK_ROWS = [
     ("a stack outside the caller's entry", "the platform loop",
      {**WORKER, "stack": "oracle", "bind": {"namespace": "platform-agents", "serviceaccount": "agentstack-worker"}}, 403, "caller-stack-denied"),
     ("a role outside the caller's entry", "the platform loop", {**WORKER, "role": "reviewer"}, 403, "caller-role-denied"),
+    ("the entry canary's role is inside the dispatcher's entry", "the platform loop",
+     {"stack": "platform", "role": "prober", "task": "canary-deepseek-v4-1-flash-atlas-cloud-fp8", "round": 0}, 200, "—"),
     ("a bind namespace outside the caller's entry", "the platform loop",
      {**WORKER, "bind": {"namespace": "oracle-agents", "serviceaccount": "agentstack-worker"}}, 403, "caller-bind-denied"),
     ("a caller with no bind namespaces may not bind", "the specs reviewer",
@@ -291,6 +313,76 @@ async def test_unknown_id(enforce_gw, presented, status, code):
         r = await enforce_gw.get("/sessions/nope", headers=as_(presented))
     then_eq("status", r.status_code, status)
     then_eq("code", err(r), code, claim=f"error code = {code}")
+
+
+# -- a judge finds a task's sessions ---------------------------------------------------------------
+
+LIST_ROWS = [
+    ("the judge lists a task two callers admitted", "policy-enforce", "the platform loop (released) + the specs reviewer", "the judge", TASK,
+     [(LOOP, "released"), (SPECS, "active")]),
+    ("the admitting caller lists only its own", "policy-enforce", "the platform loop + the specs reviewer", "the platform loop", TASK,
+     [(LOOP, "active")]),
+    ("another listed caller sees an empty list, never a 403", "policy-enforce", "the platform loop", "the specs reviewer", TASK, []),
+    ("the judge lists a task of a stack outside its entry ⚖", "policy-enforce", "an oracle dispatcher", "the judge", TASK, []),
+    ("an unknown task is an empty list", "policy-enforce", "the platform loop", "the judge", "nope", []),
+    ("a list without a bearer, under observe, is served and counted ⚖", "policy-default", "the platform loop", "no bearer", TASK, [(LOOP, "active")]),
+]
+
+
+async def _task_sessions(gw, store, clock, admitted_by: str) -> None:
+    """Given: the task's sessions, one per named admitter, one clock second apart (created_at
+    orders the list); `(released)` = the admitter DELETEs its own; an oracle dispatcher's session
+    is stored directly (no fixture caller may admit stack oracle), recorded as that SA's."""
+    for who in admitted_by.split(" + "):
+        if who == "an oracle dispatcher":
+            store.create_session(id="s-oracle-fixture", token_hash="unminted:s-oracle-fixture", stack="oracle", role="worker", task=TASK,
+                                 round=1, rail="openrouter", harness="goose", model="deepseek/deepseek-v4-flash",
+                                 created_at=clock(), expires_at=clock() + 3600, caller=ORACLE_LOOP)
+        else:
+            name = who.removesuffix(" (released)")
+            doc = await admitted(gw, name, REVIEWER if name == "the specs reviewer" else WORKER)
+            if who.endswith("(released)"):
+                with quiet():
+                    await gw.delete(f"/sessions/{doc['session']['id']}", headers=as_(name))
+        clock.advance(1)
+
+
+@pytest.mark.parametrize(("world_name", "admitted_by", "presented", "task", "expected"), [r[1:] for r in LIST_ROWS], ids=[r[0] for r in LIST_ROWS])
+async def test_judge_lists_a_task(gws, store, clock, world_name, admitted_by, presented, task, expected):
+    world(world_name)
+    gw = gws[world_name]
+    with given(f"task {TASK} has sessions admitted by {admitted_by}, oldest first"):
+        await _task_sessions(gw, store, clock, admitted_by)
+        before = await unauth(gw, "list", "absent")
+    with when(f"GET /sessions?task={task} presenting {presented}"):
+        r = await gw.get("/sessions", params={"task": task}, headers=as_(presented))
+    then_eq("status", r.status_code, 200)
+    with then(f"the rows (caller, state), oldest first = {expected} — every row the GET /sessions/{{id}} shape incl. outcome"):
+        rows = r.json()["sessions"]
+        check("(caller, state)", [(row["caller"], row["state"]) for row in rows], expected)
+        assert all({"task", "state", "outcome", "caller"} <= set(row) and "token" not in row for row in rows), rows
+    if presented == "no bearer":
+        with then("list/absent moved by 1"):
+            check("list/absent increment", await unauth(gw, "list", "absent") - before, 1.0)
+
+
+LIST_REFUSED_ROWS = [
+    ("no task is 400 malformed-body", "the judge", {}, 400, "malformed-body", None),
+    ("a list without a bearer, under enforce", "no bearer", {"task": TASK}, 401, "caller-unauthenticated", "absent"),
+]
+
+
+@pytest.mark.parametrize(("presented", "query", "status", "code", "reason"), [r[1:] for r in LIST_REFUSED_ROWS], ids=[r[0] for r in LIST_REFUSED_ROWS])
+async def test_list_refused(enforce_gw, presented, query, status, code, reason):
+    world("policy-enforce")
+    with given("no session is needed: the check refuses before any row is read"):
+        before = await unauth(enforce_gw, "list", "absent")
+    with when(f"GET /sessions with query {query} presenting {presented}"):
+        r = await enforce_gw.get("/sessions", params=query, headers=as_(presented))
+    then_eq("status", r.status_code, status)
+    then_eq("code", err(r), code, claim=f"error code = {code}")
+    with then(f"list/absent moved by {1 if reason else 0} (reason = {reason})"):
+        check("list/absent increment", await unauth(enforce_gw, "list", "absent") - before, 1.0 if reason else 0.0)
 
 
 # -- one TokenReview path, and the pull stays the pod's -------------------------------------------
@@ -380,18 +472,19 @@ async def test_policy_shape(kind):
 
 
 async def test_deployed_callers():
-    """row: the deployed callers are today's two dispatchers, under enforce"""
+    """row: the deployed callers are today's two dispatchers and the judge, under enforce"""
     world(note="the DEPLOYED policy is read, not the world's")
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
         p = Policy.from_dict(json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")))
-        got = {k: {"stacks": sorted(c.stacks), "roles": sorted(c.roles), "bind_namespaces": sorted(c.bind_namespaces)}
+        got = {k: {"stacks": sorted(c.stacks), "roles": sorted(c.roles), "bind_namespaces": sorted(c.bind_namespaces), "outcome": c.outcome}
                for k, c in p.callers.items()}
     with then("control_plane_auth = enforce"):
         check("control_plane_auth", p.control_plane_auth, "enforce")
-    with then("callers = exactly the platform loop and the specs-review tick, with today's scopes"):
+    with then("callers = exactly the platform loop, the specs-review tick and the outcome judge, with today's scopes"):
         check("callers", got, {
-            LOOP: {"stacks": ["platform"], "roles": ["worker"], "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]},
-            DEPLOYED_SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []},
+            LOOP: {"stacks": ["platform"], "roles": ["prober", "worker"], "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"], "outcome": "own"},
+            DEPLOYED_SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": [], "outcome": "own"},
+            JUDGE: {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"},
         })
 
 

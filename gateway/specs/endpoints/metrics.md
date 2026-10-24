@@ -28,6 +28,9 @@ the process is down.
 | [GW-CATALOG-GO](catalog.md#gw-catalog-go) (owned there) | `families.gateway_go_catalog_*` | — | linked — the Go catalog's freshness, size and refresh outcomes; their values are rows there |
 | [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned there) | `families.gateway_provider_requests_total`, `families.gateway_provider_failovers_total` | — | linked — the provider axis: attempts per cell and failovers; their values are rows there and below |
 | [GW-CATALOG-OR](catalog.md#gw-catalog-or) (owned there) | `families.gateway_openrouter_catalog_*`, `families.gateway_openrouter_cells`, `families.gateway_canary_*` | — | linked — the OpenRouter catalog's freshness and refresh outcomes, the cells by entry state, the canary meter and verdicts; their values are rows there |
+| [GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges) (owned there) | `families.gateway_subscription_utilization`, `families.gateway_subscription_reset_seconds` | — | linked — on the codex rail the two gauges come from an ACCEPTED headroom report, not from headers; their values are rows there |
+| [GW-CODEX-HEADROOM §Poll](openai-responses.md#poll) (owned there) | `families.gateway_codex_usage_poll_total` | — | linked — the gateway's own usage poll by outcome, every outcome from 0; its values are rows there |
+| [GW-CODEX-HEADROOM §Upstream headers](openai-responses.md#upstream-headers) (owned there) | `families.gateway_codex_upstream_headroom_total` | — | linked — the relayed answers' headroom-header reads by outcome, every outcome from 0; its values are rows there |
 
 ## GW-METRICS
 
@@ -38,14 +41,16 @@ the process is down.
 | `gateway_requests_total` | counter | `rail`, `dialect`, `status` | every data-plane request, by the status the gateway returned |
 | `gateway_upstream_seconds` | histogram | `rail` | upstream round-trip, first byte to last |
 | `gateway_tokens_total` | counter | `rail`, `class` | usage recorded from upstream bodies in four classes: `in` (UNCACHED input — the openai dialect's `prompt_tokens` minus `cached_tokens`), `cache_read`, `cache_write`, `out` — the split the window draw and the cost ledger price from ⚖ |
-| `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖ |
-| `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds) |
+| `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖; on the codex rail the last ACCEPTED headroom report's `used_percent` / 100 ([GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)) |
+| `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds); on the codex rail the accepted report's `resets_at` |
 | `gateway_credential_resolve_total` | counter | `rail`, `outcome` | every ref resolution verdict |
 | `gateway_upstream_auth_rejected_total` | counter | `rail` | every upstream 401/403 the gateway reads as a CREDENTIAL verdict — the request answered 424 `upstream-auth` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary); a policy refusal, 403 `upstream-refused`, is not counted here): the event series the dead-key alert reads; `gateway_credentials_rejected` below is the state. Every rail renders from 0 ⚖ |
 | `gateway_cells_cooled` | gauge | `rail` | (rail, model, provider) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)); counted per rail (`model` is no label on this gauge); every rail renders from 0 |
 | `gateway_credentials_rejected` | gauge | `rail` | rail credentials an upstream 401/403 rejected, until a 2xx on them or a new value — the alert hook for a dead key; every rail renders from 0 ⚖ |
 | `gateway_strikes_total` | counter | `class`, `source` | strikes written to the store ([GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)): `class` a strike class of the one vocabulary, `source` `outcome` (the consumer) or `gateway` (a transport fact) |
 | `gateway_sessions_reaped_total` | counter | `rail` | sessions released because their pod was gone ([GW-SESSIONS-LIVENESS](sessions.md#gw-sessions-liveness)); every rail renders from 0 |
+| `gateway_codex_usage_poll_total` | counter | `outcome` | the codex rail's usage polls by outcome ([GW-CODEX-HEADROOM §Poll](openai-responses.md#poll)): `accepted` = the headroom took the report; the rest name why it did not. The family exists only while the policy declares the codex rail, then every outcome renders from 0 ⚖ — the alerts read `increase()` (an undeclared rail has no series, so `CodexUsagePollSilent` cannot fire on it) |
+| `gateway_codex_upstream_headroom_total` | counter | `outcome` | the codex rail's relayed answers read for their `x-codex-*` headroom headers ([GW-CODEX-HEADROOM §Upstream headers](openai-responses.md#upstream-headers)): `accepted` = the headroom took the report, `absent` = no window header on the answer, the rest name the refusal. Declared-gated and rendered from 0 exactly like the poll family ⚖ |
 | `gateway_credential_probes_total` | counter | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
 | `gateway_requests_incomplete_total` | counter | `rail`, `dialect`, `reason` | 2xx answers whose body stopped before its end — `no-terminal`, `timeout`, `transport-error`, `client-closed` ([GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)) |
 | `gateway_go_catalog_age_seconds` | gauge | `source` | seconds since the source's last good snapshot was fetched — absent until one exists ([GW-CATALOG-GO](catalog.md#gw-catalog-go)) |
@@ -63,8 +68,10 @@ the process is down.
 | `gateway_openrouter_cells` | gauge | `state` | (model, provider) cells of the catalog by entry state — `candidate`, `eligible`, `excluded`; a provider's service tiers are one cell |
 | `gateway_canary_spend_usd` | gauge | — | metered canary spend over the trailing day at the cell's endpoint price |
 | `gateway_canary_budget_exhausted` | gauge | — | 1 while the canary cap (per refresh or per day) is spent and candidate cells wait — `GatewayCanaryBudgetExhausted` reads it |
-| `gateway_canary_rides_total` | counter | `outcome` | canary verdicts: `eligible` (a clean ride) or `excluded` (a struck one) |
+| `gateway_canary_rides_total` | counter | `outcome` | canary verdicts: `eligible` (a clean ride), `excluded` (a struck one) — and `no-verdict` (a 429'd one: the cell backs off, nothing is judged) |
 | `gateway_canary_admissions_total` | counter | `outcome` | canary admissions by answer: `dispatch`, `budget`, `not-due`, `not-in-catalog` |
+| `gateway_rail_choice_total` | counter | `model`, `rail`, `reason` | admissions where the tier named one model on two allowed rails ([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice)), by the rail that walked first and why — `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`; ⚖ `model` is the twin's openrouter spelling, the provider families' bound |
+| `gateway_tier_evidence_age_seconds` | gauge | — | seconds since the mounted tier-evidence snapshot's `snapshot_at` (`GATEWAY_BENCHMARKS`) — absent when none is mounted; `TierEvidenceStale` reads it |
 
 | description | event (world `policy-default`, upstream-ok) || series | value |
 |---|---||---|---|
@@ -109,19 +116,20 @@ The provider families (world `policy-default · openrouter-endpoints` — the sn
 | "dialect is the three paths" | requests_total || `dialect` | `anthropic`, `openai`, `responses` ([GW-RAIL-CODEX](openai-responses.md#gw-rail-codex)) |
 | "status is a numeric HTTP status" | requests_total || `status` | the codes this gateway returns (`200`, `400`, `401`, `403`, `424`, `429`, `501`, `502`, `503`, `504`) and the upstream statuses relayed |
 | "class is one of the four usage classes" | tokens_total || `class` | `in`, `cache_read`, `cache_write`, `out` |
-| "window is 5h or 7d" | subscription_utilization || `window` | `5h`, `7d` |
+| "window is 5h or 7d" | subscription_utilization || `window` | `5h`, `7d`, `other` — on the codex rail the headroom profile's minutes spelled in this vocabulary (300 → `5h`, 10080 → `7d`; a profile minute outside it renders `other` ⚖, [GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)) |
 | "outcome is the verdict class" | credential_resolve_total || `outcome` | `resolved`, `definitive`, `transient` |
-| "route is the control-plane route" | control_plane_unauthenticated_total || `route` | `admit` (`POST /sessions`), `lookup` (`GET`), `release` (`DELETE`), `outcome` (`POST /sessions/{id}/outcome`) |
+| "route is the control-plane route" | control_plane_unauthenticated_total || `route` | `admit` (`POST /sessions`), `lookup` (`GET /sessions/{id}`), `release` (`DELETE`), `outcome` (`POST /sessions/{id}/outcome`), `list` (`GET /sessions?task=`) |
 | "reason is why no caller identity was read" | control_plane_unauthenticated_total || `reason` | `absent` (no bearer), `invalid` (the review is not authenticated for audience `agent-gateway`), `review-transient` (the TokenReview API did not answer) |
 | "class is a strike class, source the writer" | strikes_total || `class` / `source` | the strike classes of the vocabulary / `outcome`, `gateway` |
 | "reason is why a 2xx body stopped before its end" | requests_incomplete_total || `reason` | `no-terminal`, `timeout`, `transport-error`, `client-closed` |
 | "source is the catalog source" | go_catalog_refresh_total || `source` | `config` (the console's V2 config), `docs` (the vendor's Go page) |
 | "state is a cell's entry state ⚖" | openrouter_cells || `state` | `candidate`, `eligible`, `excluded` |
-| "a canary outcome is a verdict, an admission an answer" | canary_rides_total / canary_admissions_total || `outcome` | `eligible`, `excluded` / `dispatch`, `budget`, `not-due`, `not-in-catalog` |
+| "a canary outcome is a verdict, an admission an answer" | canary_rides_total / canary_admissions_total || `outcome` | `eligible`, `excluded`, `no-verdict` / `dispatch`, `budget`, `not-due`, `not-in-catalog` |
 | "the catalog outcome is the refresh outcome" | go_catalog_refresh_total || `outcome` | `ok`, `fetch-failed`, `parse-failed`, `implausible` |
-| "model is a policy openrouter id ⚖" | provider_requests_total, provider_failovers_total || `model` | the openrouter rail's policy models (wire ids); else `other` |
+| "model is a policy openrouter id ⚖" | provider_requests_total, provider_failovers_total, rail_choice_total || `model` | the openrouter rail's policy models (wire ids); else `other` |
+| "reason is why the rail choice fell ⚖" | rail_choice_total || `reason` | `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint` |
 | "provider is a snapshot slug or unattributed ⚖" | provider_requests_total (`from`, `to` on provider_failovers_total) || `provider` | the endpoint snapshot's tag-base slugs, `unattributed`; else `other` |
-| "no task label, ever" | any || — | no label named `task`, `session`, `id`, `token`; `model` only on the two provider families, bounded to the policy's set ⚖ |
+| "no task label, ever" | any || — | no label named `task`, `session`, `id`, `token`; `model` only on the two provider families and the rail choice, bounded to the policy's set ⚖ |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|

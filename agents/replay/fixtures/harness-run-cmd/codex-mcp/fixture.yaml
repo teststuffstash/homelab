@@ -1,0 +1,21 @@
+# FU-270 / homelab#1041 — the WORKER's codex arm with the MCP knob present. Pins that codex gets
+# the MCP server through its REAL attach interface: the image's agent-codex renders
+# `[mcp_servers.stack-mcp] url = "<endpoint>"` into the gateway provider block from CODEX_MCP_URL
+# (agent-runtime#180), so the launcher's job is ONE env assignment prefixed to the seam, @sh-quoted
+# like the goose flag — no file prelude, no CLI flag (the pinned CLI has no --mcp flag).
+#
+# CONDITION UNDER REPLAY. The codex recipe arm (a /sessions dispatch on the codex rail), with
+# MCP_ENDPOINT and MCP_TOOLS set so the MCP attach block inside the replay region fires.
+#
+# THE CONTRACT:
+#   1. The codex case prefixes `CODEX_MCP_URL='<endpoint>' ` to `agent-codex …` in the RUN_CMD.
+#   2. NO /tmp/mcp-config.json prelude on this arm — the seam renders from the env.
+#   3. The rest of the pod command is unmoved: context prelude, recipe decode, the bypass flag,
+#      the recipe prompt with the issue number.
+name: harness-run-cmd-codex-mcp
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-run-cmd
+  - file:../goose-mcp/post.sh

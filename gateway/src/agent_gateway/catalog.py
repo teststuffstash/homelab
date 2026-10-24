@@ -4,13 +4,21 @@ The opencode rail's vendor facts, read from the vendor on a schedule instead of 
 (docs/spikes/opencode-go-catalog.md, operator rulings 2026-10-17). Two sources, each its own
 snapshot:
 
-- **config** — `GET https://opencode.ai/console/api/v2/config` (the Go key as a bearer, a
-  User-Agent and a fresh `x-opencode-session`): the `opencode-go` provider's listed models, their
-  `cost[]` tiers, context/output limits and tool support.
+- **config** — two reads, merged the way the vendor's own client merges them
+  (`packages/core/src/plugin/provider/opencode.ts`): the **catalog** read, models.dev's `api.json`
+  (public, the vendor's own registry — its `opencode-go` provider's models, their `cost` and
+  `cost.tiers`, context/output limits and tool support; a `status: deprecated` row is dropped
+  before the overlay, as the vendor's loader drops it), then the **config** read,
+  `GET https://opencode.ai/console/api/v2/config` (the Go key as a bearer, a User-Agent and a fresh
+  `x-opencode-session`): the workspace's OVERRIDES on that catalog — `disabled: true` unlists a
+  model, a `cost`, `limit`, `name`, `family` or `capabilities.tools` present on a row wins. Until
+  2026-10-20 the console answer carried the whole catalog; since then it carries the overrides
+  only, which is what it always was to the vendor's client.
 - **docs** — the vendor's Go page source (`go.mdx`, fetched unauthenticated from the vendor repo):
-  each model's monthly limit per plan, the promotion multiplier, the peak price rows, the peak
-  hours and the 5h/weekly/monthly share of the monthly limit. Parsed strictly: any drift from the
-  shape this file knows is a parse failure, never a guess.
+  each plan's monthly fee (the page's Plan table — the Go rail's price, GW-MODEL-TIERS, divides
+  it by what the plan buys), each model's monthly limit per plan, the promotion multiplier, the
+  peak price rows, the peak hours and the 5h/weekly/monthly share of the monthly limit. Parsed
+  strictly: any drift from the shape this file knows is a parse failure, never a guess.
 
 A refresh that fails — the fetch, the parse, or an implausible drop in the model count — keeps
 the source's last good snapshot (persisted in the gateway's store, so a restart starts from it)
@@ -35,6 +43,7 @@ from .store import Store, iso
 log = logging.getLogger("gateway.catalog")
 
 SOURCES = ("config", "docs")
+READS = {"config": ("catalog", "config"), "docs": ("docs",)}  # a source's reads, in order; each read has a URL
 OUTCOMES = ("ok", "fetch-failed", "parse-failed", "implausible")
 PLANS = ("go", "go-plus")
 PROVIDER = "opencode-go"
@@ -62,7 +71,7 @@ class Snapshot:
         return len({m for plan in self.body["plans"].values() for m in plan})
 
 
-# -- config: the console's V2 config ----------------------------------------------------------
+# -- config: models.dev's catalog, then the console's V2 config as the overlay ------------------
 def _rate(where: str, v, *, optional: bool = False) -> float | None:
     if v is None and optional:
         return None
@@ -71,10 +80,133 @@ def _rate(where: str, v, *, optional: bool = False) -> float | None:
     return float(v)
 
 
+def _tier_size(where: str, tier) -> int:
+    if not isinstance(tier, dict) or tier.get("type") != "context" or isinstance(tier.get("size"), bool) \
+            or not isinstance(tier.get("size"), int):
+        raise ParseError(f"{where}.tier is not {{type: context, size: <int>}}")
+    return tier["size"]
+
+
+def _ascending(where: str, tiers: list[dict]) -> None:
+    if [t["above_tokens"] for t in tiers] != sorted({t["above_tokens"] for t in tiers}):
+        raise ParseError(f"{where} tiers are not strictly ascending by context size")
+
+
+def _limit(where: str, limit, *, required: bool) -> dict:
+    """`limit: {context, output}` → `{context, output}` (ints). An overlay row may carry one of the
+    two; a catalog row carries both."""
+    if not isinstance(limit, dict):
+        raise ParseError(f"{where}.limit is not an object")
+    out: dict[str, int] = {}
+    for k in ("context", "output"):
+        v = limit.get(k)
+        if v is None and not required:
+            continue
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise ParseError(f"{where}.limit.{k} is not an integer")
+        out[k] = v
+    return out
+
+
+def _flat_cost(where: str, c: dict) -> dict:
+    """models.dev's cost row (`input`, `output`, `cache_read`?, `cache_write`?) → the leg's rate row."""
+    return {"in": _rate(f"{where}.input", c.get("input")), "out": _rate(f"{where}.output", c.get("output")),
+            "cache_read": _rate(f"{where}.cache_read", c.get("cache_read"), optional=True),
+            "cache_write": _rate(f"{where}.cache_write", c.get("cache_write"), optional=True)}
+
+
+def _name_family(where: str, row: dict) -> dict:
+    out = {}
+    for k in ("name", "family"):
+        if k in row:
+            if row[k] is not None and not isinstance(row[k], str):
+                raise ParseError(f"{where}.{k} is not a string")
+            out[k] = row[k]
+    return out
+
+
+def parse_catalog(doc) -> dict:
+    """models.dev's `api.json` → `{models: {id: {name, family, tools, context, output, cost:
+    [{above_tokens, in, out, cache_read, cache_write}]}}}` for the `opencode-go` provider: the base
+    rows the console overlays. A row whose `status` is `deprecated` is not listed (the vendor's own
+    loader drops it before any overlay — `packages/core/src/plugin/models-dev.ts`); `cost.tiers[]`
+    rows are the rate above each `tier.size`; a `context_over_200k` (the legacy spelling) with no
+    `tiers` beside it is a shape this parser does not know. Any other missing field fails the parse."""
+    if not isinstance(doc, dict):
+        raise ParseError("not an object")
+    prov = doc.get(PROVIDER)
+    if not isinstance(prov, dict) or not isinstance(prov.get("models"), dict):
+        raise ParseError(f"no `{PROVIDER}.models` object")
+    out: dict[str, dict] = {}
+    for mid, row in prov["models"].items():
+        where = f"{PROVIDER}.models.{mid}"
+        if not isinstance(row, dict):
+            raise ParseError(f"{where} is not an object")
+        status = row.get("status")
+        if status is not None and not isinstance(status, str):
+            raise ParseError(f"{where}.status is not a string")
+        if status == "deprecated":
+            continue
+        cost = row.get("cost")
+        if not isinstance(cost, dict):
+            raise ParseError(f"{where}.cost is not an object")
+        tiers = [{"above_tokens": 0, **_flat_cost(f"{where}.cost", cost)}]
+        extra = cost.get("tiers")
+        if extra is not None:
+            if not isinstance(extra, list):
+                raise ParseError(f"{where}.cost.tiers is not a list")
+            for i, c in enumerate(extra):
+                if not isinstance(c, dict):
+                    raise ParseError(f"{where}.cost.tiers[{i}] is not an object")
+                tiers.append({"above_tokens": _tier_size(f"{where}.cost.tiers[{i}]", c.get("tier")),
+                              **_flat_cost(f"{where}.cost.tiers[{i}]", c)})
+        elif "context_over_200k" in cost:
+            raise ParseError(f"{where}.cost carries context_over_200k with no tiers — the legacy spelling alone is not read")
+        _ascending(f"{where}.cost", tiers)
+        limit = _limit(where, row.get("limit"), required=True)
+        tools = row.get("tool_call")
+        if not isinstance(tools, bool):
+            raise ParseError(f"{where}.tool_call is not a boolean")
+        names = _name_family(where, row)
+        out[mid] = {"name": names.get("name"), "family": names.get("family"), "tools": tools,
+                    "context": limit["context"], "output": limit["output"], "cost": tiers}
+    return {"models": out}
+
+
+def _config_cost(where: str, cost) -> list[dict]:
+    """The console's `cost` (a list of rows, or one row — the vendor reads both): the base row,
+    then each `tier: {type: context, size}` row as the rate above that many tokens."""
+    if isinstance(cost, dict):
+        cost = [cost]
+    if not isinstance(cost, list) or not cost:
+        raise ParseError(f"{where}.cost is not a non-empty list")
+    tiers = []
+    for i, c in enumerate(cost):
+        if not isinstance(c, dict):
+            raise ParseError(f"{where}.cost[{i}] is not an object")
+        tier = c.get("tier")
+        if i == 0:
+            if tier is not None:
+                raise ParseError(f"{where}.cost[0] carries a tier — the base row must not")
+            above = 0
+        else:
+            above = _tier_size(f"{where}.cost[{i}]", tier)
+        cache = c.get("cache") or {}
+        if not isinstance(cache, dict):
+            raise ParseError(f"{where}.cost[{i}].cache is not an object")
+        tiers.append({"above_tokens": above, "in": _rate(f"{where}.cost[{i}].input", c.get("input")),
+                      "out": _rate(f"{where}.cost[{i}].output", c.get("output")),
+                      "cache_read": _rate(f"{where}.cost[{i}].cache.read", cache.get("read"), optional=True),
+                      "cache_write": _rate(f"{where}.cost[{i}].cache.write", cache.get("write"), optional=True)})
+    _ascending(f"{where}.cost", tiers)
+    return tiers
+
+
 def parse_config(doc) -> dict:
-    """`providers["opencode-go"].models` → `{models: {id: {name, family, tools, context, output,
-    cost: [{above_tokens, in, out, cache_read, cache_write}]}}}`. A row marked `disabled` is not
-    listed; any other row that lacks a field the leg reads fails the whole parse."""
+    """`providers["opencode-go"].models` → the workspace OVERRIDES `{overrides: {id: {disabled?,
+    name?, family?, tools?, limit?: {context?, output?}, cost?: [...]}}}` — only the fields a row
+    carries (the vendor applies each one "if defined" onto the catalog row). A field that is present
+    but not of its shape fails the whole parse; an answer without the Go provider is no answer."""
     if not isinstance(doc, dict) or not isinstance(doc.get("providers"), dict):
         raise ParseError("no `providers` object")
     prov = doc["providers"].get(PROVIDER)
@@ -85,47 +217,63 @@ def parse_config(doc) -> dict:
         where = f"{PROVIDER}.models.{mid}"
         if not isinstance(row, dict):
             raise ParseError(f"{where} is not an object")
-        if row.get("disabled") is True:
+        o: dict = _name_family(where, row)
+        if "disabled" in row:
+            if not isinstance(row["disabled"], bool):
+                raise ParseError(f"{where}.disabled is not a boolean")
+            o["disabled"] = row["disabled"]
+        if "capabilities" in row:
+            caps = row["capabilities"]
+            if not isinstance(caps, dict):
+                raise ParseError(f"{where}.capabilities is not an object")
+            if "tools" in caps:
+                if not isinstance(caps["tools"], bool):
+                    raise ParseError(f"{where}.capabilities.tools is not a boolean")
+                o["tools"] = caps["tools"]
+        if "limit" in row:
+            o["limit"] = _limit(where, row["limit"], required=False)
+        if "cost" in row:
+            o["cost"] = _config_cost(where, row["cost"])
+        out[mid] = o
+    return {"overrides": out}
+
+
+def merge(catalog: dict, config: dict) -> dict:
+    """The listing — the config snapshot's body: the catalog's rows with the console's overrides
+    applied the vendor's way. `disabled: true` unlists the row; a present `cost` replaces its tiers;
+    a present `limit` field, `name`, `family` or `tools` wins. An override naming no catalog row is
+    listed only when it is a complete row of its own (a `cost` and both limits; `tools` false
+    unless it says so); anything less names nothing to list."""
+    models: dict[str, dict] = {}
+    overrides = config["overrides"]
+    for mid, row in catalog["models"].items():
+        o = overrides.get(mid)
+        if o is None:
+            models[mid] = row
             continue
-        cost = row.get("cost")
-        if not isinstance(cost, list) or not cost:
-            raise ParseError(f"{where}.cost is not a non-empty list")
-        tiers = []
-        for i, c in enumerate(cost):
-            if not isinstance(c, dict):
-                raise ParseError(f"{where}.cost[{i}] is not an object")
-            tier = c.get("tier")
-            if i == 0:
-                if tier is not None:
-                    raise ParseError(f"{where}.cost[0] carries a tier — the base row must not")
-                above = 0
-            else:
-                if not isinstance(tier, dict) or tier.get("type") != "context" or not isinstance(tier.get("size"), int):
-                    raise ParseError(f"{where}.cost[{i}].tier is not {{type: context, size: <int>}}")
-                above = tier["size"]
-            cache = c.get("cache") or {}
-            if not isinstance(cache, dict):
-                raise ParseError(f"{where}.cost[{i}].cache is not an object")
-            tiers.append({"above_tokens": above, "in": _rate(f"{where}.cost[{i}].input", c.get("input")),
-                          "out": _rate(f"{where}.cost[{i}].output", c.get("output")),
-                          "cache_read": _rate(f"{where}.cost[{i}].cache.read", cache.get("read"), optional=True),
-                          "cache_write": _rate(f"{where}.cost[{i}].cache.write", cache.get("write"), optional=True)})
-        if [t["above_tokens"] for t in tiers] != sorted({t["above_tokens"] for t in tiers}):
-            raise ParseError(f"{where}.cost tiers are not strictly ascending by context size")
-        limit = row.get("limit") or {}
-        caps = row.get("capabilities") or {}
-        if not isinstance(limit, dict) or not isinstance(caps, dict):
-            raise ParseError(f"{where}.limit / .capabilities is not an object")
-        ctx, outp = limit.get("context"), limit.get("output")
-        if not isinstance(ctx, int) or not isinstance(outp, int):
-            raise ParseError(f"{where}.limit.context / .output is not an integer")
-        out[mid] = {"name": row.get("name"), "family": row.get("family"), "tools": caps.get("tools") is True,
-                    "context": ctx, "output": outp, "cost": tiers}
-    return {"models": out}
+        if o.get("disabled") is True:
+            continue
+        new = dict(row)
+        for k in ("name", "family", "tools", "cost"):
+            if k in o:
+                new[k] = o[k]
+        new.update(o.get("limit", {}))
+        models[mid] = new
+    for mid, o in overrides.items():
+        if mid in catalog["models"] or o.get("disabled") is True:
+            continue
+        lim = o.get("limit", {})
+        if "cost" in o and "context" in lim and "output" in lim:
+            models[mid] = {"name": o.get("name"), "family": o.get("family"), "tools": o.get("tools", False),
+                           "context": lim["context"], "output": lim["output"], "cost": o["cost"]}
+    return {"models": models}
 
 
 # -- docs: the vendor's go.mdx ----------------------------------------------------------------
 _PLAN_HEADER = ["Model", "Input", "Output", "Cached Read", "Cached Write", "Monthly limit"]
+_FEE_HEADER = ["Plan", "Price", "Included usage"]  # the page's Plan table: `| **Go** | **$10/month** | … |`
+_FEE_PLANS = {"**Go**": "go", "**Go Plus**": "go-plus"}
+_FEE = re.compile(r"^\*\*\$(?P<usd>[\d.]+)/month\*\*$")
 _SUFFIX = re.compile(r"^(?P<name>.+?)\s*\((?P<tag>Off-Peak|Peak|[≤>]\s*[\d.]+K tokens)\)$")
 _LIMIT = re.compile(r"^(?:~~\$[\d.]+~~\s*)?\*\*\$(?P<usd>[\d.]+)\*\*(?:<br\s*/>.*)?$")
 _UNLIMITED = re.compile(r"^\*\*Unlimited\*\*(?:<br\s*/>.*)?$")
@@ -182,20 +330,32 @@ def _hour(where: str, hhmm: str) -> int:
 
 
 def parse_docs(text: str) -> dict:
-    """The Go page → `{plans: {go: {id: usd | "unlimited"}, go-plus: {…}}, bonus: {id: x},
-    peak: {id: {in, out, cache_read, cache_write}}, peak_hours_utc, peak_weekdays, window_shares}`.
-    Rows are keyed by MODEL id through the page's own Endpoints table (display name → Model ID)."""
+    """The Go page → `{plan_fees: {go: usd, go-plus: usd}, plans: {go: {id: usd | "unlimited"},
+    go-plus: {…}}, bonus: {id: x}, peak: {id: {in, out, cache_read, cache_write}}, peak_hours_utc,
+    peak_weekdays, window_shares}`. Rows are keyed by MODEL id through the page's own Endpoints
+    table (display name → Model ID); the fees by the Plan table's plan names."""
     if not isinstance(text, str) or not text.strip():
         raise ParseError("empty page")
     ids: dict[str, str] = {}
+    fees: dict[str, float] = {}
     for header, rows in _tables(text):
         if header[:2] == ["Model", "Model ID"]:
             for r in rows:
                 if len(r) != len(header) or not r[0] or not r[1]:
                     raise ParseError(f"Endpoints row {r!r}: {len(r)} cells, expected {len(header)} with a name and an id")
                 ids[r[0]] = r[1]
+        elif header == _FEE_HEADER:
+            for r in rows:
+                if len(r) != len(_FEE_HEADER) or r[0] not in _FEE_PLANS:
+                    raise ParseError(f"Plan row {r!r}: expected {' | '.join(_FEE_HEADER)} naming {' / '.join(_FEE_PLANS)}")
+                m = _FEE.match(r[1])
+                if not m:
+                    raise ParseError(f"Plan row {r[0]}: price cell {r[1]!r} is not **$N/month**")
+                fees[_FEE_PLANS[r[0]]] = float(m.group("usd"))
     if not ids:
         raise ParseError("no Endpoints table (Model | Model ID)")
+    if set(fees) != set(PLANS):
+        raise ParseError(f"no Plan table ({' | '.join(_FEE_HEADER)}) pricing both plans — read {sorted(fees) or 'none'}")
     plans: dict[str, dict] = {}
     bonus: dict[str, int] = {}
     peak: dict[str, dict] = {}
@@ -254,11 +414,12 @@ def parse_docs(text: str) -> dict:
         days = order[a:b + 1]
     if peak and not hours:
         raise ParseError("peak rows but no 'Peak hours are … UTC, <day> through <day>' sentence")
-    return {"plans": plans, "bonus": bonus, "peak": peak, "peak_hours_utc": hours,
+    return {"plan_fees": fees, "plans": plans, "bonus": bonus, "peak": peak, "peak_hours_utc": hours,
             "peak_weekdays": days, "window_shares": window_shares}
 
 
-PARSERS: dict[str, Callable] = {"config": lambda r: parse_config(r.json()), "docs": lambda r: parse_docs(r.text)}
+PARSERS: dict[str, Callable] = {"catalog": lambda r: parse_catalog(r.json()), "config": lambda r: parse_config(r.json()),
+                                "docs": lambda r: parse_docs(r.text)}
 
 
 @dataclass(frozen=True)
@@ -299,6 +460,7 @@ class GoCatalog:
         self.refreshes: dict[tuple[str, str], int] = {(s, o): 0 for s in SOURCES for o in OUTCOMES}
         self.last_outcome: dict[str, str] = {}
         self.last_attempt: dict[str, float] = {}
+        self.served_from: float | None = None  # the oldest stored snapshot a restart serves instead of refreshing (startup_delay)
         for s in SOURCES:
             if (row := store.snapshot_load(s)) is not None:
                 snap = Snapshot(s, row[0], row[1])
@@ -311,12 +473,11 @@ class GoCatalog:
                 log.info("catalog: %s snapshot loaded from the store (fetched %s, %d models)", s, iso(row[0]),
                          self.snapshots[s].models)
 
-    def _headers(self, source: str) -> dict[str, str] | None:
+    def _headers(self, read: str) -> dict[str, str]:
+        """Per READ: the console read carries the key and a client identity (Cloudflare answers 1010
+        to a request without one; the vendor routes by session); the catalog and docs reads carry none."""
         h = {"user-agent": USER_AGENT}
-        if source == "config":
-            if not self.api_key:
-                return None
-            # Cloudflare answers 1010 to a request without a client identity; the vendor routes by session.
+        if read == "config":
             h |= {"authorization": f"Bearer {self.api_key}", "x-opencode-session": str(uuid.uuid4())}
         return h
 
@@ -329,23 +490,27 @@ class GoCatalog:
         return outcome
 
     async def _refresh(self, source: str, now: float) -> str:
-        headers = self._headers(source)
-        if headers is None:
-            log.error("catalog: %s fetch skipped — no OPENCODE_GO_API_KEY", source)
+        """The source's reads in order (READS); the first one that fails ends the refresh with its
+        outcome, the log line naming the read — no read is a guess for another."""
+        if source == "config" and not self.api_key:
+            log.error("catalog: %s fetch skipped — no OPENCODE_GO_API_KEY (no request is sent)", source)
             return "fetch-failed"
-        try:
-            r = await self.client.get(self.urls[source], headers=headers, timeout=FETCH_TIMEOUT_S)
-        except httpx.HTTPError as e:
-            log.warning("catalog: %s fetch failed (%s) — keeping the last good snapshot", source, type(e).__name__)
-            return "fetch-failed"
-        if r.status_code != 200:
-            log.warning("catalog: %s fetch answered %d — keeping the last good snapshot", source, r.status_code)
-            return "fetch-failed"
-        try:
-            body = PARSERS[source](r)
-        except Exception as e:  # noqa: BLE001 — ANY drift from the known shape is a parse failure, never a guess
-            log.error("catalog: %s parse failed (%s: %s) — keeping the last good snapshot", source, type(e).__name__, e)
-            return "parse-failed"
+        parts: dict[str, dict] = {}
+        for read in READS[source]:
+            try:
+                r = await self.client.get(self.urls[read], headers=self._headers(read), timeout=FETCH_TIMEOUT_S)
+            except httpx.HTTPError as e:
+                log.warning("catalog: %s fetch failed (%s read: %s) — keeping the last good snapshot", source, read, type(e).__name__)
+                return "fetch-failed"
+            if r.status_code != 200:
+                log.warning("catalog: %s fetch answered %d (%s read) — keeping the last good snapshot", source, r.status_code, read)
+                return "fetch-failed"
+            try:
+                parts[read] = PARSERS[read](r)
+            except Exception as e:  # noqa: BLE001 — ANY drift from the known shape is a parse failure, never a guess
+                log.error("catalog: %s parse failed (%s read — %s: %s) — keeping the last good snapshot", source, read, type(e).__name__, e)
+                return "parse-failed"
+        body = merge(parts["catalog"], parts["config"]) if source == "config" else parts["docs"]
         fresh = Snapshot(source, now, body)
         last = self.snapshots.get(source)
         if fresh.models == 0 or (last is not None and fresh.models < MIN_KEPT_SHARE * last.models):
@@ -370,8 +535,27 @@ class GoCatalog:
                 out[s] = "fetch-failed"
         return out
 
+    def startup_delay(self, now: float) -> float:
+        """Seconds the loop waits before its first refresh: 0 when a source has no stored snapshot,
+        there is no schedule, or the oldest snapshot is `refresh_s` old — else the rest of the oldest
+        one's interval (both sources refresh together, as every tick does), so a pod roll inside it
+        serves the stored snapshots instead of re-reading the vendor. The OpenRouter leg's
+        `OpenRouterCatalog.startup_delay` is the same rule (#2775 gap 2)."""
+        if self.refresh_s <= 0 or any(s not in self.snapshots for s in SOURCES):
+            return 0.0
+        oldest = min(self.snapshots[s].fetched_at for s in SOURCES)
+        delay = oldest + self.refresh_s - now
+        if delay <= 0:
+            return 0.0
+        self.served_from = oldest
+        log.info("catalog: stored snapshots are %.0fs old (the oldest) — next refresh at %s", now - oldest, iso(oldest + self.refresh_s))
+        return delay
+
     async def run(self) -> None:
-        """The schedule: one refresh of both sources at start, then every `refresh_s`."""
+        """The schedule: the first refresh of both sources after `startup_delay`, then every `refresh_s`."""
+        delay = self.startup_delay(self.clock())
+        if delay > 0:
+            await asyncio.sleep(delay)
         while True:
             try:
                 await self.refresh()
@@ -380,15 +564,24 @@ class GoCatalog:
             await asyncio.sleep(self.refresh_s)
 
     # -- reads ----------------------------------------------------------------------------------
+    def context_for(self, model: str) -> int | None:
+        """GW-SESSIONS-ENV's read for a WIRE model id: the catalog's `context` (models.dev's
+        `limit.context` under the console's overlay) — the dispatch answer's `context_tokens` on the
+        Go rail. None when no config snapshot exists or the model has no row: never a default
+        (ruling 5 — the policy holds no copy of this fact, see Policy.from_dict)."""
+        cfg = self.snapshots.get("config")
+        row = cfg.body["models"].get(model) if cfg is not None else None
+        return row["context"] if row is not None else None
+
     def go_model(self, model: str) -> GoModel | str:
         """Admission's read for a WIRE model id: its facts, or why it is not in the catalog (the
         `not-in-catalog` defer's detail — ruling 4: never a fallback price)."""
         cfg, docs = self.snapshots.get("config"), self.snapshots.get("docs")
         if cfg is None:
-            return "no console catalog snapshot yet"
+            return "no Go catalog (config) snapshot yet"
         row = cfg.body["models"].get(model)
         if row is None:
-            return "not listed by the console catalog"
+            return "not listed by the Go catalog"
         if docs is None:
             return "no Go page snapshot yet (no monthly limit)"
         lim = docs.body["plans"].get(self.plan or "", {}).get(model)
@@ -405,11 +598,27 @@ class GoCatalog:
         )
 
     def retry_at(self, now: float, fallback_s: float) -> float:
-        """When a `not-in-catalog` verdict may change: the next scheduled refresh, else `fallback_s`."""
-        last = max(self.last_attempt.values(), default=None)
-        if last is not None and self.refresh_s > 0:
-            return max(last + self.refresh_s, now + 1)
+        """When a `not-in-catalog` verdict may change: the next scheduled refresh — `refresh_s` after
+        this process's last attempt, or, before it attempts one, after the stored snapshot it serves
+        (startup_delay) — else `fallback_s`."""
+        anchor = max(self.last_attempt.values(), default=self.served_from)
+        if anchor is not None and self.refresh_s > 0:
+            return max(anchor + self.refresh_s, now + 1)
         return now + fallback_s
+
+    def plan_fee(self) -> float | None:
+        """The policy plan's monthly fee from the docs snapshot's Plan table (GW-MODEL-TIERS: the Go
+        rail's price divides it). None = no docs snapshot, or one written before the table was read."""
+        docs = self.snapshots.get("docs")
+        if docs is None or self.plan is None:
+            return None
+        fee = (docs.body.get("plan_fees") or {}).get(self.plan)
+        return float(fee) if isinstance(fee, (int, float)) else None
+
+    def listed(self) -> list[str]:
+        """The config snapshot's listed wire ids ([] = no snapshot)."""
+        cfg = self.snapshots.get("config")
+        return sorted(cfg.body["models"]) if cfg else []
 
     def monthly_limit(self, model: str) -> float | str | None:
         """The plan's monthly limit for a WIRE model id: usd, "unlimited", or None (no row)."""
@@ -428,7 +637,9 @@ class GoCatalog:
             return [m for m in self.policy_models if m not in snap.body["models"]]
         return [m for m in self.policy_models if self.monthly_limit(m) is None]
 
-    def view(self) -> dict:
+    def view(self, pricing: dict | None = None) -> dict:
+        """`GET /catalog/opencode`; `pricing` = the Go rail's price per model (capacity.go_pricing —
+        the plan fee over what the plan bought; the app hands it in, this leg holds no ledger)."""
         now = self.clock()
         cfg, docs = self.snapshots.get("config"), self.snapshots.get("docs")
         listed = cfg.body["models"] if cfg else {}
@@ -452,6 +663,8 @@ class GoCatalog:
             }
         return {
             "plan": self.plan,
+            "plan_fee_usd_month": self.plan_fee(),
+            "pricing": pricing if pricing is not None else {"fee_usd_month": None, "draw_30d_usd": 0.0, "models": {}},
             "sources": {s: {"fetched_at": iso(self.snapshots[s].fetched_at) if s in self.snapshots else None,
                             "age_s": round(now - self.snapshots[s].fetched_at, 3) if s in self.snapshots else None,
                             "models": self.snapshots[s].models if s in self.snapshots else 0,

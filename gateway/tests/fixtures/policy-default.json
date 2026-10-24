@@ -80,12 +80,14 @@
         "ranking_top_n": 30
       },
       "canary": {
-        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again.",
+        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again; backoff_s 3600 / backoff_max_s 14400 = a 429'd canary's re-try horizon (operator 2026-10-22: no verdict, exponential backoff, the walk moves on) — the world's cap is low so four rides show it (prod: a day).",
         "role": "prober",
         "harness": "opencode",
         "max_per_refresh": 3,
         "usd_per_day": 1.0,
-        "cooldown_s": 86400
+        "cooldown_s": 86400,
+        "backoff_s": 3600,
+        "backoff_max_s": 14400
       },
       "max_sessions": 20,
       "models": {
@@ -95,15 +97,15 @@
       }
     }
   },
-  "tiers": {"score": "intelligence", "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5}, "cap": 3},
+  "tiers": {"score": "intelligence", "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5}, "cap": 3, "cost": {"ride_tokens_out_m": 0.01, "strike_overhead_usd": 0, "min_rides": 5}},
   "context_tokens": {
-    "_comment": "per-model harness window — the Go rail's deepseek-v4.1-flash = the console /api/v2/config `limit.context` (2026-10-17), as in the deployed policy; absent = null in the dispatch answer, never a guess.",
-    "opencode-go/deepseek-v4.1-flash": 1000000
+    "_comment": "per-model harness window for the NON-Go rails; absent = null in the dispatch answer, never a guess. A Go model's window is the Go catalog's `context` (GW-CATALOG-GO ruling 5, GW-SESSIONS-ENV) — an `opencode-go/*` entry here refuses the load. The openrouter value below is a WORLD value for the echo row, not a vendor fact (the openrouter rail has no catalog context yet).",
+    "deepseek/deepseek-v4.1-flash": 163840
   },
   "control_plane_auth": "observe",
   "callers": {
-    "_comment": "GW-SESSIONS-AUTH — fixture identities (specs/worlds/README.md): the platform loop's dispatcher (worker admissions bound into its fixture worker namespace) and the specs reviewer's tick (reviewer + the worker-role shadow cell, never a bind), and a JUDGE (GW-SESSIONS-OUTCOME: admits nothing, `outcome: any` — may report an outcome on any platform session). `observe` here: a caller with no token is admitted and counted, so every row that does not test the caller check runs unchanged; the enforce rows ride the `policy-enforce` world.",
-    "system:serviceaccount:platform-agents:agentstack-loop": {"stacks": ["platform"], "roles": ["worker"], "bind_namespaces": ["platform-agents"]},
+    "_comment": "GW-SESSIONS-AUTH — fixture identities (specs/worlds/README.md): the platform loop's dispatcher (worker admissions bound into its fixture worker namespace, and the entry canary's prober rides \u2014 GW-CATALOG-OR \u00a7The entry canary \u2014 unbound) and the specs reviewer's tick (reviewer + the worker-role shadow cell, never a bind), and a JUDGE (GW-SESSIONS-OUTCOME: admits nothing, `outcome: any` — may report an outcome on any platform session). `observe` here: a caller with no token is admitted and counted, so every row that does not test the caller check runs unchanged; the enforce rows ride the `policy-enforce` world.",
+    "system:serviceaccount:platform-agents:agentstack-loop": {"stacks": ["platform"], "roles": ["worker", "prober"], "bind_namespaces": ["platform-agents"]},
     "system:serviceaccount:agent-coordinator:agent-coordinator": {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []},
     "system:serviceaccount:agent-coordinator:outcome-judge": {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"}
   },

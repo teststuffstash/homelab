@@ -33,32 +33,50 @@ resources:
 # is the stack's loop namespace (`<stack>-agents`); its `claude-session` exists for platform +
 # oracle only (the Composition renders the ExternalSecret for all four — sleep-agents and
 # circles-agents hold none live), so the policy does not lean on it.
-# models: DERIVED (GW-MODEL-TIERS, operator rulings 2026-10-18) — the three rails' tier lists are
-# the output of `devbox run tiers -- apply` over benchmarks.json beside this file (the committed
-# tier evidence: every candidate per rail with its Artificial Analysis row, price and Go limit;
-# the `tiers` block in policy.json holds the rules — intelligence bands 0.9/0.75/0.5 of the rail's
-# best, cheapest-first by output price, cap 3, the subscription rail by score ascending) and a
-# test row (gateway/tests/test_model_tiers.py) fails on a hand edit. Refresh = `gateway/scripts/
-# benchmarks-snapshot.sh`, then `apply`, commit both. The SPELLING stays model-classes.json's
+# models: DERIVED (GW-MODEL-TIERS, operator rulings 2026-10-18 + 2026-10-19) — the four rails'
+# tier lists are the output of `devbox run tiers -- apply` over benchmarks.json beside this file
+# (the committed tier evidence: every candidate per rail with its Artificial Analysis row, its
+# price, its clean-ride evidence and its Go limit; the `tiers` block in policy.json holds the
+# rules — intelligence bands 0.9/0.75/0.5 of the rail's best, cheapest per CLEAN ride first
+# (`tiers.cost`), cap 3, the subscription rail by score ascending) and a test row
+# (gateway/tests/test_model_tiers.py) fails on a hand edit. Refresh = `gateway/scripts/
+# benchmarks-snapshot.sh`, then `apply`, commit both; the snapshot ships in this ConfigMap too
+# (GATEWAY_BENCHMARKS) so its age alerts (TierEvidenceStale, 7 d). A tier with no priced
+# candidate is UNDECIDED and keeps its list. The SPELLING stays model-classes.json's
 # `models.*.ids` (`claude/<alias>`, `opencode-go/<id>`, bare openrouter ids); the gateway derives
 # the wire id by stripping the rail prefix (`claude/sonnet` → `sonnet`, which claude-code resolves
 # client-side; `opencode-go/mimo-v2.6-flash` → `mimo-v2.6-flash`), the same strip
 # agents/agent-session.sh performs today. Candidates: opencode = the Go catalog's listed models
 # with a monthly limit under `plan` (GW-CATALOG-GO's live read, kept in the snapshot — so the Go
 # rail's ids are never checked against model-classes.json, which carries no Go id for most of
-# them: the old proxy's table, untouched); openrouter = model-classes.json's openrouter ids;
-# anthropic = the three `claude/` aliases. History: opencode heavy first left model-classes.json's
+# them: the old proxy's table, untouched), each at the Go PRICE (the plan fee over what it bought:
+# list x fee / max(the rail's 30-day draw, the model's limit)); openrouter = the OpenRouter
+# catalog's models (GW-CATALOG-OR), each at its SELECTED endpoint's price — null until a cell
+# passed the entry canary (2026-10-20: all of them, so the openrouter lists stand as last derived);
+# anthropic = the three `claude/` aliases; codex = the ENROLLED account's model evidence (CODEX_CANDIDATES
+# of benchmarks-snapshot.sh: 2026-10-22 one id, gpt-6-astra, from the leg-E usage probe — FU-270). History: opencode heavy first left model-classes.json's
 # opencode-go claude-sonnet id (#2663 — 400 "Model is unavailable" upstream, kimi-k3 rejected as
 # too expensive for review), then every tier sat on deepseek-v4.1-flash by hand (2026-10-17) once
 # deepseek-v4-flash left the Go catalog (docs/spikes/opencode-go-catalog.md); the derivation
 # replaces both hand picks.
 # side_models (anthropic): claude-code's small side-calls name the haiku family
 # (ANTHROPIC_SMALL_FAST_MODEL default) under a sonnet session — admitted ⚖ (GW-MODEL-RESOLVE).
+# codex (LIT 2026-10-22, FU-270): the ChatGPT-subscription rail — lit as the explicit canary cell (`prober`
+# only), opened to EVERY role 2026-10-23 (operator ruling: subscriptions go to all roles; the walk's harness
+# follows the rail — sessions.md §The harness follows the rail; the block's _comment cites every ⚖ value; the
+# credential is the gateway's own login, `devbox run codex-seed`).
+# roles.*.rails ORDER (2026-10-23) is the operator's weekly knob — re-order to move a role between
+# subscriptions; a week's tokens drained on purpose fall through to the next rail: the claude-harness roles
+# anthropic → opencode → codex; the opencode-harness roles opencode → codex → anthropic → openrouter (the
+# metered rail last); the prober keeps openrouter FIRST (its probes are that rail's cells).
 # max_sessions: anthropic 5 = the old proxy's SUBSCRIPTION_MAX_RUNNING; opencode 3 =
 # model-classes.json `rails.opencode-go.concurrency` (the declared Go bound); openrouter 20
 # (per-token, bounded by key budgets not slots).
-# context_tokens: per-model harness window — the Go rail's deepseek-v4.1-flash = 1000000, the
-# console /api/v2/config `limit.context` (2026-10-17); absent = null, never a guess.
+# context_tokens: per-model harness window for the NON-Go rails — none declared today; absent =
+# null in the dispatch answer, never a guess. The Go rail's windows are NOT here: the gateway
+# answers the Go catalog's `context` (models.dev under the console overlay, GW-CATALOG-GO) and an
+# `opencode-go/*` entry here refuses the load (ruling 5; GW-SESSIONS-ENV). The 2026-10-17 hand copy
+# of deepseek-v4.1-flash's console `limit.context` (1000000) left with FU-270 (d).
 # admission (anthropic, opencode): the ladder's capacity half — RULES only: window utilization
 # thresholds, the 429 hold and its scope (opencode: `latch_scope: model` — a Go 429 cools its cell,
 # never the rail), the Go windows' thresholds + anchors (gateway/specs/endpoints/sessions.md
@@ -73,17 +91,23 @@ resources:
 # roles: rails in preference order from model-classes.json's class table (role_defaults → classes
 # → rails), harness = what agents/agent-session.sh derives for that rail today.
 # callers + control_plane_auth (GW-SESSIONS-AUTH, FU-270): who may call POST /sessions and
-# GET/DELETE /sessions/{id}, keyed by the projected-token ServiceAccount username. Exactly today's
-# dispatchers, no wildcard: `platform-agents:agentstack-loop` = the platform stack's graduated
+# GET/DELETE /sessions/{id} and GET /sessions?task=, keyed by the projected-token ServiceAccount
+# username. Exactly today's dispatchers plus the judge, no wildcard: `platform-agents:agentstack-loop` = the platform stack's graduated
 # coordinator pod (agents/coordinator-session.sh --loop-ns), the one in-cluster agent-session.sh
 # caller — worker admissions bound into the platform repo namespaces that hold an
 # `agentstack-worker` SA (agent-runtime, homelab, openrouter-operator; `agent-coordinator` holds
 # none, so a bind there could never be pulled ⚖); the jail canary mints this SA's token to act as
-# it. `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
+# it — and `prober` (2026-10-20): the ENTRY CANARY (gateway/scripts/canary-entrants.sh,
+# AGENT_GATEWAY_ROLE=prober, GW-CATALOG-OR §The entry canary) rides as this SA, so without the
+# role every canary admission was 403 caller-role-denied and no openrouter cell could become
+# eligible; `prober` binds nothing (the canary pod is unbound). `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
 # (agents/coordinator/specs-review-argo.yaml), their OWN ServiceAccount since #2685 (callers are
 # per SA; as `agent-coordinator` the key covered every workflow in that namespace): `reviewer`, and
 # `worker` for the goose@openrouter shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it
-# never binds. `enforce` since 2026-10-17
+# never binds. `agent-coordinator:outcome-judge` = the deploy-revert chain's judge step
+# (agents/coordinator/deploy-revert-argo.yaml; FU-270 (b), #2785): admits nothing (no roles, no
+# binds), `outcome: any` — it lists a task's sessions and reports `wrong-verdict` on the review
+# sessions of a merge the chain reverted (GW-SESSIONS-OUTCOME). `enforce` since 2026-10-17
 # (after #2687 made every caller send its token and the unauthenticated series stayed flat): a
 # call with no valid caller token is 401; `observe` is the rollback knob.
 #
@@ -102,6 +126,10 @@ configMapGenerator:
         app: agent-gateway
     files:
       - policy.json
+      # GW-MODEL-TIERS: the committed tier evidence rides beside the policy (GATEWAY_BENCHMARKS) so the
+      # gateway can say how old the prices it compares on are (gateway_tier_evidence_age_seconds →
+      # TierEvidenceStale); a re-cut rolls the pod like a policy edit.
+      - benchmarks.json
 
 # The image pin — the ONLY line .github/workflows/gateway-image.yaml's deploy/agent-gateway pin PR
 # edits (calver-gsha, `2026.<m>.<d>-g<sha12>`). 0.0.0-pending = no build has landed yet: the
@@ -109,4 +137,4 @@ configMapGenerator:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.10.20-gdbefb3a34f48
+    newTag: 2026.10.24-g7b1beebe34a7

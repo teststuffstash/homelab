@@ -313,6 +313,38 @@ am "[$(alert NodeMemoryMajorPagesFaults $((NOW - 30*3600)) '{"instance":"192.168
 go
 jqok "the same host with onsets a day apart is two groups (two stories)" '.counts.groups == 2'
 
+# Alertmanager's startsAt carries FRACTIONAL seconds ("…:50.72Z"), which jq's fromdateiso8601 does
+# not parse — the onset used to fall back to NOW, so every firing alert landed in the run's own hour
+# bucket (2026-10-20's digest: a 7 h-standing alert with onset 03:00, the run's hour).
+scenario group-fractional-startsAt
+T0=$((NOW - 12*3600))
+am "$(printf '[%s,%s]' "$(alert NodeMemoryMajorPagesFaults $((T0 + 600)) '{"node":"n9","triage":"dig"}')" \
+                       "$(alert NodeDiskIOSaturation $((NOW - 30*3600)) '{"node":"n9","triage":"dig"}')" \
+      | jq -c 'map(.startsAt |= sub("Z$"; ".72Z"))')"
+go
+jqok "a fractional startsAt keeps its REAL onset bucket (not the run's)" '[.groups[].onset] | index("'"$(iso $(( (T0 + 600) / 3600 * 3600 )))"'") != null'
+jqok "…so two onsets a day apart on one host stay two groups" '.counts.groups == 2'
+
+# group-keys — the responder's `now`-lane use of the same key (one session per group, 2026-10-20).
+scenario group-keys-mode
+printf '%s' '{"alerts":[
+ {"status":"firing","fingerprint":"k1","startsAt":"2026-10-20T01:31:50.72Z","labels":{"alertname":"KubePodNotReady","namespace":"garage","pod":"garage-0","job":"kube-state-metrics","triage":"now"}},
+ {"status":"firing","fingerprint":"k2","startsAt":"2026-10-20T01:31:51.10Z","labels":{"alertname":"KubePodNotReady","namespace":"loki","pod":"alloy-mr2sh","job":"kube-state-metrics","triage":"now"}},
+ {"status":"firing","fingerprint":"k3","startsAt":"2026-10-20T01:31:50Z","labels":{"alertname":"NodeNotReady","node":"hp-01","triage":"now"}},
+ {"status":"firing","fingerprint":"k4","labels":{"alertname":"KubePodNotReady","namespace":"x","pod":"y","job":"kube-state-metrics","triage":"now"}},
+ {"status":"firing","fingerprint":"k5","startsAt":"2026-10-20T01:31:50Z","labels":{"alertname":"CiliumUnreachableNodes","triage":"dig"}},
+ {"status":"resolved","fingerprint":"k6","startsAt":"2026-10-20T01:31:50Z","labels":{"alertname":"KubePodNotReady","namespace":"z","pod":"z","triage":"now"}}]}' \
+  | DIG_REPO="$REPO_SNAP" bash "$SEL" group-keys > "$H/keys.tsv" 2>/dev/null
+k() { awk -F'\t' -v f="$1" '$1 == f { print $2 }' "$H/keys.tsv"; }
+[ "$(k k1)" = "2026-10-20T01:00:00Z|cluster" ] && [ "$(k k1)" = "$(k k2)" ] \
+  && ok "two kube-state pod alerts, same onset hour → one key (host 'cluster', the dig's rule)" || bad "group-keys same group" "k1=$(k k1) k2=$(k k2)"
+[ "$(k k3)" = "2026-10-20T01:00:00Z|hp-01" ] && ok "a node-labelled alert keys to its node" || bad "group-keys node host" "k3=$(k k3)"
+[ "$(k k4)" = "solo:k4" ] && ok "no startsAt → solo key (groups with nothing)" || bad "group-keys solo" "k4=$(k k4)"
+grep -q $'^k5\t' "$H/keys.tsv" && bad "group-keys skips dig" "k5 listed" || ok "triage:dig never forms a responder group"
+grep -q $'^k6\t' "$H/keys.tsv" && bad "group-keys skips resolved" "k6 listed" || ok "a resolved alert is not a member"
+[ "$(awk -F'\t' '$1 == "k1" { print $4 }' "$H/keys.tsv")" = "workload:garage/garage-0" ] \
+  && ok "…and the subject column is the responder's own cascade" || bad "group-keys subject" "$(cat "$H/keys.tsv")"
+
 scenario group-cap-defers
 am "[$(alert A1 $((NOW - 50*3600)) '{"node":"n1","triage":"dig"}'), $(alert A2 $((NOW - 40*3600)) '{"node":"n2","triage":"dig"}'), $(alert A3 $((NOW - 30*3600)) '{"node":"n3","triage":"dig"}')]"
 DIG_ENV="DIG_MAX_GROUPS=2" go

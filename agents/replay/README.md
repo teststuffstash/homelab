@@ -255,6 +255,7 @@ is stale, so it cannot drift the way the prose register did.
 | `decorrelate-resolution/served-model` | actions | - | `agents/review-reflex.sh` | - |
 | `depends-on-retired-format/depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `deploy-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `deploy-revert-judge` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `deploy-revert-preexisting/degraded` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `deploy-revert-preexisting/healthy` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `deploy-revert-preexisting/unreadable` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
@@ -319,6 +320,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harness-run-cmd/claude-gateway` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/claude` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd/codex-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose-mcp` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd/goose` | actions | - | `agents/agent-session.sh` | - |

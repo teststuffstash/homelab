@@ -31,6 +31,19 @@ RAIL_DIALECTS = {
     "openrouter": ("anthropic", "openai"),
     "codex": ("responses",),
 }
+# The harness a rail names when the caller names none (GW-SESSIONS-ADMIT §The harness follows the
+# rail, operator ruling 2026-10-23: every subscription rail is every role's, the walk crosses the
+# dialect boundary on its own): a rail serving the role's harness's dialect keeps the role's harness;
+# a rail that does not (anthropic for an openai-harness role, codex for any role) names the harness
+# of its FIRST dialect — ⚖ one harness per dialect, the baked defaults the launcher runs.
+DIALECT_HARNESS = {"anthropic": "claude", "openai": "opencode", "responses": "codex"}
+
+
+def harness_for(rail: str, preferred: str) -> str:
+    """The harness a dispatch on `rail` names for a role whose policy harness is `preferred`."""
+    if HARNESS_DIALECT[preferred] in RAIL_DIALECTS[rail]:
+        return preferred
+    return DIALECT_HARNESS[RAIL_DIALECTS[rail][0]]
 
 SELF_URL_DEFAULT = "http://agent-gateway.agent-egress.svc.cluster.local:8080"
 UPSTREAM_DEFAULTS = {
@@ -41,14 +54,18 @@ UPSTREAM_DEFAULTS = {
     # (⚑ gap, GW-RAIL-CODEX); an unset CODEX_UPSTREAM leaves the rail without a backend.
     "codex": "",
 }
-# The Go catalog leg's two sources (GW-CATALOG-GO): the console's V2 config (the Go key reads it)
-# and the vendor's Go page source on its default branch (unauthenticated; the path moved once,
-# on 2026-10-12 — a move is a fetch failure, and GoCatalogStale names it).
+# The Go catalog leg's reads (GW-CATALOG-GO), one URL each. The `config` source = the `catalog`
+# read (models.dev's api.json — the vendor's own registry, public) overlaid by the `config` read
+# (the console's V2 config: the workspace's overrides, the Go key reads it — since 2026-10-20 it
+# carries ONLY the overrides); the `docs` source = the vendor's Go page source on its default
+# branch (unauthenticated; the path moved once, on 2026-10-12 — a move is a fetch failure, and
+# GoCatalogStale names it).
 GO_CATALOG_URLS = {
+    "catalog": "https://models.dev/api.json",
     "config": "https://opencode.ai/console/api/v2/config",
     "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx",
 }
-GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start
+GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start unless the store's snapshot is younger
 
 
 class PolicyError(ValueError):
@@ -159,6 +176,7 @@ class HeadroomPolicy:
     max_age_s: float
     ceiling: float
     windows_minutes: tuple[int, ...]
+    poll_interval_s: float  # the gateway's own usage poll (§Poll); must leave room under max_age_s
 
 
 @dataclass(frozen=True)
@@ -211,6 +229,8 @@ class CanaryPolicy:
     max_per_refresh: int
     usd_per_day: float
     cooldown_s: float  # an excluded cell is a candidate again after this
+    backoff_s: float  # a 429'd canary's first re-try horizon (operator 2026-10-22: no verdict, back off, move on)
+    backoff_max_s: float  # the horizon doubles per consecutive 429'd canary up to this
 
 
 def _catalog(rail: str, c) -> CatalogPolicy | None:
@@ -243,7 +263,7 @@ def _canary(rail: str, c, roles: set[str]) -> CanaryPolicy | None:
         raise PolicyError(f"policy: {where} is an openrouter-only key")
     if not isinstance(c, dict):
         raise PolicyError(f"policy: {where} must be an object")
-    _keys(where, c, {"role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s"})
+    _keys(where, c, {"role", "harness", "max_per_refresh", "usd_per_day", "cooldown_s", "backoff_s", "backoff_max_s"})
     role = c.get("role")
     if role not in ROLES:
         raise PolicyError(f"policy: {where}.role must be one of {', '.join(ROLES)}")
@@ -255,7 +275,11 @@ def _canary(rail: str, c, roles: set[str]) -> CanaryPolicy | None:
         raise PolicyError(f"policy: {where}.max_per_refresh must be a positive integer")
     usd = _num(f"{where}.usd_per_day", c.get("usd_per_day"))
     cooldown = _num(f"{where}.cooldown_s", c.get("cooldown_s"))
-    return CanaryPolicy(role, harness, n, usd, cooldown)
+    backoff = _num(f"{where}.backoff_s", c.get("backoff_s"))
+    backoff_max = _num(f"{where}.backoff_max_s", c.get("backoff_max_s"))
+    if backoff <= 0 or backoff_max < backoff:
+        raise PolicyError(f"policy: {where}.backoff_s must be positive and at most backoff_max_s")
+    return CanaryPolicy(role, harness, n, usd, cooldown, backoff, backoff_max)
 
 
 def _providers(rail: str, p) -> ProvidersPolicy | None:
@@ -451,25 +475,41 @@ def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
     if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
             or any(type(w) is not int or w <= 0 for w in windows)):
         raise PolicyError("policy: rails.codex.headroom.windows_minutes must be distinct positive integers")
+    interval = h.get("poll_interval_s")
+    if not _finite(interval) or not 0 < interval < max_age:
+        raise PolicyError("policy: rails.codex.headroom.poll_interval_s must be a positive number below max_age_s")
     oauth = r.get("oauth")
     margin = oauth.get("refresh_margin_s") if isinstance(oauth, dict) else None
     if not _finite(margin) or margin < 0:
         raise PolicyError("policy: rails.codex.oauth.refresh_margin_s must be a non-negative number")
-    return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows))), float(margin)
+    return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows)), float(interval)), float(margin)
 
 
 SCORE_AXES = ("intelligence", "coding", "agentic")  # the AA capability row's three indices (GW-MODEL-TIERS)
 
 
 @dataclass(frozen=True)
+class CostPolicy:
+    """`tiers.cost` (GW-MODEL-TIERS §Cost per clean ride): the terms that turn a cell's price and
+    clean-ride rate into one number — a ride's size in output tokens, what a struck ride costs on
+    top of itself, and how many judged rides a cell needs before its measured rate replaces its
+    prior. ⚖ every value is policy data; the formula is the spec's."""
+    ride_tokens_out_m: float  # M output tokens one ride spends (the 30-day mean of the openai-dialect rails, 2026-10-20)
+    strike_overhead_usd: float  # a failed ride's reviewer round + coordinator re-entry, in $ (0 = unmeasured ⚑)
+    min_rides: int  # judged rides before a cell's measured clean rate replaces its prior
+
+
+@dataclass(frozen=True)
 class TiersPolicy:
     """`tiers` (GW-MODEL-TIERS): how the DEPLOYED policy's per-(rail, tier) model lists are derived
     from the committed benchmark snapshot — the score axis, each tier's band as a fraction of the
-    rail's top score (heavy ≥ standard ≥ light), and the cap on a list's length. Rules only: the
-    scores and prices live in the snapshot, the lists are its output (`agent_gateway.tiers`)."""
+    rail's top score (heavy ≥ standard ≥ light), the cap on a list's length, and the cost terms
+    (`cost`) every list is ordered by and the admission's rail choice compares with. Rules only:
+    the scores and prices live in the snapshot, the lists are its output (`agent_gateway.tiers`)."""
     score: str
     bands: dict[str, float]  # tier -> fraction of the rail's top score a candidate must reach
     cap: int
+    cost: CostPolicy
 
 
 def tiers_policy(t) -> TiersPolicy | None:
@@ -480,7 +520,7 @@ def tiers_policy(t) -> TiersPolicy | None:
         return None
     if not isinstance(t, dict):
         raise PolicyError(f"policy: {where} must be an object {{score, bands, cap}}")
-    _keys(where, t, {"score", "bands", "cap"})
+    _keys(where, t, {"score", "bands", "cap", "cost"})
     score = t.get("score")
     if score not in SCORE_AXES:
         raise PolicyError(f"policy: {where}.score must be one of {', '.join(SCORE_AXES)}")
@@ -501,7 +541,18 @@ def tiers_policy(t) -> TiersPolicy | None:
     cap = t.get("cap")
     if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
         raise PolicyError(f"policy: {where}.cap must be a positive integer")
-    return TiersPolicy(score, fractions, cap)
+    c = t.get("cost")
+    if not isinstance(c, dict):
+        raise PolicyError(f"policy: {where}.cost must be an object {{ride_tokens_out_m, strike_overhead_usd, min_rides}}")
+    _keys(f"{where}.cost", c, {"ride_tokens_out_m", "strike_overhead_usd", "min_rides"})
+    ride = _num(f"{where}.cost.ride_tokens_out_m", c.get("ride_tokens_out_m"))
+    if ride <= 0:
+        raise PolicyError(f"policy: {where}.cost.ride_tokens_out_m must be a positive number")
+    overhead = _num(f"{where}.cost.strike_overhead_usd", c.get("strike_overhead_usd"))
+    rides = c.get("min_rides")
+    if isinstance(rides, bool) or not isinstance(rides, int) or rides < 1:
+        raise PolicyError(f"policy: {where}.cost.min_rides must be a positive integer")
+    return TiersPolicy(score, fractions, cap, CostPolicy(ride, overhead, rides))
 
 
 CONTROL_PLANE_AUTH_MODES = ("observe", "enforce")
@@ -570,7 +621,7 @@ class Policy:
     rails: dict[str, RailPolicy]
     session_ttl_s: int
     defer_retry_s: int
-    context_tokens: dict[str, int]  # policy model id -> declared harness window; absent = null, never a guess
+    context_tokens: dict[str, int]  # policy model id -> declared harness window (non-Go rails); absent = null, never a guess
     raw: dict = field(repr=False, compare=False)
     # GW-SESSIONS-AUTH: who may call the control plane, and whether a caller without a valid token
     # is refused (`enforce`) or admitted, logged and counted (`observe`, the rollout mode).
@@ -581,6 +632,9 @@ class Policy:
     tiers: TiersPolicy | None = None  # GW-MODEL-TIERS: the derivation's rules; None = the policy carries none
 
     def context_tokens_for(self, model: str) -> int | None:
+        """The declared window for a policy model id, or None. Never asked for a Go model: the
+        loader refuses a `context_tokens` entry under `opencode-go/` (ruling 5), and GW-SESSIONS-ENV
+        answers the Go rail from the catalog's `context` (GoCatalog.context_for)."""
         return self.context_tokens.get(model)
 
     @staticmethod
@@ -600,6 +654,11 @@ class Policy:
         if not isinstance(ctx_raw, dict):
             raise PolicyError("policy: context_tokens must be an object {model id: window}")
         context_tokens = {k: int(v) for k, v in ctx_raw.items() if not k.startswith("_")}
+        # GW-CATALOG-GO ruling 5: a Go model's window is the catalog's `context` (GW-SESSIONS-ENV
+        # reads it from the snapshot); a policy copy would be a stale hand copy shadowing it.
+        if go_ctx := [k for k in context_tokens if k.startswith(RAIL_PREFIX["opencode"])]:
+            raise PolicyError(f"policy: context_tokens names the Go model(s) {', '.join(sorted(go_ctx))} — a Go model's window is "
+                              "the Go catalog's `context` (GW-CATALOG-GO ruling 5), never a policy copy; drop the entry")
         rails: dict[str, RailPolicy] = {}
         for name, r in (d.get("rails") or {}).items():
             if name not in RAILS:
@@ -695,6 +754,18 @@ class Settings:
     # its schedule (0 = no schedule). The endpoints read rides the openrouter rail's upstream base.
     or_mcp_url: str = "https://mcp.openrouter.ai/mcp"
     or_catalog_refresh_s: float = GO_CATALOG_REFRESH_S
+    # GW-CODEX-HEADROOM §Poll: the account usage endpoint the gateway polls with its own credential.
+    # NO default — like CODEX_UPSTREAM it names a vendor profile (the native backend's usage path);
+    # unset = no poll, the rail stays `quota-unknown` (fail closed).
+    codex_usage_url: str = ""
+    # GW-CODEX-CAPTURE: the four-boundary recorder's scope (a task-key prefix; "" = off) and its byte
+    # bound per request; retention of persisted records in days (the bundle is pulled and reviewed, not kept).
+    codex_capture_task_prefix: str = ""
+    codex_capture_max_bytes: int = 262144
+    codex_capture_retention_days: float = 7.0
+    # GW-MODEL-TIERS: the committed tier-evidence snapshot, mounted beside the policy; its age is a gauge
+    # (`gateway_tier_evidence_age_seconds`) so a stale comparison basis alerts. Absent file = no series.
+    benchmarks_path: str = "/etc/agent-gateway/benchmarks.json"
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> Settings:
@@ -714,9 +785,15 @@ class Settings:
             cred_negative_cache_s=int(e.get("GATEWAY_CRED_NEGATIVE_CACHE_S", "20")),
             connect_timeout_s=float(e.get("GATEWAY_CONNECT_TIMEOUT_S", "10")),
             read_timeout_s=float(e.get("GATEWAY_READ_TIMEOUT_S", "600")),
-            go_catalog_urls={"config": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["config"]),
+            go_catalog_urls={"catalog": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["catalog"]),
+                             "config": e.get("GATEWAY_GO_CONFIG_URL", GO_CATALOG_URLS["config"]),
                              "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
+            codex_usage_url=e.get("CODEX_USAGE_URL", "").strip(),
+            codex_capture_task_prefix=e.get("CODEX_CAPTURE_TASK_PREFIX", "").strip(),
+            codex_capture_max_bytes=int(e.get("CODEX_CAPTURE_MAX_BYTES", "262144")),
+            codex_capture_retention_days=float(e.get("CODEX_CAPTURE_RETENTION_DAYS", "7")),
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
+            benchmarks_path=e.get("GATEWAY_BENCHMARKS", "/etc/agent-gateway/benchmarks.json"),
         )

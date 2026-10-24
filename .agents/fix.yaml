@@ -118,6 +118,14 @@ instructions: |
   - Alert rules live in `argocd/resources/*/prometheusrule.yaml` and are an ordinary GitOps PR
     since FU-136. An alert DESCRIPTION states the SYMPTOM and what to check — never a guessed
     cause, and never a cause you have not verified in this diff.
+  - **Specs are the pinned process.** When `Touches:` names `gateway/specs/**` or `gateway/tests/**`,
+    read `gateway/specs/README.md` §Rules FIRST: it points at the RULES.md / CONVENTIONS.md version this
+    island runs, and the specs reviewer (your second required approval) gates your rows against that
+    same text. The spec ⇄ test join is a RATCHET in `gateway/scripts/spec_gate.py` — per rule,
+    `row-unkeyed` / `header-unthreaded` / `cell-mismatch` / `case-unspecified` may never exceed
+    `gateway/scripts/spec-gate-baseline.json`. Your rule's counts go down or stay: after `devbox run ci`
+    in `gateway/`, run `uv run python scripts/spec_gate.py --write-baseline` there and commit the
+    lowered line in the same PR; a raised line is a RED you do not get to edit around.
   - Branch `fix/issue-{{ issue }}-<slug>`; push after the first meaningful commit and after each
     green step. A run that dies must leave a resumable branch.
   - The PR body must CLOSE the issue: write `Fixes #{{ issue }}` — a GitHub closing keyword, not a

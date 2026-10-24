@@ -10,6 +10,7 @@ dispatch-opencode              |       |       | AGENT_GATEWAY=sessions AGENT_GA
 dispatch-claude-explicit       |       |       | AGENT_GATEWAY=sessions                    | dispatch-claude-explicit     |
 dispatch-claude-subscription   |       |       | AGENT_GATEWAY=sessions                    | dispatch-claude-subscription |
 dispatch-goose                 |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_URL=http://127.0.0.1:18080 | dispatch-goose |
+dispatch-codex                 |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=prober | dispatch-codex               |
 defer                          |       |       | AGENT_GATEWAY=sessions                    | defer                        |
 http-503                       |       |       | AGENT_GATEWAY=sessions                    | http-503                     |
 unreachable                    |       |       | AGENT_GATEWAY=sessions                    | unreachable                  |

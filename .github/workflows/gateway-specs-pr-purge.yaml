@@ -6,8 +6,11 @@
 # bucket `gateway-specs` prefix pr-<N>/, written by ci.yaml's `Gateway specs site publish` step
 # whenever the PR's skip map ran the gateway gate. Nothing is created when a PR opens — Garage
 # serves an index on any sub-prefix, so the prefix IS the preview; the one lifecycle event is
-# the close. `paths` mirrors the publish condition: gateway/** plus the files whose change makes
-# scripts/diff-ci.sh's skip map fail open (every gate runs, the publish included).
+# the close. The same close removes the PR's reviewer evidence packs (evidence/pr-<N>/, written by
+# ci.yaml's `Gateway evidence publish` step — gateway/scripts/evidence-publish.sh).
+# NO `paths` filter, on purpose (2026-10-22): a filter here was a fourth copy of the gateway trigger
+# set (scripts/diff-ci.sh GATEWAY_PATHS + its fail-open files) and drift = evidence never purged.
+# Every PR close runs the purge; a PR that published nothing is the script's "nothing to purge" no-op.
 #
 # THIN workflow: logic lives in gateway/scripts/specs-pr-purge.sh (no `bash -c`, no error-swallow —
 # oracle-fleet#517/#529), tools come from devbox. A failed purge fails this step.
@@ -16,12 +19,6 @@ name: gateway-specs-pr-purge
 on:
   pull_request:
     types: [closed]
-    paths:
-      - gateway/**
-      - devbox.json
-      - devbox.lock
-      - .github/workflows/ci.yaml
-      - scripts/diff-ci.sh
 
 concurrency:
   group: gateway-specs-pr-purge-${{ github.event.number }}

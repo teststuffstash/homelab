@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   canary_provider TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_active ON sessions (rail, released_at, expires_at);
+CREATE INDEX IF NOT EXISTS sessions_task ON sessions (task);
 CREATE TABLE IF NOT EXISTS requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
@@ -87,6 +88,7 @@ CREATE TABLE IF NOT EXISTS strikes (
   session_id TEXT NOT NULL,
   at REAL NOT NULL,
   refuted_at REAL,
+  harness TEXT NOT NULL DEFAULT '',
   UNIQUE (session_id, class, source, provider)
 );
 CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
@@ -103,11 +105,31 @@ CREATE TABLE IF NOT EXISTS provider_cells (
   class TEXT,
   since REAL NOT NULL,
   cooldown_until REAL,
+  retry_at REAL,
+  backoff_s REAL,
+  limit_source TEXT,
   PRIMARY KEY (model, provider)
+);
+CREATE TABLE IF NOT EXISTS captures (
+    session_id TEXT NOT NULL,
+    seq        INTEGER NOT NULL,
+    boundary   TEXT NOT NULL,
+    ts         REAL NOT NULL,
+    record     TEXT NOT NULL,
+    PRIMARY KEY (session_id, seq)
 );
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS capacity_marks (
+  kind TEXT NOT NULL,
+  key TEXT NOT NULL,
+  until REAL,
+  stack TEXT,
+  at REAL,
+  backoff REAL,
+  PRIMARY KEY (kind, key)
 );
 """
 _STRIKES_REBUILD = """
@@ -125,10 +147,11 @@ CREATE TABLE strikes_v2 (
   session_id TEXT NOT NULL,
   at REAL NOT NULL,
   refuted_at REAL,
+  harness TEXT NOT NULL DEFAULT '',
   UNIQUE (session_id, class, source, provider)
 );
-INSERT INTO strikes_v2 (id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at)
-  SELECT id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at FROM strikes;
+INSERT INTO strikes_v2 (id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at, harness)
+  SELECT id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at, harness FROM strikes;
 DROP TABLE strikes;
 ALTER TABLE strikes_v2 RENAME TO strikes;
 CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
@@ -150,6 +173,13 @@ _ADDED_COLUMNS = {
                  "canary_provider": "TEXT"},  # GW-CATALOG-OR: the cell a canary session is pinned to (NULL = not a canary)
     "requests": {"tokens_cache_read": _COUNTER, "tokens_cache_write": _COUNTER, "incomplete": "TEXT",
                  "provider": "TEXT NOT NULL DEFAULT ''"},  # GW-RAIL-OPENROUTER: the serving provider's slug ('' = none named)
+    # GW-CATALOG-OR §The entry canary (operator 2026-10-22): a 429'd canary's re-try horizon on its cell —
+    # `retry_at` (the horizon's end), `backoff_s` (the step it doubled to), `limit_source` (the 429 body's);
+    # all NULL once a verdict lands. The cell stays `candidate` throughout.
+    "provider_cells": {"retry_at": "REAL", "backoff_s": "REAL", "limit_source": "TEXT"},
+    # GW-SESSIONS-OUTCOME §The store (operator 2026-10-24): the session's harness, on every strike; only a
+    # harness-scoped strike is matched on it. '' = a strike written before the column existed (matches no harness).
+    "strikes": {"harness": "TEXT NOT NULL DEFAULT ''"},
 }
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
 # column (NOT NULL UNIQUE) holds this prefix + the id, which no sha256 hex digest can equal.
@@ -315,6 +345,15 @@ class Store:
             row = self._db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
         return Session(**dict(row)) if row else None
 
+    def sessions_by_task(self, task: str) -> list[Session]:
+        """Every session carrying exactly `task` (GET /sessions?task= — GW-SESSIONS-AUTH), released
+        and expired included, oldest first. `task` is an original column, so the `sessions_task`
+        index lives in _SCHEMA (CREATE INDEX IF NOT EXISTS is idempotent on an existing table and
+        needs no _migrate step)."""
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM sessions WHERE task = ? ORDER BY created_at, id", (task,)).fetchall()
+        return [Session(**dict(r)) for r in rows]
+
     def get_by_token_hash(self, token_hash: str) -> Session | None:
         with self._lock:
             row = self._db.execute("SELECT * FROM sessions WHERE token_hash = ?", (token_hash,)).fetchone()
@@ -415,6 +454,29 @@ class Store:
                 (u.tokens_in, u.tokens_out, u.tokens_cache_read, u.tokens_cache_write, 1 if incomplete else 0, session_id),
             )
 
+    # -- captures (GW-CODEX-CAPTURE: the four-boundary records of a scoped codex ride) ------------
+    def record_capture(self, session_id: str, seq: int, boundary: str, ts: float, record: str) -> None:
+        with self._lock:
+            self._db.execute("INSERT INTO captures (session_id, seq, boundary, ts, record) VALUES (?,?,?,?,?)",
+                             (session_id, seq, boundary, ts, record))
+
+    def capture_count(self, session_id: str) -> int:
+        with self._lock:
+            (n,) = self._db.execute("SELECT COUNT(*) FROM captures WHERE session_id = ?", (session_id,)).fetchone()
+        return int(n)
+
+    def captures(self, session_id: str) -> list[str]:
+        with self._lock:
+            rows = self._db.execute("SELECT record FROM captures WHERE session_id = ? ORDER BY seq", (session_id,)).fetchall()
+        return [r[0] for r in rows]
+
+    def purge_captures(self, before: float) -> int:
+        """Bounded retention: records older than `before` go (the bundle lives in restricted storage
+        for review, never here for long)."""
+        with self._lock:
+            cur = self._db.execute("DELETE FROM captures WHERE ts < ?", (before,))
+        return cur.rowcount
+
     def rail_usage_since(self, rail: str, since: float) -> list[tuple[float, str, int, int, int, int]]:
         """The rail's metered (2xx) requests since `since`, ascending: (ts, session model, tokens_in,
         cache_read, cache_write, tokens_out) — the window-draw ledger (GW-SESSIONS-ADMIT)."""
@@ -438,12 +500,14 @@ class Store:
     def cell_outcomes(self, rail: str, model: str) -> dict[str, tuple[int, int]]:
         """Per provider of (rail, model): (clean rides, judged rides) — a ride = a session whose
         2xx answers that provider served and whose LATEST outcome is reported; clean = that outcome
-        is `clean` (GW-RAIL-OPENROUTER §Selection: the clean-ride rate the order reads)."""
+        is `clean` (GW-RAIL-OPENROUTER §Selection: the clean-ride rate the order reads). Provider
+        `''` is the model's own cell — the only one on the rails that pin none (the Go rail's clean
+        rate, GW-MODEL-TIERS §The rail choice), the unattributed rides on openrouter."""
         with self._lock:
             rows = self._db.execute(
                 "SELECT p.provider, o.class, COUNT(*) FROM"
                 " (SELECT DISTINCT r.session_id, r.provider FROM requests r JOIN sessions s ON s.id = r.session_id"
-                "  WHERE s.rail = ? AND s.model = ? AND r.provider <> '' AND r.status BETWEEN 200 AND 299) p"
+                "  WHERE s.rail = ? AND s.model = ? AND r.status BETWEEN 200 AND 299) p"
                 " JOIN outcomes o ON o.id = (SELECT id FROM outcomes WHERE session_id = p.session_id ORDER BY id DESC LIMIT 1)"
                 " GROUP BY p.provider, o.class", (rail, model)).fetchall()
         out: dict[str, list[int]] = {}
@@ -478,28 +542,32 @@ class Store:
         return dict(row) if row else None
 
     def add_strike(self, stack: str, task: str, rail: str, model: str, provider: str, klass: str, scope: str, source: str,
-                   session_id: str, at: float) -> bool:
+                   session_id: str, at: float, harness: str = "") -> bool:
         """One strike per (session, class, source); False = it was already counted."""
         with self._lock:
             cur = self._db.execute(
-                "INSERT OR IGNORE INTO strikes (stack, task, rail, model, provider, class, scope, source, session_id, at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (stack, task, rail, model, provider, klass, scope, source, session_id, at),
+                "INSERT OR IGNORE INTO strikes (stack, task, rail, model, provider, class, scope, source, session_id, at, harness)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (stack, task, rail, model, provider, klass, scope, source, session_id, at, harness),
             )
             return cur.rowcount == 1
 
-    def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float, providers: set[str] = frozenset()) -> int:
+    def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float, providers: set[str] = frozenset(),
+                       harness: str = "") -> int:
         """A clean outcome on (rail, model) refutes the task's counted model strikes on that model and
         its cell strikes on the cells the ride touched: (rail, model, '') and (rail, model, p) for each
         provider p the session rode (GW-RAIL-OPENROUTER: a provider-scoped strike is refuted only by
-        a clean ride on that provider)."""
+        a clean ride on that provider); and its harness strikes on the session's harness, whatever the
+        cell (§Harness-scoped strikes: a clean ride proves the harness's machinery works)."""
         ps = sorted(providers)
         marks = ",".join("?" for _ in ps)
         with self._lock:
             cur = self._db.execute(
                 "UPDATE strikes SET refuted_at = ? WHERE stack = ? AND task = ? AND refuted_at IS NULL AND at <= ?"
-                " AND model = ? AND (scope = 'model' OR (rail = ? AND (provider = ''" + (f" OR provider IN ({marks})" if ps else "") + ")))",
-                (at, stack, task, at, model, rail, *ps),
+                " AND ((scope = 'harness' AND harness = ? AND harness != '')"
+                " OR (scope != 'harness' AND model = ? AND (scope = 'model' OR (rail = ? AND (provider = ''"
+                + (f" OR provider IN ({marks})" if ps else "") + ")))))",
+                (at, stack, task, at, harness, model, rail, *ps),
             )
             return cur.rowcount
 
@@ -560,12 +628,29 @@ class Store:
         return {r["provider"]: dict(r) for r in rows}
 
     def cell_set(self, model: str, provider: str, state: str, klass: str | None, now: float, cooldown_until: float | None) -> None:
+        """A verdict on the cell: its state, class and cooldown — and the re-try horizon of any 429'd
+        canary before it is cleared (a verdict resets the backoff)."""
         with self._lock:
             self._db.execute(
                 "INSERT INTO provider_cells (model, provider, state, class, since, cooldown_until) VALUES (?,?,?,?,?,?)"
                 " ON CONFLICT(model, provider) DO UPDATE SET state = excluded.state, class = excluded.class,"
-                " since = excluded.since, cooldown_until = excluded.cooldown_until",
+                " since = excluded.since, cooldown_until = excluded.cooldown_until,"
+                " retry_at = NULL, backoff_s = NULL, limit_source = NULL",
                 (model, provider, state, klass, now, cooldown_until))
+
+    def cell_throttle(self, model: str, provider: str, retry_at: float, backoff_s: float, limit_source: str | None,
+                      now: float) -> None:
+        """A 429'd canary on the cell (GW-CATALOG-OR §The entry canary, operator 2026-10-22): no verdict —
+        the row reads `candidate` (a canary rides only a candidate cell: a new row enters as one, a row
+        back from exclusion is written as one — its old class and cooldown cleared, since a verdict is
+        what re-excludes it), the horizon and its step are written."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO provider_cells (model, provider, state, class, since, cooldown_until, retry_at, backoff_s, limit_source)"
+                " VALUES (?,?,'candidate',NULL,?,NULL,?,?,?)"
+                " ON CONFLICT(model, provider) DO UPDATE SET state = 'candidate', class = NULL, cooldown_until = NULL,"
+                " retry_at = excluded.retry_at, backoff_s = excluded.backoff_s, limit_source = excluded.limit_source",
+                (model, provider, now, retry_at, backoff_s, limit_source))
 
     def cells_count(self, now: float) -> dict[str, int]:
         """Cells by state at `now` — an exclusion past its cooldown counts as a candidate."""
@@ -578,9 +663,22 @@ class Store:
         return out
 
     def canary_sessions_since(self, since: float) -> int:
+        """The canary admissions the per-refresh cap counts: canary sessions since `since`, minus those
+        with no verdict — a 429 on the ride and no `clean` outcome after it (GW-CATALOG-OR §The entry
+        canary, operator 2026-10-22: a 429'd canary consumes no admission)."""
         with self._lock:
-            (n,) = self._db.execute("SELECT COUNT(*) FROM sessions WHERE canary_provider IS NOT NULL AND created_at >= ?", (since,)).fetchone()
+            (n,) = self._db.execute(
+                "SELECT COUNT(*) FROM sessions s WHERE s.canary_provider IS NOT NULL AND s.created_at >= ?"
+                " AND NOT (EXISTS (SELECT 1 FROM requests r WHERE r.session_id = s.id AND r.status = 429)"
+                "          AND NOT EXISTS (SELECT 1 FROM outcomes o WHERE o.session_id = s.id AND o.class = 'clean'))",
+                (since,)).fetchone()
         return int(n)
+
+    def session_throttled(self, session_id: str) -> bool:
+        """Whether the session's ride saw an upstream 429 (the ledger's fact) — a canary's no-verdict."""
+        with self._lock:
+            row = self._db.execute("SELECT 1 FROM requests WHERE session_id = ? AND status = 429 LIMIT 1", (session_id,)).fetchone()
+        return row is not None
 
     def canary_usage_since(self, since: float) -> list[tuple[str, str, int, int, int, int]]:
         """The canary sessions' 2xx requests since `since`: (model, provider, tokens_in, cache_read,
@@ -600,6 +698,34 @@ class Store:
     def meta_set(self, key: str, value: float) -> None:
         with self._lock:
             self._db.execute("INSERT INTO meta (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+    # -- the capacity marks (GW-SESSIONS-ADMIT §Capacity, "Kept across a restart") --------------
+    # One row per mark the admission's capacity state holds (capacity.py writes through under its own
+    # lock; a new gateway on the same DB reloads them at start): `kind` cooled (key `rail|model|provider`)
+    # | latched (the rail) | rejected (`rail|<credential fingerprint>`, with the mark's stack, at = since,
+    # backoff; until = its next re-verification) | hold (`rail|<fingerprint>`: the last backoff a
+    # credential's rejection doubled from — no expiry, so `until` is NULL; cleared by the same events
+    # that clear it in memory). Never a credential value: the fingerprint is a sha256 prefix. A new
+    # table, so `CREATE TABLE IF NOT EXISTS` in _SCHEMA builds it on an existing PVC (no _migrate step).
+    def mark_set(self, kind: str, key: str, until: float | None, stack: str | None = None, at: float | None = None,
+                 backoff: float | None = None) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO capacity_marks (kind, key, until, stack, at, backoff) VALUES (?,?,?,?,?,?)"
+                " ON CONFLICT(kind, key) DO UPDATE SET until = excluded.until, stack = excluded.stack, at = excluded.at,"
+                " backoff = excluded.backoff",
+                (kind, key, until, stack, at, backoff))
+
+    def mark_delete(self, kind: str, key: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM capacity_marks WHERE kind = ? AND key = ?", (kind, key))
+
+    def marks_load(self) -> list[dict]:
+        """Every stored mark, as written (the caller judges expiry: a cooldown's `until` is an expiry,
+        a probe rail's rejected `until` is a due time)."""
+        with self._lock:
+            rows = self._db.execute("SELECT kind, key, until, stack, at, backoff FROM capacity_marks ORDER BY kind, key").fetchall()
+        return [dict(r) for r in rows]
 
     def ping(self) -> bool:
         try:

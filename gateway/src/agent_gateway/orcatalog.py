@@ -21,6 +21,12 @@ CAPPED by a budget.
   exclusion after the cooldown), `eligible` (one canary ride completed clean on exactly that
   cell), `excluded` (a canary struck — with the class and a cooldown). Selection pins only
   `eligible` cells; a model with none rides unpinned.
+- **The view** (`GET /catalog/openrouter`) says, per endpoint row and per harness the policy's
+  `providers.tool_choice` names, whether the cell is `pinnable` — the floors' verdict from
+  `providers.eligible()`, THE one predicate selection uses — and `floor`, its reason where it is
+  not (homelab#2775: the first canary window of 2026-10-20 admitted `open-inference` fp4 first —
+  eligible after its clean ride, never pinnable, because the launcher walked candidates
+  alphabetically with the floors unknown to it).
 - **The canary** is a session (`POST /sessions` with `canary: {model, provider}`, the policy's
   canary role and harness, rail openrouter) pinned to that cell with no failover; its outcome is
   the verdict. Admission is capped: `canary.max_per_refresh` canaries between refreshes and
@@ -42,14 +48,14 @@ import httpx
 from . import __version__
 from .config import Policy
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
-from .providers import SNAPSHOT_SOURCE, EndpointSnapshot, ParseError, parse_endpoints
+from .providers import SNAPSHOT_SOURCE, EndpointSnapshot, ParseError, eligible, parse_endpoints
 from .store import Store, iso
 
 log = logging.getLogger("gateway.orcatalog")
 
 OUTCOMES = ("ok", "fetch-failed", "parse-failed", "implausible")
 CELL_STATES = ("candidate", "eligible", "excluded")
-CANARY_OUTCOMES = ("eligible", "excluded")
+CANARY_OUTCOMES = ("eligible", "excluded", "no-verdict")  # no-verdict: a 429'd canary (operator 2026-10-22)
 CANARY_ADMISSIONS = ("dispatch", "budget", "not-due", "not-in-catalog")
 # The ranking slices the policy may name → the MCP tool's arguments (period week on both).
 SLICES: dict[str, dict] = {"programming": {"period": "week", "category": "programming"},
@@ -141,6 +147,9 @@ class CellVerdict:
     state: str
     klass: str | None
     cooldown_until: float | None
+    retry_at: float | None = None  # a 429'd canary's re-try horizon (candidate cells only; None = none)
+    backoff_s: float | None = None  # the step the horizon doubled to
+    limit_source: str | None = None  # the 429 body's `error.metadata.limit_source`
 
 
 class OpenRouterCatalog:
@@ -164,6 +173,9 @@ class OpenRouterCatalog:
         self.refreshes: dict[str, int] = {o: 0 for o in OUTCOMES}
         self.last_outcome: str | None = None
         self.last_attempt: float | None = None
+        # The stored snapshot a restart serves instead of refreshing (startup_delay): the schedule
+        # counts from its fetched_at until this process attempts a refresh of its own.
+        self.served_from: float | None = None
         self.last_refresh_at: float | None = store.meta_get("openrouter-catalog.refreshed_at")  # the per-refresh canary window's start
         self.endpoint_failures: int = 0  # candidates whose endpoints could not be read, last refresh
         self.canary_rides: dict[str, int] = {o: 0 for o in CANARY_OUTCOMES}
@@ -252,7 +264,28 @@ class OpenRouterCatalog:
                  len(ranked), len(aa), len(candidates), len(models), failures, entrants)
         return "ok"
 
+    def startup_delay(self, now: float) -> float:
+        """Seconds the loop waits before its first refresh: 0 when there is no stored snapshot, no
+        schedule, or the snapshot is `refresh_s` old — else the rest of the interval, so a pod roll
+        inside it serves the stored snapshot and keeps the persisted `refreshed_at` (the canary
+        window's start) where it was (#2775 gap 2: three windows in 70 min on 2026-10-20, none by
+        the timer). The Go leg's `GoCatalog.startup_delay` is the same rule."""
+        row = self.store.snapshot_load(SNAPSHOT_SOURCE)
+        if row is None or self.refresh_s <= 0:
+            return 0.0
+        fetched_at = row[0]
+        delay = fetched_at + self.refresh_s - now
+        if delay <= 0:
+            return 0.0
+        self.served_from = fetched_at
+        log.info("orcatalog: stored snapshot is %.0fs old — next refresh at %s", now - fetched_at, iso(fetched_at + self.refresh_s))
+        return delay
+
     async def run(self) -> None:
+        """The schedule: the first refresh after `startup_delay`, then every `refresh_s`."""
+        delay = self.startup_delay(self.clock())
+        if delay > 0:
+            await asyncio.sleep(delay)
         while True:
             try:
                 await self.refresh()
@@ -261,8 +294,11 @@ class OpenRouterCatalog:
             await asyncio.sleep(self.refresh_s)
 
     def retry_at(self, now: float, fallback_s: float) -> float:
-        if self.last_attempt is not None and self.refresh_s > 0:
-            return max(self.last_attempt + self.refresh_s, now + 1)
+        """The next scheduled refresh: `refresh_s` after this process's last attempt — or, before it
+        attempts one, after the stored snapshot it serves (startup_delay) — else `fallback_s`."""
+        anchor = self.last_attempt if self.last_attempt is not None else self.served_from
+        if anchor is not None and self.refresh_s > 0:
+            return max(anchor + self.refresh_s, now + 1)
         return now + fallback_s
 
     # -- the cells ------------------------------------------------------------------------------
@@ -271,9 +307,10 @@ class OpenRouterCatalog:
         row = self.store.cell_get(model, provider)
         if row is None:
             return CellVerdict("candidate", None, None)
+        horizon = (row.get("retry_at"), row.get("backoff_s"), row.get("limit_source"))  # a 429'd canary's, whatever the row's state
         if row["state"] == "excluded" and row["cooldown_until"] is not None and now >= row["cooldown_until"]:
-            return CellVerdict("candidate", row["class"], None)
-        return CellVerdict(row["state"], row["class"], row["cooldown_until"])
+            return CellVerdict("candidate", row["class"], None, *horizon)
+        return CellVerdict(row["state"], row["class"], row["cooldown_until"], *horizon)
 
     def eligible_slugs(self, model: str, now: float) -> set[str]:
         return {p for p, r in self.store.cell_states(model).items() if r["state"] == "eligible"}
@@ -289,6 +326,25 @@ class OpenRouterCatalog:
             self.store.cell_set(model, provider, "excluded", klass, now, cooldown)
             self.canary_rides["excluded"] += 1
             log.warning("orcatalog: canary struck %s — (%s, %s) excluded until %s", klass, model, provider, iso(cooldown))
+
+    def throttle(self, model: str, provider: str, limit_source: str | None, now: float) -> float:
+        """A 429 on a canary ride's pinned cell (GW-CATALOG-OR §The entry canary, operator ruling
+        2026-10-22): NO verdict — the cell stays `candidate`, its re-try horizon is `canary.backoff_s`
+        on the first 429'd canary and doubles per consecutive one up to `canary.backoff_max_s`; a
+        verdict resets it (cell_set). Returns the horizon's end. The admission is not consumed
+        (store.canary_sessions_since skips the session)."""
+        can = self.canary
+        base = can.backoff_s if can else 0.0
+        cap = can.backoff_max_s if can else 0.0
+        row = self.store.cell_get(model, provider)
+        prev = row.get("backoff_s") if row else None
+        step = base if not prev else min(prev * 2, cap)
+        retry_at = now + step
+        self.store.cell_throttle(model, provider, retry_at, step, limit_source, now)
+        self.canary_rides["no-verdict"] += 1
+        log.warning("orcatalog: canary 429 on (%s, %s) — no verdict (%s); candidate again at %s (backoff %.0f s)",
+                    model, provider, limit_source or "limit_source unnamed", iso(retry_at), step)
+        return retry_at
 
     # -- the budget -----------------------------------------------------------------------------
     def prices(self, model: str, provider: str) -> tuple[float, float] | None:
@@ -314,33 +370,66 @@ class OpenRouterCatalog:
     def budget(self, now: float) -> dict:
         can = self.canary
         if can is None:
-            return {"max_per_refresh": None, "usd_per_day": None, "admitted_this_refresh": 0, "spend_usd_1d": 0.0, "exhausted": False}
+            return {"max_per_refresh": None, "usd_per_day": None, "admitted_this_refresh": 0, "spend_usd_1d": 0.0, "exhausted": False,
+                    "cooldown_s": None, "backoff_s": None, "backoff_max_s": None}
         since = self.last_refresh_at if self.last_refresh_at is not None else 0.0
         admitted = self.store.canary_sessions_since(since)
         spend = self.spend_1d(now)
         return {"max_per_refresh": can.max_per_refresh, "usd_per_day": can.usd_per_day, "admitted_this_refresh": admitted,
                 "spend_usd_1d": round(spend, 6), "exhausted": admitted >= can.max_per_refresh or spend >= can.usd_per_day,
-                "cooldown_s": can.cooldown_s}
+                "cooldown_s": can.cooldown_s, "backoff_s": can.backoff_s, "backoff_max_s": can.backoff_max_s}
 
     def budget_retry(self, now: float, fallback_s: float) -> float:
         """When asking again may help: the next refresh (the per-refresh cap) or the hour (the day roll) ⚖."""
         return min(self.retry_at(now, fallback_s), now + 3600.0)
 
     # -- reads ----------------------------------------------------------------------------------
+    def floors(self, model: str) -> dict[str, tuple[dict[str, bool], dict[str, str]]]:
+        """Per provider slug of `model`, (`pinnable`, `floor`): for every harness the policy's
+        `providers.tool_choice` names, whether the provider's representative endpoint clears the
+        floors (`providers.eligible()` — the data plane's own predicate, never a second one) and,
+        where it does not, the reason. A provider's service tiers are one cell: they carry the
+        representative's verdict. No providers policy = nothing is ever pinned: both maps empty."""
+        rail = self.policy.rails.get("openrouter")
+        pol = rail.providers if rail else None
+        if pol is None:
+            return {}
+        eps = self.snapshot.endpoints(model) or []
+        out: dict[str, tuple[dict[str, bool], dict[str, str]]] = {}
+        for harness in pol.tool_choice:
+            kept, dropped = eligible(eps, pol, harness)
+            for e in kept:
+                out.setdefault(e.slug, ({}, {}))[0][harness] = True
+            for slug, why in dropped.items():
+                pinnable, floor = out.setdefault(slug, ({}, {}))
+                pinnable[harness] = False
+                floor[harness] = why
+        return out
+
     def view(self, order: Callable[[str], list[str]]) -> dict:
-        """`GET /catalog/openrouter`: the snapshot with every cell's state, the selected provider per
-        model (`order(model)[0]` — the eligible order the data plane would pin), the budget."""
+        """`GET /catalog/openrouter`: the snapshot with every cell's state and its floors verdict per
+        harness (`pinnable` / `floor`), the selected provider per model (`order(model)[0]` — the
+        eligible order the data plane would pin), the budget."""
         now = self.clock()
         row = self.store.snapshot_load(SNAPSHOT_SOURCE)
         fetched_at = row[0] if row else None
         body = row[1] if row else {}
+        rail = self.policy.rails.get("openrouter")
+        harnesses = tuple(rail.providers.tool_choice) if rail and rail.providers else ()
         models = {}
         for mid, m in sorted((body.get("models") or {}).items()):
             states = self.store.cell_states(mid)
+            rides = self.store.cell_outcomes("openrouter", mid)  # GW-MODEL-TIERS: the cell's clean-ride evidence
+            verdicts = self.floors(mid)
             eps = []
             for e in m["endpoints"]:
                 v = self.cell(mid, e["slug"], now)
-                eps.append({**e, "state": v.state, "class": v.klass, "cooldown_until": iso(v.cooldown_until)})
+                clean, judged = rides.get(e["slug"], (0, 0))
+                pinnable, floor = verdicts.get(e["slug"], ({h: False for h in harnesses}, {}))
+                eps.append({**e, "state": v.state, "class": v.klass, "cooldown_until": iso(v.cooldown_until),
+                            "retry_at": iso(v.retry_at), "backoff_s": v.backoff_s, "limit_source": v.limit_source,
+                            "rides": {"clean": clean, "judged": judged},
+                            "pinnable": {h: pinnable.get(h, False) for h in harnesses}, "floor": dict(floor)})
             ranked = order(mid)
             cells = {e["slug"]: e["state"] for e in eps}  # a provider's service tiers are ONE cell
             models[mid] = {"ranking": m.get("ranking") or {}, "aa": m.get("aa") or {}, "fetched_at": m.get("fetched_at"),

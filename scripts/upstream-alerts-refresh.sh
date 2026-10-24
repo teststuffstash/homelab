@@ -18,9 +18,20 @@
 # `defaultRules` fingerprint is a hash over that values subtree as TEXT (comments and blank lines
 # stripped) — prometheus-rules-lint.sh computes the SAME fingerprint (its twin, named there), so a
 # change to this recipe changes both in the same commit. Tools: bash, helm 4.x (`install-tool helm`
-# in the Renovate container, devbox here), coreutils, grep, sed, awk.
+# below in the Renovate container, devbox here), coreutils, grep, sed, awk.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The helm this script runs with in the Renovate container: containerbase's `install-tool` fetches
+# it at runtime (slim image, `binarySource=install`); where `install-tool` is absent (the seat —
+# devbox provides helm) the line is a no-op. The version is Renovate-proposed: ONE customManager in
+# .github/renovate-global.json reads this `HELM_VERSION=v<x.y.z>` line (depName helm/helm, class 17
+# in docs/dependency-classes.yaml). It lived in renovate-global.json itself until 2026-10-22 — as the
+# `install-tool helm v…` postUpgradeTasks command plus its regex-escaped `allowedCommands` twin, two
+# customManagers to move the pair — under the `/.github/` CODEOWNERS row, so every helm patch parked
+# on the operator (#2804). Here it rides the custom.regex automerge lane; the proof stays the next
+# kube-prometheus-stack branch's run. Keep the `v`: Renovate captures the digits after it.
+HELM_VERSION=v4.3.1
+if command -v install-tool >/dev/null 2>&1; then install-tool helm "$HELM_VERSION"; fi
 app=argocd/platform/kube-prometheus-stack.yaml
 values=argocd/platform/values/kube-prometheus-stack.yaml
 out=argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt

@@ -17,34 +17,32 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
 
 ## Live state (pruned 2026-09-26 by the fu-sweep — every bullet re-verified against GitHub/the cluster that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-10-19 ~21:55Z — the overnight gateway session; TICK-LOG 10-19 20:30–21:55Z): #2741 + #2742 MERGED
-  as #2744 (294c7b81, four specs-review rounds, all test/spec-text); #2743 NOT started.** What landed: provider
-  attribution / own selection / request-level failover on the openrouter rail (`providers.py`, the proxy attempt loop,
-  `strikes`/`requests.provider`, `rails.openrouter.providers`), and GW-CATALOG-OR (`orcatalog.py`: the MCP weekly ranking
-  ∩ AA-benched → endpoints per candidate, the persisted snapshot, cells candidate/eligible/excluded, the `canary: {model,
-  provider}` admission, `canary-budget`/`canary-not-due`, nine families, three alerts + promtool fixture,
-  `gateway/scripts/canary-entrants.sh`, `AGENT_GATEWAY_ROLE`/`AGENT_GATEWAY_CANARY` + the `dispatch-canary` replay row).
-  **Verify after the deploy (the image for 294c7b81 built 21:52Z; its auto-bump PR #2746 is the machine lane's; the policy ConfigMap roll follows):**
-  `kubectl -n agent-egress logs deploy/agent-gateway | grep orcatalog:` shows the first refresh (the account key resolves
-  through the new agent-egress Role; the MCP answers; N models with endpoints), `gateway_openrouter_catalog_models > 0`,
-  `gateway_openrouter_cells{state="candidate"}` > 0, no `OpenRouterCatalogStale`; **the data plane changes nothing by
-  itself** — every cell is `candidate`, every openrouter request rides unpinned until canaries make cells eligible:
-  `bash gateway/scripts/canary-entrants.sh --dry-run` lists them, without `--dry-run` rides them (jail, port-forward, the
-  prober role; ⚑ gap: no in-cluster trigger). **Lesson:** a PR stacked on a feature branch here auto-merges INTO it
-  unreviewed (no protection on a feature base) — #2745 did; base everything on master. **#2743 next (fresh session,
-  island context = `gateway/specs` + `gateway/src` + the issue + the #2718 plan comment):** the Go side's price (⚖ a policy
-  `plan_fee_usd_month` ÷ the gateway's metered monthly Go tokens; the window draw as the headroom gate — both in
-  capacity.py), Go quantization undeclared → ⚑ gap row, cost per clean ride per cell = price × (1 / clean rate from
-  `store.cell_outcomes`) + a ⚖ policy strike-overhead term, `tiers.py` ordering candidates across BOTH rails by it (the
-  openrouter candidates switch from `model-classes.json` to `GET /catalog/openrouter`'s `selected` endpoint — #2718 item 4
-  closes there; production has zero eligible cells until canaries run, so the re-cut waits on them), the
-  `(opencode-go/<id>, <vendor>/<id>)` same-model join by the GW-MODEL-TIERS tail rule, the admission answer's reason +
-  `gateway_rail_choice_total{model,rail,reason}`, the rows the issue lists. The specs reviewer's recurring asks this
-  session: every judgment row ⚖ + listed under `Spec changes:`; ≤ 8 attachments PER CASE (each then_eq is one); a
-  parametrize value must appear in a step text; a glossary term redefined must be re-read on every page that names it.
-  **Operator-only, untouched:** FU-313 Go key mint, the codex login (leg E), the canary window; #2741 item 4's
-  "sessions dashboard" does not exist in the repo (no dashboard carries a `gateway_*` series) — filing one is the
-  operator's call.
+- **⚑ PICKUP (2026-10-20 ~15:25Z) — wk-metal-04 BACK on new hardware (Big Data, #2758).** The dead i5-3570K's 7600p
+  pair + 2×8G moved into the retired router (HP i5-2500, 24GB); Talos on its MX500 (wwn pin), node Ready, BGP up,
+  garage-0 rejoined with its old node id (1-replica PVCs auto-salvaged from intel1), registry-data rebuilding.
+  Open: (a) the MX500 reads 34 % lifetime used (attr 202) — fine for a system disk, watch it; (b) `sata500` Longhorn
+  disk is now the MX500's /var/lib/longhorn (fenced slow-bulk, 0 replicas — name kept, longhorn-tag-disks.sh owns
+  it); (c) operator: switch port (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the
+  box (router-move.md:62 retires it); (d) NodeCPUHighUsage cp-01 since 15:00Z handed to the responder.
+- **⚑ PICKUP (2026-10-22 ~19:20Z — gateway: three windows on #2810's code all 3/3 clean (07:00Z, 17:24Z, 19:00Z), re-cuts
+  #2813 + #2824 DEPLOYED (openrouter light = v4-flash, glm-5.3-flash, mimo-v2.6-flash; standard adds mimo), third window moved
+  no list; cells 233/15/0, no live 429 yet; TICK-LOG 10-22):** **Next windows are the seat's** (operator 10-20): after each 6 h
+  refresh (next 00:21Z) run `devbox run -- bash gateway/scripts/canary-entrants.sh --max 3 < /dev/null` from the repo root, then
+  `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers -- apply` → PR when the lists move (values only roll freely; a key
+  NEW to the loader ships AFTER its image, #2812). **Still unverified: the first platform worker ride through `/sessions`**
+  (2d: prober, reviewer only). Open ruling: #2768. **Watch, not act:** #2804 (helm/helm 4.3.0 → 4.3.1) should rebase onto
+  `scripts/upstream-alerts-refresh.sh` at Renovate's 22:25Z run and merge unattended = class 17's first proof (#2825 moved the
+  pin out of `/.github/`); if it parks or reds, read why before touching it. Operator-only: FU-313.
+- **⚑ PICKUP (2026-10-23 ~09:00Z — codex rail: role routing RULED; TICK-LOG 10-23 ~09:00Z):** #2842 MERGED 08:51Z (3 review rounds);
+  #2845 (role routing) MERGED ~09:15Z; agent-runtime#180 MERGED 09:00Z → its pin PR **#2846** armed; **#2844** (launcher
+  `CODEX_MCP_URL`) approved, merging; **#2848** = the four-boundary capture (GW-CODEX-CAPTURE), armed. **Capture ride DONE 10:12Z** (window
+  closed `--force`: targets 196→195 = the pre-window rollout's old pod leaving the set, nothing down; `AgentWorkerEgressDropped` fired
+  — the ride pod's codex CLI phoned chatgpt.com directly, denied, ride unaffected → a ⚑ gap row); #2850 (the evidence rows,
+  GW-RAIL-CODEX §Live grammar + fixture `tests/fixtures/codex-live/turn-2026-10-23.json`) MERGED; the bundle stays in
+  `~/.claude/codex-capture/` (restricted). FU-270 open items: the jail's refresh reading ~10-26, the first non-prober codex ride, the
+  native-client baseline forwarder (not built). **Watch:** the jail's codex REFRESH ~2026-10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`,
+  status codes only) = the revocation watch's second half; `gateway_codex_upstream_headroom_total{outcome}` on the next codex ride
+  (expect `accepted` — a `quota-invalid` means the live header grammar differs from the CLI's reader; the poll still carries admission).
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a

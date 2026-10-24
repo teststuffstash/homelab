@@ -22,13 +22,13 @@
     }
   },
   "roles": {
-    "worker":      {"rails": ["opencode", "openrouter"],  "tier": "standard", "harness": "opencode"},
-    "reviewer":    {"rails": ["anthropic", "opencode"],   "tier": "heavy",    "harness": "claude"},
-    "coordinator": {"rails": ["anthropic"],               "tier": "standard", "harness": "claude"},
-    "responder":   {"rails": ["anthropic"],               "tier": "standard", "harness": "claude"},
-    "retro":       {"rails": ["openrouter"],              "tier": "heavy",    "harness": "opencode"},
-    "researcher":  {"rails": ["openrouter"],              "tier": "heavy",    "harness": "opencode"},
-    "prober":      {"rails": ["openrouter", "opencode"],  "tier": "light",    "harness": "opencode"}
+    "worker":      {"rails": ["opencode", "codex", "anthropic", "openrouter"],  "tier": "standard", "harness": "opencode"},
+    "reviewer":    {"rails": ["anthropic", "opencode", "codex"],                "tier": "heavy",    "harness": "claude"},
+    "coordinator": {"rails": ["anthropic", "opencode", "codex"],                "tier": "standard", "harness": "claude"},
+    "responder":   {"rails": ["anthropic", "opencode", "codex"],                "tier": "standard", "harness": "claude"},
+    "retro":       {"rails": ["opencode", "codex", "anthropic", "openrouter"],  "tier": "heavy",    "harness": "opencode"},
+    "researcher":  {"rails": ["opencode", "codex", "anthropic", "openrouter"],  "tier": "heavy",    "harness": "opencode"},
+    "prober":      {"rails": ["openrouter", "opencode", "codex", "anthropic"],  "tier": "light",    "harness": "opencode"}
   },
   "rails": {
     "anthropic": {
@@ -65,9 +65,9 @@
       "plan": "go",
       "max_sessions": 3,
       "models": {
-        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/claude-haiku-5-5", "opencode-go/gpt-6-luna"],
-        "standard": ["opencode-go/mimo-v2.6-flash", "opencode-go/claude-haiku-5-5", "opencode-go/gpt-6-luna"],
-        "heavy":    ["opencode-go/claude-haiku-5-5", "opencode-go/glm-5.3-flash", "opencode-go/mimo-v2.6-pro"]
+        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/deepseek-v4.1-flash", "opencode-go/glm-5.3-flash"],
+        "standard": ["opencode-go/mimo-v2.6-flash", "opencode-go/glm-5.3-flash", "opencode-go/claude-haiku-5-5"],
+        "heavy":    ["opencode-go/glm-5.3-flash", "opencode-go/claude-haiku-5-5", "opencode-go/mimo-v2.6-pro"]
       }
     },
     "openrouter": {
@@ -89,41 +89,64 @@
         "ranking_top_n": 30
       },
       "canary": {
-        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again.",
+        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again; backoff_s 3600 / backoff_max_s 86400 (operator ruling 2026-10-22, homelab#2775: a 429'd canary is NO verdict — the cell's re-try horizon starts at the hour, the budget's own retry unit, doubles per consecutive 429'd canary and caps at the day, the catalog's stale horizon; the ride costs no admission and no tokens, so a throttled cell re-reads itself daily until the provider serves our traffic again).",
         "role": "prober",
         "harness": "opencode",
         "max_per_refresh": 3,
         "usd_per_day": 1.0,
-        "cooldown_s": 86400
+        "cooldown_s": 86400,
+        "backoff_s": 3600,
+        "backoff_max_s": 86400
       },
       "max_sessions": 20,
       "models": {
-        "light":    ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-flash", "xiaomi/mimo-v2.5"],
-        "standard": ["moonshotai/kimi-k3"],
-        "heavy":    ["moonshotai/kimi-k3"]
+        "light":    ["deepseek/deepseek-v4-flash", "z-ai/glm-5.3-flash", "xiaomi/mimo-v2.6-flash"],
+        "standard": ["z-ai/glm-5.3-flash", "xiaomi/mimo-v2.6-flash", "moonshotai/kimi-k3"],
+        "heavy":    ["z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]
+      }
+    },
+    "codex": {
+      "_comment": "The ChatGPT-subscription rail (GW-RAIL-CODEX / GW-CODEX-HEADROOM / GW-CODEX-OAUTH, FU-270) — LIT 2026-10-22 as the explicit canary cell (`prober` only, last); EVERY role lists it since 2026-10-23 (operator ruling: subscriptions go to all roles — the walk's harness follows the rail, sessions.md §The harness follows the rail; the spike §Role routing, docs/spikes/codex-subscription-rail.md). The credential is the gateway's OWN login (seed: devbox run codex-seed, #2826; rotations in GATEWAY_DB). ⚖ every value: max_sessions 1 = one codex ride at a time (ADR-139's single replica, one account — kept at the canary's bound while every role may now reach it: a full rail falls through to the next, raise it once live rides show the account's room); headroom.max_age_s 900 = the anthropic admission's reading_stale_s (the same 15-min staleness the subscription rail tolerates); ceiling 0.95 = the anthropic 7d threshold (ANTHROPIC_UTIL_THRESHOLD_7D) applied to both windows — the 5h window's 0.80 is a dispatch-pacing choice the canary does not need yet; windows_minutes [300, 10080] = the two windows the enrolled account's usage payload carries (observed 2026-10-22, the spike §Live usage payload shape); poll_interval_s 60 = one usage GET a minute (15 polls inside max_age_s; the poll reads no quota); oauth.refresh_margin_s 300 = refresh 5 min before the access JWT's exp (a 10-day token observed at the mint). models: DERIVED like the other rails — the one candidate is the enrolled account's model evidence (benchmarks.json rails.codex, CODEX_CANDIDATES), score ascending as the cost proxy.",
+      "max_sessions": 1,
+      "headroom": {"max_age_s": 900, "ceiling": 0.95, "windows_minutes": [300, 10080], "poll_interval_s": 60},
+      "oauth": {"refresh_margin_s": 300},
+      "models": {
+        "light":    ["codex/gpt-6-astra"],
+        "standard": ["codex/gpt-6-astra"],
+        "heavy":    ["codex/gpt-6-astra"]
       }
     }
   },
   "tiers": {
-    "_comment": "GW-MODEL-TIERS (operator rulings 2026-10-18): the three rails' tier LISTS above are DERIVED from benchmarks.json beside this file — `devbox run tiers -- apply` writes them, `-- check` (a test row) fails on a hand edit. score = the Artificial Analysis intelligence index (the one axis with full coverage); bands = a candidate is in a tier when its score >= the fraction x the rail's top score (a model can sit in several tiers); cap = each list's length, cheapest-first by output price (the subscription rail: score ascending as the cost proxy).",
+    "_comment": "GW-MODEL-TIERS (operator rulings 2026-10-18 + 2026-10-19): the four rails' tier LISTS above are DERIVED from benchmarks.json beside this file — `devbox run tiers -- apply` writes them, `-- check` (a test row) fails on a hand edit. score = the Artificial Analysis intelligence index (the one axis with full coverage); bands = a candidate is in a tier when its score >= the fraction x the rail's top score (a model can sit in several tiers); cap = each list's length, cheapest per CLEAN ride first (cost = price x a ride's output tokens / the cell's clean-ride rate + the strike overhead per failed ride; the subscription rails anthropic + codex: score ascending as the cost proxy). A tier with no priced candidate is UNDECIDED and keeps its list (every openrouter tier was, until the first entry-canary window of 2026-10-20 priced 4 of its 28 models at their selected endpoints; `gateway/scripts/canary-entrants.sh` is what admits a cell).",
     "score": "intelligence",
     "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5},
-    "cap": 3
+    "cap": 3,
+    "cost": {
+      "_comment": "GW-MODEL-TIERS §Cost per clean ride (homelab#2743, operator ruling 2026-10-19: the unit is cost per CLEAN ride, never per token) — ⚖ every value: ride_tokens_out_m 0.01 = 10k output tokens per ride, the 30-day mean per session of the two openai-dialect rails read off the gateway's own ledger on 2026-10-20 (opencode 11.1k, openrouter 13.4k); strike_overhead_usd 0 = the reviewer round + coordinator re-entry a failed ride costs is UNMEASURED (⚑ gap row) — the term exists so the measurement has a home, at 0 the order is price over clean rate; min_rides 5 = judged rides before a cell's measured clean rate replaces its prior (the same number as rails.openrouter.providers.min_rides, two knobs because two rules read them).",
+      "ride_tokens_out_m": 0.01,
+      "strike_overhead_usd": 0,
+      "min_rides": 5
+    }
   },
-  "context_tokens": {
-    "opencode-go/deepseek-v4.1-flash": 1000000
-  },
+  "context_tokens": {},
   "control_plane_auth": "enforce",
   "callers": {
     "system:serviceaccount:platform-agents:agentstack-loop": {
       "stacks": ["platform"],
-      "roles": ["worker"],
+      "roles": ["worker", "prober"],
       "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]
     },
     "system:serviceaccount:agent-coordinator:specs-review": {
       "stacks": ["platform"],
       "roles": ["reviewer", "worker"],
       "bind_namespaces": []
+    },
+    "system:serviceaccount:agent-coordinator:outcome-judge": {
+      "stacks": ["platform"],
+      "roles": [],
+      "bind_namespaces": [],
+      "outcome": "any"
     }
   },
   "session_ttl_s": 14400,

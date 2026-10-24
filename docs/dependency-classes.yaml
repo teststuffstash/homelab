@@ -253,6 +253,20 @@ classes:
     revert: {status: human, text: "no package-level revert path written down; the play snapshots `/etc/pve` before it runs (runbook §Proxmox host maintenance)"}
     canary: {status: human, text: "the other hypervisor — a real second instance since ADR-133 (nx-02 beside pve); one host per `host-maint` window, attended"}
 
+  - id: 17
+    name: Renovate runtime tools
+    extract: renovate_tools
+    where: "`scripts/upstream-alerts-refresh.sh` — `HELM_VERSION`, the helm the G12 `postUpgradeTasks` refresh installs in the slim Renovate container (containerbase `install-tool`; a no-op for the seat)"
+    manager: "custom.regex — one customManager over the script's `HELM_VERSION=v<x.y.z>` line (depName helm/helm, github-releases; renovate-global.json)"
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["scripts/upstream-alerts-refresh.sh"]
+    proposer: {status: ok, text: "Renovate `custom.regex` over the script (2026-10-22). The pin was born 2026-10-10 (#2432) INSIDE `.github/renovate-global.json` as two halves (the postUpgradeTasks command + its regex-escaped `allowedCommands` twin) under the `/.github/` codeowner row, invisible to this register — #2804 (4.3.0 → 4.3.1) parked on the operator; moved so the lane is real and the pin is a row"}
+    merge_gate: {status: ok, text: "patch/minor → `automerge` (the custom.regex rule, reflex-approved; `scripts/` carries no codeowner row except three maintenance scripts); majors → the un-armed catch-all"}
+    deploy_edge: {status: ok, text: "self-deploying — the next kube-prometheus-stack Renovate branch runs the script, which installs the merged pin"}
+    detector: {status: ok, text: "that branch's `prometheus-rules-lint` (required `ci`, G12) reds if the install or the render breaks — lagging to the next chart bump; nothing exercises the pin before merge, accepted at the 2026-10-10 minting (the same proof the codeowner gate had)"}
+    revert: {status: ok, text: "`git revert` of the one line; the pin has no consumer outside a Renovate branch"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here"}
+
 overrides:
   # keyed by the printed dependency name, or by the FULL row key (`<class>:<name>@<where>`) when the
   # same dependency appears in several places and only one of them differs

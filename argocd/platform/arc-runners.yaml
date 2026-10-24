@@ -23,7 +23,7 @@ spec:
   source:
     repoURL: ghcr.io/actions/actions-runner-controller-charts
     chart: gha-runner-scale-set
-    targetRevision: 0.15.0 # lockstep with arc-controller.yaml — Renovate bumps all three in one grouped PR (`arc`, renovate-global.json)
+    targetRevision: 0.15.1 # lockstep with arc-controller.yaml — Renovate bumps all three in one grouped PR (`arc`, renovate-global.json)
     helm:
       valuesObject:
         githubConfigUrl: https://github.com/teststuffstash
@@ -116,7 +116,7 @@ spec:
                     actions.github.com/scale-set-name: homelab-ephemeral
             initContainers:
               - name: init-dind-externals
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.20-gdbefb3a34f48
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.22-g312043d8b277
                 command: ["cp"]
                 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
                 volumeMounts:
@@ -155,7 +155,7 @@ spec:
                     mountPath: /home/runner/externals
             containers:
               - name: runner
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.20-gdbefb3a34f48
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.22-g312043d8b277
                 command: ["/home/runner/run.sh"]
                 resources:
                   requests:

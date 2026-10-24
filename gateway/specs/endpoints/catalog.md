@@ -35,27 +35,45 @@ error), and no auth, like `/metrics` — it carries no credential.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); models.dev as a fallback source and a liveness signal are `⚑ gap` (rows below) |
-| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary) |
-| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`) | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation, the committed snapshot and the equality check; `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, the snapshot hand-refreshed with no staleness alert, the openrouter candidate set = the old proxy's table, Go-only id spellings unbenched (the five "⚑ gap" rows below) |
+| [GW-CATALOG-GO](#gw-catalog-go) | `output`, `$defs.config_snapshot`, `$defs.docs_snapshot`, metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); a liveness signal is `⚑ gap` (rows below); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread) |
+| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`, `$defs.canary_block`, `$defs.cell_state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_catalog_*`, `gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view, the families, the stale alert), the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed: the `retry_at` / `backoff_s` rows below; the pod-roll window #2790 and the `pinnable` / `floor` rows #2791 were that issue's other two gaps) |
+| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`, `gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers, the admission's rail choice between twin cells (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2718)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the strike overhead unmeasured, the Go cell's clean-rate prior (the "⚑ gap" rows below) |
 
 ## GW-CATALOG-GO
 
-Two **sources**, each refreshed every **21600 s** ⚖ (6 h; the first refresh runs at start) and
+Two **sources**, each refreshed every **21600 s** ⚖ (6 h; the first refresh runs at start — unless
+the stored snapshots are younger than the interval, then at the oldest one's `fetched_at` + 21600 s:
+⚖ a pod roll re-reads nothing, [#2775](https://github.com/teststuffstash/homelab/issues/2775)) and
 each with its own snapshot:
 
-- **`config`** — `GET https://opencode.ai/console/api/v2/config`, the console's V2 config, which
-  any Go key can read. The leg keeps `providers["opencode-go"].models`: per model the `family`,
-  tool support, `limit.context` / `limit.output`, and `cost[]` (the base row, then each
-  `tier: {type: context, size}` row as the rate above that many tokens). A row marked
-  `"disabled": true` is not listed. The request carries the Go key as a bearer, a `User-Agent`
-  and a fresh `x-opencode-session` — Cloudflare answers 1010 to a bare client.
+- **`config`** — two reads, merged the way the vendor's own client merges them
+  (`packages/core/src/plugin/provider/opencode.ts`; ⚖ 2026-10-20). The **catalog read**:
+  `https://models.dev/api.json`, the vendor's own public registry (the spike's §F4) — the leg
+  keeps its `opencode-go.models`: per model the `name`, `family`, `tool_call`, `limit.context` /
+  `limit.output`, and `cost` (`input` / `output` / `cache_read` / `cache_write`, then each
+  `tiers[]` row with its `tier: {type: context, size}` as the rate above that many tokens; the
+  legacy `context_over_200k` spelling is not read, and alone it is a shape the parser does not
+  know). A row whose `status` is `deprecated` is not listed — the vendor's loader
+  (`plugin/models-dev.ts`) drops it before any overlay. Then the **console read**:
+  `GET https://opencode.ai/console/api/v2/config`, the console's V2 config, which any Go key can
+  read — since 2026-10-20 it carries the WORKSPACE'S OVERRIDES on that catalog, not the catalog
+  (`providers["opencode-go"].models` is `{}` for this account; until that day it carried every
+  row, which the 10-17 build read as the catalog): `"disabled": true` unlists the row; a `cost`
+  (the vendor's list-or-one-row spelling), a `limit` field, a `name`, `family` or
+  `capabilities.tools` present on a row wins over the catalog's; an override naming no catalog
+  row is listed only when it is a complete row of its own (a cost and both limits). The console
+  request carries the Go key as a bearer, a `User-Agent` and a fresh `x-opencode-session` —
+  Cloudflare answers 1010 to a bare client; the catalog read carries no credential. The two reads
+  are one source: the first that fails ends the refresh with its outcome (the log line names the
+  read), and the merged listing is the one snapshot admission reads.
 - **`docs`** — the vendor's Go page source, `go.mdx` on the vendor repo's default branch
   (`raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx`),
-  fetched with no credential. The leg reads each model's **monthly limit** under each plan tab
-  (`go`, `go-plus`), a promotion's multiplier, the `(Peak)` price rows, the peak-hours sentence and
-  the 5-hour / weekly / monthly share of the monthly limit. Rows are keyed by **model id** through
-  the page's own Endpoints table (display name → Model ID). ⚖ `go-models.ts` (the spike's second
+  fetched with no credential. The leg reads each plan's **monthly fee** (the page's Plan table —
+  `| **Go** | **$10/month** |`; the [Go price](../glossary.md#go-price) divides the policy plan's),
+  each model's **monthly limit** under each plan tab (`go`, `go-plus`), a promotion's multiplier,
+  the `(Peak)` price rows, the peak-hours sentence and the 5-hour / weekly / monthly share of the
+  monthly limit. Rows are keyed by **model id** through the page's own Endpoints table (display
+  name → Model ID); the fees by the Plan table's plan names. ⚖ `go-models.ts` (the spike's second
   file) is not read: it keys rows by family (`deepseek-flash`), and limits are per model (ruling 3);
   `go.mdx` carries every fact the leg needs.
 
@@ -70,27 +88,40 @@ vendor API says which plan a key is on (ruling 4).
 
 Rows run at T0 = 2027-01-15T08:00:00Z against the `policy-default` world and the fake vendor
 ([worlds/README.md §The Go catalog's fakes](../worlds/README.md#the-go-catalogs-fakes)): `catalog-ok`
-serves `tests/fixtures/go-catalog/config.json` (five listed models, one disabled row), `docs-ok`
-serves `tests/fixtures/go-catalog/go.mdx` (the same five models). Both are trimmed from the live
-answers of 2026-10-17.
+serves `tests/fixtures/go-catalog/models-dev.json` (models.dev's `opencode-go`: five listed models
+and one `status: deprecated` row), `config-ok` serves `tests/fixtures/go-catalog/config.json` (the
+console's override-only answer, `opencode-go.models: {}`), `docs-ok` serves
+`tests/fixtures/go-catalog/go.mdx` (the same five models). The first two are trimmed from the live
+answers of 2026-10-20, the page from 2026-10-17/20. The `catalog-*` knobs vary the models.dev
+read, the `config-*` knobs the console read; a refresh of the `config` source makes both.
 
 ### What a refresh keeps
 
 | description | last good (config) | the fake answers || outcome | snapshot | models |
 |---|---|---||---|---|---|
-| "a first good fetch becomes the snapshot" | none | `catalog-ok` || ok | the new one, `fetched_at` T0 | 5 |
-| "a disabled row is not listed" | none | `catalog-ok` (6 rows, `deepseek-v4-flash` disabled) || ok | `deepseek-v4-flash` absent | 5 |
-| "a later good fetch replaces it" | 5, fetched T0 | `catalog-ok` at T0 + 21600 s || ok | `fetched_at` T0 + 21600 s | 5 |
-| "an upstream error keeps the last good" | 5, fetched T0 | `catalog-503` || fetch-failed | the last good, `fetched_at` T0 | 5 |
-| "an unreachable vendor keeps the last good" | 5, fetched T0 | `catalog-down` || fetch-failed | the last good | 5 |
-| "a row without its cost is a parse failure" | 5, fetched T0 | `catalog-malformed` (`deepseek-v4-pro` has no `cost`) || parse-failed | the last good | 5 |
-| "a body without the Go provider is a parse failure" | 5, fetched T0 | `catalog-no-provider` || parse-failed | the last good | 5 |
+| "a first good fetch becomes the snapshot" | none | `catalog-ok` + `config-ok` || ok | the new one, `fetched_at` T0 | 5 |
+| "a deprecated catalog row is not listed" | none | `catalog-ok` (6 rows, `step-5-preview-free` `status: deprecated`) || ok | `step-5-preview-free` absent | 5 |
+| "an override-only console answer lists the catalog as is ⚖" | none | `config-ok` (`opencode-go.models: {}` — the live answer) || ok | the catalog's five | 5 |
+| "a disabled override unlists the row" | 5, fetched T0 | `config-disables` (`deepseek-v4-pro: {disabled: true}`) || ok | `deepseek-v4-pro` absent | 4 |
+| "a cost or limit override wins" | 5, fetched T0 | `config-reprices` (`claude-haiku-5-5`: two `cost` rows, `limit.context` 200000) || ok | its `cost` the override's two rows; `context` 200000, `output` the catalog's 128000 | 5 |
+| "a console-only row with a cost and both limits is listed ⚖" | 5, fetched T0 | `config-adds` (`deepseek-v4-flash`, no catalog row) || ok | `deepseek-v4-flash` listed with the override's cost, limits, family, tools | 6 |
+| "a console-only row without them lists nothing ⚖" | 5, fetched T0 | `config-adds-bare` (`deepseek-v4-flash: {disabled: false}`) || ok | `deepseek-v4-flash` absent | 5 |
+| "a later good fetch replaces it" | 5, fetched T0 | `catalog-ok` + `config-ok` at T0 + 21600 s || ok | `fetched_at` T0 + 21600 s | 5 |
+| "an upstream error on the catalog read keeps the last good" | 5, fetched T0 | `catalog-503` || fetch-failed | the last good, `fetched_at` T0 | 5 |
+| "an upstream error on the console read keeps the last good" | 5, fetched T0 | `config-503` || fetch-failed | the last good | 5 |
+| "an unreachable catalog host keeps the last good" | 5, fetched T0 | `catalog-down` || fetch-failed | the last good | 5 |
+| "an unreachable console keeps the last good" | 5, fetched T0 | `config-down` || fetch-failed | the last good | 5 |
+| "a catalog row without its cost is a parse failure" | 5, fetched T0 | `catalog-malformed` (`deepseek-v4-pro` has no `cost`) || parse-failed | the last good | 5 |
+| "a legacy context_over_200k row with no tiers is a parse failure ⚖" | 5, fetched T0 | `catalog-legacy-tier` || parse-failed | the last good | 5 |
+| "an override whose cost is not a cost is a parse failure" | 5, fetched T0 | `config-malformed` (`deepseek-v4-pro: {cost: "free"}`) || parse-failed | the last good | 5 |
+| "a catalog without the Go provider is a parse failure" | 5, fetched T0 | `catalog-no-provider` || parse-failed | the last good | 5 |
+| "a console answer without the Go provider is a parse failure" | 5, fetched T0 | `config-no-provider` || parse-failed | the last good | 5 |
 | "a drop below half the models is implausible ⚖" | 5, fetched T0 | `catalog-shrunk` (2 listed) || implausible | the last good | 5 |
 | "a drop to half or more is taken ⚖" | 5, fetched T0 | `catalog-trimmed` (3 listed) || ok | the new one | 3 |
 | "zero models is implausible with no last good" | none | `catalog-empty` || implausible | none | 0 |
 
 The `docs` source keeps its snapshot by the same rules; its model count is the number of model
-ids with a row in either plan tab.
+ids with a row in either plan tab. The `config` source's model count is the merged listing's.
 
 | description | last good (docs) | the fake answers || outcome | snapshot |
 |---|---|---||---|---|
@@ -101,6 +132,7 @@ ids with a row in either plan tab.
 | "a renamed limit column is a parse failure" | 5 | `docs-header-drift` (`Monthly limit` → `Limit`) || parse-failed | the last good |
 | "peak rows without the peak-hours sentence are a parse failure" | 5 | `docs-no-peak-hours` || parse-failed | the last good |
 | "no share sentence is a parse failure ⚖" | 5 | `docs-no-shares` || parse-failed | the last good |
+| "no plan table is a parse failure ⚖" | 5 | `docs-no-plan-table` || parse-failed | the last good |
 | "a drop below half the models is implausible" | 5 | `docs-shrunk` (2 models) || implausible | the last good |
 
 ### What the page says, per model
@@ -117,9 +149,10 @@ docs snapshot (both plans):
 
 | description | input || the snapshot reads |
 |---|---||---|
+| "the plan fees come from the page ⚖" | `docs-ok`'s Plan table *"\| **Go** \| **$10/month** \|"* / *"\| **Go Plus** \| **$40/month** \|"* || `plan_fee_usd_month` 10 (plan `go`); the docs snapshot's `plan_fees` go 10 / go-plus 40 |
 | "the peak hours come from the page ⚖" | `docs-ok`'s *"Peak hours are 01:00-04:00 and 06:00-10:00 UTC, Monday through Friday"* || `peak_hours_utc` `[[1, 4], [6, 10]]`, `peak_weekdays` mon–fri |
 | "the window shares come from the page ⚖" | *"5-hour — 20% of the monthly limit; weekly — 50%; and monthly — 100%"* || `window_shares` 5h 0.2 · 7d 0.5 · 30d 1.0; `deepseek-v4.1-flash` `windows_usd` 16 / 40 / 80 |
-| "the config's prices are the model's cost rows" | `catalog-ok`'s `claude-haiku-5-5` || `cost` base 0.10 / 0.50 / 0.01 / 0.125, above 100000 tokens 0.50 / 2.50 / 0.05 / 0.625 |
+| "the config's prices are the model's cost rows" | `catalog-ok`'s `claude-haiku-5-5` (models.dev's `cost` + its `tiers[0]`) || `cost` base 0.10 / 0.50 / 0.01 / 0.125, above 100000 tokens 0.50 / 2.50 / 0.05 / 0.625 |
 | "a model the page tabulates but the config does not list is shown unlisted" | `catalog-trimmed` (no `step-5-preview`) + `docs-ok` || `step-5-preview` `listed: false`, `monthly_limit_usd` 60 |
 | "the view's shape is the schema's" | `catalog-ok` + `docs-ok`, `GET /catalog/opencode` || exactly the `required` keys of `output`, of a model row and of a source state |
 
@@ -143,14 +176,19 @@ still carries one refuses to load — a stale hand copy can never shadow the cat
 | "a window the vendor gives no share refuses the load" | `window_draw.windows.1d` || refused, naming `windows.1d` |
 | "an unknown latch scope refuses the load" | `latch_scope: rail` || refused, naming `latch_scope` |
 
+The same rule holds a Go model's harness window: the dispatch answer's `context_tokens` is the
+snapshot's `context`, and a policy `context_tokens` entry for an `opencode-go/*` model refuses the
+load — the rows live on [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
+
 ### What a fetch sends
 
-| description | source || `authorization` | `user-agent` | `x-opencode-session` |
+| description | read || `authorization` | `user-agent` | `x-opencode-session` |
 |---|---||---|---|---|
-| "the config fetch carries the key and a client identity" | config || `Bearer <the Go key>` | `agent-gateway/<version> (go-catalog)` | a UUID, new on every fetch |
+| "the console read carries the key and a client identity" | config (the console) || `Bearer <the Go key>` | `agent-gateway/<version> (go-catalog)` | a UUID, new on every fetch |
+| "the catalog read carries no credential" | catalog (models.dev) || absent | `agent-gateway/<version> (go-catalog)` | absent |
 | "the docs fetch carries no credential" | docs || absent | `agent-gateway/<version> (go-catalog)` | absent |
-| "no key, no config fetch" | config, `OPENCODE_GO_API_KEY` unset || — (no request is sent; outcome fetch-failed) | — | — |
-| "the key never reaches a log line" | config answering 401 with the key in its body || — (every `gateway.catalog` line is free of the key) | — | — |
+| "no key, no config fetch" | config, `OPENCODE_GO_API_KEY` unset || — (no request is sent on either read; outcome fetch-failed) | — | — |
+| "the key never reaches a log line" | the console answering 401 with the key in its body (`config-401-echo`) || — (every `gateway.catalog` line is free of the key) | — | — |
 
 ### Kept across a restart
 
@@ -158,6 +196,7 @@ still carries one refuses to load — a stale hand copy can never shadow the cat
 |---|---||---|
 | "a PVC store keeps the snapshot" | `catalog-ok` + `docs-ok`, then a new gateway on the same DB, clock + 3600 s || both snapshots served; `age_s` 3600; `gateway_go_catalog_models{source="config"}` 5 |
 | "a corrupt stored snapshot is ignored" | a stored config row that is not JSON || no config snapshot; the next refresh replaces it |
+| "a restart inside the interval refreshes nothing at start ⚖" | `catalog-ok` + `docs-ok` at T0, then a new gateway on the same DB at T0 + 3600 s, another at T0 + 21600 s || the loop's first refresh waits 18000 s on the first (`last_attempt_at` null; a `not-in-catalog` defer's `retry_after_s` 18000), 0 s on the second — it refreshes at once |
 
 ### What `/metrics` says
 
@@ -184,7 +223,7 @@ families — `GoCatalogStale` (a source's last good snapshot older than 24 h ⚖
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: models.dev as a fallback" | the console config unreachable for a day || the last good snapshot, `GoCatalogStale` | the spike's §F4: `models.dev/api.json` mirrors the vendor and carries the only machine-readable `deprecated` marker |
+| "⚑ gap: a rail-served id the catalog does not list" | `/zen/go/v1/models` naming an id models.dev lacks (37 served against 29 listed, 2026-10-20) || not-in-catalog (ruling 4) | [#2768](https://github.com/teststuffstash/homelab/issues/2768): *listed* is the vendor's client view (models.dev minus deprecated, under the workspace's overrides), never the rail's model list — the rail's own `/models` answer is unread, and no price comes with it |
 | "⚑ gap: listed is not alive" | a listed id that answers 400 `Model is unavailable` || listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are |
 | "⚑ gap: a vendor reset time" | a Go 429 || — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed |
 | "⚑ gap: the OpenRouter rail's registry" | an openrouter session || no catalog | the old proxy reads `/api/v1/models/<id>/endpoints` for its provider pin and price (`compute_pin`, `MARKET_TTL_S`); the gateway's openrouter rail forwards the policy model with no registry (the spike's §Proposed design) |
@@ -204,7 +243,8 @@ after a clean canary through our stack* (operator rulings 2026-10-19: the candid
 a hand table; vendor numbers alone do not whitelist — laguna read 100 % up while we saw 81 % 429s;
 the canary is ON DEMAND, part of this catalog's update, and CAPPED by a budget). The leg mirrors
 [GW-CATALOG-GO](#gw-catalog-go): read on a schedule (⚖ `GATEWAY_OR_CATALOG_REFRESH_S`, 21600 s —
-6 h, the Go catalog's interval; the first refresh at start), parsed strictly, the last good
+6 h, the Go catalog's interval; the first refresh at start — unless the stored snapshot is younger
+than the interval, then at its `fetched_at` + 21600 s, the Go leg's rule), parsed strictly, the last good
 snapshot kept on any failure and persisted in the store, shown on `/metrics` and on
 `GET /catalog/openrouter`. What it reads:
 
@@ -251,7 +291,47 @@ candidate (`canary-not-due` — already eligible, or excluded inside its cooldow
 the cooldown's end), the budget, then the rail's slot count and credential as any admission.
 Who RIDES the canaries is the jail's `gateway/scripts/canary-entrants.sh` (reads the view, launches
 one prober ride per candidate cell through `agents/agent-session.sh`'s `AGENT_GATEWAY_CANARY`
-knob); FU-161's scout keeps its digest, its canary leg for OpenRouter entrants is superseded by this.
+knob — the ride names no model: the launcher's preflight refuses `--model` under
+`AGENT_GATEWAY=sessions`, and the pod's provider + model are the admission's
+`OPENCODE_CONFIG_CONTENT`); FU-161's scout keeps its digest, its canary leg for OpenRouter entrants
+is superseded by this.
+
+⚖ **Which candidates, in what order** (operator ruling 2026-10-21, homelab#2775 — a bug, not a
+design question: the first canary admission of 2026-10-20 went to `deepseek-v4.1-flash@open-inference`,
+quantization fp4, below the fp8 floor — `eligible` after its clean ride, never pinnable, because the
+launcher walked candidate cells alphabetically with the floors unknown to it). The view says it:
+every endpoint row carries **`pinnable`** — per harness the policy's `providers.tool_choice` names
+(never a code list), the floors' verdict of [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)
+evaluated by the data plane's own predicate (`providers.eligible()`: quantization at or above the
+floor, every tool-choice mode the harness uses, `uptime_last_1d` at or above the floor — a `null`
+clears none — status 0; a provider's service tiers carry the representative's verdict) — and
+**`floor`**, the reason per harness that fails (`{}` when every harness passes). The deployed
+policy's floors decide, so the flag follows the policy, not the data; `selected` is always a cell
+that is both `eligible` and pinnable for the canary harness — an eligible cell the floors reject is
+passed over whatever its price. The launcher walks only the candidate cells that are **pinnable for
+its ride's harness** (`opencode`, the script's own `HARNESS`), **cheapest first** — the endpoint's
+output price, then its input price, then the model id — and names the cells it skipped, each with
+its `floor`, in its banner, so `--dry-run < /dev/null` shows the whole decision without a ride.
+
+⚖ **A 429'd canary is no verdict** (operator ruling 2026-10-22, homelab#2775: *exponential backoff
+for providers — skip and move on, eventual consistency*). The 2026-10-20 window's 429s were the
+PINNED provider throttling OpenRouter's **shared** upstream account (`error.metadata.limit_source:
+upstream_provider_shared_pool` — the key was fine, the same cell served 200s minutes earlier and
+again a day later), which a regular ride never sees (request-level failover) and a pinned canary with
+fallbacks off cannot avoid; the catalog's `uptime_1d` reads 100 % through it. So a 429 on the canary
+ride's cell judges nothing: the cell stays **`candidate`**, the ride **consumes no admission** (the
+per-refresh count skips a canary session whose 429 was the last word — one with no `clean` outcome
+after it), and the cell gets a persisted **re-try horizon** — `retry_at` = now + `canary.backoff_s`
+on the first 429'd canary, the step **doubling per consecutive one** up to `canary.backoff_max_s`
+(⚖ policy knobs; prod 3600 s → 86400 s: the budget's own retry unit up to the catalog's stale
+horizon); the 429 body's `limit_source` rides onto the cell so a key-level 429 stays telling. Inside
+the horizon a canary on the cell defers **`canary-not-due`** (`retry_after_s` = the horizon's end)
+and the launcher skips it, naming it in a `== throttled` banner section; at the horizon it is due
+again — judged whenever the provider serves our traffic, never escalated. Any verdict (a clean ride,
+a strike) resets the horizon and the step; a strike reported on a ride that saw a 429 on its cell is
+the task's strike as ever but **not** the cell's verdict — the 429 is the likelier cause. The
+capacity half's own 30/60 s cell cooldown ([sessions.md §Capacity](sessions.md#capacity--the-ladders-capacity-half))
+is untouched by this: that is selection's signal, this is the entry gate's.
 
 ### The budget cap
 
@@ -265,7 +345,13 @@ candidates wait — `GatewayCanaryBudgetExhausted` fires on it
 (`argocd/resources/agent-gateway/prometheusrule.yaml`, promtool fixture
 `openrouter-catalog.promtool-test`), beside `OpenRouterCatalogStale` (no good refresh for 24 h, or
 no snapshot) and `OpenRouterCatalogParseFailed`. A failed canary excludes exactly its cell, never
-the model.
+the model. The window is the STORE's: its start is the persisted `refreshed_at` the refresh writes,
+`admitted_this_refresh` is the canary sessions since it, the spend the sessions' metered usage —
+nothing of the cap is in memory, so a restart inside the interval (which refreshes nothing at
+start) keeps the count and the defer; only a refresh opens the next window. ⚖ The per-process
+counters (`gateway_canary_rides_total`, `gateway_canary_admissions_total`,
+`gateway_openrouter_catalog_refresh_total`) restart at 0 with the process, as any Prometheus
+counter — `increase()` absorbs it; they gate nothing.
 
 World `policy-default · openrouter-catalog` ([worlds/README.md](../worlds/README.md#the-openrouter-catalog-world)):
 the fake MCP answers the two slices and the AA benchmarks from the live MCP answers of 2026-10-19,
@@ -284,10 +370,13 @@ fixture Secret `agent-egress/router-account-key`.
 | "rankings without dates are a parse failure" | rankings-undated | 2 || parse-failed | 2 | — |
 | "no benched candidate: implausible, nothing taken ⚖" | benchmarks-empty | none || implausible | 0 | 0 |
 | "a candidate whose endpoints read fails is absent; the refresh still lands ⚖" | endpoints-503 for G | none || ok | 1 (M) — 6 unreadable | 8 |
+| "an endpoint without an uptime figure does not fail its model's parse ⚖" | endpoints-null-uptime for G (its first endpoint's `uptime_last_1d` `null`) | none || ok | 2 (M, G) — 5 unreadable; G's row carries `uptime_1d` null | 15 |
 | "every endpoints read failing keeps the last good" | endpoints-503 for both | 2 || implausible | 2 | — |
 | "no account key: fetch-failed, no MCP call" | the ref absent | none || fetch-failed | 0 (0 MCP calls) | — |
 | "the MCP calls carry the account key and a client identity ⚖" | mcp ok | — || — | `authorization: Bearer <the account key>`; `user-agent: agent-gateway/<v> (openrouter-catalog)`; `initialize` then `tools/call` ×3 | — |
 | "a PVC store keeps the snapshot and the cells across a restart" | refresh, a new gateway on the same DB, +3600 s | — || — | `age_s` 3600; 2 models; 15 candidate cells | — |
+| "a restart inside the interval refreshes nothing at start ⚖" | refresh at T0, a new gateway on the same DB, +3600 s | 2 || — (the loop's first refresh waits 18000 s; `last_attempt_at` null; a `not-in-catalog` defer's `retry_after_s` 18000) | 2 | 15 |
+| "a restart after the interval refreshes at start" | refresh at T0, a new gateway on the same DB, +21600 s | 2 || ok (the loop refreshes at once; `fetched_at` T0 + 21600 s) | 2 | 15 |
 
 | description | arrange | body || decision | rail / model / harness | reason | retry_after_s | the cell after |
 |---|---|---||---|---|---|---|---|
@@ -302,12 +391,23 @@ fixture Secret `agent-egress/router-account-key`.
 | "a canary names a model the snapshot lacks" | refresh | prober, `canary: {moonshotai/kimi-k3, deepinfra}` || defer | — | not-in-catalog | 21600 | — |
 | "the canary role is the policy's ⚖" | refresh | worker, `canary: {M, deepinfra}` || 400 | — | malformed-body | — | — |
 | "a canary never fails over ⚖" | the canary ride answered upstream-500 | — || 500 | the upstream calls: deepinfra only | — | — | — |
+| "a 429'd canary is no verdict: the cell backs off ⚖" | the canary ride answered upstream-429-shared-pool, no consumer outcome | — || 429 | — | — | — | (M, deepinfra) `candidate`, `retry_at` T0 + 3600, `backoff_s` 3600, `limit_source` upstream_provider_shared_pool; (M, atlas-cloud) untouched; `gateway_canary_rides_total{outcome="no-verdict"}` 1 |
+| "a backed-off cell is not due until its horizon ⚖" | the same | prober, `canary: {M, deepinfra}` || defer | — | canary-not-due | 3600 | — |
+| "a cell back from exclusion backs off the same way" | (M, deepinfra) excluded at T0 (a struck canary), +86400 s a canary on it answered upstream-429-shared-pool | prober, `canary: {M, deepinfra}` || defer | — | canary-not-due | 3600 | the row reads `candidate`, class null, `retry_at` T0 + 90000, `backoff_s` 3600 (the view says the same) |
+| "at the horizon the cell is due again" | the same, +3600 s | prober, `canary: {M, deepinfra}` || dispatch | openrouter / M | — | — | — |
+| "a consecutive 429'd canary doubles the horizon; the policy caps it ⚖" | four 429'd canaries on (M, deepinfra), each ridden at the previous horizon | — || — | — | — | — | `backoff_s` after each: 3600, 7200, 14400, 14400 (`backoff_max_s`); `retry_at` = the ride's time + that |
+| "a verdict resets the backoff ⚖" | two 429'd canaries on (M, deepinfra), then a clean canary ride on it | — || — | — | — | — | eligible; `retry_at` / `backoff_s` / `limit_source` null |
+| "a strike on a ride that saw a 429 is not the cell's verdict ⚖" | the canary ride answered 429, then the consumer reports harness-gave-up | — || — | — | — | — | (M, deepinfra) `candidate` (not excluded), `retry_at` T0 + 3600; the task's strike counted (`strike: {class: harness-gave-up, scope: cell}`) |
+| "a clean finish after a 429 on the same ride: the cell enters" | the canary ride answered 429, the same session then 200, outcome clean | — || — | — | — | — | eligible; `admitted_this_refresh` 1 (the admission counts — a verdict landed) |
 
 | description | arrange | body || decision | reason | retry_after_s | `gateway_canary_budget_exhausted` |
 |---|---|---||---|---|---|---|
 | "under budget: N entrants are canaried" | refresh | 3 canaries on three cells || dispatch ×3 | — | — | 0 |
 | "at the cap the N+1th waits ⚖" | 3 admitted this refresh | a 4th canary || defer | canary-budget | 3600 | 1 |
 | "a refresh opens the next N ⚖" | 3 admitted, then a refresh | a 4th canary || dispatch | — | — | 0 |
+| "a 429'd canary consumes no admission ⚖" | 3 admitted this refresh, the first of them answered upstream-429-shared-pool (no outcome) | a 4th canary, another cell || dispatch | — | — | 0 before it (`admitted_this_refresh` 2) |
+| "a pod roll inside the window keeps the count ⚖" | 3 admitted, then a new gateway on the same DB +3600 s (no refresh at start) | a 4th canary || defer | canary-budget | 3600 | 1 (`admitted_this_refresh` 3) |
+| "a pod roll after the interval refreshes and opens the next N" | 3 admitted, then a new gateway on the same DB +21600 s, its refresh at start | a 4th canary || dispatch | — | — | 0 |
 | "the day's spend at the cap defers ⚖" | one canary ride metered $1.12 (in 5M, out 1M at deepinfra 0.14 / 0.42) | the next canary || defer | canary-budget | 3600 | 1 |
 | "the day rolls over" | the same, +86400 s | the next canary || dispatch | — | — | 0 |
 | "spend is metered at the cell's endpoint price ⚖" | the same ride || — | — | `gateway_canary_spend_usd` 1.12 | — |
@@ -321,6 +421,29 @@ fixture Secret `agent-egress/router-account-key`.
 | "cells are counted by state" | refresh, one clean canary on (M, deepinfra), one struck on (M, atlas-cloud) || `gateway_openrouter_cells{state="candidate"}` / `eligible` / `excluded` | 13 / 1 / 1 |
 | "canary verdicts are counted" | the same || `gateway_canary_rides_total{outcome="eligible"}` / `{outcome="excluded"}` | 1 / 1 |
 | "the view's shape is the schema's" | refresh, `GET /catalog/openrouter` || exactly the `required` keys of `openrouter_output`, of a model row, of an endpoint row, of `canary` | — |
+
+### The floors' verdict on the view
+
+The policy's `providers.tool_choice` names three harnesses (`opencode` / `goose`: `auto`; `claude`:
+`auto`, `required`, `function`), its floors are fp8 and uptime 95 (the `policy-default` world);
+M's rows as [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto) lists them.
+
+| description | cell | arrange || `pinnable` (opencode / goose / claude) | `floor` |
+|---|---|---||---|---|
+| "the view says which cells selection could pin: a cell without required/function is pinnable for opencode and goose, not claude ⚖" | M@morph (fp8, uptime 99.5, tool_choice `auto` only) | refresh || true / true / false | `{claude: no tool_choice required,function}` |
+| "the 2026-10-20 cell: fp4 is pinnable for no harness" | M@open-inference (fp4) | refresh || false / false / false | `quantization fp4 < fp8` on all three |
+| "a cell clearing every floor is pinnable everywhere; its service tiers carry the representative's verdict ⚖" | M@deepinfra (fp8; `/flex` uptime 84.5 and `/priority` beside it) | refresh || true / true / true on all three rows | `{}` |
+| "a null uptime clears no floor on any harness ⚖" | M@inference-net, `endpoints-null-uptime@inference-net/fp8` | refresh || false / false / false | `uptime_1d unknown` on all three |
+| "the flag follows the policy, not the data ⚖" | M@open-inference | a second gateway on the same DB, `policy-default` with `quantization_floor` fp4 || true / true / true | `{}` |
+| "selected is always a pinnable cell: the cheaper eligible fp4 cell is passed over ⚖" | M | clean canaries on (M, open-inference) — out $0.08/M — and (M, deepinfra) — $0.42/M || `selected` deepinfra, `order` [deepinfra]; open-inference `eligible` yet pinnable false | — |
+
+The launcher — `scripts/canary-entrants.sh --dry-run < /dev/null`, a fake HTTP server handing it the
+view (the script needs only `bash`, `curl`, `jq` and a gateway URL; `--dry-run` rides nothing):
+
+| description | the view || the walk (`== canary n/N: <cell>`, cheapest first) | the banner's skipped list |
+|---|---||---|---|
+| "the launcher walks pinnable candidate cells cheapest-first; the skipped cells and their floor are in the banner ⚖" | after a refresh: 15 candidate cells, 9 pinnable for `opencode` || M@deepinfra 0.42, G@near-ai 0.50, G@z-ai 0.50, M@atlas-cloud 0.54, M@morph 0.60, G@morph 0.65, G@inceptron 0.69, M@inference-net 0.715, M@baidu 1.20 ($/M out; near-ai before z-ai on the input price) — no ride: two GETs of the view, nothing else | G@atlas-cloud `uptime_1d 77.8199 < 95`, G@open-inference `quantization fp4 < fp8`, G@reka `quantization unknown`, M@alibaba `quantization unknown`, M@open-inference `quantization fp4 < fp8`, M@parasail `uptime_1d 77.4359 < 95` |
+| "the launcher skips a backed-off cell and names it in `== throttled`" | the same view after a 429'd canary on M@deepinfra (`retry_at` T0 + 3600 — T0 is 2027-01-15, ahead of the wall clock) || G@near-ai 0.50 first — M@deepinfra absent from the walk (8 of 15); the skipped list unchanged | `== throttled`: M@deepinfra (upstream_provider_shared_pool; candidate again at `<T0 + 3600>`, backoff 3600 s) |
 
 ### Named gaps (rows that exist so the omission is visible)
 
@@ -342,30 +465,141 @@ Rendered by `scripts/evidence_render.py` from CI.
 
 *The deployed policy's `rails.<rail>.models.{light,standard,heavy}` lists are the output of a
 derivation over benchmark evidence, not a hand-picked set* — the
-[tier evidence](../glossary.md#tier-evidence) (operator rulings 2026-10-18, FU-270). Three
+[tier evidence](../glossary.md#tier-evidence) (operator rulings 2026-10-18, FU-270) — *and the
+unit every cell is ordered and chosen by is its* [cost per clean ride](../glossary.md#cost-per-clean-ride)
+*, never a per-token price* (operator ruling 2026-10-19, homelab#2718; built as homelab#2743: on
+OpenRouter the headline price is a 1/price² lottery over 20+ providers and a failed ride bills a
+reviewer round + a coordinator re-entry on top; on the Go rail one flat fee buys every model). Three
 parts, each a reviewable file in git:
 
 - **The snapshot** — `argocd/resources/agent-gateway/benchmarks.json`
   (`$defs.benchmarks_snapshot`): per rail, every **candidate** policy id with its Artificial
-  Analysis row (joined by the rule below), its output/input price in $ per 1M tokens and its Go
-  monthly limit. Written by `scripts/benchmarks-snapshot.sh` from three live reads, and only
-  the candidate rows (not the capability table's 345). ⚖ The gateway itself never calls AA or
-  the OpenRouter MCP: the capability rows are the OLD proxy's weekly pull (`_capability_tick` →
-  its router store's `capability(model, source, intelligence, coding, agentic, updated_ts)`),
-  read out of that pod; the Go rows are the gateway's own `GET /catalog/opencode`
-  ([GW-CATALOG-GO](#gw-catalog-go) — the same snapshot admission reads); the OpenRouter prices
-  are the public `GET https://openrouter.ai/api/v1/models` (`pricing.completion` /
-  `pricing.prompt`, per token, scaled to $/1M; a negative = dynamic = no price).
+  Analysis row (joined by the rule below), its **price** — the openrouter model's SELECTED
+  endpoint's output/input price (`GET /catalog/openrouter` `selected`: after the floors and the
+  entry canary, [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto);
+  **null until a cell passed the canary — never the headline**), the Go model's
+  [Go price](../glossary.md#go-price) (`GET /catalog/opencode` `pricing`) — its clean-ride
+  evidence (`rides`: the cell's clean and judged rides from the outcome store, and the prior) and
+  its Go monthly limit. Written by `scripts/benchmarks-snapshot.sh` from three reads: the AA
+  capability rows (⚖ the gateway itself never calls AA: the rows are the OLD proxy's weekly pull,
+  `_capability_tick` → its router store's `capability(model, source, intelligence, coding, agentic,
+  updated_ts)`, read out of that pod) and the gateway's own two catalog views. The snapshot
+  rides beside the policy in the deploy (`GATEWAY_BENCHMARKS`): its age is
+  `gateway_tier_evidence_age_seconds`, and **`TierEvidenceStale`** fires past ⚖ 7 days (the AA
+  pull behind it is weekly; a comparison on a month-old price is a wrong answer with a confident
+  face — the 10-18 snapshot read $0.144/M against a live $0.080/M a day later), or when no
+  snapshot is mounted (`argocd/resources/agent-gateway/prometheusrule.yaml`, fixture
+  `tier-evidence.promtool-test`).
 - **The rules** — the policy's top-level `tiers` block (`$defs.tiers_block`), which the loader
   validates: `score` (one of `intelligence` | `coding` | `agentic`), `bands` (every tier, a
-  fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer). Unknown keys
-  refuse the load like every other policy block. The fixture worlds carry the same block so one
-  loader shape holds everywhere.
-- **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `check`,
-  `apply_text`; CLI `devbox run tiers -- snapshot | derive | check | apply`). The deployed
-  lists EQUAL the derivation, order included — a test row runs the check, so a hand edit of a
-  list fails the suite; `apply` rewrites exactly the three rails' `models` blocks in the
-  file's own layout.
+  fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer), and **`cost`** —
+  the cost-per-clean-ride terms (`ride_tokens_out_m`, `strike_overhead_usd`, `min_rides`;
+  [§Cost per clean ride](#cost-per-clean-ride)). Unknown keys refuse the load like every other
+  policy block. The fixture worlds carry the same block so one loader shape holds everywhere.
+- **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `same_model`,
+  `cost_per_clean_ride`, `check`, `undecided`, `apply_text`; CLI `devbox run tiers -- snapshot |
+  derive | check | apply`). The deployed lists EQUAL the derivation, order included — a test row
+  runs the check, so a hand edit of a list fails the suite; `apply` rewrites exactly the decided
+  tiers' lists in the file's own layout. ⚖ A tier whose derivation is **empty** — no benched,
+  priced candidate reaches its band (the openrouter rail before its first eligible cell) — is
+  **undecided**: the deployed list stands, `check` names it apart and never as a mismatch,
+  `apply` refuses to write it.
+
+### Cost per clean ride
+
+⚖ For a cell with price `p` ($ per 1M output tokens), clean-ride rate `r` and the policy's
+`tiers.cost` (`T` M output tokens a ride spends, `o` $ a failed ride costs on top of itself):
+**`cost = p × T ÷ r + o × (1 ÷ r − 1)`** — one clean ride takes `1 ÷ r` rides, each at the cell's
+price, and every failed one in between bills the strike overhead. `r` is **measured** from the
+outcome store (clean rides ÷ judged rides — a ride = a session the cell served a 2xx to whose
+latest outcome is reported, [GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)) once the
+cell has `min_rides` judged rides; before that a **prior** stands — the selected endpoint's
+`uptime_1d ÷ 100` on openrouter (the same prior [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)
+orders by), ⚖ 1.0 on the Go rail (one endpoint, no vendor uptime; the gap row). A rate of 0 is an
+unaffordable cell. The deployed terms: `T` 0.01 (10k output tokens — the 30-day mean per session
+of the two openai-dialect rails off the gateway's own ledger, 2026-10-20), `o` 0 (⚖ UNMEASURED:
+the term exists so the measurement has a home — the gap row; at 0 the order is price over clean
+rate), `min_rides` 5 (the same number as `providers.min_rides`; two knobs because two rules).
+
+| description | out $/M | rides (clean / judged, prior) | `tiers.cost` (T · overhead · min_rides) || rate (basis) | $ per clean ride |
+|---|---|---|---||---|---|
+| "a clean cell costs its price for one ride's tokens ⚖" | 0.42 | 0 / 0, prior 1.0 | 0.01 · 0 · 5 || 1 (prior) | 0.0042 |
+| "under min_rides the prior stands ⚖" | 0.42 | 2 / 4, prior 0.9 | 0.01 · 0 · 5 || 0.9 (prior) | 0.004667 |
+| "a measured clean rate of one half doubles the cost ⚖" | 0.42 | 3 / 6, prior 1.0 | 0.01 · 0 · 5 || 0.5 (measured) | 0.0084 |
+| "the strike overhead is paid once per failed ride ⚖" | 0.42 | 3 / 6, prior 1.0 | 0.01 · 0.10 · 5 || 0.5 (measured) | 0.1084 |
+| "a cell with no clean ride yet is unaffordable ⚖" | 0.42 | 0 / 5, prior 1.0 | 0.01 · 0 · 5 || 0 (measured) | ∞ |
+
+### The Go price
+
+⚖ The opencode rail has no per-token price: one monthly fee buys an allowance of every listed
+model at list prices. Its price per model is therefore DERIVED: **the list price × the plan's
+discount, `fee ÷ max(the rail's trailing-30-day list-priced draw, the model's monthly limit)`** —
+the fee buys at least the model's own allowance (`promise`), and a busier rail makes every Go
+token cheaper (`measured`); an unlimited model prices at 0 (`unlimited`). The fee is the Go
+page's Plan table ([GW-CATALOG-GO](#gw-catalog-go), never a policy copy — ruling 5); the draw is
+the gateway's own ledger at the catalog's list rates, the window draw's arithmetic
+([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); the model's
+windows stay the gate — a window at its threshold holds the cell whatever its price. Shown on
+`GET /catalog/opencode` `pricing` (`output.pricing`), read by the snapshot and the rail choice.
+Rows run against the world's Go catalog (plan `go`: fee $10/month; `deepseek-v4.1-flash` $80/month
+at list 0.15 in / 0.60 out; `claude-haiku-5-5` $15 at 0.10 / 0.50; `longcat-2.5-preview-free`
+unlimited), T0 = Fri 2027-01-15 08:00:00Z.
+
+| description | the rail's trailing-30-day ledger || model | discount | basis | out $/M · in $/M |
+|---|---||---|---|---|---|
+| "the plan's promise prices an idle rail ⚖" | nothing || `deepseek-v4.1-flash` | 10 ÷ 80 = 0.125 | promise | 0.075 · 0.01875 |
+| "each model's own allowance is its promise ⚖" | nothing || `claude-haiku-5-5` | 10 ÷ 15 = 0.666667 | promise | 0.333333 · 0.066667 |
+| "a rail drawing past the allowance is priced on the meter ⚖" | one worker ride at T0 + 2 h (off-peak) drawing in 1000M at $0.15 + out 100M at $0.60 = $210 at list || `deepseek-v4.1-flash` | 10 ÷ 210 = 0.047619 | measured | 0.028571 · 0.007143 |
+| "an unlimited model prices at 0 ⚖" | nothing || `longcat-2.5-preview-free` | 0 | unlimited | 0 · 0 |
+| "no fee read: no price ⚖" | the docs snapshot written before the Plan table (its body without `plan_fees`) || `deepseek-v4.1-flash` | null | null | null · null |
+| "the price shows on GET /catalog/opencode ⚖" | nothing || `pricing`: `fee_usd_month` 10, `draw_30d_usd` 0, `models[deepseek-v4.1-flash]` {out 0.075, in 0.01875, discount 0.125, basis promise, rides 0 / 0} | | | |
+
+### The rail choice
+
+*The gateway chooses between `openrouter` and `opencode-go` for one model on equal terms*
+(operator acceptance 2026-10-19, homelab#2743: every bad OpenRouter provider filtered out first —
+fp8 vs fp8, tool-call support, uptime — then price per CLEAN ride, a failed provider relaunched
+transparently). ⚖ When the admission's tier names ONE model on two of the role's allowed rails — a
+[twin](../glossary.md#twin): the same tail after the rail prefix, a `:variant` and the vendor
+are stripped, `-N-N` ↔ `-N.N` (`same_model`, one rule, no table; a `claude/` alias twins nothing)
+— the walk's rail order puts the rail whose twin cell costs less per clean ride FIRST, with that
+twin at the head of its list; everything else about [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s
+walk stands (the other rail is still walked when the first yields nothing; the tier's lists
+decide which models exist — the choice never adds one). Each twin's standing: the Go cell at the
+Go price, its window or its catalog standing holding it (`headroom` — a window at its threshold
+or a 429 cooldown; `not-in-catalog`); the openrouter cell at its SELECTED endpoint's price —
+the floors, the entry canary, the task's strikes and the cooldowns applied as [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)
+does (`no-eligible-endpoint` when nothing is left to price: no cell has passed the canary, or none
+clears the floors); each over the cell's clean-ride rate. A twin struck for the task is the retry
+contract's business, not the choice's (no choice; the walk skips it). Both unpriced → no choice:
+the role's order, and the walk's own defer. The answer carries **`rail_choice: {rail, over,
+reason}`** (`null` when no twin) and `gateway_rail_choice_total{model, rail, reason}` counts it
+(`model` = the twin's openrouter spelling, the provider families' bound). Reasons: `price` (cheaper
+per clean ride and by price alone; a tie goes to the role's order), `clean-rate` (the measured rate
+flipped the price order), `headroom`, `not-in-catalog`, `no-eligible-endpoint`. A failed-over
+request bills the serving provider: its row names that provider, its outcome judges that cell
+([§Failover](openai-chat.md#failover--before-the-first-byte-only) — the choice does not change it).
+
+World `policy-default · openrouter-endpoints` (the snapshot of `deepseek/deepseek-v4.1-flash` = M,
+every cell eligible) with the Go catalog above. A worker with harness opencode at tier **light**:
+opencode names `opencode-go/deepseek-v4.1-flash` (MG), openrouter `deepseek/deepseek-v4-flash`
+then M — M and MG are twins. Go's promise $0.075/M vs deepinfra's $0.42/M, both at the prior rate.
+
+| description | arrange | body || decision | rail | model | `rail_choice` | `gateway_rail_choice_total{model=M,rail,reason}` |
+|---|---|---||---|---|---|---|---|
+| "Go wins with free headroom and an equal clean rate ⚖" | — | worker, tier light || dispatch | opencode | MG | opencode over openrouter: `price` | `{rail="opencode",reason="price"}` 1 |
+| "openrouter wins when Go's window is near its share ⚖" | a worker ride on opencode drew in 30M / out 3.2M at T0 ($12.84 ≥ 0.80 × $16) | the same || dispatch | openrouter | M (the twin at the head, ahead of the list's first id) | openrouter over opencode: `headroom` | `{rail="openrouter",reason="headroom"}` 1 |
+| "openrouter wins when Go's clean rate is lower ⚖" | six judged Go rides on MG, one clean (rate ⅙: $0.075 ÷ 0.1667 = $0.45/M per clean ride, past deepinfra's $0.42) | the same || dispatch | openrouter | M | openrouter over opencode: `clean-rate` | `{rail="openrouter",reason="clean-rate"}` 1 |
+| "no eligible openrouter endpoint: Go ⚖" | the snapshot trimmed to the ineligible endpoints (`openrouter-endpoints-ineligible`) | the same || dispatch | opencode | MG | opencode over openrouter: `no-eligible-endpoint` | `{rail="opencode",reason="no-eligible-endpoint"}` 1 |
+| "no openrouter cell has passed the entry canary yet: Go ⚖" | every cell of M set back to `candidate` (the production state of 2026-10-20) | the same || dispatch | opencode | MG | opencode over openrouter: `no-eligible-endpoint` | `{rail="opencode",reason="no-eligible-endpoint"}` 1 |
+| "both twins held: no choice, the walk defers with the hold that lifts first ⚖" | the window draw above; the snapshot ineligible; the task's earlier ride struck `no-verdict` on `deepseek/deepseek-v4-flash` | the same, that task || defer | — | — | — (a defer) | no series; reason `no-eligible-provider`, `retry_after_s` 60 |
+| "no twin at the tier: the role's order, no choice" | — | worker, tier standard (opencode MG; openrouter `deepseek/deepseek-v4-flash`) || dispatch | opencode | MG | `null` | no series |
+| "the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell ⚖" | the window draw above; the openrouter fake's deepinfra attempt answers 500 | the same, then one ride and a `clean` outcome || dispatch | openrouter | M | `headroom` | the session's request rows deepinfra 500 then atlas-cloud 200; `GET /catalog/openrouter` rides: atlas-cloud 1 / 1, deepinfra 0 / 0 |
+
+| description | the mounted snapshot || `gateway_tier_evidence_age_seconds` |
+|---|---||---|
+| "age is seconds since snapshot_at ⚖" | a file with `snapshot_at` T0 − 600, `GATEWAY_BENCHMARKS` naming it || 600 |
+| "no snapshot mounted, no series" | `GATEWAY_BENCHMARKS` naming a missing file || absent |
 
 ### The rulings ⚖
 
@@ -377,11 +611,11 @@ the ⚖ rows of *The deployed policy* below.
 |---|---||---|
 | "the score is the Artificial Analysis intelligence index ⚖" | the one axis with full coverage: `coding` / `agentic` are null on most new rows (`claude-haiku-5.5`, `gpt-6-luna`, `mimo-v2.6-*` carry only `intelligence`) || `tiers.score: intelligence` in the deployed policy; every benched candidate row carries `intelligence`, at least one lacks `coding`; the other two axes are loadable, unused (gap row) |
 | "a tier is a band of the rail's best ⚖" | within a rail, a benched candidate is `heavy` when its score ≥ 0.90 × the rail's top score, `standard` when ≥ 0.75 ×, `light` when ≥ 0.50 ×; a model can sit in several tiers || `tiers.bands` `{heavy: 0.9, standard: 0.75, light: 0.5}` in the deployed policy; every id in a deployed list scores ≥ its band × its rail's top |
-| "each list is cheapest-first by output price, capped at 3 ⚖" | order = output price ascending, then input price, then score descending, then id (the last three break ties — the gateway's own choice); the list keeps the first `cap` || `tiers.cap: 3`; every deployed priced-rail list has ≤ 3 ids with non-decreasing `out_price`; the Go price is the catalog's base `cost[0].out`, the OpenRouter price `pricing.completion` × 1M |
-| "the subscription rail has no price: score ascending is its cost proxy ⚖" | the `anthropic` rail's candidates carry no per-token price (one flat subscription); its lists are ordered by score ascending — the cheapest-capable first || `PRICELESS_RAILS = (anthropic,)` in `agent_gateway.tiers`; every anthropic snapshot row has no price and each deployed anthropic list is strictly score-ascending; the gap row below |
-| "the candidates per rail ⚖" | opencode = the Go catalog's `listed` models with a `monthly_limit_usd` under the deployed plan (`opencode-go/<id>`); openrouter = every `models.*.ids.openrouter` value of `model-classes.json` (the old proxy's table — gap row); anthropic = the policy's three aliases `claude/haiku`, `claude/sonnet`, `claude/opus` (an argument of the snapshot script, never code) || `build_snapshot`; in the snapshot every opencode key is `opencode-go/<id>`, the openrouter keys = `model-classes.json`'s `models.*.ids.openrouter` values, the anthropic keys = the deployed rail's `claude/` aliases, `sources.capability.source` = `artificial-analysis` |
+| "each list is cheapest per clean ride first, capped at 3 ⚖" | order = cost per clean ride ascending, then input price, then score descending, then id (the last three break ties — the gateway's own choice); the list keeps the first `cap` || `tiers.cap: 3`; every deployed DECIDED priced-rail list has ≤ 3 ids with non-decreasing cost per clean ride (`row_cost` over the snapshot row under the deployed `tiers.cost`) |
+| "the subscription rail has no price: score ascending is its cost proxy ⚖" | a subscription rail's candidates carry no per-token price (one flat subscription): the `anthropic` rail and, since 2026-10-22 (FU-270), the `codex` rail (the ChatGPT subscription); their lists are ordered by score ascending — the cheapest-capable first || `PRICELESS_RAILS = (anthropic, codex)` in `agent_gateway.tiers`; every anthropic and codex snapshot row has no price and each deployed anthropic and codex list is strictly score-ascending; the gap row below |
+| "the candidates per rail ⚖" | opencode = the Go catalog's `listed` models with a `monthly_limit_usd` under the deployed plan (`opencode-go/<id>`), each at the Go price (`promise` / `measured` / `unlimited`, or unpriced before the fee is read); openrouter = the OpenRouter catalog's models ([GW-CATALOG-OR](#gw-catalog-or): the weekly ranking ∩ AA-benched), each at its SELECTED endpoint's price (`endpoint`, with the provider) or unpriced — never the headline, never the old proxy's table; anthropic = the policy's three aliases `claude/haiku`, `claude/sonnet`, `claude/opus` (an argument of the snapshot script, never code), unpriced; codex = the `codex/<id>` ids the snapshot script is handed (`CODEX_CANDIDATES` — the ENROLLED account's model evidence, not a catalog: 2026-10-22 the leg-E usage probe's `model_usage` named one id, `gpt-6-astra`, [the spike §Live usage payload shape](../../../docs/spikes/codex-subscription-rail.md)), unpriced, joined to the AA row by tail (`codex/gpt-6-astra` ↔ `openai/gpt-6-astra`) || `build_snapshot`; in the snapshot every opencode key is `opencode-go/<id>` with `price_basis` in {promise, measured, unlimited, null}, every openrouter key is a `vendor/model` id with `price_basis` in {endpoint, null} and a `provider` exactly when priced, the anthropic keys = the deployed rail's `claude/` aliases, unpriced, the codex keys = the deployed codex rail's ids, unpriced; `sources.capability.source` = `artificial-analysis`, `sources.openrouter_catalog.fetched_at` present |
 | "the join to the AA row is a rule, not a table ⚖" | AA ids are `vendor/model` with dotted versions; Go ids are bare: join on the part after the vendor `/` with `-N-N` ↔ `-N.N` normalisation, a `:variant` suffix dropped, the vendor kept when the policy id names one; the three aliases join the NEWEST `anthropic/claude-<alias>-<version>` row by version; no match, or more than one, = unbenched || `join_aa_id`; every snapshot row's `aa_id` is what `join_aa_id` returns over the snapshot's AA ids (no row is a hand-written pair); the rows below |
-| "unbenched never tiers ⚖" | a candidate with no AA row is in no list, whatever its price (the free `beam-free` and `longcat-2.5-preview-free` stay out); so does an unpriced candidate on a priced rail (`inclusionai/ling-3.0-flash:free` is benched but no longer on OpenRouter's list) || `derive`; no id in a deployed list has a null `aa_id`, nor a null `out_price` on a priced rail |
+| "unbenched never tiers ⚖" | a candidate with no AA row is in no list, whatever its price (the free `beam-free` and `longcat-2.5-preview-free` stay out); so does an unpriced candidate on a priced rail (every openrouter model until a cell passed the entry canary) || `derive`; no id in a deployed list has a null `aa_id`, nor a null `out_price` on a priced rail |
 
 ### The bands, on a hand-written rail
 
@@ -401,6 +635,20 @@ standard ≥ 37.5, light ≥ 25.
 | "the axis is the policy's: the same rail under `score: coding`" | `fx` with coding `top` 10, `near` 60, `mid` 55, `low` 50, `far` 5 || — | — | `fx/mid`, `fx/near` (top = 60, heavy ≥ 54) |
 | "the subscription rail orders by score ascending ⚖" | rail `anthropic`: `claude/fx-a` 40, `claude/fx-b` 55, `claude/fx-c` 60, no prices || `claude/fx-a`, `claude/fx-b`, `claude/fx-c` | `claude/fx-b`, `claude/fx-c` | `claude/fx-b`, `claude/fx-c` |
 | "no benched candidate: empty lists, which apply refuses to write" | rail `fx-empty`: `fx/none` only || `[]` — `apply_text` raises naming `fx-empty.light` | | |
+| "a measured clean rate reorders a list ⚖" | `fx` + `fx/mid` rides 2 / 6 (rate ⅓: $0.5 ÷ ⅓ = $1.5 per 1M of output, past `fx/near`'s $1.0) || — | `fx/near`, `fx/mid`, `fx/top` | — |
+| "a tier with no priced candidate is undecided: check passes it, apply refuses it ⚖" | rail `fx-unpriced`: `fx/a` 50 · no price || derive `[]` ×3; `undecided` names `fx-unpriced` light/standard/heavy; `check` = `{}` against a policy listing `fx/a`; `apply_text` raises naming `fx-unpriced.light` | | |
+
+### The twin rule
+
+| description | a | b || twins |
+|---|---|---||---|
+| "a Go id and its openrouter spelling are twins ⚖" | `opencode-go/deepseek-v4.1-flash` | `deepseek/deepseek-v4.1-flash` || yes |
+| "the dotted and the dashed version are twins" | `opencode-go/claude-haiku-5-5` | `anthropic/claude-haiku-5.5` || yes |
+| "a variant twins its family" | `inclusionai/ling-3.0-flash:free` | `inclusionai/ling-3.0-flash` || yes |
+| "two vendors' spellings are not twins ⚖" | `deepseek/deepseek-v4.1-flash` | `other/deepseek-v4.1-flash` || no |
+| "a suffix is not a twin" | `opencode-go/glm-5.3` | `z-ai/glm-5.3-flash` || no |
+| "an alias twins nothing ⚖" | `claude/haiku` | `opencode-go/claude-haiku-5-5` || no |
+| "the same id is not a twin" | `deepseek/deepseek-v4.1-flash` | `deepseek/deepseek-v4.1-flash` || no |
 
 ### The id join
 
@@ -429,6 +677,9 @@ standard ≥ 37.5, light ≥ 25.
 | "a missing tier band refuses the load" | `bands` without `light` || refused, naming `light` |
 | "a non-positive cap refuses the load" | `cap: 0` || refused, naming `tiers.cap` |
 | "no block: the policy loads with no rules, and the check refuses to run ⚖" | `tiers` absent || loads, `Policy.tiers` None; `check()` raises naming `tiers` |
+| "no cost terms refuse the load ⚖" | `cost` absent || refused, naming `tiers.cost` |
+| "a non-positive ride size refuses the load" | `cost.ride_tokens_out_m: 0` || refused, naming `tiers.cost.ride_tokens_out_m` |
+| "a non-positive min_rides refuses the load" | `cost.min_rides: 0` || refused, naming `tiers.cost.min_rides` |
 
 ### The deployed policy
 
@@ -440,16 +691,18 @@ Against `argocd/resources/agent-gateway/benchmarks.json` + `policy.json` (skippe
 | "a hand edit of a list fails the check" | the deployed policy with `rails.opencode.models.heavy` reversed || `check()` names `opencode.heavy` with the derived list as expected |
 | "the snapshot is the schema's shape" | the committed snapshot || exactly the `required` keys of `$defs.benchmarks_snapshot`, of a source and of a candidate row |
 | "the fixture worlds carry the block, not the derivation ⚖" | `policy-default` + the committed snapshot || the world's `tiers` = the deployed block; `check()` on the world is NOT empty (its lists are fixture ids) and no suite row runs it |
+| "an undecided tier keeps its deployed list ⚖" | the committed snapshot's undecided tiers (2026-10-20: every openrouter tier — no cell has passed the entry canary, so no openrouter price exists) || `check()` = `{}`; `undecided()` names them; each named tier's deployed list is non-empty (the last decided derivation stands until evidence exists) |
 
 ### Named gaps (rows that exist so the omission is visible)
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚑ gap: no price for the subscription rail" | the `anthropic` rail || score ascending as the cost proxy | a subscription's marginal cost per model is not a per-token price; the gateway has no ledger for it (the cost ledger is a gap on [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)) |
+| "⚑ gap: no price for the subscription rail" | the `anthropic` and `codex` rails || score ascending as the cost proxy | a subscription's marginal cost per model is not a per-token price and the subscription's fee buys no listed allowance to divide (the Go rail's derivation needs one); the gateway has no ledger for it (the cost ledger is a gap on [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)) |
 | "⚑ gap: coding / agentic unused" | `tiers.score: coding` || loads and derives — but most new rows carry null there (the ruling) | AA's task indices have no coverage on the newest models; revisit when they do |
-| "⚑ gap: the snapshot is hand-refreshed, nothing alerts on its age" | a `snapshot_at` a month old || the suite still passes | no schedule runs `benchmarks-snapshot.sh`, no `gateway_*` family carries the snapshot's age; the AA pull behind it is the old proxy's weekly tick |
-| "⚑ gap: the openrouter candidate set is the old proxy's table" | `model-classes.json` `models.*.ids.openrouter` || 11 ids, 6 benched, 5 priced — `moonshotai/kimi-k3` alone reaches `heavy` / `standard` | the gateway's openrouter rail has no registry of its own ([GW-CATALOG-GO](#gw-catalog-go) gap row); a Go-shaped catalog leg for OpenRouter would widen the set |
+| "⚑ gap: the snapshot is hand-refreshed" | a stale `snapshot_at` || `TierEvidenceStale` names it; nothing re-cuts it | no schedule runs `benchmarks-snapshot.sh`: the re-cut is a jail verb and a PR (the alert is the belt, the operator the hands) |
 | "⚑ gap: a Go-only id spelling joins nothing" | `gemini-4-argon-contributor`, `muse-spark-1.3-contributor`, `hy3`, `hy4-preview`, `qwen3.8-flash`, `space-bunny` || unbenched (9 of 29 listed Go models) | the vendor's `-contributor` / `-preview` suffixes and bare family ids have no AA spelling; a per-id alias would be a table, which the ruling forbids |
+| "⚑ gap: the Go rail's quantization is undeclared" | a Go cell beside an fp8 openrouter cell || compared as if on equal terms | the vendor states no quantization for its endpoints (checked 2026-10-19); the entry canary is the common yardstick both rails lack today ([GW-CATALOG-OR](#gw-catalog-or)'s "the Go rail's canary" row) — a Go cell gets no entry gate, its clean-rate prior is 1.0 |
+| "⚑ gap: the strike overhead is unmeasured" | a failed ride || `tiers.cost.strike_overhead_usd` 0: the order is price over clean rate | the reviewer round + the coordinator re-entry a failed ride costs ride the subscription (no per-token price) — the term has a home and no measurement |
 
 <details markdown="1"><summary>Evidence</summary>
 

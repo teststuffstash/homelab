@@ -15,8 +15,10 @@ from starlette.routing import Route
 
 from . import __version__
 from .capacity import Capacity
+from .capture import Recorder
 from .catalog import GoCatalog
-from .codex import CodexBackend, CodexProxy, CodexRail, openai_responses
+from .codex import CodexBackend, CodexProxy, CodexRail, get_session_capture, openai_responses
+from .codex_usage import UsagePoll
 from .config import Policy, Settings, wire_model
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
 from .liveness import KubePods, PodSource
@@ -30,11 +32,13 @@ from .sessions import (
     SessionService,
     delete_session,
     get_session,
+    list_sessions,
     post_session_env,
     post_session_outcome,
     post_sessions,
 )
 from .store import Store
+from .tiers import tier_evidence_age
 
 log = logging.getLogger("gateway.app")
 
@@ -47,8 +51,11 @@ async def healthz(request: Request) -> JSONResponse:
 
 
 async def catalog_opencode(request: Request) -> JSONResponse:
-    """GW-CATALOG-GO's read-only view: the snapshots admission reads, never a credential."""
-    return JSONResponse(request.app.state.catalog.view())
+    """GW-CATALOG-GO's read-only view: the snapshots admission reads, never a credential — with the
+    Go rail's price per model (GW-MODEL-TIERS §Cost per clean ride: the plan fee over what it bought)."""
+    svc: SessionService = request.app.state.sessions
+    pricing = svc.capacity.go_pricing("opencode", svc.clock()) if "opencode" in svc.policy.rails else None
+    return JSONResponse(request.app.state.catalog.view(pricing))
 
 
 async def catalog_openrouter(request: Request) -> JSONResponse:
@@ -119,7 +126,7 @@ def create_app(
     m.bind_extra(catalog.render)
     # GW-SESSIONS-PULL's identity check: the kube TokenReview API (tests hand a StaticTokenReviews in).
     sessions = SessionService(policy, store, resolver, m, settings.self_url, clock,
-                              capacity=Capacity(policy, store, catalog), reviewer=reviewer or KubeTokenReviews())
+                              capacity=Capacity(policy, store, catalog, clock), reviewer=reviewer or KubeTokenReviews())
     sessions.pods = pods or KubePods()
     m.bind_transport_facts(lambda: sessions.capacity.cooled_counts(clock()), sessions.capacity.rejected_counts)
     # The openrouter rail's provider axis (GW-RAIL-OPENROUTER): the endpoint snapshot the catalog leg
@@ -137,13 +144,32 @@ def create_app(
     sessions.outcomes.judge = orcatalog.judge if orcatalog.enabled else None
     if orcatalog.enabled:
         m.bind_extra(orcatalog.render)
+    # GW-MODEL-TIERS: the committed tier-evidence snapshot rides beside the policy; its age is the
+    # staleness alert's signal (a comparison on a month-old price is a wrong answer — #2718 item 3).
+    m.bind_tier_evidence(lambda: tier_evidence_age(settings.benchmarks_path, clock()))
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when
-    # one is handed in (tests: the FAKE store) — production passes none (⚑ gap), so it ships dark.
+    # one is handed in (tests: the FAKE store; production: __main__'s SqliteStore + NativeRefresh).
     codex = (CodexRail(policy.rails["codex"], clock, codex_backend, settings.upstreams.get("codex", ""))
              if "codex" in policy.rails else None)
     sessions.codex = codex
-    codex_proxy = CodexProxy(sessions, m, codex, client)
+    if codex is not None:
+        # GW-CODEX-HEADROOM §Gauges: an ACCEPTED report renders gateway_subscription_*{rail="codex"};
+        # a restart renders nothing until the next one (the headroom is forgotten with the process).
+        codex.headroom.on_accept = lambda snapshot: m.subscription_report("codex", snapshot.windows)
+    recorder = Recorder(store, settings.codex_capture_task_prefix, settings.codex_capture_max_bytes, clock)
+    if recorder.enabled:
+        purged = store.purge_captures(clock() - settings.codex_capture_retention_days * 86400)
+        log.info("codex capture: ON for tasks %r* (max %d bytes/request, retention %gd, %d old records purged)",
+                 recorder.task_prefix, recorder.max_bytes, settings.codex_capture_retention_days, purged)
+    codex_proxy = CodexProxy(sessions, m, codex, client, recorder)
+    # GW-CODEX-HEADROOM §Poll: the gateway's own usage observation — the only report producer today.
+    # Runs on the lifespan when the rail has a credential backend AND CODEX_USAGE_URL names the endpoint.
+    m.bind_codex_rail(codex is not None)  # the poll counter family exists only for a declared rail
+    codex_poll = UsagePoll(codex, client, settings.codex_usage_url, m, clock) if codex is not None else None
+    if codex is not None and not (codex_poll and codex_poll.enabled):
+        log.warning("codex usage poll dark: %s — the rail answers quota-unknown",
+                    "CODEX_USAGE_URL unset" if not settings.codex_usage_url else "no credential backend")
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -153,16 +179,22 @@ def create_app(
         task = asyncio.create_task(_reprobe_loop(proxy)) if reprobe_every_s else None
         # A session whose pod is gone is reaped (GW-SESSIONS-LIVENESS).
         reaper = asyncio.create_task(_reap_loop(sessions, policy.liveness_check_s)) if policy.liveness_check_s else None
-        # The Go catalog's schedule (GW-CATALOG-GO): one refresh at start, then every go_catalog_refresh_s.
+        # The Go catalog's schedule (GW-CATALOG-GO): a refresh at start unless the stored snapshots are younger than
+        # go_catalog_refresh_s (then at fetched_at + the interval — a pod roll re-reads nothing), then every interval.
         refresher = (asyncio.create_task(catalog.run(), name="go-catalog")
                      if "opencode" in policy.rails and settings.go_catalog_refresh_s > 0 else None)
-        # The OpenRouter catalog's schedule (GW-CATALOG-OR): one refresh at start, then every or_catalog_refresh_s.
+        # The OpenRouter catalog's schedule (GW-CATALOG-OR): the same rule — a roll inside the interval keeps the
+        # persisted refreshed_at, i.e. the canary window (#2775 gap 2).
         or_refresher = (asyncio.create_task(orcatalog.run(), name="openrouter-catalog")
                         if orcatalog.enabled and settings.or_catalog_refresh_s > 0 else None)
+        # The codex usage poll's schedule (GW-CODEX-HEADROOM §Poll): a poll at start (a restart needs a fresh
+        # report — the headroom is forgotten with the process), then every poll_interval_s.
+        poller = (asyncio.create_task(codex_poll.run(), name="codex-usage-poll")
+                  if codex_poll is not None and codex_poll.enabled else None)
         try:
             yield
         finally:
-            for t in (task, reaper, refresher, or_refresher):
+            for t in (task, reaper, refresher, or_refresher, poller):
                 if t is not None:
                     t.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -181,10 +213,12 @@ def create_app(
             Route("/catalog/opencode", catalog_opencode, methods=["GET"]),
             Route("/catalog/openrouter", catalog_openrouter, methods=["GET"]),
             Route("/sessions", post_sessions, methods=["POST"]),
+            Route("/sessions", list_sessions, methods=["GET"]),
             Route("/sessions/{id}", get_session, methods=["GET"]),
             Route("/sessions/{id}", delete_session, methods=["DELETE"]),
             Route("/sessions/{id}/env", post_session_env, methods=["POST"]),
             Route("/sessions/{id}/outcome", post_session_outcome, methods=["POST"]),
+            Route("/sessions/{id}/capture", get_session_capture, methods=["GET"]),
             Route("/anthropic/v1/messages", anthropic_messages, methods=["POST"]),
             # The OpenAI dialect under its contract prefix AND the OpenRouter-shaped `/api/v1`
             # alias: goose computes `$OPENROUTER_HOST/api/v1/…` and opencode's provider baseURL
@@ -207,6 +241,7 @@ def create_app(
     app.state.proxy = proxy
     app.state.codex = codex
     app.state.codex_proxy = codex_proxy
+    app.state.codex_poll = codex_poll
     app.state.catalog = catalog
     app.state.providers = providers
     app.state.orcatalog = orcatalog

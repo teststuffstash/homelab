@@ -18,10 +18,13 @@ The refresh:
 | rankings without dates are a parse failure | rankings-undated | 2 || parse-failed | 2 | — |
 | no benched candidate: implausible, nothing taken | benchmarks-empty | none || implausible | 0 | 0 |
 | a candidate whose endpoints read fails is absent; the refresh still lands | endpoints-503 for glm | none || ok | 1 (M) — 6 unreadable | 8 |
+| an endpoint without an uptime figure does not fail its model's parse | endpoints-null-uptime for glm (its first endpoint's uptime_last_1d null) | none || ok | 2 (M, G) — 5 unreadable; G's row carries uptime_1d null | 15 |
 | every endpoints read failing keeps the last good | endpoints-503 for both | 2 || implausible | 2 | — |
 | no account key: fetch-failed, no MCP call | the ref absent | none || fetch-failed | 0 (0 MCP calls) | — |
 | the MCP calls carry the account key and a client identity | mcp ok | — || — | authorization Bearer <the account key>; user-agent agent-gateway/<v> (openrouter-catalog); initialize then tools/call ×3 | — |
 | a PVC store keeps the snapshot and the cells across a restart | refresh, a new gateway on the same DB, +3600 s | — || — | age_s 3600; 2 models; 15 candidate cells | — |
+| a restart inside the interval refreshes nothing at start | refresh at T0, a new gateway on the same DB, +3600 s | 2 || — (the loop's first refresh waits 18000 s; last_attempt_at null; a not-in-catalog defer's retry_after_s 18000) | 2 | 15 |
+| a restart after the interval refreshes at start | refresh at T0, a new gateway on the same DB, +21600 s | 2 || ok (the loop refreshes at once; fetched_at T0 + 21600 s) | 2 | 15 |
 
 The entry canary (a canary = `POST /sessions` with `canary: {model, provider}`, the policy's canary role prober):
 
@@ -38,6 +41,14 @@ The entry canary (a canary = `POST /sessions` with `canary: {model, provider}`, 
 | a canary names a model the snapshot lacks | refresh | prober, canary {moonshotai/kimi-k3, deepinfra} || defer | — | not-in-catalog | 21600 | — |
 | the canary role is the policy's | refresh | worker, canary {M, deepinfra} || 400 | — | malformed-body | — | — |
 | a canary never fails over | the canary ride answered upstream-500 | — || 500 | the upstream calls: deepinfra only | — | — | — |
+| a 429'd canary is no verdict: the cell backs off | the canary ride answered upstream-429-shared-pool, no consumer outcome | — || 429 | — | — | — | (M, deepinfra) candidate, retry_at T0 + 3600, backoff_s 3600, limit_source upstream_provider_shared_pool; (M, atlas-cloud) untouched; gateway_canary_rides_total{outcome="no-verdict"} 1 |
+| a backed-off cell is not due until its horizon | the same | prober, canary {M, deepinfra} || defer | — | canary-not-due | 3600 | — |
+| a cell back from exclusion backs off the same way | (M, deepinfra) excluded at T0 (a struck canary), +86400 s a canary on it answered upstream-429-shared-pool | prober, canary {M, deepinfra} || defer | — | canary-not-due | 3600 | the row reads candidate, class null, retry_at T0 + 90000, backoff_s 3600 (the view says the same) |
+| at the horizon the cell is due again | the same, +3600 s | prober, canary {M, deepinfra} || dispatch | openrouter / M | — | — | — |
+| a consecutive 429'd canary doubles the horizon; the policy caps it | four 429'd canaries on (M, deepinfra), each ridden at the previous horizon | — || — | — | — | — | backoff_s after each: 3600, 7200, 14400, 14400 (backoff_max_s) |
+| a verdict resets the backoff | two 429'd canaries on (M, deepinfra), then a clean canary ride on it | — || — | — | — | — | eligible; retry_at / backoff_s / limit_source null |
+| a strike on a ride that saw a 429 is not the cell's verdict | the canary ride answered 429, then the consumer reports harness-gave-up | — || — | — | — | — | (M, deepinfra) candidate (not excluded), retry_at T0 + 3600; the task's strike counted |
+| a clean finish after a 429 on the same ride: the cell enters | the canary ride answered 429, the same session then 200, outcome clean | — || — | — | — | — | eligible; admitted_this_refresh 1 |
 
 The budget (policy: max_per_refresh 3, usd_per_day 1.0, cooldown_s 86400):
 
@@ -46,6 +57,9 @@ The budget (policy: max_per_refresh 3, usd_per_day 1.0, cooldown_s 86400):
 | under budget: N entrants are canaried | refresh | 3 canaries on three cells || dispatch ×3 | — | — | 0 |
 | at the cap the N+1th waits | 3 admitted this refresh | a 4th canary || defer | canary-budget | 3600 | 1 |
 | a refresh opens the next N | 3 admitted, then a refresh | a 4th canary || dispatch | — | — | 0 |
+| a 429'd canary consumes no admission | 3 admitted this refresh, the first of them answered upstream-429-shared-pool (no outcome) | a 4th canary, another cell || dispatch | — | — | 0 before it (admitted_this_refresh 2) |
+| a pod roll inside the window keeps the count | 3 admitted, then a new gateway on the same DB +3600 s (no refresh at start) | a 4th canary || defer | canary-budget | 3600 | 1 (admitted_this_refresh 3) |
+| a pod roll after the interval refreshes and opens the next N | 3 admitted, then a new gateway on the same DB +21600 s, its refresh at start | a 4th canary || dispatch | — | — | 0 |
 | the day's spend at the cap defers | one canary ride metered $1.12 (in 5M, out 1M at deepinfra 0.14/0.42) | the next canary || defer | canary-budget | 3600 | 1 |
 | the day rolls over | the same, +86400 s | the next canary || dispatch | — | — | 0 |
 | spend is metered at the cell's endpoint price | the same ride || — | — | `gateway_canary_spend_usd` 1.12 | — |
@@ -59,16 +73,56 @@ The budget (policy: max_per_refresh 3, usd_per_day 1.0, cooldown_s 86400):
 | cells are counted by state | refresh, one clean canary on (M, deepinfra), one struck on (M, atlas-cloud) || gateway_openrouter_cells{state="candidate"} / eligible / excluded | 13 / 1 / 1 |
 | canary verdicts are counted | the same || gateway_canary_rides_total{outcome="eligible"} / {outcome="excluded"} | 1 / 1 |
 | the view's shape is the schema's | refresh, GET /catalog/openrouter || exactly the schema's required keys | — |
+
+The floors' verdict on the view (homelab#2775 — operator ruling 2026-10-21, a bug: the view did not say which
+cells selection could pin): `pinnable` per harness — the policy's `providers.tool_choice` keys, opencode /
+goose / claude — and `floor`, the reason where it fails; `providers.eligible()`, the data plane's own predicate:
+
+| description | cell | arrange || pinnable (opencode / goose / claude) | floor |
+|---|---|---||---|---|
+| the view says which cells selection could pin: a cell without required/function is pinnable for opencode and goose, not claude | M@morph (fp8, uptime 99.5, tool_choice auto only) | refresh || true / true / false | {claude: no tool_choice required,function} |
+| the 2026-10-20 cell: fp4 is pinnable for no harness | M@open-inference (fp4) | refresh || false / false / false | {opencode, goose, claude: quantization fp4 < fp8} |
+| a cell clearing every floor is pinnable everywhere; its service tiers carry the representative's verdict | M@deepinfra (fp8; /flex uptime 84.5 and /priority beside it) | refresh || true / true / true on all three rows | {} |
+| a null uptime clears no floor on any harness | M@inference-net, endpoints-null-uptime@inference-net/fp8 | refresh || false / false / false | {opencode, goose, claude: uptime_1d unknown} |
+| the flag follows the policy, not the data | M@open-inference | a second gateway on the same DB, policy-default with quantization_floor fp4 || true / true / true | {} |
+| selected is always a pinnable cell: the cheaper eligible fp4 cell is passed over | M | clean canaries on (M, open-inference) 0.08 and (M, deepinfra) 0.42 || selected deepinfra; open-inference eligible, pinnable false | — |
+
+The launcher (`scripts/canary-entrants.sh --dry-run < /dev/null`, a fake HTTP server handing it the view):
+
+| description | the view || the walk (`== canary n/N: <cell>`, cheapest first) | the banner's skipped list |
+|---|---||---|---|
+| the launcher walks pinnable candidate cells cheapest-first; the skipped cells and their floor are in the banner | after a refresh: 15 candidate cells, 9 pinnable for opencode || M@deepinfra 0.42, G@near-ai 0.50, G@z-ai 0.50, M@atlas-cloud 0.54, M@morph 0.60, G@morph 0.65, G@inceptron 0.69, M@inference-net 0.715, M@baidu 1.20 — no ride (two GETs of the view, nothing else) | G@atlas-cloud (uptime_1d 77.8199 < 95), G@open-inference (quantization fp4 < fp8), G@reka (quantization unknown), M@alibaba (quantization unknown), M@open-inference (quantization fp4 < fp8), M@parasail (uptime_1d 77.4359 < 95) |
+| the launcher skips a backed-off cell and names it in `== throttled` | the same view after a 429'd canary on M@deepinfra (retry_at T0 + 3600 — T0 is 2027-01-15, ahead of the wall clock) || G@near-ai first — M@deepinfra absent from the walk (8 of 15); the skipped list unchanged | == throttled: M@deepinfra (upstream_provider_shared_pool; candidate again at <T0 + 3600>, backoff 3600 s) |
 """
 
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
-from .conftest import attach_json, bearer, check, given, open_session, quiet, rule, then, then_eq, when, world
+from agent_gateway.store import iso
+
+from .conftest import (
+    POLICY_FIXTURE,
+    attach_json,
+    bearer,
+    check,
+    given,
+    open_session,
+    quiet,
+    rule,
+    then,
+    then_eq,
+    when,
+    world,
+)
 
 pytestmark = rule("GW-CATALOG-OR")
 M = "deepseek/deepseek-v4.1-flash"
@@ -76,7 +130,10 @@ G = "z-ai/glm-5.3-flash"
 RAIL = "openrouter"
 WORLD = "openrouter-catalog"
 PATH = "/openai/v1/chat/completions"
-SCHEMA = json.loads((Path(__file__).resolve().parents[1] / "specs" / "endpoints" / "catalog.schema.json").read_text(encoding="utf-8"))
+ISLAND = Path(__file__).resolve().parents[1]
+SCHEMA = json.loads((ISLAND / "specs" / "endpoints" / "catalog.schema.json").read_text(encoding="utf-8"))
+LAUNCHER = ISLAND / "scripts" / "canary-entrants.sh"
+HARNESSES = ("opencode", "goose", "claude")  # the fixture policy's providers.tool_choice keys, in its order
 T0 = 1_800_000_000
 
 
@@ -89,10 +146,22 @@ async def _refresh(app, label: str = "") -> str:
         return outcome
 
 
+async def _refreshed(app, label: str = "a first good refresh (M and G, 15 candidate cells)") -> None:
+    """The refresh as ARRANGE (one given step, exchanges muted) — for the rows whose call under test is the view."""
+    with given(label):
+        with quiet():
+            assert await app.state.orcatalog.refresh() == "ok"
+
+
 async def _view(gw) -> dict:
     r = await gw.get("/catalog/openrouter")
     assert r.status_code == 200, r.text
     return r.json()
+
+
+def _verdicts(v: dict, model: str, slug: str) -> dict[str, dict]:
+    """`{tag: {pinnable, floor, state}}` of every view row of (model, slug) — a provider's service tiers are one cell."""
+    return {e["tag"]: {"pinnable": e["pinnable"], "floor": e["floor"], "state": e["state"]} for e in v["models"][model]["endpoints"] if e["slug"] == slug}
 
 
 def _cells(v: dict) -> dict[str, int]:
@@ -195,6 +264,19 @@ async def test_unreadable_candidate_absent(gw, app, upstreams):
     then_eq("models · unreadable · candidate cells", (sorted(v["models"]), v["endpoint_failures"], _cells(v)["candidate"]), ([M], 6, 8))
 
 
+async def test_null_uptime_kept(gw, app, upstreams):
+    """row: an endpoint without an uptime figure does not fail its model's parse"""
+    world(note=f"{WORLD}; endpoints-null-uptime for {G}")
+    upstreams[RAIL].endpoints_behaviour[G] = "endpoints-null-uptime"
+    outcome = await _refresh(app)
+    then_eq("outcome", outcome, "ok")
+    v = await _view(gw)
+    first = v["models"][G]["endpoints"][0]
+    attach_json(f"{G}'s first endpoint as the view shows it", first)
+    then_eq("models · unreadable · candidate cells", (sorted(v["models"]), v["endpoint_failures"], _cells(v)["candidate"]), ([M, G], 5, 15))
+    then_eq(f"{G}'s first endpoint's uptime_1d", first["uptime_1d"], None)
+
+
 async def test_no_account_key(gw, app, mcp, secrets):
     """row: no account key: fetch-failed, no MCP call"""
     world(note=f"{WORLD}; the account-key Secret absent")
@@ -238,6 +320,60 @@ async def test_pvc_keeps_snapshot(gw, app, clock, settings, policy, secrets, mcp
             v = (await c.get("/catalog/openrouter")).json()
     await client.aclose()
     then_eq("age_s · models · candidate cells", (v["age_s"], len(v["models"]), _cells(v)["candidate"]), (3600.0, 2, 15))
+
+
+class _SecondGateway:
+    """A new gateway on the same DB (a pod roll): `startup_delay` is the loop's first decision —
+    `run()` is not started (ASGI transports run no lifespan), the test calls the helper it wraps."""
+
+    def __init__(self, settings, policy, secrets, mcp_transport, reviews, pods, clock):
+        import httpx
+
+        from agent_gateway.app import create_app
+        from agent_gateway.store import Store
+
+        from .conftest import ObservedAsyncClient
+
+        self.client = httpx.AsyncClient(transport=mcp_transport)
+        self.app = create_app(settings, policy=policy, source=secrets, store=Store(settings.db_path), client=self.client, clock=clock,
+                              reviewer=reviews, pods=pods)
+        self.gw = ObservedAsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://gw2")
+        self.delay = self.app.state.orcatalog.startup_delay(clock())
+        attach_json("the second gateway's startup_delay", {"startup_delay_s": self.delay, "served_from": iso(self.app.state.orcatalog.served_from)})
+
+    async def close(self) -> None:
+        await self.gw.aclose()
+        await self.client.aclose()
+
+
+async def test_restart_inside_interval(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods):
+    """row: a restart inside the interval refreshes nothing at start"""
+    world(note=f"{WORLD}; a second gateway on the same DB, refresh_s 21600")
+    await _refresh(app)
+    clock.advance(3600)
+    with given("a new gateway built on the same DB path, +3600 s"):
+        second = _SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+    r = await _canary(second.gw, M, "fireworks", " on the second gateway (a cell the snapshot lacks)")
+    v = await _view(second.gw)
+    await second.close()
+    then_eq("the loop's first refresh waits (startup_delay)", second.delay, 18000.0)
+    then_eq("last_attempt_at · models · candidate cells", (v["last_attempt_at"], len(v["models"]), _cells(v)["candidate"]), (None, 2, 15))
+    _verdict(r.json(), {"decision": "defer", "reason": "not-in-catalog", "retry_after_s": 18000})
+
+
+async def test_restart_after_interval(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods):
+    """row: a restart after the interval refreshes at start"""
+    world(note=f"{WORLD}; a second gateway on the same DB, refresh_s 21600")
+    await _refresh(app)
+    clock.advance(21600)
+    with given("a new gateway built on the same DB path, +21600 s"):
+        second = _SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+    then_eq("the loop refreshes at once (startup_delay)", second.delay, 0.0)
+    outcome = await _refresh(second.app, " on the second gateway, at start")
+    v = await _view(second.gw)
+    await second.close()
+    then_eq("outcome · fetched_at · models · candidate cells", (outcome, v["fetched_at"], len(v["models"]), _cells(v)["candidate"]),
+            ("ok", iso(T0 + 21600), 2, 15))
 
 
 # -- the entry canary --------------------------------------------------------------------------------
@@ -375,6 +511,136 @@ async def test_canary_never_fails_over(gw, app, upstreams):
     then_eq("the upstream calls (pins)", [((c["body"] or {}).get("provider") or {}).get("order", [None])[0] for c in upstreams[RAIL].calls if c["path"] == "/v1/chat/completions"], ["deepinfra"])
 
 
+THROTTLED = "upstream-429-shared-pool"
+
+
+def _horizon(store, provider: str = "deepinfra") -> tuple[str, float | None, float | None, str | None]:
+    row = store.cell_get(M, provider)
+    return (row["state"], row["retry_at"], row["backoff_s"], row["limit_source"])
+
+
+async def test_canary_429_no_verdict(gw, app, store, upstreams):
+    """row: a 429'd canary is no verdict: the cell backs off"""
+    world(upstream=THROTTLED, note=f"{WORLD}; deepinfra answers OpenRouter's shared-pool 429 to the canary")
+    await _refresh(app)
+    with given("a canary ride on (M, deepinfra) answered upstream-429-shared-pool, no consumer outcome"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    then_eq("(M, deepinfra): (state, retry_at, backoff_s, limit_source)", _horizon(store),
+            ("candidate", T0 + 3600, 3600, "upstream_provider_shared_pool"))
+    then_eq("(M, atlas-cloud): (state, retry_at, backoff_s, limit_source)", _horizon(store, "atlas-cloud"), ("candidate", None, None, None))
+    then_eq('gateway_canary_rides_total{outcome="no-verdict"}', await _series(gw, 'gateway_canary_rides_total{outcome="no-verdict"}'), 1)
+
+
+async def test_backed_off_cell_not_due(gw, app, store, upstreams):
+    """row: a backed-off cell is not due until its horizon"""
+    world(upstream=THROTTLED, note=WORLD)
+    await _refresh(app)
+    with given("(M, deepinfra) backed off by a 429'd canary at T0 (horizon T0 + 3600)"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    r = await _canary(gw, M, "deepinfra")
+    _verdict(r.json(), {"decision": "defer", "reason": "canary-not-due", "retry_after_s": 3600})
+
+
+async def test_back_from_exclusion_backs_off(gw, app, store, upstreams, clock):
+    """row: a cell back from exclusion backs off the same way"""
+    world(upstream=THROTTLED, note=f"{WORLD}; a struck canary at T0, its cooldown passes, then deepinfra 429s the next canary")
+    await _refresh(app)
+    with given("(M, deepinfra) excluded at T0 by a struck canary; +86400 s (the cooldown) a canary on it answered upstream-429-shared-pool"):
+        await _canary_ride(gw, app, upstreams, behaviour="upstream-500", outcome=None)
+        clock.advance(86400)
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    r = await _canary(gw, M, "deepinfra", " (+86400 s)")
+    _verdict(r.json(), {"decision": "defer", "reason": "canary-not-due", "retry_after_s": 3600})
+    row = store.cell_get(M, "deepinfra")
+    then_eq("the row: (state, class, cooldown_until, retry_at, backoff_s)", (row["state"], row["class"], row["cooldown_until"], row["retry_at"], row["backoff_s"]),
+            ("candidate", None, None, T0 + 90000, 3600))
+    v = _verdicts(await _view(gw), M, "deepinfra")["deepinfra/fp8"]
+    e = next(e for e in (await _view(gw))["models"][M]["endpoints"] if e["tag"] == "deepinfra/fp8")
+    then_eq("the view's row: (state, retry_at, backoff_s)", (v["state"], e["retry_at"], e["backoff_s"]), ("candidate", iso(T0 + 90000), 3600))
+
+
+async def test_backed_off_cell_due_at_horizon(gw, app, store, upstreams, clock):
+    """row: at the horizon the cell is due again"""
+    world(upstream=THROTTLED, note=f"{WORLD}; the horizon (backoff_s 3600) passes")
+    await _refresh(app)
+    with given("(M, deepinfra) backed off by a 429'd canary at T0"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    clock.advance(3600)
+    r = await _canary(gw, M, "deepinfra", " (+3600 s)")
+    _verdict(r.json(), {"decision": "dispatch", "rail": RAIL, "model": M})
+
+
+async def test_backoff_doubles_to_the_cap(gw, app, store, upstreams, clock):
+    """row: a consecutive 429'd canary doubles the horizon; the policy caps it"""
+    world(upstream=THROTTLED, note=f"{WORLD}; backoff_s 3600, backoff_max_s 14400 (the world's cap)")
+    await _refresh(app)
+    seen = []
+    with given("four 429'd canaries on (M, deepinfra), each ridden at the previous horizon"):
+        for _ in range(4):
+            await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            _state, retry_at, backoff, _src = _horizon(store)
+            seen.append((backoff, retry_at - clock.t))
+            clock.advance(backoff)
+    then_eq("(backoff_s, retry_at − the ride's time) after each", seen, [(3600, 3600), (7200, 7200), (14400, 14400), (14400, 14400)])
+    then_eq("the policy's cap", app.state.policy.rails[RAIL].canary.backoff_max_s, 14400)
+
+
+async def test_verdict_resets_backoff(gw, app, store, upstreams, clock):
+    """row: a verdict resets the backoff"""
+    world(upstream=THROTTLED, note=f"{WORLD}; two 429'd canaries, then deepinfra serves")
+    await _refresh(app)
+    with given("two 429'd canaries on (M, deepinfra) (backoff 7200), then a clean canary ride on it at its horizon"):
+        for _ in range(2):
+            await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            clock.advance(_horizon(store)[2])
+        before = _horizon(store)
+        await _canary_ride(gw, app, upstreams, behaviour="upstream-ok", outcome="clean")
+    then_eq("before the clean ride: (state, backoff_s)", (before[0], before[2]), ("candidate", 7200))
+    then_eq("(M, deepinfra): (state, retry_at, backoff_s, limit_source)", _horizon(store), ("eligible", None, None, None))
+
+
+async def test_strike_after_429_not_the_verdict(gw, app, store, upstreams):
+    """row: a strike on a ride that saw a 429 is not the cell's verdict"""
+    world(upstream=THROTTLED, note=f"{WORLD}; the canary's harness gives up after the 429")
+    await _refresh(app)
+    with given("a canary ride on (M, deepinfra) answered 429, then the consumer reports harness-gave-up"):
+        with quiet():
+            doc = await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            ro = await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "harness-gave-up"})
+        attach_json("the outcome answer", ro.json())
+    then_eq("(M, deepinfra): (state, retry_at, backoff_s, limit_source)", _horizon(store), ("candidate", T0 + 3600, 3600, "upstream_provider_shared_pool"))
+    then_eq("the task's strike (the outcome answer)", ro.json().get("strike"), {"class": "harness-gave-up", "scope": "cell"})
+    then_eq('gateway_canary_rides_total{outcome="excluded"}', await _series(gw, 'gateway_canary_rides_total{outcome="excluded"}'), 0)
+
+
+async def test_clean_after_429_enters(gw, app, store, upstreams):
+    """row: a clean finish after a 429 on the same ride: the cell enters"""
+    world(upstream=THROTTLED, note=f"{WORLD}; deepinfra 429s once, then serves the same session")
+    await _refresh(app)
+    with given("a canary ride on (M, deepinfra) answered 429; the same session then 200; outcome clean"):
+        with quiet():
+            doc = await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            rr = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))
+            assert rr.status_code == 200, rr.text
+            await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "clean"})
+    then_eq("(M, deepinfra): (state, retry_at, backoff_s, limit_source)", _horizon(store), ("eligible", None, None, None))
+    then_eq("canary.admitted_this_refresh (a verdict landed: the admission counts)", (await _view(gw))["canary"]["admitted_this_refresh"], 1)
+
+
+async def test_no_verdict_consumes_no_admission(gw, app, store, upstreams):
+    """row: a 429'd canary consumes no admission"""
+    world(upstream=THROTTLED, note=f"{WORLD}; max_per_refresh 3; the first canary 429s")
+    await _refresh(app)
+    with given("3 canaries admitted this refresh: (M, deepinfra) answered upstream-429-shared-pool (no outcome), then (M, atlas-cloud) and (M, morph) clean"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+        await _canary_ride(gw, app, upstreams, "atlas-cloud")
+        await _canary_ride(gw, app, upstreams, "morph")
+    then_eq("before the 4th: (admitted_this_refresh, gateway_canary_budget_exhausted)",
+            ((await _view(gw))["canary"]["admitted_this_refresh"], await _series(gw, "gateway_canary_budget_exhausted")), (2, 0))
+    r = await _canary(gw, M, "inference-net", " (a 4th canary, another cell)")
+    _verdict(r.json(), {"decision": "dispatch", "rail": RAIL, "model": M})
+
+
 # -- the budget ----------------------------------------------------------------------------------------
 async def test_budget_under(gw, app, store):
     """row: under budget: N entrants are canaried"""
@@ -414,6 +680,45 @@ async def test_budget_refresh_resets(gw, app, store, clock):
     r = await _canary(gw, M, "inference-net", " (the 4th, after the refresh)")
     _verdict(r.json(), {"decision": "dispatch", "rail": RAIL, "model": M})
     then_eq("gateway_canary_budget_exhausted", await _series(gw, "gateway_canary_budget_exhausted"), 0)
+
+
+async def _three_admitted(gw, app) -> None:
+    with given("3 canaries admitted this refresh"):
+        with quiet():
+            for p in ("deepinfra", "atlas-cloud", "morph"):
+                assert (await gw.post("/sessions", json={"stack": "platform", "role": "prober", "task": f"c-{p}", "canary": {"model": M, "provider": p}})).json()["decision"] == "dispatch"
+
+
+async def test_budget_survives_roll(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods):
+    """row: a pod roll inside the window keeps the count"""
+    world(note=f"{WORLD}; a second gateway on the same DB, refresh_s 21600")
+    await _refresh(app)
+    await _three_admitted(gw, app)
+    clock.advance(3600)
+    with given("a new gateway built on the same DB path, +3600 s — no refresh at start"):
+        second = _SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+    r = await _canary(second.gw, M, "inference-net", " (the 4th, on the second gateway)")
+    v = await _view(second.gw)
+    exhausted = await _series(second.gw, "gateway_canary_budget_exhausted")
+    await second.close()
+    _verdict(r.json(), {"decision": "defer", "reason": "canary-budget", "retry_after_s": 3600})
+    then_eq("startup_delay · admitted_this_refresh · gateway_canary_budget_exhausted", (second.delay, v["canary"]["admitted_this_refresh"], exhausted), (18000.0, 3, 1))
+
+
+async def test_budget_roll_after_interval(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods):
+    """row: a pod roll after the interval refreshes and opens the next N"""
+    world(note=f"{WORLD}; a second gateway on the same DB, refresh_s 21600")
+    await _refresh(app)
+    await _three_admitted(gw, app)
+    clock.advance(21600)
+    with given("a new gateway built on the same DB path, +21600 s — its refresh at start"):
+        second = _SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+        await _refresh(second.app, " on the second gateway, at start")
+    r = await _canary(second.gw, M, "inference-net", " (the 4th, on the second gateway)")
+    exhausted = await _series(second.gw, "gateway_canary_budget_exhausted")
+    await second.close()
+    _verdict(r.json(), {"decision": "dispatch", "rail": RAIL, "model": M})
+    then_eq("startup_delay · gateway_canary_budget_exhausted", (second.delay, exhausted), (0.0, 0))
 
 
 async def _spend_ride(gw, app, upstreams) -> dict:
@@ -520,6 +825,186 @@ async def test_canary_rides_counted(gw, app, upstreams):
         await _canary_ride(gw, app, upstreams, "atlas-cloud", behaviour="upstream-500", outcome=None)
     then_eq("gateway_canary_rides_total eligible / excluded",
             (await _series(gw, 'gateway_canary_rides_total{outcome="eligible"}'), await _series(gw, 'gateway_canary_rides_total{outcome="excluded"}')), (1, 1))
+
+
+# -- the floors' verdict on the view (homelab#2775) ------------------------------------------------
+PINNABLE_ROWS = [
+    ("the view says which cells selection could pin: a cell without required/function is pinnable for opencode and goose, not claude",
+     "morph", {"opencode": True, "goose": True, "claude": False}, {"claude": "no tool_choice required,function"}),
+    ("the 2026-10-20 cell: fp4 is pinnable for no harness",
+     "open-inference", {"opencode": False, "goose": False, "claude": False}, {h: "quantization fp4 < fp8" for h in HARNESSES}),
+    ("a cell clearing every floor is pinnable everywhere; its service tiers carry the representative's verdict",
+     "deepinfra", {"opencode": True, "goose": True, "claude": True}, {}),
+]
+
+
+@pytest.mark.parametrize(("slug", "pinnable", "floor"), [r[1:] for r in PINNABLE_ROWS], ids=[r[0] for r in PINNABLE_ROWS])
+async def test_pinnable_per_harness(gw, app, slug, pinnable, floor):
+    world(note=f"{WORLD}; the floors of policy-default (fp8, uptime 95, tool_choice opencode/goose auto, claude auto+required+function)")
+    await _refreshed(app, f"a first good refresh; the rows of M@{slug!r} are read for pinnable = {pinnable}, floor = {floor}")
+    with when("GET /catalog/openrouter"):
+        v = await _view(gw)
+    rows = _verdicts(v, M, slug)
+    attach_json(f"the view's rows of M@{slug}", rows)
+    then_eq(f"every row of M@{slug}: (pinnable, floor)", {t: (r["pinnable"], r["floor"]) for t, r in rows.items()},
+            {t: (pinnable, floor) for t in rows})
+    then_eq("rows of the provider (its service tiers are one cell)", len(rows), 3 if slug == "deepinfra" else 1)
+
+
+async def test_pinnable_null_uptime(gw, app, upstreams):
+    """row: a null uptime clears no floor on any harness"""
+    world(note=f"{WORLD}; endpoints-null-uptime@inference-net/fp8 for M (the one M endpoint every harness could otherwise pin)")
+    upstreams[RAIL].endpoints_behaviour[M] = "endpoints-null-uptime@inference-net/fp8"
+    await _refreshed(app)
+    with when("GET /catalog/openrouter"):
+        v = await _view(gw)
+    row = _verdicts(v, M, "inference-net")["inference-net/fp8"]
+    attach_json("M@inference-net as the view shows it", next(e for e in v["models"][M]["endpoints"] if e["slug"] == "inference-net"))
+    then_eq("uptime_1d · pinnable · floor", (next(e["uptime_1d"] for e in v["models"][M]["endpoints"] if e["slug"] == "inference-net"), row["pinnable"], row["floor"]),
+            (None, {h: False for h in HARNESSES}, {h: "uptime_1d unknown" for h in HARNESSES}))
+
+
+async def test_pinnable_follows_policy(gw, app, clock, settings, secrets, mcp_transport, reviews, pods, tmp_path):
+    """row: the flag follows the policy, not the data"""
+    world(note=f"{WORLD}; a second gateway on the same DB, policy-default with providers.quantization_floor fp4")
+    await _refreshed(app)
+    import httpx
+
+    from agent_gateway.app import create_app
+    from agent_gateway.config import Policy
+    from agent_gateway.store import Store
+
+    from .conftest import ObservedAsyncClient
+
+    with given("a second gateway on the same DB and the same snapshot, its policy the fixture with quantization_floor = fp4 (the data untouched)"):
+        doc = json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
+        doc["rails"][RAIL]["providers"]["quantization_floor"] = "fp4"
+        path = tmp_path / "policy-floor-fp4.json"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        client = httpx.AsyncClient(transport=mcp_transport)
+        second = create_app(settings, policy=Policy.load(path), source=secrets, store=Store(settings.db_path), client=client, clock=clock,
+                            reviewer=reviews, pods=pods)
+    async with ObservedAsyncClient(transport=httpx.ASGITransport(app=second), base_url="http://gw2") as c:
+        with when("GET /catalog/openrouter on both gateways"):
+            low = (await c.get("/catalog/openrouter")).json()
+            with quiet():
+                default = await _view(gw)
+    await client.aclose()
+    then_eq("M@open-inference (fp4) under the fp8 floor: (pinnable, floor)", tuple(_verdicts(default, M, "open-inference")["open-inference/fp4"][k] for k in ("pinnable", "floor")),
+            ({h: False for h in HARNESSES}, {h: "quantization fp4 < fp8" for h in HARNESSES}))
+    then_eq("the same row under the fp4 floor", tuple(_verdicts(low, M, "open-inference")["open-inference/fp4"][k] for k in ("pinnable", "floor")),
+            ({h: True for h in HARNESSES}, {}))
+
+
+async def test_selected_is_pinnable(gw, app, upstreams):
+    """row: selected is always a pinnable cell: the cheaper eligible fp4 cell is passed over"""
+    world(upstream="upstream-ok", note=f"{WORLD}; clean canaries on (M, open-inference) and (M, deepinfra)")
+    await _refreshed(app)
+    with given("clean canary rides on (M, open-inference) — out $0.08/M, fp4 — and (M, deepinfra) — out $0.42/M, fp8"):
+        await _canary_ride(gw, app, upstreams, "open-inference")
+        await _canary_ride(gw, app, upstreams, "deepinfra")
+    with when("GET /catalog/openrouter"):
+        v = await _view(gw)
+    oi, di = _verdicts(v, M, "open-inference")["open-inference/fp4"], _verdicts(v, M, "deepinfra")["deepinfra/fp8"]
+    then_eq("(state, pinnable[opencode]) of M@open-inference · M@deepinfra", ((oi["state"], oi["pinnable"]["opencode"]), (di["state"], di["pinnable"]["opencode"])),
+            (("eligible", False), ("eligible", True)))
+    then_eq("M's selected · order", (v["models"][M]["selected"], v["models"][M]["order"]), ("deepinfra", ["deepinfra"]))
+    with then("every model's selected provider is an eligible row that is pinnable for the canary harness (opencode)"):
+        picked = {mid: next((e["state"], e["pinnable"]["opencode"]) for e in m["endpoints"] if e["slug"] == m["selected"])
+                  for mid, m in v["models"].items() if m["selected"] is not None}
+        check("(state, pinnable[opencode]) per selected", picked, {mid: ("eligible", True) for mid in picked})
+
+
+async def test_launcher_walk(gw, app):
+    """row: the launcher walks pinnable candidate cells cheapest-first; the skipped cells and their floor are in the banner"""
+    world(note=f"{WORLD}; a fake HTTP server hands scripts/canary-entrants.sh the view; stdin /dev/null; --dry-run")
+    await _refreshed(app)
+    body = json.dumps(await _view(gw)).encode()
+    seen: list[str] = []
+
+    class View(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(self.path)
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_):
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), View)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        with when("bash scripts/canary-entrants.sh --dry-run < /dev/null, AGENT_GATEWAY_URL = the fake serving the view"):
+            r = subprocess.run(["bash", str(LAUNCHER), "--dry-run"], env={**os.environ, "AGENT_GATEWAY_URL": f"http://127.0.0.1:{srv.server_port}"},
+                               stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120, check=False)
+            attach_json("the launcher's output", {"exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr})
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    then_eq("exit · the fake's requests (the view, then `== after:`) · ride attempts", (r.returncode, seen, r.stdout.count("ride did not dispatch")),
+            (0, ["/catalog/openrouter", "/catalog/openrouter"], 0))
+    then_eq("the walk, in order", re.findall(r"^== canary \d+/\d+: (\S+)$", r.stdout, re.M),
+            [f"{M}@deepinfra", f"{G}@near-ai", f"{G}@z-ai", f"{M}@atlas-cloud", f"{M}@morph", f"{G}@morph", f"{G}@inceptron", f"{M}@inference-net", f"{M}@baidu"])
+    then_eq("the banner's skipped cells, each with its floor", _banner_section(r.stdout, "== skipped"),
+            [f"{M}@alibaba (quantization unknown)", f"{M}@open-inference (quantization fp4 < fp8)", f"{M}@parasail (uptime_1d 77.4359 < 95)",
+             f"{G}@atlas-cloud (uptime_1d 77.8199 < 95)", f"{G}@open-inference (quantization fp4 < fp8)", f"{G}@reka (quantization unknown)"])
+
+
+async def test_launcher_skips_throttled(gw, app, upstreams):
+    """row: the launcher skips a backed-off cell and names it in `== throttled`"""
+    world(upstream=THROTTLED, note=f"{WORLD}; a 429'd canary on M@deepinfra; the fake HTTP server hands the launcher the view; --dry-run")
+    await _refreshed(app)
+    with given("a canary ride on (M, deepinfra) answered upstream-429-shared-pool (retry_at T0 + 3600, ahead of the wall clock)"):
+        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+    view = await _view(gw)
+    r = _run_launcher(view, "bash scripts/canary-entrants.sh --dry-run < /dev/null, AGENT_GATEWAY_URL = the fake serving the view")
+    then_eq("exit · ride attempts", (r.returncode, r.stdout.count("ride did not dispatch")), (0, 0))
+    then_eq("the walk, in order (M@deepinfra absent)", re.findall(r"^== canary \d+/\d+: (\S+)$", r.stdout, re.M),
+            [f"{G}@near-ai", f"{G}@z-ai", f"{M}@atlas-cloud", f"{M}@morph", f"{G}@morph", f"{G}@inceptron", f"{M}@inference-net", f"{M}@baidu"])
+    then_eq("the banner's throttled cells", _banner_section(r.stdout, "== throttled"),
+            [f"{M}@deepinfra (upstream_provider_shared_pool; candidate again at {iso(T0 + 3600)}, backoff 3600 s)"])
+    then_eq("the banner's skipped cells, unchanged", len(_banner_section(r.stdout, "== skipped")), 6)
+
+
+def _run_launcher(view: dict, label: str) -> subprocess.CompletedProcess:
+    body = json.dumps(view).encode()
+
+    class View(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_):
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), View)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        with when(label):
+            r = subprocess.run(["bash", str(LAUNCHER), "--dry-run"], env={**os.environ, "AGENT_GATEWAY_URL": f"http://127.0.0.1:{srv.server_port}"},
+                               stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120, check=False)
+            attach_json("the launcher's output", {"exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr})
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    return r
+
+
+def _banner_section(out: str, head: str) -> list[str]:
+    lines = out.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(head))
+    body = []
+    for line in lines[start + 1:]:
+        if line.startswith("=="):
+            break
+        body.append(line.strip())
+    return body
 
 
 async def test_view_keys_are_the_schema(gw, app):

@@ -3,193 +3,713 @@
   "$id": "https://teststuff.net/agent-gateway/specs/endpoints/metrics.schema.json",
   "$comment": "MACHINE half of the /metrics contract; the HUMAN half is metrics.md. This is not a JSON API: the document describes the metric families the service registers (it imports this file to do so) and the bounded value set of every label. A label or value absent here cannot be emitted. No error codes.",
   "x-endpoint": "metrics",
-  "x-use-cases": ["UC-1"],
+  "x-use-cases": [
+    "UC-1"
+  ],
   "$defs": {
-    "rail": { "enum": ["anthropic", "opencode", "openrouter", "codex", "none"] },
-    "role": { "enum": ["worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher"] },
-    "stack": { "type": "string", "description": "a key of policy.stacks" },
-    "decision": { "enum": ["dispatch", "defer"] },
-    "dialect": { "enum": ["anthropic", "openai", "responses"] },
-    "status": { "type": "string", "pattern": "^[1-5][0-9][0-9]$" },
-    "class": { "enum": ["in", "cache_read", "cache_write", "out"] },
-    "window": { "enum": ["5h", "7d"] },
-    "outcome": { "enum": ["resolved", "definitive", "transient"] },
-    "route": { "enum": ["admit", "lookup", "release", "outcome"] },
-    "reason": { "enum": ["absent", "invalid", "review-transient"] },
-    "incomplete_reason": { "enum": ["no-terminal", "timeout", "transport-error", "client-closed"] },
-    "strike_class": { "enum": ["harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown", "turn-cap", "tool-loop", "no-verdict", "wrong-verdict", "invented-findings", "repetition", "harness-gave-up", "stream-incomplete", "refused"], "description": "the strike classes of sessions.schema.json outcome.class (clean writes no strike)" },
-    "strike_source": { "enum": ["outcome", "gateway"] },
-    "catalog_source": { "enum": ["config", "docs"] },
-    "catalog_outcome": { "enum": ["ok", "fetch-failed", "parse-failed", "implausible"] },
-    "openrouter_model": { "type": "string", "description": "a policy openrouter model id (rails.openrouter.models, every tier); any other value renders `other`" },
-    "provider": { "type": "string", "description": "a slug of the endpoint snapshot (openai-chat.schema.json $defs.provider_slug) or `unattributed`; any other value renders `other`" },
-    "provider_outcome": { "enum": ["ok", "incomplete", "5xx", "429", "unreachable", "timeout", "content-type", "provider-error", "refused", "auth", "edge"] },
-    "cell_state": { "enum": ["candidate", "eligible", "excluded"] },
-    "canary_outcome": { "enum": ["eligible", "excluded"] },
-    "canary_admission": { "enum": ["dispatch", "budget", "not-due", "not-in-catalog"] }
+    "rail": {
+      "enum": [
+        "anthropic",
+        "opencode",
+        "openrouter",
+        "codex",
+        "none"
+      ]
+    },
+    "role": {
+      "enum": [
+        "worker",
+        "reviewer",
+        "coordinator",
+        "responder",
+        "retro",
+        "prober",
+        "researcher"
+      ]
+    },
+    "stack": {
+      "type": "string",
+      "description": "a key of policy.stacks"
+    },
+    "decision": {
+      "enum": [
+        "dispatch",
+        "defer"
+      ]
+    },
+    "dialect": {
+      "enum": [
+        "anthropic",
+        "openai",
+        "responses"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "pattern": "^[1-5][0-9][0-9]$"
+    },
+    "class": {
+      "enum": [
+        "in",
+        "cache_read",
+        "cache_write",
+        "out"
+      ]
+    },
+    "window": {
+      "enum": [
+        "5h",
+        "7d",
+        "other"
+      ],
+      "description": "the subscription windows; `other` = a codex headroom profile minute outside the vocabulary (GW-CODEX-HEADROOM §Gauges)"
+    },
+    "outcome": {
+      "enum": [
+        "resolved",
+        "definitive",
+        "transient"
+      ]
+    },
+    "route": {
+      "enum": [
+        "admit",
+        "lookup",
+        "release",
+        "outcome",
+        "list"
+      ]
+    },
+    "reason": {
+      "enum": [
+        "absent",
+        "invalid",
+        "review-transient"
+      ]
+    },
+    "incomplete_reason": {
+      "enum": [
+        "no-terminal",
+        "timeout",
+        "transport-error",
+        "client-closed"
+      ]
+    },
+    "strike_class": {
+      "enum": [
+        "harness-death",
+        "auth-storm",
+        "timeout",
+        "provider-5xx",
+        "no-pr",
+        "unknown",
+        "turn-cap",
+        "tool-loop",
+        "no-verdict",
+        "wrong-verdict",
+        "invented-findings",
+        "repetition",
+        "harness-gave-up",
+        "stream-incomplete",
+        "refused"
+      ],
+      "description": "the strike classes of sessions.schema.json outcome.class (clean writes no strike)"
+    },
+    "strike_source": {
+      "enum": [
+        "outcome",
+        "gateway"
+      ]
+    },
+    "catalog_source": {
+      "enum": [
+        "config",
+        "docs"
+      ]
+    },
+    "catalog_outcome": {
+      "enum": [
+        "ok",
+        "fetch-failed",
+        "parse-failed",
+        "implausible"
+      ]
+    },
+    "openrouter_model": {
+      "type": "string",
+      "description": "a policy openrouter model id (rails.openrouter.models, every tier); any other value renders `other`"
+    },
+    "provider": {
+      "type": "string",
+      "description": "a slug of the endpoint snapshot (openai-chat.schema.json $defs.provider_slug) or `unattributed`; any other value renders `other`"
+    },
+    "provider_outcome": {
+      "enum": [
+        "ok",
+        "incomplete",
+        "5xx",
+        "429",
+        "unreachable",
+        "timeout",
+        "content-type",
+        "provider-error",
+        "refused",
+        "auth",
+        "edge"
+      ]
+    },
+    "cell_state": {
+      "enum": [
+        "candidate",
+        "eligible",
+        "excluded"
+      ]
+    },
+    "canary_outcome": {
+      "enum": [
+        "eligible",
+        "excluded",
+        "no-verdict"
+      ]
+    },
+    "canary_admission": {
+      "enum": [
+        "dispatch",
+        "budget",
+        "not-due",
+        "not-in-catalog"
+      ]
+    },
+    "rail_choice_reason": {
+      "enum": [
+        "price",
+        "clean-rate",
+        "headroom",
+        "not-in-catalog",
+        "no-eligible-endpoint"
+      ],
+      "description": "why one rail's twin cell went first (sessions.schema.json $defs.rail_choice.reason)"
+    }
   },
   "families": {
     "gateway_sessions_active": {
       "type": "gauge",
-      "labels": { "rail": { "$ref": "#/$defs/rail" } },
-      "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT"]
+      "labels": {
+        "rail": {
+          "$ref": "#/$defs/rail"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-SESSIONS-ADMIT"
+      ]
     },
     "gateway_sessions_total": {
       "type": "counter",
       "labels": {
-        "rail": { "$ref": "#/$defs/rail" },
-        "role": { "$ref": "#/$defs/role" },
-        "stack": { "$ref": "#/$defs/stack" },
-        "decision": { "$ref": "#/$defs/decision" }
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "role": {
+          "$ref": "#/$defs/role"
+        },
+        "stack": {
+          "$ref": "#/$defs/stack"
+        },
+        "decision": {
+          "$ref": "#/$defs/decision"
+        }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": [
+        "GW-METRICS"
+      ]
     },
     "gateway_requests_total": {
       "type": "counter",
       "labels": {
-        "rail": { "$ref": "#/$defs/rail" },
-        "dialect": { "$ref": "#/$defs/dialect" },
-        "status": { "$ref": "#/$defs/status" }
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "dialect": {
+          "$ref": "#/$defs/dialect"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": [
+        "GW-METRICS"
+      ]
     },
     "gateway_upstream_seconds": {
       "type": "histogram",
-      "labels": { "rail": { "$ref": "#/$defs/rail" } },
-      "x-requirements": ["GW-METRICS"]
+      "labels": {
+        "rail": {
+          "$ref": "#/$defs/rail"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS"
+      ]
     },
     "gateway_tokens_total": {
       "type": "counter",
       "labels": {
-        "rail": { "$ref": "#/$defs/rail" },
-        "class": { "$ref": "#/$defs/class" }
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "class": {
+          "$ref": "#/$defs/class"
+        }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": [
+        "GW-METRICS"
+      ]
     },
     "gateway_subscription_utilization": {
       "type": "gauge",
       "labels": {
-        "rail": { "$ref": "#/$defs/rail" },
-        "window": { "$ref": "#/$defs/window" }
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "window": {
+          "$ref": "#/$defs/window"
+        }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CODEX-HEADROOM"
+      ]
     },
     "gateway_subscription_reset_seconds": {
       "type": "gauge",
       "labels": {
-        "rail": { "$ref": "#/$defs/rail" },
-        "window": { "$ref": "#/$defs/window" }
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "window": {
+          "$ref": "#/$defs/window"
+        }
       },
-      "x-requirements": ["GW-METRICS"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CODEX-HEADROOM"
+      ]
     },
     "gateway_credential_resolve_total": {
       "type": "counter",
       "labels": {
-        "rail": { "$ref": "#/$defs/rail" },
-        "outcome": { "$ref": "#/$defs/outcome" }
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        }
       },
-      "x-requirements": ["GW-METRICS", "GW-CRED-RESOLVE"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CRED-RESOLVE"
+      ]
     },
     "gateway_upstream_auth_rejected_total": {
       "type": "counter",
-      "labels": { "rail": { "$ref": "#/$defs/rail" } },
-      "x-requirements": ["GW-METRICS", "GW-CRED-BOUNDARY"]
+      "labels": {
+        "rail": {
+          "$ref": "#/$defs/rail"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CRED-BOUNDARY"
+      ]
     },
     "gateway_control_plane_unauthenticated_total": {
       "type": "counter",
       "labels": {
-        "route": { "$ref": "#/$defs/route" },
-        "reason": { "$ref": "#/$defs/reason" }
+        "route": {
+          "$ref": "#/$defs/route"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        }
       },
-      "x-requirements": ["GW-METRICS", "GW-SESSIONS-AUTH"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-SESSIONS-AUTH"
+      ]
     },
     "gateway_cells_cooled": {
       "type": "gauge",
-      "labels": { "rail": { "$ref": "#/$defs/rail" } },
-      "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT"]
+      "labels": {
+        "rail": {
+          "$ref": "#/$defs/rail"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-SESSIONS-ADMIT"
+      ]
     },
     "gateway_credentials_rejected": {
       "type": "gauge",
-      "labels": { "rail": { "$ref": "#/$defs/rail" } },
-      "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT", "GW-CRED-BOUNDARY"]
+      "labels": {
+        "rail": {
+          "$ref": "#/$defs/rail"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-SESSIONS-ADMIT",
+        "GW-CRED-BOUNDARY"
+      ]
     },
     "gateway_strikes_total": {
       "type": "counter",
       "labels": {
-        "class": { "$ref": "#/$defs/strike_class" },
-        "source": { "$ref": "#/$defs/strike_source" }
+        "class": {
+          "$ref": "#/$defs/strike_class"
+        },
+        "source": {
+          "$ref": "#/$defs/strike_source"
+        }
       },
-      "x-requirements": ["GW-METRICS", "GW-SESSIONS-OUTCOME"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-SESSIONS-OUTCOME"
+      ]
     },
     "gateway_sessions_reaped_total": {
       "type": "counter",
-      "labels": { "rail": { "$ref": "#/$defs/rail" } },
-      "x-requirements": ["GW-METRICS", "GW-SESSIONS-LIVENESS"]
+      "labels": {
+        "rail": {
+          "$ref": "#/$defs/rail"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-SESSIONS-LIVENESS"
+      ]
     },
     "gateway_credential_probes_total": {
       "type": "counter",
-      "labels": { "rail": { "$ref": "#/$defs/rail" }, "outcome": { "enum": ["cleared", "rejected", "inconclusive"] } },
-      "x-requirements": ["GW-METRICS", "GW-SESSIONS-ADMIT"]
+      "labels": {
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "outcome": {
+          "enum": [
+            "cleared",
+            "rejected",
+            "inconclusive"
+          ]
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-SESSIONS-ADMIT"
+      ]
+    },
+    "gateway_codex_usage_poll_total": {
+      "type": "counter",
+      "labels": {
+        "outcome": {
+          "enum": [
+            "accepted",
+            "quota-invalid",
+            "quota-time-invalid",
+            "quota-out-of-order",
+            "credential-unresolved",
+            "credential-transient",
+            "upstream-auth",
+            "upstream-http-error",
+            "upstream-content-type",
+            "upstream-unreachable",
+            "upstream-timeout"
+          ]
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CODEX-HEADROOM"
+      ]
+    },
+    "gateway_codex_upstream_headroom_total": {
+      "type": "counter",
+      "labels": {
+        "outcome": {
+          "enum": [
+            "accepted",
+            "absent",
+            "quota-invalid",
+            "quota-time-invalid",
+            "quota-out-of-order"
+          ]
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CODEX-HEADROOM"
+      ]
     },
     "gateway_requests_incomplete_total": {
       "type": "counter",
       "labels": {
-        "rail": { "$ref": "#/$defs/rail" },
-        "dialect": { "$ref": "#/$defs/dialect" },
-        "reason": { "$ref": "#/$defs/incomplete_reason" }
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "dialect": {
+          "$ref": "#/$defs/dialect"
+        },
+        "reason": {
+          "$ref": "#/$defs/incomplete_reason"
+        }
       },
-      "x-requirements": ["GW-METRICS", "GW-RAIL-ANTHROPIC", "GW-RAIL-OPENROUTER"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-RAIL-ANTHROPIC",
+        "GW-RAIL-OPENROUTER"
+      ]
     },
     "gateway_go_catalog_age_seconds": {
       "type": "gauge",
-      "labels": { "source": { "$ref": "#/$defs/catalog_source" } },
+      "labels": {
+        "source": {
+          "$ref": "#/$defs/catalog_source"
+        }
+      },
       "description": "seconds since the source's last good snapshot was fetched; absent until one exists",
-      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-GO"
+      ]
     },
     "gateway_go_catalog_models": {
       "type": "gauge",
-      "labels": { "source": { "$ref": "#/$defs/catalog_source" } },
-      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+      "labels": {
+        "source": {
+          "$ref": "#/$defs/catalog_source"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-GO"
+      ]
     },
     "gateway_go_catalog_refresh_total": {
       "type": "counter",
-      "labels": { "source": { "$ref": "#/$defs/catalog_source" }, "outcome": { "$ref": "#/$defs/catalog_outcome" } },
-      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+      "labels": {
+        "source": {
+          "$ref": "#/$defs/catalog_source"
+        },
+        "outcome": {
+          "$ref": "#/$defs/catalog_outcome"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-GO"
+      ]
     },
     "gateway_go_catalog_last_outcome": {
       "type": "gauge",
-      "labels": { "source": { "$ref": "#/$defs/catalog_source" }, "outcome": { "$ref": "#/$defs/catalog_outcome" } },
-      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+      "labels": {
+        "source": {
+          "$ref": "#/$defs/catalog_source"
+        },
+        "outcome": {
+          "$ref": "#/$defs/catalog_outcome"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-GO"
+      ]
     },
     "gateway_go_catalog_policy_models_missing": {
       "type": "gauge",
-      "labels": { "source": { "$ref": "#/$defs/catalog_source" } },
+      "labels": {
+        "source": {
+          "$ref": "#/$defs/catalog_source"
+        }
+      },
       "description": "policy Go models the source's snapshot does not cover; absent until a snapshot exists",
-      "x-requirements": ["GW-METRICS", "GW-CATALOG-GO"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-GO"
+      ]
     },
     "gateway_provider_requests_total": {
       "type": "counter",
-      "labels": { "rail": { "$ref": "#/$defs/rail" }, "model": { "$ref": "#/$defs/openrouter_model" }, "provider": { "$ref": "#/$defs/provider" }, "outcome": { "$ref": "#/$defs/provider_outcome" } },
+      "labels": {
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "model": {
+          "$ref": "#/$defs/openrouter_model"
+        },
+        "provider": {
+          "$ref": "#/$defs/provider"
+        },
+        "outcome": {
+          "$ref": "#/$defs/provider_outcome"
+        }
+      },
       "description": "every attempt on a (rail, model, provider) cell of the openrouter rail by how it ended (GW-RAIL-OPENROUTER)",
-      "x-requirements": ["GW-METRICS", "GW-RAIL-OPENROUTER"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-RAIL-OPENROUTER"
+      ]
     },
-    "gateway_openrouter_catalog_age_seconds": { "type": "gauge", "labels": {}, "description": "seconds since the last good OpenRouter catalog refresh; absent until one exists (GW-CATALOG-OR)", "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
-    "gateway_openrouter_catalog_models": { "type": "gauge", "labels": {}, "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
-    "gateway_openrouter_catalog_refresh_total": { "type": "counter", "labels": { "outcome": { "$ref": "#/$defs/catalog_outcome" } }, "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
-    "gateway_openrouter_catalog_last_outcome": { "type": "gauge", "labels": { "outcome": { "$ref": "#/$defs/catalog_outcome" } }, "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
-    "gateway_openrouter_cells": { "type": "gauge", "labels": { "state": { "$ref": "#/$defs/cell_state" } }, "description": "(model, provider) cells of the OpenRouter catalog by entry state", "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
-    "gateway_canary_spend_usd": { "type": "gauge", "labels": {}, "description": "metered canary spend over the trailing day at the cell's endpoint price", "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
-    "gateway_canary_budget_exhausted": { "type": "gauge", "labels": {}, "description": "1 while the canary budget is spent and candidate cells wait — the GatewayCanaryBudgetExhausted alert's signal", "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
-    "gateway_canary_rides_total": { "type": "counter", "labels": { "outcome": { "$ref": "#/$defs/canary_outcome" } }, "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
-    "gateway_canary_admissions_total": { "type": "counter", "labels": { "outcome": { "$ref": "#/$defs/canary_admission" } }, "x-requirements": ["GW-METRICS", "GW-CATALOG-OR"] },
+    "gateway_openrouter_catalog_age_seconds": {
+      "type": "gauge",
+      "labels": {},
+      "description": "seconds since the last good OpenRouter catalog refresh; absent until one exists (GW-CATALOG-OR)",
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
+    "gateway_openrouter_catalog_models": {
+      "type": "gauge",
+      "labels": {},
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
+    "gateway_openrouter_catalog_refresh_total": {
+      "type": "counter",
+      "labels": {
+        "outcome": {
+          "$ref": "#/$defs/catalog_outcome"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
+    "gateway_openrouter_catalog_last_outcome": {
+      "type": "gauge",
+      "labels": {
+        "outcome": {
+          "$ref": "#/$defs/catalog_outcome"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
+    "gateway_openrouter_cells": {
+      "type": "gauge",
+      "labels": {
+        "state": {
+          "$ref": "#/$defs/cell_state"
+        }
+      },
+      "description": "(model, provider) cells of the OpenRouter catalog by entry state",
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
+    "gateway_canary_spend_usd": {
+      "type": "gauge",
+      "labels": {},
+      "description": "metered canary spend over the trailing day at the cell's endpoint price",
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
+    "gateway_canary_budget_exhausted": {
+      "type": "gauge",
+      "labels": {},
+      "description": "1 while the canary budget is spent and candidate cells wait — the GatewayCanaryBudgetExhausted alert's signal",
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
+    "gateway_canary_rides_total": {
+      "type": "counter",
+      "labels": {
+        "outcome": {
+          "$ref": "#/$defs/canary_outcome"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
+    "gateway_canary_admissions_total": {
+      "type": "counter",
+      "labels": {
+        "outcome": {
+          "$ref": "#/$defs/canary_admission"
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-OR"
+      ]
+    },
     "gateway_provider_failovers_total": {
       "type": "counter",
-      "labels": { "model": { "$ref": "#/$defs/openrouter_model" }, "from": { "$ref": "#/$defs/provider" }, "to": { "$ref": "#/$defs/provider" } },
+      "labels": {
+        "model": {
+          "$ref": "#/$defs/openrouter_model"
+        },
+        "from": {
+          "$ref": "#/$defs/provider"
+        },
+        "to": {
+          "$ref": "#/$defs/provider"
+        }
+      },
       "description": "requests reissued to the next provider before the first byte (GW-RAIL-OPENROUTER)",
-      "x-requirements": ["GW-METRICS", "GW-RAIL-OPENROUTER"]
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-RAIL-OPENROUTER"
+      ]
+    },
+    "gateway_rail_choice_total": {
+      "type": "counter",
+      "labels": {
+        "model": {
+          "$ref": "#/$defs/openrouter_model"
+        },
+        "rail": {
+          "$ref": "#/$defs/rail"
+        },
+        "reason": {
+          "$ref": "#/$defs/rail_choice_reason"
+        }
+      },
+      "description": "admissions where the tier named one model on two allowed rails, by the rail chosen and why (GW-MODEL-TIERS §The rail choice); `model` is the twin's openrouter spelling, the provider families' bound",
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-MODEL-TIERS"
+      ]
+    },
+    "gateway_tier_evidence_age_seconds": {
+      "type": "gauge",
+      "labels": {},
+      "description": "seconds since the mounted tier-evidence snapshot's snapshot_at; absent when none is mounted — TierEvidenceStale reads it (GW-MODEL-TIERS)",
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-MODEL-TIERS"
+      ]
     }
   },
-  "forbidden_labels": ["task", "session", "id", "token"],
-  "$comment_model_label": "`model` is permitted ONLY on the two provider families, bounded to the policy's openrouter ids (GW-RAIL-OPENROUTER); every other family stays without it",
+  "forbidden_labels": [
+    "task",
+    "session",
+    "id",
+    "token"
+  ],
+  "$comment_model_label": "`model` is permitted ONLY on the two provider families and the rail choice, bounded to the policy's openrouter ids (GW-RAIL-OPENROUTER, GW-MODEL-TIERS); every other family stays without it",
   "errors": {}
 }

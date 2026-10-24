@@ -10,3 +10,6 @@ specs-site/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+# the staged site-evidence fragments + the single-file Allure report (scripts/specs-build.sh, scripts/allure-report.sh)
+.site-evidence/
+allure-report-single/

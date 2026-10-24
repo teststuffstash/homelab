@@ -22,7 +22,8 @@ from .test_codex_refresh import token
     json.dumps({"access_token": token({"exp": 4600}), "refresh_token": None}).encode(),
     json.dumps({"access_token": token({"exp": 4600}), "refresh_token": ""}).encode(),
     json.dumps({"access_token": token({"exp": 4600}), "refresh_token": "bad\r\n"}).encode(),
-])
+], ids=["not json", "a list", "oversize", "exp in the past", "exp a bool", "exp infinite",
+        "refresh_token null", "refresh_token empty", "refresh_token with CRLF"])
 def test_bad_responses_are_sanitized(body):
     clock = Clock(1000)
     old, _ = creds(clock)

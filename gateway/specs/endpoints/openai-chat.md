@@ -144,7 +144,10 @@ slug, so a provider's service tiers — `deepinfra/fp8`, `/flex`, `/priority` �
 representative is the vendor's default: no `service_tier`, then the shortest tag), kept only when it
 supports **every tool-choice mode the session's harness uses** (`providers.tool_choice.<harness>`),
 its **quantization** is on the policy ladder at or above the floor (`unknown` is off the ladder:
-excluded), its **`uptime_last_1d`** clears the floor, and its status is 0. ⚖ **Entry** ([GW-CATALOG-OR](catalog.md#gw-catalog-or)): of the endpoints that pass the floors, only the cells the
+excluded), its **`uptime_last_1d`** clears the floor (⚖ a `null` figure — the vendor's answer for a
+fresh or idle endpoint, read live on 2026-10-20 under two models — is parsed as *no uptime* and
+clears no floor: the row is kept in the snapshot, dropped by eligibility, never a parse failure that
+loses the whole model), and its status is 0. ⚖ **Entry** ([GW-CATALOG-OR](catalog.md#gw-catalog-or)): of the endpoints that pass the floors, only the cells the
 catalog has admitted — a clean entry canary, state `eligible` — are pinned; a model with no eligible cell rides
 unpinned (the seeded worlds mark every snapshot cell eligible: already canaried). ⚖ **Order**: output price
 ÷ the cell's **clean-ride rate** from the outcome store (a ride = a session the provider served a 2xx
@@ -164,6 +167,7 @@ deepinfra fp8 ✓✓✓✓ 100 0.42 (its `/flex` 84.5 and `/priority` tiers besi
 | description | harness | arrange || the order (`provider.order[0]` of successive attempts), or the pin |
 |---|---|---||---|
 | "the floors: ≥ fp8, every tool-choice mode the harness uses, uptime_1d ≥ 95, status 0 ⚖" | opencode | — || deepinfra, atlas-cloud, morph, inference-net, baidu (dropped: open-inference fp4, alibaba unknown, parasail uptime 77.4) |
+| "an endpoint with no uptime figure is dropped, the model's other endpoints stand ⚖" | opencode | the snapshot with atlas-cloud/fp8's `uptime_last_1d` `null` || deepinfra, morph, inference-net, baidu (dropped: atlas-cloud `uptime_1d unknown`, and the three above) |
 | "a harness that needs required + function drops the providers without them ⚖" | claude (anthropic dialect) | — || deepinfra, atlas-cloud, inference-net (morph, baidu dropped) |
 | "the pin is one provider with fallbacks off ⚖" | opencode | — || upstream body `provider = {order: [deepinfra], allow_fallbacks: false}`; model and messages unchanged |
 | "a provider's service tiers are one order entry: the default tag represents ⚖" | opencode | deepinfra/fp8, /flex (uptime 84.5), /priority in the snapshot || the deepinfra entry is `deepinfra/fp8` (out $0.42/M) |

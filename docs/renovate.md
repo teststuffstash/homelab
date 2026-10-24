@@ -112,9 +112,14 @@ not the coordinator, owns whether an update should exist:
   the moment anyone else pushes to it (its edited-PR rule). The in-cluster updater therefore keeps
   its hands off an untouched Renovate PR, with ONE exception: merge-ready (armed + approved + green,
   currency the only gap) it updates, so the fast path keeps 15-minute currency instead of Renovate's
-  6-hour cron and no zombie can be born (a zombie needs a PR that cannot merge — sleep-tracking#185:
-  one updater merge onto an approved-but-red PR → "Edited/Blocked" → neither rebase nor autoclose,
-  abandoned by Renovate yet unclosable). A worker-adapted branch is the updater's as before.
+  6-hour cron (the zombie it must not mint — sleep-tracking#185: one updater merge onto an
+  approved-but-red PR → "Edited/Blocked" → neither rebase nor autoclose, abandoned by Renovate yet
+  unclosable). **When that update misses** — master moves again before it merges, or the update pulls
+  a red in (homelab#2754, sleep-tracking#203, 2026-10-20) — the branch carries the updater's merge
+  commit, which Renovate's edited-PR rule counts, so the updater **hands it back**: it ticks
+  Renovate's rebase/retry checkbox and Renovate's next run rebuilds the branch as its own
+  (`agents/update-pr-branch.sh` `renovate_handback`). A worker-adapted branch is the updater's as
+  before.
 - **Closing a Renovate PR is not "done."** With Renovate's default `recreateWhen: auto`, a manually
   closed PR is *not* recreated for the **same** version (close = "reject this version"), but Renovate
   DOES open a fresh PR when a **newer** version lands → a reject→close→new-version→reject **churn**; and
@@ -146,11 +151,14 @@ archived). A red ARMED `automerge` PR still simply **parks** (docs/dependency-up
   command string must match the global `allowedCommands` exactly (compiled as a Handlebars template
   first), and `fileFilters` is the ONLY way a generated file reaches the commit (never `git add`). The
   one consumer today: the kube-prometheus-stack rule re-rendering the upstream alert list on its branch
-  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). The `install-tool helm`
-  version is Renovate-proposed (2026-10-10): two `customManagers` over `renovate-global.json` itself
-  (depName `helm/helm`) rewrite the command AND its regex-escaped `allowedCommands` entry in one branch
-  (`currentValueTemplate` + `autoReplaceStringTemplate` for the escaped half), so the pair never drifts
-  apart; the PR is codeowner-gated (`/.github/`). A dry run
+  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). The helm itself
+  is installed BY the script (`HELM_VERSION=v<x.y.z>` + `install-tool helm`, a no-op for the seat where
+  `install-tool` is absent) and Renovate-proposed through one `customManager` over that line (depName
+  `helm/helm`, class 17 of docs/dependency-classes.yaml; 2026-10-22). Until then the version sat in
+  `renovate-global.json` itself as two halves — the command and its regex-escaped `allowedCommands`
+  entry, two managers with `currentValueTemplate` + `autoReplaceStringTemplate` to move the pair —
+  which put every helm patch under the `/.github/` codeowner row (#2804 parked on 4.3.0 → 4.3.1);
+  `scripts/` has no row, so the bump now rides the custom.regex automerge lane. A dry run
   (`workflow_dispatch` → `dryRun`) still executes the commands and logs `DRY-RUN: Would commit files`,
   but only when a branch is (re)built — an up-to-date branch runs nothing, so the proof is the next bump.
 - **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
