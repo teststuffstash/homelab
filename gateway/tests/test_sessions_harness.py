@@ -128,12 +128,12 @@ T = "homelab-2867-r1"
 WORKER_T = {"stack": "platform", "role": "worker", "task": T, "round": 1}
 STRUCK = "`harness-fault` on harness opencode"
 REFUTED = ("`harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session "
-           "(tier heavy, admitted before the strike)")
+           "(harness opencode, standard tier, admitted before the strike)")
 
 # (description, arrange, body, decision, rail, harness, model, reason)
 HARNESS_STRIKE_ROWS = [
     ("a harness strike moves the walk to a cell another harness speaks ⚖", STRUCK,
-     "worker, T, `attempt: 2`", "dispatch", "codex", "codex", "codex/fixture-model", "—"),
+     "worker, T, `attempt: 2`", "dispatch", "opencode", "claude", "opencode-go/claude-haiku-5-5", "—"),
     ("a harness strike excludes no model", STRUCK,
      "worker, T, `harness: goose`, `attempt: 2`", "dispatch", "opencode", "goose", "opencode-go/deepseek-v4.1-flash", "—"),
     ("an explicit harness that is struck defers ⚖", STRUCK,
@@ -161,7 +161,7 @@ async def _arrange_strike(app, gw, clock, arrange: str) -> None:
     with given(f"arrange = {arrange}"):
         with quiet():
             first = await open_session(gw, **WORKER_T)
-            second = await open_session(gw, **WORKER_T, attempt=2, tier="heavy") if arrange == REFUTED else None
+            second = await open_session(gw, **WORKER_T, attempt=2) if arrange == REFUTED else None
             struck = await _report(gw, first, "harness-fault")
             await gw.delete(f"/sessions/{first['session']['id']}")
             clean = None

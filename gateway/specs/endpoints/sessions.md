@@ -170,11 +170,11 @@ follows the cell, homelab#2870). With an **explicit** `harness` that is struck f
 is admissible: the answer is `defer` `cells-exhausted`, because the platform has to fix the
 harness and waiting does not help. A clean outcome on the same harness refutes the strike.
 
-⚖ The harness a rail would ride is the one the walk derives today ([§The harness follows the
-rail](#the-harness-follows-the-rail)), and a rail whose derived harness is struck is passed over
-whole: a dual-dialect rail (`opencode`, `openrouter`) is **not** re-dispatched on another harness of
-its other dialect, because whether each of its models answers that dialect is per model and recorded
-nowhere. With an explicit `harness` that is not struck, the struck harness's own cells stay
+⚖ The harness a cell rides is the one the walk derives for it ([§The harness follows the
+cell](#the-harness-follows-the-cell)), and a harness-scoped strike skips that **cell**, never the
+rail whole: a cell another harness speaks stays a candidate, so a mixed-dialect Go rail keeps
+walking its other-dialect cells while `opencode` is struck — its Claude-dialect cell is taken under
+`claude`. With an explicit `harness` that is not struck, the struck harness's own cells stay
 admissible to it: the strike names no model and no cell.
 
 World `policy-codex`, codex headroom fresh at 20 % / 64 %. T = the worker task `homelab-2867-r1`;
@@ -182,10 +182,10 @@ its attempt 1 rode (opencode, `opencode-go/deepseek-v4.1-flash`) on the `opencod
 
 | description | arrange | body || decision | rail | harness | model | reason |
 |---|---|---||---|---|---|---|---|
-| "a harness strike moves the walk to a cell another harness speaks ⚖" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | codex | codex | codex/fixture-model | — |
+| "a harness strike moves the walk to a cell another harness speaks ⚖" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | opencode | claude | opencode-go/claude-haiku-5-5 | — |
 | "a harness strike excludes no model" | `harness-fault` on harness opencode | worker, T, `harness: goose`, `attempt: 2` || dispatch | opencode | goose | opencode-go/deepseek-v4.1-flash | — |
 | "an explicit harness that is struck defers ⚖" | `harness-fault` on harness opencode | worker, T, `harness: opencode`, `attempt: 2` || defer (`{decision, reason}` only) | — | — | — | cells-exhausted |
-| "a refuted harness strike excludes nothing" | `harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session (tier heavy, admitted before the strike) | worker, T, `attempt: 3` || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash | — |
+| "a refuted harness strike excludes nothing" | `harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session (harness opencode, standard tier, admitted before the strike) | worker, T, `attempt: 3` || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash | — |
 
 `POST /sessions` carries **`attempt`** (default 1): the consumer's automatic re-admission counter at
 this round. Strikes are keyed by TASK, not by attempt, so the exclusion holds however the attempt is
@@ -1227,7 +1227,7 @@ World `policy-default`.
 | "a cut stream is a transport strike" | `upstream-stream-truncated` on the session || `{…, stream-incomplete, cell, gateway}` | `{class="stream-incomplete",source="gateway"}` 1 |
 | "a bare 2xx refutes nothing" | `upstream-500`, then `upstream-ok` on the same session || `provider-5xx` still counted | — |
 | "a clean outcome refutes the task's counted strikes" | the session's request answered `upstream-500` (a gateway `provider-5xx`), then the consumer reports `clean` — the ride recovered || none counted; the strike kept, refuted (`refuted: 1`) | — |
-| "a clean outcome on another model refutes nothing there" | the heavy tier's `opencode-go/claude-haiku-5-5` struck `no-verdict`; a standard-tier session reports `clean` || the heavy model's `no-verdict` still counted (`refuted: 0`) | — |
+| "a clean outcome on another model refutes nothing there" | the heavy tier's `opencode-go/claude-haiku-5-5` struck `no-verdict`; a standard-tier session reports `clean` || the heavy cell's `no-verdict` still counted (`refuted: 0`); the strike carries harness `claude` — the cell's own | — |
 | "GET shows the latest outcome" | report `no-verdict` (`subclass: rc=1`), GET || — | `outcome` = `{class: no-verdict, subclass: rc=1, reporter: null}` |
 | "the code's vocabulary is the schema's" | `OUTCOME_CLASSES` vs `outcome.input.properties.class` (`enum`, `x-scope`) || equal, class and scope | — |
 
