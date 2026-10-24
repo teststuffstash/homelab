@@ -746,6 +746,12 @@ rather than for buying more drives.
   provisioning rule is node-scoped — exact for the one-disk nodes, pessimistic for the
   multi-disk ones (hp-01's three std disks and m70s's std + Garage spindle each sum together;
   it was thinkcentre's std disk + its two Optanes until 2026-09-12).
+- **Longhorn disk-health belt — BUILT 2026-10-24** (`LonghornDiskNotReady` in
+  `argocd/resources/longhorn-alerts/prometheusrule.yaml`, fixture `disk-not-ready.promtool-test`):
+  `longhorn_disk_status{condition="ready"} == 0` for 1 h. Every byte/provision row above and the
+  SMART belts were blind to wk-metal-04's `intel0` going Ready=False/NoDiskInfo on 2026-10-20
+  (nvme `Identify namespace failed (-5)`, SMART still "passed") — four silent days. A disk whose
+  series is absent (node/manager down) is out of its scope.
 - **Longhorn engine-move belt — BUILT 2026-10-11** (`argocd/resources/longhorn-alerts/engine-move.yaml`,
   FU-301 S9). Operator ruling 2026-10-11: the progress and outcome of a box-run engine move are read
   from CLUSTER truth, never from the management box's own metrics (the box can be mistaken about
