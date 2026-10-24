@@ -95,18 +95,18 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 | 1 | `cert-manager` | v1.21.2 | `argocd/platform/cert-manager.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 1 | `cloudnative-pg` | 0.29.1 | `argocd/platform/cnpg-operator.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-05 ([#2239](https://github.com/teststuffstash/homelab/pull/2239)) |
 | 1 | `crossplane` | 2.4.2 | `argocd/platform/crossplane.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-05 ([#2240](https://github.com/teststuffstash/homelab/pull/2240)) |
-| 1 | `external-secrets` | 2.12.0 | `argocd/platform/eso-operator.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-13 ([#2531](https://github.com/teststuffstash/homelab/pull/2531)) |
+| 1 | `external-secrets` | 2.13.0 | `argocd/platform/eso-operator.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-13 ([#2531](https://github.com/teststuffstash/homelab/pull/2531)) |
 | 1 | `forgejo` | 17.3.1 | `argocd/platform/forgejo.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-15 ([#2603](https://github.com/teststuffstash/homelab/pull/2603)) |
 | 1 | `gateway-api` | v1.4.1 | `argocd/platform/gateway-api-crds.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
-| 1 | `gha-runner-scale-set` | 0.15.0 | `argocd/platform/arc-runners-large.yaml`, `argocd/platform/arc-runners.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
-| 1 | `gha-runner-scale-set-controller` | 0.15.0 | `argocd/platform/arc-controller.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
+| 1 | `gha-runner-scale-set` | 0.15.1 | `argocd/platform/arc-runners-large.yaml`, `argocd/platform/arc-runners.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
+| 1 | `gha-runner-scale-set-controller` | 0.15.1 | `argocd/platform/arc-controller.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 1 | `infisical-standalone` | 1.11.0 | `argocd/platform/infisical.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-05 ([#2244](https://github.com/teststuffstash/homelab/pull/2244)) |
-| 1 | `kube-prometheus-stack` | 92.8.0 | `argocd/platform/kube-prometheus-stack.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-22 ([#2818](https://github.com/teststuffstash/homelab/pull/2818)) |
+| 1 | `kube-prometheus-stack` | 92.10.1 | `argocd/platform/kube-prometheus-stack.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-22 ([#2818](https://github.com/teststuffstash/homelab/pull/2818)) |
 | 1 | `metrics-server` | 3.14.0 | `argocd/platform/metrics-server.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-09 ([#2396](https://github.com/teststuffstash/homelab/pull/2396)) |
 | 1 | `plugin-barman-cloud` | 0.8.1 | `argocd/platform/plugin-barman-cloud.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 1 | `prometheus-operator-crds` | 32.0.1 | `argocd/platform/prometheus-operator-crds.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 2 | `alpine` | 3.24 | `argocd/resources/node-fstrim/fstrim.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-04 ([#2230](https://github.com/teststuffstash/homelab/pull/2230)) |
-| 2 | `cloudflare/cloudflared` | 2026.10.1@sha256:a15a3b50b8da | `argocd/resources/publicroute/composition.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-15 ([#2602](https://github.com/teststuffstash/homelab/pull/2602)) |
+| 2 | `cloudflare/cloudflared` | 2026.10.3@sha256:faa8e0a1475f | `argocd/resources/publicroute/composition.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-15 ([#2602](https://github.com/teststuffstash/homelab/pull/2602)) |
 | 2 | `docker.io/library/busybox` | 1.38.0@sha256:fd7dc98638c8 | `argocd/resources/loki/kmsg-reader.yaml`, `argocd/resources/runner-image-prepull/daemonset.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-04 ([#2233](https://github.com/teststuffstash/homelab/pull/2233)) |
 | 2 | `docker.io/prometheuscommunity/smartctl-exporter` | v0.15.0@sha256:a76e08dbf5db | `argocd/resources/smartctl-exporter/daemonset.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-13 ([#2530](https://github.com/teststuffstash/homelab/pull/2530)) |
 | 2 | `ghcr.io/k3d-io/k3d` | 5-dind@sha256:ee3872700ed0 | `agents/images.env` | ⚠ no Renovate manager reads `agents/images.env` (`AGENT_DIND_IMAGE`) | ✅ | ✅ | ✅ | 👤 | 👤 | — never |
@@ -122,21 +122,21 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 | 2 | `quay.io/prometheus/blackbox-exporter` | v0.29.1 | `argocd/resources/blackbox/blackbox.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-21 ([#2802](https://github.com/teststuffstash/homelab/pull/2802)) |
 | 2 | `registry` | 3.1.2 | `argocd/resources/registry-cache/mirror-docker-io.yaml`, `argocd/resources/registry-cache/mirror-ghcr.yaml`, `argocd/resources/registry-cache/mirror-mcr.yaml` +2 | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-06 ([#2297](https://github.com/teststuffstash/homelab/pull/2297)) |
 | 2 | `registry.teststuff.net/games` | main | `argocd/resources/games/games.yaml` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | — never |
-| 3 | `agent-base` | `AGENT_BASE_IMAGE`=2026.10.20-g123832721273 | `agents/images.env` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-20 ([#2752](https://github.com/teststuffstash/homelab/pull/2752)) |
+| 3 | `agent-base` | `AGENT_BASE_IMAGE`=2026.10.23-g79d146c8caac | `agents/images.env` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-20 ([#2752](https://github.com/teststuffstash/homelab/pull/2752)) |
 | 3 | `agent-coordinator` | `AGENT_COORDINATOR_IMAGE`=2026.10.20-g950b7f0b8201; 35 manifest ref(s) | `agents/coordinator/coordinate-argo.yaml`, `agents/coordinator/corpus-dispatch-argo.yaml`, `agents/coordinator/deep-dig-argo.yaml` +18 | ✅ | ✅ | ⚠ 29 ref(s) NOT at the images.env pin (29× (none — floats to :latest)) — the deploy-pin sweep misses them | ✅ | ✅ | 👤 | 2026-10-20 ([#2751](https://github.com/teststuffstash/homelab/pull/2751)) |
 | 3 | `agent-gateway` | (none — floats to :latest) (×1) | `argocd/resources/agent-gateway/deployment.yaml` | ✅ | ✅ | ⚠ 1 distinct ref(s) with no images.env pin — nothing sweeps them | ✅ | ✅ | 👤 | — never |
 | 3 | `cchv-server` | v1.18.0 (×1) | `agents/coordinator/transcripts-viewer.yaml` | ⚠ a hand pin — the viewer image is built from the upstream cchv tag by hand (agents/coordinator/transcripts-viewer.yaml header); no deploy-pin job, no Renovate manager for a first-party tag | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 3 | `homelab/arc-runner` | 2026.10.22-g312043d8b277 (×3) | `agents/coordinator/sentinel-argo.yaml`, `argocd/resources/runner-image-prepull/daemonset.yaml` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-22 ([#2823](https://github.com/teststuffstash/homelab/pull/2823)) |
 | 4 | `argo-cd` | 10.10.5 | `tofu/argocd.tf`, `tofu/variables.tf` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-22 ([#2816](https://github.com/teststuffstash/homelab/pull/2816)) |
-| 4 | `argocd-apps` | 2.0.6 | `tofu/argocd.tf`, `tofu/variables.tf` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | — never |
+| 4 | `argocd-apps` | 2.0.7 | `tofu/argocd.tf`, `tofu/variables.tf` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | — never |
 | 4 | `longhorn` | 1.13.0 | `tofu/longhorn.tf` | ✅ | ✅ | ✅ | ✅ | 👤 | 👤 | 2026-10-10 ([#2487](https://github.com/teststuffstash/homelab/pull/2487)) |
 | 5 | `bpg/proxmox` | 0.116.1 (`~> 0.116`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-22 ([#2817](https://github.com/teststuffstash/homelab/pull/2817)) |
 | 5 | `bpg/proxmox` | 0.116.1 (`~> 0.116`) | `tofu/provisioning/versions.tf`, `tofu/provisioning/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-22 ([#2817](https://github.com/teststuffstash/homelab/pull/2817)) |
 | 5 | `cloudflare/cloudflare` | 5.28.0 (`~> 5.0`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-21 ([#2778](https://github.com/teststuffstash/homelab/pull/2778)) |
 | 5 | `cloudflare/cloudflare` | 5.25.0 (`~> 5.0`) | `tofu/cloudflare-token/versions.tf`, `tofu/cloudflare-token/.terraform.lock.hcl` | ⚠ DISABLED for this root (renovate-global.json, #2026): `tofu/cloudflare-token` is the one-shot admin-token root the box never plans — moved by hand with a jail plan | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 5 | `hashicorp/helm` | 3.3.0 (`~> 3.0`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-02 ([#2046](https://github.com/teststuffstash/homelab/pull/2046)) |
-| 5 | `hashicorp/kubernetes` | 3.3.0 (`~> 3.0`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-09 ([#2397](https://github.com/teststuffstash/homelab/pull/2397)) |
-| 5 | `hashicorp/kubernetes` | 3.3.0 (`~> 3.0`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-09 ([#2397](https://github.com/teststuffstash/homelab/pull/2397)) |
+| 5 | `hashicorp/kubernetes` | 3.4.0 (`~> 3.0`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-09 ([#2397](https://github.com/teststuffstash/homelab/pull/2397)) |
+| 5 | `hashicorp/kubernetes` | 3.4.0 (`~> 3.0`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-09 ([#2397](https://github.com/teststuffstash/homelab/pull/2397)) |
 | 5 | `hashicorp/kubernetes` | 2.38.0 (`~> 2.31`) | `tofu/infisical/versions.tf`, `tofu/infisical/.terraform.lock.hcl` | ⚠ DISABLED for this root (renovate-global.json, #2026): the box does not plan `tofu/infisical` — moved by hand with a jail plan | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 5 | `hashicorp/random` | 3.9.1 (`~> 3.6`) | `tofu/versions.tf`, `tofu/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-04 ([#2213](https://github.com/teststuffstash/homelab/pull/2213)) |
 | 5 | `hashicorp/tls` | 4.4.1 (`~> 4.0`) | `tofu/cloudflare/versions.tf`, `tofu/cloudflare/.terraform.lock.hcl` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-09-27 ([#1997](https://github.com/teststuffstash/homelab/pull/1997)) |
@@ -185,7 +185,7 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 | 7 | `qrencode` | 4.1.1 | `devbox.lock` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-07 ([#2362](https://github.com/teststuffstash/homelab/pull/2362)) |
 | 7 | `renovate` | 44.151.2 | `devbox.lock` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-19 ([#2726](https://github.com/teststuffstash/homelab/pull/2726)) |
 | 7 | `sops` | 3.13.3 | `devbox.lock` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-07 ([#2362](https://github.com/teststuffstash/homelab/pull/2362)) |
-| 7 | `talosctl` | nixpkgs@4975466d3247 | `devbox.lock` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
+| 7 | `talosctl` | 1.14.2 | `devbox.lock` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 7 | `tea` | 0.16.0 | `devbox.lock` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-07 ([#2362](https://github.com/teststuffstash/homelab/pull/2362)) |
 | 7 | `terraform-providers.cloudflare_cloudflare` | 5.23.0 | `devbox.lock` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 | 7 | `wireguard-tools` | 1.0.20260223 | `devbox.lock` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | 2026-10-07 ([#2362](https://github.com/teststuffstash/homelab/pull/2362)) |
@@ -207,7 +207,7 @@ Columns P/G/D/Det/R/C are the class's proposer / merge gate / deploy edge / dete
 | 14 | `OPNsense SERIES (series head)` | 26.7 | `scripts/opnsense-test-vm-bootstrap.sh` | 👤 | 👤 | 👤 | ⚠ | ⚠ | 👤 | — never |
 | 15 | `poseidon/matchbox` | v0.11.0 | `ansible/group_vars/matchbox.yml` | 👤 | 👤 | ⚠ | ⚠ | 👤 | 👤 | — never |
 | 15 | `siderolabs/talos (PXE assets)` | v1.14.1 | `ansible/group_vars/matchbox.yml` | 👤 | 👤 | ⚠ | ⚠ | 👤 | 👤 | — never |
-| 17 | `helm/helm` | 4.3.0 | `scripts/upstream-alerts-refresh.sh` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
+| 17 | `helm/helm` | 4.3.1 | `scripts/upstream-alerts-refresh.sh` | ✅ | ✅ | ✅ | ✅ | ✅ | 👤 | — never |
 
 <!-- END GENERATED dependency-coverage -->
 

@@ -638,10 +638,6 @@
         }
       }
     },
-    "github:NixOS/nixpkgs/4975466d324710c576dc11ad614684e6bd8cad8e#talosctl": {
-      "last_modified": "2026-09-23T17:48:10Z",
-      "resolved": "github:NixOS/nixpkgs/4975466d324710c576dc11ad614684e6bd8cad8e?lastModified=1790185690&narHash=sha256-xJ%2BX4hBtOcAFGBOe5nAMyMUeF9foJBmIOu3NjBqBycU%3D#talosctl"
-    },
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
       "last_modified": "2026-10-16T02:15:57Z",
       "resolved": "github:NixOS/nixpkgs/f20cd90e28fe0403873f473b29e42662cd86e8c4?lastModified=1792116957&narHash=sha256-EjZqHKObBfIOeHZnMRVV87HB3pPq%2FWBkmRJWyFxmZu8%3D"
@@ -1676,6 +1672,44 @@
             }
           ],
           "store_path": "/nix/store/ga1j9059qkhhyxvz5cyby199j1nmn7lp-sops-3.13.3"
+        }
+      }
+    },
+    "talosctl@latest": {
+      "last_modified": "2026-10-02T22:55:44Z",
+      "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#talosctl",
+      "source": "devbox-search",
+      "version": "1.14.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jii52mnl43v15h493mg7smz9issd1ga7-talosctl-1.14.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jii52mnl43v15h493mg7smz9issd1ga7-talosctl-1.14.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1bs4wdrdrgi1fkcrb7f8k8l26a1bj09j-talosctl-1.14.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1bs4wdrdrgi1fkcrb7f8k8l26a1bj09j-talosctl-1.14.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/8ykf0xzzqx3y17lgig5qznpf1l42fxc9-talosctl-1.14.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/8ykf0xzzqx3y17lgig5qznpf1l42fxc9-talosctl-1.14.2"
         }
       }
     },
