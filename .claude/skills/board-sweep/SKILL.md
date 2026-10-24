@@ -25,7 +25,8 @@ deliberately deferred (§Graduation).
 - **Intent, not guesswork — island first, then the SLICE that owns the item.** The core
   judgment here — STUCK-MACHINE vs HANDLED — is "did the machinery behave as *intended*", and
   intent lives in the owning island's docs. The agent loop is one island (the heaviest); the
-  platform has others with their own owning docs — dependency upgrades, the management box, the
+  platform has others with their own owning docs — the agent gateway (`gateway/` README +
+  specs, outside the design-agents corpus), dependency upgrades, the management box, the
   router pair, the cluster substrate (spike `context-and-autonomy.md` §C7). Classify each item
   to its island, then read THAT island's slice. For the loop: the full corpus load is
   operator-typed only (`/design-agents`, 2026-09-27 — see the seat card §Design questions); do

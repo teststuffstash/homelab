@@ -121,6 +121,7 @@ owning docs, its own lane and its own failure classes:
 | Dependency upgrades / Renovate | `docs/dependency-upgrades.md`, `docs/dependency-classes.yaml`, `docs/renovate.md` |
 | The management box | `docs/management-box.md` |
 | The router pair (OPNsense CARP) | `docs/router-move.md`, `docs/opnsense-test-vm.md` |
+| The agent gateway (agent-gateway, P2) | `gateway/README.md`, `gateway/specs/` (the specs ARE the contract; not in the design-agents read plan — operator, 2026-10-17) |
 | The cluster substrate (3 CPs, disks, Garage, services) | `docs/controlplane-ha.md`, `docs/storage-ledger.md`, `docs/garage.md`, `docs/longhorn-backup.md`, `SERVICES.md` |
 
 Not measured: §C's co-change method has not been run on these, so the cut is the operator's
