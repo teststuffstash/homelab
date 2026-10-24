@@ -39,6 +39,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   10-20 15:07Z (WriteFile EIO); `nvme0` (eui …410f6) logs `Identify namespace failed (-5)` every minute; SMART "passed";
   0 replicas on it, bulk tier one disk short. Detector `LonghornDiskNotReady` PR in flight (detector first). **OPERATOR:**
   reseat / swap slot or drive on Big Data, then `longhorn-tag-disks.sh` re-registers it.
+  `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
+  09-14 — the std-tier exit left the Longhorn node record's disk entry behind). **Next (seat):** once it FIRES (~15:53Z
+  10-24), remove that stale entry in a maintenance window, through the script that owns disk records.
 - **⚑ wk-metal-04 on Big Data (#2758, 2026-10-20).** Watch the MX500's 34 % lifetime used (attr 202). **OPERATOR:** the
   switch-port row (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the box
   (router-move.md:62 retires it).
