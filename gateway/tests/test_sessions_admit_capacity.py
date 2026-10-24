@@ -93,10 +93,12 @@ def _rate(u5: float, u7: float, r5: float, r7: float) -> dict[str, str]:
 
 
 async def _ride(gw, upstreams, *, rail: str, role: str, behaviour: str = "upstream-ok", usage=None, rate=None, doc=None):
-    """Arrange through the data plane: one claude-harness ride on `rail` answered by the fake as stated."""
+    """Arrange through the data plane: one ride on `rail` (the role's harness, from the picked
+    cell) answered by the fake as stated — the request rides the anthropic dialect either way,
+    which every rail involved here serves."""
     if doc is None:
         with quiet():
-            doc = await open_session(gw, role=role, rail=rail, harness="claude", task=f"arrange-{rail}-{role}")
+            doc = await open_session(gw, role=role, rail=rail, task=f"arrange-{rail}-{role}")
     up = upstreams[rail]
     up.behaviour, up.usage, up.rate_headers = behaviour, usage, rate
     with quiet():  # one folded attachment per arranged ride instead of the gateway + fake exchange pair

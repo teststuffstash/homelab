@@ -387,7 +387,7 @@ async def test_clean_elsewhere_refutes_nothing(gw, store):
         attach_json("the outcome answer", r.json())
     then_eq("refuted", r.json()["refuted"], 0)
     with then("the heavy model's no-verdict still counts"):
-        check("strikes", _strikes(store), [{"rail": "opencode", "model": "opencode-go/claude-haiku-5-5", "harness": "opencode",
+        check("strikes", _strikes(store), [{"rail": "opencode", "model": "opencode-go/claude-haiku-5-5", "harness": "claude",
                                             "class": "no-verdict", "scope": "model", "source": "outcome"}])
 
 
