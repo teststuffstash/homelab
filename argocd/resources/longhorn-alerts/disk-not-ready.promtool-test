@@ -1,0 +1,73 @@
+# Behaviour fixture for LonghornDiskNotReady (the disk-health belt: wk-metal-04 intel0 sat
+# Ready=False/NoDiskInfo from 2026-10-20T15:07Z for four days with no alert).
+#
+#   devbox run -- promtool test rules argocd/resources/longhorn-alerts/disk-not-ready.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs every *.promtool-test in CI. Series labels are the live
+# shape of 2026-10-24 (longhorn-backend job, condition_reason carried on the series).
+rule_files:
+  - disk-not-ready.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # REPLAY of 2026-10-20: intel0 Ready 1 until t=10 (15:07Z), 0 thereafter; its sibling intel1 on
+  # the same node stays Ready. Pending from t=10, firing once the 1 h `for` is served.
+  - interval: 1m
+    name: "Replay 2026-10-20: intel0 NoDiskInfo fires after 1h, Ready sibling silent"
+    input_series:
+      - series: 'longhorn_disk_status{job="longhorn-backend",namespace="longhorn-system",node="wk-metal-04",disk="intel0",condition="ready",condition_reason=""}'
+        values: "1x9 stale"
+      - series: 'longhorn_disk_status{job="longhorn-backend",namespace="longhorn-system",node="wk-metal-04",disk="intel0",condition="ready",condition_reason="NoDiskInfo"}'
+        values: "_x10 0x200"
+      - series: 'longhorn_disk_status{job="longhorn-backend",namespace="longhorn-system",node="wk-metal-04",disk="intel0",condition="schedulable",condition_reason="DiskNotReady"}'
+        values: "_x10 0x200"
+      - series: 'longhorn_disk_status{job="longhorn-backend",namespace="longhorn-system",node="wk-metal-04",disk="intel1",condition="ready",condition_reason=""}'
+        values: "1x210"
+    alert_rule_test:
+      - { eval_time: 1h, alertname: LonghornDiskNotReady, exp_alerts: [] }
+      - eval_time: 1h15m
+        alertname: LonghornDiskNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              job: longhorn-backend
+              namespace: longhorn-system
+              node: wk-metal-04
+              disk: intel0
+              condition: ready
+              condition_reason: NoDiskInfo
+      - eval_time: 3h
+        alertname: LonghornDiskNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              job: longhorn-backend
+              namespace: longhorn-system
+              node: wk-metal-04
+              disk: intel0
+              condition: ready
+              condition_reason: NoDiskInfo
+
+  # A manager restart / node reboot: a disk blips to 0 for minutes and recovers — silent.
+  - interval: 1m
+    name: "Blip: a 20-minute not-Ready during a reboot does not fire"
+    input_series:
+      - series: 'longhorn_disk_status{job="longhorn-backend",node="wk-metal-04",disk="sata500",condition="ready"}'
+        values: "1x30 0x20 1x150"
+    alert_rule_test:
+      - { eval_time: 45m, alertname: LonghornDiskNotReady, exp_alerts: [] }
+      - { eval_time: 2h, alertname: LonghornDiskNotReady, exp_alerts: [] }
+
+  # At rest: every disk Ready — silent.
+  - interval: 1m
+    name: "At rest: Ready disks are silent"
+    input_series:
+      - series: 'longhorn_disk_status{job="longhorn-backend",node="hp-01",disk="intel7600p",condition="ready"}'
+        values: "1x200"
+      - series: 'longhorn_disk_status{job="longhorn-backend",node="hp-01",disk="intel7600p",condition="schedulable"}'
+        values: "1x200"
+    alert_rule_test:
+      - { eval_time: 3h, alertname: LonghornDiskNotReady, exp_alerts: [] }

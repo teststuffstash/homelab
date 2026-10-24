@@ -7,10 +7,10 @@ untouched in parallel until consumers move.
 
 It owns three things: the **credential boundary** (a pod holds a `gws_…` session token, never a
 real key), **per-session model resolution** (one model per session, from `policy.json`), and the
-three live **rails** — `anthropic` (the operator's Claude subscription OAuth token), `openrouter`
-(per-stack keys minted by openrouter-operator), `opencode` (the OpenCode Go key) — plus `codex`
-(the ChatGPT subscription, `responses` dialect), which ships **dark**: no deployed policy declares
-it and production ownership is wired only behind explicit environment settings.
+four live **rails** — `anthropic` (the operator's Claude subscription OAuth token), `openrouter`
+(per-stack keys minted by openrouter-operator), `opencode` (the OpenCode Go key) — and `codex`
+(the ChatGPT subscription, `responses` dialect — lit 2026-10-22, listed for every role since
+2026-10-23; see §Implementation notes).
 
 ## The contract
 
@@ -101,7 +101,7 @@ ConfigMap by a hash-suffixed configMapGenerator, so an edit rolls the pod) carri
 is deployed** — the ConfigMap rolls on sync, the image only after the deploy auto-bump (~10 min
 behind), and the loader refuses unknown keys by design (`_keys`): #2810 shipped `canary.backoff_s`
 beside its parser and the old image crash-looped the single Recreate replica for the whole gap
-(2026-10-22 06:55–07:0xZ). Values of known keys roll freely. Its three rails' tier LISTS are not hand-picked: `GW-MODEL-TIERS` derives them
+(2026-10-22 06:55–07:0xZ). Values of known keys roll freely. Its four rails' tier LISTS are not hand-picked: `GW-MODEL-TIERS` derives them
 from `argocd/resources/agent-gateway/benchmarks.json` (the committed tier evidence) under the
 policy's `tiers` block, and a row fails the suite when a list drifts from the derivation.
 

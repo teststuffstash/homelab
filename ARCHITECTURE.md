@@ -76,7 +76,7 @@ _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled
 - ✅ GitHub (`teststuffstash`), GHCR/Docker Hub as image sources; releases publish images + OCI
   charts to ghcr.
 - ✅ OpenTofu provisioning (cluster live), Talos + Kubernetes (versions: the generated line in README.md), three control planes behind a Talos VIP (ADR-133).
-- ✅ ArgoCD GitOps front (app-of-apps in `argocd/`, sourced from GitHub; Forgejo cutover = FU-007).
+- ✅ ArgoCD GitOps front (app-of-apps in `argocd/`, sourced from GitHub; Forgejo = major-outage fallback only, FU-007).
   Reconciles CloudNativePG → Postgres → Infisical → External Secrets Operator and the app layer.
 - ✅ CI: self-hosted two-tier (`docs/ci.md`) — in-cluster **ARC** (`runs-on: homelab-ephemeral`) +
   the **Proxmox VM runner** (ADR-082) for Docker/binfmt builds; Forgejo `act_runner` for Tier-B.

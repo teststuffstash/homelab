@@ -19,8 +19,8 @@ _Tracked by: FU-211 (these numbers are hand-typed — the `--render` generator i
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
 | `std` | hp-01 **×3 disks** (default unschedulable), m70s `nvme` — wk-02 left the tier 2026-09-14 (disk evicted + removed; the pve box is compute-only) | 1185G | 1020G | 294G (29%) *(was 310G, 58%)* | 337G (28%) *(was 356G)* |
-| `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p), **+ the SN530s in hp-01 and wk-04** (2026-09-24) | 1415G | 1315G | 1160G (88%), of which 300G is the registry's `registry-data` (FU-280) *(was 816G on 902G, 90%)* | 548G (39%) *(re-read 2026-09-24)* |
-| `slow-bulk` | wk-metal-04 SA400 — **unschedulable**, holds no replica | 477G | 316G | 0 | 35G (the image store) |
+| `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p; ⚠ intel0 NotReady since 2026-10-20 — nvme0 EIO), **+ the SN530s in hp-01 and wk-04** (2026-09-24) | 1415G | 1315G | 1160G (88%), of which 300G is the registry's `registry-data` (FU-280) *(was 816G on 902G, 90%)* | 548G (39%) *(re-read 2026-09-24)* |
+| `slow-bulk` | wk-metal-04 MX500 `sata500` (the install disk since 2026-10-20 — the SA400 did not move) — **unschedulable**, holds no replica | 248G | re-read pending (FU-211) | 0 | re-read pending (FU-211) |
 | `fast` | **nx-01 `intel7600p`** since 2026-09-24 (replica-1 ride scratch only; the Optane pair is shelved, FU-234) | 238G | 238G | 0 | 5G (2%) *(re-read 2026-09-24)* |
 | *(untagged)* | m70s Micron 2300 — the `longhorn-local-xfs` Garage zone, selector-less by design | 509G | 402G | 193G | 154G |
 
@@ -746,6 +746,12 @@ rather than for buying more drives.
   provisioning rule is node-scoped — exact for the one-disk nodes, pessimistic for the
   multi-disk ones (hp-01's three std disks and m70s's std + Garage spindle each sum together;
   it was thinkcentre's std disk + its two Optanes until 2026-09-12).
+- **Longhorn disk-health belt — BUILT 2026-10-24** (`LonghornDiskNotReady` in
+  `argocd/resources/longhorn-alerts/prometheusrule.yaml`, fixture `disk-not-ready.promtool-test`):
+  `longhorn_disk_status{condition="ready"} == 0` for 1 h. Every byte/provision row above and the
+  SMART belts were blind to wk-metal-04's `intel0` going Ready=False/NoDiskInfo on 2026-10-20
+  (nvme `Identify namespace failed (-5)`, SMART still "passed") — four silent days. A disk whose
+  series is absent (node/manager down) is out of its scope.
 - **Longhorn engine-move belt — BUILT 2026-10-11** (`argocd/resources/longhorn-alerts/engine-move.yaml`,
   FU-301 S9). Operator ruling 2026-10-11: the progress and outcome of a box-run engine move are read
   from CLUSTER truth, never from the management box's own metrics (the box can be mistaken about

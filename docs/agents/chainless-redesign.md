@@ -306,8 +306,8 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    spend is capped by **CI runtime**, not tokens (homelab `ci` ≈2 min; stack gates far
    longer), so cheap-retry economics stay wall-clock-bound until stack CI times improve.
 
-Build home: a later wave of #420 (after the reviewer failover ships); the accounting half
-rides #278/FU-131. Nothing here changes chunk A–F scope — the only-free interaction stays the
+Build home: FU-180 (the #420 wave it was parked on closed at the stint pilot); the accounting
+half is FU-180's rail-aware TOTAL metering (#278 and FU-131 closed). Nothing here changes chunk A–F scope — the only-free interaction stays the
 explicit conservative deny until budget-typing lands.
 
 **`claudeTier` is deprecated** because both its jobs dissolve: harness-from-string dies with the
@@ -529,7 +529,7 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
    remapping per ride made silent drift MORE likely, which is why this went first.
 2. **Rail-aware accounting** — `AGENT_RAIL` folded into stats/`run_reports` (M12's
    declared-unconsumed surfaces), then #278's summation across three currencies (window-draw /
-   usage-value / USD). FU-131's sweep relates.
+   usage-value / USD) — open as FU-180's accounting half (FU-131 closed 2026-10-24).
 3. **A rail-probe canary per (model, class) cell on the Go rail** (§M7 leg 3 machinery) before
    fleet exposure — compat fidelity is per-model, as the glm shorthand bug showed.
 4. **P4-flip evidence** — the shadow ladder read with real urgency data (the caller gap closed
@@ -573,7 +573,7 @@ ADR-107 (decision record) · [`model-routing.md`](model-routing.md) (the routing
 §M8–M13 mechanism home moved to
 [`../spikes/model-routing-history.md`](../spikes/model-routing-history.md), where M11 generalizes
 and M12 folds in) · [`agentstack.md`](agentstack.md) (claim) · FU-095 (routing program
-pointer) · FU-127 (structured `{rail, harness, model}`) · FU-131/#278 (accounting) · FU-168
+pointer) · FU-127 (structured `{rail, harness, model}`) · FU-180 (accounting + window shares; FU-131/#278 closed) · FU-168
 (dispatch throughput) · the banked tier-thesis revision (TICK-LOG 2026-08-13 — review leverage =
 decorrelation + tool-grounding, not tier; feeds class policy when piloted).
 
