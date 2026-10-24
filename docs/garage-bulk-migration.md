@@ -5,7 +5,7 @@ class/size change on a StatefulSet repeats this dance. Context: ADR-089 bulk tie
 
 > ⚠ **Written while garage was a tofu `helm_release`.** It moved to ArgoCD on 2026-08-04
 > (FU-136), so the target values now live in [`argocd/platform/garage.yaml`](../argocd/platform/garage.yaml)
-> (150Gi / `longhorn-bulk`) and step 8 is an ArgoCD sync, not a `tofu apply` — see the inline
+> (150Gi data + 30Gi meta on `longhorn-local-xfs` since the 2026-09-07 zone build-out, ADR-114) and step 8 is an ArgoCD sync, not a `tofu apply` — see the inline
 > note there. `tofu/garage.tf` keeps only the namespace, the two secrets and the VIP Service.
 > Everything else below is unchanged: the PV-rebind dance is a Kubernetes property, not a
 > tofu one.

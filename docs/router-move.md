@@ -9,7 +9,7 @@ move is that drill's router shape (§The router rehearsal there). Addresses: [`i
 as LAN) and becomes a VM on `nx-02`, built from git: WAN = nx-02's `eno2` by PCI passthrough,
 LAN = a virtio NIC on `vmbr0`. It keeps **`192.168.2.1`** — so the move changes no consumer's
 address, and the only things that must come across are the router's **identity**. Big Data stays
-cabled and powered off as the fallback for 1–2 weeks, then retires. **Since ADR-144 (2026-09-30)
+cabled and powered off as the fallback for 1–2 weeks, then retires (retired 2026-10-20 — §Status). **Since ADR-144 (2026-09-30)
 the move is to a CARP PAIR built beside Big Data** — the nx-02 VM and a `pve` VM (which gets a
 single-port x1 NIC for its WAN; Big Data's card never moves), each standing at its own LAN IP
 before the window; the identity below is carried onto both.
@@ -535,3 +535,5 @@ the hypervisor's flooding, not the node's config.
   checked API-complete against core 26.7.5 (reads + source; leases are a local `memfile`, no
   database). The inert drills proved the machinery, not the service layer — the next evidence is
   a real switchover. **Next:** §The two windows' prep list.
+- 2026-10-20: Big Data RETIRED — the fallback period is over; its hardware became `wk-metal-04` (#2758), the
+  OPNsense disk wiped.

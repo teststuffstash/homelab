@@ -13,7 +13,7 @@ there it reconciles this directory from git. Decision background: `docs/secrets.
 tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infisical-db, infisical-pg-app,
        │                     repo-homelab-github, repo-oracle-iac-github (full set: `tofu/argocd.tf`)
        └──applies──► FOUR root Applications (platform, sleep, oracle, circles — circles bootstrap 2026-08-03:
-`argocd/platform/circles-{project,namespaces}.yaml`) (helm: argocd-apps), source = GitHub (FU-007: Forgejo later)
+`argocd/platform/circles-{project,namespaces}.yaml`) (helm: argocd-apps), source = GitHub (FU-007: Forgejo = outage fallback only)
                           │
           "platform" ─► argocd/platform/*.yaml  (child Applications, ordered by sync-wave)
              Sync waves -1→6 — authoritative list = the `argocd.argoproj.io/sync-wave`
@@ -69,11 +69,11 @@ KUBECONFIG=tofu/kubeconfig devbox run -- kubectl -n argocd get applications -w
 
 ArgoCD admin password: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d` → store in KeePass.
 
-## Forgejo cutover (later — NOT done yet; FU-007)
+## Forgejo cutover (emergency procedure only — FU-007)
 
 We bootstrap against **GitHub** so there's no Forgejo/Postgres dependency on ArgoCD's own
-git source. To honor the offline principle later, mirror the repo into Forgejo and flip the
-source:
+git source. Forgejo is the GitHub-major-outage FALLBACK only, never the live read path (FU-007, operator
+ruling 2026-09-13) — this recipe is a documented emergency procedure, not a plan:
 
 1. Configure a pull-mirror of `teststuffstash/homelab` on `forgejo.teststuff.net`.
 2. Deliver a Forgejo read credential to ArgoCD via an `ExternalSecret` (now that ESO works).
