@@ -33,10 +33,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   apply` → PR when the lists move (a key NEW to the loader ships AFTER its image, #2812). Watch: the jail's codex REFRESH
   ~10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`, status codes only). Watch Go-rail worker strikes: mimo-v2.6-flash
   4/7, glm-5.3-flash 0/3 clean (#2903 re-cut). opencode 2.0 hold stands (facts: TICK-LOG 10-18). Operator-only: FU-313,
-  #2768, and two RULINGS (TICK-LOG 10-24 evening): the baseline forwarder's 4 forks; **oracle prober on codex** — (A) a
-  gateway caller `{stacks:[oracle], roles:[prober]}` + lift the launcher's platform-only guard for prober (rec. yes),
-  (B) codex = the nested mission child (rec.) vs move the probe cron onto agent-session.sh, (C) codex binary in the
-  coordinator image vs prober template → agent-base (composition edit). Prereq either way: oracle-fleet#931.
+  #2768, the baseline forwarder's 4 forks (TICK-LOG 10-24 evening). **Oracle prober on codex BUILT (10-24, rulings A/B/C):**
+  #2904 + #2905 live (agent-base prober, `prober.childRail`); codeowner read oracle-fleet#933 → then ARM oracle-iac#1141
+  (unarmed on purpose until #933 lands). Seat: read the first cron tick with a codex child after that.
 - **⚑ ADR-156 step 5** — measure tokens / worker rounds / invalid findings / coordinator interventions per completed PR
   ([`specs-reviewer.md`](specs-reviewer.md) §The portable process; next = the #2867/#2868 PRs). oracle-fleet stays on its
   own process until the operator says the gateway has proven it.
@@ -78,6 +77,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   verdicts, DIFFERS lines, weakened gates; revert = `/scripts/` in CODEOWNERS + governance-lint GOVERNANCE); the r8
   reports (#2522, merged on the bot by ruling — read after).
   (4) Prod routers on 26.7.5 with 26.7.6 pending on the official path (39 packages, no reboot) — an attended window.
+  (6) agent-runtime `.github/workflows/build-image.yaml`: the pin flow must also bump the agent-base tag in
+  `argocd/resources/agentstack/composition.yaml` (probers ride it since #2905; hand-synced until then) — operator-direct.
   (5) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).
   #1882's "3 flagged choices" were never recorded.
   (6) pve's CMOS clear reset "Restore on AC Power Loss" — UNREADABLE headless: a monitor/GPU visit or a deliberate

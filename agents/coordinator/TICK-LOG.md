@@ -14654,3 +14654,17 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - No watermark existed (never advanced since the 08-11 first run) → window set to 2026-10-14T17:00Z (the board-sweep watermark); `skill-retro-scan.sh` MARKER now derives from `.claude/skills/*/` (the hand list missed board-sweep, maintenance-window, second-jail).
 - 43 slices, read by 6 seat subagents. GAPS: 16 new entries (board-sweep-G2, handoff-G2..G4, design-agents-G7/G8, maintenance-window-G7, onboard-G3/G4, opnsense-as-code-G2, docs-cleanup-G1, second-jail-G1..G3) and resights of design-G2, design-agents-G4/G6, maintenance-window-G2/G4/G5; design-agents-G3 REOPENED (promoted rule recurs where the corpus is not loaded → seat card).
 - Promotion proposals (≥2 dates) await the operator's nod; watermark advanced after the ledger write.
+
+## 2026-10-24 ~19:40–21:00Z — oracle prober on codex BUILT (operator rulings: A yes, B nested child, C agent-base) (seat subagent)
+- **#2904 MERGED** gateway caller `oracle-agents:agentstack-loop` → role `prober`, stack oracle, no bind (+ pod-read RBAC);
+  launcher guard NOT lifted (the probe pod admits its own codex session, never via agent-session.sh).
+- **#2905 MERGED** every stack's prober on agent-base; optional `prober.childRail: codex` (one session per tick, released on
+  exit; admission refused → that tick's child falls back to claude, recorded in the report — seat's call, operator may
+  prefer fail); `PROBE_ARTIFACTS` uploaded beside report.md (#931 defect 3).
+- oracle-fleet **#932** (class2_tick reads codex exec --json, fixture = a live WM-4 codex child) + **#934** (a failed codex
+  turn = PROBE-FAIL) MERGED; **#933** (brief codex steps + #931 whole; MCP tools pre-approved — headless codex refuses MCP
+  otherwise) bot-approved, awaits operator codeowner read; **oracle-iac#1141** (`childRail: codex`) UNARMED until #933.
+- **Codex cycle (seat pod, gateway-admitted, gpt-6-astra):** OK WM-2/3/4/5/7/8, FINDING WM-1/6/9/10 (6/4 vs claude 4/6);
+  codex never under-resolves, misses by too few calls. WM-2 first try died on the #2904 gateway roll (PROBE-FAIL under
+  #934). Headroom 5h 0.06→0.52 (~5 %/mission), 7d 0.10→0.17. Artifacts `s3://agent-transcripts/oracle/probe-seat-codex/`.
+- Residual: agent-base tag in composition.yaml not on agent-runtime's pin flow (workflow file = operator-direct) → meta-state.

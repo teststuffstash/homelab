@@ -809,8 +809,8 @@ the block needs pruning, not more headings.
       (#2844), harness-scoped strikes (#2880); the harness-follows-the-cell ruling is #2870 (queued). **Next (seat):** a canary
       window per 6 h refresh, re-cut when the lists move (last #2903, 10-24); read the first platform worker ride through
       `/sessions` and the first non-prober codex ride; the jail's codex refresh reading ~10-26. **Operator-only:** FU-313;
-      ruling #2768; #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks + oracle prober
-      on codex (A–C) — both TICK-LOG 10-24 evening.
+      ruling #2768; #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
+      codex child (#2904/#2905 live) waits on oracle-fleet#933 → arm oracle-iac#1141 (TICK-LOG 10-24).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
