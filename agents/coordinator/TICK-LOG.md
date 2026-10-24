@@ -14630,3 +14630,22 @@ updates or reverts as much as possible — mechanical revert or a responder."
   ReferenceGrant, cert-manager scope, single multi-source Application for ordering). CI ci/sentinel-plan green; iac-sentinel red
   until the exceptions baseline lands on master. HELD for the shape ruling.
 - Minted FU-317 (apiserver audit → Loki), FU-318 (Kargo residuals).
+
+## 2026-10-24 ~18:20–19:25Z — gateway FU-270 seat items + oracle prober on codex (operator: "use subagents, work unattended") (seat)
+- **Canary window** (18:21Z refresh, `--max 3`): mimo-v2.6-flash @gmicloud 19 s / @io-net 188 s / @novita 19 s — all clean →
+  eligible (cells 234/15 → 231/18, $0.0134/day). **#2903 MERGED** (re-cut, values only): opencode light/standard + openrouter
+  light/standard moved; heavy/anthropic/codex unchanged. Go-rail mimo 4 strikes / 7 judged pushed its cost per clean ride up.
+- **`gateway_tokens_total` "no series" = not a bug:** counters render after first increment; Recreate pod from 15:01Z had
+  served no data-plane traffic. 14-day history present on every rail; no 200-without-tokens pod after #2640. Optional:
+  zero-init 4 rails × 4 classes (not built). `gateway_codex_upstream_headroom_total{accepted}` = 96 on the 10-23 pod.
+- **Baseline forwarder (spike §Establish a baseline): NOT built — operator forks:** which login (the jail's = the only one off
+  the gateway chain, but muddies the ~10-26 refresh watch), jail vs cluster, reuse GW-CODEX-CAPTURE sanitizer vs own,
+  verify `chatgpt_base_url` keeps native semantics first.
+- **Oracle prober on codex: mapped, no PRs.** probe-oracle cron (composition `spec.prober`) runs `claude -p` on
+  `.agents/probe.md` in the coordinator image (no codex), via the old proxy, bypassing agent-session.sh; nested child =
+  opus by default; class2_tick.py parses claude stream-json only. Blockers: launcher /sessions platform-only
+  (agent-session.sh:297), no oracle caller in policy.json, no codex binary, no codex transcript parser/fixture, `.agents/**`
+  codeowner. Rulings A–C → meta-state GATEWAY bullet.
+- **WM-1..WM-10 already ran a full cycle on the claude path (10-22 06:43Z → 10-24 18:43Z):** OK WM-2/4/5/6; FINDING
+  WM-1/3/7/8/9/10 (under-resolved/unresolved citations; WM-9 gold 0/4, prose-only report). Runner defects (child model
+  unpinned, outer LLM rewrites the JSON, report.json + child.jsonl never reach S3) → **oracle-fleet#931** filed unqueued.

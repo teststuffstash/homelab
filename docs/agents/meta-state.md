@@ -31,10 +31,12 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ GATEWAY (FU-270 is the pointer — its Next is the seat's list).** Each 6 h refresh: `devbox run -- bash
   gateway/scripts/canary-entrants.sh --max 3 < /dev/null` → `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers --
   apply` → PR when the lists move (a key NEW to the loader ships AFTER its image, #2812). Watch: the jail's codex REFRESH
-  ~10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`, status codes only); `gateway_codex_upstream_headroom_total` is 0 on
-  every outcome (10-24, no codex ride since the capture) — expect `accepted` on the next (`quota-invalid` = live header
-  grammar ≠ the CLI's reader). **`gateway_tokens_total` has NO series in Prometheus (10-24)** — unread since the 10-16
-  canary; read why. opencode 2.0 hold stands (facts: TICK-LOG 10-18). Operator-only: FU-313, #2768.
+  ~10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`, status codes only). Watch Go-rail worker strikes: mimo-v2.6-flash
+  4/7, glm-5.3-flash 0/3 clean (#2903 re-cut). opencode 2.0 hold stands (facts: TICK-LOG 10-18). Operator-only: FU-313,
+  #2768, and two RULINGS (TICK-LOG 10-24 evening): the baseline forwarder's 4 forks; **oracle prober on codex** — (A) a
+  gateway caller `{stacks:[oracle], roles:[prober]}` + lift the launcher's platform-only guard for prober (rec. yes),
+  (B) codex = the nested mission child (rec.) vs move the probe cron onto agent-session.sh, (C) codex binary in the
+  coordinator image vs prober template → agent-base (composition edit). Prereq either way: oracle-fleet#931.
 - **⚑ ADR-156 step 5** — measure tokens / worker rounds / invalid findings / coordinator interventions per completed PR
   ([`specs-reviewer.md`](specs-reviewer.md) §The portable process; next = the #2867/#2868 PRs). oracle-fleet stays on its
   own process until the operator says the gateway has proven it.

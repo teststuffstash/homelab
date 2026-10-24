@@ -807,10 +807,10 @@ the block needs pruning, not more headings.
       rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270). Live: the PLATFORM session pod rides
       `AGENT_GATEWAY=sessions` (#2788); codex rail lit 10-22, subscriptions on every role (ruled 10-23, #2845), codex MCP
       (#2844), harness-scoped strikes (#2880); the harness-follows-the-cell ruling is #2870 (queued). **Next (seat):** a canary
-      window per 6 h refresh, re-cut when the lists move; read the first platform worker ride through `/sessions` and the
-      first non-prober codex ride; the jail's codex refresh reading ~10-26; the native-client baseline forwarder (spike
-      §Establish a baseline — unbuilt). **Operator-only:** FU-313; ruling #2768; #2867's strike-accounting + version-drift
-      findings (TICK-LOG 10-24).
+      window per 6 h refresh, re-cut when the lists move (last #2903, 10-24); read the first platform worker ride through
+      `/sessions` and the first non-prober codex ride; the jail's codex refresh reading ~10-26. **Operator-only:** FU-313;
+      ruling #2768; #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks + oracle prober
+      on codex (A–C) — both TICK-LOG 10-24 evening.
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
       store (Redis/Valkey-class — not a platform service today) + a durable one (CNPG or SQLite).
