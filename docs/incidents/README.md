@@ -60,6 +60,9 @@ the same exemption the TICK-LOG and ADRs carry.
 | 2026-08-07 | [CI stayed down 5h after GitHub recovered: a listener chasing a deleted runner set](2026-08-07-arc-listener-wedge.md) | — |
 | 2026-08-11 | [wk-metal-02 lost its IPv4 default route; fleet-wide "WAN class" reds + runner starvation](2026-08-11-wk-metal-02-default-route-loss.md) | FU-150 |
 | 2026-08-24 | [pve thin pool 100% (third fill) — wk-01 froze twice, Garage metadata wiped](2026-08-24-pve-thin-pool-garage-meta-wipe.md) | FU-093, FU-137 |
+| 2026-08-26 | [The authoritative review plane was dead (reviewer 404-loop)](2026-08-26-reviewer-404-loop.md) | FU-188 |
+| 2026-08-31 | [The Argo lock plane wedged: the sync manager corrupted under the #1136 failure storm](2026-08-31-argo-semaphore-leak.md) | FU-198 |
+| 2026-09-02 | [GitHub 401-throttles anonymous git from the WAN IP; the oracle loop down ~4h through one unfixed clone site](2026-09-02-anonymous-git-throttle-loop-outage.md) | — |
 | 2026-09-03 | [pve thin pool 100% (FOURTH fill) — cp-01/wk-01/wk-02 paused on io-error, API down ~8 min; triggered by the runner-image pre-puller](2026-09-03-pve-thin-pool-fourth-fill-prepull.md) | FU-093, FU-207, FU-208 |
 | 2026-09-05 | [The updater red for 65h on a GraphQL node cap, the responder's triage dead for ≥7 days, the retro's cells dead on `set -u` — one belt fired, into a dead responder](2026-09-05-updater-node-cap-responder-dead-triage.md) | FU-227, FU-188 |
 | 2026-09-06 | [The switchboard OOMKilled 153 times in a row (doorbell-collapse listed the whole retained workflow history), and nothing alerted](2026-09-06-switchboard-oom-silent-failures.md) | FU-188, FU-219 |
@@ -67,6 +70,7 @@ the same exemption the TICK-LOG and ADRs carry.
 | 2026-09-16 | [Silent node reboots root-caused to a `page_table_check` kernel BUG (Talos < v1.13.4)](2026-09-16-page-table-check-reboots.md) | FU-246, FU-247 |
 | 2026-09-16 | [A targeted `tofu apply` for one node replaced three worker VMs](2026-09-16-targeted-apply-replaced-three-vms.md) | FU-248 |
 | 2026-09-21 | [A talosconfig (os:admin key) was committed to public master; the direct lane had no secret scan](2026-09-21-talosconfig-committed-to-public-master.md) | FU-264 |
+| 2026-09-28 | [wk-03 NotReady: an ARC runner job thrashed the 8 GB VM past its kubelet](2026-09-28-wk-03-runner-memory-thrash.md) | FU-218, FU-155 |
 | 2026-10-03 | [Wiring CNPG backups into running clusters left grafana-pg and forgejo-pg without a writable primary (~10 min each), and nothing alerted](2026-10-03-cnpg-wire-switchover-deadlock.md) | FU-299 |
 | 2026-10-06 | [ci-runner-01's root disk filled unseen (leaked kind volumes, no node_exporter) — oracle e2e red ~2 days, read as a reviewer outage; the runner App key surfaced in plans and was rotated](2026-10-06-ci-runner-disk-full-key-in-plans.md) | FU-306 |
 | 2026-10-08 | [nine hours without WAN — the window-2 failover proof left nx-02 in CARP maintenance (`carp_status/enable` does not leave it; `maintenance` is a toggle); detectors and the box timers self-healed, stranded CI and a 4-hour responder backoff holding the subscription semaphore did not](2026-10-08-carp-maintenance-not-left.md) | — |
