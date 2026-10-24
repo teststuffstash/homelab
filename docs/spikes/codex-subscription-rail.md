@@ -955,6 +955,34 @@ What the ride did NOT exercise (named, not claimed): cancellation mid-stream, a 
 incomplete terminal, a 429, a refresh during a ride, a second turn (a new `codex exec`) reusing
 state — each stays an offline synthetic row until observed live.
 
+### The opt-out ride — 2026-10-23 20:09Z (FU-270)
+
+Window `seat-1792786159-4202` (20:09:20Z–20:12:03Z), one prober ride (`canary-codex.sh`) on
+agent-base `2026.10.23-g79d146c8caac` (`sha256:0ede69bb…`), the first image carrying
+agent-runtime#181's phone-home opt-outs (PR agent-runtime#182); pod `agent-homelab-200922` on nx-01,
+harness codex, model `codex/gpt-6-astra`. Two `/openai/v1/responses` turns, both 200; the pod
+answered the prompt exactly (`codex-cli 0.162.1`; `86 README.md`), clean, 13 s in the loop.
+Upstream headers: plan `plus`, primary window 0 % used; both gateway windows read 0.
+
+- **No direct backend calls.** POLICY_DENIED from the ride pod (Prometheus): `chatgpt.com` 0 and
+  `ab.chatgpt.com` 0, against 14.2 each over the capture ride's window (10-23 10:12–10:22Z, the
+  previous image). Every other homelab-source drop series read 0; no alert changed state. This is
+  agent-runtime#181's acceptance item 4, met live — the calls the capture ride saw were the
+  optional update/analytics/telemetry activity the opt-outs disable, so the §Named gaps row
+  about them is resolved.
+- **The hubble attribution leg produced nothing** — `scripts/hubble-observe.sh` probed
+  `127.0.0.1` but dialled `localhost`, which resolved to `::1` and was refused; fixed on master
+  (the script now dials `127.0.0.1`). Prometheus carried the evidence.
+- **A jail-launched ride neither reports nor releases at finalize**: the launcher logged "router
+  report unreachable — non-fatal, jail runs land here" (`agents/agent-session.sh`, the jail-run
+  branch) and the session release failed; the canary released the session itself (200). So a
+  jail ride counts no strike and holds its rail slot until the script's explicit release —
+  the expected jail shape, recorded, not changed.
+
+Evidence: the secondary session's `REPORT.md` + `ride-attempt-1.log`, the capture bundle for
+session `71111e9d…` in the jail's `~/.claude/codex-capture/`, transcripts at
+`s3://agent-transcripts/homelab/capture-codex-20261023T200921Z/`.
+
 ### Build order and acceptance
 
 Under FU-270: specify the capture/export contract and prove sanitization offline; implement
