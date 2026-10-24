@@ -8,7 +8,7 @@ homelab has three different reconciliation regimes and a bump means something di
 split, the coordinator×Renovate verbs) is [`renovate.md`](renovate.md) — it applies to every repo
 the App autodiscovers and is not repeated here. The **app-stack** deploy shapes (app+chart,
 operator chart, pod image) are `ROADMAP.md` → *Programs in flight* → "Deploy paths" (FU-051). The
-surfaces homelab doesn't reconcile at all are FU-097, same section.
+surfaces homelab doesn't reconcile at all are ADR-152, same section.
 
 The ledger rule this feeds: [`management-box.md`](management-box.md) §The capability ledger
 (FU-097, archived 2026-10-03 — generalized to dependency classes 2026-09-27). **Tracked by:** FU-051 (the app-side sibling), FU-016 (SLSA signing/SBOM); FU-046 (reviewable dep
@@ -474,7 +474,7 @@ A bump is not done when it merges; it is done when nothing broke. What exists an
 | **Renovate liveness** | ✅ | `github_renovate_last_pr_timestamp` per repo on the github-exporter → `RenovateSilent` (14 d org-wide, `warning`) since homelab#1992 — the #502 acceptance-3 gauge; the dashboard-issue half was retired by ruling |
 | **Coverage-table rot** | ✅ | `github_dependency_coverage_gap_rows` / `_complete` / `_last_proven_timestamp` per class → `DependencyClassProofStale` (a complete class whose proof is >90 d old) — §The dependency inventory |
 | **Substrate currency / support window** | ✅ | the management box's belt compares the declared Talos / Kubernetes / Cilium versions against upstream releases and alerts on "a newer minor exists" and on "ours is EOL" — [`management-box.md`](management-box.md) §MB2 (FU-254). The sibling of the row above, and **not** a thing Renovate could have covered: class 6 must not auto-deploy |
-| Drift between tofu applies | ⚠ partial — `MgmtApplyResidueStanding` + `MgmtNode*Drift` | FU-097, FU-235 |
+| Drift between tofu applies | ⚠ partial — `MgmtApplyResidueStanding` + `MgmtNode*Drift` | FU-235 (FU-097 archived 2026-10-03) |
 
 **The observation window** (`iac-lane.md` §Progressive delivery) is the frame to reuse: sync → health
 → *window* → promote or revert. Today a homelab platform bump has a sync and a shallow health check,

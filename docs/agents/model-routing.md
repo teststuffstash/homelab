@@ -399,9 +399,9 @@ and `subscription-fallback` (the §M12 degrade). The folded accounting view is i
     `/route`; the knob is pod env, not a claim field.
 - **A platform claim is chainless when it has no chain** and refuses a chainless dispatch without
   an authoritative verdict.
-  - **`unenforced`** for [the platform stack](agentstack.md) — Goal #1640 acceptance 6 (the claim still carries
-    `workerModel`/`workerModelFallbacks` at `routerMode: shadow`; the chain-walk paragraph in the
-    brief and the runbook's `--model` step are deleted only by that acceptance).
+  - anchor: `agents/agent-session.sh` `REPLAY:chainless-guard`; [the platform stack](agentstack.md) went chainless
+    at `routerMode: authoritative` 2026-09-19 (Goal #1640 acceptance 6 — homelab#1782/#1783/#1787), the fleet's
+    last static chain.
 
 ### The OpenRouter API surface (probed — the one reference)
 
@@ -475,7 +475,6 @@ homelab#1665/#1666 via PR#1734. The rows below are the residue:
 | the finalizer/watchdog producer half of the strike vocabulary, and the storm-watchdog kill | Goal #1640 acceptance 1 (agent-runtime half) |
 | launcher retry at worker-terminal | Goal #1640 acceptance 4 |
 | strike READERS migrated off the comment to the router store | proposed, no owner (operator ruling 2026-08-19; blocked on the storage-engine question) |
-| the platform stack chainless + `routerMode: authoritative` | Goal #1640 acceptance 6 |
 
 ## The problem, from evidence
 

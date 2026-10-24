@@ -57,12 +57,15 @@ spec:
             summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is {{ $value | humanizePercentage }} used — under the 25% free floor, Longhorn will not place new replicas on it"
             description: >-
               New volumes whose diskSelector needs this disk (bulk/scratch on the two laptops)
-              fault with ReplicaSchedulingFailure while existing ones keep working. On the
-              bulk-tier nodes the usual eater is the container image store sharing the partition
-              (per-build arc-runner/agent-base images) — kubelet image GC is pinned to 60/50 on
-              kata nodes (tofu/metal.tf) for exactly this; if it fires anyway, check
-              `kubectl get --raw /api/v1/nodes/<n>/proxy/stats/summary | jq .node.runtime.imageFs`
-              first, then docs/storage-ledger.md.
+              fault with ReplicaSchedulingFailure while existing ones keep working. Check the
+              disk's Longhorn snapshots first (`kubectl -n longhorn-system get snapshots.longhorn.io`
+              by size): a REBUILD snapshot merges itself — never clear it; a `markRemoved` snapshot
+              left as volume-head's parent holds its blocks until a filesystem-trim. Then, on the
+              bulk-tier nodes, the other eater is the container image store sharing the partition
+              (per-build arc-runner/agent-base images; kubelet image GC is pinned to 60/50 on kata
+              nodes, tofu/metal.tf) —
+              `kubectl get --raw /api/v1/nodes/<n>/proxy/stats/summary | jq .node.runtime.imageFs`.
+              Ledger: docs/storage-ledger.md.
         - alert: LonghornDiskAlmostFull
           expr: |
             longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.93
@@ -74,6 +77,32 @@ spec:
             description: >-
               Act now: evict replicas off this disk (`evictionRequested: true` on the disk) or free
               space. A Longhorn volume that fills does not fail politely.
+        # DISK HEALTH, not bytes. The four byte/provision rows here and the SMART belts
+        # (docs/storage-ledger.md §Build Disk HEALTH metering) were all blind to wk-metal-04's
+        # `intel0` sitting Ready=False/NoDiskInfo from 2026-10-20T15:07Z (nvme Identify namespace
+        # failed -5, SMART still "passed") — four silent days. Longhorn's own Ready condition is
+        # the signal. `for: 1h` rides out manager restarts and node reboots (siblings blip to 0
+        # for minutes). Out of scope: a disk whose series is ABSENT (node or manager down) —
+        # that is the node/target belts' job, not this one's.
+        - alert: LonghornDiskNotReady
+          expr: |
+            longhorn_disk_status{condition="ready"} == 0
+          for: 1h
+          # triage dig: a standing condition; the kernel log + the disk's Ready message name the cause, the remedy is a hardware/CR act
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is not Ready ({{ $labels.condition_reason }}) — Longhorn cannot use it"
+            description: >-
+              Longhorn reports the disk's Ready condition False (reason {{ $labels.condition_reason }}),
+              so it is also unschedulable and any replica on it is faulted — the byte and SMART belts
+              do not see this. Read the condition message
+              (`kubectl -n longhorn-system get nodes.longhorn.io {{ $labels.node }} -o json | jq '.status.diskStatus["{{ $labels.disk }}"].conditions'`)
+              and the node's kernel log for the device
+              (`talosctl -n {{ $labels.node }} dmesg | grep -i -E 'nvme|ata|blk|I/O error'`).
+              NoDiskInfo with I/O errors = a failing device (wk-metal-04 intel0, 2026-10-20);
+              DiskFilesystemChanged = a disk record whose filesystem was replaced or removed
+              (evict + delete the disk entry if it was retired on purpose).
+              Ledger: docs/storage-ledger.md.
         # PROVISIONING SUM — how close a node is to the 200% ceiling. Measured 2026-08-04:
         # wk-02 1.11, thinkcentre 0.90, hp-01 0.84, wk-metal-01 0.63. 1.5 = halfway to the wall.
         - alert: LonghornNodeOverProvisioned

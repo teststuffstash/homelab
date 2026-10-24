@@ -1,8 +1,8 @@
 # Spike — Codex as a ChatGPT-subscription rail
 
 **Status:** investigation, 2026-09-21 (consumer-surrogate use case added 2026-09-22; isolated
-gateway prototype added 2026-10-16, see below). No
-architecture decision has been taken. This records the facts learned while bringing native Codex
+gateway prototype added 2026-10-16, see below). The rail is
+LIVE since 2026-10-22 (§Lighting the rail), role routing ruled 2026-10-23 (§Role routing); the open legs are FU-270's. This records the facts learned while bringing native Codex
 into the jail, the OpenCode Go precedent, and the first
 implementation slices. The question is: how can cluster agents use the operator's ChatGPT
 subscription without placing its refreshable credential in worker pods, while exposing account

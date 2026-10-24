@@ -7,7 +7,7 @@ document is findings only. **2026-09-24: Option A is overtaken.** The fleet has 
 v1.14 (FU-155).
 **Environment (at research time):** Talos **v1.13.2** (now v1.14.1, `tofu/variables.tf`) / Kubernetes v1.36.1; the
 ephemeral/kata tier (`wk-metal-01/02/03` 8GB, `wk-metal-04` 16GB), hardened 2026-07-28 by the
-FU-112(b) kubelet reservations (`tofu/metal.tf` — the `systemReserved`/`kubeReserved` block, ~L68-85).
+FU-112(b) kubelet reservations (`tofu/metal.tf` — the `systemReserved`/`kubeReserved` block, ~L105-141).
 **Symptom being explained:** one PSI fire SIGKILLs 4–5 unrelated pods within a second, repeating
 several times an afternoon on `wk-metal-03` (homelab#63/#65/#100/#101; incident
 `docs/incidents/2026-07-27-kata-ride-oom-cascade.md`).
@@ -111,7 +111,7 @@ kills an **arbitrary** one and reports `score: 0`. Fixed upstream in v1.13.8 by
 | `cgroupRankingExpression` | same doc | yes |
 | `sampleInterval` | same doc (default 500 ms) | yes — `ticker.Reset()` |
 | `strictCgroupClassOrdering` | same doc, **v1.13.8+ only** (absent in v1.13.2) | yes |
-| kubelet `systemReserved`/`kubeReserved`/`evictionHard` | `machine.kubelet.extraConfig` — already set for the kata tier, `tofu/metal.tf` ~L68-85 | yes |
+| kubelet `systemReserved`/`kubeReserved`/`evictionHard` | `machine.kubelet.extraConfig` — already set for the kata tier, `tofu/metal.tf` ~L105-141 | yes |
 | swap device | `SwapVolumeConfig` doc (`website/content/v1.13/reference/configuration/block/swapvolumeconfig.md`) | provisions a partition |
 | zswap | `ZswapConfig` doc (`maxPoolPercent`, `shrinkerEnabled`) | yes, but see §4 |
 | kubelet `failSwapOn` | Talos already defaults it to **false** (`internal/app/machined/pkg/controllers/k8s/kubelet_spec.go:365`) | n/a |
