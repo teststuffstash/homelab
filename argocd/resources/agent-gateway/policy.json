@@ -137,6 +137,11 @@
       "roles": ["worker", "prober"],
       "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]
     },
+    "system:serviceaccount:oracle-agents:agentstack-loop": {
+      "stacks": ["oracle"],
+      "roles": ["prober"],
+      "bind_namespaces": []
+    },
     "system:serviceaccount:agent-coordinator:specs-review": {
       "stacks": ["platform"],
       "roles": ["reviewer", "worker"],

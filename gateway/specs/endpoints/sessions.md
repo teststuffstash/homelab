@@ -1047,7 +1047,7 @@ that stack).
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
 | "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
 | "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
-| "the deployed callers are today's two dispatchers and the judge, under enforce" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker, prober]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`, outcome `own`), `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`, `own`) and `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**) |
+| "the deployed callers are today's three dispatchers and the judge, under enforce ⚖" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker, prober]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`, outcome `own`), `system:serviceaccount:oracle-agents:agentstack-loop` (`[oracle]`, `[prober]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`, `own`) and `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
@@ -1055,7 +1055,14 @@ is the one in-cluster caller of `agents/agent-session.sh`; the jail's `canary-en
 the same SA's token to ride the entry canary, which is why its entry grants `prober` beside
 `worker` (2026-10-20 — until then every canary admission was 403 `caller-role-denied`). It binds
 into the platform repo namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
-no `agentstack-worker`, so a bind there could never be pulled and is not granted. The specs-review
+no `agentstack-worker`, so a bind there could never be pulled and is not granted. ⚖ The **oracle
+loop** `oracle-agents:agentstack-loop` (operator ruling 2026-10-24, FU-270) is the `probe-oracle`
+CronWorkflow's pod (the AgentStack Composition's prober template, `prober.childRail: codex`): role
+`prober` only, stack `oracle` only, **no bind** — the pod admits ONE unbound session for its own
+nested mission child (`rail: codex`) and holds the answer's token itself, the specs reviewer's
+shape; its projected token is pod-bound, so the reaper knows the pod
+([GW-SESSIONS-LIVENESS](#gw-sessions-liveness)). Every other oracle role stays on the old proxy's
+`/route`. The specs-review
 tick and its shadow cells run as their own SA `specs-review` (`agents/coordinator/specs-review-argo.yaml`;
 homelab#2685 — `callers` is per SA, and `agent-coordinator` is the SA every other workflow in that
 namespace shares): role `reviewer`, plus ⚖ `worker` for the goose@openrouter shadow cell, which rode `--role worker`
