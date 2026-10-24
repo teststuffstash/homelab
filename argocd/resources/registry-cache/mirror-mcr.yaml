@@ -107,11 +107,29 @@ spec:
           resources:
             requests: { cpu: "100m", memory: "128Mi" }
             limits:   { cpu: "2",    memory: "512Mi" }
+        # Finishes every cold-blob fill a consumer abandoned (RegistryMirrorColdBlobAbandoned's
+        # fix, homelab#1985 S9 sweep) — design + why-not-the-alternatives in blob-warmer.yaml.
+        # Same image (busybox sh/wget/find), store mounted READ-ONLY: it reads the store and
+        # GETs blobs through the registry on localhost; only the registry ever writes.
+        - name: blob-warmer
+          image: registry:3.1.2
+          command: ["/bin/sh", "/warmer/warm.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/registry, readOnly: true }
+            - { name: warmer, mountPath: /warmer, readOnly: true }
+          resources:
+            requests: { cpu: "10m", memory: "16Mi" }
+            limits:   { cpu: "500m", memory: "64Mi" }
       volumes:
         - name: data
           persistentVolumeClaim: { claimName: mirror-mcr-data }
         - name: maintenance
           configMap: { name: store-maintenance, defaultMode: 0555 }
+        - name: warmer
+          configMap: { name: blob-warmer, defaultMode: 0555 }
 ---
 apiVersion: v1
 kind: Service
