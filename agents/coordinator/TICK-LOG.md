@@ -14496,3 +14496,19 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `test_redact.py`) stays as the in-place mark — the mark is the record, no FU (FU-270 stint).
 - Specs reviewer hygiene notes on #2872: 3× H-THREAD_BROKEN (path / log_line_contains cells not named
   in the steps) — advisory, the next GW-REDACT touch picks them up.
+
+## 2026-10-24 — two secondary reports filed under FU-270
+
+- **Opt-out ride (20:09Z 10-23, window seat-1792786159-4202)**: agent-runtime#181 acceptance 4 met live
+  — 0 POLICY_DENIED SYNs to chatgpt.com/ab.chatgpt.com vs 14.2 each on the capture ride. → **#2878**
+  (GW-RAIL-CODEX ⚑ gap row → ⚖ live evidence + spike §The opt-out ride), armed. Hubble leg's
+  `localhost`→`::1` defect fixed direct (`scripts/hubble-observe.sh`, verified against the relay).
+  Jail-launched ride neither reports nor releases at finalize — the jail-run branch, recorded only.
+- **#2867's three strikes**: (1,2) the opencode permission grant dead on 1.19.0 → #2869 (merged; next
+  opencode ride = end-state check); (3) Go rail dialect is per-MODEL (models.dev `@ai-sdk/anthropic`
+  override on the Claude models, dropped by the catalog parser) — the mirror of #2870, root added there
+  with options (a) catalog keeps per-model dialect + walk skips / (b) harness follows the model; NOT ruled.
+- Open findings for an operator ruling: strike accounting — a launcher-side fault before any model turn
+  lands as `unknown` (model scope, model-routing.md §The strike ladder) and walks to the next model;
+  version drift — the ENV evidence row + launcher comment name opencode 1.18.35 (agent-base 2026.10.15),
+  the floating `agent-base:latest` carries 1.19.0.
