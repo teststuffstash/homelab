@@ -16,4 +16,4 @@ for _ in $(seq 1 20); do
   nc -z 127.0.0.1 "$PORT" 2>/dev/null && break
   sleep 0.5
 done
-hubble observe --server "localhost:${PORT}" "$@"
+hubble observe --server "127.0.0.1:${PORT}" "$@"
