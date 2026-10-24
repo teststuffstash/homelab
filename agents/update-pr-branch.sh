@@ -71,11 +71,26 @@ PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
 # when superseded — and this updater's merge is exactly what used to take those three abilities away
 # (#185: one update-branch → "Edited/Blocked" → neither rebase nor autoclose, a zombie). ONE EXCEPTION,
 # the merge-ready one: an untouched Renovate PR that is armed, APPROVED and GREEN has nothing but
-# currency between it and the merge; the updater takes it (minutes to merge, no zombie possible — a
-# zombie needs a PR that cannot merge) so the fast path keeps its 15-min currency instead of Renovate's
-# 6-h cron. Not green, not approved, conflicted: Renovate's. `renovate_green` reads the per-candidate
-# probe (`--json commits,statusCheckRollup`); an absent or unreadable rollup is NOT green (fail toward
-# leaving it to Renovate).
+# currency between it and the merge; the updater takes it so the fast path keeps its 15-min currency
+# instead of Renovate's 6-h cron. Not green, not approved, conflicted: Renovate's. `renovate_green`
+# reads the per-candidate probe (`--json commits,statusCheckRollup`); an absent or unreadable rollup is
+# NOT green (fail toward leaving it to Renovate).
+# ⚠ THE EXCEPTION CAN STILL MINT A ZOMBIE — so it HANDS BACK (2026-10-24). "Minutes to merge" holds
+# only if the update's own CI lands before master moves again and stays green; Renovate's edited-PR
+# rule counts the updater's MERGE commit too, and `renovate_untouched` (merge commits are not content)
+# did not, so a PR whose fast-path update missed was handed "back to Renovate" by this script while
+# Renovate had already disowned it. Live 2026-10-20: homelab#2754 (master moved in the SAME minute —
+# #2748's agent-gateway deploy auto-bump; the duplicate `ci` run's CANCELLED entry then read not-green)
+# and sleep-tracking#203 (the update pulled master's playwright bump in; its first mirror pull timed
+# out) — both armed + approved + BEHIND, both "Edited/Blocked" at Renovate's 16:1x run, both still
+# there four days later. So: an untouched PR that carries a non-Renovate MERGE commit
+# (`renovate_merged_into` — only this updater's update-branch writes those) and is not merge-ready is
+# handed back through Renovate's own escape hatch, the rebase/retry checkbox (`renovate_handback`):
+# Renovate's next run rebuilds the branch from master + its change, the foreign merge is gone, and
+# the PR is Renovate's again. Same box, same idempotence as the scan's merge-conflict rebase-tick
+# (coordinator-scan.sh, homelab#1977); a worker-adapted branch never reaches it (not untouched).
+# `renovate_green` also drops a CANCELLED entry that a same-named sibling outlives — a superseded
+# duplicate run (two `synchronize` events on one update) is not a red check (#2754's rollup).
 # `author` and `headRefName` are scalar list fields (no node cost); commit authorship comes from
 # the per-candidate `gh pr view --json commits` probe leg 1 already pays for bot-approved candidates.
 # ⚠ LOGIN SHAPE (homelab#2007, 2026-09-27): `gh pr list --json author` reports an App as
@@ -90,11 +105,44 @@ renovate_author() {   # renovate_author <pr-json> → 0 when the PR author is Re
   jq -e "$RENOVATE_LOGIN_JQ"' (.author.login | renovate_login)' <<<"$1" >/dev/null 2>&1
 }
 renovate_green() {   # renovate_green <pr-view-json with statusCheckRollup> → 0 when every check concluded clean (absent = not green)
-  jq -e '([ .statusCheckRollup[]? | ((.conclusion // .state) // "") ]) as $c | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0' <<<"$1" >/dev/null 2>&1
+  jq -e '[ .statusCheckRollup[]? | { k: (.name // .context // ""), c: ((.conclusion // .state) // "") } ]
+         | group_by(.k)
+         | map(if any(.c != "CANCELLED") then map(select(.c != "CANCELLED")) else . end | .[].c) | flatten as $c
+         | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0' <<<"$1" >/dev/null 2>&1
 }
 renovate_untouched() {   # renovate_untouched <pr-view-json with commits> → 0 when no foreign non-merge commit
   jq -e "$RENOVATE_LOGIN_JQ"' [ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
            | .authors[]? | .login ] | all(renovate_login)' <<<"$1" >/dev/null 2>&1
+}
+renovate_merged_into() {   # renovate_merged_into <pr-view-json with commits> → 0 when a non-Renovate MERGE commit is on the branch
+  jq -e "$RENOVATE_LOGIN_JQ"' [ .commits[]? | select((.messageHeadline // "") | startswith("Merge branch "))
+           | .authors[]? | .login | renovate_login | not ] | any' <<<"$1" >/dev/null 2>&1
+}
+# renovate_handback <number> <log-prefix> — tick Renovate's rebase/retry box (see the header). FRESH
+# REST body read right before the full-body overwrite (Renovate regenerates bodies on its runs — the
+# #2055 stale-copy finding); REST both ways, never `gh pr edit` (GraphQL — the #2476 drain class).
+# A ticked box is left alone (Renovate's next run is the mover); a body without the box, an
+# unreadable body or a refused write is a line, never fatal (rule #6; the */15 cron retries).
+renovate_handback() {
+  local body new
+  if ! body="$(gh api "repos/$REPO/pulls/$1" --jq '.body // ""' 2>/dev/null)"; then
+    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — body unreadable, HOLDING the hand-back (rule #6; the */15 cron retries)"
+    return 0
+  fi
+  if grep -q -- '- \[x\] <!-- rebase-check -->' <<<"$body"; then
+    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — rebase already requested (box ticked); Renovate's next run takes it back"
+    return 0
+  fi
+  if ! grep -q -- '- \[ \] <!-- rebase-check -->' <<<"$body"; then
+    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — no rebase checkbox in the body; human check (close + delete the branch, docs/renovate.md)"
+    return 0
+  fi
+  new="$(printf '%s' "$body" | sed 's/- \[ \] <!-- rebase-check -->/- [x] <!-- rebase-check -->/')"
+  if gh api -X PATCH "repos/$REPO/pulls/$1" -f body="$new" >/dev/null 2>&1; then
+    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — handed back to Renovate (rebase box ticked; its next run rebuilds the branch)"
+  else
+    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — could not tick the rebase box; the */15 cron retries"
+  fi
 }
 
 # Defensive: create the label idempotently first (the porcelain add FAILED on a missing label; the
@@ -209,7 +257,11 @@ while read -r pr; do
     # The merge-ready exception (ADR-153): untouched + green falls through to the admission below
     # (APPROVED / bot-approved / automerge) — currency is the only gap, this updater closes it.
     if renovate_untouched "$cj" && ! renovate_green "$cj"; then
-      echo "updater[$REPO]: #$n Renovate-authored, untouched and not green — Renovate's to rebase (rebaseWhen behind-base-branch, ADR-153); skipping"
+      if renovate_merged_into "$cj"; then
+        renovate_handback "$n" "updater[$REPO]:"
+      else
+        echo "updater[$REPO]: #$n Renovate-authored, untouched and not green — Renovate's to rebase (rebaseWhen behind-base-branch, ADR-153); skipping"
+      fi
       continue
     fi
   fi
@@ -331,7 +383,11 @@ jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
     # Same rule as leg 1, minus the exception: a CHANGES_REQUESTED PR is not merge-ready, so an untouched
     # Renovate PR here is always Renovate's to rebase (ADR-153; every Renovate branch since 2026-10-12).
     if [ -n "$pj" ] && renovate_author "$(jq -c --argjson n "$n" '.[] | select(.number == $n)' <<<"$PRS")" && renovate_untouched "$pj"; then
-      echo "unstrand: #$n Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-153); skipping"
+      if renovate_merged_into "$pj"; then
+        renovate_handback "$n" "unstrand:"
+      else
+        echo "unstrand: #$n Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-153); skipping"
+      fi
       continue
     fi
     verdict_ok=""

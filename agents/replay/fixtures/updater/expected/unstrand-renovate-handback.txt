@@ -1,0 +1,7 @@
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName
+CALL gh pr view {{n}} --repo teststuffstash/testrepo --json commits,reviews
+CALL gh api repos/teststuffstash/testrepo/pulls/{{n}} --jq .body // ""
+CALL gh api -X PATCH repos/teststuffstash/testrepo/pulls/{{n}} -f body=This PR contains the following updates: uv 0.13.2 -> 0.13.3\n\n---\n\n - [x] <!-- rebase-check -->If you want to rebase/retry this PR, check this box
+OUT updater[teststuffstash/testrepo]: no armed+BEHIND PR to update
+OUT unstrand: #{{n}} Renovate-authored, updater-merged, not merge-ready — handed back to Renovate (rebase box ticked; its next run rebuilds the branch)
+RC 0

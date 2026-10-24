@@ -112,9 +112,14 @@ not the coordinator, owns whether an update should exist:
   the moment anyone else pushes to it (its edited-PR rule). The in-cluster updater therefore keeps
   its hands off an untouched Renovate PR, with ONE exception: merge-ready (armed + approved + green,
   currency the only gap) it updates, so the fast path keeps 15-minute currency instead of Renovate's
-  6-hour cron and no zombie can be born (a zombie needs a PR that cannot merge — sleep-tracking#185:
-  one updater merge onto an approved-but-red PR → "Edited/Blocked" → neither rebase nor autoclose,
-  abandoned by Renovate yet unclosable). A worker-adapted branch is the updater's as before.
+  6-hour cron (the zombie it must not mint — sleep-tracking#185: one updater merge onto an
+  approved-but-red PR → "Edited/Blocked" → neither rebase nor autoclose, abandoned by Renovate yet
+  unclosable). **When that update misses** — master moves again before it merges, or the update pulls
+  a red in (homelab#2754, sleep-tracking#203, 2026-10-20) — the branch carries the updater's merge
+  commit, which Renovate's edited-PR rule counts, so the updater **hands it back**: it ticks
+  Renovate's rebase/retry checkbox and Renovate's next run rebuilds the branch as its own
+  (`agents/update-pr-branch.sh` `renovate_handback`). A worker-adapted branch is the updater's as
+  before.
 - **Closing a Renovate PR is not "done."** With Renovate's default `recreateWhen: auto`, a manually
   closed PR is *not* recreated for the **same** version (close = "reject this version"), but Renovate
   DOES open a fresh PR when a **newer** version lands → a reject→close→new-version→reject **churn**; and
