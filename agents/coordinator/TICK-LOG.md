@@ -14620,3 +14620,13 @@ updates or reverts as much as possible — mechanical revert or a responder."
   record** (DiskFilesystemChanged since 09-14). Hardware act = operator; the wk-02 record removal = seat, after it fires.
 - **Sweep PRs:** #2897 (REMEDIATION-WOULD `none` lines dropped, malformed kept as `raw`), #2895 (FU-093 alert text),
   #2899 (FU-286 talosctl `latest` = 1.14.2 — box probe on the new lock owed) — all merged, no review findings.
+
+## 2026-10-24 — delivery loop build-out (operator: "build oracle-fleet#914 delivery-loop.md with subagents, unattended")
+- Survey subagent: steps 1–8 + KPI gaps vs reality → filed oracle-fleet #926 (act_not_found tail, p90 860 ms vs hit 4.7 ms),
+  #927 (zero-hit panel, 24.5 % ext 7 d), #928 (closeout score + deploy markers, 3 ⚖), #929 (session→tool-call, 0.44 proxy),
+  #930 (Rule 2 requirement counter, 20/65 anchored), oracle-iac#1140 (public route onto Gateway — iac-only, held for #918).
+  No agent/* labels; oracle WIP cap full so no oracle PRs.
+- Kargo subagent: homelab#2902 prod install from #2798 (OCI repo in tofu/argocd.tf, kargo-api ES, homelab-deploy 1 h token,
+  ReferenceGrant, cert-manager scope, single multi-source Application for ordering). CI ci/sentinel-plan green; iac-sentinel red
+  until the exceptions baseline lands on master. HELD for the shape ruling.
+- Minted FU-317 (apiserver audit → Loki), FU-318 (Kargo residuals).
