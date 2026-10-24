@@ -184,11 +184,12 @@ fake backend — presence and compatibility for that run, never necessity (the p
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|
-| "⚖ live evidence: the opted-out CLI makes no direct backend calls beside the relay" | the pinned CLI with the gateway-render opt-outs (agent-runtime#181), in the ride pod, under enforced egress || 0 TCP SYNs to `chatgpt.com` / `ab.chatgpt.com` POLICY_DENIED during the 2026-10-23 20:09Z ride (agent-base `2026.10.23-g79d146c8caac`), against 14.2 each by the same query over the previous image's capture ride; both turns completed | not CI: one dated live ride ([the spike §The opt-out ride](../../../docs/spikes/codex-subscription-rail.md#the-opt-out-ride--2026-10-23-2009z-fu-270)); an upstream CLI bump that adds a call is caught by `AgentWorkerEgressDropped`, not by a row |
 | "⚑ gap: SIWC profile (unselected)" | SIWC credentials || unsupported | separate grant and tool-shape contract required |
 | "⚑ gap: live vendor header compatibility" | real native backend || offline round trip only | live canary must establish whether other headers are required |
 | "⚑ gap: the live canary" | a real account || never run | spike step 4 — a separately authorized maintenance window |
 | "⚖ local evidence: the pinned Codex CLI completes a turn through this gateway" | `experiments/codex-rail/compat.py` (codex-cli 0.161.0, the agent-runtime lock) || a completed `codex exec --json` turn, one rotation, one upstream close | not CI: the CLI is not in the CI toolchain — dated local evidence in `experiments/codex-rail/evidence.json` |
+
+The pinned CLI's direct backend calls beside the relay (the 2026-10-23 capture ride: 14.2 POLICY_DENIED SYNs each to `chatgpt.com` / `ab.chatgpt.com`) are gone since the gateway-render opt-outs (agent-runtime#181, agent-base `2026.10.23-g79d146c8caac`): 0 by the same query on the 20:09Z ride, both turns completed — live evidence from one dated ride, not a row ([the spike §The opt-out ride](../../../docs/spikes/codex-subscription-rail.md#the-opt-out-ride--2026-10-23-2009z-fu-270)); a CLI bump that adds a call is caught by `AgentWorkerEgressDropped`.
 
 <details markdown="1"><summary>Evidence</summary>
 
