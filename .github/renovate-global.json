@@ -180,6 +180,13 @@
       "groupName": "crossplane"
     },
     {
+      "description": "Crossplane chart: NO cooldown (operator 2026-10-24, #2821). charts.crossplane.io/stable/index.yaml re-stamps EVERY entry's `created` on each publish (2026-10-22T15:41:36Z on 2.4.3 down to 1.0.0), so the 7-day minimumReleaseAge never measures a release's real age — it withheld the chart while the cooldown-exempt engine digest (docker, timestamp-optional) went out alone: a half version set, CI-red by construction (#2819). Exempt, the `crossplane` group moves together at release, like its engine image already does; the deps-review lens still reads it before merge. Scoped to the one chart served from that index (argocd manager, helm datasource, package `crossplane` — repoURL https://charts.crossplane.io/stable), so every other chart keeps the floor.",
+      "matchManagers": ["argocd"],
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["crossplane"],
+      "minimumReleaseAge": null
+    },
+    {
       "description": "cloudflared is a VERSION SET (docs/dependency-upgrades.md §Version SETS): the connector image in argocd/resources/publicroute/composition.yaml (`kubernetes` manager) AND `cloudflared_image` in tofu/cloudflare/variables.tf (the regex customManager below) — the repo's own comment declares them the same pin, and Renovate's first cloudflared PR (#2232, 2026.5.2 → 2026.9.3, 2026-10-04) moved the composition's half alone; the reviewer's version-set finding (G13). One group, one PR; labels come from the kubernetes rule (`deps-review`), the custom.regex automerge rule excludes this dep. The seat applies tofu/cloudflare after the merge (docs/runbook.md §Cloudflare).",
       "matchPackageNames": ["cloudflare/cloudflared"],
       "groupName": "cloudflared"
