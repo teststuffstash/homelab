@@ -31,19 +31,21 @@ RAIL_DIALECTS = {
     "openrouter": ("anthropic", "openai"),
     "codex": ("responses",),
 }
-# The harness a rail names when the caller names none (GW-SESSIONS-ADMIT §The harness follows the
-# rail, operator ruling 2026-10-23: every subscription rail is every role's, the walk crosses the
-# dialect boundary on its own): a rail serving the role's harness's dialect keeps the role's harness;
-# a rail that does not (anthropic for an openai-harness role, codex for any role) names the harness
-# of its FIRST dialect — ⚖ one harness per dialect, the baked defaults the launcher runs.
+# The harness a CELL naming none of the caller's speaks (GW-SESSIONS-ADMIT §The harness follows the
+# cell, operator ruling 2026-10-24): the walk picks the first admissible model, then the harness that
+# speaks that cell's dialect — the role's harness when the cell speaks it, else the harness of the
+# cell's own dialect. ⚖ one harness per dialect, the baked defaults the launcher runs.
 DIALECT_HARNESS = {"anthropic": "claude", "openai": "opencode", "responses": "codex"}
 
 
-def harness_for(rail: str, preferred: str) -> str:
-    """The harness a dispatch on `rail` names for a role whose policy harness is `preferred`."""
-    if HARNESS_DIALECT[preferred] in RAIL_DIALECTS[rail]:
+def harness_for_cell(dialects: tuple[str, ...], preferred: str) -> str:
+    """The harness a dispatch on a cell speaking `dialects` names for a role whose policy harness is
+    `preferred`: the role's harness when it speaks one of the cell's dialects, else `DIALECT_HARNESS`
+    of the cell's first dialect. A cell's dialects are its rail's, except a Go cell's, which is its
+    model's (GW-CATALOG-GO) — the harness is taken from the CELL, never from the rail."""
+    if HARNESS_DIALECT[preferred] in dialects:
         return preferred
-    return DIALECT_HARNESS[RAIL_DIALECTS[rail][0]]
+    return DIALECT_HARNESS[dialects[0]]
 
 SELF_URL_DEFAULT = "http://agent-gateway.agent-egress.svc.cluster.local:8080"
 UPSTREAM_DEFAULTS = {

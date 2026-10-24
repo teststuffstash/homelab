@@ -40,6 +40,11 @@ the test clock, 2027-01-15T08:00:00Z.
 | no plan table is a parse failure | 5 | docs-no-plan-table | parse-failed | the last good |
 | a drop below half the models is implausible | 5 | docs-shrunk (2) | implausible | the last good |
 
+| description | model | dialect |
+|---|---|---|
+| a provider override of @ai-sdk/anthropic is the anthropic dialect | claude-haiku-5-5 | anthropic |
+| a model with no provider override is the openai dialect | deepseek-v4.1-flash | openai |
+
 | description | model | plan go | plan go-plus | bonus | peak row |
 |---|---|---|---|---|---|
 | a plain row gives the monthly limit per plan | deepseek-v4.1-flash | 80 | 160 | — | 0.30 / 1.20 / 0.006 / null |
@@ -259,6 +264,24 @@ async def test_docs_refresh(cworld, vendor, clock, last, behaviour, outcome):
         v = await _view(app)
         check("sources.docs", {k: v["sources"]["docs"][k] for k in ("models", "fetched_at")},
               {"models": 5, "fetched_at": _iso(expected_at)})
+
+
+# ── The model's dialect ──────────────────────────────────────────────────────────────────────
+DIALECT_ROWS = [
+    ("a provider override of @ai-sdk/anthropic is the anthropic dialect", "claude-haiku-5-5", "anthropic"),
+    ("a model with no provider override is the openai dialect", "deepseek-v4.1-flash", "openai"),
+]
+
+
+@pytest.mark.parametrize(("model", "dialect"), [r[1:] for r in DIALECT_ROWS], ids=[r[0] for r in DIALECT_ROWS])
+async def test_model_dialect(cworld, vendor, model, dialect):
+    world(upstream="catalog-ok")
+    app = cworld.build()
+    with given("the config source refreshes from catalog-ok — the fixture carries both provider shapes"):
+        assert await app.state.catalog.refresh_source("config") == "ok"
+    with when(f"the config snapshot's row {model}"):
+        row = app.state.catalog.snapshots["config"].body["models"][model]
+    then_eq("dialect", row.get("dialect"), dialect)
 
 
 # ── What the page says, per model ────────────────────────────────────────────────────────────

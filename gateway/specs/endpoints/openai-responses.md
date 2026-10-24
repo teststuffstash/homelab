@@ -11,7 +11,7 @@ rail serves it — the operator's ChatGPT subscription. The rail was **lit on 20
 as the explicit canary cell (the deployed policy, `argocd/resources/agent-gateway/policy.json`,
 listed `rails.codex` for the `prober` role only); **since 2026-10-23 every role lists it** — the
 operator's ruling that subscriptions go to all roles — and the walk reaches it without an explicit
-`harness: codex` ([GW-SESSIONS-ADMIT §The harness follows the rail](sessions.md#the-harness-follows-the-rail)).
+`harness: codex` ([GW-SESSIONS-ADMIT §The harness follows the cell](sessions.md#the-harness-follows-the-cell)).
 A policy that declares the rail gets a credential
 backend only when `create_app` is handed a credential store: production wires gateway-local SQLite
 seeded from the gateway's own login (`devbox run codex-seed`) and the native refresh. Rows run
@@ -450,7 +450,7 @@ Recreate on the PVC; distributed fencing remains FU-271. No credential memory fa
 | "an uncertain refresh refuses, then stays refused" | the exchange times out || — | 401 `credential-refresh-uncertain`, then 401 `credential-recovery-required` |
 | "a store fault on the data plane is retriable ⚖" | the marker save raises || — | 503 `credential-store-unavailable`, `retry-after: 60` |
 | "no backend: the rail is a definitive miss" | `policy-codex`, `create_app` without a store || defer `credential-unresolved` | — |
-| "the deployed policy lists the subscription rails for every role ⚖" | `argocd/resources/agent-gateway/policy.json` || `rails.codex` with its `headroom` and `oauth` blocks (lit 2026-10-22, FU-270: the seed minted in #2826, the poll in #2828); every role's `rails` holds `anthropic`, `opencode` AND `codex` (operator ruling 2026-10-23: subscriptions go to all roles, the per-role order is the weekly knob — [GW-SESSIONS-ADMIT §The harness follows the rail](sessions.md#the-harness-follows-the-rail)); the metered `openrouter` rail, where listed, walks LAST — except for the `prober`, whose probes are that rail's | — |
+| "the deployed policy lists the subscription rails for every role ⚖" | `argocd/resources/agent-gateway/policy.json` || `rails.codex` with its `headroom` and `oauth` blocks (lit 2026-10-22, FU-270: the seed minted in #2826, the poll in #2828); every role's `rails` holds `anthropic`, `opencode` AND `codex` (operator ruling 2026-10-23: subscriptions go to all roles, the per-role order is the weekly knob — [GW-SESSIONS-ADMIT §The harness follows the cell](sessions.md#the-harness-follows-the-cell)); the metered `openrouter` rail, where listed, walks LAST — except for the `prober`, whose probes are that rail's | — |
 
 | description | input || v0 answer | the gap |
 |---|---||---|---|

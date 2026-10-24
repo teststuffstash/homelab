@@ -118,7 +118,7 @@ policy's `tiers` block, and a row fails the suite when a list drifts from the de
   gateway's OWN device login, never the jail's; runbook §Enrol the gateway's own Codex login).
   The deployed policy declares the rail since 2026-10-22 (the explicit canary cell, `prober` only);
   since 2026-10-23 every role lists it — subscriptions go to all roles, and the walk's harness
-  follows the rail (`specs/endpoints/sessions.md` §The harness follows the rail), so a ride reaches
+  follows the cell (`specs/endpoints/sessions.md` §The harness follows the cell), so a ride reaches
   it without an explicit harness. Headroom comes from two gateway-owned producers: the
   usage poll (`CODEX_USAGE_URL`) and the `x-codex-*` headers of every relayed answer
   (GW-CODEX-HEADROOM §Upstream headers). Native-CLI evidence lives in `experiments/codex-rail/`.

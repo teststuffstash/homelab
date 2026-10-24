@@ -1,12 +1,17 @@
-"""GW-SESSIONS-ADMIT §The harness follows the rail (specs/endpoints/sessions.md) — the operator's
-2026-10-23 ruling: every subscription rail is every role's, so the walk crosses the dialect boundary
-on its own. Rows run in the `policy-codex` world (roles shaped as the ruling; codex `max_sessions`
-2, anthropic 5, opencode 3) with codex headroom fresh at 20 % / 64 %.
+"""GW-SESSIONS-ADMIT §The harness follows the cell (specs/endpoints/sessions.md) — the operator's
+2026-10-23 ruling (every subscription rail is every role's, so the walk crosses the dialect boundary
+on its own) and the 2026-10-24 one (homelab#2870: the harness is taken LAST, from the (rail, model)
+cell — a Go cell's dialect is its model's). Rows run in the `policy-codex` world (roles shaped as
+the ruling; codex `max_sessions` 2, anthropic 5, opencode 3; the opencode standard list carries both
+dialect shapes — `deepseek-v4.1-flash` openai first, `claude-haiku-5-5` anthropic second) with
+codex headroom fresh at 20 % / 64 %.
 
 | description | role | body | active on rails (anthropic / opencode / codex) || decision | rail | harness | model |
 |---|---|---|---||---|---|---|---|
 | without a harness the walk crosses the dialect boundary: the reviewer reaches codex | reviewer | (defaults) | 5 / 3 / 0 || dispatch | codex | codex | codex/fixture-model |
 | a dual-dialect rail keeps the role's harness | reviewer | (defaults) | 5 / 0 / 0 || dispatch | opencode | claude | opencode-go/claude-haiku-5-5 |
+| the Go cell's dialect is the model's: an openai cell rides the opencode harness | reviewer | tier: standard | 5 / 0 / 0 || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash |
+| an explicit harness on the Go rail skips the openai cells and takes the Claude model | reviewer | harness: claude, tier: standard | 5 / 0 / 0 || dispatch | opencode | claude | opencode-go/claude-haiku-5-5 |
 | an opencode-harness worker reaching the anthropic rail rides claude | worker | (defaults) | 0 / 3 / 2 || dispatch | anthropic | claude | claude/sonnet |
 | an explicit harness still narrows the walk to its dialect | reviewer | harness: claude | 5 / 3 / 0 || defer (rail-capacity) | — | — | — |
 | an explicit rail without a harness takes the rail's harness | reviewer | rail: codex | 0 / 0 / 0 || dispatch | codex | codex | codex/fixture-model |
@@ -82,6 +87,40 @@ async def test_env_follows_harness(codex_app, codex_gw, clock):
         assert not {"CODEX_MODEL", "OPENCODE_CONFIG_CONTENT"} & set(doc["env"]), sorted(doc["env"])
 
 
+async def test_cell_dialect_names_the_harness(codex_app, codex_gw, clock):
+    """row: the Go cell's dialect is the model's: an openai cell rides the opencode harness"""
+    world("policy-codex")
+    await _arrange(codex_app, codex_gw, clock, {"anthropic": 5})
+    with when("POST /sessions {role: reviewer, tier: standard} — no harness; the subscription is full"):
+        r = await codex_gw.post("/sessions", json={"stack": "platform", "task": "homelab-2588-r1",
+                                                   "role": "reviewer", "tier": "standard"})
+    then_eq("status", r.status_code, 200)
+    doc = r.json()
+    with then("the walk takes the tier list's first cell (deepseek-v4.1-flash, openai) and the harness that speaks it",
+              answer={k: doc.get(k) for k in ("decision", "rail", "harness", "model")}):
+        then_eq("decision", doc["decision"], "dispatch")
+        then_eq("rail", doc["rail"], "opencode")
+        then_eq("harness", doc["harness"], "opencode")
+        then_eq("model", doc["model"], "opencode-go/deepseek-v4.1-flash")
+
+
+async def test_explicit_harness_skips_the_openai_cells(codex_app, codex_gw, clock):
+    """row: an explicit harness on the Go rail skips the openai cells and takes the Claude model"""
+    world("policy-codex")
+    await _arrange(codex_app, codex_gw, clock, {"anthropic": 5})
+    with when("POST /sessions {role: reviewer, harness: claude, tier: standard} — the subscription is full"):
+        r = await codex_gw.post("/sessions", json={"stack": "platform", "task": "homelab-2588-r1",
+                                                   "role": "reviewer", "harness": "claude", "tier": "standard"})
+    then_eq("status", r.status_code, 200)
+    doc = r.json()
+    with then("dispatch on opencode with the Claude model — the openai cell was skipped, never ridden",
+              answer={k: doc.get(k) for k in ("decision", "rail", "harness", "model")}):
+        then_eq("decision", doc["decision"], "dispatch")
+        then_eq("rail", doc["rail"], "opencode")
+        then_eq("harness", doc["harness"], "claude")
+        then_eq("model", doc["model"], "opencode-go/claude-haiku-5-5")
+
+
 # -- §Harness-scoped strikes (operator ruling 2026-10-24, homelab#2867's round 1) -------------------
 # A harness fault excludes the struck harness on every cell for the task, never the model. Strikes are
 # arranged through the outcome endpoint on earlier sessions of the SAME task T (never seeded).
@@ -89,12 +128,12 @@ T = "homelab-2867-r1"
 WORKER_T = {"stack": "platform", "role": "worker", "task": T, "round": 1}
 STRUCK = "`harness-fault` on harness opencode"
 REFUTED = ("`harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session "
-           "(tier heavy, admitted before the strike)")
+           "(harness opencode, standard tier, admitted before the strike)")
 
 # (description, arrange, body, decision, rail, harness, model, reason)
 HARNESS_STRIKE_ROWS = [
     ("a harness strike moves the walk to a cell another harness speaks ⚖", STRUCK,
-     "worker, T, `attempt: 2`", "dispatch", "codex", "codex", "codex/fixture-model", "—"),
+     "worker, T, `attempt: 2`", "dispatch", "opencode", "claude", "opencode-go/claude-haiku-5-5", "—"),
     ("a harness strike excludes no model", STRUCK,
      "worker, T, `harness: goose`, `attempt: 2`", "dispatch", "opencode", "goose", "opencode-go/deepseek-v4.1-flash", "—"),
     ("an explicit harness that is struck defers ⚖", STRUCK,
@@ -122,7 +161,7 @@ async def _arrange_strike(app, gw, clock, arrange: str) -> None:
     with given(f"arrange = {arrange}"):
         with quiet():
             first = await open_session(gw, **WORKER_T)
-            second = await open_session(gw, **WORKER_T, attempt=2, tier="heavy") if arrange == REFUTED else None
+            second = await open_session(gw, **WORKER_T, attempt=2) if arrange == REFUTED else None
             struck = await _report(gw, first, "harness-fault")
             await gw.delete(f"/sessions/{first['session']['id']}")
             clean = None

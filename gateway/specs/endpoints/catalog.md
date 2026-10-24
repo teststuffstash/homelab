@@ -53,7 +53,10 @@ each with its own snapshot:
   `limit.output`, and `cost` (`input` / `output` / `cache_read` / `cache_write`, then each
   `tiers[]` row with its `tier: {type: context, size}` as the rate above that many tokens; the
   legacy `context_over_200k` spelling is not read, and alone it is a shape the parser does not
-  know). A row whose `status` is `deprecated` is not listed — the vendor's loader
+  know) and the **`dialect`** — the wire the model is served on, read from the per-model
+  `provider` override (`npm: "@ai-sdk/anthropic"` → `anthropic`; no `npm` → `openai`; any other
+  `npm` is a parse failure, never a guess — [§The model's dialect](#the-models-dialect)). A row
+  whose `status` is `deprecated` is not listed — the vendor's loader
   (`plugin/models-dev.ts`) drops it before any overlay. Then the **console read**:
   `GET https://opencode.ai/console/api/v2/config`, the console's V2 config, which any Go key can
   read — since 2026-10-20 it carries the WORKSPACE'S OVERRIDES on that catalog, not the catalog
@@ -134,6 +137,20 @@ ids with a row in either plan tab. The `config` source's model count is the merg
 | "no share sentence is a parse failure ⚖" | 5 | `docs-no-shares` || parse-failed | the last good |
 | "no plan table is a parse failure ⚖" | 5 | `docs-no-plan-table` || parse-failed | the last good |
 | "a drop below half the models is implausible" | 5 | `docs-shrunk` (2 models) || implausible | the last good |
+
+### The model's dialect
+
+Each listed model's wire dialect, kept from the models.dev per-model `provider` override the
+catalog read carries (the vendor serves a Go model on one of its two endpoints): `npm:
+"@ai-sdk/anthropic"` is the anthropic one, no `npm` the openai one — any other `npm` is a parse
+failure, never a guess. The snapshot carries it per model (a console-only row, which has no
+override, is `openai`), and the admission walk takes the harness from it
+([GW-SESSIONS-ADMIT §The harness follows the cell](sessions.md#the-harness-follows-the-cell)).
+
+| description | model | dialect |
+|---|---|---|
+| "a provider override of @ai-sdk/anthropic is the anthropic dialect" | `claude-haiku-5-5` | `anthropic` |
+| "a model with no provider override is the openai dialect" | `deepseek-v4.1-flash` | `openai` |
 
 ### What the page says, per model
 
