@@ -974,8 +974,8 @@ the block needs pruning, not more headings.
       snapshot that merges itself — never clear it; alert text wrongly blames the image store), wk-metal-01/mx500
       72 %, and wk-04/`sn530` 76.6 % (+2 %/day) — `mirror-ghcr-data` holds 171 GB actual for 23 GB of filesystem: a
       133 GB `markRemoved` snapshot (10-13) sits as volume-head's parent (purge complete, nothing coalesces it) and
-      the weekly mirror GC frees blocks no trim returns — the ledger's unbuilt "second layer". **Next:** fix the alert
-      text; (a) Longhorn `filesystem-trim` RecurringJob + `remove-snapshots-during-filesystem-trim` (today false;
+      the weekly mirror GC frees blocks no trim returns — the ledger's unbuilt "second layer". Alert text fixed (#2895, 10-24). **Next:**
+      (a) Longhorn `filesystem-trim` RecurringJob + `remove-snapshots-during-filesystem-trim` (today false;
       ~140 GB back on sn530); (b) metal fstrim for the image store. Relates ADR-089, ADR-114, FU-211, homelab#934.
 - [ ] **FU-211** — **The storage ledger's numbers are hand-typed — generate them.** PR#1368 took three bot rounds on
       transposed figures in the buy-a-disk cell; "Current shape" is a 08-25 snapshot. Truth is LIVE (Longhorn
@@ -1080,9 +1080,9 @@ the block needs pruning, not more headings.
       devbox's index catches up.** devbox's index tops out at 1.13.8 against a v1.14.1 fleet, so
       **PR#1963 (merged 2026-09-24)** resolves talosctl from `github:NixOS/nixpkgs/4975466d…#talosctl`
       (1.14.1), the first flake-ref package in `devbox.json` — `devbox update` cannot move it, so it goes
-      stale silently. The belt's `talos` check cleared 2026-09-24 17:00Z (verified 10-03). **Next:** switch
-      back to `"talosctl": {"version": "latest"}` once `devbox search talosctl` lists ≥ 1.14.1 (still
-      1.13.8 on 2026-10-03; look at the Monday `devbox-update` run). Relates FU-240.
+      stale silently. The belt's `talos` check cleared 2026-09-24 17:00Z (verified 10-03). **Switched back
+      2026-10-24 (#2899, `latest` = 1.14.2).** **Next:** the box's first `talos` probe on the new lock reads 1
+      (`mgmt_probe_check{check="talos"}`, a run after 15:38Z 10-24), then archive. Relates FU-240.
 - [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes: POINTER.** Mechanism, evidence
       (incl. the 2026-09-16 FU-246 driver, the 2026-09-28 wk-03 thrash with no kill) and the ⚖ recommendation:
       [`spikes/talos-psi-thresholds.md`](spikes/talos-psi-thresholds.md) §5/§7 (symptom thread homelab#857).
