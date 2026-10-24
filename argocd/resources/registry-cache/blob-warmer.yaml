@@ -1,0 +1,79 @@
+# Mirror blob warmer — the fix leg of RegistryMirrorColdBlobAbandoned (homelab#1985 S9 sweep; the
+# detector, its mechanism block and replay are in prometheusrule.yaml, one home).
+#
+# THE FAULT. A pull-through cache fill is TIED TO THE CLIENT REQUEST that started it: when the
+# consumer gives up (docker waits 30 s for headers; MCR's CDN streamed at ~0.4 MB/s on 2026-10-20)
+# the fill is cancelled with it and nothing is cached, so every later pull starts from zero and
+# fails the same way. The mcr mirror sat wedged on one playwright layer for ~3 days (22 blob 500s)
+# until a client with no timeout fetched it once.
+#
+# WHY THIS SHAPE, NOT THE OTHER CANDIDATES (evidence in the PR, homelab#1985 thread):
+#   - registry config cannot fix it: GET headers already go out early (cold GET TTFB 0.49 s,
+#     measured 2026-10-24); the fill-to-request coupling has no knob in registry:3.
+#   - consumer retries cannot converge: each retry restarts the fill from byte 0 at the upstream's
+#     rate — the 22 failed pulls over 3 days are that experiment.
+#   - pre-warm-on-pin-change (the ghcr shape, .github/workflows/ci.yaml → warm-registry-mirror.sh)
+#     needs the pin to live in THIS repo; the MCR pins live in stack repos the platform cannot see.
+#   So the mirror warms ITSELF: whatever a consumer just asked for, the warmer finishes patiently.
+#
+# MECHANISM. A sidecar in the mirror pod reads the store (read-only mount) every 60 s: for every
+# IMAGE manifest (not an index) cached in the last WINDOW_MIN minutes, each config/layer blob that
+# is not fully in the store (blob data + this repository's layer link) is fetched ONCE through the
+# mirror on localhost, serially, with no client header timeout — so the fill runs to completion
+# and caches. A consumer's first pull of a fresh layer may still fail (it races the warmer), but
+# the blob is warm by the retry/next run instead of wedged for days. Not-yet-complete blobs are
+# simply seen again next cycle (an upstream drop mid-stream, or the warmer having joined a
+# consumer's in-flight fetch that then died — the in-flight path streams without storing).
+# WINDOW_MIN (72h) stays well under REGISTRY_PROXY_TTL (168h), so the warmer never resurrects a
+# blob the TTL scheduler evicted from an old manifest.
+#
+# SAFETY. Never `set -e` and never exits: a warmer failure must not take the pod out of Ready
+# (the Service would drop the mirror). It only ever issues the GETs a consumer already asked for.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blob-warmer
+  namespace: registry-cache
+data:
+  warm.sh: |
+    #!/bin/sh
+    set -u
+    REPOS=/var/lib/registry/docker/registry/v2/repositories
+    BLOBS=/var/lib/registry/docker/registry/v2/blobs/sha256
+    WINDOW_MIN="${WINDOW_MIN:-4320}"
+    INTERVAL="${INTERVAL:-60}"
+    # busybox wget -T is the READ-idle timeout (not a total cap): a stalled upstream is dropped
+    # after this many seconds and retried next cycle; a slow-but-moving one runs to completion.
+    READ_TIMEOUT="${READ_TIMEOUT:-300}"
+
+    cached() { # <repo> <digest>
+      d="${2#sha256:}"
+      [ -s "$BLOBS/$(echo "$d" | cut -c1-2)/$d/data" ] && [ -f "$REPOS/$1/_layers/sha256/$d/link" ]
+    }
+
+    scan() {
+      [ -d "$REPOS" ] || return 0
+      find "$REPOS" -path '*/_manifests/revisions/sha256/*/link' -mmin "-$WINDOW_MIN" 2>/dev/null |
+      while read -r link; do
+        repo="${link#"$REPOS"/}"; repo="${repo%%/_manifests/*}"
+        m="$(cat "$link" 2>/dev/null)"; m="${m#sha256:}"
+        mf="$BLOBS/$(echo "$m" | cut -c1-2)/$m/data"
+        grep -q '"layers"' "$mf" 2>/dev/null || continue   # an index: its children are their own revisions
+        for dg in $(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' "$mf" | grep -o 'sha256:[0-9a-f]\{64\}'); do
+          cached "$repo" "$dg" && continue
+          t0=$(date +%s)
+          if wget -q -T "$READ_TIMEOUT" -O /dev/null "http://127.0.0.1:5000/v2/$repo/blobs/$dg"; then
+            if cached "$repo" "$dg"; then res=warmed; else res="fetched-not-stored (joined an in-flight fill?) — retry next cycle"; fi
+          else
+            res="FAILED rc=$? — retry next cycle"
+          fi
+          echo "blob-warmer: $repo@$dg $res ($(( $(date +%s) - t0 ))s)"
+        done
+      done
+    }
+
+    echo "blob-warmer: up — window ${WINDOW_MIN}m, every ${INTERVAL}s"
+    while :; do
+      scan || true
+      sleep "$INTERVAL"
+    done
