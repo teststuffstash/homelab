@@ -118,7 +118,9 @@ not the coordinator, owns whether an update should exist:
   a red in (homelab#2754, sleep-tracking#203, 2026-10-20) — the branch carries the updater's merge
   commit, which Renovate's edited-PR rule counts, so the updater **hands it back**: it ticks
   Renovate's rebase/retry checkbox and Renovate's next run rebuilds the branch as its own
-  (`agents/update-pr-branch.sh` `renovate_handback`). A worker-adapted branch is the updater's as
+  (`agents/renovate-currency.sh` `renovate_handback` — ONE predicate shared by the updater and the scan's
+  FU-124 nudge, which is the call site that actually made the 2026-10-20 merges; its probe reads checks
+  over REST, since `gh pr view --json statusCheckRollup` needs `actions: read` the updater's App lacks). A worker-adapted branch is the updater's as
   before.
 - **Closing a Renovate PR is not "done."** With Renovate's default `recreateWhen: auto`, a manually
   closed PR is *not* recreated for the **same** version (close = "reject this version"), but Renovate

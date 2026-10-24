@@ -1,0 +1,9 @@
+{
+  "state": "success",
+  "statuses": [
+    {
+      "context": "iac-sentinel",
+      "state": "success"
+    }
+  ]
+}

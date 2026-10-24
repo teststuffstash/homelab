@@ -9,17 +9,5 @@
         }
       ]
     }
-  ],
-  "statusCheckRollup": [
-    {
-      "name": "ci",
-      "conclusion": "FAILURE",
-      "startedAt": "2026-09-27T06:05:00Z"
-    },
-    {
-      "context": "renovate/stability-days",
-      "state": "SUCCESS",
-      "startedAt": "2026-09-27T06:02:00Z"
-    }
   ]
 }

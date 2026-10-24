@@ -42,6 +42,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "${HERE}/machine-comment.sh"
 . "${HERE}/kube.sh"
 . "${HERE}/pr-last-edited.sh"   # pr_last_edited_merge — the body-edit leg of the changes-requested hold
+. "${HERE}/renovate-currency.sh"   # the Renovate-currency predicate — the FU-124 nudge, shared with update-pr-branch.sh
 # >>>REPLAY:config-defaults>>>
 # Config defaults that extracted clause blocks depend on. The replay harness (run.sh)
 # prepends this block to every composition sourced from coordinator-scan.sh, so a
@@ -3867,8 +3868,8 @@ EOF_GTHEMES_OPEN
     # non-merge commit Renovate's) is Renovate's to rebase — a foreign merge flips it "Edited/Blocked"
     # and Renovate can then neither rebase nor autoclose it (sleep-tracking#185) — EXCEPT when it is
     # merge-ready: this loop's candidates are armed + BEHIND + APPROVED already, so GREEN is the one
-    # test left, read from the same per-PR probe (`--json commits,statusCheckRollup`; the fields are
-    # not listable — the 500k-node cap, 2026-09-08), paid only for Renovate-authored candidates.
+    # test left, read from the shared per-PR probe (`renovate_probe`: commits + REST check-runs/status — the
+    # fields are not listable, the 500k-node cap 2026-09-08), paid only for Renovate-authored candidates.
     # Green → nudge (currency is the only gap, the updater's); not green or no rollup → skip.
     # Unreadable probe = HOLD (rule #6), never a nudge on unknown authorship.
     # >>>REPLAY:fu124-nudge>>>
@@ -3876,15 +3877,20 @@ EOF_GTHEMES_OPEN
       u_oid="$(printf '%s' "$prsjson" | jq -r --argjson u "$u" '.[]|select(.number==$u)|.headRefOid//""')"
       # Login shape (homelab#2007): `app/<slug>` from pr list, `<slug>[bot]` from the commits probe —
       # strip both before the prefix test (the update-pr-branch.sh RENOVATE_LOGIN_JQ def, inlined).
-      if printf '%s' "$prsjson" | jq -e --argjson u "$u" 'def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate"); .[]|select(.number==$u)|(.author.login|renovate_login)' >/dev/null 2>&1; then
-        u_cj="$(gh pr view "$u" --repo "$slug" --json commits,statusCheckRollup 2>/dev/null)" && jq -e '.commits' <<<"$u_cj" >/dev/null 2>&1 || u_cj=""
-        if [ -z "$u_cj" ]; then
-          echo "  [$repo] FU-124: #${u} commit probe unreadable — HOLDING, not nudging (rule #6; the updater cron retries)"
+      # The predicate is agents/renovate-currency.sh's (shared with update-pr-branch.sh — one reader).
+      if renovate_author "$(printf '%s' "$prsjson" | jq -c --argjson u "$u" '.[]|select(.number==$u)')"; then
+        if ! u_cj="$(renovate_probe "$slug" "$u" "$u_oid")"; then
+          echo "  [$repo] FU-124: #${u} commit/checks probe unreadable — HOLDING, not nudging (rule #6; the updater cron retries)"
           continue
         fi
-        if jq -e 'def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate"); [ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .authors[]? | .login ] | all(renovate_login)' <<<"$u_cj" >/dev/null 2>&1; then
-          if jq -e '([ .statusCheckRollup[]? | ((.conclusion // .state) // "") ]) as $c | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0' <<<"$u_cj" >/dev/null 2>&1; then
+        if renovate_untouched "$u_cj"; then
+          if renovate_green "$u_cj"; then
             echo "  [$repo] FU-124: #${u} Renovate-authored, untouched and MERGE-READY (armed, APPROVED, green) — currency is the only gap, the updater's (ADR-153); nudging"
+          elif renovate_merged_into "$u_cj"; then
+            # A foreign merge commit is on it (an earlier nudge or updater pass whose update missed):
+            # Renovate has disowned it, so skipping would leave a zombie — hand it back (2026-10-24).
+            renovate_handback "$slug" "$u" "  [$repo] FU-124:"
+            continue
           else
             echo "  [$repo] FU-124: #${u} Renovate-authored, untouched and not green — Renovate's to rebase (rebaseWhen behind-base-branch, ADR-153); skipping"
             continue

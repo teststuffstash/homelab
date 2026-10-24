@@ -1,6 +1,13 @@
 {
   "commits": [
-    { "messageHeadline": "chore(deps): update actions/checkout action to v7", "committedDate": "2026-09-27T06:00:00Z",
-      "authors": [ { "login": "app/homelab-renovate-1234" } ] }
+    {
+      "messageHeadline": "chore(deps): update actions/checkout action to v7",
+      "committedDate": "2026-09-27T06:00:00Z",
+      "authors": [
+        {
+          "login": "app/homelab-renovate-1234"
+        }
+      ]
+    }
   ]
 }

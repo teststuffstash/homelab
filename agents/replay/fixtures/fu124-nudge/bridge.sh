@@ -14,3 +14,6 @@ repo="testrepo"
 # provides the base, patches add BEHIND PRs). The bridge reads it from the
 # world path that the replay harness sets.
 prsjson="$(cat "$REPLAY_WORLD/gh/pr-list.json" 2>/dev/null || echo '[]')"
+# The nudge's Renovate predicate lives in agents/renovate-currency.sh (sourced at the top of
+# coordinator-scan.sh, outside the extracted block) — source the REAL file, never a copy.
+. "$REPLAY_ROOT/agents/renovate-currency.sh"
