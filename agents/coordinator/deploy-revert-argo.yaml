@@ -552,6 +552,11 @@ spec:
 # scripts/pin-only-lint.sh check (i): the next weekly re-resolve that lands a named version stays red
 # for REVERT_MEMORY_DAYS (the lever out is a `devbox.json` pin of that one package).
 #
+# THE CONTROL (2026-10-24, homelab#1985 — the block below the payload write): a revert whose OWN
+# post-merge run of the same workflow fails too exonerates the bump — `exonerated-pins:` on the
+# revert (check (e) skips it) and the revert reverted back (`revert-wf-<revert-sha8>`, empty
+# `reverted-pins:`, `restored-pins:`). docs/designs/fu-1990-workflow-pin-revert.md Part 6.
+#
 # IDEMPOTENCY: branch name revert-wf-<sha8> / revert-lock-<sha8> (deterministic; second attempt hits
 # already-exists), plus the responder-seen cm ledger keyed wf-<repo>-<sha>. Guards: non-master/main =
 # report-only; no recent workflow-pin/lock merge = report-only; every probe failure is loud and
@@ -617,7 +622,120 @@ spec:
         args:
           - |
             set -euo pipefail
-            printf '%s' "$PAYLOAD" > /tmp/alert.json
+            ALERT_FILE=/tmp/alert.json
+            printf '%s' "$PAYLOAD" > "$ALERT_FILE"
+
+            # ── THE CONTROL: did the revert's OWN post-merge run fail too? (homelab#1985 S9, 2026-10-24) ──
+            # A revert is a claim ("this merge broke workflow W"), and the revert's own push run of W
+            # is its control: the same workflow, the suspect out of the path. snore-recorder#63 (a
+            # digest bump) was reverted by #64 at 03:14Z on 2026-10-20 — and #64's own `build-image`
+            # run (39363243469, head 1ceaa31c) failed as well: the real cause was a stale devbox venv
+            # on the runner (#67). The chain read nothing of that, the `reverted-pins:` memory stayed,
+            # and Renovate re-proposed the bump UN-armed ("a matching PR was automerged previously")
+            # — it sat four days until the seat merged it by hand.
+            # So, BEFORE the candidate walk: for each firing master/main alert, if the failing run's
+            # head IS the merge commit of one of this chain's `revert-wf-*` PRs and that revert named
+            # the SAME workflow, the bump is exonerated: (1) the revert's body gains an
+            # `exonerated-pins:` line — pin-only-lint check (e) skips a body carrying one, so the
+            # memory is released; (2) a machine comment on the revert says why; (3) the revert is
+            # itself reverted (below) as `revert-wf-<revert-sha8>` — the existing governance-lint /
+            # iac-sentinel revert arm admits it unchanged (every file byte-for-byte at <sha8>^) — with
+            # an EMPTY `reverted-pins:` trailer and a `restored-pins:` line, through the same
+            # automerge+dependencies lane. Restoring needs no Renovate timing (the re-proposal came
+            # 7.5 h after the control failed, nothing would have been there to re-arm), and once the
+            # restore lands Renovate's re-proposal has nothing left to propose.
+            # Guards (each fail-closed = no exoneration, fall through to the unchanged walk below):
+            # an unreadable run, a run head that is no revert-wf merge, a workflow mismatch, a body
+            # without a non-empty `reverted-pins:` line, a body already exonerated, and a RESTORE
+            # (`restored-pins:`) — a restore is never exonerated, so the pair cannot ping-pong; the
+            # `wx-` ledger key makes it one decision per revert. The LOCK shape (`revert-lock-*`,
+            # check (i)) is not covered yet.
+            # >>>REPLAY:workflow-pin-revert-exonerate>>>
+            EXON_TARGETS=""
+            exonerate_one() {   # exonerate_one <alert labels JSON> — 0 + one EXON_TARGETS line when exonerated
+              local l="$1" o r wf br id slug head revj rev rsha body fwf pins orig key seen nb
+              o="$(jq -r '.owner // empty' <<< "$l")"; r="$(jq -r '.repo // empty' <<< "$l")"
+              wf="$(jq -r '.workflow // empty' <<< "$l")"; br="$(jq -r '.branch // empty' <<< "$l")"
+              id="$(jq -r '.id // empty' <<< "$l")"; slug="$o/$r"
+              [ -n "$o" ] && [ -n "$r" ] && [ -n "$wf" ] && [[ "$id" =~ ^[0-9]+$ ]] || return 1
+              head="$(gh api "repos/$slug/actions/runs/$id" --jq '.head_sha' 2>/dev/null || true)"
+              if ! [[ "$head" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "→ control: cannot read the head of $slug run $id — no exoneration read"; return 1
+              fi
+              revj="$(gh pr list --repo "$slug" --state merged --limit 10 --json number,headRefName,mergeCommit,body \
+                --jq "[.[] | select(.headRefName | startswith(\"revert-wf-\")) | select(.mergeCommit.oid == \"$head\")] | first | select(.)" 2>/dev/null || true)"
+              [ -n "$revj" ] || { echo "→ control: $slug run $id @ ${head:0:8} is no chain revert's own run"; return 1; }
+              rev="$(jq -r .number <<< "$revj")"; rsha="$head"; body="$(jq -r '.body // ""' <<< "$revj")"
+              fwf="$(printf '%s\n' "$body" | sed -nE 's/^\*\*Failed workflow:\*\* (.+) on [^ ]+ \(run #[^)]*\)$/\1/p' | head -1)"
+              pins="$(printf '%s\n' "$body" | sed -nE 's/^reverted-pins:[[:space:]]*//p' | head -1)"
+              orig="$(printf '%s\n' "$body" | sed -nE 's/^\*\*Reverted PR:\*\* #([0-9]+).*/\1/p' | head -1)"
+              if printf '%s\n' "$body" | grep -q '^restored-pins:'; then
+                echo "→ control: $slug#$rev is a RESTORE — never exonerated (no ping-pong)"; return 1
+              fi
+              if printf '%s\n' "$body" | grep -q '^exonerated-pins:'; then
+                echo "→ control: $slug#$rev is already exonerated — skip"; return 1
+              fi
+              if [ "$fwf" != "$wf" ] || [ -z "$pins" ] || [ -z "$orig" ]; then
+                echo "→ control: $slug#$rev reverted for workflow '${fwf:-?}' (pins '${pins:-}', PR #${orig:-?}); this run is '$wf' — not its control"; return 1
+              fi
+              key="wx-$(printf '%s' "${slug}-${rsha}" | sha256sum | cut -c1-16)"
+              seen="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.$key}" 2>/dev/null || true)"
+              [ -n "$seen" ] && { echo "→ control: $slug#$rev already exonerated ($seen) — skip"; return 1; }
+              echo "→ EXONERATED: $slug#$orig — workflow '$wf' failed on its revert #$rev's own merge ${rsha:0:8} (run $id) too: the suspect was out of the path"
+              nb="$(printf '%s\n\nexonerated-pins: %s' "$body" "$pins")"
+              gh pr edit "$rev" --repo "$slug" --body "$nb" \
+                || { echo "FATAL: could not write exonerated-pins: on $slug#$rev — the memory still refuses the pins, no restore"; return 1; }
+              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$key\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}" >/dev/null 2>&1 \
+                || echo "WARN: ledger patch failed — the exonerated-pins: line is the remaining belt"
+              gh pr comment "$rev" --repo "$slug" --body "$(printf 'FU-1990 control: workflow **%s** failed on this revert merge `%s` as well (run %s) — the control with the bump out of the path failed, so #%s is exonerated. `exonerated-pins:` added above (pin-only-lint check (e) no longer refuses them); the chain restores #%s through the same lane. The real fault is the responder lane.\n\nexonerated-pins: %s' "$wf" "${rsha:0:8}" "$id" "$orig" "$orig" "$pins")" \
+                || echo "WARN: could not comment on $slug#$rev"
+              EXON_TARGETS="${EXON_TARGETS}${slug}|${rev}|${rsha}|${orig}|${wf}|${br:-master}|${pins}"$'\n'
+              return 0
+            }
+            while IFS= read -r _xl; do
+              [ -n "$_xl" ] && { exonerate_one "$_xl" || true; }
+            done < <(jq -c '.alerts[]? | select(.status == "firing") | select(.labels.branch == "master" or .labels.branch == "main") | .labels' "$ALERT_FILE" 2>/dev/null || true)
+            # <<<REPLAY:workflow-pin-revert-exonerate<<<
+            if [ -n "$EXON_TARGETS" ]; then
+              while IFS='|' read -r XSLUG XREV XRSHA XORIG XWF XBRANCH XPINS; do
+                [ -n "$XSLUG" ] || continue
+                XBR="revert-wf-${XRSHA:0:8}"
+                rm -rf /work/restore
+                _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+                # (`set -e` does not hold inside an `if` condition — every step carries its own exit)
+                if ! (
+                  git clone -q -c "$_ah" --depth 30 "https://github.com/${XSLUG}.git" /work/restore || exit 1
+                  cd /work/restore || exit 1
+                  git config user.name "workflow-pin-revert (FU-1990)" && git config user.email "noreply@teststuff.net" || exit 1
+                  if git ls-remote --exit-code --heads origin "$XBR" >/dev/null 2>&1; then
+                    echo "→ branch $XBR already exists — a racing instance owns the restore"; exit 3
+                  fi
+                  git checkout -q -b "$XBR" || exit 1
+                  git revert --no-edit "$XRSHA" || { git revert --abort || true; echo "FATAL: restoring $XSLUG#$XORIG conflicted — human/responder lane (no blind force)"; exit 1; }
+                  git push -q origin "$XBR" || { echo "FATAL: could not push $XBR"; exit 1; }
+                ); then
+                  echo "→ restore of $XSLUG#$XORIG not opened (see above)"; continue
+                fi
+                # >>>REPLAY:workflow-pin-revert-restore-lane>>>
+                # The restore rides the revert lane: same identity, same `automerge`+`dependencies`
+                # pair (labels BEFORE arming — the `labeled` event fires the reflex), an EMPTY
+                # `reverted-pins:` trailer (the revert arms of governance-lint / iac-sentinel key on
+                # the trailer; empty = nothing enters check (e)'s memory) and `restored-pins:` (the
+                # ping-pong guard above reads it).
+                XBODY="$(printf 'FU-1990 control: workflow **%s** failed on `%s` at the merge of revert #%s too — the control with the bump out of the path failed, so #%s was not the cause. This restores it (a revert of #%s); the pin memory of #%s is released (`exonerated-pins:`). The failure itself is the responder lane.\n\n**Restores:** #%s (reverted by #%s)\n\nreverted-pins:\nrestored-pins: %s' \
+                  "$XWF" "$XBRANCH" "$XREV" "$XORIG" "$XREV" "$XREV" "$XORIG" "$XREV" "$XPINS")"
+                XPR="$(gh pr create --repo "$XSLUG" --base "$XBRANCH" --head "$XBR" \
+                  --title "restore #${XORIG} (exonerated — workflow '${XWF}' failed on its revert #${XREV} too)" \
+                  --body "$XBODY" | grep -oE '[0-9]+$' || true)"
+                [ -n "$XPR" ] || { echo "FATAL: could not open the restore PR for $XSLUG#$XORIG (branch $XBR pushed)"; continue; }
+                gh pr edit "$XPR" --repo "$XSLUG" --add-label automerge --add-label dependencies \
+                  || { echo "FATAL: could not label $XSLUG#$XPR — the reflex will not approve it (a human must)"; continue; }
+                gh pr merge --auto --squash "$XPR" --repo "$XSLUG" || echo "FATAL: could not arm $XSLUG#$XPR"
+                echo "→ restore PR $XSLUG#$XPR (restores #$XORIG) labelled automerge+dependencies and armed"
+                # <<<REPLAY:workflow-pin-revert-restore-lane<<<
+              done <<< "$EXON_TARGETS"
+              exit 0
+            fi
 
             # Alertmanager POSTs an array of alerts; we only care about firing ones on master/main.
             # The payload structure: {"alerts": [{"status": "firing"|"resolved", "labels": {...}, ...}]}
