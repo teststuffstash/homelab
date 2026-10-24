@@ -9,11 +9,11 @@
       ],
       "human_rows": 0,
       "id": 1,
-      "last_proven": "2026-10-22T11:22:43Z",
-      "last_proven_pr": 2818,
+      "last_proven": "2026-10-24T15:25:17Z",
+      "last_proven_pr": 2819,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
-      "rows": 15
+      "rows": 17
     },
     {
       "complete": false,
@@ -25,8 +25,8 @@
       ],
       "human_rows": 0,
       "id": 2,
-      "last_proven": "2026-10-22T02:55:46Z",
-      "last_proven_pr": 2803,
+      "last_proven": "2026-10-24T10:20:16Z",
+      "last_proven_pr": 2884,
       "name": "In-cluster images, GitOps",
       "owner_may_leave": false,
       "rows": 17
@@ -40,8 +40,8 @@
       ],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-10-22T17:03:05Z",
-      "last_proven_pr": 2823,
+      "last_proven": "2026-10-24T15:55:39Z",
+      "last_proven_pr": 2901,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 5
@@ -56,8 +56,8 @@
       ],
       "human_rows": 0,
       "id": 4,
-      "last_proven": "2026-10-22T11:16:35Z",
-      "last_proven_pr": 2816,
+      "last_proven": "2026-10-23T21:00:58Z",
+      "last_proven_pr": 2874,
       "name": "Helm charts, tofu-managed",
       "owner_may_leave": false,
       "rows": 3
@@ -71,8 +71,8 @@
       ],
       "human_rows": 0,
       "id": 5,
-      "last_proven": "2026-10-22T11:08:29Z",
-      "last_proven_pr": 2817,
+      "last_proven": "2026-10-24T02:56:47Z",
+      "last_proven_pr": 2876,
       "name": "Tofu providers",
       "owner_may_leave": false,
       "rows": 14
@@ -262,7 +262,7 @@
       "rows": 0
     },
     {
-      "complete": false,
+      "complete": true,
       "gap_cells": [],
       "gap_rows": 0,
       "human_cells": [
@@ -270,8 +270,8 @@
       ],
       "human_rows": 0,
       "id": 17,
-      "last_proven": null,
-      "last_proven_pr": null,
+      "last_proven": "2026-10-22T21:11:10Z",
+      "last_proven_pr": 2804,
       "name": "Renovate runtime tools",
       "owner_may_leave": false,
       "rows": 1
@@ -282,9 +282,9 @@
   "proofs": {
     "classes": {
       "1": {
-        "merged_at": "2026-10-22T11:22:43Z",
-        "pr": 2818,
-        "title": "chore(deps): update helm release kube-prometheus-stack to v92.8.0"
+        "merged_at": "2026-10-24T15:25:17Z",
+        "pr": 2819,
+        "title": "chore(deps): update crossplane to v2.4.3"
       },
       "10": {
         "merged_at": "2026-10-22T16:41:42Z",
@@ -296,25 +296,30 @@
         "pr": 2755,
         "title": "chore(deps): update dependency mermaid to v12.2.0"
       },
+      "17": {
+        "merged_at": "2026-10-22T21:11:10Z",
+        "pr": 2804,
+        "title": "chore(deps): update dependency helm/helm to v4.3.1"
+      },
       "2": {
-        "merged_at": "2026-10-22T02:55:46Z",
-        "pr": 2803,
-        "title": "chore(deps): update python:3.15-slim docker digest to b23bb42"
+        "merged_at": "2026-10-24T10:20:16Z",
+        "pr": 2884,
+        "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.10.3"
       },
       "3": {
-        "merged_at": "2026-10-22T17:03:05Z",
-        "pr": 2823,
-        "title": "arc-runners: pin runner image 2026.10.22-g312043d8b277"
+        "merged_at": "2026-10-24T15:55:39Z",
+        "pr": 2901,
+        "title": "arc-runners: pin runner image 2026.10.24-g134efbeb581a"
       },
       "4": {
-        "merged_at": "2026-10-22T11:16:35Z",
-        "pr": 2816,
-        "title": "chore(deps): update helm release argo-cd to v10.10.5"
+        "merged_at": "2026-10-23T21:00:58Z",
+        "pr": 2874,
+        "title": "chore(deps): update helm release argocd-apps to v2.0.7"
       },
       "5": {
-        "merged_at": "2026-10-22T11:08:29Z",
-        "pr": 2817,
-        "title": "chore(deps): update terraform proxmox to v0.116.1"
+        "merged_at": "2026-10-24T02:56:47Z",
+        "pr": 2876,
+        "title": "chore(deps): update terraform kubernetes to v3.4.0"
       },
       "6": {
         "merged_at": "2026-09-22T00:00:00Z",
@@ -353,6 +358,11 @@
         "pr": 2755,
         "title": "chore(deps): update dependency mermaid to v12.2.0"
       },
+      "17:helm/helm": {
+        "merged_at": "2026-10-22T21:11:10Z",
+        "pr": 2804,
+        "title": "chore(deps): update dependency helm/helm to v4.3.1"
+      },
       "1:argo-events": {
         "merged_at": "2026-10-04T21:46:07Z",
         "pr": 2223,
@@ -369,14 +379,14 @@
         "title": "chore(deps): update helm release cloudnative-pg to v0.29.1"
       },
       "1:crossplane": {
-        "merged_at": "2026-10-05T07:12:33Z",
-        "pr": 2240,
-        "title": "chore(deps): update crossplane to v2.4.2"
+        "merged_at": "2026-10-24T15:25:17Z",
+        "pr": 2819,
+        "title": "chore(deps): update crossplane to v2.4.3"
       },
       "1:external-secrets": {
-        "merged_at": "2026-10-13T13:31:38Z",
-        "pr": 2531,
-        "title": "chore(deps): update helm release external-secrets to v2.12.0"
+        "merged_at": "2026-10-23T16:37:15Z",
+        "pr": 2853,
+        "title": "chore(deps): update helm release external-secrets to v2.13.0"
       },
       "1:forgejo": {
         "merged_at": "2026-10-15T20:55:54Z",
@@ -389,9 +399,9 @@
         "title": "chore(deps): update helm release infisical-standalone to v1.11.0"
       },
       "1:kube-prometheus-stack": {
-        "merged_at": "2026-10-22T11:22:43Z",
-        "pr": 2818,
-        "title": "chore(deps): update helm release kube-prometheus-stack to v92.8.0"
+        "merged_at": "2026-10-23T21:10:44Z",
+        "pr": 2875,
+        "title": "chore(deps): update helm release kube-prometheus-stack to v92.10.1"
       },
       "1:metrics-server": {
         "merged_at": "2026-10-09T05:28:58Z",
@@ -404,9 +414,9 @@
         "title": "Update alpine Docker tag to v3.24"
       },
       "2:cloudflare/cloudflared": {
-        "merged_at": "2026-10-15T21:12:36Z",
-        "pr": 2602,
-        "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.10.1"
+        "merged_at": "2026-10-24T10:20:16Z",
+        "pr": 2884,
+        "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.10.3"
       },
       "2:docker.io/library/busybox": {
         "merged_at": "2026-10-04T22:57:06Z",
@@ -469,9 +479,9 @@
         "title": "chore(deps): update registry docker tag to v3.1.2"
       },
       "3:agent-base": {
-        "merged_at": "2026-10-20T03:50:21Z",
-        "pr": 2752,
-        "title": "deploy: agent-base 2026.10.20-g123832721273"
+        "merged_at": "2026-10-23T16:56:08Z",
+        "pr": 2855,
+        "title": "deploy: agent-base 2026.10.23-g79d146c8caac"
       },
       "3:agent-coordinator": {
         "merged_at": "2026-10-20T03:42:13Z",
@@ -479,14 +489,19 @@
         "title": "deploy: agent-coordinator 2026.10.20-g950b7f0b8201"
       },
       "3:homelab/arc-runner": {
-        "merged_at": "2026-10-22T17:03:05Z",
-        "pr": 2823,
-        "title": "arc-runners: pin runner image 2026.10.22-g312043d8b277"
+        "merged_at": "2026-10-24T15:55:39Z",
+        "pr": 2901,
+        "title": "arc-runners: pin runner image 2026.10.24-g134efbeb581a"
       },
       "4:argo-cd": {
         "merged_at": "2026-10-22T11:16:35Z",
         "pr": 2816,
         "title": "chore(deps): update helm release argo-cd to v10.10.5"
+      },
+      "4:argocd-apps": {
+        "merged_at": "2026-10-23T21:00:58Z",
+        "pr": 2874,
+        "title": "chore(deps): update helm release argocd-apps to v2.0.7"
       },
       "4:longhorn": {
         "merged_at": "2026-10-10T21:13:14Z",
@@ -519,14 +534,14 @@
         "title": "Update Terraform helm to v3"
       },
       "5:hashicorp/kubernetes@tofu": {
-        "merged_at": "2026-10-09T05:49:09Z",
-        "pr": 2397,
-        "title": "Update Terraform kubernetes to v3.3.0"
+        "merged_at": "2026-10-24T02:56:47Z",
+        "pr": 2876,
+        "title": "chore(deps): update terraform kubernetes to v3.4.0"
       },
       "5:hashicorp/kubernetes@tofu/cloudflare": {
-        "merged_at": "2026-10-09T05:49:09Z",
-        "pr": 2397,
-        "title": "Update Terraform kubernetes to v3.3.0"
+        "merged_at": "2026-10-24T02:56:47Z",
+        "pr": 2876,
+        "title": "chore(deps): update terraform kubernetes to v3.4.0"
       },
       "5:hashicorp/random@tofu": {
         "merged_at": "2026-10-04T16:23:38Z",
@@ -755,6 +770,17 @@
     {
       "class": 1,
       "gap_columns": [],
+      "key": "1:argo-rollouts",
+      "last_proven": null,
+      "name": "argo-rollouts",
+      "version": "2.43.8",
+      "where": [
+        "argocd/platform/argo-rollouts.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [],
       "key": "1:argo-workflows",
       "last_proven": "2026-10-21T21:26:11Z",
       "name": "argo-workflows",
@@ -789,9 +815,9 @@
       "class": 1,
       "gap_columns": [],
       "key": "1:crossplane",
-      "last_proven": "2026-10-05T07:12:33Z",
+      "last_proven": "2026-10-24T15:25:17Z",
       "name": "crossplane",
-      "version": "2.4.2",
+      "version": "2.4.3",
       "where": [
         "argocd/platform/crossplane.yaml"
       ]
@@ -800,7 +826,7 @@
       "class": 1,
       "gap_columns": [],
       "key": "1:external-secrets",
-      "last_proven": "2026-10-13T13:31:38Z",
+      "last_proven": "2026-10-23T16:37:15Z",
       "name": "external-secrets",
       "version": "2.13.0",
       "where": [
@@ -866,8 +892,19 @@
     {
       "class": 1,
       "gap_columns": [],
+      "key": "1:kargo",
+      "last_proven": null,
+      "name": "kargo",
+      "version": "1.12.4",
+      "where": [
+        "argocd/platform/kargo.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [],
       "key": "1:kube-prometheus-stack",
-      "last_proven": "2026-10-22T11:22:43Z",
+      "last_proven": "2026-10-23T21:10:44Z",
       "name": "kube-prometheus-stack",
       "version": "92.10.1",
       "where": [
@@ -922,7 +959,7 @@
       "class": 2,
       "gap_columns": [],
       "key": "2:cloudflare/cloudflared",
-      "last_proven": "2026-10-15T21:12:36Z",
+      "last_proven": "2026-10-24T10:20:16Z",
       "name": "cloudflare/cloudflared",
       "version": "2026.10.3@sha256:faa8e0a1475f",
       "where": [
@@ -1119,7 +1156,7 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:agent-base",
-      "last_proven": "2026-10-20T03:50:21Z",
+      "last_proven": "2026-10-23T16:56:08Z",
       "name": "agent-base",
       "version": "`AGENT_BASE_IMAGE`=2026.10.23-g79d146c8caac",
       "where": [
@@ -1189,9 +1226,9 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:homelab/arc-runner",
-      "last_proven": "2026-10-22T17:03:05Z",
+      "last_proven": "2026-10-24T15:55:39Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.22-g312043d8b277 (×3)",
+      "version": "2026.10.24-g134efbeb581a (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1213,7 +1250,7 @@
       "class": 4,
       "gap_columns": [],
       "key": "4:argocd-apps",
-      "last_proven": null,
+      "last_proven": "2026-10-23T21:00:58Z",
       "name": "argocd-apps",
       "version": "2.0.7",
       "where": [
@@ -1298,7 +1335,7 @@
       "class": 5,
       "gap_columns": [],
       "key": "5:hashicorp/kubernetes@tofu",
-      "last_proven": "2026-10-09T05:49:09Z",
+      "last_proven": "2026-10-24T02:56:47Z",
       "name": "hashicorp/kubernetes",
       "version": "3.4.0 (`~> 3.0`)",
       "where": [
@@ -1310,7 +1347,7 @@
       "class": 5,
       "gap_columns": [],
       "key": "5:hashicorp/kubernetes@tofu/cloudflare",
-      "last_proven": "2026-10-09T05:49:09Z",
+      "last_proven": "2026-10-24T02:56:47Z",
       "name": "hashicorp/kubernetes",
       "version": "3.4.0 (`~> 3.0`)",
       "where": [
@@ -2136,7 +2173,7 @@
       "class": 17,
       "gap_columns": [],
       "key": "17:helm/helm",
-      "last_proven": null,
+      "last_proven": "2026-10-22T21:11:10Z",
       "name": "helm/helm",
       "version": "4.3.1",
       "where": [

@@ -32,3 +32,7 @@ CLAUDE.local.md
 
 # Transient PXE flags / per-node procedure state (FU-244) — never committed
 *.local.tf
+
+# kind-kargo experiment (tests/kind-kargo/): evidence + its devbox env
+/e2e-evidence/
+/tests/kind-kargo/.devbox/

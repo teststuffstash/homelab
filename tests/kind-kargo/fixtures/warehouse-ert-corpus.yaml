@@ -1,0 +1,11 @@
+# INFORMATIONAL: can a kind pod on the runner list the first-party registry anonymously?
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata: { name: ert-corpus, namespace: oracle-kargo }
+spec:
+  interval: 5m0s
+  subscriptions:
+    - image:
+        repoURL: registry.teststuff.net/oracle-fleet/ert-corpus
+        imageSelectionStrategy: Lexical
+        discoveryLimit: 1

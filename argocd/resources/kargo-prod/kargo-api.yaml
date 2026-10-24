@@ -1,0 +1,30 @@
+# The Kargo API's admin-account Secret (kargo.yaml api.secret.name: kargo-api; the chart envFroms it
+# into the api container). Two Infisical keys, both seat-minted before this lands (PR apply plan):
+#   KARGO_ADMIN_PASSWORD_HASH_B64  — the bcrypt hash of the admin password, BASE64-ENCODED. Stored
+#       encoded on purpose: a bcrypt hash is `$2a$10$…`, and a `$` in a value is shell-expanded and
+#       stored corrupted by `devbox run infisical-secret` (scripts/infisical-secret.sh header). The
+#       plaintext password lives only in the KeePass wallet (entry `kargo-admin`).
+#   KARGO_ADMIN_TOKEN_SIGNING_KEY  — the API's JWT signing key (hex; no `$`).
+# LAN-only admin UI (the oracle-iac HTTPRoute + referencegrant.yaml) — the admin account is a
+# promotion lever; there is no IdP yet (OIDC is PLANNED, ADR-055).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: kargo-api
+  namespace: kargo
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: kargo-api
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        ADMIN_ACCOUNT_PASSWORD_HASH: '{{ .hash | b64dec }}'
+        ADMIN_ACCOUNT_TOKEN_SIGNING_KEY: '{{ .signingKey }}'
+  data:
+    - secretKey: hash
+      remoteRef: { key: KARGO_ADMIN_PASSWORD_HASH_B64 }
+    - secretKey: signingKey
+      remoteRef: { key: KARGO_ADMIN_TOKEN_SIGNING_KEY }
