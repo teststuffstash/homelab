@@ -279,3 +279,43 @@ spec:
           annotations:
             summary: "Registry mirror {{ $labels.instance }} has sustained 5xx on blob requests"
             description: "{{ $labels.instance }} has had a non-zero 5xx rate on blob (layer) requests for 10m. This is the per-blob poison signature #1282 documents — a specific blob is consistently failing while /v2/ may still answer 200. Check which blob codes are 5xx-ing: increase(registry_http_requests_total{instance=\"{{ $labels.instance }}\",handler=\"blob\",code=~\"5..\"}[10m]). Remedy: bounce the mirror Deployment — kubectl -n registry-cache rollout restart deploy/mirror-<name> (see docs/runbook.md §Registry cache)."
+        # Abandoned cold-blob fetch (S9 sweep 2026-10-24, homelab#1985 — sleep-tracking run
+        # 39411736477 + circles#134 both failed `timeout awaiting response headers` on the SAME
+        # uncached playwright/python blob, two days apart). The mechanism, read off the mirror's
+        # own logs (Loki, ns registry-cache): a proxy cache-fill is TIED TO THE CLIENT REQUEST that
+        # started it. While MCR's CDN streamed at ~0.4 MB/s, docker opened a second request for the
+        # in-flight digest that waited on upstream headers past its 30 s ResponseHeaderTimeout, the
+        # whole pull aborted, the first request was cancelled with it, and the fill died with it
+        # (`Get "https://<cdn>/…": context canceled` → `error closing blobwriter: already closed`).
+        # Nothing was cached, so every later pull started from zero and failed the same way: the
+        # mirror sat wedged on that blob for ~3 days (22 blob 500s, 10-19 → 10-22) until a patient
+        # client (no timeout) fetched it once — 0.02 s per hit ever since.
+        #
+        # Why RegistryMirrorBlob5xxRate missed it: consumers pull every few hours, so each 500
+        # holds rate([5m]) > 0 for ~5m and `for: 10m` is never met (pending 7×, fired once in 10
+        # days). The signature here is discrete: a blob GET that ran past the client's header
+        # timeout AND a blob GET that ended 5xx, on the same mirror, inside 30m. The slow-request
+        # leg keeps fast upstream 5xx (Blob5xxRate's poison class) out; the 5xx leg keeps slow-
+        # but-successful transfers out (ghcr serves many cached multi-GB layers past 25 s — a hit,
+        # not a failure). 25 s is the histogram's last bucket edge under docker's 30 s. The two
+        # legs are separate requests in the same window (no per-request join exists) — every
+        # blob 5xx in the 10-day replay coincided with slow GETs, on all three mirrors.
+        # for: 0m — each occurrence already failed a consumer; the 30m range is the alert's hold.
+        # RESTART GAP: per-pod series are summed by job, and increase() keeps the old pod's
+        # counts inside the range, so a roll neither clears nor re-fires it.
+        - alert: RegistryMirrorColdBlobAbandoned
+          expr: >
+            (sum by (job) (increase(registry_http_requests_total{handler="blob", method="get", code=~"5.."}[30m])) > 0)
+            and on (job)
+            (
+              sum by (job) (increase(registry_http_request_duration_seconds_count{handler="blob", method="get"}[30m]))
+              - sum by (job) (increase(registry_http_request_duration_seconds_bucket{handler="blob", method="get", le="25.0"}[30m]))
+              > 0
+            )
+          labels:
+            severity: warning
+            # triage: the abandoned digest and its upstream error are in the mirror's own logs
+            triage: dig
+          annotations:
+            summary: "Registry mirror {{ $labels.job }}: a consumer gave up on an uncached blob — the fill was abandoned"
+            description: "{{ $labels.job }} served a blob GET slower than 25 s and a blob GET that ended 5xx in the last 30m: a consumer timed out (docker: `timeout awaiting response headers`) while the mirror was still fetching an UNCACHED blob from upstream. The cache fill is tied to the client request, so the blob is still NOT cached and every later pull of it fails the same way until something fetches it patiently. Find the digest: Loki (X-Scope-OrgID: registry-cache) `{namespace=\"registry-cache\", container=\"registry\"} |= \"context canceled\"` (the pod name says which mirror). Warm it with no client timeout — `bash scripts/warm-registry-mirror.sh <repo>:<tag> http://<mirror VIP>` (whole image) or `curl -fsS -o /dev/null http://<mirror VIP>/v2/<repo>/blobs/<digest>` — then confirm a second GET answers instantly. docs/runbook.md §Registry cache → Cold blob abandoned."

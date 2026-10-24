@@ -1,0 +1,153 @@
+# Behaviour fixture for RegistryMirrorColdBlobAbandoned (homelab#1985 S9 sweep — the abandoned
+# cold-blob fill: sleep-tracking run 39411736477, circles#134).
+#
+#   devbox run -- promtool test rules argocd/resources/registry-cache/mirror-cold-blob.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/ in CI.
+#
+# WHAT IS BEING PINNED (the contract is the rule's comment block in prometheusrule.yaml):
+#   1. THE INCIDENT SHAPE — one blob GET past 25 s + one blob GET ending 5xx → fires at once
+#      (for: 0m) and holds for the 30m range, then clears.
+#   2. SLOW BUT SUCCESSFUL does not fire — ghcr's cached multi-GB layers legitimately run past 25 s.
+#   3. FAST 5xx does not fire — that is RegistryMirrorBlob5xxRate's poison class, not this one.
+#   4. NO CROSS-MIRROR JOIN — a slow GET on one mirror and a 5xx on another is two non-events.
+#   5. A MIRROR ROLL right after the event neither clears it nor leaks `pod` onto the alert.
+#
+# SERIES MODEL: the registry's request histogram. `_count` counts every blob GET; the
+# `le="25.0"` bucket counts those that finished within 25 s, so count − bucket = GETs slower than
+# 25 s. Background traffic is 5 fast GETs a minute ("+5" on both). A slow GET is a +1 on _count
+# with no +1 on the bucket.
+#
+# CLOCK: interval 1m = the ServiceMonitor's 60s scrape. Range selectors are LEFT-OPEN
+# (Prometheus ≥3.0): increase(x[30m]) evaluated at t sees samples in (t−30m, t]. The event lands
+# between the t=9m and t=10m samples, so the window holds both sides of the step from t=10m
+# through t=38m ((8m,38m] still contains the t=9m sample) and loses the pre-step sample at t=39m
+# ((9m,39m] starts at t=10m) — so: firing at 10m and 38m, gone at 39m.
+rule_files:
+  - mirror-cold-blob.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1. THE INCIDENT SHAPE ─────────────────────────────────────────────────────────────────────
+  # registry-mcr, 2026-10-20 11:01–11:07Z in miniature: a docker GET for the uncached
+  # playwright/python layer outlived the client and ended 500 ("context canceled").
+  - interval: 1m
+    name: a slow blob GET plus a blob 5xx fires at once and holds for the 30m range
+    input_series:
+      - series: 'registry_http_requests_total{handler="blob",method="get",code="500",job="registry-mcr"}'
+        values: "0x9 1x60"
+      - series: 'registry_http_request_duration_seconds_count{handler="blob",method="get",job="registry-mcr"}'
+        values: "0+5x9 51+5x60"
+      - series: 'registry_http_request_duration_seconds_bucket{handler="blob",method="get",le="25.0",job="registry-mcr"}'
+        values: "0+5x70"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: &mcr_alert
+          - exp_labels:
+              job: registry-mcr
+              severity: warning
+              triage: dig
+      - eval_time: 38m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: *mcr_alert
+      - eval_time: 39m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: []
+
+  # ── 2. SLOW BUT SUCCESSFUL ────────────────────────────────────────────────────────────────────
+  # registry-ghcr, 2026-10-19 09:15–09:33Z: dozens of >25 s blob GETs, all cache HITS (a runner
+  # herd pulling a cached multi-GB layer) — no 5xx, nothing failed.
+  - interval: 1m
+    name: slow successful blob GETs do not fire
+    input_series:
+      - series: 'registry_http_requests_total{handler="blob",method="get",code="500",job="registry-ghcr"}'
+        values: "0x70"
+      - series: 'registry_http_request_duration_seconds_count{handler="blob",method="get",job="registry-ghcr"}'
+        values: "0+5x9 60+15x60"
+      - series: 'registry_http_request_duration_seconds_bucket{handler="blob",method="get",le="25.0",job="registry-ghcr"}'
+        values: "0+5x70"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: []
+
+  # ── 3. FAST 5xx ───────────────────────────────────────────────────────────────────────────────
+  # A blob 500 that returned within 25 s (an upstream error, a poisoned committed blob) is the
+  # other alert's class — the slow leg must hold this one silent.
+  - interval: 1m
+    name: a fast blob 5xx does not fire
+    input_series:
+      - series: 'registry_http_requests_total{handler="blob",method="get",code="500",job="registry-mcr"}'
+        values: "0x9 1x60"
+      - series: 'registry_http_request_duration_seconds_count{handler="blob",method="get",job="registry-mcr"}'
+        values: "0+5x9 51+5x60"
+      - series: 'registry_http_request_duration_seconds_bucket{handler="blob",method="get",le="25.0",job="registry-mcr"}'
+        values: "0+5x9 51+5x60"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: []
+
+  # ── 4. NO CROSS-MIRROR JOIN ───────────────────────────────────────────────────────────────────
+  # mcr has only a slow successful GET, ghcr has only a fast 5xx: each leg is true SOMEWHERE, but
+  # `and on (job)` must not pair them across mirrors.
+  - interval: 1m
+    name: a slow GET on one mirror and a 5xx on another do not combine
+    input_series:
+      - series: 'registry_http_requests_total{handler="blob",method="get",code="500",job="registry-mcr"}'
+        values: "0x70"
+      - series: 'registry_http_request_duration_seconds_count{handler="blob",method="get",job="registry-mcr"}'
+        values: "0+5x9 51+5x60"
+      - series: 'registry_http_request_duration_seconds_bucket{handler="blob",method="get",le="25.0",job="registry-mcr"}'
+        values: "0+5x70"
+      - series: 'registry_http_requests_total{handler="blob",method="get",code="500",job="registry-ghcr"}'
+        values: "0x9 1x60"
+      - series: 'registry_http_request_duration_seconds_count{handler="blob",method="get",job="registry-ghcr"}'
+        values: "0+5x9 51+5x60"
+      - series: 'registry_http_request_duration_seconds_bucket{handler="blob",method="get",le="25.0",job="registry-ghcr"}'
+        values: "0+5x9 51+5x60"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: []
+
+  # ── 5. A MIRROR ROLL RIGHT AFTER THE EVENT ────────────────────────────────────────────────────
+  # The event lands on pod A at t=10m; A is replaced at t=12m (staleness markers) and pod B's
+  # fresh series start at t=14m. A's samples stay inside the 30m range, and `sum by (job)` drops
+  # `pod`, so the alert keeps firing as ONE instance with no pod label.
+  - interval: 1m
+    name: a mirror roll after the event neither clears it nor leaks pod onto the alert
+    input_series:
+      - series: 'registry_http_requests_total{handler="blob",method="get",code="500",job="registry-mcr",pod="mirror-mcr-a"}'
+        values: "0x9 1x1 stale"
+      - series: 'registry_http_request_duration_seconds_count{handler="blob",method="get",job="registry-mcr",pod="mirror-mcr-a"}'
+        values: "0+5x9 51 56 stale"
+      - series: 'registry_http_request_duration_seconds_bucket{handler="blob",method="get",le="25.0",job="registry-mcr",pod="mirror-mcr-a"}'
+        values: "0+5x11 stale"
+      - series: 'registry_http_requests_total{handler="blob",method="get",code="500",job="registry-mcr",pod="mirror-mcr-b"}'
+        values: "_x13 0x40"
+      - series: 'registry_http_request_duration_seconds_count{handler="blob",method="get",job="registry-mcr",pod="mirror-mcr-b"}'
+        values: "_x13 0+5x40"
+      - series: 'registry_http_request_duration_seconds_bucket{handler="blob",method="get",le="25.0",job="registry-mcr",pod="mirror-mcr-b"}'
+        values: "_x13 0+5x40"
+    alert_rule_test:
+      - eval_time: 13m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: *mcr_alert
+      - eval_time: 25m
+        alertname: RegistryMirrorColdBlobAbandoned
+        exp_alerts: *mcr_alert
