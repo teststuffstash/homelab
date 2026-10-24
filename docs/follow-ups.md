@@ -797,7 +797,7 @@ the block needs pruning, not more headings.
       classes; the scout rides its class's provider policy; `@` arms = the experiment
       instrument, shipped PR#963). **Step 1 FLIPPED 2026-09-13 (PR#1639; operator: the five
       open-inference tool-loops ARE the trial) — the suffix rides paid OpenRouter picks only.
-      Next:** the standing re-read = homelab#1640 acceptance 8; the 0731 matrix run (step 2,
+      Step 1 CONFIRMED STANDING 2026-10-14** (homelab#1669 strike read, thin traffic). **Next:** the 0731 matrix run (step 2,
       #1238 — open; parent Goal #1231 closed 2026-09-14, so unparented). Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
       the #783 provider-attribution legs.
 
@@ -856,7 +856,7 @@ the block needs pruning, not more headings.
       **Next:** a small `vendor-status` exporter owning those two (same ConfigMap-script pattern),
       metric names unchanged so dashboards/alerts keep reading. Glossary: pending renames.
 - [ ] **FU-131** — **Cost-ledger accuracy: harvest FIXED; the T+1 sweep DROPPED (ruled 2026-10-14).** Harvest backoff
-      2/5/15/45 s + `openrouter_generation_harvest_total{outcome}`; live 10-14: missed 0 vs ~6,840 stored in 21 d.
+      2/5/15/45 s + `openrouter_generation_harvest_total{outcome}`; live 10-14: missed 0 vs ~6,840 stored in 21 d. `OpenRouterGenerationHarvestMissing` 10-15 17:55–22:00Z = upstream `/generation` 404s (TICK-LOG 10-15).
       The sweep needed an in-cluster management key (ruled out) — replaced by a belt: homelab#2564 (queued).
       Remaining ledger-accuracy leg: agent-runtime#173 (standing-key `cost_usd` = siblings' spend; queued 10-14).
       **Next:** archive when both land. Relates ADR-096, FU-095.
@@ -1030,7 +1030,7 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** Rule, history, meters, status:
       [`docs/storage-ledger.md`](storage-ledger.md). Shipped: Longhorn + Garage metering, pve fstrim, thin-pool
-      meter (`PveThinPool*`, PR#1367). Under the 25 % floor 2026-10-22: hp-01 75 % (hg5d = a Longhorn REBUILD
+      meter (`PveThinPool*`, PR#1367). Under the 25 % floor (`LonghornDiskBelowSchedulingFloor`, `LonghornDiskFillingUp`) 2026-10-22: hp-01 75 % (hg5d = a Longhorn REBUILD
       snapshot that merges itself — never clear it; alert text wrongly blames the image store), wk-metal-01/mx500
       72 %, and wk-04/`sn530` 76.6 % (+2 %/day) — `mirror-ghcr-data` holds 171 GB actual for 23 GB of filesystem: a
       133 GB `markRemoved` snapshot (10-13) sits as volume-head's parent (purge complete, nothing coalesces it) and

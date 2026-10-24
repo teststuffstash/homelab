@@ -14547,3 +14547,42 @@ updates or reverts as much as possible — mechanical revert or a responder."
   recording rule on kubelet volume stats (live: docker-io 6 %, ghcr 17 %, mcr 7 %); `RegistryMirrorBlob5xxRate`
   had a real bug — per-pod series reset `for` on every roll + split per method/code → `sum by (job)`.
   Residual: prometheus-rules-lint pins alert rules only, not recording rules (store-used copy can drift).
+
+## 2026-10-24 ~13:00–14:00Z — /board-sweep (window since 10-14 17:00Z; island-first, no corpus load; 2 read-only subagents + 1 PR subagent) (seat)
+
+- **Window:** 12 claim repos (claims == `agents/stacks.json`); 68 issues closed, 534 PRs merged (homelab 299:
+  operator 137, Renovate 129, agents App 19, deploy 14); ADR-148 records 10-14 → 10-24 (19 `now` sessions, digs
+  every night, 0/3/1/1/2/2/4/1/2/0 findings). This entry is the next sweep's watermark.
+- **SILENT:** none — the crosscheck reads "belts healthy". Firing, no dig yet: `ArmedBehindNoApprovalStranded`,
+  `GoCatalogParseFailed`, `AgentDispatchCronWoken` (all after 03:30Z today).
+- **ESCALATED-UNSEEN → acted:** homelab#1669's coordinator ASK done (FU-186 "Step 1 CONFIRMED STANDING
+  2026-10-14"); the Goal #1640 verdict stays the operator's. Dig loop closed in git: FU-093 now names
+  `LonghornDiskBelowSchedulingFloor`/`LonghornDiskFillingUp` (pointer-ization had dropped them → the 10-23 re-dig),
+  FU-131 names `OpenRouterGenerationHarvestMissing`. Scoreboard: 4 rows (10-20 wk-metal-04 death, all
+  `counts: no`; garage-0 `--force` scored `unsafe`, the 3 longhorn csi deletes `wrong`).
+- **STUCK-MACHINE → PR:** the shadow-remediation harvest types `REMEDIATION-WOULD: none …` lines as null-verb
+  entries (5 in the window) → subagent PR (drop declared non-actions, keep malformed as `raw`, fixture case).
+- **Corrected subagent read:** `GithubCiWallTimeDrift` (dig 10-19 unexplained) is NOT runner queue wait. 7 d
+  medians now vs 21 d ago: queue 79 s vs 432 s, `ci` job duration 802 s vs 627 s — step-level growth inside
+  the job; the alert has cleared (no firing in 2 d). Unattributed, not filed.
+- **Unrecorded cause, not filed:** the 10-16 dig's `NodeDiskIOSaturation` nx-01 nvme1n1 (the BC711 holding
+  `/var` = EPHEMERAL, 496 samples / 10 d, ARC runners + rides per the dig — runner link unverified); quiet 2 d.
+- **Lane anomalies:** one dead node → 15+ pod-level `now` sessions, while the node alert is dig-routed (nobody
+  triaged the node until the operator asked at 04:55Z); `NodeCPUHighUsage` is `triage:none`, so TICK-LOG
+  10-20's "handed to the responder" handed it to nobody (38 h unread). A `now` session stated "recovered" for an
+  alert still firing (fp `a61bf9d99ef54a95`). TOOL_GAPs repeat: node leases / Longhorn CRs / events RBAC-denied,
+  talosctl, Loki; `kubectl get app` resolves to a Grafana CRD.
+- **ESCALATED-UNSEEN → operator:** homelab#2588 `agent/error` 9 d (both strikes = shared rate-pool drains;
+  the predicate is unbuilt on master; class fix #2601 unqueued); #2808 (closed issues stranded at
+  `agent/review`: #2860/#2867/#2868/#2870) unqueued; homelab#2757 (runner stale devbox venv) unqueued,
+  blocks circles#129; model-scout digests unread (#2725, #2512, #2242, #2053, #1821, #1647).
+- **Stack-side (outside the seat's triage scope, reported only):** circles#124 carries arbitrate+blocked+review
+  at once; sleep-tracking#199 idle 5 d at `agent/review` with no review; oracle-fleet#898 remainder
+  ownerless (`chart/` banned to the ride); sleep-iac#119 open after its alerts cleared 10-22; oracle-fleet#826
+  past its 10-19 read date.
+- **CORRECTLY-WAITING:** the Python 3.15 group (oracle-fleet#883 ruling); #2819 (verify the next Renovate run
+  completes the crossplane set); sleep-tracking#203 + allure#11 (verify after #2881/#2889 and allure#35);
+  oracle-fleet#820 (parked branch); #818.
+- **HANDLED → fu-sweep input:** FU ids cited by merged PRs: FU-270 (145), FU-051 (80), FU-022, FU-152, FU-198,
+  FU-131, FU-279, FU-280, FU-044, FU-088, FU-306, FU-124, FU-015, FU-156, FU-204, FU-271, FU-281, FU-007,
+  FU-161, FU-304 + singles (046 058 080 084 089 097 101 109 113 149 150 167 232 236 246 251 269 290 305).
