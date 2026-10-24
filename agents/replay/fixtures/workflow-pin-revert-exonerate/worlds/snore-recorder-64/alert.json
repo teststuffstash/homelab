@@ -1,0 +1,4 @@
+{"receiver":"deploy-pin-revert","status":"firing","alerts":[
+  {"status":"firing","labels":{"alertname":"GithubWorkflowRunFailed","owner":"teststuffstash","repo":"snore-recorder","workflow":"build-image","branch":"master","event":"push","number":"25","attempt":"1","id":"39362273218","conclusion":"failure"}},
+  {"status":"firing","labels":{"alertname":"GithubWorkflowRunFailed","owner":"teststuffstash","repo":"snore-recorder","workflow":"build-image","branch":"master","event":"push","number":"26","attempt":"1","id":"39363243469","conclusion":"failure"}}
+]}

@@ -1,0 +1,4 @@
+recorded:
+  at: 2026-10-24
+  source: teststuffstash/snore-recorder — PR #64 (`gh pr view 64 --json number,headRefName,mergeCommit,body`, verbatim), runs 39362273218 / 39363243469 (`gh api repos/teststuffstash/snore-recorder/actions/runs/<id>`, head_sha verbatim)
+  constructed: alert.json (the github-exporter label set of both firing runs, grouped by alertname as Alertmanager delivers them); PR #62/#63 entries trimmed to the fields the clause reads
