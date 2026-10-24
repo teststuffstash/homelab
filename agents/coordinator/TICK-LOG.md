@@ -14517,3 +14517,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   strike class `harness-fault` — spec on `fix/harness-scoped-strike` (b4d24e0, GW-SESSIONS-ADMIT
   §Harness-scoped strikes + the vocabulary/store rows); a seat subagent carries schema/code/tests/launcher
   classifier into one PR. The two compose; second to land rebases.
+- **#2880 merged 08:28Z** (harness-scoped strikes, seat subagent): `harness-fault` class, store `harness`
+  column, walk skips a rail whose harness is struck (⚖ conservative until #2870), explicit struck harness
+  → `cells-exhausted`; launcher classifier = the opencode auto-reject PAIR from #2867's strike logs, line-
+  anchored, opencode rides only. Residuals: agent-runtime's agent-finalize has no `harness-fault` (a
+  STRIKE_BY_POD ride still reports `unknown`); #2870 told to narrow the rail-skip to cells.
