@@ -989,6 +989,26 @@ corrupt committed blobs. This is the only reliable remedy for a poisoned blob on
 - The weekly `gc-mirrors` CronJob (Sunday 04:00 UTC) also clears corrupt state, but waiting for
   it is not an incident response.
 
+### Cold blob abandoned
+
+**Symptom:** `RegistryMirrorColdBlobAbandoned` fires, or a consumer's pull fails with
+`httpReadSeeker: failed open … blobs/sha256:… net/http: timeout awaiting response headers`. A
+consumer gave up on a blob the mirror was still fetching from upstream (a slow CDN stream; docker
+waits 30 s for headers). The cache fill is tied to the request that started it, so the blob is
+**still uncached** and every later pull of it fails the same way — 2026-10-19→24 the mcr mirror
+sat wedged on one playwright layer for days (homelab#1985 S9 sweep). Mechanism + evidence: the
+alert's comment block in `argocd/resources/registry-cache/prometheusrule.yaml`.
+
+**Remedy — fetch it once with no client timeout** (a bounce does NOT help: nothing is cached):
+
+```bash
+# the digest: Loki, X-Scope-OrgID: registry-cache —
+#   {namespace="registry-cache", container="registry"} |= "context canceled"
+bash scripts/warm-registry-mirror.sh <repo>:<tag> http://<mirror VIP>      # the whole image
+curl -fsS -o /dev/null http://<mirror VIP>/v2/<repo>/blobs/<digest>        # or one blob
+curl -s -o /dev/null -w '%{time_total}\n' http://<mirror VIP>/v2/<repo>/blobs/<digest>  # ≈0.0x s = cached
+```
+
 ### Full disk / PVC sizing
 
 **Symptom:** `RegistryMirrorCacheAlmostFull` alert fires (PVC >85% full). A full disk does NOT
