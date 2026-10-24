@@ -154,14 +154,22 @@ follows the cell, homelab#2870). With an **explicit** `harness` that is struck f
 is admissible: the answer is `defer` `cells-exhausted`, because the platform has to fix the
 harness and waiting does not help. A clean outcome on the same harness refutes the strike.
 
-World `policy-codex`. T = a worker task; the worker's harness on the dual-dialect rails is `opencode`.
+⚖ The harness a rail would ride is the one the walk derives today ([§The harness follows the
+rail](#the-harness-follows-the-rail)), and a rail whose derived harness is struck is passed over
+whole: a dual-dialect rail (`opencode`, `openrouter`) is **not** re-dispatched on another harness of
+its other dialect, because whether each of its models answers that dialect is per model and recorded
+nowhere. With an explicit `harness` that is not struck, the struck harness's own cells stay
+admissible to it: the strike names no model and no cell.
 
-| description | arrange (the task's strikes) | body || decision | rail | harness | reason |
-|---|---|---||---|---|---|---|
-| "a harness strike moves the walk to a cell another harness speaks ⚖" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | the first cell in walk order not ridden by opencode | not opencode | — |
-| "a harness strike excludes no model" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | — | — | — (the model the cell names is admissible as before) |
-| "an explicit harness that is struck defers ⚖" | `harness-fault` on harness opencode | worker, T, `harness: opencode`, `attempt: 2` || defer (`{decision, reason}` only) | — | — | cells-exhausted |
-| "a refuted harness strike excludes nothing" | `harness-fault` on harness opencode, then `clean` on a later opencode session of T | worker, T, `attempt: 3` || dispatch | the walk's first cell | opencode | — |
+World `policy-codex`, codex headroom fresh at 20 % / 64 %. T = the worker task `homelab-2867-r1`;
+its attempt 1 rode (opencode, `opencode-go/deepseek-v4.1-flash`) on the `opencode` harness.
+
+| description | arrange | body || decision | rail | harness | model | reason |
+|---|---|---||---|---|---|---|---|
+| "a harness strike moves the walk to a cell another harness speaks ⚖" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | codex | codex | codex/fixture-model | — |
+| "a harness strike excludes no model" | `harness-fault` on harness opencode | worker, T, `harness: goose`, `attempt: 2` || dispatch | opencode | goose | opencode-go/deepseek-v4.1-flash | — |
+| "an explicit harness that is struck defers ⚖" | `harness-fault` on harness opencode | worker, T, `harness: opencode`, `attempt: 2` || defer (`{decision, reason}` only) | — | — | — | cells-exhausted |
+| "a refuted harness strike excludes nothing" | `harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session (tier heavy, admitted before the strike) | worker, T, `attempt: 3` || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash | — |
 
 `POST /sessions` carries **`attempt`** (default 1): the consumer's automatic re-admission counter at
 this round. Strikes are keyed by TASK, not by attempt, so the exclusion holds however the attempt is

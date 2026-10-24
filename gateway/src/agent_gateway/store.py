@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS strikes (
   session_id TEXT NOT NULL,
   at REAL NOT NULL,
   refuted_at REAL,
+  harness TEXT NOT NULL DEFAULT '',
   UNIQUE (session_id, class, source, provider)
 );
 CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
@@ -146,10 +147,11 @@ CREATE TABLE strikes_v2 (
   session_id TEXT NOT NULL,
   at REAL NOT NULL,
   refuted_at REAL,
+  harness TEXT NOT NULL DEFAULT '',
   UNIQUE (session_id, class, source, provider)
 );
-INSERT INTO strikes_v2 (id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at)
-  SELECT id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at FROM strikes;
+INSERT INTO strikes_v2 (id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at, harness)
+  SELECT id, stack, task, rail, model, provider, class, scope, source, session_id, at, refuted_at, harness FROM strikes;
 DROP TABLE strikes;
 ALTER TABLE strikes_v2 RENAME TO strikes;
 CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
@@ -175,6 +177,9 @@ _ADDED_COLUMNS = {
     # `retry_at` (the horizon's end), `backoff_s` (the step it doubled to), `limit_source` (the 429 body's);
     # all NULL once a verdict lands. The cell stays `candidate` throughout.
     "provider_cells": {"retry_at": "REAL", "backoff_s": "REAL", "limit_source": "TEXT"},
+    # GW-SESSIONS-OUTCOME §The store (operator 2026-10-24): the session's harness, on every strike; only a
+    # harness-scoped strike is matched on it. '' = a strike written before the column existed (matches no harness).
+    "strikes": {"harness": "TEXT NOT NULL DEFAULT ''"},
 }
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
 # column (NOT NULL UNIQUE) holds this prefix + the id, which no sha256 hex digest can equal.
@@ -537,28 +542,32 @@ class Store:
         return dict(row) if row else None
 
     def add_strike(self, stack: str, task: str, rail: str, model: str, provider: str, klass: str, scope: str, source: str,
-                   session_id: str, at: float) -> bool:
+                   session_id: str, at: float, harness: str = "") -> bool:
         """One strike per (session, class, source); False = it was already counted."""
         with self._lock:
             cur = self._db.execute(
-                "INSERT OR IGNORE INTO strikes (stack, task, rail, model, provider, class, scope, source, session_id, at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (stack, task, rail, model, provider, klass, scope, source, session_id, at),
+                "INSERT OR IGNORE INTO strikes (stack, task, rail, model, provider, class, scope, source, session_id, at, harness)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (stack, task, rail, model, provider, klass, scope, source, session_id, at, harness),
             )
             return cur.rowcount == 1
 
-    def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float, providers: set[str] = frozenset()) -> int:
+    def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float, providers: set[str] = frozenset(),
+                       harness: str = "") -> int:
         """A clean outcome on (rail, model) refutes the task's counted model strikes on that model and
         its cell strikes on the cells the ride touched: (rail, model, '') and (rail, model, p) for each
         provider p the session rode (GW-RAIL-OPENROUTER: a provider-scoped strike is refuted only by
-        a clean ride on that provider)."""
+        a clean ride on that provider); and its harness strikes on the session's harness, whatever the
+        cell (§Harness-scoped strikes: a clean ride proves the harness's machinery works)."""
         ps = sorted(providers)
         marks = ",".join("?" for _ in ps)
         with self._lock:
             cur = self._db.execute(
                 "UPDATE strikes SET refuted_at = ? WHERE stack = ? AND task = ? AND refuted_at IS NULL AND at <= ?"
-                " AND model = ? AND (scope = 'model' OR (rail = ? AND (provider = ''" + (f" OR provider IN ({marks})" if ps else "") + ")))",
-                (at, stack, task, at, model, rail, *ps),
+                " AND ((scope = 'harness' AND harness = ? AND harness != '')"
+                " OR (scope != 'harness' AND model = ? AND (scope = 'model' OR (rail = ? AND (provider = ''"
+                + (f" OR provider IN ({marks})" if ps else "") + ")))))",
+                (at, stack, task, at, harness, model, rail, *ps),
             )
             return cur.rowcount
 

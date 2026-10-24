@@ -44,6 +44,7 @@ The store (policy-default):
 |---|---||---|---|
 | a model-scoped class strikes the model | report no-verdict || [{opencode, opencode-go/deepseek-v4.1-flash, no-verdict, model, outcome}] | {class=no-verdict,source=outcome} 1 |
 | a serving-scoped class strikes the cell | report harness-gave-up || [{…, harness-gave-up, cell, outcome}] | {class=harness-gave-up,source=outcome} 1 |
+| a harness-scoped class strikes the harness | report harness-fault || [{…, harness-fault, harness, outcome}] with harness opencode | {class=harness-fault,source=outcome} 1 |
 | the gateway writes its own transport class | the session's request answered upstream-401 || [{…, auth-storm, cell, gateway}] | {class=auth-storm,source=gateway} 1 |
 | one transport strike per session and class | three upstream-500 answers on one session || one provider-5xx strike | {class=provider-5xx,source=gateway} 1 |
 | a 429 is a cooldown, not a strike | the session's request answered upstream-429 || [] | — |
@@ -151,7 +152,7 @@ async def _report(gw, sid: str, body: dict, who: str = "the platform loop"):
 
 def _strikes(store, counted: bool = True, attach: bool = True) -> list[dict]:
     rows = store.strikes_for("platform", TASK, counted_only=counted)
-    out = [{k: r[k] for k in ("rail", "model", "class", "scope", "source")} for r in rows]
+    out = [{k: r[k] for k in ("rail", "model", "harness", "class", "scope", "source")} for r in rows]
     if attach:
         attach_json("strikes on task " + TASK + (" (counted)" if counted else " (all)"), out)
     return out
@@ -283,12 +284,14 @@ async def test_different_outcome_conflicts(gw):
 
 
 # -- the store ---------------------------------------------------------------------------------------
-CELL = {"rail": "opencode", "model": "opencode-go/deepseek-v4.1-flash"}
+CELL = {"rail": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "harness": "opencode"}
 STORE_ROWS = [
     ("a model-scoped class strikes the model", [("report", "no-verdict")], [{**CELL, "class": "no-verdict", "scope": "model", "source": "outcome"}],
      ("no-verdict", "outcome", 1)),
     ("a serving-scoped class strikes the cell", [("report", "harness-gave-up")],
      [{**CELL, "class": "harness-gave-up", "scope": "cell", "source": "outcome"}], ("harness-gave-up", "outcome", 1)),
+    ("a harness-scoped class strikes the harness", [("report", "harness-fault")],
+     [{**CELL, "class": "harness-fault", "scope": "harness", "source": "outcome"}], ("harness-fault", "outcome", 1)),
     ("the gateway writes its own transport class", [("ride", "upstream-401")], [{**CELL, "class": "auth-storm", "scope": "cell", "source": "gateway"}],
      ("auth-storm", "gateway", 1)),
     ("one transport strike per session and class", [("ride", "upstream-500"), ("ride", "upstream-500"), ("ride", "upstream-500")],
@@ -384,8 +387,8 @@ async def test_clean_elsewhere_refutes_nothing(gw, store):
         attach_json("the outcome answer", r.json())
     then_eq("refuted", r.json()["refuted"], 0)
     with then("the heavy model's no-verdict still counts"):
-        check("strikes", _strikes(store), [{"rail": "opencode", "model": "opencode-go/claude-haiku-5-5", "class": "no-verdict",
-                                            "scope": "model", "source": "outcome"}])
+        check("strikes", _strikes(store), [{"rail": "opencode", "model": "opencode-go/claude-haiku-5-5", "harness": "opencode",
+                                            "class": "no-verdict", "scope": "model", "source": "outcome"}])
 
 
 async def test_get_shows_outcome(gw):

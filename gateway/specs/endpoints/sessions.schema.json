@@ -656,7 +656,7 @@
     }
   },
   "outcome": {
-    "$comment": "POST /sessions/{id}/outcome \u2014 the consumer's classification of its own ride (GW-SESSIONS-OUTCOME). Caller-checked as DELETE is (the admitting caller), plus a judge: a `callers` entry with `outcome: any` may report on any session of its stacks. `class` is THE vocabulary (one home): `x-scope` maps each class to `cell` (serving-shaped: the (rail, model) for this task), `model` (the model on every rail for this task) or null (`clean`, which refutes).",
+    "$comment": "POST /sessions/{id}/outcome \u2014 the consumer's classification of its own ride (GW-SESSIONS-OUTCOME). Caller-checked as DELETE is (the admitting caller), plus a judge: a `callers` entry with `outcome: any` may report on any session of its stacks. `class` is THE vocabulary (one home): `x-scope` maps each class to `cell` (serving-shaped: the (rail, model) for this task), `model` (the model on every rail for this task), `harness` (the session's harness on every cell for this task \u2014 a fault of the harness's own machinery, sessions.md \u00a7Harness-scoped strikes) or null (`clean`, which refutes).",
     "input": {
       "type": "object",
       "additionalProperties": false,
@@ -682,7 +682,8 @@
             "repetition",
             "harness-gave-up",
             "stream-incomplete",
-            "refused"
+            "refused",
+            "harness-fault"
           ],
           "x-scope": {
             "clean": null,
@@ -700,7 +701,8 @@
             "repetition": "model",
             "harness-gave-up": "cell",
             "stream-incomplete": "cell",
-            "refused": "cell"
+            "refused": "cell",
+            "harness-fault": "harness"
           },
           "x-judge-only": [
             "wrong-verdict"
@@ -787,7 +789,8 @@
                 "scope": {
                   "enum": [
                     "cell",
-                    "model"
+                    "model",
+                    "harness"
                   ]
                 }
               }
@@ -810,7 +813,7 @@
       ]
     },
     "strike": {
-      "$comment": "the store's row (not served by an endpoint in this version): keyed (stack, task, rail, model, provider); provider = the serving provider's slug on the openrouter rail (GW-RAIL-OPENROUTER §Attribution), '' where none was named or the rail pins none; one per (session, class, source, provider); source = outcome (the consumer) | gateway (a transport fact); refuted_at set by a later clean outcome on the same model / on a cell the clean ride rode",
+      "$comment": "the store's row (not served by an endpoint in this version): keyed (stack, task, rail, model, provider, harness); harness = the session's harness, written on every strike and matched only by a harness-scoped one; provider = the serving provider's slug on the openrouter rail (GW-RAIL-OPENROUTER §Attribution), '' where none was named or the rail pins none; one per (session, class, source, provider); source = outcome (the consumer) | gateway (a transport fact); refuted_at set by a later clean outcome on the same model / on a cell the clean ride rode / on the same harness (harness scope)",
       "x-requirements": [
         "GW-SESSIONS-OUTCOME"
       ]
