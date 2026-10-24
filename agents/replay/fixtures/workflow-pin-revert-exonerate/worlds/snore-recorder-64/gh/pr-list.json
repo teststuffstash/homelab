@@ -1,0 +1,26 @@
+[
+  {
+    "body": "FU-1990 deterministic rollback: workflow **build-image** failed on `master` within 120m of #63 merging. The merge was pin-only (every changed line is a `uses:` pin), so reverting restores the previous action SHAs. A Renovate PR that re-proposes a reverted pin is refused by pin-only-lint check (e) in ci (it stays red until Renovate proposes a newer release). Mechanical lane: `automerge` + `dependencies` → the reflex approves, CI is the gate (ADR-100).\n\n**Reverted PR:** #63 — chore(deps): update actions/create-github-app-token digest to 64ab729\n**Failed workflow:** build-image on master (run #25)\n\nreverted-pins: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510",
+    "headRefName": "revert-wf-161afc12",
+    "mergeCommit": {
+      "oid": "1ceaa31cc9f41c011553ae108d39e0185033b43b"
+    },
+    "number": 64
+  },
+  {
+    "number": 63,
+    "headRefName": "renovate/github-actions",
+    "mergeCommit": {
+      "oid": "161afc12d4caab801a7b18d13c4a0865fa1d2253"
+    },
+    "body": "This PR contains the following updates: actions/create-github-app-token digest bcd2ba4 → 64ab729"
+  },
+  {
+    "number": 62,
+    "headRefName": "devbox-update",
+    "mergeCommit": {
+      "oid": "0f62a0c00f62a0c00f62a0c00f62a0c00f62a0c0"
+    },
+    "body": "chore: devbox update (align toolchain lock)"
+  }
+]
