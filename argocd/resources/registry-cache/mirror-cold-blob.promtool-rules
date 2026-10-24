@@ -1,0 +1,24 @@
+# RegistryMirrorColdBlobAbandoned (homelab#1985 S9 sweep) — lifted VERBATIM out of
+# prometheusrule.yaml (comments AND annotations stripped — the manifest is its one home). The rules
+# file that mirror-cold-blob.promtool-test loads. Not a manifest: `promtool test rules` needs
+# upstream-format rules (top-level `groups:`); named .promtool-rules so manifest-lint's kubeconform
+# of every *.yaml under argocd/resources does not trip on it.
+#
+# ⚠ THIS COPY IS NOT DRIFT-PINNED — same standing caveat as mirror-probes.promtool-rules. A stale
+# copy tests the OLD expr and passes VACUOUSLY. Re-copy after editing this alert:
+#
+#   yq -o=json '{"groups": [{"name": "registry-cache", "rules": [.spec.groups[].rules[] | select(.alert == "RegistryMirrorColdBlobAbandoned") | del(.annotations)]}]}' argocd/resources/registry-cache/prometheusrule.yaml | yq -P '.'
+#   (one line on purpose — a wrapped yq program string is the #344 lexer bug)
+groups:
+  - name: registry-cache
+    rules:
+      - alert: RegistryMirrorColdBlobAbandoned
+        expr: |
+          (sum by (job) (increase(registry_http_requests_total{handler="blob", method="get", code=~"5.."}[30m])) > 0) and on (job) (
+            sum by (job) (increase(registry_http_request_duration_seconds_count{handler="blob", method="get"}[30m]))
+            - sum by (job) (increase(registry_http_request_duration_seconds_bucket{handler="blob", method="get", le="25.0"}[30m]))
+            > 0
+          )
+        labels:
+          severity: warning
+          triage: dig
