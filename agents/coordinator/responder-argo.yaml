@@ -483,6 +483,9 @@ spec:
             # HARVESTED from triage.log by this shell — the model is never asked for JSON. Each
             # entry is {verb, target, reason, raw}; a line that does not parse to that shape keeps
             # `raw` with null parts, so a malformed would-line is still scored rather than lost.
+            # A DECLARED NON-ACTION (`none` / `n/a` / `no action`, any case, optionally wrapped in
+            # backticks/asterisks — "REMEDIATION-WOULD: none — the pod is healthy") is dropped:
+            # it is the session saying it would do nothing, not a would-action to score.
             # `[]` when none. Additive under responder-finding/v1 (an optional field; no reader
             # keys on its absence). Scored by /board-sweep into
             # docs/agents/remediation-would-scoreboard.md — the evidence the dial graduates on.
@@ -491,6 +494,7 @@ spec:
                           | select(test("^[[:space:]>*`-]*REMEDIATION-WOULD:"))
                           | sub("^[[:space:]>*`-]*REMEDIATION-WOULD:[*`]*[[:space:]]*"; "")
                           | sub("[*`[:space:]]+$"; "")
+                          | select(test("^[*`_]*(none|n/a|no[[:space:]-]+action)[*`_]*([[:space:].,;:—–-]|$)"; "i") | not)
                           | . as $raw
                           | ((capture("^(?<verb>[^[:space:]]+)[[:space:]]+(?<target>[^[:space:]]+)[[:space:]]+(—|–|--?)[[:space:]]+(?<reason>.+)$"))
                              // {verb: null, target: null, reason: null})
@@ -1463,7 +1467,7 @@ spec:
             REMEDIATION-WOULD MARKER — when your diagnosis names a mechanical remediation you WOULD have performed had the dial been armed (an IMPERATIVE cluster action the #834 dial would have granted — delete a wedged pod, restart a crashlooping workload, clear a stuck resource; a GitOps quick fix — revert/bump PR — is ALREADY a sanctioned outcome of yours and takes NO marker), emit ONE structured line at the start of a line in your output:
               REMEDIATION-WOULD: <verb> <namespace>/<kind>/<name> — <one-clause reason>
             For example: 'REMEDIATION-WOULD: delete oracle-fleet/pod/ert-mock-7f9c4-x2v1b — CrashLoopBackOff on a config already fixed on master; a delete lets the ReplicaSet re-pull.'
-            At most one per distinct remediation per session. This line is INDEPENDENT of your fix-verdict: the verdict answers whether a fixer PR helps, and an imperative remediation is by definition not a PR — so a report-only verdict that names an imperative remediation MUST still carry the line (that class is exactly what the dial measures). The ONLY reason to omit it: no mechanical imperative remediation applies." \
+            At most one per distinct remediation per session. This line is INDEPENDENT of your fix-verdict: the verdict answers whether a fixer PR helps, and an imperative remediation is by definition not a PR — so a report-only verdict that names an imperative remediation MUST still carry the line (that class is exactly what the dial measures). The ONLY reason to omit it: no mechanical imperative remediation applies — and then print NO marker at all (never 'REMEDIATION-WOULD: none'; a line that declares no action is noise to the scorer)." \
                 --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 40 </dev/null 2>&1 \
                 | tee "$SCRATCH/triage.log" \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow" | tee -a "$SCRATCH/triage.log"
