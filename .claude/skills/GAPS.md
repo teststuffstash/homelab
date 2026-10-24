@@ -205,7 +205,7 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       everything requirement". Neither the seat card's stop-and-ask nor this skill names islands.
       Fix: the stop-and-ask paragraph gains "island work (its owning dir + the touched launcher)
       reads the island only; never ask the corpus question for it". Sighted 2026-10-17 (operator).
-- [ ] design-agents-G8 — the inverse of G7: new grouping machinery for the deep dig was designed
+- [ ] design-agents-G8 — the inverse of G7: new grouping machinery for the [deep dig](../../docs/agents/roles.md) was designed
       with no slice read and no stop-and-ask — operator: "dig responder is supposed to take more
       than one alert at a time already" (`deep-dig-select.sh` groups). The trigger read as "a
       design question"; a PROPOSED CHANGE TO A LOOP COMPONENT is the same trigger. Fix: the
