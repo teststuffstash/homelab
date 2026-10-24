@@ -7,8 +7,9 @@ snapshot:
 - **config** — two reads, merged the way the vendor's own client merges them
   (`packages/core/src/plugin/provider/opencode.ts`): the **catalog** read, models.dev's `api.json`
   (public, the vendor's own registry — its `opencode-go` provider's models, their `cost` and
-  `cost.tiers`, context/output limits and tool support; a `status: deprecated` row is dropped
-  before the overlay, as the vendor's loader drops it), then the **config** read,
+  `cost.tiers`, context/output limits, tool support and the per-model `provider` override the
+  `dialect` comes from — `npm: "@ai-sdk/anthropic"` → anthropic, no override → openai; a
+  `status: deprecated` row is dropped before the overlay, as the vendor's loader drops it), then the **config** read,
   `GET https://opencode.ai/console/api/v2/config` (the Go key as a bearer, a User-Agent and a fresh
   `x-opencode-session`): the workspace's OVERRIDES on that catalog — `disabled: true` unlists a
   model, a `cost`, `limit`, `name`, `family` or `capabilities.tools` present on a row wins. Until
@@ -125,10 +126,31 @@ def _name_family(where: str, row: dict) -> dict:
     return out
 
 
+def _dialect(where: str, provider) -> str:
+    """The model's wire dialect (GW-CATALOG-GO): the per-model `provider` override's `npm` —
+    `@ai-sdk/anthropic` serves the model on the anthropic endpoint only, no override on the openai
+    one (the vendor's two Go endpoints). Any other `npm` is a shape this parser does not know: a
+    parse failure, never a guess."""
+    if provider is None:
+        return "openai"
+    if not isinstance(provider, dict):
+        raise ParseError(f"{where}.provider is not an object")
+    npm = provider.get("npm")
+    if npm is None:
+        return "openai"
+    if not isinstance(npm, str):
+        raise ParseError(f"{where}.provider.npm is not a string")
+    if npm == "@ai-sdk/anthropic":
+        return "anthropic"
+    raise ParseError(f"{where}.provider.npm {npm!r} is not a dialect this parser knows "
+                     "(@ai-sdk/anthropic, or no npm for openai)")
+
+
 def parse_catalog(doc) -> dict:
-    """models.dev's `api.json` → `{models: {id: {name, family, tools, context, output, cost:
+    """models.dev's `api.json` → `{models: {id: {name, family, tools, dialect, context, output, cost:
     [{above_tokens, in, out, cache_read, cache_write}]}}}` for the `opencode-go` provider: the base
-    rows the console overlays. A row whose `status` is `deprecated` is not listed (the vendor's own
+    rows the console overlays. `dialect` is the per-model `provider` override's dialect
+    (`_dialect`). A row whose `status` is `deprecated` is not listed (the vendor's own
     loader drops it before any overlay — `packages/core/src/plugin/models-dev.ts`); `cost.tiers[]`
     rows are the rate above each `tier.size`; a `context_over_200k` (the legacy spelling) with no
     `tiers` beside it is a shape this parser does not know. Any other missing field fails the parse."""
@@ -169,6 +191,7 @@ def parse_catalog(doc) -> dict:
             raise ParseError(f"{where}.tool_call is not a boolean")
         names = _name_family(where, row)
         out[mid] = {"name": names.get("name"), "family": names.get("family"), "tools": tools,
+                    "dialect": _dialect(where, row.get("provider")),
                     "context": limit["context"], "output": limit["output"], "cost": tiers}
     return {"models": out}
 
@@ -264,8 +287,11 @@ def merge(catalog: dict, config: dict) -> dict:
             continue
         lim = o.get("limit", {})
         if "cost" in o and "context" in lim and "output" in lim:
+            # A console-only row carries no models.dev `provider` override: no override → openai
+            # (GW-CATALOG-GO), the same default the catalog read gives a row without one.
             models[mid] = {"name": o.get("name"), "family": o.get("family"), "tools": o.get("tools", False),
-                           "context": lim["context"], "output": lim["output"], "cost": o["cost"]}
+                           "dialect": "openai", "context": lim["context"], "output": lim["output"],
+                           "cost": o["cost"]}
     return {"models": models}
 
 
@@ -572,6 +598,17 @@ class GoCatalog:
         cfg = self.snapshots.get("config")
         row = cfg.body["models"].get(model) if cfg is not None else None
         return row["context"] if row is not None else None
+
+    def dialect_for(self, model: str) -> str | None:
+        """GW-SESSIONS-ADMIT's dialect read for a WIRE model id: the snapshot's `dialect` — the
+        per-model `provider` override's dialect (`@ai-sdk/anthropic` → anthropic, no override →
+        openai, GW-CATALOG-GO §The model's dialect) — the Go cell's dialect the walk takes the
+        harness from. None when no config snapshot exists, the model has no row, or a snapshot
+        written before this build carries none: never a guess (the walk then falls back to the
+        rail's dialects; the `not-in-catalog` gate still holds an unlisted cell)."""
+        cfg = self.snapshots.get("config")
+        row = cfg.body["models"].get(model) if cfg is not None else None
+        return row.get("dialect") if row is not None else None
 
     def go_model(self, model: str) -> GoModel | str:
         """Admission's read for a WIRE model id: its facts, or why it is not in the catalog (the

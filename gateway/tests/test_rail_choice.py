@@ -108,9 +108,10 @@ def test_cost_per_clean_ride(price, rides, terms, rate, cost):
 
 # ── §The Go price ───────────────────────────────────────────────────────────────────────────
 async def _go_ride(gw, upstreams, usage: dict, tier: str = "light", task: str = "homelab-2743-draw") -> dict:
-    """One worker ride on opencode (harness claude: the anthropic dialect's usage is the row's)."""
+    """One worker ride on opencode (the role's harness, from the picked cell; the request itself
+    rides the anthropic dialect — the vendor's usage shape — which the Go rail serves either way)."""
     with quiet():
-        doc = await open_session(gw, role="worker", rail="opencode", harness="claude", tier=tier, task=task)
+        doc = await open_session(gw, role="worker", rail="opencode", tier=tier, task=task)
         up = upstreams["opencode"]
         up.usage = usage
         r = await gw.post(MESSAGES, headers=bearer(doc), json={"max_tokens": 8, "messages": [{"role": "user", "content": "hi"}]})

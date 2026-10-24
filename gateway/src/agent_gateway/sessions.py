@@ -35,7 +35,7 @@ from .config import (
     Policy,
     RolePolicy,
     StackPolicy,
-    harness_for,
+    harness_for_cell,
     wire_model,
 )
 from .control import ControlPlaneAuth, authorize_outcome, visible_to
@@ -124,7 +124,7 @@ class Admission:
     harness: str
     rail_override: str | None
     bind: Bind | None = None
-    harness_explicit: bool = False  # GW-SESSIONS-ADMIT §The harness follows the rail: the body named it
+    harness_explicit: bool = False  # GW-SESSIONS-ADMIT §The harness follows the cell: the body named it
     canary: tuple[str, str] | None = None  # GW-CATALOG-OR: (model, provider) — a canary session on that cell
     caller: str | None = None  # GW-SESSIONS-AUTH: the reviewed caller identity, stored on the row
     caller_pod: str | None = None  # GW-SESSIONS-LIVENESS: the caller's pod (a pod-bound caller token)
@@ -134,8 +134,9 @@ class Admission:
 
 def parse_admission(policy: Policy, body: object) -> Admission:
     """Validate the body against `post.input`; every shape miss is 400 `malformed-body` (the
-    message says which), an explicit harness×rail whose dialects do not meet is 400
-    `harness-rail-mismatch` (`codex` speaks `responses`, which only the `codex` rail serves)."""
+    message says which). The harness × rail dialect question is NOT decided here — a Go cell's
+    dialect is a catalog fact — so an explicit `harness` × `rail` pair no cell of which speaks it
+    is 400 `harness-rail-mismatch` from the walk (SessionService.admit)."""
     if not isinstance(body, dict):
         raise BadRequest("malformed-body", "body must be a JSON object")
     for key in ("stack", "role", "task"):
@@ -156,17 +157,12 @@ def parse_admission(policy: Policy, body: object) -> Admission:
     if tier not in TIERS:
         raise BadRequest("malformed-body", f"tier {tier!r} is not one of {', '.join(TIERS)}")
     harness = body.get("harness", role.harness)
-    harness_explicit = "harness" in body  # absent: the harness follows the rail the walk picks (§The harness follows the rail)
+    harness_explicit = "harness" in body  # absent: the harness follows the cell the walk picks (§The harness follows the cell)
     if harness not in HARNESSES:
         raise BadRequest("malformed-body", f"harness {harness!r} is not one of {', '.join(HARNESSES)}")
     rail = body.get("rail")
     if rail is not None and rail not in RAILS:
         raise BadRequest("malformed-body", f"rail {rail!r} is not one of {', '.join(RAILS)}")
-    if rail is not None and harness_explicit and HARNESS_DIALECT[harness] not in RAIL_DIALECTS[rail]:
-        raise BadRequest(
-            "harness-rail-mismatch",
-            f"harness {harness} speaks {HARNESS_DIALECT[harness]}; rail {rail} serves {', '.join(RAIL_DIALECTS[rail])}",
-        )
     # stack-unknown is a DEFER (typed), not a 400 — the body is well-formed, the policy just does
     # not know the stack. Carry the name through for the defer answer.
     bind = parse_bind(body["bind"]) if "bind" in body else None
@@ -309,14 +305,42 @@ class SessionService:
         (tests: the kube reviewer on a mock API) swaps it for the pull and the control plane alike."""
         return await self.reviewer.review(token, audiences)
 
+    def _cell_dialects(self, rail: str, model: str) -> tuple[str, ...]:
+        """The dialects the (rail, model) CELL serves: its rail's, except a Go cell's, which is its
+        MODEL's — the config snapshot's `dialect` (GW-CATALOG-GO §The model's dialect). No snapshot
+        or no row: the rail's own dialects (never a guess — the `not-in-catalog` gate still holds
+        an unlisted Go cell)."""
+        if rail == "opencode":
+            cat = self.capacity.catalog
+            d = cat.dialect_for(wire_model(rail, model)) if cat is not None else None
+            if d is not None:
+                return (d,)
+        return RAIL_DIALECTS[rail]
+
+    def _cell_speaks(self, rail: str, model: str, harness: str) -> bool:
+        return HARNESS_DIALECT[harness] in self._cell_dialects(rail, model)
+
     async def admit(self, adm: Admission) -> JSONResponse:
-        """The rail pick: first allowed rail that (a) the harness can speak, (b) names a model for the
-        tier, (c) has a free slot, (d) is not capacity-blocked (window utilization / 429 latch /
-        window draw / the tier model's cell cooled by a 429 — capacity.py), (e) has a resolvable
-        credential for the stack that no upstream has rejected (credential-rejected). A TRANSIENT
-        credential fault stops the walk with 503 — the kube API being away is not a verdict. A walk
-        that finds no rail defers with the reason and `retry_after_s` of the blocked rail that frees
-        FIRST (a full rail frees after the policy's `defer_retry_s`)."""
+        """The rail pick: first allowed rail that (a) names a cell its tier list gives the picked
+        harness — an explicit `harness` filters CELLS (a cell it cannot speak is skipped; an
+        explicit `harness` × `rail` pair no cell of which speaks it is 400
+        `harness-rail-mismatch`), (b) has a free slot, (c) is not capacity-blocked (window
+        utilization / 429 latch / window draw / the tier model's cell cooled by a 429 —
+        capacity.py), (d) has a resolvable credential for the stack that no upstream has rejected
+        (credential-rejected). A TRANSIENT credential fault stops the walk with 503 — the kube API
+        being away is not a verdict. A walk that finds no rail defers with the reason and
+        `retry_after_s` of the blocked rail that frees FIRST (a full rail frees after the policy's
+        `defer_retry_s`)."""
+        if adm.rail_override and adm.harness_explicit and adm.rail_override in self.policy.rails:
+            # GW-SESSIONS-ADMIT: the mismatch is per CELL — the rail may serve the harness's
+            # dialect overall (the Go rail serves both) while this tier's cells speak another.
+            # A rail the policy does not declare skips this check and falls to the role's list
+            # below (role-rail-denied): it holds no cell to speak anything.
+            cells = self.policy.rails[adm.rail_override].models.get(adm.tier) or ()
+            if cells and not any(self._cell_speaks(adm.rail_override, m, adm.harness) for m in cells):
+                return error(400, "harness-rail-mismatch",
+                             f"harness {adm.harness} speaks {HARNESS_DIALECT[adm.harness]}; no cell of "
+                             f"rail {adm.rail_override} tier {adm.tier} speaks it")
         if adm.stack.name not in self.policy.stacks:
             return self._defer(adm, "stack-unknown", f"stack {adm.stack.name!r} is not in policy")
         if adm.canary is not None:
@@ -327,12 +351,19 @@ class SessionService:
                 return self._defer(adm, "role-rail-denied", f"role {adm.role.name} may not ride rail {adm.rail_override}")
             candidates = [adm.rail_override]
         elif adm.harness_explicit:
-            candidates = [r for r in adm.role.rails if HARNESS_DIALECT[adm.harness] in RAIL_DIALECTS[r]]
+            # GW-SESSIONS-ADMIT: an explicit harness filters CELLS, not rails — a rail walks when
+            # its tier list holds a cell the harness speaks (a Go cell's dialect is its model's,
+            # GW-CATALOG-GO); a rail none of whose cells speak it is passed over, never silently
+            # ridden onto a cell that cannot.
+            candidates = [r for r in adm.role.rails
+                          if any(self._cell_speaks(r, m, adm.harness)
+                                 for m in (self.policy.rails[r].models.get(adm.tier) or ()))]
             if not candidates:
                 return self._defer(adm, "role-rail-denied", f"no rail allowed for role {adm.role.name} serves harness {adm.harness}")
         else:
-            # ⚖ §The harness follows the rail (operator ruling 2026-10-23): no harness named = every
-            # allowed rail is walked, and the dispatch's harness is the picked rail's (`harness_for`).
+            # ⚖ §The harness follows the cell (operator rulings 2026-10-23 + 2026-10-24): no
+            # harness named = every allowed rail is walked, and the dispatch's harness is the
+            # picked CELL's (`_for_cell`).
             candidates = list(adm.role.rails)
         # ⚖ The same (stack, task, round, attempt) from the same caller, for the same pod (or both
         # unbound), while the earlier session is still active = a re-run of THAT admission (a killed
@@ -352,7 +383,9 @@ class SessionService:
         # GW-MODEL-TIERS §The rail choice: when the tier names ONE model on two allowed rails, the rail
         # whose twin cell costs less per clean ride walks first, with that twin at its list's head; the
         # role's order stands for everything else (the other rail is still walked when the first yields nothing).
-        choice = self.rail_choice(adm, [r for r in candidates if self._for_rail(adm, r).harness not in struck_harnesses],
+        choice = self.rail_choice(adm, [r for r in candidates
+                                        if any(self._for_cell(adm, r, m).harness not in struck_harnesses
+                                               for m in (self.policy.rails[r].models.get(adm.tier) or ()))],
                                   struck_models, struck_cells, now)
         promoted: dict[str, str] = {}
         answer_choice: dict | None = None
@@ -364,7 +397,6 @@ class SessionService:
             log.info("session: rail choice %s over %s for %s (%s) — %s", choice["rail"], choice["over"], choice["label"],
                      choice["reason"], choice["detail"])
         for rail in candidates:
-            radm = self._for_rail(adm, rail)
             rp = self.policy.rails[rail]
             models = rp.models.get(adm.tier)
             if not models:
@@ -372,14 +404,6 @@ class SessionService:
                 continue
             if rail in promoted:
                 models = [promoted[rail]] + [m for m in models if m != promoted[rail]]
-            if radm.harness in struck_harnesses:
-                # §Harness-scoped strikes (operator 2026-10-24): the harness this rail would ride is struck for
-                # the task — every cell of the rail is excluded, the walk takes a rail another harness rides.
-                # ⚖ A dual-dialect rail is NOT re-dispatched on another harness: whether its models answer the
-                # other dialect is per model and unrecorded, so the conservative answer is to skip it.
-                exhausted.extend(f"{rail} {m} (harness {radm.harness})" for m in models)
-                log.info("session: rail %s skipped — harness %s is struck for task %s", rail, radm.harness, adm.task)
-                continue
             if self.store.active_count(rail, now) >= rp.max_sessions:
                 capacity_blocked.append((rail, "rail-capacity", now + self.policy.defer_retry_s, f"{rail} at max_sessions"))
                 continue
@@ -389,12 +413,29 @@ class SessionService:
                 capacity_blocked.append((rail, block.reason, block.free_at, block.detail))
                 continue
             # The tier's ordered list: the first model this task has not struck, whose cell is not
-            # cooled, and that the model's own capacity admits (the Go rail: listed in the Go
-            # catalog, its own windows under threshold — GW-CATALOG-GO; one model's block never
-            # holds another).
+            # cooled, that an explicit harness (when the body named one) can speak, and that the
+            # model's own capacity admits (the Go rail: listed in the Go catalog, its own windows
+            # under threshold — GW-CATALOG-GO; one model's block never holds another).
             model = None
             held: list[tuple[float, str, str, str]] = []  # (free_at, reason, model, detail)
             for m in models:
+                cell_harness = self._for_cell(adm, rail, m).harness
+                if cell_harness in struck_harnesses:
+                    # §Harness-scoped strikes (operator 2026-10-24), read at the CELL: the harness this
+                    # cell would ride is struck for the task, so the cell is excluded — the strike still
+                    # excludes no model (a cell another harness speaks stays a candidate), and a mixed
+                    # Go rail keeps walking its other-dialect cells (§The harness follows the cell).
+                    exhausted.append(f"{rail} {m} (harness {cell_harness})")
+                    log.info("session: rail %s cell %s skipped — harness %s is struck for task %s",
+                             rail, m, cell_harness, adm.task)
+                    continue
+                if adm.harness_explicit and not self._cell_speaks(rail, m, adm.harness):
+                    # GW-SESSIONS-ADMIT: the explicit harness filters CELLS — this one speaks
+                    # another dialect, so it is no candidate for THIS admission (not struck, not
+                    # exhausted: the same cell rides under a harness that speaks it).
+                    log.info("session: rail %s cell %s skipped for explicit harness %s — the cell speaks %s",
+                             rail, m, adm.harness, "/".join(self._cell_dialects(rail, m)))
+                    continue
                 if m in struck_models or (rail, m, "") in struck_cells:
                     exhausted.append(f"{rail} {m}")
                     continue
@@ -404,7 +445,8 @@ class SessionService:
                     continue
                 # The provider axis (GW-RAIL-OPENROUTER §Selection): with a snapshot, the model admits
                 # only while an eligible provider is neither struck for this task nor cooled.
-                verdict, detail = self.provider_plan(rail, m, radm.harness, adm.stack.name, adm.task, now)
+                verdict, detail = self.provider_plan(rail, m, self._for_cell(adm, rail, m).harness,
+                                                     adm.stack.name, adm.task, now)
                 if verdict == "unpinned" and any(r == rail and mm == m for r, mm, _p in struck_cells):
                     # ⚖ a provider-scoped strike with no snapshot to steer by: nothing can route around it
                     exhausted.append(f"{rail} {m}")
@@ -434,6 +476,7 @@ class SessionService:
                          ", ".join(e for e in exhausted if e.startswith(rail + " ")) or "-",
                          ", ".join(f"{m} {r}" for _, r, m, _ in held) or "-")
                 continue
+            radm = self._for_cell(adm, rail, model)  # the picked CELL's harness (§The harness follows the cell)
             if rail == "codex":  # the codex rail's own gate (GW-CODEX-HEADROOM) — no Secret ref to resolve
                 blocked = self.codex.admission(self.policy.defer_retry_s) if self.codex else ("credential-unresolved", 0)
                 if blocked is None:
@@ -485,13 +528,14 @@ class SessionService:
                                retry_after_s=None, escalate=True)
         return self._defer(adm, "role-rail-denied", f"no allowed rail of role {adm.role.name} names a model for tier {adm.tier}")
 
-    @staticmethod
-    def _for_rail(adm: Admission, rail: str) -> Admission:
-        """The admission as `rail` would dispatch it: an explicit harness is the caller's and stands;
-        otherwise the harness follows the rail (GW-SESSIONS-ADMIT §The harness follows the rail)."""
+    def _for_cell(self, adm: Admission, rail: str, model: str) -> Admission:
+        """The admission as the (rail, model) CELL would dispatch it: an explicit harness is the
+        caller's and stands (the walk already skipped cells it cannot speak); otherwise the harness
+        follows the cell (GW-SESSIONS-ADMIT §The harness follows the cell) — the role's harness
+        when the cell speaks it, else the harness of the cell's own dialect."""
         if adm.harness_explicit:
             return adm
-        h = harness_for(rail, adm.harness)
+        h = harness_for_cell(self._cell_dialects(rail, model), adm.harness)
         return adm if h == adm.harness else replace(adm, harness=h)
 
     def rail_choice(self, adm: Admission, candidates: list[str], struck_models: set[str],
@@ -550,7 +594,7 @@ class SessionService:
         cost = self.policy.tiers.cost
         rp = self.policy.rails[rail]
         if rp.providers is not None:  # the openrouter rail: the selected endpoint prices the cell
-            verdict, plan = self.provider_plan(rail, model, self._for_rail(adm, rail).harness, adm.stack.name, adm.task, now)
+            verdict, plan = self.provider_plan(rail, model, self._for_cell(adm, rail, model).harness, adm.stack.name, adm.task, now)
             if verdict != "pinned" or not plan or plan[0].out_price is None:
                 return {"cost": None, "price": None, "rate": None, "held": "no-eligible-endpoint",
                         "detail": f"no eligible endpoint to price ({verdict}: {plan if isinstance(plan, str) else '-'})"}

@@ -13,8 +13,10 @@ Which rail, or why not (world policy-default, every ref resolvable unless the ro
 | the only allowed rail's credential does not resolve | prober | (policy) | (policy) | 0 / 0 / 0 | anthropic_ref definitive miss | defer | — | — | credential-unresolved |
 | an explicit tier picks the model inside the rail | worker | (policy) | heavy | 0 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
 | an explicit harness narrows the walk to its dialect | worker | goose | (policy) | 0 / 0 / 0 | all resolve | dispatch | opencode | opencode-go/deepseek-v4.1-flash | — |
+| an explicit harness passes the rail whose cells all speak another dialect | worker | claude | light | 0 / 0 / 0 | all resolve | dispatch | openrouter | deepseek/deepseek-v4-flash | — (opencode's light cell is openai-only: passed, never ridden) |
 | a harness that cannot speak the role's only rail | prober | opencode | (policy) | 0 / 0 / 0 | all resolve | defer | — | — | role-rail-denied |
 | an explicit rail the role is not allowed | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, rail: anthropic | defer | — | — | role-rail-denied |
+| an explicit rail the policy does not declare ⚖ | worker | claude | (policy) | 0 / 0 / 0 | all resolve, rail: codex | defer | — | — | role-rail-denied |
 | an explicit rail the role is allowed is taken even when later in the list | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, rail: openrouter | dispatch | openrouter | deepseek/deepseek-v4-flash | — |
 | an unknown stack | worker (stack nope) | (policy) | (policy) | 0 / 0 / 0 | — | defer | — | — | stack-unknown |
 
@@ -28,7 +30,8 @@ What is an HTTP error, and what is not:
 | a tier outside the enum | tier: enormous | 400 | malformed-body |
 | a negative round | round: -1 | 400 | malformed-body |
 | a body that is not JSON | not json | 400 | malformed-body |
-| an explicit harness and rail that cannot speak | harness: claude, rail: openrouter — wait, claude speaks anthropic and openrouter serves it; the spec's cell is goose x anthropic | 400 | harness-rail-mismatch |
+| an explicit harness and rail that cannot speak | harness: goose, rail: anthropic (reviewer) | 400 | harness-rail-mismatch |
+| an explicit harness and rail no cell of which speaks it | harness: claude, rail: opencode (worker, standard — the tier's only cell is openai-only) | 400 | harness-rail-mismatch |
 | an explicit harness and rail that can speak | harness: claude, rail: opencode (reviewer) | 200 | — (decision: dispatch) |
 | the kube API is away while resolving the credential | reviewer; FakeSecrets transient fault | 503 | credential-transient |
 | codex where no allowed rail serves responses | harness: codex (worker; policy-default has no codex rail) | 200 | — (decision: defer, role-rail-denied) |
@@ -65,18 +68,23 @@ WALK_ROWS = [
     ("the only allowed rail's credential does not resolve", {"role": "prober"}, {"miss": "platform-agents/claude-session"}, {"decision": "defer", "reason": "credential-unresolved"}),
     ("an explicit tier picks the model inside the rail", {"tier": "heavy"}, {}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/claude-haiku-5-5"}),
     ("an explicit harness narrows the walk to its dialect", {"harness": "goose"}, {}, {"decision": "dispatch", "rail": "opencode", "model": "opencode-go/deepseek-v4.1-flash"}),
+    ("an explicit harness passes the rail whose cells all speak another dialect", {"harness": "claude", "tier": "light"}, {},
+     {"decision": "dispatch", "rail": "openrouter", "model": "deepseek/deepseek-v4-flash", "harness": "claude"}),
     ("a harness that cannot speak the role's only rail", {"role": "prober", "harness": "opencode"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
     ("an explicit rail the role is not allowed", {"rail": "anthropic", "harness": "claude"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
+    ("an explicit rail the policy does not declare ⚖", {"rail": "codex", "harness": "claude"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
     ("an explicit rail the role is allowed is taken even when later in the list", {"rail": "openrouter"}, {}, {"decision": "dispatch", "rail": "openrouter", "model": "deepseek/deepseek-v4-flash"}),
     ("an unknown stack", {"stack": "nope"}, {}, {"decision": "defer", "reason": "stack-unknown"}),
 ]
 
 
 async def _fill(gw, rail: str, n: int):
-    """Arrange only: n active sessions on `rail` (muted — one summary attachment instead of n)."""
+    """Arrange only: n active sessions on `rail` (muted — one summary attachment instead of n).
+    No explicit harness: each fill rides the role's policy harness, which the walk derives from
+    the cell it picks (a claude-harness fill on an openai-only Go cell is a harness-rail-mismatch)."""
     with quiet():
         for i in range(n):
-            await open_session(gw, role="worker" if rail != "anthropic" else "reviewer", task=f"fill-{rail}-{i}", rail=rail, harness="claude")
+            await open_session(gw, role="worker" if rail != "anthropic" else "reviewer", task=f"fill-{rail}-{i}", rail=rail)
     attach_json(f"filled: {rail} × {n}", {"rail": rail, "active_sessions_opened": n})
 
 
@@ -135,6 +143,7 @@ HTTP_ROWS = [
     ("a rail outside the enum", {"rail": "zen"}, {}, 400, "malformed-body"),
     ("a body that is not JSON", "not json", {}, 400, "malformed-body"),
     ("an explicit harness and rail that cannot speak", {"role": "reviewer", "harness": "goose", "rail": "anthropic"}, {}, 400, "harness-rail-mismatch"),
+    ("an explicit harness and rail no cell of which speaks it", {"harness": "claude", "rail": "opencode"}, {}, 400, "harness-rail-mismatch"),
     ("an explicit harness and rail that can speak", {"role": "reviewer", "harness": "claude", "rail": "opencode"}, {}, 200, None),
     ("the kube API is away while resolving the credential", {"role": "reviewer"}, {"transient": "platform-agents/claude-session"}, 503, "credential-transient"),
     ("codex where no allowed rail serves responses", {"harness": "codex"}, {}, 200, None),

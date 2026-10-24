@@ -61,14 +61,17 @@ capacity-blocked — the rail, or the [cell](../glossary.md#cell) its tier's mod
 policy's `defer_retry_s`, 60 s; ties go to walk order — ⚖ a gateway choice, the old proxy has no multi-rail answer); a walk blocked only on credentials
 defers `credential-unresolved`, or `credential-rejected` when any of its credentials was rejected
 upstream (⚖ the rejection outranks: it names the operator act, a rotation). An **explicit**
-`harness` filters the walk to the rails that serve its dialect: `claude` speaks the anthropic
-dialect (rails `anthropic`, `opencode`); `opencode` / `goose` speak openai (rails `openrouter`,
-`opencode`); `codex` speaks responses (rail `codex` only — gated by account headroom,
-[GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom), whose admission rows live there); a
-rail the harness cannot speak is skipped, and an explicit `harness` × `rail` pair that cannot
-speak is a 400 `harness-rail-mismatch`, never a silent skip. Without one, **the harness follows
-the rail** ([§The harness follows the rail](#the-harness-follows-the-rail)): every allowed rail is
-walked in the role's order and the dispatch names the harness the picked rail serves. `defer` is HTTP 200 — a normal answer the caller
+`harness` filters the walk to the **cells** that serve its dialect: `claude` speaks the anthropic
+dialect; `opencode` / `goose` speak openai; `codex` speaks responses (rail `codex` only — gated by
+account headroom, [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom), whose admission rows
+live there). A cell's dialect is its rail's — except a Go cell, which is its model's
+([GW-CATALOG-GO §The model's dialect](catalog.md#gw-catalog-go)): a cell the harness cannot speak
+is skipped, a rail none of whose tier cells speak it is passed over, and an explicit `harness` ×
+`rail` pair none of whose tier cells speak it is a 400 `harness-rail-mismatch`, never a silent
+skip. Without one, **the harness follows the cell**
+([§The harness follows the cell](#the-harness-follows-the-cell)): every allowed rail is walked in
+the role's order, the first cell its tier list admits is picked, and the dispatch names the harness
+that speaks that cell's dialect. `defer` is HTTP 200 — a normal answer the caller
 polls after `retry_after_s`; only a malformed body or a transient credential fault is an HTTP
 error. ⚖ The gateway admits on count, capacity and credential: no strikes, no cooldowns, no
 provider pins — the rest of the ADR-096 ladder is a gap, rendered as rows, not omitted. The
@@ -89,35 +92,48 @@ caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limi
 | "the only allowed rail's credential does not resolve" | prober | (policy) | (policy) | 0 / 0 / 0 | anthropic_ref definitive miss || defer | — | — | credential-unresolved |
 | "an explicit tier picks the model inside the rail" | worker | (policy) | heavy | 0 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
 | "an explicit harness narrows the walk to its dialect" | worker | goose | (policy) | 0 / 0 / 0 | all resolve || dispatch | opencode | opencode-go/deepseek-v4.1-flash | — |
+| "an explicit harness passes the rail whose cells all speak another dialect" | worker | claude | light | 0 / 0 / 0 | all resolve || dispatch | openrouter | deepseek/deepseek-v4-flash | — (opencode's light cell is openai-only: passed, never ridden) |
 | "a harness that cannot speak the role's only rail ⚖" | prober | opencode | (policy) | 0 / 0 / 0 | all resolve || defer | — | — | role-rail-denied |
 | "an explicit rail the role is not allowed" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: anthropic` || defer | — | — | role-rail-denied |
+| "an explicit rail the policy does not declare ⚖" | worker | claude | (policy) | 0 / 0 / 0 | all resolve, `rail: codex` || defer | — | — | role-rail-denied |
 | "an explicit rail the role is allowed is taken even when later in the list (logged as an override) ⚖" | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, `rail: openrouter` || dispatch | openrouter | deepseek/deepseek-v4-flash | — |
 | "an unknown stack" | worker (stack `nope`) | (policy) | (policy) | 0 / 0 / 0 | — || defer | — | — | stack-unknown |
 
-### The harness follows the rail
+### The harness follows the cell
 
 ⚖ Operator ruling 2026-10-23 (FU-270, [the spike §Role routing](../../../docs/spikes/codex-subscription-rail.md#role-routing--ruled-2026-10-23-fu-270)):
 **every subscription rail is every role's.** The role's rail ORDER is the operator's weekly knob —
 one week the reviewer rides claude, the next codex; a week's tokens drained on purpose for a
 special use are made up by the next rail with no policy edit; and a reviewer that is always the
 same model is blind to the same classes of problem. The walk therefore crosses the dialect
-boundary on its own: with no `harness` in the body every allowed rail is a candidate, and the
-dispatch's `harness` is the picked rail's — a rail that serves the dialect of
-`roles.<role>.harness` keeps the role's harness (the dual-dialect `opencode` / `openrouter`
-rails), a rail that does not names the harness of its own dialect (`anthropic` → `claude`,
-`codex` → `codex`; ⚖ one harness per dialect, the launcher's baked defaults —
-`config.DIALECT_HARNESS`). `roles.<role>.harness` is thus the role's harness on the rails that
-can serve it, no longer a filter; the env follows the harness ([GW-SESSIONS-ENV](#gw-sessions-env)),
-and the launcher runs the harness the answer names (`agents/agent-session.sh`, the
-`gateway-sessions` block). An explicit `harness` keeps its meaning above: it narrows the walk, and
-a rail it cannot speak is never picked; an explicit `rail` without a harness takes the rail's.
-Rows run in the **`policy-codex` world** (roles shaped as the ruling — every role lists
-`anthropic`, `opencode` and `codex`; codex `max_sessions` 2) with codex headroom fresh at 20 % / 64 %.
+boundary on its own: with no `harness` in the body every allowed rail is a candidate.
+
+⚖ Operator ruling 2026-10-24 (homelab#2870): **the harness is taken LAST, from the cell.** The
+walk's order is role + tier → rails in the role's order, with capacity and credentials → the first
+unstruck model on that rail's tier list → **the harness that speaks that cell's dialect**. A
+cell's dialect is its rail's — except a Go cell, which is its model's (the models.dev per-model
+`provider` override, [GW-CATALOG-GO §The model's dialect](catalog.md#gw-catalog-go)); the
+`openrouter` rail's cells serve both dialects, as its upstream does. A cell that speaks
+`roles.<role>.harness` keeps the role's harness; a cell that does not names its own dialect's
+harness (⚖ one harness per dialect, the launcher's baked defaults — `config.DIALECT_HARNESS`).
+`roles.<role>.harness` is thus the role's harness wherever the picked cell speaks it, no longer a
+filter; the env follows the harness ([GW-SESSIONS-ENV](#gw-sessions-env)), and the launcher runs
+the harness the answer names (`agents/agent-session.sh`, the `gateway-sessions` block). An
+explicit `harness` keeps its meaning above: it filters CELLS — a cell it cannot speak is skipped
+(never ridden onto), a rail none of whose tier cells speak it is passed over, and an explicit
+`harness` × `rail` pair none of whose tier cells speak it is a 400 `harness-rail-mismatch`; an
+explicit `rail` without a harness takes the picked cell's. Rows run in the **`policy-codex` world**
+(roles shaped as the 2026-10-23 ruling — every role lists `anthropic`, `opencode` and `codex`;
+codex `max_sessions` 2; the opencode standard list carries both dialect shapes —
+`deepseek-v4.1-flash` openai first, `claude-haiku-5-5` anthropic second) with codex headroom fresh
+at 20 % / 64 %.
 
 | description | role | body | active on rails (anthropic / opencode / codex) || decision | rail | harness | model |
 |---|---|---|---||---|---|---|---|
 | "without a harness the walk crosses the dialect boundary: the reviewer reaches codex ⚖" | reviewer | (defaults) | 5 / 3 / 0 || dispatch | codex | codex | codex/fixture-model |
 | "a dual-dialect rail keeps the role's harness" | reviewer | (defaults) | 5 / 0 / 0 || dispatch | opencode | claude | opencode-go/claude-haiku-5-5 |
+| "the Go cell's dialect is the model's: an openai cell rides the opencode harness" | reviewer | `tier: standard` | 5 / 0 / 0 || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash |
+| "an explicit harness on the Go rail skips the openai cells and takes the Claude model" | reviewer | `harness: claude, tier: standard` | 5 / 0 / 0 || dispatch | opencode | claude | opencode-go/claude-haiku-5-5 |
 | "an opencode-harness worker reaching the anthropic rail rides claude ⚖" | worker | (defaults) | 0 / 3 / 2 || dispatch | anthropic | claude | claude/sonnet |
 | "an explicit harness still narrows the walk to its dialect" | reviewer | `harness: claude` | 5 / 3 / 0 || defer | — | — | — (`rail-capacity`: codex is not walked) |
 | "an explicit rail without a harness takes the rail's harness ⚖" | reviewer | `rail: codex` | 0 / 0 / 0 || dispatch | codex | codex | codex/fixture-model |
@@ -154,11 +170,11 @@ follows the cell, homelab#2870). With an **explicit** `harness` that is struck f
 is admissible: the answer is `defer` `cells-exhausted`, because the platform has to fix the
 harness and waiting does not help. A clean outcome on the same harness refutes the strike.
 
-⚖ The harness a rail would ride is the one the walk derives today ([§The harness follows the
-rail](#the-harness-follows-the-rail)), and a rail whose derived harness is struck is passed over
-whole: a dual-dialect rail (`opencode`, `openrouter`) is **not** re-dispatched on another harness of
-its other dialect, because whether each of its models answers that dialect is per model and recorded
-nowhere. With an explicit `harness` that is not struck, the struck harness's own cells stay
+⚖ The harness a cell rides is the one the walk derives for it ([§The harness follows the
+cell](#the-harness-follows-the-cell)), and a harness-scoped strike skips that **cell**, never the
+rail whole: a cell another harness speaks stays a candidate, so a mixed-dialect Go rail keeps
+walking its other-dialect cells while `opencode` is struck — its Claude-dialect cell is taken under
+`claude`. With an explicit `harness` that is not struck, the struck harness's own cells stay
 admissible to it: the strike names no model and no cell.
 
 World `policy-codex`, codex headroom fresh at 20 % / 64 %. T = the worker task `homelab-2867-r1`;
@@ -166,10 +182,10 @@ its attempt 1 rode (opencode, `opencode-go/deepseek-v4.1-flash`) on the `opencod
 
 | description | arrange | body || decision | rail | harness | model | reason |
 |---|---|---||---|---|---|---|---|
-| "a harness strike moves the walk to a cell another harness speaks ⚖" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | codex | codex | codex/fixture-model | — |
+| "a harness strike moves the walk to a cell another harness speaks ⚖" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | opencode | claude | opencode-go/claude-haiku-5-5 | — |
 | "a harness strike excludes no model" | `harness-fault` on harness opencode | worker, T, `harness: goose`, `attempt: 2` || dispatch | opencode | goose | opencode-go/deepseek-v4.1-flash | — |
 | "an explicit harness that is struck defers ⚖" | `harness-fault` on harness opencode | worker, T, `harness: opencode`, `attempt: 2` || defer (`{decision, reason}` only) | — | — | — | cells-exhausted |
-| "a refuted harness strike excludes nothing" | `harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session (tier heavy, admitted before the strike) | worker, T, `attempt: 3` || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash | — |
+| "a refuted harness strike excludes nothing" | `harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session (harness opencode, standard tier, admitted before the strike) | worker, T, `attempt: 3` || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash | — |
 
 `POST /sessions` carries **`attempt`** (default 1): the consumer's automatic re-admission counter at
 this round. Strikes are keyed by TASK, not by attempt, so the exclusion holds however the attempt is
@@ -222,7 +238,8 @@ the outcome endpoint on an earlier session of the SAME task. T = `specs-review h
 | "a role outside the enum" | `role: janitor` || 400 | malformed-body |
 | "a tier outside the enum" | `tier: enormous` || 400 | malformed-body |
 | "a negative round" | `round: -1` || 400 | malformed-body |
-| "an explicit harness and rail that cannot speak" | `harness: claude`, `rail: openrouter` || 400 | harness-rail-mismatch |
+| "an explicit harness and rail that cannot speak" | `harness: goose`, `rail: anthropic` (reviewer) || 400 | harness-rail-mismatch |
+| "an explicit harness and rail no cell of which speaks it" | `{'harness': 'claude', 'rail': 'opencode'}` || 400 | harness-rail-mismatch |
 | "an explicit harness and rail that can speak" | `harness: claude`, `rail: opencode` (reviewer) || 200 | — (`decision: dispatch`) |
 | "the kube API is away while resolving the credential" | reviewer; `FakeSecrets` transient fault || 503 | credential-transient |
 | "codex where no allowed rail serves responses" | `harness: codex` (worker, `policy-default` — no codex rail) || 200 | — (`decision: defer`, `role-rail-denied`) |
@@ -1210,7 +1227,7 @@ World `policy-default`.
 | "a cut stream is a transport strike" | `upstream-stream-truncated` on the session || `{…, stream-incomplete, cell, gateway}` | `{class="stream-incomplete",source="gateway"}` 1 |
 | "a bare 2xx refutes nothing" | `upstream-500`, then `upstream-ok` on the same session || `provider-5xx` still counted | — |
 | "a clean outcome refutes the task's counted strikes" | the session's request answered `upstream-500` (a gateway `provider-5xx`), then the consumer reports `clean` — the ride recovered || none counted; the strike kept, refuted (`refuted: 1`) | — |
-| "a clean outcome on another model refutes nothing there" | the heavy tier's `opencode-go/claude-haiku-5-5` struck `no-verdict`; a standard-tier session reports `clean` || the heavy model's `no-verdict` still counted (`refuted: 0`) | — |
+| "a clean outcome on another model refutes nothing there" | the heavy tier's `opencode-go/claude-haiku-5-5` struck `no-verdict`; a standard-tier session reports `clean` || the heavy cell's `no-verdict` still counted (`refuted: 0`); the strike carries harness `claude` — the cell's own | — |
 | "GET shows the latest outcome" | report `no-verdict` (`subclass: rc=1`), GET || — | `outcome` = `{class: no-verdict, subclass: rc=1, reporter: null}` |
 | "the code's vocabulary is the schema's" | `OUTCOME_CLASSES` vs `outcome.input.properties.class` (`enum`, `x-scope`) || equal, class and scope | — |
 
