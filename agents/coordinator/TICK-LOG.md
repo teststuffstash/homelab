@@ -14543,3 +14543,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   label-sync deleted it). allure-behavior-snippets#35 (ignorePaths) merged.
 - Residuals on #1985 (comment 6383963515); FU-316 minted (ghcr/docker-io warmer, blocked on mcr soak);
   mirror metric 0 % + Blob5xx fixture labels → subagent PR in flight.
+- **#2894 merged** (subagent): `registry_mirror_store_used_percent` was a frozen init-time push → now a
+  recording rule on kubelet volume stats (live: docker-io 6 %, ghcr 17 %, mcr 7 %); `RegistryMirrorBlob5xxRate`
+  had a real bug — per-pod series reset `for` on every roll + split per method/code → `sum by (job)`.
+  Residual: prometheus-rules-lint pins alert rules only, not recording rules (store-used copy can drift).
