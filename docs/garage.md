@@ -29,7 +29,7 @@ G="devbox run -- kubectl $KC -n garage exec -i garage-0 -- /garage"
 $G status
 
 # 2. Give this single node a layout role, then commit it (v2 capacity is a size; live value
-#    since 2026-07-13: 140G on the longhorn-bulk data volume — docs/garage-bulk-migration.md).
+#    today: 130.4 GiB per zone × 3 zones on longhorn-local-xfs, layout v4 — §Target architecture).
 #    Use the node id from step 1. Verify flag names with `$G layout assign --help` (v2 syntax).
 $G layout assign -z dc1 -c 140G <NODE_ID>
 $G layout apply --version 1

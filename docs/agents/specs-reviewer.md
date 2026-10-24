@@ -126,7 +126,7 @@ TTL. OTEL with `role=specs-reviewer` so the subscription spend
 attributes. Self-test: `devbox run specs-review-self-test` (`bash -n` + the jq predicates on
 fixtures; `diff-ci` row ready, its `ci.yaml` step is operator-direct).
 
-**Cutover order (the operator; owning item FU-270 — App registered 2026-10-16).** The workflow lands first and runs in SHADOW
+**Cutover order (DONE 2026-10-16 — App registered, Secret live, #2618; kept as the re-cut recipe).** The workflow lands first and runs in SHADOW
 (the `specs-reviewer-git` Secret is `optional:true`; the script logs "specs-reviewer-git absent —
 shadow, no verdicts" and exits 0 — it never reviews under another identity). Then: (1) create +
 install the App (`scripts/github-app-bootstrap.sh homelab-specs-reviewer manifest|catch`), its key

@@ -80,7 +80,7 @@ graph TB
 | 1 — Stable base cluster (Talos VMs on Proxmox, Cilium + BGP) | ✅ done (`tofu/README.md`) |
 | 2 — Home Assistant on the cluster | ✅ done — recorder = SQLite-on-Longhorn; network Zigbee coordinator still to buy (FU-034) |
 | 3 — MAC-table provisioning pipeline (Matchbox, no IPMI) | ✅ done (`docs/provisioning.md`) |
-| 4 — Promote to a real bare-metal cluster | ✅ 6 metal nodes joined (thinkcentre, hp-01, wk-metal-01..04) |
+| 4 — Promote to a real bare-metal cluster | ✅ done — 7 metal nodes today (hp-01, m70s, nx-01, wk-metal-01..04); thinkcentre left 2026-09-12 to become the management box |
 | 5 — Day-2 operations | 🟡 monitoring ✅ (ADR-042) · GitOps ✅ (ADR-005) · logs ✅ (ADR-083) · CI ✅ (`docs/ci.md`) · **backups 🟡 (Longhorn + CNPG to the backup Garage LIVE — FU-299; Home Assistant config + off-site — FU-013)** |
 | 6 — Agent platform | 🟡 see *Agent platform* below — the loop runs unattended per-stack; the open work is programs, not phases |
 
@@ -96,7 +96,7 @@ acceptable at the public edge and replaceable.
 **Internal (LAN-only) — everything else.** **MUST keep working when the WAN is down** (the
 "offline" principle): local DNS (Unbound), on-prem Home Assistant + local MQTT/ESPHome, local-API
 integrations over cloud ones. Live today; the remaining WAN-down gap is ArgoCD's git source
-(GitHub → Forgejo cutover, FU-007).
+(Forgejo stays a major-outage fallback, not a cutover — FU-007, ruled 2026-09-13).
 
 ## HA model (target end-state — re-phased 2026-09-16, ADR-132/-133)
 
@@ -134,7 +134,7 @@ work survivable.
       joins as BACKUP**, invisible to clients. Big Data stays cabled and powered off as the fallback
       for 1–2 weeks, then retires. Its Intel card is not needed. Plan: `docs/router-move.md` §The two windows.
       **Done:** window 1 2026-10-02, window 2 2026-10-08, the WAN leg 2026-10-09 — the pair is complete
-      (`docs/router-move.md` §Status).
+      (`docs/router-move.md` §Status); Big Data retired 2026-10-20 (its hardware is now `wk-metal-04`, #2758).
    Done along the way: per-node inventory, Kea hot-standby HA (ADR-145), Cilium peering with both
    nodes, pfsync over the LAN (HAProxy VIPs stay IP aliases — the `/24` ruling; only `.1` is CARP).
    Still needed: the management network (the NX BMCs + the box's second
@@ -249,7 +249,7 @@ A project can already IaC its S3 buckets/keys (ADR-076 Workspaces), OpenRouter k
 Decide per resource: a Crossplane provider vs a thin homelab PR seam.
 
 **Delivered:** the HTTPS-names leg (ADR-092, 2026-07-15) — per-stack subdomain delegation; the
-public-ingress leg (PublicRoute XRD, ADR-101) BUILT + ARMED 2026-08-08 — zero consumers, open
+public-ingress leg (PublicRoute XRD, ADR-101) BUILT + ARMED 2026-08-08 — consumers: oracle-fleet's `minutark` + `mcp-minutark` claims; open
 legs in FU-039. homelab
 wires `*.<stack>.teststuff.net` **once** (wildcard cert + one `3.0/24` VIP + a dumb HAProxy TLS
 terminator → the stack's in-cluster Cilium Gateway; `stack_gateways` in `group_vars/opnsense.yml`,
@@ -271,7 +271,7 @@ shapes use the same readable **`2026.<m>.<d>-g<sha>`** version and a first-party
 | app + chart | the `-iac` bump (sleep-tracking → sleep-iac) | ✅ proven E2E |
 | operator / controller | Helm chart to **ghcr OCI** (ADR-084); `deploy.yaml` opens a bump PR in homelab/argocd; the app is multi-source (OCI chart + homelab `$values`), gated by `argocd-validate-pins` | ✅ live |
 | image consumed by pods | version-pinned in `agents/images.env` + `agents/coordinator/*-argo.yaml`, off `:latest` — cacheable, traceable; each build's deploy-pin bumps it | ✅ live |
-| snore-recorder | ArgoCD **PostSync hook Job** in sleep-iac (in-cluster `ansible-playbook`; failed playbook = failed sync = red app; `syncPolicy.retry` = backoff; nightly CronJob for the offline-Pi gap) | ✅ built 2026-08-02 (sleep-iac#13–16 + snore-recorder#15; FU-051's residue = observing one organic build→pin→Pi-converge run) |
+| snore-recorder | ArgoCD **PostSync hook Job** in sleep-iac (in-cluster `ansible-playbook`; failed playbook = failed sync = red app; `syncPolicy.retry` = backoff; nightly CronJob for the offline-Pi gap) | ✅ built 2026-08-02 (sleep-iac#13–16 + snore-recorder#15; proven 2026-09-27: sleep-iac#93 → Pi converge in 3 min; FU-051 archived 2026-10-24) |
 | homelab | a deploy TARGET whose gate is now PATH-based, not CI-only: `require_approval = true` + `require_code_owner_review = true` with a repo-root `CODEOWNERS` (FU-068, 2026-08-04), and `ci` grew past `argocd-validate-pins` to `manifest-lint` (kubeconform) + `tofu fmt` + the model/router/FSM lints. `docs/agents/iac-lane.md` §The platform lane | ✅ |
 
 **The other half (ADR-152): the surfaces ArgoCD and tofu do NOT reconcile.** A merged change to
