@@ -1,0 +1,13 @@
+# LonghornDiskNotReady lifted out of prometheusrule.yaml with annotations stripped (their one home
+# is the manifest) — the rules file disk-not-ready.promtool-test loads. Named .promtool-rules so
+# manifest-lint does not kubeconform it; expr+for are drift-pinned by prometheus-rules-lint.
+# Re-copy after editing the expr:
+#   yq -o=yaml '{"groups": [.spec.groups[] | .rules |= (map(select(.alert == "LonghornDiskNotReady")) | map(del(.annotations)))]}' argocd/resources/longhorn-alerts/prometheusrule.yaml
+groups:
+  - name: longhorn-capacity
+    rules:
+      - alert: LonghornDiskNotReady
+        expr: |
+          longhorn_disk_status{condition="ready"} == 0
+        for: 1h
+        labels: { severity: warning, triage: dig }
