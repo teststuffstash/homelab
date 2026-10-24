@@ -14586,3 +14586,24 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **HANDLED → fu-sweep input:** FU ids cited by merged PRs: FU-270 (145), FU-051 (80), FU-022, FU-152, FU-198,
   FU-131, FU-279, FU-280, FU-044, FU-088, FU-306, FU-124, FU-015, FU-156, FU-204, FU-271, FU-281, FU-007,
   FU-161, FU-304 + singles (046 058 080 084 089 097 101 109 113 149 150 167 232 236 246 251 269 290 305).
+
+## 2026-10-24 ~14:00–15:00Z — /fu-sweep (all sections, island-first slices, no corpus; 3 read-only classifiers + meta-state prune + 1 PR subagent) (seat)
+
+- **Archived (7, live evidence each):** FU-051 (openrouter-operator leg proven 10-13), FU-131 (belt fired on the 10-15
+  outage; agent-runtime#173 fixed), FU-152 (#2751 moved all literals; every CronWorkflow on `2026.10.20-g950b7f0b8201`),
+  FU-202 (homelab#2181 KEY-RETRY organic proof), FU-204 (#2582 + replay family), FU-210 (a readable `now` triage.log
+  10-20), FU-281 (goal-checkpoint wakes 37 → 1). FU-233/FU-206 archive entries expired. 133 → 126 open.
+- **Soaks:** FU-289 PASSED (belts silent 10-09→10-24 → the operator's VM re-plan); FU-130 FAILED — rides still resolve
+  `cache.nixos.org` + `release-assets.githubusercontent.com` (7 d Hubble DNS), re-scoped. FU-168's soak still failing
+  (23 cron-woken dispatches / 10 d). FU-058: goose cell's `retro-findings-json` missing in r8 AND r9.
+- **False text fixed:** FU-315 (FU-304 already ruled 10-14), FU-180 (#2545 ended phantom caps), FU-313 (the detector
+  fires after expiry; pre-expiry warning = FU-156's declared half, Go key added there), FU-228 + FU-297 readings, FU-306
+  (#2579 done), FU-171 (4th sighting), FU-172 (#448 closed). FU-270 pointer-ized (18 → 9 lines).
+- **DO-NOW → PR subagent:** FU-093's `LonghornDiskBelowSchedulingFloor` text (snapshots first, not the image store);
+  FU-286 UNBLOCKED (`devbox search talosctl` lists 1.14.2) → the devbox pin.
+- **meta-state** pruned 67 → 17.5 KB (14 deleted, 23 trimmed, 7 kept; every bullet live-verified). The
+  `RouterRunModelUnverifiable` dig-explained marker was REMOVED: 8 series now, openrouter-rail models outside its reason.
+- **Operator list:** FU-297 cert-carry due before ~11-01 (nothing landed — schedule); FU-315 windowed apiserver restart
+  vs CP role → 16 GB box; FU-289 VM memory re-plan (soak passed); FU-251 archive as superseded by GW-RAIL-OPENCODE (rec.
+  yes); FU-095 re-point at the gateway policy (#2845); two-sweep OPERATOR residents (framing likely wrong): FU-280, FU-298,
+  FU-310, FU-155, FU-250, FU-005; FU-311's week of data is in (user pool clean 13.5 d — rec. keep + archive).
