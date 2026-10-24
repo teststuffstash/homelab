@@ -9,13 +9,14 @@ old router's `STRIKE_CLASSES` rule, docs/agents/model-routing.md §The strike la
   caller, or a judge whose `callers` entry says `outcome: any`).
 - The gateway writes its own transport classes from the data plane (`transport()`): an upstream
   credential failure, a 5xx / unreachable upstream, a timeout, a refusal, an incomplete stream.
-- A strike is keyed (stack, task, rail, model, provider) and scoped: `cell` (serving-shaped —
-  excludes that (rail, model) for the task) or `model` (excludes the model on every rail for the
-  task). At most one strike per (session, class, source).
+- A strike is keyed (stack, task, rail, model, provider, harness) and scoped: `cell` (serving-shaped —
+  excludes that (rail, model) for the task), `model` (excludes the model on every rail for the
+  task) or `harness` (excludes the session's harness on every cell for the task — §Harness-scoped
+  strikes). At most one strike per (session, class, source).
 - Rounds ≠ strikes: a logic failure (CHANGES_REQUESTED, CI red) is no class here — the consumer's
   round counter owns it.
-- A `clean` outcome refutes the task's counted strikes on the same cell (cell scope) and the same
-  model (model scope); a bare 2xx refutes nothing.
+- A `clean` outcome refutes the task's counted strikes on the same cell (cell scope), the same
+  model (model scope) and the same harness (harness scope); a bare 2xx refutes nothing.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from .store import Session, Store
 
 log = logging.getLogger("gateway.outcomes")
 
-# class -> scope ("cell" | "model" | None for `clean`). One home: sessions.md §The vocabulary.
+# class -> scope ("cell" | "model" | "harness" | None for `clean`). One home: sessions.md §The vocabulary.
 OUTCOME_CLASSES: dict[str, str | None] = {
     "clean": None,
     # the old router's set (router.py STRIKE_CLASSES; SERVING_CLASSES → cell)
@@ -50,6 +51,8 @@ OUTCOME_CLASSES: dict[str, str | None] = {
     # the gateway's own transport classes (PR 1's facts) that have no old-router twin
     "stream-incomplete": "cell",
     "refused": "cell",
+    # operator ruling 2026-10-24 (homelab#2867): the harness's own machinery failed — not a verdict on the model
+    "harness-fault": "harness",
 }
 JUDGE_ONLY = frozenset({"wrong-verdict"})  # a verdict's correctness is not the reviewer's own call
 SOURCES = ("outcome", "gateway")
@@ -139,7 +142,7 @@ class Outcomes:
         scope = OUTCOME_CLASSES[klass]
         if scope is None:
             refuted = self.store.refute_strikes(row.stack, row.task, row.rail, row.model, now,
-                                                providers=self.store.session_providers(row.id))
+                                                providers=self.store.session_providers(row.id), harness=row.harness)
             log.info("outcome: session=%s clean — refuted %d strike(s) on task %s", row.id, refuted, row.task)
             if row.canary_provider and self.judge is not None:  # the canary's clean ride: the cell enters
                 self.judge(row.model, row.canary_provider, True, None, now)
@@ -170,11 +173,12 @@ class Outcomes:
                 log.info("outcome: session=%s %s on a 429'd canary — no verdict on (%s, %s)", row.id, klass, row.model, row.canary_provider)
             else:
                 self.judge(row.model, row.canary_provider, False, klass, now)
-        if self.store.add_strike(row.stack, row.task, row.rail, row.model, provider, klass, scope, source, row.id, now):
+        if self.store.add_strike(row.stack, row.task, row.rail, row.model, provider, klass, scope, source, row.id, now,
+                                 harness=row.harness):
             self.metrics.strike(klass, source)
-            log.warning("strike: %s/%s %s on %s %s%s (scope %s, source %s, session %s)",
+            log.warning("strike: %s/%s %s on %s %s%s harness %s (scope %s, source %s, session %s)",
                         row.stack, row.task, klass, row.rail, row.model, f" @{provider}" if provider else "",
-                        scope, source, row.id)
+                        row.harness, scope, source, row.id)
         return {"class": klass, "scope": scope}  # the wire's strike; the provider is the store row's (GET shows none)
 
     @staticmethod

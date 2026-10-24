@@ -1,0 +1,5 @@
+[2026-10-24T09:00:00Z] → ready: branch=fix/issue-2900-harness-fault
+Every opencode-harness ride struck in round 1 before reading its recipe:
+    ! permission requested: external_directory (/tmp/*); auto-rejecting
+    ✗ Read /tmp/fix-recipe.yaml failed
+    Error: The user rejected permission to use this specific tool call.
