@@ -35,6 +35,10 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   own process until the operator says the gateway has proven it.
 - **⚑ ESCALATED → operator (board-sweep 10-24):** homelab#2588 `agent/error` 9 d (shared rate-pool strikes; class fix
   #2601 unqueued); #2808 + #2757 unqueued (#2757 blocks circles#129). #2589 must land before stint #1418 can close.
+- **⚑ wk-metal-04 `intel0` DEAD-ISH (found 2026-10-24 by docs-cleanup):** Longhorn disk Ready=False/NoDiskInfo since
+  10-20 15:07Z (WriteFile EIO); `nvme0` (eui …410f6) logs `Identify namespace failed (-5)` every minute; SMART "passed";
+  0 replicas on it, bulk tier one disk short. Detector `LonghornDiskNotReady` PR in flight (detector first). **OPERATOR:**
+  reseat / swap slot or drive on Big Data, then `longhorn-tag-disks.sh` re-registers it.
 - **⚑ wk-metal-04 on Big Data (#2758, 2026-10-20).** Watch the MX500's 34 % lifetime used (attr 202). **OPERATOR:** the
   switch-port row (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the box
   (router-move.md:62 retires it).
