@@ -1,0 +1,17 @@
+# workflow-pin-revert-restore-lane — the RESTORE leg of the FU-1990 control (homelab#1985 S9,
+# 2026-10-24; sibling of workflow-pin-revert-exonerate, which emits the EXON_TARGETS line the bridge
+# replays). Contract (agents/coordinator/deploy-revert-argo.yaml block
+# workflow-pin-revert-restore-lane): after the template pushed `revert-wf-<revert-sha8>` (a git
+# revert of the revert merge — not replayable here, the same boundary as the original revert's
+# clone/push), the restore PR is opened against the alert's branch with a body carrying an EMPTY
+# `reverted-pins:` line (the governance-lint / iac-sentinel revert arms key on the trailer; empty =
+# nothing enters pin-only-lint check (e)'s memory) and `restored-pins: <pins>` (the exonerate
+# block's ping-pong guard), then labelled `automerge` + `dependencies` BEFORE `gh pr merge --auto`
+# (the `labeled` event fires the reflex — the merge-lane rule of the original revert). The PR
+# number comes from the URL gh prints (world/gh/pr-create.txt).
+name: workflow-pin-revert-restore-lane
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:workflow-pin-revert-restore-lane

@@ -167,6 +167,7 @@ The branch name is deterministic, so a racing instance hits `already-exists` and
 4. **Pin-only predicate**: empty/unreadable diff = FAIL, never "no offending lines found"
 5. **Re-proposal refusal**: `pin-only-lint` check (e), keyed on the `reverted-pins:` lines of merged `revert-wf-*` PRs (30-day window); a refused PR is red, never closed
 6. **Rate limit**: 4 requests/minute on the Sensor trigger
+7. **The control** (Part 6): a revert whose own post-merge run of the same workflow fails too is exonerated — `exonerated-pins:` releases (5), the bump is restored, a restore is never exonerated
 
 ## Composition with Responder Lane
 
@@ -315,6 +316,50 @@ one consumer the chain can fire on today is `runner-image.yaml` (push to master,
 paths); `ci.yaml` on master re-runs what the PR already proved. Drill pending (§Next steps 10 there).
 Replay: `workflow-pin-revert-candidate` (the widened call line) + `workflow-pin-revert-lock-candidate`
 (a lock-only merge is the candidate).
+
+## Part 6 — the control: a revert whose own run fails too is exonerated (2026-10-24, homelab#1985)
+
+A revert is a claim — "this merge broke workflow W" — and the revert's own post-merge run of W is
+its control: the same workflow with the suspect out of the path. Until 2026-10-24 the chain never
+read it. snore-recorder#63 (an `actions/create-github-app-token` digest bump) merged
+2026-10-20T03:03Z, `build-image` run 39362273218 failed, the chain merged revert #64
+(`revert-wf-161afc12`) at 03:14Z — and #64's own `build-image` run 39363243469 (head `1ceaa31c`)
+failed too, as did the next push's. The cause was a stale devbox venv on the runner (fixed by #67).
+The control's alert reached the chain and fell to the candidate walk (`revert-*` heads excluded →
+#63 again → already ledgered → skip); the `reverted-pins:` memory stood; Renovate re-proposed the
+bump as #65 with "Automerge: Disabled because a matching PR was automerged previously", and nothing
+re-armed it for four days.
+
+**The leg.** Before the candidate walk the template reads EVERY firing master/main alert in the
+delivery (Alertmanager groups by alertname, so the control's alert arrives beside the original's).
+For each, `gh api repos/<slug>/actions/runs/<id>` gives the run's head; if that head IS the merge
+commit of a merged `revert-wf-*` PR whose `**Failed workflow:**` line names the same workflow and
+whose `reverted-pins:` line is non-empty, the reverted PR is **exonerated**:
+
+1. the revert's body gains `exonerated-pins: <pins>` — `scripts/pin-only-lint.sh` check (e) skips a
+   body that carries one, so the refusal memory is released (written FIRST: if the edit is refused
+   nothing else happens, and the next delivery retries);
+2. the `wx-<hash>` ledger key (one decision per revert) and a machine comment on the revert;
+3. the revert is itself reverted as `revert-wf-<revert-sha8>` through the same
+   `automerge`+`dependencies` lane — a body with an EMPTY `reverted-pins:` trailer and a
+   `restored-pins:` line. The governance-lint / iac-sentinel revert arms admit it unchanged (every
+   file byte-for-byte at `<sha8>^`, trailer present); check (e) memorises nothing from it.
+
+**Why restore, not re-arm the re-proposal.** The re-proposed Renovate PR opened 7.5 h after the
+control failed — at control time there is nothing to arm, and arming later would need a scheduler.
+The restore lands the same version through the lane the revert used; once it merges, the
+re-proposal no longer applies (Renovate autocloses it, or never opens it).
+
+**Guards (no exoneration, the walk below runs unchanged):** an unreadable run head, a head that is
+no revert-wf merge, a run of ANOTHER workflow on the revert merge, a body already exonerated, a
+seen `wx-` key, and a RESTORE (`restored-pins:`) — a restore is never exonerated, so the pair cannot
+ping-pong; the restore's own failure falls to the walk, whose candidate (the original bump) is
+already ledgered. A restore whose `git revert` conflicts is aborted, never forced.
+
+**Not covered:** the lock shape (`revert-lock-*`, check (i)) and the image/provider/chart chains
+have no control leg yet. Replay: `workflow-pin-revert-exonerate` (the decision table, base world =
+the snore-recorder record) + `workflow-pin-revert-restore-lane`; the memory half is
+`scripts/pin-only-lint-test.sh` `reverted-pin-exonerated`.
 
 ## Future Work
 

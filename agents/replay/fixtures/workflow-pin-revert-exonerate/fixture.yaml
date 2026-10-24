@@ -1,0 +1,41 @@
+# workflow-pin-revert-exonerate — THE CONTROL of the FU-1990 workflow-pin revert (homelab#1985 S9,
+# 2026-10-24).
+#
+# THE DEFECT. snore-recorder#63 (actions/create-github-app-token digest → 64ab729) merged
+# 2026-10-20T03:03Z; `build-image` run 25 failed; the chain reverted it as #64 (revert-wf-161afc12,
+# merged 03:14Z) — and #64's OWN `build-image` run 26 (head 1ceaa31c) failed too. The real cause was
+# a stale devbox venv on the runner (#67). The chain read nothing of the control: the run-26 alert
+# fell to the candidate walk (revert-* heads excluded → #63 again → ledgered → skip), the
+# `reverted-pins:` memory stood, and Renovate re-proposed the bump UN-armed (#65, "a matching PR was
+# automerged previously"), four days parked until the seat merged it by hand.
+#
+# THE CONTRACT (agents/coordinator/deploy-revert-argo.yaml block workflow-pin-revert-exonerate —
+# lifted by sentinel, never retyped). For every firing master/main alert in the delivery: read the
+# run's head (`gh api …/actions/runs/<id>`); if that head IS the merge commit of a merged
+# `revert-wf-*` PR whose `**Failed workflow:**` line names the SAME workflow and whose
+# `reverted-pins:` line is non-empty, the reverted PR is EXONERATED: claim nothing until the
+# revert's body gains `exonerated-pins: <pins>` (pin-only-lint check (e) skips such a body —
+# scripts/pin-only-lint-test.sh `reverted-pin-exonerated`), then the `wx-` ledger key, then a
+# machine comment, then one EXON_TARGETS line `slug|revert|revert-sha|orig|workflow|branch|pins`
+# (the restore leg reads it — sibling fixture workflow-pin-revert-restore-lane).
+# Never exonerated (no writes, no target): a restore (`restored-pins:` — the ping-pong guard), an
+# already-exonerated body, a run of ANOTHER workflow on the revert merge, a seen ledger key, an
+# unreadable run head (fail-closed), and a refused body edit (the memory would still refuse the
+# pins — FATAL, no ledger, no target, so the next delivery retries).
+#
+# THE ROWS (rows.psv). Every row carries run 25 too (#63's merge, no revert-wf PR merged AT it) —
+# "no chain revert's own run" — because Alertmanager delivers the whole alertname group, and the
+# old single-alert read (`head -1`) is exactly how a control alert gets lost behind it.
+#   snore-recorder-64  — THE FIXED ROW (red on base: the block does not exist; the chain did nothing).
+#   restore-never / already-exonerated / other-workflow / ledger-seen / run-unreadable /
+#   edit-refused — the guards above, one per row.
+name: workflow-pin-revert-exonerate
+mode: table
+source: agents/coordinator/deploy-revert-argo.yaml
+scrub:
+  - 's/"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9:]\{8\}Z"/"TIMESTAMP"/g'
+parts:
+  - file:bridge.sh
+  - block:workflow-pin-revert-exonerate
+  - file:post.sh
+rows: rows.psv
