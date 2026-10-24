@@ -52,16 +52,16 @@ automerge-approval-required-no-update | board | gh/pr-list.json @ patches/add-au
 automerge-changes-requested-no-update | board | gh/pr-list.json @ patches/add-automerge-changes-requested.jq | | unstrand-no | n=163
 # ── ADR-141 (minted in homelab PR#2003 — GitHub Actions majors merge on their own; this carve-out is one of its consequences): Renovate owns the currency of its UNTOUCHED GROUPED-ACTIONS branches (the two rules with
 # rebaseWhen behind-base-branch); any other Renovate class still rides this updater (PR#2004 review) ─
-renovate-untouched-no-update   | board | gh/pr-list.json @ patches/add-renovate-approved.jq  |     | renovate-skip-probe1 | p1=150
+renovate-untouched-no-update   | board | gh/pr-list.json @ patches/add-renovate-approved.jq  |     | renovate-skip-probe1 | p1=150 oid=ren150oid789
 renovate-worker-pushed-update  | board | gh/pr-list.json @ patches/add-renovate-approved.jq  |     | picks-probe1-renovate | p1=150 n=150 oid=ren150oid789
 renovate-untouched-cr-no-update | board | gh/pr-list.json @ patches/add-renovate-cr-behind.jq |     | unstrand-renovate-skip | n=151
-renovate-other-class-no-update | board | gh/pr-list.json @ patches/add-renovate-other-class.jq |     | renovate-skip-probe1 | p1=152
+renovate-other-class-no-update | board | gh/pr-list.json @ patches/add-renovate-other-class.jq |     | renovate-skip-probe1 | p1=152 oid=ren152oid789
 # ── ADR-153 (2026-10-12): behind-base-branch is the ORG default, the skip covers EVERY Renovate branch
 # (the `-other-class` row above flipped: on the pre-ADR-153 source it was updated, red on base) — and
 # the ONE exception: untouched + merge-ready (armed, APPROVED, GREEN rollup) is updated, the fast path.
 # Both rows below share add-renovate-approved; the axis is the row's pr-view-150 rollup.
 renovate-untouched-green-update | board | gh/pr-list.json @ patches/add-renovate-approved.jq |     | picks-probe1-renovate | p1=150 n=150 oid=ren150oid789
-renovate-untouched-red-no-update | board | gh/pr-list.json @ patches/add-renovate-approved.jq |    | renovate-skip-probe1 | p1=150
+renovate-untouched-red-no-update | board | gh/pr-list.json @ patches/add-renovate-approved.jq |    | renovate-skip-probe1 | p1=150 oid=ren150oid789
 # Login shape (homelab#2007): the rows carry the REAL `app/homelab-renovate-1234` list shape — the raw-prefix
 # test missed it and the updater edited a live grouped-Actions branch; `renovate-untouched-cr-no-update`
 # keeps the plain `homelab-renovate-1234[bot]` shape so both spellings stay pinned.
@@ -73,7 +73,12 @@ renovate-untouched-red-no-update | board | gh/pr-list.json @ patches/add-renovat
 # (homelab#2754, sleep-tracking#203 — 2026-10-20). `-ticked-noop` is the idempotence pin; `-cr-` is
 # leg 2's twin. `renovate-superseded-cancel-green-update` is #2754's rollup: a CANCELLED duplicate `ci`
 # beside its SUCCESS sibling is green (RED on the old `renovate_green`, which counted the CANCELLED).
-renovate-updater-merged-red-handback   | board | gh/pr-list.json @ patches/add-renovate-approved.jq |  | renovate-handback-probe1 | p1=150
-renovate-updater-merged-ticked-noop    | board | gh/pr-list.json @ patches/add-renovate-approved.jq |  | renovate-handback-ticked-probe1 | p1=150
+renovate-updater-merged-red-handback   | board | gh/pr-list.json @ patches/add-renovate-approved.jq |  | renovate-handback-probe1 | p1=150 oid=ren150oid789
+renovate-updater-merged-ticked-noop    | board | gh/pr-list.json @ patches/add-renovate-approved.jq |  | renovate-handback-ticked-probe1 | p1=150 oid=ren150oid789
 renovate-updater-merged-cr-handback    | board | gh/pr-list.json @ patches/add-renovate-cr-behind.jq |  | unstrand-renovate-handback | n=151
 renovate-superseded-cancel-green-update | board | gh/pr-list.json @ patches/add-renovate-approved.jq |  | picks-probe1-renovate | p1=150 n=150 oid=ren150oid789
+# ── 2026-10-24: the checks half of the probe is REST (commits/<sha>/check-runs + /status — the App's
+# checks+statuses read; `--json statusCheckRollup` also selects checkSuite.workflowRun = actions:read,
+# which homelab-merge lacks, so every PRIVATE-repo probe failed whole for 10+ days). A refused checks
+# read HOLDS (rule #6) — never "not green", never a hand-back on a half-read.
+renovate-checks-unreadable-hold | board | gh/pr-list.json @ patches/add-renovate-approved.jq | STUB_GH_api_repos_teststuffstash_testrepo_commits_ren150oid789_check_runs_per_page_100=fail | renovate-probe-hold | p1=150 oid=ren150oid789

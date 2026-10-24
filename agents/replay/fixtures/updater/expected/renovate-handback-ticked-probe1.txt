@@ -1,6 +1,8 @@
 CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName
-CALL gh pr view {{p1}} --repo teststuffstash/testrepo --json commits,statusCheckRollup
+CALL gh pr view {{p1}} --repo teststuffstash/testrepo --json commits
+CALL gh api repos/teststuffstash/testrepo/commits/{{oid}}/check-runs?per_page=100 --jq [.check_runs[]? | {name, conclusion: ((.conclusion // .status // "") | ascii_upcase)}]
+CALL gh api repos/teststuffstash/testrepo/commits/{{oid}}/status --jq [.statuses[]? | {context, state: ((.state // "") | ascii_upcase)}]
 CALL gh api repos/teststuffstash/testrepo/pulls/{{p1}} --jq .body // ""
-OUT updater[teststuffstash/testrepo]: #{{p1}} Renovate-authored, updater-merged, not merge-ready — rebase already requested (box ticked); Renovate's next run takes it back
+OUT updater[teststuffstash/testrepo]: #{{p1}} Renovate-authored, merged into, not merge-ready — rebase already requested (box ticked); Renovate's next run takes it back
 OUT updater[teststuffstash/testrepo]: no armed+BEHIND PR to update
 RC 0

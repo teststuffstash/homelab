@@ -9,12 +9,5 @@
         }
       ]
     }
-  ],
-  "statusCheckRollup": [
-    {
-      "name": "ci",
-      "conclusion": "SUCCESS",
-      "startedAt": "2026-09-27T06:05:00Z"
-    }
   ]
 }
