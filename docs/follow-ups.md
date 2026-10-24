@@ -96,7 +96,7 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-10-14 (fu-sweep: machine lane reconciled since 10-03; GitOps & platform, Hardware & nodes, Secrets, One-time ops fully classified + the Agents items touched since 10-03 or lint-flagged — slice rule, no corpus load. **Archived (4):** FU-304, FU-312, FU-296, FU-260 (+FU-225 expired). **Soak FAILED:** FU-032 (flapped again 10-12, now on a CP). 26 items pointer-ized or trimmed to ≤10 lines, detail moved into their docs; lint 0 OVERSIZE. Previous pass 2026-10-03: fu-sweep over the WHOLE tracker, no-judgement scope — four parallel
+_Last updated: 2026-10-24 (fu-sweep after /board-sweep 10-14→10-24: machine lane reconciled since 10-14, ALL sections classified — island-first slices, no corpus load. **Archived (7):** FU-051, FU-131, FU-152, FU-202, FU-204, FU-210, FU-281; FU-233 + FU-206 archive entries expired. **Soaks:** FU-289 PASSED (→ operator re-plan), FU-130 FAILED (re-scoped). FU-270 pointer-ized. 133 → 126 open.)_
 slice subagents, machine lane reconciled since 09-24, Agents classified WITHOUT the corpus load
 (operator-typed only), so design-shaped agents items were left untouched. **Archived (10):** FU-246,
 FU-212, FU-129, FU-219, FU-154, FU-148, FU-150, FU-224, FU-097, FU-151 (+FU-173/149/184 expired). **Soaks FAILED:**
