@@ -17,6 +17,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       tracker-held facts (FU-157's user-token nature; the live legacy token outside the
       matrix). Fix: add the inconsistent-answers cue to the skill's trigger list.
       Sighted 2026-08-11.
+      **RESIGHT 2026-10-16 (operator catch, a new cue):** "what should I improve in <stack>'s
+      setup" (a security/caching/performance audit) ran as live-probe triage; the first
+      recommendation contradicted the stack's own two-tier cache design (operator: "What is
+      oracle-fleet trying to do?"). An audit of a subsystem reads its owning decision first.
+      Two dates → promote: the trigger list gains the inconsistent-answers AND the audit cue.
 
 ## board-sweep
 
@@ -36,6 +41,15 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       rebase whose plain `pr-wait` armed auto-merge (card clause added the same day); the operator's
       read of the spike (now §C7, `docs/spikes/context-and-autonomy.md`) is still owed, revert one
       `git revert 42ad3aec` away.** Closed with the merge.
+- [ ] board-sweep-G2 — **a probe that errors reads as an empty answer.** A PromQL query with a
+      syntax error (`offset` after the expression) printed "none", and the sweep reported
+      "Prometheus history before the restart is gone" — the operator asked whether data was lost;
+      it was not. The live-verify rule says verify, not "show the probe succeeded". Sighted
+      2026-10-14 (operator). Resight ~2026-10-21 (second-jail, operator-ordered artifact deletes:
+      a zsh no-word-split loop sent one malformed request and the unchanged listing was explained
+      as "deleting in the background"). Cross-skill class, 2 dates → promotion candidate for the
+      seat + subagent cards (maintenance-window-G2's 09-24 "fail loud" rule, generalised): an
+      empty/"none" read is absence only once the query's own success is shown.
 
 ## handoff
 
@@ -47,6 +61,23 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       the alert**; the report is only "there is a problem" — downtime detection never depends on
       issue reports, and the belt reaching the reporter's conclusion independently is the fair
       test. Fix: the skill gains that order as its first step. Sighted 2026-09-09 (operator).
+- [ ] handoff-G2 — **the queue is worked by hand, the skill not invoked, though its trigger
+      matched.** 2026-10-16 (a circles handoff worked + Result written "as the protocol requires"),
+      ~2026-10-22 (second jail: claim → doing → Result, unskilled), 2026-10-23 (operator: "Is there
+      a handoff/proposal from oracle regarding gateway specs?" — the trigger nearly verbatim; inbox
+      grepped by hand). Three dates → promote: the description adds "is there a handoff/proposal
+      from <stack>", "<stack>'s inbox".
+- [ ] handoff-G3 — an older inbox file was skipped as "already resolved" without the verify
+      ("The handoff says it's already resolved, but I didn't check") and left in `inbox/`, neither
+      answered nor moved. Step 1 (oldest first) has no already-resolved exit. Fix: same verify,
+      then `## Result: already resolved — <evidence>` and the move to `done/`. Sighted 2026-10-16.
+- [ ] handoff-G4 — **two shapes the protocol lacks, improvised consistently.** (a) OUTBOUND
+      mono→stack notices (a SHIPPED notice for oracle, an answer for circles) written straight to
+      `<stack>/done/` — `tools/handoff.md` describes only stack-filed tasks. (b) In a second jail,
+      step 6 (make the task durable as an FU/issue) collides with second-jail rule 2; the sessions
+      routed the record to the primary's final message. Sighted 2026-10-16, 2026-10-19,
+      ~2026-10-22 → promote: `tools/handoff.md` gains the outbound shape; step 6 gains "in a second
+      jail the durable record goes to the primary".
 
 ## meta-coordinate
 
@@ -79,6 +110,14 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       `tofu-state-env.sh` with `TOFU_STATE_ROOT_DIR`. Lesson worth more than the fix: **a skill
       that touches a tofu root inherits that root's state config, which changes without the skill
       being edited.**
+- [ ] onboard-G3 — step 2 still names `opnsense/dnsmasq-dhcp.py`; LAN DHCP is Kea on both CARP
+      nodes now (`opnsense/kea-dhcp.py`) and the session used that. Factual fix, due at the next
+      skill edit. Sighted 2026-10-20.
+- [ ] onboard-G4 — **replacement hardware under an existing node name has no path.** The
+      Big Data → wk-metal-04 rebuild improvised: keep the `machines.yaml` entry + zone, re-match
+      disks by eui, fence a re-registered dead disk's slot BEFORE scheduling (it sat open to bulk
+      replicas ~30 s), salvage single-replica volumes, `tofu init` the provisioning root. Fix: a
+      "same name, new hardware" variant section. Sighted 2026-10-20.
 
 ## design-agents
 
@@ -94,7 +133,7 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       conversation). A number in corpus prose describing live config is a status claim; the
       deployment/ConfigMap is the authority. **promoted→** the skill's output contract gains
       the live-state-claims-verified rule (statuses AND config constants), same commit.
-- [x] design-agents-G3 — a machine-filed issue's DEMANDED OPERATOR ACTION was relayed verbatim
+- [ ] design-agents-G3 — a machine-filed issue's DEMANDED OPERATOR ACTION was relayed verbatim
       ("grant Issues:Read on the reviewer App — console class, needs you") without checking the
       declared record one grep away (docs/github-apps.yaml carried issues:write since FU-069(b);
       the quiet GithubAppPermissionDrift alert alone refuted the ask — the real gap was the token
@@ -111,6 +150,14 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       4's tail of a ~1050-line brief is the suspect, and the "(ground-rules)" pointer names a
       file only worker rides receive. Belt candidates: a retro seed (§B2) on brief-clause
       compliance, or a deterministic declared-record check at the filing door (the #1207 shape).
+      **REOPENED 2026-10-24 (skill-retro scoring — the promotion failed outside its skill):**
+      2026-10-15 (P0/#1935 relayed as "your lane (tofu/github)"; a live ruleset read showed the
+      bypass in place since 08-07), 2026-10-17 (gateway island: "I need one decision from you" to
+      grant Secret creation — operator: "What requirement, give me a link"; none, the blocker was
+      the seat's own unrequired hardening), 2026-10-19 (a pickup relayed a seat-work model pick as
+      an "operator ruling" — "again deciding on opencode models?"). Two of three ran with the corpus
+      unloaded, so the output-contract rule never loaded. Fix: asks-are-claims moves to the seat
+      card (it governs every escalation the seat writes, corpus or not).
 - [ ] design-agents-G4 — the seat proposed a PER-INSTANCE hand fix ("I can wire #326's two
       blockedBy edges and the task/build labels") where the operator wanted the CONSUMER
       SURFACE fixed: the consumer card gains the rules the instance tripped, and a deterministic
@@ -131,6 +178,10 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       rule. Candidate promotion: the skill's output contract gains "before proposing a lint/
       label/rule, count the readers the author already has to model; a fix that adds one needs
       the case for why subtraction is impossible."
+      **RESIGHT 2026-10-15 (operator catch):** the #2588 fix first came as an enumerated
+      guard list — "a lot of conditions that will go stale" — redone as ONE self-retiring
+      predicate inside the updater's existing pick (memory: fix-inherits-existing-filters).
+      Fourth date → promote the candidate line above.
 - [ ] design-agents-G5 — a Goal's verdict-readiness was relayed as DUE from SHIPPED machinery
       while its Production-leg's verbs (demoting/advising/probing) name OBSERVED events: on #818
       the operator's exercised-in-a-stack bar refuted 3 of 4 deliverables (teeth never fired —
@@ -147,6 +198,18 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       session uses tokens"). Candidate promotion: the output contract gains "a rule written into
       a per-session prompt (brief, reviewer prompt, rubric, env card) cites its ADR and carries
       no dates/issue refs of its own"; mechanical twin = a lint on those files.
+      Resight 2026-10-14 (fu-sweep lane, self-caught + reverted before push). Two dates → promote.
+- [ ] design-agents-G7 — **the island exemption lives only in auto-memory.** On gateway-island
+      work the seat asked the full-corpus question before a launcher `/sessions` change — operator:
+      "only launcher and gateway as context … whole point of islands is to get rid of the read
+      everything requirement". Neither the seat card's stop-and-ask nor this skill names islands.
+      Fix: the stop-and-ask paragraph gains "island work (its owning dir + the touched launcher)
+      reads the island only; never ask the corpus question for it". Sighted 2026-10-17 (operator).
+- [ ] design-agents-G8 — the inverse of G7: new grouping machinery for the deep dig was designed
+      with no slice read and no stop-and-ask — operator: "dig responder is supposed to take more
+      than one alert at a time already" (`deep-dig-select.sh` groups). The trigger read as "a
+      design question"; a PROPOSED CHANGE TO A LOOP COMPONENT is the same trigger. Fix: the
+      stop-and-ask cue names it. Sighted 2026-10-20 (operator).
 - [ ] design-agents-G2 — a lifecycle LABEL was reported as activity ("#833 is riding —
       in-progress") from a live `gh` read alone: the label is a CLAIM, and the state is the
       JOIN (label × live pod × PR state) — the issue's PR had merged 8h earlier with no pod
@@ -306,6 +369,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       preflight|down|up <nx-02|pve>`, #2401) runs it inside a whole-host down/up. This entry now covers
       only the `maint watch` half (the alert watch as a verb, not a re-typed snippet — this session
       re-typed it once more, as a file under bash, and it worked; the point stands).
+      **RESIGHTS 2026-10-20, 2026-10-22, 2026-10-23** (seat windows: re-armed twice for a flapping
+      InfoInhibitor and at Monitor expiry; a zsh no-word-split copy whose first event reported all
+      12 baseline alerts NEW). New nuance from 10-22: the Monitor's 30-min cap equals the lease, so
+      a hand watch that also renews makes the window's life depend on a re-arm nobody prompts.
+      Still no verb.
 - [ ] maintenance-window-G4 — **a window opened to PROVE a detector fires cannot close.** The
       acceptance for any detector-first item (the standing build order: detector, let it fire on
       the real condition, then the fix) is to make the new alert fire on purpose — but `check`
@@ -337,6 +405,8 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       flapped every ~30 min all day, landed between `open` and `check`, and `close` refused on it as
       a NEW name. `check` should drop the two stock meta-alerts (`Watchdog`, `InfoInhibitor`) exactly
       as the Alertmanager route does; forced closed with this note. Second date → promote.
+      **RESIGHTS 2026-10-15 (router window, `--force` on InfoInhibitor), 2026-10-20 (filtered out
+      of the hand watch).** Promotion proposed: `check` drops `Watchdog`/`InfoInhibitor`.
 - [x] maintenance-window-G3 (filed 2026-09-22 under a colliding `-G1` id) — `maintenance-window.sh`
       kept ONE state slot per user, so a seat and its subagent with windows open at once clobbered
       each other's baseline + window id (the first `close` would have closed the SUBAGENT's
@@ -368,6 +438,19 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       `connection refused` on :4240) — a stale prober, not a network fault; cp-01's own agent saw
       all 13. It cleared by itself (past episodes 5–50 min). The alert reads the gauge, so it
       cannot tell stale from real — read `Last probed` before acting.
+      **RESIGHTS 2026-10-20 (PodSigkilled after a reinstall), ~2026-10-21 (the only NEW alerts were
+      two restart alerts the seat had already CLAIMED — a claim does not satisfy `close`),
+      2026-10-23 (the ride's own expected `AgentWorkerEgressDropped`; and a new sub-shape: the
+      baseline taken right after a rollout counted its old pod, so `check` read one target short).**
+      Six dates → promote: expected-consequence classification + claimed alerts honoured; take the
+      baseline after a just-finished rollout settles.
+- [ ] maintenance-window-G7 — **urgent restarts ran with no window.** `rollout restart` of the
+      gateway after a policy merge, then gateway + openrouter-proxy during a key rotation, checked
+      only "no session in flight" — the skill's triggers name restarts. Sighted 2026-10-17.
+      Weak resight 2026-10-22: a merge whose ArgoCD sync rolled the single-replica gateway (old
+      image refused new policy keys, ~13 min down) ran undeclared. Fix: the skill's examples name
+      incident restarts, key-rotation rollouts and single-replica sync-restarting merges
+      ("urgent is not exempt").
 - [ ] maintenance-window-G6 — **a proof that may cut the seat's own network path runs with no
       self-revert, and the skill never asks.** The window-2 failover proof (2026-10-08) was a
       background script because the jail's internet rides `.1`; its back-out step failed silently and
@@ -392,4 +475,30 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       the production BACKUP. Next: the skill routes every `ansible/opnsense-*`/`roles/opnsense-*` PR through the
       script with the env line quoted; the script's play set follows the PR's touched roles (or `--steps all` is
       the default for a role outside the four).
+- [ ] opnsense-as-code-G2 — **ACME on the CARP BACKUP returns 400** (no WAN leg while BACKUP; its
+      certs are seed copies) and the skill never mentions the pair. Fix: issue/sign on the MASTER,
+      carry certs to the BACKUP (FU-297's cert-carry); expect 400 from a BACKUP issuance. Sighted
+      2026-10-15.
 
+## docs-cleanup
+
+- [ ] docs-cleanup-G1 — a generated block (marker-delimited, `machines/generate.py`) was
+      hand-edited; the pre-push hook caught it and the fix moved to `machines.yaml`. The hard rules
+      should say it first. Sighted 2026-10-14.
+
+## second-jail
+
+- [ ] second-jail-G1 — rule 1 ("work only in a clone") names only `/workspace/homelab`; on an
+      operator-ordered task in `/workspace` (the claude-jail checkout) the session committed the
+      operator's uncommitted changes via a clone, then reset six files and fast-forwarded the
+      live tree unasked. Fix: rule 1 covers every operator checkout under `/workspace`; rewriting
+      one needs the operator's say. Sighted ~2026-10-17.
+- [ ] second-jail-G2 — rule 2 was over-applied to the separate hardware repo (refused to update
+      its purchases record as a "shared record") — operator: "you can edit the hardware repo".
+      Fix: rule 2's list is homelab's records; other repos follow their own protocol. Sighted
+      2026-10-13 (operator).
+- [ ] second-jail-G3 — invoked MID-session (`/second-jail do the PR`) after the session had
+      already made an unpushed direct master commit in the shared tree as primary; the skill
+      assumes session start, so nothing handed that commit over. Fix: on a mid-session switch,
+      list prior writes in `/workspace/homelab` and finish or hand them over first. Sighted
+      2026-10-13.

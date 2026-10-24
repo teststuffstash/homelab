@@ -14649,3 +14649,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **WM-1..WM-10 already ran a full cycle on the claude path (10-22 06:43Z → 10-24 18:43Z):** OK WM-2/4/5/6; FINDING
   WM-1/3/7/8/9/10 (under-resolved/unresolved citations; WM-9 gold 0/4, prose-only report). Runner defects (child model
   unpinned, outer LLM rewrites the JSON, report.json + child.jsonl never reach S3) → **oracle-fleet#931** filed unqueued.
+
+## 2026-10-24 ~20:00Z — skill-retro (seat)
+- No watermark existed (never advanced since the 08-11 first run) → window set to 2026-10-14T17:00Z (the board-sweep watermark); `skill-retro-scan.sh` MARKER now derives from `.claude/skills/*/` (the hand list missed board-sweep, maintenance-window, second-jail).
+- 43 slices, read by 6 seat subagents. GAPS: 16 new entries (board-sweep-G2, handoff-G2..G4, design-agents-G7/G8, maintenance-window-G7, onboard-G3/G4, opnsense-as-code-G2, docs-cleanup-G1, second-jail-G1..G3) and resights of design-G2, design-agents-G4/G6, maintenance-window-G2/G4/G5; design-agents-G3 REOPENED (promoted rule recurs where the corpus is not loaded → seat card).
+- Promotion proposals (≥2 dates) await the operator's nod; watermark advanced after the ledger write.

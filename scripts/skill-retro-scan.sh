@@ -13,7 +13,10 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$SLICES"
 
 # Slash-invoked skills leave <command-name> tags; tool-invoked ones leave Skill tool_use blocks.
-MARKER='<command-name>/(design|design-agents|docs-cleanup|fu-sweep|meta-coordinate|handoff|onboard-metal-node|opnsense-as-code|tofu-apply|skill-retro)</command-name>|"name": *"Skill"'
+# The skill list derives from .claude/skills/ — a hand list went stale (board-sweep,
+# maintenance-window, second-jail were never scanned).
+SKILLS="$(cd "$REPO/.claude/skills" && ls -d */ | tr -d / | paste -sd'|')"
+MARKER="<command-name>/($SKILLS)</command-name>|\"name\": *\"Skill\""
 
 n=0
 for f in "$PROJ"/*.jsonl; do
