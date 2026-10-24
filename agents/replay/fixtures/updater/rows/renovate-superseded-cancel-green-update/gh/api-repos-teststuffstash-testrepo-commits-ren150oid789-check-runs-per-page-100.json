@@ -1,0 +1,19 @@
+{
+  "check_runs": [
+    {
+      "name": "ci",
+      "status": "completed",
+      "conclusion": "cancelled"
+    },
+    {
+      "name": "approve / approve",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "ci",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
+}

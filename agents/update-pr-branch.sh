@@ -73,8 +73,8 @@ PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
 # the merge-ready one: an untouched Renovate PR that is armed, APPROVED and GREEN has nothing but
 # currency between it and the merge; the updater takes it so the fast path keeps its 15-min currency
 # instead of Renovate's 6-h cron. Not green, not approved, conflicted: Renovate's. `renovate_green`
-# reads the per-candidate probe (`--json commits,statusCheckRollup`); an absent or unreadable rollup is
-# NOT green (fail toward leaving it to Renovate).
+# reads the per-candidate probe (`renovate_probe`: commits + REST check-runs/status — renovate-currency.sh);
+# an absent rollup is NOT green, an unreadable one HOLDS (fail toward leaving it to Renovate).
 # ⚠ THE EXCEPTION CAN STILL MINT A ZOMBIE — so it HANDS BACK (2026-10-24). "Minutes to merge" holds
 # only if the update's own CI lands before master moves again and stays green; Renovate's edited-PR
 # rule counts the updater's MERGE commit too, and `renovate_untouched` (merge commits are not content)
@@ -100,50 +100,10 @@ PRS="$(gh pr list --repo "$REPO" --state open --limit 100 \
 # homelab#2007 (branch renovate/github-actions, one Renovate commit) and Renovate dropped the
 # branch as edited — the exact defect this skip exists to prevent. Normalize BOTH affixes before
 # the prefix test, the same `sub("\\[bot\\]$"; "")` idiom the reviewer-identity reads below use.
-RENOVATE_LOGIN_JQ='def renovate_login: (. // "") | sub("^app/"; "") | sub("\\[bot\\]$"; "") | startswith("homelab-renovate");'
-renovate_author() {   # renovate_author <pr-json> → 0 when the PR author is Renovate (every branch, ADR-153)
-  jq -e "$RENOVATE_LOGIN_JQ"' (.author.login | renovate_login)' <<<"$1" >/dev/null 2>&1
-}
-renovate_green() {   # renovate_green <pr-view-json with statusCheckRollup> → 0 when every check concluded clean (absent = not green)
-  jq -e '[ .statusCheckRollup[]? | { k: (.name // .context // ""), c: ((.conclusion // .state) // "") } ]
-         | group_by(.k)
-         | map(if any(.c != "CANCELLED") then map(select(.c != "CANCELLED")) else . end | .[].c) | flatten as $c
-         | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0' <<<"$1" >/dev/null 2>&1
-}
-renovate_untouched() {   # renovate_untouched <pr-view-json with commits> → 0 when no foreign non-merge commit
-  jq -e "$RENOVATE_LOGIN_JQ"' [ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
-           | .authors[]? | .login ] | all(renovate_login)' <<<"$1" >/dev/null 2>&1
-}
-renovate_merged_into() {   # renovate_merged_into <pr-view-json with commits> → 0 when a non-Renovate MERGE commit is on the branch
-  jq -e "$RENOVATE_LOGIN_JQ"' [ .commits[]? | select((.messageHeadline // "") | startswith("Merge branch "))
-           | .authors[]? | .login | renovate_login | not ] | any' <<<"$1" >/dev/null 2>&1
-}
-# renovate_handback <number> <log-prefix> — tick Renovate's rebase/retry box (see the header). FRESH
-# REST body read right before the full-body overwrite (Renovate regenerates bodies on its runs — the
-# #2055 stale-copy finding); REST both ways, never `gh pr edit` (GraphQL — the #2476 drain class).
-# A ticked box is left alone (Renovate's next run is the mover); a body without the box, an
-# unreadable body or a refused write is a line, never fatal (rule #6; the */15 cron retries).
-renovate_handback() {
-  local body new
-  if ! body="$(gh api "repos/$REPO/pulls/$1" --jq '.body // ""' 2>/dev/null)"; then
-    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — body unreadable, HOLDING the hand-back (rule #6; the */15 cron retries)"
-    return 0
-  fi
-  if grep -q -- '- \[x\] <!-- rebase-check -->' <<<"$body"; then
-    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — rebase already requested (box ticked); Renovate's next run takes it back"
-    return 0
-  fi
-  if ! grep -q -- '- \[ \] <!-- rebase-check -->' <<<"$body"; then
-    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — no rebase checkbox in the body; human check (close + delete the branch, docs/renovate.md)"
-    return 0
-  fi
-  new="$(printf '%s' "$body" | sed 's/- \[ \] <!-- rebase-check -->/- [x] <!-- rebase-check -->/')"
-  if gh api -X PATCH "repos/$REPO/pulls/$1" -f body="$new" >/dev/null 2>&1; then
-    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — handed back to Renovate (rebase box ticked; its next run rebuilds the branch)"
-  else
-    echo "$2 #$1 Renovate-authored, updater-merged, not merge-ready — could not tick the rebase box; the */15 cron retries"
-  fi
-}
+# The predicate's functions (renovate_author/_probe/_green/_untouched/_merged_into/_handback) live in
+# ONE file shared with coordinator-scan.sh's FU-124 nudge — two copies of it was how the nudge kept
+# minting the zombies after this file was fixed (2026-10-24).
+. "$(cd "$(dirname "$0")" && pwd)/renovate-currency.sh"
 
 # Defensive: create the label idempotently first (the porcelain add FAILED on a missing label; the
 # REST add would auto-create it grey — this keeps the colour + description)
@@ -249,7 +209,7 @@ while read -r pr; do
   n="$(jq -r '.number' <<<"$pr")"
   cj=""
   if renovate_author "$pr"; then
-    cj="$(gh pr view "$n" --repo "$REPO" --json commits,statusCheckRollup 2>/dev/null)" && jq -e '.commits' <<<"$cj" >/dev/null 2>&1 || cj=""
+    cj="$(renovate_probe "$REPO" "$n" "$(jq -r '.headRefOid // ""' <<<"$pr")")" || cj=""
     if [ -z "$cj" ]; then
       echo "updater[$REPO]: #$n commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)"
       continue
@@ -258,7 +218,7 @@ while read -r pr; do
     # (APPROVED / bot-approved / automerge) — currency is the only gap, this updater closes it.
     if renovate_untouched "$cj" && ! renovate_green "$cj"; then
       if renovate_merged_into "$cj"; then
-        renovate_handback "$n" "updater[$REPO]:"
+        renovate_handback "$REPO" "$n" "updater[$REPO]:"
       else
         echo "updater[$REPO]: #$n Renovate-authored, untouched and not green — Renovate's to rebase (rebaseWhen behind-base-branch, ADR-153); skipping"
       fi
@@ -384,7 +344,7 @@ jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
     # Renovate PR here is always Renovate's to rebase (ADR-153; every Renovate branch since 2026-10-12).
     if [ -n "$pj" ] && renovate_author "$(jq -c --argjson n "$n" '.[] | select(.number == $n)' <<<"$PRS")" && renovate_untouched "$pj"; then
       if renovate_merged_into "$pj"; then
-        renovate_handback "$n" "unstrand:"
+        renovate_handback "$REPO" "$n" "unstrand:"
       else
         echo "unstrand: #$n Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-153); skipping"
       fi
