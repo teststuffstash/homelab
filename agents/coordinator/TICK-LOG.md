@@ -14522,3 +14522,24 @@ updates or reverts as much as possible — mechanical revert or a responder."
   → `cells-exhausted`; launcher classifier = the opencode auto-reject PAIR from #2867's strike logs, line-
   anchored, opencode rides only. Residuals: agent-runtime's agent-finalize has no `harness-fault` (a
   STRIKE_BY_POD ride still reports `unknown`); #2870 told to narrow the rail-skip to cells.
+
+### 2026-10-24 ~07:50–12:30Z — S9 Renovate sweep (second jail → took over as primary)
+- **Sweep**: 10 open Renovate PRs across the claim universe; stuck causes = 2 platform (zombies, mirror
+  cold blob), 4 config/policy (crossplane split #2821, allure tests/ skip, python 3.15 park, security lane
+  labels found later), 1 rollback false attribution (snore-recorder#63/#64). None was documentation.
+- **Zombies**: #2881 (updater hand-back via Renovate's rebase box + superseded-CANCELLED not red) — then
+  the live check showed the 10-20 merges were the scan's FU-124 NUDGE (coordinator-git), not the updater,
+  and the updater's `statusCheckRollup` probe needs actions:read (homelab-merge lacks it → every private
+  repo "commit probe unreadable", 93–236 HOLD lines/day in Loki) → #2889: one predicate
+  `agents/renovate-currency.sh`, checks over REST. **Drill**: sleep-tracking#203 handed back 12:01Z.
+  #2885 struck ADR-153's "no zombie" premise.
+- **Operator ruling**: crossplane chart index excluded from the 7-day cooldown → #2886 (closes #2821;
+  `matchRegistryUrls` invalid in renovate@41 → manager+datasource+package match).
+- **Subagents**: #2887 revert-chain exoneration (revert's own post-merge run red too → restore the bump);
+  #2888 detector `RegistryMirrorColdBlobAbandoned` (replays fire at both CI failures) → #2892 mcr
+  `blob-warmer` sidecar → #2893 log fix. Root cause: the upstream fill dies with the client request.
+- **Hand acts**: snore-recorder#65 armed (merged), circles#134 e2e rerun + `dependencies` label (merged) →
+  class fix #2890 (vulnerabilityAlerts.labels replaces globals; `security` not in the AgentStack taxonomy,
+  label-sync deleted it). allure-behavior-snippets#35 (ignorePaths) merged.
+- Residuals on #1985 (comment 6383963515); FU-316 minted (ghcr/docker-io warmer, blocked on mcr soak);
+  mirror metric 0 % + Blob5xx fixture labels → subagent PR in flight.

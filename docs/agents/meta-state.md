@@ -43,6 +43,10 @@ dig-explained: RouterRunModelUnverifiable — ad-hoc probe rides with no served-
   native-client baseline forwarder (not built). **Watch:** the jail's codex REFRESH ~2026-10-26 (`logs_2.sqlite` of `.codex-jail/homelab-codex`,
   status codes only) = the revocation watch's second half; `gateway_codex_upstream_headroom_total{outcome}` on the next codex ride
   (expect `accepted` — a `quota-invalid` means the live header grammar differs from the CLI's reader; the poll still carries admission).
+- **⚑ PICKUP (2026-10-24 12:30Z — S9 Renovate sweep; TICK-LOG 10-24).** Verify next session: homelab#2819 regrouped
+  (chart 2.4.3 + digest) after #2886; sleep-tracking#203 rebuilt by Renovate after the 12:01Z hand-back; allure#11
+  regrouped with tests/Dockerfile after allure#35. Python 3.15 park: nixpkgs-unstable has 3.15.0 but `devbox search
+  python@3.15` → rc2 — un-park when devbox resolves the final. Residual list: #1985 comment 6383963515; FU-316.
 - **⚑ PICKUP (2026-10-18 ~20:00Z — seat, S9 self-serve while the operator sleeps; TICK-LOG 10-18 evening): the python
   3.15 Renovate wave is PARKED org-wide on nixpkgs** (`python315` = 3.15.0rc2 only): #2610 carries the oracle-fleet #883
   ruling + an `Un-park:` line (the seat, when nixpkgs ships a non-rc 3.15 — the four-member move is proven green on the rc in a
