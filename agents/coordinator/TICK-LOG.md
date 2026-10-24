@@ -14479,3 +14479,20 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Rail of #2862's successful ride: anthropic subscription, harness claude, claude/haiku — after 3 Go-rail
   strikes (mimo, glm, haiku-on-Go); mimo heads the Go lists because the snapshot prices it cheapest per
   clean ride (promise prices, 1 judged ride) — today's strike is not in that snapshot yet.
+
+## 2026-10-24 — read of the v0.6.2 soft-wording test (#2871, #2872)
+
+- **Both landed 2026-10-23.** #2871 (#2868, operation column + verb per rule + capture interface row;
+  merged 20:42Z) and #2872 (#2867, GW-REDACT marks; merged 21:35Z after one `merge-conflict` arbitrate
+  round — #2871 rewrote the same GW-REDACT opening paragraph; the regions overlapped after all, the
+  arbiter kept both sides). Round 1 on both issues struck on the Go rail (haiku-on-Go, upstream 400);
+  the rides that shipped ran claude/haiku on the subscription.
+- **Soft wording held.** Worker on #2867 proved 4 kinds by existing rows and MARKED 3 in place
+  (`sk-or-v1-…`, the Go key value, "ref/model id logged verbatim") — no fake worlds, no blocking ask from
+  either reviewer; specs reviewer accounted per kind against rule 11. Baseline byte-identical on both.
+- **Issue-authoring miss (mine):** #2867 asserted the openrouter `upstream-401` world echoes an
+  `sk-or-v1-…` string; it echoes `sk-ant-oat-LEAK` (`gateway/tests/conftest.py:503`, verified). The
+  worker caught it and declined the fake-world fix. The Go-key row (drive the catalog refresh from
+  `test_redact.py`) stays as the in-place mark — the mark is the record, no FU (FU-270 stint).
+- Specs reviewer hygiene notes on #2872: 3× H-THREAD_BROKEN (path / log_line_contains cells not named
+  in the steps) — advisory, the next GW-REDACT touch picks them up.
