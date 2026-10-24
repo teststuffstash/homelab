@@ -16,7 +16,7 @@ Which rail, or why not (world policy-default, every ref resolvable unless the ro
 | an explicit harness passes the rail whose cells all speak another dialect | worker | claude | light | 0 / 0 / 0 | all resolve | dispatch | openrouter | deepseek/deepseek-v4-flash | — (opencode's light cell is openai-only: passed, never ridden) |
 | a harness that cannot speak the role's only rail | prober | opencode | (policy) | 0 / 0 / 0 | all resolve | defer | — | — | role-rail-denied |
 | an explicit rail the role is not allowed | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, rail: anthropic | defer | — | — | role-rail-denied |
-| an explicit rail the policy does not declare | worker | claude | (policy) | 0 / 0 / 0 | all resolve, rail: codex | defer | — | — | role-rail-denied |
+| an explicit rail the policy does not declare ⚖ | worker | claude | (policy) | 0 / 0 / 0 | all resolve, rail: codex | defer | — | — | role-rail-denied |
 | an explicit rail the role is allowed is taken even when later in the list | worker | (policy) | (policy) | 0 / 0 / 0 | all resolve, rail: openrouter | dispatch | openrouter | deepseek/deepseek-v4-flash | — |
 | an unknown stack | worker (stack nope) | (policy) | (policy) | 0 / 0 / 0 | — | defer | — | — | stack-unknown |
 
@@ -72,7 +72,7 @@ WALK_ROWS = [
      {"decision": "dispatch", "rail": "openrouter", "model": "deepseek/deepseek-v4-flash", "harness": "claude"}),
     ("a harness that cannot speak the role's only rail", {"role": "prober", "harness": "opencode"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
     ("an explicit rail the role is not allowed", {"rail": "anthropic", "harness": "claude"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
-    ("an explicit rail the policy does not declare", {"rail": "codex", "harness": "claude"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
+    ("an explicit rail the policy does not declare ⚖", {"rail": "codex", "harness": "claude"}, {}, {"decision": "defer", "reason": "role-rail-denied"}),
     ("an explicit rail the role is allowed is taken even when later in the list", {"rail": "openrouter"}, {}, {"decision": "dispatch", "rail": "openrouter", "model": "deepseek/deepseek-v4-flash"}),
     ("an unknown stack", {"stack": "nope"}, {}, {"decision": "defer", "reason": "stack-unknown"}),
 ]
