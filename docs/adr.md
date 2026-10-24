@@ -2861,8 +2861,10 @@ measured 0.98–1.06 updater merges per PR over 14 days, so the fast path's 0.1�
 Renovate's 6-h cron); hourly Renovate (unneeded with the exception; stays an option); a scan repair that
 closes an "Autoclosing Skipped" PR (treats the symptom). **Why:** approvals survive Renovate's rebases
 (#2488: one approval across three) and a rebase costs CI only, so Renovate's ownership is cheap; the
-exception keeps the measured fast path; the zombie needs a PR that cannot merge, which the exception never
-touches. **Consequences:** a lingering Renovate PR on a busy repo gets at most 4 rebases a day instead of up
+exception keeps the measured fast path. ~~The zombie needs a PR that cannot merge, which the exception never
+touches~~ — wrong (amended 2026-10-24): a fast-path update that misses (master moves again, or it pulls a red
+in — homelab#2754, sleep-tracking#203) leaves the updater's merge commit, so the updater now hands such a PR
+back through Renovate's rebase box (#2881; mechanism in [`renovate.md`](renovate.md)). **Consequences:** a lingering Renovate PR on a busy repo gets at most 4 rebases a day instead of up
 to 21 updater merges; if Renovate's workflow is down, untouched PRs sit BEHIND with no updater belt (FU-046's
 proof-of-flight carried the adapted-branch path on #191 the same day); the scan's rebase-box repair and the
 merge-conflict Renovate clause become retirable once a quiet week shows them idle.
