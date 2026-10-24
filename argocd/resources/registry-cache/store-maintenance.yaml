@@ -104,11 +104,15 @@ data:
 
     # ── 4. REPORT ────────────────────────────────────────────────────────────────────────────
     # Best-effort: the mirror must start whether or not monitoring is reachable.
+    # Only facts that ARE per-restart events go here. The store's fill is NOT pushed: a push from
+    # this init is the fill at pod start, frozen for the pod's lifetime (mirror-mcr read 0 % for
+    # 3 days while it grew to ~2 GB, 2026-10-24). registry_mirror_store_used_percent is a live
+    # recording rule over kubelet volume stats now (prometheusrule.yaml); the df above is only
+    # the wipe decision's input, and it is logged.
     wget -q -O- --timeout=5 \
       --post-data="registry_mirror_dangling_links_repaired ${dangling}
     registry_mirror_dangling_blobs_missing ${blobs}
     registry_mirror_store_wiped ${wiped}
-    registry_mirror_store_used_percent ${used_pct}
     " "${PG}/metrics/job/registry_mirror_maintenance/mirror/${MIRROR}" >/dev/null 2>&1 &&
       echo "pushed maintenance metrics for ${MIRROR}" ||
       echo "WARN could not push maintenance metrics (mirror starts regardless)"

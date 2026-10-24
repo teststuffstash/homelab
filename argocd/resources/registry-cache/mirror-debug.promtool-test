@@ -7,30 +7,38 @@
 # *.promtool-test under argocd/), so a red fixture here is a red required check. Named
 # .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
 #
+# INPUT LABELS ARE THE LIVE SET (read off Prometheus 2026-10-24, series API): the mirror-debug
+# ServiceMonitor scrapes each mirror POD, so a series carries job=<Service name>
+# (registry-docker-io / registry-ghcr / registry-mcr), instance=<pod IP>:5001, pod=<pod name>,
+# plus container/endpoint/namespace/service/method. Until 2026-10-24 this fixture used
+# job="mirror-debug" + instance=<VIP>:5001 — labels no live series has — and its roll case kept
+# the instance across the roll, which a real roll never does; it pinned a bridge the per-series
+# expr did not have. The expr now sums by job (prometheusrule.yaml has the why).
+#
 # WHAT IS BEING PINNED:
-#   1. THE HOLE — a mirror roll mid-outage does not restart the 10m window. The [5m] range on
-#      rate() bridges the gap.
+#   1. THE HOLE — a mirror roll mid-outage (new pod: new instance + pod labels, counter from 0)
+#      does not restart the 10m window. The old pod's samples in the [5m] range bridge to the new
+#      pod's under sum by (job). FAILS on the pre-2026-10-24 per-series expr: the old pod's alert
+#      resolves and the new pod's series starts a fresh 10m `for`.
 #   2. THE PRICE — recovery is up to 5m late, asserted rather than claimed.
-#   3. EACH MIRROR FIRES INDEPENDENTLY — three targets, one alertname, no cross-talk.
+#   3. ONE ALERT PER MIRROR, EACH INDEPENDENT — three mirrors, one alertname, no cross-talk; a
+#      mirror 5xx-ing on GET and HEAD (two series) is one alert; 200s never count.
 #
 # DIRECTION WITNESS OMITTED: the existing mirror-probes.promtool-test already proves the
 # direction principle (min_over_time vs max_over_time) for this class.
 #
 # ⚠ FIXTURE NOTE: `stale` in an input series injects a real staleness marker, which is exactly
-# what Prometheus writes when a scrape fails — so the holes below bite instantly, with no 5m-
-# lookback cushion, the way a real mirror roll does.
+# what Prometheus writes when a scrape target disappears — so the old pod's series ends there
+# the way a real roll ends it.
 #
 # CLOCK: promtool's test clock starts at 0 and `interval: 1m` matches the ServiceMonitor's own
 # 60s interval, so one step here is one scrape.
 #
-# COUNTER MODEL: `registry_http_requests_total` is a counter. The input series values represent
-# the cumulative count of 5xx blob responses. A value of "0+100x30" means the counter increases
-# by 100 per minute for 30 minutes, giving rate(5m) ≈ 0.56/s > 0. A flat counter ("0+0x60")
-# means no 5xx, rate = 0.
+# COUNTER MODEL: `registry_http_requests_total` is a counter. "0+100x30" means +100 per minute
+# for 30 minutes (rate(5m) ≈ 1.67/s > 0); a flat counter means no 5xx, rate = 0.
 #
-# TIMING: rate(registry_http_requests_total{handler="blob",code="500"}[5m]) > 0 becomes true at
-# t=1m (first 5m window [t-5m,t] with ≥2 samples showing an increase). With `for: 10m`, the
-# alert fires at t=11m.
+# TIMING: the condition becomes true at t=1m (first [5m] window with ≥2 samples showing an
+# increase). With `for: 10m`, the alert fires at t=11m.
 rule_files:
   - mirror-debug.promtool-rules
 
@@ -38,16 +46,18 @@ evaluation_interval: 1m
 
 tests:
   # ── 1. THE HOLE: a mirror roll mid-outage does not restart the window ─────────────────────────
-  # mirror-docker-io is genuinely returning 5xx on blob requests from t=0. At t=30 the mirror is
-  # replaced — the scrape fails, Prometheus staleness-marks the counter series, and two minutes
-  # pass before a real sample lands again. The mirror never recovered; only the measurement went
-  # away. The [5m] range on rate() bridges the gap because samples from before the hole are still
-  # in the range.
+  # mirror-docker-io returns 5xx on blob GETs from t=0. At t=31 the pod is replaced: the old pod's
+  # series is staleness-marked, two scrapes pass, and from t=33 the NEW pod (new IP, new name,
+  # counter from 0) is scraped and is still 5xx-ing. The mirror never recovered.
+  # Bridge arithmetic: t=31..33 the old pod's samples t=26..30 are in [t-5m, t] (rate > 0); from
+  # t=35 the new pod has ≥2 samples (t=33..35). t=34: old window [29,34] holds 29,30 → still > 0.
   - interval: 1m
     name: a mirror roll mid-outage does not restart the 10m window
     input_series:
-      - series: 'registry_http_requests_total{handler="blob",code="500",instance="http://192.168.40.20:5001",job="mirror-debug"}'
-        values: "0+100x30 stale _x2 3100+100x60"
+      - series: 'registry_http_requests_total{code="500",container="registry",endpoint="debug",handler="blob",instance="10.244.11.172:5001",job="registry-docker-io",method="get",namespace="registry-cache",pod="mirror-docker-io-6d6f969f59-v9ltq",service="registry-docker-io"}'
+        values: "0+100x30 stale"
+      - series: 'registry_http_requests_total{code="500",container="registry",endpoint="debug",handler="blob",instance="10.244.11.68:5001",job="registry-docker-io",method="get",namespace="registry-cache",pod="mirror-docker-io-6d6f969f59-62zsh",service="registry-docker-io"}'
+        values: "_x33 0+100x60"
     alert_rule_test:
       # `for: 10m` has not elapsed yet (condition true since t=1m)
       - eval_time: 10m
@@ -58,20 +68,18 @@ tests:
         exp_alerts: &docker_alert
           - exp_labels:
               severity: warning
-              handler: blob
-              code: "500"
-              instance: http://192.168.40.20:5001
-              job: mirror-debug
+              job: registry-docker-io
               triage: dig
-      # mid-hole, past the staleness marker: rate() still sees samples from before and after
-      # the hole in the [5m] range, so the rate is still > 0 and the alert keeps firing.
-      - eval_time: 31m
+      # mid-hole: no pod is being scraped, the old pod's samples still carry the rate
+      - eval_time: 32m
         alertname: RegistryMirrorBlob5xxRate
         exp_alerts: *docker_alert
-      - eval_time: 33m
+      # handover: the old pod's last samples and the new pod's first ones overlap in the range
+      - eval_time: 34m
         alertname: RegistryMirrorBlob5xxRate
         exp_alerts: *docker_alert
-      # …and it never stopped firing, so the recovery of the SCRAPE is a non-event
+      # the old pod has left the range entirely — the per-series expr would be pending on the new
+      # pod here (true since t=35 → fires t=45); summed by job it never stopped firing
       - eval_time: 40m
         alertname: RegistryMirrorBlob5xxRate
         exp_alerts: *docker_alert
@@ -81,43 +89,41 @@ tests:
 
   # ── 2. THE PRICE — recovery is up to 5m late, asserted rather than claimed ────────────────────
   # rate() means "5xx in the last 5m", so a recovered mirror leaves the alert ringing for up to
-  # 5m after the last 5xx. Against `for: 10m` on a mirror that was genuinely poisoned, that is
-  # the cheaper fault — but it is a real cost, so it is asserted.
-  # Counter increases 100/min until t=29 (value 2900), then flat at 3000 from t=30. rate(5m) > 0
-  # until t=34 (when the 5m window [29,34] has first=2900, last=3000: increase=100, which is
-  # below promtool's threshold and evaluates as 0).
+  # 5m after the last 5xx. Counter +100/min to 3000 at t=30, flat after.
   - interval: 1m
     name: a recovered mirror clears the alert, up to 5m late
     input_series:
-      - series: 'registry_http_requests_total{handler="blob",code="500",instance="http://192.168.40.20:5001",job="mirror-debug"}'
+      - series: 'registry_http_requests_total{code="500",container="registry",endpoint="debug",handler="blob",instance="10.244.11.172:5001",job="registry-docker-io",method="get",namespace="registry-cache",pod="mirror-docker-io-6d6f969f59-v9ltq",service="registry-docker-io"}'
         values: "0+100x30 3000+0x40"
     alert_rule_test:
       - eval_time: 20m
         alertname: RegistryMirrorBlob5xxRate
         exp_alerts: *docker_alert
-      # 5xx stopped at t=29 (last increase at t=29→t=30 from 2900→3000) and STILL ringing at
-      # t=33: rate(5m) at t=33 looks at [28,33] → first=2800, last=3000 → increase=200 → > 0
+      # 5xx stopped at t=30 and STILL ringing at t=33: [28,33] → 2800..3000, increase > 0
       - eval_time: 33m
         alertname: RegistryMirrorBlob5xxRate
         exp_alerts: *docker_alert
-      # ...and gone at t=34: rate(5m) at t=34 looks at [29,34] → first=2900, last=3000 →
-      # increase=100 → below promtool threshold → evaluates as 0
-      - eval_time: 34m
+      # ...and gone at t=36: [31,36] holds only flat 3000s → rate 0
+      - eval_time: 36m
         alertname: RegistryMirrorBlob5xxRate
         exp_alerts: []
 
-  # ── 3. EACH MIRROR FIRES INDEPENDENTLY — no cross-talk between targets ────────────────────────
-  # Three mirrors share the same alertname and job. A failure on one must not suppress or delay
-  # the others. Here docker-io is 5xx-ing, ghcr is clean, and mcr is 5xx-ing — exactly two alerts.
+  # ── 3. ONE ALERT PER MIRROR, EACH INDEPENDENT ─────────────────────────────────────────────────
+  # docker-io 5xx-ing on GET; ghcr serving 200s with a FLAT 500 counter (an old 5xx, no new ones);
+  # mcr 5xx-ing on GET (500) AND HEAD (503) — two series, one mirror. Exactly two alerts.
   - interval: 1m
-    name: each mirror fires independently — two failing, one clean, two alerts
+    name: one alert per failing mirror — GET+HEAD 5xx is one alert, 200s and flat 5xx are none
     input_series:
-      - series: 'registry_http_requests_total{handler="blob",code="500",instance="http://192.168.40.20:5001",job="mirror-debug"}'
+      - series: 'registry_http_requests_total{code="500",container="registry",endpoint="debug",handler="blob",instance="10.244.11.172:5001",job="registry-docker-io",method="get",namespace="registry-cache",pod="mirror-docker-io-6d6f969f59-v9ltq",service="registry-docker-io"}'
         values: "0+100x60"
-      - series: 'registry_http_requests_total{handler="blob",code="500",instance="http://192.168.40.21:5001",job="mirror-debug"}'
-        values: "0+0x60"
-      - series: 'registry_http_requests_total{handler="blob",code="500",instance="http://192.168.40.31:5001",job="mirror-debug"}'
-        values: "0+100x60"
+      - series: 'registry_http_requests_total{code="500",container="registry",endpoint="debug",handler="blob",instance="10.244.11.229:5001",job="registry-ghcr",method="get",namespace="registry-cache",pod="mirror-ghcr-7c46f8d4f5-hk9pn",service="registry-ghcr"}'
+        values: "7+0x60"
+      - series: 'registry_http_requests_total{code="200",container="registry",endpoint="debug",handler="blob",instance="10.244.11.229:5001",job="registry-ghcr",method="get",namespace="registry-cache",pod="mirror-ghcr-7c46f8d4f5-hk9pn",service="registry-ghcr"}'
+        values: "0+500x60"
+      - series: 'registry_http_requests_total{code="500",container="registry",endpoint="debug",handler="blob",instance="10.244.11.148:5001",job="registry-mcr",method="get",namespace="registry-cache",pod="mirror-mcr-596f497f68-7c9rr",service="registry-mcr"}'
+        values: "0+10x60"
+      - series: 'registry_http_requests_total{code="503",container="registry",endpoint="debug",handler="blob",instance="10.244.11.148:5001",job="registry-mcr",method="head",namespace="registry-cache",pod="mirror-mcr-596f497f68-7c9rr",service="registry-mcr"}'
+        values: "0+3x60"
     alert_rule_test:
       # `for: 10m` not elapsed yet (condition true since t=1m)
       - eval_time: 10m
@@ -125,35 +131,15 @@ tests:
         exp_alerts: []
       - eval_time: 11m
         alertname: RegistryMirrorBlob5xxRate
-        exp_alerts:
+        exp_alerts: &two_alerts
           - exp_labels:
               severity: warning
-              handler: blob
-              code: "500"
-              instance: http://192.168.40.20:5001
-              job: mirror-debug
+              job: registry-docker-io
               triage: dig
           - exp_labels:
               severity: warning
-              handler: blob
-              code: "500"
-              instance: http://192.168.40.31:5001
-              job: mirror-debug
+              job: registry-mcr
               triage: dig
       - eval_time: 30m
         alertname: RegistryMirrorBlob5xxRate
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              handler: blob
-              code: "500"
-              instance: http://192.168.40.20:5001
-              job: mirror-debug
-              triage: dig
-          - exp_labels:
-              severity: warning
-              handler: blob
-              code: "500"
-              instance: http://192.168.40.31:5001
-              job: mirror-debug
-              triage: dig
+        exp_alerts: *two_alerts

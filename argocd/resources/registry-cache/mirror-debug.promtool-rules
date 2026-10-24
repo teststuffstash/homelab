@@ -24,7 +24,7 @@ groups:
   - name: registry-cache
     rules:
       - alert: RegistryMirrorBlob5xxRate
-        expr: rate(registry_http_requests_total{handler="blob", code=~"5.."}[5m]) > 0
+        expr: sum by (job) (rate(registry_http_requests_total{handler="blob", code=~"5.."}[5m])) > 0
         for: 10m
         labels:
           severity: warning

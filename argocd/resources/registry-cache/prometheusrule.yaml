@@ -63,6 +63,26 @@ spec:
           annotations:
             summary: "Registry mirror PVC {{ $labels.persistentvolumeclaim }} is over 85% full"
             description: "{{ $labels.persistentvolumeclaim }} has under 15% free. At 100% the mirror truncates in-flight pull-through writes and nodes see digest mismatches/500s instead of a loud failure. Check what's big: legit blobs (capacity/TTL decision — argocd/resources/registry-cache/) vs _uploads debris (should self-reap within ~1h via uploadpurging; if it isn't, that mechanism is broken)."
+        # registry_mirror_store_used_percent — the LIVE fill of each mirror store, per `mirror`
+        # (the MIRROR_NAME the store-maintenance init uses; PVC `<mirror>-data`). Until 2026-10-24
+        # the init PUSHED this name once per pod start, so it was the fill AT THE LAST RESTART and
+        # sat frozen for the pod's lifetime: mirror-mcr read 0 % for 3 days while the store grew to
+        # ~2 GB (restarted near-empty, then filled). The kubelet's volume stats are the same df numbers,
+        # scraped continuously — the init still uses df for its wipe decision (and logs it), but it
+        # no longer pushes it, and the pushgateway ServiceMonitor drops the frozen pushed copies.
+        # used / (used + available) is df's own Use% (ext4 reserve excluded), so this reads the
+        # same number the init's 90 % WIPE_THRESHOLD_PCT is compared against. Pinned in
+        # store-used.promtool-test.
+        - record: registry_mirror_store_used_percent
+          expr: >
+            100 * max by (mirror) (
+              label_replace(
+                kubelet_volume_stats_used_bytes{namespace="registry-cache", persistentvolumeclaim=~"mirror-.+-data"}
+                  / (kubelet_volume_stats_used_bytes{namespace="registry-cache", persistentvolumeclaim=~"mirror-.+-data"}
+                     + kubelet_volume_stats_available_bytes{namespace="registry-cache", persistentvolumeclaim=~"mirror-.+-data"}),
+                "mirror", "$1", "persistentvolumeclaim", "(mirror-.+)-data"
+              )
+            )
         # homelab#116's own complaint was "this is not detectable today": a 200-with-0-bytes is
         # invisible to the mirror's metrics and to every consumer until a build fails oddly, and
         # it took four rounds of circles#19 to find. The store-maintenance initContainer now
@@ -267,18 +287,24 @@ spec:
         # gaps the registry's own metrics series. The [5m] range on rate() bridges the gap
         # (rate looks back 5m and uses whatever samples it finds; a gap shorter than 5m still
         # has samples in the range). `for: 10m` ensures the condition is sustained.
+        # SUMMED BY job (2026-10-24): the scraped series are PER POD — instance is the pod IP and
+        # `pod` the pod name — so a roll starts a NEW series and the bare per-series expr lost its
+        # 10m `for` on every roll (and split one mirror into per-method/per-code alerts). job
+        # (registry-docker-io / registry-ghcr / registry-mcr, the Service name) is the stable
+        # mirror identity; summing by it keeps the old pod's samples inside the [5m] range across
+        # the roll — the RegistryMirrorColdBlobAbandoned shape. Pinned in mirror-debug.promtool-test.
         # CEILING: a hole wider than 5m (crash-loop, cold image pull, node drain) still resets
         # the window. Accepted, as in #313/#349.
         - alert: RegistryMirrorBlob5xxRate
-          expr: rate(registry_http_requests_total{handler="blob", code=~"5.."}[5m]) > 0
+          expr: sum by (job) (rate(registry_http_requests_total{handler="blob", code=~"5.."}[5m])) > 0
           for: 10m
           labels:
             severity: warning
             # triage: poison blob identifiable from mirror metrics and logs
             triage: dig
           annotations:
-            summary: "Registry mirror {{ $labels.instance }} has sustained 5xx on blob requests"
-            description: "{{ $labels.instance }} has had a non-zero 5xx rate on blob (layer) requests for 10m. This is the per-blob poison signature #1282 documents — a specific blob is consistently failing while /v2/ may still answer 200. Check which blob codes are 5xx-ing: increase(registry_http_requests_total{instance=\"{{ $labels.instance }}\",handler=\"blob\",code=~\"5..\"}[10m]). Remedy: bounce the mirror Deployment — kubectl -n registry-cache rollout restart deploy/mirror-<name> (see docs/runbook.md §Registry cache)."
+            summary: "Registry mirror {{ $labels.job }} has sustained 5xx on blob requests"
+            description: "{{ $labels.job }} has had a non-zero 5xx rate on blob (layer) requests for 10m. This is the per-blob poison signature #1282 documents — a specific blob is consistently failing while /v2/ may still answer 200. Check which blob codes are 5xx-ing: sum by (pod, method, code) (increase(registry_http_requests_total{job=\"{{ $labels.job }}\",handler=\"blob\",code=~\"5..\"}[10m])). Remedy: bounce the mirror Deployment — kubectl -n registry-cache rollout restart deploy/mirror-<name> (see docs/runbook.md §Registry cache)."
         # Abandoned cold-blob fetch (S9 sweep 2026-10-24, homelab#1985 — sleep-tracking run
         # 39411736477 + circles#134 both failed `timeout awaiting response headers` on the SAME
         # uncached playwright/python blob, two days apart). The mechanism, read off the mirror's
