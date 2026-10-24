@@ -63,6 +63,9 @@ data:
           cached "$repo" "$dg" && continue
           t0=$(date +%s)
           if wget -q -T "$READ_TIMEOUT" -O /dev/null "http://127.0.0.1:5000/v2/$repo/blobs/$dg"; then
+            # The registry commits the blob just AFTER the response ends (first live run, 2026-10-24:
+            # an 820 MB fill read as not-stored at once, data on disk seconds later) — give it 30 s.
+            n=0; until cached "$repo" "$dg" || [ "$n" -ge 15 ]; do sleep 2; n=$((n + 1)); done
             if cached "$repo" "$dg"; then res=warmed; else res="fetched-not-stored (joined an in-flight fill?) — retry next cycle"; fi
           else
             res="FAILED rc=$? — retry next cycle"
