@@ -45,6 +45,9 @@
 #       keeps the re-proposal open and red until Renovate moves it to a newer version (then it
 #       greens on its own) — one home, and CI is the gate for both the mechanical and the
 #       lens-reviewed lane. The repo is $PIN_ONLY_SLUG, else $GITHUB_REPOSITORY, else origin.
+#       A revert whose body carries an `exonerated-pins:` line is SKIPPED: the chain wrote it when
+#       the revert's own post-merge run of the same workflow failed too — the control with the bump
+#       out of the path failed, so the bump was not the cause (homelab#1985, 2026-10-24).
 # A revert of a pin is itself a pin change that passes (a)–(d), so the rollback needs no bypass.
 #   (f) 2026-09-28 (#1988's class row, ADR-141 amended): the FOURTH shape's memory. An `image = "<ref>"`
 #       line under tofu/*.tf (what Renovate's terraform manager rewrites on a kubernetes_deployment)
@@ -598,7 +601,7 @@ for f in $wf_changed; do
     [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
     cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
     if [ -z "$slug" ] || ! reverted_pins="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
-        --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-wf-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-pins:\")) | ltrimstr(\"reverted-pins:\")" 2>&1)"; then
+        --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-wf-\")) | (.body // \"\") | select(split(\"\\n\") | any(startswith(\"exonerated-pins:\")) | not) | split(\"\\n\")[] | select(startswith(\"reverted-pins:\")) | ltrimstr(\"reverted-pins:\")" 2>&1)"; then
       echo "pin-only-lint: FAIL — cannot read the merged revert-wf-* PRs of ${slug:-<no repo slug>} (the reverted-pin memory, check (e)): ${reverted_pins:-}; refusing to report success." >&2
       rc=2; reverted_pins=""
     fi

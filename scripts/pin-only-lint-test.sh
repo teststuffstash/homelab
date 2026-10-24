@@ -40,6 +40,9 @@ tagobj_() { mkdir -p "$STUB/repos/$1/git/tags"; printf '{"tag":"x","sha":"%s","o
 # (check (e)); reverts_ "" is the empty memory every case gets by default (see case_).
 CLOSED='pulls?state=closed&sort=updated&direction=desc&per_page=100'
 reverts_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; if [ -z "$1" ]; then printf '[]\n'; else printf '[{"merged_at":"%s","head":{"ref":"revert-wf-abcd1234"},"body":"FU-1990 rollback\\n\\nreverted-pins: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; fi >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
+# reverts_exonerated_ <owner/repo@sha …>: the same merged revert-wf-* PR, but its body also carries the
+# `exonerated-pins:` line the chain writes when the revert's own post-merge run failed too (homelab#1985).
+reverts_exonerated_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-wf-abcd1234"},"body":"FU-1990 rollback\\n\\nreverted-pins: %s\\n\\nexonerated-pins: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 # reverts_img_ <image ref …>: the closed-PR list with ONE merged revert-img-* PR naming those
 # image refs (check (f), the tofu-image-revert chain's memory).
 # reverts_prov_ <name@version …>: ONE merged revert-prov-* PR naming those provider versions
@@ -156,6 +159,11 @@ case_ clean-pair-bump ok \
 # repo names NEW as a reverted pin (the FU-1990 chain rolled it back) …
 case_ reverted-pin-refused 'is a REVERTED pin' \
   "ref_ actions/checkout v4.2.2 commit $NEW; reverts_ actions/checkout@$NEW" \
+  "bump .github/workflows/ci.yaml actions/checkout $OLD v4.2.1 $NEW v4.2.2"
+# … but NOT when that revert was exonerated: its body carries `exonerated-pins:` (the chain's control —
+# the revert's own post-merge run of the same workflow failed too), so (e) skips it → OK (homelab#1985).
+case_ reverted-pin-exonerated ok \
+  "ref_ actions/checkout v4.2.2 commit $NEW; reverts_exonerated_ actions/checkout@$NEW" \
   "bump .github/workflows/ci.yaml actions/checkout $OLD v4.2.1 $NEW v4.2.2"
 # … and the memory is fail-closed: an unreadable closed-PR list is a FAIL, never a pass (d)'s rule.
 case_ reverted-memory-unreadable 'cannot read the merged revert-wf-* PRs' \
