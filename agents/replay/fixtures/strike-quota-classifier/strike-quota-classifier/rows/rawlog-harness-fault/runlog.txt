@@ -1,0 +1,6 @@
+[0m
+> build · mimo-v2.6-flash
+[0m
+[93m[1m! [0mpermission requested: external_directory (/tmp/*); auto-rejecting
+[0m✗ [0mRead /tmp/fix-recipe.yaml failed
+[91m[1mError: [0mThe user rejected permission to use this specific tool call.

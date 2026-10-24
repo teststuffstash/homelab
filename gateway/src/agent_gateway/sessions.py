@@ -343,7 +343,7 @@ class SessionService:
             self.store.release(dup, self.clock(), reason="superseded")
             log.warning("session: superseded id=%s — the same caller re-admitted %s/%s round %d attempt %d",
                         dup, adm.stack.name, adm.task, adm.round, adm.attempt)
-        struck_models, struck_cells = self._struck(adm)
+        struck_models, struck_cells, struck_harnesses = self._struck(adm)
         capacity_blocked: list[tuple[str, str, float, str]] = []  # (rail, reason, free_at, detail)
         cred_blocked: list[str] = []
         cred_rejected: list[str] = []
@@ -352,7 +352,8 @@ class SessionService:
         # GW-MODEL-TIERS §The rail choice: when the tier names ONE model on two allowed rails, the rail
         # whose twin cell costs less per clean ride walks first, with that twin at its list's head; the
         # role's order stands for everything else (the other rail is still walked when the first yields nothing).
-        choice = self.rail_choice(adm, candidates, struck_models, struck_cells, now)
+        choice = self.rail_choice(adm, [r for r in candidates if self._for_rail(adm, r).harness not in struck_harnesses],
+                                  struck_models, struck_cells, now)
         promoted: dict[str, str] = {}
         answer_choice: dict | None = None
         if choice is not None:
@@ -371,6 +372,14 @@ class SessionService:
                 continue
             if rail in promoted:
                 models = [promoted[rail]] + [m for m in models if m != promoted[rail]]
+            if radm.harness in struck_harnesses:
+                # §Harness-scoped strikes (operator 2026-10-24): the harness this rail would ride is struck for
+                # the task — every cell of the rail is excluded, the walk takes a rail another harness rides.
+                # ⚖ A dual-dialect rail is NOT re-dispatched on another harness: whether its models answer the
+                # other dialect is per model and unrecorded, so the conservative answer is to skip it.
+                exhausted.extend(f"{rail} {m} (harness {radm.harness})" for m in models)
+                log.info("session: rail %s skipped — harness %s is struck for task %s", rail, radm.harness, adm.task)
+                continue
             if self.store.active_count(rail, now) >= rp.max_sessions:
                 capacity_blocked.append((rail, "rail-capacity", now + self.policy.defer_retry_s, f"{rail} at max_sessions"))
                 continue
@@ -639,18 +648,22 @@ class SessionService:
                  reason, retry, adm.stack.name, adm.role.name, adm.task, detail)
         return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": retry})
 
-    def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str, str]]]:
+    def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str, str]], set[str]]:
         """This task's counted strikes (GW-SESSIONS-OUTCOME): model-scoped → the model id on every rail;
         cell-scoped → that (rail, model, provider) — provider '' is the model's own cell, a slug one
-        provider's cell on it (GW-RAIL-OPENROUTER)."""
+        provider's cell on it (GW-RAIL-OPENROUTER); harness-scoped → the harness on every cell."""
         models: set[str] = set()
         cells: set[tuple[str, str, str]] = set()
+        harnesses: set[str] = set()
         for st in self.store.strikes_for(adm.stack.name, adm.task):
             if st["scope"] == "model":
                 models.add(st["model"])
+            elif st["scope"] == "harness":
+                if st["harness"]:
+                    harnesses.add(st["harness"])
             else:
                 cells.add((st["rail"], st["model"], st["provider"] or ""))
-        return models, cells
+        return models, cells, harnesses
 
     def _dispatch(self, adm: Admission, rail: str, model: str, now: float, choice: dict | None = None) -> JSONResponse:
         sid = uuid.uuid4().hex

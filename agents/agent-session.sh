@@ -3395,6 +3395,22 @@ if [ -n "$RUN_CMD" ]; then
   case "$TASK" in issue-*|pr-*) STRIKE_APPLIES=1;; *) STRIKE_APPLIES="";; esac
   if [ -n "$STRIKE_APPLIES" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
     # >>>REPLAY:strike-classifier>>>
+    # FU-270 / homelab#2867 (operator ruling 2026-10-24) — the `harness-fault` signature: opencode's
+    # headless `run` auto-rejected a permission it would otherwise ask for and the tool call died on
+    # it, before the ride did any work (homelab#2869: the grant was dead on opencode 1.19.0). Verbatim
+    # from #2867's AGENT_STRIKE log tails / #2869's body:
+    #   ! permission requested: external_directory (/tmp/*); auto-rejecting
+    #   Error: The user rejected permission to use this specific tool call.
+    # Matched as the PAIR, each line at column 0 (opencode's ANSI colour codes allowed), and only on
+    # an opencode ride — a quoted copy in content an agent reads (an issue body, this comment) is
+    # indented or prefixed, never both lines at column 0 (the homelab#1705 content-echo class).
+    harness_fault_sig() {
+      local esc ansi
+      esc="$(printf '\033')"; ansi="(${esc}\[[0-9;]*m)*"
+      [ "${HARNESS:-}" = "opencode" ] || return 1
+      grep -qE "^${ansi}! ${ansi}permission requested: .*; auto-rejecting" "$1" 2>/dev/null \
+        && grep -qE "^${ansi}Error: ${ansi}The user rejected permission to use this specific tool call" "$1" 2>/dev/null
+    }
     if [ -n "$STATS" ]; then
       # >>>REPLAY:strike-stats-classifier>>>
       # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
@@ -3415,6 +3431,11 @@ if [ -n "$RUN_CMD" ]; then
         2>/dev/null || echo unknown)"
       if [ "$ERR_CLASS" = "unknown" ] && grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG" 2>/dev/null; then
         ERR_CLASS="harness-death"
+      fi
+      # FU-270 / homelab#2867 (operator ruling 2026-10-24): the harness auto-rejected its own permission —
+      # a fault of the harness, not a verdict on the model (gateway class `harness-fault`, scope harness).
+      if [ "$ERR_CLASS" = "unknown" ] && harness_fault_sig "$RUNLOG"; then
+        ERR_CLASS="harness-fault"
       fi
       # homelab#866: provider-5xx error signature (harness-side UnknownError from the model API).
       # Zero cost, sub-30s duration, no new artifact — a startup death like config-invalid.
@@ -3437,6 +3458,9 @@ if [ -n "$RUN_CMD" ]; then
       # with this signature is a harness-startup death — should never be classified "clean".
       elif grep -qiE 'Configuration is invalid|Unrecognized key' "$RUNLOG"; then
         ERR_CLASS="harness-death"
+      # FU-270 / homelab#2867: the harness auto-rejected its own permission (harness_fault_sig below).
+      elif harness_fault_sig "$RUNLOG"; then
+        ERR_CLASS="harness-fault"
       # homelab#1705: `-32602` is goose's MCP JSON-RPC code — only a goose ride can die of it, and
       # only in its real shape (`-32602: <msg>` / `"code": -32602`), never the class NAME echoed
       # in content (an issue body, docs, router tests, the ride's own report). Mirrors
@@ -3497,7 +3521,7 @@ if [ -n "$RUN_CMD" ]; then
     EMIT_STRIKE=""
     EMIT_KEY_RETRY=""
     case "$ERR_CLASS" in
-      harness-death|auth-storm|timeout|quota|budget-403-account|http-403-other|turn-cap) EMIT_STRIKE=1;;
+      harness-death|harness-fault|auth-storm|timeout|quota|budget-403-account|http-403-other|turn-cap) EMIT_STRIKE=1;;
       budget-403-key|budget-exhausted-key) EMIT_KEY_RETRY=1;;
       budget-403) ;;  # residual — estimator/cap problem → escalate (neither strike nor key-retry)
     esac
@@ -3537,8 +3561,9 @@ if [ -n "$RUN_CMD" ]; then
     # cut streams — its own transport strikes); THIS launcher classifies its own ride and reports it
     # BEFORE the DELETE, in the gateway's one vocabulary:
     #   • a TASKED ride (issue-*/pr-*) that struck → the strike's class when it is a vocabulary
-    #     member (quota → harness-gave-up: the harness gave up on a limited upstream; anything else
-    #     → unknown); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
+    #     member (quota → harness-gave-up: the harness gave up on a limited upstream; harness-fault →
+    #     itself, a harness-scoped strike: the walk moves to another harness, not another model;
+    #     anything else → unknown); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
     #     strike — rounds are the scan's);
     #   • an AD-HOC ride → clean when agent-finalize's stats line says `exit_status: clean` or its pod
     #     Succeeded, else NOTHING: its task key is shared by every ad-hoc ride, and a strike there would
@@ -3559,7 +3584,7 @@ if [ -n "$RUN_CMD" ]; then
             | if ((.exit_status // "") == "failed" or (.exit_status // "") == "ci-failed") then "unknown"
               elif $e == "" then "unknown" else $e end' 2>/dev/null || echo unknown)"
           case "${ERR_CLASS:-unknown}" in
-            harness-death|auth-storm|timeout|provider-5xx|no-pr|unknown|turn-cap|tool-loop) GW_OUTCOME="${ERR_CLASS:-unknown}";;
+            harness-death|harness-fault|auth-storm|timeout|provider-5xx|no-pr|unknown|turn-cap|tool-loop) GW_OUTCOME="${ERR_CLASS:-unknown}";;
             quota) GW_OUTCOME="harness-gave-up";;
             *) GW_OUTCOME="unknown";;
           esac

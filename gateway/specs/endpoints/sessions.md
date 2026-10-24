@@ -131,7 +131,8 @@ an **ordered list** of models, `rails.<rail>.models.<tier>: [id, …]`; a bare s
 one-item list (every policy written before this keeps loading). The walk reads the task's
 **counted strikes** ([GW-SESSIONS-OUTCOME](#gw-sessions-outcome)) and takes, rail by rail, the
 first model of the tier's list that the task has not struck: a cell-scoped strike excludes that
-(rail, model), a model-scoped one excludes the model id on every rail, and a cooled cell
+(rail, model), a model-scoped one excludes the model id on every rail, a harness-scoped one excludes
+every cell the struck harness would ride (§Harness-scoped strikes below), and a cooled cell
 ([§Capacity](#capacity--the-ladders-capacity-half)) is skipped as well. A rail with no admissible
 model is passed over, and the walk moves on to the role's next rail. ⚖ When every candidate cell is
 **struck**, and no rail is held only by time (capacity, latch, window, cooldown — those defer as
@@ -140,6 +141,35 @@ before, because waiting helps there), the answer is `defer` **`cells-exhausted` 
 with the strike list"). ⚖ Model identity is the policy id: the same model on another rail is
 another id, so a model strike on `claude/sonnet` does not exclude `opencode-go/claude-haiku-5-5`
 (a gap row below).
+
+#### Harness-scoped strikes
+
+⚖ Operator ruling 2026-10-24 (FU-270, homelab#2867's round 1): a fault in the **harness** is not a
+verdict on the model. Two of #2867's three strikes were the launcher's dead opencode permission grant
+(opencode 1.19.0 read `mode.autoApprove` as an agent and auto-rejected the recipe read). They would
+have killed any model, yet as `unknown` (model-scoped) the walk moved to the next model, twice, and
+burned a ride each time. A **harness-scoped** strike excludes the struck harness for the task on
+every cell. The walk then takes the first admissible cell that **another** harness speaks (the harness
+follows the cell, homelab#2870). With an **explicit** `harness` that is struck for the task, nothing
+is admissible: the answer is `defer` `cells-exhausted`, because the platform has to fix the
+harness and waiting does not help. A clean outcome on the same harness refutes the strike.
+
+⚖ The harness a rail would ride is the one the walk derives today ([§The harness follows the
+rail](#the-harness-follows-the-rail)), and a rail whose derived harness is struck is passed over
+whole: a dual-dialect rail (`opencode`, `openrouter`) is **not** re-dispatched on another harness of
+its other dialect, because whether each of its models answers that dialect is per model and recorded
+nowhere. With an explicit `harness` that is not struck, the struck harness's own cells stay
+admissible to it: the strike names no model and no cell.
+
+World `policy-codex`, codex headroom fresh at 20 % / 64 %. T = the worker task `homelab-2867-r1`;
+its attempt 1 rode (opencode, `opencode-go/deepseek-v4.1-flash`) on the `opencode` harness.
+
+| description | arrange | body || decision | rail | harness | model | reason |
+|---|---|---||---|---|---|---|---|
+| "a harness strike moves the walk to a cell another harness speaks ⚖" | `harness-fault` on harness opencode | worker, T, `attempt: 2` || dispatch | codex | codex | codex/fixture-model | — |
+| "a harness strike excludes no model" | `harness-fault` on harness opencode | worker, T, `harness: goose`, `attempt: 2` || dispatch | opencode | goose | opencode-go/deepseek-v4.1-flash | — |
+| "an explicit harness that is struck defers ⚖" | `harness-fault` on harness opencode | worker, T, `harness: opencode`, `attempt: 2` || defer (`{decision, reason}` only) | — | — | — | cells-exhausted |
+| "a refuted harness strike excludes nothing" | `harness-fault` on harness opencode (attempt 1), then `clean` on attempt 2's opencode session (tier heavy, admitted before the strike) | worker, T, `attempt: 3` || dispatch | opencode | opencode | opencode-go/deepseek-v4.1-flash | — |
 
 `POST /sessions` carries **`attempt`** (default 1): the consumer's automatic re-admission counter at
 this round. Strikes are keyed by TASK, not by attempt, so the exclusion holds however the attempt is
@@ -1080,8 +1110,9 @@ the consumer's round counter. It is **no class here**, and saying one is 400
 copy (`outcomes.py` `OUTCOME_CLASSES`) is pinned to it by a row. **Scope** is the old router's rule
 ([model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder)): a
 **cell**-scoped (serving-shaped) strike excludes that (rail, model, provider) [cell](../glossary.md#cell) for
-the task; a **model**-scoped one excludes the model on every rail for the task. ⚖ Each new class's
-scope is a judgment, marked.
+the task; a **model**-scoped one excludes the model on every rail for the task; a **harness**-scoped
+one excludes the session's harness on every cell for the task (§Harness-scoped strikes). ⚖ Each new
+class's scope is a judgment, marked.
 
 | class | scope | who writes it | what it means |
 |---|---|---|---|
@@ -1101,20 +1132,23 @@ scope is a judgment, marked.
 | `harness-gave-up` | cell ⚖ | consumer | the harness abandoned after the upstream kept failing (retries exhausted) — a serving shape |
 | `stream-incomplete` | cell ⚖ | **gateway** (a 2xx with `incomplete` = `no-terminal` / `transport-error`) | the stream ended before its terminal event |
 | `refused` | cell ⚖ | **gateway** (403 `upstream-refused`) | the upstream refused this model for this caller (OpenRouter's harness gate) |
+| `harness-fault` | harness ⚖ | consumer | the harness failed on its own machinery and would fail the same way on any model: a config it did not honour, a permission it auto-rejected, a crash before its first model call (homelab#2867's dead opencode grant) |
 
 ### The store
 
-A strike is a row keyed **(stack, task, rail, model, provider)** with its class, scope and
+A strike is a row keyed **(stack, task, rail, model, provider, harness)** with its class, scope and
 **source** (`outcome` = the consumer, `gateway` = a transport fact); `provider` is the serving
 provider's slug on the openrouter rail ([GW-RAIL-OPENROUTER §Attribution](openai-chat.md#attribution--the-answer-names-the-cell)),
 `''` where none was named — a cell-scoped class lands on the provider(s) the ride rode, a
-model-scoped one carries none. ⚖ At most one per
+model-scoped one carries none. `harness` is the session's harness, written on every strike. Only a
+harness-scoped strike is matched on it. ⚖ At most one per
 (session, class, source, provider): nine 502s on one ride are one `provider-5xx`, not nine — and a
 failed-over ride strikes each provider it tried, one per cell. ⚖ A 429 writes
 **no** strike: the cell cooldown is that fact's whole answer, and a rate limit says nothing about
 this task. ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
 consumer's to say. **A clean outcome refutes** the task's counted strikes on the same cell
-(cell-scoped) and the same model (model-scoped): they stay as history, with `refuted_at` set.
+(cell-scoped), the same model (model-scoped) and the same harness (harness-scoped): they stay as
+history, with `refuted_at` set.
 **A bare 2xx refutes nothing**: a provider serving badly behind HTTP 200 is exactly what a strike
 routes around (the old router's refutation rule). ⚖ A clean outcome refutes cell strikes only on
 the cells the ride rode CLEAN (the providers that served it a 2xx, and the model's own cell): a
@@ -1166,6 +1200,7 @@ World `policy-default`.
 |---|---||---|---|
 | "a model-scoped class strikes the model" | report `no-verdict` || `{opencode, opencode-go/deepseek-v4.1-flash, no-verdict, model, outcome}` | `{class="no-verdict",source="outcome"}` 1 |
 | "a serving-scoped class strikes the cell" | report `harness-gave-up` || `{…, harness-gave-up, cell, outcome}` | `{class="harness-gave-up",source="outcome"}` 1 |
+| "a harness-scoped class strikes the harness" | report `harness-fault` || `{…, harness-fault, harness, outcome}` with harness `opencode` | `{class="harness-fault",source="outcome"}` 1 |
 | "the gateway writes its own transport class" | the session's request answered `upstream-401` || `{…, auth-storm, cell, gateway}` | `{class="auth-storm",source="gateway"}` 1 |
 | "one transport strike per session and class ⚖" | three `upstream-500` answers on one session || one `provider-5xx` | `{class="provider-5xx",source="gateway"}` 1 |
 | "a 429 is a cooldown, not a strike ⚖" | the session's request answered `upstream-429` || none | — |

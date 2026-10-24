@@ -12,3 +12,4 @@ adhoc-succeeded        |       |       |                         | adhoc-succeed
 adhoc-failed           |       |       |                         | adhoc-failed         |
 report-fails           |       |       |                         | report-fails         |
 adhoc-stats-clean      |       |       |                         | adhoc-succeeded      |
+harness-fault          |       |       |                         | harness-fault        |
