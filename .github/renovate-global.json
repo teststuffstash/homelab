@@ -37,9 +37,9 @@
 
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "description": "Security fixes are the exception to the cooldown — get them in fast (CI still gates). `automerge` label → the renovate-approve reflex approves; auto-merged so exposure is minimal. A security fix that is ALSO a major keeps the `major` label from the catch-all rule (this block cannot filter by update type): the reflex refuses `major` and the un-armed major rides the coordinator's lane — the cooldown exception still applies.",
+    "description": "Security fixes are the exception to the cooldown — get them in fast (CI still gates). `automerge` label → the renovate-approve reflex approves; auto-merged so exposure is minimal. A security fix that is ALSO a major keeps the `major` label from the catch-all rule (this block cannot filter by update type): the reflex refuses `major` and the un-armed major rides the coordinator's lane — the cooldown exception still applies. `labels` REPLACES the global label set here, so `dependencies` is listed explicitly — renovate-approve.reusable.yml gates on automerge AND dependencies, and without it the first security PR (circles#134, 2026-10-22) sat un-approved; `security` is in the AgentStack label taxonomy (composition.yaml) or label-sync deletes it.",
     "minimumReleaseAge": null,
-    "labels": ["security", "automerge"],
+    "labels": ["security", "automerge", "dependencies"],
     "addLabels": ["automerge"],
     "automerge": true
   },

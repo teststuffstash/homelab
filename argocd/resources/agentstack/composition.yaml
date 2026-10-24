@@ -118,7 +118,8 @@ spec:
                   (dict "name" "direction-change" "color" "b60205" "description" "Human reversed direction — sweep (re-scope/close+delete-branch) before any dispatch (C10)")
                   (dict "name" "dependencies" "color" "ededed" "description" "Dependency bump (Renovate)")
                   (dict "name" "automerge" "color" "ededed" "description" "Mechanical dep lane: CI-only approval, no LLM review")
-                  (dict "name" "deps-review" "color" "ededed" "description" "Reviewable dep lane: armed + LLM-reviewed (FU-046)") }}
+                  (dict "name" "deps-review" "color" "ededed" "description" "Reviewable dep lane: armed + LLM-reviewed (FU-046)")
+                  (dict "name" "security" "color" "ededed" "description" "Renovate vulnerability fix (vulnerabilityAlerts) — the cooldown-exempt fast lane") }}
             ---
             # FU-080 loop-home: the stack's <stack>-agents namespace — where the per-stack
             # coordinator/reviewer will run, OUT of the project namespaces (the airlock's real
