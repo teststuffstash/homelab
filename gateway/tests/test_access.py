@@ -54,9 +54,11 @@ async def test_role_rail(gw, policy, role, rail, allowed):
     with given(f"policy-default role {role} allows rails {sorted(ALLOWED[role])}"):
         attach_json(f"policy role {role} rails", sorted(policy.roles[role].rails))
         assert set(policy.roles[role].rails) == ALLOWED[role], "the table must mirror policy-default.json"
-    # harness claude speaks the anthropic dialect, which every rail serves — so the verdict is the role's alone
-    with when(f"POST /sessions role {role}, rail {rail}, harness claude"):
-        r = await gw.post("/sessions", json={"stack": "platform", "role": role, "task": "t", "rail": rail, "harness": "claude"})
+    # no explicit harness: every rail's tier list holds a cell the walk can name a harness for
+    # (a Go cell's dialect is its model's — GW-SESSIONS-ADMIT §The harness follows the cell), so
+    # the verdict here is the role's rail membership alone
+    with when(f"POST /sessions role {role}, rail {rail} (the role's harness)"):
+        r = await gw.post("/sessions", json={"stack": "platform", "role": role, "task": "t", "rail": rail})
     then_eq("status", r.status_code, 200)
     doc = r.json()
     if allowed:

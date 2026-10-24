@@ -68,10 +68,11 @@ pytestmark = rule("GW-SESSIONS-ADMIT")
 
 async def _ride(gw, upstreams, clock, *, rail: str, role: str, behaviour: str, stack: str = "platform",
                 reset_in: int | None = None, retry_after: str | None = None, doc=None, task: str | None = None):
-    """Arrange through the data plane: one claude-harness ride on `rail` answered by the fake as stated."""
+    """Arrange through the data plane: one ride on `rail` (the role's harness, from the picked
+    cell) answered by the fake as stated — the request rides the anthropic dialect either way."""
     if doc is None:
         with quiet():
-            doc = await open_session(gw, stack=stack, role=role, rail=rail, harness="claude", task=task or f"arrange-{rail}-{role}-{stack}")
+            doc = await open_session(gw, stack=stack, role=role, rail=rail, task=task or f"arrange-{rail}-{role}-{stack}")
     up = upstreams[rail]
     up.behaviour = behaviour
     up.reset_ms = int((clock.t + reset_in) * 1000) if reset_in is not None else None
