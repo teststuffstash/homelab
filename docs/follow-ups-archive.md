@@ -10,6 +10,31 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-152** *(archived 2026-10-24)* — **One version file for the agent-coordinator image.** agent-coordinator#27
+  (10-15, deploy-pin sweeps the Composition + gc-mirrors) + homelab#2593 (equality check in `manifest-lint.sh`, closes
+  #2566); first bump PR #2751 (10-20) moved kustomization + images.env + all 5 Composition literals + gc-mirrors
+  together, CI green; live: every per-stack CronWorkflow runs `2026.10.20-g950b7f0b8201`.
+- **FU-202** *(archived 2026-10-24)* — **Key-class failure struck the MODEL.** Built #1253 (09-02); organic proof
+  homelab#2181 10-06: `KEY-RETRY: … error_class=budget-exhausted-key` → same round re-dispatched with a fresh
+  per-session key on the salvaged branch → PR#2309, merged.
+- **FU-281** *(archived 2026-10-24)* — **Goal-checkpoint trigger side woke on nothing.** Holds (b) #2574 + (c) #2594
+  (10-15). `goal-checkpoint` wakes: 37 in the 9 d before → 1 in the 8.7 d after (a real new member, #2601), while the
+  other clauses kept firing.
+- **FU-131** *(archived 2026-10-24)* — **Cost-ledger accuracy: DONE.** Harvest backoff + `openrouter_generation_harvest_total`;
+  the T+1 sweep dropped (10-14) for the belt `OpenRouterGenerationHarvestMissing` (PR#2575, homelab#2564 closed), which
+  fired on day one of the 10-15 upstream `/generation` 404 outage. agent-runtime#173 fixed by agent-runtime PR#175
+  (a standing-key ride publishes no `cost_usd`; in agent-base 2026.10.23). Live 7 d: missed 0, stored 77.
+- **FU-210** *(archived 2026-10-24)* — **Responder transcripts: acceptance MET.** PR#1749 capture + the ADR-148 `now`
+  lane: `homelab/alert-e9dd1b29d198f98d/responder-r1-20261020T073953Z/` holds a report-only triage (verdict `none`)
+  whose `triage.log` is a readable decision (Verified/Assumed/Fix surface/Next step) beside its `finding.json`.
+  Mechanism: observability-and-retro.md §A1.
+- **FU-204** *(archived 2026-10-24)* — **C4/C5 bare-mention exclusion (silent-stall limbo, fleet#345).** Shipped
+  homelab#2562 → PR#2582 (df4a6105, 2026-10-15): `C4C5_SEL`'s open-PR test, the IL-T27 belt and the c4c5-derivations
+  report read `STRONG_LINK_JQ` (the #1720 precedent); replay family `c4c5-open-pr-link` reds on the bare-mention base.
+- **FU-051** *(archived 2026-10-24)* — **Dep bump flows E2E for every shape.** Last leg (openrouter-operator) PROVEN
+  2026-10-13: Renovate #90 (python:3.15-slim) → deploy build failed (`uv sync`, aiohttp has no cp315 wheel) → fix #93 →
+  homelab#2529 deploy PR bot-reviewed + bot-merged in 6 min. Gotcha: a base-image major can need a human dep
+  fix-forward; the pipe itself held.
 - **FU-198** *(archived 2026-10-15)* — **Argo lock-plane wedge: the retry backoff no longer holds a subscription slot.**
   Belt `ArgoLockPlaneWedged` (PR#1722) + upstream leak fixes (v4.1.4, 10-05) stood; the 10-09 five-slot
   wedge was retry backoff holding the semaphore. Ruled 10-14 (retry on a wrapper, lock on the leaf) →
@@ -239,31 +264,4 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   the same morning — scoped plan read first (exactly one resource), applied, `tofu/kubeconfig` and
   the box's copy now `https://192.168.2.50:6443`, 13 nodes Ready through it, full plan clean.
   Mechanism and the recipe: [`controlplane-ha.md`](controlplane-ha.md) §CP8.
-
-- **FU-233** *(archived 2026-09-18)* — **Codeowner-gate trial week (ADR-128): re-read done, ruled.**
-  Measurement: [`spikes/codeowner-catches.md`](spikes/codeowner-catches.md) §Re-read — 6
-  freed-path-only machine PRs, 0 human touches, one real cost (worker PR#1700 archived FU-213 on a
-  premise refuted 3 days later → FU-251). **Ruling (operator): leave the trial state AS IS and let
-  it run** — the freed tier-2 paths are low-change and the management box moves them on its own once
-  commit == rollout (FU-237/ADR-131). The residue landed with the ruling: the rubric's single-writer
-  verb now blocks ANY worker write to the tracker, not only an append.
-
-- **FU-206** *(archived 2026-09-17)* — **Operational paths are non-public on every PublicRoute
-  (ADR-123).** Built after an oracle handoff showed Googlebot walking `mcp.minutark.ee` (a 404
-  `robots.txt` = crawl everything) with `/metrics` answering 8.8 KB of Prometheus exposition —
-  the risk moved from "readable" to "on course to be indexed". TWO legs, because the dry-run
-  through cf-api-proxy turned up two facts ADR-123 did not have (cloudflare.md gotcha 8): a zone
-  admits ONE ruleset per phase (20217 — observed live at last), so the edge rule can only serve
-  the single claim per zone owning `http_request_firewall_custom`; and `block` + a custom
-  response is not entitled in that phase on Free, so the body is Cloudflare's block page, not
-  ADR-123's structured JSON. Leg 1 = the claim's own tunnel config refuses
-  `^/(metrics|healthz)(/|$)` at the connector — per-claim, so it carries the default on EVERY
-  claim and zone. Leg 2 = one more `block` rule, first in the api claim's custom-phase ruleset,
-  keeping the traffic off the home connection. Opt-in: `.spec.operationalPaths.public`. Same
-  change fixed a latent defect the probe exposed — #1304's CORS preflight rule carried the same
-  illegal custom response and would have failed at apply for the first claim setting
-  `.spec.origins`. Verified live on `mcp.minutark.ee`: `/metrics`, `/healthz` + subpaths → 403,
-  `/metricsx` → origin 404, `/` → 405, in-cluster `/metrics` → 200. ADR-123 amended; the edge leg
-  goes profile-agnostic with FU-039's zone-phase aggregation. Detail: `docs/cloudflare.md`
-  §PublicRoute.
 

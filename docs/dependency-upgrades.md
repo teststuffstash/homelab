@@ -11,7 +11,7 @@ operator chart, pod image) are `ROADMAP.md` → *Programs in flight* → "Deploy
 surfaces homelab doesn't reconcile at all are ADR-152, same section.
 
 The ledger rule this feeds: [`management-box.md`](management-box.md) §The capability ledger
-(FU-097, archived 2026-10-03 — generalized to dependency classes 2026-09-27). **Tracked by:** FU-051 (the app-side sibling), FU-016 (SLSA signing/SBOM); FU-046 (reviewable dep
+(FU-097, archived 2026-10-03 — generalized to dependency classes 2026-09-27). **Tracked by:** FU-016 (SLSA signing/SBOM); FU-051 (the app-side sibling, archived 2026-10-24), FU-046 (reviewable dep
 bumps, archived 2026-10-12) and FU-151 (the `-iac` producers' `automerge` label) are done. ADR-084
 (deploy shape), ADR-093 (Argo as the orchestration engine), ADR-088/089 (the invariants a bump
 must not break), ADR-141 (blast class picks the lane). The §Ground truth finding was FU-125
