@@ -1,0 +1,66 @@
+# Argo Rollouts — ONLY as Kargo's verification engine (AnalysisTemplate/AnalysisRun; kargo.yaml).
+# No Rollout objects, no dashboard, no notifications, no traffic-router/metric/step plugins.
+#
+# Proven in kind first (homelab#2798; tests/kind-kargo/e2e.sh renders THESE values via yq).
+#
+# Hardening vs the chart default: NAMESPACED install into the Kargo project namespace
+# (`clusterInstall: false` → the controller runs with `--namespaced` and a Role, not the default
+# ClusterRole, which grants cluster-wide secrets read, deployments update, services create/delete
+# and jobs create). Kargo creates AnalysisRuns in the PROJECT namespace (oracle-kargo), so a
+# controller watching only that namespace is all verification needs. A second Kargo project
+# would need its own release (or a return to clusterInstall). The CRDs are still cluster-scoped.
+#
+# Wave 0 (kargo is wave 1): the Rollouts CRDs must exist BEFORE Kargo starts — Kargo probes for
+# them once at startup and silently disables the integration if they are absent. The parent's
+# waves only order Application CREATION (no Application health check in argocd-cm), so this is a
+# head start, not a gate — kargo.yaml §ORDERING and the apply plan cover the first-install race.
+# oracle-kargo itself is pre-created at wave -1 (oracle-namespaces.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-rollouts
+    targetRevision: 2.43.8
+    helm:
+      valuesObject:
+        installCRDs: true
+        keepCRDs: true
+        clusterInstall: false
+        createClusterAggregateRoles: false
+        providerRBAC:
+          enabled: false
+        dashboard:
+          enabled: false
+        notifications:
+          configmap:
+            create: false
+          secret:
+            create: false
+        controller:
+          replicas: 1
+          # FU-082 shape: requests + memory limits, nothing BestEffort.
+          resources:
+            requests: { cpu: "10m", memory: "64Mi" }
+            limits: { memory: "256Mi" }
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: oracle-kargo
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

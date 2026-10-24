@@ -1,0 +1,61 @@
+# The tenant-shaped half: what oracle would declare inside the platform-created Project.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: ProjectConfig
+metadata: { name: oracle-kargo, namespace: oracle-kargo }
+spec:
+  promotionPolicies:
+    - stageSelector: { name: smoke }
+      autoPromotionEnabled: true
+    - stageSelector: { name: ingester }
+      autoPromotionEnabled: true
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata: { name: podinfo, namespace: oracle-kargo }
+spec:
+  interval: 5m0s
+  subscriptions:
+    - image:
+        repoURL: ghcr.io/stefanprodan/podinfo
+        constraint: ^6.0.0
+        discoveryLimit: 3
+---
+# Verification-only Stage: an http step against the stub, then the AnalysisTemplate.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata: { name: smoke, namespace: oracle-kargo }
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: podinfo }
+      sources: { direct: true }
+  promotionTemplate:
+    spec:
+      steps:
+        - uses: http
+          config:
+            method: GET
+            url: http://analysis-stub.oracle-kargo.svc.cluster.local:5678/
+            successExpression: response.status == 200
+  verification:
+    analysisTemplates:
+      - name: smoke
+---
+# The real promotion path: argocd-update on the named Application (argocd-role.yaml).
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata: { name: ingester, namespace: oracle-kargo }
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: podinfo }
+      sources: { direct: true }
+  promotionTemplate:
+    spec:
+      steps:
+        - uses: argocd-update
+          config:
+            apps:
+              - name: oracle-fleet-ingester
+                namespace: argocd
+  verification:
+    analysisTemplates:
+      - name: smoke

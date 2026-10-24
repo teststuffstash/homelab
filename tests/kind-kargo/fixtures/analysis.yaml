@@ -1,0 +1,54 @@
+# In-cluster stub the web metric (and the smoke Stage's http step) reads, + the AnalysisTemplate
+# Kargo verification references. Lives in the Project namespace, where the namespaced Rollouts
+# controller (argocd/platform/argo-rollouts.yaml) runs AnalysisRuns and their Jobs.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: analysis-stub, namespace: oracle-kargo }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: analysis-stub } }
+  template:
+    metadata: { labels: { app: analysis-stub } }
+    spec:
+      containers:
+        - name: echo
+          image: docker.io/hashicorp/http-echo:1.0
+          args: ["-listen=:5678", '-text={"ok":true}']
+          ports: [{ containerPort: 5678 }]
+          resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { memory: 32Mi } }
+          securityContext: { allowPrivilegeEscalation: false, runAsNonRoot: true, runAsUser: 65534, capabilities: { drop: [ALL] }, seccompProfile: { type: RuntimeDefault } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: analysis-stub, namespace: oracle-kargo }
+spec:
+  selector: { app: analysis-stub }
+  ports: [{ port: 5678, targetPort: 5678 }]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata: { name: smoke, namespace: oracle-kargo }
+spec:
+  metrics:
+    - name: web
+      count: 1
+      successCondition: result == true
+      provider:
+        web:
+          url: http://analysis-stub.oracle-kargo.svc.cluster.local:5678/
+          jsonPath: "{$.ok}"
+    - name: job
+      count: 1
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: check
+                    image: docker.io/library/busybox:1.36
+                    command: [sh, -c, "wget -qO- http://analysis-stub.oracle-kargo.svc.cluster.local:5678/ | grep -q '\"ok\":true'"]
+                    resources: { requests: { cpu: 5m, memory: 8Mi }, limits: { memory: 32Mi } }
+                    securityContext: { allowPrivilegeEscalation: false, runAsNonRoot: true, runAsUser: 65534, capabilities: { drop: [ALL] }, seccompProfile: { type: RuntimeDefault } }

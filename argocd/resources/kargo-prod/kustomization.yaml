@@ -1,0 +1,10 @@
+# Prod-only half of the Kargo install (argocd/platform/kargo.yaml, its THIRD source): the objects the
+# kind e2e (tests/kind-kargo/) has no CRDs or backends for — ESO and Gateway API. Same sync as the
+# chart, in-app wave 0 (kargo.yaml §ORDERING).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - kargo-api.yaml
+  - git-token.yaml
+  - referencegrant.yaml

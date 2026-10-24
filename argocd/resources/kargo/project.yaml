@@ -1,0 +1,12 @@
+# The oracle Kargo Project — PLATFORM-created, like the `oracle` AppProject (oracle-project.yaml):
+# the tenant declares Warehouses/Stages inside it, never the Project itself. Its namespace is
+# pre-created (oracle-namespaces.yaml) with the project label, so Kargo adopts it instead of
+# creating one.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: oracle-kargo
+  annotations:
+    # In-app wave 1 (argocd/platform/kargo.yaml §ORDERING): Kargo's Project webhook (Fail policy)
+    # must be Ready, i.e. the chart's wave 0 Healthy, before this create can pass admission.
+    argocd.argoproj.io/sync-wave: "1"

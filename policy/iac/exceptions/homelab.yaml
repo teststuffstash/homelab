@@ -29,10 +29,12 @@ spec:
             - cf-api-proxy
             - circles
             - circles-iac
+            - dummy-apps # tests/kind-kargo/fixtures/apps.yaml — the kind e2e's target namespace, never synced to prod
             - homelab
             - node-maintenance
             - oracle-fleet
             - oracle-iac
+            - oracle-kargo # the Kargo Project namespace (argocd/platform/kargo.yaml) — platform-precreated so the kargo SAs hold no namespace create
             - secrets-demo
             - sleep-iac
             - sleep-tracking
@@ -55,6 +57,14 @@ spec:
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview
             - pg-backup
+            # Kargo (argocd/resources/kargo/rbac-cluster.yaml): the hand-written cluster grants that
+            # REPLACE the chart's ClusterRoleBindings (kargo.yaml) — reads + per-Project writes,
+            # admission-guarded by kargo-write-guard.
+            - platform-kargo-api
+            - platform-kargo-controller
+            - platform-kargo-garbage-collector
+            - platform-kargo-management-controller
+            - platform-kargo-webhooks-server
       - resources:
           kinds:
             - ClusterRoleBinding
@@ -65,18 +75,30 @@ spec:
             - agentstack-loop-read-infra
             - alloy-logs-reader
             - eso-retro-git-reader-ssrr
+            - eso-kargo-git-reader-ssrr # kargo git-token mirror (argocd/resources/kargo-prod/git-token.yaml) → the eso-transcripts-reader-ssrr role
             - eso-transcripts-reader-ssrr
             - kps-lease-crds # ADR-150 (see the ClusterRole above)
             - loki-rbac-proxy-authn
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview
             - pg-backup
+            - platform-kargo-api # Kargo (see the ClusterRoles above)
+            - platform-kargo-controller
+            - platform-kargo-garbage-collector
+            - platform-kargo-management-controller
+            - platform-kargo-webhooks-server
       - resources:
           kinds:
             - MutatingAdmissionPolicy
             - MutatingAdmissionPolicyBinding
           names:
             - pg-backup-default # ADR-147: CNPG Clusters wired to their namespace's backup store
+      - resources:
+          kinds:
+            - ValidatingAdmissionPolicy
+            - ValidatingAdmissionPolicyBinding
+          names:
+            - kargo-write-guard # argocd/resources/kargo/admission-policy.yaml: the belt over every kargo-SA write
       - resources:
           kinds:
             - PriorityClass

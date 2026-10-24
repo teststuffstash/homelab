@@ -1,0 +1,15 @@
+# The platform half of the hardened Kargo install (argocd/platform/kargo.yaml): the RBAC that
+# replaces the chart's ClusterRoleBindings, the ArgoCD Role, the oracle Project, the write-guard
+# admission policy and its alert. Synced as the kargo Application's SECOND source (same sync as
+# the chart — kargo.yaml §ORDERING); proven by tests/kind-kargo/e2e.sh, which applies exactly this
+# kustomization. Prod-only objects (ESO, Gateway API) live in ../kargo-prod/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - rbac-cluster.yaml
+  - rbac-namespaced.yaml
+  - argocd-role.yaml
+  - admission-policy.yaml
+  - project.yaml
+  - prometheusrule.yaml

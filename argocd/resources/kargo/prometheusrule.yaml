@@ -1,0 +1,37 @@
+# KargoWriteDenied — the kargo-write-guard admission policy (admission-policy.yaml) refused, or (in
+# its [Warn, Audit] rollout phase) WOULD have refused, a write by a kargo ServiceAccount. Either
+# Kargo grew a write the hardened install did not foresee (an upgrade — read the audit annotation /
+# API warning and widen the policy deliberately), or something is driving the Kargo SAs at objects
+# they must not touch. Fixture pair: kargo-write-denied.promtool-{rules,test}.
+#
+# enforcement_action is "deny" under a Deny binding and "warn"/"audit" (one increment EACH) under
+# [Warn, Audit] — matching deny|warn counts every violation exactly once in either phase. A rule on
+# "deny" alone stays silent for the whole Warn soak (measured in the kind proof, tests/kind-kargo/).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kargo-admission
+  namespace: monitoring
+  labels:
+    app: kargo
+spec:
+  groups:
+    - name: kargo-admission
+      rules:
+        - alert: KargoWriteDenied
+          expr: |
+            sum by (policy, enforcement_action) (
+              increase(apiserver_validating_admission_policy_check_total{policy=~"kargo.*", enforcement_action=~"deny|warn"}[10m])
+            ) > 0
+          labels:
+            severity: warning
+            # triage: an upgrade-shaped gap (widen deliberately) or misuse of the kargo SAs — both
+            # want a look at the apiserver audit annotation before anyone loosens the policy
+            triage: dig
+          annotations:
+            summary: "Kargo write {{ $labels.enforcement_action }} by admission policy {{ $labels.policy }}"
+            description: >-
+              A kargo ServiceAccount attempted a write the {{ $labels.policy }} admission policy forbids
+              ({{ $labels.enforcement_action }}). Find the request in the apiserver audit log
+              (annotation validation.policy.admission.k8s.io/validation_failure) before changing the
+              policy — see argocd/resources/kargo/admission-policy.yaml.

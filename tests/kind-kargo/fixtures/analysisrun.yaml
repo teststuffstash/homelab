@@ -1,0 +1,13 @@
+# A direct AnalysisRun (no Kargo) — proves the namespaced Rollouts controller on its own.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisRun
+metadata: { name: direct-smoke, namespace: oracle-kargo }
+spec:
+  metrics:
+    - name: web
+      count: 1
+      successCondition: result == true
+      provider:
+        web:
+          url: http://analysis-stub.oracle-kargo.svc.cluster.local:5678/
+          jsonPath: "{$.ok}"
