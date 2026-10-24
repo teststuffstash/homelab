@@ -14607,3 +14607,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
   vs CP role → 16 GB box; FU-289 VM memory re-plan (soak passed); FU-251 archive as superseded by GW-RAIL-OPENCODE (rec.
   yes); FU-095 re-point at the gateway policy (#2845); two-sweep OPERATOR residents (framing likely wrong): FU-280, FU-298,
   FU-310, FU-155, FU-250, FU-005; FU-311's week of data is in (user pool clean 13.5 d — rec. keep + archive).
+
+## 2026-10-24 ~15:00–15:45Z — /docs-cleanup + the sweep's PRs (4-chunk read-only comb; edits in one clone) (seat)
+
+- **#2896 MERGED** (docs-cleanup, 23 files, fact fixes only): tracker-sync (FU-131 → FU-180, FU-097 → ADR-152,
+  FU-007 = outage fallback only), live statuses (codex rail lit, platform claim chainless — live `routerMode:
+  authoritative`, Big Data retired, garage on longhorn-local-xfs), 4 incidents added to the index. 9 judgment calls
+  listed on the PR body.
+- **Live finding by the comb:** wk-metal-04 `intel0` NotReady since 10-20 15:07Z (nvme0 `Identify namespace failed
+  (-5)` every minute, SMART "passed", 0 replicas) — nothing alerted for 4 days → **#2898 MERGED** `LonghornDiskNotReady`
+  (`triage: dig`, 1 h, fixture replays the 10-20 shape); live: pending for intel0 + **wk-02's stale std-tier disk
+  record** (DiskFilesystemChanged since 09-14). Hardware act = operator; the wk-02 record removal = seat, after it fires.
+- **Sweep PRs:** #2897 (REMEDIATION-WOULD `none` lines dropped, malformed kept as `raw`), #2895 (FU-093 alert text),
+  #2899 (FU-286 talosctl `latest` = 1.14.2 — box probe on the new lock owed) — all merged, no review findings.
