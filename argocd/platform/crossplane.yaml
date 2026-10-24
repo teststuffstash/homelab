@@ -21,13 +21,13 @@ metadata:
     # engine. Keyed by the engine image TAG (v<targetRevision>) so Renovate's regex customManager can move
     # it WITH the chart (the `crossplane` group — one PR, both lines; a bare-version key broke the digest
     # lookup, #2228); by hand: `crane digest docker.io/crossplane/crossplane:v<targetRevision>`.
-    crossplane.io/engine-image-digest.v2.4.2: "sha256:cfa88491dca479686747ccd0f0d1888ec8a7d1ee34629f19d45f509d6995148b"
+    crossplane.io/engine-image-digest.v2.4.3: "sha256:1c66261d805a73cade46e2ac94b665c73aebd4a00844de5fcae4bcadaa2be638"
 spec:
   project: default
   source:
     repoURL: https://charts.crossplane.io/stable
     chart: crossplane
-    targetRevision: 2.4.2
+    targetRevision: 2.4.3
   destination:
     server: https://kubernetes.default.svc
     namespace: crossplane-system
