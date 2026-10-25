@@ -27,6 +27,8 @@
 #    terminatedUpstream: true keeps the chart-generated URLs (API_SERVER_BASE_URL, the admin token
 #    issuer) on https://<api.host>. The UI/CLI hostname is the stack's HTTPRoute
 #    (kargo.oracle.teststuff.net, oracle-iac; the ReferenceGrant is in kargo-prod/).
+#  - global.securityContext = Pod Security `restricted` on every Kargo container, and all three
+#    Kargo namespaces carry the PSS labels (chart extraNamespaceLabels + managedNamespaceMetadata).
 #  - The oracle-iac git credential lives in kargo-shared-resources, not the Project namespace
 #    (kargo-prod/git-token.yaml §PLACEMENT): the tenant can deploy any namespaced kind into
 #    oracle-kargo, and a Job there could mount a Secret; the shared namespace is controller-only.
@@ -67,6 +69,29 @@ spec:
       targetRevision: 1.12.4
       helm:
         valuesObject:
+          global:
+            # Pod Security `restricted`, container-level on every component (the chart renders
+            # <component>.securityContext | default global.securityContext beside `resources`).
+            # runAsNonRoot is safe: the v1.12.4 image config is User 65532 (ghcr image config, read
+            # 2026-10-25). Found by scripts/component-check.sh's first run (homelab#2911).
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: { drop: [ALL] }
+              runAsNonRoot: true
+              seccompProfile: { type: RuntimeDefault }
+            # The chart's two resource namespaces carry the platform's PSS posture explicitly
+            # (the oracle-namespaces.yaml convention); the `kargo` namespace itself is ArgoCD's
+            # (CreateNamespace) and gets the same labels via managedNamespaceMetadata below.
+            sharedResources:
+              extraNamespaceLabels:
+                pod-security.kubernetes.io/enforce: baseline
+                pod-security.kubernetes.io/warn: restricted
+                pod-security.kubernetes.io/audit: restricted
+            systemResources:
+              extraNamespaceLabels:
+                pod-security.kubernetes.io/enforce: baseline
+                pod-security.kubernetes.io/warn: restricted
+                pod-security.kubernetes.io/audit: restricted
           crds:
             install: true
             keep: true
@@ -151,6 +176,13 @@ spec:
     namespace: kargo
   syncPolicy:
     automated: { prune: true, selfHeal: true }
+    # The `kargo` namespace is created by ArgoCD (no manifest anywhere) — its PSS posture is pinned
+    # here, the only place it can be.
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: baseline
+        pod-security.kubernetes.io/warn: restricted
+        pod-security.kubernetes.io/audit: restricted
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
