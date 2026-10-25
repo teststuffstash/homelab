@@ -23,11 +23,13 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).
   Python 3.15 wave PARKED org-wide (#2610 / oracle-fleet#883 ruling + `Un-park:` line; circles#124 stack-side): un-park
   when `devbox search python@3.15` resolves the final (rc2 today). Residual list: #1985 comment 6383963515; FU-316.
-- **⚑ DELIVERY LOOP / KARGO (2026-10-24, oracle-fleet docs/delivery-loop.md).** homelab#2902 = Kargo prod install, HELD
-  unarmed for the operator's shape ruling (#2798 stays the kind experiment + the operator-direct workflow). Before merge:
-  sentinel exceptions baseline on master, two Infisical keys (`KARGO_ADMIN_*`), CRD window (FU-304/315), mgmt-tf apply.
-  Open in it: Kargo's cluster-wide Secret list, tenant reach to the git token (no kind whitelist), UI-route TLS. Oracle gaps
-  filed unqueued: oracle-fleet #926–#930, oracle-iac#1140 (held for #918). Residuals: FU-317, FU-318.
+- **⚑ DELIVERY LOOP / KARGO (2026-10-25, oracle-fleet docs/delivery-loop.md).** homelab#2902 = Kargo prod install, HELD
+  unarmed for the operator's read (#2798 stays the kind experiment + the operator-direct workflow). 10-25: two shape
+  questions SETTLED in the branch (git token → `kargo-shared-resources`, controller-only; API plain HTTP :80, no
+  BackendTLSPolicy), the third ACCEPTED (startup cluster-wide `list secrets` → FU-318a; FU-317 detective). Before merge:
+  sentinel exceptions baseline on master (#2403 precedent), two Infisical keys (`KARGO_ADMIN_*`), CRD window (FU-304/315),
+  mgmt-tf apply. Oracle gaps filed unqueued: oracle-fleet #926–#930, oracle-iac#1140 (held for #918 — the operator's
+  spec read, still open). Residuals: FU-317, FU-318. Kind e2e not re-run since (jail has no Docker).
 - **⚑ GATEWAY (FU-270 is the pointer — its Next is the seat's list).** Each 6 h refresh: `devbox run -- bash
   gateway/scripts/canary-entrants.sh --max 3 < /dev/null` → `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers --
   apply` → PR when the lists move (a key NEW to the loader ships AFTER its image, #2812). Watch: the jail's codex REFRESH

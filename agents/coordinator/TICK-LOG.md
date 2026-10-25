@@ -14668,3 +14668,14 @@ updates or reverts as much as possible — mechanical revert or a responder."
   codex never under-resolves, misses by too few calls. WM-2 first try died on the #2904 gateway roll (PROBE-FAIL under
   #934). Headroom 5h 0.06→0.52 (~5 %/mission), 7d 0.10→0.17. Artifacts `s3://agent-transcripts/oracle/probe-seat-codex/`.
 - Residual: agent-base tag in composition.yaml not on agent-runtime's pin flow (workflow file = operator-direct) → meta-state.
+
+## 2026-10-25 ~17:30–18:00Z — Kargo #2902 shape questions settled in-branch (seat; operator: "pick up where the Kargo build went")
+- State re-read from meta-state/GitHub: #2902 OPEN unarmed, CI green on 33e34a0e, BEHIND 12 → merged master in (74308d4a).
+- Verified against Kargo 1.12.4 source + a render with the PR's exact values: credential lookup falls back to
+  `SHARED_RESOURCES_NAMESPACE` (pkg/credentials/kubernetes/database.go), chart binds the controller as reader there
+  (`kargo-controller-shared-resources-reader`), replication into Projects needs `replicate-to: "*"`; `api.tls.enabled: false`
+  → Service appProtocol http :80, one Certificate left (webhooks).
+- **56942f75** on the PR: git token mirror oracle-kargo → kargo-shared-resources (+ ClusterSecretStore condition), API TLS
+  off + terminatedUpstream + api.host, ReferenceGrant/SERVICES.md text. Sentinel smoke on the tree: 0 violations. PR body
+  §Shape questions rewritten (2 settled, 1 accepted). Still HELD: the operator's read + pre-merge steps (meta-state).
+- Open for the operator: the #2902 read; the #918 spec read (steps 1, 4, #919, oracle-iac#1140 wait on it).
