@@ -2,3 +2,9 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: cf-api-proxy
+  labels:
+    # Pinned explicitly (oracle-namespaces.yaml shape): the one nginx-unprivileged proxy pod
+    # passes baseline (live check 2026-10-25); warn/audit restricted report, never block.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
