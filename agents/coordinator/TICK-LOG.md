@@ -14679,3 +14679,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   off + terminatedUpstream + api.host, ReferenceGrant/SERVICES.md text. Sentinel smoke on the tree: 0 violations. PR body
   §Shape questions rewritten (2 settled, 1 accepted). Still HELD: the operator's read + pre-merge steps (meta-state).
 - Open for the operator: the #2902 read; the #918 spec read (steps 1, 4, #919, oracle-iac#1140 wait on it).
+
+## 2026-10-25 ~18:30–20:30Z — component checker built + run on #2902; Kargo findings fixed; two attribution PRs (seat + 2 subagents)
+- Operator: no prose checklist in argocd/README (stale list); mechanize; Kyverno is THE engine (iac-lane L0b); CIS = node-level,
+  not PR-shaped — PSS + kyverno/policies are the workload-shaped standards. **#2911** (subagent) `scripts/component-check.sh`:
+  renders every argocd/platform Application (incl. multi-source) + argocd/resources paths → `kyverno apply policy/component/`
+  (Audit; require-pod-requests-limits + disallow-latest-tag VENDORED @ 879f0814 — library has no tags; local pss-restricted
+  (native podSecurity), require-namespace-pss-labels, disallow-ingress) + SERVICES.md row check; diff-ci gate PUSH_HEAVY;
+  L0b + G3 pointers. master control 45 findings (26 PSS, 13 limits, 5 ns labels, 1 latest, 3 catalog); #2902 tree 52 → delta
+  Kargo-only (5 PSS workloads, 2 chart ns). HELD unarmed (new machinery). Apache-2.0 attribution added (b5c20ade: LICENSE
+  vendored + headers) after the operator's licensing question.
+- **#2912 MERGED** (subagent): Garage vendored chart attribution — AGPL-3.0 (repo license, no chart license), LICENSE-garage-chart,
+  VENDORED.md §License w/ §5(a) modified-work notice, template comments; zero render diff.
+- **#2902 8444efd4** (option 1, operator "fix it all"): global.securityContext restricted (image User 65532 verified via ghcr
+  config), extraNamespaceLabels ×2, managedNamespaceMetadata for ns kargo; re-run 45 = master. Ruling: vendor nouns get NO
+  glossary rows (memory vendor-terms-no-glossary). Still HELD for the read; pre-merge steps unchanged (meta-state).

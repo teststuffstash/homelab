@@ -26,7 +26,10 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ DELIVERY LOOP / KARGO (2026-10-25, oracle-fleet docs/delivery-loop.md).** homelab#2902 = Kargo prod install, HELD
   unarmed for the operator's read (#2798 stays the kind experiment + the operator-direct workflow). 10-25: two shape
   questions SETTLED in the branch (git token → `kargo-shared-resources`, controller-only; API plain HTTP :80, no
-  BackendTLSPolicy), the third ACCEPTED (startup cluster-wide `list secrets` → FU-318a; FU-317 detective). Before merge:
+  BackendTLSPolicy), the third ACCEPTED (startup cluster-wide `list secrets` → FU-318a; FU-317 detective); the
+  component checker's 7 findings FIXED (8444efd4: PSS restricted + namespace labels; 45 = master). **#2911** = the
+  checker (`scripts/component-check.sh`, report-only, kyverno/policies vendored @ SHA), HELD unarmed for the read —
+  arming it brings the reviewer; its Renovate lane needs the operator-direct global config. Before merge:
   sentinel exceptions baseline on master (#2403 precedent), two Infisical keys (`KARGO_ADMIN_*`), CRD window (FU-304/315),
   mgmt-tf apply. Oracle gaps filed unqueued: oracle-fleet #926–#930, oracle-iac#1140 (held for #918 — the operator's
   spec read, still open). Residuals: FU-317, FU-318. Kind e2e not re-run since (jail has no Docker).
