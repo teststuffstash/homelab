@@ -1,0 +1,122 @@
+# component-check exemptions — findings that are CORRECT about the manifest and WRONG about the
+# intent: node agents that must be privileged / hostPath / host-namespaced, and chart-rendered
+# aggregation roles. Passed to `kyverno apply --exceptions` by scripts/component-check.sh; the
+# report counts every row an exemption removes under "Exempted (by design)" (the checker runs the
+# evaluation with and without this file), so the number is honest, not hidden.
+#
+# ONLY controls the manifest actually needs are listed — a control the workload could meet but does
+# not (seccompProfile, allowPrivilegeEscalation on a non-privileged container, sa-automount,
+# readOnlyRootFilesystem, probes, requests/limits, secret-role-verbs, agent-coordinator's wildcard
+# role) stays a finding for a human to read. New entry = operator-owned (/policy/ is tier-3).
+#
+# Helm test-hook pods (`helm.sh/hook: test`) need no entry here: the checker drops them before
+# evaluation (ArgoCD ignores test hooks) and lists them under "Not seen by this check".
+#
+# Two kinds because there are two policy engines in the set: ValidatingPolicy (the PSS `restricted` set from the kyverno-policies chart + the CEL library rules) takes a
+# `policies.kyverno.io/v1beta1` PolicyException; a legacy ClusterPolicy (e.g. restrict-clusterrole-nodesproxy) takes a `kyverno.io/v2` one.
+---
+# node-fstrim (argocd/resources/node-fstrim/fstrim.yaml, 10 CronJobs: fstrim-<node>, fstrim-guard-<node>):
+# a privileged root pod with the node's /var hostPath'd is the ONLY mechanism that returns guest
+# blocks to pve's thin pool (file header: qm guest cmd, host mount and talosctl are all dead).
+# privileged implies allowPrivilegeEscalation (an explicit false is API-rejected, see kmsg-reader).
+apiVersion: policies.kyverno.io/v1beta1
+kind: PolicyException
+metadata:
+  name: node-fstrim-privileged-hostpath
+  namespace: node-maintenance
+spec:
+  policyRefs:
+    - {name: disallow-privileged-containers, kind: ValidatingPolicy}
+    - {name: disallow-host-path, kind: ValidatingPolicy}
+    - {name: restrict-volume-types, kind: ValidatingPolicy}
+    - {name: disallow-privilege-escalation, kind: ValidatingPolicy}
+    - {name: require-run-as-nonroot, kind: ValidatingPolicy}
+  matchConditions:
+    - name: node-fstrim-cronjobs
+      expression: "object.metadata.namespace == 'node-maintenance' && object.metadata.name.startsWith('fstrim-')"
+---
+# kmsg-reader (argocd/resources/loki/kmsg-reader.yaml): privileged is what opens the device cgroup
+# allowlist for /dev/kmsg (CAP_SYSLOG-only form LIVE-TESTED 2026-08-19 and fails); the hostPath is
+# the device node itself, mounted read-only. Not exempted: runAsNonRoot, seccomp (not shown to be needed).
+apiVersion: policies.kyverno.io/v1beta1
+kind: PolicyException
+metadata:
+  name: kmsg-reader-privileged-hostpath
+  namespace: loki
+spec:
+  policyRefs:
+    - {name: disallow-privileged-containers, kind: ValidatingPolicy}
+    - {name: disallow-host-path, kind: ValidatingPolicy}
+    - {name: restrict-volume-types, kind: ValidatingPolicy}
+    - {name: disallow-privilege-escalation, kind: ValidatingPolicy}
+  matchConditions:
+    - name: kmsg-reader
+      expression: "object.metadata.namespace == 'loki' && object.metadata.name == 'kmsg-reader'"
+---
+# smartctl-exporter (argocd/resources/smartctl-exporter/daemonset.yaml): privileged AND runAsUser 0
+# are both REQUIRED, measured 2026-09-23 (a privileged `nobody` still gets EACCES on /dev/sda).
+apiVersion: policies.kyverno.io/v1beta1
+kind: PolicyException
+metadata:
+  name: smartctl-exporter-privileged-root
+  namespace: node-maintenance
+spec:
+  policyRefs:
+    - {name: disallow-privileged-containers, kind: ValidatingPolicy}
+    - {name: disallow-privilege-escalation, kind: ValidatingPolicy}
+    - {name: require-run-as-nonroot, kind: ValidatingPolicy}
+    - {name: require-run-as-non-root-user, kind: ValidatingPolicy}
+  matchConditions:
+    - name: smartctl-exporter
+      expression: "object.metadata.namespace == 'node-maintenance' && object.metadata.name == 'smartctl-exporter'"
+---
+# kube-prometheus-stack node-exporter (chart-rendered DaemonSet): hostNetwork + hostPID + hostPath
+# (/proc, /sys, /) are how it reads the NODE's metrics rather than the pod's. Not exempted: seccomp,
+# allowPrivilegeEscalation (the container is not privileged and could meet them).
+apiVersion: policies.kyverno.io/v1beta1
+kind: PolicyException
+metadata:
+  name: node-exporter-host-access
+  namespace: monitoring
+spec:
+  policyRefs:
+    - {name: disallow-host-namespaces, kind: ValidatingPolicy}
+    - {name: disallow-host-path, kind: ValidatingPolicy}
+    - {name: restrict-volume-types, kind: ValidatingPolicy}
+  matchConditions:
+    - name: node-exporter
+      expression: "object.metadata.namespace == 'monitoring' && object.metadata.name == 'kube-prometheus-stack-prometheus-node-exporter'"
+---
+# Crossplane's five aggregate ClusterRoles (crossplane chart 2.4.x): aggregation rules by design —
+# they grant Crossplane's own CRD groups (and `*` on them) to the admin/edit/view/browse roles and
+# to the controller, so the wildcard IS the aggregation. rbac-manager and agent-read-infra stay findings.
+apiVersion: policies.kyverno.io/v1beta1
+kind: PolicyException
+metadata:
+  name: crossplane-aggregate-roles
+spec:
+  policyRefs:
+    - {name: restrict-wildcard-resources, kind: ValidatingPolicy}
+  matchConditions:
+    - name: crossplane-aggregate-roles
+      expression: "object.kind == 'ClusterRole' && object.metadata.name in ['crossplane:aggregate-to-admin', 'crossplane:aggregate-to-browse', 'crossplane:aggregate-to-edit', 'crossplane:aggregate-to-view', 'crossplane:system:aggregate-to-crossplane']"
+---
+# restrict-clusterrole-nodesproxy is a legacy ClusterPolicy (kyverno.io/v2 exception, matched by name).
+apiVersion: kyverno.io/v2
+kind: PolicyException
+metadata:
+  name: crossplane-aggregate-roles-nodesproxy
+spec:
+  exceptions:
+    - policyName: restrict-clusterrole-nodesproxy
+      ruleNames: [clusterrole-nodesproxy]
+  match:
+    any:
+      - resources:
+          kinds: [ClusterRole]
+          names:
+            - "crossplane:aggregate-to-admin"
+            - "crossplane:aggregate-to-browse"
+            - "crossplane:aggregate-to-edit"
+            - "crossplane:aggregate-to-view"
+            - "crossplane:system:aggregate-to-crossplane"

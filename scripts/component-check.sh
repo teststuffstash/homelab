@@ -21,6 +21,12 @@
 # markdown table per policy on stdout, plus the SERVICES.md coverage check and the list of what the
 # render could NOT see.
 #
+# EXEMPTIONS. policy/component/exceptions.yaml (this checkout's, like the policies) holds the by-design
+# findings — privileged node agents, aggregate ClusterRoles — as kyverno PolicyExceptions with a reason
+# each. The evaluation runs with and without it; the report prints the difference per policy as
+# "Exempted (by design)" so the headline count is honest, not hidden. Helm test-hook documents
+# (`helm.sh/hook: test`) are dropped before evaluation (ArgoCD ignores them) and listed under "Not seen".
+#
 # WHAT IT DOES NOT SEE (printed every run — a check that is silent about its blind spots reports
 # green on the FU-125 class): namespaces ArgoCD creates via `CreateNamespace=true` (no manifest);
 # `path:` sources in a FOREIGN git repo (gateway-api CRDs — not cloned); ApplicationSets (the
@@ -107,7 +113,8 @@ NOTSEEN="$WORK/notseen.txt"; : > "$NOTSEEN"            # one line per blind spot
 RENDERLOG="$WORK/render.tsv"; : > "$RENDERLOG"         # app \t source \t docs \t status
 TOOLERR="$WORK/toolerr.txt"; : > "$TOOLERR"
 APPNAMES="$WORK/apps.txt"; : > "$APPNAMES"
-nfind=0; nerr=0
+ALLFINDINGS="$WORK/allfindings.tsv"; : > "$ALLFINDINGS"   # the same rows WITHOUT the exceptions file (control)
+nfind=0; nerr=0; nhooks=0
 
 log() { printf '%s\n' "$*" >&2; }
 count_docs() { grep -c '^kind:' "$1" 2>/dev/null || true; }
@@ -227,24 +234,20 @@ render_path() {
 # sentinel's #1134 discrimination).
 # cluster-scoped kinds that must NOT inherit the Application's destination namespace below
 CLUSTER_KINDS='^(Namespace|ClusterRole|ClusterRoleBinding|CustomResourceDefinition|MutatingWebhookConfiguration|ValidatingWebhookConfiguration|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding|MutatingAdmissionPolicy|MutatingAdmissionPolicyBinding|PriorityClass|StorageClass|APIService|Node|PersistentVolume|IngressClass|GatewayClass|ClusterPolicy|ClusterIssuer|CiliumClusterwideNetworkPolicy|Provider|Function|Composition|CompositeResourceDefinition|AppProject)$'
-evaluate() {
-  local app="$1" res="$2" ns="$3" kout krc pol rsc msg line
-  [ "$(count_docs "$res")" -gt 0 ] 2>/dev/null || return 0
-  # helm emits comment-only documents (an empty CRD file keeps its `# Source:` header) and kyverno
-  # refuses the whole file on one ("Object 'Kind' is missing") — same sanitizer as the directory
-  # source: comments stripped, kind-less and kustomize-config docs dropped. A namespaced document
-  # without metadata.namespace lands in the Application's destination namespace (what ArgoCD does),
-  # so the finding names the real namespace rather than kyverno's `default`.
-  yq eval-all '(select(tag == "!!map" and .apiVersion != null and .kind != null and (.apiVersion | test("^kustomize\\.config\\.k8s\\.io/") | not)))
-    | (select((.kind | test(strenv(CLUSTER_KINDS)) | not) and .metadata.namespace == null) | .metadata.namespace) = strenv(DEST_NS)
-    | ... comments=""' "$res" > "$WORK/$app-clean.yaml" 2>/dev/null || true
-  res="$WORK/$app-clean.yaml"
-  kout="$(kyverno apply "$POLICY_DIR" "$PSS_DIR/kyverno-policies.yaml" --audit-warn --resource "$res" 2>&1)"; krc=$?
-  if ! grep -qE '^pass: [0-9]+, fail: [0-9]+' <<<"$kout"; then
-    { echo "== $app: kyverno rc=$krc with no summary (tool error, not a finding)"; printf '%s\n' "$kout" | grep -v '^Warning:' | tail -8; } >> "$TOOLERR"
-    nerr=$((nerr+1)); return 0
-  fi
-  pol=""; rsc=""
+# Helm test hooks (`helm.sh/hook: test`, `test-success`, `test-failure`, alone or in a comma list) are
+# pods ArgoCD never runs — it ignores test hooks — so they are not workloads and are not evaluated;
+# each one dropped is listed under "Not evaluated" in the report.
+HOOK_TEST_RE='(^|,)[[:space:]]*test(-success|-failure)?[[:space:]]*(,|$)'
+# Exceptions: by-design findings (privileged node agents, aggregate roles) live in
+# policy/component/exceptions.yaml, one reason per entry. They are applied by `kyverno apply
+# --exceptions`; to keep the number honest the evaluation runs TWICE (with and without) and the
+# difference is reported per policy as "Exempted (by design)" — an exemption hides nothing.
+EXCEPTIONS="${EXCEPTIONS:-$POLICY_DIR/exceptions.yaml}"
+
+# parse_kyverno <app> <kout> <outfile>: "policy P -> resource R failed…" + its message line(s) →
+# app \t policy \t resource \t message rows appended to <outfile>.
+parse_kyverno() {
+  local app="$1" kout="$2" dest="$3" pol="" rsc="" msg line
   while IFS= read -r line; do
     case "$line" in
       "policy "*" -> resource "*" failed"*)
@@ -253,10 +256,43 @@ evaluate() {
       [0-9]*" - "*)
         [ -n "$pol" ] || continue
         msg="${line#* - }"; msg="${msg#* Validation rule \'*\' failed. }"; msg="${msg## }"
-        printf '%s\t%s\t%s\t%s\n' "$app" "$pol" "$rsc" "${msg:0:400}" >> "$FINDINGS"
-        nfind=$((nfind+1)); pol="";;
+        printf '%s\t%s\t%s\t%s\n' "$app" "$pol" "$rsc" "${msg:0:400}" >> "$dest"
+        pol="";;
     esac
   done <<<"$kout"
+}
+
+evaluate() {
+  local app="$1" res="$2" ns="$3" kout krc hooks nh
+  [ "$(count_docs "$res")" -gt 0 ] 2>/dev/null || return 0
+  # helm emits comment-only documents (an empty CRD file keeps its `# Source:` header) and kyverno
+  # refuses the whole file on one ("Object 'Kind' is missing") — same sanitizer as the directory
+  # source: comments stripped, kind-less and kustomize-config docs dropped. A namespaced document
+  # without metadata.namespace lands in the Application's destination namespace (what ArgoCD does),
+  # so the finding names the real namespace rather than kyverno's `default`.
+  hooks="$(HOOK_TEST_RE="$HOOK_TEST_RE" yq eval-all '(select(tag == "!!map" and .apiVersion != null and .kind != null and ((.metadata.annotations."helm.sh/hook" // "") | test(strenv(HOOK_TEST_RE)))))
+    | .kind + "/" + .metadata.name' "$res" 2>/dev/null | grep -v '^---$' || true)"
+  if [ -n "$hooks" ]; then
+    nh="$(grep -c . <<<"$hooks")"; nhooks=$((nhooks+nh))
+    echo "$app: $nh Helm test-hook document(s) not evaluated — ArgoCD ignores \`helm.sh/hook: test\` ($(tr '\n' ' ' <<<"$hooks" | sed 's/ $//'))" >> "$NOTSEEN"
+  fi
+  HOOK_TEST_RE="$HOOK_TEST_RE" yq eval-all '(select(tag == "!!map" and .apiVersion != null and .kind != null and (.apiVersion | test("^kustomize\\.config\\.k8s\\.io/") | not) and (((.metadata.annotations."helm.sh/hook" // "") | test(strenv(HOOK_TEST_RE))) | not)))
+    | (select((.kind | test(strenv(CLUSTER_KINDS)) | not) and .metadata.namespace == null) | .metadata.namespace) = strenv(DEST_NS)
+    | ... comments=""' "$res" > "$WORK/$app-clean.yaml" 2>/dev/null || true
+  res="$WORK/$app-clean.yaml"
+  local xargs=(); [ -f "$EXCEPTIONS" ] && xargs=(--exceptions "$EXCEPTIONS")
+  kout="$(kyverno apply "$POLICY_DIR" "$PSS_DIR/kyverno-policies.yaml" --audit-warn --resource "$res" "${xargs[@]}" 2>&1)"; krc=$?
+  if ! grep -qE '^pass: [0-9]+, fail: [0-9]+' <<<"$kout"; then
+    { echo "== $app: kyverno rc=$krc with no summary (tool error, not a finding)"; printf '%s\n' "$kout" | grep -v '^Warning:' | tail -8; } >> "$TOOLERR"
+    nerr=$((nerr+1)); return 0
+  fi
+  parse_kyverno "$app" "$kout" "$FINDINGS"
+  # the control run: the same evaluation with NO exceptions; whatever it finds beyond the run above
+  # is what the exceptions file exempted.
+  if [ ${#xargs[@]} -gt 0 ]; then
+    kout="$(kyverno apply "$POLICY_DIR" "$PSS_DIR/kyverno-policies.yaml" --audit-warn --resource "$res" 2>&1)" || true
+    parse_kyverno "$app" "$kout" "$ALLFINDINGS"
+  fi
 }
 
 # ── 1+2: render + evaluate every Application ──────────────────────────────────────────────
@@ -307,12 +343,21 @@ else
 fi
 nsvc="$(grep -c . "$svc_missing" || true)"
 
+nfind="$(grep -c . "$FINDINGS" || true)"   # parse_kyverno appends rows; the count is the file
+
 # ── 3: report ─────────────────────────────────────────────────────────────────────────────
 napps="$(grep -c . "$APPNAMES" || true)"
 ndocs="$(awk -F'\t' '{s+=$3} END {print s+0}' "$RENDERLOG")"
 echo "## component-check — $MODE mode, tree \`$TREE\`"
 echo
-echo "Applications: $napps · rendered documents: $ndocs · policy findings: $nfind · SERVICES.md gaps: $nsvc · tool errors: $nerr · policies: \`policy/component/\` (kyverno/policies $KYVERNO_POLICIES_REF @ ${KYVERNO_POLICIES_SHA:0:12}) + $npss PSS \`restricted\` policies (kyverno-policies chart $KYVERNO_POLICIES_CHART_VERSION) · kube-version $K8S_VERSION"
+# Exempted (by design) = control-run rows (no exceptions file) minus the reported rows, matched on
+# app+policy+resource as a multiset (comm on sorted keys), so an exemption can only ever REMOVE a row.
+EXEMPTED="$WORK/exempted.tsv"; : > "$EXEMPTED"
+if [ -s "$ALLFINDINGS" ]; then
+  comm -23 <(cut -f1-3 "$ALLFINDINGS" | sort) <(cut -f1-3 "$FINDINGS" | sort) > "$EXEMPTED"
+fi
+nexempt="$(grep -c . "$EXEMPTED" || true)"
+echo "Applications: $napps · rendered documents: $ndocs · policy findings: $nfind · SERVICES.md gaps: $nsvc · tool errors: $nerr · policies: \`policy/component/\` (kyverno/policies $KYVERNO_POLICIES_REF @ ${KYVERNO_POLICIES_SHA:0:12}) + $npss PSS \`restricted\` policies (kyverno-policies chart $KYVERNO_POLICIES_CHART_VERSION) · kube-version $K8S_VERSION · exempted by design: $nexempt (policy/component/exceptions.yaml, listed below) · Helm test-hook documents not evaluated: $nhooks"
 echo
 echo "### Render per Application source"
 echo
@@ -333,6 +378,16 @@ if [ "$nfind" -eq 0 ]; then echo "_none_"; else
     awk -F'\t' -v p="$pol" '$2==p {gsub(/\|/, "\\|", $4); printf "| %s | `%s` | %s |\n", $1, $3, substr($4, 1, 160)}' "$FINDINGS" | sort
     echo
   done < <(cut -f2 "$FINDINGS" | sort | uniq -c | sort -rn | awk '{print $2}')
+fi
+echo "### Exempted (by design) — $nexempt row(s)"
+echo
+if [ "$nexempt" -eq 0 ]; then echo "_none_"; echo; else
+  echo "Findings the checker WOULD report but \`policy/component/exceptions.yaml\` exempts, each with its reason there. Counted, not hidden: the totals above exclude them."
+  echo
+  echo "| Policy | Exempted | Resources |"
+  echo "|---|---:|---|"
+  awk -F'\t' '{n[$2]++; r[$2]=r[$2] (r[$2]==""?"":", ") $3} END {for (p in n) printf "| `%s` | %d | %s |\n", p, n[p], r[p]}' "$EXEMPTED" | sort
+  echo
 fi
 echo "### SERVICES.md coverage (rule e)"
 echo
