@@ -73,6 +73,16 @@ spec:
           labels: # the daily Longhorn backup (docs/longhorn-backup.md) — repos + attachments
             recurring-job.longhorn.io/source: enabled
             recurring-job-group.longhorn.io/daily-backup: enabled
+        # PSS restricted (component-check) for every container of the Deployment (the chart renders
+        # this one value into the init containers too). runAsNonRoot is safe: the -rootless image
+        # config sets User 1000:1000, and SSH listens on 2222 (no NET_BIND_SERVICE needed). The
+        # chart's helm-test Pod (forgejo-test-connection) takes no securityContext value — and
+        # ArgoCD never creates helm test hooks.
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          capabilities: { drop: [ALL] }
+          runAsNonRoot: true
+          seccompProfile: { type: RuntimeDefault }
         replicaCount: 1
         service:
           http:

@@ -91,6 +91,13 @@ spec:
           resources:
             requests: { cpu: "20m", memory: "32Mi" }
             limits: { memory: "128Mi" }
+          # PSS restricted (component-check). No runAsNonRoot: the image config sets no User
+          # (quay.io/prometheus/blackbox-exporter:v0.29.1 runs as root), and kubelet would refuse
+          # it. Only the http/dns probers are configured — an icmp prober would need NET_RAW.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            seccompProfile: { type: RuntimeDefault }
       volumes:
         - name: config
           configMap: { name: blackbox-config }
