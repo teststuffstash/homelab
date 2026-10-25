@@ -5,3 +5,9 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: agent-egress
+  labels:
+    # Pinned explicitly (oracle-namespaces.yaml shape): openrouter-proxy + agent-gateway pass
+    # baseline (live check 2026-10-25); warn/audit restricted report, never block.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
