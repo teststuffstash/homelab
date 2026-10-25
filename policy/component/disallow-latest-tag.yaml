@@ -1,0 +1,40 @@
+# VENDORED VERBATIM from github.com/kyverno/policies — best-practices-vpol/disallow-latest-tag/disallow-latest-tag.yaml
+# Pin: commit 879f0814edec2bdf43b6940f9c5c0c1635c85e6a (main, 2026-10-25). The library publishes NO release tags (verified
+# `gh api repos/kyverno/policies/tags` → [] and no releases), so the pin is a commit SHA; the same
+# SHA is in every policy/component/ header and in scripts/component-check.sh's KYVERNO_POLICIES_SHA
+# (Renovate: no customManager covers this yet — docs/renovate.md). Re-vendor = curl the raw file at
+# a new SHA, replace everything below this header, update every pin line in one commit.
+# Evaluated report-only by scripts/component-check.sh (validationActions: Audit upstream too).
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag in VPOL
+    policies.kyverno.io/category: Best Practices in VPOL
+    policies.kyverno.io/minversion: 1.17.0
+    kyverno.io/kubernetes-version: "1.30"
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      The ':latest' tag is mutable and can lead to unexpected errors if the
+      image changes. A best practice is to use an immutable tag that maps to
+      a specific version of an application Pod. This policy validates that the image
+      specifies a tag and that it is not called `latest`.
+spec:
+  validationActions: [Audit]
+  evaluation: 
+     background: 
+           enabled: true
+  matchConstraints:
+        resourceRules:
+          - apiGroups: ['']
+            apiVersions: [v1]
+            operations: [CREATE, UPDATE]
+            resources: [pods]
+  validations:
+          - expression: "object.spec.containers.all(container, container.image.contains(':'))"
+            message: "An image tag is required."
+          - expression: "object.spec.containers.all(container, !container.image.endsWith(':latest'))"
+            message: "Using a mutable image tag e.g. 'latest' is not allowed."
+

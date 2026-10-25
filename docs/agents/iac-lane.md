@@ -411,7 +411,17 @@ claim diff, never a silent flip. ⚠ **The first live dispatch is what exposed I
   the worker itself. The sentinel runs cluster-side (`iac-sentinel` CronWorkflow */15,
   agent-coordinator ns, arc-runner image) with rules and engines from THIS repo's master —
   the PR tree arrives as a tarball (data, never executed; no helm/hooks in v1 — raw-YAML pass,
-  the render pass is v2). **Engines (operator ruling: no engine sprawl — Kyverno is THE rule
+  the render pass is v2). _2026-10-25:_ **the render pass EXISTS as a standalone, report-only CI
+  checker — `scripts/component-check.sh` (`devbox run component-check`)**: every
+  `argocd/platform/*.yaml` Application (single- and multi-source) is `helm template`d / kustomized
+  / concatenated the way ArgoCD applies it, and `kyverno apply policy/component/` (Audit only:
+  requests+memory-limit and no-`:latest` vendored from kyverno/policies, PSS `restricted` as one
+  audit view, Namespace PSA labels, no `Ingress`) reports a table per policy plus the SERVICES.md
+  coverage check and its own blind spots (`CreateNamespace` namespaces, foreign-repo paths,
+  ApplicationSets, Composition-embedded pods). It EXECUTES chart templates, which is exactly why
+  it stands apart from the sentinel: folding it in as the sentinel's v2 (hostile-tree render in
+  the cluster-side job, `iac_sentinel_engine_seconds` re-measured) is the next step, not done.
+  **Engines (operator ruling: no engine sprawl — Kyverno is THE rule
   engine for THIS, the CLI seat; NB no prior roadmap record of kyverno was found — this ruling is
   the record. ⚠ NARROWED 2026-08-27: the earlier "the admission-controller seat is its future"
   read as Kyverno having already won that seat. It has not — the ADMISSION seat is a separate,
