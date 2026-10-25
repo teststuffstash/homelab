@@ -23,7 +23,7 @@
   "separateMinorPatch": true,
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
-  "allowedCommands": ["^bash scripts/upstream-alerts-refresh\\.sh$"],
+  "allowedCommands": ["^bash scripts/upstream-alerts-refresh\\.sh$", "^bash scripts/vendor-kyverno-policies\\.sh$"],
   "prHourlyLimit": 3,
 
   "argocd": {
@@ -296,6 +296,25 @@
         "fileFilters": ["argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt"],
         "executionMode": "branch"
       }
+    },
+    {
+      "description": "kyverno/policies vendored set (component-check, homelab#2911): a release-branch digest bump RIDES WITH the re-fetched files — scripts/vendor-kyverno-policies.sh rewrites policy/component/ from the new SHA on the Renovate branch (the G12 shape above; a hand re-vendor was rejected by the operator 2026-10-25). The checker is report-only, so the bump can only change a report: it rides the custom.regex automerge rule above (digest). The command string must match `allowedCommands` exactly.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["kyverno/policies"],
+      "postUpgradeTasks": {
+        "commands": ["bash scripts/vendor-kyverno-policies.sh"],
+        "fileFilters": ["policy/component/**"],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "description": "kyverno-policies chart pin in scripts/component-check.sh (component-check, homelab#2911): patch/minor automerge — the chart only renders the Pod Security policies the checker REPORTS on (nothing deploys), so a bump can only change a report; majors keep the human lane like every chart. Named because the generic custom.regex automerge rule above excludes the helm datasource.",
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["kyverno-policies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["automerge"],
+      "automerge": true
     }
   ],
 
@@ -364,6 +383,23 @@
       "depNameTemplate": "helm/helm",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "description": "component-check (homelab#2911): the kyverno/policies vendored set is pinned to the engine's RELEASE BRANCH (`KYVERNO_POLICIES_REF=release-1.19`) at a commit (`KYVERNO_POLICIES_SHA`) in scripts/vendor-kyverno-policies.sh — the git-refs digest of that branch head. A digest bump runs the script via the postUpgradeTasks rule above, so the branch is BORN with the files re-fetched. The REF moves only with the kyverno CLI minor (devbox) — a hand edit in the same commit as that bump.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts\\/vendor-kyverno-policies\\.sh$/"],
+      "matchStrings": ["KYVERNO_POLICIES_REF=(?<currentValue>[^\\s]+)\\s*\\n\\s*KYVERNO_POLICIES_SHA=(?<currentDigest>[0-9a-f]{40})"],
+      "depNameTemplate": "kyverno/policies",
+      "packageNameTemplate": "https://github.com/kyverno/policies",
+      "datasourceTemplate": "git-refs"
+    },
+    {
+      "description": "component-check (homelab#2911): the kyverno-policies Helm chart the checker renders at run time for Pod Security `restricted` — `KYVERNO_POLICIES_CHART_VERSION` in scripts/component-check.sh, annotated with the class-4 `# renovate:` comment one line above (same comment grammar as class 4, different file).",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts\\/component-check\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+) registryUrl=(?<registryUrl>[^\\s]+)\\s*\\n\\s*KYVERNO_POLICIES_CHART_VERSION=(?<currentValue>[^\\s]+)"
+      ]
     }
   ]
 }
