@@ -33,3 +33,21 @@ tag/commit above.
   drained pod must keep its replica role and its scrape. The LAN VIP half of this lives in
   `tofu/garage.tf` (`kubernetes_service.garage_s3_lb`), outside the chart. Recipe + the
   one-pod-out precheck: docs/garage.md §The build-out step 8.
+
+## License
+
+- Upstream license: **AGPL-3.0** — the repository's `LICENSE` at the pinned commit is the verbatim
+  FSF text of the GNU Affero General Public License v3 (it names no copyright holder itself); the
+  chart directory ships no license file of its own, no NOTICE, and `Chart.yaml` carries no license
+  annotation (checked at commit 7b119c0b, 2026-10-25). Garage is developed by Deuxfleurs
+  (https://git.deuxfleurs.fr/Deuxfleurs/garage); the crate's `src/garage/Cargo.toml` at that commit
+  states `license = "AGPL-3.0"` and names Alex Auvolat as author.
+- A copy of that license is vendored beside this file as
+  [`LICENSE-garage-chart`](LICENSE-garage-chart) (unmodified upstream text; byte-identical to this
+  repo's own `/LICENSE`).
+- **This copy is MODIFIED** (AGPL-3.0 §5(a) notice): `templates/workload.yaml`,
+  `templates/service.yaml` and `values.yaml` differ from upstream — each carries a header comment
+  saying so, and the changes with their dates are enumerated in §Local patches above; the full
+  change record is `git log -- argocd/charts/garage/`. Every other file is verbatim upstream.
+- The containing repository is AGPL-3.0 as well (`/LICENSE`, README §License), so the derivative
+  stays under the same license.
