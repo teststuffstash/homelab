@@ -14712,3 +14712,17 @@ updates or reverts as much as possible — mechanical revert or a responder."
   ro-rootfs 40, secret-role-verbs 37, PSS seccomp 25); #2902 tree 360 = +38 Kargo/Rollouts rows, PSS/limits +0. UNARMED.
 - Also pushed in this batch: cfacc03a (operator's own direct commit — composition prober agent-base rides deploy-pin; confirmed).
 - Wind-down: no monitors armed this session (pr-waits all exited); transcripts sync run; one master push through pre-push.
+
+## 2026-10-25 23:30Z – 10-26 ~01:00Z — overnight fix wave on the checker's 322 (operator: "safe ones with opus/sonnet subagents") (3 subagents)
+- Classification: zero-behavior-change → armed PRs (image refs, namespace labels, by-design exemptions); runtime-affecting → built with
+  evidence, HELD unarmed for the morning (securityContext, requests/limits); judgment classes untouched (sa-automount, ro-rootfs,
+  secret-role-verbs, probes, RBAC wildcards).
+- **#2913 MERGED** (sonnet): 39 bare Docker Hub refs qualified; registry rows 40→3 (left: infisical bootstrap hardcoded images,
+  mirror.gcr.io redis); dependency-coverage regenerated (also caught stale master drift). **730df4d1 on #2911**: exceptions.yaml
+  (71 rows, per-control, reasons) + test-hook drop (13); control 322→238 on that branch alone.
+- **#2914 MERGED** (opus): PSS labels ×5 after a live pod check; agent-coordinator/cf-api-proxy/agent-egress/secrets-demo enforce
+  baseline (was the cluster default anyway), arc-runners privileged (dind). **#2916 UNARMED**: securityContext on 10 Applications,
+  PSS rows 65→43; registry-verified image users; argo-events + blackbox root-less config → no runAsNonRoot.
+- **#2915 UNARMED** (sonnet): requests/limits from 14 d Prometheus, 13→1; infisical 2Gi, grafana 640Mi request; vendored garage chart
+  gains `initResources` (VENDORED.md local patch).
+- Wind-down: pickup in meta-state §MORNING READS; monitors none; transcripts sync; one master push.

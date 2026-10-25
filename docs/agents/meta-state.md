@@ -36,7 +36,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   report-only; diff-ci gate; master control 322 findings. Arming it brings the reviewer. Its Renovate lanes (git-refs digest +
   postUpgradeTasks, chart regex) are ON MASTER already (direct, operator-ordered, this push) — inert until #2911 merges.
   Residuals in the PR body: no `ci.yaml` step (operator-direct), sentinel v2 integration next, legacy ClusterPolicy API deprecation.
-  (3) The #918 spec read (oracle-fleet) — still the operator's; steps 1, 4, #919, oracle-iac#1140 wait on it.
+  (3) **Overnight fix wave on the 322 (operator: "safe ones with opus/sonnet subagents")** — MERGED: #2913 (39 bare Docker Hub
+  refs → `docker.io/library/…`, pull path unchanged), #2914 (PSS labels on 5 namespaces; arc-runners `enforce: privileged` for dind).
+  HELD unarmed, runtime-affecting, evidence tables in the bodies: **#2915** requests/limits 13→1 (Infisical limit 1000Mi→2Gi at 94 %
+  use; Grafana request 256→640Mi; merge restarts garage/forgejo/infisical/grafana/node-exporter/metrics-server once) and **#2916**
+  securityContext on 10 Applications (PSS rows 65→43; `runAsNonRoot` NOT set on argo-events + blackbox — root-less image config;
+  transcripts-viewer pinned uid 997; merge rolls garage ~17 min — watch `GarageQuorumMembersRestarted`). On #2911's branch:
+  `policy/component/exceptions.yaml` (71 by-design rows: node-fstrim ×10, kmsg-reader, smartctl, node-exporter, crossplane aggregate
+  roles) + Helm test hooks dropped (13). Expected master total after all merge ≈ 322 → ~170. LEFT for a judgment read (not safe
+  blanket): sa-automount 47, ro-rootfs 40, secret-role-verbs 37, probes 16, agent-coordinator wildcard role, infisical bootstrap Job.
+  (4) The #918 spec read (oracle-fleet) — still the operator's; steps 1, 4, #919, oracle-iac#1140 wait on it.
 - **⚑ DELIVERY LOOP / KARGO (oracle-fleet docs/delivery-loop.md).** Oracle gaps filed unqueued: oracle-fleet #926–#930,
   oracle-iac#1140 (held for #918). Residuals: FU-317, FU-318. Kind e2e not re-run since (jail has no Docker; the one open
   proof for #2902 is `runAsNonRoot` end-to-end — the image is User 65532, so a first prod sync is an acceptable test).
