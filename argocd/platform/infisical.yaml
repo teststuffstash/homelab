@@ -29,6 +29,12 @@ spec:
           # tag default is kept (image.tag).
           image:
             repository: docker.io/infisical/infisical
+          # 14 d: working-set max 942Mi (p99 921Mi) against the chart's 1000Mi limit — 94 %, an
+          # OOM away. Limit raised to 2Gi (~2x max); memory request added (the chart sets only
+          # cpu 350m; CPU p99 0.21 core, so that stays).
+          resources:
+            requests: { cpu: "350m", memory: "960Mi" }
+            limits: { memory: "2Gi" }
           kubeSecretRef: infisical-secrets
           service:
             type: ClusterIP
@@ -53,6 +59,11 @@ spec:
               key: DB_CONNECTION_URI
         redis:
           enabled: true
+          # 14 d: working-set max 67Mi (p99 64Mi), CPU p99 0.04 core.
+          master:
+            resources:
+              requests: { cpu: "50m", memory: "64Mi" }
+              limits: { memory: "160Mi" }
         ingress:
           enabled: false
           nginx:
