@@ -1,4 +1,7 @@
 # VENDORED VERBATIM from github.com/kyverno/policies — best-practices-vpol/disallow-latest-tag/disallow-latest-tag.yaml
+# Copyright The Kyverno Authors. Licensed under the Apache License, Version 2.0 — a copy is vendored beside this
+# file as policy/component/LICENSE-kyverno-policies (Apache-2.0 §4(a); upstream ships no NOTICE file and the policy
+# carries no further notices). Apache-2.0 is one-way compatible with this repo's AGPL-3.0; the file is unmodified.
 # Pin: commit 879f0814edec2bdf43b6940f9c5c0c1635c85e6a (main, 2026-10-25). The library publishes NO release tags (verified
 # `gh api repos/kyverno/policies/tags` → [] and no releases), so the pin is a commit SHA; the same
 # SHA is in every policy/component/ header and in scripts/component-check.sh's KYVERNO_POLICIES_SHA
