@@ -46,6 +46,12 @@ spec:
     path: argocd/charts/garage
     helm:
       valuesObject:
+        # Hub refs qualified (docker.io/...): the same images, the same containerd mirror key
+        # (docker.io); the component-check registry allowlist matches on the host prefix.
+        image:
+          repository: docker.io/dxflrs/amd64_garage
+        initImage:
+          repository: docker.io/library/busybox
         deployment:
           kind: StatefulSet
           # One Garage instance per physical zone (ADR-114); the affinity block below is what
@@ -187,7 +193,7 @@ spec:
             configMap: { name: garage-meta-rotate-init, defaultMode: 0755 }
         extraInitContainers:
           - name: meta-rotate
-            image: busybox:stable
+            image: docker.io/library/busybox:stable
             command: ["/bin/sh", "/script/meta-rotate.sh"]
             env:
               - name: POD_NAME

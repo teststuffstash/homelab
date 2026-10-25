@@ -398,60 +398,65 @@
         "pr": 2396,
         "title": "Update Helm release metrics-server to v3.14.0"
       },
-      "2:alpine": {
-        "merged_at": "2026-10-04T22:50:54Z",
-        "pr": 2230,
-        "title": "Update alpine Docker tag to v3.24"
-      },
       "2:cloudflare/cloudflared": {
         "merged_at": "2026-10-15T21:12:36Z",
         "pr": 2602,
         "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.10.1"
+      },
+      "2:docker.io/grafana/alloy": {
+        "merged_at": "2026-10-05T23:44:00Z",
+        "pr": 2294,
+        "title": "chore(deps): update grafana/alloy docker tag to v1.20.1"
+      },
+      "2:docker.io/grafana/loki": {
+        "merged_at": "2026-10-21T03:03:16Z",
+        "pr": 2781,
+        "title": "chore(deps): update grafana/loki docker tag to v3.7.9"
+      },
+      "2:docker.io/library/alpine": {
+        "merged_at": "2026-10-04T22:50:54Z",
+        "pr": 2230,
+        "title": "Update alpine Docker tag to v3.24"
       },
       "2:docker.io/library/busybox": {
         "merged_at": "2026-10-04T22:57:06Z",
         "pr": 2233,
         "title": "Update docker.io/library/busybox Docker tag to v1.38.0"
       },
-      "2:docker.io/prometheuscommunity/smartctl-exporter": {
-        "merged_at": "2026-10-13T13:25:57Z",
-        "pr": 2530,
-        "title": "chore(deps): update docker.io/prometheuscommunity/smartctl-exporter docker tag to v0.15.0"
-      },
-      "2:grafana/alloy": {
-        "merged_at": "2026-10-05T23:44:00Z",
-        "pr": 2294,
-        "title": "chore(deps): update grafana/alloy docker tag to v1.20.1"
-      },
-      "2:grafana/loki": {
-        "merged_at": "2026-10-21T03:03:16Z",
-        "pr": 2781,
-        "title": "chore(deps): update grafana/loki docker tag to v3.7.9"
-      },
-      "2:nginx": {
+      "2:docker.io/library/nginx": {
         "merged_at": "2026-10-05T06:48:50Z",
         "pr": 2247,
         "title": "chore(deps): update nginx docker tag to v1.31"
       },
-      "2:nginxinc/nginx-unprivileged": {
+      "2:docker.io/library/python": {
+        "merged_at": "2026-10-22T02:55:46Z",
+        "pr": 2803,
+        "title": "chore(deps): update python:3.15-slim docker digest to b23bb42"
+      },
+      "2:docker.io/library/registry": {
+        "merged_at": "2026-10-06T04:35:41Z",
+        "pr": 2297,
+        "title": "chore(deps): update registry docker tag to v3.1.2"
+      },
+      "2:docker.io/nginxinc/nginx-unprivileged": {
         "merged_at": "2026-10-05T06:34:03Z",
         "pr": 2248,
         "title": "chore(deps): update nginxinc/nginx-unprivileged docker tag to v1.31"
       },
-      "2:otel/opentelemetry-collector-contrib": {
+      "2:docker.io/otel/opentelemetry-collector-contrib": {
         "merged_at": "2026-10-21T21:15:54Z",
         "pr": 2801,
         "title": "chore(deps): update otel/opentelemetry-collector-contrib docker tag to v0.163.2"
       },
-      "2:prom/pushgateway": {
+      "2:docker.io/prom/pushgateway": {
         "merged_at": "2026-10-15T16:12:04Z",
         "pr": 2587,
         "title": "chore(deps): update prom/pushgateway docker tag to v1.11.4"
       },
-      "2:python": {
-        "merged_at": "2026-10-22T02:55:46Z",
-        "pr": 2803,
-        "title": "chore(deps): update python:3.15-slim docker digest to b23bb42"
+      "2:docker.io/prometheuscommunity/smartctl-exporter": {
+        "merged_at": "2026-10-13T13:25:57Z",
+        "pr": 2530,
+        "title": "chore(deps): update docker.io/prometheuscommunity/smartctl-exporter docker tag to v0.15.0"
       },
       "2:quay.io/brancz/kube-rbac-proxy": {
         "merged_at": "2026-10-05T07:20:40Z",
@@ -462,11 +467,6 @@
         "merged_at": "2026-10-21T21:20:40Z",
         "pr": 2802,
         "title": "chore(deps): update quay.io/prometheus/blackbox-exporter docker tag to v0.29.1"
-      },
-      "2:registry": {
-        "merged_at": "2026-10-06T04:35:41Z",
-        "pr": 2297,
-        "title": "chore(deps): update registry docker tag to v3.1.2"
       },
       "3:agent-base": {
         "merged_at": "2026-10-20T03:50:21Z",
@@ -791,7 +791,7 @@
       "key": "1:crossplane",
       "last_proven": "2026-10-05T07:12:33Z",
       "name": "crossplane",
-      "version": "2.4.2",
+      "version": "2.4.3",
       "where": [
         "argocd/platform/crossplane.yaml"
       ]
@@ -910,23 +910,45 @@
     {
       "class": 2,
       "gap_columns": [],
-      "key": "2:alpine",
-      "last_proven": "2026-10-04T22:50:54Z",
-      "name": "alpine",
-      "version": "3.24",
-      "where": [
-        "argocd/resources/node-fstrim/fstrim.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
       "key": "2:cloudflare/cloudflared",
       "last_proven": "2026-10-15T21:12:36Z",
       "name": "cloudflare/cloudflared",
       "version": "2026.10.3@sha256:faa8e0a1475f",
       "where": [
         "argocd/resources/publicroute/composition.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/grafana/alloy",
+      "last_proven": "2026-10-05T23:44:00Z",
+      "name": "docker.io/grafana/alloy",
+      "version": "v1.20.1",
+      "where": [
+        "argocd/resources/loki/alloy.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/grafana/loki",
+      "last_proven": "2026-10-21T03:03:16Z",
+      "name": "docker.io/grafana/loki",
+      "version": "3.7.9",
+      "where": [
+        "argocd/resources/loki/loki.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/library/alpine",
+      "last_proven": "2026-10-04T22:50:54Z",
+      "name": "docker.io/library/alpine",
+      "version": "3.24",
+      "where": [
+        "argocd/resources/node-fstrim/fstrim.yaml"
       ]
     },
     {
@@ -939,6 +961,90 @@
       "where": [
         "argocd/resources/loki/kmsg-reader.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/library/nginx",
+      "last_proven": "2026-10-05T06:48:50Z",
+      "name": "docker.io/library/nginx",
+      "version": "1.31-alpine",
+      "where": [
+        "argocd/resources/registry/registry-fs.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/library/python",
+      "last_proven": "2026-10-22T02:55:46Z",
+      "name": "docker.io/library/python",
+      "version": "3.15-slim, 3.15-slim@sha256:b23bb42e5298",
+      "where": [
+        "argocd/resources/cloudflare-exporter/credential-expiry-probe-deployment.yaml",
+        "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
+        "argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml",
+        "argocd/resources/garage-disruption/controller.yaml",
+        "argocd/resources/garage-meta-rotation/rotation.yaml",
+        "argocd/resources/garage-write-probe/cronjob.yaml",
+        "argocd/resources/github-exporter/deployment.yaml",
+        "argocd/resources/openrouter-proxy/deployment.yaml",
+        "argocd/resources/opnsense-config-backup/cronjob.yaml",
+        "argocd/resources/pg-backup/cronjob.yaml",
+        "argocd/resources/version-sets/probe-argo.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/library/registry",
+      "last_proven": "2026-10-06T04:35:41Z",
+      "name": "docker.io/library/registry",
+      "version": "3.1.2",
+      "where": [
+        "argocd/resources/registry-cache/mirror-docker-io.yaml",
+        "argocd/resources/registry-cache/mirror-ghcr.yaml",
+        "argocd/resources/registry-cache/mirror-mcr.yaml",
+        "argocd/resources/registry/registry-fs.yaml",
+        "argocd/resources/registry/registry-gc-cronjob.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/nginxinc/nginx-unprivileged",
+      "last_proven": "2026-10-05T06:34:03Z",
+      "name": "docker.io/nginxinc/nginx-unprivileged",
+      "version": "1.31-alpine",
+      "where": [
+        "argocd/resources/cf-api-proxy/deployment.yaml",
+        "argocd/resources/devbox-search/deployment.yaml",
+        "argocd/resources/nix-cache/deployment.yaml",
+        "argocd/resources/npm-cache/deployment.yaml",
+        "argocd/resources/pypi-cache/deployment.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/otel/opentelemetry-collector-contrib",
+      "last_proven": "2026-10-21T21:15:54Z",
+      "name": "docker.io/otel/opentelemetry-collector-contrib",
+      "version": "0.163.2",
+      "where": [
+        "argocd/resources/otel-collector/deployment.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:docker.io/prom/pushgateway",
+      "last_proven": "2026-10-15T16:12:04Z",
+      "name": "docker.io/prom/pushgateway",
+      "version": "v1.11.4",
+      "where": [
+        "argocd/resources/pushgateway/deployment.yaml"
       ]
     },
     {
@@ -979,101 +1085,10 @@
     {
       "class": 2,
       "gap_columns": [],
-      "key": "2:grafana/alloy",
-      "last_proven": "2026-10-05T23:44:00Z",
-      "name": "grafana/alloy",
-      "version": "v1.20.1",
-      "where": [
-        "argocd/resources/loki/alloy.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
-      "key": "2:grafana/loki",
-      "last_proven": "2026-10-21T03:03:16Z",
-      "name": "grafana/loki",
-      "version": "3.7.9",
-      "where": [
-        "argocd/resources/loki/loki.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
-      "key": "2:nginx",
-      "last_proven": "2026-10-05T06:48:50Z",
-      "name": "nginx",
-      "version": "1.31-alpine",
-      "where": [
-        "argocd/resources/registry/registry-fs.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
-      "key": "2:nginxinc/nginx-unprivileged",
-      "last_proven": "2026-10-05T06:34:03Z",
-      "name": "nginxinc/nginx-unprivileged",
-      "version": "1.31-alpine",
-      "where": [
-        "argocd/resources/cf-api-proxy/deployment.yaml",
-        "argocd/resources/devbox-search/deployment.yaml",
-        "argocd/resources/nix-cache/deployment.yaml",
-        "argocd/resources/npm-cache/deployment.yaml",
-        "argocd/resources/pypi-cache/deployment.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
-      "key": "2:otel/opentelemetry-collector-contrib",
-      "last_proven": "2026-10-21T21:15:54Z",
-      "name": "otel/opentelemetry-collector-contrib",
-      "version": "0.163.2",
-      "where": [
-        "argocd/resources/otel-collector/deployment.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
-      "key": "2:prom/pushgateway",
-      "last_proven": "2026-10-15T16:12:04Z",
-      "name": "prom/pushgateway",
-      "version": "v1.11.4",
-      "where": [
-        "argocd/resources/pushgateway/deployment.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
-      "key": "2:python",
-      "last_proven": "2026-10-22T02:55:46Z",
-      "name": "python",
-      "version": "3.15-slim, 3.15-slim@sha256:b23bb42e5298",
-      "where": [
-        "argocd/resources/cloudflare-exporter/credential-expiry-probe-deployment.yaml",
-        "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
-        "argocd/resources/cloudflare-exporter/spend-probe-deployment.yaml",
-        "argocd/resources/garage-disruption/controller.yaml",
-        "argocd/resources/garage-meta-rotation/rotation.yaml",
-        "argocd/resources/garage-write-probe/cronjob.yaml",
-        "argocd/resources/github-exporter/deployment.yaml",
-        "argocd/resources/openrouter-proxy/deployment.yaml",
-        "argocd/resources/opnsense-config-backup/cronjob.yaml",
-        "argocd/resources/pg-backup/cronjob.yaml",
-        "argocd/resources/version-sets/probe-argo.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
       "key": "2:quay.io/brancz/kube-rbac-proxy",
       "last_proven": "2026-10-05T07:20:40Z",
       "name": "quay.io/brancz/kube-rbac-proxy",
-      "version": "v0.23.0",
+      "version": "v0.23.1",
       "where": [
         "argocd/resources/loki/loki-rbac-proxy.yaml"
       ]
@@ -1087,21 +1102,6 @@
       "version": "v0.29.1",
       "where": [
         "argocd/resources/blackbox/blackbox.yaml"
-      ]
-    },
-    {
-      "class": 2,
-      "gap_columns": [],
-      "key": "2:registry",
-      "last_proven": "2026-10-06T04:35:41Z",
-      "name": "registry",
-      "version": "3.1.2",
-      "where": [
-        "argocd/resources/registry-cache/mirror-docker-io.yaml",
-        "argocd/resources/registry-cache/mirror-ghcr.yaml",
-        "argocd/resources/registry-cache/mirror-mcr.yaml",
-        "argocd/resources/registry/registry-fs.yaml",
-        "argocd/resources/registry/registry-gc-cronjob.yaml"
       ]
     },
     {
@@ -1121,9 +1121,10 @@
       "key": "3:agent-base",
       "last_proven": "2026-10-20T03:50:21Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.10.23-g79d146c8caac",
+      "version": "`AGENT_BASE_IMAGE`=2026.10.25-gb7571947d72e; 1 manifest ref(s)",
       "where": [
-        "agents/images.env"
+        "agents/images.env",
+        "argocd/resources/agentstack/composition.yaml"
       ]
     },
     {
@@ -1134,7 +1135,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-10-20T03:42:13Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.20-g950b7f0b8201; 35 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.20-g950b7f0b8201; 34 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1191,7 +1192,7 @@
       "key": "3:homelab/arc-runner",
       "last_proven": "2026-10-22T17:03:05Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.22-g312043d8b277 (×3)",
+      "version": "2026.10.24-g134efbeb581a (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1238,7 +1239,7 @@
       "key": "5:bpg/proxmox@tofu",
       "last_proven": "2026-10-22T11:08:29Z",
       "name": "bpg/proxmox",
-      "version": "0.116.1 (`~> 0.116`)",
+      "version": "0.117.0 (`~> 0.117`)",
       "where": [
         "tofu/versions.tf",
         "tofu/.terraform.lock.hcl"
@@ -1250,7 +1251,7 @@
       "key": "5:bpg/proxmox@tofu/provisioning",
       "last_proven": "2026-10-22T11:08:29Z",
       "name": "bpg/proxmox",
-      "version": "0.116.1 (`~> 0.116`)",
+      "version": "0.117.0 (`~> 0.117`)",
       "where": [
         "tofu/provisioning/versions.tf",
         "tofu/provisioning/.terraform.lock.hcl"
