@@ -8,9 +8,10 @@
 # release's Service all live in ns oracle-fleet (oracle-fleet DEP-SHADOW; oracle-iac
 # httproute-shadow-trial.yaml) — a same-namespace backendRef needs no grant.
 #
-# ⚠ kargo-api serves TLS (chart api.tls default; Service appProtocol https, port 443) while
-# oracle-gateway's listener is plain HTTP — the route needs either api.tls off in kargo.yaml (the
-# LAN convention: TLS terminates at HAProxy) or a BackendTLSPolicy. Held for the shape ruling.
+# TLS: kargo-api serves PLAIN HTTP (kargo.yaml api.tls.enabled: false — Service appProtocol http,
+# port 80, the LAN convention: TLS terminates at OPNsense HAProxy, oracle-gateway's listener is
+# HTTP), so the HTTPRoute's backendRef is `kargo-api:80` with no BackendTLSPolicy. Shape ruling
+# 2026-10-25; the webhooks server keeps its TLS (apiserver-facing).
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata:

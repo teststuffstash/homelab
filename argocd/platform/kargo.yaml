@@ -22,9 +22,18 @@
 #  - api.secret.name: the admin-account bcrypt hash + token signing key come from the Secret
 #    `kargo-api` in ns kargo — an ExternalSecret from Infisical (argocd/resources/kargo-prod/, the
 #    third source; the kind test generates both in-run instead).
+#  - api.tls.enabled: false — the API serves plain HTTP on :80 (the LAN convention: TLS terminates
+#    at OPNsense HAProxy; oracle-gateway's listener is HTTP, so no BackendTLSPolicy).
+#    terminatedUpstream: true keeps the chart-generated URLs (API_SERVER_BASE_URL, the admin token
+#    issuer) on https://<api.host>. The UI/CLI hostname is the stack's HTTPRoute
+#    (kargo.oracle.teststuff.net, oracle-iac; the ReferenceGrant is in kargo-prod/).
+#  - The oracle-iac git credential lives in kargo-shared-resources, not the Project namespace
+#    (kargo-prod/git-token.yaml §PLACEMENT): the tenant can deploy any namespaced kind into
+#    oracle-kargo, and a Job there could mount a Secret; the shared namespace is controller-only.
 #
-# cert-manager: Kargo's self-signed webhook/API certs come from a namespaced cert-manager Issuer —
-# Kargo is cert-manager's SECOND consumer (cert-manager.yaml's header is the scope's one home).
+# cert-manager: Kargo's self-signed WEBHOOK cert comes from a namespaced cert-manager Issuer (the
+# API cert is gone with api.tls off) — Kargo is cert-manager's SECOND consumer (cert-manager.yaml's
+# header is the scope's one home).
 #
 # ORDERING — ONE Application, three sources, so the ordering is ArgoCD's IN-APP wave + kind order,
 # which DOES wait on health (the parent `platform` app's waves do NOT: argocd-cm carries no
@@ -72,6 +81,10 @@ spec:
           externalWebhooksServer:
             enabled: false
           api:
+            host: kargo.oracle.teststuff.net # the stack's HTTPRoute hostname (oracle-iac); URLs only, no Ingress
+            tls:
+              enabled: false # plain HTTP :80 — TLS ends at HAProxy (header §hardening)
+              terminatedUpstream: true
             secretManagementEnabled: false
             secret:
               name: kargo-api # ExternalSecret ← Infisical (argocd/resources/kargo-prod/kargo-api.yaml)
@@ -128,7 +141,8 @@ spec:
       targetRevision: master
       path: argocd/resources/kargo
     # Prod-only objects the kind e2e has no CRDs/backends for: the kargo-api ExternalSecret, the
-    # oracle-kargo git credential (ESO-minted homelab-deploy token), the UI ReferenceGrant.
+    # oracle-iac git credential (ESO-minted homelab-deploy token, in kargo-shared-resources), the
+    # UI ReferenceGrant.
     - repoURL: https://github.com/teststuffstash/homelab.git
       targetRevision: master
       path: argocd/resources/kargo-prod
