@@ -23,16 +23,23 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).
   Python 3.15 wave PARKED org-wide (#2610 / oracle-fleet#883 ruling + `Un-park:` line; circles#124 stack-side): un-park
   when `devbox search python@3.15` resolves the final (rc2 today). Residual list: #1985 comment 6383963515; FU-316.
-- **⚑ DELIVERY LOOP / KARGO (2026-10-25, oracle-fleet docs/delivery-loop.md).** homelab#2902 = Kargo prod install, HELD
-  unarmed for the operator's read (#2798 stays the kind experiment + the operator-direct workflow). 10-25: two shape
-  questions SETTLED in the branch (git token → `kargo-shared-resources`, controller-only; API plain HTTP :80, no
-  BackendTLSPolicy), the third ACCEPTED (startup cluster-wide `list secrets` → FU-318a; FU-317 detective); the
-  component checker's 7 findings FIXED (8444efd4: PSS restricted + namespace labels; 45 = master). **#2911** = the
-  checker (`scripts/component-check.sh`, report-only, kyverno/policies vendored @ SHA), HELD unarmed for the read —
-  arming it brings the reviewer; its Renovate lane needs the operator-direct global config. Before merge:
-  sentinel exceptions baseline on master (#2403 precedent), two Infisical keys (`KARGO_ADMIN_*`), CRD window (FU-304/315),
-  mgmt-tf apply. Oracle gaps filed unqueued: oracle-fleet #926–#930, oracle-iac#1140 (held for #918 — the operator's
-  spec read, still open). Residuals: FU-317, FU-318. Kind e2e not re-run since (jail has no Docker).
+- **⚑ MORNING READS (2026-10-26, operator) — two HELD PRs + one direct push landed overnight (TICK-LOG 10-25):**
+  (1) **homelab#2902** Kargo prod install @ 8444efd4 — all three shape questions settled (git token → `kargo-shared-resources`;
+  API plain HTTP :80; startup `list secrets` accepted → FU-318a), PSS restricted + namespace labels fixed, CI green, sentinel red
+  until the exceptions baseline lands on master (#2403 precedent). Pre-merge after the read: exceptions baseline on master →
+  two Infisical keys (`KARGO_ADMIN_*`) → CRD maintenance window (FU-304/315) → `mgmt-tf` plan/apply (+1 repo entry) → merge →
+  the PR body's apply plan. The checker's new library rules add 38 Kargo rows (SA automount, wildcard verbs in the CHART's
+  ClusterRoles, ro-rootfs, probes) — a read: fix before merge or accept as the platform-wide debt they are (322 on master).
+  (2) **homelab#2911** component checker @ 1b720e68 (CI in progress at wind-down) — `scripts/component-check.sh` renders every
+  Application + runs kyverno: PSS restricted from the `kyverno-policies` chart 3.9.2, 21 rules vendored from kyverno/policies
+  `release-1.19` via `scripts/vendor-kyverno-policies.sh` (partial-vs-legacy choices in each header), SERVICES.md check;
+  report-only; diff-ci gate; master control 322 findings. Arming it brings the reviewer. Its Renovate lanes (git-refs digest +
+  postUpgradeTasks, chart regex) are ON MASTER already (direct, operator-ordered, this push) — inert until #2911 merges.
+  Residuals in the PR body: no `ci.yaml` step (operator-direct), sentinel v2 integration next, legacy ClusterPolicy API deprecation.
+  (3) The #918 spec read (oracle-fleet) — still the operator's; steps 1, 4, #919, oracle-iac#1140 wait on it.
+- **⚑ DELIVERY LOOP / KARGO (oracle-fleet docs/delivery-loop.md).** Oracle gaps filed unqueued: oracle-fleet #926–#930,
+  oracle-iac#1140 (held for #918). Residuals: FU-317, FU-318. Kind e2e not re-run since (jail has no Docker; the one open
+  proof for #2902 is `runAsNonRoot` end-to-end — the image is User 65532, so a first prod sync is an acceptable test).
 - **⚑ GATEWAY (FU-270 is the pointer — its Next is the seat's list).** Each 6 h refresh: `devbox run -- bash
   gateway/scripts/canary-entrants.sh --max 3 < /dev/null` → `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers --
   apply` → PR when the lists move (a key NEW to the loader ships AFTER its image, #2812). Watch: the jail's codex REFRESH

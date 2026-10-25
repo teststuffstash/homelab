@@ -14694,3 +14694,21 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **#2902 8444efd4** (option 1, operator "fix it all"): global.securityContext restricted (image User 65532 verified via ghcr
   config), extraNamespaceLabels ×2, managedNamespaceMetadata for ns kargo; re-run 45 = master. Ruling: vendor nouns get NO
   glossary rows (memory vendor-terms-no-glossary). Still HELD for the read; pre-merge steps unchanged (meta-state).
+
+## 2026-10-25 ~20:30–23:30Z — kyverno/policies discussion → checker v2 (release-1.19 + chart PSS) + Renovate lanes direct; WIND-DOWN (seat + 1 subagent)
+- Discussion: library distribution = repo (no tags; main MID-MIGRATION: 462 legacy ClusterPolicy samples removed, 172 equivalent/
+  122 partial/168 missing per `.github/legacy-policy-migration.json`; the copilot/split-* branches are that work) + `release-1.x`
+  branches per engine minor (the stable channel; release-1.19 keeps legacy + vpol) + the versioned `kyverno-policies` Helm chart
+  (PSS). Operator rulings: no prose checklist (stale), mechanize; Kyverno only (L0b ruling); CIS = node-level, not PR-shaped;
+  vendor nouns get no glossary rows; hand re-vendor "nobody will ever do" → Renovate lanes.
+- **Direct (operator-ordered governance path):** `.github/renovate-global.json` — git-refs customManager over
+  `KYVERNO_POLICIES_REF/SHA` in scripts/vendor-kyverno-policies.sh + postUpgradeTasks rule (`allowedCommands` entry) + class-4-
+  grammar helm manager over `KYVERNO_POLICIES_CHART_VERSION` in scripts/component-check.sh + patch/minor automerge rule.
+  Validator --strict OK; regexes self-tested on the contract lines; text-inserted (37 lines; a json round-trip re-serialized
+  492 lines and was reverted — principle 2).
+- **#2911 @ 1b720e68** (subagent): PSS from the chart render (pss-restricted-audit.yaml deleted), 21 rules from release-1.19 via
+  the vendor script (`--check` idempotent), registry allowlist widened to the platform's hosts, class 18 rows in
+  dependency-upgrades.md, renovate.md sentence, `--only` fixed. Control 322 findings (top: sa-automount 47, image-registries 40,
+  ro-rootfs 40, secret-role-verbs 37, PSS seccomp 25); #2902 tree 360 = +38 Kargo/Rollouts rows, PSS/limits +0. UNARMED.
+- Also pushed in this batch: cfacc03a (operator's own direct commit — composition prober agent-base rides deploy-pin; confirmed).
+- Wind-down: no monitors armed this session (pr-waits all exited); transcripts sync run; one master push through pre-push.
