@@ -25,6 +25,10 @@ spec:
       valuesObject:
         infisical:
           replicaCount: 1
+          # Hub ref qualified (docker.io/...): same image, same containerd mirror key; the chart's
+          # tag default is kept (image.tag).
+          image:
+            repository: docker.io/infisical/infisical
           kubeSecretRef: infisical-secrets
           service:
             type: ClusterIP
