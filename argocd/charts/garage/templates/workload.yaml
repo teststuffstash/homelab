@@ -1,3 +1,4 @@
+{{- /* Vendored from Deuxfleurs/garage script/helm/garage @ v2.3.0 (AGPL-3.0, see ../VENDORED.md §License); MODIFIED — see VENDORED.md §Local patches */ -}}
 apiVersion: apps/v1
 kind: {{ .Values.deployment.kind }}
 metadata:

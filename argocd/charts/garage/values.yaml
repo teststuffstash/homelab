@@ -1,3 +1,4 @@
+# Vendored from Deuxfleurs/garage script/helm/garage @ v2.3.0 (AGPL-3.0, see ./VENDORED.md §License); MODIFIED — see VENDORED.md §Local patches
 # Default values for garage.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
