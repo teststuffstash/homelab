@@ -414,9 +414,11 @@ claim diff, never a silent flip. ⚠ **The first live dispatch is what exposed I
   the render pass is v2). _2026-10-25:_ **the render pass EXISTS as a standalone, report-only CI
   checker — `scripts/component-check.sh` (`devbox run component-check`)**: every
   `argocd/platform/*.yaml` Application (single- and multi-source) is `helm template`d / kustomized
-  / concatenated the way ArgoCD applies it, and `kyverno apply policy/component/` (Audit only:
-  requests+memory-limit and no-`:latest` vendored from kyverno/policies, PSS `restricted` as one
-  audit view, Namespace PSA labels, no `Ingress`) reports a table per policy plus the SERVICES.md
+  / concatenated the way ArgoCD applies it, and `kyverno apply` (Audit only: Pod Security
+  `restricted` rendered at check time from the `kyverno-policies` chart; the best-practice, RBAC-
+  hardening and Argo rules of kyverno/policies `release-1.19` vendored into `policy/component/` by
+  `scripts/vendor-kyverno-policies.sh` — both pins Renovate-moved, class 18; plus local Namespace
+  PSA labels and no `Ingress`) reports a table per policy plus the SERVICES.md
   coverage check and its own blind spots (`CreateNamespace` namespaces, foreign-repo paths,
   ApplicationSets, Composition-embedded pods). It EXECUTES chart templates, which is exactly why
   it stands apart from the sentinel: folding it in as the sentinel's v2 (hostile-tree render in

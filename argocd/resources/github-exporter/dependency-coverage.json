@@ -275,6 +275,21 @@
     },
     {
       "complete": false,
+      "gap_cells": [],
+      "gap_rows": 0,
+      "human_cells": [
+        "canary"
+      ],
+      "human_rows": 0,
+      "id": 18,
+      "last_proven": null,
+      "last_proven_pr": null,
+      "name": "Check-time policy inputs",
+      "owner_may_leave": false,
+      "rows": 2
+    },
+    {
+      "complete": false,
       "gap_cells": [
         "deploy_edge",
         "detector"
@@ -907,7 +922,7 @@
       "key": "1:kube-prometheus-stack",
       "last_proven": "2026-10-23T21:10:44Z",
       "name": "kube-prometheus-stack",
-      "version": "92.10.1",
+      "version": "92.11.0",
       "where": [
         "argocd/platform/kube-prometheus-stack.yaml"
       ]
@@ -951,7 +966,7 @@
       "key": "2:cloudflare/cloudflared",
       "last_proven": "2026-10-26T12:26:35Z",
       "name": "cloudflare/cloudflared",
-      "version": "2026.10.4@sha256:c6c7ae1d5dfd",
+      "version": "2026.10.5@sha256:1b1d34d0a9c0",
       "where": [
         "argocd/resources/publicroute/composition.yaml"
       ]
@@ -1018,7 +1033,7 @@
       "key": "2:docker.io/library/python",
       "last_proven": "2026-10-22T02:55:46Z",
       "name": "docker.io/library/python",
-      "version": "3.15-slim, 3.15-slim@sha256:b23bb42e5298",
+      "version": "3.15-slim, 3.15-slim@sha256:7ce16513bf93",
       "where": [
         "argocd/resources/cloudflare-exporter/credential-expiry-probe-deployment.yaml",
         "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
@@ -1069,7 +1084,7 @@
       "key": "2:docker.io/otel/opentelemetry-collector-contrib",
       "last_proven": "2026-10-21T21:15:54Z",
       "name": "docker.io/otel/opentelemetry-collector-contrib",
-      "version": "0.163.2",
+      "version": "0.164.0",
       "where": [
         "argocd/resources/otel-collector/deployment.yaml"
       ]
@@ -1208,7 +1223,7 @@
       "key": "3:agent-gateway",
       "last_proven": "2026-10-24T20:21:13Z",
       "name": "agent-gateway",
-      "version": "2026.10.24-gf51d97c0826f (×1)",
+      "version": "2026.10.27-g4b154e48568b (×1)",
       "where": [
         "argocd/resources/agent-gateway/deployment.yaml",
         "argocd/resources/agent-gateway/kustomization.yaml"
@@ -1304,7 +1319,7 @@
       "key": "5:cloudflare/cloudflare@tofu/cloudflare",
       "last_proven": "2026-10-21T02:57:42Z",
       "name": "cloudflare/cloudflare",
-      "version": "5.28.0 (`~> 5.0`)",
+      "version": "5.28.1 (`~> 5.0`)",
       "where": [
         "tofu/cloudflare/versions.tf",
         "tofu/cloudflare/.terraform.lock.hcl"
@@ -2178,6 +2193,28 @@
       "version": "4.3.1",
       "where": [
         "scripts/upstream-alerts-refresh.sh"
+      ]
+    },
+    {
+      "class": 18,
+      "gap_columns": [],
+      "key": "18:kyverno-policies",
+      "last_proven": null,
+      "name": "kyverno-policies",
+      "version": "3.9.2",
+      "where": [
+        "scripts/component-check.sh"
+      ]
+    },
+    {
+      "class": 18,
+      "gap_columns": [],
+      "key": "18:kyverno/policies",
+      "last_proven": null,
+      "name": "kyverno/policies",
+      "version": "release-1.19 @ 282e77f6d54e",
+      "where": [
+        "scripts/vendor-kyverno-policies.sh"
       ]
     },
     {

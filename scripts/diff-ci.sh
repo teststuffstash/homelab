@@ -55,7 +55,7 @@ MAP=(
   # report-only workload standards over every Application's RENDERED manifests (charts included —
   # iac-lane.md L0b's render pass, standing alone): the vendored+local policies, the checker, and
   # everything the ArgoCD layer applies. Exit 0 in --report mode; no ci.yaml step yet (operator-direct).
-  "component-check:^(argocd/|policy/component/|scripts/component-check\.sh$)"
+  "component-check:^(argocd/|policy/component/|scripts/(component-check|vendor-kyverno-policies)\.sh$)"
   "manifest-lint:^argocd/"
   "agentstack-rbac-lint:^argocd/resources/(agentstack|crossplane)/"
   "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel\.sh|scripts/iac-policy-test\.sh|scripts/fixtures/iac-policy/|devbox\.(json|lock)$)"

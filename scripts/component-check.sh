@@ -6,7 +6,7 @@
 #   devbox run component-check                       # --report over this checkout (exit 0 always)
 #   devbox run component-check -- --tree <dir>       # another checkout (a PR clone), same report
 #   devbox run component-check -- --enforce          # exit 1 on any finding (wired to nothing yet)
-#   devbox run component-check -- --only kargo       # one Application (debugging)
+#   devbox run component-check -- --only kargo,argo-rollouts   # a comma list of Applications (debugging)
 #   devbox run component-check -- --out <dir>        # keep the rendered manifests
 #
 # WHAT IT DOES. (1) RENDER: every `argocd/platform/*.yaml` Application — `spec.source` or
@@ -16,9 +16,10 @@
 # alike); a homelab git `path:` source is `kubectl kustomize`d when it carries a kustomization.yaml,
 # helm-templated when it is a chart dir, else concatenated the way ArgoCD's directory source applies
 # it (non-recursive unless `directory.recurse`). (2) EVALUATE: `kyverno apply policy/component/
-# --audit-warn` per Application — Kyverno is THE rule engine (operator ruling, iac-lane.md L0b; no
-# kube-linter/Polaris/kube-score here). (3) REPORT: one markdown table per policy on stdout, plus
-# the SERVICES.md coverage check and the list of what the render could NOT see.
+# <rendered kyverno-policies chart> --audit-warn` per Application — Kyverno is THE rule engine
+# (operator ruling, iac-lane.md L0b; no kube-linter/Polaris/kube-score here). (3) REPORT: one
+# markdown table per policy on stdout, plus the SERVICES.md coverage check and the list of what the
+# render could NOT see.
 #
 # WHAT IT DOES NOT SEE (printed every run — a check that is silent about its blind spots reports
 # green on the FU-125 class): namespaces ArgoCD creates via `CreateNamespace=true` (no manifest);
@@ -33,11 +34,22 @@
 # and exactly why the sentinel keeps the render pass as a separate step (v2) rather than inlining it.
 # Policies come from THIS checkout's policy/component/, never from --tree.
 #
-# RULES (policy/component/, every one Audit): require-pod-requests-limits + disallow-latest-tag
-# (VENDORED from kyverno/policies at KYVERNO_POLICIES_SHA below — the library has NO release tags),
-# pss-restricted-audit (Kyverno's native podSecurity subrule, restricted:latest), require-namespace-
-# pss-labels, disallow-ingress (local; headers say why). Homelab-specific facts (IP plan, exceptions
-# baseline, storage ledger) are the SENTINEL's business (policy/iac/), not this checker's.
+# RULES — three sources, every one Audit (operator rulings 2026-10-25):
+#   1. POD SECURITY `restricted` comes from the `kyverno-policies` HELM CHART (kyverno.github.io), rendered
+#      at check time at KYVERNO_POLICIES_CHART_VERSION below with `podSecurityStandard=restricted`,
+#      `policyType=ValidatingPolicy`, `validationFailureAction=Audit` (the chart's other knobs —
+#      `includeOtherPolicies: []`, `background: true` — stay at their defaults): 17 CEL policies, one
+#      row per missed control. Never a hand-written PSS policy here. The chart pull is WAN, like the
+#      chart pins themselves (diff-ci PUSH_HEAVY).
+#   2. The LIBRARY RULES in policy/component/ are VENDORED from kyverno/policies `release-1.19` by
+#      scripts/vendor-kyverno-policies.sh (its MANIFEST is the list, its header says why that branch
+#      and how each CEL-vs-legacy choice was made from the upstream migration audit; the pin is
+#      KYVERNO_POLICIES_REF/SHA there, Renovate-bumped, re-fetched on the bump). restrict-image-
+#      registries carries the one LOCAL PATCH (our registry allowlist). Every run re-checks the
+#      vendored copy against upstream (`--check`) — drift is a tool error in the report.
+#   3. LOCAL: require-namespace-pss-labels, disallow-ingress (headers say why no library rule fits).
+# Homelab-specific facts (IP plan, exceptions baseline, storage ledger) are the SENTINEL's business
+# (policy/iac/), not this checker's.
 #
 # SERVICES.md COVERAGE (rule e). Every Application here is either a row in SERVICES.md (the file
 # path `argocd/platform/<name>.yaml` or the name as a word in a table row) or matches one of the
@@ -48,8 +60,14 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
-# renovate: datasource=git-refs depName=https://github.com/kyverno/policies (no customManager yet — docs/renovate.md)
-KYVERNO_POLICIES_SHA=879f0814edec2bdf43b6940f9c5c0c1635c85e6a
+# The chart pin — Renovate's helm customManager reads these two lines (class 18, docs/dependency-classes.yaml):
+# renovate: datasource=helm depName=kyverno-policies registryUrl=https://kyverno.github.io/kyverno
+KYVERNO_POLICIES_CHART_VERSION=3.9.2
+KYVERNO_POLICIES_CHART_REPO=https://kyverno.github.io/kyverno
+VENDOR="$HERE/vendor-kyverno-policies.sh"
+# the library pin, for the report line only — the vendor script owns it
+KYVERNO_POLICIES_REF="$(sed -n 's/^KYVERNO_POLICIES_REF=//p' "$VENDOR")"
+KYVERNO_POLICIES_SHA="$(sed -n 's/^KYVERNO_POLICIES_SHA=//p' "$VENDOR")"
 POLICY_DIR="${POLICY_DIR:-$ROOT/policy/component}"
 K8S_VERSION="${K8S_VERSION:-1.36.1}"   # same default as scripts/manifest-lint.sh (the cluster's line)
 HOMELAB_REPO_RE='^https://github\.com/teststuffstash/homelab(\.git)?/?$'
@@ -93,6 +111,26 @@ nfind=0; nerr=0
 
 log() { printf '%s\n' "$*" >&2; }
 count_docs() { grep -c '^kind:' "$1" 2>/dev/null || true; }
+
+# ── 0: the policy set — render the PSS chart, verify the vendored library copy ─────────────
+# Pod Security `restricted` as the kyverno-policies chart renders it (rule source 1 in the header).
+# `kyvernoVersion` is "autodetect" by default (reads the cluster's Deployment) — we pass the CLI's own
+# version so the chart picks the templates for the engine that evaluates them.
+PSS_DIR="$WORK/pss"; mkdir -p "$PSS_DIR"
+kyv_ver="$(kyverno version 2>/dev/null | sed -n 's/^Version: v\{0,1\}//p')"; [ -n "$kyv_ver" ] || kyv_ver=1.19.1
+if ! helm template kyverno-policies kyverno-policies --repo "$KYVERNO_POLICIES_CHART_REPO" --version "$KYVERNO_POLICIES_CHART_VERSION" \
+    --set podSecurityStandard=restricted --set policyType=ValidatingPolicy --set validationFailureAction=Audit \
+    --set "kyvernoVersion=$kyv_ver" --kube-version "$K8S_VERSION" > "$PSS_DIR/kyverno-policies.yaml" 2> "$WORK/pss.err"; then
+  echo "component-check: FAIL — kyverno-policies chart $KYVERNO_POLICIES_CHART_VERSION did not render (the checker, not the tree, is broken):" >&2
+  tail -5 "$WORK/pss.err" >&2; exit 2
+fi
+npss="$(grep -c '^kind: ValidatingPolicy' "$PSS_DIR/kyverno-policies.yaml" || true)"
+[ "$npss" -gt 0 ] || { echo "component-check: FAIL — kyverno-policies chart rendered 0 policies" >&2; exit 2; }
+# the vendored copy must be what the pin says it is — drift is a tool error, never silently evaluated
+if ! vendor_out="$(bash "$VENDOR" --check 2>&1)"; then
+  { echo "== policy/component/ vendored copy out of sync with kyverno/policies $KYVERNO_POLICIES_REF @ ${KYVERNO_POLICIES_SHA:0:12} (run scripts/vendor-kyverno-policies.sh):"; printf '%s\n' "$vendor_out" | sed -n '1,12p'; } >> "$TOOLERR"
+  nerr=$((nerr+1))
+fi
 
 # render_chart <app> <idx> <source-json> <dest-ns> <outfile>
 render_chart() {
@@ -201,7 +239,7 @@ evaluate() {
     | (select((.kind | test(strenv(CLUSTER_KINDS)) | not) and .metadata.namespace == null) | .metadata.namespace) = strenv(DEST_NS)
     | ... comments=""' "$res" > "$WORK/$app-clean.yaml" 2>/dev/null || true
   res="$WORK/$app-clean.yaml"
-  kout="$(kyverno apply "$POLICY_DIR" --audit-warn --resource "$res" 2>&1)"; krc=$?
+  kout="$(kyverno apply "$POLICY_DIR" "$PSS_DIR/kyverno-policies.yaml" --audit-warn --resource "$res" 2>&1)"; krc=$?
   if ! grep -qE '^pass: [0-9]+, fail: [0-9]+' <<<"$kout"; then
     { echo "== $app: kyverno rc=$krc with no summary (tool error, not a finding)"; printf '%s\n' "$kout" | grep -v '^Warning:' | tail -8; } >> "$TOOLERR"
     nerr=$((nerr+1)); return 0
@@ -229,7 +267,7 @@ for f in "$TREE"/argocd/platform/*.yaml; do
     [ -n "$app" ] || continue
     if [ "$kind" = "ApplicationSet" ]; then echo "$app: ApplicationSet — generator not expanded, nothing rendered" >> "$NOTSEEN"; continue; fi
     [ "$kind" = "Application" ] || continue
-    [ -z "$ONLY" ] || [ "$ONLY" = "$app" ] || continue
+    [ -z "$ONLY" ] || [[ ",$ONLY," == *",$app,"* ]] || continue
     echo "$app" >> "$APPNAMES"
     ns="$(jq -r '.spec.destination.namespace // "default"' <<<"$appjson")"
     if jq -e '.spec.syncPolicy.syncOptions // [] | index("CreateNamespace=true")' <<<"$appjson" >/dev/null; then
@@ -274,7 +312,7 @@ napps="$(grep -c . "$APPNAMES" || true)"
 ndocs="$(awk -F'\t' '{s+=$3} END {print s+0}' "$RENDERLOG")"
 echo "## component-check — $MODE mode, tree \`$TREE\`"
 echo
-echo "Applications: $napps · rendered documents: $ndocs · policy findings: $nfind · SERVICES.md gaps: $nsvc · tool errors: $nerr · policies: \`$POLICY_DIR\` (kyverno/policies @ ${KYVERNO_POLICIES_SHA:0:12}) · kube-version $K8S_VERSION"
+echo "Applications: $napps · rendered documents: $ndocs · policy findings: $nfind · SERVICES.md gaps: $nsvc · tool errors: $nerr · policies: \`policy/component/\` (kyverno/policies $KYVERNO_POLICIES_REF @ ${KYVERNO_POLICIES_SHA:0:12}) + $npss PSS \`restricted\` policies (kyverno-policies chart $KYVERNO_POLICIES_CHART_VERSION) · kube-version $K8S_VERSION"
 echo
 echo "### Render per Application source"
 echo
