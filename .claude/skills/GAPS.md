@@ -78,6 +78,12 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       routed the record to the primary's final message. Sighted 2026-10-16, 2026-10-19,
       ~2026-10-22 → promote: `tools/handoff.md` gains the outbound shape; step 6 gains "in a second
       jail the durable record goes to the primary".
+      **RULED 2026-10-26 (operator): expand the protocol for now** — handoff had ONE mission (a stack
+      files homelab-side work) and is now used for more, so every assumption about it is suspect; the
+      wanted end state is stack↔platform communication that does not ride the seat (oracle-fleet's
+      `platform-request` label is the shape), and a multi-context design (the Kargo build: both sides
+      build, then come back) stays on the table. "handoff + issues/PRs is good enough for now — a
+      useful antipattern to keep an eye on."
 
 ## meta-coordinate
 
