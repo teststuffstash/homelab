@@ -893,11 +893,20 @@ Flash secrets (wifi/OTA/api key) = `esphome/config/secrets.yaml`, regenerated fr
 ## Cloudflare (live)
 
 Home Assistant is reachable from anywhere at **`https://ha.teststuff.net`** via a Cloudflare Tunnel
-(`cloudflared` Deployment, ns `cloudflared`) gated by **client-certificate mTLS** (WAF-enforced). All
-as code in `tofu/cloudflare/` (infra) + `tofu/cloudflare-token/` (scoped tokens); design + the full
-decision/gotcha record in `docs/cloudflare.md`.
+gated by **client-certificate mTLS** (WAF-enforced). Since 2026-10-26 the tunnel, the connector
+(Deployment `pr-home-assistant-ha-cloudflared`, ns `home-assistant`), the CNAME and the mTLS rule are
+the **PublicRoute claim** `home-assistant/ha` (`argocd/resources/ha-publicroute/`) — ArgoCD +
+Crossplane reconcile it, so a merged cloudflared pin deploys itself (one replica at a time, gated on
+"connected"). `tofu/cloudflare/` keeps the credential half (client cert + the zone's mTLS hostname
+association), `wg`/`*.local` and the minutark bootstrap — **no pin**; `tofu/cloudflare-token/` mints
+the scoped tokens. Design + the full decision/gotcha record: `docs/cloudflare.md` §Remote access.
 
-- **Apply (infra):** `source scripts/keepass-env.sh   # exports CLOUDFLARE_API_TOKEN (wallet: cloudflare-write-key)` then
+- **Claim health:** `kubectl get publicroute -n home-assistant ha` + the Workspace
+  `pr-home-assistant-ha` (`Synced`/`Ready`); a stuck Workspace's error is a gzip+base64 blob in its
+  condition message (`… | base64 -d | gunzip`).
+- **Apply (tofu/cloudflare — the credential half; nothing to do after a cloudflared bump):**
+  `source scripts/keepass-env.sh   # exports CLOUDFLARE_API_TOKEN (wallet: cloudflare-write-key)`, then
+  `TOFU_STATE_ROOT_DIR=$PWD/tofu/cloudflare . scripts/tofu-state-env.sh` and
   `devbox run -- tofu -chdir=tofu/cloudflare plan/apply`. The scoped write token is minted once by
   `tofu/cloudflare-token/` with an admin token, **outside the jail**.
 - **Phone cert:** `bash scripts/make-client-p12.sh` → `~/.claude/cloudflare/ha-client.p12` (pinned
