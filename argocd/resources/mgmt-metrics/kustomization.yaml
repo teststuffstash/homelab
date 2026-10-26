@@ -11,6 +11,7 @@ resources:
   - reconcile-rollout.yaml   # the fleet rollout's own belts (FU-273) — a file of its own
   - opnsense-drill.yaml      # the weekly OPNsense rebuild drill (FU-297)
   - upgrade-lease.yaml       # the ⚓ upgrade-lease loop's belts (ADR-150)
+  - router-verdict.yaml      # the box's `opnsense-test-vm` verdict loop (ADR-152 step 1)
 
 # The operator's progress view — "Management box — now" (uid mgmt-box-now): in-flight leases +
 # the box's lifecycle stats, progress from cluster truth, the Mgmt*/UpgradeLease* alerts as a 7-day

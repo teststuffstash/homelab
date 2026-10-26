@@ -1,0 +1,58 @@
+# The management box's ROUTER VERDICT belts (ADR-152 step 1, docs/management-box.md §MB3 "The router
+# surface"). mgmt/scripts/mgmt-router-verdict.sh (mgmt-router-verdict.timer, every 10 min) posts the
+# `opnsense-test-vm` status on every open homelab PR head and writes mgmt_router_verdict_* to its
+# textfile (job mgmt-node). Once the context is REQUIRED, a silent box is a merge freeze on every PR —
+# these say so before a human wonders why nothing merges.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mgmt-router-verdict
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: mgmt-router-verdict
+      rules:
+        # Passes start every 10 min; one pass validates the queued heads one after another (~15 min
+        # each), so two hours without a finished pass = the timer, the unit or the box is stuck.
+        - alert: MgmtRouterVerdictStale
+          expr: |
+            (time() - mgmt_router_verdict_last_run_timestamp_seconds) > 2 * 3600
+          for: 15m
+          # triage none: the verdict loop runs on the management box; its cause is only in its journal
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "The box has not finished a router-verdict pass in 2 hours"
+            description: >-
+              No `opnsense-test-vm` status is being posted, so PR heads wait on it (required check).
+              On the box: `systemctl status mgmt-router-verdict`, `journalctl -u mgmt-router-verdict -n 200`.
+              Recipe: docs/management-box.md §MB3 "The router surface".
+        # The last real run could not run the harness (VM 9110 down, its API key wrong, nx-02
+        # unreachable, a timeout): that head is `error` and retried up to 3 times, then left red.
+        - alert: MgmtRouterVerdictErrored
+          expr: |
+            mgmt_router_verdict_last_result{state="error"} == 1
+          for: 5m
+          # triage none: the harness's own report is in the box journal
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "The box's last test-VM verdict could not run the harness"
+            description: >-
+              A router-path PR head got `opnsense-test-vm: error`. The reason is the status description
+              and `journalctl -u mgmt-router-verdict -n 300` on the box; the VM: docs/opnsense-test-vm.md.
+              After the third error the head is left red — clear /var/lib/mgmt-router/done/<sha>.errors
+              on the box to retry it.
+        # The box is scraped but the verdict file was never written (the unit never ran, or a moved
+        # textfile dir) — MgmtRouterVerdictStale would be blind.
+        - alert: MgmtRouterVerdictMetricsAbsent
+          expr: |
+            up{job="mgmt-node"} == 1
+              unless on (instance) mgmt_router_verdict_last_run_timestamp_seconds
+          for: 1d
+          # triage none: verdict textfile on the management box; cause only in its journal
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "The management box publishes no router-verdict metrics"
+            description: >-
+              node_exporter on the box answers, but /var/lib/node-exporter-textfile/mgmt_router_verdict.prom
+              has not appeared in a day. `systemctl list-timers mgmt-router-verdict.timer` on the box.

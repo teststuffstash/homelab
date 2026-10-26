@@ -80,6 +80,9 @@ ENV_TABLE=(
   "OPN_API_SECRET=opnsense-automation-api-secret"
   "OPN_BACKUP_API_KEY=opnsense-backup-puller-api-key"      # scripts/opnsense-drill.sh compare stage
   "OPN_BACKUP_API_SECRET=opnsense-backup-puller-api-secret"
+  # the router verdict (mgmt-router-verdict.sh): test VM 9110's OWN pair — it opens nothing on the router
+  "OPN_TESTVM_API_KEY=opnsense-test-api-key"
+  "OPN_TESTVM_API_SECRET=opnsense-test-api-secret"
   # the main root (scripts/keepass-env.sh's export list, one line each — swap for box-scoped mints as FU-012 minds them)
   "TF_VAR_grafana_admin_password=grafana-admin-password"
   "TF_VAR_ha_prometheus_token=ha-prometheus-token"

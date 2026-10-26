@@ -609,6 +609,61 @@ in
     };
   };
 
+  # ── the ROUTER VERDICT: `opnsense-test-vm` on every open PR head (ADR-152 step 1, §MB3 "The router
+  # surface") ─────────────────────────────────────────────────────────────────────────────────────
+  # Heads touching a router path (policy `router_test_vm.paths`) are validated on test VM 9110 by
+  # master's harness; every other head gets the n/a success, so the context can be required. PR code
+  # runs as `mgmt-opnsense-test` (no shell, no home secrets, a clean env) — the harness's OPN_TEST_RUN_AS.
+  # Its own lock (one VM), its own clone under /var/lib/mgmt-router (0711: the sandbox user must
+  # traverse to the run's worktrees; /var/lib/mgmt stays 0700). Runs from a DETACHED WORKTREE of the
+  # checkout (the drill's reason: mgmt-pull resets the checkout hourly, bash reads scripts as it runs).
+  #   restartIfChanged = false — an activation must not kill a run with the VM half-converged (the next
+  #     run rolls back anyway, but the head would sit `pending` until the next tick).
+  users.users.mgmt-opnsense-test = {
+    isSystemUser = true;
+    group = "mgmt-opnsense-test";
+    home = "/var/lib/mgmt-opnsense-test";
+    createHome = true;
+    shell = "${pkgs.shadow}/bin/nologin";
+  };
+  users.groups.mgmt-opnsense-test = { };
+  systemd.services.mgmt-router-verdict = {
+    description = "router verdict: validate router-path PR heads on the OPNsense test VM, post opnsense-test-vm";
+    after = [ "mgmt-checkout.service" "network-online.target" ];
+    wants = [ "mgmt-checkout.service" "network-online.target" ];
+    path = boxTools ++ (with pkgs; [ bash git devbox nix curl jq openssl openssh util-linux coreutils findutils gnugrep gawk gnused ]);
+    restartIfChanged = false;
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "4h";
+      Environment = [
+        "HOME=/root"
+        "MGMT_BOX=1"
+        "OPN_TEST_PVE_KEY=/var/lib/mgmt/pve-ssh/id_ed25519"
+        "MGMT_ROUTER_DIR=/var/lib/mgmt-router"
+        "MGMT_ROUTER_RUN_AS=mgmt-opnsense-test"
+        "MGMT_ROUTER_TEXTFILE=/var/lib/node-exporter-textfile/mgmt_router_verdict.prom"
+      ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    script = ''
+      set -euo pipefail
+      rev="$(git -C ${repoPath} rev-parse HEAD)"
+      src="$(mktemp -d /var/lib/mgmt/router-verdict-src.XXXXXX)"
+      trap 'git -C ${repoPath} worktree remove --force "$src" >/dev/null 2>&1 || rm -rf "$src"; git -C ${repoPath} worktree prune' EXIT
+      git -C ${repoPath} worktree add --quiet --detach "$src" "$rev"
+      bash "$src/mgmt/scripts/mgmt-router-verdict.sh"
+    '';
+  };
+  systemd.timers.mgmt-router-verdict = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:1/10";   # offset from the sentinel (*:0/5) and the apply loop (*:2/5)
+      RandomizedDelaySec = "1m";
+      Persistent = true;
+    };
+  };
+
   # ── the box holds no workloads, no storage, no container runtime ──────────────────────────────
   documentation.enable = false;
   services.xserver.enable = false;
