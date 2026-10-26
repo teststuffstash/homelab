@@ -78,7 +78,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   pile-up on hp-01/sn530 moved to intel1 (healthy, hp-01 + wk-metal-04). x16 slot: IGNORED by operator ruling (no soak,
   no FU). **Next (seat):** confirm the Garage resync converged + `layout history` is one version.
 - **⚑ RetroReportOverdue (2026-10-26) = quiet week (1 ledger task < 8), not a broken retro → #2932 (quiet = exit 3,
-  skip rides, `outcome=quiet` push).** **Next (seat):** once merged + ArgoCD-synced, hand-fire `retro-session` →
+  skip rides, `outcome=quiet` push).** ⚠ CI RED: ADR-103 ratchet — retro-argo.yaml is a clause file, the PR needs a
+  replay fixture that reds on the pre-fix guard (model: `agents/replay/fixtures/retro-push-belt/`). **Next (seat):** add it IN the
+  PR (clone `fix/retro-quiet-week`); once merged + ArgoCD-synced, hand-fire `retro-session` →
   expect Succeeded, 3 tasks Skipped, the alert clears. The 1-task week itself is the real signal (loop near idle).
   GoCatalog alerts → queued as #2933 (drop-unknown-dialect ruling).
 - `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
