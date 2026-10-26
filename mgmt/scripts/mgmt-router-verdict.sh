@@ -154,7 +154,7 @@ while IFS=$'\t' read -r pr sha bref; do
   if [ "$bref" = master ]; then
     mgmt_git -C "$REPO" fetch --quiet origin "+refs/pull/$pr/head:refs/mgmt/pr-$pr" || { log "[#$pr] head fetch failed — skipped this tick"; continue; }
     base="$(git -C "$REPO" merge-base origin/master "$sha" 2>/dev/null)" || { log "[#$pr] no merge-base — skipped"; continue; }
-    files="$(git -C "$REPO" diff --name-only "$base" "$sha" --)" || { log "[#$pr] diff failed — skipped this tick"; continue; }
+    files="$(git -C "$REPO" diff --name-only --no-renames "$base" "$sha" --)"   # --no-renames: a router file renamed AWAY still lists its old path || { log "[#$pr] diff failed — skipped this tick"; continue; }
     touched="$(printf '%s\n' "$files" | mgmt_router_touched "$POL")" || { log "[#$pr] classifier failed — skipped"; continue; }
     n=0; [ -n "$touched" ] && n=$(grep -c . <<<"$touched")
   else
