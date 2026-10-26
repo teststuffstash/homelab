@@ -840,13 +840,15 @@ tofu roots, off the loops' shared lock (no tofu state is touched).
    (a hand converge, or a no-op change): nothing to apply, status success, the group's confirmed sha
    advances. The diff hunks go to the journal.
 3. **Drift — the preflight refusal.** The same plays at the sha this group was last CONFIRMED at
-   (`$ADIR/ansible-confirmed-<group>`; the previous master when there is none) run `--check` from a
+   (`$ADIR/ansible-confirmed-<group>` — an OBSERVATION, written in any mode by every check that read
+   live == a declaration: a clean target (= master), a clean drift read (= that sha), a confirmed
+   apply; the previous master when there is none) run `--check` from a
    throwaway worktree. Anything but changed=0 refuses to a human: `ansible-live-drift` (live already
    differs from what was declared before this span — the `helm-live-drift` analogue: the box never
    applies on top of a state nobody declared), `ansible-check-failed` / `ansible-unreachable` (could
    not look is never clean). Reading against the CONFIRMED sha rather than the bare previous master is
    what lets a shadowed span stay correct: a change the box only shadowed is not live, so the next
-   span reads it as pending, not as drift. A human converge clears a drift refusal: the next span's
+   span reads it as pending, not as drift — and the flip from `shadow` to `on` applies it. A human converge clears a drift refusal: the next span's
    target check reads changed=0.
 4. **Begin** — a stale lease of this group is a STOP (its actor died); a declared window
    (`agents/seat-window.sh`: the reconciler and the apply loop wait it out — a netboot reinstall never
