@@ -18,10 +18,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **LAN certs (FU-297) — DONE 2026-10-26 except one bind:** detector #2927, cron fix #2934 (both nodes), circles
-  renewed, `opnsense-cert-carry.sh` #2939 run live (pve's circles → 2027-01-24, homelab added), BACKUP sign guard
-  live. NEXT: when **#2940** (haproxy rebind on cert drift) merges → `opnsense-haproxy.yml --limit opnsense-pve` in
-  a window → pve `homelab-gw-frontend` binds `6ad1c907aed27` → trim FU-297's Next (1).
+- **LAN certs (FU-297) — DONE 2026-10-26** (detector, cron, carry, guard, rebind all live; `LanCertExpiringSoon`
+  clear). NEXT (FU-297 (1)): schedule `opnsense-cert-carry.sh nx02 pve` on the management box so the BACKUP follows
+  renewals without a seat.
 - **OPNsense 26.7.7 on the test VM (whoever is running that trial — baseline snapshot re-taken 2026-10-26 ~20:40Z,
   unrecorded):** against it the pinned `oxlorg.opnsense 26.1.11` FAILS the bgp play's neighbor task ("Failed field:
   'multiprotocol'", os-frr 2.0_2) and the haproxy play timed out — seen by the #2940 gate's BASE step. Prod stays

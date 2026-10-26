@@ -192,12 +192,12 @@ six OVERSIZE items pointer-ized into
       VM 9110 (plays under test follow the PR, #2930); a weekly from-nothing rebuild drill on the box scores prod's
       click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score). The pair is COMPLETE
       (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (56; 57 on 10-18 →
-      `MgmtOpnsenseDrillScoreRegressed`). **2026-10-26: the pair had never renewed a cert** — no AcmeClient cron job on
-      either node; FIXED (#2934 role task, applied both nodes), circles re-issued on the MASTER (valid to 2027-01-24),
-      `LanCertExpiringSoon` (#2927) resolved. **Still open: pve's carried copies cannot renew (no WAN as BACKUP) — circles'
-      copy expires 2026-11-02, a failover after that serves it expired.** **Next:** (1) cert-carry MASTER→BACKUP (export →
-      import under the same refid, HAProxy reload) + the role's sign-unissued step skipping a CARP BACKUP (its doomed LE
-      poll fails every run) before 11-02; (2) the 56 click-ops rows; CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298.
+      `MgmtOpnsenseDrillScoreRegressed`). 2026-10-26: the pair had never renewed a cert (no AcmeClient cron) — FIXED
+      end to end the same day: `LanCertExpiringSoon` #2927, cron #2934, `opnsense-cert-carry.sh` #2939 (run live, pve's
+      copies current), BACKUP sign guard, HAProxy rebind on cert drift #2940 (pve's `homelab-gw-frontend` bound).
+      **Next:** (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
+      nx02 pve`, idempotent) so the BACKUP follows the MASTER's renewals without a session; (2) the 56 click-ops rows
+      (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80
