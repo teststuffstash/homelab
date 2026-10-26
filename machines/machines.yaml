@@ -588,6 +588,11 @@ machines:
     # homelab.io/kata label + the FU-112b kubelet reservation. Compute tier: tainted ephemeral.
     talos_metal_node: true
     install_disk: /dev/disk/by-id/wwn-0x500a0751e87b861f # CT250MX500SSD1
+    # 2026-10-26: the HP firmware's AUTOMATIC legacy boot skips a GPT disk whose protective-MBR
+    # partition is not marked active ("no boot media"; the one-time boot menu boots it fine), so
+    # every unattended (re)boot fell through to PXE → boot-or-disk.ipxe `exit` → stuck. The flag
+    # sets Talos machine.install.legacyBIOSSupport (applied at install/upgrade).
+    legacy_bios: true
     kata: true
     longhorn_default_disk: true
     # 2026-09-09: two Intel SSD Pro 7600p 256 GB (SSDPEKKF256G8L — SM2262, 2×256 MB DDR4 DRAM, 3D TLC;

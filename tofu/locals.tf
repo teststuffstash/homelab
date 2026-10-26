@@ -97,6 +97,7 @@ locals {
       longhorn_disks = tolist(try(m.longhorn_disks, []))
       pin_hostname   = try(m.pin_hostname, true) != false # HostnameConfig patch; default true
       kata           = try(m.kata, false) == true         # metal_kata install image + homelab.io/kata label
+      legacy_bios    = try(m.legacy_bios, false) == true  # machine.install.legacyBIOSSupport (HP auto-boot needs the active pMBR)
       # ADR-133's laptop control plane. Drives machine_type in metal.tf and nothing else: a metal
       # CP keeps the metal schematic, the metal installer image and every other per-node flag.
       # INSTALL-TIME — Talos bakes machine_type at install, so flipping this on a running node is
