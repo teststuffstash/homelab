@@ -218,7 +218,8 @@ fi
 # DRAM-less SA400 (486 ms / 26 MB/s sustained) drops to `slow-bulk`: nothing new lands on it,
 # what already sits there (registry mirrors, garage-0's zone volumes until the rotation) stays.
 # storageReserved 0: Longhorn data only, no image store on these (the hg5d shape).
-for d in intel0 intel1; do
+# intel0 retired 2026-10-26 (dead drive — machines.yaml); intel1 alone carries the bulk tier here.
+for d in intel1; do
   if kubectl -n longhorn-system get nodes.longhorn.io wk-metal-04 -o jsonpath="{.spec.disks.$d.path}" 2>/dev/null | grep -q .; then
     echo "  wk-metal-04/$d already registered — skip"
   else

@@ -53,7 +53,11 @@
     mode: "0644"
     content: |
       #!ipxe
-      chain {{ matchbox_http }}/ipxe?mac=${mac:hexhyp} || exit
+      chain {{ matchbox_http }}/ipxe?mac=${mac:hexhyp} ||
+      {% for m in matchbox_sanboot_macs %}
+      iseq ${mac:hexhyp} {{ m | replace(':', '-') }} && sanboot --no-describe --drive 0x80 ||
+      {% endfor %}
+      exit
 
 # --- verification: the boot files are SERVED, not merely present on disk (FU-261) ---
 # The failure this catches is exactly the one that hid for months: a file staged (or not) on
