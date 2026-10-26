@@ -176,6 +176,29 @@
              | rejectattr('statusCode', 'eq', '200')
              | list }}
 
+    # A CARP BACKUP cannot order: the WAN gate leaves its WAN without link (docs/router-move.md
+    # §WAN follows the master), so every sign it attempts ends 400 and the poll below fails after
+    # its 24 retries on every run (FU-297, 2026-10-26). Its certs arrive by the carry instead —
+    # scripts/opnsense-cert-carry.sh <master> <backup> — so the role reads the LIVE role here
+    # (not the inventory's advskew: a failover makes the other node MASTER) and skips sign+poll on
+    # a BACKUP. Prod without CARP has no carp rows -> never a BACKUP. GET runs in check mode too.
+    - name: Read the CARP VIP status (a BACKUP never signs — the carry renews it)
+      oxlorg.opnsense.raw: { module: diagnostics, controller: interface, command: get_vip_status }
+      register: acme_vip_status
+
+    - name: Compute the node's CARP role
+      ansible.builtin.set_fact:
+        acme_carp_backup: >-
+          {{ (acme_vip_status.response.rows | default([])
+              | selectattr('mode', 'eq', 'carp') | map(attribute='status') | list | unique) == ['BACKUP'] }}
+
+    - name: Unissued certs left to the carry (this node is CARP BACKUP)
+      ansible.builtin.debug:
+        msg: >-
+          CARP BACKUP: not signing {{ acme_unissued | map(attribute='name') | join(', ') }} —
+          run scripts/opnsense-cert-carry.sh <master> <this node> from the MASTER (FU-297)
+      when: acme_unissued | length > 0 and acme_carp_backup | bool
+
     - name: Sign unissued certs (POST certificates/sign/<uuid>)
       oxlorg.opnsense.raw:
         module: acmeclient
@@ -184,7 +207,7 @@
         action: post
       loop: "{{ acme_unissued }}"
       loop_control: { label: "{{ item.name }} ({{ item.uuid }})" }
-      when: acme_unissued | length > 0
+      when: acme_unissued | length > 0 and not acme_carp_backup | bool
 
     - name: Poll until signed certs report statusCode 200 (LE issuance)
       oxlorg.opnsense.raw:
@@ -199,4 +222,4 @@
         | list | length == 0
       retries: 24
       delay: 5
-      when: acme_unissued | length > 0
+      when: acme_unissued | length > 0 and not acme_carp_backup | bool
