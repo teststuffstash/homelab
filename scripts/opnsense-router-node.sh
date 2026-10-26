@@ -204,11 +204,12 @@ converge() {
     unset ACME_CF_TOKEN OPN_CARP_PASSWORD
     grep -E '^(opnsense-nx02|PLAY RECAP)|ok=' "$WORK/play-${p%.yml}.log" | tail -1 >&2
   done
+  # As the `automation` API user, like the plays (FU-013 — scripts/opnsense-playbook.sh).
   # Both DHCP scripts: OPN_DHCP_SERVER (dnsmasq-dhcp.py) picks the one that serves, the other
   # converges off — under the standby profile neither serves; a LIVE node serves from Kea (ADR-145).
   for py in dnsmasq-dhcp kea-dhcp tuya-egress; do
     log "opnsense/$py.py → $HOST$(case $py in *-dhcp) echo " (OPN_DHCP_SERVER=$dhcp_server OPN_DHCP_ENABLE=$dhcp_enable)";; esac)"
-    OPN_HOST="$HOST" OPN_API_KEY="$(kp opnsense-api-key)" OPN_API_SECRET="$(kp opnsense-api-secret)" \
+    OPN_HOST="$HOST" OPN_API_KEY="$(kp opnsense-automation-api-key)" OPN_API_SECRET="$(kp opnsense-automation-api-secret)" \
       OPN_DHCP_ENABLE=$dhcp_enable OPN_DHCP_SERVER=$dhcp_server OPN_KEA_HA="$kea_ha" \
       python3 "opnsense/$py.py" > "$WORK/$py.log" 2>&1 || { tail -15 "$WORK/$py.log" >&2; die "$py.py failed"; }
   done

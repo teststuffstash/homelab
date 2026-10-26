@@ -14,27 +14,25 @@
 # The account is create-if-absent keyed on description; to change/rotate the token,
 # delete the account in the UI/API and re-run with ACME_CF_TOKEN set.
 
-# --- ensure the plugin (boot-from-git: a fresh router gets it from this play) ---
-- name: Read firmware info
-  oxlorg.opnsense.raw: { module: core, controller: firmware, command: info }
-  register: fw_info
-- name: Install os-ddclient (absent)
-  oxlorg.opnsense.raw: { module: core, controller: firmware, command: install/os-ddclient, action: post }
-  when: fw_info.response.plugin | selectattr('name', 'equalto', 'os-ddclient') | map(attribute='installed') | first == "0"
-  register: ddclient_install
-- name: Wait for the plugin install to finish
-  oxlorg.opnsense.raw: { module: core, controller: firmware, command: upgradestatus, action: post }
-  register: fw_status
-  until: fw_status.response.status == "done"
-  retries: 30
-  delay: 5
-  when: ddclient_install is not skipped
-- name: Assert os-ddclient is installed
-  oxlorg.opnsense.raw: { module: core, controller: firmware, command: info }
-  register: fw_info2
-  failed_when: fw_info2.response.plugin | selectattr('name', 'equalto', 'os-ddclient') | map(attribute='installed') | first != "1"
-  # A version-locked mirror refuses plugin installs until the base is updated
-  # ("Installation out of date") — update OPNsense first, then re-run (2026-07-14).
+# --- the plugin must already be there (FU-013) ------------------------------------
+# The play runs as the `automation` API user, which holds no firmware privilege on purpose: a
+# package install is root-equivalent. The plugin is part of the router's BUILD — the bootstrap's
+# PLUGINS (scripts/opnsense-test-vm-bootstrap.sh) for a from-git box — so this play only asserts it.
+# Without os-ddclient the `dyndns` API does not exist (404), and `page-services-dyndns` does not
+# exist either, so the users role drops it from automation's list (403) — both land here.
+- name: Assert os-ddclient is installed (its dyndns API answers)
+  oxlorg.opnsense.raw: { module: dyndns, controller: settings, command: get }
+  register: dd_probe
+  ignore_errors: true
+- name: Fail with the install instruction
+  ansible.builtin.fail:
+    msg: >-
+      os-ddclient is not installed on {{ inventory_hostname }} (or `automation` lacks
+      page-services-dyndns): `dyndns/settings/get` failed. Installing a plugin is a root act —
+      install it (System > Firmware > Plugins, or POST core/firmware/install/os-ddclient with root's
+      key, inside a maintenance window), then re-run scripts/opnsense-api-users.sh so the users role
+      grants page-services-dyndns (it skips privileges a router does not have), then this play.
+  when: dd_probe is failed or (dd_probe.response.ddclient | default(none)) is none
 
 # --- the Cloudflare account (create-if-absent keyed on description) -------------
 - name: Find ddclient accounts

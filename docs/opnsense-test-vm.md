@@ -19,7 +19,7 @@ A throwaway OPNsense router at prod's version, so a router-config PR (`ansible/o
 | WAN = `vtnet1` = net1 | `vmbr0`, **`192.168.2.67/24`**, gateway `192.168.2.1` — the management path (API `:443` + SSH `:22` from `192.168.2.0/24` only) and the egress for firmware/plugins. "Block private networks" is off (WAN *is* private here) |
 | LAN = `vtnet0` = net0 | **`vmbr1`**, a bridge with **no port and no host address** — `192.168.1.1/24` ([`ip-plan.md`](ip-plan.md) carve). DHCP, HAProxy VIPs and Unbound on this side serve nobody |
 | BGP | a floating rule blocks **outbound TCP 179 on WAN**, so the box's FRR can never peer with the real Cilium nodes, whatever a playbook configures |
-| Version | the **26.7 series head** the mirror serves at build time (`SERIES=26.7` in the bootstrap — a series, never a point; 26.7.6_3 on 2026-10-11 with prod on 26.7.5) + `os-frr`, `os-haproxy`, `os-acme-client` (prod's three config plugins) — prod's series since 2026-09-29 |
+| Version | the **26.7 series head** the mirror serves at build time (`SERIES=26.7` in the bootstrap — a series, never a point; 26.7.6_3 on 2026-10-11 with prod on 26.7.5) + `os-frr`, `os-haproxy`, `os-acme-client`, `os-ddclient` (the plugins the plays drive — they ASSERT them, installing is root's, FU-013) — prod's series since 2026-09-29. Rebaselined 2026-10-26 to add `os-ddclient`: **26.7.7, `os-frr` 2.0_2** (prod: 26.7.5, `os-frr` 1.55) |
 | Baseline | snapshot **`baseline`** (the harness's default `OPN_TEST_SNAPSHOT`) — after firmware + plugins + API/SSH, before any homelab playbook |
 | Secrets | wallet only: `opnsense-test-root-password`, `opnsense-test-api-key`, `opnsense-test-api-secret`. Root SSH = key login with the pve seed key (`~/.claude/homelab-pve-ssh/id_ed25519`); no password auth |
 
@@ -31,7 +31,13 @@ path the same morning in window seat-1790760478-4482 (14 packages, 16 s, no rebo
 head moved again (`26.7.6_3`) and the hand-started drill failed its build the same way — the bootstrap
 now declares the SERIES and runs `update` passes until the version stops moving, so a head move is
 never a build failure again; prod (26.7.5) follows on its own attended window. Prod's other
-plugins (`os-ddclient`, `os-isc-dhcp`, `os-tftp`) are not installed: no play touches them.
+plugins (`os-isc-dhcp`, `os-tftp`) are not installed: no play touches them.
+
+**`os-frr` 2.0 (26.7.7, met on the 2026-10-26 rebaseline):** the neighbour model dropped
+`multiprotocol`, and the pinned `oxlorg.opnsense` 26.1.11 (the newest release) fails translating
+every existing neighbour row — the bgp play created the first neighbour and died on the second. The
+bgp role writes neighbours through `raw` since (the fields it sets exist in 1.55 and 2.0 alike); the
+collection pin is FU-298's. Prod meets 2.0 at its next firmware update — this VM met it first.
 
 ## Why this bootstrap mechanism
 
@@ -93,8 +99,12 @@ status: on the 2026-09-29 build `upgradestatus` read `error` for an update that 
 config was written and the importer never offers itself again; `bootstrap` refuses. Destroy the
 VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate it, then bootstrap.
 
-**Moving the baseline** (a new prod version): roll back, update, then replace the snapshot
-(`qm delsnapshot` + `qm snapshot`) and bump `SERIES` in the bootstrap script.
+**Moving the baseline** (a new series head, or a plugin added to the bootstrap's `PLUGINS`):
+`bash scripts/opnsense-test-vm-bootstrap.sh rebaseline` — rolls back, updates to the series head
+(a plugin install refuses an out-of-date base, so the update is not optional), installs what is
+missing, replaces the snapshot. ⚠ It moves the VM PAST prod whenever the mirror's head did — the old
+baseline is gone, the mirror serves no older point (2026-10-26: 26.7.5 → 26.7.7). A new SERIES is
+also a `SERIES` bump in the script.
 
 ## The official update path — observed on this VM (2026-09-29)
 
@@ -354,9 +364,11 @@ The box ([`management-box.md`](management-box.md)) runs it: `mgmt-opnsense-drill
 03:30 UTC** (±20 min, `Persistent`), `mgmt-opnsense-drill.service` in
 [`mgmt/nixos/hosts/mgmt/default.nix`](../mgmt/nixos/hosts/mgmt/default.nix) — from a detached
 worktree of the checkout's current revision (the hourly `mgmt-pull` reset must not change a script
-mid-run), `restartIfChanged = false`, 3 h timeout. Credentials: nothing new — the env file's prod
-OPNsense pair (already provisioned for the belt's `--check`, `mgmt-provision-secrets.sh`) and the
-pve seed key at `/var/lib/mgmt/pve-ssh/`; the drill VM's own creds are minted per run.
+mid-run), `restartIfChanged = false`, 3 h timeout. Credentials: the env file's read-only
+`backup-puller` pair (`OPN_BACKUP_API_*`, `mgmt-provision-secrets.sh` — the compare stage's one prod
+read, `config.xml`; root's pair until 2026-10-26, FU-013) and the pve seed key at
+`/var/lib/mgmt/pve-ssh/`; the drill VM's own creds are minted per run, and the converge runs as the
+drill VM's own `automation` user (the harness's identity, runbook §Validate a router-config PR).
 
 It writes `mgmt_opnsense_drill_*` to the textfile collector (job `mgmt-node`): `_success`,
 `_last_run_timestamp_seconds`, `_duration_seconds`, `_stage_seconds{stage}`,

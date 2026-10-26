@@ -61,7 +61,7 @@ changed is not in it, the green report proves nothing about your change — pass
 bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml         # + any extra ansible args
 ```
 
-The wrapper sources creds from the KeePass wallet (`opnsense-api-key`/`-secret`), falling back to `~/.claude/homelab-opnsense/{key,secret}`, builds the `httpx`
+The wrapper sources creds from the KeePass wallet — the `automation` API user (`opnsense-automation-api-key`/`-secret`, FU-013; root's pair only for `opnsense-users.yml` via `scripts/opnsense-api-users.sh`, a 403 means a privilege missing from `opnsense_api_users`) — builds the `httpx`
 interpreter from `ansible/controller-env`, installs the collection if missing, and passes the
 interpreter as `-e` (required — `devbox run` strips the env var).
 

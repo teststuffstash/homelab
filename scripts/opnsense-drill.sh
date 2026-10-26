@@ -53,9 +53,11 @@
 #
 # SECRETS: prod's config.xml holds private keys and hashes. Both documents live in a 0700 dir
 # under the workdir, mode 0600, and are deleted when compare returns; nothing prints a value.
-# Prod creds: OPN_API_KEY/OPN_API_SECRET if set (the box's env file), else the wallet
-# (opnsense-api-key/-secret). They are read into a curl config and UNSET before anything else
-# runs, so no play or script below can inherit them.
+# Prod creds: the READ-ONLY `backup-puller` API user (FU-013 — the one identity whose job is reading
+# config.xml): OPN_BACKUP_API_KEY/OPN_BACKUP_API_SECRET if set (the box's env file), else the wallet
+# (opnsense-backup-puller-api-key/-secret). Read into a curl config and the prod pairs UNSET before
+# anything else runs, so no play or script below can inherit them. (--router's one other prod read,
+# the WireGuard server pubkey, takes the `automation` pair from the wallet — jail only.)
 #
 # Environment: OPN_DRILL_VMID (9199), OPN_DRILL_HOST (192.168.2.68 — machines.yaml),
 # OPN_DRILL_LAN_BRIDGE (vmbr2), OPN_TEST_PVE (192.168.2.59), OPN_TEST_PVE_KEY (the pve seed key),
@@ -124,15 +126,15 @@ REPORT="$WORK/report.md"; : > "$REPORT"
 rep() { printf '%s\n' "$*" >> "$REPORT"; }
 
 # ---- prod creds → a 0600 curl config, then out of the environment ----------------------------
-_pk="${OPN_API_KEY:-}"; _ps="${OPN_API_SECRET:-}"
+_pk="${OPN_BACKUP_API_KEY:-}"; _ps="${OPN_BACKUP_API_SECRET:-}"
 if [ -z "$_pk" ] || [ -z "$_ps" ]; then
   _kp() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
             -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
-  _pk="$(_kp opnsense-api-key || true)"; _ps="$(_kp opnsense-api-secret || true)"
+  _pk="$(_kp opnsense-backup-puller-api-key || true)"; _ps="$(_kp opnsense-backup-puller-api-secret || true)"
 fi
-[ -n "$_pk" ] && [ -n "$_ps" ] || die "no prod API pair (OPN_API_KEY/SECRET or the wallet) — the compare stage needs it"
+[ -n "$_pk" ] && [ -n "$_ps" ] || die "no prod read pair (OPN_BACKUP_API_KEY/SECRET or the wallet's backup-puller entries) — the compare stage needs it"
 ( umask 077; printf 'user = "%s:%s"\n' "$_pk" "$_ps" > "$SEC/prod.curl" )
-unset _pk _ps OPN_API_KEY OPN_API_SECRET ACME_CF_TOKEN
+unset _pk _ps OPN_API_KEY OPN_API_SECRET OPN_BACKUP_API_KEY OPN_BACKUP_API_SECRET ACME_CF_TOKEN
 
 # ---- a throwaway credential set for the drill VM (never stored; dies with the VM) -------------
 OPN_TEST_ROOT_PASSWORD="$(openssl rand -base64 24)"
@@ -179,6 +181,9 @@ PY
   export OPN_TEST_SHAPE=router OPN_TEST_WAN_PCI="$WAN_PCI" OPN_TEST_WAN_MAC="$WAN_MAC" \
          OPN_TEST_CARRY_FROM="$SEC/carry.xml" OPN_TEST_CARRY=trust,acme,api-users,wireguard \
          OPN_TEST_WAN_MODE="$WAN_MODE" OPN_TEST_WAN_BRIDGE="${OPN_DRILL_WAN_BRIDGE:-vmbr9}"
+  # The carried API users already hold prod's keys, so the harness mints no `automation` key to
+  # adopt — the plays run as the VM's root here (the plain drill runs them as `automation`).
+  export OPN_TEST_AS=root
   TEXTFILE_FORCE_OFF=1
   PROBE_EXTRA_PKGS=python3-cryptography   # scripts/wireguard-handshake-probe.py, the wg_handshake probe
   [ "$WAN_MODE" != bridged ] || PROBE_EXTRA_PKGS="$PROBE_EXTRA_PKGS iperf3"
@@ -520,8 +525,10 @@ SH
   # The carried WireGuard server key: a real Noise handshake from the LAN side (the WAN is dark),
   # as the laptop peer, against PROD's server pubkey — so the road-warrior clients keep working
   # across the move with no re-issue. The peer's private key goes over stdin, never argv.
-  wgpub="$(curl -sk -K "$SEC/prod.curl" --max-time 20 "https://$PROD/api/wireguard/server/searchServer" \
+  ( umask 077; printf 'user = "%s:%s"\n' "$(_kpw opnsense-automation-api-key)" "$(_kpw opnsense-automation-api-secret)" > "$SEC/wg.curl" )
+  wgpub="$(curl -sk -K "$SEC/wg.curl" --max-time 20 "https://$PROD/api/wireguard/server/searchServer" \
              | jq -r '.rows[] | select(.name == "roadwarrior") | .pubkey' 2>/dev/null || true)"
+  rm -f "$SEC/wg.curl"
   pve "pct exec $CTID -- sh -c 'cat > /root/wg-probe.py'" < "$ROOT/scripts/wireguard-handshake-probe.py"
   hs="$(_kpw wireguard-laptop-privkey | pve "pct exec $CTID -- timeout 30 python3 /root/wg-probe.py 192.168.1.1 51820 - $wgpub" 2>&1 | tail -1 || true)"
   probe wg_handshake "$([ -n "$wgpub" ] && [ "${hs%% *}" = HANDSHAKE_OK ] && echo 1 || echo 0)" \

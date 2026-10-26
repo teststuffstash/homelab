@@ -1477,7 +1477,7 @@ this section.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
   need (the Garage state key + the state passphrase, the Cloudflare token — the read-only
   `homelab-mgmt-read` since FU-238's cloudflare leg, the write key before — and the Matchbox-Proxmox token,
-  the OPNsense API pair) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
+  the OPNsense `automation` API pair — never root's since 2026-10-26, FU-013 — plus the read-only `backup-puller` pair for the drill's compare) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
   `keepass-env.sh` list, one table line each) + `main.tfvars` + the runner App key
   `ci-runner.tf` reads by path + the `homelab-sentinel` App key, plus the file-shaped ones the `provisioning` root reads by path — the
   Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the
