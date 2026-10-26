@@ -3,3 +3,9 @@
 tftp_root: /srv/tftp
 matchbox_assets: /var/lib/matchbox/assets
 matchbox_http: "http://127.0.0.1:8080"
+# MACs whose firmware will not auto-boot the local disk (it falls through to PXE every time): with
+# no Matchbox profile, iPXE boots BIOS disk 0x80 itself instead of `exit`. wk-metal-04 (HP "Big
+# Data"): the automatic legacy boot says "no boot media" for its GPT MX500 while the one-time boot
+# menu boots it; legacyBIOSSupport (#2926) did not land on disk yet (2026-10-26).
+matchbox_sanboot_macs:
+  - "00:22:4d:4f:ab:2e"
