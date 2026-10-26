@@ -631,19 +631,39 @@ _substrate_curl() {
 }
 _substrate_jq() { mgmt_x jq "$@"; }
 
-# ── check: the OPNsense play still parses and connects (--check, no writes) ──────────────────────
+# ── check: the box-applied ansible surfaces still parse, connect and match git (--check, no writes) ──
 # Class 9 in docs/dependency-upgrades.md is the sharpest FU-097 gap and it is the ROUTER: a merged
 # group_vars change sits until a human remembers. Running it in check mode makes this probe the
 # router's drift belt too — and it catches the collection/httpx/API-credential regressions this
-# repo has already been bitten by.
+# repo has already been bitten by. Since ADR-152 step 2 (2026-10-26) the same check also runs every
+# play of every `apply_ansible` group in policy/mgmt/plan-input.yaml (Matchbox first — one home for the
+# play list, the applier's): the apply loop only looks when a span touches a group's paths, so a hand
+# edit on the LXC or a shadowed change shows HERE, as `drift` on the group's host. One verdict over
+# every recap (ansible_verdict, unchanged): a node/LXC that does not answer reads `unreachable`.
 check_ansible() {
   skip_requested ansible && { skipped ansible requested "SKIP requested"; return; }
-  [ -f "$REPO/scripts/opnsense-playbook.sh" ] || { skipped ansible no-input "no opnsense-playbook.sh"; return; }
-  if [ -z "${OPN_API_KEY:-}" ] && [ ! -f "$HOME/.claude/homelab-keepass/homelab.kdbx" ]; then
-    skipped ansible no-input "no OPNsense credential reachable"; return
+  local out="" rc=0 o r p ran=0 plays=""
+  if [ -f "$REPO/scripts/opnsense-playbook.sh" ] && { [ -n "${OPN_API_KEY:-}" ] || [ -f "$HOME/.claude/homelab-keepass/homelab.kdbx" ]; }; then
+    o="$(bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml --check 2>&1)"; r=$?
+    out+="$o"$'\n'; [ "$rc" = 0 ] && rc=$r; ran=$((ran + 1))
   fi
-  local out rc
-  out="$(bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml --check 2>&1)"; rc=$?
+  # the apply_ansible groups' plays — over the play's own ssh key (PVE_SSH_KEY on the box, the jail's cache else)
+  if [ -r "${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}" ]; then
+    plays="$(mgmt_x yq -r '.apply_ansible // {} | to_entries[] | .value.plays[]' policy/mgmt/plan-input.yaml 2>/dev/null)" || plays=""
+  fi
+  # ansible-core as this checkout's devbox.lock pins it, read as data on the box (mgmt_lock_tool — the
+  # applier's resolution, mgmt-ansible.sh); the jail's devbox shell has it on PATH
+  local apb=ansible-playbook
+  if [ -n "$plays" ] && [ -n "${MGMT_BOX:-}" ]; then
+    apb="$(mgmt_lock_tool "$REPO" ansible ansible-playbook 'python3\.[0-9]+-ansible-core' 2>&1)" \
+      && apb="$apb/bin/ansible-playbook" || { out+="ERROR! ansible-core unresolvable from devbox.lock: $apb"$'\n'; rc=1; plays=""; ran=$((ran + 1)); }
+  fi
+  while IFS= read -r p; do
+    [ -n "$p" ] && [ -f "$REPO/$p" ] || continue
+    o="$(ANSIBLE_CONFIG="$REPO/ansible/ansible.cfg" ANSIBLE_NOCOLOR=1 timeout 900 mgmt_x "$apb" "$p" --check 2>&1)"; r=$?
+    out+="$o"$'\n'; [ "$rc" = 0 ] && rc=$r; ran=$((ran + 1))
+  done <<<"$plays"
+  [ "$ran" -gt 0 ] || { skipped ansible no-input "no OPNsense credential and no ansible SSH key reachable"; return; }
   ansible_verdict "$rc" "$out"
 }
 
@@ -707,13 +727,13 @@ ansible_verdict() {
   if [ ${#errored[@]} -gt 0 ]; then
     failed ansible failed "task error on ${errored[*]}${tail}"
   elif [ ${#drifted[@]} -gt 0 ]; then
-    failed ansible drift "router DRIFT — ${drifted[*]}${tail}"
+    failed ansible drift "DRIFT — ${drifted[*]}${tail}"
   elif [ ${#unreach[@]} -gt 0 ]; then
     failed ansible unreachable "${unreach[*]} did not answer (connect error/timeout); $answered host(s) checked clean"
   elif [ "$rc" -ne 0 ]; then
     failed ansible failed "--check exited $rc with a clean recap: $(printf '%s' "$clean" | tail -2 | tr '\n' ' ')"
   else
-    passed ansible "opnsense-unbound --check: plumbing ok on $answered host(s), recap changed=0"
+    passed ansible "--check: plumbing ok on $answered host(s), recap changed=0"
   fi
 }
 
