@@ -18,6 +18,14 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **LAN certs (FU-297, 2026-10-26):** `LanCertExpiringSoon` #2927 (pr-wait running) → after merge roll
+  `deploy/blackbox-exporter -n monitoring` inside a declared window (config read at start only) → replay:
+  `probe_ssl_earliest_cert_expiry{instance="circles.teststuff.net:443"} - time()` ≈ 7d, alert fires +1h →
+  THEN open the cron-fix PR from the `fix/acme-renewal-cron` branch (committed in a seat clone, not pushed;
+  test-VM gate `opnsense-test-vm.sh --pr N`), apply `opnsense-acme.yml` on the MASTER, POST
+  `certificates/sign/<circles uuid>` on nx02 → then the cert-carry to pve before **11-02**.
+
+
 - **⚑ PICKUP (2026-10-24 12:30Z — S9 Renovate sweep; TICK-LOG 10-24).** Verify next session: homelab#2819 regrouped
   (chart 2.4.3 + digest) after #2886; sleep-tracking#203 rebuilt by Renovate after the 12:01Z hand-back; allure#11
   regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).
@@ -62,11 +70,20 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   own process until the operator says the gateway has proven it.
 - **⚑ ESCALATED → operator (board-sweep 10-24):** homelab#2588 `agent/error` 9 d (shared rate-pool strikes; class fix
   #2601 unqueued); #2808 + #2757 unqueued (#2757 blocks circles#129). #2589 must land before stint #1418 can close.
-- **⚑ wk-metal-04 `intel0` DEAD-ISH (found 2026-10-24 by docs-cleanup):** Longhorn disk Ready=False/NoDiskInfo since
-  10-20 15:07Z (WriteFile EIO); `nvme0` (eui …410f6) logs `Identify namespace failed (-5)` every minute; SMART "passed";
-  0 replicas on it, bulk tier one disk short. Detector `LonghornDiskNotReady` PR in flight (detector first). **OPERATOR:**
-  reseat / swap slot or drive on Big Data, then `longhorn-tag-disks.sh` re-registers it.
-  `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
+- **⚑ wk-metal-04 — Big Data's CPU x16 slot CORRUPTS DATA (2026-10-26, #2926 #2928 #2931).** intel0 (10-20) and intel1
+  (10-26, XFS corrupt after 2 min) both failed there; intel0 passed a 4 GiB write+readback in the x4 slot → tested shelf
+  spare. intel1 runs in the x4 slot, the x16 stays EMPTY. Firmware never auto-boots the MX500 → PXE → `boot-or-disk.ipxe`
+  sanboots it (`matchbox_sanboot_macs`); `legacyBIOSSupport` reaches disk only on the next upgrade. garage-0 rebuilt
+  fresh (new id `1f54eb71`, layout v5, resync from peers — collapses to one version on its own); registry-data's
+  pile-up on hp-01/sn530 moved to intel1 (healthy, hp-01 + wk-metal-04). x16 slot: IGNORED by operator ruling (no soak,
+  no FU). **Next (seat):** confirm the Garage resync converged + `layout history` is one version.
+- **⚑ RetroReportOverdue (2026-10-26) = quiet week (1 ledger task < 8), not a broken retro → #2932 (quiet = exit 3,
+  skip rides, `outcome=quiet` push).** ⚠ CI RED: ADR-103 ratchet — retro-argo.yaml is a clause file, the PR needs a
+  replay fixture that reds on the pre-fix guard (model: `agents/replay/fixtures/retro-push-belt/`). **Next (seat):** add it IN the
+  PR (clone `fix/retro-quiet-week`); once merged + ArgoCD-synced, hand-fire `retro-session` →
+  expect Succeeded, 3 tasks Skipped, the alert clears. The 1-task week itself is the real signal (loop near idle).
+  GoCatalog alerts → queued as #2933 (drop-unknown-dialect ruling).
+- `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
   09-14 — the std-tier exit left the Longhorn node record's disk entry behind). **Next (seat):** once it FIRES (~15:53Z
   10-24), remove that stale entry in a maintenance window, through the script that owns disk records.
 - **⚑ wk-metal-04 on Big Data (#2758, 2026-10-20).** Watch the MX500's 34 % lifetime used (attr 202). **OPERATOR:** the
