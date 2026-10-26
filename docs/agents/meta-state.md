@@ -75,8 +75,12 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   spare. intel1 runs in the x4 slot, the x16 stays EMPTY. Firmware never auto-boots the MX500 → PXE → `boot-or-disk.ipxe`
   sanboots it (`matchbox_sanboot_macs`); `legacyBIOSSupport` reaches disk only on the next upgrade. garage-0 rebuilt
   fresh (new id `1f54eb71`, layout v5, resync from peers — collapses to one version on its own); registry-data's
-  pile-up on hp-01/sn530 being moved to intel1. **Next (seat):** confirm the Garage resync converged + layout history
-  is one version; the hardware repo's inventory row (operator's repo).
+  pile-up on hp-01/sn530 moved to intel1 (healthy, hp-01 + wk-metal-04). x16 slot: IGNORED by operator ruling (no soak,
+  no FU). **Next (seat):** confirm the Garage resync converged + `layout history` is one version.
+- **⚑ RetroReportOverdue (2026-10-26) = quiet week (1 ledger task < 8), not a broken retro → #2932 (quiet = exit 3,
+  skip rides, `outcome=quiet` push).** **Next (seat):** once merged + ArgoCD-synced, hand-fire `retro-session` →
+  expect Succeeded, 3 tasks Skipped, the alert clears. The 1-task week itself is the real signal (loop near idle).
+  GoCatalog alerts → queued as #2933 (drop-unknown-dialect ruling).
 - `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
   09-14 — the std-tier exit left the Longhorn node record's disk entry behind). **Next (seat):** once it FIRES (~15:53Z
   10-24), remove that stale entry in a maintenance window, through the script that owns disk records.
