@@ -325,13 +325,24 @@ grep -qi "NOT the known signature" <<<"$out" && ok "cp-upgrade says the signatur
 # 6. The UNATTENDED pair — `snapshot` + `compare`, what the management box's apply loop brackets a
 # Talos config apply with (mgmt/scripts/mgmt-apply.sh). A fake curl answers as Prometheus (FAKE_ALERTS
 # = the firing names, FAKE_UP = sum(up)); everything else is the stub kubectl above.
-REAL_CURL="$(PATH="${PATH#"$TMP/bin:"}" command -v curl)"
-cat > "$TMP/bin/curl" <<EOF
+REAL_CURL="$(PATH="${PATH#"$TMP/bin:"}" command -v curl)"; export REAL_CURL
+cat > "$TMP/bin/curl" <<'EOF'
 #!/usr/bin/env bash
-[ "\${FAKE_PROM:-0}" = 1 ] || exec "$REAL_CURL" "\$@"
-case "\$*" in
-  *api/v1/alerts*) printf '{"status":"success","data":{"alerts":[%s]}}' "\$(for a in \${FAKE_ALERTS:-}; do printf '%s{"state":"firing","labels":{"alertname":"%s"}}' "\${sep:-}" "\$a"; sep=,; done)" ;;
-  *api/v1/query*)  printf '{"status":"success","data":{"result":[{"value":[0,"%s"]}]}}' "\${FAKE_UP:-100}" ;;
+[ "${FAKE_PROM:-0}" = 1 ] || exec "$REAL_CURL" "$@"
+# One firing alert per token: `Name` or `Name{k=v,k2=v2}` (its labels — the node-consequence bin
+# reads them, §9b). FAKE_ALERTS is the static set; FAKE_ALERTS_SEQ names a file whose FIRST line is
+# consumed per call — a scripted sequence for the watch (§9a): a line `FAIL` makes the probe fail,
+# an empty line answers with no alert at all (the parser half of BLIND).
+tok() { local t="$1" n="${1%%\{*}" l="" kv kvs; case "$t" in *"{"*) l="${t#*\{}"; l="${l%\}}" ;; esac
+  printf '{"state":"firing","labels":{"alertname":"%s"' "$n"
+  IFS=, read -ra kvs <<<"$l"; for kv in "${kvs[@]}"; do [ -n "$kv" ] && printf ',"%s":"%s"' "${kv%%=*}" "${kv#*=}"; done
+  printf '}}'; }
+alerts() { local set="${FAKE_ALERTS:-}" sep="" t
+  if [ -n "${FAKE_ALERTS_SEQ:-}" ]; then set="$(sed -n 1p "$FAKE_ALERTS_SEQ")"; sed -i 1d "$FAKE_ALERTS_SEQ"; [ "$set" != FAIL ] || return 1; fi
+  for t in $set; do printf '%s' "$sep"; tok "$t"; sep=,; done; }
+case "$*" in
+  *api/v1/alerts*) body="$(alerts)" || exit 7; printf '{"status":"success","data":{"alerts":[%s]}}' "$body" ;;
+  *api/v1/query*)  printf '{"status":"success","data":{"result":[{"value":[0,"%s"]}]}}' "${FAKE_UP:-100}" ;;
 esac
 EOF
 chmod +x "$TMP/bin/curl"
@@ -651,6 +662,168 @@ nmr="$(jq -c '[.data[] | fromjson | select(.by == "node-maintenance.sh" and .nod
 [ -n "$(jq -r '.closed_at // ""' <<<"$nmr")" ] && [[ "$(jq -r .tail_until <<<"$nmr")" > "$(iso '+15 minutes')" ]] \
   && ok "…and its declared record closes with a triage tail" || bad "nm declared record: $nmr"
 unset FAKE_CM FAKE_AM
+
+# ---------------------------------------------------------------------------------------------
+# 9. THE WINDOW TOOLING RESIDUE (GAPS maintenance-window-G2/G4/G5, built 2026-10-26): the `watch`
+# verb, the two EXPECTED bins (`--node` consequences, `--expect` declarations) and node-maintenance
+# `up` starting a VM. Same stub-repo shape as §7 (the REAL scripts, a seat-window stub that mints ids
+# and logs calls), plus a kubectl wrapper for the node context / the `up` reads and a fake ssh that
+# records what reached the hypervisor. The fake curl's token grammar (§6) carries the labels.
+S9="$TMP/s9"; REPO9="$TMP/repo9"; mkdir -p "$S9/bin" "$S9/fs" "$REPO9/scripts" "$REPO9/agents" "$REPO9/tofu" "$REPO9/machines" "$REPO9/opnsense"
+cp "$ROOT/scripts/maintenance-window.sh" "$ROOT/scripts/node-maintenance.sh" "$REPO9/scripts/"
+cp "$WREPO/agents/seat-window.sh" "$REPO9/agents/"
+export FAKE_BASE_BIN="$TMP/bin"
+cat > "$S9/bin/kubectl" <<'EOF'
+#!/usr/bin/env bash
+has() { [ -n "${FAKE_STATE:-}" ] && [ -f "$FAKE_STATE/$1" ]; }
+case " $* " in
+  # the window's --node context (n1): InternalIP + the pods on it (one DaemonSet pod, one ReplicaSet pod)
+  *" get node n1 -o jsonpath={.status.addresses"*) [ "${FAKE_NODECTX_FAIL:-0}" = 1 ] && exit 1; printf '10.0.0.1\n' ;;
+  *" get pods -A --field-selector spec.nodeName=n1 -o json "*)
+    [ "${FAKE_NODECTX_FAIL:-0}" = 1 ] && exit 1
+    printf '{"items":[{"metadata":{"name":"cilium-n1x","ownerReferences":[{"kind":"DaemonSet","name":"cilium"}]}},{"metadata":{"name":"web-1","ownerReferences":[{"kind":"ReplicaSet","name":"web-abc"}]}}]}\n' ;;
+  # node-maintenance `up` on v1/v2 (VMs), m1 (metal), x1 (neither): the node is Ready once the fake
+  # ssh has been reached (qm start or the WoL packet) — 127.0.0.1 so host_up's /dev/tcp probe
+  # is refused locally and never leaves the box.
+  *" get node "*" -o jsonpath={.status.addresses"*) printf '127.0.0.1\n' ;;
+  *" get node "*" -o jsonpath={.status.conditions"*) has started && printf 'True\n' || printf 'False\n' ;;
+  *" uncordon "*) echo "node/$2 uncordoned" ;;
+  *" get nodes.longhorn.io "*) echo "Error from server (NotFound): nodes.longhorn.io not found" >&2; exit 1 ;;
+  *" get node "*" -o wide "*) echo "$3 Ready" ;;
+  *" get orphans.longhorn.io "*) echo '{"items":[]}' ;;
+  *) exec "$FAKE_BASE_BIN/kubectl" "$@" ;;
+esac
+EOF
+cat > "$S9/bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$FAKE_STATE/ssh.log"; touch "$FAKE_STATE/started"
+EOF
+chmod +x "$S9/bin/kubectl" "$S9/bin/ssh"
+# The declaration `up` reads: one multi-line entry on nx-02 (the wk-04 shape), one single-line on the
+# default hypervisor; the hypervisor IPs from a machines.yaml; a DHCP source with ONE metal MAC.
+cat > "$REPO9/tofu/variables.tf" <<'EOF'
+variable "nodes" {
+  default = {
+    cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 12288, disk_gb = 40 }
+    v1 = { role = "worker", vm_id = 8114, ip_cidr = "192.168.2.64/24", cores = 16, memory_mb = 32768, disk_gb = 110, longhorn = true, hypervisor = "nx-02",
+      serial = true,
+    }
+    v2 = { role = "worker", vm_id = 8111, ip_cidr = "192.168.2.61/24", cores = 4, memory_mb = 32768, disk_gb = 80, longhorn = true }
+  }
+}
+EOF
+printf 'machines:\n  - name: pve\n    ip: 192.0.2.3\n  - name: nx-02\n    ip: 192.0.2.9\n  - name: v1\n    kind: vm\n' > "$REPO9/machines/machines.yaml"
+printf '    {"host": "m1", "hwaddr": "aa:bb:cc:dd:ee:ff", "ip": "192.168.2.99"},\n' > "$REPO9/opnsense/dnsmasq-dhcp.py"
+mw9() { PATH="$S9/bin:$PATH" DEVBOX_PROJECT_ROOT="$REPO9" MAINT_STATE_DIR="$S9/state" FAKE_STATE="$S9/fs" \
+        FAKE_PROM=1 FAKE_UP=100 bash "$REPO9/scripts/maintenance-window.sh" "$@" 2>&1; }
+renews() { grep -c '^renew' "$S9/fs/seat-window.log" 2>/dev/null || true; }
+
+# 9a. `watch`: seeded from the slot's baseline FILE (Foo fires at open and is never NEW), each new
+# name printed ONCE across ticks (Bar), a later one still caught (Baz), the meta-alert and a claimed
+# name silent, BLIND after 3 consecutive empty reads naming the parser half, then the probe half at
+# the next multiple, the lease renewed every tick, the run bounded by --ticks. Expected counts come
+# from the sequence below, not from running the code: Bar appears on lines 2–3 → ONE "NEW Bar";
+# Baz on line 4 → ONE; Qux is claimed before the run → zero; three empty lines → "BLIND 3 (parser";
+# three FAIL lines → blind 4,5,6 → "BLIND 6 (probe"; 10 ticks → 10 renew calls.
+FAKE_ALERTS="Watchdog Foo" mw9 open --reason "watch" >/dev/null
+mw9 claim --id w1 --alert Qux --match 'namespace=x,pod=~qux-.*' >/dev/null
+printf '%s\n' "Watchdog Foo" "Watchdog Foo Bar" "Watchdog Foo Bar Qux" "Watchdog Foo Bar Baz InfoInhibitor" "" "" "" FAIL FAIL FAIL > "$S9/seq"
+r0="$(renews)"
+out="$(FAKE_ALERTS_SEQ="$S9/seq" mw9 watch --id w1 --tick 0 --ticks 10)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "seeded from baseline (2 firing" <<<"$out" && ok "watch seeds its seen-set from the slot's baseline.json" || bad "watch rc=$rc did not seed from the file: $out"
+grep -q "NEW Foo" <<<"$out" && bad "watch printed a baseline alert as NEW" || ok "a baseline alert is never NEW in the watch"
+[ "$(grep -c "NEW Bar" <<<"$out")" -eq 1 ] && ok "watch prints a new name exactly once across ticks (dedupe)" || bad "NEW Bar printed $(grep -c "NEW Bar" <<<"$out") time(s): $out"
+[ "$(grep -c "NEW Baz" <<<"$out")" -eq 1 ] && ok "…and a later new name once too" || bad "NEW Baz count: $out"
+grep -q "InfoInhibitor" <<<"$out" && bad "watch printed the meta-alert" || ok "the meta-alerts stay silent in the watch"
+grep -q "NEW Qux" <<<"$out" && bad "watch printed a CLAIMED alert as NEW" || ok "a claimed name stays silent in the watch"
+grep -q "WATCH BLIND 3 empty reads (parser" <<<"$out" && ok "watch says BLIND after 3 empty reads, naming the parser half" || bad "no BLIND 3 (parser): $out"
+grep -q "WATCH BLIND 6 empty reads (probe" <<<"$out" && ok "…and names the probe half when the read itself fails" || bad "no BLIND 6 (probe): $out"
+grep -q "WATCH BLIND 1 \|WATCH BLIND 2 " <<<"$out" && bad "watch cried BLIND before the threshold" || ok "one or two empty reads are not BLIND"
+[ $(( $(renews) - r0 )) -eq 10 ] && ok "watch renews the lease on every tick (10 ticks → 10 renews)" || bad "renews per 10 ticks: $(( $(renews) - r0 ))"
+grep -q "10 tick(s) done" <<<"$out" && [ ! -e "$S9/state/w1/watch.pid" ] && ok "watch exits at --ticks and removes its pidfile" || bad "watch did not stop/cleanup at --ticks: $out"
+# One watch per window: a live pid in the slot refuses a second; --replace stops it first.
+sleep 30 & spid=$!; printf '%s' "$spid" > "$S9/state/w1/watch.pid"
+out="$(FAKE_ALERTS="Watchdog Foo" mw9 watch --id w1 --tick 0 --ticks 1)"; rc=$?
+[ "$rc" -ne 0 ] && grep -q "already running (pid $spid)" <<<"$out" && kill -0 "$spid" 2>/dev/null && ok "a second watch for the same window is refused, the first left running" || bad "second watch rc=$rc: $out"
+out="$(FAKE_ALERTS="Watchdog Foo" mw9 watch --id w1 --tick 0 --ticks 1 --replace)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "replaced the previous watch" <<<"$out" && ! kill -0 "$spid" 2>/dev/null && ok "watch --replace stops the old watch by its recorded pid and runs" || bad "--replace rc=$rc (old pid alive: $(kill -0 "$spid" 2>/dev/null && echo yes || echo no)): $out"
+wait "$spid" 2>/dev/null
+# The watch ends when the window does: a background watch sees `close` remove the slot and exits.
+FAKE_ALERTS="Watchdog Foo" mw9 watch --id w1 --tick 1 > "$S9/watch.out" 2>&1 & wpid=$!
+sleep 1; FAKE_ALERTS="Watchdog Foo" mw9 close --id w1 >/dev/null
+i=0; while kill -0 "$wpid" 2>/dev/null && [ $i -lt 60 ]; do sleep 0.1; i=$((i+1)); done
+if ! kill -0 "$wpid" 2>/dev/null; then wait "$wpid"; rc=$?; grep -q "window w1 closed — exiting" "$S9/watch.out" && [ "$rc" -eq 0 ] \
+  && ok "watch exits (rc 0) when close removes the window's slot" || bad "watch exit rc=$rc: $(cat "$S9/watch.out")"
+else kill "$wpid" 2>/dev/null; bad "watch kept running 6s after close: $(cat "$S9/watch.out")"; fi
+
+# 9b. EXPECTED (node consequence): a window `--node n1`; a consequence-class name whose EVERY firing
+# instance is pinned to n1 passes and is named; one instance elsewhere, a non-DaemonSet pod, another
+# CronJob or a name outside the class is NEW. The pins, from the alert rules' own labels
+# (argocd/platform/values/kube-prometheus-stack.yaml, argocd/resources/job-health): NodeRebooted
+# carries `instance=<ip>:9100` only; PodSigkilled `namespace`/`pod`; CronJobNotSucceeding `cronjob`.
+FAKE_ALERTS="Watchdog" mw9 open --reason "node" --node n1 >/dev/null   # w2
+[ "$(jq -r .node "$S9/state/w2/meta.json")" = n1 ] && ok "open --node records the node in the slot" || bad "meta.json node: $(cat "$S9/state/w2/meta.json")"
+exp9() { # <label> <alerts> <want-rc> <grep>
+  local out rc; out="$(FAKE_ALERTS="Watchdog $2" mw9 check --id w2)"; rc=$?
+  [ "$rc" -eq "$3" ] && grep -q "$4" <<<"$out" && ok "$1" || bad "$1 — rc=$rc (want $3), missing '$4': $out"; }
+exp9 "NodeRebooted on the node's instance is EXPECTED (node consequence)" 'NodeRebooted{instance=10.0.0.1:9100}' 0 "EXPECTED NodeRebooted (node consequence)"
+exp9 "NodeRebooted on ANOTHER node's instance is NEW" 'NodeRebooted{instance=10.0.0.2:9100}' 2 "NEW firing alerts: NodeRebooted"
+exp9 "PodSigkilled on one of the node's DaemonSet pods is EXPECTED" 'PodSigkilled{namespace=kube-system,pod=cilium-n1x}' 0 "EXPECTED PodSigkilled (node consequence)"
+exp9 "PodSigkilled on a non-DaemonSet pod is NEW" 'PodSigkilled{namespace=x,pod=web-1}' 2 "NEW firing alerts: PodSigkilled"
+exp9 "KubeNodeNotReady with node=n1 is EXPECTED" 'KubeNodeNotReady{node=n1}' 0 "EXPECTED KubeNodeNotReady (node consequence)"
+exp9 "…but a second instance on n2 makes the name NEW (every instance must be pinned)" 'KubeNodeNotReady{node=n1} KubeNodeNotReady{node=n2}' 2 "NEW firing alerts: KubeNodeNotReady"
+exp9 "CronJobNotSucceeding on fstrim-guard-n1 is EXPECTED" 'CronJobNotSucceeding{namespace=kube-system,cronjob=fstrim-guard-n1}' 0 "EXPECTED CronJobNotSucceeding (node consequence)"
+exp9 "CronJobNotSucceeding on another CronJob is NEW" 'CronJobNotSucceeding{namespace=x,cronjob=backup}' 2 "NEW firing alerts: CronJobNotSucceeding"
+exp9 "a name outside the consequence class stays NEW even pinned to the node" 'KubeAPIDown{node=n1}' 2 "NEW firing alerts: KubeAPIDown"
+# kubectl unreadable for BOTH context reads: the ⚠ is printed, and the instance- and pod-pinned
+# consequences are NEW — nothing that could not be read is "expected".
+out="$(FAKE_NODECTX_FAIL=1 FAKE_ALERTS="Watchdog NodeRebooted{instance=10.0.0.1:9100} PodSigkilled{namespace=kube-system,pod=cilium-n1x}" mw9 check --id w2)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "node context for n1 UNREADABLE" <<<"$out" && grep -q "NEW firing alerts: NodeRebooted, PodSigkilled" <<<"$out" \
+  && ok "an unreadable node context is said, and instance-/pod-pinned consequences are then NEW (fail-closed)" || bad "ctx-fail rc=$rc: $out"
+out="$(FAKE_NODECTX_FAIL=1 FAKE_ALERTS="Watchdog KubeNodeNotReady{node=n1}" mw9 check --id w2)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "EXPECTED KubeNodeNotReady (node consequence)" <<<"$out" && ok "…while a node-label pin needs no context and still passes" || bad "ctx-fail node-label rc=$rc: $out"
+out="$(FAKE_ALERTS="Watchdog NodeRebooted{instance=10.0.0.1:9100} KubeNodeNotReady{node=n1}" mw9 close --id w2)"; rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$S9/state/w2" ] && ok "close succeeds with only node consequences off baseline" || bad "close rc=$rc on node consequences: $out"
+FAKE_ALERTS="Watchdog" mw9 open --reason "no node" >/dev/null   # w3
+out="$(FAKE_ALERTS="Watchdog KubeNodeNotReady{node=n1}" mw9 check --id w3)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: KubeNodeNotReady" <<<"$out" && ok "without --node the same alert is NEW (strict by default)" || bad "no-node rc=$rc: $out"
+FAKE_ALERTS="Watchdog" mw9 close --id w3 >/dev/null
+
+# 9c. EXPECTED (declared): `open --expect A,B` records names the seat knows the act produces;
+# check/close pass them, named; anything else beside them stays NEW; the list is names only.
+out="$(FAKE_ALERTS="Watchdog" mw9 open --reason "declared" --expect Det,Other)"; rc=$?   # w4
+[ "$rc" -eq 0 ] && [ "$(jq -c .expect "$S9/state/w4/meta.json")" = '["Det","Other"]' ] && grep -q "expecting Det, Other" <<<"$out" \
+  && ok "open --expect records the names in the slot and says they are not a silence" || bad "open --expect rc=$rc: $out / $(cat "$S9/state/w4/meta.json" 2>/dev/null)"
+out="$(FAKE_ALERTS="Watchdog Det" mw9 check --id w4)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "EXPECTED Det (declared)" <<<"$out" && ! grep -q "NEW firing" <<<"$out" && ok "check passes a declared alert, named EXPECTED (declared)" || bad "declared check rc=$rc: $out"
+out="$(FAKE_ALERTS="Watchdog Det Baz" mw9 check --id w4)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: Baz$" <<<"$out" && ok "…while an undeclared alert beside it is NEW, named alone" || bad "declared+Baz rc=$rc: $out"
+printf '%s\n' "Watchdog Det" "Watchdog Det" > "$S9/seq"
+out="$(FAKE_ALERTS_SEQ="$S9/seq" mw9 watch --id w4 --tick 0 --ticks 2)"
+[ "$(grep -c "EXPECTED Det (declared)" <<<"$out")" -eq 1 ] && ! grep -q "NEW Det" <<<"$out" && ok "the watch prints a declared alert once as EXPECTED, never NEW" || bad "watch declared: $out"
+out="$(FAKE_ALERTS="Watchdog Det Other" mw9 close --id w4)"; rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$S9/state/w4" ] && ok "close succeeds with only declared alerts off baseline" || bad "declared close rc=$rc: $out"
+out="$(FAKE_ALERTS="Watchdog" mw9 open --reason "bad" --expect 'Det Other')"; rc=$?
+[ "$rc" -eq 64 ] && ok "open --expect refuses anything but comma-separated names" || bad "bad --expect rc=$rc: $out"
+
+# 9d. node-maintenance `up` on a VM: no MAC in the DHCP source, so the node is STARTED on the
+# hypervisor var.nodes declares (`qm start <vmid>` over ssh, as host-maintenance.sh's hv()), then the
+# verb waits for Ready as before. Expected from the fixtures above: v1 → vmid 8114 on nx-02
+# (192.0.2.9, a multi-line entry), v2 → 8111 on the default pve (192.0.2.3); m1 has a MAC → WoL
+# (the python one-liner to PVE_HOST) and NO qm start; x1 has neither → the old wait, no ssh at all.
+nm9() { local n="$1"; rm -rf "$S9/nm-$n"; mkdir -p "$S9/nm-$n"
+        PATH="$S9/bin:$PATH" SILENCE=0 READY_TIMEOUT=10 FAKE_STATE="$S9/nm-$n" PVE_HOST=root@192.0.2.3 bash "$REPO9/scripts/node-maintenance.sh" up "$n" 2>&1; }
+out="$(nm9 v1)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "is a VM (vmid 8114 on nx-02)" <<<"$out" && grep -q "root@192.0.2.9 qm start 8114" "$S9/nm-v1/ssh.log" 2>/dev/null \
+  && ok "up starts a declared VM on ITS hypervisor (qm start 8114 on nx-02) and completes" || bad "up v1 rc=$rc: $out / $(cat "$S9/nm-v1/ssh.log" 2>/dev/null)"
+grep -q "python3" "$S9/nm-v1/ssh.log" 2>/dev/null && bad "up sent a WoL packet for a VM" || ok "no WoL packet for a VM"
+out="$(nm9 v2)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "root@192.0.2.3 qm start 8111" "$S9/nm-v2/ssh.log" 2>/dev/null && ok "a VM without a hypervisor= key starts on the default, pve" || bad "up v2 rc=$rc: $out / $(cat "$S9/nm-v2/ssh.log" 2>/dev/null)"
+out="$(nm9 m1)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "python3" "$S9/nm-m1/ssh.log" 2>/dev/null && grep -q "aabbccddeeff" "$S9/nm-m1/ssh.log" && ! grep -q "qm start" "$S9/nm-m1/ssh.log" \
+  && ok "metal keeps WoL (magic packet for its MAC, no qm start)" || bad "up m1 rc=$rc: $out / $(cat "$S9/nm-m1/ssh.log" 2>/dev/null)"
+out="$(nm9 x1)"; rc=$?
+[ "$rc" -ne 0 ] && grep -q "no VM declaration" <<<"$out" && [ ! -e "$S9/nm-x1/ssh.log" ] && ok "a node with neither MAC nor VM declaration waits as before (nothing sent, times out)" || bad "up x1 rc=$rc: $out"
 
 echo
 [ "$fails" -eq 0 ] && { echo "self-test: PASS"; exit 0; }
