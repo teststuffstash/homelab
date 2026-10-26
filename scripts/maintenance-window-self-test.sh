@@ -348,6 +348,15 @@ grep -q "CI runs" <<<"$out" && bad "compare ran the CI probe (the box has no gh)
 out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog KubeAPIDown" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
 [ "$rc" -eq 2 ] && grep -q "NEW firing alerts: KubeAPIDown" <<<"$out" && ok "compare exits 2 naming a new firing alert" \
   || bad "compare rc=$rc on a new alert: $out"
+# The stock meta-alerts are never NEW (GAPS maintenance-window-G4): InfoInhibitor flaps with any
+# `info` alert and landed between open and check in window after window; the route drops it, so does the diff.
+jq '.alerts=[]' "$TMP/base.json" > "$TMP/base-nometa.json"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog InfoInhibitor" FAKE_UP=100 bash "$SUT" compare "$TMP/base-nometa.json" 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "no new firing alerts" <<<"$out" && ok "compare ignores Watchdog/InfoInhibitor absent from the baseline" \
+  || bad "compare rc=$rc blocked on a stock meta-alert: $out"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog InfoInhibitor KubeAPIDown" FAKE_UP=100 bash "$SUT" compare "$TMP/base-nometa.json" 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: KubeAPIDown$" <<<"$out" && ok "…and still names the real new alert alone" \
+  || bad "compare rc=$rc with a meta-alert beside a real one: $out"
 out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 FAKE_CILIUM_NO_BACKEND=1 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
 [ "$rc" -eq 2 ] && grep -q "NO backend for 10.96.0.1:443" <<<"$out" && ok "compare exits 2 on the 2026-09-20 signature (cilium backend lost)" \
   || bad "compare rc=$rc on a lost cilium backend: $out"
@@ -373,6 +382,8 @@ case "$1" in
   open)  n=$(( $(cat "$FAKE_STATE/n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FAKE_STATE/n"
          echo "open w$n" >> "$log"; echo "✓ window w$n open until 2099-01-01T00:00:00Z — stub" ;;
   close) echo "close $*" >> "$log"; echo "✓ closed 1 window(s)" ;;
+  claim) echo "claim $*" >> "$log"; a=""; prev=""; for x in "$@"; do [ "$prev" = --alert ] && a="$x"; prev="$x"; done
+         echo "✓ claimed $a under window $3 — stub" ;;
   *)     echo "$*" >> "$log" ;;
 esac
 EOF
@@ -440,6 +451,23 @@ grep -q "old-7" <<<"$out" && [ ! -e "$MAINT_STATE_DIR/baseline.json" ] && ok "a 
 out="$(FAKE_ALERTS="Watchdog" mw close)"; rc=$?
 [ "$rc" -eq 0 ] && [ "$(tail -1 "$FAKE_STATE/seat-window.log")" = "close close --id old-7 --tail-min 20" ] \
   && ok "a migrated window closes by its recorded id" || bad "legacy close rc=$rc: $out"
+
+# 7g. CLAIMED alerts are the window's own (GAPS maintenance-window-G5): a `claim` records the name in
+# the slot; check/close print it as claimed and do not block on it; anything unclaimed stays NEW. Six
+# windows closed `--force` on their own declared fallout before this — the wait was the defect.
+FAKE_ALERTS="Watchdog" mw open --reason "claims" >/dev/null
+out="$(mw claim --id w4 --alert Foo --match 'namespace=x,pod=~foo-.*')"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(cat "$MAINT_STATE_DIR/w4/claimed" 2>/dev/null)" = "Foo" ] \
+  && ok "maint claim records the claimed name in the window's slot" || bad "claim rc=$rc did not record Foo: $out / $(cat "$MAINT_STATE_DIR/w4/claimed" 2>/dev/null)"
+out="$(FAKE_ALERTS="Watchdog Foo" mw check --id w4)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "CLAIMED under this window.*Foo" <<<"$out" && ! grep -q "NEW firing" <<<"$out" \
+  && ok "check passes on a firing alert the window claimed, and says so" || bad "check rc=$rc on a claimed alert: $out"
+out="$(FAKE_ALERTS="Watchdog Foo Bar" mw check --id w4)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: Bar$" <<<"$out" && ok "…while an unclaimed alert beside it is still NEW, named alone" \
+  || bad "check rc=$rc with Bar beside claimed Foo: $out"
+out="$(FAKE_ALERTS="Watchdog Foo InfoInhibitor" mw close --id w4)"; rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$MAINT_STATE_DIR/w4" ] && ok "close succeeds with only claimed + meta alerts off baseline" \
+  || bad "close rc=$rc on claimed Foo + InfoInhibitor: $out"
 unset FAKE_STATE
 
 # ---------------------------------------------------------------------------------------------

@@ -4,3 +4,9 @@
 # FRR must establish and learn a route from — docs/opnsense-test-vm.md §The rebuild drill.
 bgp_node_ips:
   - 192.168.1.2
+# The HAProxy VIPs on lo0, as on every router NODE (ansible/router-nodes/inventory.yml host vars —
+# ADR-088 as amended 2026-09-30: 192.168.3.0/24 is router-local, reached via the router, never on
+# `lan`). Prod's group_vars derive `lan` for a non-standby box, so without this the drill built
+# the retired Big Data shape and the score counted every VIP's interface (FU-297). The haproxy_tls
+# probe reaches the VIP through the router, as the --standby rehearsal proved with lo0.
+haproxy_vip_interface: lo0

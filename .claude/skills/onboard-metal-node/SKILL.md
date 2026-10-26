@@ -43,9 +43,14 @@ drain, delete, BGP, doc rows); do not re-derive it here.
    wrapper for this root — only for `tofu/`. (Stale-doc hit, 2026-09-07.)
    Confirm: `devbox run -- curl -s "http://192.168.2.30:8080/ipxe?mac=<aa-bb-..>"` → HTTP 200.
 
-2. **Reserve its IP** in `opnsense/dnsmasq-dhcp.py` (`hwaddr → ip`, maintenance IP == node IP),
-   then run `opnsense/dnsmasq-dhcp.py` with `OPN_API_KEY`/`OPN_API_SECRET` from the wallet
-   (entries `opnsense-api-{key,secret}` — FU-001; see how `scripts/opnsense-playbook.sh` reads them).
+2. **Reserve its IP** in `opnsense/dnsmasq-dhcp.py`'s `HOSTS` (`hwaddr → ip`, maintenance IP ==
+   node IP) — still the one home of the reservations — then apply it with
+   `opnsense/kea-dhcp.py` to BOTH CARP router nodes (LAN DHCP is Kea on the pair, ADR-145; the
+   dnsmasq script is the retired router's fallback): `bash scripts/opnsense-router-node.sh converge
+   nx02` then `… converge pve` runs it per node with the right `OPN_HOST`/`OPN_DHCP_ENABLE`/
+   `OPN_KEA_HA`; running `kea-dhcp.py` directly needs that env by hand (its header), with
+   `OPN_API_KEY`/`OPN_API_SECRET` from the wallet (entries `opnsense-api-{key,secret}`). Step 3
+   coming up at the reserved IP is the confirmation (promoted 2026-10-26, GAPS onboard-G3).
 
 3. **PXE-boot it** (or `devbox run talos-usb` for a USB ISO if PXE firmware is flaky). It comes up
    in Talos maintenance at the reserved IP.
@@ -70,6 +75,29 @@ drain, delete, BGP, doc rows); do not re-derive it here.
    ```
    Then delete the group from `flags.local.tf`. A flag never reaches git — `devbox run
    machines-lint` fails on a `matchbox_group` in any tracked provisioning file.
+
+## Variant: replacement hardware under an existing node name
+
+A dead box whose name, zone and data disks move onto new hardware is NOT a new node — keep the
+`machines.yaml` entry (name, `zone`, `longhorn_disks` by `eui`, the storage flags) and change only
+what the chassis changed: the MAC in step 2, `install_disk` (step 4 — pin by `wwn`/`eui`, the new
+box's enumeration order is nobody's promise), the hardware/notes lines. Then the normal steps,
+plus (promoted 2026-10-26, GAPS onboard-G4):
+
+- **Provisioning root in a fresh clone**: after step 1's env, `devbox run -- tofu
+  -chdir=tofu/provisioning init` before the flag apply — the root's `.terraform` is not in git.
+- **Step 5 is a REPLACE** of `talos_machine_configuration_apply.metal["<name>"]`, not a create —
+  read the plan for exactly one replace. Taint, zone and kata labels ride the surviving Node
+  object; verify them anyway (the section below).
+- **Disks re-match by identity, not by slot.** A moved data disk keeps its Longhorn disk UUID and
+  comes back `Ready`; a disk whose filesystem is new (the install disk's `/var/lib/longhorn`,
+  `DiskFilesystemChanged`) must be removed and re-registered with `scripts/longhorn-tag-disks.sh`
+  — and its slot FENCED (`allowScheduling: false` / the right tag) BEFORE the scheduler sees it:
+  the register→fence gap sat open to bulk replicas for ~30 s once ("disks syncing" between the
+  two writes) — re-run the script until the fence holds, then read `replicas` on the disk.
+- **Single-replica volumes** whose only replica lives on a kept disk come back faulted and
+  Longhorn salvages them once that disk is `Ready`; verify each is `healthy`/attached and its
+  consumer (the zone's Garage pod, a CNPG instance) is back before closing the window.
 
 ## Post-install registrations — the steps `Ready` does not gate
 

@@ -38,7 +38,10 @@ deliberately deferred (§Graduation).
 - **Live-verify every status claim** (GAPS design-agents-G1): transient docs — `meta-state.md`,
   the tracker, TICK-LOG — state what was true at their stamp. The board is the truth; `gh`/
   `kubectl` before repeating anything. The corpus prevents comprehension errors, live probes
-  prevent staleness errors; this sweep needs both.
+  prevent staleness errors; this sweep needs both. **An empty or "none" probe result is absence
+  only once the query's own success is shown** (exit status, or a positive control that returns
+  rows) — a probe that errors reads as an empty answer, and "the data is gone" from a malformed
+  query is a false status claim (promoted 2026-10-26, GAPS board-sweep-G2).
 - **The repo universe is CLAIM-DERIVED**: `stacks_json()` semantics — cluster AgentStack claims
   merged over `agents/stacks.json` — enumerating every stack's repos including context-only
   entries. Never a hand list, never "homelab" (the repo ≠ [the platform stack](../../../docs/glossary.md) ≠ the

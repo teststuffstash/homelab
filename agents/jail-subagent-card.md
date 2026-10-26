@@ -71,6 +71,9 @@
 
 - Run every verification your dispatch prompt names (lints, self-tests, replay fixtures) and
   include their real output — **never report done on red**, and never pipe-filter an exit code.
+- **An empty or "none" probe result is absence only once the query's own success is shown**
+  (exit status, or a positive control) — a probe that errors reads as an empty answer; report
+  the probe's failure, not the absence it fakes (promoted 2026-10-26, GAPS board-sweep-G2).
 - **"Pre-existing failure" is a claim, not an observation**: it requires a clean-master
   baseline run in the same report. A red you cannot reproduce on master is YOURS.
 - Report: outcome · `git diff --stat` · verification transcript tails · any deviation from the
