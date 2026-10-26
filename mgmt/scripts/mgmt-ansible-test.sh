@@ -110,6 +110,10 @@ eq converged-no-lease "0" "$(grep -c kubectl <<<"$C")"
 has converged-status '^status success ansible matchbox: live matches master' "$C"
 eq converged-confirmed-sha "$SHA" "$(cat "$ADIR/ansible-confirmed-matchbox")"
 has converged-metric-mark '	on	converged	0$' "$(cat "$ADIR/ansible-last-matchbox")"
+rm -f "$ADIR/ansible-confirmed-matchbox"
+run converged-shadow shadow clean - - -
+eq converged-shadow-observed "$SHA" "$(cat "$ADIR/ansible-confirmed-matchbox")"   # an observation, in shadow too
+eq converged-shadow-no-status "0" "$(grep -c '^status' <<<"$C")"
 
 # b. SHADOW: master would change, live = the previous master → would apply; no lease, no window, no status
 rm -f "$ADIR/ansible-confirmed-matchbox"
@@ -122,6 +126,12 @@ has shadow-target-is-master '^target matchbox.yml b$' "$C"
 eq shadow-no-apply "0" "$(grep -c '^apply ' <<<"$C")"
 eq shadow-no-kubectl-window-status "0" "$(grep -cE '^(kubectl|window|status)' <<<"$C")"
 has shadow-metric-mark '	shadow	shadow	8$' "$(cat "$ADIR/ansible-last-matchbox")"   # 4 plays × changed=2
+# the clean drift read is RECORDED (an observation): the next span's read starts from the previous master,
+# so the change this tick only shadowed reads as pending, never as drift, once the row flips on
+eq shadow-records-observed "$LAST" "$(cat "$ADIR/ansible-confirmed-matchbox")"
+run shadow-then-on on changed clean changed clean
+has shadow-then-on-base "^base matchbox.yml a$" "$C"; eq shadow-then-on-rc 0 "$RC"
+rm -f "$ADIR/ansible-confirmed-matchbox"
 # …and a DRIFT in shadow is only a log line
 run shadow-drift shadow changed changed - -
 eq shadow-drift-rc 0 "$RC"; has shadow-drift-line 'would REFUSE — ansible-live-drift' "$OUT"; eq shadow-drift-no-refuse "" "$(grep REFUSE <<<"$C")"
@@ -167,7 +177,7 @@ eq stop-confirm-lease-kept "0" "$(grep -c 'delete cm' <<<"$C")"
 eq stop-confirm-window-kept "0" "$(grep -c '^window close' <<<"$C")"
 has stop-confirm-marker '^'"$SHA"'	ansible/matchbox	.*	apply changed; confirm --check changed$' "$(cat "$ADIR/ansible-stopped")"
 has stop-confirm-status '^status failure ansible matchbox: applied, STOPPED on the confirm' "$C"
-eq stop-confirm-no-confirmed-sha "" "$(cat "$ADIR/ansible-confirmed-matchbox" 2>/dev/null)"
+eq stop-confirm-confirmed-stays-observed "$LAST" "$(cat "$ADIR/ansible-confirmed-matchbox" 2>/dev/null)"   # never master after a STOP
 # g. the marker refuses every later `on` apply — before any play runs; a shadow row still evaluates
 run stopped on changed clean changed clean
 eq stopped-rc 3 "$RC"; has stopped-refused '^REFUSE ansible matchbox: ansible applies STOPPED since' "$C"; eq stopped-no-play "0" "$(grep -cE '^(target|base|apply) ' <<<"$C")"
