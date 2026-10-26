@@ -235,8 +235,11 @@ and `opnsense/*.py` as the VM's own `automation` user with the ref's `opnsense_a
 shape (FU-013), so a play that needs a privilege the list lacks fails here with a 403, not on prod
 (`OPN_TEST_AS=root` is the old shape; the `--router` rehearsal uses it). `--status`
 also sets an `opnsense-test-vm` commit status on the validated head sha — it needs a token with
-*Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29), so from the jail the PR
-comment, which names the sha, is the record.
+*Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29). **Since 2026-10-26 the
+management box posts that status on every PR head itself** (`mgmt-router-verdict`,
+[`management-box.md`](management-box.md) §MB3 "The router surface") — a seat run is a rehearsal or a
+second opinion; while the box runs one, `systemctl is-active mgmt-router-verdict` on the box says so
+(two rollbacks of 9110 at once break both runs).
 
 The same harness also drives the weekly **rebuild drill** — a second VM built from nothing,
 converged with all router code and scored against prod, never `9110`:

@@ -192,7 +192,7 @@ six OVERSIZE items pointer-ized into
       enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
       (operator's call), then a pin bump + drop the harness workaround.
 - [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs validated on
-      VM 9110 (plays under test follow the PR, #2930); a weekly from-nothing rebuild drill on the box scores prod's
+      VM 9110, box-posted `opnsense-test-vm` on every head since 2026-10-26 (#2930, ADR-152 step 1); a weekly from-nothing rebuild drill on the box scores prod's
       click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score). The pair is COMPLETE
       (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (56; 57 on 10-18 →
       `MgmtOpnsenseDrillScoreRegressed`). 2026-10-26: the pair had never renewed a cert (no AcmeClient cron) — FIXED

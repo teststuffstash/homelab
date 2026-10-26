@@ -9,8 +9,8 @@
       ],
       "human_rows": 0,
       "id": 1,
-      "last_proven": "2026-10-24T15:25:17Z",
-      "last_proven_pr": 2819,
+      "last_proven": "2026-10-26T22:21:44Z",
+      "last_proven_pr": 2944,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
       "rows": 15
@@ -40,8 +40,8 @@
       ],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-10-26T13:03:21Z",
-      "last_proven_pr": 2925,
+      "last_proven": "2026-10-26T22:51:23Z",
+      "last_proven_pr": 2947,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 5
@@ -151,8 +151,8 @@
       ],
       "human_rows": 0,
       "id": 10,
-      "last_proven": "2026-10-22T16:41:42Z",
-      "last_proven_pr": 2820,
+      "last_proven": "2026-10-26T22:15:41Z",
+      "last_proven_pr": 2945,
       "name": "arc-runner image inputs",
       "owner_may_leave": false,
       "rows": 3
@@ -301,14 +301,14 @@
   "proofs": {
     "classes": {
       "1": {
-        "merged_at": "2026-10-24T15:25:17Z",
-        "pr": 2819,
-        "title": "chore(deps): update crossplane to v2.4.3"
+        "merged_at": "2026-10-26T22:21:44Z",
+        "pr": 2944,
+        "title": "chore(deps): update code.forgejo.org/forgejo-helm/forgejo docker tag to v17.3.2"
       },
       "10": {
-        "merged_at": "2026-10-22T16:41:42Z",
-        "pr": 2820,
-        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.338.1"
+        "merged_at": "2026-10-26T22:15:41Z",
+        "pr": 2945,
+        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.338.2"
       },
       "12": {
         "merged_at": "2026-10-20T16:20:37Z",
@@ -326,9 +326,9 @@
         "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.10.4"
       },
       "3": {
-        "merged_at": "2026-10-26T13:03:21Z",
-        "pr": 2925,
-        "title": "deploy: agent-base 2026.10.26-gecdaf1344903.120"
+        "merged_at": "2026-10-26T22:51:23Z",
+        "pr": 2947,
+        "title": "arc-runners: pin runner image 2026.10.26-g2ac2a3cff05e"
       },
       "4": {
         "merged_at": "2026-10-23T21:00:58Z",
@@ -363,9 +363,9 @@
     },
     "rows": {
       "10:ghcr.io/actions/actions-runner": {
-        "merged_at": "2026-10-22T16:41:42Z",
-        "pr": 2820,
-        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.338.1"
+        "merged_at": "2026-10-26T22:15:41Z",
+        "pr": 2945,
+        "title": "chore(deps): update ghcr.io/actions/actions-runner docker tag to v2.338.2"
       },
       "10:jetify-com/devbox": {
         "merged_at": "2026-10-02T21:45:42Z",
@@ -408,9 +408,9 @@
         "title": "chore(deps): update helm release external-secrets to v2.13.0"
       },
       "1:forgejo": {
-        "merged_at": "2026-10-15T20:55:54Z",
-        "pr": 2603,
-        "title": "chore(deps): update code.forgejo.org/forgejo-helm/forgejo docker tag to v17.3.1"
+        "merged_at": "2026-10-26T22:21:44Z",
+        "pr": 2944,
+        "title": "chore(deps): update code.forgejo.org/forgejo-helm/forgejo docker tag to v17.3.2"
       },
       "1:infisical-standalone": {
         "merged_at": "2026-10-05T07:00:22Z",
@@ -513,9 +513,9 @@
         "title": "deploy: agent-gateway 2026.10.24-gf51d97c0826f"
       },
       "3:homelab/arc-runner": {
-        "merged_at": "2026-10-24T15:55:39Z",
-        "pr": 2901,
-        "title": "arc-runners: pin runner image 2026.10.24-g134efbeb581a"
+        "merged_at": "2026-10-26T22:51:23Z",
+        "pr": 2947,
+        "title": "arc-runners: pin runner image 2026.10.26-g2ac2a3cff05e"
       },
       "4:argo-cd": {
         "merged_at": "2026-10-22T11:16:35Z",
@@ -850,7 +850,7 @@
       "class": 1,
       "gap_columns": [],
       "key": "1:forgejo",
-      "last_proven": "2026-10-15T20:55:54Z",
+      "last_proven": "2026-10-26T22:21:44Z",
       "name": "forgejo",
       "version": "17.3.2",
       "where": [
@@ -1232,9 +1232,9 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:homelab/arc-runner",
-      "last_proven": "2026-10-24T15:55:39Z",
+      "last_proven": "2026-10-26T22:51:23Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.24-g134efbeb581a (×3)",
+      "version": "2026.10.26-g2ac2a3cff05e (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -2044,7 +2044,7 @@
       "class": 10,
       "gap_columns": [],
       "key": "10:ghcr.io/actions/actions-runner",
-      "last_proven": "2026-10-22T16:41:42Z",
+      "last_proven": "2026-10-26T22:15:41Z",
       "name": "ghcr.io/actions/actions-runner",
       "version": "2.338.2",
       "where": [

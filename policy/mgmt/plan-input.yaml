@@ -42,6 +42,24 @@ roots:                      # what the box plans; a PR path under the root's dir
                   # ⚠ not cone-clean for the BELT (mgmt-probe.sh): the root still configures the kubernetes
                   # provider (its last kubernetes resources are destroyed by the retrofit's apply), so its plan
                   # asserts the cluster is up — the sentinel plans it per PR head, the belt does not.
+router_test_vm:             # the ROUTER surface (ADR-152 step 1; mgmt/scripts/mgmt-router-verdict.sh, docs/management-box.md §MB3 "The router surface")
+  # A master-bound PR head touching one of these is validated on OPNsense test VM 9110 by MASTER's
+  # scripts/opnsense-test-vm.sh, its code run as the sandbox user, and gets the `opnsense-test-vm`
+  # status from the run; every other head gets "n/a" success — the context never skips. Globs: `*`
+  # stays inside one path segment, `**` crosses them. The list = what DEPLOYS to the router (the
+  # plays, their roles + values, the node inventories, the collection pin and the python the modules
+  # run under, the API scripts). NOT here, on purpose: the harness's own inputs (scripts/opnsense-*.sh,
+  # ansible/test-vm/**) — the box runs master's copy of them, so a head changing them would be judged
+  # by the old ones; their own change is proven by the seat's run and the weekly drill.
+  paths:
+    - "ansible/opnsense-*.yml"
+    - "ansible/roles/opnsense-*/**"
+    - "ansible/group_vars/opnsense*.yml"
+    - "ansible/router-nodes/**"
+    - "ansible/collections/requirements.yml"
+    - "ansible/controller-env/**"
+    - "ansible/ansible.cfg"
+    - "opnsense/*.py"
 foreign_roots:              # planned elsewhere (host / jail) — a PR touching only these gets "no box-held surface"
   - tofu/cloudflare-token
   - tofu/infisical

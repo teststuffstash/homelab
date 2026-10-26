@@ -296,10 +296,10 @@ management box, not an Argo Job (ADR-152 supersedes the ADR-093 candidate for th
 Order, lowest blast first; each step is a lease-wrapped box run and a capability-ledger row
 (`docs/management-box.md`):
 
-1. **Test surfaces post a verdict.** The box runs the test-VM harness on router-path PR heads and
-   posts an `opnsense-test-vm` status (the sentinel already judges heads touching box-held surfaces;
-   FU-295's base-pass covers the rest) — then the verdict becomes REQUIRED on router-path PRs (spike
-   D8, ruled "once box-posted"). A firmware currency belt: the box reads `firmware/status` per node
+1. **Test surfaces post a verdict.** ✅ box-posted 2026-10-26: `mgmt-router-verdict` runs the test-VM
+   harness on router-path PR heads (PR code sandboxed) and posts `opnsense-test-vm` on EVERY head (n/a
+   success otherwise) — `docs/management-box.md` §MB3 "The router surface". **Next:** REQUIRED (spike
+   D8, ruled "once box-posted") — the `tofu/github` `required_checks` change, an operator apply. A firmware currency belt: the box reads `firmware/status` per node
    and on the test VM (the `check_substrate` pattern, FU-254) — the class-14 detector gap.
 2. **Matchbox, box-applied** — near-zero cone, the first ansible applier: shadow (`--check` diff)
    first, then on. Rides FU-297 until it outgrows it. 🔜 **BUILT 2026-10-26 in shadow** (`apply_ansible`

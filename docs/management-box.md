@@ -429,6 +429,39 @@ perform reliably; the incident that forced this is
 `management-apply` is the second status context the App posts: on the master commit the box
 applied (or refused) — the "deployed" signal a PR author reads after merge.
 
+### The router surface — the `opnsense-test-vm` verdict (ADR-152 step 1, 2026-10-26)
+
+The sentinel's second surface: **every open homelab PR head gets an `opnsense-test-vm` status from
+the box** — [`mgmt/scripts/mgmt-router-verdict.sh`](../mgmt/scripts/mgmt-router-verdict.sh), unit +
+timer `mgmt-router-verdict` (`*:1/10`). A master-bound head touching a router path
+(`router_test_vm.paths` in `policy/mgmt/plan-input.yaml`, read from master — the plays, their roles and
+values, the node inventories, the collection pin, the controller python, `opnsense/*.py`) is validated
+on test VM 9110 by **master's** `scripts/opnsense-test-vm.sh` (the five steps, + step `all` when a play
+outside the floor or a script moved — [`opnsense-test-vm.md`](opnsense-test-vm.md)): PASS → `success`,
+FAIL → `failure`, could-not-run → `error`, retried up to three times. The report, scrubbed of
+credentials, is the PR comment (marker `<!-- opnsense-test-vm -->`); the harness's own lines are the
+journal. Every other head gets `success` "n/a: no router path in this head" and a `goal/**` child the
+assembly pass, so **the context never skips** and can be required (`tofu/github/variables.tf`: a
+check that can be absent deadlocks the merge).
+
+- **PR code runs sandboxed.** Ansible roles run `connection: local`, `opnsense/*.py` and the collection
+  are code — on this box, unboxed, a hostile head would read `/var/lib/mgmt/env`. So everything that
+  executes the head's code (galaxy install, the controller-env flake, `ansible-playbook`, the scripts)
+  runs as the system user `mgmt-opnsense-test` with a clean environment (`OPN_TEST_RUN_AS`); the
+  harness, guard, inventory and overrides are master's and alone hold the hypervisor key; the plays'
+  own root ssh to the VM gets a per-run key. The sentinel's stage-1 allowlist is the tofu answer to the
+  same threat; for ansible the answer is the sandbox, not a deny list.
+- **One VM, newest head.** Its own flock (never the sentinel/apply lock — a 15-min run must not stall
+  an apply), its own clone under `/var/lib/mgmt-router` (0711; `/var/lib/mgmt` stays 0700). A run whose
+  PR head moves is killed by the watchdog; the new head is judged next tick. Memo per head sha.
+- **Credentials:** the test VM's own pair (`OPN_TESTVM_API_*` ← wallet `opnsense-test-api-*`) and the
+  pve seed key — nothing that opens the router.
+- **Belts:** `mgmt_router_verdict_*` (textfile) → `MgmtRouterVerdictStale` / `-Errored` /
+  `-MetricsAbsent` ([`router-verdict.yaml`](../argocd/resources/mgmt-metrics/router-verdict.yaml)).
+- **Retry a head left red after three errors:** on the box, `rm /var/lib/mgmt-router/done/<sha>.errors`.
+- A head changing the harness itself (`scripts/opnsense-*.sh`, `ansible/test-vm/**`) is NOT a router
+  path: the box runs master's copy, so it is judged after it lands (the seat's run + the weekly drill).
+
 ### When the box refuses — the human plan (FU-237 (e), 2026-09-16)
 
 A stage-1 refusal posts `failure` on `management-sentinel`, a **required** context, and three
@@ -988,8 +1021,13 @@ even when every check is green.
 | Helm release apply, longhorn (restore point + ordered engine moves + the HOLD for 1-replica volumes) | policy row (#2467, #2491) | **2026-10-11 (CONFIRMED, unattended)** | longhorn 1.12.1 (#2463): first engine move STOPPED (replica socket `bind: address already in use`; converged by itself in ≈31 min — breakage record #1 → the 60-min bounded wait + resume #2479); the live 1-replica move broke garage-1 (ENODATA, incident 2026-10-10) → the HOLD (#2491). **longhorn 1.13.0 (#2487, Renovate): chart bracket 07:04:57→07:17:46Z CONFIRMED (15/15 rolled, BGP 26/26, robustness unchanged); `mgmt-helm-engines` 07:22:33→09:00:14Z: 42/42 moves, 9 holds (garage ×3, CNPG ×5 — primaries fail over first, 187–195 s detaches), 33 consumer checks whole, 42 lease renewals, CONFIRMED.** Records `s3://helm-evidence/20261011T07*-box-longhorn-*`; defect found by the run: #2495 (a running oneshot is `activating`) |
 | Longhorn OFFLINE engine move — the hold (cordon → delete the consumer → detached → patch → uncordon → replacement whole) | engines unit, every 1-replica attached volume | 2026-10-11 (by hand, then the function live) | garage-1 recovery by hand 06:30Z: detached 10 s, Ready 33 s after the uncordon; `helm_lh_offline_move` itself run live from the seat against garage-2 the same morning (image already current — the hold/release half is the whole act) — see §Helm release applies item 4 |
 | The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
+<<<<<<< HEAD
 | Router config converge, BACKUP-only (`apply_ansible.opnsense`, §Router config converge — BACKUP-only: the live CARP BACKUP, the node-local restore armed first, the security-boundary `deny_paths`) | `mode: shadow` (2026-10-26) | — (shadow; the node-local restore rehearsed on test VM 9110) | ROADMAP §Deploy paths step 3; enters as box-run with its first unattended confirmed BACKUP converge. The MASTER stays the row below |
 | Router config converge, MASTER (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
+=======
+| Router config: test-VM verdict box-posted (`mgmt-router-verdict`, the `opnsense-test-vm` status — §MB3 "The router surface") | always on (a verdict, never an apply) | 2026-10-26 | ADR-152 step 1; PR code sandboxed as `mgmt-opnsense-test`; required once the operator applies `tofu/github` |
+| Router config converge (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
+>>>>>>> 05127f5d (mgmt: the box posts the opnsense-test-vm verdict on every PR head (ADR-152 step 1))
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | human, by ruling (operator 2026-09-29: the official update path, no Renovate; majors attended — [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (seat API calls, trialled on test VM 9110 first; prod 2026-09-29 + 2026-09-30) | not a box capability: class 14 in `dependency-upgrades.md`; the box run is ROADMAP §Deploy paths program step 4 (test VM → BACKUP → MASTER under one lease), the revert a `qm snapshot` local to the node (spike D5) |
 | Matchbox (`ansible/matchbox*.yml` — the server + the PXE assets; `apply_ansible.matchbox`, §Ansible applies) | `mode: on` (2026-10-27; shadow 2026-10-26) | — (shadow tick 2026-10-26 22:42Z on #2948: `would apply 88933e71 → 90f4d4ff — matchbox-ipxe-tftp=1`, drift read clean) | class 15 in `dependency-upgrades.md`; near-zero cone, the FIRST ansible applier (ROADMAP §Deploy paths program step 2) — enters as box-run with its first unattended confirmed apply |
 

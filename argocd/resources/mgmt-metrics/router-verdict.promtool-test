@@ -1,0 +1,63 @@
+# Behaviour fixture for the router verdict's belts (ADR-152 step 1).
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/router-verdict.promtool-test
+#
+# promtool's clock starts at 0; time() is the test clock. Series values are what
+# mgmt/scripts/mgmt-router-verdict.sh writes.
+rule_files:
+  - router-verdict.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 10m
+    name: "passes every 10 min, last verdict a success: nothing fires"
+    input_series:
+      - series: 'mgmt_router_verdict_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0+600x300"
+      - series: 'mgmt_router_verdict_last_result{job="mgmt-node",instance="192.168.2.53:9100",state="success"}'
+        values: "1x300"
+      - series: 'mgmt_router_verdict_last_result{job="mgmt-node",instance="192.168.2.53:9100",state="error"}'
+        values: "0x300"
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x300"
+    alert_rule_test:
+      - { eval_time: 2d, alertname: MgmtRouterVerdictStale, exp_alerts: [] }
+      - { eval_time: 2d, alertname: MgmtRouterVerdictErrored, exp_alerts: [] }
+      - { eval_time: 2d, alertname: MgmtRouterVerdictMetricsAbsent, exp_alerts: [] }
+
+  - interval: 1m
+    name: "the passes stop: Stale after 2h + 15m, not before"
+    input_series:
+      - series: 'mgmt_router_verdict_last_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x300"
+    alert_rule_test:
+      - { eval_time: 2h10m, alertname: MgmtRouterVerdictStale, exp_alerts: [] }
+      - eval_time: 2h20m
+        alertname: MgmtRouterVerdictStale
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  - interval: 1m
+    name: "an errored verdict fires after 5m"
+    input_series:
+      - series: 'mgmt_router_verdict_last_result{job="mgmt-node",instance="192.168.2.53:9100",state="error"}'
+        values: "1x20"
+    alert_rule_test:
+      - { eval_time: 3m, alertname: MgmtRouterVerdictErrored, exp_alerts: [] }
+      - eval_time: 7m
+        alertname: MgmtRouterVerdictErrored
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", state: error }
+
+  - interval: 1m
+    name: "scraped box, no verdict file for a day: MetricsAbsent"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x1700"
+    alert_rule_test:
+      - { eval_time: 23h, alertname: MgmtRouterVerdictMetricsAbsent, exp_alerts: [] }
+      - eval_time: 26h
+        alertname: MgmtRouterVerdictMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100" }
