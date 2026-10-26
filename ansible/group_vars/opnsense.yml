@@ -58,6 +58,7 @@ bgp_node_ips:
 bgp_neighbor_weight:
   192.168.2.64: 200   # wk-04
   192.168.2.62: 100   # wk-02
+# (router-verdict proof PR — DO NOT MERGE; a comment only)
 # --- opnsense-system : identity ---
 # Names the web GUI accepts in the Host header besides the node's own (System > Settings >
 # Administration > Alternate Hostnames). The GUI name resolves to the `.1` CARP VIP, which either
