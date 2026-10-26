@@ -163,13 +163,11 @@ build) and stay here as pointers only until those merge.
 
 ## opnsense-as-code
 
-- [ ] opnsense-as-code-G1 — the test-VM gate was invisible from the skill and runs only the four
-      plays (2026-10-13: two runs died on unset `OPN_TEST_HOST`/`OPN_TEST_VMID`; an
-      `opnsense-system` change got a green report that never ran it). The skill half is promoted
-      ("Validate a router-role PR on the test VM" — script, env line, `--steps prep|… all`).
-      **Pointer: the play set following the PR's touched roles is being built as its own PR by a
-      seat subagent (2026-10-26) — close this entry when it merges.**
-
+- [x] opnsense-as-code-G1 — the test-VM gate was invisible from the skill and ran only the four
+      plays, so a PR touching another role got a green report that never ran its code (2026-10-13,
+      #2537 failed on the production BACKUP). **promoted→** the skill's "Validate a router-role PR on
+      the test VM" section (script, env line, reading the plays-under-test header); **built→** #2930:
+      the play set derives from the PR's touched paths, step `all` joins by default (2026-10-26).
 ## docs-cleanup
 
 - [x] docs-cleanup-G1 — a generated marker-delimited block was hand-edited; the pre-push hook caught

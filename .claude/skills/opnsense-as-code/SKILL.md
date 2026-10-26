@@ -48,11 +48,12 @@ bash scripts/opnsense-test-vm.sh --pr <n> --steps prep      # no VM: guard + syn
 bash scripts/opnsense-test-vm.sh --pr <n> --post            # steps 1–5; report as a PR comment
 ```
 
-⚠ **Steps 2/3/5 run ONLY the four plays** — acme, bgp, unbound, haproxy (the script's `PLAYS=`
-line). A PR touching any other role (`opnsense-system`, `-users`, `-ddclient`, `-wireguard`, …)
-gets a fully green report that never executed the changed code. For those, add step `all`
-(`--steps "1 2 3 4 5 all"` — it converges EVERY `ansible/opnsense-*.yml` at HEAD) or the run
-proves nothing about the change (promoted 2026-10-26, GAPS opnsense-as-code-G1).
+**The plays under test follow the PR.** Steps 2/3/5 run the floor (acme, bgp, unbound, haproxy)
+plus every play the PR's touched paths map to (`roles/opnsense-<x>` → `opnsense-<x>.yml`; a
+`group_vars` key → the plays that name it), and a touched play outside the floor adds step `all`
+by default (#2930). Read the `plays under test … / touched …` header of the run: if the role you
+changed is not in it, the green report proves nothing about your change — pass `--steps` yourself
+(promoted 2026-10-26, GAPS opnsense-as-code-G1).
 
 ## Apply
 
