@@ -31,8 +31,17 @@ conviction (the contracts-emerge-from-patterns rule) and never by self-editing m
 - **Re-sighting extends** the matching entry with a date — never a duplicate line. An entry
   with **≥2 dates is a class**: propose promotion.
 - **Promotion** moves the distilled rule INTO the skill with dated provenance ("operator catch
-  YYYY-MM-DD") and closes the entry in the same commit. Doctrine changes are operator-gated;
-  plain factual wrongness (the "was never true" class) is fixed directly, no entry needed.
+  YYYY-MM-DD") and closes the entry in the same commit — **as a PR, with no operator nod** (ruled
+  2026-10-26: the nod was never exercised in two months while entries grew to 95 lines; the bot
+  review is the gate, the operator reads skill PRs like any other). Only DOCTRINE still asks —
+  who decides, what the seat may do alone, a new credential or egress. Plain factual wrongness
+  (the "was never true" class) is fixed directly, no entry needed.
+- **An entry is ≤10 lines, like a tracker item** (`devbox run follow-ups-lint` → OVERSIZE-GAP). Over
+  the bar it is one of two things: a RULE, so promote it; or WORK (a verb to build, a script to
+  change), so file the `FU-NNN` and leave a pointer line. History lives in git, not in the entry.
+- **design-agents entries route elsewhere** (operator 2026-10-26: the skill is semi-deprecated,
+  context is read per island): cross-cutting rules go to `agents/jail-seat-card.md`, read-scoping
+  ones to the islands table (spike `context-and-autonomy.md` §C7) — never into that skill's text.
 - **≲5-minute factual fixes skip the ledger** — edit the skill, done.
 - An entry that grows into real deferred WORK graduates to a proper `FU-NNN`
   (`docs/follow-ups.md` stays the only tracker); the entry becomes a pointer line.

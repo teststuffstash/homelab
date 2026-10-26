@@ -32,6 +32,7 @@
 # - NO-BACKLINK: a pointer's target doc never mentions the id, so the two halves can drift
 #   apart silently.
 # - UNARCHIVED: a checked `- [x]` item still in the tracker — resolution = archive, not tick.
+# - OVERSIZE-GAP: an open .claude/skills/GAPS.md entry over the same cap — promote or file an FU.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
 
@@ -209,6 +210,25 @@ if [ -f "$ARCHIVE" ]; then
       echo "STALE-ARCHIVE $id — archived ${age}d ago (> ${EXPIRY_DAYS}d): delete the entry (scrub only TODO-shaped refs; provenance refs stay — ADR-116)"
     fi
   done
+fi
+
+# The skill-gap ledger (.claude/skills/GAPS.md, ADR-105) holds the same bar as a tracker item:
+# an open entry over MAX_ITEM_LINES is either a RULE (promote it into the skill — a PR) or WORK
+# (file the FU, leave a pointer line). Found 2026-10-26: 11 of 31 open entries over the bar, one
+# at 95 lines carrying a "Next: build the verb" nobody built — a ledger entry is not a tracker.
+GAPS=.claude/skills/GAPS.md
+if [ -f "$GAPS" ]; then
+  # Captured, not piped into a bare while: a `status=1` inside a pipeline's while runs in a
+  # subshell and is lost (the todo_report block above has the same shape for the same reason).
+  gap_report=$(awk '
+    /^- \[ \] [a-z-]+-G[0-9]+/ { if (id != "") print id "|" n; match($0, /[a-z-]+-G[0-9]+/); id = substr($0, RSTART, RLENGTH); n = 1; next }
+    /^- \[x\] / || /^## / || /^> / { if (id != "") print id "|" n; id = "" ; next }
+    id != "" && /^      / { n++ }
+    END { if (id != "") print id "|" n }
+  ' "$GAPS" | while IFS='|' read -r id n; do
+    [ "$n" -gt "$MAX_ITEM_LINES" ] && echo "OVERSIZE-GAP $id — ${n} lines (> ${MAX_ITEM_LINES}): promote the rule into the skill, or file the FU and leave a pointer"
+  done)
+  if [ -n "$gap_report" ]; then printf '%s\n' "$gap_report"; status=1; fi
 fi
 
 open_items=$(printf '%s\n' "$items" | grep -c . || true)

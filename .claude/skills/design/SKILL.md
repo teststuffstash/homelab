@@ -5,8 +5,10 @@ description: >
   subsystem (platform or not). Reads are PRE-AUTHORIZED: acquire the founding docs + the owning
   doc's link closure BEFORE forming an opinion, then answer with the grounding named. Use on
   "/design <question>", "let's design ...", "is <subsystem> doing a good job", "should we change
-  how <X> works" — any question where the deliverable is a judgment about intent, not a live-state
-  diagnosis. NOT for triage/incident work (probe the live thing instead).
+  how <X> works", "what should I improve in <X>'s setup" (an audit — security, caching,
+  performance), and when several passes gave DIFFERENT answers to the same question — any
+  question where the deliverable is a judgment about intent, not a live-state diagnosis. NOT for
+  triage/incident work (probe the live thing instead).
 ---
 
 # design — don't hold back on reads
@@ -29,6 +31,12 @@ It is the jail-side twin of the context-repos hypothesis (FU-117,
 eliminate is "I did not know due to the environment."* Token cost is pre-authorized by the
 operator; rework and breaches are the expensive thing, not reads.
 
+Two cues that look like triage and are not (promoted 2026-10-26, GAPS design-G2): **inconsistent
+answers** — the same question answered differently across passes means the first pass ran as
+grep-triage and missed intent held in the tracker/docs; re-run it here. **An audit** — "what should
+I improve in <X>'s setup" is a judgment against what X is TRYING to do; read its owning decision
+before the first recommendation, or the recommendation contradicts the design it audits.
+
 ## The read plan — four layers, in order
 
 1. **Base layer — always, in full**: `CONTEXT.md` (principles/decision lens) +
@@ -40,7 +48,11 @@ operator; rework and breaches are the expensive thing, not reads.
    term or concept whose home is the linked doc ([`docs/glossary.md`](../../../docs/glossary.md) is the
    term→home index — consult it first; chase any load-bearing term it doesn't rule). Cross-repo
    topics: the sibling repos under `/workspace/` and the private `../teststuff` docs are in
-   scope.
+   scope. **Proposing DOC EDITS ⇒ the closure gains the writer side** — `docs/README.md`
+   §Conventions + the docs-cleanup Hard rules (historical records are read-only in content;
+   pointer: [`../README.md`](../README.md) §Writer-side doc rules). The layers above are
+   reader-side; an answer that says "edit doc Y" is held to the rules for writing Y (promoted
+   2026-10-26, GAPS design-G1).
 3. **Decision/tracker layer — grep, then read matches**: `docs/follow-ups.md`,
    `docs/follow-ups-archive.md`, `docs/adr.md`, `docs/spikes/` by topic keywords; read the
    matching items/blocks in full (adr.md is an index of ≤20-line blocks, not a book).

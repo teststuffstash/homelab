@@ -19,6 +19,11 @@ for experiments that may never be committed. **These rules narrow the seat card
 (`CLAUDE.local.md`)**: its single-writer and direct-to-master authority belongs to the primary,
 not to you. Everything else in it (safety, prior-art, design routing) still applies.
 
+**Invoked mid-session?** Before anything else, list what this session already wrote as the primary
+— `git -C /workspace/homelab status` + `git -C /workspace/homelab log origin/master..HEAD` — and
+either finish each item under the old role (push the direct commit) or hand it to the primary in
+your final message; only then do the rules below start (promoted 2026-10-26, GAPS second-jail-G3).
+
 1. **Work only in a clone.** Before your first write:
    ```bash
    C=<your scratchpad>/<slug>
@@ -29,11 +34,18 @@ not to you. Everything else in it (safety, prior-art, design routing) still appl
    ```
    A clone, never `git worktree add` (worktrees share the main repo's refs — homelab#428). Reading
    `/workspace/homelab` is fine; never write, `checkout`, `commit`, `stash` or `reset` there.
+   The same holds for EVERY operator checkout under `/workspace` (`/workspace` itself is the
+   claude-jail checkout, the hardware repo, …): work from a clone, and rewriting a live tree —
+   a `reset`, a fast-forward, committing the operator's uncommitted changes — needs the
+   operator's say first (promoted 2026-10-26, GAPS second-jail-G1).
 2. **Write no shared record.** Not yours: `docs/follow-ups.md` + archive (never mint an FU id —
    the counter is the primary's), `docs/agents/meta-state.md`, `agents/coordinator/TICK-LOG.md`,
    `.claude/skills/GAPS.md`, the auto-memory directory (read it, don't write it). No direct push
    to master; no merging other PRs, no codeowner reads, no `major/awaiting-human` merges. A loose
-   end you find goes into your final message (and the PR body), for the primary to file.
+   end you find goes into your final message (and the PR body), for the primary to file. This list
+   is HOMELAB's records; another repo's records (the hardware repo's purchases file, a stack repo's
+   trackers) follow that repo's own protocol, not this rule (promoted 2026-10-26, GAPS
+   second-jail-G2).
 3. **Keeping work = the PR lane.** Branch from `origin/master` in the clone, open a PR, let the
    bot review. Reference only FU ids that already exist. Abandoning is fine — no commit needed.
 4. **Live infrastructure**: a mutation runs inside a

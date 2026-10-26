@@ -36,6 +36,15 @@ themselves — the typed form is the only one that loads. Enforced at the harnes
 never passes through the Skill tool). Reads the corpus already loaded this session stay
 pre-authorized — the rule gates the LOAD, not the use.
 
+Two edges of that trigger (promoted 2026-10-26, GAPS design-agents-G7/G8). **Island work reads
+the island only** — its owning dir plus the touched launcher (the gateway: `gateway/` README +
+specs; the island list is spike `context-and-autonomy.md` §C7) — and never asks the corpus
+question for it: the point of an island is that no read-everything step exists. **A proposed
+change to a LOOP component IS the stop-and-ask trigger** — new or re-grouped machinery for the
+coordinator, a responder lane, the dig, the reviewer is designed against that component's slice
+(its owning doc + the script it changes), never from the question alone; "it read as a plain
+design question" is how existing machinery gets re-invented.
+
 ## Follow-ups (FU-NNN)
 
 Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one stable id per item
@@ -90,6 +99,36 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
   the **Tier-0 mint-root** or a **third-party console** (`docs/secrets.md` §Minting doctrine) —
   or redesign it as code. A security rationale ("strictly read-only") is not a source-of-truth
   rationale; the 2026-08-09 jail-token bullet passed the first check and failed the second.
+
+## Claims — what the seat reports, asks, and proposes
+
+The never-repeat-a-remembered-status rule, applied to everything the seat writes (promoted
+2026-10-26 from the design-agents GAPS section — these govern every report, corpus loaded or not):
+
+- **Live-state claims are verified before they are reported — statuses, config constants,
+  lifecycle labels, acceptance verbs.** A status from a transient doc (meta-state, tracker,
+  TICK-LOG) or a number in prose describing live config is as-of-stamp until `gh`/`kubectl`/the
+  deployed object confirms it. A lifecycle label is a CLAIM, never activity — the state is the
+  join (label × live pod × PR state). A verdict recommendation verifies each Production-leg verb
+  (demoting/advising/probing/…) against an OBSERVED event, never a ship record (GAPS
+  design-agents-G2, G5).
+- **Asks are claims.** An escalation that demands operator action ("grant X", "I need one
+  decision", "your lane", a pick relayed as the operator's ruling) asserts a blocker: read the
+  declared record (`docs/github-apps.yaml`, the ruleset, the install list) and the live thing
+  first; relay it with the requirement linked, or drop it. A grep/curl is cheaper than an
+  operator click (GAPS design-agents-G3).
+- **An empty or "none" probe result is absence only once the query's own success is shown**
+  (exit status, or a positive control) — a probe that errors reads as an empty answer (GAPS
+  board-sweep-G2).
+- **A malformed input from an authoring surface is evidence about the surface, not a chore.**
+  Before proposing a lint/label/rule, count the readers the author already has to model; a fix
+  that adds one argues why SUBTRACTION is impossible. New guard cases ride the existing
+  predicate, never an enumerated list. The hand edit un-wedges the instance; it is never
+  presented as the fix (GAPS design-agents-G4).
+- **A rule written into a per-session prompt** (brief, reviewer prompt, rubric, env card)
+  **cites its ADR and carries no dates/issue refs of its own** — every session pays those
+  tokens; history lives in the ADR / the incident / the FSM `incidents:` field (GAPS
+  design-agents-G6).
 
 ## How changes land (jail sessions)
 

@@ -28,6 +28,10 @@ the cluster; the copy nobody edits being the one somebody reads.
   entries record what WAS — fix dead links/renamed paths in them, never re-litigate their
   claims. Same for archived FU *entries* (they say what shipped; only their freshness window
   expires them).
+- **Generated blocks are never hand-edited.** The marker-delimited blocks (`machines/generate.py`:
+  the host table + version line in `README.md`/`CLAUDE.md`, `machines/README.md`, `machines.html`)
+  are rendered from `machines/machines.yaml` — fix the YAML, re-run the generator, commit the
+  diff; the pre-push hook rejects a hand edit anyway (promoted 2026-10-26, GAPS docs-cleanup-G1).
 - **One home per fact** (CLAUDE.md routing table): when the same paragraph lives twice, decide
   the authoritative home from the routing table, keep it there, and turn the copy into a
   pointer. Never "sync" a duplicate — that preserves the drift bug.
