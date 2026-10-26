@@ -1,7 +1,3 @@
-output "tunnel_id" {
-  value = cloudflare_zero_trust_tunnel_cloudflared.homelab.id
-}
-
 output "ha_url" {
   value = "https://${var.ha_hostname}"
 }

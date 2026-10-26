@@ -35,11 +35,13 @@ roots:                      # what the box plans; a PR path under the root's dir
                   # fine-grained PAT (docs.github.com/rest/orgs/rules — "Get all organization repository
                   # rulesets"; 403 verified 2026-09-13 with read). Both stay host-only; REPO rulesets (the
                   # pinned required checks, ADR-130), org secrets and deploy keys read fine — the gate's parts.
-  cloudflare:   { dir: tofu/cloudflare,   apply: false,   # read-only token (mgmt-read.tf), Garage state, FU-238; applies stay in the jail
-                  plan_exclude_types: [data.cloudflare_zero_trust_tunnel_cloudflared_token],
-                  plan_exclude_note: "the tunnel TOKEN is a credential read no Read group covers (401 under the read-all token) — its two in-cluster dependents, the cloudflared Secret and Deployment, drop out with it; a change to them is judged by the jail's plan" }
-                  # ⚠ not cone-clean for the BELT (mgmt-probe.sh): half the root rides the kubernetes provider,
-                  # so its plan asserts the cluster is up — the sentinel plans it per PR head, the belt does not.
+  cloudflare:   { dir: tofu/cloudflare,   apply: false }  # read-only token (mgmt-read.tf), Garage state, FU-238; applies stay in the jail
+                  # No plan_exclude_types since the ha retrofit (2026-10-26, FU-039 consumer #2): the tunnel-token
+                  # data source (a credential read no Read group covers) left this root with the tunnel and the
+                  # cloudflared Secret/Deployment — the ha PublicRoute claim owns them now.
+                  # ⚠ not cone-clean for the BELT (mgmt-probe.sh): the root still configures the kubernetes
+                  # provider (its last kubernetes resources are destroyed by the retrofit's apply), so its plan
+                  # asserts the cluster is up — the sentinel plans it per PR head, the belt does not.
 foreign_roots:              # planned elsewhere (host / jail) — a PR touching only these gets "no box-held surface"
   - tofu/cloudflare-token
   - tofu/infisical

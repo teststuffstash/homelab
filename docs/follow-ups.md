@@ -378,13 +378,14 @@ six OVERSIZE items pointer-ized into
       designed. **Next:** the playbooks move to the `automation` key (ddclient install → assert;
       dnsmasq-dhcp.py off root) — then the click detector is quiet; the HA `/config` leg stays open.
 - [ ] **FU-039** — **Platform self-service (XRD claims) — next legs: POINTER.** Design,
-      completion table and open legs of the public-ingress leg (test claim, ha retrofit, zone-phase
-      rulesets, product zones, the edge-metrics GraphQL poller whose first deliverable is the missing
-      edge-5xx belt): [`docs/cloudflare.md`](cloudflare.md) §PublicRoute + §Observability. The first
-      consumers are live and checked (homelab#1334). Per-stack thin PRs remain: LAN subdomain opt-in
-      (ADR-092), git repos, AppProject/ns. **Next:** zone-phase ruleset aggregation (one claim per
-      profile per zone today) and the ha retrofit as consumer #2. Program: `ROADMAP.md` → "Platform
-      self-service via Crossplane". Relates ADR-076, ADR-085, ADR-092, ADR-101.
+      completion table and open legs of the public-ingress leg (test claim, zone-phase rulesets,
+      product zones, the edge-metrics GraphQL poller whose first deliverable is the missing edge-5xx
+      belt): [`docs/cloudflare.md`](cloudflare.md) §PublicRoute + §Observability. The first consumers
+      are live and checked (homelab#1334); the ha retrofit (consumer #2) landed 2026-10-26 (§Remote
+      access — the cloudflared pin's manual edge, G16 resight). Per-stack thin PRs remain: LAN
+      subdomain opt-in (ADR-092), git repos, AppProject/ns. **Next:** zone-phase ruleset aggregation
+      (one claim per phase per zone today — on teststuff.net the ha claim holds the custom phase).
+      Program: `ROADMAP.md` → "Platform self-service via Crossplane". Relates ADR-076, ADR-085, ADR-092, ADR-101.
 - [ ] **FU-282** — The PublicRoute **origin mark** reads the homelab's WAN address from
       `wg.teststuff.net` — the WireGuard endpoint's ddclient record (ADR-090). Correct value,
       misleading name: a reader of the Composition has no reason to expect the VPN endpoint to be

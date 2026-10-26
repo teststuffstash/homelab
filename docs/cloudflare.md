@@ -7,8 +7,8 @@ from the phone" (2026-06) is now a platform capability (ADR-101). Status snapsho
 | Leg | Status |
 |---|---|
 | Zone on Cloudflare (NS cutover, ACME DNS-01 swap) | ✅ LIVE 2026-06-06 (§History) |
-| Remote access `ha.teststuff.net` — tunnel + client-cert mTLS | ✅ LIVE, phone-verified (§Remote access) |
-| **PublicRoute XRD** (ADR-101) — public ingress as a claim | ✅ **BUILT + ARMED 2026-08-08**; consumer #1 = the minutark placeholder claim (oracle-iac, 2026-08-12 — §Zone classes); the operator-witnessed test claim is still owed (FU-039) (§PublicRoute) |
+| Remote access `ha.teststuff.net` — tunnel + client-cert mTLS | ✅ LIVE, phone-verified (§Remote access); a **PublicRoute claim since 2026-10-26** (consumer #2) |
+| **PublicRoute XRD** (ADR-101) — public ingress as a claim | ✅ **BUILT + ARMED 2026-08-08**; consumers: the two minutark claims (oracle-iac) + `ha.teststuff.net` (2026-10-26, the retrofit — §Remote access) (§PublicRoute) |
 | Observability — read token, GraphQL, cloudflared metrics | ✅ LIVE (§Observability) |
 | Full-LAN remote access | Not Cloudflare — WireGuard on OPNsense (ADR-090) |
 
@@ -24,8 +24,19 @@ A stack claims `{hostname, backend}`; the composition renders a **per-claim Clou
 CNAME via a provider-terraform `Workspace` (the Garage-bucket donor shape, ADR-076), and the
 `cloudflared` Deployment in the claim's namespace (digest-pinned, restricted). **Subtree
 enforcement fail-louds in the composition template**: a claim can only create
-`*.<its-namespace>.teststuff.net`. The XRD is the privilege boundary — claims never see a
-Cloudflare credential.
+`*.<its-namespace>.teststuff.net` (a platform-owned namespace excepted — §Zone classes). The XRD
+is the privilege boundary — claims never see a Cloudflare credential.
+
+**The connector, every claim (2026-10-26):** at least **two** replicas — a floor in the template,
+not an XRD `minimum` (that would strand stored composites, gotcha 5), so a claim's `replicas: 1`
+is a no-op the stack can drop — spread across nodes (hostname topology spread, `ScheduleAnyway`);
+`--metrics` on the named port `metrics` (:2000, scraped by the `cloudflared` PodMonitor in every
+namespace — §Observability); a readiness probe on `/ready`, which answers 200 only once a tunnel
+connection is **registered**, and a `RollingUpdate` of `maxSurge: 1, maxUnavailable: 0`, so a
+rollout (every Renovate cloudflared bump) replaces one replica at a time and only after the new
+one is connected — Cloudflare's own ask in its 2026-10 upgrade notice; a generous liveness probe
+on the same path. Before this, the composition's connector had no probe at all and the oracle
+claims ran one replica, so every restart darkened their hostname.
 
 Files: `argocd/resources/publicroute/{xrd,composition}.yaml` (+ `example-claim.yaml.example` for
 the shape), app `argocd/platform/publicroute.yaml`, provider secret
@@ -44,6 +55,34 @@ the 2026-08-09 custody move; the reconciler holds no Cloudflare credential).
 - **Edge leg (the claim that owns the zone's `http_request_firewall_custom` entry point — today an `api` claim):** one more `block` rule, FIRST in that ruleset, so the request never reaches the home connection. A consumer claim cannot render a second ruleset in the phase (error 20217, gotcha 8) and gets the connector leg alone until zone-phase aggregation (FU-039).
 
 Per-path opt-in is `.spec.operationalPaths.public` on the claim (a subset of the platform list). ⚠ **The block body is Cloudflare's own 403 page, not the structured JSON ADR-123 asked for** — `block` + a custom response in this phase is refused on the Free plan (gotcha 8). Live-verified on `mcp.minutark.ee` 2026-09-17: public `/metrics`, `/healthz` and their subpaths → 403, `/metricsx` → origin 404 (no over-match), `/` → 405 (route unaffected), in-cluster `/metrics` → 200 (the LAN scrape path is untouched).
+
+**Profile-agnostic, optional — client-cert mTLS (`.spec.mtls.enforce`, 2026-10-26, the ha
+retrofit):** renders the block rule `(http.host eq "<host>" and not
+cf.tls_client_auth.cert_verified)` in the zone's `http_request_firewall_custom` ruleset — so the
+claim OWNS that phase's entry point, and the ADR-123 edge leg joins the same ruleset (block rules
+first: operational paths, mTLS, then the api profile's preflight/Skip when present). The
+**credential half is not the claim's**: the zone's managed-CA hostname association (a per-zone
+singleton) and the client certificate need SSL/Certificates write, which the composition's token
+deliberately does not carry — they are done once in `tofu/cloudflare/mtls.tf`, and without the
+association the edge never asks for a certificate, so the rule blocks every request. Like the api
+Skip it takes the zone's custom phase: **one such claim per zone** until aggregation (FU-039).
+
+**Consumer-profile opt-outs (`.spec.cacheRule: false`, `.spec.rum: false`, 2026-10-26):** for an
+app rather than a page. `cacheRule: false` renders no cache rule — the route keeps Cloudflare's
+zone default (static file extensions only, origin `Cache-Control` honoured) and does not take the
+zone's `http_request_cache_settings` entry point; `rum: false` renders no Web Analytics (no beacon
+injected into the app's HTML, and no FU-250 403 holding the Workspace red). Absent = on, so the
+existing claims render unchanged.
+
+**Adoption (`.spec.imports`, 2026-10-26):** `{dnsRecordId, ruleset: {id, name}}` renders Terraform
+`import` blocks (Terraform 1.5, which provider-terraform v1.1.1 embeds; a no-op once the resource
+is in state, so the field stays in the claim) — an existing record or custom-phase ruleset is
+UPDATED in place by the claim's first apply instead of created, the zero-gap move off a
+hand-applied root. The ruleset's live `name` is carried because provider 5.23 REPLACES a ruleset
+on a name change (a window with no WAF rule, then a 20217 on create). **Zone owners only** (the
+product zone's owner or a platform-owned namespace): an import id is a handle on any object in the
+zone, so the template fail-louds it for a subtree tenant (guard fixture
+`tenant-imports-v1alpha2-xr.must-fail.yaml`).
 
 **Profile-agnostic, optional — the origin mark (`.spec.originMark`, 2026-09-23, oracle-fleet#667):**
 an origin that is reachable from the public internet cannot tell OUR traffic (probers, rides, the
@@ -87,19 +126,19 @@ The quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, 
 | Edge observability export: DIY GraphQL poller (per-route series) | ✅ (#1306, merged) |
 | cf-api-proxy allowlist extended for RUM account-scoped paths | ✅ (#1322/#1324, merged) |
 | First consumers — the apex `consumer` claim (oracle-iac, 2026-08-12 → v1alpha2 #531; static site behind it 2026-09-03) and the `mcp.minutark.ee` `api` claim (oracle-iac#532, public 21:28Z 2026-09-03). The live checks (homelab#1334): 1 api 429 ✅ observed 21:30Z (97×429, JSON body, `Retry-After: 10`, no interstitial in 300 responses), 2 consumer cache ✅ observed 12:35Z, 3 RUM ✗ undeliverable via any user token (design residual, #1311) — and it holds the consumer claim's Workspace `Synced=False` forever, which masked a week-old state lock: FU-250 | ✅ 1+2 / ✗ 3 |
-| `ha.teststuff.net` retrofit = consumer #2 (retires `tofu/cloudflare/` + the write-key) | ☐ operator-witnessed, after the test claim |
+| `ha.teststuff.net` retrofit = consumer #2 | ✅ **2026-10-26** — claim `home-assistant/ha` (`argocd/resources/ha-publicroute/`): tunnel, config, connector, CNAME and the mTLS rule reconciled; CNAME + mTLS ruleset ADOPTED (`.spec.imports`), zero gap. Triggered by a security notice the hand-applied pin missed for 11 days (§Remote access). `tofu/cloudflare/` and the write-key do NOT retire: the root keeps the credential half (client cert, hostname association) + `wg`/`*.local` + the minutark bootstrap, with no pin |
 | Product zones (a claim owning a whole zone, e.g. the IdP/oracle-sales domains) | ☐ future — §Zone classes |
 | Operational paths non-public by default (ADR-123; `/metrics`, `/healthz`; per-path opt-in) | ✅ **BUILT 2026-09-17 (FU-206)** — connector leg on every claim, edge leg on the claim owning the zone's custom phase. §PublicRoute above. |
 | Origin mark (`.spec.originMark`) — edge-asserted "this request came from the homelab" header, both profiles | ✅ **BUILT 2026-09-23** (oracle-fleet#667) — entitlement live-probed (gotcha 9); egress address read from the ddclient record at every reconcile, no updater. §PublicRoute above. |
 | The request map (ADR-124): platform stage map + renderer + self-test | ✅ phase 1 (2026-09-03) — [`patterns/public-request-flow.md`](patterns/public-request-flow.md). ☐ phase 2: publish the claim's platform rows on the PublicRoute XR **status** so an app renders against what is live. |
 | Never-challenge Skip is over-broad (seam S5) — listing `http_request_firewall_managed` drops the Free managed WAF for the api host, not only challenges | ☐ decide: keep the products (bic/securityLevel/uaBlock) + `http_request_sbfm`, drop the managed phase from the Skip? Dry-run through the proxy first. |
 | DDoS L7 (`ddos_l7`) is outside the Skip (seam S4) — its mitigations can be challenge-shaped on an api route | ☐ verify whether the Free plan lets the HTTP DDoS ruleset action be overridden to block; if not, record it as a plan ceiling on the never-challenge promise. |
-| Zone-phase ruleset aggregation | ☐ **still the open leg (FU-039) — and now a live LIMIT.** The profiles' rulesets are rendered PER CLAIM, but Cloudflare keeps ONE entry-point ruleset per phase per zone (a second is added as a *rule* on the existing entry point, never as another ruleset — Ruleset Engine docs). So today: **at most one claim per profile per zone** (minutark.ee: the apex `consumer` + `mcp` `api` fit, disjoint phases); and on the platform zone `http_request_firewall_custom` is already the ha mTLS entry point (`tofu/cloudflare/mtls.tf`), so **any `api` claim on teststuff.net is unsupported** until aggregation lands (the never-challenge Skip lives in that phase since 2026-09-03 — before, only claims with `.spec.origins` collided). A collision is expected to fail the claim's Workspace loudly (create of a second phase ruleset), not to replace the existing entry point — expected from the API model, not yet observed live. Tracked as the post-launch child filed at assembly (2026-09-03). |
+| Zone-phase ruleset aggregation | ☐ **still the open leg (FU-039) — and now a live LIMIT.** The profiles' rulesets are rendered PER CLAIM, but Cloudflare keeps ONE entry-point ruleset per phase per zone (a second is added as a *rule* on the existing entry point, never as another ruleset — Ruleset Engine docs). So today: **at most one claim per profile per zone** (minutark.ee: the apex `consumer` + `mcp` `api` fit, disjoint phases); and on the platform zone `http_request_firewall_custom` is already the ha claim's mTLS entry point (`.spec.mtls`, 2026-10-26), so **any `api` claim on teststuff.net is unsupported** until aggregation lands (the never-challenge Skip lives in that phase since 2026-09-03 — before, only claims with `.spec.origins` collided). A collision is expected to fail the claim's Workspace loudly (create of a second phase ruleset), not to replace the existing entry point — expected from the API model, not yet observed live. Tracked as the post-launch child filed at assembly (2026-09-03). |
 
-Two claims now serve real traffic through it (the completion row above): rendering, credential
-flow, Workspace reconciliation, the api rate limit and the consumer cache rule are all
-live-verified on the product zone; the ha retrofit (consumer #2 on the platform zone) stays
-operator-witnessed because it retires `tofu/cloudflare/`.
+Three claims serve real traffic through it (the completion rows above): rendering, credential
+flow, Workspace reconciliation, the api rate limit and the consumer cache rule are live-verified
+on the product zone, and the ha retrofit (2026-10-26) proved the schema generalizes to the
+platform zone's one-off — the ≥2-projects acceptance test below.
 
 ### Design record (requirements source — kept; the build followed it)
 
@@ -139,21 +178,30 @@ own domain) is a claim migration, not Cloudflare surgery.
 
 **The live zone map** (merged here from the old §"Zone classes + spend surface" header,
 2026-08-12 — the parked structural debt, closed when the minutark onboarding landed):
-`teststuff.net` = **platform zone** (any ns claims in its delegated subtree); `minutark.ee` =
+`teststuff.net` = **platform zone** (any ns claims in its delegated subtree; its
+**platform-owned namespaces** — today `home-assistant` — claim anywhere in it); `minutark.ee` =
 **product zone, owner `oracle-fleet`** (the owning ns claims anywhere incl. the apex; consumer
 #1 is the minutark placeholder claim in oracle-iac). The zone map is a platform constant in the
 PublicRoute composition; a product zone's BOOTSTRAP (records, TLS floor, DNSSEC) is
 `tofu/cloudflare/minutark.tf` until the composition grows a product-zone bootstrap class.
+
+**Platform-owned namespaces (2026-10-26, the ha retrofit).** The platform's own public hostnames
+(`ha.teststuff.net`) sit outside every delegated subtree, so the subtree guard refused them for
+any namespace. The doctrine already answers it — the composition owns the platform zone, and a
+zone's owner claims anywhere in it — so the zone map names the namespaces the platform claims
+FROM (`owners` on `teststuff.net`): each is the backend's own namespace (the stack model the
+oracle claims follow; the connector runs beside its backend), each is a reviewed line in the
+composition, and each may also ADOPT existing objects (`.spec.imports`), which a tenant may not.
 
 ## Token matrix (who holds what — the ONE table; drafts died here. Expiry dates are NOT kept here: the `credential_expiry_timestamp_seconds` gauge reads them live, `CredentialExpiringSoon` alerts at <30 d)
 
 | Token | Scope | Canonical + delivery | Consumer / applier |
 |---|---|---|---|
 | **Account admin** (CF name: "Create Additional Tokens"; expiry: the `credential_expiry_timestamp_seconds` gauge, FU-156) | mint scope: user `API Tokens: Write` + zone/account read — *transitively* everything (it mints the rest); exact dashboard recipe in [`tofu/cloudflare-token/README.md`](../tofu/cloudflare-token/README.md) | **KeePass ONLY**, host (`~/Documents/homelab-admin.kdbx`, beside the GitHub org-admin) | the operator, solely to apply `tofu/cloudflare-token` (the mint). Never jail, never cluster. |
-| `homelab-tofu-apply` | **both product zones** DNS/SSL/WAF/**Settings**/Single Redirects/Bot Management + account Tunnel, write (Settings = Argo-capable, see §Spend surface; Single Redirects added 2026-09-03 for the minutark www→apex rule — `Zone WAF Write` does NOT unlock the redirect phase despite the docs' "at least one of" list) | wallet `cloudflare-write-key`; jail `~/.claude/cloudflare/write-key`; ⚠ **expires 2027-01-01** (FU-156) | jail applies `tofu/cloudflare/` (ha + the minutark zone bootstrap), plan-gated by the operator; the management box held a copy for its plans until `homelab-mgmt-read` replaced it (FU-238). **Retires** at the consumer-#2 retrofit. |
+| `homelab-tofu-apply` | **both product zones** DNS/SSL/WAF/**Settings**/Single Redirects/Bot Management + account Tunnel, write (Settings = Argo-capable, see §Spend surface; Single Redirects added 2026-09-03 for the minutark www→apex rule — `Zone WAF Write` does NOT unlock the redirect phase despite the docs' "at least one of" list) | wallet `cloudflare-write-key`; jail `~/.claude/cloudflare/write-key`; ⚠ **expires 2027-01-01** (FU-156) | jail applies `tofu/cloudflare/` (the ha mTLS credential half, `wg`/`*.local`, the minutark zone bootstrap), plan-gated by the operator; the management box held a copy for its plans until `homelab-mgmt-read` replaced it (FU-238). Did NOT retire at the consumer-#2 retrofit (2026-10-26): the mTLS credential half needs its SSL group. |
 | `homelab-acme-dns` | one zone, DNS write | wallet `cloudflare-acme-token`; OPNsense env (`ACME_CF_TOKEN` when running the ACME playbook) | acme.sh DNS-01 |
 | `homelab-observability-read` | ALL zones read (analytics/zone/WAF-config) + account read (analytics, tunnel, **audit logs via `Account Settings Read`** — fixed 2026-08-08, see the gotcha) | KeePass → `~/.claude/cloudflare/observability-read` (jail) + Infisical `CLOUDFLARE_OBSERVABILITY_READ` (→ ESO) | jail LLM sessions (GraphQL + audit), the CF exporter, responder triage later |
-| `homelab-ingress-write` | DNS (both product zones) + Tunnel write only | KeePass → Infisical `CLOUDFLARE_INGRESS_WRITE` → ESO **`cf-api-proxy/cf-api-token`** — the PROXY holds it (2026-08-09 custody move); provider-terraform is TOKENLESS (`base_url` → the proxy). Never in claims, never the reconciler. | **cf-api-proxy** (§below), on behalf of PublicRoute Workspaces. |
+| `homelab-ingress-write` | DNS (both product zones) + Tunnel write + zone WAF/Cache/Transform write (the rulesets) — **no SSL/Certificates** (why the mTLS credential half stays in `tofu/cloudflare`) | KeePass → Infisical `CLOUDFLARE_INGRESS_WRITE` → ESO **`cf-api-proxy/cf-api-token`** — the PROXY holds it (2026-08-09 custody move); provider-terraform is TOKENLESS (`base_url` → the proxy). Never in claims, never the reconciler. | **cf-api-proxy** (§below), on behalf of PublicRoute Workspaces. |
 | `homelab-inventory-read` (CF name `homelab-token-inventory-read`, never-expiring) | user `API Tokens: Read` — token METADATA only (names, status, `expires_on`), for the FU-156 expiry belt | `inventory-read.tf` → wallet `cloudflare-inventory-read` + Infisical `CLOUDFLARE_INVENTORY_READ` (the store script) → ESO `monitoring/cloudflare-inventory-read` | **cloudflare-credential-expiry-probe** (`argocd/resources/cloudflare-exporter/credential-expiry-probe.py`): every token's expiry into `credential_expiry_timestamp_seconds` |
 | `homelab-mgmt-read` | the write token's group set in READ form — both product zones DNS/SSL/WAF/Settings/Single Redirects/Bot Management + account Tunnel read; **not** the tunnel token endpoint (a credential read no Read group covers — the box's plan excludes that data source + its two in-cluster dependents, `policy/mgmt/plan-input.yaml`) | `mgmt-read.tf` → KeePass `cloudflare-mgmt-read` (the store script) → the management box's `/var/lib/mgmt/env` as `CLOUDFLARE_API_TOKEN` via `mgmt/scripts/mgmt-provision-secrets.sh --push` (mint BEFORE the push: the table fails loudly on a missing entry) | the **management box** plans `tofu/cloudflare/` on every PR head (the sentinel, ADR-131 / FU-238) — plan only, never apply; retired the write key from the box |
 | `homelab-jail-read-all` | EVERY read group per scope, filtered live from the catalog (`\bRead\b` — 43 zone + ~117 account + 2 user groups at mint); zones `*`, account `*`, user | `jail-read-all.tf` → KeePass → `~/.claude/cloudflare/jail-read-all` via wallet-files.sh. **Replaced the dashboard "Read all resources" token (deleted at apply, 2026-08-12)** | jail LLM sessions' ad-hoc read-everything archaeology (token audits, settings dumps, permission probes) |
@@ -244,8 +292,10 @@ otherwise; a group can also gate NOTHING, because the gate may not be a permissi
 
 ## Observability
 
-**What exists today:** `cloudflared`'s own Prometheus metrics (PodMonitor, ~119 series —
-per-tunnel request totals + connection health; ⚠ this build exports **no response-code dimension
+**What exists today:** `cloudflared`'s own Prometheus metrics (PodMonitor
+`argocd/resources/cloudflare-exporter/podmonitor-cloudflared.yaml` — every PublicRoute connector
+in every namespace since the 2026-10-26 retrofit, ~119 series per pair of replicas — per-tunnel
+request totals + connection health; ⚠ this build exports **no response-code dimension
 and no hostname label** on `cloudflared_tunnel_total_requests` (labels: container/instance/job/
 namespace/pod — verified live, homelab#362), so the tunnel metrics are a liveness signal, NOT a
 substitute for zone analytics); the `homelab-observability-read` token for on-demand GraphQL +
@@ -354,9 +404,8 @@ queryable on free, and at our traffic volumes sampling ≈ 100%: that's the inci
 the consumer profile renders `cloudflare_web_analytics_site` (auto_install = true, enabled = true)
 and `cloudflare_web_analytics_rule` (host = the route, paths = ["*"]) for each consumer-profile
 claim. The JS beacon auto-installs on orange-clouded pages under the route hostname. Requires
-account-scoped API paths in the cf-api-proxy allowlist (added by #1322/#1324). Not relevant for
-`ha.teststuff.net` (an app behind mTLS, not a page we optimize) — that leg becomes a PublicRoute
-claim at the consumer-#2 retrofit and will carry RUM then if desired. The IdP OIDC login flow
+account-scoped API paths in the cf-api-proxy allowlist (added by #1322/#1324). Not wanted for
+`ha.teststuff.net` (an app behind mTLS, not a page we optimize): its claim sets `rum: false`. The IdP OIDC login flow
 and oracle's public "sales" page are the first real browser-facing surfaces that will exercise
 this.
 
@@ -365,8 +414,34 @@ this.
 Goal was: reach **Home Assistant from the phone, anywhere**. `https://ha.teststuff.net` returns
 **403 without a client cert** (mTLS + WAF enforcing) and serves HA **with** it — verified from
 the phone on mobile data. The phone `.p12` is at `~/.claude/cloudflare/ha-client.p12`
-(`scripts/make-client-p12.sh` regenerates). This leg becomes a PublicRoute claim at the
-consumer-#2 retrofit; until then `tofu/cloudflare/` owns it.
+(`scripts/make-client-p12.sh` regenerates).
+
+**Since 2026-10-26 it is a PublicRoute claim** — `home-assistant/ha`
+(`argocd/resources/ha-publicroute/publicroute.yaml`, app `argocd/platform/ha-publicroute.yaml`):
+consumer profile, `mtls.enforce`, `cacheRule: false`, `rum: false`, 2 connectors beside HA. **Why
+then:** Cloudflare emailed an upgrade notice (cloudflared ≥ 2026.10.2); Renovate had merged
+2026.10.2/.3/.4 into the composition AND the tofu variable (one version-set PR each time), the two
+oracle claims took every bump on merge, and the ha connector sat on 2026.10.1 for 11 days —
+its pin lived in a root applied by hand, so the merged pin had no deploy edge (the G16 resight,
+[`dependency-upgrades.md`](dependency-upgrades.md) §Gap register). The fix is structural: what
+drifts or pins moved into the reconciled claim; what stayed in tofu is credential/singleton
+class with no pin.
+
+**The split:**
+
+| Piece | Owner | Why |
+|---|---|---|
+| tunnel + config + connector token + `cloudflared` Deployment | the claim (Crossplane Workspace + composed Deployment) | the pinned, drifting piece — a merged pin IS the deploy |
+| `ha` CNAME, the mTLS **enforcement** ruleset (zone custom phase) | the claim — ADOPTED at the cutover (`.spec.imports`, zero gap) | DNS + WAF write are in the composition's token |
+| client key/CSR/cert (the phone credential), managed-CA **hostname association** | `tofu/cloudflare/mtls.tf` | SSL/Certificates write, which the composition's token does not carry (re-minting it is a Tier-0 act, docs/secrets.md); the association is a per-zone singleton; `make-client-p12.sh` reads `tofu output` |
+
+**Cutover (2026-10-26, in a declared window):** the claim's first apply imported the record and
+the ruleset and UPDATED both in place — the CNAME re-pointed to the claim's tunnel, the ruleset
+kept its live name (a rename would replace it) and gained the ADR-123 operational-path rule
+before the mTLS rule, so `ha` never answered without the 403; then, only after the new connector
+had registered, `tofu/cloudflare` was applied: the CNAME and ruleset FORGOTTEN (`removed`
+blocks, `destroy = false` — `tofu/cloudflare/removed.tf`), the old tunnel, its config, the token
+Secret, the Deployment and the `cloudflared` namespace destroyed.
 
 **Decisions** (detail: ADR-050…054): transport = **Cloudflare Tunnel** (outbound-only, no WAN
 port-forward, CGNAT-proof); auth = **mTLS via Application-Security / SSL Client Certificates**,
@@ -385,15 +460,15 @@ cf.tls_client_auth.cert_verified` → Block) → (4) cache (HA passes through) �
 skipped, no Access app exists → (6) tunnel egress via `cloudflared` → in-cluster HA → (7) HA
 login + TOTP. CNAME gotcha: enable mTLS on the **specific hostname**, not the CNAME target.
 
-**What `tofu/cloudflare/` contains** (built 2026-06-06, provider v5): tunnel
-(`cloudflare_zero_trust_tunnel_cloudflared`, remotely-managed config object; DNS target is
-`${tunnel.id}.cfargotunnel.com` — no `.cname` attr in v5), `cloudflare_dns_record` (uses
-`content`, not `value`): `ha` CNAME → tunnel (proxied), `*.local` A → 127.0.0.1 (DNS-only);
-mTLS chain `tls_private_key` → `cloudflare_client_certificate` (zone managed-CA) +
-`certificate_authorities_hostname_associations` (per-zone **singleton**) + the WAF
-`cloudflare_ruleset`; the `cloudflared` namespace/secret/Deployment (2 replicas,
-digest-pinned). Lesson that keeps recurring: don't trust model memory for CF v5 — provider
-GitHub docs + a credential-free `tofu validate` before any apply.
+**What `tofu/cloudflare/` contains** (since the 2026-10-26 retrofit — credential/singleton
+class, **no dependency pin a running thing consumes**): the mTLS credential chain
+`tls_private_key` → `cloudflare_client_certificate` (zone managed-CA) +
+`certificate_authorities_hostname_associations` (per-zone **singleton**); DNS records `wg`
+(existence only, ddclient owns the content) and `*.local` A → 127.0.0.1 (DNS-only); the minutark
+product-zone bootstrap. Until the retrofit it also held the tunnel, the `ha` CNAME, the WAF
+ruleset and the `cloudflared` namespace/Secret/Deployment (digest-pinned — the pin that drifted).
+Lesson that keeps recurring: don't trust model memory for CF v5 — provider GitHub docs + a
+credential-free `tofu validate` before any apply.
 
 ## Rollout gotchas (hit + fixed 2026-06-06; +1 2026-08-08)
 

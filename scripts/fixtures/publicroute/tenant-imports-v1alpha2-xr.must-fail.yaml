@@ -1,0 +1,25 @@
+# publicroute-tf-validate NEGATIVE fixture — must FAIL to render. A subtree TENANT (any namespace not
+# in the zone map's owners) setting .spec.imports: an import id is a handle on ANY record/ruleset in
+# the zone, so adopting one would let a tenant rename the record or rewrite the zone's WAF rules —
+# outside its delegated subtree. The composition refuses it; this proves the guard still fires.
+apiVersion: platform.teststuff.net/v1alpha2
+kind: XPublicRoute
+metadata:
+  name: adopt-xr
+spec:
+  claimRef:
+    apiVersion: platform.teststuff.net/v1alpha2
+    kind: PublicRoute
+    name: adopt
+    namespace: sleep-tracking
+  profile: consumer
+  hostname: app.sleep-tracking.teststuff.net
+  backend:
+    service: whatever.sleep-tracking.svc.cluster.local.
+    port: 8080
+  mtls:
+    enforce: true
+  imports:
+    ruleset:
+      id: 9de8f75ce9f54ced876e4fb0caaabff3
+      name: mTLS enforcement

@@ -1,0 +1,31 @@
+# publicroute-tf-validate fixture — the ha.teststuff.net retrofit (FU-039 consumer #2): a
+# PLATFORM-OWNED namespace (home-assistant, the zone map's `owners`) claiming outside any delegated
+# subtree, consumer profile with the cache rule and RUM switched off, mTLS enforcement (so the
+# claim owns the zone's http_request_firewall_custom ruleset and the ADR-123 edge leg joins it), and
+# the two adoption import blocks. Mirrors argocd/resources/ha-publicroute/publicroute.yaml; keep the
+# two in step.
+apiVersion: platform.teststuff.net/v1alpha2
+kind: XPublicRoute
+metadata:
+  name: ha-xr
+spec:
+  claimRef:
+    apiVersion: platform.teststuff.net/v1alpha2
+    kind: PublicRoute
+    name: ha
+    namespace: home-assistant
+  profile: consumer
+  hostname: ha.teststuff.net
+  backend:
+    service: home-assistant.home-assistant.svc.cluster.local.
+    port: 8123
+  replicas: 2
+  mtls:
+    enforce: true
+  cacheRule: false
+  rum: false
+  imports:
+    dnsRecordId: e22672952d286876dcc44528bbc06400
+    ruleset:
+      id: 9de8f75ce9f54ced876e4fb0caaabff3
+      name: mTLS enforcement
