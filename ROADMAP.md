@@ -308,8 +308,10 @@ Order, lowest blast first; each step is a lease-wrapped box run and a capability
 3. **Router config reconcile** — shadow (the per-node `--check`, as today) → BACKUP-only (converge,
    `check`, lease confirm) → full rolling (MASTER through `carp-maintenance` with the dead-man and a
    node-local config-restore timer armed before the apply). Respects declared windows (FU-300) and
-   the security-boundary path policy (ADR-152 (4)). The one open fork: whether that policy is the
-   sentinel's `deny_paths` shape or a role-level list.
+   the security-boundary path policy (ADR-152 (4)). The one open fork — **ruled 2026-10-26: the
+   sentinel's `deny_paths` shape, per `apply_ansible` row in the policy file** (not a role-level list).
+   🔜 **BACKUP-only BUILT 2026-10-26 in shadow** (the `opnsense` row: live CARP BACKUP, node-local
+   restore armed first, `deny_paths`; docs/management-box.md §Router config converge — BACKUP-only).
 4. **Firmware along the same rolling path** — test VM (roll back to baseline, update, harness, move
    the baseline) → BACKUP (snapshot, update, `check`) → MASTER (maintenance, update, `check`, leave),
    one lease renewed per node. Majors: box-run after ONE attended drill along this path (the ADR-149

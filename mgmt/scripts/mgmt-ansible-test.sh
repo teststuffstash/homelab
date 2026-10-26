@@ -33,7 +33,7 @@ eq groups-role "matchbox" "$(printf 'ansible/roles/matchbox-proxydhcp/tasks/main
 eq groups-play "matchbox" "$(printf 'docs/x.md\nansible/matchbox-talos-assets.yml\n' | ans_groups_touched "$POL")"
 eq groups-vars "matchbox" "$(printf 'ansible/group_vars/matchbox.yml\n' | ans_groups_touched "$POL")"
 eq groups-inventory "matchbox" "$(printf 'ansible/inventory.yml\n' | ans_groups_touched "$POL")"
-eq groups-tofu-only "" "$(printf 'tofu/main.tf\nansible/opnsense-unbound.yml\n' | ans_groups_touched "$POL")"
+eq groups-tofu-only "" "$(printf 'tofu/main.tf\nansible/pve-upgrade.yml\n' | ans_groups_touched "$POL")"
 eq groups-once "1" "$(printf 'ansible/matchbox.yml\nansible/roles/matchbox/tasks/main.yml\n' | ans_groups_touched "$POL" | grep -c .)"
 printf 'roots: [\n' >"$T/bad.yaml"
 printf 'ansible/matchbox.yml\n' | ans_groups_touched "$T/bad.yaml" >/dev/null 2>&1; eq groups-unreadable-rc 1 "$?"
@@ -58,6 +58,46 @@ eq recap-none-is-failed "p.yml	-	0	0	1	1" "$(ans_recap p.yml 1 "$T/o-none")"
 ans_recap a.yml 0 "$T/o-clean" >"$T/r4"; eq judge-clean "clean" "$(ans_judge "$T/r4")"
 # a play killed by the timeout (rc 124) with a clean partial recap is failed, never clean
 ans_recap a.yml 124 "$T/o-clean" >"$T/r5"; eq judge-timeout-failed "failed	a.yml:matchbox-lxc" "$(ans_judge "$T/r5")"
+
+# ── 2b. the router row's pure reads + the real *.py play runner ───────────────────────────────────
+RROW="$(ans_row "$POL" opnsense)"
+eq router-row-shadow-target "shadow carp-backup" "$(jq -r '"\(.mode) \(.target)"' <<<"$RROW")"
+eq groups-router "opnsense" "$(printf 'opnsense/dnsmasq-dhcp.py\n' | ans_groups_touched "$POL")"
+eq groups-router-role "opnsense" "$(printf 'ansible/roles/opnsense-haproxy/tasks/main.yml\n' | ans_groups_touched "$POL")"
+# the security boundary: WireGuard / ACME / ddclient / users / CARP / the tuya filter+d_nat → hits; unbound → none
+eq deny-hits "ansible/roles/opnsense-acme/tasks/main.yml
+ansible/roles/opnsense-wireguard/defaults/main.yml
+opnsense/tuya-egress.py" "$(ans_deny_hits "$RROW" ansible/roles/opnsense-acme/tasks/main.yml opnsense/tuya-egress.py ansible/roles/opnsense-wireguard/defaults/main.yml ansible/opnsense-unbound.yml)"
+eq deny-none "" "$(ans_deny_hits "$RROW" ansible/opnsense-unbound.yml opnsense/kea-dhcp.py ansible/roles/opnsense-haproxy/x)"
+eq deny-carp "ansible/opnsense-carp.yml" "$(ans_deny_hits "$RROW" ansible/opnsense-carp.yml)"
+# THE backup: exactly one MASTER + one BACKUP, read from the map — never a name
+M2="$(printf 'opnsense-nx02\t192.168.2.70\tMASTER\nopnsense-pve\t192.168.2.71\tBACKUP\n')"
+eq carp-backup-pve "opnsense-pve	192.168.2.71" "$(ans_carp_backup "$M2")"
+M3="$(printf 'opnsense-nx02\t192.168.2.70\tBACKUP\nopnsense-pve\t192.168.2.71\tMASTER\n')"
+eq carp-backup-swapped "opnsense-nx02	192.168.2.70" "$(ans_carp_backup "$M3")"   # after a failover the OTHER node is the canary
+ans_carp_backup "$(printf 'a\t1\tMASTER\nb\t2\tMASTER\n')" >/dev/null; eq carp-two-masters-rc 1 "$?"
+ans_carp_backup "$(printf 'a\t1\tMASTER\nb\t2\tINIT\n')" >/dev/null; eq carp-init-rc 1 "$?"
+# ans_carp_map: the API read per inventory node; hasync config sync ON refuses
+_ans_api() { case "$1:$2" in
+  192.168.2.70:diagnostics*) echo '{"rows":[{"subnet":"192.168.2.1","mode":"carp","status":"MASTER"},{"subnet":"192.168.3.5","mode":"ipalias","status":"x"}]}' ;;
+  192.168.2.71:diagnostics*) echo '{"rows":[{"subnet":"192.168.2.1","mode":"carp","status":"BACKUP"}]}' ;;
+  *:core/hasync/get) echo "{\"hasync\":{\"synchronizetoip\":\"${HASYNC:-}\"}}" ;;
+esac; }
+eq carp-map "opnsense-nx02	192.168.2.70	MASTER
+opnsense-pve	192.168.2.71	BACKUP" "$(ans_carp_map 192.168.2.1)"
+HASYNC=192.168.2.71 ans_carp_map 192.168.2.1 >"$T/hs" ; eq carp-map-hasync-rc 1 "$?"; has carp-map-hasync-why 'hasync config sync to 192.168.2.71 is ON' "$(cat "$T/hs")"
+# the REAL _ans_playbook on a *.py play: the node's script env (a `;` in OPN_KEA_HA survives — no
+# shell eval), OPN_CHECK=1 under --check, 0 under the apply
+printf '%s\n' 'import os' 'print(os.environ["OPN_HOST"], os.environ["OPN_KEA_HA"], os.environ["OPN_CHECK"])' >"$T/fake.py"
+printf 'OPN_HOST=192.168.2.71\nOPN_KEA_HA=opnsense-pve;a=http://x:8001/=primary,b=http://y:8001/=standby\n' >"$T/se.env"
+eq py-play-check "192.168.2.71 opnsense-pve;a=http://x:8001/=primary,b=http://y:8001/=standby 1" \
+  "$(ANS_PY=python3 ANS_SCRIPT_ENV="$T/se.env" _ans_playbook "$T" fake.py --check --diff)"
+eq py-play-apply "0" "$(ANS_PY=python3 ANS_SCRIPT_ENV="$T/se.env" _ans_playbook "$T" fake.py | awk '{print $3}')"
+# a script WITHOUT OPN_CHECK support never runs in a check phase — it would ignore the flag and write
+printf '%s\n' 'open("'"$T"'/WROTE", "w").write("x")' >"$T/old.py"
+ANS_PY=python3 _ans_playbook "$T" old.py --check >"$T/old.out" 2>&1; eq py-no-check-support-rc 1 "$?"
+eq py-no-check-support-not-run "absent" "$([ -e "$T/WROTE" ] && echo ran || echo absent)"
+ans_recap old.py 1 "$T/old.out" >"$T/r6"; eq py-no-check-support-failed "failed	old.py:-" "$(ans_judge "$T/r6")"
 
 # ── 3. the bracket, against a fixture clone ───────────────────────────────────────────────────────
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
@@ -203,6 +243,73 @@ rm -f "$ADIR/ansible-stopped"
 LEASE_JSON='{"data":{"sha":"abc","expected-end":"2026-10-26T13:00:00Z","max-end":"2026-10-26T13:00:00Z"}}' \
   run live-lease on changed clean changed clean
 eq live-lease-rc 1 "$RC"; eq live-lease-no-window "0" "$(grep -c '^window' <<<"$C")"; eq live-lease-no-marker "" "$(cat "$ADIR/ansible-stopped" 2>/dev/null)"
+
+# ── 4. the ROUTER row: BACKUP-only, the node-local restore armed before the apply ─────────────────
+# the span above touches ansible/matchbox.yml only; the router bracket is driven directly. Stubs: the
+# pair map (MAP_MODE), the script env, the runner, the node check (NODE_OK), the revert arm/cancel.
+_ans_runner_opnsense() { ANS_PY=python3; }
+_ans_script_env() { echo "script-env $1" >>"$T/calls"; printf 'OPN_HOST=192.168.2.71\n'; }
+_ans_node_check() { echo "node-check $1" >>"$T/calls"; [ "${NODE_OK:-1}" = 1 ] || { echo '  FAIL  CARP 192.168.2.1 lan/INIT'; return 1; }; }
+ans_carp_map() {
+  case "${MAP_MODE:-ok}:$(cat "$T/applied" 2>/dev/null && echo after)" in
+    two-masters:*) printf 'opnsense-nx02\t192.168.2.70\tMASTER\nopnsense-pve\t192.168.2.71\tMASTER\n' ;;
+    moved:after)   printf 'opnsense-nx02\t192.168.2.70\tBACKUP\nopnsense-pve\t192.168.2.71\tMASTER\n' ;;
+    *)             printf 'opnsense-nx02\t192.168.2.70\tMASTER\nopnsense-pve\t192.168.2.71\tBACKUP\n' ;;
+  esac; }
+ans_revert_arm() { echo "revert-arm $1 $2" >>"$T/calls"; [ "${ARM_OK:-1}" = 1 ] && echo "armed; history head config-1.xml" || { echo "sleeper did not start"; return 1; }; }
+ans_revert_cancel() { echo "revert-cancel $1" >>"$T/calls"; echo cancelled; }
+_ans_sleep() { :; }
+rmode() { _yq ".apply_ansible.opnsense.mode = \"$1\"" "$POL" >"$T/pol.yaml"; }
+rrun() {  # <name> <mode> <target> <base> <apply> <confirm>
+  rm -f "$T/calls" "$T/applied" "$ADIR/refused-rev" "$ADIR/ansible-stopped" "$ADIR/ansible-confirmed-opnsense"; rmode "$2"
+  P_target="$3" P_base="$4" P_apply="$5" P_confirm="$6"
+  ans_bracket "$T/pol.yaml" opnsense "$SHA" "$LAST" >"$T/out.$1" 2>&1; RC=$?
+  C="$(cat "$T/calls" 2>/dev/null)"; OUT="$(cat "$T/out.$1")"
+}
+rplays=6
+# r1 shadow: the BACKUP resolved live, the plays limited to it, would apply; nothing armed, no lease
+rrun r-shadow shadow changed clean - -
+eq r-shadow-rc 0 "$RC"
+has r-shadow-target 'target = the CARP BACKUP opnsense-pve \(192.168.2.71\); MASTER opnsense-nx02 untouched' "$OUT"
+has r-shadow-would '\[shadow\] ansible opnsense: would apply' "$OUT"
+eq r-shadow-no-arm-lease "0" "$(grep -cE '^(revert-arm|kubectl|window)' <<<"$C")"
+eq r-shadow-limit "opnsense-pve" "$ANS_LIMIT"
+# r2 backup-only, confirm good: arm BEFORE the apply, node check, CARP unchanged → cancel, lease deleted
+rrun r-good backup-only changed clean changed clean
+eq r-good-rc 0 "$RC"
+eq r-good-order "get|window open|create|revert-arm|apply|confirm|node-check|revert-cancel|delete|window close" \
+  "$(sed -n 's/^kubectl.* \(get\|create\|delete\) .*/\1/p; s/^\(window [a-z]*\)$/\1/p; s/^\(apply\|confirm\) .*/\1/p; s/^\(revert-arm\|revert-cancel\|node-check\) .*/\1/p' <<<"$C" | uniq | paste -sd'|')"
+has r-good-arm-deadline '^revert-arm 192.168.2.71 1800$' "$C"   # revert_min 30 → 1800 s, on the BACKUP's address
+has r-good-node-check '^node-check pve$' "$C"
+has r-good-status '^status success ansible opnsense: applied by the management box' "$C"
+L="$(ls -d "$MGMT_ANSIBLE_DIR"/*-opnsense-"${SHA:0:8}" | tail -1)/lease.json"
+has r-good-lease-reason 'target opnsense-pve \(its node-local restore is the revert\)' "$(jq -r .data.reason "$L")"
+# r3 the node check fails → STOP: the restore stays ARMED (the revert, by construction), lease + window kept
+NODE_OK=0 rrun r-node-bad backup-only changed clean changed clean
+eq r-node-bad-rc 2 "$RC"; eq r-node-bad-no-cancel "0" "$(grep -c '^revert-cancel' <<<"$C")"
+eq r-node-bad-lease-kept "0" "$(grep -c 'delete cm' <<<"$C")"
+has r-node-bad-why 'router node check: 1 FAIL line\(s\).*stays ARMED' "$(cat "$ADIR/ansible-stopped")"
+# r4 the pair MOVED during the apply (the BACKUP took .1) → STOP, armed
+MAP_MODE=moved rrun r-moved backup-only changed clean changed clean
+eq r-moved-rc 2 "$RC"; has r-moved-why 'carp: the pair moved' "$(cat "$ADIR/ansible-stopped")"; eq r-moved-no-cancel "0" "$(grep -c '^revert-cancel' <<<"$C")"
+# r5 two MASTERs → refused before anything runs (and in shadow, only said)
+MAP_MODE=two-masters rrun r-pair backup-only changed clean changed clean
+eq r-pair-rc 3 "$RC"; has r-pair-refused '^REFUSE ansible opnsense: ansible-pair-unhealthy — the pair is not one MASTER \+ one BACKUP' "$C"; eq r-pair-no-play "0" "$(grep -cE '^(target|apply) ' <<<"$C")"
+MAP_MODE=two-masters rrun r-pair-shadow shadow changed clean - -
+eq r-pair-shadow-rc 0 "$RC"; has r-pair-shadow-line 'would REFUSE — ansible-pair-unhealthy' "$OUT"
+# r6 the restore does not arm → PROBE-FAIL: lease deleted, window closed, NOTHING applied
+ARM_OK=0 rrun r-noarm backup-only changed clean changed clean
+eq r-noarm-rc 1 "$RC"; eq r-noarm-no-apply "0" "$(grep -c '^apply ' <<<"$C")"; has r-noarm-lease-deleted 'delete cm upgrade-lease-ansible-opnsense' "$C"
+# r7 a span touching the security boundary → REFUSED whatever else it holds (shadow: said only)
+mkdir -p "$R/opnsense"; echo x >"$R/opnsense/tuya-egress.py"; echo c >"$R/ansible/matchbox.yml"
+git -C "$R" add -A; git -C "$R" commit -qm tuya; SHA2="$(git -C "$R" rev-parse HEAD)"
+rm -f "$T/calls"; rmode backup-only; P_target=changed P_base=clean P_apply=changed P_confirm=clean
+ans_bracket "$T/pol.yaml" opnsense "$SHA2" "$SHA" >"$T/out.r7" 2>&1; RC=$?; C="$(cat "$T/calls" 2>/dev/null)"
+eq r-deny-rc 3 "$RC"; has r-deny-refused '^REFUSE ansible opnsense: security-boundary — the span touches 1 denied path' "$C"; eq r-deny-no-play "0" "$(grep -cE '^(target|apply) ' <<<"$C")"
+# r8 a mode that would reach the MASTER does not exist: `on` without a target is refused for this row
+# (target carp-backup + mode on is not a combination the bracket admits)
+rm -f "$T/calls"; _yq '.apply_ansible.opnsense.mode = "on"' "$POL" >"$T/pol.yaml"
+ans_bracket "$T/pol.yaml" opnsense "$SHA" "$LAST" >/dev/null 2>&1; eq r-on-refused-rc 3 "$?"
 
 echo "mgmt-ansible-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

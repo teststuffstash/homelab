@@ -47,10 +47,69 @@ ANS_STORE_NAME='python3\.[0-9]+-ansible-core'        # devbox `ansible` = nixpkg
 _akc() { local kc="${KUBECONFIG:-}"; [ -f "$kc" ] || kc=/var/lib/mgmt/kubeconfig; printf '%s' "$kc"; }
 _ak()   { ( cd "$REPO" && mgmt_x kubectl --kubeconfig "$(_akc)" --request-timeout=30s "$@" ); }
 _awin() { KUBECONFIG="$(_akc)" SEAT_WINDOW_BY=mgmt-apply bash "$REPO/agents/seat-window.sh" "$@"; }
-# _ans_playbook <tree> <play> [args…] — one play from <tree>, its own ansible.cfg (inventory, roles)
+# The per-bracket run context (ans_bracket sets it from the row; empty = the Matchbox shape):
+#   ANS_LIMIT        the one inventory host every play is limited to (a router row: the CARP BACKUP)
+#   ANS_PY           the controller interpreter (a `runner: opnsense` row: ansible/controller-env, httpx)
+#   ANS_SCRIPT_ENV   a file of KEY=value lines the opnsense/*.py "plays" run under (the node's
+#                    `opnsense-router-node.sh script-env`); OPN_API_KEY/SECRET come from the unit's env
+ANS_LIMIT=""; ANS_PY=""; ANS_SCRIPT_ENV=""
+# _ans_playbook <tree> <play> [args…] — one play from <tree>, its own ansible.cfg (inventory, roles).
+# A `*.py` play is an opnsense/ API script: run with the context's env, `--check` → OPN_CHECK=1 (its
+# read-only diff + an ansible-shaped recap line, opnsense/dnsmasq-dhcp.py's contract).
 _ans_playbook() {
-  ( cd "$1" && ANSIBLE_CONFIG="$1/ansible/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
-      timeout "$ANS_TIMEOUT" ansible-playbook "$1/$2" "${@:3}" )
+  local tree="$1" play="$2" chk=0; shift 2
+  case "$play" in
+    *.py)
+      case " $* " in *" --check "*) chk=1 ;; esac
+      # A script that does not implement OPN_CHECK would IGNORE it and write: never run one in a check
+      # phase. (2026-10-26, the first shadow smoke: the drift read ran the PREVIOUS master's
+      # dnsmasq-dhcp.py + kea-dhcp.py — written before OPN_CHECK existed — as a real rebuild against
+      # the prod BACKUP. Same data, so no harm; the class is closed here, fail-closed: no recap = failed.)
+      if [ "$chk" = 1 ] && ! grep -q 'OPN_CHECK' "$tree/$play" 2>/dev/null; then
+        echo "fatal: [$play]: no OPN_CHECK support in this tree's copy — not run in a check phase (it would write)"
+        return 1
+      fi
+      ( cd "$tree" || exit 1
+        if [ -n "$ANS_SCRIPT_ENV" ]; then
+          while IFS= read -r kv; do [ -n "$kv" ] && export "${kv%%=*}=${kv#*=}"; done <"$ANS_SCRIPT_ENV"
+        fi
+        OPN_CHECK=$chk timeout "$ANS_TIMEOUT" "${ANS_PY:-python3}" "$tree/$play" ) ;;
+    *)
+      local -a extra=()
+      [ -n "$ANS_LIMIT" ] && extra+=(--limit "$ANS_LIMIT")
+      [ -n "$ANS_PY" ] && extra+=(-e "ansible_python_interpreter=$ANS_PY")
+      ( cd "$tree" && ANSIBLE_CONFIG="$tree/ansible/ansible.cfg" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 \
+          timeout "$ANS_TIMEOUT" ansible-playbook "$tree/$play" "${extra[@]}" "$@" ) ;;
+  esac
+}
+# _ans_api <host> <path> — a READ of a router node's API with the unit's pair (GET); the pair goes in a
+# curl config on stdin, never on the command line (ps would show it)
+_ans_api() {
+  printf 'user = "%s:%s"\n' "${OPN_API_KEY:-}" "${OPN_API_SECRET:-}" | curl -sfk --max-time 20 -K - "https://$1/api/$2"
+}
+# _ans_node <ip> <sh…> — root on a router node over the seed key (= the pve key, opnsense-router-node.sh node_ssh)
+_ans_node() {
+  local ip="$1"; shift
+  ssh -i "${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}" -o BatchMode=yes -o ConnectTimeout=10 \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$ip" "$@"
+}
+# _ans_node_check <verb-node> — the read-only serving-rules check (opnsense-router-node.sh check)
+_ans_node_check() {
+  ( cd "$REPO" && OPN_TEST_PVE_KEY="${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}" \
+      timeout 300 bash "$REPO/scripts/opnsense-router-node.sh" check "$1" )
+}
+_ans_script_env() { ( cd "$REPO" && bash "$REPO/scripts/opnsense-router-node.sh" script-env "$1" ); }
+# _ans_runner_opnsense → ANS_PY set + the collection present; rc 1 + why on stderr
+_ans_runner_opnsense() {
+  [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ] || { echo "no OPN_API_KEY/OPN_API_SECRET in the unit's env" >&2; return 1; }
+  local out
+  out="$(cd "$REPO" && NIX_CONFIG="experimental-features = nix-command flakes" timeout 600 \
+         nix build --no-link --print-out-paths "path:$REPO/ansible/controller-env" 2>&1)" \
+    || { echo "controller-env build failed: $(tail -1 <<<"$out")" >&2; return 1; }
+  ANS_PY="$(tail -1 <<<"$out")/bin/python3"
+  [ -x "$ANS_PY" ] || { echo "controller-env has no bin/python3 ($ANS_PY)" >&2; return 1; }
+  ( cd "$REPO" && timeout 300 ansible-galaxy collection install -r "$REPO/ansible/collections/requirements.yml" >/dev/null 2>&1 ) \
+    || { echo "ansible-galaxy collection install failed" >&2; return 1; }
 }
 # _ans_units <hosts> <units…> → rc 0 when every unit is active on every host (the play's own ssh)
 _ans_units() {
@@ -61,6 +120,7 @@ _ans_units() {
 _ans_http() { curl -sf -m 10 -o /dev/null "$1"; }
 _ans_date() { date -u -d "$1" +%Y-%m-%dT%H:%M:%SZ; }
 _ans_now() { date +%s; }
+_ans_sleep() { [ "${1:-0}" -gt 0 ] && sleep "$1"; return 0; }
 
 # ── pure reads (the test feeds them files) ──────────────────────────────────────────────────────
 # ans_groups_touched <policy> (files on stdin) → the apply_ansible groups whose `paths` match, sorted.
@@ -140,6 +200,12 @@ ans_health() {
     [ -n "$u" ] || continue
     _ans_http "$u" || { echo "http: $u did not answer 2xx"; bad=1; }
   done < <(jq -r '.health.http[]?' <<<"$row")
+  if [ "$(jq -r '.health.router_node_check // false' <<<"$row")" = true ]; then
+    if [ -z "${ANS_NODE:-}" ]; then echo "router_node_check: no target node"; bad=1
+    elif ! _ans_node_check "${ANS_NODE#opnsense-}" >"${ANS_D:-/tmp}/node-check.log" 2>&1; then
+      echo "router node check: $(grep -c FAIL "${ANS_D:-/tmp}/node-check.log") FAIL line(s) — $(grep FAIL "${ANS_D:-/tmp}/node-check.log" | head -2 | sed 's/^ *FAIL *//' | tr '\n' ';')"; bad=1
+    fi
+  fi
   hosts="$(jq -r '.hosts // ""' <<<"$row")"; units="$(jq -r '(.health.units // []) | join(" ")' <<<"$row")"
   if [ -n "$units" ]; then
     if [ -z "$hosts" ]; then echo "units: the row names units but no hosts"; bad=1
@@ -176,21 +242,114 @@ ans_lease_check() {
 ans_mark() { printf '%s\t%s\t%s\t%s\n' "$(_ans_now)" "$2" "$3" "${4:-0}" >"$ADIR/ansible-last-$1"; }
 _ans_count() { [ "${1%%$'\t'*}" = changed ] || { echo 0; return; }; tr ' ' '\n' <<<"${1#*$'\t'}" | sed -n 's/.*=\([0-9]*\)$/\1/p' | awk '{s+=$1} END {print s+0}'; }
 
+# ── the router row's reads and its LOCAL revert (ADR-152 (2)–(4), step 3) ──────────────────────
+# ans_deny_hits <row-json> <files…> → the span files matching the row's `deny_paths` (the security
+# boundary: WAN firewall, port forwards, WireGuard, ACME/DNS credentials — a human applies those),
+# one per line. The policy-file shape of the sentinel's `deny_paths`, per row (ruled 2026-10-26).
+ans_deny_hits() {
+  local row="$1" pat f; shift
+  while IFS= read -r pat; do
+    [ -n "$pat" ] || continue
+    for f in "$@"; do
+      # shellcheck disable=SC2254  # the policy's glob, on purpose
+      case "$f" in $pat) printf '%s\n' "$f" ;; esac
+    done
+  done < <(jq -r '.deny_paths[]?' <<<"$row") | sort -u
+}
+# ans_carp_map <vip> → one "<inventory-host>\t<ip>\t<MASTER|BACKUP|…>" line per router node, LIVE (the
+# API's CARP status of <vip> — never a static name: which node is BACKUP is the pair's state, not
+# config). rc 1 + why on stdout: a node that does not answer, a status unreadable, or hasync's
+# config sync switched on (XMLRPC would overwrite a BACKUP-only converge from the un-converged
+# MASTER — the BACKUP must hold its own config for ADR-152 (3)'s canary to mean anything).
+ans_carp_map() {
+  local vip="$1" inv="$REPO/ansible/router-nodes/inventory.yml" rows h ip st sync
+  rows="$(_yq -r '.all.children.opnsense.hosts | to_entries[] | "\(.key) \(.value.ansible_host)"' "$inv")" \
+    && [ -n "$rows" ] || { echo "router-nodes inventory unreadable"; return 1; }
+  while read -r h ip; do
+    st="$(_ans_api "$ip" diagnostics/interface/get_vip_status | jq -r --arg v "$vip" \
+          '[.rows[]? | select(.subnet == $v and .mode == "carp") | .status] | first // ""')" || st=""
+    [ -n "$st" ] || { echo "$h ($ip): CARP status of $vip unreadable"; return 1; }
+    sync="$(_ans_api "$ip" core/hasync/get | jq -r '.hasync.synchronizetoip // "?"')" || sync="?"
+    [ "$sync" = "?" ] && { echo "$h ($ip): hasync settings unreadable"; return 1; }
+    [ -z "$sync" ] || { echo "$h ($ip): hasync config sync to $sync is ON — a BACKUP-only converge would be overwritten"; return 1; }
+    printf '%s\t%s\t%s\n' "$h" "$ip" "$st"
+  done <<<"$rows"
+}
+# ans_carp_backup <map> → "<host>\t<ip>" of THE backup; rc 1 + why unless exactly one MASTER + one BACKUP
+ans_carp_backup() {
+  local m b
+  m="$(awk -F'\t' '$3 == "MASTER"' <<<"$1" | grep -c .)"; b="$(awk -F'\t' '$3 == "BACKUP"' <<<"$1" | grep -c .)"
+  [ "$m" = 1 ] && [ "$b" = 1 ] && [ "$(grep -c . <<<"$1")" = 2 ] \
+    || { echo "the pair is not one MASTER + one BACKUP: $(cut -f1,3 <<<"$1" | tr '\t\n' '= ')"; return 1; }
+  awk -F'\t' '$3 == "BACKUP" {print $1 "\t" $2}' <<<"$1"
+}
+# The node-local restore (ADR-152 (2)): armed BEFORE the converge, ON the node, so it fires whether or
+# not the box (whose own path rides the router) is still there. Arm = copy the live config.xml aside
+# and start a sleeper that, unless cancelled, restores it and reboots the node at its deadline — a
+# BACKUP reboot is the pair's proven move (router-move.md drills); it comes back as BACKUP (its skew)
+# on the config it had before this apply. The box's ⚓ lease is the OUTER timer (cap_min > revert_min).
+# Not reboot-proof (a sleeper, the FU-308 dead-man's shape): a node that reboots mid-bracket comes up
+# on the CONVERGED config with nothing armed — the box's confirm then reads it and STOPs on a bad one.
+ANS_REVERT_FLAG=/conf/box-revert.armed; ANS_REVERT_COPY=/conf/box-revert.xml
+ANS_REVERT_SH=/root/box-revert.sh; ANS_REVERT_PID=/tmp/box-revert.pid; ANS_REVERT_LOG=/root/box-revert.log
+ans_revert_arm() {  # <ip> <seconds> <sha> → rc 0 armed (prints the history head it copied over)
+  local ip="$1" secs="$2" sha="$3"
+  printf '%s\n' '#!/bin/sh' \
+    "# armed $(date -u +%FT%TZ) by mgmt/scripts/mgmt-ansible.sh (box BACKUP converge to ${sha:0:12}, ADR-152 (2))" \
+    "sleep $secs" \
+    "if [ -f $ANS_REVERT_FLAG ]; then" \
+    "  echo \"\$(date -u +%FT%TZ) box-revert FIRED after ${secs}s: restoring $ANS_REVERT_COPY (the pre-apply config) and rebooting\" >> $ANS_REVERT_LOG" \
+    "  rm -f $ANS_REVERT_FLAG; cp $ANS_REVERT_COPY /conf/config.xml && sync && /sbin/shutdown -r now" \
+    "fi" \
+    "rm -f $ANS_REVERT_PID" \
+  | _ans_node "$ip" "[ -f $ANS_REVERT_FLAG ] && { echo 'a box-revert is already armed'; exit 1; }
+      cp /conf/config.xml $ANS_REVERT_COPY && touch $ANS_REVERT_FLAG && cat > $ANS_REVERT_SH && chmod +x $ANS_REVERT_SH || exit 1
+      nohup $ANS_REVERT_SH >/dev/null 2>&1 </dev/null & echo \$! > $ANS_REVERT_PID; sleep 0.3
+      kill -0 \$(cat $ANS_REVERT_PID) 2>/dev/null || { rm -f $ANS_REVERT_FLAG; echo 'sleeper did not start'; exit 1; }
+      echo \"\$(date -u +%FT%TZ) armed (${secs}s, ${sha:0:12}); history head \$(ls -t /conf/backup | head -1)\" >> $ANS_REVERT_LOG
+      echo \"armed; history head \$(ls -t /conf/backup | head -1)\""
+}
+ans_revert_cancel() {  # <ip> → rc 0 cancelled (nothing armed is also rc 0, said so)
+  _ans_node "$1" "rm -f $ANS_REVERT_FLAG; p=\$(cat $ANS_REVERT_PID 2>/dev/null); [ -n \"\$p\" ] && kill \$p 2>/dev/null
+    rm -f $ANS_REVERT_PID $ANS_REVERT_COPY; echo \"\$(date -u +%FT%TZ) cancelled (confirmed)\" >> $ANS_REVERT_LOG; echo cancelled"
+}
+
 # ── the bracket ─────────────────────────────────────────────────────────────────────────────────
 # ans_bracket <policy> <group> <sha> <last> → see the header's return codes. Uses refuse() + mgmt_post_status
 # from the caller (mgmt-apply.sh) and REPO (its clone, reset to <sha>).
 ans_bracket() {
   local pol="$1" g="$2" sha="$3" last="$4" row mode plays cap hosts walerts d base j jb n conf wid lease end
+  local target revmin node="" nodeip="" carp0="" rvline=""
+  ANS_LIMIT=""; ANS_PY=""; ANS_SCRIPT_ENV=""; ANS_NODE=""; ANS_D=""
   row="$(ans_row "$pol" "$g")" && [ -n "$row" ] && [ "$row" != '""' ] \
     || { refuse "$sha" "ansible $g: apply_ansible row unreadable — human apply"; return 3; }
   mode="$(jq -r '.mode // "shadow"' <<<"$row")"; plays="$(jq -c '.plays // []' <<<"$row")"
   cap="$(jq -r '.cap_min // 30' <<<"$row")"; hosts="$(jq -r '.hosts // ""' <<<"$row")"
   walerts="$(jq -r '(.window_alerts // ["none"]) | join(",")' <<<"$row")"
   [ "$(jq 'length' <<<"$plays")" -gt 0 ] || { refuse "$sha" "ansible $g: the row names no plays — human"; return 3; }
-  case "$mode" in on|shadow) ;; *) refuse "$sha" "ansible $g: mode '$mode' is not on|shadow — human"; return 3 ;; esac
+  target="$(jq -r '.target // ""' <<<"$row")"; revmin="$(jq -r '.revert_min // 0' <<<"$row")"
+  # backup-only = on, for a row whose target is the CARP BACKUP (ROADMAP §Deploy paths step 3): the
+  # MASTER's rolling path is a later step and no mode here can reach it
+  case "$mode:$target" in
+    on:|shadow:*|backup-only:carp-backup) ;;
+    *) refuse "$sha" "ansible $g: mode '$mode' with target '${target:-none}' is not on|shadow|backup-only(carp-backup) — human"; return 3 ;;
+  esac
+  [ "$target" = carp-backup ] && [ "$revmin" -ge "$cap" ] && { refuse "$sha" "ansible $g: revert_min ($revmin) must be below cap_min ($cap) — the lease is the OUTER timer"; return 3; }
+  [ "$mode" = backup-only ] && mode=on
   # the loop's own SHADOW (no App token, or MGMT_SHADOW=1) shadows every row: nothing is applied
   [ "${MGMT_SHADOW:-0}" = 1 ] && mode=shadow
   d="${MGMT_ANSIBLE_DIR:-$ADIR/ansible}/$(date -u +%Y%m%dT%H%M%SZ)-$g-${sha:0:8}"; mkdir -p "$d" || { log "PROBE-FAIL: ansible $g: record dir $d not writable"; return 1; }
+  ANS_D="$d"
+  # the security boundary (ADR-152 (4)): a span touching a row's deny_paths is a human's, whatever else it holds
+  local -a span=(); local sf hits
+  sf="$(git -C "$REPO" log --name-only --format= "${last}..${sha}" -- 2>/dev/null; git -C "$REPO" diff --name-only "$last" "$sha" -- 2>/dev/null)"
+  [ -n "$sf" ] && mapfile -t span < <(grep . <<<"$sf" | sort -u)
+  hits="$(ans_deny_hits "$row" "${span[@]}")"
+  if [ -n "$hits" ]; then
+    ans_mark "$g" "$mode" refused 0
+    [ "$mode" = shadow ] && { log "[shadow] ansible $g: would REFUSE — security-boundary: $(tr '\n' ' ' <<<"$hits")"; return 0; }
+    refuse "$sha" "ansible $g: security-boundary — the span touches $(grep -c . <<<"$hits") denied path(s) (WAN firewall/port forwards/WireGuard/ACME-DNS creds) — a human applies" "$hits"; return 3
+  fi
   if [ "$mode" = on ] && [ -s "$ADIR/ansible-stopped" ]; then
     refuse "$sha" "ansible $g: ansible applies STOPPED since $(cut -f2,4 "$ADIR/ansible-stopped" | tr '\t' ' ' | head -c 80) — a human reads the record, then rm $ADIR/ansible-stopped"
     return 3
@@ -199,6 +358,28 @@ ans_bracket() {
     log "ansible $g: toolchain unresolvable: $(tail -1 "$d/tools.err")"
     [ "$mode" = shadow ] && { ans_mark "$g" "$mode" refused 0; log "[shadow] ansible $g: would REFUSE (toolchain)"; return 0; }
     refuse "$sha" "ansible $g: ansible toolchain unresolvable from devbox.lock — see the box journal"; return 3
+  fi
+  if [ "$(jq -r '.runner // ""' <<<"$row")" = opnsense ] && ! _ans_runner_opnsense 2>"$d/runner.err"; then
+    log "ansible $g: the opnsense runner is not ready: $(tail -1 "$d/runner.err")"
+    [ "$mode" = shadow ] && { ans_mark "$g" "$mode" refused 0; log "[shadow] ansible $g: would REFUSE (opnsense runner)"; return 0; }
+    refuse "$sha" "ansible $g: opnsense runner not ready ($(tail -1 "$d/runner.err" | head -c 60)) — see the box journal"; return 3
+  fi
+  # the TARGET: the CARP BACKUP, read live from the pair (never a static name)
+  if [ "$target" = carp-backup ]; then
+    local vip; vip="$(jq -r '.vip // "192.168.2.1"' <<<"$row")"
+    if ! carp0="$(ans_carp_map "$vip")" || ! node="$(ans_carp_backup "$carp0")"; then
+      local why="${node:-$carp0}"
+      log "ansible $g: no BACKUP to converge — $why"
+      ans_mark "$g" "$mode" refused 0
+      [ "$mode" = shadow ] && { log "[shadow] ansible $g: would REFUSE — ansible-pair-unhealthy: $why"; return 0; }
+      refuse "$sha" "ansible $g: ansible-pair-unhealthy — $why — human"; return 3
+    fi
+    nodeip="${node#*$'\t'}"; node="${node%%$'\t'*}"; ANS_LIMIT="$node"; ANS_NODE="$node"
+    printf '%s\n' "$carp0" >"$d/carp-before.tsv"
+    ANS_SCRIPT_ENV="$d/script.env"
+    _ans_script_env "${node#opnsense-}" >"$ANS_SCRIPT_ENV" 2>"$d/script-env.err" \
+      || { log "PROBE-FAIL: ansible $g: script-env for $node unreadable ($(tail -1 "$d/script-env.err"))"; return 1; }
+    log "ansible $g: target = the CARP BACKUP $node ($nodeip); MASTER $(awk -F'\t' '$3 == "MASTER" {print $1}' <<<"$carp0") untouched"
   fi
 
   # 2 the target: --check --diff of master
@@ -264,27 +445,55 @@ ans_bracket() {
   [ -n "$wid" ] || { log "PROBE-FAIL: ansible $g: window id unreadable"; return 1; }
   lease="upgrade-lease-ansible-$g"; end="$(_ans_date "+${cap} minutes")"
   jq -n --arg n "$lease" --arg ns "$ANS_LEASE_NS" --arg l "$ANS_LEASE_LABEL" --arg subj "ansible/$g" --arg chart "$g" \
-        --arg sha "$sha" --arg from "$conf" --arg to "$sha" --arg end "$end" --arg w "$wid" \
+        --arg sha "$sha" --arg from "$conf" --arg to "$sha" --arg end "$end" --arg w "$wid" --arg node "$node" \
     '{apiVersion:"v1", kind:"ConfigMap", metadata:{name:$n, namespace:$ns, labels:{($l):"true"}},
       data:{subject:$subj, chart:$chart, sha:$sha, from:$from, to:$to, "expected-end":$end, "max-end":$end,
-            by:"mgmt-apply", reason:("box ansible bracket under window " + $w + " — forward only (ADR-152 step 2): an expired lease here is a STOP, never a revert")}}' >"$d/lease.json"
+            by:"mgmt-apply", reason:("box ansible bracket under window " + $w + " — forward only (ADR-152): an expired lease here is a STOP, never a revert PR" + (if $node != "" then "; target " + $node + " (its node-local restore is the revert)" else "" end))}}' >"$d/lease.json"
   if ! _ak create -f "$d/lease.json" >/dev/null 2>"$d/lease.err"; then
     log "PROBE-FAIL: ansible $g: lease not created ($(tail -c 200 "$d/lease.err")) — closing the window, not applying"
     _awin close --id "$wid" --tail-min 0 >/dev/null 2>&1 || true; return 1
   fi
   log "ansible $g: begun — window $wid, lease $ANS_LEASE_NS/$lease (expected-end $end), record $d"
+  # the LOCAL revert, armed BEFORE the apply (ADR-152 (2)) — no arm, no apply
+  if [ "$target" = carp-backup ] && [ "$revmin" -gt 0 ]; then
+    if ! rvline="$(ans_revert_arm "$nodeip" "$(( revmin * 60 ))" "$sha" 2>&1)"; then
+      log "PROBE-FAIL: ansible $g: node-local restore did not arm on $node ($rvline) — lease deleted, window closed, not applying"
+      _ak -n "$ANS_LEASE_NS" delete cm "$lease" >/dev/null 2>&1 || true
+      _awin close --id "$wid" --tail-min 0 >/dev/null 2>&1 || true; return 1
+    fi
+    log "ansible $g: node-local restore ARMED on $node — fires in ${revmin}m unless confirmed ($rvline)"
+  fi
 
   # 5 apply, 6 confirm
   local ja jc hf=""
   ja="$(ans_run "$d" apply "$REPO" "$plays")"
   log "ansible $g: APPLY → ${ja//$'\t'/ — }"
+  # settle (the row's `settle_s`): a router reconfigure restarts services the confirm then reads
+  _ans_sleep "$(jq -r '.settle_s // 0' <<<"$row")"
   jc="$(ans_run "$d" confirm "$REPO" "$plays" --check)"
   log "ansible $g: confirm --check → ${jc//$'\t'/ — }"
   hf="$(ans_health "$row")" || true
+  if [ "$target" = carp-backup ]; then   # CARP unchanged: the BACKUP still BACKUP, the MASTER untouched
+    local carp1; carp1="$(ans_carp_map "$(jq -r '.vip // "192.168.2.1"' <<<"$row")" 2>&1)" || true
+    printf '%s\n' "$carp1" >"$d/carp-after.tsv"
+    [ "$carp1" = "$carp0" ] || hf="${hf:+$hf
+}carp: the pair moved — before $(cut -f1,3 <<<"$carp0" | tr '\t\n' '= ') after $(cut -f1,3 <<<"$carp1" | tr '\t\n' '= ')"
+  fi
   { echo "box ansible apply $g ${conf:0:8} → ${sha:0:8}  window $wid  lease $lease"
     echo "== target --check: $j"; echo "== apply: $ja"; echo "== confirm --check: $jc"
     echo "== health: ${hf:-ok}"; } >"$d/summary.txt"
   if [ "${ja%%$'\t'*}" != failed ] && [ "${ja%%$'\t'*}" != unreachable ] && [ "$jc" = clean ] && [ -z "$hf" ]; then
+    if [ -n "$rvline" ]; then
+      local cl; cl="$(ans_revert_cancel "$nodeip" 2>&1)" || cl="FAILED: $cl"
+      log "ansible $g: node-local restore on $node: $cl"
+      case "$cl" in *cancelled*) ;; *)
+        hf="node-local restore NOT cancelled on $node ($cl) — it will restore the pre-apply config"
+        printf '%s\t%s\t%s\t%s\n' "$sha" "ansible/$g" "$d" "confirmed, but $hf" >"$ADIR/ansible-stopped"
+        ans_mark "$g" "$mode" stopped "$n"
+        mgmt_post_status "$sha" "$CTX" failure "ansible $g: applied + confirmed, but the node-local restore could not be cancelled — STOPPED"
+        return 2 ;;
+      esac
+    fi
     _ak -n "$ANS_LEASE_NS" delete cm "$lease" >/dev/null 2>&1 || log "ansible $g: WARN lease $lease not deleted — the lease loop reads it as ansible_stopped at expiry"
     _awin close --id "$wid" >/dev/null 2>&1 || log "ansible $g: WARN window $wid not closed — it lapses at its until"
     printf '%s' "$sha" >"$ADIR/ansible-confirmed-$g"
@@ -295,9 +504,10 @@ ans_bracket() {
   fi
   local why
   why="apply ${ja%%$'\t'*}; confirm --check ${jc%%$'\t'*}${hf:+; $(tr '\n' ';' <<<"$hf" | sed 's/;$//')}"
+  [ -n "$rvline" ] && why="$why; the node-local restore on $node stays ARMED — it restores the pre-apply config and reboots the node at its deadline"
   printf '%s\t%s\t%s\t%s\n' "$sha" "ansible/$g" "$d" "$why" >"$ADIR/ansible-stopped"
   ans_mark "$g" "$mode" stopped "$n"
-  log "ansible $g: STOPPED — $why — lease $lease KEPT, window $wid LEFT OPEN, $ADIR/ansible-stopped written; nothing reverted"
+  log "ansible $g: STOPPED — $why — lease $lease KEPT, window $wid LEFT OPEN, $ADIR/ansible-stopped written; the box reverts nothing"
   mgmt_post_status "$sha" "$CTX" failure "ansible $g: applied, STOPPED on the confirm: $why"
   return 2
 }

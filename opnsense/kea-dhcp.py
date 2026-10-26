@@ -26,8 +26,10 @@ Env:
                         "opnsense-nx02;opnsense-nx02=http://192.168.2.70:8001/=primary,opnsense-pve=http://192.168.2.71:8001/=standby"
                         Each URL is that node's OWN address on a port other than the control
                         agent's (8000); the peer list is identical on both nodes.
+    OPN_CHECK=1         READ-ONLY: print each difference + an ansible-shaped recap line, write
+                        nothing (dnsmasq-dhcp.py's contract — the box applier's --check)
 """
-import base64, json, os, runpy, ssl, sys, urllib.request
+import base64, json, os, runpy, ssl, sys, urllib.error, urllib.request
 
 HOST = os.environ.get("OPN_HOST", "192.168.2.1")
 ENABLE = os.environ.get("OPN_DHCP_ENABLE", "1")
@@ -110,9 +112,71 @@ def off():
     print("apply:", call("service/reconfigure").get("status"))
 
 
+CHECK = os.environ.get("OPN_CHECK", "0") == "1"   # READ-ONLY: diff + recap line (dnsmasq-dhcp.py's contract)
+
+
+def diff():
+    """Live vs the data (selected=kea): one line per difference. READ-ONLY."""
+    out = []
+    cur = call("dhcpv4/get", method="GET")["dhcpv4"]
+    ha, peers = ha_config()
+    sel = lambda v: sorted(k for k, o in v.items() if isinstance(o, dict) and str(o.get("selected")) == "1" and k) \
+        if isinstance(v, dict) else sorted(x for x in str(v or "").split(",") if x)
+    if str(cur["general"].get("enabled")) != ENABLE:
+        out.append(f"general enabled: live {cur['general'].get('enabled')!r} != {ENABLE!r}")
+    if str(cur["general"].get("fwrules")) != "1":
+        out.append(f"general fwrules: live {cur['general'].get('fwrules')!r} != '1'")
+    if sel(cur["general"].get("interfaces")) != [INTERFACE]:
+        out.append(f"general interfaces: live {sel(cur['general'].get('interfaces'))} != [{INTERFACE!r}]")
+    for k in ("enabled", "this_server_name"):
+        if str(cur["ha"].get(k, "")) != ha[k]:
+            out.append(f"ha {k}: live {cur['ha'].get(k)!r} != {ha[k]!r}")
+    subs = call("dhcpv4/search_subnet").get("rows", [])
+    want = {"subnet": SUBNET["subnet"], "pools": SUBNET["pools"], "valid_lifetime": SUBNET["valid_lifetime"],
+            "option_data_autocollect": "0", "option_data.routers": OPT["3"],
+            "option_data.domain_name_servers": OPT["6"], "option_data.domain_name": RANGE["domain"],
+            "ping_check": "1", "description": SUBNET["description"]}
+    have = [{k: str(r.get(k, "")).strip() for k in want} for r in subs]
+    if have != [want]:
+        out.append(f"subnet: live {have} != [{want}]")
+    have = {(r.get("hostname"), r.get("ip_address"), (r.get("hw_address") or "").lower(), r.get("description"))
+            for r in call("dhcpv4/search_reservation").get("rows", [])}
+    wantr = {(h["host"], h["ip"], h["hwaddr"].lower(), h["host"]) for h in HOSTS}
+    for h in sorted(have - wantr):
+        out.append(f"reservation {h[0]} {h[1]} {h[2]}: live only (or changed)")
+    for h in sorted(wantr - have):
+        out.append(f"reservation {h[0]} {h[1]} {h[2]}: missing on live (or changed)")
+    have = sorted((r.get("name"), r.get("url"), r.get("role")) for r in call("dhcpv4/search_peer").get("rows", []))
+    if have != sorted((p["name"], p["url"], p["role"]) for p in peers):
+        out.append(f"peers: live {have} != {sorted((p['name'], p['url'], p['role']) for p in peers)}")
+    ca = call("ctrl_agent/get", method="GET")["ctrlagent"]["general"]
+    if str(ca.get("enabled")) != ("1" if peers else "0"):
+        out.append(f"ctrl_agent enabled: live {ca.get('enabled')!r}")
+    return out
+
+
+def recap(changed, unreachable=0, failed=0):
+    print("\nPLAY RECAP *********")
+    print(f"{HOST} : ok=1 changed={changed} unreachable={unreachable} failed={failed}")
+
+
 def main():
     if SERVER != "kea":
+        if CHECK:
+            sys.exit("OPN_CHECK covers the selected server (kea) only")
         return off()
+    try:
+        d = diff()
+    except (urllib.error.URLError, OSError) as e:
+        print(f"fatal: [{HOST}]: Unable to connect {BASE}: {e}")
+        recap(0, unreachable=1)
+        sys.exit(4)
+    for line in d:
+        print(f"  ~ {line}")
+    if CHECK:
+        print(f"Kea on {HOST}: {len(d)} difference(s) — check mode, nothing written")
+        recap(len(d))
+        return
     ha, peers = ha_config()
     print(f"Rebuilding Kea DHCPv4 on {HOST} (enable={ENABLE}, ha={'on' if peers else 'off'})...")
     wipe("reservation"); wipe("subnet"); wipe("peer")      # reservations reference the subnet
@@ -132,6 +196,7 @@ def main():
     must(call("ctrl_agent/set", {"ctrlagent": {"general": {
         "enabled": "1" if peers else "0", "http_host": "127.0.0.1", "http_port": "8000"}}}), "ctrl_agent")
     print("apply:", call("service/reconfigure").get("status"))
+    recap(len(d))
 
 
 if __name__ == "__main__":
