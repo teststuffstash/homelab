@@ -2,9 +2,9 @@
 # maintenance-window — the mechanical half of the /maintenance-window skill.
 #
 #   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply]
-#   bash scripts/maintenance-window.sh check [--id <window-id>]       # also RENEWS the window's lease
+#   bash scripts/maintenance-window.sh check [--id <window-id>]       # also RENEWS the window's lease; new-alert diff drops Watchdog/InfoInhibitor + the window's claims
 #   bash scripts/maintenance-window.sh renew [--id <window-id>]       # the lease alone — the skill's watch calls it
-#   bash scripts/maintenance-window.sh claim [--id <window-id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>)
+#   bash scripts/maintenance-window.sh claim [--id <window-id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>)   # also records the name for check/close
 #   bash scripts/maintenance-window.sh close [--id <window-id>] [--force]   # mutex released now, triage tail ${MAINT_TAIL_MIN:-20}m
 #   bash scripts/maintenance-window.sh list              # the windows this tool has open (its state slots)
 #   bash scripts/maintenance-window.sh cilium-check      # probe 3 alone, no baseline needed
@@ -99,6 +99,18 @@ MAINT_REPOS="${MAINT_REPOS:-homelab oracle-fleet oracle-iac sleep-tracking snore
 # The classes a maintenance window structurally produces. Same default as node-maintenance.sh's
 # DECLARED_ALERTS plus the control-plane names the 2026-09-20 apply produced.
 DEFAULT_ALERTS="KubeAPIDown,KubeletInstanceUnreachable,KubeNodeNotReady,KubeNodeUnreachable,KubePodNotReady,KubeSchedulerInstanceUnreachable,KubeControllerManagerInstanceUnreachable,KubeAggregatedAPIDown,KubeDeploymentReplicasMismatch,KubeDaemonSetRolloutStuck,KubeDaemonSetMisScheduled,CiliumUnreachableNodes,CiliumAgentScrapeDown,TargetDown"
+
+# Names the new-alert diff NEVER counts (GAPS maintenance-window-G4, promoted 2026-10-26): the two
+# stock kube-prometheus-stack meta-alerts. `Watchdog` always fires; `InfoInhibitor` flaps with any
+# `info` alert that lacks a warning sibling — it landed between `open` and `check` in window after
+# window and `close` refused on it as NEW. The Alertmanager route drops both; so does this diff.
+META_ALERTS='["Watchdog","InfoInhibitor"]'
+# Alert NAMES the seat `claim`ed under the window being checked (GAPS maintenance-window-G5, promoted
+# 2026-10-26): `claim` records each under $STATE_DIR/<id>/claimed, cmd_check loads them here, and the
+# diff prints them as the window's own instead of blocking `close` on them — a claim is the seat
+# saying "this one is mine", and refusing to close on it only bought a 30-min wait or a `--force`.
+# Empty for the unattended `compare` (no window, no claims).
+CLAIMED='[]'
 
 # EVERY read distinguishes "queried and found nothing" from "the query failed" — and returns
 # non-zero for the latter. Caught in review (#1804): the first cut piped `curl … 2>/dev/null` into
@@ -434,7 +446,15 @@ compare_snapshots() { # <baseline-json> <now-json>
   if [ "$(jq -r .alerts_ok <<<"$now")" != true ]; then
     echo "  ⚠ alerts UNREADABLE — Prometheus $PROM/api/v1/alerts did not answer; the new-alert check did NOT run"; rc=2
   else
-    local new; new="$(jq -r --argjson b "$b" '[.alerts[]|select(. as $a | ($b.alerts|index($a))|not)]|join(", ")' <<<"$now")"
+    # Three bins for a name firing now and absent at baseline: a stock meta-alert (dropped, as the
+    # Alertmanager route drops it), a name this window CLAIMED (printed as its own, not blocking),
+    # or NEW — the only bin that is a regression. Everything else about the diff stays strict.
+    local new claimed
+    new="$(jq -r --argjson b "$b" --argjson meta "$META_ALERTS" --argjson cl "$CLAIMED" \
+          '[.alerts[]|select(. as $a | (($b.alerts + $meta + $cl)|index($a))|not)]|join(", ")' <<<"$now")"
+    claimed="$(jq -r --argjson b "$b" --argjson cl "$CLAIMED" \
+          '[.alerts[]|select(. as $a | ($b.alerts|index($a)|not) and ($cl|index($a)))]|join(", ")' <<<"$now")"
+    [ -z "$claimed" ] || echo "  ok  firing but CLAIMED under this window (its own fallout, not blocking): $claimed"
     if [ -n "$new" ]; then echo "  ⚠ NEW firing alerts: $new"; rc=2; else echo "  ok  no new firing alerts"; fi
   fi
 
@@ -469,6 +489,8 @@ cmd_check() {
   local b; b="$(cat "$BASE")"
   local now; now="$(snapshot)"
   local rc=0
+  # The names this window claimed (one per line, written by cmd_claim) — honoured by the diff.
+  [ ! -s "$STATE_DIR/$SLOT/claimed" ] || CLAIMED="$(jq -Rsc 'split("\n")|map(select(length>0))|unique' "$STATE_DIR/$SLOT/claimed")"
   echo "== check vs baseline ($(jq -r .at <<<"$b"), window $SLOT) =="
   compare_snapshots "$b" "$now" || rc=$?
 
@@ -523,7 +545,16 @@ cmd_renew() {
 }
 cmd_claim() {
   [ -s "$WID" ] || { echo "claim: no recorded window id for slot $SLOT" >&2; return 1; }
-  bash "$ROOT/agents/seat-window.sh" claim --id "$(cat "$WID")" "$@"
+  local out; out="$(bash "$ROOT/agents/seat-window.sh" claim --id "$(cat "$WID")" "$@")" || { printf '%s\n' "$out"; return 1; }
+  printf '%s\n' "$out"
+  # Record the claimed NAME in the slot so check/close honour it (header §CLAIMED). The name comes
+  # from seat-window's own `✓ claimed <name> under window` line (a `--fp` claim derives it from the
+  # alert's labels, so the caller may never have typed it); the `--alert` argument is the fallback.
+  local name="" prev=""
+  name="$(sed -n 's/^✓ claimed \([^ ]*\) under window .*/\1/p' <<<"$out" | sed -n 1p)"
+  if [ -z "$name" ]; then for a in "$@"; do [ "$prev" = --alert ] && name="$a"; prev="$a"; done; fi
+  if [ -n "$name" ]; then printf '%s\n' "$name" >> "$STATE_DIR/$SLOT/claimed"
+  else echo "  ⚠ could not tell which alert was claimed — check/close will still count it as NEW" >&2; fi
 }
 
 # The cilium backend probe on its own, with no baseline and no window — for a caller that has
