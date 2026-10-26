@@ -61,10 +61,12 @@ data "talos_machine_configuration" "metal" {
   config_patches = concat(
     [yamlencode({
       machine = {
-        install = {
+        # legacyBIOSSupport only where set: emitting `false` everywhere would rewrite every metal
+        # node's config for nothing (machines.yaml `legacy_bios`).
+        install = merge({
           disk  = each.value.install_disk
           image = each.value.kata ? data.talos_image_factory_urls.metal_kata.urls.installer : local.talos_install_image
-        }
+        }, each.value.legacy_bios ? { legacyBIOSSupport = true } : {})
       }
     })],
     [local.registry_mirrors_patch],
