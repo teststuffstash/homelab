@@ -215,7 +215,9 @@ for row in "${todo[@]}"; do
   case "$state" in
     success) desc="PASS at ${sha:0:8} in $((dur/60)) min — ${plays:-?}" ;;
     failure) desc="FAIL at ${sha:0:8}: $(grep -m1 '^FAIL: ' "$work.log" | cut -c7-80) — see the PR comment" ;;
-    *)       desc="could not run (${killed:-rc $rc}): $(grep -m1 '^opnsense-test-vm: ' "$work.log" | cut -c19-90) — retried"
+    *)       why="$(grep -m1 '^opnsense-test-vm: ' "$work.log" | cut -c19-90)"
+             [ -n "$why" ] || why="$(grep -v '^Info:' "$work.log" | tail -1 | sed 's|^.*/scripts/||' | cut -c1-80)"   # a shell error, not the harness's own die
+             desc="could not run (${killed:-rc $rc}): $why — retried"
              e=0; [ -f "$RDIR/done/$sha.errors" ] && e="$(cat "$RDIR/done/$sha.errors")"
              echo $(( e + 1 )) >"$RDIR/done/$sha.errors" ;;
   esac
