@@ -98,7 +98,7 @@ would compare favourably against it.
 `check` is a point read. Across a long window the seat also needs to be *interrupted*, so:
 
 **Arm a background alert watch at `open` and keep it for the whole window — and do not re-type
-it.** The watch is a verb, `maint watch`, owned by `FU-319`; until it lands, a hand copy
+it.** The watch is a verb, `maint watch` (built 2026-10-26); if it is ever missing, a hand copy
 is a script FILE (never an inline loop — zsh does not word-split) that meets four rules, each a
 past silent failure (promoted 2026-10-26, GAPS maintenance-window-G2): it **seeds from the slot's
 baseline** (`~/.claude/maintenance-window/<id>/baseline.json` → `.alerts[]`, never from the
