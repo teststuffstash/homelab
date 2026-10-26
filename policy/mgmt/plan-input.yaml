@@ -186,7 +186,7 @@ apply_ansible:              # ansible play GROUPS the box may apply unattended (
   #                 nothing — the window is declared to hold the reconciler and the apply loop
   #   health        confirm reads: `http` must answer 2xx, `units` must be `active` on `hosts`
   matchbox:
-    mode: shadow
+    mode: on                # flipped 2026-10-27 after the first shadow tick (#2948) — ADR-152 step 2
     hosts: matchbox
     plays:
       - ansible/matchbox.yml
