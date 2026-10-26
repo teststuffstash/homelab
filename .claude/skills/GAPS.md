@@ -121,6 +121,11 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
 
 ## design-agents
 
+> **Routing (operator 2026-10-26): design-agents is semi-deprecated — context is read per island
+> (spike `context-and-autonomy.md` §C7; oracle-fleet#935's read map is the track-unit shape).** A
+> promotion from this section goes to the seat card (cross-cutting rules: asks-are-claims,
+> live-verify) or to the islands table (read scoping), never into the skill's own text.
+
 - [x] design-agents-G1 — a STATUS read from `meta-state.md`/tracker was repeated in the answer
       ("agent-runtime#62 still queued") although the session's own live board probe contradicted
       it in-context (#62 closed 30 min after meta-state's consolidation stamp). Fix: the output
@@ -475,10 +480,6 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       the production BACKUP. Next: the skill routes every `ansible/opnsense-*`/`roles/opnsense-*` PR through the
       script with the env line quoted; the script's play set follows the PR's touched roles (or `--steps all` is
       the default for a role outside the four).
-- [ ] opnsense-as-code-G2 — **ACME on the CARP BACKUP returns 400** (no WAN leg while BACKUP; its
-      certs are seed copies) and the skill never mentions the pair. Fix: issue/sign on the MASTER,
-      carry certs to the BACKUP (FU-297's cert-carry); expect 400 from a BACKUP issuance. Sighted
-      2026-10-15.
 
 ## docs-cleanup
 
