@@ -19,7 +19,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **LAN certs (FU-297) — DONE 2026-10-26** (detector, cron, carry, guard, rebind all live; `LanCertExpiringSoon`
-  clear). NEXT (FU-297 (1)): schedule `opnsense-cert-carry.sh nx02 pve` on the management box so the BACKUP follows
+  clear). NEXT (FU-297 (1)): schedule `opnsense-cert-carry.sh nx02 pve` on the [management box](../management-box.md) so the BACKUP follows
   renewals without a seat.
 - **OPNsense 26.7.7 on the test VM (whoever is running that trial — baseline snapshot re-taken 2026-10-26 ~20:40Z,
   unrecorded):** against it the pinned `oxlorg.opnsense 26.1.11` FAILS the bgp play's neighbor task ("Failed field:
