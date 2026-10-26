@@ -53,6 +53,7 @@
     mode: "0644"
     content: |
       #!ipxe
+      # ansible/roles/matchbox-ipxe-tftp — applied by the management box (ADR-152): edit the role, not this file
       chain {{ matchbox_http }}/ipxe?mac=${mac:hexhyp} ||
       {% for m in matchbox_sanboot_macs %}
       iseq ${mac:hexhyp} {{ m | replace(':', '-') }} && sanboot --no-describe --drive 0x80 ||
