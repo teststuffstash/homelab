@@ -11,18 +11,57 @@
     group: matchbox
     mode: "0755"
 
+# --- fetch only what is missing or stale. get_url without a checksum cannot answer "same file?" in
+# --check (it issues a HEAD and always reports `changed`), so the box's applier
+# (mgmt/scripts/mgmt-ansible.sh) read a permanent false diff here. The dir is keyed by version only,
+# so the SCHEMATIC the files were fetched for is recorded beside them (.schematic): a version bump
+# (new dir) or a schematic change (marker differs) re-fetches both, anything else is a no-op. The
+# reads run in --check too.
+- name: Read the schematic the staged assets were fetched for
+  ansible.builtin.command: cat "{{ matchbox_assets }}/talos/{{ talos_version }}/.schematic"
+  register: talos_assets_marker
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Stat the staged kernel + initramfs
+  ansible.builtin.stat:
+    path: "{{ matchbox_assets }}/talos/{{ talos_version }}/{{ item }}"
+  loop:
+    - "vmlinuz-{{ talos_arch }}"
+    - "initramfs-{{ talos_arch }}.xz"
+  register: talos_assets_stat
+
+- name: Decide whether to fetch
+  ansible.builtin.set_fact:
+    talos_assets_fetch: >-
+      {{ (talos_assets_stat.results | rejectattr('stat.exists') | list | length) > 0
+         or (talos_assets_marker.stdout | default('') | trim) != talos_schematic_id }}
+
 - name: Download Talos kernel
+  when: talos_assets_fetch
   ansible.builtin.get_url:
     url: "{{ talos_factory_base }}/{{ talos_schematic_id }}/{{ talos_version }}/kernel-{{ talos_arch }}"
     dest: "{{ matchbox_assets }}/talos/{{ talos_version }}/vmlinuz-{{ talos_arch }}"
+    force: true
     owner: matchbox
     group: matchbox
     mode: "0644"
 
 - name: Download Talos initramfs
+  when: talos_assets_fetch
   ansible.builtin.get_url:
     url: "{{ talos_factory_base }}/{{ talos_schematic_id }}/{{ talos_version }}/initramfs-{{ talos_arch }}.xz"
     dest: "{{ matchbox_assets }}/talos/{{ talos_version }}/initramfs-{{ talos_arch }}.xz"
+    force: true
+    owner: matchbox
+    group: matchbox
+    mode: "0644"
+
+- name: Record the schematic the assets were fetched for
+  ansible.builtin.copy:
+    dest: "{{ matchbox_assets }}/talos/{{ talos_version }}/.schematic"
+    content: "{{ talos_schematic_id }}\n"
     owner: matchbox
     group: matchbox
     mode: "0644"

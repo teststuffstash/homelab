@@ -165,3 +165,45 @@ apply_helm:                 # helm_release addresses the box may APPLY unattende
     - address: helm_release.longhorn
       cap_min: 240
       engine_order: [fast, none, bulk, slow-bulk, std]
+apply_ansible:              # ansible play GROUPS the box may apply unattended (ADR-152 program step 2, operator 2026-10-26)
+  # mgmt/scripts/mgmt-ansible.sh (docs/management-box.md §"Ansible applies — Matchbox first"). A master
+  # span whose files (every commit's, `git log --name-only`) match a row's `paths` runs the row's bracket
+  # behind the same gates as a tofu root (declared windows, the box verdict, refused-rev, the
+  # `management-apply` status): `--check --diff` of the plays at master → nothing to do when it is
+  # changed=0; DRIFT = the plays at the sha the box last confirmed for this group (else the previous
+  # master) are NOT changed=0 on live → refused to a human; else window + ⚓ lease
+  # (upgrade-lease-ansible-<group>) → apply → CONFIRM (a second --check changed=0 + `health`) → lease
+  # deleted. A bad confirm or a failed apply STOPS: lease + window kept, $ADIR/ansible-stopped
+  # (→ MgmtAnsibleApplyStopped) refuses every later ansible apply until a human removes it. Never a
+  # revert, never a retry.
+  #   mode          shadow = both checks + the would-be apply in the journal and the metrics, NOTHING
+  #                 applied, no status; on = the bracket above. The OPERATOR flips it.
+  #   hosts         the inventory pattern the health's unit read targets (ansible ad-hoc, the play's own ssh)
+  #   plays         in order; every one runs in each phase (a play that is changed=0 costs one read)
+  #   paths         bash case globs (`*` crosses `/`) over the span's files
+  #   cap_min       the lease's deadline from the bracket's begin: the plays' apply + the confirm
+  #   window_alerts the alert names the change may produce (seat-window --alerts); `none` = graces
+  #                 nothing — the window is declared to hold the reconciler and the apply loop
+  #   health        confirm reads: `http` must answer 2xx, `units` must be `active` on `hosts`
+  matchbox:
+    mode: shadow
+    hosts: matchbox
+    plays:
+      - ansible/matchbox.yml
+      - ansible/matchbox-proxydhcp.yml       # before ipxe-tftp: its verify fetches over dnsmasq's TFTP
+      - ansible/matchbox-ipxe-tftp.yml
+      - ansible/matchbox-talos-assets.yml
+    paths:
+      - "ansible/matchbox*.yml"
+      - "ansible/roles/matchbox*"
+      - "ansible/group_vars/matchbox.yml"
+      - "ansible/inventory.yml"
+      - "ansible/ansible.cfg"
+      - "ansible/requirements.yml"
+    cap_min: 30
+    window_alerts: [none]
+    health:
+      http:
+        - "http://192.168.2.30:8080/"
+        - "http://192.168.2.30:8080/assets/boot-or-disk.ipxe"
+      units: [matchbox, dnsmasq]

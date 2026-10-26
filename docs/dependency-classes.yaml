@@ -234,9 +234,9 @@ classes:
     proof_paths: []
     proposer: {status: human, text: "a hand edit; `machines-lint` holds the Talos asset pin in lockstep with the fleet's declaration (a substrate bump drags it)"}
     merge_gate: {status: human, text: "codeowner read; `machines-lint` in `ci` is the only mechanical check"}
-    deploy_edge: {status: gap, text: "a human playbook re-run (`ansible/matchbox*.yml`; `matchbox-talos-assets.yml` for the assets) — a merge deploys nothing. The FIRST box ansible applier (ROADMAP §Deploy paths program step 2): shadow `--check` diff first, then on"}
-    detector: {status: gap, text: "none — nothing reads Matchbox until the next netboot, so a stale provisioner shows up as the next node's failed PXE install"}
-    revert: {status: human, text: "`git revert` + the playbook re-run"}
+    deploy_edge: {status: human, text: "the box's ansible applier (`policy/mgmt/plan-input.yaml` `apply_ansible.matchbox`, `mgmt/scripts/mgmt-ansible.sh` — docs/management-box.md §Ansible applies) evaluates every merged span touching the plays/roles/group_vars: `--check --diff` of master, the drift refusal, then window + ⚓ lease → apply → confirm (a second `--check` changed=0 + Matchbox HTTP + units). SHADOW since 2026-10-26 (the would-be apply in the journal, nothing applied) — until the row flips `on` a human still re-runs the playbooks (ROADMAP §Deploy paths program step 2)"}
+    detector: {status: ok, text: "the box belt's `check_ansible` runs every Matchbox play in `--check` each tick since 2026-10-26 (the policy's play list) → `MgmtBeltCheckFailing` reason `drift` on `matchbox-lxc`; the roles were made check-clean for it (the release re-download, `get_url`'s HEAD diff, the tftpd-hpa mask)"}
+    revert: {status: human, text: "`git revert` + the playbook re-run (the box applies the revert like any span once on); the box itself never reverts — a bad confirm STOPS it (`MgmtAnsibleApplyStopped`)"}
     canary: {status: human, text: "the cone is near zero (nothing depends on Matchbox until the next PXE boot — dependency-upgrades.md §4 Rollout), so Matchbox IS the ansible classes' canary: the first box-applied surface by ADR-152's program order, ahead of the router (class 9)"}
 
   - id: 16

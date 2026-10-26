@@ -348,7 +348,8 @@ in
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "30m";
-      Environment = [ "HOME=/root" "MODE=belt" "MGMT_BOX=1" ];
+      # PVE_SSH_KEY: check_ansible's --check of the apply_ansible groups (Matchbox) rides it
+      Environment = [ "HOME=/root" "MODE=belt" "MGMT_BOX=1" "PVE_SSH_KEY=/var/lib/mgmt/pve-ssh/id_ed25519" ];
       # The credentials. NOT in this closure (public repo, world-readable store): a root-only file
       # placed by mgmt/scripts/mgmt-provision-secrets.sh (--extra-files at install, --push to rotate),
       # read at each start so a rotation needs no restart. The leading "-" means a missing file
@@ -452,7 +453,10 @@ in
       # apply (argo-cd's helm timeout 15m), one-at-a-time engine moves (≤15m each, stops at the first
       # failure) and the settle. Plain ticks still take a minute; the timer never stacks a oneshot.
       TimeoutStartSec = "5h";
-      Environment = [ "HOME=/root" "MGMT_BOX=1" ];
+      # PVE_SSH_KEY: the box's copy of the Proxmox seed key — the Matchbox plays' ssh identity
+      # (ansible/group_vars/matchbox.yml defaults to the jail's path). The ansible applier (ADR-152
+      # step 2, mgmt/scripts/mgmt-ansible.sh) runs ansible-core from the clone's devbox.lock as data.
+      Environment = [ "HOME=/root" "MGMT_BOX=1" "PVE_SSH_KEY=/var/lib/mgmt/pve-ssh/id_ed25519" ];
       EnvironmentFile = [ "-/var/lib/mgmt/env" ];
     };
     script = "${repoPath}/mgmt/scripts/mgmt-apply.sh";

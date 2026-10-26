@@ -223,13 +223,11 @@
     },
     {
       "complete": false,
-      "gap_cells": [
-        "deploy_edge",
-        "detector"
-      ],
-      "gap_rows": 2,
+      "gap_cells": [],
+      "gap_rows": 0,
       "human_cells": [
         "canary",
+        "deploy_edge",
         "merge_gate",
         "proposer",
         "revert"
@@ -2152,10 +2150,7 @@
     },
     {
       "class": 15,
-      "gap_columns": [
-        "deploy_edge",
-        "detector"
-      ],
+      "gap_columns": [],
       "key": "15:poseidon/matchbox",
       "last_proven": null,
       "name": "poseidon/matchbox",
@@ -2166,10 +2161,7 @@
     },
     {
       "class": 15,
-      "gap_columns": [
-        "deploy_edge",
-        "detector"
-      ],
+      "gap_columns": [],
       "key": "15:siderolabs/talos (PXE assets)",
       "last_proven": null,
       "name": "siderolabs/talos (PXE assets)",

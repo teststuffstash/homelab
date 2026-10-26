@@ -35,6 +35,13 @@
 #               → verdict. Good = lease deleted, status success. Bad = STOP: lease + window kept,
 #               $ADIR/helm-stopped (→ MgmtHelmApplyStopped) refuses every later helm apply until a human
 #               removes it. Never a revert. The record goes to s3://helm-evidence on the backup Garage.
+#   ansible    a span whose files match a policy `apply_ansible` row's `paths` runs that group's bracket
+#               (mgmt/scripts/mgmt-ansible.sh, ADR-152 program step 2) behind the same window/verdict gates,
+#               after the tofu roots: --check of master (changed=0 → nothing to do) → the plays as last
+#               confirmed must be clean on live (else REFUSED: drift, a human looks first) → window + ⚓
+#               lease → apply → confirm (--check changed=0 + the row's health). Bad = STOP: lease + window
+#               kept, $ADIR/ansible-stopped (→ MgmtAnsibleApplyStopped). Row `mode: shadow` = the checks
+#               and the would-be apply in the journal, nothing applied. Never a revert, never a retry.
 #   MGMT_SHADOW=1  plan + check, log the would-be apply, no apply, no status, no stamp
 # Usage: mgmt/scripts/mgmt-apply.sh   (the timer's unit). Env: mgmt/scripts/mgmt-lib.sh + MGMT_APPLY_DIR.
 set -uo pipefail
@@ -43,6 +50,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/mgmt-lib.sh"
 # shellcheck source=mgmt-helm.sh
 . "$HERE/mgmt-helm.sh"
+# shellcheck source=mgmt-ansible.sh
+. "$HERE/mgmt-ansible.sh"
 # A Type=oneshot unit is `activating` for the whole run of its script (`is-active` exits 3 on it), so
 # the engines unit read as NOT running on every tick of its first live run (2026-10-11 07:22→, 42 moves)
 # and was "started" again each minute — a coalesced no-op in systemd, but a lying log line.
@@ -91,7 +100,7 @@ refuse() {  # <sha> <desc> <comment-lines>
 # (rc≠0) leaves last-ok-tick alone, so a loop that cannot fetch reads as stale, not as fresh.
 TEXTDIR="${MGMT_TEXTFILE_DIR:-/var/lib/node-exporter-textfile}"
 emit_metrics() {
-  local rc=$1 a r n=0 oldest=0 isref=0 addrs=0 okt=0 pcf=0 tmp
+  local rc=$1 a r n=0 oldest=0 isref=0 addrs=0 okt=0 pcf=0 tmp astop
   [ -d "$TEXTDIR" ] || return 0
   [ "$rc" = 0 ] && date +%s >"$ADIR/last-ok-tick"
   a="$(cat "$ADIR/applied-rev" 2>/dev/null)"; r="$(cat "$ADIR/refused-rev" 2>/dev/null)"
@@ -99,6 +108,7 @@ emit_metrics() {
   okt="$(cat "$ADIR/last-ok-tick" 2>/dev/null)"; okt="${okt:-0}"
   [ -s "$ADIR/post-check-failed" ] && pcf=1
   hstop=0; [ -s "$ADIR/helm-stopped" ] && hstop=1
+  astop=0; [ -s "$ADIR/ansible-stopped" ] && astop=1
   if [ -n "$a" ] && [ -n "${sha:-}" ] && [ "$a" != "$sha" ]; then
     n="$(git -C "$REPO" rev-list --count "$a..$sha" 2>/dev/null)" || n=0
     oldest="$(git -C "$REPO" log --reverse --format=%ct "$a..$sha" 2>/dev/null | sed -n 1p)"
@@ -126,6 +136,9 @@ mgmt_apply_post_check_failed $pcf
 # HELP mgmt_apply_helm_stopped 1 while the box's helm applies are STOPPED after a bad verdict (FU-301; cleared by hand: rm \$ADIR/helm-stopped).
 # TYPE mgmt_apply_helm_stopped gauge
 mgmt_apply_helm_stopped ${hstop:-0}
+# HELP mgmt_apply_ansible_stopped 1 while the box's ansible applies are STOPPED after a bad confirm (ADR-152 step 2; cleared by hand: rm \$ADIR/ansible-stopped).
+# TYPE mgmt_apply_ansible_stopped gauge
+mgmt_apply_ansible_stopped ${astop:-0}
 # HELP mgmt_apply_deferred_window 1 while the last tick DEFERRED a plan because a declared window held it (or the window registry was unreadable).
 # TYPE mgmt_apply_deferred_window gauge
 mgmt_apply_deferred_window $deferred
@@ -141,6 +154,24 @@ mgmt_apply_deferred_verdict $deferred_verdict
 # HELP mgmt_apply_errored_unexercised 1 per provider while master's standing refusal is an apply ERROR in <root> and that provider owns a changed address at a version no successful changing apply has run yet (exercised = the last one that did, or unknown).
 # TYPE mgmt_apply_errored_unexercised gauge
 PROM
+  # the last evaluation of each apply_ansible group (mgmt-ansible.sh ans_mark): when, in which mode, what
+  # it came to (converged | shadow | applied | refused | stopped) and how many tasks the --check of master
+  # would have changed — the shadow read the operator flips a row on
+  local af; for af in "$ADIR"/ansible-last-*; do
+    [ -s "$af" ] || continue
+    awk -F'\t' -v g="${af##*/ansible-last-}" 'NR==1 {
+      printf "mgmt_apply_ansible_last_run_timestamp_seconds{group=\"%s\",mode=\"%s\",outcome=\"%s\"} %s\n", g, $2, $3, $1
+      printf "mgmt_apply_ansible_would_change{group=\"%s\"} %s\n", g, $4 }' "$af" >>"$tmp.ans"
+  done
+  if [ -s "$tmp.ans" ]; then
+    { echo "# HELP mgmt_apply_ansible_last_run_timestamp_seconds Last evaluation of an apply_ansible group (mgmt-ansible.sh), by mode and outcome."
+      echo "# TYPE mgmt_apply_ansible_last_run_timestamp_seconds gauge"
+      grep '^mgmt_apply_ansible_last_run' "$tmp.ans"
+      echo "# HELP mgmt_apply_ansible_would_change Tasks the last --check of master reported changed for the group (0 = live matched)."
+      echo "# TYPE mgmt_apply_ansible_would_change gauge"
+      grep '^mgmt_apply_ansible_would_change' "$tmp.ans"; } >>"$tmp"
+  fi
+  rm -f "$tmp.ans"
   [ -s "$ADIR/apply-unexercised" ] && [ -n "$r" ] && awk -F'\t' '{printf "mgmt_apply_errored_unexercised{root=\"%s\",provider=\"%s\",exercised=\"%s\",locked=\"%s\"} 1\n", $1, $2, $3, $4}' "$ADIR/apply-unexercised" >>"$tmp"
   chmod 0644 "$tmp" && mv -f "$tmp" "$TEXTDIR/mgmt_apply.prom"
 }
@@ -191,10 +222,13 @@ for r in "${roots[@]}"; do
   ap="$(mgmt_root_apply "$POL" "$r")" || { log "PROBE-FAIL: apply flag of $r unreadable — not stamping, next run retries"; exit 1; }
   [ "$ap" = true ] && apply_roots+=("$r")
 done
-if [ ${#apply_roots[@]} -eq 0 ]; then
-  log "${last:0:8}..${sha:0:8} touches no apply:true root (${#files[@]} files) — stamping"; stamp "$sha"; exit 0
+# the apply_ansible groups whose paths the span touched (mgmt-ansible.sh) — the same fail-closed read
+ans_out="$(printf '%s\n' "${files[@]}" | ans_groups_touched "$POL")" || { log "PROBE-FAIL: apply_ansible classifier failed (policy unreadable) — not stamping, next run retries"; exit 1; }
+ans_groups=(); [ -n "$ans_out" ] && mapfile -t ans_groups <<<"$ans_out"
+if [ ${#apply_roots[@]} -eq 0 ] && [ ${#ans_groups[@]} -eq 0 ]; then
+  log "${last:0:8}..${sha:0:8} touches no apply:true root and no apply_ansible group (${#files[@]} files) — stamping"; stamp "$sha"; exit 0
 fi
-log "${last:0:8}..${sha:0:8} touches: ${apply_roots[*]}"
+log "${last:0:8}..${sha:0:8} touches:${apply_roots[*]:+ ${apply_roots[*]}}${ans_groups[*]:+ ansible: ${ans_groups[*]}}"
 
 # FU-300 — WIP 1 across windows this loop did not open (it opens none), BEFORE anything plans or
 # posts: a deferral is not a verdict, so no refusal, no status, no stamp — the next tick re-reads.
@@ -395,6 +429,19 @@ for root in "${apply_roots[@]}"; do
     fi
     refuse "$sha" "$root: apply errored — see the box journal (half-applied? human)"; exit 0
   fi
+done
+# ADR-152 step 2 — the ansible groups, after the roots, one bracket each (mgmt-ansible.sh). The runs take
+# minutes and touch no tofu state, so they run OFF the loops' shared lock (the sentinel and the lease
+# loop keep their cadence); the oneshot unit serialises apply ticks by itself.
+for g in "${ans_groups[@]}"; do
+  flock -u 9 2>/dev/null || true
+  ans_bracket "$POL" "$g" "$sha" "$last"; arc=$?
+  flock -w 600 9 2>/dev/null || log "WARN: lock busy re-taking it after the ansible bracket"
+  case "$arc" in
+    0|2) ;;                    # done / STOPPED (the apply happened — the sha is stamped, the marker refuses the next)
+    3) exit 0 ;;               # REFUSED — refuse() wrote refused-rev and the status
+    *) exit 1 ;;               # PROBE-FAIL — nothing changed, no stamp; the next tick retries
+  esac
 done
 [ "${MGMT_SHADOW:-0}" = 1 ] || { stamp "$sha"; date +%s >"$ADIR/last-run"; }
 log "done"
