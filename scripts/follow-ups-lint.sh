@@ -226,7 +226,11 @@ if [ -f "$GAPS" ]; then
     id != "" && /^      / { n++ }
     END { if (id != "") print id "|" n }
   ' "$GAPS" | while IFS='|' read -r id n; do
-    [ "$n" -gt "$MAX_ITEM_LINES" ] && echo "OVERSIZE-GAP $id — ${n} lines (> ${MAX_ITEM_LINES}): promote the rule into the skill, or file the FU and leave a pointer"
+    # an if, not `[ ] && echo`: under set -e a false test as the loop's last status fails the
+    # whole $(...) assignment and the lint dies silently with rc 1 (found on this very block)
+    if [ "$n" -gt "$MAX_ITEM_LINES" ]; then
+      echo "OVERSIZE-GAP $id — ${n} lines (> ${MAX_ITEM_LINES}): promote the rule into the skill, or file the FU and leave a pointer"
+    fi
   done)
   if [ -n "$gap_report" ]; then printf '%s\n' "$gap_report"; status=1; fi
 fi
