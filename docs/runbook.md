@@ -169,6 +169,14 @@ bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml -e ...    # extra
 ```
 
 Why the wrapper exists (the non-obvious bits):
+- **It runs as the `automation` API user, never root** (FU-013, 2026-10-26): wallet
+  `opnsense-automation-api-{key,secret}`, privileges = `opnsense_api_users` in
+  `ansible/group_vars/opnsense.yml`, so every revision a play writes is attributed and the click
+  detector below stays quiet for it. A **403** = a privilege that list lacks: add it there, rehearse
+  on the test VM (the harness runs as the VM's own `automation`), then re-run
+  `scripts/opnsense-api-users.sh` in a window. Root's pair (`OPN_AS_ROOT=1`) is accepted for
+  `opnsense-users.yml` only — the user mint. Installing a plugin is root's too: the plays assert
+  their plugins (the bootstrap's `PLUGINS` builds them in).
 - `oxlorg.opnsense` needs **`httpx`**, provided by the pinned nix flake `ansible/controller-env/`.
 - **`devbox run` strips `ANSIBLE_PYTHON_INTERPRETER`**, and that env var is ignored for the implicit
   localhost anyway → the interpreter must be passed as **`-e ansible_python_interpreter=...`**.
@@ -221,7 +229,11 @@ bash scripts/opnsense-test-vm.sh --pr 2033 --post            # full run; report 
 The five steps (rollback → base converges → head on top → a mutation reaches the RUNNING
 daemons, with a BASE-roles negative control → fresh converge + idempotent rerun), the isolation
 overrides and what the run does NOT prove (ACME issuance, real backends, BGP sessions) are in
-the header of `scripts/opnsense-test-vm.sh`; the report lists them again per run. `--status`
+the header of `scripts/opnsense-test-vm.sh`; the report lists them again per run. **Identity:**
+right after each rollback the harness runs the users play (as the VM's root) and every other play
+and `opnsense/*.py` as the VM's own `automation` user with the ref's `opnsense_api_users` — prod's
+shape (FU-013), so a play that needs a privilege the list lacks fails here with a 403, not on prod
+(`OPN_TEST_AS=root` is the old shape; the `--router` rehearsal uses it). `--status`
 also sets an `opnsense-test-vm` commit status on the validated head sha — it needs a token with
 *Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29), so from the jail the PR
 comment, which names the sha, is the record.
@@ -318,7 +330,7 @@ K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n opnsense-config-backup"
 $K annotate externalsecret opnsense-backup-puller force-sync=$(date +%s) --overwrite
 ```
 
-The mint is itself a root-key write, so the first backup run reports it as `OpnsenseConfigUnattributedRevision` (`user "…" created`, `add_api_key`), and so does every playbook run until the wrapper uses the `automation` key.
+The mint is itself a root-key write, so the next backup run reports it as `OpnsenseConfigUnattributedRevision` (`user "…" created`, `add_api_key`, a privilege change). Every playbook and API script runs as `automation` since 2026-10-26, so they no longer do — a root revision outside a users run is a click (or a firmware/plugin act: those are root by design).
 Then set `suspend: false` in `cronjob.yaml` (its own PR), and once ArgoCD has synced run it once
 by hand so the first backup does not wait for 04:23 UTC:
 `$K create job --from=cronjob/opnsense-config-backup first-run && $K logs -f job/first-run`.

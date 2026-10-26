@@ -74,8 +74,12 @@ ENV_TABLE=(
   "TOFU_STATE_SECRET=tofu-state-secret"
   "TOFU_STATE_PASSPHRASE=tofu-state-passphrase"    # the state's own key — shared by nature, never box-scoped
   "CLOUDFLARE_API_TOKEN=cloudflare-mgmt-read"      # tofu/cloudflare plan on PR heads (the sentinel, FU-238): the READ-ONLY twin of the write key, minted by tofu/cloudflare-token/mgmt-read.tf on the host — mint BEFORE the next --push
-  "OPN_API_KEY=opnsense-api-key"                   # scripts/opnsense-playbook.sh --check
-  "OPN_API_SECRET=opnsense-api-secret"
+  # OPNsense: never root's pair (FU-013). The plays (the belt's --check, the box's appliers) run as
+  # the `automation` API user; the weekly drill's one prod read (config.xml) as the read-only puller.
+  "OPN_API_KEY=opnsense-automation-api-key"        # scripts/opnsense-playbook.sh
+  "OPN_API_SECRET=opnsense-automation-api-secret"
+  "OPN_BACKUP_API_KEY=opnsense-backup-puller-api-key"      # scripts/opnsense-drill.sh compare stage
+  "OPN_BACKUP_API_SECRET=opnsense-backup-puller-api-secret"
   # the main root (scripts/keepass-env.sh's export list, one line each — swap for box-scoped mints as FU-012 minds them)
   "TF_VAR_grafana_admin_password=grafana-admin-password"
   "TF_VAR_ha_prometheus_token=ha-prometheus-token"

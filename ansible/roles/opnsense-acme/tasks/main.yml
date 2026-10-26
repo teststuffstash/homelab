@@ -83,7 +83,8 @@
         action: post
       register: acme_cron
       changed_when: (acme_cron.response.result | default('')) == 'new'
-      failed_when: (acme_cron.response.result | default('')) not in ['no change', 'new']
+      # check mode: raw skips the POST (empty response) — a --check is not a failed integration
+      failed_when: not ansible_check_mode and (acme_cron.response.result | default('')) not in ['no change', 'new']
 
     # NOTE: `email` is CREATE-ONLY here — the acme_account module's change-detection set is
     # ['description','custom_ca','eab_kid','eab_hmac'], so it will NOT update the email of an

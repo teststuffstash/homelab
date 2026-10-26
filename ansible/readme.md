@@ -44,9 +44,9 @@ because their real values are here, not baked in).
 | `opnsense-haproxy.yml` | `opnsense-haproxy` | HTTPS reverse proxy → in-cluster service VIPs |
 | `opnsense-unbound.yml` | `opnsense-unbound` | static Unbound host overrides (e.g. `ubiquiti.teststuff.net`) |
 | `opnsense-wireguard.yml` | `opnsense-wireguard` | WireGuard full-LAN VPN (ADR-090) |
-| `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) |
+| `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) — asserts the `os-ddclient` plugin, never installs it (a root act, FU-013) |
 | `opnsense-system.yml` | `opnsense-system` | router-wide settings no service role owns: Interfaces > Settings (offloading, VLAN hw filter, Allow IPv6) + Reporting > NetFlow (Insight) — prod's values, pinned on drift only (FU-297) |
-| `opnsense-users.yml` | `opnsense-users` | one API user per consumer (`backup-puller`, `automation`) + a key each — run via `bash scripts/opnsense-api-users.sh`, which stores what it mints (FU-013) |
+| `opnsense-users.yml` | `opnsense-users` | one API user per consumer (`backup-puller`, `automation`) + a key each — run via `bash scripts/opnsense-api-users.sh`, which stores what it mints (FU-013). The ONLY play that runs with root's key: every other play runs as `automation` (`scripts/opnsense-playbook.sh`), whose privileges are `opnsense_api_users` |
 | `opnsense-carp.yml` | `opnsense-carp` | the router pair's CARP VIPs + pfsync (ADR-144); VIPs in `router-nodes/group_vars/opnsense.yml` (`router_carp_vips`) — a no-op where the list is undefined (prod inventory, test VM, drill); `scripts/opnsense-router-node.sh converge` runs it |
 | `matchbox.yml` | `matchbox` | install Matchbox on the PXE LXC |
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |

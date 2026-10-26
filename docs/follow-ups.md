@@ -185,7 +185,10 @@ six OVERSIZE items pointer-ized into
       Upstream `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register`
       without the uuid → 404 (identical in 25.7.8 and 26.1.11; the controller wants
       `register/<uuid>`); prod hides it (account already registered); the test-VM harness
-      pre-registers as a workaround (#2105). (The second defect — `bgpd` never started on first
+      pre-registers as a workaround (#2105). **2026-10-26:** `os-frr` 2.0 (26.7.7, the test VM since its
+      rebaseline) dropped the neighbour `multiprotocol` field and 26.1.11's `frr_bgp_neighbor` fails on
+      every existing row — the bgp role writes neighbours via `raw` since; a collection that knows 2.0
+      retires that too. (The second defect — `bgpd` never started on first
       enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
       (operator's call), then a pin bump + drop the harness workaround.
 - [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs validated on
@@ -375,8 +378,10 @@ six OVERSIZE items pointer-ized into
       doesn't DR). `tofu/homeassistant.tf`. **Router leg LIVE 2026-09-29:** prod users + keys
       minted (#2108), un-suspended (#2117), first run proven (object decrypts to a valid config,
       metrics in Prometheus); `OpnsenseConfigUnattributedRevision` fired on the root-key mint as
-      designed. **Next:** the playbooks move to the `automation` key (ddclient install → assert;
-      dnsmasq-dhcp.py off root) — then the click detector is quiet; the HA `/config` leg stays open.
+      designed. **Automation key DONE 2026-10-26:** every play + `opnsense/*.py` runs as `automation`
+      (the wrapper, the node converge, the box's env, the test-VM harness); 11 privileges added (the
+      403s on test VM 9110), root only for the users play. **Next:** the 04:23 backup run after the
+      2026-10-26 users run reads quiet = acceptance; the HA `/config` leg stays open.
 - [ ] **FU-039** — **Platform self-service (XRD claims) — next legs: POINTER.** Design,
       completion table and open legs of the public-ingress leg (test claim, zone-phase rulesets,
       product zones, the edge-metrics GraphQL poller whose first deliverable is the missing edge-5xx

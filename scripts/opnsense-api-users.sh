@@ -8,7 +8,9 @@
 #   bash scripts/opnsense-api-users.sh [extra ansible-playbook args, e.g. --check --diff]
 #
 # A live router write: run it inside a maintenance window. The play runs with root's key through
-# scripts/opnsense-playbook.sh (user management needs it). OPNsense returns an API secret exactly
+# scripts/opnsense-playbook.sh (OPN_AS_ROOT=1 — user management is the one root act; every other
+# play runs as `automation`). A privilege change converges on the existing user and mints NOTHING
+# (keys are per user, not per privilege set). OPNsense returns an API secret exactly
 # once, so the play writes a fresh pair into a private tmpdir (0600) and this script moves it into
 # the stores and deletes the tmpdir — the values never reach argv of anything but keepassxc's stdin
 # and the infisical-secret call, and never a log.
@@ -40,7 +42,7 @@ kp_put() { # kp_put <entry> <value-file>  (value via stdin, never argv)
 SINK="$(mktemp -d)"; chmod 700 "$SINK"
 trap 'find "$SINK" -type f -exec shred -u {} + 2>/dev/null; rm -rf "$SINK"' EXIT
 
-bash scripts/opnsense-playbook.sh ansible/opnsense-users.yml -e "opnsense_users_key_sink=$SINK" "$@"
+OPN_AS_ROOT=1 bash scripts/opnsense-playbook.sh ansible/opnsense-users.yml -e "opnsense_users_key_sink=$SINK" "$@"
 
 minted=0
 for keyf in "$SINK"/*.key; do

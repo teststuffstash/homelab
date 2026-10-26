@@ -7,6 +7,8 @@
 #   bash scripts/opnsense-test-vm-bootstrap.sh bootstrap   # never-booted disk → snapshot `baseline`
 #   bash scripts/opnsense-test-vm-bootstrap.sh finish      # resume after the import (VM up, no snapshot)
 #   bash scripts/opnsense-test-vm-bootstrap.sh status      # power, snapshots, version, plugins
+#   bash scripts/opnsense-test-vm-bootstrap.sh rebaseline  # MOVE the baseline: roll back, update to the
+#                                                          #   SERIES head, install missing PLUGINS, re-snapshot
 #   bash scripts/opnsense-test-vm-bootstrap.sh render F    # the seed config.xml to F (debug; mode 600)
 #   bash scripts/opnsense-test-vm-bootstrap.sh create      # EPHEMERAL VMs only (the rebuild drill):
 #   bash scripts/opnsense-test-vm-bootstrap.sh destroy     #   the hardware tofu gives 9110, by qm
@@ -41,7 +43,7 @@ LAN_DHCP_START=192.168.1.100
 LAN_DHCP_END=192.168.1.199
 SERIES=26.7                                        # prod's SERIES (docs/opnsense-test-vm.md §Version): the build converges on whatever head the mirror serves today, never an exact point (26.7.5 → 26.7.6_3 broke every build twice)
 NANO_VERSION=26.7                                  # = tofu var.opnsense_test_nano_version (the birth image)
-PLUGINS="os-frr os-haproxy os-acme-client"         # what the ansible/opnsense-*.yml plays drive
+PLUGINS="os-frr os-haproxy os-acme-client os-ddclient"   # what the ansible/opnsense-*.yml plays drive — the plays ASSERT them, installing is root's (FU-013)
 SNAP="${OPN_TEST_SNAPSHOT:-baseline}"      # the harness default (OPN_TEST_SNAPSHOT)
 # The ROUTER REHEARSAL shape (docs/opnsense-test-vm.md §The router rehearsal; ephemeral VMs only):
 SHAPE="${OPN_TEST_SHAPE:-test}"                    # test | router | standing (ADR-144: the node's LAN = vmbr0 at WAN_IP, WAN = WAN_BRIDGE)
@@ -431,7 +433,35 @@ cmd_destroy() {
   log "destroyed $VMNAME ($VMID)"
 }
 
+# Moving the baseline (docs/opnsense-test-vm.md §Recipes): a new series head, or a plugin added to
+# PLUGINS. Same outcome-judged steps as `finish`, on top of the current baseline; the old snapshot
+# is replaced only after the new state is in hand (VM stopped, plugins verified).
+cmd_rebaseline() {
+  nx "qm listsnapshot $VMID" | grep -qw -- "$SNAP" || die "no snapshot $SNAP — bootstrap builds the first one"
+  [ "$(nx "qm config $VMID" | sed -n 's/^name: //p')" = "$VMNAME" ] || die "vmid $VMID is not $VMNAME"
+  log "roll back to $SNAP and start"
+  nx "qm rollback $VMID $SNAP --start 1"
+  wait_api 600
+  firmware_update
+  local p
+  for p in $PLUGINS; do
+    if installed_plugin "$p"; then log "$p already installed"; continue; fi
+    log "install $p"
+    api POST "core/firmware/install/$p" >/dev/null
+    wait_firmware_job || true
+    installed_plugin "$p" || die "$p not installed after the firmware job — the old $SNAP is untouched"
+  done
+  log "clean shutdown → replace snapshot $SNAP"
+  nx "qm shutdown $VMID --timeout 180"
+  nx "qm delsnapshot $VMID $SNAP"
+  nx "qm snapshot $VMID $SNAP --description 'FU-297 baseline: $SERIES + $PLUGINS, API+SSH, before any homelab playbook (rebaselined $(date -u +%F))'"
+  nx "qm start $VMID"
+  wait_api 600
+  cmd_status
+}
+
 case "${1:-}" in
+  rebaseline) cmd_rebaseline ;;
   create)    cmd_create ;;
   destroy)   cmd_destroy ;;
   bootstrap) cmd_bootstrap ;;

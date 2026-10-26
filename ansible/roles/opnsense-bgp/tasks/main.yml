@@ -23,7 +23,6 @@
     oxlorg.opnsense.frr_general: "{{ opnsense_conn | combine({'reload': true}) }}"
     oxlorg.opnsense.frr_bgp_general: "{{ opnsense_conn | combine({'reload': true}) }}"
     oxlorg.opnsense.frr_bgp_route_map: "{{ opnsense_conn | combine({'reload': true}) }}"
-    oxlorg.opnsense.frr_bgp_neighbor: "{{ opnsense_conn | combine({'reload': true}) }}"
   block:
     - name: Enable FRR
       oxlorg.opnsense.frr_general:
@@ -46,21 +45,56 @@
         action: permit
         id: 10
 
+    # NEIGHBOURS go through `raw`, not frr_bgp_neighbor: os-frr 2.0 (OPNsense 26.7.7's series head,
+    # met on test VM 9110 on 2026-10-26) dropped the neighbour's `multiprotocol` field, and the pinned
+    # collection's module (26.1.11 — the newest released) fails translating every existing row
+    # ("Failed field: 'multiprotocol'"), so the play could create the first neighbour and nothing
+    # after it. These five fields exist under the same names in os-frr 1.55 (prod, 26.7.5) and 2.0,
+    # so one task serves both until the collection catches up (FU-298 tracks the pin).
+    # Matched on the peer address alone (the old `match_fields: ['ip']`): one neighbour per node.
+    - name: Read the route-maps (a neighbour links its inbound map by uuid)
+      oxlorg.opnsense.raw: { module: quagga, controller: bgp, command: searchRoutemap }
+      register: bgp_routemaps
+      check_mode: false
+
+    - name: Read the BGP neighbours
+      oxlorg.opnsense.raw: { module: quagga, controller: bgp, command: searchNeighbor }
+      register: bgp_neighbors
+      check_mode: false
+
     - name: "BGP neighbor per Talos node (remote AS {{ cluster_asn }})"
-      oxlorg.opnsense.frr_bgp_neighbor:
-        peer_ip: "{{ item }}"
-        remote_as: "{{ cluster_asn }}"
-        route_map_in: CILIUM-ALLOW-ALL
-        # Preferred ingress (group_vars `bgp_neighbor_weight`): FRR picks the highest weight as the
-        # best path, and with kernel multipath off that is the one nexthop the kernel holds.
-        weight: "{{ bgp_neighbor_weight[item] | default(omit) }}"
-        # Standby: configured but disabled — no session to the cluster (router-move.md).
-        enabled: "{{ not (opnsense_standby | default(false) | bool) }}"
-        # Match existing neighbors on peer IP alone. The default ['ip','description']
-        # never matches here (we set no description -> desired None vs stored '') so the
-        # module would append a duplicate neighbor on every run.
-        match_fields: ['ip']
+      oxlorg.opnsense.raw:
+        module: quagga
+        controller: bgp
+        command: "{{ ('setNeighbor/' ~ bgp_cur.uuid) if bgp_cur else 'addNeighbor' }}"
+        action: post
+        data: { neighbor: "{{ bgp_want }}" }
+      vars:
+        bgp_cur: "{{ bgp_neighbors.response.rows | default([]) | selectattr('address', 'equalto', item) | first | default(none) }}"
+        bgp_rm_uuid: "{{ bgp_routemaps.response.rows | default([]) | selectattr('name', 'equalto', 'CILIUM-ALLOW-ALL') | map(attribute='uuid') | first | default('') }}"
+        bgp_want:
+          address: "{{ item }}"
+          remoteas: "{{ cluster_asn | string }}"
+          linkedRoutemapIn: "{{ bgp_rm_uuid }}"
+          # Preferred ingress (group_vars `bgp_neighbor_weight`): FRR picks the highest weight as the
+          # best path, and with kernel multipath off that is the one nexthop the kernel holds.
+          weight: "{{ bgp_neighbor_weight[item] | default('') | string }}"
+          # Standby: configured but disabled — no session to the cluster (router-move.md).
+          enabled: "{{ '0' if (opnsense_standby | default(false) | bool) else '1' }}"
+      when: >-
+        bgp_cur is none
+        or bgp_cur.remoteas != bgp_want.remoteas
+        or bgp_cur.linkedRoutemapIn != bgp_want.linkedRoutemapIn
+        or bgp_cur.weight != bgp_want.weight
+        or bgp_cur.enabled != bgp_want.enabled
       loop: "{{ bgp_node_ips }}"
+      register: bgp_neighbor_writes
+      changed_when: true
+      failed_when: (bgp_neighbor_writes.response.result | default('')) != 'saved' and not ansible_check_mode
+
+    - name: Apply the neighbours to the running FRR (one reconfigure for every write above)
+      oxlorg.opnsense.raw: { module: quagga, controller: service, command: reconfigure, action: post }
+      when: bgp_neighbor_writes is changed
 
 # A FRESH router needs FRR cycled once for bgpd to run at all — see bgpd-running.yml (FU-298).
 # Outside the block on purpose: its modules (frr_diagnostic, service) take no `reload`, and

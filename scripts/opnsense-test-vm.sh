@@ -76,6 +76,27 @@
 #   OPN_TEST_EXTRA_VARS  one more `-e @file` after overrides.yml on every play (the drill's
 #                        BGP neighbour = its fake peer)                (default: none)
 #   OPN_DHCP_REMAP       passed to opnsense/dnsmasq-dhcp.py by step `all` (its header)
+#   OPN_TEST_AS          automation (default) | root — the identity the plays run as (below)
+#   OPN_TEST_RUN_AS      a local user: run the refs' CODE as it (below)  (default: unset = as the caller)
+#
+# Sandbox (OPN_TEST_RUN_AS, the management box's PR verdict — docs/management-box.md §MB3): every
+# command that EXECUTES a ref's code — the collection install (galaxy content), the ref's
+# controller-env flake (`nix build`), ansible-playbook (its roles run `connection: local`) and
+# opnsense/*.py — runs as that unprivileged user with a CLEAN environment (PATH, HOME and the
+# variables the plays read, nothing of the caller's — the box's env file never reaches PR code).
+# This script, the guard, the test inventory and the overrides stay the caller's (master's) and
+# keep the hypervisor + VM root ssh key; the plays' own root ssh to the VM (the haproxy/system
+# roles' anti-lockout + tunables reads) gets a PER-RUN key the script installs on the rolled-back VM.
+# Needs root (runuser). The report, logs and recaps are written by the caller, out of the user's reach.
+#
+# Identity (FU-013): prod runs every play but opnsense-users.yml as the `automation` API user
+# (scripts/opnsense-playbook.sh), holding exactly `opnsense_api_users`' privileges. So does the VM:
+# after each rollback the users play (as root = the VM's own key) creates the VM's API users from
+# the ref's list and mints `automation` a key into a 0700 sink; every other play and every
+# opnsense/*.py then runs with that key, and step 3 re-converges the users at HEAD first (a PR
+# that adds a privilege brings it). A play needing a privilege the list lacks fails HERE (HTTP
+# 403), not on prod. OPN_TEST_AS=root is the old shape — the --router rehearsal, whose users are
+# carried from prod WITH keys, so nothing is minted. The fixture's own calls stay root's.
 #
 # Exit: 0 PASS, 1 FAIL (a step assertion), 2 usage / guard / environment.
 set -euo pipefail
@@ -90,6 +111,7 @@ while [ $# -gt 0 ]; do
     --base) BASE_REF="$2"; shift 2 ;;
     --head) HEAD_REF="$2"; shift 2 ;;
     --ref) BASE_REF="$2"; HEAD_REF="$2"; NOFETCH=1; shift 2 ;;
+    --no-fetch) NOFETCH=1; shift ;;   # --base/--head already in this repo (the box's authenticated fetch)
     --steps) STEPS="$2"; STEPS_GIVEN=1; shift 2 ;;
     --post) POST=1; shift ;;
     --status) STATUS=1; shift ;;
@@ -140,13 +162,35 @@ case "$KEY_ENTRY$SECRET_ENTRY" in *opnsense-api-key*|*opnsense-api-secret*)
 # ---------------------------------------------------------------- workdir + creds ------------
 WORK="${OPN_TEST_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/opnsense-test-vm.XXXXXX")}"
 mkdir -p "$WORK"; WORK="$(cd "$WORK" && pwd)"
+RUN_AS="${OPN_TEST_RUN_AS:-}"; RUN_HOME=''; RUN_SSH_KEY=''
+if [ -n "$RUN_AS" ]; then
+  [ "$(id -u)" = 0 ] || die "OPN_TEST_RUN_AS needs root (runuser)"
+  RUN_HOME="$(getent passwd "$RUN_AS" | cut -d: -f6)"
+  [ -n "$RUN_HOME" ] && [ -d "$RUN_HOME" ] && [ "$RUN_AS" != root ] || die "OPN_TEST_RUN_AS=$RUN_AS: no such user with a home"
+  umask 022; chmod 0755 "$WORK"   # the worktrees must be readable by it; secrets below stay 0600/0700
+  for d in run-tmp run-ssh; do mkdir -p "$WORK/$d"; chown "$RUN_AS" "$WORK/$d"; chmod 0700 "$WORK/$d"; done
+  RUN_SSH_KEY="$WORK/run-ssh/id_ed25519"
+  ssh-keygen -q -t ed25519 -N '' -C "opnsense-test-vm-run-$$" -f "$RUN_SSH_KEY"
+  chown "$RUN_AS" "$RUN_SSH_KEY" "$RUN_SSH_KEY.pub"
+fi
+# x <cmd ...>: a command that EXECUTES a ref's code. As OPN_TEST_RUN_AS with a clean environment when
+# set (callers pass what it needs as `env K=V`), else as the caller.
+x() {
+  if [ -n "$RUN_AS" ]; then
+    runuser -u "$RUN_AS" -- env -i PATH="$PATH" HOME="$RUN_HOME" LANG=C.UTF-8 TMPDIR="$WORK/run-tmp" \
+      NIX_CONFIG="$NIX_CONFIG" "$@"
+  else
+    "$@"
+  fi
+}
+own() { [ -z "$RUN_AS" ] || chown -R "$RUN_AS" "$@"; }   # own <dir>: a dir the ref's code writes into
 LOG="$WORK/logs"; mkdir -p "$LOG"
 REPORT="$WORK/report.md"; : > "$REPORT"
 CURLCFG="$WORK/.curl-auth"
 WORKTREES=''
 cleanup() {
   rm -f "$CURLCFG"
-  rm -rf "${USERSINK:-}"   # step all's minted test-VM keys — on every exit path, a `die` included
+  rm -rf "${USERSINK:-}" "$WORK/.id-keys"   # minted test-VM keys — on every exit path, a `die` included
   if [ "$KEEP" -eq 0 ]; then
     for wt in $WORKTREES; do git worktree remove --force "$wt" >/dev/null 2>&1 || true; done
   fi
@@ -163,8 +207,18 @@ if [ -z "${OPN_TEST_API_KEY:-}" ] || [ -z "${OPN_TEST_API_SECRET:-}" ]; then
 fi
 [ -n "$OPN_TEST_API_KEY" ] && [ -n "$OPN_TEST_API_SECRET" ] \
   || die "empty test-VM API creds (wallet entries $KEY_ENTRY / $SECRET_ENTRY missing?)"
-# What group_vars' opnsense_conn reads — set to the TEST creds, for this process only.
-export OPN_API_KEY="$OPN_TEST_API_KEY" OPN_API_SECRET="$OPN_TEST_API_SECRET"
+# What group_vars' opnsense_conn reads — set to the TEST creds, for this process only. The plays
+# switch to the VM's `automation` key once it is minted (identity(), below).
+AS="${OPN_TEST_AS:-automation}"
+case "$AS" in automation|root) ;; *) die "OPN_TEST_AS must be automation|root" ;; esac
+AUTO_KEY=''; AUTO_SECRET=''
+as_root() { export OPN_API_KEY="$OPN_TEST_API_KEY" OPN_API_SECRET="$OPN_TEST_API_SECRET"; }
+as_plays() { # the identity every play but users runs as
+  [ "$AS" = root ] && { as_root; return; }
+  [ -n "$AUTO_KEY" ] || die "no automation key on the VM yet (identity() runs after each rollback)"
+  export OPN_API_KEY="$AUTO_KEY" OPN_API_SECRET="$AUTO_SECRET"
+}
+as_root
 export OPN_TEST_HOST OPN_TEST_GUARD=opnsense-test-vm
 unset ACME_CF_TOKEN
 ( umask 077; printf 'user = "%s:%s"\n' "$OPN_TEST_API_KEY" "$OPN_TEST_API_SECRET" > "$CURLCFG" )
@@ -248,6 +302,12 @@ for p in $(touched_plays); do
 done
 EXTRA="${EXTRA# }"
 if [ -n "$EXTRA" ] && [ "$STEPS_GIVEN" -eq 0 ]; then STEPS="$STEPS all"; fi
+# opnsense/*.py run in step all only — a change to one joins it too, or the verdict never ran it
+TOUCHED_PY="$(git diff --name-only "$MERGE_BASE" "$HEAD_SHA" -- ':(glob)opnsense/*.py')"
+if [ -n "$TOUCHED_PY" ] && [ "$STEPS_GIVEN" -eq 0 ]; then
+  case " $STEPS " in *" all "*) ;; *) STEPS="$STEPS all" ;; esac
+  echo "touched router scripts: $(echo "$TOUCHED_PY" | tr '\n' ' ')— step all joins the default" >&2
+fi
 PLAYS_NOTE="floor \`$(echo "$FLOOR" | sed 's/opnsense-//g; s/\.yml//g')\`"
 [ -z "$EXTRA" ] || PLAYS_NOTE="$PLAYS_NOTE + touched \`$(echo "$EXTRA" | sed 's/opnsense-//g; s/\.yml//g')\`"
 echo "plays under test (steps prep/2/3/5): $PLAYS_NOTE" >&2
@@ -269,8 +329,9 @@ prep_ref() { # prep_ref base|head <sha>
   # partial entry written by a flaky galaxy.ansible.com answer; the pin itself was fine). One
   # retry covers the flake that wrote it.
   local try
+  mkdir -p "$col"; own "$col"
   for try in 1 2; do
-    ANSIBLE_COLLECTIONS_PATH="$col" \
+    x env ANSIBLE_COLLECTIONS_PATH="$col" \
       ansible-galaxy collection install --no-cache -r "$wt/ansible/collections/requirements.yml" -p "$col" \
       > "$LOG/$name-galaxy.log" 2>&1 && break
     [ "$try" = 1 ] && { echo "collection install for $name failed (try 1) — retrying in 20 s" >&2; sleep 20; continue; }
@@ -280,7 +341,7 @@ prep_ref() { # prep_ref base|head <sha>
   got="$(jq -r .collection_info.version "$col/ansible_collections/oxlorg/opnsense/MANIFEST.json")"
   [ "$want" = "$got" ] || die "$name: requirements pin $want but $col holds $got"
   WT[$name]="$wt"; COL[$name]="$col"; CVER[$name]="$got"
-  PY[$name]="$(nix build --no-link --print-out-paths "path:$wt/ansible/controller-env")/bin/python3"
+  PY[$name]="$(x nix build --no-link --print-out-paths "path:$wt/ansible/controller-env")/bin/python3"
 }
 
 # ansible_on <roles-ref> <collection-ref> <play> [ansible-playbook args ...]
@@ -288,8 +349,15 @@ prep_ref() { # prep_ref base|head <sha>
 # --limit to the test host, the isolation overrides, then the caller's args (later -e wins).
 ansible_on() {
   local wt="${WT[$1]}" cref="$2" play="$3"; shift 3
-  env ANSIBLE_CONFIG="$wt/ansible/ansible.cfg" ANSIBLE_COLLECTIONS_PATH="${COL[$cref]}" \
-      ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_RETRY_FILES_ENABLED=0 \
+  # every variable a play reads (lookup('env', …)) is named here — under OPN_TEST_RUN_AS nothing else exists
+  local -a ev=(ANSIBLE_CONFIG="$wt/ansible/ansible.cfg" ANSIBLE_COLLECTIONS_PATH="${COL[$cref]}"
+               ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_RETRY_FILES_ENABLED=0
+               OPN_API_KEY="$OPN_API_KEY" OPN_API_SECRET="$OPN_API_SECRET"
+               OPN_TEST_HOST="$OPN_TEST_HOST" OPN_TEST_GUARD="$OPN_TEST_GUARD")
+  [ -z "${ACME_CF_TOKEN:-}" ] || ev+=(ACME_CF_TOKEN="$ACME_CF_TOKEN")
+  [ -z "${OPN_CARP_PASSWORD:-}" ] || ev+=(OPN_CARP_PASSWORD="$OPN_CARP_PASSWORD")
+  [ -z "$RUN_SSH_KEY" ] || ev+=(OPN_SSH_KEY="$RUN_SSH_KEY")
+  x env "${ev[@]}" \
     ansible-playbook -i "$INV" --limit opnsense-test-vm "$wt/ansible/$play" \
       -e "@$OVR" ${OPN_TEST_EXTRA_VARS:+-e "@$OPN_TEST_EXTRA_VARS"} "$@" -e "opnsense_prod_host=$PROD_HOST" \
       -e "ansible_python_interpreter=${PY[$cref]}"
@@ -322,11 +390,42 @@ run_unit() {
   case "$4" in
     opnsense-ddclient.yml) export ACME_CF_TOKEN=fu297-drill-not-a-token ;;  # its account needs one; upstream refuses it
     opnsense-users.yml)   # the VM's minted keys: 0600 into a 0700 sink, removed right after the play AND by cleanup()
-      USERSINK="$WORK/.user-keys"; ( umask 077; mkdir -p "$USERSINK" )
-      printf 'opnsense_users_key_sink: %s\n' "$USERSINK" > "$WORK/users-sink.yml"; ev=("$WORK/users-sink.yml") ;;
+      USERSINK="$WORK/.user-keys"; ( umask 077; mkdir -p "$USERSINK" ); own "$USERSINK"
+      printf 'opnsense_users_key_sink: %s\n' "$USERSINK" > "$WORK/users-sink.yml"; ev=("$WORK/users-sink.yml")
+      as_root ;;   # user management is the one root act (FU-013), on the VM as on prod
   esac
   run_play "$@" "${ev[@]}"
   unset ACME_CF_TOKEN; [ -z "${USERSINK:-}" ] || rm -rf "$USERSINK"
+  [ "$4" != opnsense-users.yml ] || { as_plays; run_key; }
+}
+# identity <ref>: converge the VM's API users at <ref> as root; adopt `automation`'s key when this
+# run mints it (right after a rollback). A later call (step 3, HEAD's list) mints nothing and keeps
+# the key — privileges converge on the existing user. See the header (Identity).
+# run_key: the sandbox's per-run ssh key onto the VM's root (the haproxy/system roles ssh there);
+# re-asserted after every users-play run (a user sync may rewrite root's authorized_keys).
+run_key() {
+  [ -n "$RUN_SSH_KEY" ] || return 0
+  local pub; pub="$(cat "$RUN_SSH_KEY.pub")"
+  vm_ssh "grep -qxF '$pub' /root/.ssh/authorized_keys 2>/dev/null || printf '%s\\n' '$pub' >> /root/.ssh/authorized_keys" \
+    || die "could not install the run key on the VM"
+}
+IDN=0
+identity() {
+  [ "$AS" = automation ] || { run_key; return 0; }
+  local sink="$WORK/.id-keys"
+  IDN=$((IDN + 1))
+  ( umask 077; rm -rf "$sink"; mkdir -p "$sink" ); own "$sink"
+  printf 'opnsense_users_key_sink: %s\n' "$sink" > "$WORK/id-sink.yml"
+  as_root
+  run_play "id$IDN-$1-users" "$1" "$1" opnsense-users.yml "$WORK/id-sink.yml"
+  if [ "$RC" -ne 0 ]; then rm -rf "$sink"; tail -25 "$LOG/id$IDN-$1-users.log" >&2; die "the users play ($1, as root) failed — no automation identity"; fi
+  if [ -s "$sink/automation.key" ] && [ -s "$sink/automation.secret" ]; then
+    AUTO_KEY="$(cat "$sink/automation.key")"; AUTO_SECRET="$(cat "$sink/automation.secret")"
+  fi
+  rm -rf "$sink"
+  [ -n "$AUTO_KEY" ] || die "the VM's automation user has a key this run did not mint (carried from prod?) — OPN_TEST_AS=root"
+  as_plays; run_key
+  rep "- identity: plays run as the VM's \`automation\` user, privileges from \`$1\`'s \`opnsense_api_users\` (FU-013)"
 }
 on_ref() { [ -f "${WT[$1]}/ansible/$2" ]; }   # on_ref base|head <play>: a touched play may be new in HEAD
 recap_table() { # print the recap rows for tags matching $1
@@ -352,6 +451,7 @@ rollback() {
   [ "$name" = "$VMNAME" ] || die "REFUSING rollback: vmid $OPN_TEST_VMID on $PVE is '$name', not '$VMNAME'"
   pve_ssh "qm listsnapshot $OPN_TEST_VMID" | grep -qw -- "$SNAP" || die "no snapshot '$SNAP' on vmid $OPN_TEST_VMID"
   pve_ssh "qm rollback $OPN_TEST_VMID $SNAP" >&2
+  AUTO_KEY=''; AUTO_SECRET=''; as_root   # the rolled-back VM has no automation user
   st="$(pve_ssh "qm status $OPN_TEST_VMID")"
   case "$st" in *running*) ;; *) pve_ssh "qm start $OPN_TEST_VMID" >&2 ;; esac
   for i in $(seq 1 120); do
@@ -456,9 +556,10 @@ fixture() {
 preflight() {
   local pk
   OPN_VERSION="$(vm_ssh 'opnsense-version' 2>/dev/null || echo '?')"
-  pk="$(vm_ssh "pkg query '%n %v' os-frr os-haproxy os-acme-client" 2>/dev/null || true)"
+  # = the bootstrap's PLUGINS: the plays only assert a plugin (installing one is root's, FU-013)
+  pk="$(vm_ssh "pkg query '%n %v' os-frr os-haproxy os-acme-client os-ddclient" 2>/dev/null || true)"
   PLUGINS="$(echo "$pk" | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
-  for n in os-frr os-haproxy os-acme-client; do
+  for n in os-frr os-haproxy os-acme-client os-ddclient; do
     grep -q "^$n " <<< "$pk" || die "plugin $n is not installed on the test VM (baseline incomplete)"
   done
 }
@@ -530,6 +631,7 @@ if has 1; then
   echo "step 1: rollback" >&2
   rollback; preflight; fixture
   rep "- OPNsense: \`$OPN_VERSION\`; plugins: $PLUGINS"
+  identity base
   rep ''; rep '### 1. Rollback to baseline'; rep ''
   rep "Rolled back to \`$SNAP\`, API + SSH up, fixture in place (one self-signed cert, disabled ACME rows bound to it)."
 fi
@@ -556,6 +658,7 @@ fi
 if has 3; then
   echo "step 3: head on top" >&2
   rep ''; rep '### 3. Apply HEAD on top of the converged base'; rep ''
+  identity head   # HEAD's privilege list onto the existing automation user (mints nothing)
   for p in $PLAYS; do
     run_unit "3-head-${p%.yml}" head head "$p"
     [ "$RC" -eq 0 ] || { failstep "head \`$p\` rc=$RC (97 = API translation error)"; fail_tail "3-head-${p%.yml}"; }
@@ -610,7 +713,7 @@ fi
 if has 5; then
   echo "step 5: fresh converge + idempotence" >&2
   rep ''; rep '### 5. Fresh converge on HEAD + idempotent rerun'; rep ''
-  rollback; fixture
+  rollback; fixture; identity head
   for p in $PLAYS; do
     run_unit "5-run1-${p%.yml}" head head "$p"
     [ "$RC" -eq 0 ] || { failstep "fresh HEAD \`$p\` rc=$RC"; fail_tail "5-run1-${p%.yml}"; }
@@ -648,7 +751,9 @@ if has all; then
   recap_table 'all-'
   for py in $(cd "${WT[head]}/opnsense" && ls *.py | sed 's/\.py$//'); do
     set +e
-    OPN_HOST="$OPN_TEST_HOST" python3 "${WT[head]}/opnsense/$py.py" > "$LOG/all-$py.log" 2>&1; RC=$?
+    pev=(OPN_HOST="$OPN_TEST_HOST" OPN_API_KEY="$OPN_API_KEY" OPN_API_SECRET="$OPN_API_SECRET")
+    for v in OPN_DHCP_REMAP OPN_DHCP_ENABLE OPN_DHCP_SERVER OPN_KEA_HA; do [ -z "${!v:-}" ] || pev+=("$v=${!v}"); done
+    x env "${pev[@]}" python3 "${WT[head]}/opnsense/$py.py" > "$LOG/all-$py.log" 2>&1; RC=$?
     set -e
     rep "- \`opnsense/$py.py\`: rc=$RC"
     [ "$RC" -eq 0 ] || { failstep "\`opnsense/$py.py\` rc=$RC"; fail_tail "all-$py"; }
@@ -690,6 +795,14 @@ rep '- ddclient / WireGuard / carp / system / users plays and `opnsense/dnsmasq-
 rep ''
 rep "**Verdict: $VERDICT** at head \`$HEAD_SHA\`. Logs: \`$LOG\` (on the jail that ran it)."
 
+# Scrub: no credential this run held may leave in the report (a failing play's tail is quoted
+# above, and under the box's sandbox the report is posted as a PR comment).
+SCRUB_VALS="$(printf '%s\n' "$OPN_TEST_API_KEY" "$OPN_TEST_API_SECRET" "$AUTO_KEY" "$AUTO_SECRET" "${ACME_CF_TOKEN:-}")" \
+  python3 -I -c 'import os,sys
+p=sys.argv[1]; t=open(p).read()
+for v in os.environ["SCRUB_VALS"].split("\n"):
+    if len(v) >= 8: t=t.replace(v,"<redacted>")
+open(p,"w").write(t)' "$REPORT"
 echo "report: $REPORT" >&2
 if [ "$POST" -eq 1 ]; then gh pr comment "$PR" --body-file "$REPORT" >&2; fi
 if [ "$STATUS" -eq 1 ]; then
