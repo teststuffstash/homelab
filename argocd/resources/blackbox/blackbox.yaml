@@ -50,6 +50,21 @@ data:
             Origin: https://mcp.oracle.teststuff.net
           body: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"blackbox-fu099","version":"1.0"}}}'
           valid_status_codes: [200, 400, 401, 403, 406]
+      # Cert expiry of every LAN HTTPS name the router's ACME client owns (the 18 names of
+      # ansible/group_vars/opnsense.yml `acme_cert_specs`, probed by the Probe `lan-certs`). A TLS
+      # handshake only, verification off on purpose: HAProxy's answer code is `lan-fronts`' probe,
+      # and an EXPIRED cert must still yield probe_ssl_earliest_cert_expiry (a verify failure
+      # would drop the metric exactly when LanCertExpiringSoon needs it). The target host is the
+      # SNI. Born 2026-10-26: the rebuilt CARP pair carried the certs but no renewal cron, and
+      # nothing read the dates — circles.teststuff.net sat 7 days from expiry.
+      tls_lan:
+        prober: tcp
+        timeout: 10s
+        tcp:
+          preferred_ip_protocol: ip4
+          tls: true
+          tls_config:
+            insecure_skip_verify: true
       # Garage cluster health as each node sees it (docs/garage.md §Belts). /health is the one
       # UNAUTHENTICATED admin endpoint (probed 2026-09-09: 200 without a token; GetClusterHealth
       # is 403) and it answers 200 for BOTH "fully operational" and "operational but some storage
@@ -125,6 +140,42 @@ spec:
         - https://argo.teststuff.net
         - https://transcripts.local.teststuff.net
         - https://specs.oracle.teststuff.net
+---
+# The served certificate's expiry for every ACME-owned LAN name — LanCertExpiringSoon's input.
+# Target list = `acme_cert_specs` in ansible/group_vars/opnsense.yml (one home: add a cert there,
+# add its name here in the same PR). Probed at the HAProxy VIP each name resolves to, so a BACKUP
+# router serving its carried copies after a failover is read the same way as the MASTER.
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: lan-certs
+  namespace: monitoring
+spec:
+  jobName: blackbox-lan-certs
+  interval: 5m
+  module: tls_lan
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - opnsense.teststuff.net:443
+        - homeassistant.teststuff.net:443
+        - grafana.teststuff.net:443
+        - prometheus.teststuff.net:443
+        - alertmanager.teststuff.net:443
+        - forgejo.teststuff.net:443
+        - argo.teststuff.net:443
+        - apps.teststuff.net:443
+        - s3.teststuff.net:443
+        - oracle-specs.teststuff.net:443
+        - argocd.teststuff.net:443
+        - infisical.teststuff.net:443
+        - transcripts.local.teststuff.net:443
+        - registry.teststuff.net:443
+        - oracle.teststuff.net:443
+        - sleep.teststuff.net:443
+        - circles.teststuff.net:443
+        - homelab.teststuff.net:443
 ---
 # The 2026-09-08 stall class: garage-0 dropped off the RPC mesh for minutes every hour for three
 # days and nothing at the Garage level said so (docs/storage-ledger.md §The SA400 zone under rf=3
@@ -268,3 +319,24 @@ spec:
           annotations:
             summary: "Unbound not answering for api.github.com"
             description: "SERVFAIL/no answer for api.github.com through Unbound (192.168.2.1:53) — check for a cached SERVFAIL (TICK-LOG 2026-08-26/08-31); if so, POST /api/unbound/service/restart, wallet API creds."
+        # ── LanCertExpiringSoon — the router's ACME renewal, read from the SERVED cert ─────────────
+        # Every LAN HTTPS name is a Let's Encrypt cert issued on the OPNsense MASTER
+        # (ansible/roles/opnsense-acme: renew_interval 60 of 90 days), so a served cert under 14
+        # days IS a renewal that did not happen — the AcmeClient cron missing (2026-10-26: the
+        # rebuilt pair had none; the ansible settings write never calls the plugin's
+        # fetchCronIntegration, so boot-from-git shipped auto-renewal ON with no job), the DNS-01
+        # token dead, or a BACKUP serving carried copies past the MASTER's renewal (FU-297's
+        # cert-carry). Threshold: a healthy cert never reads below 30 days; 14 leaves a week to act
+        # before LE's expiry. `for: 1h` outlasts a prober roll; the condition moves a day a day, so
+        # no range function (the #336 class does not apply — nothing here is a momentary reading).
+        - alert: LanCertExpiringSoon
+          expr: (probe_ssl_earliest_cert_expiry{job="blackbox-lan-certs"} - time()) < 14 * 86400
+          for: 1h
+          labels:
+            severity: warning
+            # triage: dig — the cause is router-side (ACME client state, its cron, DNS-01); the
+            # investigator reads the served cert + this metric, the fix is the acme play on the MASTER
+            triage: dig
+          annotations:
+            summary: "{{ $labels.instance }} serves a cert expiring in {{ $value | humanizeDuration }}"
+            description: "The Let's Encrypt cert served at {{ $labels.instance }} expires in {{ $value | humanizeDuration }} — ACME renewal on the router MASTER did not happen (renew_interval 60d of 90). On the MASTER read Services > ACME Client: the cert's status/last update and whether the AcmeClient cron job exists (ansible/roles/opnsense-acme ensures it); a BACKUP's carried copy renews only through FU-297's cert-carry (docs/router-move.md §The identity the new router carries)."
