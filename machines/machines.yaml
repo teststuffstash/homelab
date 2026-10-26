@@ -603,9 +603,11 @@ machines:
     # already sits on it. by-id (eui) selectors: this directive PARTITIONS what it points at, and
     # /dev/nvme{0,1}n1 is enumeration order. Names are the live Longhorn disk keys — never rename.
     longhorn_disks:
-      # intel0 (eui …410f6, serial BTHH829402EZ256B) RETIRED 2026-10-26: Identify-namespace EIO since
-      # 10-20, and after a reseat a freshly made XFS failed its superblock CRC on the first read —
-      # the drive returns other data than was written. Still physically in the box; pull it.
+      # intel0 (eui …410f6, serial BTHH829402EZ256B) OUT 2026-10-26 — the drive is FINE, the x16 SLOT is
+      # not: two drives each failed there (intel0 10-20 → EIO + corrupt XFS; intel1 2026-10-26 → probe
+      # timeout on one boot, worked on the next, and its XFS came back corrupt), while intel0 passed
+      # a 4 GiB direct write+readback in the x4 slot. intel1 now sits in the x4 slot (PCH root port
+      # 00:1c.0); the x16 slot (CPU root port 00:01.0) stays EMPTY. intel0 = tested shelf spare.
       - { device: /dev/disk/by-id/nvme-eui.5cd2e42a81a35e16, name: intel1, tags: [bulk] } # serial BTHH817204JW256B
     ephemeral: true
     notes: >-
