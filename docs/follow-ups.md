@@ -192,15 +192,15 @@ six OVERSIZE items pointer-ized into
       enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
       (operator's call), then a pin bump + drop the harness workaround.
 - [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs validated on
-      VM 9110; a weekly from-nothing rebuild drill on the box (`mgmt-opnsense-drill.timer`) scores prod's click-ops
-      residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score has the drill record). The pair is
-      COMPLETE (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (score 56;
-      57 on 10-18 → `MgmtOpnsenseDrillScoreRegressed` firing). **⚠ 2026-10-26: no cert on the pair has EVER renewed** —
-      no AcmeClient cron job on either node (router-move.md §The identity), pve's copies cannot order (no WAN as BACKUP),
-      circles.teststuff.net expires **2026-11-02**. Detector `LanCertExpiringSoon` #2927. **Next:** (1) the acme role's
-      `fetchCronIntegration` task applied on the MASTER + circles re-issued, (2) cert-carry MASTER→BACKUP (export → import,
-      frontends re-bound) before 11-02, (3) the 56 click-ops rows (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2), CI for
-      `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298, FU-307.
+      VM 9110 (plays under test follow the PR, #2930); a weekly from-nothing rebuild drill on the box scores prod's
+      click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score). The pair is COMPLETE
+      (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (56; 57 on 10-18 →
+      `MgmtOpnsenseDrillScoreRegressed`). 2026-10-26: the pair had never renewed a cert (no AcmeClient cron) — FIXED
+      end to end the same day: `LanCertExpiringSoon` #2927, cron #2934, `opnsense-cert-carry.sh` #2939 (run live, pve's
+      copies current), BACKUP sign guard, HAProxy rebind on cert drift #2940 (pve's `homelab-gw-frontend` bound).
+      **Next:** (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
+      nx02 pve`, idempotent) so the BACKUP follows the MASTER's renewals without a session; (2) the 56 click-ops rows
+      (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80

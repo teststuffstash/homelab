@@ -34,8 +34,9 @@ mgmt_x() {
   else ( cd "${REPO:-$PWD}" && devbox run --quiet -- "$@" ); fi   # jail-only fallback (FU-305)
 }
 
-# mgmt_lock_tool <tree> <name> [bin] → the store path (a dir with bin/<bin>, default <name>) devbox.lock
-# pins for package <name>,
+# mgmt_lock_tool <tree> <name> [bin] [store-name] → the store path (a dir with bin/<bin>, default <name>)
+# devbox.lock pins for package <name> (store-name: the ERE the store path's name part must match,
+# default <name> — `ansible` resolves to `python3.N-ansible-core-<ver>`, mgmt-ansible.sh),
 # realised locally and GC-rooted under $MGMT_TOOLROOTS. rc 1 + why on stderr: no lock, no entry,
 # an entry whose shape is not the one admitted, or a path nix could not substitute/build.
 # Admitted shapes (anything else is refused — the lock is input, not code):
@@ -43,15 +44,15 @@ mgmt_x() {
 #   "github:NixOS/nixpkgs/<40-hex rev>#<name>" (resolved the same, ?query allowed) → nix build
 MGMT_TOOLROOTS="${MGMT_TOOLROOTS:-/var/lib/mgmt/toolroots}"
 mgmt_lock_tool() {
-  local tree="$1" name="$2" bin="${3:-$2}" lock="$1/devbox.lock" entry sp ref rev root out
+  local tree="$1" name="$2" bin="${3:-$2}" sname="${4:-$2}" lock="$1/devbox.lock" entry sp ref rev root out
   [ -s "$lock" ] || { echo "mgmt-tools: no devbox.lock in $tree" >&2; return 1; }
   entry="$(jq -c --arg n "$name" '[.packages | to_entries[]
              | select((.key | startswith($n + "@")) or (.key | endswith("#" + $n)))] | first // empty' "$lock" 2>/dev/null)" \
     && [ -n "$entry" ] || { echo "mgmt-tools: $name has no entry in $lock" >&2; return 1; }
   sp="$(jq -r '.value.systems["x86_64-linux"].store_path // empty' <<<"$entry")"
   if [ -n "$sp" ]; then
-    [[ "$sp" =~ ^/nix/store/[0-9a-df-np-sv-z]{32}-${name}-[0-9][0-9A-Za-z.+_-]*$ ]] \
-      || { echo "mgmt-tools: $name's store_path '$sp' is not /nix/store/<hash>-$name-<version> — refused" >&2; return 1; }
+    [[ "$sp" =~ ^/nix/store/[0-9a-df-np-sv-z]{32}-${sname}-[0-9][0-9A-Za-z.+_-]*$ ]] \
+      || { echo "mgmt-tools: $name's store_path '$sp' is not /nix/store/<hash>-$sname-<version> — refused" >&2; return 1; }
     root="$MGMT_TOOLROOTS/$name-${sp:11:12}"
     if [ ! -e "$root/bin/$bin" ]; then
       mkdir -p "$MGMT_TOOLROOTS"

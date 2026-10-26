@@ -122,7 +122,7 @@ drill found the same wedge for the revert PR. The split now, per tool
 | `yq`, `kubectl`, `jq`, `curl`, `openssl`, `git`, `awscli2`, `ssh`, coreutils … | the box's closure (`boxTools`, on every loop unit's `path`) — `mgmt_x` | gate machinery: must not depend on any tree it reads; a missing one fails LOUD (`MGMT_BOX=1`), never a silent devbox fallback |
 | `tofu`, `talosctl`, `helm` | the `devbox.lock` of the tree the loop ACTS from (its own master clone), read as **data**: the store path / `NixOS/nixpkgs@<rev>` entry, shape-validated, realised by nix from the signed cache — `mgmt_tree_path` | the version IS part of the change (tofu's state format, the Talos client↔cluster minor, helm 4 vs 3). devbox never runs: no `devbox.json`, no init_hook, no venv. A PR head's `devbox.lock` is never read |
 | tofu **providers** | the planned tree's `.terraform.lock.hcl` — the PR head's for the sentinel | the provider-pin gate (§MB3) plans the head's providers, unchanged |
-| `ansible` (+ its python) | `devbox run` — the belt's `check_ansible` and the weekly rebuild drill only | report-only: a bad lock costs one red belt check, never a wedged gate |
+| `ansible` (+ its python) | `devbox run` — the belt's OPNsense `--check` (`scripts/opnsense-playbook.sh`) and the weekly rebuild drill; the `apply_ansible` plays (§Ansible applies — the apply loop's applier AND the belt's `--check` of them) take ansible-core from the tree's `devbox.lock` as data (`mgmt_lock_tool`, store name `python3.N-ansible-core-<ver>`) | report-only on the belt: a bad lock costs one red belt check, never a wedged gate; in the applier it refuses that group with its reason |
 
 **The in-cluster `iac-sentinel` runs the IMAGE's lock, not master's (operator ruling 2026-10-10,
 FU-305).** The other required context that a bad lock could silence is posted by a pod
@@ -179,7 +179,7 @@ mechanism. The probe set (`mgmt/scripts/mgmt-probe.sh`, run by a systemd timer o
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
 | **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — with its `.ephemeral` install-time half, and `node_declared_k8s`: the labels/taints tofu itself sets, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
 | **the substrate-currency check** (`check_substrate`, 2026-09-23 — FU-254) | DECLARED (the `default` of `talos_version_{controlplane,worker}` / `kubernetes_version` / `cilium_version` in `tofu/variables.tf`, read straight out of the checkout — deliberately not a `tofu output`: none carries the last two, and `node_install_targets` needs the main state and an initialised root) vs UPSTREAM (each project's GitHub releases, drafts and prereleases dropped). It asserts the one thing every other check here takes for granted: **that the declaration itself is still current, and still inside its project's support window** — Talos 1.13 left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a conversation, not a mechanism. Renovate cannot fill this: class 6 in [`dependency-upgrades.md`](dependency-upgrades.md) is deliberately "must not auto-deploy". Publishes `mgmt_substrate_minors_behind{component}` (0 = current), `mgmt_substrate_supported{component}` (0 = EOL) and a fetch-age series; the "how long is too long" judgement is `MgmtSubstrateBehind` (7 d, still supported) / `MgmtSubstrateUnsupported` (1 h, past the window) in `argocd/resources/mgmt-metrics/`. ⚠ **The support windows are hand-encoded constants** in the check (Talos: the CURRENT minor only — community support for 1.13 ended on the 1.14.0 release date, so one minor behind is already EOL and Talos skips the `Behind` grace entirely; Kubernetes and Cilium: three minors) — nothing here discovers a policy, so an upstream that changes its window makes the EOL gauge lie quietly until that table is corrected. ⚠ The upstream answer is **cached 6 h**: the belt ticks every 15 min, and a fetch per tick would be ~288 GitHub API calls a day against a 60/hour anonymous per-IP budget for an answer that moves a few times a year. A component whose release list cannot be read publishes NO series rather than a false "current" |
-| `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
+| `ansible --check` on an OPNsense play + every `apply_ansible` group's plays (Matchbox, since 2026-10-26 — §Ansible applies) | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | **the prometheus-operator CRD owner check** (`check_kps_crds`, 2026-10-07 — ADR-151, gap G16) | every `monitoring.coreos.com` CRD's `operator.prometheus.io/version` equals the running `kube-prometheus-stack-operator` image tag. The pair moves in one Renovate group, but a failed CRD sync, a stack bump merged outside the group, or a lease revert of the stack pin alone (ADR-150 never downgrades CRDs) leave the operator on a schema it did not ship — kube-state-metrics exports no CRD annotations, so the read is this kubectl probe; reason `skew` names the drifted CRDs |
 | each credential it holds, read once | a rotation did not lock the box out |
 
@@ -816,6 +816,77 @@ read still `ok`; with a kubeconfig pointed at a dead port it read `down` (`kube-
 reconciler's verdict cases in `mgmt-reconcile-test`, the post-check's in `mgmt-policy-test`, the
 alert in `mgmt-metrics.promtool-test`.
 
+### Ansible applies — Matchbox first (ADR-152 program step 2, 2026-10-26)
+
+Until this change a merged `ansible/matchbox*.yml` / `group_vars` / role change deployed nothing; the
+seat re-ran the playbooks by hand. Operator ruling 2026-10-26 ("durable long-term fixes — I don't have
+time to apply updates by hand anymore"): the box is the ONE ansible applier outside ArgoCD, in
+[ADR-152](adr.md)'s program order — Matchbox first (near-zero cone: nothing reads it until the next
+netboot), then the router's BACKUP (ROADMAP §Deploy paths step 3).
+
+**What admits a group.** `policy/mgmt/plan-input.yaml` `apply_ansible.<group>` — codeowner-gated, read
+from master like the rest of the file: `plays` (in order), `paths` (bash case globs over the span's
+files — every commit's, `git log --name-only`, as for the roots), `mode` (`shadow` | `on`, the
+operator's toggle), `hosts`, `cap_min` (the ⚓ lease's deadline), `window_alerts`, `health`. A span
+touching a group's paths runs it behind every gate a root has — the declared-window gate (FU-300) and
+the box verdict (FU-302) first, `refused-rev` on a refusal, the `management-apply` status — after the
+tofu roots, off the loops' shared lock (no tofu state is touched).
+
+**The bracket** (`mgmt/scripts/mgmt-ansible.sh`, sourced by `mgmt-apply.sh`; the helm bracket's shape):
+
+1. **Toolchain** — ansible-core as the clone's `devbox.lock` pins it, read as DATA (`mgmt_lock_tool`,
+   §Two pins — devbox never runs in a gate loop; a bad lock refuses this group with its reason).
+2. **Target** — `--check --diff` of every play at master. changed=0 everywhere → live already IS master
+   (a hand converge, or a no-op change): nothing to apply, status success, the group's confirmed sha
+   advances. The diff hunks go to the journal.
+3. **Drift — the preflight refusal.** The same plays at the sha this group was last CONFIRMED at
+   (`$ADIR/ansible-confirmed-<group>`; the previous master when there is none) run `--check` from a
+   throwaway worktree. Anything but changed=0 refuses to a human: `ansible-live-drift` (live already
+   differs from what was declared before this span — the `helm-live-drift` analogue: the box never
+   applies on top of a state nobody declared), `ansible-check-failed` / `ansible-unreachable` (could
+   not look is never clean). Reading against the CONFIRMED sha rather than the bare previous master is
+   what lets a shadowed span stay correct: a change the box only shadowed is not live, so the next
+   span reads it as pending, not as drift. A human converge clears a drift refusal: the next span's
+   target check reads changed=0.
+4. **Begin** — a stale lease of this group is a STOP (its actor died); a declared window
+   (`agents/seat-window.sh`: the reconciler and the apply loop wait it out — a netboot reinstall never
+   races a Matchbox converge) and `agent-coordinator/upgrade-lease-ansible-<group>` (subject
+   `ansible/<group>`, from = the confirmed sha, to = master, `expected-end` = begin + `cap_min`).
+5. **Apply** — every play, in order, each under `MGMT_ANSIBLE_TIMEOUT` (900 s).
+6. **Confirm** — a second `--check` is changed=0 AND the row's `health` passes (Matchbox: HTTP `:8080/`
+   and the iPXE entry script answer, `matchbox` + `dnsmasq` `active` on the LXC over the play's own ssh;
+   the ipxe play's own TFTP verify already ran inside the apply). Good → lease deleted, window closed,
+   confirmed sha = master, status success. Bad, or an apply that failed → **STOP**: lease and window
+   KEPT, `/var/lib/mgmt/apply/ansible-stopped` refuses every later ansible apply (shadow rows still
+   evaluate), `mgmt_apply_ansible_stopped` → **`MgmtAnsibleApplyStopped`** (warning, `triage: none`;
+   second arm: the lease loop's outcome `ansible_stopped` — a box that died mid-bracket). The sha is
+   stamped (the apply happened). Never a revert, never a retry.
+
+**Shadow** (`mode: shadow`, and every row while the loop itself is SHADOW): steps 1–3 and the would-be
+apply in the journal (`[shadow] ansible matchbox: would apply …` / `would REFUSE — …`), the metrics, no
+lease, no window, no status; the span still stamps. Metrics (textfile, job `mgmt-node`):
+`mgmt_apply_ansible_last_run_timestamp_seconds{group,mode,outcome}` (converged | shadow | applied |
+refused | stopped) and `mgmt_apply_ansible_would_change{group}`. **Clearing a stop**: read the record
+(`ansible-stopped` names the dir under `/var/lib/mgmt/apply/ansible/`: `summary.txt`, one log per play
+and phase), then `rm /var/lib/mgmt/apply/ansible-stopped`, `kubectl -n agent-coordinator delete cm
+upgrade-lease-ansible-<group>`, `devbox run maint -- close --id <window>`.
+
+**The belt sees what the loop does not look at.** The loop only reads a group when a span touches its
+paths; a hand edit on the LXC between merges is the belt's: `check_ansible` (§MB2) runs every play of
+every `apply_ansible` group in `--check` beside the router's — one play list, the policy's — so live
+drift on Matchbox reads `drift` on `matchbox-lxc` (`MgmtBeltCheckFailing`).
+
+**Check-mode honesty was the precondition.** The plays were never check-clean, so `--check` could not be
+the diff: the matchbox role re-downloaded its release into `/tmp` on every run and the `--check` then
+FAILED at the extract; `get_url` without a checksum reports `changed` on every `--check` (it issues a
+HEAD); the tftpd-hpa mask reported `changed` forever once the package was gone. All three were fixed in
+the roles with this change (the installed version, the asset `.schematic` marker, the mask read) — a
+role that is not check-clean refuses itself on the box (`ansible-check-failed`), which is the signal.
+
+**Credentials.** Nothing new: the Matchbox plays ssh as root with the Proxmox seed key — the jail's
+`~/.claude/homelab-pve-ssh/id_ed25519`, the box's provisioned copy `/var/lib/mgmt/pve-ssh/id_ed25519`
+(`PVE_SSH_KEY` on the apply and belt units; `ansible/group_vars/matchbox.yml` defaults to the jail path).
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
@@ -844,7 +915,7 @@ even when every check is green.
 | The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
 | Router config converge (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | human, by ruling (operator 2026-09-29: the official update path, no Renovate; majors attended — [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (seat API calls, trialled on test VM 9110 first; prod 2026-09-29 + 2026-09-30) | not a box capability: class 14 in `dependency-upgrades.md`; the box run is ROADMAP §Deploy paths program step 4 (test VM → BACKUP → MASTER under one lease), the revert a `qm snapshot` local to the node (spike D5) |
-| Matchbox (`ansible/matchbox*.yml` — the server + the PXE assets) | human (a playbook re-run) | — | not a box capability: class 15 in `dependency-upgrades.md`; near-zero cone, so it is the FIRST ansible applier candidate (ROADMAP §Deploy paths, the program's step 2: shadow `--check` diff first, then on) |
+| Matchbox (`ansible/matchbox*.yml` — the server + the PXE assets; `apply_ansible.matchbox`, §Ansible applies) | `mode: shadow` (2026-10-26) | — (shadow: the would-be apply per merged span) | class 15 in `dependency-upgrades.md`; near-zero cone, the FIRST ansible applier (ROADMAP §Deploy paths program step 2) — enters as box-run with its first unattended confirmed apply |
 
 ### Non-Talos VMs: the runner verb (2026-10-08)
 

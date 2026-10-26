@@ -68,7 +68,14 @@ because their real values are here, not baked in).
 bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml          # or any opnsense-*.yml
 ```
 
-**Matchbox** — over SSH (uses the Proxmox seed key from `group_vars/matchbox.yml`; no httpx needed):
+**Matchbox** — the MANAGEMENT BOX applies these on merge (ADR-152 program step 2;
+[`docs/management-box.md`](../docs/management-box.md) §Ansible applies — the `apply_ansible.matchbox`
+row of `policy/mgmt/plan-input.yaml`, `shadow` until the operator flips it `on`). Every Matchbox play
+must therefore stay **check-clean**: a second `--check` after a run must report `changed=0` (the box's
+confirm), and `--check` must not fail where a real run would succeed (no task that reads what an
+earlier task only *would* have written — guard it with `not ansible_check_mode`). By hand, over SSH (the
+Proxmox seed key: `PVE_SSH_KEY`, else the jail's `~/.claude/homelab-pve-ssh/id_ed25519` —
+`group_vars/matchbox.yml`; no httpx needed):
 
 ```bash
 export ANSIBLE_CONFIG=ansible/ansible.cfg

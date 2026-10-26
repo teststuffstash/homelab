@@ -18,14 +18,14 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **LAN certs (FU-297, 2026-10-26):** `LanCertExpiringSoon` #2927 (pr-wait running) → after merge roll
-  `deploy/blackbox-exporter -n monitoring` inside a declared window (config read at start only) → replay:
-  `probe_ssl_earliest_cert_expiry{instance="circles.teststuff.net:443"} - time()` ≈ 7d, alert fires +1h →
-  THEN open the cron-fix PR from the `fix/acme-renewal-cron` branch (committed in a seat clone, not pushed;
-  test-VM gate `opnsense-test-vm.sh --pr N`), apply `opnsense-acme.yml` on the MASTER, POST
-  `certificates/sign/<circles uuid>` on nx02 → then the cert-carry to pve before **11-02**.
-
-
+- **LAN certs (FU-297) — DONE 2026-10-26** (detector, cron, carry, guard, rebind all live; `LanCertExpiringSoon`
+  clear). NEXT (FU-297 (1)): schedule `opnsense-cert-carry.sh nx02 pve` on the [management box](../management-box.md) so the BACKUP follows
+  renewals without a seat.
+- **OPNsense 26.7.7 on the test VM (whoever is running that trial — baseline snapshot re-taken 2026-10-26 ~20:40Z,
+  unrecorded):** against it the pinned `oxlorg.opnsense 26.1.11` FAILS the bgp play's neighbor task ("Failed field:
+  'multiprotocol'", os-frr 2.0_2) and the haproxy play timed out — seen by the #2940 gate's BASE step. Prod stays
+  26.7.5 until the collection (Galaxy latest IS 26.1.11; upstream O-X-L/ansible-opnsense#488 covered 26.7 only)
+  handles it or the neighbor task moves to `raw`. Needs an owner + a record before any prod firmware step.
 - **⚑ PICKUP (2026-10-24 12:30Z — S9 Renovate sweep; TICK-LOG 10-24).** Verify next session: homelab#2819 regrouped
   (chart 2.4.3 + digest) after #2886; sleep-tracking#203 rebuilt by Renovate after the 12:01Z hand-back; allure#11
   regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).

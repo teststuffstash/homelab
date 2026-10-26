@@ -75,6 +75,18 @@ $R_NX_CH
 $R_PVE_OK" >/dev/null 2>&1
 check "rc 0 with changed=2 → fail drift" "fail drift"
 
+# 5b. the router recap + the apply_ansible groups' recaps in ONE output (check_ansible concatenates
+#     them, ADR-152 step 2): a Matchbox play with changed=2 is drift on its own host, the router stays clean
+reset; ansible_verdict 0 "PLAY RECAP ***
+$R_NX_OK
+$R_PVE_OK
+
+PLAY [Matchbox proxy-DHCP boot server] ***
+PLAY RECAP ***
+matchbox-lxc               : ok=5    changed=2    unreachable=0    failed=0    skipped=1" >"$T/mb.out" 2>&1
+check "router clean + matchbox changed=2 → fail drift" "fail drift"
+n=$((n+1)); if grep -q 'DRIFT — matchbox-lxc=changed:2$' "$T/mb.out"; then echo "ok   the drift names the matchbox host"; else echo "FAIL drift line: $(cat "$T/mb.out")"; fails=$((fails+1)); fi
+
 # 7. the CRD-owner belt (ADR-151, G16): kps_crds_verdict over captured `get crd` JSON + the image.
 CRDS='{"items":[{"metadata":{"name":"prometheuses.monitoring.coreos.com","annotations":{"operator.prometheus.io/version":"0.91.0"}},"spec":{"group":"monitoring.coreos.com"}},{"metadata":{"name":"servicemonitors.monitoring.coreos.com","annotations":{"operator.prometheus.io/version":"0.91.0"}},"spec":{"group":"monitoring.coreos.com"}},{"metadata":{"name":"workflows.argoproj.io"},"spec":{"group":"argoproj.io"}}]}'
 reset; kps_crds_verdict "$CRDS" "quay.io/prometheus-operator/prometheus-operator:v0.91.0" >/dev/null 2>&1

@@ -436,6 +436,8 @@ the hypervisor's flooding, not the node's config.
   both nodes (above), circles.teststuff.net served 7 days from expiry; a BACKUP can never order
   (the WAN gate leaves its WAN without link, so its 400 is structural). Detector `LanCertExpiringSoon`
   (#2927) first, then the role's `fetchCronIntegration` task on the MASTER, then FU-297's cert-carry.
+  **Same evening: #2934 landed and was applied to both nodes (cron job + `UpdateCron` set on nx02 and pve),
+  circles re-issued on the MASTER, the alert resolved. The BACKUP's copies still need the carry (FU-297).**
 
 - 2026-09-29 night: the inventory above. Prod, the test VM baseline and the drill all on 26.7.4_1
   (#2128), plain drill score 12 → SystemHealth pinned (#2129). The rehearsal

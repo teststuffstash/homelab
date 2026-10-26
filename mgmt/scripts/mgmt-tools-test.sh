@@ -76,15 +76,15 @@ rm -f "$T/devbox.calls"
 # ── 2. mgmt_lock_tool: the admitted lock shapes, and the refusals ────────────────────────────────
 # nix stubbed: records the call and materialises <root>/bin/<bin> like a realised path would.
 L="$T/lock"; mkdir -p "$L"
-lock_case() {  # <name> <want rc> <want-grep in stderr|-> <pkg> <bin> <devbox.lock json>
-  local name="$1" want="$2" grepf="$3" pkg="$4" bin="$5" json="$6" out rc
+lock_case() {  # <name> <want rc> <want-grep in stderr|-> <pkg> <bin> <devbox.lock json> [store-name ERE]
+  local name="$1" want="$2" grepf="$3" pkg="$4" bin="$5" json="$6" sname="${7:-$4}" out rc
   printf '%s\n' "$json" >"$L/devbox.lock"; rm -rf "$T/roots" "$T/nix.calls"
   out="$(
     export MGMT_TOOLROOTS="$T/roots" BIN="$bin"
     . "$HERE/mgmt-tools.sh"
     nix-store() { echo "nix-store $*" >>"$T/nix.calls"; mkdir -p "$3/bin"; : >"$3/bin/$BIN"; chmod +x "$3/bin/$BIN"; }
     nix() { echo "nix $*" >>"$T/nix.calls"; local l; l="${4}"; mkdir -p "$l/bin"; : >"$l/bin/$BIN"; chmod +x "$l/bin/$BIN"; }
-    mgmt_lock_tool "$L" "$pkg" "$bin" 2>"$T/lt.err"
+    mgmt_lock_tool "$L" "$pkg" "$bin" "$sname" 2>"$T/lt.err"
   )"; rc=$?
   if [ "$rc" != "$want" ]; then bad "lock-tool $name" "rc=$rc want $want: $(cat "$T/lt.err")"; return; fi
   if [ "$grepf" != - ] && ! grep -Eq -- "$grepf" "$T/lt.err" "$T/nix.calls" 2>/dev/null; then bad "lock-tool $name" "no '$grepf' in: $(cat "$T/lt.err" "$T/nix.calls" 2>/dev/null)"; return; fi
@@ -106,6 +106,11 @@ lock_case short-rev       1 "refused" talosctl talosctl \
   "{\"packages\":{\"github:NixOS/nixpkgs/nixos-unstable#talosctl\":{}}}"
 lock_case no-entry        1 "has no entry" opentofu tofu '{"packages":{}}'
 lock_case unparseable     1 "has no entry" opentofu tofu '{not json'
+# ansible (mgmt-ansible.sh): devbox's `ansible` is nixpkgs' ansible-core, named python3.N-ansible-core-<ver>
+lock_case ansible-core    0 "nix-store --realise --add-root .*/ansible-87j6482arv29 /nix/store/$H-python3.14-ansible-core-2.21.4" ansible ansible-playbook \
+  "{\"packages\":{\"ansible@latest\":{\"systems\":{\"x86_64-linux\":{\"store_path\":\"/nix/store/$H-python3.14-ansible-core-2.21.4\"}}}}}" 'python3\.[0-9]+-ansible-core'
+lock_case ansible-other   1 "refused" ansible ansible-playbook \
+  "{\"packages\":{\"ansible@latest\":{\"systems\":{\"x86_64-linux\":{\"store_path\":\"/nix/store/$H-python3.14-evil-2.21.4\"}}}}}" 'python3\.[0-9]+-ansible-core'
 if [ ! -s "$T/nix.calls" ]; then ok "lock-tool: a refused shape never reaches nix"; else bad "lock-tool: nix was called on a refusal" "$(cat "$T/nix.calls")"; fi
 
 # mgmt_tree_path: a bad entry fails ITS tool only; the others still land on PATH; a jail no-op
