@@ -66,6 +66,25 @@
       oxlorg.opnsense.raw: { module: acmeclient, controller: service, command: reconfigure, action: post }
       when: acme_enable is changed
 
+    # The renewal CRON JOB is not a setting: the plugin creates it only in
+    # `settings/fetchCronIntegration` (the GUI calls it on every settings page load; an API
+    # `settings/set` never does), so a box converged from this role read autoRenewal=1 with NO job
+    # behind it — both rebuilt CARP nodes, 2026-10-26 (cron list empty; the 17 carried certs had
+    # never renewed; circles.teststuff.net served 7 days from expiry — LanCertExpiringSoon). The
+    # call is idempotent: it validates the stored job UUID, re-adopts an orphaned AcmeClient job,
+    # or creates the daily job and reloads cron — result "no change" | "new". It creates nothing
+    # while autoRenewal is off (the standby profile), so it runs unconditionally. raw takes no
+    # `reload`; the plugin reloads cron itself.
+    - name: Ensure the AcmeClient auto-renewal cron job (fetchCronIntegration)
+      oxlorg.opnsense.raw:
+        module: acmeclient
+        controller: settings
+        command: fetchCronIntegration
+        action: post
+      register: acme_cron
+      changed_when: (acme_cron.response.result | default('')) == 'new'
+      failed_when: (acme_cron.response.result | default('')) not in ['no change', 'new']
+
     # NOTE: `email` is CREATE-ONLY here — the acme_account module's change-detection set is
     # ['description','custom_ca','eab_kid','eab_hmac'], so it will NOT update the email of an
     # *existing* account. A fresh build registers with acme_account_email (boot-from-git);
