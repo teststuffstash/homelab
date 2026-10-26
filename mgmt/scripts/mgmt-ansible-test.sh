@@ -39,7 +39,7 @@ printf 'roots: [\n' >"$T/bad.yaml"
 printf 'ansible/matchbox.yml\n' | ans_groups_touched "$T/bad.yaml" >/dev/null 2>&1; eq groups-unreadable-rc 1 "$?"
 _yq 'del(.apply_ansible)' "$POL" >"$T/noans.yaml"
 eq groups-no-rows "" "$(printf 'ansible/matchbox.yml\n' | ans_groups_touched "$T/noans.yaml")"
-eq row-mode-shadow-as-shipped "shadow" "$(ans_row "$POL" matchbox | jq -r .mode)"
+eq row-mode-matchbox-on "on" "$(ans_row "$POL" matchbox | jq -r .mode)"
 
 # ── 2. the recap reader ───────────────────────────────────────────────────────────────────────────
 recap() {  # <host> <changed> <unreachable> <failed>

@@ -41,7 +41,7 @@
     group: root
     mode: "0644"
     content: |
-      # Managed by the matchbox-proxydhcp role
+      # Managed by the matchbox-proxydhcp role — applied by the management box on merge (ADR-152)
       port=0                       # no DNS (Unbound on the router owns :53)
       log-dhcp                     # log tag/boot decisions (journalctl -u dnsmasq)
       interface=eth0
