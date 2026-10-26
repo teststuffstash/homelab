@@ -1,13 +1,6 @@
-# v5 cloudflare_zero_trust_tunnel_cloudflared exposes no `.cname` — the tunnel's DNS
-# target is <tunnel-id>.cfargotunnel.com. Proxied so the edge (mTLS + WAF) sits in front.
-resource "cloudflare_dns_record" "ha" {
-  zone_id = var.zone_id
-  name    = "ha"
-  type    = "CNAME"
-  content = "${cloudflare_zero_trust_tunnel_cloudflared.homelab.id}.cfargotunnel.com"
-  proxied = true
-  ttl     = 1 # automatic (required to be 1 when proxied)
-}
+# The `ha` CNAME moved to the ha PublicRoute claim on 2026-10-26 (argocd/resources/ha-publicroute/,
+# FU-039 consumer #2) — ADOPTED by the claim's Workspace (an import block), so this root FORGETS
+# it rather than destroying it (removed.tf).
 
 # WireGuard road-warrior endpoint (ADR-090) — the home WAN IP. DNS-only: Cloudflare
 # can't proxy WireGuard UDP, and the whole point is a direct tunnel to OPNsense.

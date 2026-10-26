@@ -1,0 +1,27 @@
+# ha-publicroute — the ha.teststuff.net PublicRoute claim (FU-039 consumer #2, docs/cloudflare.md
+# §Remote access): the platform's own public hostname, claimed from the backend's namespace
+# `home-assistant` (a platform-owned namespace in the composition's zone map — the stack model the
+# oracle claims follow; the connector runs beside HA). Wave 6: after the XRD/Composition (publicroute,
+# wave 5). The namespace is tofu's (tofu/homeassistant.tf) — no CreateNamespace.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ha-publicroute
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/ha-publicroute
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: home-assistant
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -1,0 +1,35 @@
+# ha.teststuff.net — Home Assistant from anywhere, behind client-certificate mTLS, as a PublicRoute
+# claim (FU-039 consumer #2, 2026-10-26). Until then this leg was tofu/cloudflare, a root applied by
+# hand: its cloudflared pin sat 11 days behind a Cloudflare security notice while Renovate's bumps
+# merged (the G16 resight, docs/dependency-upgrades.md). Now the connector, tunnel, CNAME and the mTLS
+# enforcement rule are reconciled by ArgoCD + Crossplane like every other claim — a merged pin IS the
+# deploy. What stays in tofu/cloudflare is the credential half (client cert + the zone's managed-CA
+# hostname association — SSL/Certificates write the composition's token does not carry), no pin.
+# Design + cutover record: docs/cloudflare.md §Remote access.
+apiVersion: platform.teststuff.net/v1alpha2
+kind: PublicRoute
+metadata:
+  name: ha
+  namespace: home-assistant   # a PLATFORM-OWNED namespace of teststuff.net (the composition's zone map)
+spec:
+  profile: consumer
+  hostname: ha.teststuff.net
+  backend:
+    # trailing dot: docs/cloudflare.md gotcha 1 (ndots + the *.local.teststuff.net wildcard → 502)
+    service: home-assistant.home-assistant.svc.cluster.local.
+    port: 8123
+  replicas: 2
+  mtls:
+    enforce: true
+  # An app, not a page: no edge cache rule (Cloudflare's zone default — static extensions only,
+  # HA's own Cache-Control honoured — exactly as before the retrofit; and the claim does not take
+  # the platform zone's cache-settings entry point), and no RUM beacon injected into HA's HTML.
+  cacheRule: false
+  rum: false
+  # Adopted from tofu/cloudflare at the cutover (zero gap: the CNAME is updated in place to this
+  # claim's tunnel, the mTLS rule is never absent). Inert once in the Workspace state.
+  imports:
+    dnsRecordId: e22672952d286876dcc44528bbc06400   # ha CNAME
+    ruleset:
+      id: 9de8f75ce9f54ced876e4fb0caaabff3          # the zone's http_request_firewall_custom entry point
+      name: mTLS enforcement                         # live name — a rename would REPLACE it
