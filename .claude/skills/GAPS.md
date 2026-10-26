@@ -9,8 +9,8 @@ skip the ledger. History lives in this file's git log, not in the entries. This 
 PUBLIC repo — dialogue-level facts only, never tool output.
 
 **2026-10-26 sweep:** every entry with a text fix was promoted in one PR; the "build
-it" halves were dispatched as their own PRs the same day (operator: no FU for a decided, bounded
-build) and stay here as pointers only until those merge.
+it" halves were built as their own PRs the same day (#2930, #2935 — operator: no FU for a decided,
+bounded build); handoff-G4 waits on claude-jail#11.
 
 ## design
 
@@ -133,25 +133,20 @@ build) and stay here as pointers only until those merge.
 - [x] maintenance-window-G1 — a fix that addressed only the instances in view, reported as the
       class (2026-09). **promoted→** Hard-won: a class fix closes only with the enumeration — every
       site listed, the count stated, a self-test case per site (2026-10-26).
-- [ ] maintenance-window-G2 — the alert watch is a snippet the seat re-types; seven copies between
-      2026-09-21 and 10-23, each with its own defect (zsh word-split, no dedupe, dead probe, wrong
-      seed, Monitor expiry = the lease length). The CP half closed 2026-10-09 (`controlplane-
-      upgrade.sh down|up`, `host-maintenance.sh`). The skill now names the verb as the owner and
-      lists the four rules a hand copy must meet. **Pointer: the `maint watch` verb and
-      `node-maintenance up` starting a VM are being built as their own PR (seat subagent,
-      2026-10-26) — close on its merge.**
+- [x] maintenance-window-G2 — the alert watch was a snippet the seat re-typed; seven copies between
+      2026-09-21 and 10-23, each with its own defect. **built→** `maint watch` (one process per window,
+      seeded from `baseline.json`, seen-set dedupe, `WATCH BLIND`, lease renewal) and `node-maintenance
+      up` starting a VM — #2935 (2026-10-26); live proof = the next real window.
 - [x] maintenance-window-G3 — one state slot per user clobbered concurrent windows (2026-09-22).
       **fixed→** state keyed by window id, `--id`, `list` verb, self-test §7.
 - [x] maintenance-window-G4 — the stock meta-alerts (`Watchdog`, `InfoInhibitor`) and a
       deliberately fired detector blocked `close` (2026-09-23, 09-24, 10-05, 10-15, 10-20).
       **promoted→** `check`/`close` drop the two meta-alerts (`META_ALERTS`, self-test §6); a fired
       detector is `claim`ed; `open --expect` for one the responder must also see rides the same PR.
-- [ ] maintenance-window-G5 — `close` refuses on the window's OWN consequences (NodeRebooted,
-      PodSigkilled, the node's CronJob; six dates 2026-09-27 → 10-23), and on alerts the seat had
-      already `claim`ed. Claimed alerts are now honoured (`claimed` file, "CLAIMED … not blocking",
-      self-test §7g); the rollout-settles-before-baseline rule and the `cilium-health Last probed`
-      read are skill text. **Pointer: expected-consequence classification by `--node` rides the window-tooling PR
-      (2026-10-26) — close on its merge.**
+- [x] maintenance-window-G5 — `close` refused on the window's OWN consequences and on alerts the seat
+      had already `claim`ed (six dates 2026-09-27 → 10-23). **built→** claimed alerts honoured (#2929),
+      EXPECTED bins for node-pinned consequence classes + `open --expect` (#2935, 2026-10-26); the
+      rollout-settles-before-baseline rule is skill text.
 - [x] maintenance-window-G6 — a proof that may cut the seat's own network path ran with no
       self-revert (2026-10-08, nine hours blind). The dead-man half shipped 2026-10-09 (#2399).
       **promoted→** the skill asks "does your own session ride what you are about to move?" → arm
