@@ -145,10 +145,43 @@ def repo_files(pattern):
 # ── extractors: one per class, each yields rows {name, version, where[], match[], overrides{}} ──
 
 
+def kustomize_pins():
+    """Every kustomize `images[].newTag` under the GitOps trees → {dir: {image name: newTag}}. Kustomize
+    rewrites the tag of every matching `image:` in the resources it renders, so a manifest that names
+    the image bare (or with a stale tag) runs the kustomization's newTag — the agent-coordinator
+    manifests (FU-152) and agent-gateway pin this way. Until 2026-10-26 the generator read the `image:`
+    literal alone and printed those refs as floating to :latest (the drift audit's class-3 finding)."""
+    pins = {}
+    for pattern in IMAGE_GLOBS:
+        for path in repo_files(pattern):
+            if os.path.basename(path) != "kustomization.yaml":
+                continue
+            for doc in yaml_docs(path):
+                if not isinstance(doc, dict):
+                    continue
+                for img in doc.get("images") or []:
+                    if isinstance(img, dict) and img.get("name") and img.get("newTag"):
+                        pins.setdefault(os.path.dirname(path), {})[img["name"]] = str(img["newTag"])
+    return pins
+
+
+def kustomize_tag(pins, path, name):
+    """(newTag, kustomization path) the nearest enclosing kustomization pins for `name`, or (None, None)
+    (a resource is rendered by the kustomization in its own dir or an ancestor dir within the repo)."""
+    d = os.path.dirname(path)
+    while d.startswith(ROOT) and d != ROOT:
+        if name in pins.get(d, {}):
+            return pins[d][name], os.path.join(d, "kustomization.yaml")
+        d = os.path.dirname(d)
+    return None, None
+
+
 def parse_image_refs():
     """Every `image:` literal under the GitOps trees → {name: {versions: {ver: count}, files: set}}.
-    Templated refs (`{{ … }}`) are skipped — they are not pins."""
+    Templated refs (`{{ … }}`) are skipped — they are not pins. A kustomize `newTag` for the image in
+    the enclosing kustomization wins over the literal's tag, as it does at render time."""
     refs = {}
+    pins = kustomize_pins()
     for pattern in IMAGE_GLOBS:
         for path in repo_files(pattern):
             for line in read(path).splitlines():
@@ -159,13 +192,16 @@ def parse_image_refs():
                 if not ref:
                     continue
                 name = ref.group("name")
-                ver = ref.group("tag") or ""
+                ktag, kfile = kustomize_tag(pins, path, name)
+                ver = ktag or ref.group("tag") or ""
                 if ref.group("digest"):
                     ver = (ver + "@" if ver else "@") + ref.group("digest")[:19]
                 entry = refs.setdefault(name, {"versions": {}, "files": set()})
                 entry["versions"][ver or "(none — floats to :latest)"] = \
                     entry["versions"].get(ver or "(none — floats to :latest)", 0) + 1
                 entry["files"].add(rel(path))
+                if kfile:
+                    entry["files"].add(rel(kfile))  # the pin's file — what a deploy/* PR touches (the proof match)
     return refs
 
 
@@ -456,6 +492,22 @@ def extract_matchbox():
     return rows
 
 
+def extract_garage_backup():
+    """Class 19 — the backup Garage LXC (CT 220, the Longhorn/CNPG backup target — FU-299,
+    docs/longhorn-backup.md): `garage_version` in ansible/group_vars/garage_backup.yml, a sha-pinned
+    static binary the `garage-backup.yml` playbook installs. Missing from the register until the
+    2026-10-26 drift audit."""
+    path = os.path.join(ROOT, "ansible", "group_vars", "garage_backup.yml")
+    if not os.path.exists(path):
+        return []
+    rows = []
+    for doc in yaml_docs(path):
+        if isinstance(doc, dict) and doc.get("garage_version"):
+            rows.append({"name": "deuxfleurs/garage (backup LXC)", "version": str(doc["garage_version"]),
+                         "where": [rel(path)], "match": ["garage_version"]})
+    return rows
+
+
 def extract_arc_runner():
     path = os.path.join(ROOT, "docker", "arc-runner", "Dockerfile")
     src = read(path)
@@ -528,6 +580,7 @@ def extract_all(registry):
         "ansible": extract_ansible,
         "opnsense_firmware": extract_opnsense_firmware,
         "matchbox": extract_matchbox,
+        "garage_backup": extract_garage_backup,
         "arc_runner": extract_arc_runner,
         "deno": extract_deno,
         "renovate_tools": extract_renovate_tools,

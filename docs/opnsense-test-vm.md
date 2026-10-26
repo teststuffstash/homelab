@@ -219,9 +219,9 @@ scorer's self-test (synthetic documents); the drill runs it before every score.
 
 **Reducing the score** is the point: each (a) row is either code to write (put the setting in a
 role), or — only if it really is environment, unreachable or dead residue — a reviewed map line.
-Prod config is never deleted to lower the score (operator, 2026-09-29): dead residue (the ISC-DHCP
-block, the empty-valued legacy tunables, disabled port-forwards) is accepted **in its dead state
-only**, by a map line with a condition (`| prod:value=`, `| prod:disabled=1`, syntax in the map's
+Prod config is never deleted to lower the score (operator, 2026-09-29): dead residue (Big Data's
+ISC-DHCP block, empty-valued legacy tunables and disabled port-forwards; today GUI-saved ACME action
+defaults) is accepted **in its dead state only**, by a map line with a condition (`| prod:value=`, `| prod:disabled=1`, syntax in the map's
 header) — the same path counts again the day it comes alive.
 
 **Drill record, 2026-10-04 → 10-11 (moved from the FU-297 tracker item, 2026-10-14).** Three reds were
@@ -231,6 +231,37 @@ past, fixed by declaring a series (#2501). The 18:21Z run PASSED (826 s; build 3
 440 s), and the score went from 117 to **56**. The 56 rows are the PAIR's prod config read against a
 single-router rehearsal: `OPNsense/Kea` 36, `virtualip` 17, `hasync` 2 (+1). Each one gets coded or accepted
 (FU-297). No CI exercises `scripts/opnsense-drill.sh` (reviewer note on #2493).
+
+**Row sweep, 2026-10-26 (10-11 → 10-25: 56, 57, 58).** The 10-25 report's 58 rows, read against
+prod's config.xml (the MASTER, `.70`) and the test VM's code-built one:
+
+- **Kea, 31 rows — the remap was missing.** `kea-dhcp.py` already converges the drill with the
+  `OPN_DHCP_REMAP` data (it reads `dnsmasq-dhcp.py`), but the map remapped `dnsmasq/**` only, so
+  every reservation's `ip_address` (27) and the subnet, pool, router and DNS server (4) counted.
+  Fixed by a `remap OPNsense/Kea/dhcp4/**` line: still a row the day a value differs by more than the prefix.
+- **`virtualip/vip[*]/interface`, 17 rows (16 → 17 when `homelab-gw` 3.36 joined, #2612) — a drill
+  fix.** Prod's VIPs sit on `lo0` (router-node host var, ADR-088 as amended); the drill took the
+  group_vars default `lan`. [`drill-overrides.yml`](../ansible/test-vm/drill-overrides.yml) now sets
+  `lo0`, so the drill builds the node's shape and the rows go by construction.
+- **The pair, 8 rows: env lines.** The CARP `.1` VIP (the one prod-only `vip` — coded in
+  `router_carp_vips`, not a click-op), pfsync's interface + peer, Kea's two HA peers, `ha/enabled`,
+  `this_server_name` and the control agent. All of it is code. A lone drill router cannot carry it,
+  because a hot-standby peer aimed at prod's nodes would sync leases with them. Each line holds
+  only while the drill side is off or empty.
+- **`nat/rule[*]/audit`, 1 row — the line had the wrong kind.** Big Data's 26.1 rules had no
+  `audit`, so the line read `drill-only`. The pair's rules are API-made on 26.7, and both sides fill
+  it with base64 created/updated history. The line is now `value`.
+- **`dnsmasq/hosts[*]/hwaddr`, 1 row**: wk-metal-04's MAC, merged 10-20 and not yet applied.
+  Another fix covers it; it stays counting.
+- **38 stale lines deleted.** The 39th was the `audit` line above, rewritten. Every one dated from #2111/#2120 (2026-09-29) and
+  described Big Data's years-old config: its NICs (`lan/if`, `/22`), the ISP DNS servers, seed drift
+  (console, ssh, `ntpd/ispool`, root's shell/keys, monit's 4-core LoadAvg), the 26.1 nat triplet,
+  and its dead residue (ISC DHCP, tftp, the empty tunables, `opt1..3`, the IPv6 defaults, the
+  disabled forwards, snmpd, `language`, `nextgid`, `widgets`). Prod is now a node from the drill's
+  own bootstrap, so that thing is gone, not moved. Against the test VM's config, the new map
+  moved only the 8 pair rows (clickops → env) and exposed nothing.
+
+Expected next Sunday: **1** (the hwaddr row), 0 once that MAC is applied.
 
 ### The router rehearsal — the drill in the future router's shape
 
