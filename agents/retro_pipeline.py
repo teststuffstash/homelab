@@ -201,6 +201,13 @@ def collect(args, store, temp):
     print('activity collection persisted through ' + args.now)
 
 
+class QuietWindow(ValueError):
+    """The min-tasks refusal: a verdict on the week, not a failure (exit 3, see main)."""
+
+
+QUIET_EXIT = 3
+
+
 def prepare(args, store, temp):
     end = cutoff(args.now)
     checkpoint = store.get(args.series + '/checkpoint.json', {})
@@ -235,7 +242,7 @@ def prepare(args, store, temp):
         # The floor the old `minNewTasks` guard held, now per window: a refused week is NOT
         # published, so its evidence rolls into the next window instead of being skipped.
         if bundle['ledger']['population']['task_count'] < args.min_tasks:
-            raise ValueError('GUARD REFUSED: %d ledger task(s) emitted in [%s, %s) (< %d) — nothing worth two rides; the window rolls forward'
+            raise QuietWindow('GUARD REFUSED: %d ledger task(s) emitted in [%s, %s) (< %d) — nothing worth two rides; the window rolls forward'
                              % (bundle['ledger']['population']['task_count'], start, end, args.min_tasks))
         bundle['series'] = args.series
         bundle['storage_key'] = key
@@ -374,6 +381,11 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except QuietWindow as exc:
+        # The guard step turns this exit into a clean, skipped run + the overdue belt's
+        # quiet-week push (retro-argo.yaml) — a quiet week is not an overdue retro.
+        print(str(exc), file=sys.stderr)
+        sys.exit(QUIET_EXIT)
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as exc:
         print('retro pipeline failed: ' + str(exc), file=sys.stderr)
         sys.exit(1)

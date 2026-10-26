@@ -108,7 +108,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_quiet_window_refuses_and_rolls_forward(self):
         self.args.min_tasks = 1
-        with self.assertRaisesRegex(ValueError, 'GUARD REFUSED'):
+        with self.assertRaisesRegex(p.QuietWindow, 'GUARD REFUSED'):
             p.prepare(self.args, self.store, self.root)
         self.assertIsNone(self.store.get('platform/runs/20260928T000000Z/bundle.json'))
         self.assertIsNone(self.store.get('platform/checkpoint.json'))
@@ -258,6 +258,12 @@ class PipelineTests(unittest.TestCase):
         self.assertNotIn('minNewTasks', path.read_text())
         guard = next(t for t in spec['workflowSpec']['templates'] if t['name'] == 'guard')
         self.assertIn('--min-tasks "{{workflow.parameters.minWindowTasks}}"', guard['container']['args'][0])
+        # A quiet week skips the rides + harvest and pushes the overdue belt (exit 3 contract).
+        for name in ('cell-a','cell-b','harvest'):
+            task = next(t for t in tasks if t['name'] == name)
+            self.assertEqual(task['when'], '{{tasks.guard.outputs.parameters.quiet}} == false')
+        self.assertIn('[ "$rc" -eq %d ]' % p.QUIET_EXIT, guard['container']['args'][0])
+        self.assertIn('/outcome/quiet', guard['container']['args'][0])
         env = {e['name']: e for e in guard['container']['env']}
         self.assertTrue(env['GH_TOKEN']['valueFrom']['secretKeyRef'].get('optional'))
 
