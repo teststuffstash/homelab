@@ -18,9 +18,15 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **LAN certs (FU-297):** detector #2927 + cron fix #2934 DONE and applied (both nodes), circles renewed, alert
-  resolved 2026-10-26. NEXT: the cert-carry MASTER→BACKUP + skip-sign-on-BACKUP role guard (a seat subagent builds
-  the script + test-VM drill; the live carry to pve runs in a seat window) before **11-02**, when pve's circles copy expires.
+- **LAN certs (FU-297) — DONE 2026-10-26 except one bind:** detector #2927, cron fix #2934 (both nodes), circles
+  renewed, `opnsense-cert-carry.sh` #2939 run live (pve's circles → 2027-01-24, homelab added), BACKUP sign guard
+  live. NEXT: when **#2940** (haproxy rebind on cert drift) merges → `opnsense-haproxy.yml --limit opnsense-pve` in
+  a window → pve `homelab-gw-frontend` binds `6ad1c907aed27` → trim FU-297's Next (1).
+- **OPNsense 26.7.7 on the test VM (whoever is running that trial — baseline snapshot re-taken 2026-10-26 ~20:40Z,
+  unrecorded):** against it the pinned `oxlorg.opnsense 26.1.11` FAILS the bgp play's neighbor task ("Failed field:
+  'multiprotocol'", os-frr 2.0_2) and the haproxy play timed out — seen by the #2940 gate's BASE step. Prod stays
+  26.7.5 until the collection (Galaxy latest IS 26.1.11; upstream O-X-L/ansible-opnsense#488 covered 26.7 only)
+  handles it or the neighbor task moves to `raw`. Needs an owner + a record before any prod firmware step.
 - **⚑ PICKUP (2026-10-24 12:30Z — S9 Renovate sweep; TICK-LOG 10-24).** Verify next session: homelab#2819 regrouped
   (chart 2.4.3 + digest) after #2886; sleep-tracking#203 rebuilt by Renovate after the 12:01Z hand-back; allure#11
   regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).
