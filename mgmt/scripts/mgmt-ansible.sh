@@ -11,8 +11,10 @@
 #                 devbox never runs in a gate loop; a bad lock fails THIS step with its reason)
 #   2 target      `--check --diff` of every play at master. changed=0 everywhere → live already IS master:
 #                 nothing to apply (the hand path converged it, or the change is a no-op) — confirmed
-#   3 drift       the same plays at the sha this group was last CONFIRMED at ($ADIR/ansible-confirmed-<g>;
-#                 the previous master when none) must be changed=0 on live: if live already differs from
+#   3 drift       the same plays at the sha this group was last CONFIRMED at ($ADIR/ansible-confirmed-<g> —
+#                 written by every check that read live == a declaration, in any mode: a clean target
+#                 (= master), a clean drift read (= that sha), a confirmed apply; the previous master
+#                 when none) must be changed=0 on live: if live already differs from
 #                 what was declared before this span, a human looks first (`ansible-live-drift`, the
 #                 `helm-live-drift` analogue — the box never applies on top of a state nobody declared).
 #                 A check that errors or does not reach a host refuses too (`ansible-check-failed`,
@@ -207,8 +209,9 @@ ans_bracket() {
     clean)
       log "ansible $g: live already matches master — nothing to apply"
       ans_mark "$g" "$mode" converged 0
-      if [ "$mode" = on ]; then printf '%s' "$sha" >"$ADIR/ansible-confirmed-$g"
-        mgmt_post_status "$sha" "$CTX" success "ansible $g: live matches master (--check changed=0) — nothing to apply"; fi
+      # an OBSERVATION, in any mode: live holds master's declaration (the drift read's next baseline)
+      printf '%s' "$sha" >"$ADIR/ansible-confirmed-$g"
+      [ "$mode" = on ] && mgmt_post_status "$sha" "$CTX" success "ansible $g: live matches master (--check changed=0) — nothing to apply"
       return 0 ;;
     failed|unreachable)
       local rule="ansible-check-failed"; [ "${j%%$'\t'*}" = unreachable ] && rule="ansible-unreachable"
@@ -238,6 +241,9 @@ ans_bracket() {
     [ "$mode" = shadow ] && { log "[shadow] ansible $g: would REFUSE — $brule: $bwhy (${jb#*$'\t'})"; return 0; }
     refuse "$sha" "ansible $g: $brule — $bwhy (${jb#*$'\t'}) — human looks first"; return 3
   fi
+  # the drift read was clean: live holds <conf>'s declaration — recorded as an OBSERVATION, so a span
+  # this tick only SHADOWS stays pending (not drift) for the next span's read: shadow → on is seamless
+  printf '%s' "$conf" >"$ADIR/ansible-confirmed-$g"
   if [ "$mode" = shadow ]; then
     ans_mark "$g" "$mode" shadow "$n"
     log "[shadow] ansible $g: would apply ${conf:0:8} → ${sha:0:8} now — ${j#*$'\t'} (window + lease upgrade-lease-ansible-$g, cap ${cap}m, confirm = --check changed=0 + health)"
