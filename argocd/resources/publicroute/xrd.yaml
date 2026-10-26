@@ -5,9 +5,12 @@
 # (rate-limit / skip-challenge / CORS / cache) rendered PER CLAIM. Cloudflare keeps ONE
 # entry-point ruleset per phase per zone, so this is a live limit — at most one claim per
 # profile per zone, and no api+origins claim on the platform zone (its firewall_custom phase
-# is the ha mTLS ruleset) — until the aggregation leg lands (docs/cloudflare.md §PublicRoute,
+# is the ha claim's mTLS ruleset) — until the aggregation leg lands (docs/cloudflare.md §PublicRoute,
 # completion table; FU-039).
 #
+# v1alpha2: `mtls`, `cacheRule`, `rum`, `imports` added 2026-10-26 (the ha.teststuff.net retrofit,
+# FU-039 consumer #2) — all optional and additive like operationalPaths: no storage flip, no
+# stranded composites (docs/cloudflare.md gotchas 4/5). Absent = today's rendering.
 # v1alpha2: `operationalPaths.public` added 2026-09-17 (FU-206) — optional and additive, so
 # stored XRs need no conversion; absent means the ADR-123 default (both paths blocked).
 # v1alpha2: profile field (consumer|api) added — the route class fans out edge defaults the
@@ -100,9 +103,12 @@ spec:
                   type: string
                   description: >-
                     Public FQDN. Platform zone: must lie in the claiming namespace's delegated
-                    subtree (<anything>.<namespace>.teststuff.net). Product zone: must be the
-                    zone apex or inside it. Enforced by the composition (the XRD is the
-                    privilege boundary; Cloudflare has no sub-zone grain).
+                    subtree (<anything>.<namespace>.teststuff.net) — unless the namespace is one
+                    of the zone's PLATFORM-OWNED namespaces (the composition's zone map, e.g.
+                    home-assistant for ha.teststuff.net), which claim anywhere in the zone like a
+                    product-zone owner. Product zone: must be the zone apex or inside it. Enforced
+                    by the composition (the XRD is the privilege boundary; Cloudflare has no
+                    sub-zone grain).
                 profile:
                   type: string
                   enum: [consumer, api]
@@ -200,6 +206,70 @@ spec:
                         rendered Workspace module, so an unconstrained value would be an HCL
                         injection applied with the platform's Cloudflare credential. Same guard
                         as the sibling `header` field.
+                mtls:
+                  type: object
+                  description: >-
+                    Client-certificate mTLS enforcement at the edge (profile-agnostic; the ha.teststuff.net
+                    retrofit, FU-039 consumer #2). `enforce: true` renders a block rule for this
+                    hostname without a verified client certificate
+                    (`not cf.tls_client_auth.cert_verified`) in the zone's http_request_firewall_custom
+                    ruleset — which this claim then OWNS, so the ADR-123 operational-path block joins
+                    it at the edge too. The CREDENTIAL half is not the claim's: the zone's
+                    managed-CA hostname association and the client certificate are done once in
+                    tofu/cloudflare (SSL/Certificates write, which the composition's token does not
+                    carry) — without the association the edge never asks for a certificate and this
+                    rule blocks every request. ⚠ Like the api profile's Skip it claims the zone's
+                    custom phase: ONE such claim per zone until zone-phase aggregation (FU-039).
+                  properties:
+                    enforce:
+                      type: boolean
+                cacheRule:
+                  type: boolean
+                  description: >-
+                    consumer profile only. Absent or true: render the consumer edge-cache rule
+                    (respect_origin, http_request_cache_settings). false: render NO cache rule — the
+                    route keeps Cloudflare's zone default (static file extensions only, origin
+                    Cache-Control honoured) and the claim does not occupy the zone's cache-settings
+                    entry point. For an app, not a page (ha.teststuff.net).
+                rum:
+                  type: boolean
+                  description: >-
+                    consumer profile only. Absent or true: render Web Analytics (RUM) for the
+                    route — which no token we hold can create today (FU-250: the Workspace stays
+                    Synced=False). false: render none (no JS beacon injected into the app's HTML).
+                imports:
+                  type: object
+                  description: >-
+                    ADOPT existing Cloudflare objects into this claim's Workspace instead of creating
+                    them (Terraform `import` blocks — a zero-gap cutover from a hand-applied root).
+                    Platform-owned or zone-owner namespaces only (the composition refuses it for a
+                    subtree tenant: adopting an arbitrary record or ruleset id would reach outside
+                    the delegated subtree). Inert once imported (an import of a resource already in
+                    state is a no-op), so it stays in the claim.
+                  properties:
+                    dnsRecordId:
+                      type: string
+                      pattern: ^[0-9a-f]{32}$
+                      description: The existing record for `hostname` (updated in place to this claim's tunnel).
+                    ruleset:
+                      type: object
+                      required: [id, name]
+                      description: >-
+                        The zone's existing http_request_firewall_custom ruleset (requires
+                        `mtls.enforce` or the api profile). `name` is the live ruleset's name and
+                        is rendered as-is: the provider REPLACES a ruleset on a name change, and a
+                        replace is a window with no WAF rule (and a 20217 collision on create).
+                      properties:
+                        id:
+                          type: string
+                          pattern: ^[0-9a-f]{32}$
+                        name:
+                          type: string
+                          pattern: ^[A-Za-z0-9][A-Za-z0-9 ._-]*$
+                          maxLength: 64
                 replicas:
                   type: integer
-                  description: cloudflared connector replicas in the claiming namespace.
+                  description: >-
+                    cloudflared connector replicas in the claiming namespace. A FLOOR of two is
+                    applied by the composition (a public hostname never rides one connector), so
+                    values below 2 are a no-op.

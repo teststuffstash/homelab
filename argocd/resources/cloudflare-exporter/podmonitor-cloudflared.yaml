@@ -4,28 +4,21 @@ metadata:
   name: cloudflared
   labels: { app: cloudflared }
 spec:
-  # The tunnel daemon has exported Prometheus metrics on :2000 since day one
-  # (`--metrics 0.0.0.0:2000` in tofu/cloudflare/) — unscraped for its first 25 days (#132's
-  # sibling find, 2026-08-08). This is the PLAN-INDEPENDENT half of edge observability:
-  # per-hostname tunnel requests + response codes, QUIC/HA connection health, retries —
-  # local truth about the ha.teststuff.net path regardless of what the free zone's GraphQL
-  # will serve. portNumber because the tofu Deployment declares no named ports; changing
-  # that would be a tofu apply for a cosmetic rename.
+  # Every PublicRoute connector, in whatever namespace its claim lives (ha.teststuff.net in
+  # home-assistant since the 2026-10-26 retrofit, the oracle claims in oracle-fleet, …): the
+  # composition's cloudflared Deployment labels its pods `app.kubernetes.io/name: cloudflared`
+  # and serves Prometheus metrics on the declared port `metrics` (:2000). This is the
+  # PLAN-INDEPENDENT half of edge observability: tunnel requests, QUIC/HA connection health,
+  # retries — local truth about each public path regardless of what the free zone's GraphQL
+  # will serve. Per-claim identity is the `namespace`/`pod` target labels (the pod name carries
+  # `pr-<ns>-<claim>-cloudflared`).
+  # History: until the retrofit this selected the tofu/cloudflare one-off (ns `cloudflared`,
+  # `app: cloudflared`, NO declared port — hence an __address__ relabel to podIP:2000); the
+  # composition's connectors were unscraped (no --metrics) until the same change.
   namespaceSelector:
-    matchNames: [cloudflared]
+    any: true
   selector:
-    matchLabels: { app: cloudflared }
+    matchLabels: { app.kubernetes.io/name: cloudflared }
   podMetricsEndpoints:
-    # NOT portNumber: that field matches against DECLARED container ports, and the tofu
-    # Deployment declares none — the generated keep-rule on
-    # __meta_kubernetes_pod_container_port_number matched nothing and the job had zero
-    # targets (found live: scrape config rendered, activeTargets empty). The CRD's own doc
-    # says undeclared ports need relabeling; this rewrites the address to podIP:2000.
-    # Declaring the port in tofu/cloudflare's Deployment is the cleaner fix — fold it into
-    # the next apply of that root, then this can revert to portNumber.
-    - interval: 60s
-      relabelings:
-        - sourceLabels: [__meta_kubernetes_pod_ip]
-          targetLabel: __address__
-          replacement: $1:2000
-          action: replace
+    - port: metrics
+      interval: 60s

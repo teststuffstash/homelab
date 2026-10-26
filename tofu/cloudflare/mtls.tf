@@ -29,21 +29,10 @@ resource "cloudflare_certificate_authorities_hostname_associations" "ha" {
   hostnames = [var.ha_hostname]
 }
 
-# --- Enforcement (WAF custom rule) ---------------------------------------------------------
-# mTLS validation alone only *records* the result; this rule *enforces* it. Block any request
-# to the HA host that didn't present a verified client cert. Scoped to the host so *.local and
-# anything else are untouched.
-resource "cloudflare_ruleset" "mtls_enforce" {
-  zone_id     = var.zone_id
-  name        = "mTLS enforcement"
-  description = "Require a verified client certificate on the Home Assistant hostname"
-  kind        = "zone"
-  phase       = "http_request_firewall_custom"
-
-  rules = [{
-    ref         = "require_client_cert_ha"
-    description = "Block ${var.ha_hostname} without a verified client cert"
-    expression  = "(http.host eq \"${var.ha_hostname}\" and not cf.tls_client_auth.cert_verified)"
-    action      = "block"
-  }]
-}
+# --- Enforcement (WAF custom rule) — NOT here since 2026-10-26 --------------------------------
+# The block rule (`not cf.tls_client_auth.cert_verified` on the HA host) is rendered by the ha
+# PublicRoute claim (.spec.mtls.enforce) into the zone's http_request_firewall_custom ruleset,
+# which the claim ADOPTED from this root (removed.tf). What stays here is the CREDENTIAL half the
+# composition's token cannot write (SSL/Certificates): the client cert and the hostname association
+# above — without the association the edge never asks for a certificate and the claim's rule
+# blocks every request.
