@@ -1169,7 +1169,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-base:2026.10.25-gb7571947d72e
+                      image: ghcr.io/teststuffstash/agent-base:2026.10.26-gecdaf1344903
                       command: ["bash", "-lc"]
                       args:
                         - |
