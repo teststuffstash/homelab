@@ -18,14 +18,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **LAN certs (FU-297, 2026-10-26):** `LanCertExpiringSoon` #2927 (pr-wait running) → after merge roll
-  `deploy/blackbox-exporter -n monitoring` inside a declared window (config read at start only) → replay:
-  `probe_ssl_earliest_cert_expiry{instance="circles.teststuff.net:443"} - time()` ≈ 7d, alert fires +1h →
-  THEN open the cron-fix PR from the `fix/acme-renewal-cron` branch (committed in a seat clone, not pushed;
-  test-VM gate `opnsense-test-vm.sh --pr N`), apply `opnsense-acme.yml` on the MASTER, POST
-  `certificates/sign/<circles uuid>` on nx02 → then the cert-carry to pve before **11-02**.
-
-
+- **LAN certs (FU-297):** detector #2927 + cron fix #2934 DONE and applied (both nodes), circles renewed, alert
+  resolved 2026-10-26. NEXT: the cert-carry MASTER→BACKUP + skip-sign-on-BACKUP role guard (a seat subagent builds
+  the script + test-VM drill; the live carry to pve runs in a seat window) before **11-02**, when pve's circles copy expires.
 - **⚑ PICKUP (2026-10-24 12:30Z — S9 Renovate sweep; TICK-LOG 10-24).** Verify next session: homelab#2819 regrouped
   (chart 2.4.3 + digest) after #2886; sleep-tracking#203 rebuilt by Renovate after the 12:01Z hand-back; allure#11
   regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).
