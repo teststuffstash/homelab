@@ -45,10 +45,11 @@ path, or the operator's phone — because the alert watch and `check` below ride
 go blind with you (promoted 2026-10-26, GAPS maintenance-window-G6).
 
 ```bash
-devbox run maint -- open --reason "<what you are doing, in the responder's words>"   # prints the window id
+devbox run maint -- open --reason "<what you are doing, in the responder's words>" [--node <n>] [--expect A,B]   # prints the window id
+devbox run maint -- watch --id <id>          # IN THE BACKGROUND, for the whole window (below); --replace re-arms
 # ... do the work, running `check` between steps ...
 devbox run maint -- check [--id <id>]        # also renews the window's lease
-devbox run maint -- renew --id <id>          # the background watch calls this (below)
+devbox run maint -- renew --id <id>          # the lease alone (the watch renews every tick)
 devbox run maint -- claim --id <id> --alert <name> --match 'namespace=<ns>,pod=~<ds>-.*'   # or --fp <fingerprint>
 devbox run maint -- close [--id <id>]        # mutex released now; a 20-min triage tail, then history
 ```
@@ -72,10 +73,14 @@ target short — let it settle before `open` (promoted 2026-10-26, GAPS maintena
 
 **What the new-alert diff does NOT count** (promoted 2026-10-26, GAPS maintenance-window-G4/G5):
 the two stock meta-alerts (`Watchdog`, `InfoInhibitor` — it flaps with any `info` alert and lands
-between `open` and `check`), and any alert you **`claim`ed** under this window — printed as
-"CLAIMED", not blocking. So the window's own declared fallout (`NodeRebooted`, `PodSigkilled`,
-`KubeNodeNotReady` after a planned reboot, the detector you opened the window to make fire) is
-claimed with its labels, never waited out and never forced past. Everything else stays strict.
+between `open` and `check`); any alert you **`claim`ed** under this window (printed "CLAIMED");
+a name you **declared** with `open --expect A,B` (the detector you opened the window to make fire
+— printed `EXPECTED <name> (declared)`; NOT a silence, the responder still sees it); and, for a
+window opened `--node <n>`, that node's **own consequences** (`NodeRebooted`, `PodSigkilled`,
+`KubeNodeNotReady`, `CiliumUnreachableNodes`, `CronJobNotSucceeding` on `fstrim-guard-<n>`) when
+EVERY firing instance is pinned to the node — its `node` label, its InternalIP as `instance`, one
+of its DaemonSet pods, its CronJob — printed `EXPECTED <name> (node consequence)`. One instance on
+another node and the name is NEW. Everything else stays strict: `check` and `close` block on it.
 `--force` means a stale slot from a dead session; every other use is said out loud with the item
 named, and each one devalues the word.
 
@@ -97,23 +102,26 @@ would compare favourably against it.
 
 `check` is a point read. Across a long window the seat also needs to be *interrupted*, so:
 
-**Arm a background alert watch at `open` and keep it for the whole window — and do not re-type
-it.** The watch is a verb, `maint watch` (built 2026-10-26); if it is ever missing, a hand copy
-is a script FILE (never an inline loop — zsh does not word-split) that meets four rules, each a
-past silent failure (promoted 2026-10-26, GAPS maintenance-window-G2): it **seeds from the slot's
-baseline** (`~/.claude/maintenance-window/<id>/baseline.json` → `.alerts[]`, never from the
-terminal — `open` prints the responder's skip list, not the firing set); it **probes a path the
-jail can reach** (Alertmanager's VIP `192.168.40.14:9093/api/v2/alerts` with plain `curl`, no
-in-container exec); it **fails loud** (`WATCH BLIND` after N consecutive empty reads, and it can
-say WHICH half broke — the probe or the parser) and **dedupes** (a seen-set; one line per new name,
-once); and re-arming **stops the old one first** — two watches make the dead one's output read
-as a finding. A watch that stays silent across an event is verified against Prometheus, never
-trusted: silence from a working watch and from a dead one are the same notification. The same
+**Arm the watch at `open` and keep it for the whole window — and do not re-type it.** The watch
+is a verb: `devbox run maint -- watch --id <id>`, run as a BACKGROUND task (it is one process per
+window — a second refuses, `--replace` stops the old one by its recorded pid; re-arm it after
+`/clear`). It seeds from the slot's baseline, reads the same alert source `check` reads every 45 s,
+prints each NEW name once (`NEW <name>`; the EXPECTED bins above print once as `EXPECTED <name>
+(…)`; meta-alerts and claims stay silent), says `WATCH BLIND <n> empty reads (probe|parser …)`
+after 3 consecutive failed/empty reads instead of staying silent, renews the lease every tick (a
+lapsed lease prints its ⚠ — the responder is triaging your named alerts and your claims are gone:
+stop and re-open), and exits when `close` removes the window. If the verb is ever missing, a hand
+copy is a script FILE (never an inline loop — zsh does not word-split) that meets the same four
+rules, each a past silent failure (promoted 2026-10-26, GAPS maintenance-window-G2): **seed from
+the slot's baseline** (`~/.claude/maintenance-window/<id>/baseline.json` → `.alerts[]`, never from
+the terminal — `open` prints the responder's skip list, not the firing set); **probe a path the
+jail can reach** with plain `curl`, no in-container exec (Prometheus' `/api/v1/alerts` as `check`
+does, or Alertmanager's VIP `192.168.40.14:9093/api/v2/alerts`); **fail loud** (`WATCH BLIND`
+after N consecutive empty reads, saying WHICH half broke) and **dedupe** (a seen-set); and
+**stop the old one first** when re-arming — two watches make the dead one's output read as a
+finding. A watch that stays silent across an event is verified against Prometheus, never trusted:
+silence from a working watch and from a dead one are the same notification. The same
 fail-loud/which-half rule binds every probe or benchmark the seat writes inside a window.
-
-**Every poll (at least every 10 minutes) also renews the lease**: `devbox run maint -- renew --id <id>` (cheap, idempotent). A
-non-zero renew means the window LAPSED or was closed — the responder is triaging your named alerts
-and your claims are gone. Treat that like a new alert: stop and re-open.
 
 **Every new `now` alert in the watch gets exactly ONE outcome, said out loud** (operator ruling
 2026-10-09 — "not my lane, carry on" left alerts owned by nobody):
@@ -126,11 +134,13 @@ and your claims are gone. Treat that like a new alert: stop and re-open.
 - **HAND OFF** — it is not yours, or you cannot tell: leave it, and SAY SO in the session ("handing
   off X to the responder"). After the grace the responder triages it with your window in its brief.
 
+An EXPECTED alert (declared or node consequence) still gets one of these two outcomes — the bins
+stop `check`/`close` from blocking on it, they silence nothing.
+
 "Continue silently" is not an option. And a CLAIM is not a diagnosis: an alert that is a
 **regression your own act caused** (the 2026-09-20 class — not expected fallout of a planned
 reboot, but something now broken) is still a **stop signal**: stop the maintenance, diagnose, and
 only then continue. Claiming it only stops the responder from duplicating the work you now owe.
-The watch dies with the session — re-arm it after `/clear`.
 
 ## What `check` actually checks, and why each one is there
 

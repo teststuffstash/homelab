@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # maintenance-window — the mechanical half of the /maintenance-window skill.
 #
-#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply]
+#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply] [--expect A,B]
 #   bash scripts/maintenance-window.sh check [--id <window-id>]       # also RENEWS the window's lease; new-alert diff drops Watchdog/InfoInhibitor + the window's claims
-#   bash scripts/maintenance-window.sh renew [--id <window-id>]       # the lease alone — the skill's watch calls it
+#   bash scripts/maintenance-window.sh watch [--id <window-id>] [--replace] [--tick <s>] [--ticks <n>]   # the background alert watch: one per window, prints each NEW name once, renews the lease every tick
+#   bash scripts/maintenance-window.sh renew [--id <window-id>]       # the lease alone — `watch` calls it every tick
 #   bash scripts/maintenance-window.sh claim [--id <window-id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>)   # also records the name for check/close
 #   bash scripts/maintenance-window.sh close [--id <window-id>] [--force]   # mutex released now, triage tail ${MAINT_TAIL_MIN:-20}m
 #   bash scripts/maintenance-window.sh list              # the windows this tool has open (its state slots)
@@ -29,6 +30,26 @@
 # helm-release-evidence.sh) has no watch to renew, so it passes `--hours` and keeps a fixed term.
 # `claim` turns a new `now` alert into the window's own (an Alertmanager silence on its labels,
 # under the lease) — the outcome the responder's grace waits for. `close` TAILS instead of deleting.
+#
+# THE WATCH IS A VERB (GAPS maintenance-window-G2, 2026-10-26). Seven hand-typed copies of the alert
+# watch between 2026-09-21 and 10-23 each had their own defect — zsh word-split, no dedupe, a dead
+# probe, seeded from the terminal instead of the baseline, two copies at once. `watch` is the one
+# copy: ONE process per window (a pidfile in the slot; a second refuses, `--replace` stops the old
+# one), seeded from the slot's baseline.json, reading the SAME alert source `check` reads, printing
+# each NEW name ONCE (a seen-set), saying `WATCH BLIND <n> empty reads` after MAINT_WATCH_BLIND
+# consecutive failed/empty reads instead of staying silent (and WHICH half broke — the probe or the
+# parser), renewing the lease every tick, and exiting when the slot is gone (`close`).
+#
+# EXPECTED ALERTS do not block (GAPS maintenance-window-G4/G5, 2026-10-26). Two bins beside CLAIMED:
+#   declared         `open --expect A,B` — names the seat KNOWS the act produces (the detector it
+#                    is firing on purpose). Recorded in the slot, NOT an Alertmanager silence: the
+#                    responder still sees the alert; only this tool's gate stops blocking on it.
+#   node consequence a window opened `--node <n>`: an alert whose NAME is in CONSEQUENCE_ALERTS and
+#                    whose EVERY firing instance is pinned to that node (`node` label, `instance`
+#                    = the node's InternalIP — NodeRebooted carries only that —, a pod of the
+#                    node's DaemonSets, or the `fstrim-guard-<n>` CronJob). One instance on another
+#                    node and the name is NEW: the planned reboot's own fallout is expected, a
+#                    second node's is not. Six windows closed `--force` on exactly this before.
 #
 # `snapshot` + `compare` are the UNATTENDED form — no window, no CI probe (the caller has no gh):
 # the management box's apply loop brackets a Talos config apply with them (mgmt/scripts/mgmt-apply.sh,
@@ -63,7 +84,7 @@ ROOT="${DEVBOX_PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 LEASE_MIN="${MAINT_LEASE_MIN:-30}"   # the declared window's lease (header §THE WINDOW IS A LEASE)
 TAIL_MIN="${MAINT_TAIL_MIN:-20}"     # close's triage-only tail ≈ the longest `for:` of a window's `now` alerts
 STATE_DIR="${MAINT_STATE_DIR:-$HOME/.claude/maintenance-window}"
-# Per-window slot: $STATE_DIR/<key>/{baseline.json,window-id,meta.json}. <key> IS the seat-window
+# Per-window slot: $STATE_DIR/<key>/{baseline.json,window-id,meta.json,claimed,watch.pid}. <key> IS the seat-window
 # id for every slot `open` writes; `window-id` inside is the id close hands to seat-window.sh (it
 # can be empty only for a migrated pre-slot state whose open never recorded one). BASE/WID are set
 # by use_slot() once the verb has resolved which window it is acting on.
@@ -111,6 +132,16 @@ META_ALERTS='["Watchdog","InfoInhibitor"]'
 # saying "this one is mine", and refusing to close on it only bought a 30-min wait or a `--force`.
 # Empty for the unattended `compare` (no window, no claims).
 CLAIMED='[]'
+# The two EXPECTED bins (header §EXPECTED ALERTS), loaded from the slot's meta.json by load_slot_meta;
+# empty for `compare`, so the unattended gate stays strict. CONSEQUENCE_ALERTS is the closed class a
+# single-node window structurally fires: the reboot (NodeRebooted on its instance), the pods the
+# power-off kills (PodSigkilled on its DaemonSet pods), the node itself (KubeNodeNotReady), the mesh
+# losing it (CiliumUnreachableNodes) and its own fstrim CronJob missing a run.
+EXPECTED='[]'
+WIN_NODE=""
+CONSEQUENCE_ALERTS="${MAINT_CONSEQUENCE_ALERTS:-NodeRebooted,PodSigkilled,KubeNodeNotReady,CiliumUnreachableNodes,CronJobNotSucceeding}"
+WATCH_TICK="${MAINT_WATCH_TICK:-45}"    # s between watch reads
+WATCH_BLIND="${MAINT_WATCH_BLIND:-3}"   # consecutive failed/empty reads before the watch says BLIND
 
 # EVERY read distinguishes "queried and found nothing" from "the query failed" — and returns
 # non-zero for the latter. Caught in review (#1804): the first cut piped `curl … 2>/dev/null` into
@@ -130,10 +161,17 @@ prom_get() {
   jq -e '.status == "success"' >/dev/null 2>&1 <<<"$out" || return 1
   printf '%s' "$out"
 }
-firing() {
+# Every firing alert WITH its labels — `[{alertname, labels}]`. The labels are what the node-
+# consequence bin reads (header §EXPECTED ALERTS); `firing` keeps the unique-name view every other
+# reader (mgmt-verdict.sh sources this file) always had.
+firing_alerts() {
   local out; out="$(prom_get "$PROM/api/v1/alerts")" || return 1
   jq -e 'has("data") and (.data|has("alerts"))' >/dev/null 2>&1 <<<"$out" || return 1
-  jq -r '[.data.alerts[]|select(.state=="firing")|.labels.alertname]|unique' <<<"$out"
+  jq -c '[.data.alerts[]|select(.state=="firing")|{alertname:.labels.alertname, labels:.labels}]' <<<"$out"
+}
+firing() {
+  local f; f="$(firing_alerts)" || return 1
+  jq -c '[.[].alertname]|unique' <<<"$f"
 }
 targets_up() {
   local out; out="$(prom_get --data-urlencode 'query=sum(up)' "$PROM/api/v1/query")" || return 1
@@ -275,22 +313,23 @@ snapshot() {
   local cil cilium_ok=true; cil="$(cilium_backends)" || { cil="0 0 0"; cilium_ok=false; }
   # Each read carries an *_ok flag. A false flag is never "0" or "clean" — cmd_check reports it
   # as unreadable and fails, because "we did not look" must not be indistinguishable from "fine".
-  local alerts alerts_ok=true up up_ok=true pods pods_ok=true pods_out
-  alerts="$(firing)" || { alerts='[]'; alerts_ok=false; }
+  local alerts alerts_ok=true up up_ok=true pods pods_ok=true pods_out firing_j
+  if firing_j="$(firing_alerts)"; then alerts="$(jq -c '[.[].alertname]|unique' <<<"$firing_j")"
+  else firing_j='[]'; alerts='[]'; alerts_ok=false; fi
   up="$(targets_up)" || { up=0;        up_ok=false; }
   if pods_out="$(pods_bad_list)"; then
     pods="$(printf '%s\n' "$pods_out" | awk 'NF{n++} END{print n+0}')"
   else
     pods=0; pods_ok=false
   fi
-  jq -n --argjson alerts "$alerts" --argjson alerts_ok "$alerts_ok" \
+  jq -n --argjson alerts "$alerts" --argjson alerts_ok "$alerts_ok" --argjson firing "$firing_j" \
         --arg up "$up" --argjson up_ok "$up_ok" \
         --arg pods "$pods" --argjson pods_ok "$pods_ok" \
         --arg have "${cil%% *}" --arg missing "$(cut -d' ' -f2 <<<"$cil")" \
         --arg unknown "${cil##* }" --arg nodes "$n" --argjson cilium_ok "$cilium_ok" \
         --argjson nodes_ok "$nodes_ok" \
         --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        '{at:$at, alerts:$alerts, alerts_ok:$alerts_ok, up:($up|tonumber), up_ok:$up_ok,
+        '{at:$at, alerts:$alerts, alerts_ok:$alerts_ok, firing:$firing, up:($up|tonumber), up_ok:$up_ok,
           pods_bad:($pods|tonumber), pods_ok:$pods_ok, cilium_ok:$cilium_ok,
           cilium_have:($have|tonumber), cilium_missing:($missing|tonumber),
           cilium_unknown:($unknown|tonumber), nodes:($nodes|tonumber), nodes_ok:$nodes_ok}'
@@ -305,7 +344,7 @@ baseline_readable() { # <snapshot-file>
 }
 
 cmd_open() {
-  local reason="" alerts="$DEFAULT_ALERTS" hours="" node="" admit="" admit_apply=""
+  local reason="" alerts="$DEFAULT_ALERTS" hours="" node="" admit="" admit_apply="" expect=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --admit-reconciler) admit=1; shift ;;
@@ -314,10 +353,14 @@ cmd_open() {
       --alerts) alerts="$2"; shift 2 ;;
       --hours)  hours="$2";  shift 2 ;;
       --node)   node="$2";   shift 2 ;;
+      --expect) expect="${2:-}"; shift 2 ;;   # names check/close report EXPECTED (declared) — header §EXPECTED ALERTS
       *) echo "unknown arg: $1" >&2; exit 64 ;;
     esac
   done
   [ -n "$reason" ] || { echo "open: --reason is required (it is what the responder reads)" >&2; exit 64; }
+  # Alert names only: the list lands in a JSON array and is matched by equality, never a regex.
+  case "$expect" in *[!A-Za-z0-9_,]*) echo "open: --expect takes alert NAMES, comma-separated (got '$expect')" >&2; exit 64 ;; esac
+  local expect_j; expect_j="$(jq -cn --arg e "$expect" '$e|split(",")|map(select(length>0))|unique')"
   mkdir -p "$STATE_DIR"
   # The baseline is taken BEFORE the window exists (the window id is minted by seat-window.sh),
   # so it lands in a pending slot and is renamed to the id once the window is open.
@@ -357,10 +400,13 @@ cmd_open() {
   printf '%s' "$id" > "$pend/window-id"
   jq -n --arg id "$id" --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg until "$until_" --argjson lease "$([ -n "$hours" ] && echo false || echo true)" \
-        '{id:$id, reason:$reason, opened_at:$at, until:$until, lease:$lease}' > "$pend/meta.json"
+        --arg node "$node" --argjson expect "$expect_j" \
+        '{id:$id, reason:$reason, opened_at:$at, until:$until, lease:$lease, node:$node, expect:$expect}' > "$pend/meta.json"
   mv "$pend" "$STATE_DIR/$id"
   echo "  maintenance-window slot: $id — pass '--id $id' to check/renew/claim/close if any other session may have a window open"
-  [ -n "$hours" ] || echo "  a ${LEASE_MIN}m LEASE: the background watch must call 'renew --id $id' (check renews too) or the declaration lapses"
+  [ "$expect_j" = '[]' ] || echo "  expecting $(jq -r 'join(", ")' <<<"$expect_j") — check/close report them EXPECTED (declared), not blocking; NOT a silence, the responder still sees them"
+  [ -z "$node" ] || echo "  node $node — its own consequences ($CONSEQUENCE_ALERTS, every instance pinned to $node) report EXPECTED (node consequence)"
+  [ -n "$hours" ] || echo "  a ${LEASE_MIN}m LEASE: the background watch must call 'renew --id $id' ('watch --id $id' does, every tick; check renews too) or the declaration lapses"
 }
 
 # ---- slot resolution --------------------------------------------------------------------------
@@ -426,6 +472,62 @@ cmd_list() {
   local k; for k in $all; do slot_line "$k"; done
 }
 
+# The window's node context for the node-consequence bin: its InternalIP and its DaemonSet pod
+# names, read lazily — only when a consequence-class name is off baseline. Non-zero = a read
+# failed; the caller says so, and whatever that read would have pinned is NOT pinned (a failed IP
+# read leaves `instance` unmatched, a failed pod read leaves `pod` unmatched); the `node` label
+# needs no context and still pins. Fail-closed: what could not be read is never "expected".
+NODE_IP=""; NODE_DS_PODS='[]'
+node_context() {
+  local rc=0 pods
+  NODE_IP="$(kubectl get node "$WIN_NODE" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)" || NODE_IP=""
+  [ -n "$NODE_IP" ] || rc=1
+  if pods="$(kubectl get pods -A --field-selector "spec.nodeName=$WIN_NODE" -o json 2>/dev/null)" \
+     && NODE_DS_PODS="$(jq -c '[.items[]|select((.metadata.ownerReferences // [])|any(.kind=="DaemonSet"))|.metadata.name]' <<<"$pods" 2>/dev/null)"; then :
+  else NODE_DS_PODS='[]'; rc=1; fi
+  return "$rc"
+}
+
+# THE ONE classifier for names firing in <now> and absent from <baseline>, minus the meta-alerts:
+# `{claimed, declared, node, new, ctx_unread}` — the first three print and pass, `new` is the
+# regression, `ctx_unread` says a node-context read failed (printed as ⚠ by both callers; it runs
+# in a command substitution, so the flag travels in the JSON, not a global). Shared by `check`/
+# `close` (baseline = the slot's) and `watch` (baseline = its seen-set), so the two can never
+# disagree about which names block. The node bin needs every firing INSTANCE of the name pinned to
+# WIN_NODE (header §EXPECTED ALERTS); <now>.firing carries the labels.
+classify_off_baseline() { # <baseline-json> <now-json>
+  local cand cons unread=false
+  cand="$(jq -c --argjson b "$1" --argjson meta "$META_ALERTS" \
+          '[.alerts[]|select(. as $a | (($b.alerts + $meta)|index($a))|not)]' <<<"$2")"
+  cons="$(jq -cn --arg c "$CONSEQUENCE_ALERTS" '$c|split(",")|map(select(length>0))')"
+  if [ -n "$WIN_NODE" ] && jq -e --argjson c "$cons" 'any(.[]; . as $a | ($c|index($a)) != null)' <<<"$cand" >/dev/null; then
+    node_context || unread=true
+  fi
+  jq -cn --argjson cand "$cand" --argjson now "$2" --argjson cl "$CLAIMED" --argjson exp "$EXPECTED" --argjson unread "$unread" \
+         --argjson cons "$cons" --arg node "$WIN_NODE" --arg ip "$NODE_IP" --argjson ds "$NODE_DS_PODS" '
+    def pinned($n; $l): ($node != "") and (
+        ($l.node // "") == $node
+        or ($ip != "" and ((($l.instance // "") | split(":")[0]) == $ip))
+        or (($l.pod // "") as $p | $p != "" and (($ds | index($p)) != null))
+        or ($n == "CronJobNotSucceeding" and ($l.cronjob // "") == ("fstrim-guard-" + $node)));
+    def inst($n): [ ($now.firing // [])[] | select(.alertname == $n) ];
+    reduce $cand[] as $a ({claimed:[], declared:[], node:[], new:[], ctx_unread:$unread};
+      if ($cl|index($a)) != null then .claimed += [$a]
+      elif ($exp|index($a)) != null then .declared += [$a]
+      elif (($cons|index($a)) != null) and (inst($a)|length) > 0 and all(inst($a)[]; pinned($a; .labels)) then .node += [$a]
+      else .new += [$a] end)'
+}
+
+# The slot's recorded context for the gate: claimed names (cmd_claim appends), the `--expect` list
+# and the `--node` (cmd_open writes meta.json). Idempotent; `watch` calls it every tick for claims.
+load_slot_meta() {
+  CLAIMED='[]'
+  [ ! -s "$STATE_DIR/$SLOT/claimed" ] || CLAIMED="$(jq -Rsc 'split("\n")|map(select(length>0))|unique' "$STATE_DIR/$SLOT/claimed")"
+  [ ! -f "$STATE_DIR/$SLOT/meta.json" ] || {
+    EXPECTED="$(jq -c '.expect // []' "$STATE_DIR/$SLOT/meta.json")"
+    WIN_NODE="$(jq -r '.node // ""' "$STATE_DIR/$SLOT/meta.json")"; }
+}
+
 # The cluster half of `check`: probes 1–4 of <now> against <baseline>, one ok/⚠ line each.
 # rc 2 on any regression or unread probe, else 0. Shared by `check` and `compare`.
 compare_snapshots() { # <baseline-json> <now-json>
@@ -446,15 +548,18 @@ compare_snapshots() { # <baseline-json> <now-json>
   if [ "$(jq -r .alerts_ok <<<"$now")" != true ]; then
     echo "  ⚠ alerts UNREADABLE — Prometheus $PROM/api/v1/alerts did not answer; the new-alert check did NOT run"; rc=2
   else
-    # Three bins for a name firing now and absent at baseline: a stock meta-alert (dropped, as the
-    # Alertmanager route drops it), a name this window CLAIMED (printed as its own, not blocking),
-    # or NEW — the only bin that is a regression. Everything else about the diff stays strict.
-    local new claimed
-    new="$(jq -r --argjson b "$b" --argjson meta "$META_ALERTS" --argjson cl "$CLAIMED" \
-          '[.alerts[]|select(. as $a | (($b.alerts + $meta + $cl)|index($a))|not)]|join(", ")' <<<"$now")"
-    claimed="$(jq -r --argjson b "$b" --argjson cl "$CLAIMED" \
-          '[.alerts[]|select(. as $a | ($b.alerts|index($a)|not) and ($cl|index($a)))]|join(", ")' <<<"$now")"
+    # Bins for a name firing now and absent at baseline (classify_off_baseline): a stock meta-alert
+    # (dropped, as the Alertmanager route drops it), a name this window CLAIMED, one DECLARED with
+    # `open --expect`, a NODE CONSEQUENCE of the window's `--node` — each printed and not blocking —
+    # or NEW, the only bin that is a regression. Everything else about the diff stays strict.
+    local bins new claimed a
+    bins="$(classify_off_baseline "$b" "$now")"
+    claimed="$(jq -r '.claimed|join(", ")' <<<"$bins")"
     [ -z "$claimed" ] || echo "  ok  firing but CLAIMED under this window (its own fallout, not blocking): $claimed"
+    for a in $(jq -r '.declared[]' <<<"$bins"); do echo "  ok  EXPECTED $a (declared)"; done
+    for a in $(jq -r '.node[]' <<<"$bins"); do echo "  ok  EXPECTED $a (node consequence)"; done
+    [ "$(jq -r .ctx_unread <<<"$bins")" != true ] || echo "  ⚠ node context for $WIN_NODE UNREADABLE (InternalIP / DaemonSet pods) — consequence alerts not pinned by a node label count as NEW"
+    new="$(jq -r '.new|join(", ")' <<<"$bins")"
     if [ -n "$new" ]; then echo "  ⚠ NEW firing alerts: $new"; rc=2; else echo "  ok  no new firing alerts"; fi
   fi
 
@@ -489,8 +594,8 @@ cmd_check() {
   local b; b="$(cat "$BASE")"
   local now; now="$(snapshot)"
   local rc=0
-  # The names this window claimed (one per line, written by cmd_claim) — honoured by the diff.
-  [ ! -s "$STATE_DIR/$SLOT/claimed" ] || CLAIMED="$(jq -Rsc 'split("\n")|map(select(length>0))|unique' "$STATE_DIR/$SLOT/claimed")"
+  # The names this window claimed, declared with --expect, and its --node — honoured by the diff.
+  load_slot_meta
   echo "== check vs baseline ($(jq -r .at <<<"$b"), window $SLOT) =="
   compare_snapshots "$b" "$now" || rc=$?
 
@@ -557,6 +662,65 @@ cmd_claim() {
   else echo "  ⚠ could not tell which alert was claimed — check/close will still count it as NEW" >&2; fi
 }
 
+# The background alert watch (header §THE WATCH IS A VERB). Runs in the foreground of ITS process —
+# the seat starts it as a background task — and prints one line per event, timestamped:
+#   NEW <name>                          a name off the seen-set, in no non-blocking bin (once)
+#   EXPECTED <name> (declared|node consequence)   same bins as check, once
+#   WATCH BLIND <n> empty reads (...)   n consecutive reads failed (probe) or parsed to no alert at all
+#                                       (parser — Watchdog always fires, so an empty set is a broken read)
+#   watch: window <id> closed — exiting the slot is gone (close ran)
+# Claimed names and the meta-alerts join the seen-set silently. --ticks N bounds the run (the
+# self-test's seam; 0 = until the window closes); --tick 0 is legal for the same reason.
+WATCH_PID=""
+cmd_watch() {
+  local pf="$STATE_DIR/$SLOT/watch.pid" old
+  if [ -s "$pf" ] && old="$(cat "$pf")" && [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then
+    if [ "${REPLACE:-0}" = 1 ]; then
+      kill "$old" 2>/dev/null || true
+      local i=0; while kill -0 "$old" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+      kill -0 "$old" 2>/dev/null && { echo "watch: pid $old did not stop — refusing to start a second watch for $SLOT" >&2; return 1; }
+      echo "watch: replaced the previous watch for $SLOT (pid $old)"
+    else
+      echo "watch: a watch for $SLOT is already running (pid $old) — two watches make the dead one's output read as a finding; 'watch --id $SLOT --replace' stops it first" >&2
+      return 1
+    fi
+  fi
+  printf '%s' "$$" > "$pf"
+  # Only the pidfile WE wrote is ours to remove — a --replace successor has overwritten it by then.
+  trap '[ "$(cat "'"$pf"'" 2>/dev/null)" = "$$" ] && rm -f "'"$pf"'"' EXIT
+  local seen; seen="$(jq -c '.alerts' "$BASE")"
+  load_slot_meta
+  ts() { date -u +%H:%M:%SZ; }
+  echo "$(ts) watch: window $SLOT, pid $$, seeded from baseline ($(jq length <<<"$seen") firing at $(jq -r .at "$BASE")), tick ${WATCH_TICK}s, blind after $WATCH_BLIND empty reads$( [ -z "$WIN_NODE" ] || printf ', node %s' "$WIN_NODE")$( [ "$EXPECTED" = '[]' ] || printf ', expecting %s' "$(jq -r 'join(",")' <<<"$EXPECTED")")"
+  local n=0 blind=0 half="" f names now bins a
+  while :; do
+    [ -d "$STATE_DIR/$SLOT" ] || { echo "$(ts) watch: window $SLOT closed — exiting"; return 0; }
+    load_slot_meta
+    if f="$(firing_alerts)"; then
+      if [ "$(jq length <<<"$f")" -eq 0 ]; then blind=$((blind+1)); half="parser: the read answered with NO alert at all, not even Watchdog"
+      else
+        blind=0
+        names="$(jq -c '[.[].alertname]|unique' <<<"$f")"
+        now="$(jq -cn --argjson a "$names" --argjson f "$f" '{alerts:$a, firing:$f}')"
+        bins="$(classify_off_baseline "{\"alerts\":$seen}" "$now")"
+        for a in $(jq -r '.new[]' <<<"$bins"); do echo "$(ts) NEW $a"; done
+        for a in $(jq -r '.declared[]' <<<"$bins"); do echo "$(ts) EXPECTED $a (declared)"; done
+        for a in $(jq -r '.node[]' <<<"$bins"); do echo "$(ts) EXPECTED $a (node consequence)"; done
+        [ "$(jq -r .ctx_unread <<<"$bins")" != true ] || echo "$(ts) ⚠ node context for $WIN_NODE UNREADABLE — consequence alerts not pinned by a node label count as NEW"
+        seen="$(jq -c --argjson n "$names" '. + $n | unique' <<<"$seen")"
+      fi
+    else blind=$((blind+1)); half="probe: $PROM/api/v1/alerts did not answer with a Prometheus envelope"; fi
+    if [ "$blind" -ge "$WATCH_BLIND" ] && [ $((blind % WATCH_BLIND)) -eq 0 ]; then
+      echo "$(ts) WATCH BLIND $blind empty reads ($half) — the watch is NOT seeing alerts; verify against Prometheus by hand"
+    fi
+    # The lease, every tick (seat-window prints its ✓ on stdout — noise here; its ⚠ stays on stderr).
+    cmd_renew >/dev/null || true
+    n=$((n+1))
+    [ "${TICKS:-0}" -eq 0 ] || [ "$n" -lt "$TICKS" ] || { echo "$(ts) watch: $n tick(s) done — exiting (--ticks)"; return 0; }
+    sleep "$WATCH_TICK"
+  done
+}
+
 # The cilium backend probe on its own, with no baseline and no window — for a caller that has
 # just restarted an apiserver and needs the answer NOW (scripts/controlplane-upgrade.sh). It
 # reports and exits; deciding what to do about a 2 is the caller's business.
@@ -591,12 +755,17 @@ cmd_compare() {
 
 case "${1:-}" in
   open)  shift; cmd_open "$@" ;;
-  check|close|renew|claim)
+  check|close|renew|claim|watch)
     verb="$1"; shift; id=""; pass=()
     while [ $# -gt 0 ]; do
       case "$1" in
         --id)    [ -n "${2:-}" ] || { echo "$verb: --id needs a window id" >&2; exit 64; }; id="$2"; shift 2 ;;
         --force) [ "$verb" = close ] || { echo "$verb: unknown arg --force" >&2; exit 64; }; FORCE=1; shift ;;
+        --replace) [ "$verb" = watch ] || { echo "$verb: unknown arg --replace" >&2; exit 64; }; REPLACE=1; shift ;;
+        --tick|--ticks)
+                 [ "$verb" = watch ] || { echo "$verb: unknown arg: $1" >&2; exit 64; }
+                 case "${2:-}" in ''|*[!0-9]*) echo "watch: $1 needs a whole number of seconds/ticks" >&2; exit 64 ;; esac
+                 if [ "$1" = --tick ]; then WATCH_TICK="$2"; else TICKS="$2"; fi; shift 2 ;;
         --alert|--match|--fp)
                  [ "$verb" = claim ] || { echo "$verb: unknown arg: $1" >&2; exit 64; }
                  [ -n "${2:-}" ] || { echo "claim: $1 needs a value" >&2; exit 64; }; pass+=("$1" "$2"); shift 2 ;;
@@ -611,6 +780,7 @@ case "${1:-}" in
       close) cmd_close ;;
       renew) cmd_renew ;;
       claim) cmd_claim "${pass[@]}" ;;
+      watch) cmd_watch ;;
     esac ;;
   list) shift; cmd_list ;;
   # `|| exit $?` so the exit CODE survives: the caller distinguishes 2 (roll the DaemonSet) from
@@ -619,5 +789,5 @@ case "${1:-}" in
   cilium-check) shift; cmd_cilium || exit $? ;;
   snapshot) shift; cmd_snapshot ;;
   compare)  shift; cmd_compare "$@" || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] | check [--id <id>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] [--expect A,B] | check [--id <id>] | watch [--id <id>] [--replace] [--tick <s>] [--ticks <n>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
 esac
