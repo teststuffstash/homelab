@@ -5,7 +5,8 @@ Guest build: [`scripts/opnsense-test-vm-bootstrap.sh`](../scripts/opnsense-test-
 [`opnsense/test-vm/config.xml.tmpl`](../opnsense/test-vm/config.xml.tmpl). Inventory:
 [`machines/machines.yaml`](../machines/machines.yaml). **Using it** — per-run rollback, the plays,
 the report — is the validation harness, [`runbook.md`](runbook.md) §Validate a router-config PR on
-the OPNsense test VM (`scripts/opnsense-test-vm.sh`)._
+the OPNsense test VM (`scripts/opnsense-test-vm.sh`). The management box runs it on every router-path PR
+head and posts `opnsense-test-vm` ([`management-box.md`](management-box.md) §MB3 "The router surface")._
 
 A throwaway OPNsense router at prod's version, so a router-config PR (`ansible/opnsense-*.yml`,
 `opnsense/dnsmasq-dhcp.py`) can be applied to a **real API** before it reaches `192.168.2.1`.
