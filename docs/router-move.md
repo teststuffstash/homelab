@@ -432,6 +432,15 @@ the hypervisor's flooding, not the node's config.
 
 ## Status
 
+- 2026-10-26 night: **the management box converges the BACKUP — built, in shadow** (ADR-152 step 3;
+  [`management-box.md`](management-box.md) §Router config converge — BACKUP-only): the node is read
+  live from the pair's CARP state, a node-local config restore (copy + reboot unless confirmed) is
+  armed on it before the apply, the security boundary is the policy row's `deny_paths`. hasync's
+  XMLRPC config sync is OFF on both nodes (read 2026-10-26) — each node holds its own config, so the
+  BACKUP is a real canary. The dnsmasq fallback's wk-metal-04 `hwaddr` (#2758, Kea fixed by hand
+  10-20) is now converged on the BACKUP (the jail smoke's accidental base-tree run, same data); the
+  MASTER still carries the old MAC until its rolling path (step 3's later part) or a seat converge.
+
 - 2026-10-26: **no cert on the pair had ever renewed** — the AcmeClient cron job was missing on
   both nodes (above), circles.teststuff.net served 7 days from expiry; a BACKUP can never order
   (the WAN gate leaves its WAN without link, so its 400 is structural). Detector `LanCertExpiringSoon`

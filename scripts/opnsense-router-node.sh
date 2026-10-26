@@ -7,6 +7,7 @@
 #   bash scripts/opnsense-router-node.sh converge <node>   # every router play + the API scripts (standby or LIVE)
 #   bash scripts/opnsense-router-node.sh check    <node>   # READ-ONLY: standby = the inert rules + prod unharmed;
 #                                                          #            LIVE = the serving rules (ADR-145 window 1)
+#   bash scripts/opnsense-router-node.sh script-env <node>  # the opnsense/*.py env converge uses (no secrets) — the box applier reads it
 #   bash scripts/opnsense-router-node.sh killswitch-arm|killswitch-disarm|killswitch-status <node>
 #   bash scripts/opnsense-router-node.sh carp-maintenance <node> enter|leave|status   # planned failover (demotion-aware)
 #   bash scripts/opnsense-router-node.sh fakeisp up|down|log     # PAIR: the WAN drills' fake ISP (nx-02 netns)
@@ -165,7 +166,13 @@ killswitch_status() { pve "systemctl is-active -q $KS_UNIT && echo armed || echo
 API_CURL=''
 api_setup() {  # prod's wallet pair — carried to the node, so it authenticates there too
   API_CURL="$(mktemp)"; chmod 600 "$API_CURL"
-  printf 'user = "%s:%s"\n' "$(kp opnsense-api-key)" "$(kp opnsense-api-secret)" > "$API_CURL"
+  # a pre-set pair wins (the management box: /var/lib/mgmt/env — it holds no wallet), as in
+  # scripts/opnsense-playbook.sh
+  if [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ]; then
+    printf 'user = "%s:%s"\n' "$OPN_API_KEY" "$OPN_API_SECRET" > "$API_CURL"
+  else
+    printf 'user = "%s:%s"\n' "$(kp opnsense-api-key)" "$(kp opnsense-api-secret)" > "$API_CURL"
+  fi
 }
 api() { curl -sfk -K "$API_CURL" --max-time 30 "https://$HOST/api/$1"; }
 
@@ -180,6 +187,15 @@ kea_ha_env() {
   [ "$n" -ge 2 ] || return 0
   printf '%s;' "$INV_HOST"
   printf '%s\n' "$rows" | awk 'NR==1{r="primary"} NR>1{r="standby"} {printf "%s%s=http://%s:8001/=%s", (NR>1?",":""), $1, $2, r}'
+}
+
+# script-env — the opnsense/*.py environment converge passes this node, minus the credentials, one
+# `KEY=value` per line (the management box's applier sources it: mgmt/scripts/mgmt-ansible.sh). The
+# one home of the rule stays converge's: a LIVE node serves from Kea with the pair's HA peers.
+script_env() {
+  local dhcp_enable=0 kea_ha=''
+  if [ "$STANDBY" != true ]; then dhcp_enable=1; kea_ha="$(kea_ha_env)"; fi
+  printf 'OPN_HOST=%s\nOPN_DHCP_ENABLE=%s\nOPN_DHCP_SERVER=kea\nOPN_KEA_HA=%s\n' "$HOST" "$dhcp_enable" "$kea_ha"
 }
 
 converge() {
@@ -230,7 +246,13 @@ check() {
   [ -n "$API_CURL" ] || api_setup
   echo "== $VMNAME ($HOST) — $( [ $live = 1 ] && echo 'LIVE: the serving rules' || echo 'the inert rules')"
   v="$(api interfaces/overview/interfaces_info 2>/dev/null | jq -r '.rows[]? | select(.identifier=="lan") | .addr4' || true)"
-  [ "${v%%/*}" = "$HOST" ] && ok "LAN address $v" || no "LAN address '${v:-unread}' (want $HOST)"
+  # the `automation` API user (FU-013 — the box's pair) may not read Status: Interfaces (403): read the
+  # lan interface's first IPv4 over the seed key instead — the same fact, from the node's own config
+  if [ -z "$v" ]; then
+    v="$(node_ssh 'i=$(sed -n "/<lan>/,/<\/lan>/s:.*<if>\(.*\)</if>.*:\1:p" /conf/config.xml | head -1); ifconfig "$i" | awk "/inet /{print \$2; exit}"' 2>/dev/null || true)"
+    [ -n "$v" ] && v="$v (ifconfig)"
+  fi
+  [ "${v%%[/ ]*}" = "$HOST" ] && ok "LAN address $v" || no "LAN address '${v:-unread}' (want $HOST)"
   v="$(api interfaces/vip_settings/search_item 2>/dev/null | jq -r '[.rows[] | select(.descr|startswith("haproxy-")) | .interface] | group_by(.) | map("\(.[0])=\(length)") | join(" ")' || true)"
   case "$v" in lo0=*) [ "${v#lo0=}" -gt 0 ] && ok "HAProxy VIPs: $v" || no "HAProxy VIPs: $v";; *) no "HAProxy VIPs: '${v:-unread}' (want all on lo0)";; esac
   v="$(api quagga/bgp/search_neighbor 2>/dev/null | jq -r '[.rows[] | .enabled] | unique | join(",")' || true)"
@@ -332,6 +354,7 @@ case "$cmd" in
   build) build ;;
   converge) converge ;;
   check) check ;;
+  script-env) script_env ;;
   killswitch-arm) killswitch_arm ;;
   killswitch-disarm) killswitch_disarm ;;
   killswitch-status) killswitch_status ;;
