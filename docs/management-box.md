@@ -889,6 +889,77 @@ role that is not check-clean refuses itself on the box (`ansible-check-failed`),
 `~/.claude/homelab-pve-ssh/id_ed25519`, the box's provisioned copy `/var/lib/mgmt/pve-ssh/id_ed25519`
 (`PVE_SSH_KEY` on the apply and belt units; `ansible/group_vars/matchbox.yml` defaults to the jail path).
 
+### Router config converge — BACKUP-only (ADR-152 program step 3, 2026-10-26)
+
+The same bracket, a second `apply_ansible` row (`opnsense`), with the four router differences ADR-152
+names made mechanical. What it adds to §Ansible applies:
+
+- **The target is the CARP BACKUP, read live** (`target: carp-backup`): every router node in
+  `ansible/router-nodes/inventory.yml` answers `diagnostics/interface/get_vip_status` for the row's
+  `vip` (`.1`); exactly one MASTER and one BACKUP or the span is refused (`ansible-pair-unhealthy` —
+  a node down, INIT, two MASTERs). Never a static name: after a failover the OTHER node is the canary.
+  Every play runs `--limit <backup>`; the MASTER is not reachable from any mode here
+  (`backup-only` is the only non-shadow mode a `carp-backup` row admits — the rolling MASTER path is
+  step 3's later part).
+- **The BACKUP must hold its own config.** OPNsense's XMLRPC config sync (`core/hasync`
+  `synchronizetoip`) would overwrite a BACKUP-only converge from the un-converged MASTER at the next
+  sync, and ADR-152 (3)'s canary would read the MASTER's config. Read 2026-10-26 on both nodes:
+  `synchronizetoip` empty, no sync items — pfsync (state) only, config is per node (each node is
+  converged by `opnsense-router-node.sh converge <node>`). The read is a refusal on every run: sync
+  switched on refuses the span.
+- **The plays** are the router plays the box may run (`bgp`, `unbound`, `haproxy`, `system`) plus the
+  DHCP API scripts (`opnsense/dnsmasq-dhcp.py`, `opnsense/kea-dhcp.py`), whose new `OPN_CHECK=1` is their
+  `--check`: a read-only diff and an ansible-shaped recap line. The scripts run under the node's
+  `scripts/opnsense-router-node.sh script-env <node>` (converge's own rule: a LIVE node serves Kea with
+  the pair's HA peers). A script WITHOUT `OPN_CHECK` support is never run in a check phase — it would
+  ignore the flag and write (the first jail smoke did exactly that, below).
+- **The security boundary is a path policy** (ADR-152 (4); the program's one open fork, **ruled
+  2026-10-26: the sentinel's `deny_paths` shape, per row, in the policy file** — one home, read from
+  master, codeowner-gated — over a role-level list in the applier): the row's `deny_paths` name the
+  WAN-firewall + port-forward surface (`opnsense/tuya-egress.py`: filter + `d_nat` rules), WireGuard,
+  ACME + ddclient (the DNS credentials), the API users and CARP (pair mechanics, and a password the box
+  does not hold). A span touching one is refused to a human (`security-boundary`), whatever else it
+  holds; those plays are not in the row's list either. A `group_vars/opnsense.yml` edit to one of those
+  plays' values selects the row and converges nothing (the plays that read it are not run) — the human
+  path stays `opnsense-router-node.sh converge`.
+- **The revert is LOCAL, armed before the apply** (ADR-152 (2)): after the window and the lease, the box
+  ssh-es to the BACKUP (the seed root key = the pve key) and copies the live `/conf/config.xml` aside
+  (`/conf/box-revert.xml`, plus the config-history head in `/root/box-revert.log`), then starts a sleeper
+  ON THE NODE: unless cancelled within `revert_min` (30), it restores that copy and reboots the node — a
+  BACKUP reboot is the pair's proven move, and it comes back BACKUP (its skew) on the pre-apply config.
+  No arm, no apply. Confirm good → the box cancels it; anything else → STOP and the restore fires by
+  itself: the revert, by construction, needing nothing from the box (whose own path rides the router).
+  The box's ⚓ lease (`cap_min` 45) is the OUTER timer. Not reboot-proof (the FU-308 dead-man's shape):
+  a node that reboots mid-bracket comes up on the converged config with nothing armed, which the
+  confirm then reads. Why not the history API's `revert_backup`: it rewrites `config.xml` and applies
+  nothing (`BackupController::revertBackupAction` — `restoreBackup` + `save`); the reboot is what makes
+  the restored config the running one. **Rehearsed on the test VM 9110 (2026-10-26, the real functions):**
+  armed 90 s → an Unbound host override added via the API → 21:48:12Z `FIRED … restoring … rebooting`
+  → API back, the override gone; armed 600 s → cancelled → flag, copy and sleeper gone; a second arm
+  over a live one refused.
+- **The confirm** adds the read-only serving-rules check (`scripts/opnsense-router-node.sh check
+  <node>`, which now takes the unit's `OPN_API_KEY`/`SECRET` like `opnsense-playbook.sh`) and the
+  pair's CARP map UNCHANGED (the BACKUP still BACKUP, the MASTER untouched) to the second `--check`;
+  `settle_s` (60) before it.
+- **Runner** (`runner: opnsense`): the oxlorg modules need httpx — the interpreter is
+  `ansible/controller-env` built by the box's own nix (data from the clone, never devbox) and the
+  collection is installed by the lock-pinned `ansible-galaxy`; the credential is whatever pair
+  `/var/lib/mgmt/env` carries (step 0 made it the `automation` user, #2942) — never minted here.
+- **Shadow first.** The row ships `mode: shadow`; the jail smoke of the full loop (below) read the
+  BACKUP `opnsense-pve`, MASTER `opnsense-nx02`, and `--check` → `opnsense/dnsmasq-dhcp.py=2` — the one
+  real merged-but-unapplied router change (wk-metal-04's dnsmasq `hwaddr`, #2758, applied to Kea by
+  hand on 10-20 but never to the dnsmasq fallback; the drill's realism score 57→58 on 10-25).
+
+**Incident note (2026-10-26, the jail smoke).** The shadow smoke's DRIFT read ran the PREVIOUS master's
+two DHCP scripts — written before `OPN_CHECK` existed — and they did a real rebuild against the prod
+BACKUP (`opnsense-pve`, 21:55:41Z, the root wallet pair: dnsmasq rebuilt with dnsmasq off, Kea rebuilt
++ reconfigured as HA standby). Same data, so no change in kind — it converged the BACKUP's dnsmasq
+`hwaddr` the proof had meant to use — and `opnsense-router-node.sh check pve` read every serving rule
+`ok` straight after. Closed the same commit: `_ans_playbook` refuses a check phase for a `*.py` that
+does not implement `OPN_CHECK` (fixture `py-no-check-support-*`). The first real span after this change
+therefore reads its drift base from a tree without check mode and REFUSES (`ansible-check-failed`) —
+by design, once; every later span's base has it.
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
@@ -915,7 +986,8 @@ even when every check is green.
 | Helm release apply, longhorn (restore point + ordered engine moves + the HOLD for 1-replica volumes) | policy row (#2467, #2491) | **2026-10-11 (CONFIRMED, unattended)** | longhorn 1.12.1 (#2463): first engine move STOPPED (replica socket `bind: address already in use`; converged by itself in ≈31 min — breakage record #1 → the 60-min bounded wait + resume #2479); the live 1-replica move broke garage-1 (ENODATA, incident 2026-10-10) → the HOLD (#2491). **longhorn 1.13.0 (#2487, Renovate): chart bracket 07:04:57→07:17:46Z CONFIRMED (15/15 rolled, BGP 26/26, robustness unchanged); `mgmt-helm-engines` 07:22:33→09:00:14Z: 42/42 moves, 9 holds (garage ×3, CNPG ×5 — primaries fail over first, 187–195 s detaches), 33 consumer checks whole, 42 lease renewals, CONFIRMED.** Records `s3://helm-evidence/20261011T07*-box-longhorn-*`; defect found by the run: #2495 (a running oneshot is `activating`) |
 | Longhorn OFFLINE engine move — the hold (cordon → delete the consumer → detached → patch → uncordon → replacement whole) | engines unit, every 1-replica attached volume | 2026-10-11 (by hand, then the function live) | garage-1 recovery by hand 06:30Z: detached 10 s, Ready 33 s after the uncordon; `helm_lh_offline_move` itself run live from the seat against garage-2 the same morning (image already current — the hold/release half is the whole act) — see §Helm release applies item 4 |
 | The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
-| Router config converge (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
+| Router config converge, BACKUP-only (`apply_ansible.opnsense`, §Router config converge — BACKUP-only: the live CARP BACKUP, the node-local restore armed first, the security-boundary `deny_paths`) | `mode: shadow` (2026-10-26) | — (shadow; the node-local restore rehearsed on test VM 9110) | ROADMAP §Deploy paths step 3; enters as box-run with its first unattended confirmed BACKUP converge. The MASTER stays the row below |
+| Router config converge, MASTER (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | human, by ruling (operator 2026-09-29: the official update path, no Renovate; majors attended — [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (seat API calls, trialled on test VM 9110 first; prod 2026-09-29 + 2026-09-30) | not a box capability: class 14 in `dependency-upgrades.md`; the box run is ROADMAP §Deploy paths program step 4 (test VM → BACKUP → MASTER under one lease), the revert a `qm snapshot` local to the node (spike D5) |
 | Matchbox (`ansible/matchbox*.yml` — the server + the PXE assets; `apply_ansible.matchbox`, §Ansible applies) | `mode: shadow` (2026-10-26) | — (shadow: the would-be apply per merged span) | class 15 in `dependency-upgrades.md`; near-zero cone, the FIRST ansible applier (ROADMAP §Deploy paths program step 2) — enters as box-run with its first unattended confirmed apply |
 

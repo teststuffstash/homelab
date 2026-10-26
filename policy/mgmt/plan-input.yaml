@@ -207,3 +207,60 @@ apply_ansible:              # ansible play GROUPS the box may apply unattended (
         - "http://192.168.2.30:8080/"
         - "http://192.168.2.30:8080/assets/boot-or-disk.ipxe"
       units: [matchbox, dnsmasq]
+  # The ROUTER (ADR-152 program step 3, operator 2026-10-26): the CARP BACKUP only — `target:
+  # carp-backup` = the node the pair's live CARP state names BACKUP for `vip` (never a static name),
+  # refused unless the pair reads exactly one MASTER + one BACKUP with hasync's config sync OFF.
+  # `backup-only` = on for that node; the MASTER's rolling path is a later step, no mode reaches it.
+  #   runner        opnsense = the controller-env interpreter (httpx) + the oxlorg collection, the
+  #                 unit's OPN_API_KEY/SECRET (whatever user /var/lib/mgmt/env carries — never minted here)
+  #   plays         the router plays the box may run + the opnsense/*.py DHCP scripts (their OPN_CHECK=1
+  #                 is the --check), each limited to the BACKUP; the script env is the node's
+  #                 `opnsense-router-node.sh script-env` (converge's own rule)
+  #   deny_paths    the SECURITY BOUNDARY (ADR-152 (4)) — WAN firewall + port forwards (tuya-egress.py's
+  #                 filter + d_nat rules), WireGuard, ACME + ddclient (DNS credentials), the API users,
+  #                 and CARP (the pair's own mechanics + its password, which the box does not hold): a span
+  #                 touching one is REFUSED to a human whatever else it holds. The sentinel's
+  #                 `deny_paths` shape, per row — ruled 2026-10-26 over a role-level list (one home: this file)
+  #   revert_min    the node-local restore's deadline (armed BEFORE the apply, ON the node: the pre-apply
+  #                 config.xml + a reboot unless the box confirms) — below cap_min: the lease is the OUTER timer
+  #   health        router_node_check = `opnsense-router-node.sh check <node>` (the read-only serving rules);
+  #                 the confirm also requires the pair's CARP map unchanged
+  opnsense:
+    mode: shadow
+    target: carp-backup
+    vip: 192.168.2.1
+    runner: opnsense
+    hosts: opnsense
+    plays:
+      - ansible/opnsense-bgp.yml
+      - ansible/opnsense-unbound.yml
+      - ansible/opnsense-haproxy.yml
+      - ansible/opnsense-system.yml
+      - opnsense/dnsmasq-dhcp.py
+      - opnsense/kea-dhcp.py
+    paths:
+      - "ansible/opnsense-*.yml"
+      - "ansible/roles/opnsense-*"
+      - "ansible/group_vars/opnsense.yml"
+      - "ansible/router-nodes/*"
+      - "ansible/collections/*"
+      - "ansible/controller-env/*"
+      - "opnsense/*.py"
+    deny_paths:
+      - "opnsense/tuya-egress.py"
+      - "ansible/opnsense-wireguard.yml"
+      - "ansible/roles/opnsense-wireguard*"
+      - "ansible/opnsense-acme.yml"
+      - "ansible/roles/opnsense-acme*"
+      - "ansible/opnsense-ddclient.yml"
+      - "ansible/roles/opnsense-ddclient*"
+      - "ansible/opnsense-users.yml"
+      - "ansible/roles/opnsense-users*"
+      - "ansible/opnsense-carp.yml"
+      - "ansible/roles/opnsense-carp*"
+    cap_min: 45
+    revert_min: 30
+    settle_s: 60
+    window_alerts: [OpnsenseConfigUnattributedRevision, RouterPairMasterCount, RouterWanGateSilent, TargetDown]
+    health:
+      router_node_check: true

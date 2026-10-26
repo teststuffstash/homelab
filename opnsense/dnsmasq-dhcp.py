@@ -13,10 +13,16 @@ Run:
     export OPN_API_KEY=...  OPN_API_SECRET=...      # same creds as ansible/opnsense-*.yml
     python3 opnsense/dnsmasq-dhcp.py
 
+OPN_CHECK=1: READ-ONLY — compare live with the data below, print each difference and an
+ansible-shaped recap line (`<host> : ok=1 changed=N unreachable=0 failed=0`), write nothing.
+The management box's applier (mgmt/scripts/mgmt-ansible.sh) reads that line as this script's
+`--check` (preflight + confirm); an apply run prints the same line (changed = the differences it
+found before rebuilding). An API that does not answer → `unreachable=1`, exit 4.
+
 Reboot-safety: ISC dhcpd must also be DISABLED. There is no API for it — uncheck
 Services > ISC DHCPv4 > [LAN] > Enable in the OPNsense UI (one-time manual step).
 """
-import base64, json, os, ssl, sys, urllib.request
+import base64, json, os, ssl, sys, urllib.error, urllib.request
 
 HOST = os.environ.get("OPN_HOST", "192.168.2.1")
 # OPN_DHCP_ENABLE=0: the STANDBY profile (docs/router-move.md) — the config converges, the
@@ -143,9 +149,10 @@ if REMAP:
                 _obj[_k] = _to + _obj[_k][len(_frm):]
 
 
-def call(path, body=None):
-    req = urllib.request.Request(f"{BASE}/{path}", data=json.dumps(body or {}).encode(),
-        method="POST", headers={"Authorization": AUTH, "Content-Type": "application/json"})
+def call(path, body=None, method="POST"):
+    get = method == "GET"   # a GET with a JSON content-type is a 400 on OPNsense
+    req = urllib.request.Request(f"{BASE}/{path}", data=None if get else json.dumps(body or {}).encode(),
+        method=method, headers={"Authorization": AUTH, **({} if get else {"Content-Type": "application/json"})})
     with urllib.request.urlopen(req, context=CTX, timeout=20) as r:
         return json.loads(r.read().decode())
 
@@ -158,7 +165,67 @@ def rebuild(item, key, rows):
         print(f"  + {item}: {res}")
 
 
+CHECK = os.environ.get("OPN_CHECK", "0") == "1"
+
+
+def _sel(v):
+    """An OPNsense list field as a sorted list: search rows give "a,b", `get` gives {k: {selected}}."""
+    if isinstance(v, dict):
+        return sorted(k for k, o in v.items() if isinstance(o, dict) and o.get("selected") in (1, "1") and k)
+    return sorted(x for x in str(v or "").split(",") if x)
+
+
+def diff():
+    """The differences between live and the data above, one human line each (READ-ONLY)."""
+    out = []
+    want_enable = ENABLE if SERVER == "dnsmasq" else "0"
+    rows = call("settings/searchRange").get("rows", [])
+    keys = ("interface", "start_addr", "end_addr", "subnet_mask", "lease_time", "domain_type", "domain", "description")
+    have = [{k: str(r.get(k, "")) for k in keys} for r in rows]
+    if have != [{k: str(RANGE.get(k, "")) for k in keys}]:
+        out.append(f"range: live {have} != {RANGE}")
+    have = sorted((r.get("type"), r.get("option"), r.get("interface"), r.get("value")) for r in call("settings/searchOption").get("rows", []))
+    want = sorted((o["type"], o["option"], o["interface"], o["value"]) for o in OPTIONS)
+    if have != want:
+        out.append(f"options: live {have} != {want}")
+    # every field the data declares (host, ip, hwaddr, descr) — a field the data leaves out is not judged
+    fields = ("host", "ip", "hwaddr", "descr")
+    norm = lambda d: tuple(str(d.get(k, "") or "").lower() if k == "hwaddr" else str(d.get(k, "") or "") for k in fields)
+    have = {norm(r) for r in call("settings/searchHost").get("rows", [])}
+    want = {norm(h) for h in HOSTS}
+    for h in sorted(have - want):
+        out.append(f"host {' '.join(x for x in h if x)}: live only (or changed)")
+    for h in sorted(want - have):
+        out.append(f"host {' '.join(x for x in h if x)}: missing on live (or changed)")
+    g = call("settings/get", method="GET")["dnsmasq"]
+    for k, w in (("enable", want_enable), ("port", "0")):
+        if str(g.get(k)) != w:
+            out.append(f"general {k}: live {g.get(k)!r} != {w!r}")
+    if _sel(g.get("interface")) != [INTERFACE]:
+        out.append(f"general interface: live {_sel(g.get('interface'))} != [{INTERFACE!r}]")
+    if str((g.get("dhcp") or {}).get("enable_ra")) != "0":
+        out.append(f"general dhcp.enable_ra: live {(g.get('dhcp') or {}).get('enable_ra')!r} != '0'")
+    return out
+
+
+def recap(changed, unreachable=0, failed=0):
+    print("\nPLAY RECAP *********")
+    print(f"{HOST} : ok=1 changed={changed} unreachable={unreachable} failed={failed}")
+
+
 def main():
+    try:
+        d = diff()
+    except (urllib.error.URLError, OSError) as e:
+        print(f"fatal: [{HOST}]: Unable to connect {BASE}: {e}")
+        recap(0, unreachable=1)
+        sys.exit(4)
+    for line in d:
+        print(f"  ~ {line}")
+    if CHECK:
+        print(f"dnsmasq on {HOST}: {len(d)} difference(s) — check mode, nothing written")
+        recap(len(d))
+        return
     print("Rebuilding dnsmasq DHCP config...")
     rebuild("Range", "range", [RANGE])
     rebuild("Option", "option", OPTIONS)
@@ -171,6 +238,7 @@ def main():
                                             "dhcp": {"enable_ra": "0"}}}).get("result"))
     print("apply:", call("service/reconfigure").get("status"))
     print("\nDone. Remember: disable ISC DHCPv4 in the OPNsense UI for reboot-safety.")
+    recap(len(d))
 
 
 if __name__ == "__main__":

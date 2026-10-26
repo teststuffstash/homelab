@@ -649,7 +649,9 @@ check_ansible() {
   fi
   # the apply_ansible groups' plays — over the play's own ssh key (PVE_SSH_KEY on the box, the jail's cache else)
   if [ -r "${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}" ]; then
-    plays="$(mgmt_x yq -r '.apply_ansible // {} | to_entries[] | .value.plays[]' policy/mgmt/plan-input.yaml 2>/dev/null)" || plays=""
+    # ssh-connected groups only: a `runner:` row (the router) needs its interpreter + target and is the
+    # opnsense-unbound check above plus the applier's own preflight
+    plays="$(mgmt_x yq -r '.apply_ansible // {} | to_entries[] | select(.value.runner == null) | .value.plays[]' policy/mgmt/plan-input.yaml 2>/dev/null)" || plays=""
   fi
   # ansible-core as this checkout's devbox.lock pins it, read as data on the box (mgmt_lock_tool — the
   # applier's resolution, mgmt-ansible.sh); the jail's devbox shell has it on PATH
