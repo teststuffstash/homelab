@@ -280,6 +280,10 @@
           "level": "read",
           "why": "CI green at head is the dispatch premise; `gh pr checks` + `gh run list --commit <head>`"
         },
+        "statuses": {
+          "level": "read",
+          "why": "statusCheckRollup also carries commit STATUSES; one written by another App (renovate/stability-days, oracle-fleet#883) is FORBIDDEN to a token without this and GraphQL fails the whole PR list — the specs reviewer skipped oracle-fleet every tick on 2026-10-27 until the grant"
+        },
         "actions": {
           "level": "read",
           "why": "`gh run view --log` on the head's CI run — the evidence-render step output is the lens's evidence input when `specs/evidence/` is gitignored (gateway/)"

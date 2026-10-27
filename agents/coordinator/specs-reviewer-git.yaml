@@ -53,6 +53,11 @@ spec:
     pull_requests: write     #   submit the specs verdict (approve / request-changes) + read the PR body's Spec changes:
     issues: read             #   the closing issue's ## Acceptance rows — the lens's check-1 intent source (reads only)
     checks: read             #   CI green at head is the dispatch premise (statusCheckRollup)
+    statuses: read           #   the SAME premise: statusCheckRollup mixes CheckRuns (checks:read) with commit STATUSES — a
+                             #   StatusContext another App wrote (renovate/stability-days on oracle-fleet#883) is FORBIDDEN
+                             #   without this, and GraphQL fails the WHOLE `gh pr list`, blinding the repo (2026-10-27).
+                             #   ⚠ The App must hold Commit statuses: Read in its settings BEFORE this line lands — a request
+                             #   the installation cannot grant fails the mint for every repo.
     actions: read            #   `gh run view --log` on the head's ci run — the evidence-render block is the evidence input
   repositories:              #   the island repos — SPECS_REVIEW_REPOS in agents/specs-reviewer-session.sh
     - homelab                #   (an island adopting the lens adds itself here AND installs the App there —
