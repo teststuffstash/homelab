@@ -55,7 +55,8 @@ spec:
     checks: read             #   CI green at head is the dispatch premise (statusCheckRollup)
     actions: read            #   `gh run view --log` on the head's ci run — the evidence-render block is the evidence input
   repositories:              #   the island repos — SPECS_REVIEW_REPOS in agents/specs-reviewer-session.sh
-    - homelab                #   (an island adopting the lens adds itself here AND installs the App there)
+    - homelab                #   (an island adopting the lens adds itself here AND installs the App there —
+    - oracle-fleet           #    the install FIRST: a token request naming an uninstalled repo fails for all)
 ---
 # 3) Drive the generator → the Secret the CronWorkflow reads (key `token` → GH_TOKEN).
 apiVersion: external-secrets.io/v1
