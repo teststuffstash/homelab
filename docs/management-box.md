@@ -1670,3 +1670,5 @@ mean nobody here has run NixOS in anger — which is exactly what the pilot is f
 And the snore deployment shape is NOT the model for updating this box: its ansible Job runs
 **inside the cluster**, and pointing that at the recovery root would put the cluster in the root's
 dependency cone. It is also deployment, not OS upgrade.
+
+<!-- proof PR: in-cluster n/a for opnsense-test-vm (#2970) — close unmerged -->
