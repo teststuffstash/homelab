@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: collector
-          image: docker.io/otel/opentelemetry-collector-contrib:0.163.2
+          image: docker.io/otel/opentelemetry-collector-contrib:0.164.0
           args: ["--config=/etc/otelcol/config.yaml"]
           ports:
             - { name: otlp-grpc, containerPort: 4317 }
