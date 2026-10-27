@@ -79,13 +79,13 @@ resource "cloudflare_dns_record" "proton_dkim" {
   comment  = "Proton Mail DKIM (Proton-managed key rotation)."
 }
 
-# Proton's suggested starting policy. No rua= yet: the dmarc@ address does not exist; tighten
-# to p=reject once reports show only Proton sending.
+# Proton's suggested starting policy + aggregate reports to dmarc@ (a Proton address, 2026-10-27);
+# tighten to p=reject once the reports show only Proton sending as teststuff.net.
 resource "cloudflare_dns_record" "proton_dmarc" {
   zone_id = var.zone_id
   name    = "_dmarc"
   type    = "TXT"
-  content = "\"v=DMARC1; p=quarantine\""
+  content = "\"v=DMARC1; p=quarantine; rua=mailto:dmarc@teststuff.net\""
   ttl     = 3600
   comment = "DMARC for the mail domain (Proton)."
 }
