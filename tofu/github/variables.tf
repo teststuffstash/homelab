@@ -135,7 +135,7 @@ variable "protected_repos" {
     # every master push re-runs e2e (30-min timeout, two slots) on every open PR before any can
     # merge. Safe to require because e2e carries NO `if:` and NO `needs:` and triggers on both
     # master and `goal/**` — a context that can skip is a required check that deadlocks.
-    oracle-fleet   = { required_checks = ["ci", "e2e"], require_code_owner_review = true }                                   # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
+    oracle-fleet   = { required_checks = ["ci", "e2e"], require_code_owner_review = true, required_approvals = 2 }           # specs/ = the specs reviewer's (ADR-155, 2026-10-26); CODEOWNERS keeps /docs/process/ + /.agents/ + /.claude/ on Rasmus
     oracle-iac     = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: CI + sentinel, no review; PRIVATE → the one repo the push guard can exist on
     sleep-iac      = { required_checks = ["ci", "iac-sentinel"], require_approval = false }                                  # public → no push ruleset possible
     sleep-tracking = { required_checks = ["ci", "system-test"] }                                                             # system-test = the kind+Playwright render gate (sleep goal #121); job name, not the workflow name "integration"

@@ -662,7 +662,9 @@ check_ansible() {
   fi
   while IFS= read -r p; do
     [ -n "$p" ] && [ -f "$REPO/$p" ] || continue
-    o="$(ANSIBLE_CONFIG="$REPO/ansible/ansible.cfg" ANSIBLE_NOCOLOR=1 timeout 900 mgmt_x "$apb" "$p" --check 2>&1)"; r=$?
+    # `timeout` execs a BINARY: mgmt_x (a shell function) goes FIRST and resolves `timeout` + the play
+    # runner — `timeout 900 mgmt_x …` exited 127 on every play and red the belt (2026-10-26 22:02Z on)
+    o="$(cd "$REPO" && ANSIBLE_CONFIG="$REPO/ansible/ansible.cfg" ANSIBLE_NOCOLOR=1 mgmt_x timeout 900 "$apb" "$p" --check 2>&1)"; r=$?
     out+="$o"$'\n'; [ "$rc" = 0 ] && rc=$r; ran=$((ran + 1))
   done <<<"$plays"
   [ "$ran" -gt 0 ] || { skipped ansible no-input "no OPNsense credential and no ansible SSH key reachable"; return; }

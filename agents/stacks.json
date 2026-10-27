@@ -29,7 +29,7 @@
         "openrouter-operator"
       ],
       "mainRepo": "homelab",
-      "coordinatorModel": "opencode-go/deepseek-v4-flash",
+      "coordinatorModel": "opus",
       "routerMode": "authoritative",
       "modelDeny": [
         "deepseek/deepseek-v4-flash-0731"
