@@ -119,8 +119,11 @@ _ans_playbook() {
   elif [ -e "$T/applied" ]; then ph=confirm
   else ph=target; fi
   echo "$ph $(basename "$play") $(cd "$tree" && cat ansible/matchbox.yml)" >>"$T/calls"
-  local v="P_$ph"
-  case "${!v}" in
+  local v="P_$ph" r
+  r="${!v}"
+  # P_TARGET_ONLY=<play basename>: the target --check measures a change in that play alone
+  [ "$ph" = target ] && [ -n "${P_TARGET_ONLY:-}" ] && [ "$(basename "$play")" != "$P_TARGET_ONLY" ] && r=clean
+  case "$r" in
     clean)   recap matchbox-lxc 0 0 0 ;;
     changed) recap matchbox-lxc 2 0 0 ;;
     failed)  echo 'fatal: [matchbox-lxc]: FAILED! => {"msg": "x"}'; recap matchbox-lxc 0 0 1; return 2 ;;
@@ -209,6 +212,13 @@ eq confirm-no-marker "" "$(cat "$ADIR/ansible-stopped" 2>/dev/null)"
 # the lease record: subject ansible/matchbox, from = the previous master (nothing confirmed yet), to = master
 L="$(ls -d "$MGMT_ANSIBLE_DIR"/*-matchbox-"${SHA:0:8}" | tail -1)/lease.json"
 eq confirm-lease-fields "ansible/matchbox $LAST $SHA 2026-10-26T12:30:00Z" "$(jq -r '.data | "\(.subject) \(.from) \(.to) \(.["expected-end"])"' "$L")"
+# d2. the apply runs ONLY the plays the target --check measured as changed (a 0-diff DHCP script would
+#     still wipe + re-add; the confirm still reads every play)
+rm -f "$ADIR/ansible-confirmed-matchbox"
+P_TARGET_ONLY=matchbox-ipxe-tftp.yml run apply-only-changed on changed clean changed clean
+eq apply-only-changed-rc 0 "$RC"
+eq apply-only-changed-plays "apply matchbox-ipxe-tftp.yml" "$(grep '^apply ' <<<"$C" | cut -d' ' -f1,2 | paste -sd'|')"
+eq apply-only-changed-confirm-all "$plays" "$(grep -c '^confirm ' <<<"$C")"
 # e. the NEXT span's drift read uses the CONFIRMED sha, not the span's previous master
 run after-confirm shadow changed clean - -
 has drift-reads-confirmed "^base matchbox.yml b$" "$C"

@@ -887,7 +887,9 @@ tofu roots, off the loops' shared lock (no tofu state is touched).
    (`agents/seat-window.sh`: the reconciler and the apply loop wait it out — a netboot reinstall never
    races a Matchbox converge) and `agent-coordinator/upgrade-lease-ansible-<group>` (subject
    `ansible/<group>`, from = the confirmed sha, to = master, `expected-end` = begin + `cap_min`).
-5. **Apply** — every play, in order, each under `MGMT_ANSIBLE_TIMEOUT` (900 s).
+5. **Apply** — the plays the target `--check` MEASURED as changed, in order, each under
+   `MGMT_ANSIBLE_TIMEOUT` (900 s); the rest are converged by that read (a 0-diff DHCP script would still
+   wipe and re-add — the first BACKUP converge restarted Kea on the standby for nothing).
 6. **Confirm** — a second `--check` is changed=0 AND the row's `health` passes (Matchbox: HTTP `:8080/`
    and the iPXE entry script answer, `matchbox` + `dnsmasq` `active` on the LXC over the play's own ssh;
    the ipxe play's own TFTP verify already ran inside the apply). Good → lease deleted, window closed,
@@ -917,6 +919,19 @@ FAILED at the extract; `get_url` without a checksum reports `changed` on every `
 HEAD); the tftpd-hpa mask reported `changed` forever once the package was gone. All three were fixed in
 the roles with this change (the installed version, the asset `.schematic` marker, the mask read) — a
 role that is not check-clean refuses itself on the box (`ansible-check-failed`), which is the signal.
+
+**Proved live (2026-10-26, the box).** After a seat converge in window seat-1793051883-8737 (live =
+master: the proxydhcp header + the new asset marker), the **shadow tick** on #2948 (22:42Z): `--check at
+90f4d4ff → changed — matchbox-ipxe-tftp=1` (the iPXE provenance comment), drift read at 88933e71 clean,
+`[shadow] would apply 88933e71 → 90f4d4ff`, the observation recorded. The **first unattended apply**
+on #2950 (the flip to `on` + the proxydhcp header): 23:13:08Z `--check → proxydhcp=2 ipxe-tftp=1` →
+23:13:39Z drift read at 88933e71 clean → 23:13:40Z window `seat-1793056419-4512` (by `mgmt-apply`,
+alerts `none`) + lease `upgrade-lease-ansible-matchbox` (subject `ansible/matchbox`, from 88933e71,
+to 5400f47e, expected-end 23:43:40Z) → 23:14:12Z APPLY (the dnsmasq handler restarted it 23:14:00Z) →
+23:14:43Z confirm `--check` clean, health ok (`:8080/`, the iPXE script, matchbox + dnsmasq active) →
+23:14:46Z CONFIRMED, lease deleted, window closed → `management-apply` = success "ansible matchbox:
+applied by the management box (3 change(s)) · confirm clean";
+`mgmt_apply_ansible_last_run_timestamp_seconds{group="matchbox",mode="on",outcome="applied"}`.
 
 **Credentials.** Nothing new: the Matchbox plays ssh as root with the Proxmox seed key — the jail's
 `~/.claude/homelab-pve-ssh/id_ed25519`, the box's provisioned copy `/var/lib/mgmt/pve-ssh/id_ed25519`
@@ -980,10 +995,23 @@ names made mechanical. What it adds to §Ansible applies:
   read (anti-lockout, hostname) gets `OPN_SSH_KEY` = the box's `PVE_SSH_KEY` (the node's root key IS
   the pve key — the first box shadow tick failed both plays on the jail's `$HOME` path); the credential is whatever pair
   `/var/lib/mgmt/env` carries (step 0 made it the `automation` user, #2942) — never minted here.
-- **Shadow first.** The row ships `mode: shadow`; the jail smoke of the full loop (below) read the
-  BACKUP `opnsense-pve`, MASTER `opnsense-nx02`, and `--check` → `opnsense/dnsmasq-dhcp.py=2` — the one
-  real merged-but-unapplied router change (wk-metal-04's dnsmasq `hwaddr`, #2758, applied to Kea by
-  hand on 10-20 but never to the dnsmasq fallback; the drill's realism score 57→58 on 10-25).
+- **Shadow first, then BACKUP-only (proved live 2026-10-27).** The box's shadow tick on #2951 (23:39Z):
+  target = the CARP BACKUP `opnsense-pve`, `--check → dnsmasq-dhcp.py=2` (a `descr` on wk-metal-04's
+  reservation); haproxy/system failed their ssh read on the jail's key path → #2952 (`OPN_SSH_KEY`). The
+  drift baseline that tick could not record was read by the seat (jail `--check` at 5400f47e as
+  `automation`, limited to the BACKUP: every play and both scripts 0) and seeded on the box. The
+  **first unattended BACKUP converge** on #2955 (the flip to `backup-only` + a second `descr`): 00:22:38Z
+  target `opnsense-pve`, MASTER untouched → `--check → dnsmasq-dhcp.py=4` → 00:25:27Z drift read at
+  5400f47e clean → 00:25:28Z window `seat-1793060727-4189` + lease `upgrade-lease-ansible-opnsense`
+  (expected-end 01:10:27Z) → **node-local restore ARMED** (00:25:21Z, 1800 s, history head
+  `config-1793051741.7536.xml`) → 00:27:00Z APPLY → 00:29:23Z confirm `--check` clean, `check pve` all
+  ok (LAN via ifconfig, CARP `.1` BACKUP, Kea HA pair, WAN gate DOWN, `.1` serves), CARP map unchanged
+  → 00:29:21Z restore **cancelled** on the node → 00:29:28Z CONFIRMED, lease deleted, window closed →
+  `management-apply` success "applied by the management box (4 change(s)) · confirm clean". The node's
+  config history attributes every write to `automation@192.168.2.53` (the box); the MASTER's head stayed
+  at 2026-10-26 21:37Z. The MASTER still carries the wk-metal-04 `hwaddr` (#2758) and lacks the two
+  descrs — the weekly drill scores against it — until its rolling path (step 3's later part) or a seat
+  `converge nx02`.
 
 **Incident note (2026-10-26, the jail smoke).** The shadow smoke's DRIFT read ran the PREVIOUS master's
 two DHCP scripts — written before `OPN_CHECK` existed — and they did a real rebuild against the prod
@@ -1022,14 +1050,14 @@ even when every check is green.
 | Longhorn OFFLINE engine move — the hold (cordon → delete the consumer → detached → patch → uncordon → replacement whole) | engines unit, every 1-replica attached volume | 2026-10-11 (by hand, then the function live) | garage-1 recovery by hand 06:30Z: detached 10 s, Ready 33 s after the uncordon; `helm_lh_offline_move` itself run live from the seat against garage-2 the same morning (image already current — the hold/release half is the whole act) — see §Helm release applies item 4 |
 | The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
 <<<<<<< HEAD
-| Router config converge, BACKUP-only (`apply_ansible.opnsense`, §Router config converge — BACKUP-only: the live CARP BACKUP, the node-local restore armed first, the security-boundary `deny_paths`) | `mode: shadow` (2026-10-26) | — (shadow; the node-local restore rehearsed on test VM 9110) | ROADMAP §Deploy paths step 3; enters as box-run with its first unattended confirmed BACKUP converge. The MASTER stays the row below |
+| Router config converge, BACKUP-only (`apply_ansible.opnsense`, §Router config converge — BACKUP-only: the live CARP BACKUP, the node-local restore armed first, the security-boundary `deny_paths`) | `mode: backup-only` (2026-10-27; shadow 2026-10-26) | **2026-10-27 (CONFIRMED, unattended)** | #2955: opnsense-pve, dnsmasq-dhcp.py=4, restore armed 00:25:21Z → cancelled 00:29:21Z, `check pve` ok, CARP unchanged, lease + window closed (§Router config converge — BACKUP-only). The node-local restore FIRING is proven on test VM 9110 only. The MASTER stays the row below |
 | Router config converge, MASTER (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
 =======
 | Router config: test-VM verdict box-posted (`mgmt-router-verdict`, the `opnsense-test-vm` status — §MB3 "The router surface") | always on (a verdict, never an apply) | 2026-10-26 | ADR-152 step 1; PR code sandboxed as `mgmt-opnsense-test`; required once the operator applies `tofu/github` |
 | Router config converge (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
 >>>>>>> 05127f5d (mgmt: the box posts the opnsense-test-vm verdict on every PR head (ADR-152 step 1))
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | human, by ruling (operator 2026-09-29: the official update path, no Renovate; majors attended — [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (seat API calls, trialled on test VM 9110 first; prod 2026-09-29 + 2026-09-30) | not a box capability: class 14 in `dependency-upgrades.md`; the box run is ROADMAP §Deploy paths program step 4 (test VM → BACKUP → MASTER under one lease), the revert a `qm snapshot` local to the node (spike D5) |
-| Matchbox (`ansible/matchbox*.yml` — the server + the PXE assets; `apply_ansible.matchbox`, §Ansible applies) | `mode: on` (2026-10-27; shadow 2026-10-26) | — (shadow tick 2026-10-26 22:42Z on #2948: `would apply 88933e71 → 90f4d4ff — matchbox-ipxe-tftp=1`, drift read clean) | class 15 in `dependency-upgrades.md`; near-zero cone, the FIRST ansible applier (ROADMAP §Deploy paths program step 2) — enters as box-run with its first unattended confirmed apply |
+| Matchbox (`ansible/matchbox*.yml` — the server + the PXE assets; `apply_ansible.matchbox`, §Ansible applies) | `mode: on` (2026-10-26; shadow tick 22:42Z on #2948) | **2026-10-26 (CONFIRMED, unattended)** | #2950: proxydhcp=2 + ipxe-tftp=1 applied 23:14:12Z, confirm clean + health ok, lease + window closed, `management-apply` success (§Ansible applies) — class 15, the FIRST ansible applier |
 
 ### Non-Talos VMs: the runner verb (2026-10-08)
 
