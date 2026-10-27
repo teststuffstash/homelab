@@ -102,6 +102,10 @@ _ans_script_env() { ( cd "$REPO" && bash "$REPO/scripts/opnsense-router-node.sh"
 # _ans_runner_opnsense → ANS_PY set + the collection present; rc 1 + why on stderr
 _ans_runner_opnsense() {
   [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ] || { echo "no OPN_API_KEY/OPN_API_SECRET in the unit's env" >&2; return 1; }
+  # the haproxy/system roles' one ssh read/write (anti-lockout, hostname) takes OPN_SSH_KEY, else
+  # $HOME/.claude/… — the jail's path; on the box (HOME=/root) that file does not exist (the first box
+  # shadow tick, 2026-10-26 23:39Z: both plays failed their ssh read). The node's root key IS the pve key.
+  export OPN_SSH_KEY="${OPN_SSH_KEY:-${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}}"
   local out
   out="$(cd "$REPO" && NIX_CONFIG="experimental-features = nix-command flakes" timeout 600 \
          nix build --no-link --print-out-paths "path:$REPO/ansible/controller-env" 2>&1)" \
