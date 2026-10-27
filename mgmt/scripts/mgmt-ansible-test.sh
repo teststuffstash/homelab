@@ -61,7 +61,7 @@ ans_recap a.yml 124 "$T/o-clean" >"$T/r5"; eq judge-timeout-failed "failed	a.yml
 
 # ── 2b. the router row's pure reads + the real *.py play runner ───────────────────────────────────
 RROW="$(ans_row "$POL" opnsense)"
-eq router-row-shadow-target "shadow carp-backup" "$(jq -r '"\(.mode) \(.target)"' <<<"$RROW")"
+eq router-row-backup-only-target "backup-only carp-backup" "$(jq -r '"\(.mode) \(.target)"' <<<"$RROW")"
 eq groups-router "opnsense" "$(printf 'opnsense/dnsmasq-dhcp.py\n' | ans_groups_touched "$POL")"
 eq groups-router-role "opnsense" "$(printf 'ansible/roles/opnsense-haproxy/tasks/main.yml\n' | ans_groups_touched "$POL")"
 # the security boundary: WireGuard / ACME / ddclient / users / CARP / the tuya filter+d_nat → hits; unbound → none
