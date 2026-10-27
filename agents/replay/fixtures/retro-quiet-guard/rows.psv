@@ -1,0 +1,7 @@
+# retro-quiet-guard — the decision table (family contract in fixture.yaml; per-row intent below).
+# id                | world | patch | env                                 | expect              | params
+prepare-ok          |       |       | PREP_RC=0                           | prepare-ok          |
+quiet-push-ok       |       |       | PREP_RC=3 CURL_RC_1=0               | quiet-push-ok       |
+quiet-push-retry-ok |       |       | PREP_RC=3 CURL_RC_1=1 CURL_RC_2=0   | quiet-push-retry-ok |
+quiet-push-fails    |       |       | PREP_RC=3 CURL_RC_1=1 CURL_RC_2=1   | quiet-push-fails    |
+prepare-fails       |       |       | PREP_RC=1                           | prepare-fails       |

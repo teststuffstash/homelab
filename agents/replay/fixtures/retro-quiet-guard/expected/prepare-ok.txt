@@ -1,0 +1,4 @@
+CALL python3 agents/retro_pipeline.py prepare --series oracle --output $WORK/bundle.json --min-tasks <minWindowTasks>
+OUT QUIET: false
+OUT BUNDLE: <none>
+RC 0

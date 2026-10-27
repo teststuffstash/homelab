@@ -1,0 +1,6 @@
+CALL python3 agents/retro_pipeline.py prepare --series oracle --output $WORK/bundle.json --min-tasks <minWindowTasks>
+CALL curl -s --max-time 10 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/oracle/outcome/quiet
+CALL curl -s --max-time 10 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/oracle/outcome/quiet
+OUT QUIET: true
+OUT BUNDLE: {"quiet": true}
+RC 0

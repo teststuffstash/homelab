@@ -1,0 +1,31 @@
+# retro-quiet-guard — the guard's prepare exit-code branch (homelab#2932).
+#
+# THE CONTRACT: retro-argo.yaml's guard step runs `retro_pipeline.py prepare` and branches on
+# its exit code. 0 → `quiet=false`, the step falls through and the cells + harvest ride.
+# 3 (QUIET_EXIT: 1..minWindowTasks-1 ledger tasks; zero is a broken ledger, exit 1) → a verdict: a stub
+# bundle, `quiet=true`, the RetroReportOverdue belt pushed under its own `outcome/quiet`
+# grouping, exit 0. Any other non-zero → the guard fails with that code, no push.
+#
+# The quiet push is the harvest belt's shape (retro-push-belt): retry once. Its final failure
+# must be VISIBLE — a belt whose own failure is a TTL'd log line is not a belt (FU-108 class).
+# No branch or PR exists at guard time, so harvest's PR-body amendment has nothing to amend:
+# the CHOSEN surface is the guard itself failing (exit 1), so the workflow reads Failed beside
+# the overdue alert that then fires honestly, never Succeeded beside a silent WARN.
+#
+# Rows: `prepare-ok` · `quiet-push-ok` · `quiet-push-retry-ok` · `quiet-push-fails` ·
+# `prepare-fails`. Seams in bridge.sh: python3 / curl / date / sleep shadows, and WORK (the
+# outputs dir, defined just above the block in the manifest) pointed at a tmpdir.
+name: retro-quiet-guard
+mode: table
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-quiet-guard
+env:
+  - STACK=oracle
+  - DATE_TS=1761523200
+rows: rows.psv
+# The block carries Argo's literal `{{workflow.parameters.minWindowTasks}}` (substituted at
+# submit time); `{{` in a table template reads as an unfilled row param, so name it instead.
+scrub:
+  - 's#{{workflow\.parameters\.minWindowTasks}}#<minWindowTasks>#g'

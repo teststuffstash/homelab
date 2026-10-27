@@ -99,6 +99,7 @@ spec:
             # SKIPPED/omitted node keeps its normal meaning, and the guard's refusal must still
             # stop the run (it has no continueOn, by design).
             - name: cell-a
+              when: "{{tasks.guard.outputs.parameters.quiet}} == false"
               template: retro-cell
               dependencies: [guard]
               continueOn: { failed: true, error: true }
@@ -109,6 +110,7 @@ spec:
                 artifacts:
                   - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
             - name: cell-b
+              when: "{{tasks.guard.outputs.parameters.quiet}} == false"
               template: retro-cell
               dependencies: [cell-a]
               continueOn: { failed: true, error: true }
@@ -119,6 +121,7 @@ spec:
                 artifacts:
                   - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
             - name: harvest
+              when: "{{tasks.guard.outputs.parameters.quiet}} == false"
               template: harvest
               dependencies: [cell-a, cell-b]
               arguments:
@@ -138,6 +141,8 @@ spec:
       # retro or the fixer is busy — a skipped retro must be VISIBLE in the DAG, not silent.
       - name: guard
         outputs:
+          parameters:
+            - { name: quiet, valueFrom: { path: /work/quiet } }
           artifacts:
             - { name: evidence, path: /work/bundle.json, archive: { none: {} } }
         container:
@@ -189,8 +194,38 @@ spec:
               [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) in ${PROJECT} — retro would contend for the fixer WIP slot"; exit 1; }
               # FU-058: one immutable activity bundle, shared by both cells and harvest.
               # Preparation checks collection coverage; only successful publication advances it.
-              python3 agents/retro_pipeline.py prepare --series "$STACK" --output /work/bundle.json \
-                --min-tasks "{{workflow.parameters.minWindowTasks}}"
+              # A QUIET week (1..minWindowTasks-1 ledger tasks, exit 3; ZERO stays exit 1) is a verdict, not a
+              # failure: the window rolls forward unpublished, the cells + harvest are skipped
+              # (`quiet` output), and the RetroReportOverdue belt gets a push under its own
+              # outcome=quiet group — its bare max() reads every group, so a quiet week cannot
+              # page while a real failure still does (2026-10-26: the first quiet week since
+              # #2130 failed the workflow and fired the belt).
+              # The quiet push is the same belt as harvest's (retry once, then a VISIBLE failure — FU-108
+              # class: a belt whose own failure is a TTL'd log line is not a belt). No branch or PR exists
+              # yet, so harvest's PR-body surface has nothing to amend: a quiet push that fails after the
+              # retry FAILS the guard instead — the workflow reads Failed, matching the overdue alert that
+              # will (honestly) fire, rather than Succeeded beside a silent WARN.
+              # WORK is the outputs dir (the replay fixture's seam — retro-quiet-guard points it at a tmpdir).
+              WORK=/work
+              # >>>REPLAY:retro-quiet-guard>>>
+              rc=0
+              python3 agents/retro_pipeline.py prepare --series "$STACK" --output "$WORK/bundle.json" \
+                --min-tasks "{{workflow.parameters.minWindowTasks}}" || rc=$?
+              if [ "$rc" -eq 3 ]; then
+                echo '{"quiet": true}' > "$WORK/bundle.json"
+                echo true > "$WORK/quiet"
+                QUIET_URL="http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${STACK}/outcome/quiet"
+                printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
+                  | curl -s --max-time 10 --data-binary @- "$QUIET_URL" \
+                  || { sleep 3 \
+                       && printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
+                          | curl -s --max-time 10 --data-binary @- "$QUIET_URL"; } \
+                  || { echo "GUARD FAILED: quiet week, but the pushgateway push failed after retry — failing the run so RetroReportOverdue and the workflow phase agree"; exit 1; }
+                exit 0
+              fi
+              [ "$rc" -eq 0 ] || exit "$rc"
+              echo false > "$WORK/quiet"
+              # <<<REPLAY:retro-quiet-guard<<<
           env: &tsenv
             - { name: HOME, value: "/home/node" }
             # optional like its siblings: an absent mirror degrades (anonymous clone, unset env),
