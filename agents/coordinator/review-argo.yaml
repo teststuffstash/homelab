@@ -80,6 +80,17 @@ spec:
       port: "12000"
       endpoint: /review
       method: POST
+    # The specs reviewer's doorbell (ADR-155; operator 2026-10-27: a 3–5 min wait on the */5 cron
+    # for a mechanical approve is not acceptable). The code reviewer's pod POSTs here right after
+    # its verdict lands (agents/reviewer-session.sh, after the exit contract) — the specs gate's
+    # premise is exactly that approval. Consumed by the `specs-review` Sensor
+    # (specs-review-argo.yaml); the */5 CronWorkflow stays as the level backstop. Payload scopes
+    # only ({repo, number}, logged); the tick walks every open head regardless — a doorbell, never
+    # a work item (coordinate-argo.yaml doctrine).
+    specs-review:
+      port: "12000"
+      endpoint: /specs-review
+      method: POST
     # FU-085: the coordinator doorbell — POST /coordinate {repo} wakes the scan in seconds where
     # the */10 cron would wait minutes. Consumed by the `coordinator` Sensor (coordinate-argo.yaml).
     coordinate:
