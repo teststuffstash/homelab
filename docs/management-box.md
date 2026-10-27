@@ -976,7 +976,9 @@ names made mechanical. What it adds to §Ansible applies:
   `settle_s` (60) before it.
 - **Runner** (`runner: opnsense`): the oxlorg modules need httpx — the interpreter is
   `ansible/controller-env` built by the box's own nix (data from the clone, never devbox) and the
-  collection is installed by the lock-pinned `ansible-galaxy`; the credential is whatever pair
+  collection is installed by the lock-pinned `ansible-galaxy`; the haproxy/system roles' one ssh
+  read (anti-lockout, hostname) gets `OPN_SSH_KEY` = the box's `PVE_SSH_KEY` (the node's root key IS
+  the pve key — the first box shadow tick failed both plays on the jail's `$HOME` path); the credential is whatever pair
   `/var/lib/mgmt/env` carries (step 0 made it the `automation` user, #2942) — never minted here.
 - **Shadow first.** The row ships `mode: shadow`; the jail smoke of the full loop (below) read the
   BACKUP `opnsense-pve`, MASTER `opnsense-nx02`, and `--check` → `opnsense/dnsmasq-dhcp.py=2` — the one

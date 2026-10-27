@@ -99,6 +99,10 @@ ANS_PY=python3 _ans_playbook "$T" old.py --check >"$T/old.out" 2>&1; eq py-no-ch
 eq py-no-check-support-not-run "absent" "$([ -e "$T/WROTE" ] && echo ran || echo absent)"
 ans_recap old.py 1 "$T/old.out" >"$T/r6"; eq py-no-check-support-failed "failed	old.py:-" "$(ans_judge "$T/r6")"
 
+# the opnsense runner exports the roles' ssh key from the box's PVE_SSH_KEY (never the jail's $HOME path)
+eq runner-ssh-key "/var/lib/mgmt/pve-ssh/id_ed25519" "$( unset OPN_SSH_KEY; export PVE_SSH_KEY=/var/lib/mgmt/pve-ssh/id_ed25519 OPN_API_KEY=k OPN_API_SECRET=s
+  nix() { echo /nix/store/x-env; }; ansible-galaxy() { :; }; _ans_runner_opnsense >/dev/null 2>&1; echo "$OPN_SSH_KEY")"
+
 # ── 3. the bracket, against a fixture clone ───────────────────────────────────────────────────────
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 R="$T/clone"; git init -q -b master "$R"; mkdir -p "$R/ansible"
