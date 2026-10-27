@@ -41,3 +41,19 @@ gh() {
   printf '{"reviews":[],"comments":[],"labels":[],"commits":[{"oid":"abc1234def567890abcdef","messageHeadline":"fix: the thing","committedDate":"2026-08-18T17:50:00Z"}],"headRefOid":"abc1234def567890abcdef"}'
   return 0
 }
+
+# The specs-review doorbell (2026-10-27): the block's second external write is a POST to the
+# agent-loop EventSource on the live-verdict terminal. Function-shadow `curl` the same way — record
+# the CALL line (the URL and body ARE the contract: which endpoint, which repo/number) and answer
+# success. Which TERMINAL rings is what the rows pin; a shadow that failed would only exercise the
+# "NOT rung" log line, which the cron backstop makes a non-decision.
+curl() {
+  {
+    printf 'CALL curl'
+    for _a in "$@"; do
+      printf ' %s' "$_a"
+    done
+    printf '\n'
+  } >> "$REPLAY_ACTIONS"
+  return 0
+}

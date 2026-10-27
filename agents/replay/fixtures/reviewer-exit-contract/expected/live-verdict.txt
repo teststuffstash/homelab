@@ -1,5 +1,7 @@
 CALL gh pr view 42 --repo teststuffstash/test-project --json reviews,comments,labels,commits,headRefOid
+CALL curl -fsS --max-time 5 -X POST -H Content-Type: application/json -d {"repo":"test-project","number":42} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/specs-review
 OUT exit-contract: terminal OK — live homelab-reviewer verdict at this head
+OUT specs-review doorbell rung for teststuffstash/test-project#42
 OUT FINAL: 0
 OUT TERMINAL_OK: 1
 RC 0

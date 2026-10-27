@@ -1014,6 +1014,7 @@ assert_review_terminal() {
   [ -f "${SILENT_DEDUP_RECORD:-${TMPDIR:-/tmp}/silent_dedup_record.$$}" ] && silent_dedup="1"
   if [ "${verdict:-0}" -gt 0 ]; then
     echo "exit-contract: terminal OK — live ${REVIEWER_LOGIN} verdict at this head"
+    RING_SPECS=1   # the one terminal that changes the specs gate's premise (its doorbell, below)
     return 0
   fi
   # TERMINAL 4 is tested BEFORE the standing-aside terminal: the #1438 scenario has an aside at the
@@ -1034,7 +1035,7 @@ assert_review_terminal() {
   echo "exit-contract: NO TERMINAL — no ${REVIEWER_LOGIN} verdict, no standing-aside, no agent/error, no silent-dedup at head ${newest_sha8:-unknown} (verdict=$verdict aside=$aside error=$error_label silent_dedup=$silent_dedup); a green here would mask a dead review plane" >&2
   return 1
 }
-TERMINAL_OK=0
+TERMINAL_OK=0; RING_SPECS=0
 if assert_review_terminal; then TERMINAL_OK=1; fi
 # Exit policy: a terminal exists → 0 (even if claude crashed right after posting it — the review
 # landed and its record is on the PR); claude failed with no terminal → claude's own RC (honest);
@@ -1042,15 +1043,14 @@ if assert_review_terminal; then TERMINAL_OK=1; fi
 if [ "${TERMINAL_OK:-0}" = "1" ]; then FINAL=0
 elif [ "${RC:-0}" -ne 0 ]; then FINAL="${RC:-1}"
 else FINAL=10; fi
-# <<<REPLAY:reviewer-exit-contract<<<
-echo "$FINAL" > /tmp/rc
-# Ring the specs reviewer's doorbell (agent-loop EventSource /specs-review → the `specs-review`
-# Sensor, specs-review-argo.yaml): its dispatch premise is THIS identity's live verdict, so the
-# second approval follows in seconds instead of on the */5 cron (operator, 2026-10-27). Rung on
-# any terminal — a standing-aside or an agent/error costs the specs tick a no-op walk, and the
-# ring is deliberately OUTSIDE the replayed block (the fixture shadows gh, not curl). Best effort:
-# a missed ring is the cron's case (the doorbell doctrine, coordinate-argo.yaml).
-if [ "${TERMINAL_OK:-0}" = "1" ]; then
+# The specs reviewer's doorbell (agent-loop EventSource /specs-review → the `specs-review` Sensor,
+# specs-review-argo.yaml): its dispatch premise is THIS identity's live verdict, so on that
+# terminal — and only that one; an aside or an agent/error moves nothing for the specs gate — the
+# second approval follows in seconds instead of on the */5 cron (operator, 2026-10-27). Best
+# effort, never a FINAL change: a missed ring is the cron's case (the doorbell doctrine,
+# coordinate-argo.yaml). Inside the replayed block on purpose: the fixture pins WHICH terminal rings
+# (bridge.sh shadows curl the way it shadows gh).
+if [ "${RING_SPECS:-0}" = "1" ]; then
   _bell="${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/specs-review"
   if curl -fsS --max-time 5 -X POST -H 'Content-Type: application/json' \
        -d "{\"repo\":\"${REPO_SLUG##*/}\",\"number\":${PR_NUMBER}}" "$_bell" >/dev/null 2>&1; then
@@ -1059,6 +1059,8 @@ if [ "${TERMINAL_OK:-0}" = "1" ]; then
     echo "specs-review doorbell NOT rung (${_bell} unreachable) — the */5 cron picks it up"
   fi
 fi
+# <<<REPLAY:reviewer-exit-contract<<<
+echo "$FINAL" > /tmp/rc
 trap - EXIT
 upload_transcripts
 cat /tmp/result.json
