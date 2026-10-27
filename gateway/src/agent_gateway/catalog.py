@@ -46,6 +46,11 @@ log = logging.getLogger("gateway.catalog")
 SOURCES = ("config", "docs")
 READS = {"config": ("catalog", "config"), "docs": ("docs",)}  # a source's reads, in order; each read has a URL
 OUTCOMES = ("ok", "fetch-failed", "parse-failed", "implausible")
+# ⚖ #2933 (operator ruling 2026-10-26): a LISTED model whose dialect the parser does not know is
+# dropped from that refresh — counted and logged by the reason, and the rest of the source lands
+# (a model the gateway cannot speak cannot be admitted, so dropping loses nothing that worked).
+# Whole-source shape failures stay parse failures. The dialect is still never guessed.
+DROPPED_REASONS = ("unknown-dialect",)
 PLANS = ("go", "go-plus")
 PROVIDER = "opencode-go"
 # ⚖ a fresh snapshot with fewer than this share of the last good one's models is implausible (a
@@ -126,11 +131,20 @@ def _name_family(where: str, row: dict) -> dict:
     return out
 
 
-def _dialect(where: str, provider) -> str:
+# ⚖ the npm packages the gateway can speak, one wire dialect each (GW-CATALOG-GO §The model's
+# dialect): no `npm` is the openai one. Any other value is not a dialect — its row is dropped
+# (#2933), not guessed and not a whole-source failure.
+KNOWN_NPM: dict[str, str] = {"@ai-sdk/anthropic": "anthropic"}
+
+
+def _dialect(where: str, provider, dropped: list[dict], model: str) -> str | None:
     """The model's wire dialect (GW-CATALOG-GO): the per-model `provider` override's `npm` —
     `@ai-sdk/anthropic` serves the model on the anthropic endpoint only, no override on the openai
-    one (the vendor's two Go endpoints). Any other `npm` is a shape this parser does not know: a
-    parse failure, never a guess."""
+    one (the vendor's two Go endpoints). Returns None when the row is DROPPED: any other `npm`
+    value is a dialect this parser does not know — recorded `{model, reason: unknown-dialect}` in
+    `dropped` (counted and logged by the refresh, #2933), never a guess and never a whole-source
+    failure (only the row is lost). A `provider` that is not an object, or an `npm` that is not a
+    string, is a shape the parser does not know: still a parse failure of the whole source."""
     if provider is None:
         return "openai"
     if not isinstance(provider, dict):
@@ -138,28 +152,32 @@ def _dialect(where: str, provider) -> str:
     npm = provider.get("npm")
     if npm is None:
         return "openai"
-    if not isinstance(npm, str):
-        raise ParseError(f"{where}.provider.npm is not a string")
     if npm == "@ai-sdk/anthropic":
         return "anthropic"
-    raise ParseError(f"{where}.provider.npm {npm!r} is not a dialect this parser knows "
-                     "(@ai-sdk/anthropic, or no npm for openai)")
+    if not isinstance(npm, str):
+        raise ParseError(f"{where}.provider.npm is not a string")
+    dropped.append({"model": model, "reason": "unknown-dialect"})
+    return None
 
 
-def parse_catalog(doc) -> dict:
-    """models.dev's `api.json` → `{models: {id: {name, family, tools, dialect, context, output, cost:
-    [{above_tokens, in, out, cache_read, cache_write}]}}}` for the `opencode-go` provider: the base
-    rows the console overlays. `dialect` is the per-model `provider` override's dialect
-    (`_dialect`). A row whose `status` is `deprecated` is not listed (the vendor's own
-    loader drops it before any overlay — `packages/core/src/plugin/models-dev.ts`); `cost.tiers[]`
-    rows are the rate above each `tier.size`; a `context_over_200k` (the legacy spelling) with no
-    `tiers` beside it is a shape this parser does not know. Any other missing field fails the parse."""
+def parse_catalog(doc) -> tuple[dict, list[dict]]:
+    """models.dev's `api.json` → (`{models: {id: {name, family, tools, dialect, context, output,
+    cost: [{above_tokens, in, out, cache_read, cache_write}]}}}`, the dropped rows) for the
+    `opencode-go` provider: the base rows the console overlays. `dialect` is the per-model
+    `provider` override's dialect (`_dialect`); a row whose override names a dialect this parser
+    does not know is DROPPED — `{model, reason}` into the returned list, counted and logged by the
+    refresh, and the other rows land (⇁ #2933). A row whose `status` is `deprecated` is not listed
+    (the vendor's own loader drops it before any overlay — `packages/core/src/plugin/models-dev.ts`);
+    `cost.tiers[]` rows are the rate above each `tier.size`; a `context_over_200k` (the legacy
+    spelling) with no `tiers` beside it is a shape this parser does not know. Any other missing
+    field fails the parse — whole-source shape failures stay whole-source."""
     if not isinstance(doc, dict):
         raise ParseError("not an object")
     prov = doc.get(PROVIDER)
     if not isinstance(prov, dict) or not isinstance(prov.get("models"), dict):
         raise ParseError(f"no `{PROVIDER}.models` object")
     out: dict[str, dict] = {}
+    dropped: list[dict] = []
     for mid, row in prov["models"].items():
         where = f"{PROVIDER}.models.{mid}"
         if not isinstance(row, dict):
@@ -190,10 +208,12 @@ def parse_catalog(doc) -> dict:
         if not isinstance(tools, bool):
             raise ParseError(f"{where}.tool_call is not a boolean")
         names = _name_family(where, row)
+        dialect = _dialect(where, row.get("provider"), dropped, mid)
+        if dialect is None:  # drop-and-count (#2933): the row is absent from this refresh
+            continue
         out[mid] = {"name": names.get("name"), "family": names.get("family"), "tools": tools,
-                    "dialect": _dialect(where, row.get("provider")),
-                    "context": limit["context"], "output": limit["output"], "cost": tiers}
-    return {"models": out}
+                    "dialect": dialect, "context": limit["context"], "output": limit["output"], "cost": tiers}
+    return {"models": out}, dropped
 
 
 def _config_cost(where: str, cost) -> list[dict]:
@@ -258,7 +278,7 @@ def parse_config(doc) -> dict:
         if "cost" in row:
             o["cost"] = _config_cost(where, row["cost"])
         out[mid] = o
-    return {"overrides": out}
+    return {"overrides": out}, []  # the overlay never drops a row (drop-and-count reads only the catalog)
 
 
 def merge(catalog: dict, config: dict) -> dict:
@@ -301,6 +321,12 @@ _FEE_HEADER = ["Plan", "Price", "Included usage"]  # the page's Plan table: `| *
 _FEE_PLANS = {"**Go**": "go", "**Go Plus**": "go-plus"}
 _FEE = re.compile(r"^\*\*\$(?P<usd>[\d.]+)/month\*\*$")
 _SUFFIX = re.compile(r"^(?P<name>.+?)\s*\((?P<tag>Off-Peak|Peak|[≤>]\s*[\d.]+K tokens)\)$")
+# ⚖ #2933 (ruling, case (a): the live page of 2026-10-25): a plan row's PROMOTION suffix — a
+# trailing ` (<N>% off)` on a name the Endpoints table has. The name is read without it; the
+# promotion multiplier N/100 (0.5 at 50% off) is kept per model, beside the Nx `bonus` multiplier
+# the limit cells carry (a price promotion, not a usage one — it is the multiplier the page's own
+# struck price cells display, and no row here is priced by the docs leg: §(Peak) reads only Peak rows).
+_PROMO = re.compile(r"^(?P<name>.+?)\s*\((?P<digits>\d+)%\s+off\)$")
 _LIMIT = re.compile(r"^(?:~~\$[\d.]+~~\s*)?\*\*\$(?P<usd>[\d.]+)\*\*(?:<br\s*/>.*)?$")
 _UNLIMITED = re.compile(r"^\*\*Unlimited\*\*(?:<br\s*/>.*)?$")
 _BONUS = re.compile(r"<small>\s*(?P<x>\d+)x\b")
@@ -355,11 +381,18 @@ def _hour(where: str, hhmm: str) -> int:
     return h
 
 
-def parse_docs(text: str) -> dict:
-    """The Go page → `{plan_fees: {go: usd, go-plus: usd}, plans: {go: {id: usd | "unlimited"},
-    go-plus: {…}}, bonus: {id: x}, peak: {id: {in, out, cache_read, cache_write}}, peak_hours_utc,
-    peak_weekdays, window_shares}`. Rows are keyed by MODEL id through the page's own Endpoints
-    table (display name → Model ID); the fees by the Plan table's plan names."""
+def parse_docs(text: str) -> tuple[dict, list[dict]]:
+    """The Go page → (`{plan_fees: {go: usd, go-plus: usd}, plans: {go: {id: usd | "unlimited"},
+    go-plus: {…}}, bonus: {id: x}, promotion: {id: multiplier}, peak: {id: {in, out, cache_read,
+    cache_write}}, peak_hours_utc, peak_weekdays, window_shares}`, the dropped rows — []). Rows
+    are keyed by MODEL id through the page's own Endpoints table (display name → Model ID); the
+    fees by the Plan table's plan names. A plan row's trailing ` (<N>% off)` is the page's PROMOTION
+    spelling on a name the table has: the row is read under the stripped name and its multiplier
+    N/100 is kept per model (#2933 case (a)) — a promotion, never a dialect. A plan row whose name
+    is still not in the Endpoints table is a shape the leg does not know (ruling: drop-and-count
+    was ruled for the DIALECT; the docs leg keeps its parse failure — the Endpoints table is the
+    page's own index, an unlisted name there is a page fault). The docs leg never drops: the list
+    is always empty."""
     if not isinstance(text, str) or not text.strip():
         raise ParseError("empty page")
     ids: dict[str, str] = {}
@@ -384,6 +417,7 @@ def parse_docs(text: str) -> dict:
         raise ParseError(f"no Plan table ({' | '.join(_FEE_HEADER)}) pricing both plans — read {sorted(fees) or 'none'}")
     plans: dict[str, dict] = {}
     bonus: dict[str, int] = {}
+    promotion: dict[str, float] = {}
     peak: dict[str, dict] = {}
     for plan in PLANS:
         tabs = _tables(_slot(text, plan))
@@ -396,6 +430,9 @@ def parse_docs(text: str) -> dict:
                 raise ParseError(f"{where}: {len(r)} cells, expected {len(_PLAN_HEADER)}")
             m = _SUFFIX.match(r[0])
             name, tag = (m.group("name"), m.group("tag")) if m else (r[0], None)
+            promo = None
+            if tag is None and (pm := _PROMO.match(r[0])):
+                name, promo = pm.group("name"), float(pm.group("digits")) / 100
             if name not in ids:
                 raise ParseError(f"{where}: {name!r} is not in the Endpoints table")
             mid = ids[name]
@@ -414,6 +451,10 @@ def parse_docs(text: str) -> dict:
             if tag == "Peak" and plan == "go":
                 peak[mid] = {"in": _price(where, r[1]), "out": _price(where, r[2]),
                              "cache_read": _price(where, r[3]), "cache_write": _price(where, r[4])}
+            if promo is not None:
+                if mid in promotion and promotion[mid] != promo:
+                    raise ParseError(f"{where}: two promotion multipliers for {mid} ({promotion[mid]} vs {promo})")
+                promotion[mid] = promo
         if not limits:
             raise ParseError(f"plan {plan}: the table has no rows")
         plans[plan] = limits
@@ -440,10 +481,12 @@ def parse_docs(text: str) -> dict:
         days = order[a:b + 1]
     if peak and not hours:
         raise ParseError("peak rows but no 'Peak hours are … UTC, <day> through <day>' sentence")
-    return {"plan_fees": fees, "plans": plans, "bonus": bonus, "peak": peak, "peak_hours_utc": hours,
-            "peak_weekdays": days, "window_shares": window_shares}
+    return ({"plan_fees": fees, "plans": plans, "bonus": bonus, "promotion": promotion, "peak": peak,
+             "peak_hours_utc": hours, "peak_weekdays": days, "window_shares": window_shares}), []
 
 
+# each parser returns (body, dropped rows) — `docs` never drops; drop-and-count rides the
+# catalog read (#2933)
 PARSERS: dict[str, Callable] = {"catalog": lambda r: parse_catalog(r.json()), "config": lambda r: parse_config(r.json()),
                                 "docs": lambda r: parse_docs(r.text)}
 
@@ -484,6 +527,7 @@ class GoCatalog:
         self.policy_models = tuple(sorted({wire_model("opencode", m) for m in ids}))
         self.snapshots: dict[str, Snapshot] = {}
         self.refreshes: dict[tuple[str, str], int] = {(s, o): 0 for s in SOURCES for o in OUTCOMES}
+        self.dropped: dict[tuple[str, str], int] = {(s, r): 0 for s in SOURCES for r in DROPPED_REASONS}
         self.last_outcome: dict[str, str] = {}
         self.last_attempt: dict[str, float] = {}
         self.served_from: float | None = None  # the oldest stored snapshot a restart serves instead of refreshing (startup_delay)
@@ -522,6 +566,7 @@ class GoCatalog:
             log.error("catalog: %s fetch skipped — no OPENCODE_GO_API_KEY (no request is sent)", source)
             return "fetch-failed"
         parts: dict[str, dict] = {}
+        dropped: list[dict] = []
         for read in READS[source]:
             try:
                 r = await self.client.get(self.urls[read], headers=self._headers(read), timeout=FETCH_TIMEOUT_S)
@@ -532,10 +577,16 @@ class GoCatalog:
                 log.warning("catalog: %s fetch answered %d (%s read) — keeping the last good snapshot", source, r.status_code, read)
                 return "fetch-failed"
             try:
-                parts[read] = PARSERS[read](r)
+                parts[read], read_dropped = PARSERS[read](r)
             except Exception as e:  # noqa: BLE001 — ANY drift from the known shape is a parse failure, never a guess
                 log.error("catalog: %s parse failed (%s read — %s: %s) — keeping the last good snapshot", source, read, type(e).__name__, e)
                 return "parse-failed"
+            dropped += read_dropped
+        if dropped:
+            for d in dropped:
+                self.dropped[(source, d["reason"])] += 1
+            log.info("catalog: %s dropped %d model(s) — %s", source, len(dropped),
+                     "; ".join(f"{d['model']} ({d['reason']})" for d in dropped))
         body = merge(parts["catalog"], parts["config"]) if source == "config" else parts["docs"]
         fresh = Snapshot(source, now, body)
         last = self.snapshots.get(source)
@@ -695,6 +746,7 @@ class GoCatalog:
                 "cost": row["cost"] if row else [],
                 "peak": docs.body["peak"].get(mid) if docs else None,
                 "bonus": docs.body["bonus"].get(mid) if docs else None,
+                "promotion": docs.body.get("promotion", {}).get(mid) if docs else None,
                 "monthly_limit_usd": lim,
                 "windows_usd": ({w: round(lim * s, 6) for w, s in shares.items()} if isinstance(lim, float) else None),
             }
@@ -735,5 +787,9 @@ class GoCatalog:
         out += ["# HELP gateway_go_catalog_policy_models_missing Policy Go models the source's snapshot does not cover (absent: no snapshot yet).",
                 "# TYPE gateway_go_catalog_policy_models_missing gauge"]
         out += [f'gateway_go_catalog_policy_models_missing{{source="{s}"}} {len(self.missing(s))}' for s in SOURCES if s in self.snapshots]
+        out += ["# HELP gateway_go_catalog_models_dropped_total Listed models the refreshes dropped (#2933: a dialect this parser does not know, drop-and-count), by reason.",
+                "# TYPE gateway_go_catalog_models_dropped_total counter"]
+        out += [f'gateway_go_catalog_models_dropped_total{{source="{s}",reason="{r}"}} {self.dropped[(s, r)]}'
+                for s in SOURCES for r in DROPPED_REASONS]
         return out
 

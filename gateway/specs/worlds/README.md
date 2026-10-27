@@ -120,9 +120,11 @@ needs another catalog refreshes against the fake vendor first (`catalog-retired`
 | `config-no-provider` | the console answer without its `opencode-go` provider |
 | `config-503` / `config-down` | 503 / a connect failure on the console read |
 | `config-401-echo` | 401 whose body names the test Go key (the redaction row) |
+| `catalog-google` | the models.dev fixture + `gemini-4-argon` on `npm @ai-sdk/google` — a dialect the parser does not know, DROPPED (drop-and-count, #2933); the other five land |
 | `docs-ok` | 200, the page fixture |
 | `docs-404` | 404 (the page moved) |
 | `docs-unknown-model` | a `DeepSeek V4.2 Flash` plan row the Endpoints table does not name |
+| `docs-promo` | the page + the live page of 2026-10-25's Gemini 4 Argon rows: a plan-row name with the trailing ` (50% off)` that the Endpoints table has, both plan tabs and the Endpoints table (the promotion multiplier, #2933 case (a)) |
 | `docs-short-endpoint-row` | the Endpoints table's `Step 5 Preview` row cut to one cell |
 | `docs-header-drift` | the plan tables' `Monthly limit` column renamed `Limit` |
 | `docs-no-peak-hours` / `docs-no-shares` | the peak-hours sentence / the 5-hour-weekly-monthly share sentence removed |

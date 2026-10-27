@@ -65,6 +65,12 @@ def catalog_doc(behaviour: str) -> dict:
     elif behaviour == "catalog-legacy-tier":  # the legacy spelling alone: context_over_200k, no tiers
         models["deepseek-v4-pro"]["cost"]["context_over_200k"] = {"input": 1.32, "output": 3.96, "cache_read": 0.044}
         models["deepseek-v4-pro"]["cost"].pop("tiers", None)
+    elif behaviour == "catalog-google":  # #2933: the vendor lists a model on a dialect the gateway
+        # does not speak (@ai-sdk/google) — the row is DROPPED, the other five keep landing
+        models["gemini-4-argon"] = {**copy.deepcopy(models["deepseek-v4-pro"]),
+                                    "id": "gemini-4-argon", "name": "Gemini 4 Argon", "family": "gemini",
+                                    "provider": {"npm": "@ai-sdk/google",
+                                                 "api": "https://opencode.ai/inference/go/google/v1beta"}}
     elif behaviour == "catalog-no-provider":
         doc = {"opencode": doc["opencode-go"]}
     elif behaviour == "catalog-empty":
@@ -103,7 +109,22 @@ def config_doc(behaviour: str) -> dict:
 def docs_text(behaviour: str) -> str:
     text = (FIXTURES / "go.mdx").read_text(encoding="utf-8")
     lines = text.splitlines()
-    if behaviour == "docs-unknown-model":
+    if behaviour == "docs-promo":  # #2933 case (a): the live page's PROMOTION spelling on Gemini
+        # 4 Argon — a trailing ` (50% off)` on a plan-row name the Endpoints table has; the plan
+        # cells and the limits are the live rows of 2026-10-25, laid into the fixture's tables
+        def promo_row(limit: str) -> str:
+            return (f"| Gemini 4 Argon (50% off)   | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10 "
+                    f"| -            | {limit} |")
+        for plan_tab, limit in (("go", "**$30**"), ("go-plus", "**$120**")):
+            i = next(n for n, line in enumerate(lines) if _slot_holds(lines, n, plan_tab)
+                     and line.lstrip().startswith("| Claude Haiku 5.5 (> 100K tokens)"))
+            lines.insert(i + 1, promo_row(limit))
+        i = next(n for n, line in enumerate(lines) if line.lstrip().startswith("| Step 5 Preview")
+                 and "opencode.ai/inference" in line)  # the Endpoints table's last row
+        lines.insert(i + 1, "| Gemini 4 Argon             | gemini-4-argon          "
+                            "| `https://opencode.ai/inference/go/google/v1beta/models/gemini-4-argon` "
+                            "| `@ai-sdk/google`         |")
+    elif behaviour == "docs-unknown-model":
         i = next(n for n, line in enumerate(lines) if "DeepSeek V4.1 Flash (Off-Peak)" in line)
         lines.insert(i, lines[i].replace("DeepSeek V4.1 Flash (Off-Peak)", "DeepSeek V4.2 Flash            "))
     elif behaviour == "docs-short-endpoint-row":
@@ -130,6 +151,13 @@ def docs_text(behaviour: str) -> str:
 
 def _first_cell(line: str) -> str | None:
     return line.strip().strip("|").split("|")[0].strip() if line.lstrip().startswith("|") else None
+
+
+def _slot_holds(lines: list[str], n: int, slot: str) -> bool:
+    """Is lines[n] inside `<div slot="…">…</div>`? (the promo derivation inserts per tab)."""
+    lo = next(i for i, line in enumerate(lines) if f'<div slot="{slot}">' in line)
+    hi = next(i for i, line in enumerate(lines[lo + 1:], lo + 1) if line.lstrip().startswith("</div>"))
+    return lo < n < hi
 
 
 def _drop_orphan_rules(lines: list[str]) -> list[str]:
