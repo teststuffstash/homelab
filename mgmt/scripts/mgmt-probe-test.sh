@@ -87,6 +87,26 @@ matchbox-lxc               : ok=5    changed=2    unreachable=0    failed=0    s
 check "router clean + matchbox changed=2 → fail drift" "fail drift"
 n=$((n+1)); if grep -q 'DRIFT — matchbox-lxc=changed:2$' "$T/mb.out"; then echo "ok   the drift names the matchbox host"; else echo "FAIL drift line: $(cat "$T/mb.out")"; fails=$((fails+1)); fi
 
+# 5c. the LOOP itself (check_ansible over the apply_ansible plays), not only the verdict: a stub
+#     ansible-playbook on PATH (jail) and as a resolved store path (box, MGMT_BOX=1) must both be RUN —
+#     `timeout 900 mgmt_x …` handed `timeout` a shell function and every play exited 127 (2026-10-26)
+SB="$T/stub"; mkdir -p "$SB/bin" "$T/home"; : >"$T/key"
+printf '%s\n' '#!/bin/sh' 'echo "stub $*" >>"$STUB_CALLS"' 'printf "PLAY RECAP ***\nmatchbox-lxc : ok=4 changed=0 unreachable=0 failed=0 skipped=1\n"' >"$SB/bin/ansible-playbook"
+chmod +x "$SB/bin/ansible-playbook"; export STUB_CALLS="$T/stub.calls"
+: >"$STUB_CALLS"; reset
+( export HOME="$T/home" PVE_SSH_KEY="$T/key" PATH="$SB/bin:$PATH"; unset MGMT_BOX OPN_API_KEY
+  check_ansible >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/loop.res" )
+n=$((n+1)); if [ "$(cat "$T/loop.res")" = "ansible pass ok" ] && [ "$(grep -c '^stub ansible/matchbox' "$STUB_CALLS")" -ge 4 ]; then
+  echo "ok   check_ansible runs every apply_ansible play through the stub (jail PATH)"; else
+  echo "FAIL check_ansible loop (jail): $(cat "$T/loop.res") calls=$(cat "$STUB_CALLS")"; fails=$((fails+1)); fi
+: >"$STUB_CALLS"; reset
+( export HOME="$T/home" PVE_SSH_KEY="$T/key" MGMT_BOX=1; unset OPN_API_KEY
+  mgmt_lock_tool() { echo "$SB"; }
+  check_ansible >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/loop.res" )
+n=$((n+1)); if [ "$(cat "$T/loop.res")" = "ansible pass ok" ] && [ "$(grep -c '^stub ansible/matchbox' "$STUB_CALLS")" -ge 4 ]; then
+  echo "ok   check_ansible runs every apply_ansible play through the resolved store path (box)"; else
+  echo "FAIL check_ansible loop (box): $(cat "$T/loop.res") calls=$(cat "$STUB_CALLS")"; fails=$((fails+1)); fi
+
 # 7. the CRD-owner belt (ADR-151, G16): kps_crds_verdict over captured `get crd` JSON + the image.
 CRDS='{"items":[{"metadata":{"name":"prometheuses.monitoring.coreos.com","annotations":{"operator.prometheus.io/version":"0.91.0"}},"spec":{"group":"monitoring.coreos.com"}},{"metadata":{"name":"servicemonitors.monitoring.coreos.com","annotations":{"operator.prometheus.io/version":"0.91.0"}},"spec":{"group":"monitoring.coreos.com"}},{"metadata":{"name":"workflows.argoproj.io"},"spec":{"group":"argoproj.io"}}]}'
 reset; kps_crds_verdict "$CRDS" "quay.io/prometheus-operator/prometheus-operator:v0.91.0" >/dev/null 2>&1
