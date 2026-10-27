@@ -298,8 +298,8 @@ Order, lowest blast first; each step is a lease-wrapped box run and a capability
 
 1. **Test surfaces post a verdict.** ✅ box-posted 2026-10-26: `mgmt-router-verdict` runs the test-VM
    harness on router-path PR heads (PR code sandboxed) and posts `opnsense-test-vm` on EVERY head (n/a
-   success otherwise) — `docs/management-box.md` §MB3 "The router surface". **Next:** REQUIRED (spike
-   D8, ruled "once box-posted") — the `tofu/github` `required_checks` change, an operator apply. A firmware currency belt: the box reads `firmware/status` per node
+   success otherwise) — `docs/management-box.md` §MB3 "The router surface". ✅ REQUIRED 2026-10-27 (spike
+   D8, ruled "once box-posted" — #2957 applied; the n/a success rides the in-cluster iac-sentinel run, #2970). **Next:** a firmware currency belt: the box reads `firmware/status` per node
    and on the test VM (the `check_substrate` pattern, FU-254) — the class-14 detector gap.
 2. **Matchbox, box-applied** — near-zero cone, the first ansible applier: shadow (`--check` diff)
    first, then on. Rides FU-297 until it outgrows it. ✅ **2026-10-26** — built (#2941, `apply_ansible`
