@@ -244,3 +244,10 @@ standing set below; what differs is cadence and the act rule:
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; watch the FAILURE
   signature explicitly; `PROBE-FAIL` over silent empty state. Monitors survive `/clear` and are
   invisible to TaskList — find leftovers by process and kill before re-arming.
+- **⚑ PICKUP (2026-10-27 20:3xZ — specs-review doorbell, #2975 live, UNPROVEN).** The code reviewer's pod now rings
+  `/specs-review` after a live verdict and the `specs-review` Sensor submits `specs-review-edge-*`; no verdict came
+  after the sync, so the first proof is the next approved PR on homelab/oracle-fleet: expect the edge Workflow and a
+  specs verdict within ~30 s of the code approval (cron path was 93 s–3 min 20 s). If `specs-review-edge-*` never
+  appears, read the reviewer pod's tail for "specs-review doorbell NOT rung". Residual (one line, next docs pass):
+  `docs/agents/specs-reviewer.md` §Reach — an island adopting the lens must also carry the App-permission diff
+  (`statuses: read`, the #2973 lesson), not only the repo list + install.
