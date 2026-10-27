@@ -8,10 +8,12 @@ metadata:
   name: platform
 spec:
   mainRepo: homelab
-  coordinatorModel: opencode-go/deepseek-v4-flash # 2026-09-25 (operator): the Anthropic 7d window sits at
-  # 0.94 against the 0.95 latch, and the dispatch class rails are subscription-only, so a latched
-  # coordinator DEFERS rather than fails over. The claim model is an explicit override (resolve-model:
-  # --model wins), so this rides the Go rail until the window resets; revert to `opus` then.
+  coordinatorModel: opus # 2026-10-27: back on the subscription (the launcher default). The 2026-09-25
+  # temporary (`opencode-go/deepseek-v4-flash`, taken while the Anthropic 7d window sat at 0.94
+  # against the 0.95 latch — "revert to opus when the window resets") ended when the Go rail
+  # retired that model: every coordinator session read `API Error: 410 Model deepseek-v4-flash
+  # has been deprecated` (coordinator-homelab-issue-2933). The latch was clear at the revert.
+  # The claim model stays an explicit override (resolve-model: --model wins).
   # FU-080 graduation (2026-07-26, third stack): platform runs its own per-stack loop in
   # platform-agents. Thin by design — only openrouter-operator has a fixer block, and little
   # agentic activity happens here yet (operator note). coordinator.enabled + loop.perStack render
