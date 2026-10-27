@@ -104,10 +104,12 @@ variable "protected_repos" {
     # opnsense-test-vm (ADR-152 step 1, spike D8 "required once box-posted"): the management box's
     # router verdict (mgmt/scripts/mgmt-router-verdict.sh, docs/management-box.md §MB3 "The router
     # surface"). It NEVER skips: a head touching no router path gets success "n/a: no router path in
-    # this head", a goal/** child the assembly pass, and a router-path head the test-VM run — so it is
+    # this head" (from the in-cluster iac-sentinel run since #2970 — the management-sentinel scope
+    # split), a goal/** child the assembly pass, and a router-path head the test-VM run — so it is
     # safe to require on master and goal/** alike (a context that can skip deadlocks). The cost,
-    # accepted: router-path PRs now wait ~15 min on test VM 9110, and a silent box blocks EVERY PR
-    # (MgmtRouterVerdictStale says so within 2 h).
+    # accepted: router-path PRs now wait ~15 min on test VM 9110, and a silent box holds router-path
+    # PRs (MgmtRouterVerdictStale says so within 2 h). The operator's 2026-10-27 ruling on this list's
+    # shape (one narrow exception; the next box surface = a generic context) is §MB3's.
     homelab = { required_checks = ["ci", "iac-sentinel", "management-sentinel", "opnsense-test-vm"], require_approval = true, require_code_owner_review = true, required_approvals = 2 } # management-sentinel = the box's plan-on-PR verdict (ADR-131), posted by the same sentinel App # public → no push ruleset possible (flag comment above)
     # The three below flipped require_code_owner_review=true 2026-08-11 (the reviewer-enable
     # retrace): with the platform stack's bot reviewer ON, require_approval alone lets a bot
