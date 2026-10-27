@@ -60,7 +60,7 @@ while [ "$i" -lt "$count" ]; do
   fi
   # membership: the title, else the block's Touches (every entry under gateway/)
   member=0
-  if printf '%s' "$title" | grep -qiE '^gateway([:/ ]|$)|\bGW-[A-Z]'; then
+  if grep -qiE '^gateway([:/ ]|$)|\bGW-[A-Z]' <<< "$title"; then
     member=1
   else
     touches="$(printf '%s' "$row" | jq -r '.body // ""' | python3 "$PARSER" get Touches --ref "${REPO}#${num}" 2>/dev/null || true)"
