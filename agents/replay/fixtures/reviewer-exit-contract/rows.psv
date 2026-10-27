@@ -8,6 +8,10 @@
 # terminal at the content sha (newest_sha8 path) and a verdict between content and merge
 # (newest_commit date path) — both FINAL=0. Under the old startswith("Merge branch ") filter both
 # rows false-red FINAL=10 (a legitimately-posted aside/verdict invisible to the assert).
+# 2026-10-27, the specs-review doorbell: the live-verdict terminal (and ONLY it) POSTs /specs-review on
+# the agent-loop EventSource — the two `live-verdict` rows carry the CALL curl line; standing-aside /
+# agent-error / silent-dedup / no-terminal rows carry none (an aside moves nothing for the specs gate).
+# Pinned here because the ring sits inside the replayed block.
 # id                                        | world | patch (relpath @ patches/*.jq)                           | env                 | expect                | params
 live-verdict-at-head                        | clean | gh/pr-view-42.json @ patches/add-verdict.jq            | RC=0                | live-verdict          |
 standing-aside-at-head                      | clean | gh/pr-view-42.json @ patches/add-aside.jq              | RC=0                | standing-aside        |
