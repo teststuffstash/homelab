@@ -21,6 +21,8 @@ the test clock, 2027-01-15T08:00:00Z.
 | an unreachable console keeps the last good | 5, fetched T0 | config-down | fetch-failed | the last good | 5 |
 | a catalog row without its cost is a parse failure | 5, fetched T0 | catalog-malformed | parse-failed | the last good | 5 |
 | a legacy context_over_200k row with no tiers is a parse failure | 5, fetched T0 | catalog-legacy-tier | parse-failed | the last good | 5 |
+| the unknown dialect drops that model, the refresh keeps the others ⚖ | 5, fetched T0 | catalog-google (gemini-4-argon on @ai-sdk/google) | ok | gemini-4-argon absent (dropped) | 5 |
+| a dropped id is not re-listed by the console overlay ⚖ | 5, fetched T0 | catalog-google + config-adds-gemini (a complete override for the dropped id) | ok | gemini-4-argon absent (the overlay names no row) | 5 |
 | an override whose cost is not a cost is a parse failure | 5, fetched T0 | config-malformed | parse-failed | the last good | 5 |
 | a catalog without the Go provider is a parse failure | 5, fetched T0 | catalog-no-provider | parse-failed | the last good | 5 |
 | a console answer without the Go provider is a parse failure | 5, fetched T0 | config-no-provider | parse-failed | the last good | 5 |
@@ -39,11 +41,14 @@ the test clock, 2027-01-15T08:00:00Z.
 | no share sentence is a parse failure | 5 | docs-no-shares | parse-failed | the last good |
 | no plan table is a parse failure | 5 | docs-no-plan-table | parse-failed | the last good |
 | a drop below half the models is implausible | 5 | docs-shrunk (2) | implausible | the last good |
+| a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖ | 5 | docs-promo (the live Gemini 4 Argon rows) | ok | 6 models; promotion gemini-4-argon 0.5, limits 30 / 120 |
+| a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖ | 5 | docs-promo (the live Gemini 4 Argon rows) | ok | 6 models; promotion gemini-4-argon 0.5, limits 30 / 120 |
 
 | description | model | dialect |
 |---|---|---|
 | a provider override of @ai-sdk/anthropic is the anthropic dialect | claude-haiku-5-5 | anthropic |
 | a model with no provider override is the openai dialect | deepseek-v4.1-flash | openai |
+| an npm the parser does not know drops the row ⚖ | gemini-4-argon | absent |
 
 | description | model | plan go | plan go-plus | bonus | peak row |
 |---|---|---|---|---|---|
@@ -100,6 +105,7 @@ the test clock, 2027-01-15T08:00:00Z.
 | every policy Go model listed: none missing | catalog-ok | policy_models_missing{source="config"} | 0 |
 | policy Go models the config does not list are counted | catalog-shrunk | policy_models_missing{source="config"} | 1 |
 | policy Go models without a limit row under the plan are counted | docs-shrunk | policy_models_missing{source="docs"} | 1 |
+| a model the source cannot speak is counted dropped ⚖ | catalog-google | models_dropped_total{config,unknown-dialect} / {docs,…} | 1 / 0 |
 """
 
 from __future__ import annotations
@@ -178,6 +184,8 @@ CONFIG_ROWS = [
     ("an unreachable console keeps the last good", LAST_GOOD, ("catalog-ok", "config-down"), "T0", "fetch-failed", T0, 5, LISTED_FIVE),
     ("a catalog row without its cost is a parse failure", LAST_GOOD, ("catalog-malformed", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
     ("a legacy context_over_200k row with no tiers is a parse failure", LAST_GOOD, ("catalog-legacy-tier", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
+    ("the unknown dialect drops that model, the refresh keeps the others ⚖", LAST_GOOD, ("catalog-google", "config-ok"), "T0", "ok", T0, 5, LISTED_FIVE),
+    ("a dropped id is not re-listed by the console overlay ⚖", LAST_GOOD, ("catalog-google", "config-adds-gemini"), "T0", "ok", T0, 5, LISTED_FIVE),
     ("an override whose cost is not a cost is a parse failure", LAST_GOOD, ("catalog-ok", "config-malformed"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
     ("a catalog without the Go provider is a parse failure", LAST_GOOD, ("catalog-no-provider", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
     ("a console answer without the Go provider is a parse failure", LAST_GOOD, ("catalog-ok", "config-no-provider"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
@@ -229,24 +237,35 @@ async def test_config_refresh(cworld, vendor, vendor_transport, clock, last, kno
             check("row", {k: row[k] for k in ("family", "tools", "context", "output", "cost")},
                   {"family": "deepseek-flash", "tools": True, "context": 1000000, "output": 384000,
                    "cost": [{"above_tokens": 0, "in": 0.14, "out": 0.28, "cache_read": 0.028, "cache_write": None}]})
+    if catalog_b == "catalog-google":
+        with then("gemini-4-argon: absent (dropped, counted — the other four land, dialects intact)"):
+            check("gemini-4-argon in the snapshot", "gemini-4-argon" in app.state.catalog.snapshots["config"].body["models"], False)
+            check("the models.dev rows that landed carry their dialects",
+                  [app.state.catalog.snapshots["config"].body["models"][m].get("dialect") for m in sorted(LISTED_FIVE)],
+                  ["anthropic", "openai", "openai", "openai", "openai"])
+    if config_b == "config-adds-gemini":
+        with then("the overlay's complete override does not resurrect the dropped id — its dialect would be a guess"):
+            check("gemini-4-argon in the merged listing",
+                  "gemini-4-argon" in app.state.catalog.snapshots["config"].body["models"], False)
 
 
 # ── What a refresh keeps: docs ───────────────────────────────────────────────────────────────
 DOCS_ROWS = [
-    ("the page parses", "none", "docs-ok", "ok"),
-    ("a 404 keeps the last good — the page moved", "5", "docs-404", "fetch-failed"),
-    ("a plan row naming a model the Endpoints table lacks is a parse failure", "5", "docs-unknown-model", "parse-failed"),
-    ("an Endpoints row with one cell is a parse failure", "5", "docs-short-endpoint-row", "parse-failed"),
-    ("a renamed limit column is a parse failure", "5", "docs-header-drift", "parse-failed"),
-    ("peak rows without the peak-hours sentence are a parse failure", "5", "docs-no-peak-hours", "parse-failed"),
-    ("no share sentence is a parse failure", "5", "docs-no-shares", "parse-failed"),
-    ("no plan table is a parse failure", "5", "docs-no-plan-table", "parse-failed"),
-    ("a drop below half the models is implausible", "5", "docs-shrunk", "implausible"),
+    ("the page parses", "none", "docs-ok", "ok", 5),
+    ("a 404 keeps the last good — the page moved", "5", "docs-404", "fetch-failed", 5),
+    ("a plan row naming a model the Endpoints table lacks is a parse failure", "5", "docs-unknown-model", "parse-failed", 5),
+    ("an Endpoints row with one cell is a parse failure", "5", "docs-short-endpoint-row", "parse-failed", 5),
+    ("a renamed limit column is a parse failure", "5", "docs-header-drift", "parse-failed", 5),
+    ("peak rows without the peak-hours sentence are a parse failure", "5", "docs-no-peak-hours", "parse-failed", 5),
+    ("no share sentence is a parse failure", "5", "docs-no-shares", "parse-failed", 5),
+    ("no plan table is a parse failure", "5", "docs-no-plan-table", "parse-failed", 5),
+    ("a drop below half the models is implausible", "5", "docs-shrunk", "implausible", 5),
+    ("a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖", "5", "docs-promo", "ok", 6),
 ]
 
 
-@pytest.mark.parametrize(("last", "behaviour", "outcome"), [r[1:] for r in DOCS_ROWS], ids=[r[0] for r in DOCS_ROWS])
-async def test_docs_refresh(cworld, vendor, clock, last, behaviour, outcome):
+@pytest.mark.parametrize(("last", "behaviour", "outcome", "models"), [r[1:] for r in DOCS_ROWS], ids=[r[0] for r in DOCS_ROWS])
+async def test_docs_refresh(cworld, vendor, clock, last, behaviour, outcome, models):
     world(upstream=behaviour)
     app = cworld.build()
     with given(f"last good (docs): {'none' if last == 'none' else last + ' models, fetched T0'}"):
@@ -260,16 +279,26 @@ async def test_docs_refresh(cworld, vendor, clock, last, behaviour, outcome):
         got = await app.state.catalog.refresh_source("docs")
     then_eq("outcome", got, outcome)
     expected_at = T0 + 60 if outcome == "ok" else T0
-    with then(f"the docs snapshot: 5 models, fetched_at {_iso(expected_at)}"):
+    with then(f"the docs snapshot: {models} models, fetched_at {_iso(expected_at)}"):
         v = await _view(app)
         check("sources.docs", {k: v["sources"]["docs"][k] for k in ("models", "fetched_at")},
-              {"models": 5, "fetched_at": _iso(expected_at)})
+              {"models": models, "fetched_at": _iso(expected_at)})
+    if behaviour == "docs-promo":
+        with then("gemini-4-argon: the promotion multiplier 0.5, the limits $30 / $120, every other model unchanged; bonus stays the Nx map only"):
+            docs = app.state.catalog.snapshots["docs"].body
+            check("the docs snapshot's promotion map", docs["promotion"], {"gemini-4-argon": 0.5})
+            check("gemini-4-argon's monthly limit (go / go-plus)",
+                  (docs["plans"]["go"]["gemini-4-argon"], docs["plans"]["go-plus"]["gemini-4-argon"]), (30.0, 120.0))
+            check("the other models' limits unchanged (go)", sorted(set(docs["plans"]["go"]) - {"gemini-4-argon"}), sorted(LISTED_FIVE))
+            check("the other models' limits unchanged (go-plus)", sorted(set(docs["plans"]["go-plus"]) - {"gemini-4-argon"}), sorted(LISTED_FIVE))
+            check("bonus stays the Nx map only", docs["bonus"].get("gemini-4-argon"), None)
 
 
 # ── The model's dialect ──────────────────────────────────────────────────────────────────────
 DIALECT_ROWS = [
     ("a provider override of @ai-sdk/anthropic is the anthropic dialect", "claude-haiku-5-5", "anthropic"),
     ("a model with no provider override is the openai dialect", "deepseek-v4.1-flash", "openai"),
+    ("an npm the parser does not know drops the row ⚖", "gemini-4-argon", "absent"),
 ]
 
 
@@ -277,11 +306,14 @@ DIALECT_ROWS = [
 async def test_model_dialect(cworld, vendor, model, dialect):
     world(upstream="catalog-ok")
     app = cworld.build()
-    with given("the config source refreshes from catalog-ok — the fixture carries both provider shapes"):
+    with given("the config source refreshes from catalog-ok — the fixture carries both provider shapes (catalog-google for the an-npm case)"):
+        if model == "gemini-4-argon":
+            vendor.catalog = "catalog-google"
         assert await app.state.catalog.refresh_source("config") == "ok"
     with when(f"the config snapshot's row {model}"):
-        row = app.state.catalog.snapshots["config"].body["models"][model]
-    then_eq("dialect", row.get("dialect"), dialect)
+        row = app.state.catalog.snapshots["config"].body["models"].get(model)
+    with then(f"dialect {dialect}"):
+        check("dialect", row.get("dialect") if row else "absent", dialect)
 
 
 # ── What the page says, per model ────────────────────────────────────────────────────────────
@@ -373,7 +405,32 @@ async def test_tabulated_but_unlisted(cworld, vendor):
         check("models.step-5-preview.monthly_limit_usd", v["models"]["step-5-preview"]["monthly_limit_usd"], 60.0)
 
 
-# ── The plan ───────────────────────────────────────────────────────────────────────────────
+# ── Drop-and-count (an npm the parser cannot speak, #2933) ────────────────────────────────────
+async def test_unknown_dialect_drops_the_row(cworld, vendor, caplog):
+    """row: an npm the parser does not know drops the row ⚖"""
+    caplog.set_level(logging.INFO, logger="gateway.catalog")
+    world(upstream="catalog-google")
+    app = cworld.build()
+    with given("the fake models.dev read answers catalog-google (gemini-4-argon carried on @ai-sdk/google)"):
+        vendor.catalog = "catalog-google"
+        assert vendor.catalog == "catalog-google"
+    with when("the config source refreshes"):
+        got = await app.state.catalog.refresh_source("config")
+        cfg = app.state.catalog.snapshots["config"].body["models"]
+        lines = [r.getMessage() for r in caplog.records if r.name == "gateway.catalog"]
+    with then("outcome ok; gemini-4-argon absent, the other rows and their dialects land, one drop line names it"):
+        attach_json("gateway.catalog drop line(s)", [x for x in lines if "dropped" in x])
+        then_eq("outcome", got, "ok")
+        check("gemini-4-argon in the snapshot", "gemini-4-argon" in cfg, False)
+        check("the known rows keep their dialects",
+              sorted({(m, r["dialect"]) for m, r in cfg.items()}),
+              sorted([("claude-haiku-5-5", "anthropic")] + [(m, "openai") for m in sorted(cfg) if m != "claude-haiku-5-5"]))
+        check("the drop line names the model and the reason",
+              [x for x in lines if x.startswith("catalog: config dropped ")],
+              ["catalog: config dropped 1 model(s) — gemini-4-argon (unknown-dialect)"])
+
+
+# ── The plan ─────────────────────────────────────────────────────────────────────────────────
 ABSENT = object()
 PLAN_ROWS = [
     ("the declared plan picks the limits' tab", "opencode", "go", "loads"),
@@ -591,6 +648,24 @@ async def test_restart_inside_interval(cworld, vendor, clock):
 
 
 # ── What /metrics says ───────────────────────────────────────────────────────────────────────
+async def test_metric_models_dropped(cworld, vendor, policy):
+    """row: a model the source cannot speak is counted dropped ⚖"""
+    world(upstream="catalog-google")
+    app = cworld.build()
+    ids = app.state.catalog.policy_models
+    with given(f"policy-default's Go ids (tiers + side_models, wire spelling): {', '.join(ids)} — none is the dropped one; the fake models.dev read answers catalog-google"):
+        attach_json("policy Go ids", list(ids))
+        vendor.catalog = "catalog-google"
+    with when("the config source refreshes; GET /metrics"):
+        await app.state.catalog.refresh_source("config")
+        text = await _metrics(app)
+    with then("dropped{config,unknown-dialect} 1 · dropped{docs,unknown-dialect} 0"):
+        check('gateway_go_catalog_models_dropped_total{source="config",reason="unknown-dialect"}',
+              _value(text, 'gateway_go_catalog_models_dropped_total{source="config",reason="unknown-dialect"}'), 1)
+        check('gateway_go_catalog_models_dropped_total{source="docs",reason="unknown-dialect"}',
+              _value(text, 'gateway_go_catalog_models_dropped_total{source="docs",reason="unknown-dialect"}'), 0)
+
+
 async def test_metric_age(cworld, vendor, clock):
     """row: age is seconds since the last good fetch"""
     world(upstream="catalog-ok")

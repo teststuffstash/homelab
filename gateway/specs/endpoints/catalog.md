@@ -64,7 +64,10 @@ each with its own snapshot:
   row, which the 10-17 build read as the catalog): `"disabled": true` unlists the row; a `cost`
   (the vendor's list-or-one-row spelling), a `limit` field, a `name`, `family` or
   `capabilities.tools` present on a row wins over the catalog's; an override naming no catalog
-  row is listed only when it is a complete row of its own (a cost and both limits). The console
+  row is listed only when it is a complete row of its own (a cost and both limits) — and an id
+  the catalog read DROPPED this refresh names no row and is never re-listed (#2933: the
+  complete-row branch would list it with a guessed `openai` dialect, which the ruling forbids).
+  The console
   request carries the Go key as a bearer, a `User-Agent` and a fresh `x-opencode-session` —
   Cloudflare answers 1010 to a bare client; the catalog read carries no credential. The two reads
   are one source: the first that fails ends the refresh with its outcome (the log line names the
@@ -75,14 +78,27 @@ each with its own snapshot:
   `| **Go** | **$10/month** |`; the [Go price](../glossary.md#go-price) divides the policy plan's),
   each model's **monthly limit** under each plan tab (`go`, `go-plus`), a promotion's multiplier,
   the `(Peak)` price rows, the peak-hours sentence and the 5-hour / weekly / monthly share of the
-  monthly limit. Rows are keyed by **model id** through the page's own Endpoints table (display
-  name → Model ID); the fees by the Plan table's plan names. ⚖ `go-models.ts` (the spike's second
+  monthly limit. A plan row's trailing **` (<N>% off)`** is the page's promotion spelling on a
+  name the Endpoints table has: the row is read under the stripped name and the multiplier **N/100**
+  (0.5 at 50 % off) is kept per model in the snapshot's `promotion` map, beside the limit cells'
+  Nx `bonus` multiplier (a price promotion, not a usage one — #2933, ruling 2026-10-26, case (a)).
+  Rows are keyed by **model id** through the page's own Endpoints table (display name → Model ID);
+  the fees by the Plan table's plan names. ⚖ `go-models.ts` (the spike's second
   file) is not read: it keys rows by family (`deepseek-flash`), and limits are per model (ruling 3);
   `go.mdx` carries every fact the leg needs.
 
 The parse is **strict**: a shape the parser does not know is a parse failure, never a guess —
 whatever the parser raises on it is counted `parse-failed`, and one source's failure never skips
-the other source's refresh. A
+the other source's refresh. ⚖ **One listed-model exception (drop-and-count, #2933, ruling
+2026-10-26)**: a row whose DIALECT the parser does not know *(config source)* is dropped from that
+refresh — counted and logged, the rest of the source lands; the dialect is still never guessed,
+and a model the gateway cannot speak cannot be admitted, so dropping loses nothing that worked.
+A dropped id is **not re-listed by the console overlay**: the overlay's complete-row branch
+(the override naming no catalog row) skips it — a complete override for a dropped id cannot
+bring it back with a guessed `openai` dialect (⇁ [§The model's dialect](#the-models-dialect)).
+Whole-source shape failures (below half, no Plan table, no Endpoints table, a named provider
+missing) stay failures.
+A
 refresh whose fetch fails, whose parse fails, or whose model count drops below **half** ⚖ of the
 last good snapshot's (zero models always) keeps the last good snapshot. The snapshot is written
 to the gateway's store (`catalog_snapshots`, one row per source), so a restarted gateway starts
@@ -116,6 +132,8 @@ read, the `config-*` knobs the console read; a refresh of the `config` source ma
 | "an unreachable console keeps the last good" | 5, fetched T0 | `config-down` || fetch-failed | the last good | 5 |
 | "a catalog row without its cost is a parse failure" | 5, fetched T0 | `catalog-malformed` (`deepseek-v4-pro` has no `cost`) || parse-failed | the last good | 5 |
 | "a legacy context_over_200k row with no tiers is a parse failure ⚖" | 5, fetched T0 | `catalog-legacy-tier` || parse-failed | the last good | 5 |
+| "the unknown dialect drops that model, the refresh keeps the others ⚖" | 5, fetched T0 | `catalog-google` (`gemini-4-argon` on `@ai-sdk/google`) || ok | `gemini-4-argon` absent (dropped) | 5 |
+| "a dropped id is not re-listed by the console overlay ⚖" | 5, fetched T0 | `catalog-google` + `config-adds-gemini` (a complete console override for `gemini-4-argon`) || ok | `gemini-4-argon` absent (the override names no row) | 5 |
 | "an override whose cost is not a cost is a parse failure" | 5, fetched T0 | `config-malformed` (`deepseek-v4-pro: {cost: "free"}`) || parse-failed | the last good | 5 |
 | "a catalog without the Go provider is a parse failure" | 5, fetched T0 | `catalog-no-provider` || parse-failed | the last good | 5 |
 | "a console answer without the Go provider is a parse failure" | 5, fetched T0 | `config-no-provider` || parse-failed | the last good | 5 |
@@ -137,13 +155,20 @@ ids with a row in either plan tab. The `config` source's model count is the merg
 | "no share sentence is a parse failure ⚖" | 5 | `docs-no-shares` || parse-failed | the last good |
 | "no plan table is a parse failure ⚖" | 5 | `docs-no-plan-table` || parse-failed | the last good |
 | "a drop below half the models is implausible" | 5 | `docs-shrunk` (2 models) || implausible | the last good |
+| "a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖" | 5 | `docs-promo` (the live Gemini 4 Argon rows, ruling 2026-10-26 case (a)) || ok | 6 models; `gemini-4-argon` promotion 0.5, limits $30 / $120 |
 
 ### The model's dialect
 
 Each listed model's wire dialect, kept from the models.dev per-model `provider` override the
 catalog read carries (the vendor serves a Go model on one of its two endpoints): `npm:
-"@ai-sdk/anthropic"` is the anthropic one, no `npm` the openai one — any other `npm` is a parse
-failure, never a guess. The snapshot carries it per model (a console-only row, which has no
+"@ai-sdk/anthropic"` is the anthropic one, no `npm` the openai one — any other `npm` value is a
+dialect this parser does not know, and its row is **dropped** from the refresh (⇁ the strict
+paragraph; #2933 ruling 2026-10-26: counted, logged, the rest lands — the dialect is still never
+guessed, and a catalog-level fault like a missing provider object is a parse failure whole).
+A dropped id stays dropped through the console overlay too: the overlay's complete-row branch
+skips it (⇁ the strict paragraph), so a complete override for a dropped id never re-lists it
+with a guessed dialect.
+The snapshot carries it per model (a console-only row, which has no
 override, is `openai`), and the admission walk takes the harness from it
 ([GW-SESSIONS-ADMIT §The harness follows the cell](sessions.md#the-harness-follows-the-cell)).
 
@@ -151,6 +176,7 @@ override, is `openai`), and the admission walk takes the harness from it
 |---|---|---|
 | "a provider override of @ai-sdk/anthropic is the anthropic dialect" | `claude-haiku-5-5` | `anthropic` |
 | "a model with no provider override is the openai dialect" | `deepseek-v4.1-flash` | `openai` |
+| "an npm the parser does not know drops the row ⚖" | `gemini-4-argon` | absent |
 
 ### What the page says, per model
 
@@ -227,6 +253,7 @@ load — the rows live on [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
 | "every policy Go model listed: none missing" | `catalog-ok`; `policy-default` names `deepseek-v4.1-flash` and `claude-haiku-5-5` || `gateway_go_catalog_policy_models_missing{source="config"}` | 0 |
 | "policy Go models the config does not list are counted" | `catalog-shrunk` (no `claude-haiku-5-5`) || `gateway_go_catalog_policy_models_missing{source="config"}` | 1 |
 | "policy Go models without a limit row under the plan are counted" | `docs-shrunk` (no `claude-haiku-5-5` row) || `gateway_go_catalog_policy_models_missing{source="docs"}` | 1 |
+| "a model the source cannot speak is counted dropped ⚖" | `catalog-google` ('s refresh: `gemini-4-argon` dropped; the docs source drops nothing) || `gateway_go_catalog_models_dropped_total{source="config",reason="unknown-dialect"}` / `{source="docs",…}` | 1 / 0 |
 
 No family carries a `model` label ([GW-METRICS](metrics.md#gw-metrics)): the missing ids are
 named in the refresh's log line and in the view's `policy_models`. The alert rules on these
@@ -234,7 +261,9 @@ families — `GoCatalogStale` (a source's last good snapshot older than 24 h ⚖
 `GoCatalogParseFailed` (the last refresh parse-failed or was implausible) and
 `GoCatalogPolicyModelMissing` (a policy Go model uncovered) — live in
 `argocd/resources/agent-gateway/prometheusrule.yaml`, with their promtool fixture
-`go-catalog.promtool-test` beside it.
+`go-catalog.promtool-test` beside it. The **drop counter** `gateway_go_catalog_models_dropped_total`
+(#2933) carries no alert of its own: a drop is not a fault (the rest of the source landed) — it is
+the visible trace of a dialect the parser cannot speak, read when a model wanted on a new wire goes missing.
 
 ### Named gaps (rows that exist so the omission is visible)
 
