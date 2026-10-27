@@ -21,6 +21,15 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **LAN certs (FU-297) — DONE 2026-10-26** (detector, cron, carry, guard, rebind all live; `LanCertExpiringSoon`
   clear). NEXT (FU-297 (1)): schedule `opnsense-cert-carry.sh nx02 pve` on the [management box](../management-box.md) so the BACKUP follows
   renewals without a seat.
+- **Security contact + company mail (operator 2026-10-27, no FU yet).** teststuff.net mail is LIVE on Proton
+  (homelab#2974 applied; #2976 MX/SPF/DKIM/DMARC applied, PR pending merge); addresses + reasoning in the private
+  teststuff repo `docs/company-email.md`. NEXT, all naming `security@teststuff.net`: (1) `security.txt` (RFC 9116)
+  — one source in homelab, copied into each site at build, `Canonical:` per domain, plus a probe that alerts on
+  `Expires:` nearing / a copy drifting from the source; (2) an org-default `SECURITY.md` via a new
+  `teststuffstash/.github` repo + GitHub private vulnerability reporting on the public repos (tofu/github if the
+  provider has it); (3) one disclosure policy page both link to; (4) Cloudflare Email Routing for every OTHER
+  domain's `security@`/`privacy@`/`abuse@`/`postmaster@` → the Proton inbox (tofu/cloudflare, a shared default);
+  (5) later: teststuff.net DMARC `p=quarantine` → `p=reject` once the `dmarc@` reports show only Proton sending.
 - **OPNsense 26.7.7 on the test VM (whoever is running that trial — baseline snapshot re-taken 2026-10-26 ~20:40Z,
   unrecorded):** against it the pinned `oxlorg.opnsense 26.1.11` FAILS the bgp play's neighbor task ("Failed field:
   'multiprotocol'", os-frr 2.0_2) and the haproxy play timed out — seen by the #2940 gate's BASE step. Prod stays
