@@ -107,9 +107,21 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(ledger['population']['first_touch_by_model'], {'haiku': {'tasks':1, 'non_clean':0}})
 
     def test_quiet_window_refuses_and_rolls_forward(self):
-        self.args.min_tasks = 1
-        with self.assertRaisesRegex(p.QuietWindow, 'GUARD REFUSED'):
+        self.args.min_tasks = 2
+        self.write_ledger([{'ts':'2026-09-27T18:30:34Z', 'key':'oracle-fleet#753', 'terminal_label':'agent/done',
+                            'rounds':[{'model':'m','exit_status':'clean'}]}])
+        with self.assertRaisesRegex(p.QuietWindow, 'GUARD REFUSED: 1 ledger task'):
             p.prepare(self.args, self.store, self.root)
+        self.assertIsNone(self.store.get('platform/runs/20260928T000000Z/bundle.json'))
+        self.assertIsNone(self.store.get('platform/checkpoint.json'))
+
+    def test_empty_window_is_a_failure_not_quiet(self):
+        # A dead-but-reachable ledger source reads as 0 tasks every week; a quiet verdict would
+        # push outcome=quiet forever and silence RetroReportOverdue — it must stay a failure.
+        self.args.min_tasks = 1
+        with self.assertRaisesRegex(ValueError, 'GUARD REFUSED: 0 ledger tasks') as cm:
+            p.prepare(self.args, self.store, self.root)
+        self.assertNotIsInstance(cm.exception, p.QuietWindow)
         self.assertIsNone(self.store.get('platform/runs/20260928T000000Z/bundle.json'))
         self.assertIsNone(self.store.get('platform/checkpoint.json'))
 

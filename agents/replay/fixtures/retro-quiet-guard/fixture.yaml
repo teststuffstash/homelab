@@ -2,7 +2,7 @@
 #
 # THE CONTRACT: retro-argo.yaml's guard step runs `retro_pipeline.py prepare` and branches on
 # its exit code. 0 → `quiet=false`, the step falls through and the cells + harvest ride.
-# 3 (QUIET_EXIT: fewer than minWindowTasks ledger tasks) → a verdict, not a failure: a stub
+# 3 (QUIET_EXIT: 1..minWindowTasks-1 ledger tasks; zero is a broken ledger, exit 1) → a verdict: a stub
 # bundle, `quiet=true`, the RetroReportOverdue belt pushed under its own `outcome/quiet`
 # grouping, exit 0. Any other non-zero → the guard fails with that code, no push.
 #

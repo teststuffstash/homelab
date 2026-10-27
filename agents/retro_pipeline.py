@@ -241,7 +241,14 @@ def prepare(args, store, temp):
         bundle['ledger'] = ledger_window(store.ledger(), start, end)
         # The floor the old `minNewTasks` guard held, now per window: a refused week is NOT
         # published, so its evidence rolls into the next window instead of being skipped.
-        if bundle['ledger']['population']['task_count'] < args.min_tasks:
+        tasks = bundle['ledger']['population']['task_count']
+        if tasks == 0 and args.min_tasks > 0:
+            # ZERO tasks is not a quiet week: it is indistinguishable from a ledger source that is
+            # reachable but empty (a dead collector). Fail (exit 1) so RetroReportOverdue still
+            # pages — a quiet verdict here would push outcome=quiet forever and silence it.
+            raise ValueError('GUARD REFUSED: 0 ledger tasks emitted in [%s, %s) — a fully empty window '
+                             'is treated as a broken ledger source, not a quiet week' % (start, end))
+        if tasks < args.min_tasks:
             raise QuietWindow('GUARD REFUSED: %d ledger task(s) emitted in [%s, %s) (< %d) — nothing worth two rides; the window rolls forward'
                              % (bundle['ledger']['population']['task_count'], start, end, args.min_tasks))
         bundle['series'] = args.series

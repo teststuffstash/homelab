@@ -194,7 +194,7 @@ spec:
               [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) in ${PROJECT} — retro would contend for the fixer WIP slot"; exit 1; }
               # FU-058: one immutable activity bundle, shared by both cells and harvest.
               # Preparation checks collection coverage; only successful publication advances it.
-              # A QUIET week (fewer than minWindowTasks ledger tasks, exit 3) is a verdict, not a
+              # A QUIET week (1..minWindowTasks-1 ledger tasks, exit 3; ZERO stays exit 1) is a verdict, not a
               # failure: the window rolls forward unpublished, the cells + harvest are skipped
               # (`quiet` output), and the RetroReportOverdue belt gets a push under its own
               # outcome=quiet group — its bare max() reads every group, so a quiet week cannot
