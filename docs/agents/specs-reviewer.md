@@ -306,7 +306,8 @@ CODEOWNERS; §Reach below).
    the App there FIRST (a token request naming an uninstalled repo fails for every repo), then one
    PR adds the repo to the `specs-reviewer-git` chain's `repositories` + `SPECS_REVIEW_REPOS` +
    `evidence_bucket` + a lens block, then — only once the identity is seen approving there — apply
-   `required_approvals = 2` in `tofu/github` (earlier, every PR of the repo stalls on a count of 2).
+   `required_approvals = 2` in `tofu/github` — an OPERATOR apply, the admin token is not in the
+   jail wallet by design (earlier, every PR of the repo stalls on a count of 2).
 5. **The half-join guard and parametrize-from-spec — tool flag or repo gate?** The oracle handoff
    (`.handoff/oracle/done/20261020-2107-specs-ruleset-and-golden-example-for-the-specs-reviewer.md`
    §4 items 4–5, 2026-10-20) names the hazard the joined render carries: a rule joins as soon as ONE
