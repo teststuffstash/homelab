@@ -29,8 +29,9 @@ The dispatch prompt names them:
   (island membership + no `agent/*` lifecycle label + no standing intake ruling). Trigger: ≥ 3 such
   issues, or the oldest ≥ 24 h — one sitting per trigger, never per issue.
 - `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`) —
-  prose someone wrote instead of an issue. A text input first becomes an issue (`file`), then takes
-  one of the other outcomes in the same sitting.
+  prose someone wrote instead of an issue. A text input becomes an issue (`file`) only when its
+  ruling would be `queue`, `goal` or `seat`; a `standing` or `close` ruling on text is
+  report-only — the source record keeps it (one home per fact), the report says why.
 - `mode: dry-run | apply`. Dry-run writes NOTHING to GitHub; the report carries every body and
   label you WOULD write, verbatim, so a reader can grade the ruling before it is live.
 
@@ -41,7 +42,7 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 | Read | Why |
 |---|---|
 | The item: body, every comment, linked PR **bodies** (never diffs) | the claim and its history |
-| [`README.md`](README.md) + [`specs/README.md`](specs/README.md) | the island and its process (the pinned rules) |
+| [`README.md`](README.md) + [`specs/README.md`](specs/README.md) + the pinned `RULES.md` it names (a `gh api` GET of the pinned tag) | the island and its process (the pinned rules) |
 | The spec page(s) the item names — the requirement section + the page's index row, nothing more | live-verify the claim (is the flag still there? does the row still say that?) |
 | Open issues of the repo whose title or `Touches` name the same requirement/page; PRs merged since the item was filed that touch the same page | dedup, supersession |
 | Open `task/goal` issues whose `## Acceptance` names the item's surface | a covering Goal (ADR-122 (4): a sprout binds INTO its container) |
@@ -57,7 +58,7 @@ Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islan
 |---|---|---|
 | **queue** | one ride finishes it: ONE deliverable, one PR, a bounded `Touches` (≲ 5 paths), key rows on ≤ 2 requirements, every path `machine-merge` | body rewritten to the shape below (§A queue-ready body), labels `agent-fix` + `task/fix` or `task/build` + `agent/queued`; one `intake: queue — <reason>` comment |
 | **goal** | real work the island wants that no single ride finishes (≥ 2 deliverables, or a design pin children elaborate), and the whole fits the Goal ceiling (§A bot-authored Goal) | the Goal + its branch + 2–5 bound children (each queue-shaped) + dispositions + `goal-lint` PASS; `agent/queued` on the CHILDREN only; one `intake: goal — <reason>` comment on each absorbed input |
-| **seat** | a human fact is missing: a ruling the body says is pending, a credential, a maintenance window, an operator-only path (`classify_touches` → `codeowner-author`), a scope you cannot pin, a Goal above the ceiling, or a human-filed issue you would otherwise close | labels `agent-fix` + `agent/blocked`; ONE comment: `intake: seat — <what is needed, one line>` and, on its own line, `blocked-on: human` (the scan's suppression grammar, README §Blocked-on marker) |
+| **seat** | a human fact is missing: a ruling the body says is pending, a credential, a maintenance window, an operator-only path (`classify_touches` → `codeowner-author`), a scope you cannot pin, a Goal above the ceiling, or a human-filed issue you would otherwise close | labels `agent-fix` + `agent/blocked`; ONE comment: `intake: seat — <what is needed, one line>` and, on its own line, `blocked-on: human` (the scan's suppression grammar, README §Blocked-on marker). **Comment only, no labels, when the body itself keeps the item out of the loop** ("not an agent-loop item", "the seat sequences it") — a human's lineage line outranks your label set |
 | **fold** | two or more inputs are one change (same requirement, same fix) | the SURVIVOR takes the merged body and its outcome; the others get `intake: fold → #<survivor>` and close as duplicate — bot-filed only (§Hard limits) |
 | **close** | the claim no longer holds (live-verified), the work merged since filing, or the honest answer is "leave the `⚑ gap` standing" and nothing live depends on it | `intake: close — <evidence: the line, the PR, the date>` and close (`not planned` for standing gaps; bot-filed only — a human-filed one is `seat` with the same recommendation) |
 | **standing** | a valid gap the island records honestly and nobody should spend a ride on now | `intake: standing — <why not now>` (the selector skips it from then on); no labels |
@@ -132,6 +133,11 @@ Unverified: <what you did not read on the wire — "verify during implementation
   (`spec_gate.py`, the baseline). You do not restate the process; you state the rows.
 - `⚖` on any row with a plausible alternative (rule 4). A row you could not ground in the page or
   a merged PR is marked `verify during implementation` (rule 10), never asserted.
+- **A `⚑ gap` flag whose `→ work #M` is closed with the shortfall still real** has two honest
+  fixes, and you choose: `file` the successor work issue (rule it in the same sitting — usually
+  `standing`) and re-point the flag at it, or re-point at the closed issue's comment that names
+  the residue, ⚖. Rule 10's grammar names a work issue; a dead pointer is the one thing a flag
+  may not carry.
 
 ## A bot-authored Goal
 
