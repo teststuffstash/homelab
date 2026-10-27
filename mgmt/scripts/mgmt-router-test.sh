@@ -54,6 +54,12 @@ printf 'roots: {}\n' >"${TMPDIR:-/tmp}/mgmt-router-test-pol.$$.yaml"
 printf 'ansible/opnsense-bgp.yml\n' | mgmt_router_touched "${TMPDIR:-/tmp}/mgmt-router-test-pol.$$.yaml" >/dev/null 2>&1; rc=$?
 rm -f "${TMPDIR:-/tmp}/mgmt-router-test-pol.$$.yaml"
 [ $rc = 1 ] && ok "path:policy-without-list-fails-closed" || no "path:policy-without-list-fails-closed" "rc $rc"
+# the in-cluster half's shape (scripts/iac-sentinel.sh MGMT_BOX_SURFACES): the classifier over the
+# policy AT a ref, rc kept across the temp copy's cleanup — a router path is found, a doc is not
+got="$(printf 'docs/a.md\nansible/opnsense-bgp.yml\n' | mgmt_router_touched_at "$REPO" HEAD)"; rc=$?
+[ $rc = 0 ] && [ "$got" = "ansible/opnsense-bgp.yml" ] && ok "path:at-ref" || no "path:at-ref" "rc $rc got '$got'"
+printf 'ansible/opnsense-bgp.yml\n' | mgmt_router_touched_at "$REPO" refs/no/such/ref >/dev/null 2>&1; rc=$?
+[ $rc = 1 ] && ok "path:at-ref-missing-policy-fails-closed" || no "path:at-ref-missing-policy-fails-closed" "rc $rc"
 
 # ── the action per head ──
 act_case() { # <name> <base> <touched> <state> <errors> <want>

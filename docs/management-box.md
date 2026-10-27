@@ -444,6 +444,20 @@ journal. Every other head gets `success` "n/a: no router path in this head" and 
 assembly pass, so **the context never skips** and can be required (`tofu/github/variables.tf`: a
 check that can be absent deadlocks the merge).
 
+- **The same scope split as `management-sentinel` (2026-10-27).** The n/a success is posted by the
+  in-cluster `iac-sentinel` run seconds after a push (`scripts/iac-sentinel.sh`, the
+  `MGMT_BOX_SURFACES` table — one row per box-posted required context, the classifier
+  `mgmt_router_touched` in `mgmt-lib.sh` shared with the box's loop); the box's loop backstops it and
+  skips a head that already carries the context. So a silent box holds only router-path heads, as it
+  holds only root-touching heads for the plan — never every PR.
+- **Required-check shape — the operator's ruling (2026-10-27).** The ruleset's list reads `ci`,
+  `iac-sentinel`, `management-sentinel`, `opnsense-test-vm`: the last three are one mechanic and one
+  identity (the sentinel App), and `opnsense-test-vm` is a narrow surface beside two generic names.
+  Accepted as the one exception — nothing else in sight needs a verdict of this kind. **The next
+  box-judged surface that wants its own required context triggers the refactor instead**: one
+  generic context (a `management-sentinel` whose description names the surface, or `ci` calling the
+  box) with the surfaces hidden behind it, never a fifth row in the ruleset.
+
 - **PR code runs sandboxed.** Ansible roles run `connection: local`, `opnsense/*.py` and the collection
   are code — on this box, unboxed, a hostile head would read `/var/lib/mgmt/env`. So everything that
   executes the head's code (galaxy install, the controller-env flake, `ansible-playbook`, the scripts)

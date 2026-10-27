@@ -10,10 +10,16 @@
 #                                        The report (scrubbed of credentials) is the PR comment.
 #   base master, no router path          success "n/a: no router path in this head" — the context never
 #                                        skips, so it can be REQUIRED (tofu/github/variables.tf: a check
-#                                        that can be absent deadlocks the merge)
+#                                        that can be absent deadlocks the merge). The in-cluster
+#                                        iac-sentinel run posts this n/a seconds after a push (the same
+#                                        scope split as management-sentinel — scripts/iac-sentinel.sh
+#                                        `mgmt_box_surfaces_post`); this loop backstops it and skips a
+#                                        head that already carries the context, so a silent box holds
+#                                        only router-path heads.
 #   base goal/**                         success, judged at the goal → master assembly PR (FU-295's shape)
 #   any other base                       not judged (not required there)
-# The router paths are `router_test_vm.paths` in policy/mgmt/plan-input.yaml, read from MASTER.
+# The router paths are `router_test_vm.paths` in policy/mgmt/plan-input.yaml, read from MASTER; the
+# classifier (mgmt_router_touched) lives in mgmt-lib.sh — both posters read it.
 #
 # PR CODE RUNS SANDBOXED: the harness itself, its guard, inventory and overrides are master's and keep
 # the hypervisor/VM root key; every command that executes the head's code (galaxy install, the
@@ -40,33 +46,8 @@ CTX="opnsense-test-vm"; MARKER="<!-- opnsense-test-vm -->"
 NA_DESC="n/a: no router path in this head"
 
 # ── judgement (pure; fixture-tested by mgmt/scripts/mgmt-router-test.sh) ────────────────────────
-# mgmt_router_globs <policy> → one glob per line (`*` stays inside a path segment, `**` crosses);
-# rc 1 when the list is unreadable or empty — the caller judges nothing then (never "n/a").
-mgmt_router_globs() {
-  local out
-  out="$(mgmt_policy_get "$1" '.router_test_vm.paths[]?')" || return 1
-  [ -n "$out" ] || return 1
-  printf '%s\n' "$out"
-}
-# _mgmt_glob_ere <glob> → an anchored ERE. The policy's globs use path characters, `*` and `**` only;
-# anything else regex-special is refused (rc 1) rather than half-escaped.
-_mgmt_glob_ere() {
-  local g="$1"
-  case "$g" in *[]\[+?^\$\(\)\{\}\|\\]*) echo "policy: unsupported character in router glob '$g'" >&2; return 1 ;; esac
-  g="${g//./\\.}"; g="${g//\*\*/@@}"; g="${g//\*/[^/]*}"; g="${g//@@/.*}"
-  printf '^%s$' "$g"
-}
-# mgmt_router_touched <policy> — changed file paths on stdin → the router paths among them; rc 1 = policy unreadable
-mgmt_router_touched() {
-  local globs g re=""
-  globs="$(mgmt_router_globs "$1")" || { echo "policy: router_test_vm.paths unreadable/empty ($1)" >&2; return 1; }
-  while IFS= read -r g; do
-    [ -n "$g" ] || continue
-    g="$(_mgmt_glob_ere "$g")" || return 1
-    re="${re:+$re|}($g)"
-  done <<<"$globs"
-  grep -E -- "$re" || true
-}
+# The path classifier (mgmt_router_globs / mgmt_router_touched) is mgmt-lib.sh's — shared with the
+# in-cluster n/a poster, so the two can never disagree on what a router path is.
 # mgmt_router_action <base-ref> <router-files-touched (count)> <latest state of the context on the head, or "">
 # <errors so far> <max errors> → one word:
 #   skip      not judged (another base) or already judged (success/failure) or out of error retries
