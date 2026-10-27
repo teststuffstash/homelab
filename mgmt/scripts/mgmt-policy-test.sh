@@ -137,6 +137,31 @@ fail_ at-ref-yq-hiccup '( cp "$POL" "$T/policy.yaml"; mkdir -p "$T/policy/mgmt" 
 got="$(printf 'tofu/github/x.tf\ntofu/cloudflare-token/y.tf\n' | mgmt_roots_touched_at "$T" HEAD)"; rc=$?
 if [ $rc = 0 ] && [ "$got" = github ]; then pass=$((pass+1)); echo "PASS at-ref-positive (roots: github)"
 else fail=$((fail+1)); echo "FAIL at-ref-positive — rc=$rc roots '$got'"; fi
+# The in-cluster poster ITSELF (scripts/iac-sentinel.sh mgmt_box_surfaces_post): its inputs resolve from
+# its own assignments, and the exact `bash -c` call shape it runs per surface row answers right over
+# THIS checkout. #2088 moved mgmt-lib.sh and the poster's `[ -f "$MGMT_LIB" ] || return 0` turned the
+# in-cluster half off for six weeks (2026-09-15 → 2026-10-27) with nothing failing — this is the gate.
+IAC="$REPO/scripts/iac-sentinel.sh"
+iac_var() { HERE="$REPO/scripts" bash -c "$(grep -m1 "^$1=" "$IAC"); printf '%s' \"\$$1\""; }
+LIB_P="$(iac_var MGMT_LIB)"; POL_P="$(iac_var MGMT_POLICY)"
+if [ -f "$LIB_P" ] && [ -f "$POL_P" ]; then pass=$((pass+1)); echo "PASS in-cluster-poster-inputs-resolve"
+else fail=$((fail+1)); echo "FAIL in-cluster-poster-inputs-resolve — lib '$LIB_P' policy '$POL_P' (a moved file? fix the assignment in $IAC)"; fi
+poster_case() {  # <name> <classifier> <files (newline-joined)> <want>
+  local got rc
+  got="$(REPO="$REPO" bash -c '. "$1"; printf "%s\n" "$3" | "$2" "$REPO" HEAD' _ "$LIB_P" "$2" "$3" 2>/dev/null)"; rc=$?
+  if [ $rc = 0 ] && [ "$got" = "$4" ]; then pass=$((pass+1)); echo "PASS in-cluster-poster:$1"
+  else fail=$((fail+1)); echo "FAIL in-cluster-poster:$1 — rc=$rc got '$got' want '$4'"; fi
+}
+# every row of MGMT_BOX_SURFACES names a classifier that exists in the lib and answers over HEAD
+while IFS='|' read -r ctx fn _; do
+  [ -n "$ctx" ] || continue
+  if REPO="$REPO" bash -c '. "$1"; declare -F "$2" >/dev/null' _ "$LIB_P" "$fn"; then pass=$((pass+1)); echo "PASS in-cluster-poster-row:$ctx → $fn exists"
+  else fail=$((fail+1)); echo "FAIL in-cluster-poster-row:$ctx — classifier '$fn' is not a function in $LIB_P"; fi
+done < <(sed -n '/^MGMT_BOX_SURFACES=(/,/^)/p' "$IAC" | grep -o '"[^"]*"' | tr -d '"')
+poster_case roots-github        mgmt_roots_touched_at  $'tofu/github/x.tf\ndocs/a.md'            github
+poster_case roots-untouched     mgmt_roots_touched_at  $'docs/a.md\nansible/opnsense-bgp.yml'   ""
+poster_case router-path         mgmt_router_touched_at $'docs/a.md\nansible/opnsense-bgp.yml'   ansible/opnsense-bgp.yml
+poster_case router-untouched    mgmt_router_touched_at $'tofu/github/x.tf\ndocs/a.md'            ""
 
 # ── the APPLY side: the allowlist + the Talos config precondition (mgmt_talos_gate) + the post-apply
 # health gate (mgmt_post_check), over SYNTHETIC `tofu show -json` plans fed through mgmt_plan_digest —

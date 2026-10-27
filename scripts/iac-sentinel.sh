@@ -124,7 +124,13 @@ post_status_ctx() {
 # classifier a mgmt-lib function taking <repo-dir> <ref> with the head's changed paths on stdin and
 # printing the surface's paths among them (empty = the surface is untouched; rc ≠ 0 = could not
 # classify, post nothing). Adding a box surface = adding a row (ADR-152 step 1 added the second).
-MGMT_LIB="${HERE}/mgmt-lib.sh"
+# ⚠ The lib lives under mgmt/scripts/ since #2088 (2026-09-15). This probe read `${HERE}/mgmt-lib.sh`
+# until 2026-10-27 and the function returned 0 SILENTLY for six weeks — every "no box-held surface"
+# status in that window was the box's (`[e:…]` prefix), the in-cluster half was off and nobody saw
+# it. mgmt-policy-test now resolves this very line and runs the call shape below; a missing input
+# here is a loud line per head, never a quiet return.
+MGMT_LIB="${HERE}/../mgmt/scripts/mgmt-lib.sh"
+MGMT_POLICY="${HERE}/../policy/mgmt/plan-input.yaml"
 MGMT_BOX_SURFACES=(
   "management-sentinel|mgmt_roots_touched_at|no box-held surface touched (in-cluster)"   # the tofu roots — the box plans them
   "opnsense-test-vm|mgmt_router_touched_at|n/a: no router path in this head (in-cluster)" # router_test_vm.paths — the box runs test VM 9110
@@ -132,7 +138,7 @@ MGMT_BOX_SURFACES=(
 mgmt_box_surfaces_post() {   # <repo> <pr> <sha>
   local repo="$1" pr="$2" sha="$3" present files fetched=0 row ctx fn desc touched
   [ "$repo" = "homelab" ] && [ "$pr" != "-" ] && [ -n "$STATUS_TOKEN" ] || return 0
-  [ -f "$MGMT_LIB" ] && [ -f "${HERE}/../policy/mgmt/plan-input.yaml" ] || return 0
+  [ -f "$MGMT_LIB" ] && [ -f "$MGMT_POLICY" ] || { log "[$repo#$pr] box surfaces: INPUT MISSING ($MGMT_LIB / $MGMT_POLICY) — the in-cluster half is OFF, the box posts every verdict (the #2088 move class)"; return 0; }
   present="$(gh api "repos/${ORG}/${repo}/commits/${sha}/status" --jq '[.statuses[].context]|unique|.[]' 2>/dev/null)" || { log "[$repo#$pr] box surfaces: status probe failed — leaving the head to the box"; return 0; }
   for row in "${MGMT_BOX_SURFACES[@]}"; do
     IFS='|' read -r ctx fn desc <<<"$row"
