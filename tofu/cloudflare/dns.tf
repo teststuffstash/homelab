@@ -43,3 +43,49 @@ resource "cloudflare_dns_record" "proton_verification" {
   ttl     = 3600
   comment = "Proton Mail domain verification — keep while teststuff.net mail is on Proton."
 }
+
+# Proton Mail for teststuff.net — the records Proton's domain wizard issued (2026-10-27), verbatim.
+# All DNS-only: mail records are never proxied.
+resource "cloudflare_dns_record" "proton_mx" {
+  for_each = { "mail.protonmail.ch" = 10, "mailsec.protonmail.ch" = 20 }
+  zone_id  = var.zone_id
+  name     = "teststuff.net"
+  type     = "MX"
+  content  = each.key
+  priority = each.value
+  ttl      = 3600
+  comment  = "Proton Mail inbound (teststuff.net is the company's mail domain)."
+}
+
+# Proton's suggested soft-fail (~all), not minutark's -all: this domain DOES send, through Proton.
+resource "cloudflare_dns_record" "proton_spf" {
+  zone_id = var.zone_id
+  name    = "teststuff.net"
+  type    = "TXT"
+  content = "\"v=spf1 include:_spf.protonmail.ch ~all\""
+  ttl     = 3600
+  comment = "SPF: only Proton sends as teststuff.net."
+}
+
+# DKIM: Proton rotates keys behind these CNAMEs — the targets are per-domain and stable.
+resource "cloudflare_dns_record" "proton_dkim" {
+  for_each = toset(["protonmail", "protonmail2", "protonmail3"])
+  zone_id  = var.zone_id
+  name     = "${each.key}._domainkey"
+  type     = "CNAME"
+  content  = "${each.key}.domainkey.ds2ossz6ahlcifdibluvfm5ittjl5vizkbfiwwo2qguhnkui65kpq.domains.proton.ch"
+  proxied  = false
+  ttl      = 3600
+  comment  = "Proton Mail DKIM (Proton-managed key rotation)."
+}
+
+# Proton's suggested starting policy + aggregate reports to dmarc@ (a Proton address, 2026-10-27);
+# tighten to p=reject once the reports show only Proton sending as teststuff.net.
+resource "cloudflare_dns_record" "proton_dmarc" {
+  zone_id = var.zone_id
+  name    = "_dmarc"
+  type    = "TXT"
+  content = "\"v=DMARC1; p=quarantine; rua=mailto:dmarc@teststuff.net\""
+  ttl     = 3600
+  comment = "DMARC for the mail domain (Proton)."
+}
