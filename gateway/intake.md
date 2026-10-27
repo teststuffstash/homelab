@@ -137,7 +137,8 @@ Unverified: <what you did not read on the wire — "verify during implementation
   fixes, and you choose: `file` the successor work issue (rule it in the same sitting — usually
   `standing`) and re-point the flag at it, or re-point at the closed issue's comment that names
   the residue, ⚖. Rule 10's grammar names a work issue; a dead pointer is the one thing a flag
-  may not carry.
+  may not carry. A successor you file carries `Origin=<the input you are ruling>` (the sitting's
+  provenance); the closed work issue is named in prose.
 
 ## A bot-authored Goal
 

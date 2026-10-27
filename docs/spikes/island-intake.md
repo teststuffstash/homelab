@@ -69,9 +69,31 @@ loop writes the comment only, no labels; a `⚑ gap` flag whose work issue close
 fixes (file the successor, or re-point at the residue comment ⚖); the pinned RULES.md is in the
 read set.
 
-## Run 2 — apply (2026-10-27)
+## Run 2 — apply (2026-10-27 ~21:20Z, opus subagent, 152k tokens, 41 tool calls, 6.5 min)
 
-_(filled from the apply sitting's report — see the section below once it lands)_
+Same inputs, the amended brief, writes granted; run 1's output handed over as a draft to
+re-verify, not to replay. Every claim re-checked live (the flag lines, the merged PRs, the
+deployed `policy.json` callers, `classify_touches` with a positive control). Written:
+
+| input | ruling | written |
+|---|---|---|
+| #2782 | queue | body rewritten; `agent-fix` + `task/fix` + `agent/queued`; the flag re-pointed at a filed successor |
+| ↳ **#2977** | file → standing | the successor work issue for #2718's three standing shortfalls (parseable block, done-when per shortfall, the trigger to pick one up); `intake: standing`, no labels |
+| #2753 | queue | body rewritten (the world column restored; a stale fixture-SA spelling in the world prose found and parked ⚖ out of scope); same labels |
+| #2768 | seat | `agent-fix` + `agent/blocked`; `blocked-on: human` naming the ruling |
+| #2650 | seat, comment only | no labels — the body keeps it out of the loop (the amended rule) |
+| #2684 | standing | comment only |
+| FU-271 | standing, report-only | nothing |
+
+End state: the selector went from `fire: 5` to `hold: 0`; the seat rang the platform doorbell
+after the run. Run 2 graded run 1: same ruling on all six, two bodies changed (the #2782 flag
+form — the draft had named the closed issue, which neither honest fix allows; #2753's table had
+dropped the page's `world` column). Facts it lacked: whether `spec_gate.py` reads the `→ work`
+pointer (marked "verify during implementation" — the worker's); whether a listed bind namespace
+holds an SA that must not ride (#2684's own trigger, `kubectl` forbidden by the brief); which
+`Origin` a filed successor takes (now ruled in the brief: the input being ruled); rule 10's flag
+grammar for a requirement-level gap tracked by an FU id (`health.md`'s HA row — pinned-text
+territory, §Open questions 4).
 
 ## Reading
 
