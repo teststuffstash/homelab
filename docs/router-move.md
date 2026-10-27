@@ -432,6 +432,11 @@ the hypervisor's flooding, not the node's config.
 
 ## Status
 
+- 2026-10-27 00:29Z: **the box converged the BACKUP unattended** (#2955, `mode: backup-only`):
+  opnsense-pve, dnsmasq-dhcp.py=4 (two reservation descrs), node-local restore armed → cancelled,
+  `check pve` ok, CARP unchanged, writes attributed to `automation@192.168.2.53`; MASTER untouched
+  (still carries wk-metal-04's old dnsmasq MAC + lacks the descrs until its rolling path / a seat
+  `converge nx02`).
 - 2026-10-26 night: **the management box converges the BACKUP — built, in shadow** (ADR-152 step 3;
   [`management-box.md`](management-box.md) §Router config converge — BACKUP-only): the node is read
   live from the pair's CARP state, a node-local config restore (copy + reboot unless confirmed) is

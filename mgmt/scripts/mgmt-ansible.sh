@@ -441,7 +441,7 @@ ans_bracket() {
     2) refuse "$sha" "ansible $g: STOPPED — a stale lease upgrade-lease-ansible-$g (see $ADIR/ansible-stopped)"; return 3 ;;
     3) log "PROBE-FAIL: ansible $g: lease unreadable — not begun"; return 1 ;;
   esac
-  _awin open --reason "box ansible apply: $g ${conf:0:8} → ${sha:0:8} — mgmt/scripts/mgmt-ansible.sh (ADR-152 step 2)" \
+  _awin open --reason "box ansible apply: $g ${conf:0:8} → ${sha:0:8} — mgmt/scripts/mgmt-ansible.sh (ADR-152)" \
     --alerts "$walerts" --minutes "$(( cap + 30 ))" \
     --note "forward only: a bad confirm STOPS the box (lease kept, window kept, MgmtAnsibleApplyStopped) — nothing reverts" \
     >"$d/window-open.log" 2>&1 || { log "PROBE-FAIL: ansible $g: window did not open ($(tail -1 "$d/window-open.log"))"; return 1; }
@@ -470,7 +470,13 @@ ans_bracket() {
 
   # 5 apply, 6 confirm
   local ja jc hf=""
-  ja="$(ans_run "$d" apply "$REPO" "$plays")"
+  # only the plays the target --check MEASURED as changed (the rest are converged by that read): the
+  # DHCP scripts rebuild by wipe + re-add, so a 0-diff kea-dhcp.py still restarted Kea on the standby
+  # (the first BACKUP converge, 2026-10-27 00:27Z) — order kept, the confirm still checks every play
+  local aplays; aplays="$(jq -c --argjson ch "$(awk -F'\t' '$3 > 0 {print $1}' "$d/target.recap" | jq -Rn '[inputs]')" \
+    '[.[] | select(. as $p | $ch | index($p))]' <<<"$plays")"
+  log "ansible $g: applying $(jq -r 'join(" ")' <<<"$aplays") (the rest read changed=0)"
+  ja="$(ans_run "$d" apply "$REPO" "$aplays")"
   log "ansible $g: APPLY → ${ja//$'\t'/ — }"
   # settle (the row's `settle_s`): a router reconfigure restarts services the confirm then reads
   _ans_sleep "$(jq -r '.settle_s // 0' <<<"$row")"

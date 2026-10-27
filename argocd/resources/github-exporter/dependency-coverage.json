@@ -227,7 +227,6 @@
       "gap_rows": 0,
       "human_cells": [
         "canary",
-        "deploy_edge",
         "merge_gate",
         "proposer",
         "revert"
