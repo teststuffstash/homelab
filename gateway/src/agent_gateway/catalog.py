@@ -281,12 +281,15 @@ def parse_config(doc) -> dict:
     return {"overrides": out}, []  # the overlay never drops a row (drop-and-count reads only the catalog)
 
 
-def merge(catalog: dict, config: dict) -> dict:
+def merge(catalog: dict, config: dict, dropped_ids=frozenset()) -> dict:
     """The listing — the config snapshot's body: the catalog's rows with the console's overrides
     applied the vendor's way. `disabled: true` unlists the row; a present `cost` replaces its tiers;
     a present `limit` field, `name`, `family` or `tools` wins. An override naming no catalog row is
     listed only when it is a complete row of its own (a `cost` and both limits; `tools` false
-    unless it says so); anything less names nothing to list."""
+    unless it says so); anything less names nothing to list. `dropped_ids` (#2933) are the rows
+    `parse_catalog` dropped this refresh (an unknown dialect): they name no catalog row AND are
+    never listed by the complete-row branch — a dropped model comes back with a GUESSED dialect
+    there (`openai`), which the drop-and-count ruling forbids."""
     models: dict[str, dict] = {}
     overrides = config["overrides"]
     for mid, row in catalog["models"].items():
@@ -303,7 +306,7 @@ def merge(catalog: dict, config: dict) -> dict:
         new.update(o.get("limit", {}))
         models[mid] = new
     for mid, o in overrides.items():
-        if mid in catalog["models"] or o.get("disabled") is True:
+        if mid in catalog["models"] or mid in dropped_ids or o.get("disabled") is True:
             continue
         lim = o.get("limit", {})
         if "cost" in o and "context" in lim and "output" in lim:
@@ -587,7 +590,7 @@ class GoCatalog:
                 self.dropped[(source, d["reason"])] += 1
             log.info("catalog: %s dropped %d model(s) — %s", source, len(dropped),
                      "; ".join(f"{d['model']} ({d['reason']})" for d in dropped))
-        body = merge(parts["catalog"], parts["config"]) if source == "config" else parts["docs"]
+        body = merge(parts["catalog"], parts["config"], {d["model"] for d in dropped}) if source == "config" else parts["docs"]
         fresh = Snapshot(source, now, body)
         last = self.snapshots.get(source)
         if fresh.models == 0 or (last is not None and fresh.models < MIN_KEPT_SHARE * last.models):

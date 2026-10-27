@@ -99,6 +99,12 @@ def config_doc(behaviour: str) -> dict:
         models["deepseek-v4-flash"] = copy.deepcopy(ADDED_ROW)
     elif behaviour == "config-adds-bare":  # a console-only row that is no row
         models["deepseek-v4-flash"] = {"disabled": False}
+    elif behaviour == "config-adds-gemini":  # #2933 round 2: a COMPLETE override for the id the
+        # catalog read DROPPED (gemini-4-argon on @ai-sdk/google) — the overlay still never
+        # re-lists a dropped id (a guessed dialect would be its cost)
+        models["gemini-4-argon"] = {"name": "Gemini 4 Argon", "family": "gemini",
+                                    "cost": [{"input": 2.0, "output": 10.0, "cache": {"read": 0.1}}],
+                                    "limit": {"context": 1000000, "output": 384000}}
     elif behaviour == "config-malformed":
         models["deepseek-v4-pro"] = {"cost": "free"}
     elif behaviour == "config-no-provider":

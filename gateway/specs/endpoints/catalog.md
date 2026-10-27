@@ -64,7 +64,10 @@ each with its own snapshot:
   row, which the 10-17 build read as the catalog): `"disabled": true` unlists the row; a `cost`
   (the vendor's list-or-one-row spelling), a `limit` field, a `name`, `family` or
   `capabilities.tools` present on a row wins over the catalog's; an override naming no catalog
-  row is listed only when it is a complete row of its own (a cost and both limits). The console
+  row is listed only when it is a complete row of its own (a cost and both limits) — and an id
+  the catalog read DROPPED this refresh names no row and is never re-listed (#2933: the
+  complete-row branch would list it with a guessed `openai` dialect, which the ruling forbids).
+  The console
   request carries the Go key as a bearer, a `User-Agent` and a fresh `x-opencode-session` —
   Cloudflare answers 1010 to a bare client; the catalog read carries no credential. The two reads
   are one source: the first that fails ends the refresh with its outcome (the log line names the
@@ -90,6 +93,9 @@ the other source's refresh. ⚖ **One listed-model exception (drop-and-count, #2
 2026-10-26)**: a row whose DIALECT the parser does not know *(config source)* is dropped from that
 refresh — counted and logged, the rest of the source lands; the dialect is still never guessed,
 and a model the gateway cannot speak cannot be admitted, so dropping loses nothing that worked.
+A dropped id is **not re-listed by the console overlay**: the overlay's complete-row branch
+(the override naming no catalog row) skips it — a complete override for a dropped id cannot
+bring it back with a guessed `openai` dialect (⇁ [§The model's dialect](#the-models-dialect)).
 Whole-source shape failures (below half, no Plan table, no Endpoints table, a named provider
 missing) stay failures.
 A
@@ -127,6 +133,7 @@ read, the `config-*` knobs the console read; a refresh of the `config` source ma
 | "a catalog row without its cost is a parse failure" | 5, fetched T0 | `catalog-malformed` (`deepseek-v4-pro` has no `cost`) || parse-failed | the last good | 5 |
 | "a legacy context_over_200k row with no tiers is a parse failure ⚖" | 5, fetched T0 | `catalog-legacy-tier` || parse-failed | the last good | 5 |
 | "the unknown dialect drops that model, the refresh keeps the others ⚖" | 5, fetched T0 | `catalog-google` (`gemini-4-argon` on `@ai-sdk/google`) || ok | `gemini-4-argon` absent (dropped) | 5 |
+| "a dropped id is not re-listed by the console overlay ⚖" | 5, fetched T0 | `catalog-google` + `config-adds-gemini` (a complete console override for `gemini-4-argon`) || ok | `gemini-4-argon` absent (the override names no row) | 5 |
 | "an override whose cost is not a cost is a parse failure" | 5, fetched T0 | `config-malformed` (`deepseek-v4-pro: {cost: "free"}`) || parse-failed | the last good | 5 |
 | "a catalog without the Go provider is a parse failure" | 5, fetched T0 | `catalog-no-provider` || parse-failed | the last good | 5 |
 | "a console answer without the Go provider is a parse failure" | 5, fetched T0 | `config-no-provider` || parse-failed | the last good | 5 |
@@ -158,6 +165,9 @@ catalog read carries (the vendor serves a Go model on one of its two endpoints):
 dialect this parser does not know, and its row is **dropped** from the refresh (⇁ the strict
 paragraph; #2933 ruling 2026-10-26: counted, logged, the rest lands — the dialect is still never
 guessed, and a catalog-level fault like a missing provider object is a parse failure whole).
+A dropped id stays dropped through the console overlay too: the overlay's complete-row branch
+skips it (⇁ the strict paragraph), so a complete override for a dropped id never re-lists it
+with a guessed dialect.
 The snapshot carries it per model (a console-only row, which has no
 override, is `openai`), and the admission walk takes the harness from it
 ([GW-SESSIONS-ADMIT §The harness follows the cell](sessions.md#the-harness-follows-the-cell)).

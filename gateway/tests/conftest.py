@@ -797,9 +797,10 @@ def seed_go_catalog(store: Store, fetched_at: float = 1_800_000_000.0) -> Store:
     one refresh would store them (GW-CATALOG-GO). Admission reads them."""
     from agent_gateway.catalog import merge, parse_catalog, parse_config, parse_docs
 
+    cat, cat_dropped = parse_catalog(json.loads((GO_CATALOG_FIXTURES / "models-dev.json").read_text(encoding="utf-8")))
     store.snapshot_save("config", fetched_at, merge(
-        parse_catalog(json.loads((GO_CATALOG_FIXTURES / "models-dev.json").read_text(encoding="utf-8")))[0],
-        parse_config(json.loads((GO_CATALOG_FIXTURES / "config.json").read_text(encoding="utf-8")))[0]))
+        cat, parse_config(json.loads((GO_CATALOG_FIXTURES / "config.json").read_text(encoding="utf-8")))[0],
+        {d["model"] for d in cat_dropped}))
     store.snapshot_save("docs", fetched_at, parse_docs((GO_CATALOG_FIXTURES / "go.mdx").read_text(encoding="utf-8"))[0])
     return store
 

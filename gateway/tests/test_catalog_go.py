@@ -22,6 +22,7 @@ the test clock, 2027-01-15T08:00:00Z.
 | a catalog row without its cost is a parse failure | 5, fetched T0 | catalog-malformed | parse-failed | the last good | 5 |
 | a legacy context_over_200k row with no tiers is a parse failure | 5, fetched T0 | catalog-legacy-tier | parse-failed | the last good | 5 |
 | the unknown dialect drops that model, the refresh keeps the others ⚖ | 5, fetched T0 | catalog-google (gemini-4-argon on @ai-sdk/google) | ok | gemini-4-argon absent (dropped) | 5 |
+| a dropped id is not re-listed by the console overlay ⚖ | 5, fetched T0 | catalog-google + config-adds-gemini (a complete override for the dropped id) | ok | gemini-4-argon absent (the overlay names no row) | 5 |
 | an override whose cost is not a cost is a parse failure | 5, fetched T0 | config-malformed | parse-failed | the last good | 5 |
 | a catalog without the Go provider is a parse failure | 5, fetched T0 | catalog-no-provider | parse-failed | the last good | 5 |
 | a console answer without the Go provider is a parse failure | 5, fetched T0 | config-no-provider | parse-failed | the last good | 5 |
@@ -184,6 +185,7 @@ CONFIG_ROWS = [
     ("a catalog row without its cost is a parse failure", LAST_GOOD, ("catalog-malformed", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
     ("a legacy context_over_200k row with no tiers is a parse failure", LAST_GOOD, ("catalog-legacy-tier", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
     ("the unknown dialect drops that model, the refresh keeps the others ⚖", LAST_GOOD, ("catalog-google", "config-ok"), "T0", "ok", T0, 5, LISTED_FIVE),
+    ("a dropped id is not re-listed by the console overlay ⚖", LAST_GOOD, ("catalog-google", "config-adds-gemini"), "T0", "ok", T0, 5, LISTED_FIVE),
     ("an override whose cost is not a cost is a parse failure", LAST_GOOD, ("catalog-ok", "config-malformed"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
     ("a catalog without the Go provider is a parse failure", LAST_GOOD, ("catalog-no-provider", "config-ok"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
     ("a console answer without the Go provider is a parse failure", LAST_GOOD, ("catalog-ok", "config-no-provider"), "T0", "parse-failed", T0, 5, LISTED_FIVE),
@@ -241,6 +243,10 @@ async def test_config_refresh(cworld, vendor, vendor_transport, clock, last, kno
             check("the models.dev rows that landed carry their dialects",
                   [app.state.catalog.snapshots["config"].body["models"][m].get("dialect") for m in sorted(LISTED_FIVE)],
                   ["anthropic", "openai", "openai", "openai", "openai"])
+    if config_b == "config-adds-gemini":
+        with then("the overlay's complete override does not resurrect the dropped id — its dialect would be a guess"):
+            check("gemini-4-argon in the merged listing",
+                  "gemini-4-argon" in app.state.catalog.snapshots["config"].body["models"], False)
 
 
 # ── What a refresh keeps: docs ───────────────────────────────────────────────────────────────

@@ -116,6 +116,7 @@ needs another catalog refreshes against the fake vendor first (`catalog-retired`
 | `config-disables` | + `deepseek-v4-pro: {disabled: true}` |
 | `config-reprices` | + `claude-haiku-5-5` with two `cost` rows (0.20/1.00, above 200000 tokens 1.00/5.00) and `limit.context` 200000 |
 | `config-adds` / `config-adds-bare` | + `deepseek-v4-flash` (no catalog row) as a full row (cost, both limits, family, tools) / as `{disabled: false}` alone |
+| `config-adds-gemini` | + `gemini-4-argon` (the id `catalog-google`'s read DROPPED) as a full row (cost, both limits, name, family) — the overlay still never re-lists a dropped id (#2933) |
 | `config-malformed` | + `deepseek-v4-pro: {cost: "free"}` |
 | `config-no-provider` | the console answer without its `opencode-go` provider |
 | `config-503` / `config-down` | 503 / a connect failure on the console read |
