@@ -30,6 +30,12 @@
 # in the table are the JAIL's today, which is the phase-A shortcut. Each row is meant to be swapped
 # for a box-scoped entry as those are minted (FU-012's next) — one line per credential, on purpose.
 #
+# ⚠ RUN IT FROM THE OPERATOR'S CHECKOUT (/workspace/homelab = ~/Projects/homelab), NEVER A CLONE: it
+# ships the checkout's gitignored tofu/terraform.tfvars + tofu/provisioning/terraform.tfvars (main's
+# proxmox token, provisioning's ssh_public_keys), which a clone does not have. A push from a clone
+# (2026-10-26 22:03Z) replaced both box var files with the wallet-appended remainder → the belt's
+# tofu:provisioning check and main's next plan failed on "no value for variable". It refuses now.
+#
 # Usage:
 #   mgmt/scripts/mgmt-provision-secrets.sh                 # stage → ~/.claude/homelab-mgmt/extra-files
 #   mgmt/scripts/mgmt-provision-secrets.sh --push          # stage + rsync onto root@192.168.2.53
@@ -39,6 +45,11 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 MGMT_HOST_DEFAULT="192.168.2.53"
+
+# Refuse BEFORE anything is staged when the checkout's tfvars are missing (a clone — see the header).
+for _tv in "$REPO/tofu/terraform.tfvars" "$REPO/tofu/provisioning/terraform.tfvars"; do
+  [ -s "$_tv" ] || { echo "FATAL: ${_tv#"$REPO"/} missing or empty in $REPO — run this from the operator's checkout, never a clone (it would wipe the box's copy)" >&2; exit 1; }
+done
 
 # Resolve the cred root (the dir holding homelab-keepass/) — jail vs host, like wallet-files.sh.
 CRED=""
@@ -204,7 +215,7 @@ for root in provisioning main; do
   if [ -s "$src" ]; then
     install -m600 "$src" "$OUT/var/lib/mgmt/$root.tfvars"; echo "  + var/lib/mgmt/$root.tfvars  (← ${src#"$REPO"/})"
   else
-    echo "  ! ${src#"$REPO"/} missing — the box's plan of that root will fail on its variables" >&2
+    echo "FATAL: ${src#"$REPO"/} vanished mid-run" >&2; exit 1
   fi
 done
 # ⚠ Proxmox tokens ride in the tfvars, NEVER the env: a TF_VAR_ in the env that a tfvars overrides
