@@ -30,3 +30,16 @@ resource "cloudflare_dns_record" "wildcard_local" {
   ttl     = 300
   comment = "Local self-signed TLS dev environments (work). DNS-only — do not proxy."
 }
+
+# Proton Mail custom-domain ownership proof (2026-10-27): teststuff.net becomes the ONE mail
+# domain (a Proton mailbox); every other domain forwards into it via Cloudflare Email Routing.
+# Proton re-checks this record to confirm continued ownership — never remove it while the domain
+# is on Proton. Not a secret (public DNS by design). MX/SPF/DKIM/DMARC follow once verified.
+resource "cloudflare_dns_record" "proton_verification" {
+  zone_id = var.zone_id
+  name    = "teststuff.net"
+  type    = "TXT"
+  content = "\"protonmail-verification=89dbb6fc6fd41e4229d0271c3b6bfee27749166d\""
+  ttl     = 3600
+  comment = "Proton Mail domain verification — keep while teststuff.net mail is on Proton."
+}
