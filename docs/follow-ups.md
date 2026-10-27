@@ -672,6 +672,16 @@ the block needs pruning, not more headings.
       09-13 it latched five ISSUES for one PROVIDER fault. **Next:** re-key provider/model/neither = homelab#1640
       acceptance 5 (open). Relates FU-199, agent-runtime#85, model-routing §M1a.
 
+- [ ] **FU-320** — **Island intake: the gateway admits its own ordinary work (P6 first leg, spike 2026-10-27).**
+      Brief `gateway/intake.md` + selector `gateway/scripts/intake-select.sh` + the two live
+      sittings in `docs/spikes/island-intake.md` (PR #2978 — links once it merges): #2782/#2753 queued with the key
+      rows written in, #2977 filed + standing, #2768/#2650 seat, #2684 standing. Until wired, the seat runs the sitting
+      as an opus subagent when the selector fires, then rings. **Next (operator rulings, spike §Open questions):**
+      the scan clause (`island-intake` unit, brief = the island file, replay fixture); `INTAKE_GOAL_BUDGET_USD`
+      (10) vs "Goals stay human"; may the bot close human-filed issues; rule 10's flag grammar for a closed work
+      issue (pinned text). The `goal` path is unexercised. Settle: bot-filing → `agent/queued` ≈ 0 days on the
+      island, two weeks, rides merging ≤ 2 rounds. Relates FU-270, ADR-139, ADR-155/156, ADR-122.
+
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
 - [ ] **FU-218** — **ARC runner memory: a node-sized limit, not node removal: POINTER.** The runner
