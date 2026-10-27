@@ -156,5 +156,16 @@ for u in mgmt-sentinel mgmt-apply mgmt-lease mgmt-reconcile mgmt-state-snapshot;
   else ok "nix: $u runs on boxTools, MGMT_BOX=1"; fi
 done
 
+# mgmt-provision-secrets.sh refuses from a clone (no gitignored tfvars) BEFORE it reads the wallet or
+# stages anything — the 2026-10-26 22:03Z push from a clone wiped the box's var files.
+C="$T/clone"; mkdir -p "$C/mgmt/scripts" "$C/tofu/provisioning"; cp "$REPO/mgmt/scripts/mgmt-provision-secrets.sh" "$C/mgmt/scripts/"
+o="$(HOME="$T/nohome" bash "$C/mgmt/scripts/mgmt-provision-secrets.sh" --push 127.0.0.9 2>&1)"; r=$?
+if [ $r != 0 ] && grep -q 'tofu/terraform.tfvars missing' <<<"$o"; then ok "provision-secrets: refuses from a clone, names the file"
+else bad "provision-secrets: a clone without tfvars was not refused (rc $r): $o"; fi
+printf 'x = 1\n' >"$C/tofu/terraform.tfvars"
+o="$(HOME="$T/nohome" bash "$C/mgmt/scripts/mgmt-provision-secrets.sh" 2>&1)"; r=$?
+if [ $r != 0 ] && grep -q 'tofu/provisioning/terraform.tfvars missing' <<<"$o"; then ok "provision-secrets: refuses without provisioning's tfvars"
+else bad "provision-secrets: missing provisioning tfvars not refused (rc $r): $o"; fi
+
 echo "mgmt-tools-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
