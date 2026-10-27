@@ -55,7 +55,8 @@ OPTIONS = [  # explicit router + DNS so clients get the gateway / Unbound resolv
     {"type": "set", "option": "6", "interface": INTERFACE, "value": "192.168.2.1"},
 ]
 HOSTS = [  # static reservations preserved from ISC
-    {"host": "pve", "hwaddr": "22:24:4d:07:03:76", "ip": "192.168.2.3"},
+    {"host": "pve", "hwaddr": "22:24:4d:07:03:76", "ip": "192.168.2.3",
+     "descr": "Proxmox host pve (X99) — hosts the BACKUP router node"},
     {"host": "BRN_8D63B8", "hwaddr": "00:80:77:8d:63:b8", "ip": "192.168.2.4"},
     # bare-metal Talos worker (ThinkPad X240) — pinned so the maintenance-mode IP
     # == the ongoing node IP (clean tofu apply target).
