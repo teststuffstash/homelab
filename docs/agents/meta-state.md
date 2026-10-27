@@ -144,8 +144,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ HYGIENE:** stale agent branches (10-24: homelab 11, agent-runtime 1, circles 3): delete or resume. The ZOMBIE
   hosted runs 32217689970 and 34748702282 (still `queued`) cannot be cancelled by API: operator UI, or ignore. Phantom
   closes: oracle-fleet #25 #24 #22 #7 closed still `agent/review`, sleep-tracking #7 closed `agent/blocked` — relabel.
-  Platform `coordinatorModel` still `opencode-go/deepseek-v4-flash` (live AgentStack 10-24; the 09-25 temporary — back
-  to the subscription when ruled). Stack-side: inert `:dependencyDashboard` lines; agent-runtime's `deps-pin-guard.sh`
+  Platform `coordinatorModel` → `opus` via #2960 (10-27: the Go rail retired deepseek-v4-flash, 410 on every
+  coordinator session; the claim's own exit clause) — confirm the next `coordinate-perstack` child runs clean. Stack-side: inert `:dependencyDashboard` lines; agent-runtime's `deps-pin-guard.sh`
   pre-#83; dead `update-pr-branch.reusable.yml` callers. #1988 closes when its base-image half has its own home.
 - **⚑ DESIGN INPUTS WITH NO OTHER HOME (operator: deliberately not FUs — pick up in a
   design-agents sitting; re-ruled 2026-10-15):**
