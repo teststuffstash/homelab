@@ -5,7 +5,8 @@ Guest build: [`scripts/opnsense-test-vm-bootstrap.sh`](../scripts/opnsense-test-
 [`opnsense/test-vm/config.xml.tmpl`](../opnsense/test-vm/config.xml.tmpl). Inventory:
 [`machines/machines.yaml`](../machines/machines.yaml). **Using it** — per-run rollback, the plays,
 the report — is the validation harness, [`runbook.md`](runbook.md) §Validate a router-config PR on
-the OPNsense test VM (`scripts/opnsense-test-vm.sh`)._
+the OPNsense test VM (`scripts/opnsense-test-vm.sh`). The management box runs it on every router-path PR
+head and posts `opnsense-test-vm` ([`management-box.md`](management-box.md) §MB3 "The router surface")._
 
 A throwaway OPNsense router at prod's version, so a router-config PR (`ansible/opnsense-*.yml`,
 `opnsense/dnsmasq-dhcp.py`) can be applied to a **real API** before it reaches `192.168.2.1`.
@@ -19,7 +20,7 @@ A throwaway OPNsense router at prod's version, so a router-config PR (`ansible/o
 | WAN = `vtnet1` = net1 | `vmbr0`, **`192.168.2.67/24`**, gateway `192.168.2.1` — the management path (API `:443` + SSH `:22` from `192.168.2.0/24` only) and the egress for firmware/plugins. "Block private networks" is off (WAN *is* private here) |
 | LAN = `vtnet0` = net0 | **`vmbr1`**, a bridge with **no port and no host address** — `192.168.1.1/24` ([`ip-plan.md`](ip-plan.md) carve). DHCP, HAProxy VIPs and Unbound on this side serve nobody |
 | BGP | a floating rule blocks **outbound TCP 179 on WAN**, so the box's FRR can never peer with the real Cilium nodes, whatever a playbook configures |
-| Version | the **26.7 series head** the mirror serves at build time (`SERIES=26.7` in the bootstrap — a series, never a point; 26.7.6_3 on 2026-10-11 with prod on 26.7.5) + `os-frr`, `os-haproxy`, `os-acme-client` (prod's three config plugins) — prod's series since 2026-09-29 |
+| Version | the **26.7 series head** the mirror serves at build time (`SERIES=26.7` in the bootstrap — a series, never a point; 26.7.6_3 on 2026-10-11 with prod on 26.7.5) + `os-frr`, `os-haproxy`, `os-acme-client`, `os-ddclient` (the plugins the plays drive — they ASSERT them, installing is root's, FU-013) — prod's series since 2026-09-29. Rebaselined 2026-10-26 to add `os-ddclient`: **26.7.7, `os-frr` 2.0_2** (prod: 26.7.5, `os-frr` 1.55) |
 | Baseline | snapshot **`baseline`** (the harness's default `OPN_TEST_SNAPSHOT`) — after firmware + plugins + API/SSH, before any homelab playbook |
 | Secrets | wallet only: `opnsense-test-root-password`, `opnsense-test-api-key`, `opnsense-test-api-secret`. Root SSH = key login with the pve seed key (`~/.claude/homelab-pve-ssh/id_ed25519`); no password auth |
 
@@ -31,7 +32,13 @@ path the same morning in window seat-1790760478-4482 (14 packages, 16 s, no rebo
 head moved again (`26.7.6_3`) and the hand-started drill failed its build the same way — the bootstrap
 now declares the SERIES and runs `update` passes until the version stops moving, so a head move is
 never a build failure again; prod (26.7.5) follows on its own attended window. Prod's other
-plugins (`os-ddclient`, `os-isc-dhcp`, `os-tftp`) are not installed: no play touches them.
+plugins (`os-isc-dhcp`, `os-tftp`) are not installed: no play touches them.
+
+**`os-frr` 2.0 (26.7.7, met on the 2026-10-26 rebaseline):** the neighbour model dropped
+`multiprotocol`, and the pinned `oxlorg.opnsense` 26.1.11 (the newest release) fails translating
+every existing neighbour row — the bgp play created the first neighbour and died on the second. The
+bgp role writes neighbours through `raw` since (the fields it sets exist in 1.55 and 2.0 alike); the
+collection pin is FU-298's. Prod meets 2.0 at its next firmware update — this VM met it first.
 
 ## Why this bootstrap mechanism
 
@@ -93,8 +100,12 @@ status: on the 2026-09-29 build `upgradestatus` read `error` for an update that 
 config was written and the importer never offers itself again; `bootstrap` refuses. Destroy the
 VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate it, then bootstrap.
 
-**Moving the baseline** (a new prod version): roll back, update, then replace the snapshot
-(`qm delsnapshot` + `qm snapshot`) and bump `SERIES` in the bootstrap script.
+**Moving the baseline** (a new series head, or a plugin added to the bootstrap's `PLUGINS`):
+`bash scripts/opnsense-test-vm-bootstrap.sh rebaseline` — rolls back, updates to the series head
+(a plugin install refuses an out-of-date base, so the update is not optional), installs what is
+missing, replaces the snapshot. ⚠ It moves the VM PAST prod whenever the mirror's head did — the old
+baseline is gone, the mirror serves no older point (2026-10-26: 26.7.5 → 26.7.7). A new SERIES is
+also a `SERIES` bump in the script.
 
 ## The official update path — observed on this VM (2026-09-29)
 
@@ -219,9 +230,9 @@ scorer's self-test (synthetic documents); the drill runs it before every score.
 
 **Reducing the score** is the point: each (a) row is either code to write (put the setting in a
 role), or — only if it really is environment, unreachable or dead residue — a reviewed map line.
-Prod config is never deleted to lower the score (operator, 2026-09-29): dead residue (the ISC-DHCP
-block, the empty-valued legacy tunables, disabled port-forwards) is accepted **in its dead state
-only**, by a map line with a condition (`| prod:value=`, `| prod:disabled=1`, syntax in the map's
+Prod config is never deleted to lower the score (operator, 2026-09-29): dead residue (Big Data's
+ISC-DHCP block, empty-valued legacy tunables and disabled port-forwards; today GUI-saved ACME action
+defaults) is accepted **in its dead state only**, by a map line with a condition (`| prod:value=`, `| prod:disabled=1`, syntax in the map's
 header) — the same path counts again the day it comes alive.
 
 **Drill record, 2026-10-04 → 10-11 (moved from the FU-297 tracker item, 2026-10-14).** Three reds were
@@ -231,6 +242,37 @@ past, fixed by declaring a series (#2501). The 18:21Z run PASSED (826 s; build 3
 440 s), and the score went from 117 to **56**. The 56 rows are the PAIR's prod config read against a
 single-router rehearsal: `OPNsense/Kea` 36, `virtualip` 17, `hasync` 2 (+1). Each one gets coded or accepted
 (FU-297). No CI exercises `scripts/opnsense-drill.sh` (reviewer note on #2493).
+
+**Row sweep, 2026-10-26 (10-11 → 10-25: 56, 57, 58).** The 10-25 report's 58 rows, read against
+prod's config.xml (the MASTER, `.70`) and the test VM's code-built one:
+
+- **Kea, 31 rows — the remap was missing.** `kea-dhcp.py` already converges the drill with the
+  `OPN_DHCP_REMAP` data (it reads `dnsmasq-dhcp.py`), but the map remapped `dnsmasq/**` only, so
+  every reservation's `ip_address` (27) and the subnet, pool, router and DNS server (4) counted.
+  Fixed by a `remap OPNsense/Kea/dhcp4/**` line: still a row the day a value differs by more than the prefix.
+- **`virtualip/vip[*]/interface`, 17 rows (16 → 17 when `homelab-gw` 3.36 joined, #2612) — a drill
+  fix.** Prod's VIPs sit on `lo0` (router-node host var, ADR-088 as amended); the drill took the
+  group_vars default `lan`. [`drill-overrides.yml`](../ansible/test-vm/drill-overrides.yml) now sets
+  `lo0`, so the drill builds the node's shape and the rows go by construction.
+- **The pair, 8 rows: env lines.** The CARP `.1` VIP (the one prod-only `vip` — coded in
+  `router_carp_vips`, not a click-op), pfsync's interface + peer, Kea's two HA peers, `ha/enabled`,
+  `this_server_name` and the control agent. All of it is code. A lone drill router cannot carry it,
+  because a hot-standby peer aimed at prod's nodes would sync leases with them. Each line holds
+  only while the drill side is off or empty.
+- **`nat/rule[*]/audit`, 1 row — the line had the wrong kind.** Big Data's 26.1 rules had no
+  `audit`, so the line read `drill-only`. The pair's rules are API-made on 26.7, and both sides fill
+  it with base64 created/updated history. The line is now `value`.
+- **`dnsmasq/hosts[*]/hwaddr`, 1 row**: wk-metal-04's MAC, merged 10-20 and not yet applied.
+  Another fix covers it; it stays counting.
+- **38 stale lines deleted.** The 39th was the `audit` line above, rewritten. Every one dated from #2111/#2120 (2026-09-29) and
+  described Big Data's years-old config: its NICs (`lan/if`, `/22`), the ISP DNS servers, seed drift
+  (console, ssh, `ntpd/ispool`, root's shell/keys, monit's 4-core LoadAvg), the 26.1 nat triplet,
+  and its dead residue (ISC DHCP, tftp, the empty tunables, `opt1..3`, the IPv6 defaults, the
+  disabled forwards, snmpd, `language`, `nextgid`, `widgets`). Prod is now a node from the drill's
+  own bootstrap, so that thing is gone, not moved. Against the test VM's config, the new map
+  moved only the 8 pair rows (clickops → env) and exposed nothing.
+
+Expected next Sunday: **1** (the hwaddr row), 0 once that MAC is applied.
 
 ### The router rehearsal — the drill in the future router's shape
 
@@ -323,9 +365,11 @@ The box ([`management-box.md`](management-box.md)) runs it: `mgmt-opnsense-drill
 03:30 UTC** (±20 min, `Persistent`), `mgmt-opnsense-drill.service` in
 [`mgmt/nixos/hosts/mgmt/default.nix`](../mgmt/nixos/hosts/mgmt/default.nix) — from a detached
 worktree of the checkout's current revision (the hourly `mgmt-pull` reset must not change a script
-mid-run), `restartIfChanged = false`, 3 h timeout. Credentials: nothing new — the env file's prod
-OPNsense pair (already provisioned for the belt's `--check`, `mgmt-provision-secrets.sh`) and the
-pve seed key at `/var/lib/mgmt/pve-ssh/`; the drill VM's own creds are minted per run.
+mid-run), `restartIfChanged = false`, 3 h timeout. Credentials: the env file's read-only
+`backup-puller` pair (`OPN_BACKUP_API_*`, `mgmt-provision-secrets.sh` — the compare stage's one prod
+read, `config.xml`; root's pair until 2026-10-26, FU-013) and the pve seed key at
+`/var/lib/mgmt/pve-ssh/`; the drill VM's own creds are minted per run, and the converge runs as the
+drill VM's own `automation` user (the harness's identity, runbook §Validate a router-config PR).
 
 It writes `mgmt_opnsense_drill_*` to the textfile collector (job `mgmt-node`): `_success`,
 `_last_run_timestamp_seconds`, `_duration_seconds`, `_stage_seconds{stage}`,

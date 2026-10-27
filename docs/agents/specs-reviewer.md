@@ -63,7 +63,7 @@ agent-coordinator image, its own `specs-review` ServiceAccount — the gateway's
 clones master and runs `agents/specs-reviewer-session.sh` — ONE layer,
 not `reviewer-session.sh`'s launcher→pod shape, because this identity never executes or reads
 hostile code: its inputs are a diff, a body and a CI log, and its LLM admission is the gateway's.
-The tick holds no state; for every open non-draft PR of `SPECS_REVIEW_REPOS` (homelab today) at
+The tick holds no state; for every open non-draft PR of `SPECS_REVIEW_REPOS` (homelab + oracle-fleet since 2026-10-27) at
 its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar):
 
 | state at the content commit | the tick does |
@@ -283,8 +283,9 @@ report to record that digest (open question 2).
 Cheaper helper subagents wait for that data, and they need a gateway change first: a session is
 admitted with one model and the gateway rewrites every request to it
 ([GW-SESSIONS-ENV](../../gateway/specs/endpoints/sessions.md#gw-sessions-env)), so a cheaper
-subagent bills at the lead's model today. oracle-fleet's human codeowner gate is a separate
-decision; adopting the briefs does not remove it.
+subagent bills at the lead's model today. oracle-fleet's human codeowner gate on `specs/` was a
+separate decision: the operator retired it 2026-10-26 (oracle-fleet#925 drops `/specs/` from its
+CODEOWNERS; §Reach below).
 
 ## Open questions
 
@@ -301,9 +302,12 @@ decision; adopting the briefs does not remove it.
    image; a digest stamp needs the image build to run the suite.
 3. **`Spec changes:` as a deterministic pre-open check** (the 2026-07-25 oracle retros asked):
    the reviewer is the backstop, not the first line. Unchanged.
-4. **Reach.** Oracle-fleet keeps its rule-1 codeowner gate; replacing it is per island, operator's
-   call: install the App there, add the repo to the `specs-reviewer-git` chain's `repositories` + `SPECS_REVIEW_REPOS`,
-   set `required_approvals = 2` in `tofu/github`.
+4. **Reach.** Per island, operator's call. The adoption order (oracle-fleet, 2026-10-27): install
+   the App there FIRST (a token request naming an uninstalled repo fails for every repo), then one
+   PR adds the repo to the `specs-reviewer-git` chain's `repositories` + `SPECS_REVIEW_REPOS` +
+   `evidence_bucket` + a lens block, then — only once the identity is seen approving there — apply
+   `required_approvals = 2` in `tofu/github` — an OPERATOR apply, the admin token is not in the
+   jail wallet by design (earlier, every PR of the repo stalls on a count of 2).
 5. **The half-join guard and parametrize-from-spec — tool flag or repo gate?** The oracle handoff
    (`.handoff/oracle/done/20261020-2107-specs-ruleset-and-golden-example-for-the-specs-reviewer.md`
    §4 items 4–5, 2026-10-20) names the hazard the joined render carries: a rule joins as soon as ONE

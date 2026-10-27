@@ -1,0 +1,30 @@
+# The mgmt-router-verdict group, lifted VERBATIM out of router-verdict.yaml (annotations stripped —
+# the manifest is their one home) — the rules file router-verdict.promtool-test loads.
+# DRIFT-PINNED by `devbox run prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/mgmt-metrics/router-verdict.yaml | yq -P '.'
+groups:
+  - name: mgmt-router-verdict
+    rules:
+      - alert: MgmtRouterVerdictStale
+        expr: |
+          (time() - mgmt_router_verdict_last_run_timestamp_seconds) > 2 * 3600
+        for: 15m
+        labels:
+          severity: warning
+          triage: none
+      - alert: MgmtRouterVerdictErrored
+        expr: |
+          mgmt_router_verdict_last_result{state="error"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          triage: none
+      - alert: MgmtRouterVerdictMetricsAbsent
+        expr: |
+          up{job="mgmt-node"} == 1
+            unless on (instance) mgmt_router_verdict_last_run_timestamp_seconds
+        for: 1d
+        labels:
+          severity: warning
+          triage: none

@@ -67,7 +67,7 @@ Also physical, not code: `sensor.plug_opnsense_power` (HA `power.yaml`, the dash
 | Identity | Consumer that breaks without it | Mechanism | State |
 |---|---|---|---|
 | Certificates + CAs (17 LE certs, refids intact) + the web GUI's `ssl-certref` | every HAProxy frontend (binds by refid), the GUI name | **carried from the newest FU-013 backup** at seed time (`opnsense/test-vm/seed-shape.py` `trust`) | operator ruling 2026-09-29; rehearsal-proven (below) |
-| The registered ACME account + its certificate rows | renewal; a fresh account would re-register (FU-298's 404) and re-issue 17 certs against LE's weekly limit | carried (`acme`) — acme.sh renews on its 60-day clock from there | same |
+| The registered ACME account + its certificate rows | renewal; a fresh account would re-register (FU-298's 404) and re-issue 17 certs against LE's weekly limit | carried (`acme`) — acme.sh renews on its 60-day clock from there **only once the AcmeClient cron job exists**, and that job is NOT identity: the plugin creates it in `settings/fetchCronIntegration` (a GUI-page call; an API settings write never makes it), so both rebuilt nodes ran with auto-renewal ON and no job — nothing renewed from 09-29 to 2026-10-26 (`LanCertExpiringSoon`, #2927; the acme role now makes the call). A BACKUP cannot order at all (no WAN link behind the gate), so its renewal path is the carry: `scripts/opnsense-cert-carry.sh <master> <backup>` copies each renewed cert+key from the MASTER's trust store onto the BACKUP under the same refid and reconfigures its HAProxy (the acme role skips sign+poll on a BACKUP) | same; cron gap found 2026-10-26 |
 | API users `backup-puller`, `automation` + their keys; root's API key | the backup CronJob's ESO secret, the box's `OPN_API_*` belts, every playbook | carried (`api-users`: the users with their hashed keys; root's prod key lines appended to the seed's own) — no key is re-minted, so nothing in the wallet/Infisical flips | rehearsal-proven (below); the users role then finds each user WITH a key and mints nothing |
 | WAN MAC (`em0`, `machines.yaml` `opnsense.wan_mac`) | the ISP lease (and the public IP ddclient publishes) | `spoofmac` on `igb0` | rehearsal-proven (below) |
 | WireGuard server keypair | the two client configs | **carried** (`wireguard`: the whole section — operator 2026-09-30 chose (a) over (b) export to the wallet + an import path and (c) re-issue both clients: the key already rides every encrypted backup, and no client is touched; (c) stays the lost-everything fallback, (b) returns with CARP's shared-key question) | rehearsal-proven (below): `wg_handshake` |
@@ -431,6 +431,27 @@ kill switch's reading of the event stands — a frame sourced `.1` left the node
 the hypervisor's flooding, not the node's config.
 
 ## Status
+
+- 2026-10-27 00:29Z: **the box converged the BACKUP unattended** (#2955, `mode: backup-only`):
+  opnsense-pve, dnsmasq-dhcp.py=4 (two reservation descrs), node-local restore armed → cancelled,
+  `check pve` ok, CARP unchanged, writes attributed to `automation@192.168.2.53`; MASTER untouched
+  (still carries wk-metal-04's old dnsmasq MAC + lacks the descrs until its rolling path / a seat
+  `converge nx02`).
+- 2026-10-26 night: **the management box converges the BACKUP — built, in shadow** (ADR-152 step 3;
+  [`management-box.md`](management-box.md) §Router config converge — BACKUP-only): the node is read
+  live from the pair's CARP state, a node-local config restore (copy + reboot unless confirmed) is
+  armed on it before the apply, the security boundary is the policy row's `deny_paths`. hasync's
+  XMLRPC config sync is OFF on both nodes (read 2026-10-26) — each node holds its own config, so the
+  BACKUP is a real canary. The dnsmasq fallback's wk-metal-04 `hwaddr` (#2758, Kea fixed by hand
+  10-20) is now converged on the BACKUP (the jail smoke's accidental base-tree run, same data); the
+  MASTER still carries the old MAC until its rolling path (step 3's later part) or a seat converge.
+
+- 2026-10-26: **no cert on the pair had ever renewed** — the AcmeClient cron job was missing on
+  both nodes (above), circles.teststuff.net served 7 days from expiry; a BACKUP can never order
+  (the WAN gate leaves its WAN without link, so its 400 is structural). Detector `LanCertExpiringSoon`
+  (#2927) first, then the role's `fetchCronIntegration` task on the MASTER, then FU-297's cert-carry.
+  **Same evening: #2934 landed and was applied to both nodes (cron job + `UpdateCron` set on nx02 and pve),
+  circles re-issued on the MASTER, the alert resolved. The BACKUP's copies still need the carry (FU-297).**
 
 - 2026-09-29 night: the inventory above. Prod, the test VM baseline and the drill all on 26.7.4_1
   (#2128), plain drill score 12 → SystemHealth pinned (#2129). The rehearsal

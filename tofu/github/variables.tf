@@ -101,7 +101,14 @@ variable "protected_repos" {
     #     the single change you most want eyes on (the Trivy-class mitigation, renovate.md).
     # required_approvals = 2 since ADR-155 (2026-10-16): homelab hosts the agent-gateway island
     # (gateway/specs/), the first repo whose spec rows are gated by the specs reviewer identity.
-    homelab = { required_checks = ["ci", "iac-sentinel", "management-sentinel"], require_approval = true, require_code_owner_review = true, required_approvals = 2 } # management-sentinel = the box's plan-on-PR verdict (ADR-131), posted by the same sentinel App # public → no push ruleset possible (flag comment above)
+    # opnsense-test-vm (ADR-152 step 1, spike D8 "required once box-posted"): the management box's
+    # router verdict (mgmt/scripts/mgmt-router-verdict.sh, docs/management-box.md §MB3 "The router
+    # surface"). It NEVER skips: a head touching no router path gets success "n/a: no router path in
+    # this head", a goal/** child the assembly pass, and a router-path head the test-VM run — so it is
+    # safe to require on master and goal/** alike (a context that can skip deadlocks). The cost,
+    # accepted: router-path PRs now wait ~15 min on test VM 9110, and a silent box blocks EVERY PR
+    # (MgmtRouterVerdictStale says so within 2 h).
+    homelab = { required_checks = ["ci", "iac-sentinel", "management-sentinel", "opnsense-test-vm"], require_approval = true, require_code_owner_review = true, required_approvals = 2 } # management-sentinel = the box's plan-on-PR verdict (ADR-131), posted by the same sentinel App # public → no push ruleset possible (flag comment above)
     # The three below flipped require_code_owner_review=true 2026-08-11 (the reviewer-enable
     # retrace): with the platform stack's bot reviewer ON, require_approval alone lets a bot
     # approval auto-merge — the codeowner flag is what turns the bot review into input-only on
@@ -128,7 +135,7 @@ variable "protected_repos" {
     # every master push re-runs e2e (30-min timeout, two slots) on every open PR before any can
     # merge. Safe to require because e2e carries NO `if:` and NO `needs:` and triggers on both
     # master and `goal/**` — a context that can skip is a required check that deadlocks.
-    oracle-fleet   = { required_checks = ["ci", "e2e"], require_code_owner_review = true }                                   # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
+    oracle-fleet   = { required_checks = ["ci", "e2e"], require_code_owner_review = true, required_approvals = 2 }           # specs/ = the specs reviewer's (ADR-155, 2026-10-26); CODEOWNERS keeps /docs/process/ + /.agents/ + /.claude/ on Rasmus
     oracle-iac     = { required_checks = ["ci", "iac-sentinel"], require_approval = false, restrict_workflow_pushes = true } # sleep-iac shape: CI + sentinel, no review; PRIVATE → the one repo the push guard can exist on
     sleep-iac      = { required_checks = ["ci", "iac-sentinel"], require_approval = false }                                  # public → no push ruleset possible
     sleep-tracking = { required_checks = ["ci", "system-test"] }                                                             # system-test = the kind+Playwright render gate (sleep goal #121); job name, not the workflow name "integration"

@@ -94,7 +94,7 @@ spec:
         env:
           - { name: HOME, value: "/home/node" }
           - { name: ORG, value: "teststuffstash" }
-          - { name: SPECS_REVIEW_REPOS, value: "homelab" }
+          - { name: SPECS_REVIEW_REPOS, value: "homelab oracle-fleet" }
           - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc:9091" }
           - { name: GATEWAY_URL, value: "http://agent-gateway.agent-egress.svc.cluster.local:8080" }
           # The SECOND review identity's token (ADR-155). Env is the frozen fallback; the image's

@@ -166,8 +166,12 @@
 
     # Create-if-absent means a VIP change in group_vars silently does NOT rebind the frontend —
     # that trap shipped twice (transcripts .11→.30→.28; found live 2026-07-13 when .30 shadowed the
-    # Matchbox LXC). Re-post the full frontend payload keyed by uuid whenever the bind drifts.
-    - name: Update HAProxy frontend bind on VIP change
+    # Matchbox LXC). Re-post the full frontend payload keyed by uuid whenever the bind drifts —
+    # or the CERT does: a frontend created before its cert was issued (or on a CARP BACKUP, whose
+    # ACME row has no certRefId until the cert-carry writes it — pve's homelab-gw-frontend bound
+    # nothing for ten days, 2026-10-26) stays unbound for ever under create-if-absent. A known
+    # refid that differs from the frontend's rebinds it; an unissued cert (no refid yet) does not.
+    - name: Update HAProxy frontend on bind or cert drift
       oxlorg.opnsense.raw:
         module: haproxy
         controller: settings
@@ -188,7 +192,11 @@
       loop_control: { label: "{{ item.name }}-frontend rebind -> {{ item.vip }}:443" }
       vars:
         _existing: "{{ hap_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | list }}"
-      when: (_existing | length) > 0 and (_existing | first).bind != (item.vip ~ ':443')
+      when: >-
+        (_existing | length) > 0 and (
+          (_existing | first).bind != (item.vip ~ ':443')
+          or ((cert_refid[item.cert_domain] | default('')) != ''
+              and (_existing | first).ssl_certificates != cert_refid[item.cert_domain]))
       notify: reconfigure haproxy
 
     # --- TCP passthrough services (no TLS) — e.g. Forgejo SSH clone on :22 --------

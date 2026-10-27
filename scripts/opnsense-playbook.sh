@@ -10,9 +10,15 @@
 # Usage:
 #   bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml [extra ansible args]
 #
-# Creds come from the Tier-0 KeePass wallet (entries opnsense-api-{key,secret} — FU-001,
-# byte-identical migration verified 2026-07-12), falling back to the legacy
-# ~/.claude/homelab-opnsense/{key,secret} flat files if the wallet is missing.
+# Identity (FU-013): every play runs as the router's `automation` API user — wallet entries
+# opnsense-automation-api-{key,secret}, privileges = `opnsense_api_users` in
+# ansible/group_vars/opnsense.yml — so its config revisions are attributed and the click detector
+# (OpnsenseConfigUnattributedRevision, docs/runbook.md §OPNsense config backup) stays quiet for them.
+# A play that 403s needs a privilege added to that list (+ scripts/opnsense-api-users.sh), never root.
+#
+# The ONE root act: OPN_AS_ROOT=1 reads root's key (opnsense-api-{key,secret}) and is accepted for
+# ansible/opnsense-users.yml only — creating users and minting their keys is user management,
+# a root act by design (scripts/opnsense-api-users.sh sets it). Any other play refuses it.
 set -euo pipefail
 
 [ $# -ge 1 ] || { echo "usage: $0 ansible/opnsense-<play>.yml [extra ansible-playbook args]" >&2; exit 2; }
@@ -22,18 +28,27 @@ cd "$(dirname "$0")/.."   # repo root (nix build path:./... and ansible/ are rel
 export NIX_CONFIG="experimental-features = nix-command flakes"
 export ANSIBLE_CONFIG="$PWD/ansible/ansible.cfg"   # inventory + roles_path (paths are repo-root-relative)
 
+case "$1" in */opnsense-users.yml|opnsense-users.yml) _users_play=1 ;; *) _users_play=0 ;; esac
+if [ "${OPN_AS_ROOT:-0}" = 1 ] && [ "$_users_play" = 0 ]; then
+  echo "REFUSING: OPN_AS_ROOT=1 is for ansible/opnsense-users.yml only — every other play runs as \`automation\` (FU-013); a 403 means a missing privilege in opnsense_api_users" >&2
+  exit 2
+fi
+if [ "${OPN_AS_ROOT:-0}" = 1 ]; then _entry=opnsense-api; else _entry=opnsense-automation-api; fi
+
 _kp_db="$HOME/.claude/homelab-keepass/homelab.kdbx"
-# A pre-set pair wins: the management box carries no wallet — its units get these from
-# /var/lib/mgmt/env (mgmt/scripts/mgmt-provision-secrets.sh). Otherwise the wallet is the source.
+# A pre-set pair wins: the management box carries no wallet — its units get the automation pair
+# from /var/lib/mgmt/env (mgmt/scripts/mgmt-provision-secrets.sh). Otherwise the wallet is the source.
+# The root act always reads the wallet (a jail act — the box holds no root pair).
+if [ "${OPN_AS_ROOT:-0}" = 1 ]; then unset OPN_API_KEY OPN_API_SECRET; fi
 if [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ]; then
   :
 elif [ -f "$_kp_db" ]; then
   _kp_get() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
                 -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$_kp_db" "$1" 2>/dev/null; }
-  export OPN_API_KEY="$(_kp_get opnsense-api-key)"
-  export OPN_API_SECRET="$(_kp_get opnsense-api-secret)"
+  export OPN_API_KEY="$(_kp_get "$_entry-key")"
+  export OPN_API_SECRET="$(_kp_get "$_entry-secret")"
 fi
-[ -n "$OPN_API_KEY" ] && [ -n "$OPN_API_SECRET" ] || { echo "empty OPNsense API creds (wallet entry missing? run scripts/keepass-init.sh)" >&2; exit 1; }
+[ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ] || { echo "empty OPNsense API creds (wallet entries $_entry-{key,secret} missing? scripts/opnsense-api-users.sh mints the automation pair)" >&2; exit 1; }
 
 PYBIN="$(nix build --no-link --print-out-paths path:./ansible/controller-env)/bin/python3"
 

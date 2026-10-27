@@ -360,6 +360,48 @@ mgmt_roots_touched_at() {
   rm -f "$pol"
   return $rc
 }
+
+# ── the ROUTER surface's classifier (ADR-152 step 1; mgmt-router-verdict.sh posts the verdict) ──
+# Here, not in the verdict script, because the `opnsense-test-vm` context has the same scope split
+# as `management-sentinel` (docs/management-box.md §MB3): the in-cluster iac-sentinel run posts the
+# n/a success for heads touching no router path, the box judges the rest — ONE classifier, read by
+# both, from the same master copy of the policy. Fixture-tested by mgmt/scripts/mgmt-router-test.sh.
+# mgmt_router_globs <policy> → one glob per line (`*` stays inside a path segment, `**` crosses);
+# rc 1 when the list is unreadable or empty — the caller judges nothing then (never "n/a").
+mgmt_router_globs() {
+  local out
+  out="$(mgmt_policy_get "$1" '.router_test_vm.paths[]?')" || return 1
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out"
+}
+# _mgmt_glob_ere <glob> → an anchored ERE. The policy's globs use path characters, `*` and `**` only;
+# anything else regex-special is refused (rc 1) rather than half-escaped.
+_mgmt_glob_ere() {
+  local g="$1"
+  case "$g" in *[]\[+?^\$\(\)\{\}\|\\]*) echo "policy: unsupported character in router glob '$g'" >&2; return 1 ;; esac
+  g="${g//./\\.}"; g="${g//\*\*/@@}"; g="${g//\*/[^/]*}"; g="${g//@@/.*}"
+  printf '^%s$' "$g"
+}
+# mgmt_router_touched <policy> — changed file paths on stdin → the router paths among them; rc 1 = policy unreadable
+mgmt_router_touched() {
+  local globs g re=""
+  globs="$(mgmt_router_globs "$1")" || { echo "policy: router_test_vm.paths unreadable/empty ($1)" >&2; return 1; }
+  while IFS= read -r g; do
+    [ -n "$g" ] || continue
+    g="$(_mgmt_glob_ere "$g")" || return 1
+    re="${re:+$re|}($g)"
+  done <<<"$globs"
+  grep -E -- "$re" || true
+}
+# mgmt_router_touched_at <repo-dir> <ref> <files…via stdin> → mgmt_router_touched over the policy AT
+# <ref>; the rc survives the temp copy's cleanup (the same shape as mgmt_roots_touched_at).
+mgmt_router_touched_at() {
+  local pol rc
+  pol="$(mgmt_policy_load "$1" "$2")" || return 1
+  mgmt_router_touched "$pol"; rc=$?
+  rm -f "$pol"
+  return $rc
+}
 mgmt_root_dir()   { mgmt_policy_get "$1" ".roots.\"$2\".dir"; }
 # mgmt_root_excludes <policy> <root> <checkout-root-dir> → "-exclude=<addr>" args for every state
 # resource of a type in roots[X].plan_exclude_types (github: the admin-only repo settings). Reads

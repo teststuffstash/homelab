@@ -66,6 +66,26 @@
       oxlorg.opnsense.raw: { module: acmeclient, controller: service, command: reconfigure, action: post }
       when: acme_enable is changed
 
+    # The renewal CRON JOB is not a setting: the plugin creates it only in
+    # `settings/fetchCronIntegration` (the GUI calls it on every settings page load; an API
+    # `settings/set` never does), so a box converged from this role read autoRenewal=1 with NO job
+    # behind it — both rebuilt CARP nodes, 2026-10-26 (cron list empty; the 17 carried certs had
+    # never renewed; circles.teststuff.net served 7 days from expiry — LanCertExpiringSoon). The
+    # call is idempotent: it validates the stored job UUID, re-adopts an orphaned AcmeClient job,
+    # or creates the daily job and reloads cron — result "no change" | "new". It creates nothing
+    # while autoRenewal is off (the standby profile), so it runs unconditionally. raw takes no
+    # `reload`; the plugin reloads cron itself.
+    - name: Ensure the AcmeClient auto-renewal cron job (fetchCronIntegration)
+      oxlorg.opnsense.raw:
+        module: acmeclient
+        controller: settings
+        command: fetchCronIntegration
+        action: post
+      register: acme_cron
+      changed_when: (acme_cron.response.result | default('')) == 'new'
+      # check mode: raw skips the POST (empty response) — a --check is not a failed integration
+      failed_when: not ansible_check_mode and (acme_cron.response.result | default('')) not in ['no change', 'new']
+
     # NOTE: `email` is CREATE-ONLY here — the acme_account module's change-detection set is
     # ['description','custom_ca','eab_kid','eab_hmac'], so it will NOT update the email of an
     # *existing* account. A fresh build registers with acme_account_email (boot-from-git);
@@ -157,6 +177,29 @@
              | rejectattr('statusCode', 'eq', '200')
              | list }}
 
+    # A CARP BACKUP cannot order: the WAN gate leaves its WAN without link (docs/router-move.md
+    # §WAN follows the master), so every sign it attempts ends 400 and the poll below fails after
+    # its 24 retries on every run (FU-297, 2026-10-26). Its certs arrive by the carry instead —
+    # scripts/opnsense-cert-carry.sh <master> <backup> — so the role reads the LIVE role here
+    # (not the inventory's advskew: a failover makes the other node MASTER) and skips sign+poll on
+    # a BACKUP. Prod without CARP has no carp rows -> never a BACKUP. GET runs in check mode too.
+    - name: Read the CARP VIP status (a BACKUP never signs — the carry renews it)
+      oxlorg.opnsense.raw: { module: diagnostics, controller: interface, command: get_vip_status }
+      register: acme_vip_status
+
+    - name: Compute the node's CARP role
+      ansible.builtin.set_fact:
+        acme_carp_backup: >-
+          {{ (acme_vip_status.response.rows | default([])
+              | selectattr('mode', 'eq', 'carp') | map(attribute='status') | list | unique) == ['BACKUP'] }}
+
+    - name: Unissued certs left to the carry (this node is CARP BACKUP)
+      ansible.builtin.debug:
+        msg: >-
+          CARP BACKUP: not signing {{ acme_unissued | map(attribute='name') | join(', ') }} —
+          run scripts/opnsense-cert-carry.sh <master> <this node> from the MASTER (FU-297)
+      when: acme_unissued | length > 0 and acme_carp_backup | bool
+
     - name: Sign unissued certs (POST certificates/sign/<uuid>)
       oxlorg.opnsense.raw:
         module: acmeclient
@@ -165,7 +208,7 @@
         action: post
       loop: "{{ acme_unissued }}"
       loop_control: { label: "{{ item.name }} ({{ item.uuid }})" }
-      when: acme_unissued | length > 0
+      when: acme_unissued | length > 0 and not acme_carp_backup | bool
 
     - name: Poll until signed certs report statusCode 200 (LE issuance)
       oxlorg.opnsense.raw:
@@ -180,4 +223,4 @@
         | list | length == 0
       retries: 24
       delay: 5
-      when: acme_unissued | length > 0
+      when: acme_unissued | length > 0 and not acme_carp_backup | bool

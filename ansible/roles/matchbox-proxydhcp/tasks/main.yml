@@ -14,8 +14,19 @@
     update_cache: true
     cache_valid_time: 3600
 
-# dnsmasq serves TFTP itself now; retire the standalone tftpd-hpa to free :69.
+# dnsmasq serves TFTP itself now; retire the standalone tftpd-hpa to free :69. Only while it is NOT
+# already masked: once the package is gone the unit is a bare mask link, and the systemd module then
+# reported `changed` on every run (its enable/state half fails "not found" under failed_when: false) —
+# a permanent false diff for the box's --check (mgmt/scripts/mgmt-ansible.sh). The read runs in --check.
+- name: Read tftpd-hpa's unit state
+  ansible.builtin.command: systemctl is-enabled tftpd-hpa
+  register: tftpd_hpa_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: Disable tftpd-hpa (dnsmasq owns TFTP)
+  when: (tftpd_hpa_state.stdout | default('') | trim) != 'masked'
   ansible.builtin.systemd:
     name: tftpd-hpa
     state: stopped
@@ -30,7 +41,7 @@
     group: root
     mode: "0644"
     content: |
-      # Managed by the matchbox-proxydhcp role
+      # Managed by the matchbox-proxydhcp role — applied by the management box on merge (ADR-152)
       port=0                       # no DNS (Unbound on the router owns :53)
       log-dhcp                     # log tag/boot decisions (journalctl -u dnsmasq)
       interface=eth0

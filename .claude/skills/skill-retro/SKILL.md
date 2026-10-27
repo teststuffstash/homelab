@@ -36,7 +36,9 @@ and the public-repo scrub rule: [`../README.md`](../README.md) §Improvement con
    ledger is public.
 5. **Report + advance the watermark** (`date -Iseconds > ~/.claude/skill-retro/watermark`,
    only AFTER the ledger is written): new/extended entries, promotion proposals (entries with
-   ≥2 dates), and step 1's scoring. Promotions land only on the operator's nod.
+   ≥2 dates), and step 1's scoring. **Promotions land as a PR to the skill in the same pass** (the
+   README contract, 2026-10-26) — doctrine alone waits for the operator; a fix that needs building
+   becomes an FU with a pointer line, so the ledger never carries a "Next: build X".
 
 ## Guardrails
 

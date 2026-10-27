@@ -154,7 +154,7 @@ EVIDENCE_ARTIFACT="${EVIDENCE_ARTIFACT:-gateway-evidence}"   # the LEGACY ci run
 # already admits ns garage). No reader key, no GitHub API call.
 EVIDENCE_WEB="${EVIDENCE_WEB:-http://garage-s3.garage.svc.cluster.local:3902}"
 # evidence_bucket <repo> → the website bucket its CI publishes packs to ("" = none: artifact only)
-evidence_bucket() { case "$1" in homelab) printf 'gateway-specs';; esac; }
+evidence_bucket() { case "$1" in homelab) printf 'gateway-specs';; oracle-fleet) printf 'oracle-specs';; esac; }
 # pack_roots <repo> → "<specs-root> <tests-root>": where that repo's rules and their tests live
 pack_roots() { case "$1" in homelab) printf 'gateway/specs gateway/tests';; *) printf 'specs tests';; esac; }
 # review_path_re <repo> → the file-list trigger for the LLM pass: a specs path, or the repo's
@@ -238,6 +238,8 @@ self_test() {
   check "trigger: a non-gateway tests dir is NOT a homelab rule-test path" 1 "$(grep -cE "$(review_path_re homelab)" <<< 'scripts/tests/x.py' >/dev/null; echo $?)"
   check "pack roots: homelab" "gateway/specs gateway/tests" "$(pack_roots homelab)"
   check "pack roots: default island layout" "specs tests" "$(pack_roots some-island)"
+  check "trigger: oracle-fleet root specs path → LLM pass" 0 "$(grep -cE "$(review_path_re oracle-fleet)" <<< 'specs/server/http.md' >/dev/null; echo $?)"
+  check "trigger: oracle-fleet rule-test path → LLM pass" 0 "$(grep -cE "$(review_path_re oracle-fleet)" <<< 'tests/test_rt.py' >/dev/null; echo $?)"
   check "specs path predicate: docs/specs-reviewer.md is NOT a specs path" 1 "$(grep -cE "$SPECS_PATH_RE" <<< 'docs/agents/specs-reviewer.md' >/dev/null; echo $?)"
   check "verdict parse: APPROVE" APPROVE "$(parse_verdict "$(printf '## Specs review\nVerdict: APPROVE — no blocking check failed\nRows: …\n')")"
   check "verdict parse: CHANGES_REQUESTED" CHANGES_REQUESTED "$(parse_verdict "$(printf '## Specs review\nVerdict: CHANGES_REQUESTED — 1, 6\n')")"
@@ -326,8 +328,9 @@ self_test() {
   check "evidence bucket: absent key → rc 1" 1 "$rs"
   rs=0; EVIDENCE_WEB="file://$d/web" evidence_fetch homelab pr-7 bbbb2222 "$d/ev" || rs=$?
   check "evidence bucket: a pack without evidence.json → rc 1" 1 "$rs"
-  rs=0; EVIDENCE_WEB="file://$d/web" evidence_fetch oracle-fleet pr-7 aaaa1111 "$d/ev" || rs=$?
+  rs=0; EVIDENCE_WEB="file://$d/web" evidence_fetch some-island pr-7 aaaa1111 "$d/ev" || rs=$?
   check "evidence bucket: a repo with no bucket → rc 1" 1 "$rs"
+  check "evidence bucket: oracle-fleet → oracle-specs" oracle-specs "$(evidence_bucket oracle-fleet)"
   # ── the shadow run (gateway/PLAN.md step 3: "the shadow path has no gh write call") ──
   # The allow-list's table. Expected values are GitHub's own semantics, not this code's: a review,
   # comment, edit, label, merge or workflow dispatch is a write; `gh api` without -X is POST as

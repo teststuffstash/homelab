@@ -59,14 +59,39 @@
     group: matchbox
     mode: "0750"
 
+# --- the release: fetched ONLY when the installed binary is not matchbox_version (or the TLS assets
+# have never been generated — cert-gen ships in the tarball). /tmp is not durable on the LXC, so the
+# old unconditional download re-fetched on every run and `--check` then FAILED at the extract (its
+# source did not exist): the box's applier (mgmt/scripts/mgmt-ansible.sh) reads `--check` as the
+# play's diff, so the play must be check-clean when nothing changes. Both reads run in --check too.
+- name: Read the installed matchbox version
+  ansible.builtin.command: /usr/local/bin/matchbox -version
+  register: matchbox_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check whether server cert already exists
+  ansible.builtin.stat:
+    path: "{{ matchbox_tls_dir }}/server.crt"
+  register: server_crt
+
+- name: Decide whether the release is needed
+  ansible.builtin.set_fact:
+    matchbox_need_release: "{{ (matchbox_installed.stdout | default('') | trim) != matchbox_version or not server_crt.stat.exists }}"
+
 - name: Download matchbox release
+  when: matchbox_need_release
   ansible.builtin.get_url:
     url: "https://github.com/poseidon/matchbox/releases/download/{{ matchbox_version }}/matchbox-{{ matchbox_version }}-{{ matchbox_arch }}.tar.gz"
     dest: "/tmp/matchbox-{{ matchbox_version }}.tar.gz"
     checksum: "sha256:{{ matchbox_sha256 }}"
     mode: "0644"
 
+# not in --check: the download above did not land, so there is nothing to extract — the download's
+# `changed` already reports the release change
 - name: Extract matchbox
+  when: matchbox_need_release and not ansible_check_mode
   ansible.builtin.unarchive:
     src: "/tmp/matchbox-{{ matchbox_version }}.tar.gz"
     dest: /tmp
@@ -74,6 +99,7 @@
     creates: "/tmp/matchbox-{{ matchbox_version }}-{{ matchbox_arch }}/matchbox"
 
 - name: Install matchbox binary
+  when: matchbox_need_release and not ansible_check_mode
   ansible.builtin.copy:
     src: "/tmp/matchbox-{{ matchbox_version }}-{{ matchbox_arch }}/matchbox"
     dest: /usr/local/bin/matchbox
@@ -84,11 +110,6 @@
   notify: Restart matchbox
 
 # --- TLS: use the bundled cert-gen (ca + server + client) ------------------
-- name: Check whether server cert already exists
-  ansible.builtin.stat:
-    path: "{{ matchbox_tls_dir }}/server.crt"
-  register: server_crt
-
 - name: Generate TLS assets via bundled cert-gen
   ansible.builtin.shell:
     cmd: SAN="{{ matchbox_san }}" ./cert-gen
@@ -107,7 +128,7 @@
     - { f: ca.crt, m: "0644" }
     - { f: server.crt, m: "0644" }
     - { f: server.key, m: "0600" }
-  when: not server_crt.stat.exists
+  when: not server_crt.stat.exists and not ansible_check_mode
   notify: Restart matchbox
 
 - name: Fetch CLIENT certs to the controller (for the tofu provider)
@@ -119,7 +140,7 @@
     - ca.crt
     - client.crt
     - client.key
-  when: not server_crt.stat.exists
+  when: not server_crt.stat.exists and not ansible_check_mode
 
 - name: Install systemd unit
   ansible.builtin.copy:

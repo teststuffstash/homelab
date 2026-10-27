@@ -215,5 +215,18 @@ LEASES="$(jq -nc --argjson l "$(lease upgrade-lease-tofu-helm-argocd-apps tofu/h
 run helm-live 0
 expect helm-live-active '1 in flight, 0 expired' "$OUT"
 
+# 15. a box ANSIBLE apply's lease (ADR-152 step 2: subject ansible/<group>) past its deadline → ansible_stopped:
+#     no revert, no PR, not expired, its own counter (MgmtAnsibleApplyStopped's second arm), forward_only untouched
+GH_MODE=none; BEFORE="$(git -C "$ORIGIN" show-ref | sha256sum)"
+FO_BEFORE="$(metric mgmt_lease_revert_total 'outcome="forward_only"')"
+LEASES="$(jq -nc --argjson l "$(lease upgrade-lease-ansible-matchbox ansible/matchbox "$A" "$A" "$A" "$PAST")" '{items:[$l]}')"
+run ansible-stopped 0
+expect ansible-stopped-outcome "lease upgrade-lease-ansible-matchbox: ansible_stopped — ansible/matchbox ${A:0:8} → ${A:0:8} unconfirmed since $PAST" "$OUT"
+expect ansible-stopped-counter '^1$' "$(metric mgmt_lease_revert_total 'outcome="ansible_stopped"')"
+expect ansible-stopped-forward-only-unchanged "^$FO_BEFORE\$" "$(metric mgmt_lease_revert_total 'outcome="forward_only"')"
+expect ansible-stopped-not-expired '^0$' "$(metric mgmt_lease_expired .)"
+expect ansible-stopped-origin-untouched "^$BEFORE\$" "$(git -C "$ORIGIN" show-ref | sha256sum)"
+expect_empty ansible-stopped-no-pr "$(grep -v 'GET branches/master' "$GH_LOG" || true)"
+
 echo "mgmt-lease-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

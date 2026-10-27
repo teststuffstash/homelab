@@ -34,13 +34,34 @@ then apply the matching playbook with the wrapper. Never click-ops it.
 
 To change *behaviour* (not just values), edit the role's `roles/opnsense-<x>/tasks/main.yml`.
 
+## Validate a router-role PR on the test VM BEFORE it merges
+
+**Every PR touching `ansible/opnsense-*.yml`, `ansible/roles/opnsense-*` or the `oxlorg.opnsense`
+pin runs `scripts/opnsense-test-vm.sh` against the throwaway OPNsense VM** — `--check` proves
+plumbing, not apply. The VM's identity is an explicit input (no defaults — unset, the run dies on
+`OPN_TEST_HOST`/`OPN_TEST_VMID`); the full flow and what it does NOT prove:
+`docs/runbook.md` §Validate a router-config PR on the OPNsense test VM, the script's header.
+
+```bash
+export OPN_TEST_HOST=192.168.2.67 OPN_TEST_VMID=9110         # the VM's identity is an explicit input
+bash scripts/opnsense-test-vm.sh --pr <n> --steps prep      # no VM: guard + syntax-check, both refs
+bash scripts/opnsense-test-vm.sh --pr <n> --post            # steps 1–5; report as a PR comment
+```
+
+**The plays under test follow the PR.** Steps 2/3/5 run the floor (acme, bgp, unbound, haproxy)
+plus every play the PR's touched paths map to (`roles/opnsense-<x>` → `opnsense-<x>.yml`; a
+`group_vars` key → the plays that name it), and a touched play outside the floor adds step `all`
+by default (#2930). Read the `plays under test … / touched …` header of the run: if the role you
+changed is not in it, the green report proves nothing about your change — pass `--steps` yourself
+(promoted 2026-10-26, GAPS opnsense-as-code-G1).
+
 ## Apply
 
 ```bash
 bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml         # + any extra ansible args
 ```
 
-The wrapper sources creds from the KeePass wallet (`opnsense-api-key`/`-secret`), falling back to `~/.claude/homelab-opnsense/{key,secret}`, builds the `httpx`
+The wrapper sources creds from the KeePass wallet — the `automation` API user (`opnsense-automation-api-key`/`-secret`, FU-013; root's pair only for `opnsense-users.yml` via `scripts/opnsense-api-users.sh`, a 403 means a privilege missing from `opnsense_api_users`) — builds the `httpx`
 interpreter from `ansible/controller-env`, installs the collection if missing, and passes the
 interpreter as `-e` (required — `devbox run` strips the env var).
 

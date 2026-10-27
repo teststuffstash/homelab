@@ -44,9 +44,9 @@ because their real values are here, not baked in).
 | `opnsense-haproxy.yml` | `opnsense-haproxy` | HTTPS reverse proxy → in-cluster service VIPs |
 | `opnsense-unbound.yml` | `opnsense-unbound` | static Unbound host overrides (e.g. `ubiquiti.teststuff.net`) |
 | `opnsense-wireguard.yml` | `opnsense-wireguard` | WireGuard full-LAN VPN (ADR-090) |
-| `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) |
+| `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) — asserts the `os-ddclient` plugin, never installs it (a root act, FU-013) |
 | `opnsense-system.yml` | `opnsense-system` | router-wide settings no service role owns: Interfaces > Settings (offloading, VLAN hw filter, Allow IPv6) + Reporting > NetFlow (Insight) — prod's values, pinned on drift only (FU-297) |
-| `opnsense-users.yml` | `opnsense-users` | one API user per consumer (`backup-puller`, `automation`) + a key each — run via `bash scripts/opnsense-api-users.sh`, which stores what it mints (FU-013) |
+| `opnsense-users.yml` | `opnsense-users` | one API user per consumer (`backup-puller`, `automation`) + a key each — run via `bash scripts/opnsense-api-users.sh`, which stores what it mints (FU-013). The ONLY play that runs with root's key: every other play runs as `automation` (`scripts/opnsense-playbook.sh`), whose privileges are `opnsense_api_users` |
 | `opnsense-carp.yml` | `opnsense-carp` | the router pair's CARP VIPs + pfsync (ADR-144); VIPs in `router-nodes/group_vars/opnsense.yml` (`router_carp_vips`) — a no-op where the list is undefined (prod inventory, test VM, drill); `scripts/opnsense-router-node.sh converge` runs it |
 | `matchbox.yml` | `matchbox` | install Matchbox on the PXE LXC |
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |
@@ -68,7 +68,14 @@ because their real values are here, not baked in).
 bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml          # or any opnsense-*.yml
 ```
 
-**Matchbox** — over SSH (uses the Proxmox seed key from `group_vars/matchbox.yml`; no httpx needed):
+**Matchbox** — the MANAGEMENT BOX applies these on merge (ADR-152 program step 2;
+[`docs/management-box.md`](../docs/management-box.md) §Ansible applies — the `apply_ansible.matchbox`
+row of `policy/mgmt/plan-input.yaml`, `shadow` until the operator flips it `on`). Every Matchbox play
+must therefore stay **check-clean**: a second `--check` after a run must report `changed=0` (the box's
+confirm), and `--check` must not fail where a real run would succeed (no task that reads what an
+earlier task only *would* have written — guard it with `not ansible_check_mode`). By hand, over SSH (the
+Proxmox seed key: `PVE_SSH_KEY`, else the jail's `~/.claude/homelab-pve-ssh/id_ed25519` —
+`group_vars/matchbox.yml`; no httpx needed):
 
 ```bash
 export ANSIBLE_CONFIG=ansible/ansible.cfg

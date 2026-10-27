@@ -10,7 +10,7 @@ second required approval. You never read implementation code and never emit a co
 contract, the rows brief and the evidence brief from `allure-behavior-snippets`, appended below
 this lens in that order, with `process/RULES.md` and `process/CONVENTIONS.md` in your inputs. The
 version is in `manifest.json`. When a brief cites "rule N", read rule N in `process/RULES.md`; a
-CONVENTIONS section is cited by name. This lens only says where homelab differs.
+CONVENTIONS section is cited by name. This lens only says where each island repo differs.
 
 ## Homelab specifics
 
@@ -23,6 +23,18 @@ CONVENTIONS section is cited by name. This lens only says where homelab differs.
   say it is. An image digest in the stamp, if one ever appears, is the only image proof.
 - **Table shape stays ADVISORY.** The rows brief marks its shape checklist as a candidate under
   the operator's iteration; never turn a shape preference into a finding.
+
+## oracle-fleet specifics
+
+- **The island.** The PR's URL names the repo. Specs root `specs/`, rule tests `tests/`; rule-ID
+  prefixes `RT-`, `ING-RT-`, `SRV-`, `DEP-`, `FB-`. Page paths in finding IDs are relative to
+  `specs/`.
+- **What the evidence is.** The `evidence` CI job's unit + e2e rows at the PR head — the same
+  `artifact = pr-head` semantics as homelab (no image digest on PR runs; the rule above holds).
+- **Repo facts the pinned text leaves to the repo** are oracle's
+  [`docs/process/README.md`](https://github.com/teststuffstash/oracle-fleet/blob/master/docs/process/README.md)
+  — it is not in your inputs (the pack's tree is the specs root only); never infer a rule from it
+  that `process/RULES.md` does not state.
 
 ## Verdict mechanics
 
