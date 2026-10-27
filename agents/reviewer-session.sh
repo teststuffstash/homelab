@@ -1044,6 +1044,21 @@ elif [ "${RC:-0}" -ne 0 ]; then FINAL="${RC:-1}"
 else FINAL=10; fi
 # <<<REPLAY:reviewer-exit-contract<<<
 echo "$FINAL" > /tmp/rc
+# Ring the specs reviewer's doorbell (agent-loop EventSource /specs-review → the `specs-review`
+# Sensor, specs-review-argo.yaml): its dispatch premise is THIS identity's live verdict, so the
+# second approval follows in seconds instead of on the */5 cron (operator, 2026-10-27). Rung on
+# any terminal — a standing-aside or an agent/error costs the specs tick a no-op walk, and the
+# ring is deliberately OUTSIDE the replayed block (the fixture shadows gh, not curl). Best effort:
+# a missed ring is the cron's case (the doorbell doctrine, coordinate-argo.yaml).
+if [ "${TERMINAL_OK:-0}" = "1" ]; then
+  _bell="${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/specs-review"
+  if curl -fsS --max-time 5 -X POST -H 'Content-Type: application/json' \
+       -d "{\"repo\":\"${REPO_SLUG##*/}\",\"number\":${PR_NUMBER}}" "$_bell" >/dev/null 2>&1; then
+    echo "specs-review doorbell rung for ${REPO_SLUG}#${PR_NUMBER}"
+  else
+    echo "specs-review doorbell NOT rung (${_bell} unreachable) — the */5 cron picks it up"
+  fi
+fi
 trap - EXIT
 upload_transcripts
 cat /tmp/result.json

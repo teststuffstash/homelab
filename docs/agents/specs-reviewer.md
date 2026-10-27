@@ -57,10 +57,16 @@ key `GH_TOKEN`). The login is a literal in the script (`homelab-specs-reviewer`,
 suffix — `gh api user` 403s for an installation token; REST spells reviewers `x[bot]`, GraphQL
 `x`, so every match strips the suffix).
 
-**Dispatch.** A level-triggered CronWorkflow `specs-review` in `agent-coordinator`
+**Dispatch.** Edge + level. The edge (2026-10-27, operator: a 3–5 min wait on the cron for a
+mechanical approve is not acceptable): the code reviewer's pod rings `POST /specs-review` on the
+agent-loop EventSource right after its verdict lands (`agents/reviewer-session.sh`, after the exit
+contract — that approval IS this gate's dispatch premise) and the `specs-review` Sensor submits one
+tick (`specs-review-edge-*`). The level: a CronWorkflow `specs-review` in `agent-coordinator`
 (`agents/coordinator/specs-review-argo.yaml`: `*/5`, `Forbid` + mutex, 15-min deadline, the
 agent-coordinator image, its own `specs-review` ServiceAccount — the gateway's `callers` key, #2685)
-clones master and runs `agents/specs-reviewer-session.sh` — ONE layer,
+— the backstop for a missed ring and for everything that becomes eligible without a verdict event
+(CI going green). Both run the same walk:
+it clones master and runs `agents/specs-reviewer-session.sh` — ONE layer,
 not `reviewer-session.sh`'s launcher→pod shape, because this identity never executes or reads
 hostile code: its inputs are a diff, a body and a CI log, and its LLM admission is the gateway's.
 The tick holds no state; for every open non-draft PR of `SPECS_REVIEW_REPOS` (homelab + oracle-fleet since 2026-10-27) at
