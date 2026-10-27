@@ -165,7 +165,9 @@ mkdir -p "$WORK"; WORK="$(cd "$WORK" && pwd)"
 RUN_AS="${OPN_TEST_RUN_AS:-}"; RUN_HOME=''; RUN_SSH_KEY=''
 if [ -n "$RUN_AS" ]; then
   [ "$(id -u)" = 0 ] || die "OPN_TEST_RUN_AS needs root (runuser)"
-  RUN_HOME="$(getent passwd "$RUN_AS" | cut -d: -f6)"
+  # /etc/passwd, not getent: the box's units carry no glibc `getent` on PATH (2026-10-27, the first
+  # box run died here); NixOS writes declared system users there
+  RUN_HOME="$(awk -F: -v u="$RUN_AS" '$1 == u { print $6 }' /etc/passwd)"
   [ -n "$RUN_HOME" ] && [ -d "$RUN_HOME" ] && [ "$RUN_AS" != root ] || die "OPN_TEST_RUN_AS=$RUN_AS: no such user with a home"
   umask 022; chmod 0755 "$WORK"   # the worktrees must be readable by it; secrets below stay 0600/0700
   for d in run-tmp run-ssh; do mkdir -p "$WORK/$d"; chown "$RUN_AS" "$WORK/$d"; chmod 0700 "$WORK/$d"; done
