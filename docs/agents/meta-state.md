@@ -66,6 +66,12 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ DELIVERY LOOP / KARGO (oracle-fleet docs/delivery-loop.md).** Oracle gaps filed unqueued: oracle-fleet #926–#930,
   oracle-iac#1140 (held for #918). Residuals: FU-317, FU-318. Kind e2e not re-run since (jail has no Docker; the one open
   proof for #2902 is `runAsNonRoot` end-to-end — the image is User 65532, so a first prod sync is an acceptable test).
+- **⚑ ISLAND INTAKE (FU-320, PR #2978 — 2026-10-27 overnight spike).** PICKUP: (1) #2978's verdict (pr-wait was armed);
+  (2) the first intake-queued rides — #2782 and #2753 (one-line spec-flag edits, rows written into the issues): did the
+  scan dispatch them, did they merge in ≤ 2 rounds, did the specs reviewer accept the rows as written; (3) #2977 /
+  #2684 standing, #2768 / #2650 `blocked-on: human` — the operator's rulings (what a rail-served-but-unlisted id is;
+  #2650's done-when pick). Rulings the spike asks for: `docs/spikes/island-intake.md` §Open questions. Run it by hand
+  until wired: `bash gateway/scripts/intake-select.sh` → opus subagent on `gateway/intake.md` → `devbox run ring platform`.
 - **⚑ GATEWAY (FU-270 is the pointer — its Next is the seat's list).** Each 6 h refresh: `devbox run -- bash
   gateway/scripts/canary-entrants.sh --max 3 < /dev/null` → `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers --
   apply` → PR when the lists move (a key NEW to the loader ships AFTER its image, #2812). Watch: the jail's codex REFRESH
