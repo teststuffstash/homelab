@@ -162,7 +162,7 @@ s3_publish_verify() {
   local have want have_size want_size
   local rc=0
   have=$(rclone lsjson --stat --files-only "$dest/$key" 2>&1) || rc=$?
-  if [ "$rc" -ne 0 ] || ! printf '%s\n' "$have" | grep -qE '"IsDir"[[:space:]]*:[[:space:]]*false'; then
+  if [ "$rc" -ne 0 ] || ! grep -qE '"IsDir"[[:space:]]*:[[:space:]]*false' <<< "$have"; then
     {
       echo "s3_publish_verify: VERIFY FAILED — $dest/$key is absent after the write; the server did not keep our writes (issue #318):"
       printf '%s\n' "$have" | sed -n 1,3p
