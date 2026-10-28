@@ -20,6 +20,9 @@ tag/commit above.
   compacted snapshot — the rotation loop's mechanism (docs/garage.md §Metadata reclamation,
   `argocd/resources/garage-meta-rotation/`). Upstream's chart has `extraVolumes`/`extraVolumeMounts`
   but no init-container hook (2026-09-09).
+- `templates/workload.yaml` + `values.yaml`: `initResources` on the chart's own `garage-init`
+  init container (upstream renders it with no `resources`; the platform standard is requests + a
+  memory limit on every container — component-check `require-requests-limits`, 2026-10-25).
 - `templates/workload.yaml` + `values.yaml`: `minReadySeconds` on the StatefulSet (upstream has
   none). With `readinessProbe` on `/health` it is what keeps a rollout from cycling two quorum
   members inside the same minute (2026-09-09).

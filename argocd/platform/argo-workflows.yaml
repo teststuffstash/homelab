@@ -30,6 +30,12 @@ spec:
         crds:
           install: true
           keep: true
+          # The CRD install Job (a pre-install/upgrade hook; ran once in the last 14 d: ~32Mi
+          # working set). Request headroom over that; limit floor 128Mi.
+          upgradeJob:
+            resources:
+              requests: { cpu: "10m", memory: "64Mi" }
+              limits: { memory: "128Mi" }
         singleNamespace: false
         controller:
           workflowNamespaces:

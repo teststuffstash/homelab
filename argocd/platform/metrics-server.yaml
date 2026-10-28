@@ -27,6 +27,11 @@ spec:
     targetRevision: 3.14.0
     helm:
       valuesObject:
+        # 14 d: working-set max 59Mi, CPU p99 5m. The chart's own 100m/200Mi requests stay
+        # (never lowered); the limit must sit at/above the request, so 256Mi (~4x max).
+        resources:
+          requests: { cpu: "100m", memory: "200Mi" }
+          limits: { memory: "256Mi" }
         args:
           - --kubelet-insecure-tls
           - --kubelet-preferred-address-types=InternalIP
