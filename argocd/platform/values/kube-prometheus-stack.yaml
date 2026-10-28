@@ -547,6 +547,12 @@ grafana:
         - { name: sleep-data, mountPath: /data }
       resources:
         requests: { cpu: 10m, memory: 64Mi }
+      # PSS restricted (component-check). The pod-level securityContext (chart default
+      # runAsUser 472, runAsNonRoot) already covers the user; this adds the container fields.
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: [ALL] }
+        seccompProfile: { type: RuntimeDefault }
   extraEmptyDirMounts:
     - mountPath: /data
       name: sleep-data

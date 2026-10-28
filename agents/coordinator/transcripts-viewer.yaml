@@ -49,6 +49,12 @@ spec:
             - { name: claude-data, mountPath: /home/cchv/.claude }
             - { name: goose-data, mountPath: /home/cchv/.local/share/goose }
           securityContext:
+            # PSS restricted (component-check). The image's User is the NAME `cchv`, which kubelet
+            # cannot verify against runAsNonRoot — the numeric id is pinned here: 997:997 is
+            # `cchv` in the v1.18.0 image's /etc/passwd (the uid the process already runs as).
+            runAsNonRoot: true
+            runAsUser: 997
+            runAsGroup: 997
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
             seccompProfile: { type: RuntimeDefault }

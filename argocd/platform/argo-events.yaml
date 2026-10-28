@@ -26,6 +26,12 @@ spec:
           resources:
             requests: { cpu: "50m", memory: "64Mi" }
             limits: { memory: "128Mi" }
+          # PSS restricted (component-check). No runAsNonRoot: the quay.io/argoproj/argo-events
+          # image config sets no User (it runs as root), so kubelet would refuse the pod.
+          containerSecurityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            seccompProfile: { type: RuntimeDefault }
         webhook:
           resources:
             requests: { cpu: "25m", memory: "64Mi" }
