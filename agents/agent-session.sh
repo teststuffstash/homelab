@@ -1493,6 +1493,7 @@ if [ -n "${RECIPE:-}" ]; then
   # entrypoint (one REPO_URL) stays untouched; warn-don't-die — a failed clone degrades the ride
   # to exactly the pre-pilot world, and the env card's bullet tells the model the WARN means
   # "not mounted". All expansion is launcher-side (URLs are literals by the time the pod runs).
+  # >>>REPLAY:context-repos-prelude>>>
   CTX_PRELUDE=""
   if [ -n "$CONTEXT_REPOS" ]; then
     CTX_PRELUDE="mkdir -p /work/context-repos; "
@@ -1501,6 +1502,7 @@ if [ -n "${RECIPE:-}" ]; then
       CTX_PRELUDE="${CTX_PRELUDE}git clone --depth 1 --quiet ${_CTXU} /work/context-repos/${_CTXN} || echo \"WARN: context clone failed: ${_CTXU}\"; "
     done
   fi
+  # <<<REPLAY:context-repos-prelude<<<
   # GOOSE_MAX_TOKENS as a COMMAND-PREFIX env — it must exist in the POD, not this shell, exactly as
   # agents/retro-session.sh does it. The 16384 ceiling cures the `-32602` truncation class (proven
   # on mimo, 2026-07-25); the cure was wired into the retro path only and the worker's goose arm

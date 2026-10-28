@@ -238,6 +238,7 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-with-arbitration` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
+| `context-repos-prelude` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
 | `coordinator-pick-rail/anthropic` | actions | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-pick-rail/both` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -272,6 +273,7 @@ is stale, so it cannot drift the way the prose register did.
 | `doorbell/switchboard-fanout` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/switchboard-routed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/switchboard-unit` | actions | - | `agents/coordinator-scan.sh` | - |
+| `env-card-context-repos` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-docker-buildkit` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-ground-rules/empty` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-ground-rules/missing` | actions | - | `agents/agent-session.sh` | - |

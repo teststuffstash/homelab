@@ -1,0 +1,17 @@
+# 2026-10-28 (agent-circles-issue-135-r1) — the env card advertises context repos at the path
+# the prelude actually clones to.
+#
+# CONDITION UNDER REPLAY. render_env_card() on a circles ride with the context-repos pilot
+# default set. Only the Context-repos bullet is observed (post.sh greps it out of the card).
+#
+# THE CONTRACT: the bullet names `/work/context-repos/` and both repo names. `/work/context/` is
+# the read-only pre-fetch bundle (index.txt, issue.md) — advertising it here sent models to the
+# bundle while the clones had silently failed (docs/spikes/context-repos.md §Measurement void).
+#
+# Paired with `context-repos-prelude`, which pins the clone target.
+name: env-card-context-repos
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:render_env_card
+  - file:post.sh

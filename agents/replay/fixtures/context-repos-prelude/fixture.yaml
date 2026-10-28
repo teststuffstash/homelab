@@ -1,0 +1,22 @@
+# 2026-10-28 (agent-circles-issue-135-r1) — the context-repos clone target must NOT be the
+# pre-fetch bundle mount.
+#
+# CONDITION UNDER REPLAY. A circles ride with the context-repos pilot default (circles-iac +
+# homelab). The prelude block assembles the pod-side clone commands that RUN_CMD is prefixed with.
+#
+# THE CONTRACT:
+#   1. Every clone lands under `/work/context-repos/<name>`. Since #1386 (2026-09-05) the bundle
+#      ConfigMap is mounted READ-ONLY at `/work/context`; a clone there dies "Read-only file
+#      system", warn-don't-die swallows it, and the repos were silently absent on every ride
+#      until this fix (docs/spikes/context-repos.md §Measurement void).
+#   2. Each clone keeps its warn-don't-die tail (`|| echo "WARN: context clone failed: <url>"`)
+#      — the env card's bullet tells the model what that WARN means.
+#
+# Paired with `env-card-context-repos`, which pins that the card advertises the same path.
+name: context-repos-prelude
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-repos-prelude
+  - file:post.sh
