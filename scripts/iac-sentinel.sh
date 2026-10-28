@@ -112,34 +112,54 @@ post_status_ctx() {
   fi
 }
 
-# ── management-sentinel, the IN-CLUSTER half (ADR-131, docs/management-box.md §MB3 scope split) ──
-# A homelab head that touches NO box-held root gets its `management-sentinel` success HERE, on
+# ── the box-posted contexts' IN-CLUSTER half (ADR-131, docs/management-box.md §MB3 scope split) ──
+# A homelab head that touches NO path of a box-judged surface gets that surface's success HERE, on
 # the edge's timescale (seconds after a push), so the management box — a ≤5-min tick — only ever
-# answers tofu-touching PRs, and a box outage holds only those. Same policy file (THIS clone's
-# master copy, never the PR's), same classifier (mgmt-lib's mgmt_roots_touched), same App identity.
-# The box skips a head that already carries the context, so the two never disagree: a root-touching
-# head gets NOTHING from here and waits for the box's plan. Operator, 2026-09-13 (homelab#1629: a
-# reviewer spawned and stood aside while the box's tick had not come).
-MGMT_LIB="${HERE}/mgmt-lib.sh"
-mgmt_noroot_post() {   # <repo> <pr> <sha>
-  local repo="$1" pr="$2" sha="$3" have files roots pol
+# answers heads it alone can judge, and a box outage holds only those. Same policy file (THIS
+# clone's master copy, never the PR's), same classifier (mgmt-lib's), same App identity. The box
+# skips a head that already carries the context, so the two never disagree: a surface-touching
+# head gets NOTHING from here and waits for the box's verdict. Operator, 2026-09-13 (homelab#1629:
+# a reviewer spawned and stood aside while the box's tick had not come).
+# One row per box-posted REQUIRED context — "<context>|<classifier>|<success description>", the
+# classifier a mgmt-lib function taking <repo-dir> <ref> with the head's changed paths on stdin and
+# printing the surface's paths among them (empty = the surface is untouched; rc ≠ 0 = could not
+# classify, post nothing). Adding a box surface = adding a row (ADR-152 step 1 added the second).
+# ⚠ The lib lives under mgmt/scripts/ since #2088 (2026-09-15). This probe read `${HERE}/mgmt-lib.sh`
+# until 2026-10-27 and the function returned 0 SILENTLY for six weeks — every "no box-held surface"
+# status in that window was the box's (`[e:…]` prefix), the in-cluster half was off and nobody saw
+# it. mgmt-policy-test now resolves this very line and runs the call shape below; a missing input
+# here is a loud line per head, never a quiet return.
+MGMT_LIB="${HERE}/../mgmt/scripts/mgmt-lib.sh"
+MGMT_POLICY="${HERE}/../policy/mgmt/plan-input.yaml"
+MGMT_BOX_SURFACES=(
+  "management-sentinel|mgmt_roots_touched_at|no box-held surface touched (in-cluster)"   # the tofu roots — the box plans them
+  "opnsense-test-vm|mgmt_router_touched_at|n/a: no router path in this head (in-cluster)" # router_test_vm.paths — the box runs test VM 9110
+)
+mgmt_box_surfaces_post() {   # <repo> <pr> <sha>
+  local repo="$1" pr="$2" sha="$3" present files fetched=0 row ctx fn desc touched
   [ "$repo" = "homelab" ] && [ "$pr" != "-" ] && [ -n "$STATUS_TOKEN" ] || return 0
-  [ -f "$MGMT_LIB" ] && [ -f "${HERE}/../policy/mgmt/plan-input.yaml" ] || return 0
-  have="$(gh api "repos/${ORG}/${repo}/commits/${sha}/status" --jq '[.statuses[]|select(.context=="management-sentinel")]|length' 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: status probe failed — leaving the head to the box"; return 0; }
-  [ "$have" = "0" ] || return 0
-  files="$(gh api "repos/${ORG}/${repo}/pulls/${pr}/files" --paginate --jq '.[].filename' 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: file list probe failed — leaving the head to the box"; return 0; }
-  # the classifier, from the trusted tree; REPO is where devbox resolves (this clone's root).
-  # FAIL CLOSED: an empty root list is a SUCCESS status, so the classifier's rc must reach this
-  # `||` — mgmt_roots_touched_at keeps it across its temp-file cleanup and mgmt_roots_touched
-  # itself fails on any policy read error (a nested-devbox hiccup once read as "no root touched";
-  # review finding on this PR). A failure posts nothing; the box's tick judges the head instead.
-  roots="$(REPO="${HERE}/.." bash -c '. "$1"; printf "%s\n" "$2" | mgmt_roots_touched_at "$REPO" HEAD' _ "$MGMT_LIB" "$files" 2>/dev/null)" || { log "[$repo#$pr] management-sentinel: classifier failed — leaving the head to the box"; return 0; }
-  if [ -z "$roots" ]; then
-    post_status_ctx "$repo" "$sha" management-sentinel success "no box-held surface touched (in-cluster)"
-    log "[$repo#$pr@${sha:0:8}] management-sentinel=success — no box-held surface (in-cluster half)"
-  else
-    log "[$repo#$pr@${sha:0:8}] management-sentinel: touches $(tr '\n' ' ' <<<"$roots")— the box plans it"
-  fi
+  [ -f "$MGMT_LIB" ] && [ -f "$MGMT_POLICY" ] || { log "[$repo#$pr] box surfaces: INPUT MISSING ($MGMT_LIB / $MGMT_POLICY) — the in-cluster half is OFF, the box posts every verdict (the #2088 move class)"; return 0; }
+  present="$(gh api "repos/${ORG}/${repo}/commits/${sha}/status" --jq '[.statuses[].context]|unique|.[]' 2>/dev/null)" || { log "[$repo#$pr] box surfaces: status probe failed — leaving the head to the box"; return 0; }
+  for row in "${MGMT_BOX_SURFACES[@]}"; do
+    IFS='|' read -r ctx fn desc <<<"$row"
+    grep -qxF -- "$ctx" <<<"$present" && continue   # the box (or an earlier tick) already judged it
+    if [ "$fetched" = 0 ]; then   # one file-list read per head, only when some context is still absent
+      files="$(gh api "repos/${ORG}/${repo}/pulls/${pr}/files" --paginate --jq '.[].filename' 2>/dev/null)" || { log "[$repo#$pr] box surfaces: file list probe failed — leaving the head to the box"; return 0; }
+      fetched=1
+    fi
+    # the classifier, from the trusted tree; REPO is where devbox resolves (this clone's root).
+    # FAIL CLOSED: an empty path list is a SUCCESS status, so the classifier's rc must reach this
+    # `||` — the *_at wrappers keep it across their temp-file cleanup and the classifiers fail on
+    # any policy read error (a nested-devbox hiccup once read as "no root touched"; review finding
+    # on #1631). A failure posts nothing; the box's tick judges the head instead.
+    touched="$(REPO="${HERE}/.." bash -c '. "$1"; printf "%s\n" "$3" | "$2" "$REPO" HEAD' _ "$MGMT_LIB" "$fn" "$files" 2>/dev/null)" || { log "[$repo#$pr] $ctx: classifier failed — leaving the head to the box"; continue; }
+    if [ -z "$touched" ]; then
+      post_status_ctx "$repo" "$sha" "$ctx" success "$desc"
+      log "[$repo#$pr@${sha:0:8}] $ctx=success — surface untouched (in-cluster half)"
+    else
+      log "[$repo#$pr@${sha:0:8}] $ctx: touches $(tr '\n' ' ' <<<"$touched")— the box judges it"
+    fi
+  done
 }
 
 # ── the chain's revert arm (homelab#2561, FU-1990) ───────────────────────────────────────────
@@ -458,7 +478,7 @@ for repo in $SENTINEL_REPOS; do
         fi
       fi
     fi
-    mgmt_noroot_post "$repo" "$num" "$sha"
+    mgmt_box_surfaces_post "$repo" "$num" "$sha"
     if evaluate "$repo" "$sha" "$num" "$author"; then
       if [ "${GITLEAKS_TOOL_ERROR:-0}" -ne 0 ] || [ "${KYVERNO_TOOL_ERROR:-0}" -ne 0 ]; then
         # an engine that could not run means the verdict is INCOMPLETE — fail closed as a probe

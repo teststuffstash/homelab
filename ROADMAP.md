@@ -296,18 +296,24 @@ management box, not an Argo Job (ADR-152 supersedes the ADR-093 candidate for th
 Order, lowest blast first; each step is a lease-wrapped box run and a capability-ledger row
 (`docs/management-box.md`):
 
-1. **Test surfaces post a verdict.** The box runs the test-VM harness on router-path PR heads and
-   posts an `opnsense-test-vm` status (the sentinel already judges heads touching box-held surfaces;
-   FU-295's base-pass covers the rest) — then the verdict becomes REQUIRED on router-path PRs (spike
-   D8, ruled "once box-posted"). A firmware currency belt: the box reads `firmware/status` per node
+1. **Test surfaces post a verdict.** ✅ box-posted 2026-10-26: `mgmt-router-verdict` runs the test-VM
+   harness on router-path PR heads (PR code sandboxed) and posts `opnsense-test-vm` on EVERY head (n/a
+   success otherwise) — `docs/management-box.md` §MB3 "The router surface". ✅ REQUIRED 2026-10-27 (spike
+   D8, ruled "once box-posted" — #2957 applied; the n/a success rides the in-cluster iac-sentinel run, #2970). **Next:** a firmware currency belt: the box reads `firmware/status` per node
    and on the test VM (the `check_substrate` pattern, FU-254) — the class-14 detector gap.
 2. **Matchbox, box-applied** — near-zero cone, the first ansible applier: shadow (`--check` diff)
-   first, then on. Rides FU-297 until it outgrows it.
+   first, then on. Rides FU-297 until it outgrows it. ✅ **2026-10-26** — built (#2941, `apply_ansible`
+   in the policy, `mgmt/scripts/mgmt-ansible.sh`, `MgmtAnsibleApplyStopped`), shadow tick on #2948, `on`
+   + the first unattended apply CONFIRMED on #2950 (docs/management-box.md §Ansible applies).
 3. **Router config reconcile** — shadow (the per-node `--check`, as today) → BACKUP-only (converge,
    `check`, lease confirm) → full rolling (MASTER through `carp-maintenance` with the dead-man and a
    node-local config-restore timer armed before the apply). Respects declared windows (FU-300) and
-   the security-boundary path policy (ADR-152 (4)). The one open fork: whether that policy is the
-   sentinel's `deny_paths` shape or a role-level list.
+   the security-boundary path policy (ADR-152 (4)). The one open fork — **ruled 2026-10-26: the
+   sentinel's `deny_paths` shape, per `apply_ansible` row in the policy file** (not a role-level list).
+   ✅ **shadow + BACKUP-only 2026-10-27** — built #2949 (the `opnsense` row: live CARP BACKUP,
+   node-local restore armed first, `deny_paths`), shadow tick on #2951, the first unattended BACKUP
+   converge CONFIRMED on #2955 (docs/management-box.md §Router config converge — BACKUP-only). Next:
+   the full rolling path (the MASTER).
 4. **Firmware along the same rolling path** — test VM (roll back to baseline, update, harness, move
    the baseline) → BACKUP (snapshot, update, `check`) → MASTER (maintenance, update, `check`, leave),
    one lease renewed per node. Majors: box-run after ONE attended drill along this path (the ADR-149

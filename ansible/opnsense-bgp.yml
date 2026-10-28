@@ -9,7 +9,7 @@
     oxlorg.opnsense.frr_general: "{{ opnsense_conn }}"
     oxlorg.opnsense.frr_bgp_general: "{{ opnsense_conn }}"
     oxlorg.opnsense.frr_bgp_route_map: "{{ opnsense_conn }}"
-    oxlorg.opnsense.frr_bgp_neighbor: "{{ opnsense_conn }}"
+    oxlorg.opnsense.raw: "{{ opnsense_conn }}"                # neighbours (os-frr 2.0, see the role)
     oxlorg.opnsense.frr_diagnostic: "{{ opnsense_conn }}"
     oxlorg.opnsense.service: "{{ opnsense_conn }}"
   roles:

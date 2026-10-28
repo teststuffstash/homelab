@@ -23,7 +23,7 @@
   "separateMinorPatch": true,
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
-  "allowedCommands": ["^bash scripts/upstream-alerts-refresh\\.sh$"],
+  "allowedCommands": ["^bash scripts/upstream-alerts-refresh\\.sh$", "^bash scripts/vendor-kyverno-policies\\.sh$"],
   "prHourlyLimit": 3,
 
   "argocd": {
@@ -127,18 +127,18 @@
       "automerge": true
     },
     {
-      "description": "Regex-managed pins (the customManagers below: devbox/nix in the arc-runner image, s5cmd in the coordinator image) patch/minor — a pinned download the image build exercises in `ci` (push: false), so CI is the gate → mechanical automerge; the cluster image pin is the revert. Until 2026-09-27 these bumps had NO lane (an un-armed `dependencies` PR nobody owned — the #1988 unlabelled class). Majors → the catch-all (human lane). The two VERSION-SET partners (crossplane engine digest, cloudflared in tofu/cloudflare) are excluded so their grouped PRs ride the argocd/kubernetes lane's labels. Operator ruling the same day: pin only what Renovate updates — a pin Renovate cannot bump is worse than a weekly float. Two later members: (1) the helm the G12 refresh script installs at runtime (`HELM_VERSION` in `scripts/upstream-alerts-refresh.sh`, helm/helm, one customManager below — class 17): no CI exercises it and the next kube-prometheus-stack branch's postUpgradeTasks run is its proof; `scripts/` carries no codeowner row, so THIS lane is its gate (2026-10-22 — until then the pin lived in this file under the `/.github/` row and #2804 parked on a patch); (2) `matchDatasources: !helm` keeps the class-4 tofu charts (the `# renovate:` annotation manager below) OUT of this lane — they ride the `deps-review` rule after the next one.",
+      "description": "Regex-managed pins (the customManagers below: devbox/nix in the arc-runner image, s5cmd in the coordinator image) patch/minor — a pinned download the image build exercises in `ci` (push: false), so CI is the gate → mechanical automerge; the cluster image pin is the revert. Until 2026-09-27 these bumps had NO lane (an un-armed `dependencies` PR nobody owned — the #1988 unlabelled class). Majors → the catch-all (human lane). The VERSION-SET partner (the crossplane engine digest) is excluded so its grouped PR rides the argocd lane's labels (cloudflared in tofu/cloudflare was the second until 2026-10-26: the ha retrofit moved that connector into the PublicRoute composition, and the root carries no pin). Operator ruling the same day: pin only what Renovate updates — a pin Renovate cannot bump is worse than a weekly float. Two later members: (1) the helm the G12 refresh script installs at runtime (`HELM_VERSION` in `scripts/upstream-alerts-refresh.sh`, helm/helm, one customManager below — class 17): no CI exercises it and the next kube-prometheus-stack branch's postUpgradeTasks run is its proof; `scripts/` carries no codeowner row, so THIS lane is its gate (2026-10-22 — until then the pin lived in this file under the `/.github/` row and #2804 parked on a patch); (2) `matchDatasources: !helm` keeps the class-4 tofu charts (the `# renovate:` annotation manager below) OUT of this lane — they ride the `deps-review` rule after the next one.",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["!helm"],
-      "matchPackageNames": ["!crossplane/crossplane", "!cloudflare/cloudflared"],
+      "matchPackageNames": ["!crossplane/crossplane"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
       "addLabels": ["automerge"],
       "automerge": true
     },
     {
-      "description": "The two VERSION-SET partners' regex members (crossplane engine digest, cloudflared in tofu/cloudflare) ride the `deps-review` lane WITH automerge, exactly like the chart/image member they are grouped with. Renovate arms a grouped branch only when EVERY upgrade in it has `automerge: true` — the exclusion above alone left these members at the default (false), so the first PR BORN as a group (#2295, cloudflared 2026.10.0, 2026-10-05) came out `Automerge: Disabled by config`, un-armed, and parked on nobody: the review reflex reads armed PRs only, the coordinator's un-armed clause reads `major` only (gap register G15). #2228/#2240 looked proven only because the crossplane branch had been armed by GitHub while it was still a single-member PR and the group rewrite force-pushed onto it. Majors are untouched: the catch-all below sets `automerge: false` on them, so a grouped major stays un-armed as intended.",
+      "description": "The VERSION-SET partner's regex member (the crossplane engine digest; cloudflared in tofu/cloudflare was the second until the 2026-10-26 ha retrofit retired that pin) rides the `deps-review` lane WITH automerge, exactly like the chart/image member they are grouped with. Renovate arms a grouped branch only when EVERY upgrade in it has `automerge: true` — the exclusion above alone left these members at the default (false), so the first PR BORN as a group (#2295, cloudflared 2026.10.0, 2026-10-05) came out `Automerge: Disabled by config`, un-armed, and parked on nobody: the review reflex reads armed PRs only, the coordinator's un-armed clause reads `major` only (gap register G15). #2228/#2240 looked proven only because the crossplane branch had been armed by GitHub while it was still a single-member PR and the group rewrite force-pushed onto it. Majors are untouched: the catch-all below sets `automerge: false` on them, so a grouped major stays un-armed as intended.",
       "matchManagers": ["custom.regex"],
-      "matchPackageNames": ["crossplane/crossplane", "cloudflare/cloudflared"],
+      "matchPackageNames": ["crossplane/crossplane"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
       "addLabels": ["deps-review"],
       "automerge": true
@@ -185,11 +185,6 @@
       "matchDatasources": ["helm"],
       "matchPackageNames": ["crossplane"],
       "minimumReleaseAge": null
-    },
-    {
-      "description": "cloudflared is a VERSION SET (docs/dependency-upgrades.md §Version SETS): the connector image in argocd/resources/publicroute/composition.yaml (`kubernetes` manager) AND `cloudflared_image` in tofu/cloudflare/variables.tf (the regex customManager below) — the repo's own comment declares them the same pin, and Renovate's first cloudflared PR (#2232, 2026.5.2 → 2026.9.3, 2026-10-04) moved the composition's half alone; the reviewer's version-set finding (G13). One group, one PR; labels come from the kubernetes rule (`deps-review`), the custom.regex automerge rule excludes this dep. The seat applies tofu/cloudflare after the merge (docs/runbook.md §Cloudflare).",
-      "matchPackageNames": ["cloudflare/cloudflared"],
-      "groupName": "cloudflared"
     },
     {
       "description": "kube-prometheus-stack is a VERSION SET (ADR-151, gap G16 — docs/dependency-upgrades.md §Version SETS): the stack chart in argocd/platform/kube-prometheus-stack.yaml (`skipCrds: true` since the 2026-08-04 adoption) AND upstream's `prometheus-operator-crds` chart in argocd/platform/prometheus-operator-crds.yaml, which owns the ten monitoring.coreos.com CRDs the stack chart never applies (Helm's crds/ is install-only; they sat at operator v0.91.0 owned by nobody). The CRD chart cuts one major per operator minor (29.0.0 = v0.91.0, 32.0.1 = v0.94.1), so a stack major that crosses an operator minor MUST carry the CRD bump in the same PR — one group, one PR; labels come from the argocd rules (deps-review for patch/minor, the major catch-all for majors). `devbox run renovate-lane-lint` asserts the group arms as one. The first CRD sync is the FU-304 control-plane memory event — the seat merges a crossing inside a window.",
@@ -296,6 +291,25 @@
         "fileFilters": ["argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt"],
         "executionMode": "branch"
       }
+    },
+    {
+      "description": "kyverno/policies vendored set (component-check, homelab#2911): a release-branch digest bump RIDES WITH the re-fetched files — scripts/vendor-kyverno-policies.sh rewrites policy/component/ from the new SHA on the Renovate branch (the G12 shape above; a hand re-vendor was rejected by the operator 2026-10-25). The checker is report-only, so the bump can only change a report: it rides the custom.regex automerge rule above (digest). The command string must match `allowedCommands` exactly.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["kyverno/policies"],
+      "postUpgradeTasks": {
+        "commands": ["bash scripts/vendor-kyverno-policies.sh"],
+        "fileFilters": ["policy/component/**"],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "description": "kyverno-policies chart pin in scripts/component-check.sh (component-check, homelab#2911): patch/minor automerge — the chart only renders the Pod Security policies the checker REPORTS on (nothing deploys), so a bump can only change a report; majors keep the human lane like every chart. Named because the generic custom.regex automerge rule above excludes the helm datasource.",
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["helm"],
+      "matchPackageNames": ["kyverno-policies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["automerge"],
+      "automerge": true
     }
   ],
 
@@ -341,14 +355,6 @@
       "extractVersionTemplate": "^v(?<version>.*)$"
     },
     {
-      "description": "cloudflared in tofu/cloudflare/variables.tf — the composition's VERSION SET partner (the `cloudflared` group rule above). The one-off connector's Deployment reads `var.cloudflared_image`, so the terraform manager's kubernetes_deployment image extraction never sees the ref — it lives in a variable DEFAULT, not an `image = \"…\"` literal (git log: Renovate never touched this file). Tag and digest both captured and rewritten, the same docker datasource as the composition's pin so both classify alike and group.",
-      "customType": "regex",
-      "managerFilePatterns": ["/^tofu\\/cloudflare\\/variables\\.tf$/"],
-      "matchStrings": ["cloudflare/cloudflared:(?<currentValue>[0-9]{4}\\.[0-9]+\\.[0-9]+)@(?<currentDigest>sha256:[0-9a-f]{64})"],
-      "depNameTemplate": "cloudflare/cloudflared",
-      "datasourceTemplate": "docker"
-    },
-    {
       "description": "Class 4 — Helm charts, tofu-managed: a `# renovate: datasource=<ds> depName=<chart> registryUrl=<repo>` comment on the line above a variable's `default = \"<version>\"` in the main root (`tofu/*.tf`). The terraform manager reads `helm_release.version` LITERALS only; these releases say `version = var.<x>`, so until this manager every chart bump was a hand edit (0 Renovate PRs, dependency-upgrades.md §Ground truth). Opt-in by annotation: `cilium_version` stays un-annotated (class 6 — human-proposed until ROADMAP G-D). The registryUrl repeats the `repository =` of the helm_release it feeds — change both together. Lane: the class-4 `deps-review` rule above.",
       "customType": "regex",
       "managerFilePatterns": ["/^tofu\\/[^\\/]+\\.tf$/"],
@@ -364,6 +370,23 @@
       "depNameTemplate": "helm/helm",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "description": "component-check (homelab#2911): the kyverno/policies vendored set is pinned to the engine's RELEASE BRANCH (`KYVERNO_POLICIES_REF=release-1.19`) at a commit (`KYVERNO_POLICIES_SHA`) in scripts/vendor-kyverno-policies.sh — the git-refs digest of that branch head. A digest bump runs the script via the postUpgradeTasks rule above, so the branch is BORN with the files re-fetched. The REF moves only with the kyverno CLI minor (devbox) — a hand edit in the same commit as that bump.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts\\/vendor-kyverno-policies\\.sh$/"],
+      "matchStrings": ["KYVERNO_POLICIES_REF=(?<currentValue>[^\\s]+)\\s*\\n\\s*KYVERNO_POLICIES_SHA=(?<currentDigest>[0-9a-f]{40})"],
+      "depNameTemplate": "kyverno/policies",
+      "packageNameTemplate": "https://github.com/kyverno/policies",
+      "datasourceTemplate": "git-refs"
+    },
+    {
+      "description": "component-check (homelab#2911): the kyverno-policies Helm chart the checker renders at run time for Pod Security `restricted` — `KYVERNO_POLICIES_CHART_VERSION` in scripts/component-check.sh, annotated with the class-4 `# renovate:` comment one line above (same comment grammar as class 4, different file).",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts\\/component-check\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+) registryUrl=(?<registryUrl>[^\\s]+)\\s*\\n\\s*KYVERNO_POLICIES_CHART_VERSION=(?<currentValue>[^\\s]+)"
+      ]
     }
   ]
 }

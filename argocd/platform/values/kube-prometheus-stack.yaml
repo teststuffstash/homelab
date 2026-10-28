@@ -527,7 +527,7 @@ grafana:
       secretKeyRef: { name: oracle-feedback-pg-ro, key: password, optional: true }
   extraContainers: |
     - name: sleep-sqlite-sync
-      image: amazon/aws-cli:2.17.0
+      image: docker.io/amazon/aws-cli:2.17.0
       command: ["/bin/sh", "-c"]
       args:
         - |
@@ -743,7 +743,7 @@ prometheus:
           - sh
           - -c
           - chown -R 1000:2000 /prometheus
-        image: busybox:1.37
+        image: docker.io/library/busybox:1.37
         name: chown-data
         resources:
           limits:

@@ -235,7 +235,7 @@
     "docs_snapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["plan_fees", "plans", "bonus", "peak", "peak_hours_utc", "peak_weekdays", "window_shares"],
+      "required": ["plan_fees", "plans", "bonus", "promotion", "peak", "peak_hours_utc", "peak_weekdays", "window_shares"],
       "properties": {
         "plans": {
           "type": "object",
@@ -252,6 +252,7 @@
           "description": "the page's Plan table: each plan's monthly fee in USD (GW-MODEL-TIERS divides it)"
         },
         "bonus": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 1 } },
+        "promotion": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 }, "description": "per model id, the PROMOTION multiplier a plan-row name carries as a trailing ` (<N>% off)` — the stripped name's multiplier N/100 (0.5 at 50% off; #2933 case (a)), the price discount the page's own struck price cells display; beside `bonus`, the usage Nx multiplier the limit cells carry. Kept, not read: no docs fact here is priced off it" },
         "peak": { "type": "object", "additionalProperties": { "$ref": "#/$defs/price_row" } },
         "peak_hours_utc": { "type": "array", "items": { "type": "array", "prefixItems": [{ "type": "integer" }, { "type": "integer" }], "minItems": 2, "maxItems": 2 } },
         "peak_weekdays": { "type": "array", "items": { "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] } },
@@ -370,7 +371,7 @@
         "additionalProperties": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["listed", "family", "tools", "context", "output", "cost", "peak", "bonus", "monthly_limit_usd", "windows_usd"],
+          "required": ["listed", "family", "tools", "context", "output", "cost", "peak", "bonus", "promotion", "monthly_limit_usd", "windows_usd"],
           "properties": {
             "listed": { "type": "boolean", "description": "in the config snapshot (the account's listed set — not a liveness signal)" },
             "family": { "type": ["string", "null"] }, "tools": { "type": ["boolean", "null"] },
@@ -378,6 +379,7 @@
             "cost": { "type": "array", "items": { "$ref": "#/$defs/cost_tier" } },
             "peak": { "oneOf": [{ "$ref": "#/$defs/price_row" }, { "type": "null" }] },
             "bonus": { "type": ["integer", "null"] },
+            "promotion": { "type": ["number", "null"], "minimum": 0, "description": "the model's promotion multiplier from the docs page (` (<N>% off)` → N/100; #2933 case (a)); null = no promotion suffix on its plan rows" },
             "monthly_limit_usd": { "$ref": "#/$defs/limit" },
             "windows_usd": { "type": ["object", "null"], "description": "window_shares x the plan's monthly limit; null when the limit is not a number" }
           }

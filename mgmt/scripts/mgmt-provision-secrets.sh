@@ -30,6 +30,12 @@
 # in the table are the JAIL's today, which is the phase-A shortcut. Each row is meant to be swapped
 # for a box-scoped entry as those are minted (FU-012's next) — one line per credential, on purpose.
 #
+# ⚠ RUN IT FROM THE OPERATOR'S CHECKOUT (/workspace/homelab = ~/Projects/homelab), NEVER A CLONE: it
+# ships the checkout's gitignored tofu/terraform.tfvars + tofu/provisioning/terraform.tfvars (main's
+# proxmox token, provisioning's ssh_public_keys), which a clone does not have. A push from a clone
+# (2026-10-26 22:03Z) replaced both box var files with the wallet-appended remainder → the belt's
+# tofu:provisioning check and main's next plan failed on "no value for variable". It refuses now.
+#
 # Usage:
 #   mgmt/scripts/mgmt-provision-secrets.sh                 # stage → ~/.claude/homelab-mgmt/extra-files
 #   mgmt/scripts/mgmt-provision-secrets.sh --push          # stage + rsync onto root@192.168.2.53
@@ -39,6 +45,11 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 MGMT_HOST_DEFAULT="192.168.2.53"
+
+# Refuse BEFORE anything is staged when the checkout's tfvars are missing (a clone — see the header).
+for _tv in "$REPO/tofu/terraform.tfvars" "$REPO/tofu/provisioning/terraform.tfvars"; do
+  [ -s "$_tv" ] || { echo "FATAL: ${_tv#"$REPO"/} missing or empty in $REPO — run this from the operator's checkout, never a clone (it would wipe the box's copy)" >&2; exit 1; }
+done
 
 # Resolve the cred root (the dir holding homelab-keepass/) — jail vs host, like wallet-files.sh.
 CRED=""
@@ -74,8 +85,15 @@ ENV_TABLE=(
   "TOFU_STATE_SECRET=tofu-state-secret"
   "TOFU_STATE_PASSPHRASE=tofu-state-passphrase"    # the state's own key — shared by nature, never box-scoped
   "CLOUDFLARE_API_TOKEN=cloudflare-mgmt-read"      # tofu/cloudflare plan on PR heads (the sentinel, FU-238): the READ-ONLY twin of the write key, minted by tofu/cloudflare-token/mgmt-read.tf on the host — mint BEFORE the next --push
-  "OPN_API_KEY=opnsense-api-key"                   # scripts/opnsense-playbook.sh --check
-  "OPN_API_SECRET=opnsense-api-secret"
+  # OPNsense: never root's pair (FU-013). The plays (the belt's --check, the box's appliers) run as
+  # the `automation` API user; the weekly drill's one prod read (config.xml) as the read-only puller.
+  "OPN_API_KEY=opnsense-automation-api-key"        # scripts/opnsense-playbook.sh
+  "OPN_API_SECRET=opnsense-automation-api-secret"
+  "OPN_BACKUP_API_KEY=opnsense-backup-puller-api-key"      # scripts/opnsense-drill.sh compare stage
+  "OPN_BACKUP_API_SECRET=opnsense-backup-puller-api-secret"
+  # the router verdict (mgmt-router-verdict.sh): test VM 9110's OWN pair — it opens nothing on the router
+  "OPN_TESTVM_API_KEY=opnsense-test-api-key"
+  "OPN_TESTVM_API_SECRET=opnsense-test-api-secret"
   # the main root (scripts/keepass-env.sh's export list, one line each — swap for box-scoped mints as FU-012 minds them)
   "TF_VAR_grafana_admin_password=grafana-admin-password"
   "TF_VAR_ha_prometheus_token=ha-prometheus-token"
@@ -197,7 +215,7 @@ for root in provisioning main; do
   if [ -s "$src" ]; then
     install -m600 "$src" "$OUT/var/lib/mgmt/$root.tfvars"; echo "  + var/lib/mgmt/$root.tfvars  (← ${src#"$REPO"/})"
   else
-    echo "  ! ${src#"$REPO"/} missing — the box's plan of that root will fail on its variables" >&2
+    echo "FATAL: ${src#"$REPO"/} vanished mid-run" >&2; exit 1
   fi
 done
 # ⚠ Proxmox tokens ride in the tfvars, NEVER the env: a TF_VAR_ in the env that a tfvars overrides

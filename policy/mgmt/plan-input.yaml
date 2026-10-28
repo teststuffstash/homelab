@@ -35,11 +35,31 @@ roots:                      # what the box plans; a PR path under the root's dir
                   # fine-grained PAT (docs.github.com/rest/orgs/rules — "Get all organization repository
                   # rulesets"; 403 verified 2026-09-13 with read). Both stay host-only; REPO rulesets (the
                   # pinned required checks, ADR-130), org secrets and deploy keys read fine — the gate's parts.
-  cloudflare:   { dir: tofu/cloudflare,   apply: false,   # read-only token (mgmt-read.tf), Garage state, FU-238; applies stay in the jail
-                  plan_exclude_types: [data.cloudflare_zero_trust_tunnel_cloudflared_token],
-                  plan_exclude_note: "the tunnel TOKEN is a credential read no Read group covers (401 under the read-all token) — its two in-cluster dependents, the cloudflared Secret and Deployment, drop out with it; a change to them is judged by the jail's plan" }
-                  # ⚠ not cone-clean for the BELT (mgmt-probe.sh): half the root rides the kubernetes provider,
-                  # so its plan asserts the cluster is up — the sentinel plans it per PR head, the belt does not.
+  cloudflare:   { dir: tofu/cloudflare,   apply: false }  # read-only token (mgmt-read.tf), Garage state, FU-238; applies stay in the jail
+                  # No plan_exclude_types since the ha retrofit (2026-10-26, FU-039 consumer #2): the tunnel-token
+                  # data source (a credential read no Read group covers) left this root with the tunnel and the
+                  # cloudflared Secret/Deployment — the ha PublicRoute claim owns them now.
+                  # ⚠ not cone-clean for the BELT (mgmt-probe.sh): the root still configures the kubernetes
+                  # provider (its last kubernetes resources are destroyed by the retrofit's apply), so its plan
+                  # asserts the cluster is up — the sentinel plans it per PR head, the belt does not.
+router_test_vm:             # the ROUTER surface (ADR-152 step 1; mgmt/scripts/mgmt-router-verdict.sh, docs/management-box.md §MB3 "The router surface")
+  # A master-bound PR head touching one of these is validated on OPNsense test VM 9110 by MASTER's
+  # scripts/opnsense-test-vm.sh, its code run as the sandbox user, and gets the `opnsense-test-vm`
+  # status from the run; every other head gets "n/a" success — the context never skips. Globs: `*`
+  # stays inside one path segment, `**` crosses them. The list = what DEPLOYS to the router (the
+  # plays, their roles + values, the node inventories, the collection pin and the python the modules
+  # run under, the API scripts). NOT here, on purpose: the harness's own inputs (scripts/opnsense-*.sh,
+  # ansible/test-vm/**) — the box runs master's copy of them, so a head changing them would be judged
+  # by the old ones; their own change is proven by the seat's run and the weekly drill.
+  paths:
+    - "ansible/opnsense-*.yml"
+    - "ansible/roles/opnsense-*/**"
+    - "ansible/group_vars/opnsense*.yml"
+    - "ansible/router-nodes/**"
+    - "ansible/collections/requirements.yml"
+    - "ansible/controller-env/**"
+    - "ansible/ansible.cfg"
+    - "opnsense/*.py"
 foreign_roots:              # planned elsewhere (host / jail) — a PR touching only these gets "no box-held surface"
   - tofu/cloudflare-token
   - tofu/infisical
@@ -163,3 +183,102 @@ apply_helm:                 # helm_release addresses the box may APPLY unattende
     - address: helm_release.longhorn
       cap_min: 240
       engine_order: [fast, none, bulk, slow-bulk, std]
+apply_ansible:              # ansible play GROUPS the box may apply unattended (ADR-152 program step 2, operator 2026-10-26)
+  # mgmt/scripts/mgmt-ansible.sh (docs/management-box.md §"Ansible applies — Matchbox first"). A master
+  # span whose files (every commit's, `git log --name-only`) match a row's `paths` runs the row's bracket
+  # behind the same gates as a tofu root (declared windows, the box verdict, refused-rev, the
+  # `management-apply` status): `--check --diff` of the plays at master → nothing to do when it is
+  # changed=0; DRIFT = the plays at the sha the box last confirmed for this group (else the previous
+  # master) are NOT changed=0 on live → refused to a human; else window + ⚓ lease
+  # (upgrade-lease-ansible-<group>) → apply → CONFIRM (a second --check changed=0 + `health`) → lease
+  # deleted. A bad confirm or a failed apply STOPS: lease + window kept, $ADIR/ansible-stopped
+  # (→ MgmtAnsibleApplyStopped) refuses every later ansible apply until a human removes it. Never a
+  # revert, never a retry.
+  #   mode          shadow = both checks + the would-be apply in the journal and the metrics, NOTHING
+  #                 applied, no status; on = the bracket above. The OPERATOR flips it.
+  #   hosts         the inventory pattern the health's unit read targets (ansible ad-hoc, the play's own ssh)
+  #   plays         in order; every one runs in each phase (a play that is changed=0 costs one read)
+  #   paths         bash case globs (`*` crosses `/`) over the span's files
+  #   cap_min       the lease's deadline from the bracket's begin: the plays' apply + the confirm
+  #   window_alerts the alert names the change may produce (seat-window --alerts); `none` = graces
+  #                 nothing — the window is declared to hold the reconciler and the apply loop
+  #   health        confirm reads: `http` must answer 2xx, `units` must be `active` on `hosts`
+  matchbox:
+    mode: on                # flipped 2026-10-27 after the first shadow tick (#2948) — ADR-152 step 2
+    hosts: matchbox
+    plays:
+      - ansible/matchbox.yml
+      - ansible/matchbox-proxydhcp.yml       # before ipxe-tftp: its verify fetches over dnsmasq's TFTP
+      - ansible/matchbox-ipxe-tftp.yml
+      - ansible/matchbox-talos-assets.yml
+    paths:
+      - "ansible/matchbox*.yml"
+      - "ansible/roles/matchbox*"
+      - "ansible/group_vars/matchbox.yml"
+      - "ansible/inventory.yml"
+      - "ansible/ansible.cfg"
+      - "ansible/requirements.yml"
+    cap_min: 30
+    window_alerts: [none]
+    health:
+      http:
+        - "http://192.168.2.30:8080/"
+        - "http://192.168.2.30:8080/assets/boot-or-disk.ipxe"
+      units: [matchbox, dnsmasq]
+  # The ROUTER (ADR-152 program step 3, operator 2026-10-26): the CARP BACKUP only — `target:
+  # carp-backup` = the node the pair's live CARP state names BACKUP for `vip` (never a static name),
+  # refused unless the pair reads exactly one MASTER + one BACKUP with hasync's config sync OFF.
+  # `backup-only` = on for that node; the MASTER's rolling path is a later step, no mode reaches it.
+  #   runner        opnsense = the controller-env interpreter (httpx) + the oxlorg collection, the
+  #                 unit's OPN_API_KEY/SECRET (whatever user /var/lib/mgmt/env carries — never minted here)
+  #   plays         the router plays the box may run + the opnsense/*.py DHCP scripts (their OPN_CHECK=1
+  #                 is the --check), each limited to the BACKUP; the script env is the node's
+  #                 `opnsense-router-node.sh script-env` (converge's own rule)
+  #   deny_paths    the SECURITY BOUNDARY (ADR-152 (4)) — WAN firewall + port forwards (tuya-egress.py's
+  #                 filter + d_nat rules), WireGuard, ACME + ddclient (DNS credentials), the API users,
+  #                 and CARP (the pair's own mechanics + its password, which the box does not hold): a span
+  #                 touching one is REFUSED to a human whatever else it holds. The sentinel's
+  #                 `deny_paths` shape, per row — ruled 2026-10-26 over a role-level list (one home: this file)
+  #   revert_min    the node-local restore's deadline (armed BEFORE the apply, ON the node: the pre-apply
+  #                 config.xml + a reboot unless the box confirms) — below cap_min: the lease is the OUTER timer
+  #   health        router_node_check = `opnsense-router-node.sh check <node>` (the read-only serving rules);
+  #                 the confirm also requires the pair's CARP map unchanged
+  opnsense:
+    mode: backup-only       # flipped 2026-10-27 after the first router shadow tick (#2951) — ADR-152 step 3
+    target: carp-backup
+    vip: 192.168.2.1
+    runner: opnsense
+    hosts: opnsense
+    plays:
+      - ansible/opnsense-bgp.yml
+      - ansible/opnsense-unbound.yml
+      - ansible/opnsense-haproxy.yml
+      - ansible/opnsense-system.yml
+      - opnsense/dnsmasq-dhcp.py
+      - opnsense/kea-dhcp.py
+    paths:
+      - "ansible/opnsense-*.yml"
+      - "ansible/roles/opnsense-*"
+      - "ansible/group_vars/opnsense.yml"
+      - "ansible/router-nodes/*"
+      - "ansible/collections/*"
+      - "ansible/controller-env/*"
+      - "opnsense/*.py"
+    deny_paths:
+      - "opnsense/tuya-egress.py"
+      - "ansible/opnsense-wireguard.yml"
+      - "ansible/roles/opnsense-wireguard*"
+      - "ansible/opnsense-acme.yml"
+      - "ansible/roles/opnsense-acme*"
+      - "ansible/opnsense-ddclient.yml"
+      - "ansible/roles/opnsense-ddclient*"
+      - "ansible/opnsense-users.yml"
+      - "ansible/roles/opnsense-users*"
+      - "ansible/opnsense-carp.yml"
+      - "ansible/roles/opnsense-carp*"
+    cap_min: 45
+    revert_min: 30
+    settle_s: 60
+    window_alerts: [OpnsenseConfigUnattributedRevision, RouterPairMasterCount, RouterWanGateSilent, TargetDown]
+    health:
+      router_node_check: true

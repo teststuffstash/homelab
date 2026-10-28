@@ -135,6 +135,12 @@
         "implausible"
       ]
     },
+    "catalog_dropped_reason": {
+      "enum": [
+        "unknown-dialect"
+      ],
+      "$comment": "why a listed model was dropped from a refresh (drop-and-count, #2933): its wire dialect is one the parser does not know. Bounded — a new wire joins here when the parser learns it"
+    },
     "openrouter_model": {
       "type": "string",
       "description": "a policy openrouter model id (rails.openrouter.models, every tier); any other value renders `other`"
@@ -533,6 +539,22 @@
         }
       },
       "description": "policy Go models the source's snapshot does not cover; absent until a snapshot exists",
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-CATALOG-GO"
+      ]
+    },
+    "gateway_go_catalog_models_dropped_total": {
+      "type": "counter",
+      "labels": {
+        "source": {
+          "$ref": "#/$defs/catalog_source"
+        },
+        "reason": {
+          "$ref": "#/$defs/catalog_dropped_reason"
+        }
+      },
+      "description": "listed models the source's refreshes DROPPED (drop-and-count, #2933) by reason — a dialect the parser does not know; the rest of the source lands, and a model wanted on a new wire stays visible instead of silently absent",
       "x-requirements": [
         "GW-METRICS",
         "GW-CATALOG-GO"

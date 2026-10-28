@@ -109,6 +109,16 @@ groups:
           severity: warning
           triage: none
 
+  # ── LanCertExpiringSoon — an absolute-time rule, no range function (blackbox.yaml) ───────────
+  - name: lan-certs
+    rules:
+      - alert: LanCertExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry{job="blackbox-lan-certs"} - time()) < 14 * 86400
+        for: 1h
+        labels:
+          severity: warning
+          triage: dig
+
   # ── DIRECTION WITNESS — `max_over_time`, the class's default and the wrong function here ──────
   # Class rule (ii) at GithubRateLimitLow: `max_over_time` is the alert-PRESERVING function only
   # where HIGH is the bad reading. `probe_success == 0` is the opposite, so max holds the

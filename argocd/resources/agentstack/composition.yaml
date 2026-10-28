@@ -575,7 +575,7 @@ spec:
                         - name: crashnet
                           # The coordinator image (bash + jq + s5cmd), same pin as the loop
                           # CronWorkflows above — the deploy-pin sweep bumps them together.
-                          image: ghcr.io/teststuffstash/agent-coordinator:2026.10.20-g950b7f0b8201
+                          image: ghcr.io/teststuffstash/agent-coordinator:2026.10.26-g950b7f0b8201
                           command: ["bash", "-lc"]
                           args:
                             - |
@@ -788,7 +788,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.10.20-g950b7f0b8201
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.10.26-g950b7f0b8201
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -862,7 +862,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.10.20-g950b7f0b8201
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.10.26-g950b7f0b8201
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -932,7 +932,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.10.20-g950b7f0b8201
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.10.26-g950b7f0b8201
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -1129,9 +1129,9 @@ spec:
             # The post-deploy edge (sync-succeeded doorbell) is FU-102's remaining machinery.
             # IMAGE = agent-base (operator ruling 2026-10-24, FU-270 fork C): it carries the outer
             # `claude` AND `codex` + agent-codex, python3, s5cmd, jq, curl, git (verified in-cluster
-            # 2026-10-24); its user is devbox, so HOME=/home/devbox. ⚠ The literal below is NOT
-            # bumped by agent-runtime's deploy-pin (that edits agents/images.env only) — keep it equal
-            # to images.env AGENT_BASE_IMAGE by hand until the pin flow seds this file too.
+            # 2026-10-24); its user is devbox, so HOME=/home/devbox. The literal below is bumped by
+            # agent-runtime's deploy-pin in the same PR as images.env AGENT_BASE_IMAGE (agent-runtime
+            # 4a8723f, 2026-10-25) — never hand-edit one without the other.
             # prober.childRail: codex (FU-270 fork B): the brief's NESTED mission child rides the
             # agent-gateway's codex rail — this pod admits ONE unbound prober session as its loop SA
             # (policy callers: oracle-agents:agentstack-loop → [prober], no bind), renders the codex
@@ -1169,7 +1169,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-base:2026.10.25-gb7571947d72e
+                      image: ghcr.io/teststuffstash/agent-base:2026.10.26-gecdaf1344903.120
                       command: ["bash", "-lc"]
                       args:
                         - |

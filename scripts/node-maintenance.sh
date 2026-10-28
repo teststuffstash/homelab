@@ -11,7 +11,7 @@
 #   bash scripts/node-maintenance.sh down      <node>   # preflight → settle → drain → talosctl shutdown
 #                                                        (settle also SILENCES the node's alerts in
 #                                                         Alertmanager; `up` tails the silence 20m)
-#   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) → wait Ready → uncordon → wait Longhorn healthy
+#   bash scripts/node-maintenance.sh up        <node>   # WoL (metal) / qm start on its hypervisor (VM) → wait Ready → uncordon → wait Longhorn healthy
 #   bash scripts/node-maintenance.sh upgrade   <node>   # preflight → floors → settle → DRAIN → talosctl
 #                                                        upgrade → wait Ready + Longhorn healthy →
 #                                                        VERIFY version AND schematic against the declaration
@@ -641,13 +641,39 @@ wait_storage_back() {
 }
 
 # ---------------------------------------------------------------- up
+# A VM has no MAC in the DHCP source of truth and no WoL path: `down`'s `talosctl shutdown` leaves it
+# STOPPED on its hypervisor (the guest halts, Proxmox marks it stopped), and until 2026-10-26 `up`
+# only said "a VM? start it on pve" and waited — every VM window ended in the operator clicking
+# Start (GAPS maintenance-window-G2). So `up` starts it where it lives: `qm start <vmid>` over the
+# same pve ssh key host-maintenance.sh uses (its `hv()`), on the hypervisor the declaration names.
+# The vm id and hypervisor are read from `var.nodes` in tofu/variables.tf — the ONE declaration
+# (machines.yaml points there for VM specs; default hypervisor "pve", as the variable's default) —
+# and the hypervisor's IP from machines.yaml. Metal keeps WoL. Non-zero = not a declared VM.
+vm_decl() { awk -v n="$NODE" '$1==n && $2=="=" && $3=="{" {p=1} p {print} p && /}/ {exit}' "$REPO/tofu/variables.tf" 2>/dev/null; }
+vm_start() {
+  local decl vmid hv hvip
+  decl="$(vm_decl)"; [ -n "$decl" ] || return 1
+  vmid="$(grep -oE 'vm_id *= *[0-9]+' <<<"$decl" | grep -oE '[0-9]+$' | head -1)"
+  [ -n "$vmid" ] || return 1
+  hv="$(grep -oE 'hypervisor *= *"[^"]+"' <<<"$decl" | sed 's/.*"\(.*\)"/\1/' | head -1)"; hv="${hv:-pve}"
+  hvip="$(yq -r ".machines[] | select(.name==\"$hv\") | .ip // \"\"" "$REPO/machines/machines.yaml")"
+  [ -n "$hvip" ] || { log "$NODE is VM $vmid on $hv, but machines.yaml has no ip for $hv — start it by hand (qm start $vmid); waiting for Ready"; return 0; }
+  log "$NODE is a VM (vmid $vmid on $hv) — qm start via root@$hvip"
+  ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
+    -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$hvip" "qm start $vmid" \
+    || log "qm start $vmid on $hv failed (already running? host key? key file?) — still waiting for Ready in case the VM is already up"
+}
+
 up() {
   local ip; ip="$(node_ip)"
   if [ "$(node_ready)" = True ]; then log "$NODE already Ready"; else
     if host_up "$ip"; then log "$ip answers on :50000 — booting, no WoL needed"; else
       power status || true   # the plug's draw, before we believe anything about the box's state
       local mac; mac="$(node_mac || true)"
-      if [ -z "$mac" ]; then log "no MAC for $NODE in opnsense/dnsmasq-dhcp.py (a VM? start it on pve) — waiting for Ready anyway"; else
+      if [ -z "$mac" ]; then
+        # No WoL path: a declared VM is started on its hypervisor (vm_start); anything else waits.
+        vm_start || log "no MAC for $NODE in opnsense/dnsmasq-dhcp.py and no VM declaration in tofu/variables.tf var.nodes — waiting for Ready anyway"
+      else
         log "WoL $NODE ($mac) via $PVE_HOST"
         ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
           -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$PVE_HOST" \

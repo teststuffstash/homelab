@@ -40,6 +40,11 @@ devbox run tf-validate                                # syntax-only, no backend/
 devbox run github-tofu plan                           # tofu/github root (repos/rulesets/org secrets)
 ```
 
+**`github-tofu` applies OUTSIDE the jail with the org-admin wallet** (`scripts/github-tf.sh` header,
+`tofu/github/README.md` §Run it) — a token that plans cleanly is not a token that can apply: plan
+reads, apply writes repository/organization *Administration*, which the jail PAT lacks by design
+(promoted 2026-10-26, GAPS tofu-apply-G3).
+
 The `tofu/provisioning/` root (Matchbox) has separate state and only needs one var:
 
 ```bash
@@ -55,8 +60,32 @@ If a plan errors `No value for required variable <x>`, a new required var was ad
 
 - ⚠️ **Never `talosctl upgrade` a Proxmox nocloud VM** — bake extensions into the image
   (`image.tf`) and recreate (`-replace`). Metal nodes upgrade fine.
+- ⚠️ **A `machines.yaml` `longhorn_disks` change needs a node REBOOT** (Talos provisions
+  `machine.disks` at boot) — so does any other v1alpha1 change Talos cannot take live. Both
+  `talos_machine_configuration_apply` resources run `apply_mode = "no_reboot"` (`tofu/talos.tf`,
+  `tofu/metal.tf`), so the apply REFUSES it instead of rebooting mid-apply; the reboot is yours,
+  inside the window: `scripts/node-maintenance.sh settle <node>` (cordon + move the last replicas)
+  or `down <node>` FIRST, then the reboot, then `up <node>`. The reboot is fine; a node carrying
+  single-replica volumes rebooting undrained is not. Other documents (VolumeConfig,
+  HostnameConfig) are install-time — never refused, never live (promoted 2026-10-26, GAPS
+  tofu-apply-G2).
+- **A FAILED apply is NOT a no-op.** A provider error mid-apply (a github 403, a Proxmox 500) can
+  still persist the PLANNED state, and the next plan then reads `No changes` while the live thing
+  differs — invisible and self-sealing (a later apply with the right token is a no-op too). Before
+  retrying, read the live object and compare it with `state show`; `apply -refresh-only` may not
+  repopulate nested blocks (github rulesets' `required_check`), so the repair is `state rm` +
+  `import '<id>'`, then re-plan until the expected diff returns (promoted 2026-10-26, GAPS
+  tofu-apply-G3).
 - Pin images by digest after first run (e.g. `unifi.tf`) so a registry tag move can't desync them.
 - A targeted apply prints a "Resource targeting is in effect" warning — expected; follow up with a
   full `plan` later to catch drift.
 - After applying, verify the real end state (`devbox run nodes`, `kubectl rollout status`, `dig`) —
-  don't claim done from the apply output alone.
+  don't claim done from the apply output alone. **Nor from the exit code alone**: the wrapper has
+  returned exit 127 AFTER `Apply complete!` on an apply that had fully landed — a non-zero exit is
+  "verify the end state", never "re-run" or "roll back" (promoted 2026-10-26, GAPS tofu-apply-G1).
+- **A `proxmox_virtual_environment_vm` change: the post-apply check is `qm config <vmid>` on the
+  hypervisor, diffed against the plan's `+`/`~` lines**, before `node-maintenance.sh up`. The
+  provider's `1 changed` line is not the end state — pvedaemon has accepted an update that carried
+  fewer fields than planned (`journalctl -u pvedaemon | grep 'update VM'` shows what it got); a
+  config can also be accepted and the start then fail on a property. Re-plan + re-apply until
+  `qm config` matches (promoted 2026-10-26, GAPS tofu-apply-G3 resight).

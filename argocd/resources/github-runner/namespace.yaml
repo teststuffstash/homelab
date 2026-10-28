@@ -1,8 +1,12 @@
 # Runner namespace. PodSecurity=privileged because containerMode=dind gives each runner a
-# privileged Docker-in-Docker sidecar (same opt-up as the Forgejo runner ns + monitoring).
+# privileged Docker-in-Docker sidecar (same opt-up as the Forgejo runner ns + monitoring) —
+# live 2026-10-25: homelab-ephemeral-runner-* pods carry `privileged: true` on container `dind`,
+# so baseline enforce would reject every runner. warn/audit restricted report, never block.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: arc-runners
   labels:
     pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

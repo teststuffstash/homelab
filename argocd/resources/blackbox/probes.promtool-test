@@ -376,3 +376,37 @@ tests:
       - eval_time: 60m
         alertname: EndpointProbeFailing
         exp_alerts: *specs_alert
+
+  # ── 9. LanCertExpiringSoon — the DATE, not the handshake ──────────────────────────────────────
+  # The expr compares the cert's notAfter to wall-clock and promtool's clock starts at 0, so the
+  # series carry ABSOLUTE seconds: 7 days out = 604800, 40 days out = 3456000. The 7-day cert is
+  # under the 14-day line from t=0 and fires once `for: 1h` is served; the 40-day one never does.
+  - interval: 1m
+    name: a cert 7 days from expiry fires after 1h; one 40 days out never does
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{instance="circles.teststuff.net:443",job="blackbox-lan-certs",namespace="monitoring"}'
+        values: "604800+0x120"
+      - series: 'probe_ssl_earliest_cert_expiry{instance="grafana.teststuff.net:443",job="blackbox-lan-certs",namespace="monitoring"}'
+        values: "3456000+0x120"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LanCertExpiringSoon
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: LanCertExpiringSoon
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: circles.teststuff.net:443
+              job: blackbox-lan-certs
+              namespace: monitoring
+              triage: dig
+      - eval_time: 120m
+        alertname: LanCertExpiringSoon
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: circles.teststuff.net:443
+              job: blackbox-lan-certs
+              namespace: monitoring
+              triage: dig

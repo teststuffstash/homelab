@@ -8,10 +8,13 @@
 #   4. the operational-path block (ADR-123, both profiles): /metrics + /healthz are non-public
 #      by default — refused at the connector on EVERY claim, and additionally at the edge for
 #      the claim that owns the zone's http_request_firewall_custom entry point.
+#   5. optional, profile-agnostic: client-cert mTLS enforcement (.spec.mtls — a block rule in
+#      that same custom-phase ruleset, which the claim then owns) and adoption of existing
+#      Cloudflare objects (.spec.imports — Terraform import blocks; the ha.teststuff.net
+#      retrofit, FU-039 consumer #2, 2026-10-26).
 # SUBTREE ENFORCEMENT lives here (fail-loud template): hostname must be under
-# <ns>.teststuff.net. The zone/account ids are platform constants (docs/cloudflare.md).
-# v5 provider idioms mirror tofu/cloudflare (the proven ha.teststuff.net one-off, which this
-# XRD exists to eventually absorb as consumer #2).
+# <ns>.teststuff.net, unless ns is one of the zone's platform-owned namespaces (the zone map).
+# The zone/account ids are platform constants (docs/cloudflare.md).
 #
 # Profile fan-out (v1alpha2+): the profile field (required, no default on the object) selects
 # which class defaults the composition renders — the way ADR-101's zone classes fan out zone
@@ -46,10 +49,13 @@ spec:
             {{- $host := $xr.spec.hostname }}
             {{- $b := $xr.spec.backend }}
             {{- /* ADR-101 zone classes (platform constants — docs/cloudflare.md §Live IDs).
-                 platform: any ns claims inside its delegated subtree. product: ONLY the owning
-                 ns, anywhere in the zone (apex included) — the stack owns the whole zone. */}}
+                 platform: any ns claims inside its delegated subtree; the zone's `owners` — the
+                 PLATFORM-OWNED namespaces, i.e. the platform's own public hostnames — claim
+                 anywhere in the zone, as the composition (the zone's owner) delegates to itself.
+                 product: ONLY the owning ns, anywhere in the zone (apex included) — the stack owns
+                 the whole zone. Every owner list is a reviewed line in THIS file. */}}
             {{- $zones := dict
-                  "teststuff.net" (dict "id" "6b63f95592a9e036f8b8f6934511d321" "class" "platform")
+                  "teststuff.net" (dict "id" "6b63f95592a9e036f8b8f6934511d321" "class" "platform" "owners" (list "home-assistant"))
                   "minutark.ee"   (dict "id" "fa1b02951c29ee4828b8948d0dd7baaf" "class" "product" "owner" "oracle-fleet") }}
             {{- $zoneName := $xr.spec.zone | default "teststuff.net" }}
             {{- $zone := get $zones $zoneName }}
@@ -63,11 +69,20 @@ spec:
               {{- if and (ne $host $zoneName) (not (hasSuffix (printf ".%s" $zoneName) $host)) }}
                 {{- fail (printf "PublicRoute %s/%s: hostname %q is outside product zone %q" $ns $claim $host $zoneName) }}
               {{- end }}
+            {{- else if has $ns ($zone.owners | default list) }}
+              {{- if and (ne $host $zoneName) (not (hasSuffix (printf ".%s" $zoneName) $host)) }}
+                {{- fail (printf "PublicRoute %s/%s: hostname %q is outside platform zone %q" $ns $claim $host $zoneName) }}
+              {{- end }}
             {{- else }}
               {{- if not (hasSuffix (printf ".%s.teststuff.net" $ns) $host) }}
                 {{- fail (printf "PublicRoute %s/%s: hostname %q is outside the namespace's delegated subtree *.%s.teststuff.net (zone-class + delegations doctrine: docs/cloudflare.md)" $ns $claim $host $ns) }}
               {{- end }}
             {{- end }}
+            {{- /* The zone's owner: the product zone's owning ns, or a platform-owned ns. Only an
+                 owner may ADOPT existing objects (.spec.imports) — an import id is a handle on ANY
+                 record/ruleset in the zone, so a subtree tenant setting one would reach outside its
+                 delegated subtree (rename the record, rewrite the zone's WAF rules). */}}
+            {{- $isOwner := or (and (eq $zone.class "product") (eq $ns $zone.owner)) (has $ns ($zone.owners | default list)) }}
             {{- $res := printf "pr-%s-%s" $ns $claim }}
             {{- $origin := printf "%s://%s:%d" (default "http" $b.protocol) $b.service (int $b.port) }}
             {{- /* Profile fan-out: v1alpha2+ claims carry .spec.profile (required, no default).
@@ -91,6 +106,25 @@ spec:
             {{- $opsAlt := list }}
             {{- range $opsBlocked }}{{ $opsAlt = append $opsAlt (trimPrefix "/" .) }}{{ end }}
             {{- $opsRegex := printf "^/(%s)(/|$)" (join "|" $opsAlt) }}
+            {{- /* Optional profile-agnostic legs (the ha retrofit, 2026-10-26). Gated by hasKey /
+                 explicit values, never by a schema default (G4). */}}
+            {{- $mtls := and (hasKey $xr.spec "mtls") (eq (toString (get $xr.spec.mtls "enforce")) "true") }}
+            {{- $cacheRule := not (and (hasKey $xr.spec "cacheRule") (eq (toString $xr.spec.cacheRule) "false")) }}
+            {{- $rum := not (and (hasKey $xr.spec "rum") (eq (toString $xr.spec.rum) "false")) }}
+            {{- /* The zone's http_request_firewall_custom entry point: the api profile's Skip lives
+                 there, and so does the mTLS block — one ruleset either way (20217). */}}
+            {{- $ownsCustom := or (eq $profile "api") $mtls }}
+            {{- $imports := dict }}
+            {{- if hasKey $xr.spec "imports" }}{{ $imports = $xr.spec.imports }}{{ end }}
+            {{- if and $imports (not $isOwner) }}
+              {{- fail (printf "PublicRoute %s/%s: .spec.imports is for the zone's owner only — namespace %q is a subtree tenant of %q (docs/cloudflare.md §Zone classes)" $ns $claim $ns $zoneName) }}
+            {{- end }}
+            {{- if and (hasKey $imports "ruleset") (not $ownsCustom) }}
+              {{- fail (printf "PublicRoute %s/%s: .spec.imports.ruleset adopts the zone's http_request_firewall_custom ruleset, which this claim renders only with mtls.enforce or the api profile" $ns $claim) }}
+            {{- end }}
+            {{- $customName := printf "PublicRoute %s firewall" $host }}
+            {{- if eq $profile "api" }}{{ $customName = printf "PublicRoute %s api firewall" $host }}{{ end }}
+            {{- if hasKey $imports "ruleset" }}{{ $customName = $imports.ruleset.name }}{{ end }}
             ---
             apiVersion: tf.upbound.io/v1beta1
             kind: Workspace
@@ -166,6 +200,105 @@ spec:
                     proxied = true
                     ttl     = 1
                   }
+                  {{- /* Adoption (.spec.imports, zone owners only — guarded above): the record is
+                       UPDATED in place to this claim's tunnel instead of created, so a hostname
+                       moving off a hand-applied root never answers NXDOMAIN. Terraform 1.5 import
+                       blocks (provider-terraform v1.1.1 embeds 1.5.5); the id is a literal, as 1.5
+                       requires; a no-op once the resource is in state. Provider 5.23 import ids:
+                       dns_record `<zone_id>/<record_id>`, ruleset `zones/<zone_id>/<ruleset_id>`. */}}
+                  {{- if hasKey $imports "dnsRecordId" }}
+                  import {
+                    to = cloudflare_dns_record.this
+                    id = "{{ $zone.id }}/{{ $imports.dnsRecordId }}"
+                  }
+                  {{- end }}
+                  {{- if $ownsCustom }}
+                  # --- the zone's http_request_firewall_custom entry point: ONE ruleset ---
+                  # Rendered for the api profile (never-challenge Skip + CORS preflight) and for any
+                  # claim with .spec.mtls.enforce (the client-cert block). ONE entry-point ruleset per
+                  # phase per zone (#1338, error 20217 observed live 2026-09-17): every rule this claim
+                  # needs in the phase rides in THIS resource, and a second claim on the same zone
+                  # that needs the phase cannot render its own until zone-phase aggregation (FU-039).
+                  # On teststuff.net the ha claim (mTLS) holds it — any api claim there is unsupported.
+                  # Block rules first (`block` terminates, `skip` does not): operational paths, mTLS,
+                  # CORS preflight, then the api Skip.
+                  # A Skip with `products`/`phases` is a WAF CUSTOM rule (http_request_firewall_custom).
+                  # Placing it in the managed phase is refused by the API — 20120 "skip action parameter
+                  # phase 'http_request_sbfm' is not authorized" (live through cf-api-proxy, 2026-09-03);
+                  # in the custom phase the same rule is accepted on the Free zone. It skips the
+                  # challenge products (bic, securityLevel, uaBlock) and the challenge phases
+                  # (http_request_sbfm, http_request_firewall_managed) for this host.
+                  # `name` forces a REPLACE in provider 5.23 (RequiresReplace) — an adopted ruleset
+                  # keeps its live name (.spec.imports.ruleset.name) so the import updates in place.
+                  resource "cloudflare_ruleset" "firewall_custom" {
+                    zone_id  = local.zone_id
+                    name     = "{{ $customName }}"
+                    kind     = "zone"
+                    phase    = "http_request_firewall_custom"
+                    rules = [
+                    {{- /* Leg 2 of ADR-123: the operational-path block at the EDGE — one more
+                         rule in the ruleset this claim already owns, so the request never
+                         reaches the home connection. First in the list: `block` terminates,
+                         `skip` does not. Only the claim owning this phase gets it — a claim
+                         rendering a second ruleset in this phase is refused by the API with 20217
+                         "exceeded maximum number of zone rulesets for phase" (observed live on
+                         minutark.ee 2026-09-17). Other claims get leg 1 until zone-phase
+                         aggregation (FU-039). ⚠ NO custom response: `block` +
+                         action_parameters.response in THIS phase is refused on the Free plan ("not
+                         entitled to use a custom response") — unlike the rate-limit phase. */}}
+                    {{- if $opsBlocked }}
+                      {
+                        ref         = "operational_paths_block"
+                        action      = "block"
+                        description = "operational paths are non-public (ADR-123): {{ join ", " $opsBlocked }}"
+                        expression  = "(http.host eq \"{{ $host }}\" and ({{ range $i, $p := $opsBlocked }}{{ if $i }} or {{ end }}http.request.uri.path eq \"{{ $p }}\" or starts_with(http.request.uri.path, \"{{ $p }}/\"){{ end }}))"
+                        enabled     = true
+                      },
+                    {{- end }}
+                    {{- /* mTLS ENFORCEMENT: validation at the TLS handshake only RECORDS
+                         cf.tls_client_auth.*; this rule enforces it. Needs the zone's managed-CA
+                         hostname association (tofu/cloudflare/mtls.tf — the credential half) or
+                         the edge never requests a certificate and every request is blocked. */}}
+                    {{- if $mtls }}
+                      {
+                        ref         = "require_client_cert"
+                        action      = "block"
+                        description = "mTLS: block {{ $host }} without a verified client certificate"
+                        expression  = "(http.host eq \"{{ $host }}\" and not cf.tls_client_auth.cert_verified)"
+                        enabled     = true
+                      },
+                    {{- end }}
+                    {{- if and (eq $profile "api") $xr.spec.origins }}
+                      {
+                        ref         = "preflight_disallowed_origin"
+                        action      = "block"
+                        description = "api profile: reject CORS preflight from origins outside the claim allow-list"
+                        expression  = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and not http.request.headers[\"origin\"][0] in { {{- range $xr.spec.origins }} \"{{ . }}\"{{ end }} })"
+                        enabled = true
+                      },
+                    {{- end }}
+                    {{- if eq $profile "api" }}
+                      {
+                        ref         = "skip_challenge"
+                        action      = "skip"
+                        description = "api profile: skip all challenge-shaped mitigations"
+                        expression  = "(http.host eq \"{{ $host }}\")"
+                        action_parameters = {
+                          products = ["bic", "securityLevel", "uaBlock"]
+                          phases   = ["http_request_sbfm", "http_request_firewall_managed"]
+                        }
+                        enabled = true
+                      },
+                    {{- end }}
+                    ]
+                  }
+                  {{- if hasKey $imports "ruleset" }}
+                  import {
+                    to = cloudflare_ruleset.firewall_custom
+                    id = "zones/{{ $zone.id }}/{{ $imports.ruleset.id }}"
+                  }
+                  {{- end }}
+                  {{- end }}
                   {{- /* Profile-specific resources — api shapes filled in (#1304), consumer shapes filled in (#1305) */}}
                   {{- if eq $profile "api" }}
                   # --- api profile: per-IP rate limiting ---
@@ -209,68 +342,6 @@ spec:
                       enabled = true
                     }]
                   }
-                  # --- api profile: never-challenge Skip + CORS preflight = ONE custom-phase ruleset ---
-                  # A Skip with `products`/`phases` is a WAF CUSTOM rule (http_request_firewall_custom).
-                  # Placing it in the managed phase is refused by the API — 20120 "skip action parameter
-                  # phase 'http_request_sbfm' is not authorized" (live through cf-api-proxy, 2026-09-03);
-                  # in the custom phase the same rule is accepted on the Free zone. It skips the
-                  # challenge products (bic, securityLevel, uaBlock) and the challenge phases
-                  # (http_request_sbfm, http_request_firewall_managed) for this host.
-                  # ONE entry-point ruleset per phase per zone (#1338): the CORS preflight block, which
-                  # lives in the same phase, rides in THIS resource — a sibling cloudflare_ruleset in
-                  # the same phase would collide with itself at apply. Preflight block first (a
-                  # disallowed OPTIONS dies here), then the Skip. On the platform zone this phase is
-                  # already the ha mTLS entry point (tofu/cloudflare/mtls.tf) — any api claim on
-                  # teststuff.net is unsupported until zone-phase aggregation lands (docs/cloudflare.md
-                  # §Completion state).
-                  resource "cloudflare_ruleset" "firewall_custom" {
-                    zone_id  = local.zone_id
-                    name     = "PublicRoute {{ $host }} api firewall"
-                    kind     = "zone"
-                    phase    = "http_request_firewall_custom"
-                    rules = [
-                    {{- /* Leg 2 of ADR-123: the operational-path block at the EDGE — one more
-                         rule in the ruleset this claim already owns, so the request never
-                         reaches the home connection. First in the list: `block` terminates,
-                         `skip` does not. api profile only — a consumer claim rendering its own
-                         ruleset in this phase is refused by the API with 20217 "exceeded
-                         maximum number of zone rulesets for phase" (observed live on minutark.ee
-                         2026-09-17), because the zone already has an api claim holding the
-                         entry point. Consumer claims get leg 1 until zone-phase aggregation
-                         (FU-039). ⚠ NO custom response: `block` + action_parameters.response in
-                         THIS phase is refused on the Free plan ("not entitled to use a custom
-                         response") — unlike the rate-limit phase, which serves one. */}}
-                    {{- if $opsBlocked }}
-                      {
-                        ref         = "operational_paths_block"
-                        action      = "block"
-                        description = "operational paths are non-public (ADR-123): {{ join ", " $opsBlocked }}"
-                        expression  = "(http.host eq \"{{ $host }}\" and ({{ range $i, $p := $opsBlocked }}{{ if $i }} or {{ end }}http.request.uri.path eq \"{{ $p }}\" or starts_with(http.request.uri.path, \"{{ $p }}/\"){{ end }}))"
-                        enabled     = true
-                      },
-                    {{- end }}
-                    {{- if $xr.spec.origins }}
-                      {
-                        ref         = "preflight_disallowed_origin"
-                        action      = "block"
-                        description = "api profile: reject CORS preflight from origins outside the claim allow-list"
-                        expression  = "(http.host eq \"{{ $host }}\" and http.request.method eq \"OPTIONS\" and not http.request.headers[\"origin\"][0] in { {{- range $xr.spec.origins }} \"{{ . }}\"{{ end }} })"
-                        enabled = true
-                      },
-                    {{- end }}
-                      {
-                        ref         = "skip_challenge"
-                        action      = "skip"
-                        description = "api profile: skip all challenge-shaped mitigations"
-                        expression  = "(http.host eq \"{{ $host }}\")"
-                        action_parameters = {
-                          products = ["bic", "securityLevel", "uaBlock"]
-                          phases   = ["http_request_sbfm", "http_request_firewall_managed"]
-                        }
-                        enabled = true
-                      },
-                    ]
-                  }
                   # --- api profile: CORS response headers ---
                   # Edge-owned Access-Control-* from the claim's origins allow-list (.spec.origins).
                   # Empty/absent means no CORS at the edge — the origin controls its own policy. An
@@ -307,13 +378,15 @@ spec:
                   }
                   {{- end }}
                   {{- else }}
-                  # --- consumer profile: no custom-phase ruleset ---
+                  # --- consumer profile: no custom-phase ruleset of its own ---
                   # The operational-path block (ADR-123) reaches a consumer claim through the
-                  # connector leg above, not the edge: rendering a second zone ruleset in
+                  # connector leg above, not the edge — unless the claim sets .spec.mtls and so
+                  # owns the custom phase (the ruleset above). A second zone ruleset in
                   # http_request_firewall_custom is refused (20217) wherever an api claim — or,
-                  # on teststuff.net, the ha mTLS ruleset — already holds the entry point.
+                  # on teststuff.net, the ha claim's mTLS ruleset — already holds the entry point.
                   # The edge leg becomes profile-agnostic with zone-phase aggregation (FU-039).
-                  # --- consumer profile: edge caching on ---
+                  {{- if $cacheRule }}
+                  # --- consumer profile: edge caching on (.spec.cacheRule: false renders none) ---
                   # Respect-origin cache headers (Cloudflare default edge TTL when the origin sends none).
                   # Filled in (#1305).
                   resource "cloudflare_ruleset" "cache_rule" {
@@ -344,7 +417,11 @@ spec:
                       enabled = true
                     }]
                   }
-                  # --- consumer profile: RUM/client telemetry ---
+                  {{- end }}
+                  {{- if $rum }}
+                  # --- consumer profile: RUM/client telemetry (.spec.rum: false renders none) ---
+                  # ⚠ FU-250: no token we hold can create these (403) — a claim rendering them
+                  # stays Workspace Synced=False; the other resources still apply.
                   # Web Analytics (RUM) for the consumer route. The site is associated with the
                   # zone (auto_install injects the JS snippet for orange-clouded sites). A
                   # catch-all rule includes all traffic under the hostname.
@@ -367,6 +444,7 @@ spec:
                     is_paused   = false
                     paths       = ["*"]
                   }
+                  {{- end }}
                   {{- end }}
                   {{- if $xr.spec.originMark }}
                   {{- $markHeader := $xr.spec.originMark.header }}
@@ -464,24 +542,61 @@ spec:
                 gotemplating.fn.crossplane.io/composition-resource-name: cloudflared
               labels: { app: {{ $res }}-cloudflared }
             spec:
-              replicas: {{ default 1 $xr.spec.replicas }}
+              {{- /* A public hostname never rides ONE connector: the replica count has a FLOOR of
+                   two, applied here and not as an XRD `minimum` (that would strand every stored
+                   composite carrying `replicas: 1` — docs/cloudflare.md gotcha 5). A claim's
+                   `replicas: 1` is therefore a no-op. With maxUnavailable 0 and the readiness
+                   probe below, a rollout (every Renovate cloudflared bump) replaces one replica at
+                   a time and only after the new one has REGISTERED a tunnel connection — the
+                   2026-10-26 Cloudflare upgrade notice's ask, and what kept a 1-replica claim's
+                   hostname dark through every restart before. */}}
+              replicas: {{ max 2 (int (default 1 $xr.spec.replicas)) }}
+              minReadySeconds: 10
+              strategy:
+                type: RollingUpdate
+                rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
               selector:
                 matchLabels: { app: {{ $res }}-cloudflared }
               template:
                 metadata:
-                  labels: { app: {{ $res }}-cloudflared }
+                  # app.kubernetes.io/name is the PodMonitor's selector (cloudflare-exporter's
+                  # podmonitor-cloudflared.yaml, every namespace); `app` stays the immutable selector.
+                  labels: { app: {{ $res }}-cloudflared, app.kubernetes.io/name: cloudflared }
                 spec:
+                  topologySpreadConstraints:
+                    - maxSkew: 1
+                      topologyKey: kubernetes.io/hostname
+                      whenUnsatisfiable: ScheduleAnyway
+                      labelSelector:
+                        matchLabels: { app: {{ $res }}-cloudflared }
                   containers:
                     - name: cloudflared
-                      # same pin as tofu/cloudflare (the proven one-off)
-                      image: cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39
-                      args: ["tunnel", "--no-autoupdate", "run", "--token", "$(TUNNEL_TOKEN)"]
+                      image: cloudflare/cloudflared:2026.10.5@sha256:1b1d34d0a9c0bfca9de72db8460d328db3f19edd2b96169114e3e893a97bbe53
+                      args: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run", "--token", "$(TUNNEL_TOKEN)"]
                       env:
                         - name: TUNNEL_TOKEN
                           valueFrom:
                             secretKeyRef:
                               name: {{ $res }}-tunnel
                               key: tunnel_token
+                      ports:
+                        - { name: metrics, containerPort: 2000, protocol: TCP }
+                      # /ready answers 200 only once >=1 tunnel connection is REGISTERED with the
+                      # edge — readiness is what gates the rolling update on "connected".
+                      # Registration takes a few seconds; readiness never kills, so it polls tight.
+                      readinessProbe:
+                        httpGet: { path: /ready, port: metrics }
+                        initialDelaySeconds: 5
+                        periodSeconds: 5
+                        failureThreshold: 3
+                      # Liveness on the same path, generous: a connector that has held NO edge
+                      # connection for ~3 min after a 60 s start is restarted (the tofu connector's
+                      # probe, loosened) — a WAN blip shorter than that never restarts it.
+                      livenessProbe:
+                        httpGet: { path: /ready, port: metrics }
+                        initialDelaySeconds: 60
+                        periodSeconds: 20
+                        failureThreshold: 9
                       resources:
                         requests: { cpu: 10m, memory: 32Mi }
                         limits: { memory: 128Mi }

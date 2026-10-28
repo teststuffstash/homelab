@@ -169,6 +169,14 @@ bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml -e ...    # extra
 ```
 
 Why the wrapper exists (the non-obvious bits):
+- **It runs as the `automation` API user, never root** (FU-013, 2026-10-26): wallet
+  `opnsense-automation-api-{key,secret}`, privileges = `opnsense_api_users` in
+  `ansible/group_vars/opnsense.yml`, so every revision a play writes is attributed and the click
+  detector below stays quiet for it. A **403** = a privilege that list lacks: add it there, rehearse
+  on the test VM (the harness runs as the VM's own `automation`), then re-run
+  `scripts/opnsense-api-users.sh` in a window. Root's pair (`OPN_AS_ROOT=1`) is accepted for
+  `opnsense-users.yml` only — the user mint. Installing a plugin is root's too: the plays assert
+  their plugins (the bootstrap's `PLUGINS` builds them in).
 - `oxlorg.opnsense` needs **`httpx`**, provided by the pinned nix flake `ansible/controller-env/`.
 - **`devbox run` strips `ANSIBLE_PYTHON_INTERPRETER`**, and that env var is ignored for the implicit
   localhost anyway → the interpreter must be passed as **`-e ansible_python_interpreter=...`**.
@@ -221,10 +229,17 @@ bash scripts/opnsense-test-vm.sh --pr 2033 --post            # full run; report 
 The five steps (rollback → base converges → head on top → a mutation reaches the RUNNING
 daemons, with a BASE-roles negative control → fresh converge + idempotent rerun), the isolation
 overrides and what the run does NOT prove (ACME issuance, real backends, BGP sessions) are in
-the header of `scripts/opnsense-test-vm.sh`; the report lists them again per run. `--status`
+the header of `scripts/opnsense-test-vm.sh`; the report lists them again per run. **Identity:**
+right after each rollback the harness runs the users play (as the VM's root) and every other play
+and `opnsense/*.py` as the VM's own `automation` user with the ref's `opnsense_api_users` — prod's
+shape (FU-013), so a play that needs a privilege the list lacks fails here with a 403, not on prod
+(`OPN_TEST_AS=root` is the old shape; the `--router` rehearsal uses it). `--status`
 also sets an `opnsense-test-vm` commit status on the validated head sha — it needs a token with
-*Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29), so from the jail the PR
-comment, which names the sha, is the record.
+*Commit statuses: write*; the jail PAT gets 403 (probed 2026-09-29). **Since 2026-10-26 the
+management box posts that status on every PR head itself** (`mgmt-router-verdict`,
+[`management-box.md`](management-box.md) §MB3 "The router surface") — a seat run is a rehearsal or a
+second opinion; while the box runs one, `systemctl is-active mgmt-router-verdict` on the box says so
+(two rollbacks of 9110 at once break both runs).
 
 The same harness also drives the weekly **rebuild drill** — a second VM built from nothing,
 converged with all router code and scored against prod, never `9110`:
@@ -318,7 +333,7 @@ K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n opnsense-config-backup"
 $K annotate externalsecret opnsense-backup-puller force-sync=$(date +%s) --overwrite
 ```
 
-The mint is itself a root-key write, so the first backup run reports it as `OpnsenseConfigUnattributedRevision` (`user "…" created`, `add_api_key`), and so does every playbook run until the wrapper uses the `automation` key.
+The mint is itself a root-key write, so the next backup run reports it as `OpnsenseConfigUnattributedRevision` (`user "…" created`, `add_api_key`, a privilege change). Every playbook and API script runs as `automation` since 2026-10-26, so they no longer do — a root revision outside a users run is a click (or a firmware/plugin act: those are root by design).
 Then set `suspend: false` in `cronjob.yaml` (its own PR), and once ArgoCD has synced run it once
 by hand so the first backup does not wait for 04:23 UTC:
 `$K create job --from=cronjob/opnsense-config-backup first-run && $K logs -f job/first-run`.
@@ -893,11 +908,20 @@ Flash secrets (wifi/OTA/api key) = `esphome/config/secrets.yaml`, regenerated fr
 ## Cloudflare (live)
 
 Home Assistant is reachable from anywhere at **`https://ha.teststuff.net`** via a Cloudflare Tunnel
-(`cloudflared` Deployment, ns `cloudflared`) gated by **client-certificate mTLS** (WAF-enforced). All
-as code in `tofu/cloudflare/` (infra) + `tofu/cloudflare-token/` (scoped tokens); design + the full
-decision/gotcha record in `docs/cloudflare.md`.
+gated by **client-certificate mTLS** (WAF-enforced). Since 2026-10-26 the tunnel, the connector
+(Deployment `pr-home-assistant-ha-cloudflared`, ns `home-assistant`), the CNAME and the mTLS rule are
+the **PublicRoute claim** `home-assistant/ha` (`argocd/resources/ha-publicroute/`) — ArgoCD +
+Crossplane reconcile it, so a merged cloudflared pin deploys itself (one replica at a time, gated on
+"connected"). `tofu/cloudflare/` keeps the credential half (client cert + the zone's mTLS hostname
+association), `wg`/`*.local` and the minutark bootstrap — **no pin**; `tofu/cloudflare-token/` mints
+the scoped tokens. Design + the full decision/gotcha record: `docs/cloudflare.md` §Remote access.
 
-- **Apply (infra):** `source scripts/keepass-env.sh   # exports CLOUDFLARE_API_TOKEN (wallet: cloudflare-write-key)` then
+- **Claim health:** `kubectl get publicroute -n home-assistant ha` + the Workspace
+  `pr-home-assistant-ha` (`Synced`/`Ready`); a stuck Workspace's error is a gzip+base64 blob in its
+  condition message (`… | base64 -d | gunzip`).
+- **Apply (tofu/cloudflare — the credential half; nothing to do after a cloudflared bump):**
+  `source scripts/keepass-env.sh   # exports CLOUDFLARE_API_TOKEN (wallet: cloudflare-write-key)`, then
+  `TOFU_STATE_ROOT_DIR=$PWD/tofu/cloudflare . scripts/tofu-state-env.sh` and
   `devbox run -- tofu -chdir=tofu/cloudflare plan/apply`. The scoped write token is minted once by
   `tofu/cloudflare-token/` with an admin token, **outside the jail**.
 - **Phone cert:** `bash scripts/make-client-p12.sh` → `~/.claude/cloudflare/ha-client.p12` (pinned

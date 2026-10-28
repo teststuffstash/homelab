@@ -201,6 +201,13 @@ def collect(args, store, temp):
     print('activity collection persisted through ' + args.now)
 
 
+class QuietWindow(ValueError):
+    """The min-tasks refusal: a verdict on the week, not a failure (exit 3, see main)."""
+
+
+QUIET_EXIT = 3
+
+
 def prepare(args, store, temp):
     end = cutoff(args.now)
     checkpoint = store.get(args.series + '/checkpoint.json', {})
@@ -234,8 +241,15 @@ def prepare(args, store, temp):
         bundle['ledger'] = ledger_window(store.ledger(), start, end)
         # The floor the old `minNewTasks` guard held, now per window: a refused week is NOT
         # published, so its evidence rolls into the next window instead of being skipped.
-        if bundle['ledger']['population']['task_count'] < args.min_tasks:
-            raise ValueError('GUARD REFUSED: %d ledger task(s) emitted in [%s, %s) (< %d) — nothing worth two rides; the window rolls forward'
+        tasks = bundle['ledger']['population']['task_count']
+        if tasks == 0 and args.min_tasks > 0:
+            # ZERO tasks is not a quiet week: it is indistinguishable from a ledger source that is
+            # reachable but empty (a dead collector). Fail (exit 1) so RetroReportOverdue still
+            # pages — a quiet verdict here would push outcome=quiet forever and silence it.
+            raise ValueError('GUARD REFUSED: 0 ledger tasks emitted in [%s, %s) — a fully empty window '
+                             'is treated as a broken ledger source, not a quiet week' % (start, end))
+        if tasks < args.min_tasks:
+            raise QuietWindow('GUARD REFUSED: %d ledger task(s) emitted in [%s, %s) (< %d) — nothing worth two rides; the window rolls forward'
                              % (bundle['ledger']['population']['task_count'], start, end, args.min_tasks))
         bundle['series'] = args.series
         bundle['storage_key'] = key
@@ -374,6 +388,11 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except QuietWindow as exc:
+        # The guard step turns this exit into a clean, skipped run + the overdue belt's
+        # quiet-week push (retro-argo.yaml) — a quiet week is not an overdue retro.
+        print(str(exc), file=sys.stderr)
+        sys.exit(QUIET_EXIT)
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as exc:
         print('retro pipeline failed: ' + str(exc), file=sys.stderr)
         sys.exit(1)

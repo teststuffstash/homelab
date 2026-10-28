@@ -37,6 +37,14 @@ groups:
         labels:
           severity: critical
           triage: none
+      - alert: MgmtAnsibleApplyStopped
+        expr: |
+          mgmt_apply_ansible_stopped == 1
+            or on (instance) (increase(mgmt_lease_revert_total{outcome="ansible_stopped"}[30m]) > 0)
+        for: 5m
+        labels:
+          severity: warning
+          triage: none
       - alert: MgmtApplyDeferredByWindow
         expr: |
           mgmt_apply_deferred_window == 1

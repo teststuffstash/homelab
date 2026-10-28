@@ -149,11 +149,13 @@
       "mgmt-policy-test": [
         "bash mgmt/scripts/mgmt-tools-test.sh",
         "bash mgmt/scripts/mgmt-policy-test.sh",
+        "bash mgmt/scripts/mgmt-router-test.sh",
         "bash mgmt/scripts/mgmt-reconcile-test.sh",
         "bash mgmt/scripts/mgmt-rollout-evidence-test.sh",
         "bash mgmt/scripts/mgmt-probe-test.sh",
         "bash mgmt/scripts/mgmt-lease-test.sh",
         "bash mgmt/scripts/mgmt-helm-test.sh",
+        "bash mgmt/scripts/mgmt-ansible-test.sh",
         "bash mgmt/scripts/mgmt-verdict-test.sh"
       ],
       "mgmt-reconcile-test": [

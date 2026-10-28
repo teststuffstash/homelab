@@ -18,16 +18,60 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **LAN certs (FU-297) — DONE 2026-10-26** (detector, cron, carry, guard, rebind all live; `LanCertExpiringSoon`
+  clear). NEXT (FU-297 (1)): schedule `opnsense-cert-carry.sh nx02 pve` on the [management box](../management-box.md) so the BACKUP follows
+  renewals without a seat.
+- **Security contact + company mail (operator 2026-10-27, no FU yet).** teststuff.net mail is LIVE on Proton
+  (homelab#2974 applied; #2976 MX/SPF/DKIM/DMARC applied, PR pending merge); addresses + reasoning in the private
+  teststuff repo `docs/company-email.md`. NEXT, all naming `security@teststuff.net`: (1) `security.txt` (RFC 9116)
+  — one source in homelab, copied into each site at build, `Canonical:` per domain, plus a probe that alerts on
+  `Expires:` nearing / a copy drifting from the source; (2) an org-default `SECURITY.md` via a new
+  `teststuffstash/.github` repo + GitHub private vulnerability reporting on the public repos (tofu/github if the
+  provider has it); (3) one disclosure policy page both link to; (4) Cloudflare Email Routing for every OTHER
+  domain's `security@`/`privacy@`/`abuse@`/`postmaster@` → the Proton inbox (tofu/cloudflare, a shared default);
+  (5) later: teststuff.net DMARC `p=quarantine` → `p=reject` once the `dmarc@` reports show only Proton sending.
+- **OPNsense 26.7.7 on the test VM (whoever is running that trial — baseline snapshot re-taken 2026-10-26 ~20:40Z,
+  unrecorded):** against it the pinned `oxlorg.opnsense 26.1.11` FAILS the bgp play's neighbor task ("Failed field:
+  'multiprotocol'", os-frr 2.0_2) and the haproxy play timed out — seen by the #2940 gate's BASE step. Prod stays
+  26.7.5 until the collection (Galaxy latest IS 26.1.11; upstream O-X-L/ansible-opnsense#488 covered 26.7 only)
+  handles it or the neighbor task moves to `raw`. Needs an owner + a record before any prod firmware step.
 - **⚑ PICKUP (2026-10-24 12:30Z — S9 Renovate sweep; TICK-LOG 10-24).** Verify next session: homelab#2819 regrouped
   (chart 2.4.3 + digest) after #2886; sleep-tracking#203 rebuilt by Renovate after the 12:01Z hand-back; allure#11
   regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).
   Python 3.15 wave PARKED org-wide (#2610 / oracle-fleet#883 ruling + `Un-park:` line; circles#124 stack-side): un-park
   when `devbox search python@3.15` resolves the final (rc2 today). Residual list: #1985 comment 6383963515; FU-316.
-- **⚑ DELIVERY LOOP / KARGO (2026-10-24, oracle-fleet docs/delivery-loop.md).** homelab#2902 = Kargo prod install, HELD
-  unarmed for the operator's shape ruling (#2798 stays the kind experiment + the operator-direct workflow). Before merge:
-  sentinel exceptions baseline on master, two Infisical keys (`KARGO_ADMIN_*`), CRD window (FU-304/315), mgmt-tf apply.
-  Open in it: Kargo's cluster-wide Secret list, tenant reach to the git token (no kind whitelist), UI-route TLS. Oracle gaps
-  filed unqueued: oracle-fleet #926–#930, oracle-iac#1140 (held for #918). Residuals: FU-317, FU-318.
+- **⚑ MORNING READS (2026-10-26, operator) — two HELD PRs + one direct push landed overnight (TICK-LOG 10-25):**
+  (1) **homelab#2902** Kargo prod install @ 8444efd4 — all three shape questions settled (git token → `kargo-shared-resources`;
+  API plain HTTP :80; startup `list secrets` accepted → FU-318a), PSS restricted + namespace labels fixed, CI green, sentinel red
+  until the exceptions baseline lands on master (#2403 precedent). Pre-merge after the read: exceptions baseline on master →
+  two Infisical keys (`KARGO_ADMIN_*`) → CRD maintenance window (FU-304/315) → `mgmt-tf` plan/apply (+1 repo entry) → merge →
+  the PR body's apply plan. The checker's new library rules add 38 Kargo rows (SA automount, wildcard verbs in the CHART's
+  ClusterRoles, ro-rootfs, probes) — a read: fix before merge or accept as the platform-wide debt they are (322 on master).
+  (2) **homelab#2911** component checker @ 1b720e68 (CI in progress at wind-down) — `scripts/component-check.sh` renders every
+  Application + runs kyverno: PSS restricted from the `kyverno-policies` chart 3.9.2, 21 rules vendored from kyverno/policies
+  `release-1.19` via `scripts/vendor-kyverno-policies.sh` (partial-vs-legacy choices in each header), SERVICES.md check;
+  report-only; diff-ci gate; master control 322 findings. Arming it brings the reviewer. Its Renovate lanes (git-refs digest +
+  postUpgradeTasks, chart regex) are ON MASTER already (direct, operator-ordered, this push) — inert until #2911 merges.
+  Residuals in the PR body: no `ci.yaml` step (operator-direct), sentinel v2 integration next, legacy ClusterPolicy API deprecation.
+  (3) **Overnight fix wave on the 322 (operator: "safe ones with opus/sonnet subagents")** — MERGED: #2913 (39 bare Docker Hub
+  refs → `docker.io/library/…`, pull path unchanged), #2914 (PSS labels on 5 namespaces; arc-runners `enforce: privileged` for dind).
+  HELD unarmed, runtime-affecting, evidence tables in the bodies: **#2915** requests/limits 13→1 (Infisical limit 1000Mi→2Gi at 94 %
+  use; Grafana request 256→640Mi; merge restarts garage/forgejo/infisical/grafana/node-exporter/metrics-server once) and **#2916**
+  securityContext on 10 Applications (PSS rows 65→43; `runAsNonRoot` NOT set on argo-events + blackbox — root-less image config;
+  transcripts-viewer pinned uid 997; merge rolls garage ~17 min — watch `GarageQuorumMembersRestarted`). On #2911's branch:
+  `policy/component/exceptions.yaml` (71 by-design rows: node-fstrim ×10, kmsg-reader, smartctl, node-exporter, crossplane aggregate
+  roles) + Helm test hooks dropped (13). Expected master total after all merge ≈ 322 → ~170. LEFT for a judgment read (not safe
+  blanket): sa-automount 47, ro-rootfs 40, secret-role-verbs 37, probes 16, agent-coordinator wildcard role, infisical bootstrap Job.
+  (4) The #918 spec read (oracle-fleet) — still the operator's; steps 1, 4, #919, oracle-iac#1140 wait on it.
+- **⚑ DELIVERY LOOP / KARGO (oracle-fleet docs/delivery-loop.md).** Oracle gaps filed unqueued: oracle-fleet #926–#930,
+  oracle-iac#1140 (held for #918). Residuals: FU-317, FU-318. Kind e2e not re-run since (jail has no Docker; the one open
+  proof for #2902 is `runAsNonRoot` end-to-end — the image is User 65532, so a first prod sync is an acceptable test).
+- **⚑ ISLAND INTAKE (FU-320, PR #2978 — 2026-10-27 overnight spike).** PICKUP: (1) #2978's verdict (pr-wait was armed);
+  (2) the first intake-queued rides — #2782 and #2753 (one-line spec-flag edits, rows written into the issues): did the
+  scan dispatch them, did they merge in ≤ 2 rounds, did the specs reviewer accept the rows as written; (3) #2977 /
+  #2684 standing, #2768 / #2650 `blocked-on: human` — the operator's rulings (what a rail-served-but-unlisted id is;
+  #2650's done-when pick). Rulings the spike asks for: `docs/spikes/island-intake.md` §Open questions. Run it by hand
+  until wired: `bash gateway/scripts/intake-select.sh` → opus subagent on `gateway/intake.md` → `devbox run ring platform`.
 - **⚑ GATEWAY (FU-270 is the pointer — its Next is the seat's list).** Each 6 h refresh: `devbox run -- bash
   gateway/scripts/canary-entrants.sh --max 3 < /dev/null` → `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers --
   apply` → PR when the lists move (a key NEW to the loader ships AFTER its image, #2812). Watch: the jail's codex REFRESH
@@ -41,11 +85,20 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   own process until the operator says the gateway has proven it.
 - **⚑ ESCALATED → operator (board-sweep 10-24):** homelab#2588 `agent/error` 9 d (shared rate-pool strikes; class fix
   #2601 unqueued); #2808 + #2757 unqueued (#2757 blocks circles#129). #2589 must land before stint #1418 can close.
-- **⚑ wk-metal-04 `intel0` DEAD-ISH (found 2026-10-24 by docs-cleanup):** Longhorn disk Ready=False/NoDiskInfo since
-  10-20 15:07Z (WriteFile EIO); `nvme0` (eui …410f6) logs `Identify namespace failed (-5)` every minute; SMART "passed";
-  0 replicas on it, bulk tier one disk short. Detector `LonghornDiskNotReady` PR in flight (detector first). **OPERATOR:**
-  reseat / swap slot or drive on Big Data, then `longhorn-tag-disks.sh` re-registers it.
-  `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
+- **⚑ wk-metal-04 — Big Data's CPU x16 slot CORRUPTS DATA (2026-10-26, #2926 #2928 #2931).** intel0 (10-20) and intel1
+  (10-26, XFS corrupt after 2 min) both failed there; intel0 passed a 4 GiB write+readback in the x4 slot → tested shelf
+  spare. intel1 runs in the x4 slot, the x16 stays EMPTY. Firmware never auto-boots the MX500 → PXE → `boot-or-disk.ipxe`
+  sanboots it (`matchbox_sanboot_macs`); `legacyBIOSSupport` reaches disk only on the next upgrade. garage-0 rebuilt
+  fresh (new id `1f54eb71`, layout v5, resync from peers — collapses to one version on its own); registry-data's
+  pile-up on hp-01/sn530 moved to intel1 (healthy, hp-01 + wk-metal-04). x16 slot: IGNORED by operator ruling (no soak,
+  no FU). **Next (seat):** confirm the Garage resync converged + `layout history` is one version.
+- **⚑ RetroReportOverdue (2026-10-26) = quiet week (1 ledger task < 8), not a broken retro → #2932 (quiet = exit 3,
+  skip rides, `outcome=quiet` push).** ⚠ CI RED: ADR-103 ratchet — retro-argo.yaml is a clause file, the PR needs a
+  replay fixture that reds on the pre-fix guard (model: `agents/replay/fixtures/retro-push-belt/`). **Next (seat):** add it IN the
+  PR (clone `fix/retro-quiet-week`); once merged + ArgoCD-synced, hand-fire `retro-session` →
+  expect Succeeded, 3 tasks Skipped, the alert clears. The 1-task week itself is the real signal (loop near idle).
+  GoCatalog alerts → queued as #2933 (drop-unknown-dialect ruling).
+- `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
   09-14 — the std-tier exit left the Longhorn node record's disk entry behind). **Next (seat):** once it FIRES (~15:53Z
   10-24), remove that stale entry in a maintenance window, through the script that owns disk records.
 - **⚑ wk-metal-04 on Big Data (#2758, 2026-10-20).** Watch the MX500's 34 % lifetime used (attr 202). **OPERATOR:** the
@@ -77,8 +130,6 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   verdicts, DIFFERS lines, weakened gates; revert = `/scripts/` in CODEOWNERS + governance-lint GOVERNANCE); the r8
   reports (#2522, merged on the bot by ruling — read after).
   (4) Prod routers on 26.7.5 with 26.7.6 pending on the official path (39 packages, no reboot) — an attended window.
-  (6) agent-runtime `.github/workflows/build-image.yaml`: the pin flow must also bump the agent-base tag in
-  `argocd/resources/agentstack/composition.yaml` (probers ride it since #2905; hand-synced until then) — operator-direct.
   (5) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).
   #1882's "3 flagged choices" were never recorded.
   (6) pve's CMOS clear reset "Restore on AC Power Loss" — UNREADABLE headless: a monitor/GPU visit or a deliberate
@@ -108,8 +159,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ HYGIENE:** stale agent branches (10-24: homelab 11, agent-runtime 1, circles 3): delete or resume. The ZOMBIE
   hosted runs 32217689970 and 34748702282 (still `queued`) cannot be cancelled by API: operator UI, or ignore. Phantom
   closes: oracle-fleet #25 #24 #22 #7 closed still `agent/review`, sleep-tracking #7 closed `agent/blocked` — relabel.
-  Platform `coordinatorModel` still `opencode-go/deepseek-v4-flash` (live AgentStack 10-24; the 09-25 temporary — back
-  to the subscription when ruled). Stack-side: inert `:dependencyDashboard` lines; agent-runtime's `deps-pin-guard.sh`
+  Platform `coordinatorModel` → `opus` via #2960 (10-27: the Go rail retired deepseek-v4-flash, 410 on every
+  coordinator session; the claim's own exit clause) — confirm the next `coordinate-perstack` child runs clean. Stack-side: inert `:dependencyDashboard` lines; agent-runtime's `deps-pin-guard.sh`
   pre-#83; dead `update-pr-branch.reusable.yml` callers. #1988 closes when its base-image half has its own home.
 - **⚑ DESIGN INPUTS WITH NO OTHER HOME (operator: deliberately not FUs — pick up in a
   design-agents sitting; re-ruled 2026-10-15):**
@@ -208,3 +259,10 @@ standing set below; what differs is cadence and the act rule:
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; watch the FAILURE
   signature explicitly; `PROBE-FAIL` over silent empty state. Monitors survive `/clear` and are
   invisible to TaskList — find leftovers by process and kill before re-arming.
+- **⚑ PICKUP (2026-10-27 20:3xZ — specs-review doorbell, #2975 live, UNPROVEN).** The code reviewer's pod now rings
+  `/specs-review` after a live verdict and the `specs-review` Sensor submits `specs-review-edge-*`; no verdict came
+  after the sync, so the first proof is the next approved PR on homelab/oracle-fleet: expect the edge Workflow and a
+  specs verdict within ~30 s of the code approval (cron path was 93 s–3 min 20 s). If `specs-review-edge-*` never
+  appears, read the reviewer pod's tail for "specs-review doorbell NOT rung". Residual (one line, next docs pass):
+  `docs/agents/specs-reviewer.md` §Reach — an island adopting the lens must also carry the App-permission diff
+  (`statuses: read`, the #2973 lesson), not only the repo list + install.

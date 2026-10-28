@@ -2,8 +2,12 @@
 # Logic in roles/matchbox*; values here. See docs/provisioning.md.
 
 # --- SSH connection (root via the Proxmox seed key, outside the repo) ---
+# The SAME key in two places: the jail's wallet cache (the default) and the management box's
+# provisioned copy, /var/lib/mgmt/pve-ssh/id_ed25519 — the box's apply unit sets PVE_SSH_KEY to it
+# (mgmt/nixos/hosts/mgmt/default.nix; the box applies these plays, docs/management-box.md §"Ansible
+# applies — Matchbox first"). PVE_SSH_KEY is scripts/host-maintenance.sh's name for the same key.
 ansible_user: root
-ansible_ssh_private_key_file: /home/node/.claude/homelab-pve-ssh/id_ed25519
+ansible_ssh_private_key_file: "{{ lookup('ansible.builtin.env', 'PVE_SSH_KEY') | default('/home/node/.claude/homelab-pve-ssh/id_ed25519', true) }}"
 ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
 
 # --- matchbox (server install) ---

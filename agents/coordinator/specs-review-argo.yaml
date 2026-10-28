@@ -94,7 +94,7 @@ spec:
         env:
           - { name: HOME, value: "/home/node" }
           - { name: ORG, value: "teststuffstash" }
-          - { name: SPECS_REVIEW_REPOS, value: "homelab" }
+          - { name: SPECS_REVIEW_REPOS, value: "homelab oracle-fleet" }
           - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc:9091" }
           - { name: GATEWAY_URL, value: "http://agent-gateway.agent-egress.svc.cluster.local:8080" }
           # The SECOND review identity's token (ADR-155). Env is the frozen fallback; the image's
@@ -124,8 +124,8 @@ spec:
           requests: { cpu: "250m", memory: "512Mi" }
           limits: { memory: "2Gi" }
 ---
-# Level-triggered: every 5 minutes, one tick, never two at once (Forbid + the mutex above — the
-# mutex also serializes a future edge submission against the cron, the coordinate-argo lesson).
+# Level backstop: every 5 minutes, one tick, never two at once (Forbid + the mutex above — the
+# mutex also serializes the edge submissions below against the cron, the coordinate-argo lesson).
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
@@ -139,6 +139,48 @@ spec:
   failedJobsHistoryLimit: 5
   workflowSpec:
     workflowTemplateRef: { name: specs-review }
+---
+# Edge: the code reviewer's pod rings POST /specs-review {repo, number} on the agent-loop
+# EventSource (review-argo.yaml) the moment its verdict is on the PR — the specs gate's dispatch
+# premise — and this Sensor submits one tick (operator, 2026-10-27: waiting up to 5 min on the cron
+# for a mechanical approve is not acceptable). The tick is the same level-triggered walk as the cron's
+# (payload ignored beyond the log line), so a ring can never do more than the cron would; the mutex
+# queues an edge tick behind a running one. rateLimit is the dumb outer belt against a verdict storm.
+# Same submit-only ServiceAccount as every agent-loop Sensor (rbac.yaml). No `wake` parameter: the
+# template takes none, and the cron-vs-edge split shows in the Workflow name (specs-review-edge-*).
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: specs-review
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
+  dependencies:
+    - name: specs-review-dep
+      eventSourceName: agent-loop
+      eventName: specs-review
+  triggers:
+    - rateLimit: { unit: Minute, requestsPerUnit: 4 }
+      template:
+        name: submit-specs-review
+        conditions: "specs-review-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: specs-review-edge-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: specs-review }
 ---
 # SHADOW cell runs (gateway/PLAN.md step 3; docs/agents/specs-reviewer.md §Shadow runs): ONE
 # harness × rail cell over a PR list, one-off, never on a schedule. The same script in

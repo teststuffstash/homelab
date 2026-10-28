@@ -95,6 +95,32 @@ spec:
               is whole: `rm /var/lib/mgmt/apply/helm-stopped`, delete the lease
               (`kubectl -n agent-coordinator delete cm upgrade-lease-tofu-helm-<release>`), close the
               window. docs/management-box.md §MB3 "Helm release applies".
+        # ADR-152 step 2 — a box ANSIBLE apply (mgmt/scripts/mgmt-ansible.sh; Matchbox first) STOPPED on its
+        # confirm (a second --check that still changes, a health read that fails) or on a failed apply:
+        # forward only, nothing reverted — the box kept the ⚓ lease and the window and refuses every later
+        # ansible apply until a human clears the marker. Second arm: the lease loop finds such a lease past
+        # its deadline (`ansible_stopped`) — also the box that died mid-bracket.
+        - alert: MgmtAnsibleApplyStopped
+          expr: |
+            mgmt_apply_ansible_stopped == 1
+              or on (instance) (increase(mgmt_lease_revert_total{outcome="ansible_stopped"}[30m]) > 0)
+          for: 5m
+          # triage none: like MgmtHelmApplyStopped — the record is the read, a person clears the stop
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "The management box stopped after an ansible apply — nothing was reverted"
+            description: >-
+              A box-run ansible apply (ADR-152 step 2 — the policy's `apply_ansible` groups, Matchbox
+              first) applied a merged change and its confirm failed: a second `--check` still reported
+              changes, a health read failed (Matchbox HTTP :8080, the matchbox/dnsmasq units), or the
+              apply itself errored — or its ⚓ upgrade lease outlived its deadline unconfirmed. The box is
+              FORWARD ONLY: it did not revert or retry. It kept the lease and the declared window and
+              refuses every later ansible apply. Read `/var/lib/mgmt/apply/ansible-stopped` on
+              192.168.2.53 (it names the record dir: summary.txt + one log per play and phase) and the
+              `management-apply` status on the commit. Once the surface is whole:
+              `rm /var/lib/mgmt/apply/ansible-stopped`, delete the lease
+              (`kubectl -n agent-coordinator delete cm upgrade-lease-ansible-<group>`), close the window.
+              docs/management-box.md §MB3 "Ansible applies — Matchbox first".
         # FU-300 — the apply loop DEFERS while a declared window holds it (docs/management-box.md §MB3
         # "Declared windows hold the apply loop"). A deferral posts no status and completes its tick,
         # so neither MgmtApplyResidueStanding (reads a failure status) nor MgmtApplyLoopStale (reads

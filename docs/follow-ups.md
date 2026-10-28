@@ -185,19 +185,22 @@ six OVERSIZE items pointer-ized into
       Upstream `oxlorg.opnsense` `acme_account` `register()` POSTs `acmeclient/accounts/register`
       without the uuid → 404 (identical in 25.7.8 and 26.1.11; the controller wants
       `register/<uuid>`); prod hides it (account already registered); the test-VM harness
-      pre-registers as a workaround (#2105). (The second defect — `bgpd` never started on first
+      pre-registers as a workaround (#2105). **2026-10-26:** `os-frr` 2.0 (26.7.7, the test VM since its
+      rebaseline) dropped the neighbour `multiprotocol` field and 26.1.11's `frr_bgp_neighbor` fails on
+      every existing row — the bgp role writes neighbours via `raw` since; a collection that knows 2.0
+      retires that too. (The second defect — `bgpd` never started on first
       enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
       (operator's call), then a pin bump + drop the harness workaround.
 - [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs validated on
-      VM 9110; a weekly from-nothing rebuild drill on the box (`mgmt-opnsense-drill.timer`) scores prod's click-ops
-      residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score has the drill record). The pair is
-      COMPLETE (2026-10-09, both windows + WAN leg; history: [`router-move.md`](router-move.md) §Status). Drill GREEN
-      since 2026-10-11 (score 56; 57 on the 10-18 run → `MgmtOpnsenseDrillScoreRegressed` firing). **⚠ 2026-10-17: certs issued on the MASTER never reach the BACKUP** — pve's 17
-      certs are seed copies (identical `statusLastUpdate`s), ACME on pve 400s (no WAN leg as BACKUP; `*.homelab`
-      issued on nx02 only, #2612), no XMLRPC sync by design → a failover serves the default cert; earliest copy
-      (registry, 2026-09-02) hits its renewal mark ~2026-11-01. **Next:** a cert-carry step in the pair's play
-      (export from MASTER → import on BACKUP, frontends re-bound) BEFORE that date; then the 56 click-ops rows
-      (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298, FU-307.
+      VM 9110, box-posted `opnsense-test-vm` on every head since 2026-10-26 (#2930, ADR-152 step 1); a weekly from-nothing rebuild drill on the box scores prod's
+      click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score). The pair is COMPLETE
+      (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (56; 57 on 10-18 →
+      `MgmtOpnsenseDrillScoreRegressed`). 2026-10-26: the pair had never renewed a cert (no AcmeClient cron) — FIXED
+      end to end the same day: `LanCertExpiringSoon` #2927, cron #2934, `opnsense-cert-carry.sh` #2939 (run live, pve's
+      copies current), BACKUP sign guard, HAProxy rebind on cert drift #2940 (pve's `homelab-gw-frontend` bound).
+      **Next:** (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
+      nx02 pve`, idempotent) so the BACKUP follows the MASTER's renewals without a session; (2) the 56 click-ops rows
+      (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80
@@ -375,16 +378,19 @@ six OVERSIZE items pointer-ized into
       doesn't DR). `tofu/homeassistant.tf`. **Router leg LIVE 2026-09-29:** prod users + keys
       minted (#2108), un-suspended (#2117), first run proven (object decrypts to a valid config,
       metrics in Prometheus); `OpnsenseConfigUnattributedRevision` fired on the root-key mint as
-      designed. **Next:** the playbooks move to the `automation` key (ddclient install → assert;
-      dnsmasq-dhcp.py off root) — then the click detector is quiet; the HA `/config` leg stays open.
+      designed. **Automation key DONE 2026-10-26:** every play + `opnsense/*.py` runs as `automation`
+      (the wrapper, the node converge, the box's env, the test-VM harness); 11 privileges added (the
+      403s on test VM 9110), root only for the users play. **Next:** the 04:23 backup run after the
+      2026-10-26 users run reads quiet = acceptance; the HA `/config` leg stays open.
 - [ ] **FU-039** — **Platform self-service (XRD claims) — next legs: POINTER.** Design,
-      completion table and open legs of the public-ingress leg (test claim, ha retrofit, zone-phase
-      rulesets, product zones, the edge-metrics GraphQL poller whose first deliverable is the missing
-      edge-5xx belt): [`docs/cloudflare.md`](cloudflare.md) §PublicRoute + §Observability. The first
-      consumers are live and checked (homelab#1334). Per-stack thin PRs remain: LAN subdomain opt-in
-      (ADR-092), git repos, AppProject/ns. **Next:** zone-phase ruleset aggregation (one claim per
-      profile per zone today) and the ha retrofit as consumer #2. Program: `ROADMAP.md` → "Platform
-      self-service via Crossplane". Relates ADR-076, ADR-085, ADR-092, ADR-101.
+      completion table and open legs of the public-ingress leg (test claim, zone-phase rulesets,
+      product zones, the edge-metrics GraphQL poller whose first deliverable is the missing edge-5xx
+      belt): [`docs/cloudflare.md`](cloudflare.md) §PublicRoute + §Observability. The first consumers
+      are live and checked (homelab#1334); the ha retrofit (consumer #2) landed 2026-10-26 (§Remote
+      access — the cloudflared pin's manual edge, G16 resight). Per-stack thin PRs remain: LAN
+      subdomain opt-in (ADR-092), git repos, AppProject/ns. **Next:** zone-phase ruleset aggregation
+      (one claim per phase per zone today — on teststuff.net the ha claim holds the custom phase).
+      Program: `ROADMAP.md` → "Platform self-service via Crossplane". Relates ADR-076, ADR-085, ADR-092, ADR-101.
 - [ ] **FU-282** — The PublicRoute **origin mark** reads the homelab's WAN address from
       `wg.teststuff.net` — the WireGuard endpoint's ddclient record (ADR-090). Correct value,
       misleading name: a reader of the Composition has no reason to expect the VPN endpoint to be
@@ -665,6 +671,16 @@ the block needs pruning, not more headings.
       uncorrelated. Reader BUILT (#1235; IL-T30 in [`issue-lifecycle-fsm.md`](agents/issue-lifecycle-fsm.md));
       09-13 it latched five ISSUES for one PROVIDER fault. **Next:** re-key provider/model/neither = homelab#1640
       acceptance 5 (open). Relates FU-199, agent-runtime#85, model-routing §M1a.
+
+- [ ] **FU-320** — **Island intake: the gateway admits its own ordinary work (P6 first leg, spike 2026-10-27).**
+      Brief `gateway/intake.md` + selector `gateway/scripts/intake-select.sh` + the two live
+      sittings in `docs/spikes/island-intake.md` (PR #2978 — links once it merges): #2782/#2753 queued with the key
+      rows written in, #2977 filed + standing, #2768/#2650 seat, #2684 standing. Until wired, the seat runs the sitting
+      as an opus subagent when the selector fires, then rings. **Next (operator rulings, spike §Open questions):**
+      the scan clause (`island-intake` unit, brief = the island file, replay fixture); `INTAKE_GOAL_BUDGET_USD`
+      (10) vs "Goals stay human"; may the bot close human-filed issues; rule 10's flag grammar for a closed work
+      issue (pinned text). The `goal` path is unexercised. Settle: bot-filing → `agent/queued` ≈ 0 days on the
+      island, two weeks, rides merging ≤ 2 rounds. Relates FU-270, ADR-139, ADR-155/156, ADR-122.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 

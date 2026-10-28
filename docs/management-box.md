@@ -122,7 +122,7 @@ drill found the same wedge for the revert PR. The split now, per tool
 | `yq`, `kubectl`, `jq`, `curl`, `openssl`, `git`, `awscli2`, `ssh`, coreutils … | the box's closure (`boxTools`, on every loop unit's `path`) — `mgmt_x` | gate machinery: must not depend on any tree it reads; a missing one fails LOUD (`MGMT_BOX=1`), never a silent devbox fallback |
 | `tofu`, `talosctl`, `helm` | the `devbox.lock` of the tree the loop ACTS from (its own master clone), read as **data**: the store path / `NixOS/nixpkgs@<rev>` entry, shape-validated, realised by nix from the signed cache — `mgmt_tree_path` | the version IS part of the change (tofu's state format, the Talos client↔cluster minor, helm 4 vs 3). devbox never runs: no `devbox.json`, no init_hook, no venv. A PR head's `devbox.lock` is never read |
 | tofu **providers** | the planned tree's `.terraform.lock.hcl` — the PR head's for the sentinel | the provider-pin gate (§MB3) plans the head's providers, unchanged |
-| `ansible` (+ its python) | `devbox run` — the belt's `check_ansible` and the weekly rebuild drill only | report-only: a bad lock costs one red belt check, never a wedged gate |
+| `ansible` (+ its python) | `devbox run` — the belt's OPNsense `--check` (`scripts/opnsense-playbook.sh`) and the weekly rebuild drill; the `apply_ansible` plays (§Ansible applies — the apply loop's applier AND the belt's `--check` of them) take ansible-core from the tree's `devbox.lock` as data (`mgmt_lock_tool`, store name `python3.N-ansible-core-<ver>`) | report-only on the belt: a bad lock costs one red belt check, never a wedged gate; in the applier it refuses that group with its reason |
 
 **The in-cluster `iac-sentinel` runs the IMAGE's lock, not master's (operator ruling 2026-10-10,
 FU-305).** The other required context that a bad lock could silence is posted by a pod
@@ -179,7 +179,7 @@ mechanism. The probe set (`mgmt/scripts/mgmt-probe.sh`, run by a systemd timer o
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
 | **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — with its `.ephemeral` install-time half, and `node_declared_k8s`: the labels/taints tofu itself sets, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
 | **the substrate-currency check** (`check_substrate`, 2026-09-23 — FU-254) | DECLARED (the `default` of `talos_version_{controlplane,worker}` / `kubernetes_version` / `cilium_version` in `tofu/variables.tf`, read straight out of the checkout — deliberately not a `tofu output`: none carries the last two, and `node_install_targets` needs the main state and an initialised root) vs UPSTREAM (each project's GitHub releases, drafts and prereleases dropped). It asserts the one thing every other check here takes for granted: **that the declaration itself is still current, and still inside its project's support window** — Talos 1.13 left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a conversation, not a mechanism. Renovate cannot fill this: class 6 in [`dependency-upgrades.md`](dependency-upgrades.md) is deliberately "must not auto-deploy". Publishes `mgmt_substrate_minors_behind{component}` (0 = current), `mgmt_substrate_supported{component}` (0 = EOL) and a fetch-age series; the "how long is too long" judgement is `MgmtSubstrateBehind` (7 d, still supported) / `MgmtSubstrateUnsupported` (1 h, past the window) in `argocd/resources/mgmt-metrics/`. ⚠ **The support windows are hand-encoded constants** in the check (Talos: the CURRENT minor only — community support for 1.13 ended on the 1.14.0 release date, so one minor behind is already EOL and Talos skips the `Behind` grace entirely; Kubernetes and Cilium: three minors) — nothing here discovers a policy, so an upstream that changes its window makes the EOL gauge lie quietly until that table is corrected. ⚠ The upstream answer is **cached 6 h**: the belt ticks every 15 min, and a fetch per tick would be ~288 GitHub API calls a day against a 60/hour anonymous per-IP budget for an answer that moves a few times a year. A component whose release list cannot be read publishes NO series rather than a false "current" |
-| `ansible --check` on an OPNsense play | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
+| `ansible --check` on an OPNsense play + every `apply_ansible` group's plays (Matchbox, since 2026-10-26 — §Ansible applies) | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | **the prometheus-operator CRD owner check** (`check_kps_crds`, 2026-10-07 — ADR-151, gap G16) | every `monitoring.coreos.com` CRD's `operator.prometheus.io/version` equals the running `kube-prometheus-stack-operator` image tag. The pair moves in one Renovate group, but a failed CRD sync, a stack bump merged outside the group, or a lease revert of the stack pin alone (ADR-150 never downgrades CRDs) leave the operator on a schema it did not ship — kube-state-metrics exports no CRD annotations, so the read is this kubectl probe; reason `skew` names the drifted CRDs |
 | each credential it holds, read once | a rotation did not lock the box out |
 
@@ -313,6 +313,13 @@ count-gated org secrets need, and the read-only twin of the Cloudflare write tok
 (`tofu/cloudflare-token/mgmt-read.tf`), so both plans are clean; applies stay on the host / in the
 jail); ansible plays (`--check` of a PR head — the same executes-PR-
 content class, the same allowlist) after that.
+⚠ **The in-cluster half was silently OFF 2026-09-15 → 2026-10-27:** #2088 moved `mgmt-lib.sh` to
+`mgmt/scripts/` and the poster's existence probe (`scripts/mgmt-lib.sh`) returned 0 without a word, so
+the box posted every n/a for six weeks (the `[e:…]` prefix on a "no box-held surface" status is the
+box's; the in-cluster one says "(in-cluster)") and the box-outage property this split exists for did
+not hold. Found by the #2971 proof head after #2970 added the router row. Since then a missing input
+is a loud line per head and `mgmt-policy-test` resolves the poster's own assignments and runs its call
+shape over every `MGMT_BOX_SURFACES` row — a moved file fails the fixture, not the gate.
 
 **Goal children get a base-pass, not a plan (FU-295, 2026-10-06).** The `required-checks` ruleset
 requires this context on `goal/**` bases too, and a box that judged master-bound heads only left
@@ -428,6 +435,53 @@ perform reliably; the incident that forced this is
 [2026-09-16](incidents/2026-09-16-targeted-apply-replaced-three-vms.md).
 `management-apply` is the second status context the App posts: on the master commit the box
 applied (or refused) — the "deployed" signal a PR author reads after merge.
+
+### The router surface — the `opnsense-test-vm` verdict (ADR-152 step 1, 2026-10-26)
+
+The sentinel's second surface: **every open homelab PR head gets an `opnsense-test-vm` status from
+the box** — [`mgmt/scripts/mgmt-router-verdict.sh`](../mgmt/scripts/mgmt-router-verdict.sh), unit +
+timer `mgmt-router-verdict` (`*:1/10`). A master-bound head touching a router path
+(`router_test_vm.paths` in `policy/mgmt/plan-input.yaml`, read from master — the plays, their roles and
+values, the node inventories, the collection pin, the controller python, `opnsense/*.py`) is validated
+on test VM 9110 by **master's** `scripts/opnsense-test-vm.sh` (the five steps, + step `all` when a play
+outside the floor or a script moved — [`opnsense-test-vm.md`](opnsense-test-vm.md)): PASS → `success`,
+FAIL → `failure`, could-not-run → `error`, retried up to three times. The report, scrubbed of
+credentials, is the PR comment (marker `<!-- opnsense-test-vm -->`); the harness's own lines are the
+journal. Every other head gets `success` "n/a: no router path in this head" and a `goal/**` child the
+assembly pass, so **the context never skips** and can be required (`tofu/github/variables.tf`: a
+check that can be absent deadlocks the merge).
+
+- **The same scope split as `management-sentinel` (2026-10-27).** The n/a success is posted by the
+  in-cluster `iac-sentinel` run seconds after a push (`scripts/iac-sentinel.sh`, the
+  `MGMT_BOX_SURFACES` table — one row per box-posted required context, the classifier
+  `mgmt_router_touched` in `mgmt-lib.sh` shared with the box's loop); the box's loop backstops it and
+  skips a head that already carries the context. So a silent box holds only router-path heads, as it
+  holds only root-touching heads for the plan — never every PR.
+- **Required-check shape — the operator's ruling (2026-10-27).** The ruleset's list reads `ci`,
+  `iac-sentinel`, `management-sentinel`, `opnsense-test-vm`: the last three are one mechanic and one
+  identity (the sentinel App), and `opnsense-test-vm` is a narrow surface beside two generic names.
+  Accepted as the one exception — nothing else in sight needs a verdict of this kind. **The next
+  box-judged surface that wants its own required context triggers the refactor instead**: one
+  generic context (a `management-sentinel` whose description names the surface, or `ci` calling the
+  box) with the surfaces hidden behind it, never a fifth row in the ruleset.
+
+- **PR code runs sandboxed.** Ansible roles run `connection: local`, `opnsense/*.py` and the collection
+  are code — on this box, unboxed, a hostile head would read `/var/lib/mgmt/env`. So everything that
+  executes the head's code (galaxy install, the controller-env flake, `ansible-playbook`, the scripts)
+  runs as the system user `mgmt-opnsense-test` with a clean environment (`OPN_TEST_RUN_AS`); the
+  harness, guard, inventory and overrides are master's and alone hold the hypervisor key; the plays'
+  own root ssh to the VM gets a per-run key. The sentinel's stage-1 allowlist is the tofu answer to the
+  same threat; for ansible the answer is the sandbox, not a deny list.
+- **One VM, newest head.** Its own flock (never the sentinel/apply lock — a 15-min run must not stall
+  an apply), its own clone under `/var/lib/mgmt-router` (0711; `/var/lib/mgmt` stays 0700). A run whose
+  PR head moves is killed by the watchdog; the new head is judged next tick. Memo per head sha.
+- **Credentials:** the test VM's own pair (`OPN_TESTVM_API_*` ← wallet `opnsense-test-api-*`) and the
+  pve seed key — nothing that opens the router.
+- **Belts:** `mgmt_router_verdict_*` (textfile) → `MgmtRouterVerdictStale` / `-Errored` /
+  `-MetricsAbsent` ([`router-verdict.yaml`](../argocd/resources/mgmt-metrics/router-verdict.yaml)).
+- **Retry a head left red after three errors:** on the box, `rm /var/lib/mgmt-router/done/<sha>.errors`.
+- A head changing the harness itself (`scripts/opnsense-*.sh`, `ansible/test-vm/**`) is NOT a router
+  path: the box runs master's copy, so it is judged after it lands (the seat's run + the weekly drill).
 
 ### When the box refuses — the human plan (FU-237 (e), 2026-09-16)
 
@@ -816,6 +870,180 @@ read still `ok`; with a kubeconfig pointed at a dead port it read `down` (`kube-
 reconciler's verdict cases in `mgmt-reconcile-test`, the post-check's in `mgmt-policy-test`, the
 alert in `mgmt-metrics.promtool-test`.
 
+### Ansible applies — Matchbox first (ADR-152 program step 2, 2026-10-26)
+
+Until this change a merged `ansible/matchbox*.yml` / `group_vars` / role change deployed nothing; the
+seat re-ran the playbooks by hand. Operator ruling 2026-10-26 ("durable long-term fixes — I don't have
+time to apply updates by hand anymore"): the box is the ONE ansible applier outside ArgoCD, in
+[ADR-152](adr.md)'s program order — Matchbox first (near-zero cone: nothing reads it until the next
+netboot), then the router's BACKUP (ROADMAP §Deploy paths step 3).
+
+**What admits a group.** `policy/mgmt/plan-input.yaml` `apply_ansible.<group>` — codeowner-gated, read
+from master like the rest of the file: `plays` (in order), `paths` (bash case globs over the span's
+files — every commit's, `git log --name-only`, as for the roots), `mode` (`shadow` | `on`, the
+operator's toggle), `hosts`, `cap_min` (the ⚓ lease's deadline), `window_alerts`, `health`. A span
+touching a group's paths runs it behind every gate a root has — the declared-window gate (FU-300) and
+the box verdict (FU-302) first, `refused-rev` on a refusal, the `management-apply` status — after the
+tofu roots, off the loops' shared lock (no tofu state is touched).
+
+**The bracket** (`mgmt/scripts/mgmt-ansible.sh`, sourced by `mgmt-apply.sh`; the helm bracket's shape):
+
+1. **Toolchain** — ansible-core as the clone's `devbox.lock` pins it, read as DATA (`mgmt_lock_tool`,
+   §Two pins — devbox never runs in a gate loop; a bad lock refuses this group with its reason).
+2. **Target** — `--check --diff` of every play at master. changed=0 everywhere → live already IS master
+   (a hand converge, or a no-op change): nothing to apply, status success, the group's confirmed sha
+   advances. The diff hunks go to the journal.
+3. **Drift — the preflight refusal.** The same plays at the sha this group was last CONFIRMED at
+   (`$ADIR/ansible-confirmed-<group>` — an OBSERVATION, written in any mode by every check that read
+   live == a declaration: a clean target (= master), a clean drift read (= that sha), a confirmed
+   apply; the previous master when there is none) run `--check` from a
+   throwaway worktree. Anything but changed=0 refuses to a human: `ansible-live-drift` (live already
+   differs from what was declared before this span — the `helm-live-drift` analogue: the box never
+   applies on top of a state nobody declared), `ansible-check-failed` / `ansible-unreachable` (could
+   not look is never clean). Reading against the CONFIRMED sha rather than the bare previous master is
+   what lets a shadowed span stay correct: a change the box only shadowed is not live, so the next
+   span reads it as pending, not as drift — and the flip from `shadow` to `on` applies it. A human converge clears a drift refusal: the next span's
+   target check reads changed=0.
+4. **Begin** — a stale lease of this group is a STOP (its actor died); a declared window
+   (`agents/seat-window.sh`: the reconciler and the apply loop wait it out — a netboot reinstall never
+   races a Matchbox converge) and `agent-coordinator/upgrade-lease-ansible-<group>` (subject
+   `ansible/<group>`, from = the confirmed sha, to = master, `expected-end` = begin + `cap_min`).
+5. **Apply** — the plays the target `--check` MEASURED as changed, in order, each under
+   `MGMT_ANSIBLE_TIMEOUT` (900 s); the rest are converged by that read (a 0-diff DHCP script would still
+   wipe and re-add — the first BACKUP converge restarted Kea on the standby for nothing).
+6. **Confirm** — a second `--check` is changed=0 AND the row's `health` passes (Matchbox: HTTP `:8080/`
+   and the iPXE entry script answer, `matchbox` + `dnsmasq` `active` on the LXC over the play's own ssh;
+   the ipxe play's own TFTP verify already ran inside the apply). Good → lease deleted, window closed,
+   confirmed sha = master, status success. Bad, or an apply that failed → **STOP**: lease and window
+   KEPT, `/var/lib/mgmt/apply/ansible-stopped` refuses every later ansible apply (shadow rows still
+   evaluate), `mgmt_apply_ansible_stopped` → **`MgmtAnsibleApplyStopped`** (warning, `triage: none`;
+   second arm: the lease loop's outcome `ansible_stopped` — a box that died mid-bracket). The sha is
+   stamped (the apply happened). Never a revert, never a retry.
+
+**Shadow** (`mode: shadow`, and every row while the loop itself is SHADOW): steps 1–3 and the would-be
+apply in the journal (`[shadow] ansible matchbox: would apply …` / `would REFUSE — …`), the metrics, no
+lease, no window, no status; the span still stamps. Metrics (textfile, job `mgmt-node`):
+`mgmt_apply_ansible_last_run_timestamp_seconds{group,mode,outcome}` (converged | shadow | applied |
+refused | stopped) and `mgmt_apply_ansible_would_change{group}`. **Clearing a stop**: read the record
+(`ansible-stopped` names the dir under `/var/lib/mgmt/apply/ansible/`: `summary.txt`, one log per play
+and phase), then `rm /var/lib/mgmt/apply/ansible-stopped`, `kubectl -n agent-coordinator delete cm
+upgrade-lease-ansible-<group>`, `devbox run maint -- close --id <window>`.
+
+**The belt sees what the loop does not look at.** The loop only reads a group when a span touches its
+paths; a hand edit on the LXC between merges is the belt's: `check_ansible` (§MB2) runs every play of
+every `apply_ansible` group in `--check` beside the router's — one play list, the policy's — so live
+drift on Matchbox reads `drift` on `matchbox-lxc` (`MgmtBeltCheckFailing`).
+
+**Check-mode honesty was the precondition.** The plays were never check-clean, so `--check` could not be
+the diff: the matchbox role re-downloaded its release into `/tmp` on every run and the `--check` then
+FAILED at the extract; `get_url` without a checksum reports `changed` on every `--check` (it issues a
+HEAD); the tftpd-hpa mask reported `changed` forever once the package was gone. All three were fixed in
+the roles with this change (the installed version, the asset `.schematic` marker, the mask read) — a
+role that is not check-clean refuses itself on the box (`ansible-check-failed`), which is the signal.
+
+**Proved live (2026-10-26, the box).** After a seat converge in window seat-1793051883-8737 (live =
+master: the proxydhcp header + the new asset marker), the **shadow tick** on #2948 (22:42Z): `--check at
+90f4d4ff → changed — matchbox-ipxe-tftp=1` (the iPXE provenance comment), drift read at 88933e71 clean,
+`[shadow] would apply 88933e71 → 90f4d4ff`, the observation recorded. The **first unattended apply**
+on #2950 (the flip to `on` + the proxydhcp header): 23:13:08Z `--check → proxydhcp=2 ipxe-tftp=1` →
+23:13:39Z drift read at 88933e71 clean → 23:13:40Z window `seat-1793056419-4512` (by `mgmt-apply`,
+alerts `none`) + lease `upgrade-lease-ansible-matchbox` (subject `ansible/matchbox`, from 88933e71,
+to 5400f47e, expected-end 23:43:40Z) → 23:14:12Z APPLY (the dnsmasq handler restarted it 23:14:00Z) →
+23:14:43Z confirm `--check` clean, health ok (`:8080/`, the iPXE script, matchbox + dnsmasq active) →
+23:14:46Z CONFIRMED, lease deleted, window closed → `management-apply` = success "ansible matchbox:
+applied by the management box (3 change(s)) · confirm clean";
+`mgmt_apply_ansible_last_run_timestamp_seconds{group="matchbox",mode="on",outcome="applied"}`.
+
+**Credentials.** Nothing new: the Matchbox plays ssh as root with the Proxmox seed key — the jail's
+`~/.claude/homelab-pve-ssh/id_ed25519`, the box's provisioned copy `/var/lib/mgmt/pve-ssh/id_ed25519`
+(`PVE_SSH_KEY` on the apply and belt units; `ansible/group_vars/matchbox.yml` defaults to the jail path).
+
+### Router config converge — BACKUP-only (ADR-152 program step 3, 2026-10-26)
+
+The same bracket, a second `apply_ansible` row (`opnsense`), with the four router differences ADR-152
+names made mechanical. What it adds to §Ansible applies:
+
+- **The target is the CARP BACKUP, read live** (`target: carp-backup`): every router node in
+  `ansible/router-nodes/inventory.yml` answers `diagnostics/interface/get_vip_status` for the row's
+  `vip` (`.1`); exactly one MASTER and one BACKUP or the span is refused (`ansible-pair-unhealthy` —
+  a node down, INIT, two MASTERs). Never a static name: after a failover the OTHER node is the canary.
+  Every play runs `--limit <backup>`; the MASTER is not reachable from any mode here
+  (`backup-only` is the only non-shadow mode a `carp-backup` row admits — the rolling MASTER path is
+  step 3's later part).
+- **The BACKUP must hold its own config.** OPNsense's XMLRPC config sync (`core/hasync`
+  `synchronizetoip`) would overwrite a BACKUP-only converge from the un-converged MASTER at the next
+  sync, and ADR-152 (3)'s canary would read the MASTER's config. Read 2026-10-26 on both nodes:
+  `synchronizetoip` empty, no sync items — pfsync (state) only, config is per node (each node is
+  converged by `opnsense-router-node.sh converge <node>`). The read is a refusal on every run: sync
+  switched on refuses the span.
+- **The plays** are the router plays the box may run (`bgp`, `unbound`, `haproxy`, `system`) plus the
+  DHCP API scripts (`opnsense/dnsmasq-dhcp.py`, `opnsense/kea-dhcp.py`), whose new `OPN_CHECK=1` is their
+  `--check`: a read-only diff and an ansible-shaped recap line. The scripts run under the node's
+  `scripts/opnsense-router-node.sh script-env <node>` (converge's own rule: a LIVE node serves Kea with
+  the pair's HA peers). A script WITHOUT `OPN_CHECK` support is never run in a check phase — it would
+  ignore the flag and write (the first jail smoke did exactly that, below).
+- **The security boundary is a path policy** (ADR-152 (4); the program's one open fork, **ruled
+  2026-10-26: the sentinel's `deny_paths` shape, per row, in the policy file** — one home, read from
+  master, codeowner-gated — over a role-level list in the applier): the row's `deny_paths` name the
+  WAN-firewall + port-forward surface (`opnsense/tuya-egress.py`: filter + `d_nat` rules), WireGuard,
+  ACME + ddclient (the DNS credentials), the API users and CARP (pair mechanics, and a password the box
+  does not hold). A span touching one is refused to a human (`security-boundary`), whatever else it
+  holds; those plays are not in the row's list either. A `group_vars/opnsense.yml` edit to one of those
+  plays' values selects the row and converges nothing (the plays that read it are not run) — the human
+  path stays `opnsense-router-node.sh converge`.
+- **The revert is LOCAL, armed before the apply** (ADR-152 (2)): after the window and the lease, the box
+  ssh-es to the BACKUP (the seed root key = the pve key) and copies the live `/conf/config.xml` aside
+  (`/conf/box-revert.xml`, plus the config-history head in `/root/box-revert.log`), then starts a sleeper
+  ON THE NODE: unless cancelled within `revert_min` (30), it restores that copy and reboots the node — a
+  BACKUP reboot is the pair's proven move, and it comes back BACKUP (its skew) on the pre-apply config.
+  No arm, no apply. Confirm good → the box cancels it; anything else → STOP and the restore fires by
+  itself: the revert, by construction, needing nothing from the box (whose own path rides the router).
+  The box's ⚓ lease (`cap_min` 45) is the OUTER timer. Not reboot-proof (the FU-308 dead-man's shape):
+  a node that reboots mid-bracket comes up on the converged config with nothing armed, which the
+  confirm then reads. Why not the history API's `revert_backup`: it rewrites `config.xml` and applies
+  nothing (`BackupController::revertBackupAction` — `restoreBackup` + `save`); the reboot is what makes
+  the restored config the running one. **Rehearsed on the test VM 9110 (2026-10-26, the real functions):**
+  armed 90 s → an Unbound host override added via the API → 21:48:12Z `FIRED … restoring … rebooting`
+  → API back, the override gone; armed 600 s → cancelled → flag, copy and sleeper gone; a second arm
+  over a live one refused.
+- **The confirm** adds the read-only serving-rules check (`scripts/opnsense-router-node.sh check
+  <node>`, which now takes the unit's `OPN_API_KEY`/`SECRET` like `opnsense-playbook.sh`) and the
+  pair's CARP map UNCHANGED (the BACKUP still BACKUP, the MASTER untouched) to the second `--check`;
+  `settle_s` (60) before it.
+- **Runner** (`runner: opnsense`): the oxlorg modules need httpx — the interpreter is
+  `ansible/controller-env` built by the box's own nix (data from the clone, never devbox) and the
+  collection is installed by the lock-pinned `ansible-galaxy`; the haproxy/system roles' one ssh
+  read (anti-lockout, hostname) gets `OPN_SSH_KEY` = the box's `PVE_SSH_KEY` (the node's root key IS
+  the pve key — the first box shadow tick failed both plays on the jail's `$HOME` path); the credential is whatever pair
+  `/var/lib/mgmt/env` carries (step 0 made it the `automation` user, #2942) — never minted here.
+- **Shadow first, then BACKUP-only (proved live 2026-10-27).** The box's shadow tick on #2951 (23:39Z):
+  target = the CARP BACKUP `opnsense-pve`, `--check → dnsmasq-dhcp.py=2` (a `descr` on wk-metal-04's
+  reservation); haproxy/system failed their ssh read on the jail's key path → #2952 (`OPN_SSH_KEY`). The
+  drift baseline that tick could not record was read by the seat (jail `--check` at 5400f47e as
+  `automation`, limited to the BACKUP: every play and both scripts 0) and seeded on the box. The
+  **first unattended BACKUP converge** on #2955 (the flip to `backup-only` + a second `descr`): 00:22:38Z
+  target `opnsense-pve`, MASTER untouched → `--check → dnsmasq-dhcp.py=4` → 00:25:27Z drift read at
+  5400f47e clean → 00:25:28Z window `seat-1793060727-4189` + lease `upgrade-lease-ansible-opnsense`
+  (expected-end 01:10:27Z) → **node-local restore ARMED** (00:25:21Z, 1800 s, history head
+  `config-1793051741.7536.xml`) → 00:27:00Z APPLY → 00:29:23Z confirm `--check` clean, `check pve` all
+  ok (LAN via ifconfig, CARP `.1` BACKUP, Kea HA pair, WAN gate DOWN, `.1` serves), CARP map unchanged
+  → 00:29:21Z restore **cancelled** on the node → 00:29:28Z CONFIRMED, lease deleted, window closed →
+  `management-apply` success "applied by the management box (4 change(s)) · confirm clean". The node's
+  config history attributes every write to `automation@192.168.2.53` (the box); the MASTER's head stayed
+  at 2026-10-26 21:37Z. The MASTER still carries the wk-metal-04 `hwaddr` (#2758) and lacks the two
+  descrs — the weekly drill scores against it — until its rolling path (step 3's later part) or a seat
+  `converge nx02`.
+
+**Incident note (2026-10-26, the jail smoke).** The shadow smoke's DRIFT read ran the PREVIOUS master's
+two DHCP scripts — written before `OPN_CHECK` existed — and they did a real rebuild against the prod
+BACKUP (`opnsense-pve`, 21:55:41Z, the root wallet pair: dnsmasq rebuilt with dnsmasq off, Kea rebuilt
++ reconfigured as HA standby). Same data, so no change in kind — it converged the BACKUP's dnsmasq
+`hwaddr` the proof had meant to use — and `opnsense-router-node.sh check pve` read every serving rule
+`ok` straight after. Closed the same commit: `_ans_playbook` refuses a check phase for a `*.py` that
+does not implement `OPN_CHECK` (fixture `py-no-check-support-*`). The first real span after this change
+therefore reads its drift base from a tree without check mode and REFUSES (`ansible-check-failed`) —
+by design, once; every later span's base has it.
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 One row per surface: what the box has done unattended, when, and the evidence, plus its auto-apply
@@ -842,9 +1070,15 @@ even when every check is green.
 | Helm release apply, longhorn (restore point + ordered engine moves + the HOLD for 1-replica volumes) | policy row (#2467, #2491) | **2026-10-11 (CONFIRMED, unattended)** | longhorn 1.12.1 (#2463): first engine move STOPPED (replica socket `bind: address already in use`; converged by itself in ≈31 min — breakage record #1 → the 60-min bounded wait + resume #2479); the live 1-replica move broke garage-1 (ENODATA, incident 2026-10-10) → the HOLD (#2491). **longhorn 1.13.0 (#2487, Renovate): chart bracket 07:04:57→07:17:46Z CONFIRMED (15/15 rolled, BGP 26/26, robustness unchanged); `mgmt-helm-engines` 07:22:33→09:00:14Z: 42/42 moves, 9 holds (garage ×3, CNPG ×5 — primaries fail over first, 187–195 s detaches), 33 consumer checks whole, 42 lease renewals, CONFIRMED.** Records `s3://helm-evidence/20261011T07*-box-longhorn-*`; defect found by the run: #2495 (a running oneshot is `activating`) |
 | Longhorn OFFLINE engine move — the hold (cordon → delete the consumer → detached → patch → uncordon → replacement whole) | engines unit, every 1-replica attached volume | 2026-10-11 (by hand, then the function live) | garage-1 recovery by hand 06:30Z: detached 10 s, Ready 33 s after the uncordon; `helm_lh_offline_move` itself run live from the seat against garage-2 the same morning (image already current — the hold/release half is the whole act) — see §Helm release applies item 4 |
 | The box verdict — its own Prometheus-free read (FU-302) | always on (apply + reconcile gates) | 2026-10-10 (read) | run on the box: `ok`, agreeing with Prometheus; Prometheus pointed dead → `degraded`, direct reads intact. The gates: harness only until the first real DOWN (§The box verdict) |
+<<<<<<< HEAD
+| Router config converge, BACKUP-only (`apply_ansible.opnsense`, §Router config converge — BACKUP-only: the live CARP BACKUP, the node-local restore armed first, the security-boundary `deny_paths`) | `mode: backup-only` (2026-10-27; shadow 2026-10-26) | **2026-10-27 (CONFIRMED, unattended)** | #2955: opnsense-pve, dnsmasq-dhcp.py=4, restore armed 00:25:21Z → cancelled 00:29:21Z, `check pve` ok, CARP unchanged, lease + window closed (§Router config converge — BACKUP-only). The node-local restore FIRING is proven on test VM 9110 only. The MASTER stays the row below |
+| Router config converge, MASTER (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
+=======
+| Router config: test-VM verdict box-posted (`mgmt-router-verdict`, the `opnsense-test-vm` status — §MB3 "The router surface") | always on (a verdict, never an apply) | 2026-10-26 | ADR-152 step 1; PR code sandboxed as `mgmt-opnsense-test`; REQUIRED since 2026-10-27 (#2957 applied; the n/a half in-cluster since #2970 + the lib-path fix) |
 | Router config converge (`scripts/opnsense-router-node.sh converge <node>` — every router play + the API scripts) | human, by ruling (the 2026-09-13 anchor: "human-applied until the redundancy exists"; the pair is complete since 2026-10-09, [`router-move.md`](router-move.md) §Status — the flip is not yet ruled) | — (seat-run per node; the test VM harness + the weekly rebuild drill are its test surfaces, FU-297) | not a box capability yet: class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory; the box path is ROADMAP §Deploy paths program step 3 (shadow `--check` → BACKUP-only → rolling through `carp-maintenance` with the dead-man), lease-wrapped, security-boundary paths excluded (ADR-152) |
+>>>>>>> 05127f5d (mgmt: the box posts the opnsense-test-vm verdict on every PR head (ADR-152 step 1))
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | human, by ruling (operator 2026-09-29: the official update path, no Renovate; majors attended — [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (seat API calls, trialled on test VM 9110 first; prod 2026-09-29 + 2026-09-30) | not a box capability: class 14 in `dependency-upgrades.md`; the box run is ROADMAP §Deploy paths program step 4 (test VM → BACKUP → MASTER under one lease), the revert a `qm snapshot` local to the node (spike D5) |
-| Matchbox (`ansible/matchbox*.yml` — the server + the PXE assets) | human (a playbook re-run) | — | not a box capability: class 15 in `dependency-upgrades.md`; near-zero cone, so it is the FIRST ansible applier candidate (ROADMAP §Deploy paths, the program's step 2: shadow `--check` diff first, then on) |
+| Matchbox (`ansible/matchbox*.yml` — the server + the PXE assets; `apply_ansible.matchbox`, §Ansible applies) | `mode: on` (2026-10-26; shadow tick 22:42Z on #2948) | **2026-10-26 (CONFIRMED, unattended)** | #2950: proxydhcp=2 + ipxe-tftp=1 applied 23:14:12Z, confirm clean + health ok, lease + window closed, `management-apply` success (§Ansible applies) — class 15, the FIRST ansible applier |
 
 ### Non-Talos VMs: the runner verb (2026-10-08)
 
@@ -1406,7 +1640,7 @@ this section.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
   need (the Garage state key + the state passphrase, the Cloudflare token — the read-only
   `homelab-mgmt-read` since FU-238's cloudflare leg, the write key before — and the Matchbox-Proxmox token,
-  the OPNsense API pair) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
+  the OPNsense `automation` API pair — never root's since 2026-10-26, FU-013 — plus the read-only `backup-puller` pair for the drill's compare) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
   `keepass-env.sh` list, one table line each) + `main.tfvars` + the runner App key
   `ci-runner.tf` reads by path + the `homelab-sentinel` App key, plus the file-shaped ones the `provisioning` root reads by path — the
   Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the

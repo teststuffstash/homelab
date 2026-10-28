@@ -258,22 +258,38 @@ unbound_advanced:
 #   which ALSO matches revertBackup/deleteBackup; user-config-readonly is what makes it safe:
 #   both of those call throwReadOnly(), which refuses any user holding it.
 #
-# automation — the ansible plays' own identity (so their revisions stop reading as `root`).
-#   One privilege per API area the opnsense-* roles call (the ACL pattern it grants in brackets):
+# automation — the identity EVERY router play and API script runs as (scripts/opnsense-playbook.sh,
+#   scripts/opnsense-router-node.sh converge, the test-VM harness and the box), so their revisions are
+#   attributed and the click detector stays quiet for them. Since 2026-10-26 root's key runs only the
+#   users play itself (OPN_AS_ROOT=1 in scripts/opnsense-api-users.sh). One privilege per API area
+#   (the ACL pattern it grants in brackets, from the models' ACL.xml):
 #     page-routing                        bgp                  [api/quagga/*]
 #     page-services-acmeclient            acme, haproxy        [api/acmeclient/*]
 #     page-services-haproxy               haproxy              [api/haproxy/*]
-#     page-firewall-virtualipaddress-edit haproxy (VIP alias)  [api/interfaces/vip_settings/*]
+#     page-firewall-virtualipaddress-edit haproxy, carp (VIPs) [api/interfaces/vip_settings/*]
 #     page-services-unbound               unbound, haproxy, wg [api/unbound/*]
 #     page-wireguard-config               wireguard            [api/wireguard/{server,client,general,service}/*]
-#     page-filter-api                     wireguard (WAN rule) [api/firewall/filter/*]
-#     page-services-dyndns                ddclient             [os-ddclient's ACL; prod only — the test VM has no plugin]
-#   Deliberately NOT granted: page-system-firmware-manualupdate ([api/core/firmware/*]), which
-#   the ddclient role uses to install os-ddclient when missing. Package install is root-equivalent;
-#   plugin installs stay a root/bootstrap step. Nor page-services-dnsforwarder ([api/dnsmasq/*],
-#   opnsense/dnsmasq-dhcp.py) — not an ansible play; add it when that script moves off root's key.
-#   Creating the user changes nothing by itself: scripts/opnsense-playbook.sh still reads root's
-#   key (opnsense-api-{key,secret}) until the wrapper is switched in a separate step.
+#     page-filter-api                     wireguard, tuya      [api/firewall/filter/*]
+#     page-services-dyndns                ddclient             [os-ddclient's ACL — exists only with the plugin]
+#     page-system-advanced-network        system               [api/interfaces/settings/*]
+#     page-diagnostics-netflow            system               [api/diagnostics/netflow/*]
+#     page-diagnostics-health             system               [api/diagnostics/systemhealth/*]
+#     page-system-hasync                  carp (pfsync)        [api/core/hasync/*]
+#     page-system-gateways                carp (LAN_GW)        [api/routing/settings/*]
+#     page-services-dnsforwarder          opnsense/dnsmasq-dhcp.py [api/dnsmasq/*]
+#     page-dhcp-kea-v4                    opnsense/kea-dhcp.py [api/kea/dhcpv4/*, kea/service/*]
+#     page-dhcp-kea-ctrl-agent            opnsense/kea-dhcp.py [api/kea/ctrl_agent/*]
+#     page-firewall-alias-edit            opnsense/tuya-egress.py [api/firewall/alias/*]
+#     page-firewall-nat-portforward-edit  opnsense/tuya-egress.py [api/firewall/d_nat/*]
+#     page-status-carp                    acme (the CARP BACKUP guard) [api/diagnostics/interface/get_vip_status*]
+#   Found 2026-10-26 by running every play + script as `automation` on test VM 9110 (the harness's
+#   default identity since then — a play needing a privilege this list lacks fails THERE with a 403).
+#   Deliberately NOT granted: page-system-firmware-manualupdate ([api/core/firmware/*]) — a package
+#   install is root-equivalent; plugins are part of the router's BUILD (the bootstrap's PLUGINS) and
+#   the ddclient play only asserts its plugin. ADR-152 (4)'s human security boundary (WAN firewall,
+#   port forwards, WireGuard, ACME/DNS creds) is a PATH policy on what the box applies — this list is
+#   identity, so it carries what the code under review already writes.
+#   A privilege change converges on the existing user and mints nothing: scripts/opnsense-api-users.sh.
 opnsense_api_users:
   - name: backup-puller
     description: "config.xml backup puller (in-cluster, read-only) - FU-013"
@@ -291,6 +307,17 @@ opnsense_api_users:
       - page-wireguard-config
       - page-filter-api
       - page-services-dyndns
+      - page-system-advanced-network
+      - page-diagnostics-netflow
+      - page-diagnostics-health
+      - page-system-hasync
+      - page-system-gateways
+      - page-services-dnsforwarder
+      - page-dhcp-kea-v4
+      - page-dhcp-kea-ctrl-agent
+      - page-firewall-alias-edit
+      - page-firewall-nat-portforward-edit
+      - page-status-carp
 
 # --- opnsense-system : router-wide settings no service role owns (FU-297) -----------------
 # Prod's CURRENT values (read 2026-09-29), so the play is a no-op against prod; the rebuild drill
