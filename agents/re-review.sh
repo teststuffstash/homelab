@@ -497,7 +497,8 @@ EOF
       # reply with no bytes at all is a non-event worth one more attempt.
       oc_raw=""; oc_text=""
       for oc_try in 1 2; do
-        oc_raw="$($OPENCODE_RUN -m "$MODEL" "$PROMPT_CONTENT" 2>/dev/null)" || oc_raw=""
+        # </dev/null: opencode >=2 `run` waits for EOF on a piped stdin (agent-session.sh harness-run-cmd).
+        oc_raw="$($OPENCODE_RUN -m "$MODEL" "$PROMPT_CONTENT" </dev/null 2>/dev/null)" || oc_raw=""
         [ -n "$(printf '%s' "$oc_raw" | tr -d '[:space:]')" ] && break
         echo "  attempt $oc_try: empty completion — retrying once"
       done

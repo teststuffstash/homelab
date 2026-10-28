@@ -11,6 +11,10 @@
 #      the recipe file as the task prompt.
 #   3. The rest of the pod command is unmoved: prelude, then the base64 decode, then `opencode run
 #      -m ${OPENCODE_MODEL} ...`.
+#   4. `opencode run` ends in `</dev/null`. opencode >=2 (agent-runtime#183) reads a piped stdin as
+#      extra prompt and waits for EOF; the pod's stdin never closes, so without it the ride idles
+#      until the 4h deadline (incident 2026-10-28, the FU-187 quiet-stall shape). The pre-fix
+#      RUN_CMD fails this fixture's expected line.
 name: harness-run-cmd-opencode
 mode: actions
 source: agents/agent-session.sh
