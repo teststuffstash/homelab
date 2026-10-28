@@ -10,6 +10,8 @@
 #                downgrade — a line-move row for it would double-count the same fact)
 #   a no-move lock → all three empty and the body section prints "none" twice
 #   an unparseable version pair (a hash) → majors (changed + unparseable), never downgrades
+#   regen_generated (G12b): the head lock's gh ref renders the allowlist and LISTS it; a render failure
+#                warns, lists nothing, never aborts; no generator in the repo → nothing, silently
 #   lane (lock_lane, 2026-10-07): #2260 → arm (argo-workflows is a major, opentofu only a line move);
 #                an opentofu MAJOR → human; HUMAN_PACKAGES is the seam (empty set → always arm)
 #   devbox run devbox-update-test
@@ -117,6 +119,37 @@ check "flake: lastModified went backwards → the move is ALSO a downgrade" "nix
 check "flake: no change → no moves" 0 "$(jq -r '.moves | length' <<<"$(flake_moves "$fl_old" "$fl_old")")"
 check "flake: the real mgmt/nixos/flake.lock parses (no-move against itself)" 0 \
       "$(jq -r '.moves | length' <<<"$(flake_moves "$(cat "$HERE/../mgmt/nixos/flake.lock")" "$(cat "$HERE/../mgmt/nixos/flake.lock")")")"
+
+# regen_generated (G12b, #2919): a tool-generated file rides the lock bump. `nix` is stubbed on PATH:
+# it records the flake ref and runs the `-c` command (or fails when NIX_STUB_FAIL=1), so the cases
+# pin the contract — the head lock's gh ref is used, the file is LISTED (so the PR is not "already
+# current" on a gh-only move), and a render failure warns without aborting or listing.
+rg="$(mktemp -d)"; mkdir -p "$rg/bin" "$rg/repo/agents/replay/stubs"
+cat >"$rg/bin/nix" <<'STUB'
+#!/usr/bin/env bash
+echo "$2" >"$NIX_STUB_LOG"
+[ "${NIX_STUB_FAIL:-0}" = 1 ] && exit 1
+[ "$3" = -c ] || exit 3; shift 3; exec "$@"
+STUB
+printf '#!/usr/bin/env bash\necho rendered >"$(dirname "$0")/stubs/gh-json-fields.tsv"\n' >"$rg/repo/agents/replay/gh-json-fields.sh"
+chmod +x "$rg/bin/nix"
+echo '{"packages":{"gh@latest":{"resolved":"github:NixOS/nixpkgs/674a2028#gh"}}}' >"$rg/repo/devbox.lock"
+export NIX_STUB_LOG="$rg/nix.log"
+out="$(cd "$rg/repo" && PATH="$rg/bin:$PATH" regen_generated 2>"$rg/err")"
+check "regen: lists the allowlist (a gh-only move is not 'already current')" "agents/replay/stubs/gh-json-fields.tsv" "$out"
+check "regen: renders through the HEAD lock's gh flake ref" "github:NixOS/nixpkgs/674a2028#gh" "$(cat "$rg/nix.log")"
+check "regen: the file was re-rendered" rendered "$(cat "$rg/repo/agents/replay/stubs/gh-json-fields.tsv")"
+out="$(cd "$rg/repo" && NIX_STUB_FAIL=1 PATH="$rg/bin:$PATH" regen_generated 2>"$rg/err")"; rc=$?
+check "regen: a render failure lists nothing" "" "$out"
+check "regen: a render failure does not abort" 0 "$rc"
+check "regen: a render failure warns" 1 "$(grep -c '^::warning::.*could not regenerate the gh --json allowlist' "$rg/err")"
+echo '{"packages":{}}' >"$rg/repo/devbox.lock"; : >"$rg/nix.log"
+out="$(cd "$rg/repo" && PATH="$rg/bin:$PATH" regen_generated 2>"$rg/err")"
+check "regen: no gh in the lock → nothing listed, nix not called, a warning" "||1" "$out|$(cat "$rg/nix.log")|$(grep -c '::warning::' "$rg/err")"
+rm "$rg/repo/agents/replay/gh-json-fields.sh"
+out="$(cd "$rg/repo" && PATH="$rg/bin:$PATH" regen_generated 2>"$rg/err")"
+check "regen: a repo without the generator → nothing, silently" "|0" "$out|$(grep -c . "$rg/err")"
+rm -rf "$rg"
 
 echo "devbox-update-test: $n check(s), $fails failure(s)"
 [ "$fails" -eq 0 ]
