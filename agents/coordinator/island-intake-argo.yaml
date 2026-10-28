@@ -187,9 +187,11 @@ spec:
 
               The inputs are \`text:\` inputs with \`source: dig\` — findings of the grouped deep dig
               (docs/agents/roles.md §deep dig), each a diagnosis of standing alerts with the reads it
-              made. Treat each as a CLAIM (intake.md procedure step 1): live-verify it — the code line
-              it names, the alert (curl -s http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts),
-              and the issues/PRs filed or merged since the finding's timestamp. Several findings are
+              made. Treat each as a CLAIM (intake.md procedure step 1): live-verify it within the brief's
+              read set — the spec row it names, the alert's live state (curl -s
+              http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts), the log lines
+              the alert's annotation names, and the issues/PRs filed or merged since the finding's
+              timestamp. Several findings are
               often ONE cause (the dig groups by onset + host, and re-digs a renamed tail alert):
               rule them together — one issue for one change. When you \`file\`, the issue's prose names
               the finding id(s) as its origin (\`Origin=\` is prose for a non-issue source).

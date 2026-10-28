@@ -243,7 +243,7 @@ rm -f "$REPO_SNAP/docs/agents/meta-state.md"
 # hand-written {alertname, subject} object. That hand-written shape is the one the gate matched
 # and no harvested record ever carried: the fixture passed while the live gate re-dug the same
 # group four days running (2026-10-06…09).
-CFP_ALERT() { alert KubeDeploymentReplicasMismatch $((NOW - 8*3600)) "$(jq -nc --argjson k "$KSM" --arg d "${1:-cf-api-proxy}" '$k + {namespace:$d, deployment:$d, triage:"dig"}')"; }
+CFP_ALERT() { alert KubeDeploymentReplicasMismatch "${CFP_ONSET:-$((NOW - 3*86400))}" "$(jq -nc --argjson k "$KSM" --arg d "${1:-cf-api-proxy}" '$k + {namespace:$d, deployment:$d, triage:"dig"}')"; }
 prior_from_run() { # <finding-ts-epoch> <verdict> — harvest a finding for THIS scenario's group 0 → $H/prior.json
   go
   local key; key="$(jq -r '.groups[0].key' "$H/digest.json")"
@@ -264,6 +264,24 @@ jq -e '.[0] | has("alertname") | not' "$H/prior.json" >/dev/null 2>&1 && jq -e '
   && ok "the harvested record carries the digest's members, no top-level alertname (the real shape)" || bad "harvested prior shape" "$(cat "$H/prior.json")"
 go
 jqok "a HARVESTED dig finding for the same (alert, subject) 2 days ago explains it (no daily re-dig)" '.counts.unexplained == 0 and (.explained[0].explained_by | startswith("dug "))'
+
+# A cause-found prior explains only the episode it saw: the alert re-firing in an episode that
+# STARTED after the finding is dug again (2026-10-28, GoCatalogParseFailed's new vendor cause);
+# an `explained` prior keeps its window (a nightly known condition is not re-dug per night).
+scenario explained-prior-dig-new-episode
+am "[$(CFP_ALERT)]"
+prior_from_run $((NOW - 2*86400)) cause-found
+CFP_ONSET=$((NOW - 8*3600)); am "[$(CFP_ALERT)]"
+go
+jqok "a cause-found prior does NOT explain an episode that started after it (the condition is back)" '.counts.unexplained == 1'
+am "[$(CFP_ALERT)]"; CFP_ONSET=$((NOW - 3*86400))
+scenario explained-prior-dig-new-episode-explained
+am "[$(CFP_ALERT)]"
+prior_from_run $((NOW - 2*86400)) explained
+CFP_ONSET=$((NOW - 8*3600)); am "[$(CFP_ALERT)]"
+go
+jqok "…an explained prior still does (no per-night re-dig of a known recurring condition)" '.counts.unexplained == 0'
+unset CFP_ONSET
 
 scenario explained-prior-dig-stale
 am "[$(CFP_ALERT)]"

@@ -49,6 +49,7 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 | The spec page(s) the item names — the requirement section + the page's index row, nothing more | live-verify the claim (is the flag still there? does the row still say that?) |
 | Open issues of the repo whose title or `Touches` name the same requirement/page; PRs merged since the item was filed that touch the same page | dedup, supersession |
 | Open `task/goal` issues whose `## Acceptance` names the item's surface | a covering Goal (ADR-122 (4): a sprout binds INTO its container) |
+| For a `dig` input: the alert's live state (Alertmanager) and the log lines its annotation names | is the condition still there, and is it still THIS cause (a re-fire on a new cause is the next dig's, not this ruling's) |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
 
 Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islands, the gateway's
