@@ -17,6 +17,10 @@ Two layers (per the chosen design):
 Plus, the repos themselves are managed here (fully, not click-ops):
 - **Repos** (`repos.tf`, `github_repository`, adopted via `import` blocks): every writable setting is
   declared — visibility, merge methods, and the auto-merge + auto-delete-branch that complete the flow.
+- **Security contact** (`security.tf`): the public `.github` repo carrying the org-default
+  `SECURITY.md` (source: `files/SECURITY.md` — the disclosure policy's only home) + GitHub private
+  vulnerability reporting on every public repo — done by `scripts/github-tf.sh` after each successful
+  `apply` (an API PUT per repo: no provider resource, and the sentinel refuses provisioners).
 - **Deploy keys** (`deploy_keys.tf`): the rasmus-soot-cv write deploy key + its org PR-ruleset
   exclusion (#751; key material in the wallet, `homelab-cv-deploy/`).
 - **Agent labels** — NOT here anymore: `labels.tf` was retired 2026-08-04 (FU-068); the whole
@@ -52,6 +56,7 @@ owner:
 - **Organization permissions → Administration: Read and write**  ← unblocks the org ruleset
 - **Organization permissions → Secrets: Read and write**  ← for the org Actions secrets (actions_secrets.tf; `DEPLOY_APP_*`/`RENOVATE_APP_*`/`REVIEWER_APP_*` — the `MERGE_GH_APP_*` pair retired 2026-08-26, ADR-111; 403 on `/orgs/*/actions/secrets/public-key` without it)
 - **Repository permissions → Administration: Read and write**  ← for the per-repo rulesets + `github_repository` (repos.tf)
+- **Repository permissions → Contents: Read and write**  ← for `github_repository_file` (security.tf writes `.github/SECURITY.md`)
 - **Repository permissions → Issues: Read and write**  ← historical grant for the retired labels.tf era; labels are claim-owned now (harmless to keep — labels live under Issues, not Administration)
 
 If the org enforces PAT approval the token sits "pending"; approve it yourself as owner. Then:

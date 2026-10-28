@@ -6,7 +6,7 @@
 #
 # Sibling of scripts/tf.sh (main root), same dual-path cred resolution. Sources, in order:
 #   1. (retired 2026-08-26, ADR-111/homelab#745 — the merge-App org secrets are gone from this root)
-#   2. GITHUB_TOKEN  ← the teststuffstash ORG ADMIN token (Administration:R/W on repos+rulesets +
+#   2. GITHUB_TOKEN  ← the teststuffstash ORG ADMIN token (Administration:R/W on repos+rulesets + Contents:R/W (security.tf) +
 #      Issues:R/W for labels), from a SEPARATE KeePass wallet. An already-set GITHUB_TOKEN wins (wallet skipped).
 #
 # The org-admin token lives in a SEPARATE, dedicated wallet (~/Documents/homelab-admin.kdbx, entry
@@ -105,4 +105,19 @@ fi
 TOFU_STATE_ROOT_DIR="$ROOT/tofu/github" . "$ROOT/scripts/tofu-state-env.sh" || exit 1
 tofu -chdir="$ROOT/tofu/github" init -input=false >&2
 echo "github-tf: GITHUB_TOKEN set → tofu -chdir=tofu/github $*" >&2
-exec tofu -chdir="$ROOT/tofu/github" "$@"
+[ "${1:-}" = apply ] || exec tofu -chdir="$ROOT/tofu/github" "$@"
+tofu -chdir="$ROOT/tofu/github" "$@" || exit $?
+
+# After a successful apply: GitHub private vulnerability reporting ON for every public repo in the org
+# (tofu/github/security.tf says why it lives here — no provider resource, provisioners refused). The
+# PUT is idempotent; PVR exists for public repos only; never turned off here (one-way, deliberately).
+ORG="${TF_VAR_org:-teststuffstash}"   # tofu/github/variables.tf var.org default
+repos="$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' \
+  "https://api.github.com/orgs/$ORG/repos?type=public&per_page=100" | jq -r '.[] | select(.archived | not) | .full_name')" \
+  || { echo "github-tf: PVR — listing public repos failed" >&2; exit 1; }
+for r in $repos; do
+  curl -fsS -o /dev/null -X PUT -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/$r/private-vulnerability-reporting" \
+    || { echo "github-tf: PVR enable failed on $r" >&2; exit 1; }
+  echo "github-tf: PVR on: $r" >&2
+done
