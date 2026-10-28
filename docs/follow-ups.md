@@ -876,7 +876,7 @@ the block needs pruning, not more headings.
       **Next:** pick the cheap belt — a no-growth clause in agent-storm-watchdog (run.log
       unchanged Nm ⇒ the same kill path WITH strike bookkeeping, beating the reap), or the
       proxy-side signal (key silent Nm while its ride pod Runs); the SIGTERM-trap finalize on
-      deadline is the agent-runtime half. Relates FU-072 (this trigger's cause).
+      deadline is the agent-runtime half. Relates FU-072. Resight 10-28: opencode 2.x stdin hang, 2 rides ([incident](incidents/2026-10-28-opencode-2-stdin-hang.md)).
 
 - [ ] **FU-188** — **Reviewer 404-loop / the combination table — POINTER.** Postmortem, belt audit, yaml-in-git
       ruling, legs: [`incidents/2026-08-26-reviewer-404-loop.md`](incidents/2026-08-26-reviewer-404-loop.md) §Residual
