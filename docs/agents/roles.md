@@ -458,7 +458,11 @@ never harder posture on quiet ones.
   `RetroReportOverdue`); `meta-alert-crosscheck.sh` names the firing `dig` set once per sweep as
   `routing-dig`, never as untriaged machinery. What the seat reads: the findings in the bucket
   (`devbox run garage-s3 s3 ls s3://agent-transcripts/homelab/` for the `dig-<date>/` prefixes) —
-  surfacing them on the board is the next step, not built here.
+  surfacing them on the board is the next step, not built here. **Island findings are consumed:**
+  a `cause-found` finding whose text names an island (`gateway/`) is a `text:` input to that
+  island's intake sitting — [`island-intake-argo.yaml`](../../agents/coordinator/island-intake-argo.yaml),
+  daily 05:00Z, brief [`gateway/intake.md`](../../gateway/intake.md) — which folds, files and queues
+  it (FU-320); the dig itself still files nothing.
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (a human-queued
   MISSION issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a

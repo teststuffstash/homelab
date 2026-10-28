@@ -79,6 +79,22 @@ spec:
           annotations:
             summary: "The grouped deep dig has not run in >2 days — standing/recurring dig alerts are not being investigated"
             description: "The daily 03:30Z deep-dig CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since the lane shipped 2026-10-04). Every triage: dig alert that stands or recurs is unread until it does. Check: argo -n agent-coordinator cron get deep-dig and the newest deep-dig-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/deep-dig. Design: docs/agents/roles.md §deep dig; selector: agents/deep-dig-select.sh."
+        # ── island intake's own belt (FU-320, 2026-10-28) ─────────────────────────────────────
+        # agents/coordinator/island-intake-argo.yaml pushes island_intake_last_run_timestamp_seconds
+        # on EVERY exit path (hold, cap, probe failure, session done) — the DeepDigStale shape for the
+        # lane that admits the dig's island findings. Same 8d bridge + `or vector(0)`, same 2 d on a
+        # daily schedule. triage: none + platform_machinery — the remedy is reading the cron in Argo.
+        # Fixture: island-intake.promtool-test.
+        - alert: IslandIntakeStale
+          expr: (time() - (max(max_over_time(island_intake_last_run_timestamp_seconds[8d])) or vector(0))) > 2 * 86400
+          for: 6h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: none
+          annotations:
+            summary: "Island intake has not run in >2 days — the dig's island findings are not being admitted"
+            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig's cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: gateway/intake.md; selector: gateway/scripts/intake-select.sh --source dig."
         # A negative cost is a DATA-QUALITY bug, never a discount — the probe-fails-into-a-value
         # class (agent-runtime#12 fixed the known instance; this alert catches regressions and any
         # new path that subtracts against a failed read).

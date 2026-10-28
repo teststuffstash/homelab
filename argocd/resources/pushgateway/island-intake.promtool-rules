@@ -1,0 +1,26 @@
+# IslandIntakeStale, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is its
+# one home) — the rules file that island-intake.promtool-test loads. Not a manifest and not applied to
+# anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml on purpose —
+# manifest-lint kubeconforms EVERY *.yaml under argocd/resources.
+#
+# ONE ALERT, its OWN file, for the same reason DeepDigStale has one (deep-dig.promtool-
+# rules' header): the restart-gap contract is a DIFFERENCE-shaped behaviour worth its own fixture.
+#
+# ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
+# editing the alert:
+#
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "IslandIntakeStale")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-runs
+    rules:
+      - alert: IslandIntakeStale
+        expr: (time() - (max(max_over_time(island_intake_last_run_timestamp_seconds[8d])) or vector(0))) > 2 * 86400
+        for: 6h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: none
+        annotations:
+          summary: Island intake has not run in >2 days — the dig's island findings are not being admitted
+          description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig''s cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: gateway/intake.md; selector: gateway/scripts/intake-select.sh --source dig.'

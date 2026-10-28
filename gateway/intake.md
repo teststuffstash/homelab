@@ -2,7 +2,7 @@
 
 > **Brief, v0 (spike, 2026-10-27).** The gateway is the first island to run it; the rules are
 > island-agnostic, the §Island facts block is the gateway's. Design, evidence and the open
-> questions: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md). The ancestor is
+> questions: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) (tracked by FU-320). The ancestor is
 > the coordinator's `goal-decompose` clause
 > ([`agents/coordinator/README.md`](../agents/coordinator/README.md) §The `goal-decompose` clause):
 > same authoring rules, one level earlier — a decompose starts from a Goal a human admitted; this
@@ -28,8 +28,11 @@ The dispatch prompt names them:
 - `issues:` `<owner/repo>#<n>` …, selected by [`scripts/intake-select.sh`](scripts/intake-select.sh)
   (island membership + no `agent/*` lifecycle label + no standing intake ruling). Trigger: ≥ 3 such
   issues, or the oldest ≥ 24 h — one sitting per trigger, never per issue.
-- `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`) —
-  prose someone wrote instead of an issue. A text input becomes an issue (`file`) only when its
+- `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`,
+  `dig`) — prose someone wrote instead of an issue. **`dig` is the wired source:**
+  [`agents/coordinator/island-intake-argo.yaml`](../agents/coordinator/island-intake-argo.yaml)
+  runs this sitting unattended each morning over the [deep dig](../docs/agents/roles.md)'s `cause-found` findings that name
+  the island (`scripts/intake-select.sh --source dig`); its prompt adds the receipt protocol. A text input becomes an issue (`file`) only when its
   ruling would be `queue`, `goal` or `seat`; a `standing` or `close` ruling on text is
   report-only — the source record keeps it (one home per fact), the report says why.
 - `mode: dry-run | apply`. Dry-run writes NOTHING to GitHub; the report carries every body and
@@ -46,6 +49,7 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 | The spec page(s) the item names — the requirement section + the page's index row, nothing more | live-verify the claim (is the flag still there? does the row still say that?) |
 | Open issues of the repo whose title or `Touches` name the same requirement/page; PRs merged since the item was filed that touch the same page | dedup, supersession |
 | Open `task/goal` issues whose `## Acceptance` names the item's surface | a covering Goal (ADR-122 (4): a sprout binds INTO its container) |
+| For a `dig` input: the alert's live state (Alertmanager) and the log lines its annotation names | is the condition still there, and is it still THIS cause (a re-fire on a new cause is the next dig's, not this ruling's) |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
 
 Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islands, the gateway's

@@ -174,18 +174,26 @@ explain_meta() { # <alertname> — only an explicit `dig-explained:` marker line
       for (j = 1; j <= k; j++) if (a[j] == n) { print "meta-state: " (reason == "" ? "dig-explained" : reason); exit }
     }' "$DIG_REPO/docs/agents/meta-state.md" 2>/dev/null
 }
-explain_prior() { # <alertname> <subject>
+explain_prior() { # <alertname> <subject> [<startsAt of the firing episode>]
   # The key is the finding's `members` — [{alertname, subject}], stamped by `harvest` from the
   # run's OWN digest (the shell's key, never the session's prose). A finding harvested before the
   # stamp existed (pre-2026-10-09) has only the session's `alerts` strings, "<alertname> (<subject>)"
   # per the brief — parsed as the fallback so the already-stored week still dedups. The gate
   # matched a top-level .alertname/.subject no harvested record ever carried, so the same group
   # was re-dug daily (2026-10-06…09) while the fixture fed the never-produced shape.
-  printf '%s' "$PRIOR" | jq -r --arg n "$1" --arg s "$2" --argjson cut "$(( DIG_NOW - DIG_REDIG_DAYS * 86400 ))" '
+  # A prior `cause-found`/`fix-proposed` explains only the EPISODE it saw: when the alert is firing
+  # in an episode that STARTED after that finding, a fix was expected and the condition is back —
+  # news, so it is dug again (2026-10-28: GoCatalogParseFailed{docs} re-fired on a NEW vendor
+  # cause the day after its 10-25 cause shipped, and the 7-day key hid it). `explained` and
+  # `unexplained` priors keep the full window — a nightly-recurring known condition must not be
+  # re-dug per night (the 10-06…09 lesson). A quiet recurring candidate has no startsAt: unchanged.
+  printf '%s' "$PRIOR" | jq -r --arg n "$1" --arg s "$2" --arg st "${3:-}" --argjson cut "$(( DIG_NOW - DIG_REDIG_DAYS * 86400 ))" '
     def keys_of: if (.members | type) == "array" and (.members | length) > 0 then .members
       else [ (.alerts // [])[]? | strings | capture("^(?<alertname>[^ (]+) \\((?<subject>.*)\\)$")? ] end;
     [ .[]? | select(type == "object") | select(keys_of | any(.alertname == $n and .subject == $s))
-      | select(((.ts // "") | if . == "" then 0 else (fromdateiso8601? // 0) end) > $cut) ]
+      | select(((.ts // "") | if . == "" then 0 else (fromdateiso8601? // 0) end) > $cut)
+      | select(($st == "") or ((.verdict // "") | IN("cause-found", "fix-proposed") | not)
+               or (($st | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601? // 0) <= ((.ts // "") | fromdateiso8601? // 0))) ]
     | first | if . == null then "" else "dug \(.ts) (\(.verdict // "?"))" end' 2>/dev/null
 }
 
@@ -265,7 +273,7 @@ cmd_select() {
     local name subj why
     name="$(printf '%s' "$c" | jq -r '.alertname')"; subj="$(printf '%s' "$c" | jq -r '.subject')"
     why="$(explain_window "$name")"
-    [ -n "$why" ] || why="$(explain_prior "$name" "$subj")"
+    [ -n "$why" ] || why="$(explain_prior "$name" "$subj" "$(printf '%s' "$c" | jq -r '.startsAt // ""')")"
     [ -n "$why" ] || why="$(explain_issue "$name" "$subj")"
     [ -n "$why" ] || why="$(explain_fu "$name")"
     [ -n "$why" ] || why="$(explain_meta "$name")"
