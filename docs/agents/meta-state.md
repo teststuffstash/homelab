@@ -35,6 +35,11 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   'multiprotocol'", os-frr 2.0_2) and the haproxy play timed out — seen by the #2940 gate's BASE step. Prod stays
   26.7.5 until the collection (Galaxy latest IS 26.1.11; upstream O-X-L/ansible-opnsense#488 covered 26.7 only)
   handles it or the neighbor task moves to `raw`. Needs an owner + a record before any prod firmware step.
+- **⚑ PICKUP (2026-10-28 — minio-client → rclone; TICK-LOG 10-28).** Workers on oracle-fleet#939 + circles#135 (mc→rclone,
+  scripts/tests only). When each merges: seat PR in that repo dropping `minio-client` from devbox.json/lock (codeowner-author
+  per `classify_touches`) + oracle-fleet's ci.yaml `mc` comment — then the weekly devbox-update's stack legs go green.
+  circles#135 r1/r2 were the opencode 2.x stdin hang (#2998); confirm r3 actually progresses. Also owed: G12b proof (#2995 —
+  the next red ARMED automerge PR gets a ride) and the FU-187 detector (operator to pick).
 - **⚑ PICKUP (2026-10-24 12:30Z — S9 Renovate sweep; TICK-LOG 10-24).** Verify next session: homelab#2819 regrouped
   (chart 2.4.3 + digest) after #2886; sleep-tracking#203 rebuilt by Renovate after the 12:01Z hand-back; allure#11
   regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).
