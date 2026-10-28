@@ -267,8 +267,21 @@ classes:
     revert: {status: ok, text: "`git revert` of the one line; the pin has no consumer outside a Renovate branch"}
     canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory): the detector + revert pair substitutes for a canary here"}
 
+  - id: 18
+    name: Check-time policy inputs
+    extract: policy_inputs
+    where: "the two pins `scripts/component-check.sh` (`devbox run component-check`, report-only — docs/agents/iac-lane.md §L0b) evaluates manifests against, neither deployed anywhere: `KYVERNO_POLICIES_CHART_VERSION` (the `kyverno-policies` chart, rendered at check time as the Pod Security `restricted` set) and `scripts/vendor-kyverno-policies.sh`'s `KYVERNO_POLICIES_REF`/`KYVERNO_POLICIES_SHA` (the kyverno/policies `release-1.19` head the `policy/component/` library rules are vendored from)"
+    manager: "custom.regex — the class-4-shaped `# renovate: datasource=helm depName=kyverno-policies registryUrl=…` annotation over the chart line; a `git-refs` digest manager over the `KYVERNO_POLICIES_REF`+`KYVERNO_POLICIES_SHA` pair, with `scripts/vendor-kyverno-policies.sh` as the branch's `postUpgradeTasks` command (the second G12 consumer — docs/renovate.md §Gotchas) so the bump is born with the files re-fetched (renovate-global.json, operator-direct, 2026-10-25)"
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["scripts/component-check.sh", "scripts/vendor-kyverno-policies.sh", "policy/component/"]
+    proposer: {status: ok, text: "Renovate `custom.regex` over the two scripts (renovate-global.json, 2026-10-25, homelab#2911): the chart by version, the library by branch-head digest; the library publishes no release tags, so the pin is the `release-1.19` head (operator ruling 2026-10-25 — main is mid-migration, docs in the vendor script's header). Proof pending: the first `renovate/` PR that moves either line"}
+    merge_gate: {status: ok, text: "patch/minor + digest → `automerge` (reflex-approved; `scripts/` and `policy/component/` carry no codeowner row) — a bump changes only what the REPORT says, never what the cluster runs; majors → the un-armed catch-all (a chart major may rename policies or change `policyType` semantics)"}
+    deploy_edge: {status: ok, text: "self-deploying and cluster-free: the next `component-check` run (CI on the branch, the seat's `devbox run component-check`) renders the new chart version and evaluates the re-fetched files — nothing on the cluster consumes these pins (the admission seat is FU-191, undecided)"}
+    detector: {status: ok, text: "the Renovate branch's own `component-check` run is the detector: a chart that fails to render or a vendored file the CLI rejects is a tool error in the report, and `vendor-kyverno-policies.sh --check` inside every run reds a vendored copy that drifted from its pin (the postUpgradeTasks re-fetch failing to run would show here). Report-only until `--enforce` is wired, so the red is a line the reviewer reads, not a check"}
+    revert: {status: ok, text: "`git revert` of the bump commit — the pin lines and the re-fetched `policy/component/` files travel in the same commit by construction (postUpgradeTasks `fileFilters`), so the revert is complete and `--check` proves it"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10, docs/dependency-upgrades.md §The dependency inventory) — and moot here: the pins feed a report, there is no live instance to canary"}
+
   - id: 19
-    # 18 is held by the open component-check PR (#2911, `policy_inputs`) — numbered past it.
     name: Backup Garage LXC (the Longhorn/CNPG backup target)
     extract: garage_backup
     where: "`ansible/group_vars/garage_backup.yml` — `garage_version` + `garage_sha256` (a static musl binary for CT 220 `backup-garage` @ 192.168.2.73, docs/longhorn-backup.md; FU-299); kept in lockstep with the vendored in-cluster chart's `appVersion` (argocd/charts/garage) by the group_vars comment alone"

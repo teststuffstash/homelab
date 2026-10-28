@@ -152,8 +152,10 @@ archived). A red ARMED `automerge` PR still simply **parks** (docs/dependency-up
   `binarySource=install`; the `-full` image sets `global`, which also disables `installTools`), every
   command string must match the global `allowedCommands` exactly (compiled as a Handlebars template
   first), and `fileFilters` is the ONLY way a generated file reaches the commit (never `git add`). The
-  one consumer today: the kube-prometheus-stack rule re-rendering the upstream alert list on its branch
-  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container). The helm itself
+  first consumer: the kube-prometheus-stack rule re-rendering the upstream alert list on its branch
+  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container); the second is
+  `scripts/vendor-kyverno-policies.sh` on a `KYVERNO_POLICIES_SHA` branch, re-fetching `policy/component/`
+  from the bumped kyverno/policies head (class 18; bash/curl/sed/awk only, same constraint). The helm itself
   is installed BY the script (`HELM_VERSION=v<x.y.z>` + `install-tool helm`, a no-op for the seat where
   `install-tool` is absent) and Renovate-proposed through one `customManager` over that line (depName
   `helm/helm`, class 17 of docs/dependency-classes.yaml; 2026-10-22). Until then the version sat in

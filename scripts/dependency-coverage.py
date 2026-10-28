@@ -537,6 +537,26 @@ def extract_renovate_tools():
     return rows
 
 
+def extract_policy_inputs():
+    """Class 18: the two check-time pins component-check evaluates against — the kyverno-policies
+    chart version in scripts/component-check.sh (`KYVERNO_POLICIES_CHART_VERSION=<x.y.z>`, the helm
+    customManager's line) and the kyverno/policies branch head in scripts/vendor-kyverno-policies.sh
+    (`KYVERNO_POLICIES_REF=<branch>` + `KYVERNO_POLICIES_SHA=<40-hex>`, the git-refs manager's pair);
+    the SHA row prints as `<ref> @ <sha12>` so a bump reads as a move, not a new dependency."""
+    rows = []
+    path = os.path.join(ROOT, "scripts", "component-check.sh")
+    chart = shell_assignments(read(path), ("KYVERNO_POLICIES_CHART_VERSION",))["KYVERNO_POLICIES_CHART_VERSION"]
+    if chart:
+        rows.append({"name": "kyverno-policies", "version": chart, "where": [rel(path)],
+                     "match": ["kyverno-policies", "KYVERNO_POLICIES_CHART_VERSION="]})
+    path = os.path.join(ROOT, "scripts", "vendor-kyverno-policies.sh")
+    pins = shell_assignments(read(path), ("KYVERNO_POLICIES_REF", "KYVERNO_POLICIES_SHA"))
+    if pins["KYVERNO_POLICIES_REF"] and pins["KYVERNO_POLICIES_SHA"]:
+        rows.append({"name": "kyverno/policies", "version": f"{pins['KYVERNO_POLICIES_REF']} @ {pins['KYVERNO_POLICIES_SHA'][:12]}",
+                     "where": [rel(path)], "match": ["kyverno/policies", "KYVERNO_POLICIES_SHA="]})
+    return rows
+
+
 def extract_deno():
     rows = []
     for path in repo_files("scripts/*/deno.json"):
@@ -584,6 +604,7 @@ def extract_all(registry):
         "arc_runner": extract_arc_runner,
         "deno": extract_deno,
         "renovate_tools": extract_renovate_tools,
+        "policy_inputs": extract_policy_inputs,
         "mgmt_flake": extract_mgmt_flake,
         "none": lambda: [],
     }

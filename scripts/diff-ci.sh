@@ -52,6 +52,10 @@ MGMT_PATHS='^(policy/mgmt/|mgmt/scripts/mgmt-[a-z-]*\.sh$|mgmt/scripts/mgmt-root
 # scoped to their deployment dir).
 MAP=(
   "argocd-validate-pins:^argocd/"
+  # report-only workload standards over every Application's RENDERED manifests (charts included —
+  # iac-lane.md L0b's render pass, standing alone): the vendored+local policies, the checker, and
+  # everything the ArgoCD layer applies. Exit 0 in --report mode; no ci.yaml step yet (operator-direct).
+  "component-check:^(argocd/|policy/component/|scripts/(component-check|vendor-kyverno-policies)\.sh$)"
   "manifest-lint:^argocd/"
   "agentstack-rbac-lint:^argocd/resources/(agentstack|crossplane)/"
   "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel\.sh|scripts/iac-policy-test\.sh|scripts/fixtures/iac-policy/|devbox\.(json|lock)$)"
@@ -172,7 +176,10 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           anywhere" requirement outright.
 #   gateway-specs-publish   `uv run --no-project --with mkdocs…` resolves three pins from PyPI on a
 #                           cold cache — real WAN on the first run (measured 2026-10-16: ~40s cold).
-PUSH_HEAVY="argocd-validate-pins manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish"
+#   component-check         `helm template` pulls every third-party chart pin (ghcr.io, jetstack,
+#                           prometheus-community, cloudsmith, …) — real WAN on every run, ~2 min
+#                           wall measured 2026-10-25 in a jail clone (69 Applications, ~860 docs).
+PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish"
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.

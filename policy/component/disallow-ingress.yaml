@@ -1,0 +1,25 @@
+# LOCAL (not from kyverno/policies — no library rule bans the Ingress kind outright). CONTEXT.md
+# principle 5: Gateway API over Ingress — LAN names ride HTTPRoutes on the per-stack Gateways
+# (argocd/resources/*-gateway/, SERVICES.md), never an Ingress. A chart that renders an Ingress
+# from its defaults is the usual way one slips in (ingress.enabled is often true upstream).
+# Evaluated report-only by scripts/component-check.sh.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: component-disallow-ingress
+  annotations:
+    policies.kyverno.io/description: "No kind: Ingress — Gateway API (HTTPRoute) is the platform's ingress contract"
+spec:
+  validationActions: [Audit]
+  evaluation:
+    background:
+      enabled: true
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [networking.k8s.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [ingresses]
+  validations:
+    - expression: "false"
+      message: "kind: Ingress is not used on this platform — expose the service with an HTTPRoute on the stack Gateway (CONTEXT.md principle 5)."
