@@ -72,12 +72,14 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   #926–#930, oracle-iac#1140 — the delivery loop closes only on a shadow→prod promotion + a blocked failing candidate. #2798 (kind proof,
   draft): superseded except `.github/workflows/platform-kind-kargo.yaml` (governance path, operator-direct — FU-318 b/c); close it once
   the operator rules on the workflow. Residuals: FU-317, FU-318.
-- **⚑ ISLAND INTAKE (FU-320, PR #2978 — 2026-10-27 overnight spike).** PICKUP: (1) #2978's verdict (pr-wait was armed);
-  (2) the first intake-queued rides — #2782 and #2753 (one-line spec-flag edits, rows written into the issues): did the
-  scan dispatch them, did they merge in ≤ 2 rounds, did the specs reviewer accept the rows as written; (3) #2977 /
-  #2684 standing, #2768 / #2650 `blocked-on: human` — the operator's rulings (what a rail-served-but-unlisted id is;
-  #2650's done-when pick). Rulings the spike asks for: `docs/spikes/island-intake.md` §Open questions. Run it by hand
-  until wired: `bash gateway/scripts/intake-select.sh` → opus subagent on `gateway/intake.md` → `devbox run ring platform`.
+- **⚑ ISLAND INTAKE — WIRED for the dig source 2026-10-28 (FU-320; #3004 + #3008 merged, in-cluster dry-run
+  `island-intake-stshg` 23:36Z: 4 inputs → close ×4 on #2933/#2961, receipt in the bucket, model fable).** PICKUP — the
+  first unattended pair: (1) the 03:30Z dig should DIG `GoCatalogParseFailed{docs}` (new "Go Teams" plan-row cause, onset
+  10-28 21:21Z — #3004's new-episode rule; master would have hidden it) → a `cause-found` finding naming `gateway/`;
+  (2) the 05:00Z `island-intake` APPLY sitting should close the four old findings and file + queue ONE Go-Teams issue
+  (bucket `homelab/intake-gateway-2026-10-29/*/receipt.json`; `island_intake_*` on the pushgateway); (3) the scan
+  dispatches it and the ride merges ≤ 2 rounds. If (1) did not dig it, read `homelab/dig-2026-10-29/*/digest.json`
+  `explained`. Spike-era rides #2782/#2753 both closed `agent/done`. Open rulings: spike §Open questions 2–5.
 - **⚑ GATEWAY (FU-270 is the pointer — its Next is the seat's list).** Each 6 h refresh: `devbox run -- bash
   gateway/scripts/canary-entrants.sh --max 3 < /dev/null` → `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers --
   apply` → PR when the lists move (a key NEW to the loader ships AFTER its image, #2812). Watch: the jail's codex REFRESH
