@@ -1,0 +1,3 @@
+CALL gh pr view 2919 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT REACHED: end
+RC 0

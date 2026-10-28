@@ -1,0 +1,16 @@
+# unarmed-major/automerge-red-emits (2026-10-28, G12b — #2919): an ARMED `automerge` (mechanical-lane) bump whose
+# CI is red at a settled head — the weekly devbox-update PR sat here two days with no actor (the reflex approves
+# green only, auto-merge waits on green forever). Expected: the unit is emitted (same unit, same bound as FU-046).
+name: unarmed-major-automerge-red-emits
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-10-28T09:00:00Z

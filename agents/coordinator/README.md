@@ -1566,7 +1566,19 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    it counts the `state-fp:unarmed-major:` markers and at five refuses the sixth ride — the PR gets
    `agent/arbitrate` + an event line, and a human adapts by hand, re-proposes, or abandons it through
    the Renovate config. Removing the label buys five more: the count is the markers NEWER than the
-   last arbitrate event line, so the ruling re-opens the budget. Both classes share that cap.
+   last arbitrate event line, so the ruling re-opens the budget. Every class shares that cap.
+   **And an ARMED `automerge` (mechanical-lane) bump in its RED state only (G12b, operator ruling
+   2026-10-28: "S9 needs a new rule" — #2919, the weekly devbox-update PR, sat red and armed two days
+   with no actor).** Green and pending are the auto-merge lane's own (renovate-approve + GitHub
+   auto-merge); the scan brings it only red at a settled head. No reviewer — there is no lens to read a
+   mechanical bump and STEP 0 stands aside on an armed red head: skip step 2 and go straight to a
+   **worker on the PR branch** (`--work-branch <renovate branch>`, armed — no `--no-arm`), briefed with
+   the failing step's log (`gh run view <run> --log-failed` on the red check's run). Green re-enters
+   the lane: the reflex approves, auto-merge lands it — steps 2 and 5 never apply. **Hopeless** (the
+   red is not adaptable on the branch: upstream is broken, or the fix belongs to the generator that
+   writes the PR, e.g. `scripts/devbox-update.sh`): close the PR with a one-line why, and file the gap
+   as an issue on the owning repo naming the failing step and the closed PR — a mechanical bump comes
+   back on Renovate's next run, so the closed PR is not the record; the issue is. Same five-ride bound.
 2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
    **reviewer directly** — even while red (the reflex won't, but you can; a major review is an
    *investigation* whose whole job is to explain the red — the reviewer's STEP 0 treats a concluded

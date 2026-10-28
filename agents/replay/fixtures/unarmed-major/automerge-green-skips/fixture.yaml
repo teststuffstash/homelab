@@ -1,0 +1,15 @@
+# unarmed-major/automerge-green-skips (2026-10-28, G12b): the same armed `automerge` PR, CI green — the auto-merge
+# lane's own (renovate-approve + GitHub auto-merge). Expected: NO unit, no report line; the files probe never happens.
+name: unarmed-major-automerge-green-skips
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-10-28T09:00:00Z

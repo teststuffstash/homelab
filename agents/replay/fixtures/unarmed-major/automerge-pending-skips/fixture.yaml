@@ -1,0 +1,15 @@
+# unarmed-major/automerge-pending-skips (2026-10-28, G12b): the armed `automerge` PR with `ci` still running and
+# nothing red — pending belongs to the auto-merge lane, not even a SETTLING line. Expected: NO unit, no report line.
+name: unarmed-major-automerge-pending-skips
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-10-28T09:00:00Z
