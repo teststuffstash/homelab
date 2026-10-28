@@ -254,7 +254,7 @@ scout_canary_ride() { # <id> <arm> <is_free> <harness> <attempt> → the AGENT_R
     *)
       out="$(bash "$HERE/agent-session.sh" "$CANARY_PROJECT" --harness opencode --model "openrouter/$rid" \
           --task "$sess" --round "$attempt" --openrouter-secret "$secret" \
-          --run "opencode run -m \"openrouter/$rid\" \"$prompt\"" 2>&1)" || true ;;
+          --run "opencode run -m \"openrouter/$rid\" \"$prompt\" </dev/null" 2>&1)" || true ;;  # </dev/null: opencode >=2 waits on piped stdin (agent-session.sh harness-run-cmd)
   esac
   printf '%s\n' "$out" | grep -E "AGENT_RUN_STATS|PREFLIGHT|403|guardrail" >&2 || true
   printf '%s' "$out" | sed -n 's/.*AGENT_RUN_STATS \(.*\)/\1/p' | tail -1

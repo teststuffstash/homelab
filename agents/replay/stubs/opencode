@@ -20,6 +20,15 @@ _RP_TOOL=opencode
 . "${REPLAY_STUB_DIR:?agents/replay/run.sh must export REPLAY_STUB_DIR}/_common.sh"
 
 _rp_record "$@"
+# opencode >=2 (agent-runtime#183, 1.19.0 → 2.1.1): `run` reads a piped stdin as extra prompt
+# input and waits for EOF. An open pipe that never closes = an idle hang with no output (incident
+# 2026-10-28, the FU-187 quiet-stall shape). Emulated as the hang's observable end — no stdout,
+# the timeout's exit 124 — so a call site without `</dev/null` fails its fixture. A fixture
+# proves the redirect by handing the clause such a pipe (bridge: a FIFO opened read-write).
+if [ -p /dev/stdin ]; then
+  echo "opencode stub: stdin is an open pipe — opencode >=2 run waits for EOF (hang emulated, exit 124)" >&2
+  exit 124
+fi
 case "${STUB_OPENCODE:-}" in
   empty) exit 0 ;;
   malformed) printf '\033[0m\n> build \302\267 nemotron-3.5-lightning-free\n\033[0m\n{\n  "verdict": "APPROVE",\n  "findings": "Line one of the findings.\n\n  Line two, and the raw newline above is what jq refuses."\n}\n' ;;

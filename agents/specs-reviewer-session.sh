@@ -724,7 +724,7 @@ harness_opencode() {
   local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
   envargs+=('OPENCODE_PERMISSION={"edit":"deny","bash":"deny","webfetch":"deny","external_directory":"deny"}'
             OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1 OPENCODE_DISABLE_CLAUDE_CODE=1 OPENCODE_DISABLE_SHARE=1)
-  (cd "$inputs" && timeout "${LLM_TIMEOUT_S}" env -i "${envargs[@]}" opencode run "$prompt" > "$WORK/result.txt" 2> "$WORK/harness.err")
+  (cd "$inputs" && timeout "${LLM_TIMEOUT_S}" env -i "${envargs[@]}" opencode run "$prompt" < /dev/null > "$WORK/result.txt" 2> "$WORK/harness.err")  # opencode >=2 waits on piped stdin (agent-session.sh harness-run-cmd)
 }
 # harness_goose <inputs> <lens> <prompt> → $WORK/result.txt
 #   SHADOW ONLY. System prompt = `--system`; tools = the `developer` builtin ONLY (--no-profile) —
