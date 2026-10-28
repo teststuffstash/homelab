@@ -40,28 +40,31 @@ case "$EVIDENCE_PREFIX" in
   pr-*) keep="${EVIDENCE_KEEP_PR:-5}" ;;
   *)    keep="${EVIDENCE_KEEP_BRANCH:-30}" ;;
 esac
-DIR="specs/gateway-specs/evidence/${EVIDENCE_PREFIX}"
+DIR="specs:gateway-specs/evidence/${EVIDENCE_PREFIX}"
 
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 tar -czf "$scratch/${EVIDENCE_SHA}.tar.gz" -C "$PACK" .
-s3_publish_alias specs "$ENDPOINT" "$GATEWAY_SPECS_S3_ACCESS_KEY_ID" "$GATEWAY_SPECS_S3_SECRET_ACCESS_KEY"
+s3_publish_remote specs "$ENDPOINT" "$GATEWAY_SPECS_S3_ACCESS_KEY_ID" "$GATEWAY_SPECS_S3_SECRET_ACCESS_KEY"
 s3_publish_put "$scratch/${EVIDENCE_SHA}.tar.gz" "$DIR/${EVIDENCE_SHA}.tar.gz"
 echo "published: evidence/${EVIDENCE_PREFIX}/${EVIDENCE_SHA}.tar.gz ($(du -h "$scratch/${EVIDENCE_SHA}.tar.gz" | cut -f1))"
 
-# Prune: keep the newest $keep by lastModified. The probe's exit is captured apart from its
-# output — a failed listing must never read as "nothing to prune" (oracle-fleet#529).
+# Prune: keep the newest $keep by the server's LastModified (--use-server-modtime, the old mc ls
+# lastModified — not the uploaded file's mtime metadata). The probe's exit is captured apart from
+# its output — a failed listing must never read as "nothing to prune" (oracle-fleet#529).
 listing=""
-if ! listing="$(mc ls --json "$DIR/" 2>&1)"; then
-  echo "::error::evidence-publish: mc ls probe failed for $DIR/: $listing" >&2
+if ! listing="$(s3_publish_ls lsjson --files-only --use-server-modtime "$DIR")"; then
+  echo "::error::evidence-publish: listing probe failed for $DIR/" >&2
   exit 1
 fi
-mapfile -t old < <(printf '%s\n' "$listing" | python3 -c '
+mapfile -t old < <(printf '%s\n' "${listing:-[]}" | python3 -c '
 import json, sys
-rows = [json.loads(l) for l in sys.stdin if l.startswith("{")]
-files = sorted((r for r in rows if r.get("type") == "file"), key=lambda r: r["lastModified"], reverse=True)
-print("\n".join(r["key"] for r in files[int(sys.argv[1]):]))' "$keep" | grep . || true)
+from datetime import datetime
+rows = json.loads(sys.stdin.read() or "[]")
+ts = lambda r: datetime.fromisoformat(r["ModTime"].replace("Z", "+00:00"))
+files = sorted((r for r in rows if not r.get("IsDir")), key=ts, reverse=True)
+print("\n".join(r["Path"] for r in files[int(sys.argv[1]):]))' "$keep" | grep . || true)
 for k in "${old[@]}"; do
-  mc rm --quiet "$DIR/$k"
+  rclone deletefile "$DIR/$k"
 done
 echo "evidence-publish: kept newest $keep under evidence/${EVIDENCE_PREFIX}/, pruned ${#old[@]}"
