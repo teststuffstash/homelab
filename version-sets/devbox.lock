@@ -2,82 +2,82 @@
   "lockfile_version": "1",
   "packages": {
     "claude-code@latest": {
-      "last_modified": "2026-10-16T02:15:57Z",
-      "resolved": "github:NixOS/nixpkgs/f20cd90e28fe0403873f473b29e42662cd86e8c4#claude-code",
+      "last_modified": "2026-10-24T11:44:37Z",
+      "resolved": "github:NixOS/nixpkgs/d3b13ad75cc492690728f9307e443dec9ef9a20e#claude-code",
       "source": "devbox-search",
-      "version": "2.1.300",
+      "version": "2.1.309",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/dyx4a9i8kl4hagg0r2h6lq57gsy9h01q-claude-code-2.1.300",
+              "path": "/nix/store/9x8w4lrkd50im6niwh5n0m8jknm1nkqj-claude-code-2.1.309",
               "default": true
             }
           ],
-          "store_path": "/nix/store/dyx4a9i8kl4hagg0r2h6lq57gsy9h01q-claude-code-2.1.300"
+          "store_path": "/nix/store/9x8w4lrkd50im6niwh5n0m8jknm1nkqj-claude-code-2.1.309"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/8pfi81isqvphdxxzjpfl57z41xh0k90r-claude-code-2.1.300",
+              "path": "/nix/store/q8h86mjfkvzhikx5hixak49qnl2csh8l-claude-code-2.1.309",
               "default": true
             }
           ],
-          "store_path": "/nix/store/8pfi81isqvphdxxzjpfl57z41xh0k90r-claude-code-2.1.300"
+          "store_path": "/nix/store/q8h86mjfkvzhikx5hixak49qnl2csh8l-claude-code-2.1.309"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/j306ia52jv4hvcqg1l4y52i9l95dbr01-claude-code-2.1.300",
+              "path": "/nix/store/j6lkh874ly3wamxblr0zprppscql6f2h-claude-code-2.1.309",
               "default": true
             }
           ],
-          "store_path": "/nix/store/j306ia52jv4hvcqg1l4y52i9l95dbr01-claude-code-2.1.300"
+          "store_path": "/nix/store/j6lkh874ly3wamxblr0zprppscql6f2h-claude-code-2.1.309"
         }
       }
     },
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
-      "last_modified": "2026-10-16T02:15:57Z",
-      "resolved": "github:NixOS/nixpkgs/f20cd90e28fe0403873f473b29e42662cd86e8c4?lastModified=1792116957&narHash=sha256-EjZqHKObBfIOeHZnMRVV87HB3pPq%2FWBkmRJWyFxmZu8%3D"
+      "last_modified": "2026-10-27T21:33:45Z",
+      "resolved": "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5?lastModified=1793136825&narHash=sha256-2pkE69JpFRInaARSczZytcfPw83IL82E2KdhbWGwdMs%3D"
     },
     "kind@latest": {
-      "last_modified": "2026-10-08T19:21:32Z",
-      "resolved": "github:NixOS/nixpkgs/8edc0c72e3a38faf5434e40d1f19431125fe4b30#kind",
+      "last_modified": "2026-10-24T11:44:37Z",
+      "resolved": "github:NixOS/nixpkgs/d3b13ad75cc492690728f9307e443dec9ef9a20e#kind",
       "source": "devbox-search",
-      "version": "0.32.0",
+      "version": "0.33.0",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/ng8yqy8c1i47q4dny3ijkbcmi6kmzffy-kind-0.32.0",
+              "path": "/nix/store/mdjc40gwimfiaxgxsyfbnl2abrd6zplz-kind-0.33.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/ng8yqy8c1i47q4dny3ijkbcmi6kmzffy-kind-0.32.0"
+          "store_path": "/nix/store/mdjc40gwimfiaxgxsyfbnl2abrd6zplz-kind-0.33.0"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/yq4jldxfm2k59br8rz6mb59cmr80waww-kind-0.32.0",
+              "path": "/nix/store/brv8i0am9d0ibizipzk45a0lk7cnxqqh-kind-0.33.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/yq4jldxfm2k59br8rz6mb59cmr80waww-kind-0.32.0"
+          "store_path": "/nix/store/brv8i0am9d0ibizipzk45a0lk7cnxqqh-kind-0.33.0"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/p15hsmri9drmgizh3h5dhy2wnwspfnm9-kind-0.32.0",
+              "path": "/nix/store/frggqlpvn9ckaa65062jx59vpmdmjgc1-kind-0.33.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/p15hsmri9drmgizh3h5dhy2wnwspfnm9-kind-0.32.0"
+          "store_path": "/nix/store/frggqlpvn9ckaa65062jx59vpmdmjgc1-kind-0.33.0"
         }
       }
     },
