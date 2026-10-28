@@ -131,6 +131,10 @@ spec:
             # against a 128Mi request would be the first pod out, before the ride that caused
             # the pressure. Requesting what it uses puts it behind the rides in that ranking.
             memory: 1Gi
+        # The chart's own garage-init (a sed over garage.toml): request-sized, memory-capped.
+        initResources:
+          requests: { cpu: "10m", memory: "32Mi" }
+          limits: { memory: "128Mi" }
         # Platform store above per-ride pods at scheduling and eviction time (the laptops are
         # shared with kata rides). rf=3 tolerates losing one zone, but not as a routine event.
         priorityClassName: system-cluster-critical
@@ -180,6 +184,13 @@ spec:
             effect: NoSchedule
         service:
           type: ClusterIP
+        # PSS restricted (component-check): merged over the chart's container securityContext
+        # (drop ALL + readOnlyRootFilesystem stay from argocd/charts/garage/values.yaml) for the
+        # garage + garage-init containers; the user is the chart's pod-level runAsUser 1000 /
+        # runAsNonRoot. Changing it rolls the StatefulSet (one zone at a time — minReadySeconds).
+        securityContext:
+          allowPrivilegeEscalation: false
+          seccompProfile: { type: RuntimeDefault }
         # METADATA ROTATION SEED — the init container that makes GarageDiskFillingUp on a meta
         # volume a self-clearing condition (docs/garage.md §Metadata reclamation, as built). It runs
         # on every pod start and is a no-op unless the controller (argocd/resources/
@@ -195,6 +206,11 @@ spec:
           - name: meta-rotate
             image: docker.io/library/busybox:stable
             command: ["/bin/sh", "/script/meta-rotate.sh"]
+            # A cp of the compacted LMDB snapshot (GBs): page cache is reclaimable under the cap,
+            # so 512Mi is headroom, not a working-set claim. No CPU limit (house rule).
+            resources:
+              requests: { cpu: "10m", memory: "32Mi" }
+              limits: { memory: "512Mi" }
             env:
               - name: POD_NAME
                 valueFrom: { fieldRef: { fieldPath: metadata.name } }
@@ -206,6 +222,7 @@ spec:
               capabilities: { drop: [ALL] }
               readOnlyRootFilesystem: true
               allowPrivilegeEscalation: false
+              seccompProfile: { type: RuntimeDefault }
             volumeMounts:
               - { name: meta, mountPath: /mnt/meta }
               - { name: data, mountPath: /mnt/data }

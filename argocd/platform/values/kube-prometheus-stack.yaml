@@ -545,8 +545,16 @@ grafana:
           valueFrom: { secretKeyRef: { name: sleep-db-reader, key: STORE_S3_SECRET_KEY } }
       volumeMounts:
         - { name: sleep-data, mountPath: /data }
+      # 14 d: working-set max 74Mi (p99 18Mi), CPU ~0. Request kept; limit = 2x max.
       resources:
         requests: { cpu: 10m, memory: 64Mi }
+        limits: { memory: "160Mi" }
+      # PSS restricted (component-check). The pod-level securityContext (chart default
+      # runAsUser 472, runAsNonRoot) already covers the user; this adds the container fields.
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: [ALL] }
+        seccompProfile: { type: RuntimeDefault }
   extraEmptyDirMounts:
     - mountPath: /data
       name: sleep-data
@@ -562,10 +570,14 @@ grafana:
     # space form SPLITS here — "4.0.6" was installed as its own pluginId, 404'd, and
     # crashlooped the pod (2026-08-25 20:11Z, 4 restarts before the fix).
     - frser-sqlite-datasource@4.0.6
+  # 14 d: working-set max 984Mi (p99 593Mi), CPU p99 0.06 core. CPU request kept at 100m; memory
+  # request 256Mi -> 640Mi (p99, was under-requested 2.3x); limit = 2x max.
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 640Mi
+    limits:
+      memory: 2Gi
   service:
     annotations:
       lbipam.cilium.io/ips: 192.168.40.11
@@ -584,10 +596,14 @@ grafana:
       folderAnnotation: grafana_folder
       provider:
         foldersFromFilesStructure: true
+    # Both sidecars share this key. 14 d working-set max: dashboards 88Mi, datasources 80Mi
+    # (p99 86/78Mi); CPU p99 3m / 1m. Memory request raised to p99 (64Mi -> 96Mi), limit = 2x max.
     resources:
       requests:
         cpu: 20m
-        memory: 64Mi
+        memory: 96Mi
+      limits:
+        memory: 192Mi
 kube-state-metrics:
   # 192Mi → 384Mi 2026-09-14: enabling customResourceState (below) lifted the steady state from
   # ≤100Mi to a flat ~204Mi (KSM's CRD discovery over every installed group — the upjet provider
@@ -789,11 +805,24 @@ prometheus:
       bgp: advertise
     type: LoadBalancer
 prometheus-node-exporter:
+  # 14 d: working-set max 27Mi, CPU p99 3m. Requests kept; limit = the 128Mi floor (2x max = 55Mi).
   resources:
     requests:
       cpu: 20m
       memory: 32Mi
+    limits:
+      memory: 128Mi
 prometheusOperator:
+  # The cert create/patch Jobs (one chart key serves both; they run only at chart upgrades, so
+  # there is no 14 d series): kube-webhook-certgen is a tiny Go binary — floor values.
+  admissionWebhooks:
+    patch:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 128Mi
   prometheusConfigReloader:
     resources:
       limits:

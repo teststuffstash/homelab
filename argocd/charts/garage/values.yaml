@@ -106,6 +106,9 @@ initImage:
   repository: busybox
   tag: stable
   pullPolicy: IfNotPresent
+# -- LOCAL PATCH (not upstream, see VENDORED.md): resources for the chart's own `garage-init`
+# init container (upstream sets none). Requests + a memory limit are the platform standard.
+initResources: {}
 
 # -- set if you need credentials to pull your custom image
 imagePullSecrets: []

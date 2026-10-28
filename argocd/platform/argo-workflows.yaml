@@ -30,6 +30,12 @@ spec:
         crds:
           install: true
           keep: true
+          # The CRD install Job (a pre-install/upgrade hook; ran once in the last 14 d: ~32Mi
+          # working set). Request headroom over that; limit floor 128Mi.
+          upgradeJob:
+            resources:
+              requests: { cpu: "10m", memory: "64Mi" }
+              limits: { memory: "128Mi" }
         singleNamespace: false
         controller:
           workflowNamespaces:
@@ -66,6 +72,11 @@ spec:
             # caps the informer cache so the raise is the ceiling, not the answer.
             requests: { cpu: "100m", memory: "512Mi" }
             limits: { memory: "1Gi" }
+          # PSS restricted (component-check): merged over the chart's container securityContext
+          # (runAsNonRoot + drop ALL + no privilege escalation already there) — only the seccomp
+          # profile is missing. Image User 8737.
+          securityContext:
+            seccompProfile: { type: RuntimeDefault }
           metricsConfig: { enabled: true }
           serviceMonitor: { enabled: true }
         server:
@@ -85,6 +96,9 @@ spec:
             # fix one row up; server is the lighter component, half the controller's envelope.
             requests: { cpu: "50m", memory: "256Mi" }
             limits: { memory: "512Mi" }
+          # PSS restricted — same merge as the controller's above (image User 8737).
+          securityContext:
+            seccompProfile: { type: RuntimeDefault }
   destination:
     server: https://kubernetes.default.svc
     namespace: argo

@@ -57,6 +57,10 @@ spec:
                   key: rpcSecret
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- with .Values.initResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: configmap
               mountPath: /mnt/garage.toml

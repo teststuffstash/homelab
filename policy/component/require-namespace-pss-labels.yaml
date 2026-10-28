@@ -1,0 +1,29 @@
+# LOCAL (not from kyverno/policies — the library has no "namespace carries its PSA labels" rule;
+# its psa-mpol/ MUTATES labels onto namespaces, which a report-only CLI pass cannot do). Every
+# Namespace manifest the ArgoCD layer applies must declare all three Pod Security Admission labels
+# so the admission level is an explicit, reviewed choice per namespace, never the cluster default
+# (see argocd/resources/*-namespaces/ for the labelled shape). A namespace created by ArgoCD's
+# `CreateNamespace=true` sync option has NO manifest and is INVISIBLE to this rule — the checker
+# reports those Applications separately. Evaluated report-only by scripts/component-check.sh.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: component-require-namespace-pss-labels
+  annotations:
+    policies.kyverno.io/description: "Namespace manifests carry pod-security.kubernetes.io/{enforce,warn,audit}"
+spec:
+  validationActions: [Audit]
+  evaluation:
+    background:
+      enabled: true
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ['']
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [namespaces]
+  validations:
+    - expression: >-
+        has(object.metadata.labels) &&
+        ['enforce', 'warn', 'audit'].all(k, ('pod-security.kubernetes.io/' + k) in object.metadata.labels)
+      message: "Namespace must carry pod-security.kubernetes.io/enforce, /warn and /audit labels (explicit PSA level per namespace)."

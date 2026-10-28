@@ -66,6 +66,17 @@ spec:
               DISABLE_REGISTRATION: true
             session:
               PROVIDER: memory
+        # 14 d: working-set max 235Mi (p99 229Mi), CPU p99 0.42 core. Limit = 2x max.
+        resources:
+          requests: { cpu: "450m", memory: "256Mi" }
+          limits: { memory: "512Mi" }
+        # The three init containers (init-directories, init-app-ini, configure-gitea) keep the
+        # chart's 100m/128Mi requests; the chart ships `limits: {}`. configure-gitea peaked at
+        # 42Mi; 256Mi leaves a failed init no excuse to block the pod.
+        initContainers:
+          resources:
+            limits: { memory: "256Mi" }
+            requests: { cpu: "100m", memory: "128Mi" }
         persistence:
           enabled: true
           size: 5Gi
@@ -73,6 +84,16 @@ spec:
           labels: # the daily Longhorn backup (docs/longhorn-backup.md) — repos + attachments
             recurring-job.longhorn.io/source: enabled
             recurring-job-group.longhorn.io/daily-backup: enabled
+        # PSS restricted (component-check) for every container of the Deployment (the chart renders
+        # this one value into the init containers too). runAsNonRoot is safe: the -rootless image
+        # config sets User 1000:1000, and SSH listens on 2222 (no NET_BIND_SERVICE needed). The
+        # chart's helm-test Pod (forgejo-test-connection) takes no securityContext value — and
+        # ArgoCD never creates helm test hooks.
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          capabilities: { drop: [ALL] }
+          runAsNonRoot: true
+          seccompProfile: { type: RuntimeDefault }
         replicaCount: 1
         service:
           http:
