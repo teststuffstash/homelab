@@ -13,7 +13,7 @@
       "last_proven_pr": 2944,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
-      "rows": 15
+      "rows": 17
     },
     {
       "complete": false,
@@ -808,6 +808,17 @@
     {
       "class": 1,
       "gap_columns": [],
+      "key": "1:argo-rollouts",
+      "last_proven": null,
+      "name": "argo-rollouts",
+      "version": "2.43.8",
+      "where": [
+        "argocd/platform/argo-rollouts.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [],
       "key": "1:argo-workflows",
       "last_proven": "2026-10-21T21:26:11Z",
       "name": "argo-workflows",
@@ -914,6 +925,17 @@
       "version": "1.11.0",
       "where": [
         "argocd/platform/infisical.yaml"
+      ]
+    },
+    {
+      "class": 1,
+      "gap_columns": [],
+      "key": "1:kargo",
+      "last_proven": null,
+      "name": "kargo",
+      "version": "1.12.4",
+      "where": [
+        "argocd/platform/kargo.yaml"
       ]
     },
     {
@@ -1033,7 +1055,7 @@
       "key": "2:docker.io/library/python",
       "last_proven": "2026-10-22T02:55:46Z",
       "name": "docker.io/library/python",
-      "version": "3.15-slim, 3.15-slim@sha256:7ce16513bf93",
+      "version": "3.15-slim, 3.15-slim@sha256:3053ea19f293",
       "where": [
         "argocd/resources/cloudflare-exporter/credential-expiry-probe-deployment.yaml",
         "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
@@ -1095,7 +1117,7 @@
       "key": "2:docker.io/prom/pushgateway",
       "last_proven": "2026-10-15T16:12:04Z",
       "name": "docker.io/prom/pushgateway",
-      "version": "v1.11.4",
+      "version": "v1.11.5",
       "where": [
         "argocd/resources/pushgateway/deployment.yaml"
       ]
@@ -1174,7 +1196,7 @@
       "key": "3:agent-base",
       "last_proven": "2026-10-26T13:03:21Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.10.26-gecdaf1344903.120; 1 manifest ref(s)",
+      "version": "`AGENT_BASE_IMAGE`=2026.10.28-g2a1ab2455a9c.122; 1 manifest ref(s)",
       "where": [
         "agents/images.env",
         "argocd/resources/agentstack/composition.yaml"
@@ -1188,7 +1210,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-10-26T12:45:41Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.26-g950b7f0b8201; 34 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.28-g950b7f0b8201; 34 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1223,7 +1245,7 @@
       "key": "3:agent-gateway",
       "last_proven": "2026-10-24T20:21:13Z",
       "name": "agent-gateway",
-      "version": "2026.10.27-g4b154e48568b (×1)",
+      "version": "2026.10.28-g2ebea9e33983 (×1)",
       "where": [
         "argocd/resources/agent-gateway/deployment.yaml",
         "argocd/resources/agent-gateway/kustomization.yaml"
@@ -1248,7 +1270,7 @@
       "key": "3:homelab/arc-runner",
       "last_proven": "2026-10-26T22:51:23Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.26-g2ac2a3cff05e (×3)",
+      "version": "2026.10.28-g171df8266a1c (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1407,7 +1429,7 @@
       "key": "5:hashicorp/tls@tofu/cloudflare",
       "last_proven": "2026-09-27T12:26:36Z",
       "name": "hashicorp/tls",
-      "version": "4.4.1 (`~> 4.0`)",
+      "version": "4.4.2 (`~> 4.0`)",
       "where": [
         "tofu/cloudflare/versions.tf",
         "tofu/cloudflare/.terraform.lock.hcl"
@@ -1557,7 +1579,7 @@
       "key": "7:awscli2",
       "last_proven": "2026-10-07T20:11:25Z",
       "name": "awscli2",
-      "version": "2.35.11",
+      "version": "2.36.31",
       "where": [
         "devbox.lock"
       ]
@@ -1568,7 +1590,7 @@
       "key": "7:bind",
       "last_proven": "2026-10-07T20:11:25Z",
       "name": "bind",
-      "version": "9.20.29",
+      "version": "9.20.30",
       "where": [
         "devbox.lock"
       ]
@@ -1590,7 +1612,7 @@
       "key": "7:claude-code@version-sets",
       "last_proven": null,
       "name": "claude-code",
-      "version": "2.1.300",
+      "version": "2.1.309",
       "where": [
         "version-sets/devbox.lock"
       ]
@@ -1601,7 +1623,7 @@
       "key": "7:cloudflared",
       "last_proven": "2026-10-19T08:40:35Z",
       "name": "cloudflared",
-      "version": "2026.10.0",
+      "version": "2026.10.1",
       "where": [
         "devbox.lock"
       ]
@@ -1645,7 +1667,7 @@
       "key": "7:gh",
       "last_proven": "2026-10-19T08:40:35Z",
       "name": "gh",
-      "version": "2.102.0",
+      "version": "2.103.2",
       "where": [
         "devbox.lock"
       ]
@@ -1678,7 +1700,7 @@
       "key": "7:infisical",
       "last_proven": "2026-10-07T20:11:25Z",
       "name": "infisical",
-      "version": "0.43.132",
+      "version": "0.44.2",
       "where": [
         "devbox.lock"
       ]
@@ -1722,7 +1744,7 @@
       "key": "7:kind@version-sets",
       "last_proven": null,
       "name": "kind",
-      "version": "0.32.0",
+      "version": "0.33.0",
       "where": [
         "version-sets/devbox.lock"
       ]
@@ -1777,7 +1799,7 @@
       "key": "7:kyverno",
       "last_proven": "2026-10-07T20:11:25Z",
       "name": "kyverno",
-      "version": "1.19.1",
+      "version": "1.19.2",
       "where": [
         "devbox.lock"
       ]
@@ -1799,7 +1821,7 @@
       "key": "7:nixpkgs-unstable",
       "last_proven": null,
       "name": "nixpkgs-unstable",
-      "version": "nixpkgs@f20cd90e28fe",
+      "version": "nixpkgs@f05535a0efcb",
       "where": [
         "devbox.lock"
       ]
@@ -1810,7 +1832,7 @@
       "key": "7:nixpkgs-unstable@version-sets",
       "last_proven": null,
       "name": "nixpkgs-unstable",
-      "version": "nixpkgs@f20cd90e28fe",
+      "version": "nixpkgs@f05535a0efcb",
       "where": [
         "version-sets/devbox.lock"
       ]
@@ -1832,7 +1854,7 @@
       "key": "7:nodejs_22",
       "last_proven": null,
       "name": "nodejs_22",
-      "version": "22.23.3",
+      "version": "22.23.4",
       "where": [
         "devbox.lock"
       ]
@@ -1843,7 +1865,7 @@
       "key": "7:openssl",
       "last_proven": "2026-10-07T20:11:25Z",
       "name": "openssl",
-      "version": "3.5.8",
+      "version": "3.5.9",
       "where": [
         "devbox.lock"
       ]
@@ -1854,7 +1876,7 @@
       "key": "7:opentofu",
       "last_proven": "2026-10-19T08:40:35Z",
       "name": "opentofu",
-      "version": "1.13.1",
+      "version": "1.13.2",
       "where": [
         "devbox.lock"
       ]
@@ -1876,7 +1898,7 @@
       "key": "7:python3",
       "last_proven": "2026-10-07T20:11:25Z",
       "name": "python3",
-      "version": "3.14.7",
+      "version": "3.14.8",
       "where": [
         "devbox.lock"
       ]
@@ -1920,7 +1942,7 @@
       "key": "7:talosctl",
       "last_proven": null,
       "name": "talosctl",
-      "version": "1.14.2",
+      "version": "1.14.3",
       "where": [
         "devbox.lock"
       ]
@@ -2095,7 +2117,7 @@
       "key": "12:linkedom",
       "last_proven": null,
       "name": "linkedom",
-      "version": "0.18.13",
+      "version": "0.18.14",
       "where": [
         "scripts/mermaid-lint/deno.json"
       ]
@@ -2117,7 +2139,7 @@
       "key": "13:nix-community/disko",
       "last_proven": null,
       "name": "nix-community/disko",
-      "version": "725ea35e410a",
+      "version": "cedd626e11b6",
       "where": [
         "mgmt/nixos/flake.lock"
       ]
@@ -2128,7 +2150,7 @@
       "key": "13:NixOS/nixpkgs",
       "last_proven": null,
       "name": "NixOS/nixpkgs",
-      "version": "nixos-26.05@8ce73368d1ef",
+      "version": "nixos-26.05@718f670e8453",
       "where": [
         "mgmt/nixos/flake.lock"
       ]

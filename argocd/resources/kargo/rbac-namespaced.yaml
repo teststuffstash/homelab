@@ -1,0 +1,167 @@
+# Namespaced grants for the Kargo SAs — the half of the hardened install that replaces the chart's
+# ClusterRoleBindings (argocd/platform/kargo.yaml sets rbac.installClusterRoleBindings: false).
+# Each RoleBinding binds a CHART ClusterRole (kept in sync by the chart) inside ONE namespace, so a
+# chart `*` on secrets/serviceaccounts/roles/rolebindings is `*` in that namespace only.
+#
+#  - oracle-kargo (the Project namespace): every component's chart role — the controller and
+#    management controller do their real work here (Stages/Freight/Promotions, the per-Project
+#    Roles/RoleBindings/ServiceAccounts Kargo reconciles, AnalysisRuns).
+#  - kargo-shared-resources / kargo-system-resources: the management controller caches Secrets and
+#    ConfigMaps in exactly these two (cmd/controlplane/management_controller.go) and replicates
+#    shared ones into Projects. The chart already binds the controller/api readers there.
+#  - kargo: the management controller finalizes the controller's ServiceAccount (a Role, not the
+#    chart ClusterRole — the kargo namespace holds the API's signing-key Secret).
+#
+# Names carry `platform-` so they never collide with the RoleBindings Kargo itself creates in the
+# Project namespace (kargo-project-admin, kargo-*-read-secrets, kargo-admin/viewer/promoter).
+# A NEW Kargo Project = one more copy of the oracle-kargo block (one Project today).
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-controller
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-controller
+subjects:
+  - kind: ServiceAccount
+    name: kargo-controller
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-controller-rollouts
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-controller-rollouts
+subjects:
+  - kind: ServiceAccount
+    name: kargo-controller
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-management-controller
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-management-controller
+subjects:
+  - kind: ServiceAccount
+    name: kargo-management-controller
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-webhooks-server
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-webhooks-server
+subjects:
+  - kind: ServiceAccount
+    name: kargo-webhooks-server
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-api
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-api
+subjects:
+  - kind: ServiceAccount
+    name: kargo-api
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-api-rollouts
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-api-rollouts
+subjects:
+  - kind: ServiceAccount
+    name: kargo-api
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-garbage-collector
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-garbage-collector
+subjects:
+  - kind: ServiceAccount
+    name: kargo-garbage-collector
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-management-controller
+  namespace: kargo-shared-resources
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-management-controller
+subjects:
+  - kind: ServiceAccount
+    name: kargo-management-controller
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-management-controller
+  namespace: kargo-system-resources
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-management-controller
+subjects:
+  - kind: ServiceAccount
+    name: kargo-management-controller
+    namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-kargo-management-controller
+  namespace: kargo
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [get, list, watch, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-management-controller
+  namespace: kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-kargo-management-controller
+subjects:
+  - kind: ServiceAccount
+    name: kargo-management-controller
+    namespace: kargo

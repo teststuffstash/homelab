@@ -1,6 +1,9 @@
-# cert-manager — ONLY as the issuer of the Barman Cloud plugin's internal mTLS (operator ↔ plugin
-# gRPC), which the plugin's chart requires (ADR-147). NOT a TLS-termination path: LAN TLS still
-# terminates at OPNsense HAProxy with the ACME wildcard (the ADR-085 ruling stands).
+# cert-manager — ONLY as an issuer of IN-CLUSTER component certs whose charts require it. This
+# header is the scope's one home; consumers (each via its own namespaced self-signed Issuer):
+#   1. the Barman Cloud plugin's internal mTLS (operator ↔ plugin gRPC) — ADR-147;
+#   2. Kargo's webhook + API serving certs (argocd/platform/kargo.yaml; oracle-fleet ADR-OF-006).
+# NOT a TLS-termination path: LAN TLS still terminates at OPNsense HAProxy with the ACME wildcard
+# (the ADR-085 ruling stands). A third consumer = a line here, not a new decision.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

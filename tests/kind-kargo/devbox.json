@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "EXPERIMENT toolchain for the hardened Kargo + Argo Rollouts kind proof (e2e.sh). A dedicated config, not the root devbox.json: kind is the only tool the root lacks, and growing the root lock for an abandon-able experiment would touch every gate that keys on devbox.lock. docker comes from the VM runner's host install (docs/patterns/kind-ci.md).",
+  "packages": {
+    "kind": "latest",
+    "kubectl": "latest",
+    "kubernetes-helm": "latest",
+    "yq-go": "latest",
+    "jq": "latest"
+  },
+  "shell": {
+    "init_hook": [],
+    "scripts": {
+      "e2e": [
+        "bash e2e.sh"
+      ]
+    }
+  }
+}

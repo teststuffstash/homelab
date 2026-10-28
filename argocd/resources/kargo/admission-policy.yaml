@@ -1,0 +1,109 @@
+# kargo-write-guard — the belt over everything the kargo ServiceAccounts WRITE that RBAC cannot
+# scope by name or shape (native ValidatingAdmissionPolicy, the ADR-147 pg-backup-default shape;
+# no Kyverno controller). Matches ONLY requests whose user is a kargo-namespace SA; ArgoCD's own
+# applies of argocd/resources/kargo/ are never matched.
+#
+# RBAC (rbac-*.yaml, argocd-role.yaml) is the first gate; this policy is the second, and it is
+# what pins the writes RBAC can only grant by verb:
+#   (a) RoleBinding: roleRef must be a `kargo-*` role, and only inside a Kargo PROJECT namespace
+#       (label kargo.akuity.io/project=true) or the two Kargo resource namespaces.
+#       ClusterRoleBinding: only `kargo-project-admin-<project>` → the ClusterRole of the same name
+#       (the one CRB Kargo creates per Project, projects.go).
+#   (b) ClusterRole: only `kargo-project-admin-<project>`, every rule = kargo.akuity.io/projects
+#       with resourceNames and verbs ⊆ {get,update,patch,delete}; no aggregation, no URLs.
+#       Role: only in a project namespace, no wildcard apiGroup/resource, apiGroups ⊆ {core, rbac,
+#       kargo, argoproj}, no explicit impersonate/escalate/bind. NOT "no * verbs": Kargo's own
+#       per-Project kargo-admin Role carries `*` on secrets/serviceaccounts/roles (namespace-bound).
+#   (c) Namespace create/update/delete: only the allowlist (UPDATE included — relabelling another
+#       namespace as a Project would otherwise open (a)/(d) on it).
+#   (d) Secret writes: only in project namespaces + the two Kargo resource namespaces.
+#   (e) Application: UPDATE only, and only of an Application that already carries
+#       kargo.akuity.io/authorized-stage and keeps it unchanged (no self-authorizing); never create
+#       or delete.
+#
+# ROLLOUT: the binding starts at [Warn, Audit] (prod plan) — violations land as API warnings +
+# audit annotations and count in apiserver_validating_admission_policy_check_total, which
+# KargoWriteDenied (prometheusrule.yaml) alerts on. Flip to [Deny, Audit] once a clean soak shows
+# zero warn counts. The kind proof (tests/kind-kargo/e2e.sh) runs Kargo under BOTH.
+# failurePolicy Fail: a broken policy blocks only kargo-SA writes, never anyone else's.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: kargo-write-guard
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [rbac.authorization.k8s.io]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE]
+        resources: [roles, rolebindings, clusterroles, clusterrolebindings]
+      - apiGroups: [""]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [namespaces, secrets]
+      - apiGroups: [argoproj.io]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [applications]
+  matchConditions:
+    - name: kargo-service-accounts-only
+      expression: "request.userInfo.username.startsWith('system:serviceaccount:kargo:')"
+  variables:
+    - name: kind
+      expression: "request.kind.kind"
+    - name: projectNs
+      expression: >-
+        namespaceObject != null && has(namespaceObject.metadata.labels)
+        && 'kargo.akuity.io/project' in namespaceObject.metadata.labels
+        && namespaceObject.metadata.labels['kargo.akuity.io/project'] == 'true'
+    - name: kargoResourceNs
+      expression: "request.namespace in ['kargo-shared-resources', 'kargo-system-resources']"
+    - name: namespaceAllowlist
+      expression: "['oracle-kargo']"
+  validations:
+    - expression: >-
+        variables.kind != 'RoleBinding'
+        || (object.roleRef.name.startsWith('kargo-') && (variables.projectNs || variables.kargoResourceNs))
+      messageExpression: "'kargo-write-guard (a): RoleBinding ' + request.namespace + '/' + request.name + ' must reference a kargo-* role inside a Kargo project namespace'"
+    - expression: >-
+        variables.kind != 'ClusterRoleBinding'
+        || (object.metadata.name.startsWith('kargo-project-admin-') && object.roleRef.kind == 'ClusterRole'
+            && object.roleRef.name == object.metadata.name)
+      messageExpression: "'kargo-write-guard (a): ClusterRoleBinding ' + request.name + ' is not a kargo-project-admin-<project> binding to its own ClusterRole'"
+    - expression: >-
+        variables.kind != 'ClusterRole'
+        || (object.metadata.name.startsWith('kargo-project-admin-') && !has(object.aggregationRule)
+            && has(object.rules) && object.rules.all(r,
+                 has(r.apiGroups) && r.apiGroups == ['kargo.akuity.io']
+                 && has(r.resources) && r.resources == ['projects']
+                 && has(r.resourceNames) && size(r.resourceNames) > 0
+                 && !has(r.nonResourceURLs)
+                 && r.verbs.all(v, v in ['get', 'update', 'patch', 'delete'])))
+      messageExpression: "'kargo-write-guard (b): ClusterRole ' + request.name + ' is not a kargo-project-admin-<project> role scoped to its own Project'"
+    - expression: >-
+        variables.kind != 'Role'
+        || (variables.projectNs && (!has(object.rules) || object.rules.all(r,
+                 has(r.apiGroups) && r.apiGroups.all(g, g in ['', 'rbac.authorization.k8s.io', 'kargo.akuity.io', 'argoproj.io'])
+                 && has(r.resources) && !('*' in r.resources)
+                 && !r.verbs.exists(v, v in ['impersonate', 'escalate', 'bind']))))
+      messageExpression: "'kargo-write-guard (b): Role ' + request.namespace + '/' + request.name + ' is outside a Kargo project namespace or grants wildcard/impersonate/escalate/bind'"
+    - expression: "variables.kind != 'Namespace' || request.name in variables.namespaceAllowlist"
+      messageExpression: "'kargo-write-guard (c): ' + request.operation + ' of Namespace ' + request.name + ' is outside the Kargo namespace allowlist'"
+    - expression: "variables.kind != 'Secret' || variables.projectNs || variables.kargoResourceNs"
+      messageExpression: "'kargo-write-guard (d): Secret write in ' + request.namespace + ', which is not a Kargo project namespace'"
+    - expression: >-
+        variables.kind != 'Application'
+        || (request.operation == 'UPDATE'
+            && has(oldObject.metadata.annotations) && 'kargo.akuity.io/authorized-stage' in oldObject.metadata.annotations
+            && has(object.metadata.annotations) && 'kargo.akuity.io/authorized-stage' in object.metadata.annotations
+            && object.metadata.annotations['kargo.akuity.io/authorized-stage'] == oldObject.metadata.annotations['kargo.akuity.io/authorized-stage'])
+      messageExpression: "'kargo-write-guard (e): ' + request.operation + ' of Application ' + request.namespace + '/' + request.name + ' without an unchanged kargo.akuity.io/authorized-stage annotation'"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: kargo-write-guard
+spec:
+  policyName: kargo-write-guard
+  validationActions: [Warn, Audit]

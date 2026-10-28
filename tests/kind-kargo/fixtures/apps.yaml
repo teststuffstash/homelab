@@ -1,0 +1,58 @@
+# Stand-ins for the prod Applications Kargo would promote. Same names as prod; a public Helm chart
+# source (no git, no credentials). No automated sync — Kargo's argocd-update triggers it.
+apiVersion: v1
+kind: Namespace
+metadata: { name: dummy-apps }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: oracle-fleet-ingester
+  namespace: argocd
+  annotations: { kargo.akuity.io/authorized-stage: "oracle-kargo:ingester" }
+spec:
+  project: default
+  source:
+    repoURL: https://stefanprodan.github.io/podinfo
+    chart: podinfo
+    targetRevision: 6.15.0
+    helm:
+      valuesObject:
+        replicaCount: 1
+        resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { memory: 64Mi } }
+  destination: { server: https://kubernetes.default.svc, namespace: dummy-apps }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: oracle-fleet-ingester-shadow
+  namespace: argocd
+  annotations: { kargo.akuity.io/authorized-stage: "oracle-kargo:ingester" }
+spec:
+  project: default
+  source:
+    repoURL: https://stefanprodan.github.io/podinfo
+    chart: podinfo
+    targetRevision: 6.15.0
+    helm:
+      valuesObject:
+        replicaCount: 1
+        resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { memory: 64Mi } }
+  destination: { server: https://kubernetes.default.svc, namespace: dummy-apps }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-dummy
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://stefanprodan.github.io/podinfo
+    chart: podinfo
+    targetRevision: 6.15.0
+    helm:
+      valuesObject:
+        replicaCount: 1
+        resources: { requests: { cpu: 5m, memory: 16Mi }, limits: { memory: 64Mi } }
+  destination: { server: https://kubernetes.default.svc, namespace: dummy-apps }
