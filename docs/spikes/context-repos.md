@@ -58,10 +58,11 @@ Both positions are on record. Neither has data. Hence: pilot + measure.
 
 - Launcher `--context-repo <url>` (repeatable) on `agents/agent-session.sh`; for circles rides
   default it to `teststuffstash/circles-iac` + `teststuffstash/homelab`. **Anonymous depth-1
-  https clones into `/work/context/<name>`** — public repos, no token, so no push path exists:
+  https clones into `/work/context-repos/<name>`** (was `/work/context/<name>` until 2026-10-28 — see
+  §Measurement void below) — public repos, no token, so no push path exists:
   ADR-081 credential scoping and the org-pin rule are untouched, and no egress change is needed
   (github.com is baseline).
-- Env card gains a line: `Context repos: /work/context/{circles-iac,homelab} — read-only
+- Env card gains a line: `Context repos: /work/context-repos/{circles-iac,homelab} — read-only
   reference; grep freely (SERVICES.md lives in homelab).` Capability truth in the card, per the
   FU-126 folklore lesson.
 - Circles recipes drop the "you have ONLY this repo" sentence (folklore removal, same move as
@@ -72,7 +73,7 @@ Both positions are on record. Neither has data. Hence: pilot + measure.
 ## Measurement (the point of the pilot)
 
 Transcripts land in `s3://agent-transcripts` (transcripts-sync). After ~2–4 weeks or ≥10 circles
-rides, sweep the transcripts for tool calls touching `/work/context/` and classify per ride:
+rides, sweep the transcripts for tool calls touching `/work/context-repos/` and classify per ride:
 
 1. **(a) load-bearing** — a fact from a context repo shaped the work AND was not in the issue;
 2. **(b) redundant** — context repo consulted, but the issue already carried the fact;
@@ -80,6 +81,14 @@ rides, sweep the transcripts for tool calls touching `/work/context/` and classi
 
 Secondary signal: tokens/rounds per ride vs pre-pilot circles rides (mounting is not free if
 models compulsively re-grep).
+
+**Measurement void 2026-09-05 → 2026-10-28.** The context pre-fetch bundle (#1386, 0825b983)
+mounts a read-only ConfigMap at `/work/context`, the same path the pilot's prelude cloned into,
+so every clone died (`could not create work tree dir … Read-only file system` + `WARN: context
+clone failed`). The repos were NEVER mounted on any ride in that window (found live on
+agent-circles-issue-135-r1; fixed by moving the clones to `/work/context-repos/`). Transcripts from
+that window prove nothing about context-repo use, and reads under `/work/context/` (`index.txt`,
+`issue.md`, …) are BUNDLE reads, never context-repo reads. The sweep counts rides after the fix only.
 
 ## Decision criteria
 

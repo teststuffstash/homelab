@@ -1,0 +1,2 @@
+OUT - **Context repos:** read-only reference clones at `/work/context-repos/` (circles-iac, homelab) — grep them freely (SERVICES.md lives in homelab; deploy pins in circles-iac). REFERENCE only: never commit/push/build there, and your task's own facts still come from the issue. A `WARN: context clone failed` at the top of the run log means that repo is NOT mounted — work without it, don't fetch it yourself.
+RC 0

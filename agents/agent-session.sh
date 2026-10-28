@@ -112,7 +112,7 @@ while [ $# -gt 0 ]; do
     --recipe)    RECIPE="$2"; shift 2;;  # claude harness: launcher BUILDS the run command from this goose recipe path — never LLM-assembled (2026-07-21 #55 incident)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
     --no-arm)    NO_ARM=1; shift;;      # explicit operator override only — un-arming is otherwise DERIVED (unprotected base, or a research recipe into the default branch); finalize skips arm-at-open (AGENT_ARM_PR=0); C9 skips research/* branches
-    --context-repo) CONTEXT_REPOS="${CONTEXT_REPOS:+$CONTEXT_REPOS }$2"; shift 2;;  # repeatable: read-only reference clone at /work/context/<name> (docs/spikes/context-repos.md pilot); public https URLs only — anonymous clone, no token
+    --context-repo) CONTEXT_REPOS="${CONTEXT_REPOS:+$CONTEXT_REPOS }$2"; shift 2;;  # repeatable: read-only reference clone at /work/context-repos/<name> (docs/spikes/context-repos.md pilot); public https URLs only — anonymous clone, no token
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -816,7 +816,9 @@ fi   # FU-270: end of the /route path (opened at the gateway-sessions block)
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
 
 # Context-repos PILOT (docs/spikes/context-repos.md, 2026-08-04): circles rides get read-only
-# reference clones by default — measurement is whether transcripts ever show /work/context reads.
+# reference clones by default — measurement is whether transcripts ever show /work/context-repos reads.
+# NOT /work/context: that path is the read-only pre-fetch bundle mount (#1386) — the shared path
+# silently killed every clone 2026-09-05..2026-10-28.
 # Circles-ONLY by design; promotion to other stacks = a claim knob (fixer.contextRepos) + XRD
 # field + an ADR, gated on that measurement. Explicit --context-repo always wins.
 if [ -z "$CONTEXT_REPOS" ] && [ "$PROJECT" = "circles" ]; then
@@ -1049,14 +1051,14 @@ render_env_card() {
   printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); the global nix flake registry is pinned EMPTY (\`\$NIX_CONFIG\`), so an indirect ref like \`nix run nixpkgs#foo\` fails fast — use \`devbox add\` or a direct \`github:NixOS/nixpkgs/<rev>#foo\` ref; container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), mcr.microsoft.com=\`\$REGISTRY_MIRROR_MCR\` (${mmcr}), **HTTP-only**; python → pip/uv against \`\$UV_DEFAULT_INDEX\`/\`\$PIP_INDEX_URL\` (${pypi_cache}, on python-profile rides) or upstream pypi.org + files.pythonhosted.org (open on the python egress profile — fallback if cache unavailable); node → \`npm ci\`/\`npm install\` against \`\$NPM_CONFIG_REGISTRY\` (${npm_cache}, every ride, automatic — no registry.npmjs.org egress needed; a package-lock.json keeps its canonical \`https://registry.npmjs.org/…\` \`resolved\` URLs and npm swaps the host at fetch time, so never rewrite them to the proxy). **uv lockfile caveat:** python-profile rides also set \`\$UV_FROZEN=1\`, because uv records the resolving index inside \`uv.lock\` — so \`uv sync\`/\`uv run\` install from the COMMITTED lock and can never rewrite it to the LAN index, and \`uv lock\` no-ops with a warning. Two consequences to act on: a repo with no committed \`uv.lock\` fails loudly (commit one), and to CHANGE a dependency you must re-lock explicitly against canonical PyPI — \`UV_FROZEN=0 UV_DEFAULT_INDEX=https://pypi.org/simple uv add <pkg>\` — because a plain \`uv add\` here edits \`pyproject.toml\`, leaves the lock stale and still exits 0. **Pod-only caveat:** these vars exist ONLY inside agent pods; a repo script that consumes them MUST supply a default (\`\${REGISTRY_MIRROR_DOCKER_IO:-${mdio}}\`, \`\${REGISTRY_MIRROR_GHCR:-${mghcr}}\`, \`\${REGISTRY_MIRROR_MCR:-${mmcr}}\`), because the same script runs in CI/dev environments without them. **Scheme caveat:** the values carry \`http://\` (correct for containerd/k3d \`endpoint =\` config), but a bare image ref cannot carry a scheme — use \`\${VAR#*://}\` to strip it."
 
   # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
-  # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
+  # spike's measurement is whether transcripts ever show /work/context-repos reads, so the card ADVERTISES
   # and the recipes stay silent (capability truth lives here — the FU-126 folklore rule). Without
   # the pilot the ride clones ONLY /work/repo and service facts are the ISSUE AUTHOR's job to put
   # in the issue — that responsibility split IS the FU-117 role×context question, unresolved.
   if [ -n "${CONTEXT_REPOS:-}" ]; then
     local ctx_names="" _cu
     for _cu in $CONTEXT_REPOS; do ctx_names="${ctx_names:+$ctx_names, }$(basename "$_cu" .git)"; done
-    printf '%s\n' "- **Context repos:** read-only reference clones at \`/work/context/\` (${ctx_names}) — grep them freely (SERVICES.md lives in homelab; deploy pins in circles-iac). REFERENCE only: never commit/push/build there, and your task's own facts still come from the issue. A \`WARN: context clone failed\` at the top of the run log means that repo is NOT mounted — work without it, don't fetch it yourself."
+    printf '%s\n' "- **Context repos:** read-only reference clones at \`/work/context-repos/\` (${ctx_names}) — grep them freely (SERVICES.md lives in homelab; deploy pins in circles-iac). REFERENCE only: never commit/push/build there, and your task's own facts still come from the issue. A \`WARN: context clone failed\` at the top of the run log means that repo is NOT mounted — work without it, don't fetch it yourself."
   fi
   if [ -n "$DOCKER" ]; then
     # WHY: docker-client-in-devbox.json = FU-119; the kind-node-hangs-on-missing-mirror trap =
@@ -1486,18 +1488,21 @@ if [ -n "${RECIPE:-}" ]; then
   fi
   RECIPE_B64="$(base64 -w0 "$RECIPE_WITH_CARD")"; rm -f "$RECIPE_WITH_CARD"
   # Context-repos pilot prelude (docs/spikes/context-repos.md): anonymous depth-1 clones into
-  # /work/context BEFORE the harness starts. Rides the launcher-owned RUN_CMD so agent-runtime's
+  # /work/context-repos BEFORE the harness starts (NOT /work/context — the read-only bundle
+  # ConfigMap mount owns that path; /work itself is the container's writable layer). Rides the launcher-owned RUN_CMD so agent-runtime's
   # entrypoint (one REPO_URL) stays untouched; warn-don't-die — a failed clone degrades the ride
   # to exactly the pre-pilot world, and the env card's bullet tells the model the WARN means
   # "not mounted". All expansion is launcher-side (URLs are literals by the time the pod runs).
+  # >>>REPLAY:context-repos-prelude>>>
   CTX_PRELUDE=""
   if [ -n "$CONTEXT_REPOS" ]; then
-    CTX_PRELUDE="mkdir -p /work/context; "
+    CTX_PRELUDE="mkdir -p /work/context-repos; "
     for _CTXU in $CONTEXT_REPOS; do
       _CTXN="$(basename "$_CTXU" .git)"
-      CTX_PRELUDE="${CTX_PRELUDE}git clone --depth 1 --quiet ${_CTXU} /work/context/${_CTXN} || echo \"WARN: context clone failed: ${_CTXU}\"; "
+      CTX_PRELUDE="${CTX_PRELUDE}git clone --depth 1 --quiet ${_CTXU} /work/context-repos/${_CTXN} || echo \"WARN: context clone failed: ${_CTXU}\"; "
     done
   fi
+  # <<<REPLAY:context-repos-prelude<<<
   # GOOSE_MAX_TOKENS as a COMMAND-PREFIX env — it must exist in the POD, not this shell, exactly as
   # agents/retro-session.sh does it. The 16384 ceiling cures the `-32602` truncation class (proven
   # on mimo, 2026-07-25); the cure was wired into the retro path only and the worker's goose arm

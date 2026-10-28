@@ -51,7 +51,7 @@ list"). The data schema carries a `source` dimension from day one (`jail` today)
 ## v1 (next) — cluster leg, separate + combined views
 
 Same parser over `s3://agent-transcripts` slices (transcripts-sync; the one-PVC coverage gap
-closed with FU-140, archived 2026-08-12 — cluster slices are complete) with `/work/repo` + `/work/context/<name>` path normalization. **Operator
+closed with FU-140, archived 2026-08-12 — cluster slices are complete) with `/work/repo` + `/work/context-repos/<name>` path normalization (context-repo clones; `/work/context/` is the pre-fetch bundle). **Operator
 requirement (2026-08-11): jail and cluster stay viewable separately AND combined — not a full
 merge.** This leg simultaneously delivers the [context-repos](context-repos.md) spike's overdue
 measurement sweep (its load-bearing / redundant / untouched classification) — one parser, two

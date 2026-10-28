@@ -1,0 +1,3 @@
+OUT CTX_PRELUDE: mkdir -p /work/context-repos; git clone --depth 1 --quiet https://github.com/teststuffstash/circles-iac.git /work/context-repos/circles-iac || echo "WARN: context clone failed: https://github.com/teststuffstash/circles-iac.git"; git clone --depth 1 --quiet https://github.com/teststuffstash/homelab.git /work/context-repos/homelab || echo "WARN: context clone failed: https://github.com/teststuffstash/homelab.git"; 
+OUT → prelude stays off /work/context/ (the bundle mount)
+RC 0
