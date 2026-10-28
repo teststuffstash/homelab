@@ -26,6 +26,24 @@ import pytest
 ISLAND = Path(__file__).resolve().parent.parent
 
 _PY = r"(\d+\.\d+)"
+# devbox's search index can lag nixpkgs (homelab#2610: python@3.15 resolved to rc2 while nixpkgs had
+# 3.15.0 final), so the devbox members also read the nixpkgs FLAKE-REF form
+# `github:NixOS/nixpkgs/<rev>#python3NN` → "3.NN"; the plain `python`/`python@X.Y` forms stay
+# accepted so the swap-back stays green.
+_FLAKE_PY = r'"?github:NixOS/nixpkgs/[0-9a-f]+#python(\d)(\d{2,})'
+
+
+def _mutate_any(m: re.Match[str]) -> str:
+    """Odd-value mutation for a member with alternative forms: rewrite the matched version groups so
+    they read 9.99 — "X.Y" → "9.99", flake `python3NN` → `python999`."""
+    spans = [m.span(i) for i, g in enumerate(m.groups(), 1) if g is not None]
+    repl = ["9.99"] if len(spans) == 1 else ["9", "99"]
+    text, base = m.group(0), m.start(0)
+    for (lo, hi), r in reversed(list(zip(spans, repl, strict=True))):
+        text = text[: lo - base] + r + text[hi - base :]
+    return text
+
+
 # member -> (island file, regex whose groups spell the major.minor, odd-value mutation of the match)
 _MEMBERS: dict[str, tuple[str, str, Callable[[re.Match[str]], str]]] = {
     "Dockerfile build stage": (
@@ -33,9 +51,9 @@ _MEMBERS: dict[str, tuple[str, str, Callable[[re.Match[str]], str]]] = {
     "Dockerfile runtime stage": (
         "Dockerfile", rf"^FROM python:{_PY}-slim\s*$", lambda m: m.group(0).replace(m.group(1), "9.99")),
     "devbox.json python": (
-        "devbox.json", rf'"python":\s*"{_PY}"', lambda m: m.group(0).replace(m.group(1), "9.99")),
+        "devbox.json", rf'(?:"python":\s*"{_PY}"|{_FLAKE_PY}"\s*:)', _mutate_any),
     "devbox.lock python@": (
-        "devbox.lock", rf'^\s*"python@{_PY}":', lambda m: m.group(0).replace(m.group(1), "9.99")),
+        "devbox.lock", rf'^\s*"(?:python@{_PY}|{_FLAKE_PY})":', _mutate_any),
     "pyproject.toml requires-python": (
         "pyproject.toml", rf'^requires-python\s*=\s*">=\s*{_PY}', lambda m: m.group(0).replace(m.group(1), "9.99")),
     "pyproject.toml ruff target-version": (
@@ -47,7 +65,7 @@ def _python_versions(texts: dict[str, str]) -> dict[str, str]:
     out = {}
     for member, (fname, pattern, _) in _MEMBERS.items():
         m = re.search(pattern, texts[fname], re.MULTILINE)
-        out[member] = ".".join(m.groups()) if m else "<not found>"
+        out[member] = ".".join(g for g in m.groups() if g is not None) if m else "<not found>"
     return out
 
 
