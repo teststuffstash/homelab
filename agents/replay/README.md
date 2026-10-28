@@ -566,6 +566,10 @@ is stale, so it cannot drift the way the prose register did.
 | `touches-check-predicate/touches-check-predicate` | suite | - | `-` | - |
 | `touches-malformed/touches-malformed` | actions | - | `agents/coordinator-scan.sh` | - |
 | `transcript-mirror-probe` | table | - | `agents/agent-session.sh` | - |
+| `unarmed-major/automerge-green-skips` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/automerge-pending-skips` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/automerge-red-emits` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/automerge-red-settling-held` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/blocked-on-human` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/content-push-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/cr-emits` | actions | - | `agents/coordinator-scan.sh` | - |

@@ -8,8 +8,10 @@
 #   issue: open ∧ `agent/queued`                                      (ready to dispatch — the
 #          ONE dispatch precondition, ADR-122 (2), S8 #1432; `agent-fix` is never re-tested here)
 #   PR:    open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-conflict` ∨ reviewDecision=CHANGES_REQUESTED
-#          ∨ (`deps-review` ∧ armed ∧ (red ∨ CHANGES_REQUESTED)))   (FU-046, 2026-10-12: the reviewable
+#          ∨ (`deps-review` ∧ armed ∧ (red ∨ CHANGES_REQUESTED))   (FU-046, 2026-10-12: the reviewable
 #          bump the green-only reflex cannot own rides the `unarmed-major` unit — five rides, then a human)
+#          ∨ (`automerge` ∧ armed ∧ ¬`major` ∧ red at a settled head))   (G12b, 2026-10-28: the mechanical
+#          bump whose CI went red — #2919 — rides the same unit, same bound)
 #   v2:    issue open ∧ `agent-fix` ∧ `agent/in-progress` ∧ no Running worker pod ∧ no open PR
 #          referencing it (C4/C5 — a worker went terminal and nothing re-ticked; pod read via
 #          kubectl, probe failures skip the clause rather than fail into a wake). Once that state
@@ -4275,9 +4277,13 @@ EOF_GTHEMES_OPEN
     # states the reflex cannot own — RED (the reflex reviews green PRs only) and CHANGES_REQUESTED (the
     # changes-requested clause is WORKER_AUTHOR-scoped and never sees a Renovate author). Green = the
     # reflex's, decided per PR from the view below. `agent/arbitrate` = rides exhausted, a human's.
+    # A third (G12b, S9 #1985, operator ruling 2026-10-28 — "S9 needs a new rule"): the ARMED `automerge`
+    # (mechanical-lane) bump in ONE state, RED at a settled head. Green and pending are the auto-merge
+    # lane's own (renovate-approve + GitHub auto-merge); CHANGES_REQUESTED is not its state (no LLM
+    # reviewer reads it). #2919 (the weekly devbox-update PR) sat red and armed for two days, no actor.
     UM_MAX_RIDES="${UM_MAX_RIDES:-5}"
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("merge-conflict"))|not) and (((($L|index("major"))) and (.autoMergeRequest==null)) or ((($L|index("deps-review"))) and (.autoMergeRequest!=null) and (($L|index("major"))|not))))|.number'); do
-      um_lane="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name)) as $L|if ($L|index("deps-review")) and (.autoMergeRequest!=null) then "deps-review" else "unarmed-major" end' 2>/dev/null)" || um_lane="unarmed-major"
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("merge-conflict"))|not) and (((($L|index("major"))) and (.autoMergeRequest==null)) or ((($L|index("deps-review")) or ($L|index("automerge"))) and (.autoMergeRequest!=null) and (($L|index("major"))|not))))|.number'); do
+      um_lane="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name)) as $L|if ($L|index("major")) and (.autoMergeRequest==null) then "unarmed-major" elif ($L|index("deps-review")) then "deps-review" elif ($L|index("automerge")) then "automerge" else "unarmed-major" end' 2>/dev/null)" || um_lane="unarmed-major"
       pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
       um_boc="$(pr_blocked_on_check "$slug" "$u" "$pr_json_um")"
       case "$um_boc" in
@@ -4296,6 +4302,13 @@ EOF_GTHEMES_OPEN
         um_red="$(printf '%s' "$pr_json_um" | jq -r '
           ([ .statusCheckRollup[]? | ((.conclusion // .state) // "") | select(. == "FAILURE" or . == "TIMED_OUT" or . == "ERROR") ] | length > 0) as $red
           | if $red or (.reviewDecision == "CHANGES_REQUESTED") then "yes" else "no" end' 2>/dev/null)" || um_red="no"
+        [ "$um_red" = "yes" ] || continue
+      elif [ "$um_lane" = "automerge" ]; then
+        # The automerge class gate: RED only (a concluded failure on the head); "settled" is the SETTLING
+        # hold below — a red head whose rollup is still filling in waits for it like every other lane.
+        # Unreadable = not red (fail-open to the auto-merge lane: a ride is the expensive side).
+        um_red="$(printf '%s' "$pr_json_um" | jq -r '
+          if ([ .statusCheckRollup[]? | ((.conclusion // .state) // "") | select(. == "FAILURE" or . == "TIMED_OUT" or . == "ERROR") ] | length > 0) then "yes" else "no" end' 2>/dev/null)" || um_red="no"
         [ "$um_red" = "yes" ] || continue
       fi
       # Bounded rides (ADR-127's max-5 made deterministic, operator 2026-10-12): every dispatch leaves a

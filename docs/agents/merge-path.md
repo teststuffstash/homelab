@@ -519,7 +519,8 @@ the CronJob-era wake mechanics and the reusable-workflow era: git history + TICK
   CI-only approval (the reflex SKIPS them); `deps-review` bumps and ARMED `major` bumps ride the LLM
   review path (the migration lens); an UN-ARMED `major` is the coordinator's human lane. A `deps-review`
   bump that is RED or CHANGES_REQUESTED rides the coordinator's `unarmed-major` unit (2026-10-12: the
-  reflex is green-only, so the worker adapts on the Renovate branch; five rides, then a human). The lane is
+  reflex is green-only, so the worker adapts on the Renovate branch; five rides, then a human); so does an
+  ARMED `automerge` bump that is RED at a settled head (2026-10-28, G12b — #2919). The lane is
   the BLAST CLASS's, not semver's (ADR-141, amended 2026-09-27: GitHub Actions bumps of every type
   ride the grouped `automerge` lane until a dependency graduates on evidence; terraform providers
   are the human-plan lane). See [`../renovate.md`](../renovate.md).

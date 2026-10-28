@@ -101,8 +101,9 @@ not the coordinator, owns whether an update should exist:
 - **Reviewer requests changes** → the PR stays OPEN (changes-requested doesn't close it), Renovate
   won't duplicate it, and `rebaseWhen: conflicted` keeps it stable. Action: **a worker adapts the code
   on the renovate branch** — since 2026-10-12 the scan's `unarmed-major` unit owns this for an ARMED
-  `deps-review` PR too, in its red or changes-requested state (the reflex is green-only; FU-046): five
-  rides, then `agent/arbitrate` for a human — never close. **Not on the GitHub Actions lane** (ADR-141):
+  `deps-review` PR too, in its red or changes-requested state (the reflex is green-only; FU-046), and
+  since 2026-10-28 an ARMED `automerge` PR in its red state (G12b): five rides, then `agent/arbitrate`
+  for a human — never close a `deps-review` one. **Not on the GitHub Actions lane** (ADR-141):
   those PRs are grouped per repo per wave, and the reviewer reads one as a batch member with no fixer
   behind it.
 - **Renovate owns its PRs' currency, conflicts and autoclose (ADR-153, 2026-10-12).**
@@ -134,7 +135,9 @@ The coordinator loop runs in-cluster, unsuspended since 2026-07-28 (`reflexes-ar
 changes-requested→worker transition covers un-armed `major` PRs and, since #2521 (2026-10-12), an
 ARMED `deps-review` PR that is red or changes-requested — the worker pushes to the `renovate/*`
 branch, up to five rides, then `agent/arbitrate` (first proven on sleep-tracking#191; FU-046,
-archived). A red ARMED `automerge` PR still simply **parks** (docs/dependency-upgrades.md G12b).
+archived). Since 2026-10-28 a red ARMED `automerge` (mechanical-lane) PR rides the same unit, red at a
+settled head only, same bound — the worker adapts in-PR from the failing step's log; a hopeless one is
+closed and the gap filed (docs/dependency-upgrades.md G12b, #2919).
 
 ## Gotchas encountered
 

@@ -1,0 +1,26 @@
+{
+  "number": 2919,
+  "headRefOid": "c0ffee00aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    {
+      "name": "ci",
+      "conclusion": "FAILURE",
+      "startedAt": "2026-10-26T05:12:44Z"
+    },
+    {
+      "name": "approve / approve",
+      "conclusion": "SKIPPED",
+      "startedAt": "2026-10-26T05:12:41Z"
+    }
+  ],
+  "reviews": [],
+  "commits": [
+    {
+      "oid": "c0ffee00aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "messageHeadline": "chore(devbox): weekly devbox update",
+      "committedDate": "2026-10-26T05:12:38Z"
+    }
+  ],
+  "comments": []
+}
