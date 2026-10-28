@@ -24,8 +24,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **Security contact + company mail (operator 2026-10-27/28, no FU — pointers below own status).** teststuff.net
   mail is LIVE on Proton (homelab#2974 + #2976 merged + applied); addresses + reasoning in the private teststuff
   repo `docs/company-email.md`. Disclosure policy text = `tofu/github/files/SECURITY.md` (its ONLY home) →
-  homelab#3001 creates the public `teststuffstash/.github` repo + PVR on every public repo — **operator applies**
-  (add Contents:R/W to the admin PAT first). minutark.ee security page naming the lead + its own `security.txt`
+  homelab#3001 MERGED + APPLIED 2026-10-28: public `teststuffstash/.github` serves it as the org default (every
+  repo's Security tab), PVR on all 13 public repos (verified via API). minutark.ee security page naming the lead + its own `security.txt`
   + contact → `info@teststuff.net`: oracle-fleet#943 (oracle loop). The minutark page URL = the CVP "security
   leader" link (e-äriregister entry meanwhile). LATER: the homelab single `security.txt` source + Expires/drift
   probe (minutark's copy becomes a consumer); Cloudflare Email Routing for every OTHER domain's
