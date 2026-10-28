@@ -181,6 +181,8 @@ archived). A red ARMED `automerge` PR still simply **parks** (docs/dependency-up
   excepted — §"The automerge vs review split"); a reverted lock version is refused by `pin-only-lint`
   check (i) for 30 days, which holds the WHOLE weekly PR red — the lever out is a `devbox.json` pin of
   that one package (`"<pkg>": {"version": "<x.y.z>"}`), dropped once nixpkgs moves on.
+  Files GENERATED from a pinned tool's output (today: the replay `gh-json-fields` allowlist) are
+  re-rendered from the new lock on the same PR, so a tool bump does not red its own weekly PR (G12b).
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates
   `FROM …@sha256`; a `customManagers` regex on the same line just produces "could not determine new
   digest" warnings. Removed.

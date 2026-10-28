@@ -195,8 +195,26 @@ if [ "$DIR" = "." ] && [ -f mgmt/nixos/flake.lock ]; then
 access-tokens = github.com=$GH_TOKEN" nix flake update --flake "./$FLAKE_DIR"
 fi
 
+# Tool-GENERATED files (homelab leg only): a committed file rendered from a pinned tool's own output
+# moves with the lock that moves the tool — the Renovate `postUpgradeTasks` shape (G12). Otherwise the
+# tool's bump reds its own weekly PR until someone regenerates, and a red ARMED mechanical PR has no
+# actor (G12b — #2919 sat red two days on the gh 2.102.0 → 2.103.2 version line alone). The gh
+# `--json` allowlist renders from the NEW lock's gh through its nixpkgs flake ref (no devbox install);
+# a field gh DROPPED then reds the replay fixture that asks for it, which is the check's real point.
+# A render failure only warns: the PR still opens and its CI names the stale file.
+GEN_FILES=""
+if [ "$DIR" = "." ] && [ -f agents/replay/gh-json-fields.sh ]; then
+  GH_REF="$(jq -r '[.packages | to_entries[] | select(.key | startswith("gh@")) | .value.resolved][0] // empty' devbox.lock)"
+  if [ -n "$GH_REF" ] && NIX_CONFIG="experimental-features = nix-command flakes
+access-tokens = github.com=$GH_TOKEN" nix shell "$GH_REF" -c bash agents/replay/gh-json-fields.sh --write; then
+    GEN_FILES="agents/replay/stubs/gh-json-fields.tsv"
+  else
+    echo "::warning::[$REPO] could not regenerate the gh --json allowlist from ${GH_REF:-<no gh in devbox.lock>}"
+  fi
+fi
+
 # porcelain, not `git diff`: the stamp's lock may be NEW (untracked) on its first run
-if [ -z "$(git status --porcelain -- "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"})" ]; then
+if [ -z "$(git status --porcelain -- "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"} $GEN_FILES)" ]; then
   echo "[$REPO] devbox.lock already current — nothing to do"; exit 0
 fi
 
@@ -227,7 +245,7 @@ LINES="$(jq -r '.lines[]' <<<"$MOVES")"
 git config user.name "homelab-renovate[bot]"
 git config user.email "homelab-renovate[bot]@users.noreply.github.com"
 git checkout -q -B "$BRANCH"
-git add "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR/devbox.lock" "$VS_DIR/devbox.json"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"}
+git add "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR/devbox.lock" "$VS_DIR/devbox.json"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"} $GEN_FILES
 git commit -q -m "chore: devbox update — align the toolchain lock (FU-022)" \
   -m "Weekly synchronized devbox.lock bump so shared tools resolve to the same version across repos (nix cache + agent-base bake hits)."
 git push -q --force origin "$BRANCH"
