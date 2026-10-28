@@ -31,7 +31,7 @@ The dispatch prompt names them:
 - `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`,
   `dig`) — prose someone wrote instead of an issue. **`dig` is the wired source:**
   [`agents/coordinator/island-intake-argo.yaml`](../agents/coordinator/island-intake-argo.yaml)
-  runs this sitting unattended each morning over the deep dig's `cause-found` findings that name
+  runs this sitting unattended each morning over the [deep dig](../docs/agents/roles.md)'s `cause-found` findings that name
   the island (`scripts/intake-select.sh --source dig`); its prompt adds the receipt protocol. A text input becomes an issue (`file`) only when its
   ruling would be `queue`, `goal` or `seat`; a `standing` or `close` ruling on text is
   report-only — the source record keeps it (one home per fact), the report says why.
