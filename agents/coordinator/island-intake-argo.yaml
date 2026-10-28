@@ -164,7 +164,12 @@ spec:
               # ── 1. SELECT (deterministic; exit 1 = hold, 2 = a probe failed) ─────────────────
               bash gateway/scripts/intake-select.sh --source dig --island "$ISLAND" --out /tmp/sel.json 2>/tmp/select.log
               rc=$?; cat /tmp/select.log
-              if [ "$rc" -eq 2 ]; then _push 0 0 0 0 0; echo "island-intake: selection probe failed — exit 1, Argo retries"; exit 1; fi
+              # A hold is a hold only when the selector WROTE a selection saying so: an unexpected death
+              # (set -e) also exits 1, and reading that as "nothing to do" is the fail-open the first
+              # in-cluster dry-run hit (2026-10-28 — inputs 0 while four findings were waiting).
+              if [ "$rc" -eq 2 ] || ! jq -e '.schema == "island-intake-select/v1"' /tmp/sel.json >/dev/null 2>&1; then
+                _push 0 0 0 0 0; echo "island-intake: selection failed (rc=$rc, no valid selection) — exit 1, Argo retries"; exit 1
+              fi
               NIN="$(jq -r '.counts.inputs // 0' /tmp/sel.json 2>/dev/null || echo 0)"
               if [ "$rc" -ne 0 ]; then _push 1 "$NIN" 0 0 0; echo "island-intake: hold — no sitting today"; exit 0; fi
 

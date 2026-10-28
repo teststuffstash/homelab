@@ -87,8 +87,13 @@ ts_read_objects() {
     done
     return 0
   fi
-  _s5 ls "s3://$TS_BUCKET/homelab/$prefix/*" 2>/dev/null | awk '{print $NF}' \
-    | grep -E "/${glob//\*/[^/]*}\$" | sed -E 's#^.*/([^/]+/[^/]+)$#\1#' | sort -u \
+  # s5cmd answers a prefix with no objects with an ERROR + exit 1 — the NORMAL case here (today's
+  # receipts before the first sitting, a day the dig did not run), so it must not trip `set -e`:
+  # the positive control in cmd_dig already proved the bucket is readable. (2026-10-28: the first
+  # in-cluster dry-run died here with exit 1, which the workflow then read as a hold.)
+  local rows; rows="$(_s5 ls "s3://$TS_BUCKET/homelab/$prefix/*" 2>/dev/null || true)"
+  printf '%s\n' "$rows" | awk 'NF {print $NF}' \
+    | { grep -E "/${glob//\*/[^/]*}\$" || true; } | sed -E 's#^.*/([^/]+/[^/]+)$#\1#' | sort -u \
     | while read -r rel; do
         _s5 cat "s3://$TS_BUCKET/homelab/$prefix/$rel" 2>/dev/null \
           | jq -c --arg k "$prefix/$rel" '. + {_key: $k}' 2>/dev/null \
