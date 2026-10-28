@@ -128,6 +128,14 @@
 # takes the operator path straight to master, where this check does not run.
 /argocd/platform/openrouter-operator.yaml
 
+# The replay fake gh's `--json` allowlist (G12b, operator 2026-10-28): GENERATED from the pinned gh
+# and re-rendered by the weekly devbox-update on every gh bump (scripts/devbox-update.sh
+# `regen_generated`) — owned, each bump would park the mechanical lock PR on a human (#2919, #2986).
+# Ownership is REPLACED, not dropped: the replay suite `gh-json-fields-allowlist-current` (required
+# `ci`, selected by any agents/ or devbox.lock change) holds this file BYTE-EXACT to what the head
+# lock's gh renders — no hand edit passes it. One-line revert: delete this row.
+/agents/replay/stubs/gh-json-fields.tsv
+
 # The ownership file owns itself — otherwise the first thing an agent could propose is its own
 # ungating (oracle-fleet's CODEOWNERS carries the same line for the same reason).
 /CODEOWNERS         @RasmusSoot
