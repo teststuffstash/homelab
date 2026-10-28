@@ -155,6 +155,12 @@ bounded build); handoff-G4 waits on claude-jail#11.
       (2026-10-17; weak resight 10-22, an ArgoCD sync rolling the single-replica gateway).
       **promoted→** triggers + hard rule: urgent is not exempt — incident restarts, key rotations,
       single-replica sync-restarting merges (2026-10-26).
+- [ ] maintenance-window-G8 — the watch's `NEW <name>` line never reached the seat mid-window:
+      `maint watch` ran as a background shell task, which interrupts only on EXIT, so a NEW
+      `UpgradeLeaseInFlight` (07:04Z) was read after `close` and got its outcome late (benign,
+      info/triage none). Sighted 2026-10-28 (merge window #2916/#2915/#2911). Fix shape: the skill
+      says to arm the watch as a line-streaming monitor (each line = a notification), not a
+      background task read only at exit.
 
 ## opnsense-as-code
 
