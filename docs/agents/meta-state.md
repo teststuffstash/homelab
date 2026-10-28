@@ -47,12 +47,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   Python 3.15 wave PARKED org-wide (#2610 / oracle-fleet#883 ruling + `Un-park:` line; circles#124 stack-side): un-park
   when `devbox search python@3.15` resolves the final (rc2 today). Residual list: #1985 comment 6383963515; FU-316.
 - **⚑ MORNING READS (2026-10-26, operator) — two HELD PRs + one direct push landed overnight (TICK-LOG 10-25):**
-  (1) **homelab#2902** Kargo prod install @ 8444efd4 — all three shape questions settled (git token → `kargo-shared-resources`;
-  API plain HTTP :80; startup `list secrets` accepted → FU-318a), PSS restricted + namespace labels fixed, CI green, sentinel red
-  until the exceptions baseline lands on master (#2403 precedent). Pre-merge after the read: exceptions baseline on master →
-  two Infisical keys (`KARGO_ADMIN_*`) → CRD maintenance window (FU-304/315) → `mgmt-tf` plan/apply (+1 repo entry) → merge →
-  the PR body's apply plan. The checker's new library rules add 38 Kargo rows (SA automount, wildcard verbs in the CHART's
-  ClusterRoles, ro-rootfs, probes) — a read: fix before merge or accept as the platform-wide debt they are (322 on master).
+  (1) **homelab#2902** Kargo prod install — see the KARGO pickup bullet below (2026-10-28: pre-merge chain done, install = operator's go).
   (2) **homelab#2911** component checker @ 1b720e68 (CI in progress at wind-down) — `scripts/component-check.sh` renders every
   Application + runs kyverno: PSS restricted from the `kyverno-policies` chart 3.9.2, 21 rules vendored from kyverno/policies
   `release-1.19` via `scripts/vendor-kyverno-policies.sh` (partial-vs-legacy choices in each header), SERVICES.md check;
@@ -69,9 +64,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   roles) + Helm test hooks dropped (13). Expected master total after all merge ≈ 322 → ~170. LEFT for a judgment read (not safe
   blanket): sa-automount 47, ro-rootfs 40, secret-role-verbs 37, probes 16, agent-coordinator wildcard role, infisical bootstrap Job.
   (4) The #918 spec read (oracle-fleet) — still the operator's; steps 1, 4, #919, oracle-iac#1140 wait on it.
-- **⚑ DELIVERY LOOP / KARGO (oracle-fleet docs/delivery-loop.md).** Oracle gaps filed unqueued: oracle-fleet #926–#930,
-  oracle-iac#1140 (held for #918). Residuals: FU-317, FU-318. Kind e2e not re-run since (jail has no Docker; the one open
-  proof for #2902 is `runAsNonRoot` end-to-end — the image is User 65532, so a first prod sync is an acceptable test).
+- **⚑ KARGO PROD INSTALL — homelab#2902 @ 2e319ee8 (2026-10-28 pre-merge chain DONE, TICK-LOG 10-28 evening). HELD, unarmed: the
+  install is the operator's go (ADR-110 escalation class; wk-metal-02's apiserver sits at 3064/3200 MiB GOMEMLIMIT, `ControlPlaneNodeMemoryLow`
+  firing).** Done: rebased onto master (generated coverage files regenerated, `--check` clean), sentinel baseline MERGED as #3003 — **all four required
+  contexts green on 2e319ee8** (CI, iac-sentinel 0 violations, management-sentinel `+1 ~0 -0`, opnsense-test-vm n/a; BEHIND only), Infisical `KARGO_ADMIN_PASSWORD_HASH_B64` + `KARGO_ADMIN_TOKEN_SIGNING_KEY` minted + read back (wallet `kargo-admin`),
+  mgmt plan **`20261028T181445Z-fc77efb2`** = exactly `+ kubernetes_secret.argocd_repo_kargo_oci` (re-plan if the state serial moved),
+  component-check 202 = master's ~164 + 38 Kargo/Rollouts rows (chart RBAC debt — accepted 10-26), PR body apply notes corrected.
+  **NEXT (operator go → seat):** `/maintenance-window` → `mgmt-tf apply <plan-id>` → arm + merge #2902 → the PR body's §Apply plan 4–6 (Rollouts
+  CRD check / kargo-controller restart if it started first; `kargo-git-oracle-iac` in `kargo-shared-resources`; `KargoWriteDenied` silent;
+  SERVICES.md → LIVE). Kind e2e not re-run (jail has no Docker; the harness applies `argocd/resources/kargo` only — kargo-prod is unproven
+  until the first sync). Oracle side after install: oracle-fleet #917/#918 (operator's spec read), #926–#930, oracle-iac#1140. Residuals: FU-317, FU-318.
 - **⚑ ISLAND INTAKE (FU-320, PR #2978 — 2026-10-27 overnight spike).** PICKUP: (1) #2978's verdict (pr-wait was armed);
   (2) the first intake-queued rides — #2782 and #2753 (one-line spec-flag edits, rows written into the issues): did the
   scan dispatch them, did they merge in ≤ 2 rounds, did the specs reviewer accept the rows as written; (3) #2977 /
