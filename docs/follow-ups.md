@@ -675,9 +675,10 @@ the block needs pruning, not more headings.
 - [ ] **FU-320** — **Island intake: the gateway admits its own ordinary work (P6 first leg, spike 2026-10-27).**
       Brief [`gateway/intake.md`](../gateway/intake.md) + selector `gateway/scripts/intake-select.sh` + the two live
       sittings in [`spikes/island-intake.md`](spikes/island-intake.md) (PR #2978, merged 10-27): #2782/#2753 queued with the key
-      rows written in, #2977 filed + standing, #2768/#2650 seat, #2684 standing. Until wired, the seat runs the sitting
-      as an opus subagent when the selector fires, then rings. **Next (operator rulings, spike §Open questions):**
-      the scan clause (`island-intake` unit, brief = the island file, replay fixture); `INTAKE_GOAL_BUDGET_USD`
+      rows written in, #2977 filed + standing, #2768/#2650 seat, #2684 standing. **WIRED for the dig source
+      (2026-10-28, ruling = own CronWorkflow, spike §Open questions 1):** `island-intake-argo.yaml` daily 05:00Z, receipts =
+      the ruled-input ledger, `INTAKE_DAILY_MAX`. Proof owed: the first live sitting (dry-run, then apply). The issue pile
+      stays seat-run until wired as a second source. **Next (operator rulings):** `INTAKE_GOAL_BUDGET_USD`
       (10) vs "Goals stay human"; may the bot close human-filed issues; rule 10's flag grammar for a closed work
       issue (pinned text). The `goal` path is unexercised. Settle: bot-filing → `agent/queued` ≈ 0 days on the
       island, two weeks, rides merging ≤ 2 rounds. Relates FU-270, ADR-139, ADR-155/156, ADR-122.
@@ -1132,8 +1133,9 @@ the block needs pruning, not more headings.
       [`spikes/responder-week-audit.md`](spikes/responder-week-audit.md) §2026-10-09. **Next:** (a) LANDED #2415 (re-dig skip keyed on harvest-stamped
       members) — proof owed: a re-firing subject the dig skips. (b)+(c) reader LIVE: `/board-sweep` (#2416), first
       run 2026-10-14 set a `dig-explained:` marker (#2555); its lane anomalies are the next input (dig 10-10 "5
-      findings, wrote 2"; no responder triage 10-11/10-14; dig TOOL_GAPs — TICK-LOG 2026-10-14; 10-24: one dead node → 15+ pod-level `now` sessions = (d)). (d) `now`-lane
-      grouping; (e) the lane's own dependency cone. oracle-fleet's 5 rules lack `triage` (stack lane). Relates FU-230, FU-231.
+      findings, wrote 2"; no responder triage 10-11/10-14; dig TOOL_GAPs — TICK-LOG 2026-10-14). (d) `now`-lane grouping LANDED
+      #2761 (10-20). (e) the lane's own dependency cone. (f) dig→worker: island findings → island intake (FU-320, 10-28;
+      replay 10-05→10-28 = 1 dispatchable cause). oracle-fleet's 5 rules lack `triage` (stack lane). Relates FU-230, FU-231.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat unread in Loki
       for six days (2026-09-10). **Detector LANDED + PROVEN LIVE 2026-09-23** (#1948): an Alloy
       `stage.metrics` counter on the kmsg stream → `KernelOopsCaptured` per node, a sender-side metric

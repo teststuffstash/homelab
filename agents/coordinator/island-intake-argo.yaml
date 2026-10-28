@@ -1,0 +1,258 @@
+# island-intake-argo — the island intake sitting, WIRED (FU-320): the gateway island admits the
+# deep dig's findings about it, so a cause the dig established becomes a queued, spec-shaped issue
+# without the seat relaying it. First source = the dig only (operator, 2026-10-28); the issue pile
+# keeps the seat-run sitting (gateway/intake.md) until a second source is wired here.
+#
+# WHY. The dig files nothing by design (FU-231: findings to the bucket, issues only for actionable
+# verdicts), so its `cause-found` findings reached a worker only through a human: the 10-25 Go
+# catalog cause was dispatched ~45 h later, after the seat re-found it (#2933). Intake is the
+# island's ONE admission — it live-verifies, folds same-cause inputs BEFORE filing, writes the key
+# spec rows, and queues — so the dig needs no issue author of its own (ADR-122: filing stays inert
+# for everyone else; the island's lens is the gate — ADR-155/156).
+#
+# Machinery inventory (the deep dig's shape, deep-dig-argo.yaml):
+#   predicate  = `gateway/scripts/intake-select.sh --source dig`: dig `cause-found` findings from the
+#                last 7 d whose text names the island, minus every input an earlier APPLY receipt
+#                ruled (deterministic shell; the model never picks its inputs — ADR-094).
+#   edge       = this CronWorkflow, daily 05:00Z (after the 03:30Z dig). No Sensor: nothing here is
+#                urgent, and one sitting over the day's batch is the cost shape (≈150k tokens).
+#   key        = the receipts — homelab/intake-<island>-<date>/<run>/receipt.json, read back with the
+#                READER key (the dig's own re-dig key pattern). An input with no ruling line in the
+#                session's output is NOT ruled and re-presents tomorrow.
+#   capacity   = INTAKE_DAILY_MAX apply sittings per UTC day (the responder's daily-cap shape) + the
+#                subscription-capacity semaphore on the LEAF (FU-198 — the retry wrapper holds no slot)
+#                + activeDeadline 1 h. The model is the goal-decompose class (authoring, not checking —
+#                coordinator-scan.sh's ruling for the same work one level later); it is not served on
+#                the Go rail, so a Go-only window defers to the retry.
+#   output     = the sitting's GitHub writes (issues, labels, one `intake:` comment per ruling — the
+#                brief's outcomes) + the receipt, inputs, brief, transcript and an A1 manifest in the
+#                bucket; then ONE /coordinate ring for the platform stack when anything was queued.
+#   belts      = island_intake_* gauges (job island_intake) + IslandIntakeStale
+#                (argocd/resources/pushgateway/prometheusrule.yaml).
+#   dry-run    = `argo -n agent-coordinator submit --from cronworkflow/island-intake -p mode=dry-run`:
+#                the sitting writes nothing to GitHub and its receipt consumes nothing.
+# Harness: agents/island-intake-test.sh (run by `devbox run deep-dig-test`, the dig's own gate).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: island-intake
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "0 5 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 3600
+    ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 172800 }
+    arguments:
+      parameters:
+        - { name: mode, value: apply }
+        - { name: island, value: gateway }
+    # homelab#103 / #867 soft spread + Longhorn-disk de-preference — the dig's.
+    podSpecPatch: |
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchExpressions:
+              - { key: workflows.argoproj.io/workflow, operator: Exists }
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 10
+              preference:
+                matchExpressions:
+                  - key: node.longhorn.io/create-default-disk
+                    operator: NotIn
+                    values:
+                      - "true"
+    entrypoint: intake-retry
+    volumes:
+      - { name: work, emptyDir: {} }
+    templates:
+      # THE RETRY WRAPPER — no semaphore here; every attempt is a fresh `intake` node that acquires
+      # and releases the slot (FU-198, the dig's and the responder's split).
+      - name: intake-retry
+        steps:
+          - - name: intake
+              template: intake
+        retryStrategy:
+          limit: "3"
+          retryPolicy: OnFailure
+          backoff: { duration: "30m", factor: "2" }
+      - name: intake
+        metadata:
+          labels: { app: island-intake-workflow }
+        synchronization:
+          semaphores:
+            - configMapKeyRef: { name: subscription-capacity, key: claude }
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator
+          env:
+            - { name: HOME, value: "/home/node" }
+            - { name: ORG, value: "teststuffstash" }
+            - { name: MODE, value: "{{workflow.parameters.mode}}" }
+            - { name: ISLAND, value: "{{workflow.parameters.island}}" }
+            - { name: INTAKE_DAILY_MAX, value: "2" }
+            - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
+            - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
+            - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
+            # Cost attribution: role=coordinator (the authoring role), lane=intake.
+            - { name: CLAUDE_CODE_ENABLE_TELEMETRY, value: "1" }
+            - { name: OTEL_METRICS_EXPORTER, value: "otlp" }
+            - { name: OTEL_LOGS_EXPORTER, value: "otlp" }
+            - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: "http/protobuf" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.monitoring.svc.cluster.local:4318" }
+            - { name: OTEL_TRACES_EXPORTER, value: "none" }
+            - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=coordinator,lane=intake,stack=platform" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: AWS_REGION, value: "garage" }
+            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+            - name: AGENT_TS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
+            - name: AGENT_TS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
+            # The READER key is NOT optional in effect: without it the selector cannot see what was
+            # already ruled, so it exits 2 (fail-closed) instead of feeding the same findings daily.
+            - name: AGENT_TS_READER_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
+            - name: AGENT_TS_READER_SECRET
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
+            - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+          command: [bash, -lc]
+          args:
+            - |
+              set -uo pipefail
+              DAY="$(date -u +%Y-%m-%d)"; TS_RUN="$(date -u +%Y%m%dT%H%M%SZ)"
+              case "$MODE" in apply|dry-run) ;; *) echo "island-intake: mode must be apply|dry-run (got $MODE)"; exit 1;; esac
+              PGW="${PUSHGATEWAY:-}"
+              _push() { # <probe_ok> <inputs> <session_ran> <ruled> <queued>
+                [ -n "$PGW" ] || return 0
+                printf '%s\n' \
+                  "# TYPE island_intake_last_run_timestamp_seconds gauge" "island_intake_last_run_timestamp_seconds $(date -u +%s)" \
+                  "# TYPE island_intake_probe_ok gauge" "island_intake_probe_ok $1" \
+                  "# TYPE island_intake_inputs gauge" "island_intake_inputs $2" \
+                  "# TYPE island_intake_session_ran gauge" "island_intake_session_ran $3" \
+                  "# TYPE island_intake_ruled gauge" "island_intake_ruled $4" \
+                  "# TYPE island_intake_queued gauge" "island_intake_queued $5" \
+                  | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/island_intake/island/$ISLAND" >/dev/null 2>&1 \
+                  || echo "island-intake: pushgateway unreachable — metrics stale, rulings unaffected"
+              }
+              TS_PREFIX="s3://${AGENT_TS_BUCKET}/homelab/intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}"
+              _ts_put() { # <local> <remote-basename>
+                [ -s "$1" ] || return 0
+                [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 writer key — $2 not captured"; return 1; }
+                command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — $2 not captured"; return 1; }
+                AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" \
+                  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$1" "$TS_PREFIX/$2" >/dev/null 2>&1 \
+                  || { echo "transcripts: upload FAILED for $2"; return 1; }
+              }
+
+              rm -rf /work/homelab
+              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { _push 0 0 0 0 0; echo "island-intake: clone failed"; exit 1; }
+              cd /work/homelab
+
+              # ── 1. SELECT (deterministic; exit 1 = hold, 2 = a probe failed) ─────────────────
+              bash gateway/scripts/intake-select.sh --source dig --island "$ISLAND" --out /tmp/sel.json 2>/tmp/select.log
+              rc=$?; cat /tmp/select.log
+              if [ "$rc" -eq 2 ]; then _push 0 0 0 0 0; echo "island-intake: selection probe failed — exit 1, Argo retries"; exit 1; fi
+              NIN="$(jq -r '.counts.inputs // 0' /tmp/sel.json 2>/dev/null || echo 0)"
+              if [ "$rc" -ne 0 ]; then _push 1 "$NIN" 0 0 0; echo "island-intake: hold — no sitting today"; exit 0; fi
+
+              # ── 2. one sitting, on the subscription rail (the goal-decompose class is not on Go) ──
+              rail="$(SUBSCRIPTION_TIER=heavy bash agents/subscription-latch.sh --pick-rail)" || rail=""
+              case "$rail" in
+                ''|opencode-go/*) _push 1 "$NIN" 0 0 0; echo "island-intake: subscription rail not clear (rail='$rail') — exit 1, Argo retries with backoff"; exit 1;;
+              esac
+              _rm="$(bash agents/resolve-model.sh --role coordinator --class goal-decompose --fallback opus)"
+              eval "$(python3 agents/model_id.py --shell "$_rm")"; TS_MODEL="${MODEL_MODEL:-$_rm}"
+
+              {
+              cat <<BRIEF
+              You are the ISLAND INTAKE sitting for the \`$ISLAND\` island, running unattended in-cluster
+              (agents/coordinator/island-intake-argo.yaml). Your working tree is a fresh clone of homelab
+              master at /work/homelab (cwd). Read gateway/intake.md IN FULL first and follow it exactly —
+              it is your brief; this prompt only adds the inputs, the mode and the receipt protocol.
+
+              mode: $MODE
+
+              The inputs are \`text:\` inputs with \`source: dig\` — findings of the grouped deep dig
+              (docs/agents/roles.md §deep dig), each a diagnosis of standing alerts with the reads it
+              made. Treat each as a CLAIM (intake.md procedure step 1): live-verify it — the code line
+              it names, the alert (curl -s http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts),
+              and the issues/PRs filed or merged since the finding's timestamp. Several findings are
+              often ONE cause (the dig groups by onset + host, and re-digs a renamed tail alert):
+              rule them together — one issue for one change. When you \`file\`, the issue's prose names
+              the finding id(s) as its origin (\`Origin=\` is prose for a non-issue source).
+
+              RECEIPT PROTOCOL (the shell parses this; the receipt is the ONLY record that an input was
+              ruled — an input without a line re-presents tomorrow). For EVERY input id below print
+              exactly one line, at the end, outside any code fence:
+                INTAKE-RULED: <input id> <outcome> <refs>
+              <outcome> is one of queue|goal|seat|fold|close|standing|file|deferred (the brief's
+              outcomes; \`deferred\` = left for a later sitting, e.g. past the 3-queue cap); <refs> is a
+              comma-separated list of the issue/PR refs you wrote or relied on (owner/repo#n), or \`-\`.
+              In dry-run mode print the lines you WOULD print.
+              BRIEF
+              printf '\nINPUTS (island-intake-select/v1, built %s):\n' "$(jq -r .ts /tmp/sel.json)"
+              jq '.inputs' /tmp/sel.json
+              } > /tmp/brief.md
+              _ts_put /tmp/brief.md brief.md || true
+              _ts_put /tmp/sel.json inputs.json || true
+
+              : > /tmp/ts-mark; : > /tmp/intake.log
+              claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 120 </dev/null 2>&1 \
+                | tee /tmp/intake.log \
+                || echo "WARN: the intake session failed — whatever it printed is still harvested" | tee -a /tmp/intake.log
+
+              # ── 3. RECEIPT (shell-owned: only ids of THIS run's inputs, only known outcomes) ────
+              grep -oE '^ *INTAKE-RULED: [^ ]+ [a-z-]+( [^ ]+)?' /tmp/intake.log | sed 's/^ *INTAKE-RULED: //' \
+                | jq -R -s --slurpfile sel /tmp/sel.json '
+                    ($sel[0].inputs | map(.id)) as $ids
+                    | [ split("\n")[] | select(length > 0) | split(" ")
+                        | {input: .[0], outcome: .[1], refs: ((.[2] // "-") | if . == "-" then [] else split(",") end)}
+                        | select(.input as $i | $ids | index($i))
+                        | select(.outcome | IN("queue","goal","seat","fold","close","standing","file","deferred")) ]
+                    | unique_by(.input)' > /tmp/ruled.json 2>/dev/null || echo '[]' > /tmp/ruled.json
+              NR="$(jq '[.[] | select(.outcome != "deferred")] | length' /tmp/ruled.json)"
+              NQ="$(jq '[.[] | select(.outcome == "queue" or .outcome == "goal")] | length' /tmp/ruled.json)"
+              jq -n --arg island "$ISLAND" --arg mode "$MODE" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                    --arg model "$TS_MODEL" --arg rail "$rail" --arg run "intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}" \
+                    --slurpfile sel /tmp/sel.json --slurpfile ruled /tmp/ruled.json \
+                    '{schema: "island-intake-receipt/v1", island: $island, mode: $mode, ts: $ts, run: $run,
+                      session_ran: true, model: $model, rail: $rail,
+                      inputs: ($sel[0].inputs | map(.id)), ruled: $ruled[0]}' > /tmp/receipt.json
+              echo "island-intake: $NR of $NIN input(s) ruled ($NQ queued) — receipt:"; jq -c '.ruled[]' /tmp/receipt.json
+              _ts_put /tmp/receipt.json receipt.json \
+                || echo "⚠ island-intake: the RECEIPT did not upload — tomorrow's sitting re-reads these inputs (its own step 2 finds what this one filed)"
+              jq -n --arg role coordinator --arg lane intake --arg project homelab --arg task "intake-${ISLAND}-$DAY" \
+                    --arg model "$TS_MODEL" --arg rail "$rail" --arg pod "${HOSTNAME:-}" --arg ts "$TS_RUN" \
+                    '{role:$role, lane:$lane, project:$project, task:$task, round:1, model:$model, rail:$rail,
+                      session_key:"coordinator-claude", pod:$pod, timestamp:$ts,
+                      files:["inputs.json","brief.md","intake.log","receipt.json"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json
+              _ts_put /tmp/intake.log intake.log || true
+              _ts_put /tmp/ts-manifest.json manifest.json || true
+              { find "$HOME/.claude/projects" -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do _ts_put "$f" "$(basename "$f")" || true; done
+
+              # ── 4. RING once, so queued work dispatches now rather than on the scan's cron ──────
+              if [ "$MODE" = apply ] && [ "$NQ" -gt 0 ]; then
+                curl -m 5 -fsS -X POST -H "Content-Type: application/json" \
+                  -d '{"stack":"platform","loop_ns":"platform-agents","unit":"-"}' \
+                  http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate >/dev/null 2>&1 \
+                  && echo "island-intake: rang /coordinate for platform" \
+                  || echo "island-intake: coordinate bell failed (non-fatal — the scan's cron catches it)"
+              fi
+              _push 1 "$NIN" 1 "$NR" "$NQ"
+              exit 0
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "1Gi" }

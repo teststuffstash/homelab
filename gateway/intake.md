@@ -2,7 +2,7 @@
 
 > **Brief, v0 (spike, 2026-10-27).** The gateway is the first island to run it; the rules are
 > island-agnostic, the §Island facts block is the gateway's. Design, evidence and the open
-> questions: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md). The ancestor is
+> questions: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) (tracked by FU-320). The ancestor is
 > the coordinator's `goal-decompose` clause
 > ([`agents/coordinator/README.md`](../agents/coordinator/README.md) §The `goal-decompose` clause):
 > same authoring rules, one level earlier — a decompose starts from a Goal a human admitted; this
@@ -28,8 +28,11 @@ The dispatch prompt names them:
 - `issues:` `<owner/repo>#<n>` …, selected by [`scripts/intake-select.sh`](scripts/intake-select.sh)
   (island membership + no `agent/*` lifecycle label + no standing intake ruling). Trigger: ≥ 3 such
   issues, or the oldest ≥ 24 h — one sitting per trigger, never per issue.
-- `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`) —
-  prose someone wrote instead of an issue. A text input becomes an issue (`file`) only when its
+- `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`,
+  `dig`) — prose someone wrote instead of an issue. **`dig` is the wired source:**
+  [`agents/coordinator/island-intake-argo.yaml`](../agents/coordinator/island-intake-argo.yaml)
+  runs this sitting unattended each morning over the deep dig's `cause-found` findings that name
+  the island (`scripts/intake-select.sh --source dig`); its prompt adds the receipt protocol. A text input becomes an issue (`file`) only when its
   ruling would be `queue`, `goal` or `seat`; a `standing` or `close` ruling on text is
   report-only — the source record keeps it (one home per fact), the report says why.
 - `mode: dry-run | apply`. Dry-run writes NOTHING to GitHub; the report carries every body and

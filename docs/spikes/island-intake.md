@@ -112,11 +112,18 @@ territory, §Open questions 4).
 
 ## Open questions (the operator's)
 
-1. **Wiring.** The selector is a scan clause's shape; the sitting is a coordinator item unit
-   (`island-intake|homelab|…`) in the `goal-decompose` lane, brief = `gateway/intake.md` (the
-   P7 shape: the island's own context, loaded per clause) instead of the 139 KB coordinator
-   brief. The scan edit carries a replay fixture (ADR-103). Until wired, the seat runs it as a
-   subagent when the selector fires (the two runs above).
+1. **Wiring — RULED 2026-10-28 (operator): its own CronWorkflow, the dig as the first source.**
+   Not a scan clause: scan units are item-shaped (`clause|repo|issue-N` — lanes, WIP, dispatch
+   markers all key on an item) and the scan pod holds no bucket READER key, while an intake
+   sitting is a batch over a pile. `agents/coordinator/island-intake-argo.yaml` runs daily at
+   05:00Z (after the 03:30Z [deep dig](../agents/roles.md)): `intake-select.sh --source dig` →
+   one sitting (goal-decompose class) on `gateway/intake.md` → a `receipt.json` per run (the
+   ledger of ruled inputs) → one `/coordinate` ring when it queued. Spend is a budget knob
+   (`INTAKE_DAILY_MAX`, the responder's cap shape), not code. Why the dig first: its
+   `cause-found` findings reached a worker only through the seat (the 10-25 Go-catalog cause was
+   dispatched ~45 h later as #2933); intake folds same-cause findings before filing, so the dig
+   needs no issue author. The issue pile stays seat-run until wired as a second source; the
+   gateway's own dedup store is a later concern (operator, same ruling).
 2. **Budget ceiling for a bot-authored Goal** (`INTAKE_GOAL_BUDGET_USD`, default 10) — P6 said
    "Goals stay human"; the ask puts the human at the assembly read instead. The ceiling is the
    dial between the two.

@@ -448,4 +448,9 @@ _retry_backoff="$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-ret
   && ok "…and the wrapper's step calls the dig leaf" || bad "FU-198 caller edge" "dig-retry does not call dig"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
+# The dig's CONSUMER (FU-320): island intake admits the dig's island findings, so its harness rides
+# this gate — diff-ci's deep-dig-test row also selects on the selector's path for that reason.
+printf '\n\033[1m── island intake (the dig'"'"'s consumer) ──\033[0m\n'
+bash "$REPO/agents/island-intake-test.sh"; INTAKE_RC=$?
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
+[ "$INTAKE_RC" -eq 0 ] || { echo "island-intake-test FAILED (rc=$INTAKE_RC)"; exit 1; }
