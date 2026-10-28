@@ -15,8 +15,9 @@
 # SOURCE OF TRUTH = the pinned gh itself, never a hand list: `gh <cmd> --json` with no fields prints
 # "Specify one or more comma-separated fields for `--json`:" followed by the field list, offline
 # (it fails before auth). The committed file carries the gh version line, so a gh BUMP reds the
-# --check (registered as the `gh-json-fields` suite fixture, run by the full replay) until someone
-# regenerates — a field gh drops in a bump then surfaces as a fixture red, not a production abort.
+# --check (registered as the `gh-json-fields` suite fixture, run by the full replay) until it is
+# regenerated — the weekly devbox-update does that ON its bump PR (scripts/devbox-update.sh, G12b) —
+# and a field gh drops in a bump then surfaces as a fixture red, not a production abort.
 #
 # The command list is every `gh` subcommand that takes `--json` in this gh — the fake refuses a
 # `--json` call on a command NOT in the file (loud, so a new subcommand is added here, not guessed).

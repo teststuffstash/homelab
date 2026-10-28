@@ -28,7 +28,7 @@
 # It does NOT change the lane: the ruling is "rely on the lens" — the PR stays armed, and the migration
 # lens's lock-bump read (agents/lenses/migration.md §Lock bumps) addresses every named item. A class
 # un-arms only once the lens finds a downgrade/line move that mattered (graduation, ADR-141's rule).
-# `DEVBOX_UPDATE_LIB=1 . scripts/devbox-update.sh` loads only `lock_moves` (the self-test's seam —
+# `DEVBOX_UPDATE_LIB=1 . scripts/devbox-update.sh` loads only the functions (the self-test's seam —
 # scripts/devbox-update-test.sh runs it over #2260's recorded lock diff).
 #
 # THE VERSION-SET STAMP (homelab#2014 shape (a), operator ruling 2026-10-10). In the homelab leg only
@@ -158,6 +158,29 @@ flake_moves() {
 merge_moves() {
   jq -s '{majors: (map(.majors) | add), downgrades: (map(.downgrades) | add), lines: (map(.lines) | add)}' <<<"$(printf '%s\n' "$@")"
 }
+# regen_generated → the tool-GENERATED files it re-rendered, one path per line (run from the repo root,
+# after the lock moved). A committed file rendered from a pinned tool's own output moves with the lock
+# that moves the tool — the Renovate `postUpgradeTasks` shape (G12). Otherwise the tool's bump reds its
+# own weekly PR until someone regenerates, and a red ARMED mechanical PR has no actor (G12b — #2919 sat
+# red two days on the gh 2.102.0 → 2.103.2 version line alone). The gh `--json` allowlist renders from
+# the NEW lock's gh through its nixpkgs flake ref (no devbox install); a field gh DROPPED then reds the
+# replay fixture that asks for it, which is the check's real point. Its CODEOWNERS ownership is replaced
+# by that same check: `gh-json-fields-allowlist-current` holds the file byte-exact to the head lock's gh.
+# A render failure only WARNS and lists nothing: the PR still opens and its CI names the stale file.
+# Self-test seam (scripts/devbox-update-test.sh stubs `nix`).
+regen_generated() {
+  local ref
+  [ -f agents/replay/gh-json-fields.sh ] || return 0
+  ref="$(jq -r '[.packages | to_entries[] | select(.key | startswith("gh@")) | .value.resolved][0] // empty' devbox.lock 2>/dev/null)"
+  if [ -n "$ref" ] && NIX_CONFIG="experimental-features = nix-command flakes
+access-tokens = github.com=${GH_TOKEN:-}" nix shell "$ref" -c bash agents/replay/gh-json-fields.sh --write >&2; then
+    echo "agents/replay/stubs/gh-json-fields.tsv"
+  else
+    echo "::warning::[${REPO:-?}] could not regenerate the gh --json allowlist from ${ref:-<no gh in devbox.lock>}" >&2
+  fi
+  return 0
+}
+
 [ "${DEVBOX_UPDATE_LIB:-0}" = 1 ] && return 0
 
 REPO="${REPO:?set REPO=owner/name}"
@@ -195,8 +218,12 @@ if [ "$DIR" = "." ] && [ -f mgmt/nixos/flake.lock ]; then
 access-tokens = github.com=$GH_TOKEN" nix flake update --flake "./$FLAKE_DIR"
 fi
 
+# Tool-GENERATED files (the homelab leg — `regen_generated` above).
+GEN_FILES=""
+[ "$DIR" != "." ] || GEN_FILES="$(regen_generated)"
+
 # porcelain, not `git diff`: the stamp's lock may be NEW (untracked) on its first run
-if [ -z "$(git status --porcelain -- "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"})" ]; then
+if [ -z "$(git status --porcelain -- "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"} $GEN_FILES)" ]; then
   echo "[$REPO] devbox.lock already current — nothing to do"; exit 0
 fi
 
@@ -227,7 +254,7 @@ LINES="$(jq -r '.lines[]' <<<"$MOVES")"
 git config user.name "homelab-renovate[bot]"
 git config user.email "homelab-renovate[bot]@users.noreply.github.com"
 git checkout -q -B "$BRANCH"
-git add "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR/devbox.lock" "$VS_DIR/devbox.json"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"}
+git add "$DIR/devbox.lock" ${VS_DIR:+"$VS_DIR/devbox.lock" "$VS_DIR/devbox.json"} ${FLAKE_DIR:+"$FLAKE_DIR/flake.lock"} $GEN_FILES
 git commit -q -m "chore: devbox update — align the toolchain lock (FU-022)" \
   -m "Weekly synchronized devbox.lock bump so shared tools resolve to the same version across repos (nix cache + agent-base bake hits)."
 git push -q --force origin "$BRANCH"
