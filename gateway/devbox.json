@@ -1,10 +1,10 @@
 {
   "$schema":  "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
-  "_comment": "agent-gateway island toolchain (P2, ADR-139): python 3.15 + uv, the oracle-fleet shape (python rides a nixpkgs FLAKE REF because devbox's search index lagged at 3.15.0rc2 while nixpkgs had 3.15.0 final, homelab#2610 — swap back to `\"python\": \"3.15\"` once `devbox search python@3.15` resolves the final); minio-client (mc) for the specs-site + evidence publish (scripts/specs-publish.sh, scripts/evidence-publish.sh), allure for the run's single-file report (scripts/allure-report.sh — the oracle-fleet pin, same store path) — mkdocs itself rides `uv run --no-project` with exact pins, see scripts/specs-build.sh). Run `devbox run ci` from THIS directory; the repo-root devbox.json reaches it through its `gateway-ci` script (diff-ci row `gateway-ci:^gateway/`). Nothing here is shared with the old openrouter-proxy, which stays on the repo-root toolchain untouched.",
+  "_comment": "agent-gateway island toolchain (P2, ADR-139): python 3.15 + uv, the oracle-fleet shape (python rides a nixpkgs FLAKE REF because devbox's search index lagged at 3.15.0rc2 while nixpkgs had 3.15.0 final, homelab#2610 — swap back to `\"python\": \"3.15\"` once `devbox search python@3.15` resolves the final); rclone for the specs-site + evidence publish/purge (scripts/lib/s3-publish.sh — minio-client was dropped 2026-10-28: nixpkgs marks it insecure/abandoned upstream), allure for the run's single-file report (scripts/allure-report.sh — the oracle-fleet pin, same store path) — mkdocs itself rides `uv run --no-project` with exact pins, see scripts/specs-build.sh). Run `devbox run ci` from THIS directory; the repo-root devbox.json reaches it through its `gateway-ci` script (diff-ci row `gateway-ci:^gateway/`). Nothing here is shared with the old openrouter-proxy, which stays on the repo-root toolchain untouched.",
   "packages": {
     "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5#python315": "",
     "uv":           "latest",
-    "minio-client": "latest",
+    "rclone":       "latest",
     "allure":       "2.46.1"
   },
   "env": {

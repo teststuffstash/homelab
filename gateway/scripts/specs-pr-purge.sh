@@ -10,7 +10,7 @@
 # teardown. Lessons carried over verbatim from oracle-fleet:
 #   * oracle-fleet#517 — logic lives HERE (thin-workflow convention), with no error-swallow: a
 #     purge that starts but fails fails the step.
-#   * oracle-fleet#529 — the `mc ls` probe's exit status is captured SEPARATELY from its output: a
+#   * oracle-fleet#529 — the listing probe's exit status is captured SEPARATELY from its output: a
 #     failing probe (auth hiccup, network blip) must NOT read as "prefix empty" and skip silently.
 #   * Precondition, NOT an error-swallow: removal is attempted only when the prefix holds objects —
 #     a PR whose CI never published (no gateway/ change) must not turn a close into a failure.
@@ -30,17 +30,17 @@ N="${1:?usage: specs-pr-purge.sh <pr-number>}"
 
 # shellcheck disable=SC1091
 source scripts/lib/s3-publish.sh
-s3_publish_alias specs "$GATEWAY_SPECS_S3_ENDPOINT" "$GATEWAY_SPECS_S3_ACCESS_KEY_ID" "$GATEWAY_SPECS_S3_SECRET_ACCESS_KEY"
-for PREFIX in "specs/gateway-specs/pr-${N}/" "specs/gateway-specs/evidence/pr-${N}/"; do
+s3_publish_remote specs "$GATEWAY_SPECS_S3_ENDPOINT" "$GATEWAY_SPECS_S3_ACCESS_KEY_ID" "$GATEWAY_SPECS_S3_SECRET_ACCESS_KEY"
+for PREFIX in "specs:gateway-specs/pr-${N}" "specs:gateway-specs/evidence/pr-${N}"; do
   listing=""
-  if ! listing="$(mc ls --recursive "$PREFIX" 2>&1)"; then
-    echo "::error::mc ls probe failed for ${PREFIX}: $listing" >&2
+  if ! listing="$(s3_publish_ls lsf -R --files-only "$PREFIX")"; then
+    echo "::error::listing probe failed for ${PREFIX}/" >&2
     exit 1
   fi
   if [ -n "$listing" ]; then
-    echo "purging ${PREFIX} (close-time cleanup)"
-    mc rm --recursive --force "$PREFIX"
+    echo "purging ${PREFIX}/ (close-time cleanup)"
+    rclone delete --checkers "$S3_PUBLISH_WORKERS" "$PREFIX"
   else
-    echo "no objects under ${PREFIX} — nothing to purge"
+    echo "no objects under ${PREFIX}/ — nothing to purge"
   fi
 done
