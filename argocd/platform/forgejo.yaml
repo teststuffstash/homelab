@@ -66,6 +66,17 @@ spec:
               DISABLE_REGISTRATION: true
             session:
               PROVIDER: memory
+        # 14 d: working-set max 235Mi (p99 229Mi), CPU p99 0.42 core. Limit = 2x max.
+        resources:
+          requests: { cpu: "450m", memory: "256Mi" }
+          limits: { memory: "512Mi" }
+        # The three init containers (init-directories, init-app-ini, configure-gitea) keep the
+        # chart's 100m/128Mi requests; the chart ships `limits: {}`. configure-gitea peaked at
+        # 42Mi; 256Mi leaves a failed init no excuse to block the pod.
+        initContainers:
+          resources:
+            limits: { memory: "256Mi" }
+            requests: { cpu: "100m", memory: "128Mi" }
         persistence:
           enabled: true
           size: 5Gi
