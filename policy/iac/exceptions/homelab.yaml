@@ -57,6 +57,7 @@ spec:
             - openrouter-proxy-semaphore
             - openrouter-proxy-tokenreview
             - pg-backup
+            - specs-review-claims-read # ADR-156: the specs-review tick's ONE cluster read — agentstacks get/list, so pack_roots reads repos[].specs (agents/coordinator/rbac.yaml, homelab#3025)
             # Kargo (argocd/resources/kargo/rbac-cluster.yaml): the hand-written cluster grants that
             # REPLACE the chart's ClusterRoleBindings (kargo.yaml) — reads + per-Project writes,
             # admission-guarded by kargo-write-guard.
@@ -87,6 +88,7 @@ spec:
             - platform-kargo-garbage-collector
             - platform-kargo-management-controller
             - platform-kargo-webhooks-server
+            - specs-review-claims-read # ADR-156 (see the ClusterRole above)
       - resources:
           kinds:
             - MutatingAdmissionPolicy
