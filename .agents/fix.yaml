@@ -97,7 +97,7 @@ instructions: |
 
   # ── THE GATE ─────────────────────────────────────────────────────────────────────────────────
   # You open the PR with `pr-open` (the ground rules), and pr-open runs this repo's gate:
-  # `devbox run pr-gate` = `devbox run diff-ci`, exactly the CI gates your diff can affect (the
+  # `devbox run pr-gate` = `devbox run diff-ci` + `scan-secrets`: exactly the CI gates your diff can affect, then the secret scan (the
   # path→task map in `scripts/diff-ci.sh` is the ONE home of "which paths feed which gate" —
   # never restate it here). Do not run diff-ci yourself as well; `pr-open --check-only` is the
   # early check. The PR-context gates (pin-only-lint, governance-lint) need the PR's base/author
