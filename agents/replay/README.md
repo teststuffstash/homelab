@@ -544,6 +544,11 @@ is stale, so it cannot drift the way the prose register did.
 | `session-belt/queued` | actions | - | `agents/coordinator-scan.sh` | - |
 | `sigpipe-lint` | suite | - | `-` | - |
 | `slo-teeth/slo-teeth` | suite | - | `-` | - |
+| `specs-process/field-absent` | actions | - | `agents/agent-session.sh` | - |
+| `specs-process/not-reached` | actions | - | `agents/agent-session.sh` | - |
+| `specs-process/pin-missing` | actions | - | `agents/agent-session.sh` | - |
+| `specs-process/pin-unpublished` | actions | - | `agents/agent-session.sh` | - |
+| `specs-process/reached` | actions | - | `agents/agent-session.sh` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
 | `stale-stamp-repair-lens-verdict-untouched` | actions | - | `agents/coordinator-scan.sh` | - |

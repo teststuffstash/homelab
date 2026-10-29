@@ -158,8 +158,29 @@ EVIDENCE_ARTIFACT="${EVIDENCE_ARTIFACT:-gateway-evidence}"   # the LEGACY ci run
 EVIDENCE_WEB="${EVIDENCE_WEB:-http://garage-s3.garage.svc.cluster.local:3902}"
 # evidence_bucket <repo> → the website bucket its CI publishes packs to ("" = none: artifact only)
 evidence_bucket() { case "$1" in homelab) printf 'gateway-specs';; oracle-fleet) printf 'oracle-specs';; esac; }
-# pack_roots <repo> → "<specs-root> <tests-root>": where that repo's rules and their tests live
-pack_roots() { case "$1" in homelab) printf 'gateway/specs gateway/tests';; *) printf 'specs tests';; esac; }
+# pack_roots <repo> → "<specs-root> <tests-root>": where that repo's rules and their tests live.
+# The CLAIM's `repos[].specs` {root, tests} when the AgentStack read serves one — the same field
+# the worker launcher mounts the pinned process by (agent-session.sh REPLAY:specs-process-volume),
+# so the ride, the trigger (review_path_re) and the pack read ONE home for a repo's roots. The
+# per-repo case stays as the fallback: a repo whose claim has no field yet, and every run without
+# a cluster (the jail, --self-test, CI). ONE read per tick (CLAIMS_JSON; a pre-set value is the
+# self-test's seam); a failed read is said once, then the table answers — never a missing pack.
+CLAIMS_JSON="${CLAIMS_JSON:-}"       # "" = not read yet; "null" = read failed (fallback table in force)
+claim_specs() {  # <repo> → "<root> <tests>" from its claim, or "" (no claim / no field / malformed)
+  if [ -z "$CLAIMS_JSON" ]; then
+    CLAIMS_JSON="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null)" || CLAIMS_JSON="null"
+    [ -n "$CLAIMS_JSON" ] || CLAIMS_JSON="null"
+    # stderr: pack_roots is read inside `$( )` — a log line on stdout would BECOME the roots.
+    [ "$CLAIMS_JSON" != null ] || log "WARN agentstacks read failed (no kubectl, no RBAC, no cluster) — pack roots come from the per-repo fallback table this tick" >&2
+  fi
+  jq -r --arg p "$1" '[.items[]?.spec.repos[]? | select(.name == $p) | .specs | select(type == "object")
+    | select((.root|type) == "string" and (.tests|type) == "string" and (.root|length) > 0 and (.tests|length) > 0)
+    | "\(.root) \(.tests)"] | first // empty' <<< "$CLAIMS_JSON" 2>/dev/null || true
+}
+pack_roots() {
+  local c; c="$(claim_specs "$1")"
+  if [ -n "$c" ]; then printf '%s' "$c"; else case "$1" in homelab) printf 'gateway/specs gateway/tests';; *) printf 'specs tests';; esac; fi
+}
 # review_path_re <repo> → the file-list trigger for the LLM pass: a specs path, or the repo's
 # rule-test root (a changed test label reaches a rule without touching specs — touched-rules
 # decides inside the pass; zero touched rules = the mechanical approval after all)
@@ -219,6 +240,7 @@ classify() {
 self_test() {
   local fails=0
   bash -n "$0" || { echo "self-test: bash -n FAILED"; return 1; }
+  CLAIMS_JSON=null   # hermetic: the self-test never reads a cluster — pack_roots answers from the table until the seam below
   check() { # <name> <expected> <actual>
     if [ "$2" = "$3" ]; then echo "  ok   $1"; else echo "  FAIL $1: expected '$2' got '$3'"; fails=$((fails+1)); fi
   }
@@ -247,8 +269,21 @@ self_test() {
   check "trigger: homelab rule-test path → LLM pass" 0 "$(grep -cE "$(review_path_re homelab)" <<< 'gateway/tests/test_access.py' >/dev/null; echo $?)"
   check "trigger: homelab specs path → LLM pass" 0 "$(grep -cE "$(review_path_re homelab)" <<< 'gateway/specs/access.md' >/dev/null; echo $?)"
   check "trigger: a non-gateway tests dir is NOT a homelab rule-test path" 1 "$(grep -cE "$(review_path_re homelab)" <<< 'scripts/tests/x.py' >/dev/null; echo $?)"
-  check "pack roots: homelab" "gateway/specs gateway/tests" "$(pack_roots homelab)"
-  check "pack roots: default island layout" "specs tests" "$(pack_roots some-island)"
+  # pack_roots: the claim's `repos[].specs` wins when present and well-formed; the per-repo table
+  # answers a repo without the field, a malformed field (not two non-empty strings), and an
+  # unreadable claim read (CLAIMS_JSON=null — the kubectl-less run). CLAIMS_JSON pre-set = the seam;
+  # expectations come from the claim text below and the table, never from running the code.
+  CLAIMS_JSON='{"items":[{"spec":{"repos":[{"name":"homelab","specs":{"root":"gateway/specs","tests":"gateway/tests"}},{"name":"moved","specs":{"root":"docs/specs","tests":"qa/rules"}},{"name":"half","specs":{"root":"specs"}},{"name":"typed","specs":{"root":["specs"],"tests":"tests"}},{"name":"plain"}]}}]}'
+  check "pack roots: homelab (claim field)" "gateway/specs gateway/tests" "$(pack_roots homelab)"
+  check "pack roots: a claim field moves the roots" "docs/specs qa/rules" "$(pack_roots moved)"
+  check "pack roots: field without tests → table" "specs tests" "$(pack_roots half)"
+  check "pack roots: non-string root → table" "specs tests" "$(pack_roots typed)"
+  check "pack roots: repo without the field → table" "specs tests" "$(pack_roots plain)"
+  check "pack roots: repo absent from every claim → table" "specs tests" "$(pack_roots some-island)"
+  check "trigger follows the claim: moved repo's test root" 0 "$(grep -cE "$(review_path_re moved)" <<< 'qa/rules/test_x.py' >/dev/null; echo $?)"
+  CLAIMS_JSON=null
+  check "pack roots: homelab, claim read failed → table" "gateway/specs gateway/tests" "$(pack_roots homelab 2>/dev/null)"
+  check "pack roots: default island layout, claim read failed → table" "specs tests" "$(pack_roots some-island 2>/dev/null)"
   check "trigger: oracle-fleet root specs path → LLM pass" 0 "$(grep -cE "$(review_path_re oracle-fleet)" <<< 'specs/server/http.md' >/dev/null; echo $?)"
   check "trigger: oracle-fleet rule-test path → LLM pass" 0 "$(grep -cE "$(review_path_re oracle-fleet)" <<< 'tests/test_rt.py' >/dev/null; echo $?)"
   check "specs path predicate: docs/specs-reviewer.md is NOT a specs path" 1 "$(grep -cE "$SPECS_PATH_RE" <<< 'docs/agents/specs-reviewer.md' >/dev/null; echo $?)"

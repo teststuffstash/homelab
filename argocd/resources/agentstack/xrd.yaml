@@ -469,6 +469,51 @@ spec:
                                   type: string
                                 description:
                                   type: string
+                      specs:
+                        type: object
+                        required: [root, tests]
+                        description: >-
+                          Present = this repo keeps `specs/` pages under the ONE portable spec
+                          process (ADR-156: rules + conventions + briefs shipped by the
+                          allure-behavior-snippets release the repo pins). Names where the rules
+                          and their tests live. Consumed by the LAUNCHER (agent-session.sh, the
+                          same claim read as fixer.docker): when a dispatch's declared `Touches:`
+                          footprint reaches `root/` or `tests/`, the pinned process image
+                          (`ghcr.io/teststuffstash/allure-behavior-snippets-process`, tag = the
+                          repo's pin, resolved to its digest at dispatch) is mounted READ-ONLY into
+                          the ride through the ADR-135 image-volume path and the env card points
+                          the worker at it — the process is INJECTED, never a "please read X"
+                          instruction and never restated in a recipe. Also consumed by the specs
+                          reviewer (specs-reviewer-session.sh pack_roots: the trigger paths and
+                          the context pack's roots). Nothing is rendered by the Composition. A repo
+                          without this field gets neither. NO defaults here ON PURPOSE (the
+                          NO-SCHEMA-DEFAULT rule, argocd/platform/agent-fixer.yaml): the consumer
+                          defaults `pin` where it reads it.
+                        properties:
+                          root:
+                            type: string
+                            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                            description: >-
+                              Repo-relative directory of the spec pages (homelab: `gateway/specs`;
+                              an island repo: `specs`). No leading/trailing slash, no dot-led
+                              segment.
+                          tests:
+                            type: string
+                            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                            description: >-
+                              Repo-relative directory of the rule tests (homelab: `gateway/tests`;
+                              an island repo: `tests`) — a changed test label reaches a rule
+                              without touching a spec page, so it is part of the footprint test.
+                          pin:
+                            type: string
+                            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                            description: >-
+                              Repo-relative path of the file carrying `SNIPPETS_WHEEL=<release
+                              wheel URL>` — the repo's process pin, read at the ride's base ref.
+                              Omit for the layout both consumers share today:
+                              `<parent of root>/scripts/lib/snippets.sh` (`gateway/scripts/lib/
+                              snippets.sh` for `gateway/specs`, `scripts/lib/snippets.sh` for
+                              `specs`). Declare only when the repo keeps its pin elsewhere.
                       fixer:
                         type: object
                         description: >-

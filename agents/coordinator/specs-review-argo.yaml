@@ -17,7 +17,9 @@
 # shadow cell), no bind. Both templates run as the DEDICATED `specs-review` SA (rbac.yaml,
 # homelab#2685) — not `agent-coordinator`, the SA every other workflow here shares: `callers`
 # is per SA, so that key would authorize all of them as the specs reviewer. Its RBAC is the
-# executor's `workflowtaskresults` binding and nothing else — the script never calls kubectl.
+# executor's `workflowtaskresults` binding plus ONE cluster read (`specs-review-claims-read`:
+# agentstacks get/list — the script's `pack_roots` takes a repo's specs/tests roots off its
+# claim's `repos[].specs`, the field the worker launcher mounts the spec process by; rbac.yaml).
 #
 # IDENTITY: GH_TOKEN = the `specs-reviewer-git` Secret (agents/coordinator/specs-reviewer-git.yaml),
 # `optional:true`.

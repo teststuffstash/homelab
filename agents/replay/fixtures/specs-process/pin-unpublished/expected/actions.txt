@@ -1,0 +1,9 @@
+CALL gh api repos/teststuffstash/homelab/contents/gateway/scripts/lib/snippets.sh?ref=master -H Accept: application/vnd.github.raw
+CALL iv_digest_of ghcr.io teststuffstash/allure-behavior-snippets-process v0.6.4
+OUT SPECS_PROCESS:[unmounted]
+OUT IV_MOUNT:
+OUT IV_VOLUME:
+OUT IV_CARD:[]
+OUT - **Spec process: this task touches the repo's spec pages or rule tests, but the pinned process could NOT be mounted this ride** (launcher-side: the repo's process pin did not resolve — not yours to fix). Do not look for `/mnt/snippets/process`. Still list every specs change in the PR body under a `Spec changes:` heading (⚖ on judgment rows), and say there that the process was unavailable to you.
+ERR WARN: spec process NOT mounted — ghcr.io/teststuffstash/allure-behavior-snippets-process:v0.6.4 (the pin at gateway/scripts/lib/snippets.sh@master) has no anonymously served manifest (release not published as an image? private package?); the ride's card says so (ADR-156)
+RC 0

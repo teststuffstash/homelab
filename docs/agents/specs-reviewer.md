@@ -291,6 +291,19 @@ and marks each of its findings `resolved` / `still open` before reading new beha
 nothing about an image: digest evidence requires the suite to run AGAINST the built image and the
 report to record that digest (open question 2).
 
+**The worker reads the same text (operator rulings 2026-10-29).** A worker that touches a repo's
+specs gets the pinned process INJECTED into its ride — never a "please read X" instruction and
+never a rule restated in a recipe. The claim's `repos[].specs: {root, tests, pin?}` names the
+roots ([agentstack.md §The spec process rides with the worker](agentstack.md#the-spec-process-rides-with-the-worker-repos-specs-adr-156));
+the launcher mounts `ghcr.io/teststuffstash/allure-behavior-snippets-process:v<the repo's pin>`
+(the release's FROM-scratch artifact: `/process/{RULES.md,CONVENTIONS.md,briefs/*.md,VERSION}`)
+read-only at `/mnt/snippets` through the ADR-135 image-volume path whenever the issue's declared
+`Touches:` reaches `root/` or `tests/`, and its env card says: read `briefs/author.md` first, list
+every specs change under `Spec changes:` with ⚖ on judgment rows, the reviewer judges against this
+same text. This reviewer's `pack_roots` reads the same claim field, so the ride, the trigger and the
+pack name one set of roots. The author brief itself ships with the snippets release; until a
+release carries it, the card's instruction names a file the mount does not yet have.
+
 **Order** (status kept here):
 1. This record — DONE 2026-10-16 (#2621).
 2. The homelab launcher inputs that need no Allure (issue acceptance text, previous review,
@@ -306,6 +319,18 @@ report to record that digest (open question 2).
 6. The staged read (§Inputs) — wired in #3015, ACTIVE from the snippets v0.6.4 pin (2026-10-29;
    the manifest's `masked.files` + `masked.keys`). Next: read the extra pass's cost on the first
    oracle-fleet rounds (the tick's `→ claude pass 1 (masked)` log line beside the pass-2 line).
+
+7. The process rides with the worker — the claim's `repos[].specs {root, tests, pin?}`, the pinned
+   process mounted read-only through the ADR-135 image-volume path, a static card block, the
+   reviewer's `pack_roots` off the same field — MERGED 2026-10-29 (#3025; inert until a claim
+   carries the field). `briefs/author.md`, the author's 40-line pointer checklist, is snippets#42
+   (held for the operator's read). Next, in order: tag snippets v0.6.6; bump the pins (gateway
+   `snippets.sh` + this launcher, oracle-fleet); add the field to the homelab and oracle claims;
+   retire the restated process text in the recipes (oracle-fleet#947 step 0, `.agents/fix.yaml`).
+8. The process home as platform infrastructure (operator direction 2026-10-29) — NOT STARTED; the
+   program is [ROADMAP §Backlog](../../ROADMAP.md#portable-specevidence-review--one-process-for-every-specs-repo-2026-10-16-adr-156):
+   re-home + governance + a CI gate + `CLAUDE.md` + review rubric, evals for the process markdowns,
+   shared ownership with oracle, release notes with a migration guide for LLMs, Renovate for the pins.
 
 Cheaper helper subagents wait for that data, and they need a gateway change first: a session is
 admitted with one model and the gateway rewrites every request to it

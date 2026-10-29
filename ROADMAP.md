@@ -468,6 +468,26 @@ evidence brief over a deterministic context pack. Phases and design:
 [`docs/agents/specs-reviewer.md` §The portable process](docs/agents/specs-reviewer.md#the-portable-process-adr-156-2026-10-16);
 the order and its status live in that section.
 
+**The process home becomes platform infrastructure (operator direction, 2026-10-29).** Every worker
+and reviewer that touches a `specs/` page reads `allure-behavior-snippets`' text, and the process is
+developed from two seats (the gateway island, oracle). Today the repo is a tenant: a context-only
+entry in the oracle claim, a zero-approval ruleset with no required checks, unit tests that run in
+no CI, no CODEOWNERS, no devbox, pins bumped by hand in every consumer. Legs, each on an existing
+mechanism: (1) **platform-owned** — the claim entry re-homes to the platform claim with a fixer and
+the reviewer; `protected_repos` (one bot approval, required checks); CODEOWNERS on `process/`,
+`.agents/`, `.github/`; a `CLAUDE.md` carrying the contract both seats load (release discipline, who
+reads which file, how a pin moves); a `.agents/review.md` that judges process text as a per-ride
+prompt (pointers over paraphrase, no history). (2) **tests worth the name** — devbox + a `ci.yml`
+unit gate as a required check, and EVALS for the process markdowns in the shape skills get: fixture
+spec pages with expected findings, a brief run through a model and scored; the specs reviewer's
+shadow harness is the runner. (3) **shared ownership with oracle** — the repo stays stack-neutral,
+both seats develop it, cross-seat asks ride the handoff queue until the loop files them. (4) **a
+release carries a migration guide for LLMs** — a version that changes a rule ships, beside its
+CHANGELOG, the checklist an agent applies to every spec page (v0.6.3's `||` → `name?` columns is the
+first); the consumer's pin-bump PR carries it and a per-repo "migrate the pages" work item follows;
+the bumps themselves become Renovate PRs (a regex manager for `SNIPPETS_WHEEL=` and the launcher's
+version + sha pair). Status: item 8 of the section linked above.
+
 ### Self-hosted supply-chain security (SLSA L3 / "L4") — plan written 2026-06-12
 Build **real software** here with verifiable provenance **without GitHub/Chainguard as services**.
 Full plan, self-hosted stack, phased steps and the hardware decision live in
