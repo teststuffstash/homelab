@@ -320,6 +320,18 @@ release carries it, the card's instruction names a file the mount does not yet h
    the manifest's `masked.files` + `masked.keys`). Next: read the extra pass's cost on the first
    oracle-fleet rounds (the tick's `→ claude pass 1 (masked)` log line beside the pass-2 line).
 
+7. The process rides with the worker — the claim's `repos[].specs {root, tests, pin?}`, the pinned
+   process mounted read-only through the ADR-135 image-volume path, a static card block, the
+   reviewer's `pack_roots` off the same field — MERGED 2026-10-29 (#3025; inert until a claim
+   carries the field). `briefs/author.md`, the author's 40-line pointer checklist, is snippets#42
+   (held for the operator's read). Next, in order: tag snippets v0.6.6; bump the pins (gateway
+   `snippets.sh` + this launcher, oracle-fleet); add the field to the homelab and oracle claims;
+   retire the restated process text in the recipes (oracle-fleet#947 step 0, `.agents/fix.yaml`).
+8. The process home as platform infrastructure (operator direction 2026-10-29) — NOT STARTED; the
+   program is [ROADMAP §Backlog](../../ROADMAP.md#portable-specevidence-review--one-process-for-every-specs-repo-2026-10-16-adr-156):
+   re-home + governance + a CI gate + `CLAUDE.md` + review rubric, evals for the process markdowns,
+   shared ownership with oracle, release notes with a migration guide for LLMs, Renovate for the pins.
+
 Cheaper helper subagents wait for that data, and they need a gateway change first: a session is
 admitted with one model and the gateway rewrites every request to it
 ([GW-SESSIONS-ENV](../../gateway/specs/endpoints/sessions.md#gw-sessions-env)), so a cheaper
