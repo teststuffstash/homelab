@@ -270,7 +270,7 @@
         "bash scripts/diff-ci.sh \"$@\""
       ],
       "pr-gate": [
-        "bash scripts/diff-ci.sh \"origin/${PR_OPEN_BASE:-master}\""
+        "bash scripts/diff-ci.sh \"origin/${PR_OPEN_BASE:-master}\" && devbox run scan-secrets"
       ],
       "clause-replay": [
         "bash agents/replay/run.sh"
