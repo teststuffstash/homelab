@@ -17,7 +17,12 @@
 #    oracle-kargo: get/list/watch on Stages, Freight, Promotions, Warehouses, AnalysisRuns and
 #    their events, nothing on Secrets — so a Kargo rollout can be verified from the oracle jail
 #    (the loki-tenant-grants shape: a platform-owned read grant to the workbench outside its own
-#    namespace). The workbench is namespace-admin in oracle-fleet and nothing elsewhere.
+#    namespace). The workbench is namespace-admin in oracle-fleet and nothing elsewhere. Plus ONE
+#    write: create/delete on AnalysisRuns — so the jail can execute a Project AnalysisTemplate as a
+#    standalone AnalysisRun (the verdict object on real mirrored traffic, Kargo promoting nothing)
+#    and remove its own runs. Not read-only in effect (a run's job provider starts a pod in this
+#    namespace), granted because the namespace holds no Secrets and the workbench already owns
+#    pods in oracle-fleet; re-read this if a credential ever lands in oracle-kargo.
 #
 # Names carry `platform-` so they never collide with the RoleBindings Kargo itself creates in the
 # Project namespace (kargo-project-admin, kargo-*-read-secrets, kargo-admin/viewer/promoter).
@@ -182,6 +187,30 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: kargo-viewer
+subjects:
+  - kind: ServiceAccount
+    name: oracle-workbench
+    namespace: oracle-fleet
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-analysisrun-author
+  namespace: oracle-kargo
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [analysisruns]
+    verbs: [create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-analysisrun-author-oracle-workbench
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-analysisrun-author
 subjects:
   - kind: ServiceAccount
     name: oracle-workbench
