@@ -303,9 +303,8 @@ report to record that digest (open question 2).
    (`gateway/scripts/evidence-publish.sh` — Actions storage quota).
 5. The evidence pass live — LIVE 2026-10-16 (#2624; first pass #2628: 3 rules, 9 turns, 34 s). Next:
    measure tokens, worker rounds, invalid findings and coordinator interventions per completed PR.
-6. The staged read (§Inputs) — WIRED in the session, INERT until the pin bump to the snippets
-   release that carries allure-behavior-snippets#39. Next: bump `SNIPPETS_VERSION`/`SNIPPETS_SHA256`
-   (with `gateway/scripts/lib/snippets.sh`), then read the extra pass's cost on the first
+6. The staged read (§Inputs) — wired in #3015, ACTIVE from the snippets v0.6.4 pin (2026-10-29;
+   the manifest's `masked.files` + `masked.keys`). Next: read the extra pass's cost on the first
    oracle-fleet rounds (the tick's `→ claude pass 1 (masked)` log line beside the pass-2 line).
 
 Cheaper helper subagents wait for that data, and they need a gateway change first: a session is

@@ -146,9 +146,9 @@ SPECS_PATH_RE='(^|/)specs/'
 # ship in ONE wheel, verified by digest and run with the image's stdlib python3 (pack, evidence and
 # touched_rules import nothing outside the stdlib; the wheel is extracted, not zip-imported, because
 # the pack copies process/ from package files).
-SNIPPETS_VERSION="0.6.2"   # bump TOGETHER with gateway/scripts/lib/snippets.sh (CI evidence)
+SNIPPETS_VERSION="0.6.4"   # bump TOGETHER with gateway/scripts/lib/snippets.sh (CI evidence)
 SNIPPETS_WHEEL="https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v${SNIPPETS_VERSION}/allure_behavior_snippets-${SNIPPETS_VERSION}-py3-none-any.whl"
-SNIPPETS_SHA256="32da3c184d658f9acf241ba734a9f32fb5c557ddc47246a0c8d35d9441846f2d"
+SNIPPETS_SHA256="68259d492600c76464395cfff7f92d4c7c2b0a148051714b268bda7ee44e5eba"
 EVIDENCE_ARTIFACT="${EVIDENCE_ARTIFACT:-gateway-evidence}"   # the LEGACY ci run artifact (fallback only, see evidence_fetch)
 # The evidence packs live in OUR storage since 2026-10-21 (the Actions artifact held ~2.1 GB of the
 # org's 2 GB included storage — GithubStorageHeldHigh): CI writes evidence/<pr-N|branch>/<sha>.tar.gz
@@ -436,7 +436,7 @@ ROWS
   local pk="$d/pack"; mkdir -p "$pk/process/briefs" "$pk/tree" "$pk/evidence"
   for f in spec-sections.md spec-sections-masked.md digest.md masked/digest.md row-keys.tsv tree/a.md evidence/R-1.json process/briefs/rows.md; do
     mkdir -p "$pk/$(dirname "$f")"; printf 'x\n' > "$pk/$f"; done
-  printf '%s' '{"masked":{"files":["spec-sections-masked.md","masked/digest.md"],"row_keys":"row-keys.tsv"}}' > "$pk/manifest.json"
+  printf '%s' '{"masked":{"files":["spec-sections-masked.md","masked/digest.md"],"keys":"row-keys.tsv","tree":"unmasked"}}' > "$pk/manifest.json"
   check "pass 1 world: built from the declared list" 0 "$(pass1_inputs "$pk" "$d/p1"; echo $?)"
   check "pass 1 world: exactly the masked files + process/ + manifest" "manifest.json masked/digest.md process/briefs/rows.md spec-sections-masked.md" \
     "$(cd "$d/p1" && find . -type f | sed 's|^\./||' | sort | tr '\n' ' ' | sed 's/ $//')"
@@ -749,11 +749,11 @@ evidence_pack() {
 # pass1_inputs <pack> <dest> → pass 1's world: EXACTLY the files the pack's manifest declares masked
 # (`masked.files`, pack-relative) + process/ + manifest.json. An ALLOW-list: a surface the producer
 # left unmasked (tree/, evidence/, attachments/, the full sections) is absent from pass 1, never
-# leaked into it. A path escaping the pack, the key map itself (`masked.row_keys`), a missing file
+# leaked into it. A path escaping the pack, the key map itself (`masked.keys`), a missing file
 # or an empty list is a refusal: a pack that offers the staged read must carry its surface.
 pass1_inputs() {
   local pack="$1" dest="$2" keys f
-  keys="$(jq -r '.masked.row_keys // "row-keys.tsv"' "$pack/manifest.json" 2>/dev/null)" || return 1
+  keys="$(jq -r '.masked.keys // "row-keys.tsv"' "$pack/manifest.json" 2>/dev/null)" || return 1
   local -a files=(); mapfile -t files < <(jq -r '.masked.files[]? // empty' "$pack/manifest.json" 2>/dev/null)
   [ "${#files[@]}" -gt 0 ] || return 1
   rm -rf "$dest"; mkdir -p "$dest"
