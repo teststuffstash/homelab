@@ -44,7 +44,10 @@
 #              specs tree, the head's raw Allure results (the pack ci publishes to the bucket) with
 #              evidence.json + digest.md + attachments, the base branch's evidence as baseline, the
 #              PR body, the closing issue's acceptance text, the previous review, and process/ (the
-#              pinned RULES, CONVENTIONS and briefs). A failed clone/wheel/pack is no review (fail
+#              pinned RULES, CONVENTIONS and briefs). When the pinned pack offers --mask-descriptions the pass is the
+#              STAGED READ (review_run): pass 1 over the manifest's masked allow-list only, frozen
+#              as pass1.md, then pass 2 (the review) over the full pack — one admission, one
+#              LLM_TIMEOUT_S for both. A failed clone/wheel/pack is no review (fail
 #              CLOSED); absent EVIDENCE is stated in the pack and becomes the brief's finding. The model is CONFINED: `env -i` with exactly the dispatch env + OTEL + a
 #              throwaway HOME (never GH_TOKEN/GH_TOKEN_FILE), and an allow-listed tool scope —
 #              `Read(//<inputs>/**)` + Glob, nothing else — so the token file, /proc and $HOME
@@ -163,6 +166,14 @@ pack_roots() { case "$1" in homelab) printf 'gateway/specs gateway/tests';; *) p
 review_path_re() { local _s t; read -r _s t <<< "$(pack_roots "$1")"; printf '%s|^%s/' "$SPECS_PATH_RE" "$t"; }
 PR_LIST_LIMIT="${PR_LIST_LIMIT:-40}"                     # review-reflex.sh's ceiling: the rollup fragment is deep
 LLM_TIMEOUT_S="${LLM_TIMEOUT_S:-600}"                    # the model's wall clock; < the 900 s pod deadline minus clone + submit
+# THE STAGED READ (the rows brief's check 10 as two passes of one session): pass 1 reads the pack's
+# MASKED surface (every description cell → its row key r<table>.<row>) and its findings are frozen
+# as pass1.md; pass 2 is the review over the full pack + pass1.md + the key map, and carries the
+# verdict. On whenever the pinned wheel's evidence-pack offers --mask-descriptions (a capability
+# probe, so the pin bump IS the switch); 0 = the single pass. Both passes share LLM_TIMEOUT_S.
+SPECS_STAGED_READ="${SPECS_STAGED_READ:-1}"
+PASS1_TIMEOUT_S="${PASS1_TIMEOUT_S:-200}"                # pass 1's share; pass 2 gets what is left
+STAGED=0                                                 # set per pass by build_pack
 
 log() { printf '%s specs-review: %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
@@ -421,6 +432,39 @@ ROWS
   # …and a run that gets past its flags has the read-only gh INSTALLED before its first read
   # (the token check is that first read's gate; with no token it stops right there, rc 2).
   check "shadow_main: gh is the read-only wrapper once a run starts" 1 "$( (GH_TOKEN="" GH_TOKEN_FILE=""; shadow_main --harness goose homelab#1 >/dev/null 2>&1 || true; declare -f gh) | grep -c 'gh_shadow "\$@"')"
+  # ── the staged read: pass 1's world is the manifest's masked ALLOW-list, nothing else ──
+  local pk="$d/pack"; mkdir -p "$pk/process/briefs" "$pk/tree" "$pk/evidence"
+  for f in spec-sections.md spec-sections-masked.md digest.md masked/digest.md row-keys.tsv tree/a.md evidence/R-1.json process/briefs/rows.md; do
+    mkdir -p "$pk/$(dirname "$f")"; printf 'x\n' > "$pk/$f"; done
+  printf '%s' '{"masked":{"files":["spec-sections-masked.md","masked/digest.md"],"row_keys":"row-keys.tsv"}}' > "$pk/manifest.json"
+  check "pass 1 world: built from the declared list" 0 "$(pass1_inputs "$pk" "$d/p1"; echo $?)"
+  check "pass 1 world: exactly the masked files + process/ + manifest" "manifest.json masked/digest.md process/briefs/rows.md spec-sections-masked.md" \
+    "$(cd "$d/p1" && find . -type f | sed 's|^\./||' | sort | tr '\n' ' ' | sed 's/ $//')"
+  local bad
+  for bad in '["../x"]' '["/etc/passwd"]' '["row-keys.tsv"]' '["absent.md"]' '[]'; do
+    printf '{"masked":{"files":%s}}' "$bad" > "$pk/manifest.json"
+    check "pass 1 world: refuses masked.files=$bad" 1 "$(pass1_inputs "$pk" "$d/p1" >/dev/null 2>&1 && echo 0 || echo 1)"
+  done
+  printf '{}' > "$pk/manifest.json"
+  check "pass 1 world: a pack with no masked section is a refusal" 1 "$(pass1_inputs "$pk" "$d/p1" >/dev/null 2>&1 && echo 0 || echo 1)"
+  check "prompt: single pass names no pass1.md" 0 "$(STAGED=0 review_prompt o/r 1 abc | grep -c pass1.md)"
+  check "prompt: staged pass 2 adjudicates the frozen pass 1" 1 "$(STAGED=1 review_prompt o/r 1 abc | grep -c 'survives, contradicted or withdrawn')"
+  # review_run's order with the harness recorded: pass 1 in pass1/ with its own prompt and share,
+  # frozen into the pack, THEN pass 2 in the pack; a silent pass 1 ends the run without pass 2.
+  check "review_run: staged = pass 1 in pass1/ (200 s), then pass 2 in inputs/ seeing pass1.md" "pass1:PASS 1:200|inputs:PASS 2:frozen" "$(
+    WORK="$d/rr"; mkdir -p "$WORK/inputs" "$WORK/pass1"; STAGED=1; PASS1_TIMEOUT_S=200; LLM_TIMEOUT_S=600
+    harness_run() { local n; n="$(basename "$2")"
+      case "$3" in *"PASS 1 of"*) printf '%s' "pass1:PASS 1:$5" >> "$WORK/calls"; printf -- '- r1.1 — check 10 — frozen\n' > "$WORK/result.txt";;
+                   *"PASS 2 of"*) printf '|%s:PASS 2:%s' "$n" "$(grep -q frozen "$WORK/inputs/pass1.md" && echo frozen)" >> "$WORK/calls";; esac; }
+    review_run claude o/r 1 abc m >/dev/null; cat "$WORK/calls")"
+  check "review_run: an empty pass 1 → rc 1 and no pass 2" "1:" "$(
+    WORK="$d/rr2"; mkdir -p "$WORK/inputs" "$WORK/pass1"; STAGED=1
+    harness_run() { case "$3" in *"PASS 2 of"*) printf 'p2' >> "$WORK/calls";; *) : > "$WORK/result.txt";; esac; }
+    rc=0; review_run claude o/r 1 abc m >/dev/null || rc=$?; printf '%s:%s' "$rc" "$(cat "$WORK/calls" 2>/dev/null)")"
+  check "review_run: single pass = one call with the whole LLM_TIMEOUT_S" "inputs:600" "$(
+    WORK="$d/rr3"; mkdir -p "$WORK/inputs"; STAGED=0; LLM_TIMEOUT_S=600
+    harness_run() { printf '%s:%s' "$(basename "$2")" "$5" >> "$WORK/calls"; }
+    review_run claude o/r 1 abc m >/dev/null; cat "$WORK/calls")"
   rm -rf "$d"
   [ "$fails" -eq 0 ] && { echo "self-test: ok"; return 0; }
   echo "self-test: $fails FAILED"; return 1
@@ -673,14 +717,22 @@ build_pack() {
     --tests-root "$tests_root" --prior-review "$ctx/prior-review.md" --issue-intent "$ctx/issue-intent.md"
     --pr-body "$ctx/pr-body.md" --out "$inputs")
   [ -n "$bl_json" ] && packargs+=(--baseline "$bl_json" --baseline-commit "$bl_commit")
-  PYTHONPATH="$WORK/snippets" python3 -c 'import sys; sys.argv[0] = "evidence-pack"; from allure_behavior_snippets.pack import main; sys.exit(main())' \
-      "${packargs[@]}" > "$WORK/pack.log" 2>&1 \
+  STAGED=0
+  if [ "$SPECS_STAGED_READ" = 1 ] && evidence_pack --help 2>/dev/null | grep -q -- '--mask-descriptions'; then
+    packargs+=(--mask-descriptions); STAGED=1
+  fi
+  evidence_pack "${packargs[@]}" > "$WORK/pack.log" 2>&1 \
     || { log "[$repo#$num] evidence-pack FAILED — no review: $(tail -c 300 "$WORK/pack.log" | tr '\n' ' ')"; return 1; }
   local n_rules; n_rules="$(grep -c . "$inputs/touched-rules.txt" 2>/dev/null || true)"
   # the file list hit a specs/test path but no rule is touched (prose, a fixture, a helper):
   # nothing for either brief — the caller's mechanical approval, said so
   [ "${n_rules:-0}" -eq 0 ] && return 4
   log "[$repo#$num] pack: ${n_rules} touched rule(s): $(tr '\n' ' ' < "$inputs/touched-rules.txt" | head -c 300)"
+  if [ "$STAGED" = 1 ]; then
+    pass1_inputs "$inputs" "$WORK/pass1" \
+      || { log "[$repo#$num] the pack offers --mask-descriptions but its manifest declares no usable masked surface (masked.files) — no review"; return 1; }
+    log "[$repo#$num] staged read: pass 1 over $(jq -r '.masked.files | length' "$inputs/manifest.json") masked file(s)"
+  fi
   # the system prompt: homelab's wiring lens + the pinned briefs (finding contract first)
   local b
   for b in finding-contract rows evidence; do
@@ -690,9 +742,38 @@ build_pack() {
   return 0
 }
 
-# review_prompt <slug> <num> <head> → the user prompt every harness gets (the brief's entry point)
+# evidence_pack <args…> — the pinned wheel's pack builder (stdlib python3, extracted wheel)
+evidence_pack() {
+  PYTHONPATH="$WORK/snippets" python3 -c 'import sys; sys.argv[0] = "evidence-pack"; from allure_behavior_snippets.pack import main; sys.exit(main())' "$@"
+}
+# pass1_inputs <pack> <dest> → pass 1's world: EXACTLY the files the pack's manifest declares masked
+# (`masked.files`, pack-relative) + process/ + manifest.json. An ALLOW-list: a surface the producer
+# left unmasked (tree/, evidence/, attachments/, the full sections) is absent from pass 1, never
+# leaked into it. A path escaping the pack, the key map itself (`masked.row_keys`), a missing file
+# or an empty list is a refusal: a pack that offers the staged read must carry its surface.
+pass1_inputs() {
+  local pack="$1" dest="$2" keys f
+  keys="$(jq -r '.masked.row_keys // "row-keys.tsv"' "$pack/manifest.json" 2>/dev/null)" || return 1
+  local -a files=(); mapfile -t files < <(jq -r '.masked.files[]? // empty' "$pack/manifest.json" 2>/dev/null)
+  [ "${#files[@]}" -gt 0 ] || return 1
+  rm -rf "$dest"; mkdir -p "$dest"
+  for f in "${files[@]}"; do
+    case "$f" in /*|..|../*|*/..|*/../*|"$keys") return 1;; esac
+    [ -f "$pack/$f" ] || return 1
+    mkdir -p "$dest/$(dirname "$f")" && cp "$pack/$f" "$dest/$f" || return 1
+  done
+  cp -r "$pack/process" "$dest/process" && cp "$pack/manifest.json" "$dest/manifest.json"
+}
+# pass1_prompt <slug> <num> <head> → pass 1 of the staged read: the rows brief's check 10, first half
+pass1_prompt() {
+  printf '%s' "You are the specs reviewer for pull request ${1}#${2} (head ${3}), on PASS 1 of a staged read. Your working directory holds the MASKED surface only (manifest.json, masked.files): every decision table's description cell is replaced by its row key r<table>.<row>; prose, headers, inputs, expected cells and worlds are in view. process/RULES.md, process/CONVENTIONS.md and process/briefs/rows.md are the pinned process. Do the first half of the rows brief's check 10: read every touched table's rows from their cells alone and record each row whose conditions or outcome cannot be placed without the hidden description, plus any other rows-brief finding the masked tables show. Never guess a description. Write ONLY a findings list, one line per finding: '- <row key or page anchor> — <rule or check> — <what the cells alone do not settle>', or the single line '- none'. No Verdict line: this list is frozen and handed to pass 2. Do not run commands, do not fetch anything."
+}
+# review_prompt <slug> <num> <head> → the user prompt every harness gets (the brief's entry point);
+# on a staged read ($STAGED=1) it is pass 2 and adds the frozen pass 1's adjudication
 review_prompt() {
-  printf '%s' "You are the specs reviewer for pull request ${1}#${2} (head ${3}). Your working directory is the context pack and holds your ONLY inputs; your Read and Glob tools are scoped to it. Start with manifest.json (what the pack holds and what was not provided), then intent: pr-body.md, issue-intent.md, spec-sections.md (each touched rule's section at the head + the spec diff), tree/ (the specs at the head, for neighbours), process/RULES.md and process/CONVENTIONS.md (the pinned process your briefs cite). Then evidence: digest.md first (its Stamp:, Baseline: and precomputed findings), the per-rule <RULE>.md tables, evidence/<RULE>.json for ONE rule's records (never the whole evidence.json: it holds every touched rule and can exceed your context), baseline-evidence.json, and attachments/ where a row's value is still unproven. prior-review.md is your previous review of this PR: on a later round, mark each of its findings resolved or still open FIRST. Apply BOTH briefs (rows, evidence) under the finding contract and write ONLY the review body in its Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <blocking finding IDs>'. Do not run commands, do not fetch anything, do not submit the review yourself: the launcher submits what you return."
+  local staged=""
+  [ "${STAGED:-0}" = 1 ] && staged=" This review is PASS 2 of a staged read: pass1.md is your frozen first pass over the masked surface (row keys r<table>.<row>; row-keys.tsv joins each key to its description). Before your new findings, mark EVERY pass-1 finding survives, contradicted or withdrawn against the revealed description and its cells. A finding the description alone explains SURVIVES (check 10: a condition that lives only in the description), the reveal never repairs it. Then the new intent findings. Never rewrite pass1.md."
+  printf '%s' "You are the specs reviewer for pull request ${1}#${2} (head ${3}). Your working directory is the context pack and holds your ONLY inputs; your Read and Glob tools are scoped to it. Start with manifest.json (what the pack holds and what was not provided), then intent: pr-body.md, issue-intent.md, spec-sections.md (each touched rule's section at the head + the spec diff), tree/ (the specs at the head, for neighbours), process/RULES.md and process/CONVENTIONS.md (the pinned process your briefs cite). Then evidence: digest.md first (its Stamp:, Baseline: and precomputed findings), the per-rule <RULE>.md tables, evidence/<RULE>.json for ONE rule's records (never the whole evidence.json: it holds every touched rule and can exceed your context), baseline-evidence.json, and attachments/ where a row's value is still unproven. prior-review.md is your previous review of this PR: on a later round, mark each of its findings resolved or still open FIRST. Apply BOTH briefs (rows, evidence) under the finding contract and write ONLY the review body in its Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <blocking finding IDs>'. Do not run commands, do not fetch anything, do not submit the review yourself: the launcher submits what you return.${staged}"
 }
 
 # ── the harnesses: ONE home per CLI invocation. Each runs CONFINED — `env -i` with exactly the
@@ -707,9 +788,9 @@ review_prompt() {
 #   denied, not prompted; Grep/Bash/Write are not granted at all (Grep's rule grammar is not
 #   path-scoped, and the inputs are small).
 harness_claude() {
-  local inputs="$1" lens="$2" prompt="$3" model="$4"
+  local inputs="$1" lens="$2" prompt="$3" model="$4" limit="${5:-$LLM_TIMEOUT_S}"
   local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
-  (cd "$inputs" && timeout "${LLM_TIMEOUT_S}" env -i "${envargs[@]}" claude -p "$prompt" --model "$model" --append-system-prompt-file "$lens" \
+  (cd "$inputs" && timeout "${limit}" env -i "${envargs[@]}" claude -p "$prompt" --model "$model" --append-system-prompt-file "$lens" \
       --allowedTools "Read(//${inputs#/}/**)" "Glob" --permission-mode default --output-format json > "$WORK/result.json")
 }
 # harness_opencode <inputs> <lens> <prompt> → $WORK/result.txt (the final message, plain text)
@@ -718,13 +799,13 @@ harness_claude() {
 #   glob, grep, list stay, inside the cwd). Model/provider come ONLY from the dispatch env (⚖
 #   GW-SESSIONS-ENV verify rows: whatever opencode really reads is what the gateway must hand it).
 harness_opencode() {
-  local inputs="$1" lens="$2" prompt="$3" home
+  local inputs="$1" lens="$2" prompt="$3" limit="${4:-$LLM_TIMEOUT_S}" home
   home="$(sed -n 's/^HOME=//p' "$WORK/env.list" | head -1)"
   mkdir -p "$home/.config/opencode" && cp "$lens" "$home/.config/opencode/AGENTS.md" || return 1
   local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
   envargs+=('OPENCODE_PERMISSION={"edit":"deny","bash":"deny","webfetch":"deny","external_directory":"deny"}'
             OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1 OPENCODE_DISABLE_CLAUDE_CODE=1 OPENCODE_DISABLE_SHARE=1)
-  (cd "$inputs" && timeout "${LLM_TIMEOUT_S}" env -i "${envargs[@]}" opencode run "$prompt" < /dev/null > "$WORK/result.txt" 2> "$WORK/harness.err")  # opencode >=2 waits on piped stdin (agent-session.sh harness-run-cmd)
+  (cd "$inputs" && timeout "${limit}" env -i "${envargs[@]}" opencode run "$prompt" < /dev/null > "$WORK/result.txt" 2> "$WORK/harness.err")  # opencode >=2 waits on piped stdin (agent-session.sh harness-run-cmd)
 }
 # harness_goose <inputs> <lens> <prompt> → $WORK/result.txt
 #   SHADOW ONLY. System prompt = `--system`; tools = the `developer` builtin ONLY (--no-profile) —
@@ -732,11 +813,49 @@ harness_opencode() {
 #   confinement contract (its shell can read what the pod's uid can): recorded per run as
 #   `confinement: "env-only"`, which is why shadow runs take merged, operator-authored PRs.
 harness_goose() {
-  local inputs="$1" lens="$2" prompt="$3"
+  local inputs="$1" lens="$2" prompt="$3" limit="${4:-$LLM_TIMEOUT_S}"
   local -a envargs=(); mapfile -t envargs < "$WORK/env.list"
   envargs+=(GOOSE_MODE=auto GOOSE_DISABLE_KEYRING=1 GOOSE_MAX_TURNS=60)
-  (cd "$inputs" && timeout "${LLM_TIMEOUT_S}" env -i "${envargs[@]}" goose run --no-session --no-profile --with-builtin developer -q \
+  (cd "$inputs" && timeout "${limit}" env -i "${envargs[@]}" goose run --no-session --no-profile --with-builtin developer -q \
       --system "$(cat "$lens")" -t "$prompt" > "$WORK/result.txt" 2> "$WORK/harness.err")
+}
+
+# harness_run <harness> <dir> <prompt> <model|""> <timeout_s> → the model's text in $WORK/result.txt
+# (claude also leaves its JSON result in $WORK/result.json); rc = the harness's, 124 = timed out
+harness_run() {
+  local rc=0
+  case "$1" in
+    claude)   harness_claude "$2" "$WORK/lens.md" "$3" "$4" "$5" || rc=$?
+              jq -r '.result // ""' "$WORK/result.json" > "$WORK/result.txt" 2>/dev/null || true;;
+    opencode) harness_opencode "$2" "$WORK/lens.md" "$3" "$5" || rc=$?;;
+    goose)    harness_goose "$2" "$WORK/lens.md" "$3" "$5" || rc=$?;;
+    *) return 2;;
+  esac
+  return "$rc"
+}
+# review_run <harness> <slug> <num> <head> <model|""> → the review text in $WORK/result.txt (+ claude's
+# $WORK/result.json), rc = the harness's. ONE admission covers both passes of a staged read: pass 1
+# runs in $WORK/pass1 (its own Read scope — the full pack is out of reach) bounded by
+# PASS1_TIMEOUT_S; its text is frozen as <pack>/pass1.md (claude's JSON kept as
+# $WORK/pass1-result.json); pass 2 runs in the full pack with what is left of LLM_TIMEOUT_S. A pass 1
+# that fails or says nothing ends the run with no pass 2 (rc ≠ 0: a harness death, never a verdict).
+review_run() {
+  local h="$1" slug="$2" num="$3" head="$4" model="$5" rc=0 t0 limit="$LLM_TIMEOUT_S"
+  rm -f "$WORK/result.json" "$WORK/result.txt" "$WORK/pass1-result.json"
+  if [ "${STAGED:-0}" = 1 ]; then
+    t0="$SECONDS"
+    harness_run "$h" "$WORK/pass1" "$(pass1_prompt "$slug" "$num" "$head")" "$model" "$PASS1_TIMEOUT_S" || rc=$?
+    [ -f "$WORK/result.json" ] && mv "$WORK/result.json" "$WORK/pass1-result.json"
+    if [ "$rc" -ne 0 ] || ! grep -q '[^[:space:]]' "$WORK/result.txt" 2>/dev/null; then
+      log "pass 1 (masked) ended rc=${rc} with $(wc -c < "$WORK/result.txt" 2>/dev/null || echo 0) byte(s) — no pass 2"
+      [ "$rc" -ne 0 ] || rc=1; rm -f "$WORK/result.txt"; return "$rc"
+    fi
+    mv "$WORK/result.txt" "$WORK/inputs/pass1.md"
+    limit=$(( LLM_TIMEOUT_S - (SECONDS - t0) ))
+    log "pass 1 (masked): $(grep -c '^- ' "$WORK/inputs/pass1.md" || true) finding line(s) frozen in $(( SECONDS - t0 )) s; pass 2 gets ${limit} s"
+  fi
+  harness_run "$h" "$WORK/inputs" "$(review_prompt "$slug" "$num" "$head")" "$model" "$limit" || rc=$?
+  return "$rc"
 }
 
 # ── shadow run (--shadow): the read-only gh, the as-of readers, the per-PR record ───────────────
@@ -871,18 +990,16 @@ shadow_one() {
   SESSION_ID="$(jq -r '.session.id' "$resp")"
   log "[$repo#$num] shadow DISPATCH session=${SESSION_ID} rail=$(jq -r '.rail' "$resp") model=$(jq -r '.model' "$resp")"
   llm_env_args "$resp" "$WORK/home" > "$WORK/env.list" || { shadow_record "$rec" 'outcome="env-refused"'; shadow_release "$rec"; return 1; }
-  local prompt; prompt="$(review_prompt "$slug" "$num" "$head")"
-  local t1; t1="$(date +%s)"
-  case "$SHADOW_HARNESS" in
-    claude)
-      local model; model="$(jq -r '.env.ANTHROPIC_MODEL // ""' "$resp")"
-      if [ -z "$model" ]; then log "[$repo#$num] shadow: dispatch env carries no ANTHROPIC_MODEL"; rc=1
-      else harness_claude "$WORK/inputs" "$WORK/lens.md" "$prompt" "$model" || rc=$?; fi
-      jq -r '.result // ""' "$WORK/result.json" > "$WORK/result.txt" 2>/dev/null || true
-      shadow_record "$rec" "harness_usage=$(jq -c '{usage, num_turns, total_cost_usd, subtype}' "$WORK/result.json" 2>/dev/null || echo null)";;
-    opencode) harness_opencode "$WORK/inputs" "$WORK/lens.md" "$prompt" || rc=$?;;
-    goose)    harness_goose "$WORK/inputs" "$WORK/lens.md" "$prompt" || rc=$?;;
-  esac
+  local t1 model=""; t1="$(date +%s)"
+  [ "$SHADOW_HARNESS" = claude ] && model="$(jq -r '.env.ANTHROPIC_MODEL // ""' "$resp")"
+  if [ "$SHADOW_HARNESS" = claude ] && [ -z "$model" ]; then log "[$repo#$num] shadow: dispatch env carries no ANTHROPIC_MODEL"; rc=1
+  else review_run "$SHADOW_HARNESS" "$slug" "$num" "$head" "$model" || rc=$?; fi
+  shadow_record "$rec" "staged=$([ "$STAGED" = 1 ] && echo true || echo false)"
+  if [ "$SHADOW_HARNESS" = claude ]; then
+    shadow_record "$rec" "harness_usage=$(jq -c '{usage, num_turns, total_cost_usd, subtype}' "$WORK/result.json" 2>/dev/null || echo null)" \
+      "pass1_usage=$(jq -c '{usage, num_turns, total_cost_usd, subtype}' "$WORK/pass1-result.json" 2>/dev/null || echo null)"
+  fi
+  [ -s "$WORK/inputs/pass1.md" ] && cp "$WORK/inputs/pass1.md" "$SHADOW_OUT/${tag}.pass1.md"
   shadow_record "$rec" "harness_rc=$rc" "timed_out=$([ "$rc" -eq 124 ] && echo true || echo false)" "model_wall_s=$(( $(date +%s) - t1 ))"
   [ -s "$WORK/harness.err" ] && cp "$WORK/harness.err" "$SHADOW_OUT/${tag}.stderr.txt"
   shadow_release "$rec"
@@ -1102,15 +1219,14 @@ else
     #      verbatim, keys validated) + OTEL + a throwaway HOME — never GH_TOKEN / GH_TOKEN_FILE,
     #      never the pod's env (llm_env_args; pinned by --self-test);
     #    • an ALLOW-LIST tool scope (harness_claude).
-    local prompt
-    prompt="$(review_prompt "$slug" "$num" "$head")"
     llm_env_args "$resp" "$WORK/home" > "$WORK/env.list" || { log "[$repo#$num] refusing the gateway's env map — no review"; return 1; }
     local rc=0
     # bounded INSIDE the workflow's 900 s activeDeadlineSeconds: a deadline kill skips the EXIT
     # trap, so the session would hold its rail slot until the gateway TTL (4 h) and the tick's
-    # metrics push would never happen. 124 = timed out → no verdict, the next tick retries.
-    rm -f "$WORK/result.json"
-    harness_claude "$inputs" "$lens" "$prompt" "$model" || rc=$?
+    # metrics push would never happen. 124 = timed out → no verdict, the next tick retries. A
+    # staged read's two passes share the one LLM_TIMEOUT_S (review_run).
+    review_run claude "$slug" "$num" "$head" "$model" || rc=$?
+    [ -s "$WORK/pass1-result.json" ] && jq -r '"→ claude pass 1 (masked) \(.subtype // "done"): in=\(.usage.input_tokens // 0) out=\(.usage.output_tokens // 0) cache_read=\(.usage.cache_read_input_tokens // 0) turns=\(.num_turns // 0) cost_usd=\(.total_cost_usd // 0)"' "$WORK/pass1-result.json" 2>/dev/null || true
     local is_json=0 review="" verdict=""
     jq -e . "$WORK/result.json" >/dev/null 2>&1 && is_json=1
     if [ "$rc" -eq 0 ] && [ "$is_json" = 1 ]; then
