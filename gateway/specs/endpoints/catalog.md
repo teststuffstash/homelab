@@ -82,6 +82,9 @@ each with its own snapshot:
   name the Endpoints table has: the row is read under the stripped name and the multiplier **N/100**
   (0.5 at 50 % off) is kept per model in the snapshot's `promotion` map, beside the limit cells'
   Nx `bonus` multiplier (a price promotion, not a usage one — #2933, ruling 2026-10-26, case (a)).
+  The fees are read from the Plan table's `**Go**` / `**Go Plus**` rows only; a Plan-table row
+  naming any other plan (the vendor's **Go Teams**, #3011) is passed over with one log line naming
+  the row — not a plan this leg models, and no third key enters `plan_fees`.
   Rows are keyed by **model id** through the page's own Endpoints table (display name → Model ID);
   the fees by the Plan table's plan names. ⚖ `go-models.ts` (the spike's second
   file) is not read: it keys rows by family (`deepseek-flash`), and limits are per model (ruling 3);
@@ -96,8 +99,15 @@ and a model the gateway cannot speak cannot be admitted, so dropping loses nothi
 A dropped id is **not re-listed by the console overlay**: the overlay's complete-row branch
 (the override naming no catalog row) skips it — a complete override for a dropped id cannot
 bring it back with a guessed `openai` dialect (⇁ [§The model's dialect](#the-models-dialect)).
-Whole-source shape failures (below half, no Plan table, no Endpoints table, a named provider
-missing) stay failures.
+⚖ **A second exception, the docs source's unmodelled Plan row (#3011)**: a Plan-table row whose
+plan name the leg does not model (neither `**Go**` nor `**Go Plus**` — the vendor's new
+**Go Teams** row) is **passed over** with one log line naming the row — not a model, so not the
+drop counter (#2933); a plan the policy cannot name (`rails.opencode.plan` is `go` | `go-plus`)
+buys admission nothing, so passing it over loses nothing that worked. A row of another shape
+(a wrong cell count) is still a parse failure, and a Plan table missing `**Go**` or `**Go Plus**`
+stays a whole-source parse failure — the fees cannot price both plans.
+Whole-source shape failures (below half, no Plan table or one missing `**Go**` / `**Go Plus**`,
+no Endpoints table, a named provider missing) stay failures.
 A
 refresh whose fetch fails, whose parse fails, or whose model count drops below **half** ⚖ of the
 last good snapshot's (zero models always) keeps the last good snapshot. The snapshot is written
@@ -154,8 +164,10 @@ ids with a row in either plan tab. The `config` source's model count is the merg
 | "peak rows without the peak-hours sentence are a parse failure" | 5 | `docs-no-peak-hours` || parse-failed | the last good |
 | "no share sentence is a parse failure ⚖" | 5 | `docs-no-shares` || parse-failed | the last good |
 | "no plan table is a parse failure ⚖" | 5 | `docs-no-plan-table` || parse-failed | the last good |
+| "a Plan table without the Go Plus row is a parse failure" | 5 | `docs-no-go-plus` || parse-failed | the last good |
 | "a drop below half the models is implausible" | 5 | `docs-shrunk` (2 models) || implausible | the last good |
 | "a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖" | 5 | `docs-promo` (the live Gemini 4 Argon rows, ruling 2026-10-26 case (a)) || ok | 6 models; `gemini-4-argon` promotion 0.5, limits $30 / $120 |
+| "a Plan-table row naming a plan the leg does not model is passed over ⚖" | 5 | `docs-teams` (the live **Go Teams** Plan-table row under Go Plus — `**Go Teams**` / `**$20/member/month**` / `Every member gets their own Go limits, plus $5/month on every model` — read 2026-10-28) || ok | 5 models; `plan_fees` go 10 / go-plus 40, no `go-teams` key; one log line names the row |
 
 ### The model's dialect
 

@@ -40,9 +40,10 @@ the test clock, 2027-01-15T08:00:00Z.
 | peak rows without the peak-hours sentence are a parse failure | 5 | docs-no-peak-hours | parse-failed | the last good |
 | no share sentence is a parse failure | 5 | docs-no-shares | parse-failed | the last good |
 | no plan table is a parse failure | 5 | docs-no-plan-table | parse-failed | the last good |
+| a Plan table without the Go Plus row is a parse failure | 5 | docs-no-go-plus | parse-failed | the last good |
 | a drop below half the models is implausible | 5 | docs-shrunk (2) | implausible | the last good |
 | a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖ | 5 | docs-promo (the live Gemini 4 Argon rows) | ok | 6 models; promotion gemini-4-argon 0.5, limits 30 / 120 |
-| a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖ | 5 | docs-promo (the live Gemini 4 Argon rows) | ok | 6 models; promotion gemini-4-argon 0.5, limits 30 / 120 |
+| a Plan-table row naming a plan the leg does not model is passed over ⚖ | 5 | docs-teams (the live **Go Teams** row under Go Plus) | ok | 5 models; plan_fees go 10 / go-plus 40, no go-teams key; one log line names the row |
 
 | description | model | dialect |
 |---|---|---|
@@ -259,8 +260,10 @@ DOCS_ROWS = [
     ("peak rows without the peak-hours sentence are a parse failure", "5", "docs-no-peak-hours", "parse-failed", 5),
     ("no share sentence is a parse failure", "5", "docs-no-shares", "parse-failed", 5),
     ("no plan table is a parse failure", "5", "docs-no-plan-table", "parse-failed", 5),
+    ("a Plan table without the Go Plus row is a parse failure", "5", "docs-no-go-plus", "parse-failed", 5),
     ("a drop below half the models is implausible", "5", "docs-shrunk", "implausible", 5),
     ("a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖", "5", "docs-promo", "ok", 6),
+    ("a Plan-table row naming a plan the leg does not model is passed over ⚖", "5", "docs-teams", "ok", 5),
 ]
 
 
@@ -292,6 +295,28 @@ async def test_docs_refresh(cworld, vendor, clock, last, behaviour, outcome, mod
             check("the other models' limits unchanged (go)", sorted(set(docs["plans"]["go"]) - {"gemini-4-argon"}), sorted(LISTED_FIVE))
             check("the other models' limits unchanged (go-plus)", sorted(set(docs["plans"]["go-plus"]) - {"gemini-4-argon"}), sorted(LISTED_FIVE))
             check("bonus stays the Nx map only", docs["bonus"].get("gemini-4-argon"), None)
+
+
+# ── A Plan-table row naming a plan the leg does not model is passed over (#3011) ──────────────
+async def test_unmodelled_plan_row_passes_over(cworld, vendor, caplog):
+    """row: a Plan-table row naming a plan the leg does not model is passed over ⚖"""
+    caplog.set_level(logging.INFO, logger="gateway.catalog")
+    world(upstream="docs-teams")
+    app = cworld.build()
+    with given("the fake Go page answers docs-teams — the live **Go Teams** Plan-table row under Go Plus"):
+        vendor.docs = "docs-teams"
+    with when("the docs source refreshes"):
+        got = await app.state.catalog.refresh_source("docs")
+        docs = app.state.catalog.snapshots["docs"].body
+        lines = [r.getMessage() for r in caplog.records if r.name == "gateway.catalog"]
+    with then("outcome ok; 5 models; plan_fees exactly go 10 / go-plus 40 (no go-teams key); one log line names the row"):
+        attach_json("gateway.catalog pass-over line(s)", [x for x in lines if "passed over" in x])
+        then_eq("outcome", got, "ok")
+        check("the docs snapshot's plan_fees", docs["plan_fees"], {"go": 10.0, "go-plus": 40.0})
+        check("the model count is the five", len({m for plan in docs["plans"].values() for m in plan}), len(LISTED_FIVE))
+        check("the pass-over line names the row",
+              [x for x in lines if x.startswith("catalog: docs plan row passed over ")],
+              ["catalog: docs plan row passed over — **Go Teams** (not a plan this leg models)"])
 
 
 # ── The model's dialect ──────────────────────────────────────────────────────────────────────
