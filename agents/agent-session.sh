@@ -76,6 +76,10 @@ ib_refuse_malformed() {   # <key> <ref>
 # its cell's own budget key through the same two variables (homelab#270). Moved out verbatim; the
 # reasoning that used to sit here lives in the helper's header.
 . "${HERE}/kube.sh"
+# The ONE footprint grammar (ADR-097/ADR-122): fp_conflict decides whether an issue's declared
+# `Touches:` reaches the repo's specs roots (REPLAY:specs-process-volume) — the scan's own
+# predicate, never a launcher-side regex over the same line.
+. "${HERE}/footprint.sh"
 
 # Goal #1640 acceptance 4: this launcher's own argv, kept VERBATIM before the parse loop consumes
 # it. The retry re-run re-enters the launcher with exactly these args, so the round does not
@@ -890,6 +894,10 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
     # ADR-135: the repo's fixer.imageVolumes from the SAME claim read — resolved (validated +
     # probed) by resolve_image_volumes below, before the env card renders.
     IV_CLAIM_JSON="$(printf '%s' "$claims_json" | jq -c --arg p "$PROJECT" '[.items[].spec.repos[] | select(.name == $p) | .fixer.imageVolumes // []] | first // []' 2>/dev/null)" || { IV_CLAIM_JSON="[]"; echo "WARN: could not read fixer.imageVolumes off the claims (a malformed sibling AgentStack?) — no image volumes this ride (ADR-135)" >&2; }
+    # ADR-156: the repo's `specs` field {root, tests, pin?} from the SAME claim read — consumed by
+    # REPLAY:specs-process-volume once the issue's declared footprint is known (after the body
+    # read). Absent field ⇒ empty ⇒ nothing below engages.
+    SPECS_CLAIM_JSON="$(printf '%s' "$claims_json" | jq -c --arg p "$PROJECT" '[.items[].spec.repos[] | select(.name == $p) | .specs | select(type == "object")] | first // empty' 2>/dev/null)" || SPECS_CLAIM_JSON=""
   else
     echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
@@ -909,12 +917,15 @@ fi
 # Outputs: IV_MOUNT / IV_VOLUME (pod-manifest fragments, the SC_MOUNT shape) and IV_CARD (env-card
 # lines — what IS mounted, and what was declared but is NOT, so a ride never guesses).
 IV_ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json'
+iv_ghcr_token() {  # <repo-path> → the anonymous pull token ghcr hands out for that repo (empty = none)
+  curl -fsS --max-time 5 "https://ghcr.io/token?scope=repository:${1}:pull" 2>/dev/null | jq -r '.token // empty' || true
+}
 iv_probe() {  # <registry-host> <repo-path> <sha256:digest> → rc 0 iff the manifest is anonymously served
   # EXACTLY 200: `curl -f` alone passes a 3xx, and the registry 301s a path containerd would
   # reject (`a//b`) — a probe that says yes to what the kubelet cannot pull is the wedge itself.
   local host="$1" repo="$2" dig="$3" tok="" code=""
   if [ "$host" = "ghcr.io" ]; then
-    tok="$(curl -fsS --max-time 5 "https://ghcr.io/token?scope=repository:${repo}:pull" 2>/dev/null | jq -r '.token // empty')" || tok=""
+    tok="$(iv_ghcr_token "$repo")"
     [ -n "$tok" ] || return 1
     code="$(curl -sSI --max-time 5 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $tok" -H "Accept: $IV_ACCEPT" "https://ghcr.io/v2/${repo}/manifests/${dig}" 2>/dev/null)" || code=""
   else
@@ -922,9 +933,76 @@ iv_probe() {  # <registry-host> <repo-path> <sha256:digest> → rc 0 iff the man
   fi
   [ "$code" = "200" ]
 }
+iv_digest_of() {  # <registry-host> <repo-path> <tag> → prints the tag's `Docker-Content-Digest`; rc 1 if not anonymously served (200)
+  # The tag→digest step for a reference the launcher DERIVES (REPLAY:specs-process-volume: the
+  # repo's release pin names a tag). The result still goes through iv_resolve_entry's fence AND
+  # iv_probe — this only answers "which digest", never "may it mount". Same anonymous auth as the
+  # probe; the same Accept list, so an OCI index (multi-arch + attestation) resolves to the INDEX
+  # digest the kubelet pulls by.
+  local host="$1" repo="$2" tag="$3" tok="" hdrs="" dig=""
+  if [ "$host" = "ghcr.io" ]; then
+    tok="$(iv_ghcr_token "$repo")"
+    [ -n "$tok" ] || return 1
+    hdrs="$(curl -sSI --max-time 5 -H "Authorization: Bearer $tok" -H "Accept: $IV_ACCEPT" "https://ghcr.io/v2/${repo}/manifests/${tag}" 2>/dev/null)" || return 1
+  else
+    hdrs="$(curl -sSI --max-time 5 -H "Accept: $IV_ACCEPT" "https://${host}/v2/${repo}/manifests/${tag}" 2>/dev/null)" || return 1
+  fi
+  hdrs="$(printf '%s\n' "$hdrs" | tr -d '\r')"
+  grep -Eq '^HTTP/[0-9.]+ 200( |$)' <<< "$hdrs" || return 1
+  dig="$(sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: *//p' <<< "$hdrs" | sed -n 1p)"
+  grep -Eq '^sha256:[a-f0-9]{64}$' <<< "$dig" || return 1
+  printf '%s' "$dig"
+}
+# iv_resolve_entry <name> <reference> <mountPath> [nocard] → rc 0 iff the entry MOUNTS. ONE entry
+# through the whole ADR-135 path — fence, name/path clash against every earlier entry (IV_SEEN_*),
+# probe, the three rendered fragments. Called by resolve_image_volumes per claim entry and by
+# REPLAY:specs-process-volume for the launcher-derived process volume; `nocard` leaves the env-card
+# line to the caller (the process volume has its own static card block — a generic data-volume
+# line beside it would say the same thing twice, with SQLite advice that does not apply).
+IV_SEEN_NAMES=" "; IV_SEEN_PATHS=""
+iv_resolve_entry() {
+  local name="$1" ref="$2" mp="$3" card="${4:-}" host repo dig p clash=""
+  if ! grep -Eq '^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$' <<< "$name" \
+     || ! grep -Eq '^(registry\.teststuff\.net|ghcr\.io/teststuffstash)(/[a-z0-9]+([._-][a-z0-9]+)*)+@sha256:[a-f0-9]{64}$' <<< "$ref" \
+     || ! grep -Eq '^/(corpus|data|mnt)(/[A-Za-z0-9][A-Za-z0-9._-]*)*$' <<< "$mp"; then
+    # The refused entry's text is UNVALIDATED claim input headed for two prompts (this log is
+    # read by the dispatching session, the card by the ride) — only its [a-z0-9-] residue leaves.
+    name="$(printf '%s' "$name" | tr -cd 'a-z0-9-' | cut -c1-32)"; [ -n "$name" ] || name="unnamed"
+    echo "WARN: image volume '${name}' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it" >&2
+    [ "$card" = nocard ] || IV_CARD="${IV_CARD}- **Data volume \`${name}\`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it."$'\n'
+    return 1
+  fi
+  # One name, one path, and no path inside another — for EVERY fenced entry, mounted or not, so
+  # a duplicate of an entry whose probe failed cannot mount under its name and contradict its line.
+  case "$IV_SEEN_NAMES" in *" $name "*) clash="name";; esac
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$mp/" in "$p/"*) clash="${clash:-path}";; esac
+    case "$p/" in "$mp/"*) clash="${clash:-path}";; esac
+  done <<EOF_IVP
+$IV_SEEN_PATHS
+EOF_IVP
+  if [ -n "$clash" ]; then
+    echo "WARN: image volume '${name}' at ${mp} REFUSED — duplicate ${clash} (or a mountPath nested in another entry's) in the claim; ride continues WITHOUT this entry" >&2
+    [ "$card" = nocard ] || IV_CARD="${IV_CARD}- **A second claim entry (\`${name}\` at \`${mp}\`) was IGNORED** — its ${clash} collides with an earlier entry. Only the earlier entry's line above describes what is mounted."$'\n'
+    return 1
+  fi
+  IV_SEEN_NAMES="${IV_SEEN_NAMES}${name} "; IV_SEEN_PATHS="${IV_SEEN_PATHS}${mp}"$'\n'
+  host="${ref%%/*}"; repo="${ref#*/}"; repo="${repo%@*}"; dig="${ref##*@}"
+  if iv_probe "$host" "$repo" "$dig"; then
+    echo "→ image volume ${name}: mounting ${ref} at ${mp} (read-only, ADR-135)"
+    IV_MOUNT="${IV_MOUNT}"$'\n'"        - { name: iv-${name}, mountPath: ${mp}, readOnly: true }"
+    IV_VOLUME="${IV_VOLUME}"$'\n'"    - name: iv-${name}"$'\n'"      image: { reference: \"${ref}\", pullPolicy: IfNotPresent }"
+    [ "$card" = nocard ] || IV_CARD="${IV_CARD}- **Data volume \`${name}\`: mounted READ-ONLY at \`${mp}\`** (OCI image \`${ref}\`). It is the stack's published artifact, not a checkout — never try to write there; list it (\`ls -R ${mp}\`) to find the files. For a SQLite file open it immutable: \`sqlite3.connect(\"file:<path>?immutable=1\", uri=True)\`."$'\n'
+    return 0
+  fi
+  echo "WARN: image volume '${name}' NOT mounted — ${ref} is not anonymously served (HTTP 200) by its registry (dangling digest? private package?); cold ride without it (ADR-135 probe-then-mount)" >&2
+  [ "$card" = nocard ] || IV_CARD="${IV_CARD}- **Data volume \`${name}\`: declared, NOT mounted** (the registry did not serve its digest at launch). Do not look for \`${mp}\`; say so if the task needed it."$'\n'
+  return 1
+}
 resolve_image_volumes() {
-  IV_MOUNT=""; IV_VOLUME=""; IV_CARD=""
-  local rows name ref mp host repo dig seen_names=" " seen_paths="" p clash US
+  IV_MOUNT=""; IV_VOLUME=""; IV_CARD=""; IV_SEEN_NAMES=" "; IV_SEEN_PATHS=""
+  local rows name ref mp US
   US="$(printf '\037')"   # unit separator: NOT IFS whitespace, so an empty field stays a field
   # Every field is coerced to a string HERE — one object-valued field must refuse ONE entry, not
   # make `@tsv`-style rendering fail and silently drop the whole list.
@@ -935,43 +1013,7 @@ resolve_image_volumes() {
   fi
   [ -n "$rows" ] || return 0
   while IFS="$US" read -r name ref mp; do
-    if ! grep -Eq '^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$' <<< "$name" \
-       || ! grep -Eq '^(registry\.teststuff\.net|ghcr\.io/teststuffstash)(/[a-z0-9]+([._-][a-z0-9]+)*)+@sha256:[a-f0-9]{64}$' <<< "$ref" \
-       || ! grep -Eq '^/(corpus|data|mnt)(/[A-Za-z0-9][A-Za-z0-9._-]*)*$' <<< "$mp"; then
-      # The refused entry's text is UNVALIDATED claim input headed for two prompts (this log is
-      # read by the dispatching session, the card by the ride) — only its [a-z0-9-] residue leaves.
-      name="$(printf '%s' "$name" | tr -cd 'a-z0-9-' | cut -c1-32)"; [ -n "$name" ] || name="unnamed"
-      echo "WARN: image volume '${name}' REFUSED — name/reference/mountPath outside the ADR-135 fence (digest-pinned, registry.teststuff.net or ghcr.io/teststuffstash, mountPath under /corpus|/data|/mnt, no dot-led path segment); ride continues WITHOUT it" >&2
-      IV_CARD="${IV_CARD}- **Data volume \`${name}\`: declared, NOT mounted** (the claim's entry is outside the platform fence). Do not look for it; say so if the task needed it."$'\n'
-      continue
-    fi
-    # One name, one path, and no path inside another — for EVERY fenced entry, mounted or not, so
-    # a duplicate of an entry whose probe failed cannot mount under its name and contradict its line.
-    clash=""
-    case "$seen_names" in *" $name "*) clash="name";; esac
-    while IFS= read -r p; do
-      [ -n "$p" ] || continue
-      case "$mp/" in "$p/"*) clash="${clash:-path}";; esac
-      case "$p/" in "$mp/"*) clash="${clash:-path}";; esac
-    done <<EOF_IVP
-$seen_paths
-EOF_IVP
-    if [ -n "$clash" ]; then
-      echo "WARN: image volume '${name}' at ${mp} REFUSED — duplicate ${clash} (or a mountPath nested in another entry's) in the claim; ride continues WITHOUT this entry" >&2
-      IV_CARD="${IV_CARD}- **A second claim entry (\`${name}\` at \`${mp}\`) was IGNORED** — its ${clash} collides with an earlier entry. Only the earlier entry's line above describes what is mounted."$'\n'
-      continue
-    fi
-    seen_names="${seen_names}${name} "; seen_paths="${seen_paths}${mp}"$'\n'
-    host="${ref%%/*}"; repo="${ref#*/}"; repo="${repo%@*}"; dig="${ref##*@}"
-    if iv_probe "$host" "$repo" "$dig"; then
-      echo "→ image volume ${name}: mounting ${ref} at ${mp} (read-only, ADR-135)"
-      IV_MOUNT="${IV_MOUNT}"$'\n'"        - { name: iv-${name}, mountPath: ${mp}, readOnly: true }"
-      IV_VOLUME="${IV_VOLUME}"$'\n'"    - name: iv-${name}"$'\n'"      image: { reference: \"${ref}\", pullPolicy: IfNotPresent }"
-      IV_CARD="${IV_CARD}- **Data volume \`${name}\`: mounted READ-ONLY at \`${mp}\`** (OCI image \`${ref}\`). It is the stack's published artifact, not a checkout — never try to write there; list it (\`ls -R ${mp}\`) to find the files. For a SQLite file open it immutable: \`sqlite3.connect(\"file:<path>?immutable=1\", uri=True)\`."$'\n'
-    else
-      echo "WARN: image volume '${name}' NOT mounted — ${ref} is not anonymously served (HTTP 200) by its registry (dangling digest? private package?); cold ride without it (ADR-135 probe-then-mount)" >&2
-      IV_CARD="${IV_CARD}- **Data volume \`${name}\`: declared, NOT mounted** (the registry did not serve its digest at launch). Do not look for \`${mp}\`; say so if the task needed it."$'\n'
-    fi
+    iv_resolve_entry "$name" "$ref" "$mp" || true
   done <<EOF_IV
 $rows
 EOF_IV
@@ -1145,6 +1187,18 @@ render_env_card() {
   # claims the tool is available on any harness with the knob.
   # ADR-135: one line per declared image volume — mounted, or declared-but-not (never silent).
   [ -n "${IV_CARD:-}" ] && printf '%s' "$IV_CARD"
+  # ADR-156: the pinned spec process, mounted by REPLAY:specs-process-volume when the issue's
+  # declared footprint reaches the claim's `specs` roots (SPECS_PROCESS = mounted | unmounted |
+  # ""). STATIC text by design — no version (the mount's VERSION file has it), no rule content
+  # (the rules ARE the mount): the card points, the process speaks for itself, and the specs
+  # reviewer judges the PR's rows against the same pinned text. The degraded arm is said, never
+  # silent (the FU-125 class): a worker that cannot find the mount must not reconstruct the rules.
+  case "${SPECS_PROCESS:-}" in
+    mounted)
+      printf '%s\n' "- **Spec process: this task touches the repo's spec pages or rule tests.** The repo's pinned spec process is mounted READ-ONLY at \`${SPECS_PROCESS_MOUNT}/process\` (verify: \`cat ${SPECS_PROCESS_MOUNT}/process/VERSION\`). Read \`briefs/author.md\` there FIRST, then the rules it cites (\"rule N\" = \`RULES.md\` there; the conventions = \`CONVENTIONS.md\`). List EVERY specs change in the PR body under a \`Spec changes:\` heading, ⚖ on judgment rows. The specs reviewer judges your rows against this same text — never reconstruct the rules from memory or from another repo." ;;
+    unmounted)
+      printf '%s\n' "- **Spec process: this task touches the repo's spec pages or rule tests, but the pinned process could NOT be mounted this ride** (launcher-side: the repo's process pin did not resolve — not yours to fix). Do not look for \`${SPECS_PROCESS_MOUNT}/process\`. Still list every specs change in the PR body under a \`Spec changes:\` heading (⚖ on judgment rows), and say there that the process was unavailable to you." ;;
+  esac
   if [ -n "${MCP_ENDPOINT:-}" ]; then
     printf '%s\n' "- **Feedback tool: available** (harness: ${HARNESS}, model: ${MODEL}). File structured feedback using the MCP tool — the harness and model above are stamped by the launcher, not self-reported."
     printf '%s\n' "- **Version skew:** Production serves ${AGENT_BASE_IMAGE##*:} (pinned release); this worktree runs HEAD. If behavior differs from production, the pin is the reference."
@@ -1217,6 +1271,70 @@ if [ -n "${RECIPE:-}" ]; then
       fi
     fi
     # <<<REPLAY:base-declared-read<<<
+    # ── THE SPEC PROCESS RIDES WITH THE WORKER (ADR-156, operator rulings 2026-10-29) ───────────
+    # Every worker that touches a repo's specs gets the pinned process (RULES, CONVENTIONS, the
+    # briefs) INJECTED — never a "please read X" line, never restated in a recipe: a rule a worker
+    # reconstructs from memory is a second process, and the specs reviewer judges rows against the
+    # pinned one. Mechanism, all launcher-owned (ADR-094): the claim's `repos[].specs`
+    # {root, tests, pin?} names where the rules live; the issue's declared `Touches:` (the ONE
+    # parser, read off the SAME body the `Base:` read fetched; the scan's own fp_conflict decides
+    # "reaches") says whether THIS dispatch touches them; the repo's own release pin
+    # (`SNIPPETS_WHEEL=` in the pin file, read at the base ref exactly as the devbox.lock pre-flight
+    # reads a file) names the process version; the tag resolves to a digest at dispatch and the
+    # image rides the ADR-135 path — fence, probe-then-mount, the pod fragments — as one more
+    # entry. Degrades LOUDLY at every step: no pin, no manifest, a refused entry ⇒ an UNMOUNTED
+    # ride whose card says so (render_env_card, keyed on SPECS_PROCESS). A footprint that does not
+    # reach the roots, or a repo without the field, engages nothing — byte-identical to before.
+    # The IMAGE is the process artifact the snippets release publishes beside its wheel: a
+    # FROM-scratch rootfs `/process/{RULES.md,CONVENTIONS.md,briefs/*.md,VERSION}`, so the mount at
+    # $SPECS_PROCESS_MOUNT puts the files at $SPECS_PROCESS_MOUNT/process (no subPath needed —
+    # the card names that path). A declared `*` footprint reaches everything, as it does for the
+    # scan's hold (ADR-097: undeclared-but-present is exclusive); an ABSENT `Touches:` reaches
+    # nothing — the card would otherwise tell a ride it touches specs when nothing says it does.
+    # >>>REPLAY:specs-process-volume>>>
+    SPECS_PROCESS=""                                        # "" | mounted | unmounted — the card's switch
+    SPECS_PROCESS_MOUNT="/mnt/snippets"                     # under the ADR-135 fence; the card names ${SPECS_PROCESS_MOUNT}/process
+    SPECS_PROCESS_IMAGE="teststuffstash/allure-behavior-snippets-process"   # on ghcr.io; tag = v<pin>
+    sp_pin_version() {  # <slug> <ref> <path> → the release version the pin file's `SNIPPETS_WHEEL=` names (`v0.6.4/…` ⇒ 0.6.4); rc 1 if unreadable/unparseable
+      local v
+      v="$(gh api "repos/$1/contents/$3?ref=$2" -H "Accept: application/vnd.github.raw" 2>/dev/null \
+            | sed -n 's#^SNIPPETS_WHEEL=.*/releases/download/v\([0-9][0-9A-Za-z.-]*\)/.*#\1#p' | head -1)" || v=""
+      [ -n "$v" ] || return 1
+      printf '%s' "$v"
+    }
+    if [ -n "${SPECS_CLAIM_JSON:-}" ]; then
+      # Claim strings are prompt-adjacent input (they reach this log): one path grammar for all
+      # three — repo-relative, no leading slash, no dot-led segment, no `//` — the XRD's pattern,
+      # enforced again here because a claim applied before the schema tightened must meet it too.
+      _sp_root="$(printf '%s' "$SPECS_CLAIM_JSON" | jq -r 'if (.root|type)=="string" then .root else "" end' 2>/dev/null)" || _sp_root=""
+      _sp_tests="$(printf '%s' "$SPECS_CLAIM_JSON" | jq -r 'if (.tests|type)=="string" then .tests else "" end' 2>/dev/null)" || _sp_tests=""
+      _sp_pin="$(printf '%s' "$SPECS_CLAIM_JSON" | jq -r 'if (.pin|type)=="string" then .pin else "" end' 2>/dev/null)" || _sp_pin=""
+      if [ -z "$_sp_pin" ]; then
+        # The layout both consumers share today: the pin sits beside the specs root's parent
+        # (`gateway/specs` → `gateway/scripts/lib/snippets.sh`; `specs` → `scripts/lib/snippets.sh`).
+        case "$_sp_root" in */*) _sp_pin="${_sp_root%/*}/scripts/lib/snippets.sh";; *) _sp_pin="scripts/lib/snippets.sh";; esac
+      fi
+      _sp_re='^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+      if ! grep -Eq "$_sp_re" <<< "$_sp_root" || ! grep -Eq "$_sp_re" <<< "$_sp_tests" || ! grep -Eq "$_sp_re" <<< "$_sp_pin"; then
+        echo "WARN: the claim's \`specs\` field for ${PROJECT} is outside the path grammar (repo-relative dirs/file, no dot-led segment) — spec process NOT considered this ride (ADR-156)" >&2
+      else
+        _ib_rc=0
+        ISSUE_TOUCHES="$(printf '%s' "$_ib_body" | ib_get Touches "$_ib_ref")" || _ib_rc=$?
+        [ "$_ib_rc" -eq 0 ] || ib_refuse_malformed Touches "$_ib_ref"
+        if [ -n "$ISSUE_TOUCHES" ] && fp_conflict "$ISSUE_TOUCHES" "${_sp_root}/**, ${_sp_tests}/**"; then
+          SPECS_PROCESS="unmounted"
+          if ! _sp_ver="$(sp_pin_version "${ORG:-teststuffstash}/${PROJECT}" "$BASE_REF" "$_sp_pin")"; then
+            echo "WARN: spec process NOT mounted — no \`SNIPPETS_WHEEL=…/releases/download/v<version>/…\` pin readable at ${_sp_pin}@${BASE_REF} in ${PROJECT}, while #${ISSUE_N}'s footprint reaches ${_sp_root}/ or ${_sp_tests}/; the ride's card says so (ADR-156)" >&2
+          elif ! _sp_dig="$(iv_digest_of ghcr.io "$SPECS_PROCESS_IMAGE" "v${_sp_ver}")"; then
+            echo "WARN: spec process NOT mounted — ghcr.io/${SPECS_PROCESS_IMAGE}:v${_sp_ver} (the pin at ${_sp_pin}@${BASE_REF}) has no anonymously served manifest (release not published as an image? private package?); the ride's card says so (ADR-156)" >&2
+          else
+            echo "→ spec process: #${ISSUE_N}'s footprint reaches ${_sp_root}/ or ${_sp_tests}/ — pin v${_sp_ver} (${_sp_pin}@${BASE_REF}) resolves to ${_sp_dig}"
+            iv_resolve_entry process "ghcr.io/${SPECS_PROCESS_IMAGE}@${_sp_dig}" "$SPECS_PROCESS_MOUNT" nocard && SPECS_PROCESS="mounted"
+          fi
+        fi
+      fi
+    fi
+    # <<<REPLAY:specs-process-volume<<<
     # RESEARCH RIDES ARM INTO A GOAL (operator ruling 2026-09-04, the oracle-fleet#418 read). A
     # research recipe's PR is human-gated BY DESIGN (FU-105) — but that gate is the human WEAVE
     # at the DEFAULT branch, not the fix→goal hop ("feature→goal is fine to automate; goal→master

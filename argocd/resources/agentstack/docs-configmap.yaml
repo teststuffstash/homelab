@@ -154,6 +154,36 @@ data:
       0–40 % of runc (homelab#1807). Two versions sit on disk around a roll.
     - Max 4 per repo. Worker rides only in v1 — reviewer/coordinator pods do not mount it yet.
 
+    ## The spec process rides with the worker (`repos[].specs`, ADR-156)
+
+    A repo that keeps `specs/` pages under the portable spec process (the rules, conventions and
+    briefs the `allure-behavior-snippets` release ships, pinned per repo) declares where its rules
+    and their tests live:
+
+    ```yaml
+    repos:
+      - name: my-island
+        specs:
+          root: specs            # the spec pages   (homelab: gateway/specs)
+          tests: tests           # the rule tests   (homelab: gateway/tests)
+          # pin: scripts/lib/snippets.sh   — optional; default = <parent of root>/scripts/lib/snippets.sh
+    ```
+
+    - **Injected, never instructed.** When a dispatched issue's declared `Touches:` footprint
+      reaches `root/` or `tests/`, the launcher reads the repo's own pin (`SNIPPETS_WHEEL=` in the
+      pin file, at the ride's base ref), resolves `ghcr.io/teststuffstash/allure-behavior-snippets-process:v<version>`
+      to its digest, and mounts it READ-ONLY at `/mnt/snippets` through the image-volume path
+      above (fence + probe-then-mount). The ride's card then names `/mnt/snippets/process`
+      (`RULES.md`, `CONVENTIONS.md`, `briefs/`, `VERSION`) and tells the worker to read the author
+      brief first. No recipe text restates a rule.
+    - **Loud degrade.** No readable pin, no published image for that version, or a refused entry
+      ⇒ an unmounted ride whose card says the process was unavailable. A footprint that does not
+      reach the roots, or a repo without this field, gets neither mount nor card line.
+    - **One home for the roots.** The specs reviewer reads the same field for its trigger paths and
+      its context pack (`pack_roots`), falling back to its per-repo table when the claim has none.
+    - Nothing is rendered by the Composition for this field. No schema defaults (the `pin` default
+      lives in the launcher, where it is read).
+
     ## Claim-owned labels (`repos[].labels` — the Issues tier, FU-068)
 
     A repo entry with a `labels:` block gets an AUTHORITATIVE `IssueLabels`: the platform

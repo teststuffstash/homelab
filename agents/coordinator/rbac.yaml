@@ -99,15 +99,44 @@ subjects:
 # names now (`system:serviceaccount:agent-coordinator:specs-review`). Its grant is EXACTLY what
 # the two Workflow pods need: the Argo executor's `workflowtaskresults` create/patch — the
 # chart-rendered `argo-workflows-workflow` Role, the same one `agent-coordinator` holds through
-# `argo-workflows-workflow-coordinator` (review-argo.yaml). NOTHING from the ClusterRole above
-# and none of the namespaced Roles: agents/specs-reviewer-session.sh never calls kubectl or argo
-# (its inputs are a diff, a body and a CI log; its Secret is a volume/env ref, kubelet-served),
-# so pods, configmaps, workflows, openrouterkeys and agentstacks are all left out.
+# `argo-workflows-workflow-coordinator` (review-argo.yaml) — plus ONE cluster read, the
+# `specs-review-claims-read` ClusterRole below. NOTHING else from the ClusterRole above and none
+# of the namespaced Roles: agents/specs-reviewer-session.sh calls kubectl for exactly that read
+# (its other inputs are a diff, a body and a CI log; its Secret is a volume/env ref,
+# kubelet-served), so pods, configmaps, workflows and openrouterkeys are all left out.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: specs-review
   namespace: agent-coordinator
+---
+# The specs-review tick's one cluster read: `pack_roots` takes a repo's specs/tests roots off its
+# AgentStack claim (`repos[].specs`) — the SAME field the worker launcher mounts the pinned spec
+# process by (ADR-156), so the trigger paths, the context pack and the ride read one home.
+# agentstacks get/list, nothing else; a failed read falls back to the script's per-repo table,
+# said once per tick. Not a binding to `agentstack-claims-read` (argocd/resources/agentstack/
+# rbac.yaml): that role is "loop cluster reads" (endpoints, apps, …), wider than this tick needs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: specs-review-claims-read
+rules:
+  - apiGroups: [platform.teststuff.net]
+    resources: [agentstacks]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: specs-review-claims-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: specs-review-claims-read
+subjects:
+  - kind: ServiceAccount
+    name: specs-review
+    namespace: agent-coordinator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
