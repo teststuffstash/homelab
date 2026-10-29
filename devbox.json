@@ -269,6 +269,9 @@
       "diff-ci": [
         "bash scripts/diff-ci.sh \"$@\""
       ],
+      "scan-secrets": [
+        "gitleaks detect --source . --log-opts=\"origin/${PR_OPEN_BASE:-master}..HEAD\" --config policy/iac/gitleaks.toml --no-banner --redact"
+      ],
       "pr-gate": [
         "bash scripts/diff-ci.sh \"origin/${PR_OPEN_BASE:-master}\" && devbox run scan-secrets"
       ],
