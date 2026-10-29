@@ -72,12 +72,11 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   #926–#930, oracle-iac#1140 — the delivery loop closes only on a shadow→prod promotion + a blocked failing candidate. #2798 (kind proof,
   draft): superseded except `.github/workflows/platform-kind-kargo.yaml` (governance path, operator-direct — FU-318 b/c); close it once
   the operator rules on the workflow. Residuals: FU-317, FU-318.
-- **⚑ ISLAND INTAKE — first unattended pair PROVEN 2026-10-29 (FU-320; TICK-LOG 10-29).** The 03:30Z dig dug
-  `GoCatalogParseFailed{docs}` (cause-found, finding-4), and 05:00Z `island-intake-1793250000` APPLY (fable) closed the
-  four old findings (#2933/#2961) and filed + queued **#3011** (Go Teams pass-over, `machine-merge`). #3011 was footprint-held
-  by the phantom #2981 (`agent/error` + `agent/in-progress` on catalog.md since 10-27), which the seat closed as superseded
-  06:40Z, so the scan reads it ACTIONABLE. PICKUP: #3011's ride merges ≤ 2 rounds, then `GoCatalogParseFailed{docs}` clears
-  after the image bump rolls. Open rulings: spike §Open questions 2–5.
+- **⚑ ISLAND INTAKE — first unattended pair CLOSED END-TO-END 2026-10-29 (FU-320; TICK-LOG 10-29).** 03:30Z dig →
+  05:00Z APPLY intake (fable) closed four old findings and filed + queued **#3011** → ride (two strikes on glm-5.3-flash:
+  unknown-error, then a timeout that still pushed the branch) → **#3012** merged 07:32Z (both bot reviewers approved) →
+  auto-bump #3013 rolled `agent-gateway:2026.10.29-gaed013e7a653` → `GoCatalogParseFailed{docs}` last fired 07:30Z, clear
+  since. No pickup left on this leg. Open rulings: spike §Open questions 2–5; the issue pile is still seat-run.
 - **⚑ GATEWAY (FU-270 is the pointer — its Next is the seat's list).** Each 6 h refresh: `devbox run -- bash
   gateway/scripts/canary-entrants.sh --max 3 < /dev/null` → `benchmarks-snapshot.sh` → `cd gateway && devbox run tiers --
   apply` → PR when the lists move (a key NEW to the loader ships AFTER its image, #2812). Watch: the jail's codex REFRESH
