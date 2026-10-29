@@ -82,11 +82,12 @@ instructions: |
     never write them any other way (homelab#1793).
 
   # ── THE GATE ─────────────────────────────────────────────────────────────────────────────────
-  # There is NO `devbox run ci` in this repo. Pre-flight = `devbox run diff-ci`: it runs exactly
-  # the CI gates your diff can affect (the path→task map in `scripts/diff-ci.sh` is the ONE home
-  # of "which paths feed which gate" — never restate it here). Do not report green without
-  # naming what it ran. The PR-context gates (pin-only-lint, governance-lint) need the PR's
-  # base/author and run only in CI.
+  # You open the PR with `pr-open` (the ground rules), and pr-open runs this repo's gate:
+  # `devbox run pr-gate` = `devbox run diff-ci`, exactly the CI gates your diff can affect (the
+  # path→task map in `scripts/diff-ci.sh` is the ONE home of "which paths feed which gate" —
+  # never restate it here). Do not run diff-ci yourself as well; `pr-open --check-only` is the
+  # early check. The PR-context gates (pin-only-lint, governance-lint) need the PR's base/author
+  # and run only in CI.
   A clause/replay change additionally holds the pin-vacuity bar: the changed fixtures must red
   on the pre-fix tree and green on yours.
   `manifest-lint` prints a SKIPPED count for CRs whose schema it lacks — skipped is NOT

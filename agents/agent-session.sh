@@ -1145,11 +1145,12 @@ render_env_card() {
 
   # WHY: a declared `Base:` (issue body) means the work is STACKED on an unmerged branch. Both
   # halves must be said or neither helps: the clone is already on that branch (launcher), but
-  # `gh pr create` defaults to the repo's DEFAULT branch, and a PR opened against master would
+  # `gh pr create` defaults to the repo's DEFAULT branch (pr-open defaults to PR_OPEN_BASE, the ride's
+  # base, but a worker can still pass --base), and a PR opened against master would
   # show the entire base branch plus this change — a diff that cannot mean what it appears to
   # mean, reviewed by a reflex that would then arm it.
   if [ "$BASE_REF" != "master" ]; then
-    printf '%s\n' "- **Base branch: \`${BASE_REF}\`, NOT master.** Your clone is already on it and your branch forks from it. Open the PR against it explicitly — \`gh pr create --base ${BASE_REF} …\` — or the PR will target master and its diff will include everything in \`${BASE_REF}\` on top of your work. This PR is human-gated: it will NOT auto-merge, which is deliberate."
+    printf '%s\n' "- **Base branch: \`${BASE_REF}\`, NOT master.** Your clone is already on it and your branch forks from it. \`pr-open\` targets it by default; never pass another \`--base\`, or the PR will target master and its diff will include everything in \`${BASE_REF}\` on top of your work. This PR is human-gated: it will NOT auto-merge, which is deliberate."
   fi
   # FU-090 leg (c): the goal this issue serves. BOUNDED — Goal + Acceptance only (see the parse
   # site). Your issue is the contract; this is the reason it exists, and what "done" is measured
@@ -1720,6 +1721,14 @@ if [ -n "${RECIPE:-}" ]; then
     codex) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${MCP_CODEX_ENV}agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
   esac
   # <<<REPLAY:harness-run-cmd<<<
+  # pr-open (docs/agents/workflow.md §Gate A): the ONE way a worker opens a PR, on every stack. It
+  # runs the repo's declared gate (`devbox run pr-gate`) and opens the PR only on green, so no
+  # recipe names a gate of its own. Written into the ride from THIS checkout (agents/pr-open.sh is
+  # its one home) and put on PATH; PR_OPEN_BASE carries the ride's base, so a stacked (`Base:`)
+  # ride's PR targets it by default. A missing file is a refusal, never a ride without the gate.
+  [ -s "$HERE/pr-open.sh" ] || { echo "PREFLIGHT REFUSED: $HERE/pr-open.sh missing — a recipe ride cannot open its PR without it" >&2; exit 3; }
+  PR_OPEN_B64="$(base64 -w0 "$HERE/pr-open.sh")"
+  RUN_CMD="mkdir -p /work/bin; printf '%s' '${PR_OPEN_B64}' | base64 -d > /work/bin/pr-open; chmod +x /work/bin/pr-open; export PATH=/work/bin:\$PATH PR_OPEN_BASE=${BASE_REF}; ${RUN_CMD}"
 fi
 
 IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}}"
