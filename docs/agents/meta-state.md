@@ -18,6 +18,13 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-10-29 — specs process delivery; TICK-LOG 10-29 ~17:30Z + the night entry).** ROLLED OUT: snippets
+  v0.6.6 tagged (author brief), homelab#3030 (pins + README links + the homelab claim's `specs` field) and oracle-iac#1151
+  (oracle-fleet claim) MERGED, both claims live; oracle-fleet#958 (pin + process README/conventions links) in the lane.
+  NEXT: (a) retire the restated process text in the recipes — oracle-fleet#947's step 0 (its recipe PR is the oracle
+  seat's) and homelab `.agents/fix.yaml` "Specs are the pinned process" — the card + mount now carry it; (b) read the
+  first gateway/oracle specs ride's log for `→ spec process:` + the mounted card (the `reached` path on live data);
+  (c) the program (snippets as platform infrastructure) = ROADMAP §Backlog / specs-reviewer.md order item 8, NOT STARTED.
 - **LAN certs (FU-297) — DONE 2026-10-26** (detector, cron, carry, guard, rebind all live; `LanCertExpiringSoon`
   clear). NEXT (FU-297 (1)): schedule `opnsense-cert-carry.sh nx02 pve` on the [management box](../management-box.md) so the BACKUP follows
   renewals without a seat.
