@@ -11,7 +11,7 @@
 # v0.6.4 = `evidence-pack --mask-descriptions`, the specs reviewer's staged read (rows-brief check 10).
 # Bump TOGETHER with SNIPPETS_VERSION in
 # agents/specs-reviewer-session.sh (the reviewer's context pack) — one process, two consumers.
-SNIPPETS_WHEEL=https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v0.6.4/allure_behavior_snippets-0.6.4-py3-none-any.whl
+SNIPPETS_WHEEL=https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v0.6.6/allure_behavior_snippets-0.6.6-py3-none-any.whl
 
 # allure_evidence <args…> — run the pinned tool's `allure-evidence` console script.
 allure_evidence() {
