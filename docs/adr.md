@@ -2938,3 +2938,23 @@ from one summary line per test.
 path" to "touches a rule"; cheap helper subagents wait for measured data and a gateway per-session
 helper tier; oracle-fleet's codeowner gate is untouched; the table-shape checklist stays advisory,
 marked as a candidate under operator iteration.
+
+### ADR-157 — One `pr-open` on every stack: the only way a worker opens a PR, and it runs the repo's one declared gate (2026-10-29)
+**Status:** Accepted (operator, 2026-10-29: "lets unify. I dont want the mixups and have either
+agents run nothing at all or run it twice … pr-open everywhere").
+**Decision:** `agents/pr-open.sh` is the single home; the launcher writes it into every recipe ride
+as `pr-open` on PATH. It refuses an unreferenced body, an uncommitted tree or an unpushed HEAD, runs
+`devbox run pr-gate` (each repo declares that one script — its `ci` or `diff-ci`), stamps a green
+HEAD + tree so a second call does not re-run it, runs the repo's optional `scripts/pr-open-check`
+body hook, then `gh pr create` with an explicit base and head. Recipes and the card name no gate
+command. Mechanism: [workflow.md §Gate A](agents/workflow.md#two-gates-not-one).
+**Considered:** baking it into the agent-runtime image (rejected: every change waits on an image
+release and a pin bump); detecting `diff-ci` else `ci` (rejected: the gate choice would live in a
+heuristic, not in the repo); making oracle's acceptance-block check mandatory everywhere (rejected:
+every stack's issue shape would change; it stays oracle's hook); goose `retry.checks` (rejected: it
+runs after the push and restarts the agent without the failure).
+**Why:** a gate named in prose is run never or twice; one script that both gates and opens the PR
+leaves exactly one path.
+**Consequences:** a repo without `pr-gate` cannot open worker PRs (refusal, by design), so every
+recipe repo gains the script before the launcher change lands; `retry:` blocks leave the recipes;
+oracle-fleet's own `scripts/pr-open.sh` retires and its checker moves behind the hook.

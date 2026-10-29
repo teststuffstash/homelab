@@ -269,6 +269,9 @@
       "diff-ci": [
         "bash scripts/diff-ci.sh \"$@\""
       ],
+      "pr-gate": [
+        "bash scripts/diff-ci.sh \"origin/${PR_OPEN_BASE:-master}\""
+      ],
       "clause-replay": [
         "bash agents/replay/run.sh"
       ],
@@ -443,6 +446,9 @@
       ],
       "specs-review-self-test": [
         "bash agents/specs-reviewer-session.sh --self-test"
+      ],
+      "pr-open-self-test": [
+        "bash agents/pr-open.sh --self-test"
       ],
       "new-stack": [
         "bash scripts/new-stack.sh \"$@\""
