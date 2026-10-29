@@ -130,6 +130,15 @@ def docs_text(behaviour: str) -> str:
         lines.insert(i + 1, "| Gemini 4 Argon             | gemini-4-argon          "
                             "| `https://opencode.ai/inference/go/google/v1beta/models/gemini-4-argon` "
                             "| `@ai-sdk/google`         |")
+    elif behaviour == "docs-teams":  # #3011: the vendor's new Go Teams row in the Plan table
+        # (under Go Plus, verbatim as the live page of 2026-10-28 carries it — the live read's
+        # parse error reads `Plan row ['**Go Teams**', '**$20/member/month**', …]`) — a plan this
+        # leg does not model: passed over with one log line, not a parse failure
+        i = next(n for n, line in enumerate(lines) if line.lstrip().startswith("| **Go Plus**"))
+        lines.insert(i + 1, "| **Go Teams** | **$20/member/month** | Every member gets their own Go limits, plus $5/month on every model |")
+    elif behaviour == "docs-no-go-plus":  # the Plan table without its Go Plus row — the fees
+        # cannot price both plans: a whole-source parse failure (the no-table knob's sibling)
+        lines = [line for line in lines if _first_cell(line) != "**Go Plus**"]
     elif behaviour == "docs-unknown-model":
         i = next(n for n, line in enumerate(lines) if "DeepSeek V4.1 Flash (Off-Peak)" in line)
         lines.insert(i, lines[i].replace("DeepSeek V4.1 Flash (Off-Peak)", "DeepSeek V4.2 Flash            "))

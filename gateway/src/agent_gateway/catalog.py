@@ -391,11 +391,18 @@ def parse_docs(text: str) -> tuple[dict, list[dict]]:
     are keyed by MODEL id through the page's own Endpoints table (display name → Model ID); the
     fees by the Plan table's plan names. A plan row's trailing ` (<N>% off)` is the page's PROMOTION
     spelling on a name the table has: the row is read under the stripped name and its multiplier
-    N/100 is kept per model (#2933 case (a)) — a promotion, never a dialect. A plan row whose name
-    is still not in the Endpoints table is a shape the leg does not know (ruling: drop-and-count
-    was ruled for the DIALECT; the docs leg keeps its parse failure — the Endpoints table is the
-    page's own index, an unlisted name there is a page fault). The docs leg never drops: the list
-    is always empty."""
+    N/100 is kept per model (#2933 case (a)) — a promotion, never a dialect.
+    ⚖ A Plan-table row whose name is a plan this leg does not model (neither `**Go**` nor
+    `**Go Plus**` — the vendor's new **Go Teams** row, #3011) is PASSED OVER with one log line
+    naming the row: not a model, so not the drop counter (#2933) — a plan the policy cannot name
+    (`rails.opencode.plan` is `go` | `go-plus`) buys admission nothing, so passing it over loses
+    nothing that worked. A row of another shape (a wrong cell count) is still a shape the parser
+    does not know — a parse failure, never a guess. A plan row whose name is still not in the
+    Endpoints table is a shape the leg does not know (ruling: drop-and-count was ruled for the
+    DIALECT; the docs leg keeps its parse failure — the Endpoints table is the page's own index, an
+    unlisted name there is a page fault). A Plan table missing `**Go**` or `**Go Plus**` is a
+    whole-source failure (the fees cannot price both plans). The docs leg never drops: the list is
+    always empty."""
     if not isinstance(text, str) or not text.strip():
         raise ParseError("empty page")
     ids: dict[str, str] = {}
@@ -408,8 +415,14 @@ def parse_docs(text: str) -> tuple[dict, list[dict]]:
                 ids[r[0]] = r[1]
         elif header == _FEE_HEADER:
             for r in rows:
-                if len(r) != len(_FEE_HEADER) or r[0] not in _FEE_PLANS:
-                    raise ParseError(f"Plan row {r!r}: expected {' | '.join(_FEE_HEADER)} naming {' / '.join(_FEE_PLANS)}")
+                if len(r) != len(_FEE_HEADER):
+                    raise ParseError(f"Plan row {r!r}: expected {' | '.join(_FEE_HEADER)}")
+                if r[0] not in _FEE_PLANS:
+                    # ⚖ a plan this leg does not model is passed over, logged, never a failure
+                    # (the strict paragraph's second exception — #3011; no drop count: the row is
+                    # not a model).
+                    log.info("catalog: docs plan row passed over — %s (not a plan this leg models)", r[0])
+                    continue
                 m = _FEE.match(r[1])
                 if not m:
                     raise ParseError(f"Plan row {r[0]}: price cell {r[1]!r} is not **$N/month**")

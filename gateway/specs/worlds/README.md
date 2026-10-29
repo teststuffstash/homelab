@@ -125,6 +125,8 @@ needs another catalog refreshes against the fake vendor first (`catalog-retired`
 | `docs-ok` | 200, the page fixture |
 | `docs-404` | 404 (the page moved) |
 | `docs-unknown-model` | a `DeepSeek V4.2 Flash` plan row the Endpoints table does not name |
+| `docs-teams` | the page + the Plan table's **Go Teams** row under Go Plus (`**$20/member/month**`, "Every member gets their own Go limits, plus $5/month on every model" — the live row of 2026-10-28): a plan the leg does not model, passed over with one log line (#3011) |
+| `docs-no-go-plus` | the Plan table without its **Go Plus** row — the fees cannot price both plans (a whole-source parse failure beside `docs-no-plan-table`) |
 | `docs-promo` | the page + the live page of 2026-10-25's Gemini 4 Argon rows: a plan-row name with the trailing ` (50% off)` that the Endpoints table has, both plan tabs and the Endpoints table (the promotion multiplier, #2933 case (a)) |
 | `docs-short-endpoint-row` | the Endpoints table's `Step 5 Preview` row cut to one cell |
 | `docs-header-drift` | the plan tables' `Monthly limit` column renamed `Limit` |
