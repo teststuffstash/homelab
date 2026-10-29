@@ -36,6 +36,18 @@ CONVENTIONS section is cited by name. This lens only says where each island repo
   — it is not in your inputs (the pack's tree is the specs root only); never infer a rule from it
   that `process/RULES.md` does not state.
 
+## The staged read
+
+When the pinned pack carries a masked surface, the rows brief's check 10 runs as two passes in
+one session. **Pass 1** sees only that surface (`manifest.json` → `masked.files`): each
+description cell is replaced by its row key `r<table>.<row>`. It writes a findings list and no
+verdict. The launcher freezes that list as `pass1.md`. **Pass 2** is the review: the full pack
+plus `pass1.md` and `row-keys.tsv`, which joins each key to its description. Pass 2 marks every
+pass-1 finding `survives`, `contradicted` or `withdrawn` before it writes new findings. A finding
+that only the description explains survives, because a condition that lives only in the
+description is check 10's blocking case. Pass 2 writes the `Verdict:` line, and its findings
+cite page rows, not keys. A pack without a masked surface gets the single pass.
+
 ## Verdict mechanics
 
 Write ONLY the review body in the finding contract's Output shape. The launcher parses your

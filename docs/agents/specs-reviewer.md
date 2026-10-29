@@ -111,6 +111,24 @@ posted through the REST reviews endpoint with `commit_id` = the reviewed head (`
 `APPROVE`, `CHANGES_REQUESTED` → `REQUEST_CHANGES`); an unparsable result is no terminal. The
 mechanical approval takes the same path.
 
+**The staged read (rows-brief check 10 in two passes).** When the pinned wheel's `evidence-pack`
+offers `--mask-descriptions`, the tick passes it, so the pin bump turns the staged read on
+(`SPECS_STAGED_READ=0` turns it off). The pack's `manifest.json` → `masked.files` then lists the
+masked surface: the touched sections and the per-rule and digest tables, with each `description`
+cell replaced by its row key `r<table>.<row>`. `row-keys.tsv` joins each key back to its
+description. One gateway session runs two prompts. **Pass 1** runs in a directory that holds
+exactly the declared files plus `process/` and `manifest.json`. That is an allow-list, so a
+surface the producer did not mask (`tree/`, `evidence/`, attachments, the full sections) is
+outside pass 1's `Read` scope. Pass 1's findings are frozen into the pack as `pass1.md`.
+**Pass 2** is today's review over the full pack plus `pass1.md`. It marks each pass-1 finding
+`survives` / `contradicted` / `withdrawn` (a finding that only the description explains
+survives) and writes the verdict. The two passes share `LLM_TIMEOUT_S`: pass 1 gets
+`PASS1_TIMEOUT_S` (200 s) and pass 2 gets the rest. A pack that offers the flag but declares no
+usable masked list is no review (fail closed). A pass 1 that fails or returns nothing is a
+harness death with no pass 2. The first trial, oracle-fleet#946 on the riigiteataja page, found
+41 structural findings that survived the reveal; nine ordinary review rounds had passed that
+class. The masked surface comes from allure-behavior-snippets#39.
+
 **Evidence at head.** Only a run stamped `git.commit=<head>` in `environment.properties` counts
 (CONVENTIONS § The head/artifact stamp); the pack's `Stamp:` line says whether it does. The gateway
 suite runs against the PR head's source in-process, so its stamp carries no `image.digest`: it is
@@ -126,7 +144,7 @@ tick, shadow and zero-PR ticks included — the `SpecsReviewTickStale` alert in
 `specs_review_tick_verdicts{kind=mechanical|approve|request_changes|defer|error}` (per-tick
 counts — a push replaces the group; `SpecsReviewNoProgress` fires when every tick for an hour
 reported an `error` or a `defer`, the stuck-but-ticking case the heartbeat cannot see). The model
-run is bounded by `timeout ${LLM_TIMEOUT_S}` (600 s) inside the pod's 900 s deadline, because a
+run is bounded by `timeout ${LLM_TIMEOUT_S}` (600 s; a staged read's two passes share it) inside the pod's 900 s deadline, because a
 deadline kill skips the EXIT trap and leaves the gateway session holding its slot until the 4 h
 TTL. OTEL with `role=specs-reviewer` so the subscription spend
 attributes. Self-test: `devbox run specs-review-self-test` (`bash -n` + the jq predicates on
@@ -285,6 +303,10 @@ report to record that digest (open question 2).
    (`gateway/scripts/evidence-publish.sh` — Actions storage quota).
 5. The evidence pass live — LIVE 2026-10-16 (#2624; first pass #2628: 3 rules, 9 turns, 34 s). Next:
    measure tokens, worker rounds, invalid findings and coordinator interventions per completed PR.
+6. The staged read (§Inputs) — WIRED in the session, INERT until the pin bump to the snippets
+   release that carries allure-behavior-snippets#39. Next: bump `SNIPPETS_VERSION`/`SNIPPETS_SHA256`
+   (with `gateway/scripts/lib/snippets.sh`), then read the extra pass's cost on the first
+   oracle-fleet rounds (the tick's `→ claude pass 1 (masked)` log line beside the pass-2 line).
 
 Cheaper helper subagents wait for that data, and they need a gateway change first: a session is
 admitted with one model and the gateway rewrites every request to it
