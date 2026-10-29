@@ -1,0 +1,263 @@
+# Behaviour fixture for CloudflareEdgeHost5xxRatio — the edge-5xx belt (2026-10-29), fourth fixture
+# pair in this directory (spend-belt #334, exporter-down #351, edge-belt #1306).
+#
+#   devbox run -- promtool test rules argocd/resources/cloudflare-exporter/edge-5xx.promtool-test
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+# CI-enforced: .github/workflows/ci.yaml runs `devbox run prometheus-rules-lint`, which runs
+# `promtool test rules` over every *.promtool-test under argocd/.
+#
+# CLOCK: promtool's test clock starts at 0; range selectors are LEFT-OPEN in Prometheus 3.x.
+# `increase()` extrapolates to the window edges, so the fixture pins thresholds with `> bool`
+# comparisons (exact 0/1) rather than with extrapolated floats.
+#
+# ✅ WHAT THIS FILE RESOLVES: the belt is sized from the first real event, and the sizing is
+# EXECUTED here, not described. §1 replays the poller's real counter shape for 2026-10-29
+# 13:00–16:00Z on mcp.minutark.ee — the day's 11 edge-generated 520s, ten of them in one minute —
+# and asserts the alert stays silent through all of it (operator ruling 2026-10-29: that rate was
+# not actionable). §2 is the previous day's one-an-hour trickle. §3–§4 are what the belt exists
+# for: every request failing (a dead tunnel/origin) and a third of them failing, both at the host's
+# median traffic (~270 req/h). §5 is the ratio arm alone: a 20 % error share at volume stays quiet.
+# §6 is the accepted cost in writing: a low-traffic host (the apex, ~9 req/h) fully down never
+# reaches the 20-in-30m floor. §7–§8 are the #288 class on COUNTERS: a poller roll (counter reset +
+# a new pod identity) neither fakes a burst nor restarts a `for:` window during a real outage —
+# `increase()` absorbs the reset, `sum by (zone, host)` drops the pod.
+rule_files:
+  - edge-5xx.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1/8 — REPLAY: 2026-10-29 13:00–16:00Z on mcp.minutark.ee, the real counter shape ────────
+  # Per-status counters at the poller's observed slopes over those 180 minutes (200: +364,
+  # 202: +137, 400: +132, 404: +216, 405: +1, 499: +1, 303 flat). The 520 series APPEARS at
+  # 14:46Z (t=106) at 1 — the poller had rolled since the previous day's errors, so its in-memory
+  # counter started fresh — and steps to 11 at 14:57Z (t=117): the ten-in-one-minute burst.
+  # Worst 30m window live: 13 errors, 11.6 %. The belt must stay silent for the whole three hours.
+  - interval: 1m
+    name: "REPLAY 2026-10-29: the 14:54Z burst (10 edge 520s in a minute) stays silent"
+    input_series:
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "3154+2.02x180"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="202",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "1175+0.76x180"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="303",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "4+0x180"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="400",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "1039+0.73x180"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="404",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "2346+1.2x180"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="405",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "40+0x60 41+0x120"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="499",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "5+0x90 6+0x90"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "_x106 1+0x11 11+0x63"
+    promql_expr_test:
+      # the fixture really carries the burst: ≥9 edge 5xx inside the 30m window after 14:57Z…
+      - expr: sum by (zone, host) (increase(cloudflare_edge_requests_total{status=~"5.."}[30m])) > bool 9
+        eval_time: 135m
+        exp_samples:
+          - labels: '{zone="minutark.ee",host="mcp.minutark.ee"}'
+            value: 1
+      # …and still neither arm trips: under the 20 floor, under the 25 % ratio
+      - expr: sum by (zone, host) (increase(cloudflare_edge_requests_total{status=~"5.."}[30m])) > bool 20
+        eval_time: 135m
+        exp_samples:
+          - labels: '{zone="minutark.ee",host="mcp.minutark.ee"}'
+            value: 0
+      - expr: (sum by (zone, host) (increase(cloudflare_edge_requests_total{status=~"5.."}[30m])) / sum by (zone, host) (increase(cloudflare_edge_requests_total[30m]))) > bool 0.25
+        eval_time: 135m
+        exp_samples:
+          - labels: '{zone="minutark.ee",host="mcp.minutark.ee"}'
+            value: 0
+    alert_rule_test:
+      - eval_time: 110m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 125m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 140m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 180m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+
+  # ── 2/8 — REPLAY: 2026-10-28 05–12Z, one or two 520s an hour at ~4 req/min ─────────────────
+  - interval: 1m
+    name: "REPLAY 2026-10-28: a one-an-hour 520 trickle stays silent"
+    input_series:
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+3x420"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="404",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+1x420"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+0x59 1+0x59 2+0x59 3+0x59 4+0x59 5+0x59 6+0x61"
+    alert_rule_test:
+      - eval_time: 200m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 420m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+
+  # ── 3/8 — THE OUTAGE: every request 520 at the host's median traffic (~4.5 req/min) ──────────
+  # The 2xx counter holds (nothing gets through). The 20 floor is reached at ~5m, ratio is 1 from
+  # the first sample, `for: 15m` → firing at ~20m. The value in the summary is the ratio arm's.
+  - interval: 1m
+    name: "a dead tunnel/origin at median traffic fires in ~20m, labelled by host"
+    input_series:
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "3500+0x60"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+4.5x60"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              zone: minutark.ee
+              host: mcp.minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge: mcp.minutark.ee is answering 100% 5xx"
+              description: "More than a quarter of mcp.minutark.ee's edge responses over 30m were 5xx (and more than 20 of them), for 15m — the Cloudflare edge is failing requests to this host. SYMPTOM ONLY: a 52x/530 with origin status 0 is the edge↔tunnel hop (connector dead, wedged QUIC connection, Cloudflare incident); an origin-generated 5xx shows in the origin's own response counters. Check: the claim's cloudflared pods + logs and cloudflared_tunnel_* in its namespace, the origin pods, then the GraphQL read of originResponseStatus by hour (docs/cloudflare.md §Observability). Sized so the 2026-10-28/29 trickle (≤13 edge 520s per 30m, ≤12 %) stays silent — that rate is not actionable."
+
+  # ── 4/8 — a THIRD of requests failing at volume fires too (2 × 520 + 4 × 200 per minute) ─────
+  # The 20 floor is reached at ~10m here (2/min), so `for: 15m` puts firing at ~25m; checked at 30m.
+  - interval: 1m
+    name: "a 33 % error share at volume fires (ratio arm above 25 %, count far above the floor)"
+    input_series:
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+4x60"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+2x60"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              zone: minutark.ee
+              host: mcp.minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge: mcp.minutark.ee is answering 33.33% 5xx"
+              description: "More than a quarter of mcp.minutark.ee's edge responses over 30m were 5xx (and more than 20 of them), for 15m — the Cloudflare edge is failing requests to this host. SYMPTOM ONLY: a 52x/530 with origin status 0 is the edge↔tunnel hop (connector dead, wedged QUIC connection, Cloudflare incident); an origin-generated 5xx shows in the origin's own response counters. Check: the claim's cloudflared pods + logs and cloudflared_tunnel_* in its namespace, the origin pods, then the GraphQL read of originResponseStatus by hour (docs/cloudflare.md §Observability). Sized so the 2026-10-28/29 trickle (≤13 edge 520s per 30m, ≤12 %) stays silent — that rate is not actionable."
+
+  # ── 5/8 — the RATIO arm alone: 20 % errors at volume (1 × 520 + 4 × 200 per minute) is quiet ──
+  # 30 errors per 30m clears the count floor; the ratio (0.2) does not clear 0.25. This is the
+  # arm that keeps a busy host's background error trickle off the pager.
+  - interval: 1m
+    name: "20 % errors at volume: the count floor is cleared, the ratio arm holds, silent"
+    input_series:
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+4x60"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+1x60"
+    promql_expr_test:
+      - expr: sum by (zone, host) (increase(cloudflare_edge_requests_total{status=~"5.."}[30m])) > bool 20
+        eval_time: 45m
+        exp_samples:
+          - labels: '{zone="minutark.ee",host="mcp.minutark.ee"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+
+  # ── 6/8 — ACCEPTED COST: a low-traffic host fully down never reaches the floor ─────────────────
+  # The apex at ~9 req/h (0.15/min), every one a 530: ratio 1, but 4.5 errors per 30m. The belt is
+  # not that host's availability probe — the consumer's own one is (docs/cloudflare.md
+  # §Observability). Pinned so a future threshold change has to re-read this trade-off.
+  - interval: 1m
+    name: "accepted cost: a ~9 req/h host at 100 % 530 is invisible to this belt"
+    input_series:
+      - series: 'cloudflare_edge_requests_total{host="minutark.ee",status="530",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+0.15x120"
+    promql_expr_test:
+      - expr: (sum by (zone, host) (increase(cloudflare_edge_requests_total{status=~"5.."}[30m])) / sum by (zone, host) (increase(cloudflare_edge_requests_total[30m]))) > bool 0.25
+        eval_time: 60m
+        exp_samples:
+          - labels: '{zone="minutark.ee",host="minutark.ee"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+
+  # ── 7/8 — a POLLER ROLL at 20 % errors: counter reset + new pod identity fakes no burst ──────
+  # Both counters restart from 0 under a new pod label at t=31 (the single-replica probe rolled,
+  # ~1m hole). `increase()` treats each series' own samples; `sum by (zone, host)` adds the two
+  # pod generations. The share stays 20 %, so the alert stays quiet across the roll.
+  - interval: 1m
+    name: "a probe roll (counter reset, new pod) does not fake a burst"
+    input_series:
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "1000+4x30 stale"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "100+1x30 stale"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "_x31 0+4x60"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "_x31 0+1x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+
+  # ── 8/8 — a POLLER ROLL during a real outage does not restart `for: 15m` (#288 class) ────────
+  # Outage from t=0 (§3's shape); the probe rolls at t=20–21. The alert is pending from ~5m and
+  # must be firing at 22m and stay firing — the roll changed the pod label, not the host's state.
+  - interval: 1m
+    name: "a probe roll mid-outage does not re-clock the alert"
+    input_series:
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "3500+0x20 stale"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.180:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-7f7d69b568-9dfcd",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "0+4.5x20 stale"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="200",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "_x21 3500+0x40"
+      - series: 'cloudflare_edge_requests_total{host="mcp.minutark.ee",status="520",container="probe",endpoint="http-metrics",instance="10.244.2.185:9506",job="cloudflare-edge-probe",namespace="monitoring",pod="cloudflare-edge-probe-6b8d5c9f42-q7x2n",service="cloudflare-edge-probe",zone="minutark.ee"}'
+        values: "_x21 0+4.5x40"
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts: []
+      - eval_time: 22m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              zone: minutark.ee
+              host: mcp.minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge: mcp.minutark.ee is answering 100% 5xx"
+              description: "More than a quarter of mcp.minutark.ee's edge responses over 30m were 5xx (and more than 20 of them), for 15m — the Cloudflare edge is failing requests to this host. SYMPTOM ONLY: a 52x/530 with origin status 0 is the edge↔tunnel hop (connector dead, wedged QUIC connection, Cloudflare incident); an origin-generated 5xx shows in the origin's own response counters. Check: the claim's cloudflared pods + logs and cloudflared_tunnel_* in its namespace, the origin pods, then the GraphQL read of originResponseStatus by hour (docs/cloudflare.md §Observability). Sized so the 2026-10-28/29 trickle (≤13 edge 520s per 30m, ≤12 %) stays silent — that rate is not actionable."
+      - eval_time: 35m
+        alertname: CloudflareEdgeHost5xxRatio
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              zone: minutark.ee
+              host: mcp.minutark.ee
+            exp_annotations:
+              summary: "Cloudflare edge: mcp.minutark.ee is answering 100% 5xx"
+              description: "More than a quarter of mcp.minutark.ee's edge responses over 30m were 5xx (and more than 20 of them), for 15m — the Cloudflare edge is failing requests to this host. SYMPTOM ONLY: a 52x/530 with origin status 0 is the edge↔tunnel hop (connector dead, wedged QUIC connection, Cloudflare incident); an origin-generated 5xx shows in the origin's own response counters. Check: the claim's cloudflared pods + logs and cloudflared_tunnel_* in its namespace, the origin pods, then the GraphQL read of originResponseStatus by hour (docs/cloudflare.md §Observability). Sized so the 2026-10-28/29 trickle (≤13 edge 520s per 30m, ≤12 %) stays silent — that rate is not actionable."

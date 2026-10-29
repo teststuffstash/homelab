@@ -61,8 +61,10 @@ spec:
         # Where this belt actually belongs: FU-039's DIY GraphQL poller, on
         # `httpRequestsAdaptiveGroups` — ✅ on free zones WITH host+status dims per the same matrix,
         # which is the only path that can see the zone that carries our public traffic. It will
-        # export its own metric name, so this rule could not have been recycled into it either;
-        # re-add an edge-5xx alert when that poller lands, keyed to what IT produces.
+        # export its own metric name, so this rule could not have been recycled into it either.
+        # The poller landed (#1306); the edge-5xx belt was re-added 2026-10-29 keyed to ITS series
+        # — `CloudflareEdgeHost5xxRatio` in the edge observability block below, under a new name
+        # so the retired one stays retired (edge-probe.py --self-test asserts that).
         # ── spend drift belt (#217; the argo leg RETIRED 2026-08-12) ───────────────────────────
         # The account has a payment card attached, so a plan change bills silently — this is the
         # belt: it cannot prevent the change, it makes it loud. It shipped with a third alert,
@@ -158,6 +160,36 @@ spec:
           annotations:
             summary: "Cloudflare edge probe is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}"
             description: "The edge probe has not read a zone's edge data for 30m — the gauges above are UNKNOWN, not safe, and edge data absence would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-edge-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's GraphQL reads on the product zone (docs/cloudflare.md §Token matrix)."
+        # ── edge-5xx belt (FU-039's first data-series alert, 2026-10-29) ─────────────────────────
+        # Keyed to the poller's `cloudflare_edge_requests_total{zone,host,status}` — the series the
+        # retired `CloudflareEdge5xx` (above) never had. Per HOST, because the zone mixes the apex
+        # static site with the MCP API, and a tunnel outage is per PublicRoute claim.
+        # SIZED FROM EVIDENCE, NOT SYMMETRY (operator ruling 2026-10-29): the first edge 5xx in 28
+        # days of zone history were 20 Cloudflare-generated 520s on mcp.minutark.ee over 2026-10-28/29
+        # (origin status 0, never reached cloudflared or the origin; worst 30m: 13 errors, 11.6 %).
+        # Nothing was actionable at that rate, so this belt must NOT have fired on it — the
+        # thresholds leave ~2× headroom over that worst window (edge-5xx.promtool-test replays it).
+        # What it is for: a dead tunnel or origin — every request 520/530 — at any real traffic level.
+        # Two arms, both required: the RATIO (so a busy host's background error trickle never
+        # pages) AND a count floor of 20 in 30m (so a host with a handful of requests cannot page
+        # on one or two errors). Accepted cost: a host under ~40 req/h is invisible to this belt even
+        # when fully down (the apex at ~9 req/h is one) — its availability is the consumer's own
+        # probe, not an edge ratio. `increase()` absorbs the poller's counter reset on a roll;
+        # `sum by (zone, host)` drops the pod identity, so a roll cannot restart the `for:` window
+        # (#288 class) — executed in the fixture, not argued.
+        # Not `platform_machinery`: the connector pods, the claim and the origin are all in-cluster
+        # and readable, so a dig can act (restart a wedged connector, read the origin) — unlike the
+        # spend belts above, whose remedy is an operator move.
+        - alert: CloudflareEdgeHost5xxRatio
+          expr: (sum by (zone, host) (increase(cloudflare_edge_requests_total{status=~"5.."}[30m])) / sum by (zone, host) (increase(cloudflare_edge_requests_total[30m])) > 0.25) and (sum by (zone, host) (increase(cloudflare_edge_requests_total{status=~"5.."}[30m])) > 20)
+          for: 15m
+          labels:
+            severity: warning
+            # triage: connector pods, the PublicRoute claim and the origin are readable in-cluster; the edge view is the GraphQL read (docs/cloudflare.md §Observability)
+            triage: dig
+          annotations:
+            summary: "Cloudflare edge: {{ $labels.host }} is answering {{ $value | humanizePercentage }} 5xx"
+            description: "More than a quarter of {{ $labels.host }}'s edge responses over 30m were 5xx (and more than 20 of them), for 15m — the Cloudflare edge is failing requests to this host. SYMPTOM ONLY: a 52x/530 with origin status 0 is the edge↔tunnel hop (connector dead, wedged QUIC connection, Cloudflare incident); an origin-generated 5xx shows in the origin's own response counters. Check: the claim's cloudflared pods + logs and cloudflared_tunnel_* in its namespace, the origin pods, then the GraphQL read of originResponseStatus by hour (docs/cloudflare.md §Observability). Sized so the 2026-10-28/29 trickle (≤13 edge 520s per 30m, ≤12 %) stays silent — that rate is not actionable."
     # ── credential-expiry belt (FU-156) — docs/secrets.md §Credential expiry is telemetry ───────
     # Series: `credential_expiry_timestamp_seconds{provider, credential}` from
     # cloudflare-credential-expiry-probe (credential-expiry-probe.py beside this file) — one per
