@@ -1,21 +1,21 @@
 {
-  "snapshot_at": "2026-10-24T19:07:45Z",
+  "snapshot_at": "2026-10-29T19:03:52Z",
   "sources": {
     "capability": {
       "source": "artificial-analysis",
-      "pulled_at": "2026-10-17T19:22:37Z",
-      "rows": 345
+      "pulled_at": "2026-10-25T21:52:21Z",
+      "rows": 347
     },
     "go_catalog": {
-      "fetched_at": "2026-10-24T06:21:03Z",
+      "fetched_at": "2026-10-29T13:36:21Z",
       "fee_usd_month": 10.0,
-      "draw_30d_usd": 0.347342
+      "draw_30d_usd": 1.471611
     },
     "openrouter_catalog": {
-      "fetched_at": "2026-10-24T18:21:14Z",
+      "fetched_at": "2026-10-29T18:22:20Z",
       "cells": {
-        "candidate": 231,
-        "eligible": 18,
+        "candidate": 210,
+        "eligible": 15,
         "excluded": 0
       }
     }
@@ -136,22 +136,6 @@
           "prior": 1.0
         }
       },
-      "opencode-go/gemini-4-argon-contributor": {
-        "aa_id": null,
-        "intelligence": null,
-        "coding": null,
-        "agentic": null,
-        "out_price": 3.333333333,
-        "in_price": 0.666666667,
-        "monthly_limit_usd": 60.0,
-        "provider": null,
-        "price_basis": "promise",
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
       "opencode-go/glm-5.2": {
         "aa_id": "z-ai/glm-5.2",
         "intelligence": 33.7,
@@ -196,55 +180,7 @@
         "price_basis": "promise",
         "rides": {
           "clean": 0,
-          "judged": 3,
-          "prior": 1.0
-        }
-      },
-      "opencode-go/gpt-5.6-luna": {
-        "aa_id": "openai/gpt-5.6-luna",
-        "intelligence": 37.3,
-        "coding": 71.4,
-        "agentic": 42.1,
-        "out_price": 0.8,
-        "in_price": 0.133333333,
-        "monthly_limit_usd": 15.0,
-        "provider": null,
-        "price_basis": "promise",
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
-      "opencode-go/gpt-6-luna": {
-        "aa_id": "openai/gpt-6-luna",
-        "intelligence": 38.1,
-        "coding": null,
-        "agentic": null,
-        "out_price": 0.333333333,
-        "in_price": 0.066666667,
-        "monthly_limit_usd": 15.0,
-        "provider": null,
-        "price_basis": "promise",
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
-      "opencode-go/grok-4.7": {
-        "aa_id": "x-ai/grok-4.7",
-        "intelligence": 46.4,
-        "coding": null,
-        "agentic": null,
-        "out_price": 4.0,
-        "in_price": 1.333333333,
-        "monthly_limit_usd": 15.0,
-        "provider": null,
-        "price_basis": "promise",
-        "rides": {
-          "clean": 0,
-          "judged": 0,
+          "judged": 7,
           "prior": 1.0
         }
       },
@@ -274,6 +210,22 @@
         "monthly_limit_usd": 30.0,
         "provider": null,
         "price_basis": "promise",
+        "rides": {
+          "clean": 0,
+          "judged": 0,
+          "prior": 1.0
+        }
+      },
+      "opencode-go/iceman-contributor-free": {
+        "aa_id": null,
+        "intelligence": null,
+        "coding": null,
+        "agentic": null,
+        "out_price": 0.0,
+        "in_price": 0.0,
+        "monthly_limit_usd": "unlimited",
+        "provider": null,
+        "price_basis": "unlimited",
         "rides": {
           "clean": 0,
           "judged": 0,
@@ -313,8 +265,8 @@
         }
       },
       "opencode-go/kimi-k3.1-pro": {
-        "aa_id": null,
-        "intelligence": null,
+        "aa_id": "moonshotai/kimi-k3.1-pro",
+        "intelligence": 55.1,
         "coding": null,
         "agentic": null,
         "out_price": 6.666666667,
@@ -387,8 +339,8 @@
         "provider": null,
         "price_basis": "promise",
         "rides": {
-          "clean": 3,
-          "judged": 7,
+          "clean": 4,
+          "judged": 8,
           "prior": 1.0
         }
       },
@@ -425,45 +377,13 @@
         }
       },
       "opencode-go/minimax-m3.1-flash": {
-        "aa_id": null,
-        "intelligence": null,
+        "aa_id": "minimax/minimax-m3.1-flash",
+        "intelligence": 42.7,
         "coding": null,
         "agentic": null,
         "out_price": 0.3,
         "in_price": 0.075,
         "monthly_limit_usd": 20.0,
-        "provider": null,
-        "price_basis": "promise",
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
-      "opencode-go/muse-spark-1.2-contributor": {
-        "aa_id": null,
-        "intelligence": null,
-        "coding": null,
-        "agentic": null,
-        "out_price": 0.033333333,
-        "in_price": 0.016666667,
-        "monthly_limit_usd": 60.0,
-        "provider": null,
-        "price_basis": "promise",
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
-      "opencode-go/muse-spark-1.3-contributor": {
-        "aa_id": null,
-        "intelligence": null,
-        "coding": null,
-        "agentic": null,
-        "out_price": 0.033333333,
-        "in_price": 0.016666667,
-        "monthly_limit_usd": 60.0,
         "provider": null,
         "price_basis": "promise",
         "rides": {
@@ -554,22 +474,6 @@
           "prior": 1.0
         }
       },
-      "anthropic/claude-opus-5": {
-        "aa_id": "anthropic/claude-opus-5",
-        "intelligence": 50.8,
-        "coding": 78.0,
-        "agentic": 56.5,
-        "out_price": null,
-        "in_price": null,
-        "monthly_limit_usd": null,
-        "provider": null,
-        "price_basis": null,
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
       "anthropic/claude-opus-5.5": {
         "aa_id": "anthropic/claude-opus-5.5",
         "intelligence": 57.6,
@@ -607,8 +511,8 @@
         "intelligence": 24.4,
         "coding": 52.0,
         "agentic": 26.3,
-        "out_price": 0.0798,
-        "in_price": 0.0399,
+        "out_price": 0.14,
+        "in_price": 0.07,
         "monthly_limit_usd": null,
         "provider": "streamlake",
         "price_basis": "endpoint",
@@ -632,22 +536,6 @@
           "clean": 0,
           "judged": 0,
           "prior": 1.0
-        }
-      },
-      "deepseek/deepseek-v4.1-flash": {
-        "aa_id": "deepseek/deepseek-v4.1-flash",
-        "intelligence": 24.7,
-        "coding": null,
-        "agentic": null,
-        "out_price": 0.2148,
-        "in_price": 0.0537,
-        "monthly_limit_usd": null,
-        "provider": "baidu",
-        "price_basis": "endpoint",
-        "rides": {
-          "clean": 1,
-          "judged": 1,
-          "prior": 0.999306
         }
       },
       "google/gemini-3.8-flash": {
@@ -698,20 +586,52 @@
           "prior": 1.0
         }
       },
+      "minimax/minimax-m3.1-flash": {
+        "aa_id": "minimax/minimax-m3.1-flash",
+        "intelligence": 42.7,
+        "coding": null,
+        "agentic": null,
+        "out_price": null,
+        "in_price": null,
+        "monthly_limit_usd": null,
+        "provider": null,
+        "price_basis": null,
+        "rides": {
+          "clean": 0,
+          "judged": 0,
+          "prior": 1.0
+        }
+      },
       "moonshotai/kimi-k3": {
         "aa_id": "moonshotai/kimi-k3",
         "intelligence": 43.6,
         "coding": 76.2,
         "agentic": 50.0,
-        "out_price": 14.9,
-        "in_price": 1.358,
+        "out_price": 14.626,
+        "in_price": 1.278,
         "monthly_limit_usd": null,
         "provider": "morph",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 0.999305
+          "prior": 0.999291
+        }
+      },
+      "moonshotai/kimi-k3.1-pro": {
+        "aa_id": "moonshotai/kimi-k3.1-pro",
+        "intelligence": 55.1,
+        "coding": null,
+        "agentic": null,
+        "out_price": null,
+        "in_price": null,
+        "monthly_limit_usd": null,
+        "provider": null,
+        "price_basis": null,
+        "rides": {
+          "clean": 0,
+          "judged": 0,
+          "prior": 1.0
         }
       },
       "nvidia/nemotron-3-ultra-550b-a55b:free": {
@@ -826,11 +746,11 @@
           "prior": 1.0
         }
       },
-      "upstage/solar-mini4": {
-        "aa_id": "upstage/solar-mini4",
-        "intelligence": 24.1,
-        "coding": null,
-        "agentic": null,
+      "thinkingmachines/inkling:free": {
+        "aa_id": "thinkingmachines/inkling",
+        "intelligence": 25.0,
+        "coding": 52.1,
+        "agentic": 22.5,
         "out_price": null,
         "in_price": null,
         "monthly_limit_usd": null,
@@ -871,7 +791,7 @@
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 0.983545
+          "prior": 0.963794
         }
       },
       "xiaomi/mimo-v2.6-pro": {
@@ -930,12 +850,12 @@
         "out_price": 0.25,
         "in_price": 0.075,
         "monthly_limit_usd": null,
-        "provider": "streamlake",
+        "provider": "gmicloud",
         "price_basis": "endpoint",
         "rides": {
           "clean": 1,
-          "judged": 1,
-          "prior": 0.986806
+          "judged": 4,
+          "prior": 0.991667
         }
       }
     },
@@ -945,6 +865,54 @@
         "intelligence": 52.7,
         "coding": 76.9,
         "agentic": 51.0,
+        "out_price": null,
+        "in_price": null,
+        "monthly_limit_usd": null,
+        "provider": null,
+        "price_basis": null,
+        "rides": {
+          "clean": 0,
+          "judged": 0,
+          "prior": 1.0
+        }
+      },
+      "codex/gpt-6-luna": {
+        "aa_id": "openai/gpt-6-luna",
+        "intelligence": 38.1,
+        "coding": null,
+        "agentic": null,
+        "out_price": null,
+        "in_price": null,
+        "monthly_limit_usd": null,
+        "provider": null,
+        "price_basis": null,
+        "rides": {
+          "clean": 0,
+          "judged": 0,
+          "prior": 1.0
+        }
+      },
+      "codex/gpt-6.1-sol": {
+        "aa_id": "openai/gpt-6.1-sol",
+        "intelligence": 51.8,
+        "coding": null,
+        "agentic": null,
+        "out_price": null,
+        "in_price": null,
+        "monthly_limit_usd": null,
+        "provider": null,
+        "price_basis": null,
+        "rides": {
+          "clean": 0,
+          "judged": 0,
+          "prior": 1.0
+        }
+      },
+      "codex/gpt-6.1-terra": {
+        "aa_id": null,
+        "intelligence": null,
+        "coding": null,
+        "agentic": null,
         "out_price": null,
         "in_price": null,
         "monthly_limit_usd": null,

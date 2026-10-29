@@ -67,7 +67,7 @@ fx/none unbenched · 0/0.
 | a tier is a band of the rail's best | bands 0.9/0.75/0.5; every listed id scores ≥ band × its rail's top |
 | each list is cheapest per clean ride first, capped at 3 | cap 3; priced-rail lists ≤ 3, cost per clean ride non-decreasing |
 | the subscription rail has no price: score ascending is its cost proxy | anthropic and codex rows unpriced; lists strictly score-ascending |
-| the candidates per rail | opencode keys opencode-go/<id> priced promise/measured/unlimited or unpriced; openrouter keys = the OpenRouter catalog's vendor/model ids, priced at the selected endpoint (basis endpoint with its provider) or unpriced; anthropic keys = the rail's claude/ aliases, unpriced; codex keys = the deployed codex rail's ids, unpriced; source artificial-analysis |
+| the candidates per rail | opencode keys opencode-go/<id> priced promise/measured/unlimited or unpriced; openrouter keys = the OpenRouter catalog's vendor/model ids, priced at the selected endpoint (basis endpoint with its provider) or unpriced; anthropic keys = the rail's claude/ aliases, unpriced; codex keys ⊇ the deployed codex rail's ids (a key on no list is unbenched or below every band), unpriced; source artificial-analysis |
 | the join to the AA row is a rule, not a table | every row's aa_id == join_aa_id over the snapshot's AA ids |
 | unbenched never tiers | no listed id has a null aa_id, nor a null out_price on a priced rail |
 
@@ -89,7 +89,16 @@ from pathlib import Path
 import pytest
 
 from agent_gateway.config import CostPolicy, Policy, PolicyError, TiersPolicy, tiers_policy
-from agent_gateway.tiers import apply_text, check, derive, join_aa_id, row_cost, same_model, undecided
+from agent_gateway.tiers import (
+    PRICELESS_RAILS,
+    apply_text,
+    check,
+    derive,
+    join_aa_id,
+    row_cost,
+    same_model,
+    undecided,
+)
 
 from .conftest import ISLAND, POLICY_FIXTURE, attach_json, given, rule, then, then_eq, when, world
 
@@ -407,15 +416,18 @@ def test_hand_edit_fails():
     """row: a hand edit of a list fails the check"""
     world(note="against the deployed policy + the committed snapshot")
     policy, bench = _deployed()
-    with given("the deployed policy with rails.opencode.models.heavy reversed"):
+    # the first deployed list with two or more ids, in a fixed order: reversing a one-id list is no edit
+    rail, tier = next((r, t) for r in sorted(policy["rails"]) for t in ("light", "standard", "heavy")
+                      if isinstance(policy["rails"][r].get("models", {}).get(t), list) and len(policy["rails"][r]["models"][t]) >= 2)
+    with given(f"the deployed policy with rails.{rail}.models.{tier} reversed"):
         policy = copy.deepcopy(policy)
-        policy["rails"]["opencode"]["models"]["heavy"] = list(reversed(policy["rails"]["opencode"]["models"]["heavy"]))
-        attach_json("edited heavy", policy["rails"]["opencode"]["models"]["heavy"])
+        policy["rails"][rail]["models"][tier] = list(reversed(policy["rails"][rail]["models"][tier]))
+        attach_json("edited list", policy["rails"][rail]["models"][tier])
     with when("check(policy, benchmarks)"):
         mismatches = check(policy, bench)
-    with then("check() names opencode.heavy, expecting the derived list", named={"expected": ["opencode.heavy"], "actual": [f"{r}.{t}" for r, ts in mismatches.items() for t in ts]}):
-        assert list(mismatches) == ["opencode"] and list(mismatches["opencode"]) == ["heavy"]
-        assert mismatches["opencode"]["heavy"]["expected"] == derive(bench, tiers_policy(policy["tiers"]))["opencode"]["heavy"]
+    with then(f"check() names {rail}.{tier}, expecting the derived list", named={"expected": [f"{rail}.{tier}"], "actual": [f"{r}.{t}" for r, ts in mismatches.items() for t in ts]}):
+        assert list(mismatches) == [rail] and list(mismatches[rail]) == [tier]
+        assert mismatches[rail][tier]["expected"] == derive(bench, tiers_policy(policy["tiers"]))[rail][tier]
 
 
 def _pool(rows: dict, rail: str, axis: str) -> dict:
@@ -473,7 +485,7 @@ def test_ruling_cheapest_first():
     with given("the deployed priced-rail lists (the decided tiers) with each id's cost per clean ride"):
         priced = {rail: {tier: [(pid, row_cost(bench["rails"][rail][pid], cost)) for pid in ids]
                          for tier, ids in _listed(policy, rail).items() if tier not in und.get(rail, [])}
-                  for rail in bench["rails"] if rail != "anthropic"}
+                  for rail in bench["rails"] if rail not in PRICELESS_RAILS}
         attach_json("lists with costs", priced)
         attach_json("undecided (the deployed list stands, unchecked here)", und)
     with when("each decided list's length and cost order are read"):
@@ -559,7 +571,14 @@ def test_snapshot_candidates():
     then_eq("anthropic keys", sorted(rails["anthropic"]), aliases, claim="the anthropic keys = the deployed rail's claude/ aliases")
     then_eq("anthropic rows priced", [k for k, r in rails["anthropic"].items() if r["out_price"] is not None], [])
     codex_ids = sorted({x for lst in policy["rails"]["codex"]["models"].values() for x in ([lst] if isinstance(lst, str) else lst)})
-    then_eq("codex keys", sorted(rails["codex"]), codex_ids, claim="the codex keys = the deployed codex rail's ids (the enrolled account's model evidence)")
+    then_eq("deployed codex ids missing from the snapshot", [i for i in codex_ids if i not in rails["codex"]], [],
+            claim="every deployed codex id is a snapshot key (the enrolled account's model evidence)")
+    tp = tiers_policy(policy["tiers"])
+    benched = {k: float(r[tp.score]) for k, r in rails["codex"].items() if r.get("aa_id") and isinstance(r.get(tp.score), (int, float))}
+    top = max(benched.values(), default=0.0)
+    then_eq("codex keys on no list that are benched within a band", sorted(k for k in rails["codex"] if k not in codex_ids
+            and k in benched and benched[k] >= min(tp.bands.values()) * top), [],
+            claim="a codex key no list carries is unbenched or below every band — never a dropped candidate")
     then_eq("codex rows priced", [k for k, r in rails["codex"].items() if r["out_price"] is not None], [])
     then_eq("capability source · openrouter catalog fetched_at present",
             (bench["sources"]["capability"]["source"], bench["sources"]["openrouter_catalog"]["fetched_at"] is not None), ("artificial-analysis", True))

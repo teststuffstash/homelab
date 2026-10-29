@@ -7,9 +7,10 @@
 #   kubectl on PATH (from the repo root: `devbox run -- bash gateway/scripts/benchmarks-snapshot.sh`)
 #   KUBECONFIG      the cluster (default: tofu/kubeconfig at the repo root)
 #   ANTHROPIC_ALIASES  the subscription rail's candidate aliases (ruling 4: the policy's three)
-#   CODEX_CANDIDATES   the codex rail's candidates (`codex/<id>`): the ENROLLED account's model evidence —
-#                      2026-10-22 the leg-E usage probe's `model_usage` named one key, gpt-6-astra
-#                      (docs/spikes/codex-subscription-rail.md §Live usage payload shape); not a catalog
+#   CODEX_CANDIDATES   the codex rail's candidates (`codex/<id>`, COMMA-separated): the ENROLLED account's
+#                      model evidence — the account catalog + one completed turn per id
+#                      (docs/spikes/codex-subscription-rail.md §Account model evidence, 2026-10-29: the
+#                      newest of each family); not a bundled catalog
 #
 # Inputs (each saved beside the output under /tmp for the record of this run):
 #   1. the capability rows — the OLD proxy's router store, table `capability` (the AA pull its
@@ -27,7 +28,7 @@ cd "$(dirname "$0")/.."
 ROOT=$(cd .. && pwd)
 export KUBECONFIG="${KUBECONFIG:-$ROOT/tofu/kubeconfig}"
 ALIASES="${ANTHROPIC_ALIASES:-claude/haiku,claude/sonnet,claude/opus}"
-CODEX="${CODEX_CANDIDATES:-codex/gpt-6-astra}"
+CODEX="${CODEX_CANDIDATES:-codex/gpt-6-luna,codex/gpt-6.1-terra,codex/gpt-6.1-sol,codex/gpt-6-astra}"
 OUT="${1:-$ROOT/argocd/resources/agent-gateway/benchmarks.json}"
 scratch=$(mktemp -d /tmp/benchmarks-snapshot.XXXXXX)
 pf=""
