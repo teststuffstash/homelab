@@ -84,53 +84,64 @@ Two accountings against the same ~150Gi bulk tier:
 
 Live caps to reconcile: `kubectl get workspaces.tf.upbound.io` (8 garage workspaces).
 
-### Garage bucket quotas vs the layout (2026-09-14) — the sum is homelab's to keep
+### Garage bucket quotas vs the layout (re-read 2026-10-29) — the sum is homelab's to keep
 
 The stacks state what they need (ADR-089: every bucket claim carries `max_size`); **whether the
 cluster can honour the sum is answered here, not in any one claim** (operator, 2026-09-14 — the
 oracle-iac `ert-snapshots` note used to carry its own pool math and it went stale the day the
-three-zone layout replaced the bulk volume). Read from `garage_bucket_quota_bytes` /
-`garage_bucket_bytes` and `garage layout show`:
+three-zone layout replaced the bulk volume). Read from `garage bucket info` (or
+`garage_bucket_quota_bytes` / `garage_bucket_bytes`), `garage stats` and `garage layout show`:
 
 | bucket | quota | used | owner |
 |---|---|---|---|
-| ert-snapshots | **120Gi** *(97 GB → 129 GB, oracle-iac#800)* | 92 GB | oracle-iac |
-| ~~registry~~ | — | — | homelab — REMOVED 2026-10-14 (FU-280; 21 GB + 4.3 GB MPU debris reclaimed). The sums below predate it |
-| agent-transcripts | 21 GB | 6 GB | homelab (FU-228) |
-| jail-transcripts | 21 GB | 1 GB | homelab |
-| loki | 17 GB | 11 GB | homelab |
-| allure-reports | 11 GB | 8 GB | oracle-iac |
-| argo-artifacts (+ per-repo) | 13 GB | 0 | homelab |
-| the rest (specs, sleep-*, tofu-state, probe) | 20 GB | 1 GB | mixed |
-| **sum promised** | **≈284 GB logical** *(252 GB before #800)* | **146 GB logical** | |
-| **the layout** | **130.4 GiB (140 GB) per zone, rf=3 → usable = one zone** | **88 GB physical per zone** | homelab |
+| ert-snapshots | **120Gi** *(oracle-iac#800)* | 84.7 GiB | oracle-iac |
+| ert-whatif-control / ert-whatif-candidate | **18Gi + 18Gi** | 1.1 / 7.9 GiB | oracle-iac (`oracle-fleet/infra/whatif-garage-workspace.yaml`, #1075/#1081) |
+| ert-whatif | 4Gi | 2 MB | oracle-iac (same Workspace; `runs/` only, 7-day prune) |
+| agent-transcripts | 20Gi | 9.5 GiB | homelab (FU-228) |
+| jail-transcripts | 20Gi | 1.4 GiB | homelab |
+| allure-reports | 20Gi | 2.5 GiB | oracle-iac |
+| loki | 16Gi | 4.9 GiB | homelab |
+| argo-artifacts (+ `-oracle-fleet`) | 10Gi + 2Gi | ~3 MB | homelab |
+| the rest (specs ×4, sleep-*, tofu-state, probe, opnsense backup) | ≈22Gi | ~0.8 GiB | mixed |
+| **sum promised** | **≈270 GiB logical** | **112.6 GiB logical** (20 buckets) | |
+| **the layout** | **130.4 GiB per zone, rf=3 → usable = one zone** | **≈70 GiB physical per zone** (150Gi data volumes, 80 GiB free on each) | homelab |
 
-Two numbers make the table honest. **Logical vs physical:** the store holds 146 GB of objects in
-88 GB per zone — Garage's block compression on the ERT dumps, ~1.65×, measured on THIS mix (delta
-output may compress differently; measure before leaning on it). **Promised vs possible:** quotas
-are over-committed 2× against the layout on purpose (the same posture as the bulk tier's
+Two numbers make the table honest. **Logical vs physical:** the store holds 112.6 GiB of objects in
+≈70 GiB per zone — Garage's block compression on this mix, ~1.6× (1.65× on 2026-09-14; the ERT
+dumps compress, a `corpus.sqlite` may not — measure before leaning on it). **Promised vs possible:**
+quotas are over-committed 2× against the layout on purpose (the same posture as the bulk tier's
 registry mirrors above); the belt that makes that safe is `GarageBucketQuotaNear` (80 % of a
 quota) plus the disk-fill belts in `garage-alerts/`. A quota counts LOGICAL bytes and frees the
 moment an object is deleted; the physical blocks are reclaimed by Garage's block GC after its
 grace period (upstream durability doc), so disk headroom lags quota headroom by about a day —
 a cleanup job does not buy the concurrent writer room the same hour.
 
-**Ceilings — per zone, because the zones are not symmetric** (Longhorn node CRs, 2026-09-14;
-scheduled = provisioned, not bytes):
+**The what-if buckets fit (oracle handoff 2026-10-09, oracle-iac#1076/#1081).** oracle asked for
+40Gi and split it three ways rather than adding to it: one output bucket per arm, because both arms
+write the same keys. The joint worst case adds ≈61–75 GiB physical per zone: every what-if bucket
+full and incompressible (+40), plus `ert-snapshots` at its quota (+35 logical, ≈21–35 physical).
+That is under today's 80 GiB free per data volume, with ≈5–19 GiB to spare, provided nothing else
+grows in the same window. The steady state is far below that: one run keeps ≈9 GiB per arm, and
+every run empties both arms at its start. So the pool honours the 40Gi beside `ert-snapshots`' 120Gi.
+The margin in the joint worst case is the over-commit posture above, not slack. Growing
+`ert-snapshots` or the what-if buckets again first needs the data volumes grown, which is
+the ceilings question below.
 
-| zone | disk | scheduled / max | what else is on it | room to grow garage's 161 GB data volume |
+**Ceilings — the data volume, not the disk** (Longhorn node + volume CRs, 2026-10-29; volumes are
+thin, so `actual` includes freed but untrimmed blocks):
+
+| zone | disk under `data-garage-N` | disk max / available | volume actual / size | can the disk hold the full volume? |
 |---|---|---|---|---|
-| wk-metal-04 | `intel1` 256 GB | **258 / 256 GB** | garage-0 data 161 + meta 32, **PyPI + mcr mirrors 21 + 43** (Longhorn's most-free pick at the time, L30) | **none** — the disk is over-committed today; the mirrors would have to move (intel0 has ~50 GB) before this zone can grow |
-| m70s | `pm961` 256 GB | 193 / 256 GB | garage-1 data + meta only (dedicated) | ~60 GB → data ≈ 215 GB |
-| wk-metal-01 | `mx500` 498 GB | 408 / 498 GB, 107 GB reserved | garage-2 data + meta, the image store, four scratch/bulk replicas | ~90 GB nominal, shared with the scratch tier |
+| wk-metal-04 (garage-0) | `intel1` | 255 / 104 GB (354 GB scheduled) | 81 / 161 GB | yes — +80 GB needed, 104 GB available |
+| m70s (garage-1) | `nvme` (moved off `pm961`, which is now empty) | 509 / 146 GB | 143 / 161 GB | yes — +18 GB needed |
+| wk-metal-01 (garage-2) | `mx500` | 497 / 106 GB (461 GB scheduled) | 114 / 161 GB | yes — +47 GB needed |
 
-The data PVC is 161 GB against the 140 GB layout, so ≈20 GB of slack per zone is a layout bump
-away without touching any disk. Beyond that, **usable = the smallest zone, and the smallest zone is
-wk-metal-04 at zero** — a 150 GB bucket does not fit this layout: at today's ratio it is ~90 GB
-physical plus ~55 GB for everything else, i.e. every data volume at ~200 GB, which intel1 cannot
-hold at all and pm961 barely. That ask is the capacity item the Requirements table already names
-(dedicated, larger zone disks in the SFFs — FU-137's residual, the fleet-role assignment), not a
-quota edit; the cheap interim on wk-metal-04 is moving the two mirror volumes off intel1.
+Every zone can hold its full 150Gi data volume today, so **usable is bounded by the volume size and
+the 130.4 GiB layout**, not by a disk. That reverses the 2026-09-14 reading, when `wk-metal-04`'s
+`intel1` was over-committed and had zero room. Raising usable above ≈130 GiB per zone means a data
+volume grow plus a layout bump. On `intel1` and `mx500` that is a scheduling question, because
+both disks are heavily scheduled with thin volumes. It remains FU-137's residual: dedicated,
+larger zone disks.
 **Splitting a bucket
 buys no placement** — rf=3 over three zones puts every block on every zone regardless of bucket;
 split only for quota isolation (e.g. the ert-delta step artifacts out of `ert-snapshots`) or
