@@ -21,9 +21,20 @@ now, not k8s CronJobs, with a `*/15` backstop) — near-instant instead of a pol
 
 The most important distinction (a real run conflated them and shipped red CI):
 
-- **Gate A — the worker's own pre-merge contract.** The agent runs `devbox run ci` to green +
-  `scan-secrets` **before it opens the PR**. This is *in-session, always*, encoded in the recipe
-  (`fix.yaml` `retry.checks`). An agent must never surface a PR that fails its own checks.
+- **Gate A — the worker's own pre-merge contract: `pr-open`** ([ADR-157](../adr.md#adr-157--one-pr-open-on-every-stack-the-only-way-a-worker-opens-a-pr-and-it-runs-the-repos-one-declared-gate-2026-10-29)).
+  A worker opens a PR ONLY through `pr-open` (`agents/pr-open.sh`, written into every recipe ride
+  by the launcher and put on PATH; the ground rules say so). It refuses a body with no
+  `Fixes|Closes|Resolves|Refs #N`, an uncommitted tracked change, or an unpushed HEAD. It then runs
+  the repo's ONE declared gate, `devbox run pr-gate` (each recipe repo maps it in `devbox.json` to its
+  `ci` or `diff-ci`; `PR_OPEN_BASE` carries the PR's base so a diff-scoped gate compares against it;
+  a repo without `pr-gate` cannot open worker PRs). A green run stamps HEAD + the tree under the git
+  dir, so the early `pr-open --check-only` and the final call pay for the gate once. Next comes the
+  repo's optional body hook (`scripts/pr-open-check`, e.g. oracle-fleet's acceptance-block re-run),
+  then `gh pr create` with an explicit base and head. The gate runs *in-session* and the agent reads
+  its refusal, so a red never becomes a PR. No recipe names a gate command of its own: a gate named
+  in prose ends up run never, or twice. goose's `retry.checks` is **not** this gate (it runs after
+  the push and restarts the agent from its initial prompt, without the failure), and recipes do not
+  ship it.
 - **Gate B — post-PR iteration** (human review comments, or server-only CI). The worker does **not**
   block on this. It runs to a terminal state and dies. A review round is a *new invocation* of the
   same pure function: `(repo@base-sha, issue, PR + review thread + CI results) → updated branch`.

@@ -96,11 +96,12 @@ instructions: |
   finding: `agent/blocked` with one comment naming the file and why.
 
   # ── THE GATE ─────────────────────────────────────────────────────────────────────────────────
-  # There is NO `devbox run ci` in this repo. Pre-flight = `devbox run diff-ci`: it runs exactly
-  # the CI gates your diff can affect (the path→task map in `scripts/diff-ci.sh` is the ONE home
-  # of "which paths feed which gate" — never restate it here). Do not report green without
-  # naming what it ran. The PR-context gates (pin-only-lint, governance-lint) need the PR's
-  # base/author and run only in CI.
+  # You open the PR with `pr-open` (the ground rules), and pr-open runs this repo's gate:
+  # `devbox run pr-gate` = `devbox run diff-ci`, exactly the CI gates your diff can affect (the
+  # path→task map in `scripts/diff-ci.sh` is the ONE home of "which paths feed which gate" —
+  # never restate it here). Do not run diff-ci yourself as well; `pr-open --check-only` is the
+  # early check. The PR-context gates (pin-only-lint, governance-lint) need the PR's base/author
+  # and run only in CI.
   `devbox run manifest-lint` prints a SKIPPED count for CRs whose schema it lacks (Applications,
   AgentStacks, CiliumNetworkPolicies, PrometheusRules). Skipped is NOT validated — if your change
   is one of those kinds, say plainly in the PR body that the gate did not check it and what you
@@ -123,9 +124,11 @@ instructions: |
     island runs, and the specs reviewer (your second required approval) gates your rows against that
     same text. The spec ⇄ test join is a RATCHET in `gateway/scripts/spec_gate.py` — per rule,
     `row-unkeyed` / `header-unthreaded` / `cell-mismatch` / `case-unspecified` may never exceed
-    `gateway/scripts/spec-gate-baseline.json`. Your rule's counts go down or stay: after `devbox run ci`
-    in `gateway/`, run `uv run python scripts/spec_gate.py --write-baseline` there and commit the
-    lowered line in the same PR; a raised line is a RED you do not get to edit around.
+    `gateway/scripts/spec-gate-baseline.json`. Your rule's counts go down or stay: after a green
+    `pr-open --check-only` (its gate runs the gateway suite, which writes `gateway/allure-results`),
+    run `uv run python scripts/spec_gate.py --write-baseline` in `gateway/` and commit the lowered
+    line in the same PR — the final `pr-open` then gates that commit. A raised line is a RED you
+    do not get to edit around.
   - Branch `fix/issue-{{ issue }}-<slug>`; push after the first meaningful commit and after each
     green step. A run that dies must leave a resumable branch.
   - The PR body must CLOSE the issue: write `Fixes #{{ issue }}` — a GitHub closing keyword, not a
