@@ -65,9 +65,9 @@
       "plan": "go",
       "max_sessions": 3,
       "models": {
-        "light":    ["opencode-go/deepseek-v4.1-flash", "opencode-go/glm-5.3-flash", "opencode-go/mimo-v2.6-flash"],
-        "standard": ["opencode-go/glm-5.3-flash", "opencode-go/mimo-v2.6-flash", "opencode-go/claude-haiku-5-5"],
-        "heavy":    ["opencode-go/glm-5.3-flash", "opencode-go/claude-haiku-5-5", "opencode-go/mimo-v2.6-pro"]
+        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/minimax-m3", "opencode-go/minimax-m3.1-flash"],
+        "standard": ["opencode-go/minimax-m3.1-flash", "opencode-go/claude-haiku-5-5", "opencode-go/mimo-v2.6-pro"],
+        "heavy":    ["opencode-go/kimi-k3.1-pro"]
       }
     },
     "openrouter": {
@@ -100,20 +100,20 @@
       },
       "max_sessions": 20,
       "models": {
-        "light":    ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash", "xiaomi/mimo-v2.6-flash"],
+        "light":    ["deepseek/deepseek-v4-flash", "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash"],
         "standard": ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "moonshotai/kimi-k3"],
         "heavy":    ["z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]
       }
     },
     "codex": {
-      "_comment": "The ChatGPT-subscription rail (GW-RAIL-CODEX / GW-CODEX-HEADROOM / GW-CODEX-OAUTH, FU-270) — LIT 2026-10-22 as the explicit canary cell (`prober` only, last); EVERY role lists it since 2026-10-23 (operator ruling: subscriptions go to all roles — the walk's harness follows the rail, sessions.md §The harness follows the rail; the spike §Role routing, docs/spikes/codex-subscription-rail.md). The credential is the gateway's OWN login (seed: devbox run codex-seed, #2826; rotations in GATEWAY_DB). ⚖ every value: max_sessions 1 = one codex ride at a time (ADR-139's single replica, one account — kept at the canary's bound while every role may now reach it: a full rail falls through to the next, raise it once live rides show the account's room); headroom.max_age_s 900 = the anthropic admission's reading_stale_s (the same 15-min staleness the subscription rail tolerates); ceiling 0.95 = the anthropic 7d threshold (ANTHROPIC_UTIL_THRESHOLD_7D) applied to both windows — the 5h window's 0.80 is a dispatch-pacing choice the canary does not need yet; windows_minutes [300, 10080] = the two windows the enrolled account's usage payload carries (observed 2026-10-22, the spike §Live usage payload shape); poll_interval_s 60 = one usage GET a minute (15 polls inside max_age_s; the poll reads no quota); oauth.refresh_margin_s 300 = refresh 5 min before the access JWT's exp (a 10-day token observed at the mint). models: DERIVED like the other rails — the one candidate is the enrolled account's model evidence (benchmarks.json rails.codex, CODEX_CANDIDATES), score ascending as the cost proxy.",
+      "_comment": "The ChatGPT-subscription rail (GW-RAIL-CODEX / GW-CODEX-HEADROOM / GW-CODEX-OAUTH, FU-270) — LIT 2026-10-22 as the explicit canary cell (`prober` only, last); EVERY role lists it since 2026-10-23 (operator ruling: subscriptions go to all roles — the walk's harness follows the rail, sessions.md §The harness follows the rail; the spike §Role routing, docs/spikes/codex-subscription-rail.md). The credential is the gateway's OWN login (seed: devbox run codex-seed, #2826; rotations in GATEWAY_DB). ⚖ every value: max_sessions 1 = one codex ride at a time (ADR-139's single replica, one account — kept at the canary's bound while every role may now reach it: a full rail falls through to the next, raise it once live rides show the account's room); headroom.max_age_s 900 = the anthropic admission's reading_stale_s (the same 15-min staleness the subscription rail tolerates); ceiling 0.95 = the anthropic 7d threshold (ANTHROPIC_UTIL_THRESHOLD_7D) applied to both windows — the 5h window's 0.80 is a dispatch-pacing choice the canary does not need yet; windows_minutes [300, 10080] = the two windows the enrolled account's usage payload carries (observed 2026-10-22, the spike §Live usage payload shape); poll_interval_s 60 = one usage GET a minute (15 polls inside max_age_s; the poll reads no quota); oauth.refresh_margin_s 300 = refresh 5 min before the access JWT's exp (a 10-day token observed at the mint). models: DERIVED like the other rails — the candidates are the enrolled account's model evidence (benchmarks.json rails.codex, CODEX_CANDIDATES: the account catalog + a completed turn per id, 2026-10-29), score ascending as the cost proxy.",
       "max_sessions": 1,
       "headroom": {"max_age_s": 900, "ceiling": 0.95, "windows_minutes": [300, 10080], "poll_interval_s": 60},
       "oauth": {"refresh_margin_s": 300},
       "models": {
-        "light":    ["codex/gpt-6-astra"],
-        "standard": ["codex/gpt-6-astra"],
-        "heavy":    ["codex/gpt-6-astra"]
+        "light":    ["codex/gpt-6-luna", "codex/gpt-6.1-sol", "codex/gpt-6-astra"],
+        "standard": ["codex/gpt-6.1-sol", "codex/gpt-6-astra"],
+        "heavy":    ["codex/gpt-6.1-sol", "codex/gpt-6-astra"]
       }
     }
   },

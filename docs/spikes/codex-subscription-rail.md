@@ -983,6 +983,27 @@ Evidence: the secondary session's `REPORT.md` + `ride-attempt-1.log`, the captur
 session `71111e9d…` in the jail's `~/.claude/codex-capture/`, transcripts at
 `s3://agent-transcripts/homelab/capture-codex-20261023T200921Z/`.
 
+### Account model evidence — 2026-10-29 (homelab#3016)
+
+The spike's model-evidence rule ("account catalog, then completed inference") read for the whole
+codex family, from the gateway pod through its own credential lifecycle (`Lifecycle.acquire` +
+`responses.upstream_headers`: no token printed, no store write beyond the rail's own refresh).
+
+- **Account catalog** — `GET {CODEX_UPSTREAM}/models?client_version=<v>`, 200. The list is
+  filtered by `client_version` against each model's `minimal_client_version`: at `0.130.0` it
+  holds one hidden id (`codex-auto-review`); at any version ≥ `0.155.0` it lists eight visible
+  ids: `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6.1-terra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`,
+  `gpt-5.6-terra`, `gpt-5.6-luna` (plus the hidden `gpt-reserve`, `codex-auto-review`).
+- **Completed inference** on the newest member of each family: one streamed, `store:false`
+  Responses turn each on `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol`, `gpt-6-astra`. All four:
+  HTTP 200, `response.completed`, the served `model` equal to the one asked, 19 in / 5 out tokens.
+
+What it settles: the four are entitled on this account, and they are the codex candidates of
+the 2026-10-29 snapshot (`CODEX_CANDIDATES`). AA scores (the 2026-10-25 pull): astra 52.7,
+`gpt-6.1-sol` 51.8, luna 38.1; `gpt-6.1-terra` has no AA row yet, so it tiers nowhere until one
+appears ("unbenched never tiers") and needs no edit when it does. What it does not settle:
+`model_usage` in the usage payload still names one key, so that field is not a catalog.
+
 ### Build order and acceptance
 
 Under FU-270: specify the capture/export contract and prove sanitization offline; implement
