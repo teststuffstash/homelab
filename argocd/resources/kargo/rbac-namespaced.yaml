@@ -12,6 +12,13 @@
 #  - kargo: the management controller finalizes the controller's ServiceAccount (a Role, not the
 #    chart ClusterRole — the kargo namespace holds the API's signing-key Secret).
 #
+#  - the stack jail's workbench SA (`oracle-fleet/oracle-workbench`, oracle-iac
+#    `oracle-fleet/agent/workbench.yaml`) gets the chart's `kargo-viewer` ClusterRole inside
+#    oracle-kargo: get/list/watch on Stages, Freight, Promotions, Warehouses, AnalysisRuns and
+#    their events, nothing on Secrets — so a Kargo rollout can be verified from the oracle jail
+#    (the loki-tenant-grants shape: a platform-owned read grant to the workbench outside its own
+#    namespace). The workbench is namespace-admin in oracle-fleet and nothing elsewhere.
+#
 # Names carry `platform-` so they never collide with the RoleBindings Kargo itself creates in the
 # Project namespace (kargo-project-admin, kargo-*-read-secrets, kargo-admin/viewer/promoter).
 # A NEW Kargo Project = one more copy of the oracle-kargo block (one Project today).
@@ -165,3 +172,17 @@ subjects:
   - kind: ServiceAccount
     name: kargo-management-controller
     namespace: kargo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-kargo-viewer-oracle-workbench
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kargo-viewer
+subjects:
+  - kind: ServiceAccount
+    name: oracle-workbench
+    namespace: oracle-fleet
