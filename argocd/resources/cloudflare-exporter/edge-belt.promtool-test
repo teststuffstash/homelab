@@ -29,8 +29,9 @@
 #         `{}` and back, which is a window restart with no change in the underlying condition.
 #         Bridging the arm (`absent(min_over_time(…[10m]))`) is what removes it.
 #
-# NOT covered here: the edge-probe's data-series alerts (edge-5xx, rate-limit threshold) — those
-# are follow-ups, not blockers for this round (#1306 scope).
+# NOT covered here: the edge-probe's data-series alerts. The edge-5xx one landed 2026-10-29 as its
+# own pair, edge-5xx.promtool-{rules,test} (its counters must not be loaded beside these cases);
+# a rate-limit threshold remains a follow-up.
 rule_files:
   - edge-belt.promtool-rules
 

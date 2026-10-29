@@ -355,6 +355,24 @@ committed `prometheusrule.yaml` (`python3 edge-probe.py --self-test`). The alert
 probe has not read a zone's edge data for 30m — the counters above are STALE (holding their last
 value), not safe, and edge data absence would go unnoticed.
 
+**Edge-5xx belt** (2026-10-29 — the data-series alert FU-039 deferred at #1306):
+`CloudflareEdgeHost5xxRatio` fires when, per `host`, more than a quarter of the edge responses
+over 30m were 5xx AND more than 20 of them, for 15m. It is **sized from the first real event, not
+by symmetry**: the first edge 5xx in 28 days of zone history were 20 Cloudflare-generated 520s on
+`mcp.minutark.ee` across 2026-10-28/29 (origin status 0, duration 0 — never handed to cloudflared,
+whose per-code counters and the origin's `gateway_http_responses_total` both read zero 5xx; all
+eight QUIC edge connections flat-normal; a 2026.10.4→10.5 connector bump 12 h earlier correlated in
+time with no mechanism in its changelog). Worst 30m window: 13 errors, 11.6 %. The operator ruled
+that rate not worth hunting, so the belt leaves ~2× headroom over it and its fixture replays that
+day (`edge-5xx.promtool-test`, 2026-10-29 13:00–16:00Z at the poller's real counter shape). What
+it catches is a dead tunnel or origin — every request 52x/530 — at any real traffic level; the
+accepted cost is that a host under ~40 req/h is invisible to it even when fully down (the apex at
+~9 req/h is one — its availability is the consumer's own probe, not an edge ratio). Reading a
+firing: `originResponseStatus` by hour from the same GraphQL dataset separates the edge↔tunnel hop
+(status 0 → connector pods, `cloudflared_tunnel_response_by_code`, Cloudflare status) from an
+origin-generated 5xx (the origin's own counters show it). Not `platform_machinery`: connector,
+claim and origin are in-cluster and a dig can act.
+
 **Spend drift belt** (homelab#217, 2026-08-09; argo leg retired 2026-08-12 — §Spend surface):
 `cloudflare-spend-probe` — a ConfigMap-python poller beside the exporter in the same
 app/namespace, on the same ESO-delivered `CLOUDFLARE_OBSERVABILITY_READ` token, polling the
