@@ -1,0 +1,15 @@
+# ADR-156 / operator rulings 2026-10-29 — the spec process rides with the worker. See ../pre.sh for
+# the family's seams; this file carries the one condition (vars.sh).
+name: specs-process-pin-unpublished
+mode: actions
+source: agents/agent-session.sh
+requires:
+  - python3
+parts:
+  - block:preflight-body-parser
+  - block:image-volumes
+  - file:../pre.sh
+  - file:vars.sh
+  - block:specs-process-volume
+  - block:render_env_card
+  - file:../post.sh

@@ -291,6 +291,19 @@ and marks each of its findings `resolved` / `still open` before reading new beha
 nothing about an image: digest evidence requires the suite to run AGAINST the built image and the
 report to record that digest (open question 2).
 
+**The worker reads the same text (operator rulings 2026-10-29).** A worker that touches a repo's
+specs gets the pinned process INJECTED into its ride — never a "please read X" instruction and
+never a rule restated in a recipe. The claim's `repos[].specs: {root, tests, pin?}` names the
+roots ([agentstack.md §The spec process rides with the worker](agentstack.md#the-spec-process-rides-with-the-worker-repos-specs-adr-156));
+the launcher mounts `ghcr.io/teststuffstash/allure-behavior-snippets-process:v<the repo's pin>`
+(the release's FROM-scratch artifact: `/process/{RULES.md,CONVENTIONS.md,briefs/*.md,VERSION}`)
+read-only at `/mnt/snippets` through the ADR-135 image-volume path whenever the issue's declared
+`Touches:` reaches `root/` or `tests/`, and its env card says: read `briefs/author.md` first, list
+every specs change under `Spec changes:` with ⚖ on judgment rows, the reviewer judges against this
+same text. This reviewer's `pack_roots` reads the same claim field, so the ride, the trigger and the
+pack name one set of roots. The author brief itself ships with the snippets release; until a
+release carries it, the card's instruction names a file the mount does not yet have.
+
 **Order** (status kept here):
 1. This record — DONE 2026-10-16 (#2621).
 2. The homelab launcher inputs that need no Allure (issue acceptance text, previous review,

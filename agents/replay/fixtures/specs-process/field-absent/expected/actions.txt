@@ -1,0 +1,6 @@
+OUT SPECS_PROCESS:[]
+OUT IV_MOUNT:
+OUT IV_VOLUME:
+OUT IV_CARD:[]
+OUT card: no spec-process bullet
+RC 0

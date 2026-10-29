@@ -89,6 +89,33 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
   four kata nodes), and resolving once at dispatch black-holed any ride that outlived a dependency
   reschedule — [the spike](../spikes/kata-service-vip.md) has the three occurrences.
 
+## The spec process rides with the worker (`repos[].specs`, ADR-156)
+
+A repo that keeps `specs/` under the [portable spec process](specs-reviewer.md#the-portable-process-adr-156-2026-10-16)
+declares `specs: {root, tests, pin?}` — where its spec pages and rule tests live (homelab:
+`gateway/specs` + `gateway/tests`; an island repo: `specs` + `tests`), and optionally the file
+carrying its `SNIPPETS_WHEEL=` release pin (default: `<parent of root>/scripts/lib/snippets.sh`).
+The Composition renders nothing for it; two consumers read it:
+
+- **The worker launcher** (`agents/agent-session.sh`, `REPLAY:specs-process-volume`): when a
+  dispatched issue's declared `Touches:` footprint reaches `root/` or `tests/` (the scan's own
+  `fp_conflict`, ADR-097 — an absent footprint reaches nothing), it reads the repo's pin at the
+  base ref, resolves `ghcr.io/teststuffstash/allure-behavior-snippets-process:v<version>` to its
+  digest, and mounts the image READ-ONLY at `/mnt/snippets` through the ADR-135 image-volume path
+  (fence, probe-then-mount, the same pod fragments) — the env card then points the ride at
+  `/mnt/snippets/process` (`RULES.md`, `CONVENTIONS.md`, `briefs/`, `VERSION`). The process is
+  **injected, never instructed and never restated in a recipe** (operator rulings 2026-10-29): a
+  rule a worker reconstructs from memory is a second process. Every failure to mount is LOUD —
+  the card says the process was unavailable and the dispatch log names which step failed.
+- **The specs reviewer** (`agents/specs-reviewer-session.sh` `pack_roots`): the same roots drive
+  its trigger paths and the context pack, with its per-repo table as the fallback for a claim
+  without the field (and for cluster-less runs). The `specs-review` SA holds `agentstacks`
+  get/list for this one read ([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml)).
+
+Replay: `agents/replay/fixtures/specs-process/` (reached / not reached / field absent / pin
+unresolvable). Usage shape in the in-cluster doc ConfigMap (§The spec process rides with the
+worker).
+
 ## The MCP knob (`spec.mcp`, #1039)
 
 `spec.mcp` is a **stack-wide** knob declaring the stack's MCP (Model Context Protocol) tool server

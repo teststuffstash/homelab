@@ -57,6 +57,11 @@ short system-prompt prefix, keyed on the knobs:
   A miss HANGS (not errors)."*  ·  `enforce: false` → *"Egress monitored, not blocked."*
 - budget/round (*"round N of ROUNDS_MAX; ~$X budget"*), write-scope (*"you can only push a
   `fix/` branch + open a PR; master is unreachable"* — as fact, not fear).
+- `repos[].specs` × the issue's declared `Touches:` reaching its roots → *"the repo's pinned spec
+  process is mounted read-only at `/mnt/snippets/process`; read `briefs/author.md` first"* — or,
+  when the pin did not resolve, *"could NOT be mounted this ride; say so"*
+  ([agentstack.md §The spec process rides with the worker](agentstack.md#the-spec-process-rides-with-the-worker-repos-specs-adr-156)).
+  The process itself is the mount, never card or recipe text.
 
 **Provable, not describable** (the operator's phrasing): the card is generated from the knobs, so
 it's true by construction, and it hands the worker the *verify* command instead of a prose claim
