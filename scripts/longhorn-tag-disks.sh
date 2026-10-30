@@ -4,17 +4,15 @@
 # tofu-managed; the node CR is the authority).
 #
 # Tiers (tofu/longhorn.tf has the StorageClasses):
-#   std  — the original default disks (hp-01, wk-02; thinkcentre's left with the box, below) + hp-01's second SATA
+#   std  — hp-01's default disk (wk-02's and thinkcentre's left with their tier exits, below) + hp-01's second SATA
 #          (`hg5d`, 2026-08-25) + **m70s's default disk (2026-09-12**, once the Garage zone moved
-#          off it onto the dedicated PM961 — see its block below). wk-02's is still TAGGED std but
-#          `allowScheduling=false` since 2026-09-12: it is a thin volume on the pve pool and must
-#          not take NEW replicas. The DEFAULT class is fenced to std via
+#          off it onto the dedicated PM961 — see its block below). The DEFAULT class is fenced to std via
 #          persistence.defaultDiskSelector, so the scheduler can't drop platform replicas onto the
 #          huge/wipe-prone bulk disks.
 #   bulk — wk-metal-01's 500G MX500 + wk-metal-04's two 7600p + **hp-01's SN530 (2026-09-24,
 #          the tier's first ALWAYS-ON member)**, registered here explicitly
 #          (bulk-ONLY, generously reserved for the container/kata image store they share the
-#          partition with). wk-02 left this tier on 2026-08-07 — see the note below.
+#          partition with). wk-02 left this tier on 2026-08-07 (ADR-089).
 #   fast — **nx-01's Intel 7600p since 2026-09-24** (registered below), which ends the HOMELESS
 #          stretch that began 2026-09-12 when the Optane pair left with thinkcentre and every
 #          longhorn-fast PVC went Pending (FU-234). The Optane pair is still unhomed and still
@@ -105,47 +103,12 @@ fi
 # The lesson it carried is general and now sits in docs/storage-ledger.md: Longhorn's auto-sized
 # 30% reservation fenced off a third of a disk from a tier with 10.5G of scheduling room, and nine
 # std replicas sat PENDING with 67G physically free, 2026-08-07.)
-# wk-02's tier, third and final revision — STD-ONLY since 2026-08-07. The history matters because
-# each step was right about the problem in front of it:
-#   dual std+bulk  → the only disk in two tiers. Longhorn places on the disk with the most room and
-#                    wk-02 was the largest, so it won std placements AND absorbed bulk demand until
-#                    it sat at 104% of its physical size while thinkcentre idled at 18% (#94).
-#   bulk-only      → fixed that, at the cost of dropping std from three zones to two. The bill came
-#                    due immediately: hp-01 reached 105% of allocatable, nine std replicas hung
-#                    PENDING with nowhere to go, and a 2Gi transcripts PVC could not place (#98).
-#   std-only (now) → wk-metal-04 joining bulk made wk-02 unnecessary THERE, and std is where the
-#                    scarcity actually is. Its 221G is the third std zone; the nine strays that
-#                    were already sitting here stopped being strays without moving a byte.
-# ⚠ The trade this locks in: bulk is now two tainted, wipe-on-PXE compute nodes with no always-on
-# member, so Garage's only two copies live there. Judged acceptable — and arguably an upgrade —
-# because they are two INDEPENDENT physical disks in two independent boxes, where wk-02's disk is
-# a thin volume on a single consumer NVMe shared with three other VMs, on a pool that reached
-# 99.14% (2026-08-07). "Always-on" was never the same property as "durable".
-tag wk-02 "$(default_disk wk-02)" '["std"]'
-# wk-02 reservation. Auto-sized at 30% of the ORIGINAL 81G disk, then cut to 15Gi for the
-# 150Gi bulk grant. 15Gi was a fiction: this node's container image store alone measured 38.6G
-# (2026-08-07), i.e. the reservation did not even cover what was already on the disk, and Longhorn
-# happily promised 298.5G on a 253.3G disk. 30Gi covers the kubelet's 10% nodefs eviction floor
-# (25.3G) with margin; the image store's remainder is covered by physical headroom, not by the
-# reservation (wk-02 lands at ~41% physical once the mirror + nix-cache/HA replicas leave).
-# ⚠ This disk is ALSO an LVM thin volume on pve, whose pool ran to 99.14% — the byte sum here is
-# not the only one that binds. See docs/storage-ledger.md §"A third sum: the hypervisor".
-kubectl -n longhorn-system patch nodes.longhorn.io wk-02 --type=merge \
-  -p "{\"spec\":{\"disks\":{\"$(default_disk wk-02)\":{\"storageReserved\":32212254720}}}}" >/dev/null
-echo "  wk-02 storageReserved -> 30Gi"
-# ⚠ NO NEW std REPLICAS ON THE POOL (operator direction, 2026-09-12). wk-02's std disk is an LVM
-# thin volume on pve, the pool that has filled to 100% four times (FU-093), so once m70s's Micron
-# joined std above there is no reason for the scheduler to keep choosing a pooled disk — Longhorn
-# places on the disk with the most available space, and wk-02 was winning by being large.
-# allowScheduling=false is NOT an eviction: its 27 existing replicas stay, keep serving, and leave
-# organically — a rebuild or a PVC re-cut now lands on m70s/hp-01 instead.
-# ⚠ UPDATE 2026-09-12 (same day, later): thinkcentre then LEFT the cluster, so std is down to TWO
-# schedulable nodes. Every r=2 std volume must therefore hold one copy on m70s and one on hp-01,
-# with no third zone to rebuild onto, and soft anti-affinity means a capacity squeeze shows up as
-# silent co-location rather than a Pending volume. That is what hp-01's 7600p (above) bought.
-kubectl -n longhorn-system patch nodes.longhorn.io wk-02 --type=merge \
-  -p "{\"spec\":{\"disks\":{\"$(default_disk wk-02)\":{\"allowScheduling\":false}}}}" >/dev/null
-echo "  wk-02 allowScheduling -> false (no new std replicas on the pve pool)"
+# wk-02 was in this script (std tag, 30Gi storageReserved, allowScheduling=false) until it left
+# the std tier on 2026-09-14 — the Xeon is compute-only (docs/storage-ledger.md). Like thinkcentre,
+# nothing here refers to it any more, on purpose: these patches address the disk by KEY, so a
+# patch against a removed disk entry would merge it back into the node CR, and a record with no
+# filesystem behind it reads as DiskFilesystemChanged (LonghornDiskNotReady). Its tier history
+# (dual std+bulk → bulk-only → std-only → out) is ADR-089 + the ledger's.
 
 # m70s: register the PM961 (the ADR-114 zone's DEDICATED data disk, fitted 2026-09-12 on a
 # Gembird PEX-M2-01 in the x16 LP slot — the box's only x4-capable slot). Talos mounts it at
