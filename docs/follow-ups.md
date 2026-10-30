@@ -998,9 +998,10 @@ the block needs pruning, not more headings.
       snapshot that merges itself — never clear it; alert text wrongly blames the image store), wk-metal-01/mx500
       72 %, and wk-04/`sn530` 76.6 % (+2 %/day) — `mirror-ghcr-data` holds 171 GB actual for 23 GB of filesystem: a
       133 GB `markRemoved` snapshot (10-13) sits as volume-head's parent (purge complete, nothing coalesces it) and
-      the weekly mirror GC frees blocks no trim returns — the ledger's unbuilt "second layer". Alert text fixed (#2895, 10-24). **Next:**
-      (a) Longhorn `filesystem-trim` RecurringJob + `remove-snapshots-during-filesystem-trim` (today false;
-      ~140 GB back on sn530); (b) metal fstrim for the image store. Relates ADR-089, ADR-114, FU-211, homelab#934.
+      the weekly mirror GC frees blocks no trim returns. Alert text fixed (#2895, 10-24). (a) DONE 2026-10-30
+      (#3045): weekly `filesystem-trim` RecurringJob + `removeSnapshotsDuringFilesystemTrim` — first run
+      took Longhorn actual 859→403 GB (mirror-ghcr 199→31 G), every disk ≥57 % free, all Longhorn alerts
+      clear. **Next:** (b) metal fstrim for the image store. Relates ADR-089, ADR-114, FU-211, homelab#934.
 - [ ] **FU-211** — **The storage ledger's numbers are hand-typed — generate them.** PR#1368 took three bot rounds on
       transposed figures in the buy-a-disk cell; "Current shape" is a 08-25 snapshot. Truth is LIVE (Longhorn
       disk status, `pve_lvm_thin_lv_size_bytes`, ResourceQuotas, Garage Workspaces — `scripts/storage-ledger-check.sh`

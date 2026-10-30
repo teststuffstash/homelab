@@ -14868,3 +14868,14 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Window `seat-1793391459-1414` (expect LonghornDiskNotReady): json-patch remove of the disk key → node Ready/Schedulable,
   `longhorn_disk_status{node="wk-02"}` empty (control: 11 other disks reporting), alert gone; check clean, closed 20:18Z.
   The orphaned `/var/lib/longhorn` contents on wk-02 left in place (EPHEMERAL, harmless).
+
+## 2026-10-30 ~20:30–22:55Z — seat: wk-04/sn530 at 90 % → in-volume trim built and watched (#3045, FU-093 a)
+
+- Dig: `LonghornNodeStorageLow`/`DiskFillingUp`/`BelowSchedulingFloor` wk-04/sn530 90.3 % (+4.8 GB/day). mirror-ghcr-data
+  199 G actual on 161 G — removed 133 G snapshot (10-13) parented on volume-head, no in-volume trim ever ran.
+- **#3045 MERGED** (operator: "lasting fix, schedule it while we watch"): `removeSnapshotsDuringFilesystemTrim` (box plan =
+  helm values only, applied 20:4xZ, setting applied=true) + RecurringJob `filesystem-trim` Fri 22:00Z, groups default +
+  daily-backup. Window `seat-1793392818-1108`.
+- First run 22:00Z: 37 attached volumes trimmed, 6 detached skipped (expected warnings). Longhorn actual **859 → 403 GB**;
+  mirror-ghcr 199 → 31 G (the removed snapshot object stays, 2 G — unmapped, not deleted); wk-04/sn530 82 % free,
+  every disk ≥57 % free; all Longhorn alerts clear; window checks clean, closed.
