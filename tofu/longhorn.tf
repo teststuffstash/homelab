@@ -189,6 +189,12 @@ resource "helm_release" "longhorn" {
       # (scripts/node-maintenance.sh `up` now reports them). Grace period stays at the
       # 300 s default. Orphans on nodes that are down/unknown are never auto-deleted.
       orphanResourceAutoDeletion = "replica-data"
+      # A filesystem trim also coalesces the removed snapshots under the volume head (FU-093's
+      # "second layer", docs/storage-ledger.md). Without it a snapshot marked removed but parented
+      # straight onto volume-head is never merged and keeps its blocks: mirror-ghcr-data held a
+      # 133G one, 199G actual on a 161G volume. Run by the `filesystem-trim` RecurringJob
+      # (argocd/resources/longhorn-backup/filesystem-trim.yaml); volumes keep `ignored` = follow this.
+      removeSnapshotsDuringFilesystemTrim = true
       # Let Longhorn read the Metrics Server (argocd/platform/metrics-server.yaml) so it populates the
       # longhorn_*_cpu/memory_* metrics behind the dashboard's "CPU & Memory" panels.
       kubernetesMetricsServerMetricsEnabled = true

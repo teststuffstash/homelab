@@ -693,9 +693,12 @@ rather than for buying more drives.
   the fourth fill); these alerts prove the mechanism runs, the meter says whether it suffices.
   ⚠ Nor does it reach **ci-runner-01** — same pool, not a k8s node; it is an ordinary Linux guest
   and its own `fstrim.timer` is the cover. Unverified, and worth a look.
-  ⚠ Second layer, not built: a Longhorn `filesystem-trim` RecurringJob. A node-level fstrim cannot
-  reclaim space *inside* a replica's sparse file, so volume-level churn needs its own trim before
-  the node one can see it.
+- **Second layer — in-volume reclaim, BUILT 2026-10-30** (FU-093 (a)): the weekly Longhorn
+  `filesystem-trim` RecurringJob (`argocd/resources/longhorn-backup/filesystem-trim.yaml`, every
+  volume) + `removeSnapshotsDuringFilesystemTrim` (`tofu/longhorn.tf`). A node-level fstrim cannot
+  reclaim space *inside* a replica's sparse file, and a removed snapshot parented on volume-head is
+  never coalesced without the setting — mirror-ghcr-data's 133G one (10-13) took wk-04/`sn530`
+  past 90 %.
 - **pve thin-pool metering — BUILT 2026-09-04** (FU-093's blocking act after the
   [fourth fill](incidents/2026-09-03-pve-thin-pool-fourth-fill-prepull.md)). Debian's packaged
   node_exporter on the hypervisor plus a one-minute systemd timer feeding its textfile collector
@@ -809,7 +812,7 @@ for this document: keep stating the need and its evidence here, and let the supp
 | **pve thin pool honest** — promised ≤ pool, or the pool grows | today **488 GB promised on a 353.84 GB pool** (`lvs`: <353.84g after the 09-03 +1 GB extend) (wk-02 240, ci-runner-01 80, wk-01 80, cp-01 40, wk-03 40, LXC 8 — 408 only while ci-runner-01 was destroyed, 09-03/04); a second NVMe on pve's free x16 slot extends the pool (cheapest — see §hypervisor), a 1 TB NVMe replaces the 500 GB, or wk-02's 240 GB disk leaves the pool | four 100 % fills in a month, the fourth took the control plane down 8 min; twice-daily fstrim + the meter are belts, not capacity | need | FU-093, ADR-114 (new box, not more disks in pve) |
 | **bulk scratch for 5 concurrent docker rides per stack** | 100Gi × 3 stacks = 300Gi worst case, replica-1 on 453 GiB free | 60Gi wedged the fourth dispatch inside an hour (homelab#1321) | need | #1321 (done 2026-09-04) |
 | **a third PHYSICAL zone for Garage rf=3** — **MET 2026-09-07** (`m70s`; all six Garage volumes on `longhorn-local-xfs` across wk-metal-01 / wk-metal-04 / m70s, nothing of Garage on the pool) | residual **want**: a *dedicated* data disk in m70s — garage-1 shares the OEM Micron 2300 with Talos + the image store (kubelet imageGC 60/50 is the belt); supply side = the same NVMe lot as the SA400 demote | ADR-114's redundancy story used to end on a VM that pauses when the pool fills; meta rode rf=1 on wk-02 from 08-25 to 09-07 | need → met | FU-137, ADR-114 |
-| **Longhorn in-volume reclaim** | ~41 GiB one-off on wk-02 (Prometheus 12, loki 10, garage-meta 8), then the volumes' own churn | node fstrim cannot reach blocks inside replica sparse files; measured 2026-09-04 | want | FU-093 next act (`filesystem-trim` RecurringJob) |
+| **Longhorn in-volume reclaim** | ~41 GiB one-off on wk-02 (Prometheus 12, loki 10, garage-meta 8), then the volumes' own churn | node fstrim cannot reach blocks inside replica sparse files; measured 2026-09-04 | want → built 2026-10-30 | §Second layer above |
 | **registry mirrors never wipe** | grow the PVC (ghcr 100Gi at ~19 G actual) whenever `RegistryMirrorWipedRepeatedly` fires — never lower the threshold | a wipe costs a day of slow builds (homelab#116) | want | §mirrors above |
 | **image store off the Longhorn bulk partition on the kata laptops** | a second partition or disk per laptop, or kubelet imageGC below the Longhorn reserve | <25 % free on the shared partition = no scratch PVC = every docker ride wedged (2026-09-01) | want | PR#1193's floor alert is the belt |
 | **a Garage zone node's envelope** (the register had no row; measured 2026-09-10, garage.md §Target architecture) | ≥ 4 threads at desktop-class clocks (the chain is serial: clock and IPC over core count — m70s's 2C/4T @ 4.0 GHz returns a PUT in 0.68 s, the 4-core 3.4 GHz Ivy Bridge 0.66 s, the 2C ULV X240 1.99 s); **≈ 2 cores free at peak** for Garage (0.8) + the Longhorn engine (up to 1.1) + kernel; **16 GB** so the compacted LMDB (5–6 GB, up to 24 GB before rotation) sits in page cache (X240 at 8 GB: 200–1,800 major faults/s; m70s at 16 GB: 50); DRAM NVMe; **no rides on the node** | both stall episodes (09-08 SA400 windows, 09-10 08:25Z release on wk-metal-01: node 9 % idle, every endpoint p99 28–100 s, quorum races lost) were a ride sharing the zone node; the X240 zone paces GC, resync and PutObject for the whole cluster (mean 1.99 s vs 0.66 s) | need | FU-137 (the garage-2 move), the fleet-role assignment, now durable in `ROADMAP.md` §Hardware strategy: SFFs = std + Garage zones, laptops = control planes |

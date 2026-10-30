@@ -1,0 +1,22 @@
+# In-volume reclaim (FU-093, docs/storage-ledger.md §"Second layer"): a weekly fstrim INSIDE every
+# Longhorn volume. Node-level fstrim (argocd/resources/node-fstrim/) cannot reach blocks freed
+# inside a replica's sparse file, so a volume's actual size only ever grows — and with
+# removeSnapshotsDuringFilesystemTrim (tofu/longhorn.tf) the trim also coalesces removed snapshots
+# parented on the volume head, which nothing else merges.
+# Groups: `default` is every volume with no recurring-job label, `daily-backup` the backup class
+# (recurringjob.yaml) — a labelled volume leaves `default`, so both are named to cover all.
+# Detached and block-mode volumes are skipped by Longhorn. Friday 22:00Z: after Sunday's mirror GC
+# (registry-cache/gc-mirrors.yaml) has had the week's churn to free; not overlapping 02:00Z backups.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: filesystem-trim
+  namespace: longhorn-system
+spec:
+  name: filesystem-trim
+  task: filesystem-trim
+  cron: "0 22 * * 5"
+  groups: [default, daily-backup]
+  retain: 0
+  concurrency: 2
+  labels: {}
