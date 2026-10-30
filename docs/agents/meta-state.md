@@ -110,9 +110,6 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   PR (clone `fix/retro-quiet-week`); once merged + ArgoCD-synced, hand-fire `retro-session` →
   expect Succeeded, 3 tasks Skipped, the alert clears. The 1-task week itself is the real signal (loop near idle).
   GoCatalog alerts → queued as #2933 (drop-unknown-dialect ruling).
-- `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
-  09-14 — the std-tier exit left the Longhorn node record's disk entry behind). **Next (seat):** once it FIRES (~15:53Z
-  10-24), remove that stale entry in a maintenance window, through the script that owns disk records.
 - **⚑ wk-metal-04 on Big Data (#2758, 2026-10-20).** Watch the MX500's 34 % lifetime used (attr 202). **OPERATOR:** the
   switch-port row (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the box
   (router-move.md:62 retires it).

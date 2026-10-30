@@ -14858,3 +14858,13 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Rollout (operator: "roll out the 42 and claim edits"): tag **v0.6.6** (wheel sha `d7545abd…`, process image 200); **homelab#3030 MERGED** (launcher 0.6.6 + sha, gateway snippets.sh, `gateway/specs/README.md` links off v0.6.2 at last, homelab claim `specs:{gateway/specs,gateway/tests}`); **oracle-iac#1151 MERGED** (oracle-fleet claim `specs:{specs,tests}`); both claims live (`specs.root` read back). **oracle-fleet#958** (pin + process README/conventions links): CI red once on a uv-cache lock I/O error (shared RWX cache, parallel first fetch — rerun green), reviewer caught `conventions.md` still at v0.6.3 → fixed in the PR → **MERGED** 2026-10-29 ~21:50Z. All three consumers on v0.6.6.
 - Also: **#3028 MERGED** — workbench SA create/delete AnalysisRuns in oracle-kargo (rung 3 from the jail; no secrets in the ns, no CNP row needed — the controller queries Prometheus from oracle-kargo).
 - Wind-down (operator: "wind down when these are done"). Pickup = meta-state PICKUP bullet (retire recipes' restated process text; read the first specs ride's `→ spec process:` line; the program is item 8).
+
+## 2026-10-30 ~20:05–20:25Z — seat: LonghornDiskNotReady wk-02 dig → stale disk record removed (#3044)
+
+- Dig: `default-disk-080500000000` Ready=False/DiskFilesystemChanged since 09-14 12:08:25Z = the wk-02 recreate window — the
+  std-tier exit left the disk entry in `nodes.longhorn.io/wk-02`, the fresh 80G disk got a new `longhorn-disk.cfg`
+  (`6e175730…` vs the record's `06864bf8…`). 0 replicas, 0 scheduled. `scripts/longhorn-tag-disks.sh` still merge-patched the
+  disk key (would resurrect the entry) → **PR #3044** drops the wk-02 block.
+- Window `seat-1793391459-1414` (expect LonghornDiskNotReady): json-patch remove of the disk key → node Ready/Schedulable,
+  `longhorn_disk_status{node="wk-02"}` empty (control: 11 other disks reporting), alert gone; check clean, closed 20:18Z.
+  The orphaned `/var/lib/longhorn` contents on wk-02 left in place (EPHEMERAL, harmless).
