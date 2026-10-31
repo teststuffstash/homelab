@@ -47,7 +47,7 @@ because their real values are here, not baked in).
 | `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) — asserts the `os-ddclient` plugin, never installs it (a root act, FU-013) |
 | `opnsense-system.yml` | `opnsense-system` | router-wide settings no service role owns: Interfaces > Settings (offloading, VLAN hw filter, Allow IPv6) + Reporting > NetFlow (Insight) — prod's values, pinned on drift only (FU-297) |
 | `opnsense-users.yml` | `opnsense-users` | one API user per consumer (`backup-puller`, `automation`) + a key each — run via `bash scripts/opnsense-api-users.sh`, which stores what it mints (FU-013). The ONLY play that runs with root's key: every other play runs as `automation` (`scripts/opnsense-playbook.sh`), whose privileges are `opnsense_api_users` |
-| `opnsense-carp.yml` | `opnsense-carp` | the router pair's CARP VIPs + pfsync (ADR-144); VIPs in `router-nodes/group_vars/opnsense.yml` (`router_carp_vips`) — a no-op where the list is undefined (prod inventory, test VM, drill); `scripts/opnsense-router-node.sh converge` runs it |
+| `opnsense-carp.yml` | `opnsense-carp` | the router pair's CARP VIPs + pfsync (ADR-144); VIPs in `router-nodes/group_vars/opnsense.yml` (`router_carp_vips`) — a no-op where the list is undefined (test VM, drill); `scripts/opnsense-router-node.sh converge` runs it |
 | `matchbox.yml` | `matchbox` | install Matchbox on the PXE LXC |
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |
 | `matchbox-proxydhcp.yml` | `matchbox-proxydhcp` | dnsmasq proxy-DHCP boot server |
@@ -56,7 +56,7 @@ because their real values are here, not baked in).
 | (role only) | `pve-apt-repos` | the Proxmox repos as code — enterprise entries disabled, no-subscription declared (deb822, PVE ≥ 9); runs first in both pve plays, because a fresh install's enterprise-only apt 401s every cache refresh (nx-02, 2026-09-27) |
 | `pve-upgrade.yml` | `pve-upgrade` | in-major Proxmox dist-upgrade + `/etc/pve` snapshot (never reboots); `devbox run -- ansible-playbook ansible/pve-upgrade.yml` |
 | `pve-node-exporter.yml` | `pve-node-exporter` | the pve thin-pool meter (FU-093) + the guest memory-placement meter (FU-289): node_exporter (+ meminfo_numa, reclaim vmstat) + textfile timer on the hypervisor; `devbox run -- ansible-playbook ansible/pve-node-exporter.yml` |
-| `pve-router-killswitch.yml` | `pve-router-killswitch` | the standing router nodes' kill switch on their hypervisor (ADR-144), armed before `pve-guests` autostarts a node; `scripts/opnsense-router-node.sh killswitch-arm\|disarm\|status <node>` drives the units |
+| `pve-router-killswitch.yml` | `pve-router-killswitch` | the router nodes' units on their hypervisor (ADR-144): the WAN gate `router-wangate@<vmid>` (WAN link iff CARP MASTER) and the standing-node kill switch, armed before `pve-guests` autostarts a node — retired for a LIVE node (`pve_router_live_vmids`; both since window 2); `scripts/opnsense-router-node.sh killswitch-arm\|disarm\|status <node>` drives the units |
 | `garage-backup.yml` | `garage-backup` | the Longhorn backup-target Garage on its LXC (FU-299, `docs/longhorn-backup.md`) |
 | `pve-serial-log.yml` | `pve-serial-log` | serial-console capture for the VMs flagged `serial = true` in `tofu/variables.tf` (#882): a `qemu-serial-log@<vmid>` socat unit per vmid → `/var/log/qemu-serial/<vmid>.log`; `devbox run -- ansible-playbook ansible/pve-serial-log.yml` |
 
@@ -70,7 +70,8 @@ bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml          # or any
 
 **Matchbox** — the MANAGEMENT BOX applies these on merge (ADR-152 program step 2;
 [`docs/management-box.md`](../docs/management-box.md) §Ansible applies — the `apply_ansible.matchbox`
-row of `policy/mgmt/plan-input.yaml`, `shadow` until the operator flips it `on`). Every Matchbox play
+row of `policy/mgmt/plan-input.yaml`, `on` since 2026-10-27). The router's CARP BACKUP is converged the same way
+(`apply_ansible.opnsense`, `backup-only` since 2026-10-27 — §Router config converge). Every Matchbox play
 must therefore stay **check-clean**: a second `--check` after a run must report `changed=0` (the box's
 confirm), and `--check` must not fail where a real run would succeed (no task that reads what an
 earlier task only *would* have written — guard it with `not ansible_check_mode`). By hand, over SSH (the
@@ -83,7 +84,8 @@ devbox run -- ansible-playbook ansible/matchbox.yml          # see docs/provisio
 ```
 
 To change a value, edit `group_vars/<target>.yml`. To change behaviour, edit the role's
-`roles/<name>/tasks/main.yml`. LAN DHCP is **not** Ansible — it's `../opnsense/dnsmasq-dhcp.py`.
+`roles/<name>/tasks/main.yml`. LAN DHCP is **not** Ansible — it's `../opnsense/kea-dhcp.py` (Kea, since window 1 — ADR-145), whose LAN data
+lives in `../opnsense/dnsmasq-dhcp.py`.
 
 ## Why the wrapper exists (the non-obvious bits)
 
