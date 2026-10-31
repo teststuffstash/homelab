@@ -10,7 +10,8 @@ WT="$(cd "$HERE/../.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
-# ── the fixture repo: base → A (pin-only bump, keep + regen move with it) → B (a values edit) ───
+# ── the fixture repo: base → A (pin-only bump, keep + regen move with it) → B (a values edit) →
+#    C (an unrelated file — the master HEAD a delayed sync runs at, ADR-150) ───────────────────────
 SRC="$T/src"; git -C "$T" init -q -b master "$SRC"
 mkdir -p "$SRC/argocd/platform/values" "$SRC/policy/mgmt"
 cp "$WT/policy/mgmt/upgrade-leases.yaml" "$SRC/policy/mgmt/upgrade-leases.yaml"
@@ -32,6 +33,9 @@ A="$(git -C "$SRC" rev-parse HEAD)"
 app 91.8.0 "        valueFiles: [x]\n" >"$SRC/argocd/platform/kube-prometheus-stack.yaml"
 git -C "$SRC" add -A && git -C "$SRC" commit -q -m "values edit"
 B="$(git -C "$SRC" rev-parse HEAD)"
+printf 'roadmap\n' >"$SRC/ROADMAP.md"
+git -C "$SRC" add -A && git -C "$SRC" commit -q -m "unrelated"
+C="$(git -C "$SRC" rev-parse HEAD)"
 ORIGIN="$T/origin.git"; git clone -q --bare "$SRC" "$ORIGIN"
 # The box's root has NO git identity — the loop must carry its own (S9 drill 2026-10-10: the revert
 # staged and died at the commit, read as `conflict`). Drop the fixture identity and forbid git's
@@ -105,13 +109,14 @@ LEASES="$(jq -nc --argjson l "$(lease l2 argocd/platform/kube-prometheus-stack.y
 run expired-pin-only 0
 expect reverted-outcome "lease l2: reverted — PR #4242 opened: kube-prometheus-stack 91.8.0 → 86.3.2, branch revert-chart-lease-${A:0:8}" "$OUT"
 BR="revert-chart-lease-${A:0:8}"
+expect reverted-resolved-self "lease l2: lease sha ${A:0:8} → pin commit ${A:0:8}" "$OUT"
 expect reverted-branch-on-origin "refs/heads/$BR" "$(git -C "$ORIGIN" show-ref)"
 expect reverted-pin-back 'targetRevision: 86.3.2' "$(git -C "$ORIGIN" show "$BR:argocd/platform/kube-prometheus-stack.yaml")"
 expect reverted-values-edit-kept 'valueFiles: \[x\]' "$(git -C "$ORIGIN" show "$BR:argocd/platform/kube-prometheus-stack.yaml")"
 expect reverted-keep-forward 'targetRevision: 32.0.1' "$(git -C "$ORIGIN" show "$BR:argocd/platform/prometheus-operator-crds.yaml")"
 expect reverted-regen-back '^# chart: kube-prometheus-stack 86.3.2$' "$(git -C "$ORIGIN" show "$BR:argocd/platform/values/kube-prometheus-stack-upstream-alerts.txt")"
 expect reverted-one-commit '^1$' "$(git -C "$ORIGIN" rev-list --count "master..$BR")"
-expect reverted-master-untouched "^$B\$" "$(git -C "$ORIGIN" rev-parse master)"
+expect reverted-master-untouched "^$C\$" "$(git -C "$ORIGIN" rev-parse master)"
 expect reverted-pr-body-last-line 'reverted-charts: kube-prometheus-stack@91.8.0$' "$(grep '^POST pulls ' "$GH_LOG" | sed 's/^POST pulls //' | jq -r '.body' | tail -1)"
 expect reverted-pr-head "\"head\":\"$BR\"" "$(grep '^POST pulls ' "$GH_LOG")"
 expect reverted-labels '"labels":\["automerge","dependencies"\]' "$(grep '^POST issues/4242/labels' "$GH_LOG")"
@@ -131,11 +136,11 @@ LEASES="$(jq -nc --argjson l "$(lease l3 argocd/platform/kube-prometheus-stack.y
 run expired-stale-pin 0
 expect stale-already "lease l3: already — master's argocd/platform/kube-prometheus-stack.yaml pin is 91.8.0, not the lease's 99.0.0" "$OUT"
 
-# 6. expired, the commit is not pin-only (B edits values) → not_pin_only, nothing pushed
-LEASES="$(jq -nc --argjson l "$(lease l4 argocd/platform/kube-prometheus-stack.yaml "$B" 86.3.2 91.8.0 "$PAST")" '{items:[$l]}')"
-run expired-not-pin-only 0
-expect not-pin-only "lease l4: not_pin_only — argocd/platform/kube-prometheus-stack.yaml: 1 changed line\(s\) outside the pin grammar" "$OUT"
-expect_empty not-pin-only-no-branch "$(git -C "$ORIGIN" show-ref | grep "revert-chart-lease-${B:0:8}" || true)"
+# 6. the pin-only predicate refuses a commit whose change to the file is not the pin (B edits values).
+#    Driven directly: end to end, a lease at B RESOLVES to A (B carries no pin pair) — cases 16–18.
+WHY="$(pin_only_commit "$B" argocd/platform/kube-prometheus-stack.yaml "argocd/platform/prometheus-operator-crds.yaml" "" 86.3.2 91.8.0)"; RC=$?
+expect not-pin-only-rc '^1$' "$RC"
+expect not-pin-only "argocd/platform/kube-prometheus-stack.yaml: 1 changed line\(s\) outside the pin grammar" "$WHY"
 
 # 7. a subject the policy does not name → no_policy
 LEASES="$(jq -nc --argjson l "$(lease l5 argocd/platform/other.yaml "$A" 1.0.0 2.0.0 "$PAST")" '{items:[$l]}')"
@@ -227,6 +232,40 @@ expect ansible-stopped-forward-only-unchanged "^$FO_BEFORE\$" "$(metric mgmt_lea
 expect ansible-stopped-not-expired '^0$' "$(metric mgmt_lease_expired .)"
 expect ansible-stopped-origin-untouched "^$BEFORE\$" "$(git -C "$ORIGIN" show-ref | sha256sum)"
 expect_empty ansible-stopped-no-pr "$(grep -v 'GET branches/master' "$GH_LOG" || true)"
+
+# 16. (b) the lease's sha is a LATER unrelated commit (a delayed sync ran at C, which touched only
+#     ROADMAP.md): the pin commit resolves from the subject's history to A — the newest commit whose
+#     change to the file is the lease's 86.3.2 → 91.8.0 pair — and A is judged, branched and reverted
+git -C "$ORIGIN" update-ref -d "refs/heads/$BR"
+LEASES="$(jq -nc --argjson l "$(lease l9 argocd/platform/kube-prometheus-stack.yaml "$C" 86.3.2 91.8.0 "$PAST")" '{items:[$l]}')"
+run resolve-later-sha 0
+expect resolve-later-log "lease l9: lease sha ${C:0:8} → pin commit ${A:0:8}" "$OUT"
+expect resolve-later-reverted "lease l9: reverted — PR #4242 opened: kube-prometheus-stack 91.8.0 → 86.3.2, branch $BR" "$OUT"
+expect resolve-later-pin-back 'targetRevision: 86.3.2' "$(git -C "$ORIGIN" show "$BR:argocd/platform/kube-prometheus-stack.yaml")"
+expect resolve-later-roadmap-kept '^roadmap$' "$(git -C "$ORIGIN" show "$BR:ROADMAP.md")"
+expect resolve-later-one-commit '^1$' "$(git -C "$ORIGIN" rev-list --count "master..$BR")"
+expect resolve-later-body-names-A "\*\*Reverted commit:\*\* $A" "$(grep '^POST pulls ' "$GH_LOG" | sed 's/^POST pulls //' | jq -r '.body')"
+
+# 17. (b′) a later commit that touches the SUBJECT FILE but not its pin (B, a values edit) resolves past it to A
+LEASES="$(jq -nc --argjson l "$(lease l10 argocd/platform/kube-prometheus-stack.yaml "$B" 86.3.2 91.8.0 "$PAST")" '{items:[$l]}')"
+GH_MODE=pr-exists
+run resolve-past-file-edit 0
+expect resolve-past-file-edit-log "lease l10: lease sha ${B:0:8} → pin commit ${A:0:8}" "$OUT"
+expect resolve-past-file-edit-ledger "lease l10: already — PR #77 is open, labelled and armed for $BR" "$OUT"
+GH_MODE=none
+
+# 18. (c) no commit in the file's history carries the lease's pair (85.0.0 → 91.8.0 — A's pair is
+#     86.3.2 → 91.8.0) → not_pin_only naming the resolution, nothing pushed; and the walk is BOUNDED:
+#     depth 1 from C sees only B (C does not touch the file), which carries no pin pair → no pin commit
+BEFORE="$(git -C "$ORIGIN" show-ref | sha256sum)"
+LEASES="$(jq -nc --argjson l "$(lease l11 argocd/platform/kube-prometheus-stack.yaml "$C" 85.0.0 91.8.0 "$PAST")" '{items:[$l]}')"
+run no-pin-commit 0
+expect no-pin-commit-outcome "lease l11: not_pin_only — no pin commit for 85.0.0→91.8.0 at/before ${C:0:8} in argocd/platform/kube-prometheus-stack.yaml's last 20 commits" "$OUT"
+expect no-pin-commit-counter '^1$' "$(metric mgmt_lease_revert_total 'outcome="not_pin_only"')"
+LEASES="$(jq -nc --argjson l "$(lease l12 argocd/platform/kube-prometheus-stack.yaml "$C" 86.3.2 91.8.0 "$PAST")" '{items:[$l]}')"
+MGMT_LEASE_RESOLVE_DEPTH=1 run no-pin-commit-bounded 0
+expect no-pin-commit-bounded-outcome "lease l12: not_pin_only — no pin commit for 86.3.2→91.8.0 at/before ${C:0:8} in argocd/platform/kube-prometheus-stack.yaml's last 1 commits" "$OUT"
+expect no-pin-commit-origin-untouched "^$BEFORE\$" "$(git -C "$ORIGIN" show-ref | sha256sum)"
 
 echo "mgmt-lease-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

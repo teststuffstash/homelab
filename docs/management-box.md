@@ -1534,13 +1534,16 @@ seat has one open.
 `*:0/5` and the apply loop's `*:2/5`; the three share one flock), its own clone under `/var/lib/mgmt/lease`,
 the policy `policy/mgmt/upgrade-leases.yaml` read from MASTER (the sentinel principle). Per tick: read the
 leases (unreadable → PROBE-FAIL, `mgmt_lease_unreadable 1` — never "no leases"); for every lease with
-`expected-end` in the past: (1) the ledger — a PR for branch `revert-chart-lease-<sha8>` exists, or master's
-pin in the subject file is no longer the lease's `to` → `already`; (2) the subject must be in the policy →
-else `no_policy`; (3) the lease's commit must be **pin-only** — it touched nothing but the subject `file` +
+`expected-end` in the past: (1) the ledger — master's pin in the subject file is no longer the lease's
+`to`, or a PR for branch `revert-chart-lease-<sha8>` (of the pin commit) exists → `already`; (2) the subject
+must be in the policy → else `no_policy`; (3) the **pin commit** is resolved — the lease's `sha` is the revision
+the sync ran at, which a delayed sync makes a later unrelated commit, so the loop walks the subject file's last
+20 commits at/before it for the newest whose change to the file is exactly the lease's from → to pair (none →
+`not_pin_only`), and that commit must be **pin-only** — it touched nothing but the subject `file` +
 the policy's `keep` + `regen` files, and inside `file`/`keep` every changed non-comment line is a
 `targetRevision:` line with `file`'s one pair equal to the lease's from/to (the predicate of
 `argocd/resources/chart-revert/chart_revert.py`) → else `not_pin_only`; (4) the revert: `git revert` of the
-sha on a branch off master, the `keep` files restored to the sha's FORWARD content (**a lease revert never
+pin commit on a branch off master, the `keep` files restored to its FORWARD content (**a lease revert never
 downgrades CRDs** — `argocd/platform/prometheus-operator-crds.yaml`, ADR-151) and amended into the one
 commit, the `regen` files (the upstream alert list + triage map, rendered from the pin) reverted with it;
 (5) push the branch, open the PR (`revert: <chart> chart <to> → <from> (upgrade lease expired)`, labels
