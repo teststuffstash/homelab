@@ -17,8 +17,8 @@ a SHARED docker daemon you must assume is dirty.**
 Two environments execute the same script (`devbox run <your-gate>`, same command locally and in
 CI — the OOTB principle):
 
-- **The VM runner** (`ci-runner-01`, `runs-on: [self-hosted, proxmox-vm]`, ADR-082): **two
-  runner slots on ONE docker daemon**. Concurrent runs share everything — names, ports, image
+- **The VM runners** (`ci-runner-01` on pve, `ci-runner-02` on nx-02 — FU-266;
+  `runs-on: [self-hosted, proxmox-vm]`, ADR-082): **two runner slots on ONE docker daemon per VM**. Concurrent runs share everything — names, ports, image
   tags, the inotify budget.
 - **Docker-mode agent rides** (kata + dind, `fixer.docker: true`): egress-enforced — direct
   registry pulls are policy-DENIED; only the mirror path works. ⚠ The two environments can
