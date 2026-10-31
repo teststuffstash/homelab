@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # kube.sh — how a launcher reaches kubectl. ONE implementation, two callers.
 #
 # Sourced by `agent-session.sh` (dispatch: worker pods, session keys, endpoint probes) and by

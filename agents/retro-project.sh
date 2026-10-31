@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # retro-project.sh — the ONE stack→(PROJECT, MAIN_REPO) map for the retro lane (homelab#588,
 # the platform-series rename). `agents/retro-session.sh` (the launcher, which mints the cell's
 # OpenRouterKey IN this namespace) and `agents/coordinator/retro-argo.yaml`'s guard (the busy

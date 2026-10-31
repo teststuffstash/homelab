@@ -8,7 +8,7 @@
 # `iac-sentinel` status.
 #   fail = ≥1 fail (an Enforce rule fired) · warn = 0 fail, ≥1 warn (Audit only) · pass = neither
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 POLICY_DIR="${POLICY_DIR:-policy/iac}"
 FIX="scripts/fixtures/iac-policy"
 bad=0; n=0

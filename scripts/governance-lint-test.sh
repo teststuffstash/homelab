@@ -41,7 +41,7 @@ mkrepo "$T/docs" "docs/note.md"
 pass=0; fail=0
 check() {  # check <repo> <author> <want-exit> <want-phrase> <label>
   local out rc
-  out="$(cd "$T" && PR_AUTHOR="$2" CI= bash "$1/scripts/governance-lint.sh" base 2>&1)"; rc=$?
+  out="$(cd "$T" && PR_AUTHOR="$2" CI='' bash "$1/scripts/governance-lint.sh" base 2>&1)"; rc=$?
   if [ "$rc" = "$3" ] && grep -qF -- "$4" <<< "$out"; then
     pass=$((pass+1)); echo "ok   $5"
   else
@@ -96,7 +96,7 @@ mklock() {
 checkrl() {  # checkrl <repo> <head-ref> <body> <want-exit> <want-phrase> <label>  (HEAD = <head-ref>)
   local out rc
   git -C "$1" checkout -q "$2"
-  out="$(cd "$T" && PR_AUTHOR='homelab-agents-1234[bot]' PR_HEAD_REF="$2" PR_BODY="$3" GOVLINT_REMOTE=. CI= \
+  out="$(cd "$T" && PR_AUTHOR='homelab-agents-1234[bot]' PR_HEAD_REF="$2" PR_BODY="$3" GOVLINT_REMOTE=. CI='' \
          bash "$1/scripts/governance-lint.sh" base 2>&1)"; rc=$?
   if [ "$rc" = "$4" ] && grep -qF -- "$5" <<< "$out"; then
     pass=$((pass+1)); echo "ok   $6"
@@ -247,7 +247,7 @@ mksync() {
 }
 checksync() {  # checksync <repo> <want-exit> <want-phrase> <label>
   local out rc
-  out="$(cd "$T" && PR_AUTHOR='homelab-agents-1234[bot]' GOVLINT_MASTER=master CI= \
+  out="$(cd "$T" && PR_AUTHOR='homelab-agents-1234[bot]' GOVLINT_MASTER=master CI='' \
          bash "$1/scripts/governance-lint.sh" "$GTIP" 2>&1)"; rc=$?
   if [ "$rc" = "$2" ] && grep -qF -- "$3" <<< "$out"; then
     pass=$((pass+1)); echo "ok   $4"

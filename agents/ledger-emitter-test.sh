@@ -14,7 +14,7 @@
 # EVERY EXPECTED VALUE IS COMPUTED FROM THE CONSTRUCTED INPUTS + THE CONTRACT (the ledger row
 # schema in ledger.py), never read back from the code under test.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf '  ✓ %s\n' "$1"; }

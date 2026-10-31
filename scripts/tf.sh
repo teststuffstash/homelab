@@ -10,7 +10,7 @@
 #   - tfvars                   → proxmox_api_token + non-secret IDs (github_app_id/installation_id, ci_runner_*)
 set -eu
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 # 2026-09-13 (ADR-129/-131, FU-012): main's STATE MOVED to the management box, with the
 # dangerous creds — the jail's copy is a frozen backup. A local plan here would plan against a
 # stale state (or, with no state file, plan to CREATE everything it already owns — tofu-state.md).

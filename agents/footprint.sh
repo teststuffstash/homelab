@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # footprint.sh — declared-footprint intersection for parallel dispatch (ADR-097, FU-086).
 # Sourced by coordinator-scan.sh; exercised by agents/footprint-test.sh (the double-dispatch
 # belt: a predicate bug here must fail a test, not double-dispatch into a lane).

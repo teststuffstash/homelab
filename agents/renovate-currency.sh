@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # agents/renovate-currency.sh — the ONE reader of "whose currency is this Renovate PR" (ADR-153),
 # sourced by both update-branch call sites that meet Renovate PRs: agents/update-pr-branch.sh (leg 1,
 # leg 2 and leg 1b's hand-back sweep over their complement, identity homelab-merge) and coordinator-scan.sh's FU-124 nudge (identity coordinator-git).

@@ -21,7 +21,7 @@
 # secrets-capable GITHUB_TOKEN in env — gh honours it). A 403 fails loudly per row, never
 # silently. Cluster reads ride tofu/kubeconfig, present on both sides of the jail boundary.
 set -euo pipefail
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 KUBE=(kubectl --kubeconfig "$ROOT/tofu/kubeconfig")
 
 # ── THE MAPPING ─────────────────────────────────────────────────────────────────────────────
