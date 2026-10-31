@@ -335,7 +335,9 @@ fi
 # merged-into PR that is CURRENT but red, a codeowner park gone red (leg 1's pre-filter drops it), or
 # a current CHANGES_REQUESTED one waited — invisible — until master happened to move under it. So the
 # sweep runs the SAME predicate over the complement: every armed, unbreakered Renovate PR that is in
-# neither leg's domain (no PR is probed twice per pass). Not merge-ready here = not green OR
+# neither leg's domain (no PR is probed twice per pass). Not merge-ready here = a CONCLUDED red
+# (`renovate_red`: checks reported, none in flight, not green — a CURRENT merged-into PR is most often
+# the one leg 1 just updated, its CI re-running; pending or absent checks wait for the next pass) OR
 # CHANGES_REQUESTED — leg 1's test plus leg 2's (an untouched Renovate PR gets no new content but
 # Renovate's, so a CR one is stuck until handed back); green + awaiting review is the reviewer's, and
 # green + APPROVED + current is merging. Silent unless it acts or HOLDS (an out-of-domain PR that
@@ -351,7 +353,7 @@ while read -r pr; do
     continue
   fi
   renovate_untouched "$sj" && renovate_merged_into "$sj" || continue
-  if ! renovate_green "$sj" || [ "$(jq -r '.reviewDecision' <<<"$pr")" = CHANGES_REQUESTED ]; then
+  if renovate_red "$sj" || [ "$(jq -r '.reviewDecision' <<<"$pr")" = CHANGES_REQUESTED ]; then
     renovate_handback "$REPO" "$n" "handback[$REPO]:"
   fi
 done <<<"$(jq -c "$LEG_DOMAINS_JQ"' .[] | select(.autoMergeRequest != null and (leg1_cand | not)

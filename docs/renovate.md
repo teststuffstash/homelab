@@ -123,7 +123,8 @@ not the coordinator, owns whether an update should exist:
   FU-124 nudge, which is the call site that actually made the 2026-10-20 merges; its probe reads checks
   over REST, since `gh pr view --json statusCheckRollup` needs `actions: read` the updater's App lacks).
   The hand-back reaches every armed Renovate PR, BEHIND or not (the updater's leg 1b sweep,
-  homelab#1985): a merged-into PR that is current-but-red or a red codeowner park is handed back
+  homelab#1985): a merged-into PR whose CI has CONCLUDED red while current, or a red codeowner park, is handed back
+  (in-flight or absent checks wait — a just-updated PR is re-running CI)
   without waiting for master to move. A worker-adapted branch is the updater's as before — never
   handed back (Renovate's rebuild would drop the worker's commit).
 - **Closing a Renovate PR is not "done."** With Renovate's default `recreateWhen: auto`, a manually

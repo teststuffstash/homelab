@@ -57,6 +57,19 @@ renovate_green() {
          | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0' <<<"$1" >/dev/null 2>&1
 }
 
+# renovate_red <probe-json> → 0 only on a CONCLUDED red: at least one check reported, none still in
+# flight (a check-run reports QUEUED/IN_PROGRESS/WAITING/REQUESTED/PENDING as its conclusion here, a
+# commit status PENDING), and not green. Absent or in-flight checks are NOT red — the PR the updater
+# just merged master into sits exactly there while its CI re-runs, and a hand-back on that state
+# would throw away the update it is waiting on (#3058 review). The next pass re-reads.
+renovate_red() {
+  jq -e '([ .statusCheckRollup[]? | ((.conclusion // .state) // "") ]) as $c
+         | ($c | length) > 0
+           and ([ $c[] | select(. == "QUEUED" or . == "IN_PROGRESS" or . == "WAITING"
+                                or . == "REQUESTED" or . == "PENDING" or . == "") ] | length) == 0' <<<"$1" >/dev/null 2>&1 \
+    && ! renovate_green "$1"
+}
+
 renovate_untouched() {   # renovate_untouched <json with commits> → 0 when no foreign non-merge commit
   jq -e "$RENOVATE_LOGIN_JQ"' [ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
            | .authors[]? | .login ] | all(renovate_login)' <<<"$1" >/dev/null 2>&1

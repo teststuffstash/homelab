@@ -94,3 +94,9 @@ renovate-merged-current-red-handback | board | gh/pr-list.json @ patches/add-ren
 renovate-merged-current-green-noop   | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-silent-probe1   | p1=153 oid=ren153oid789
 renovate-untouched-current-red-noop  | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-silent-probe1   | p1=153 oid=ren153oid789
 renovate-merged-park-red-handback    | board | gh/pr-list.json @ patches/add-renovate-park-red.jq       | | sweep-handback-probe1 | p1=154 oid=ren154oid789
+# #3058 review: the sweep hands back only a CONCLUDED red (`renovate_red`). A current merged-into PR is
+# most often the one leg 1 JUST updated, CI re-running — in-flight (`in_progress`) or not-yet-reported
+# (zero checks) is silent; a hand-back there would discard the update. Both RED on the first-cut 1b
+# source (which tested `! renovate_green`).
+renovate-merged-current-pending-noop  | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-silent-probe1 | p1=153 oid=ren153oid789
+renovate-merged-current-nochecks-noop | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-silent-probe1 | p1=153 oid=ren153oid789
