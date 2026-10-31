@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # island-intake-test — behavioural harness for the WIRED island intake (FU-320): the selector's
 # `--source dig` mode (gateway/scripts/intake-select.sh) and the CronWorkflow that runs it
-# (agents/coordinator/island-intake-argo.yaml).
+# (agents/coordinator/island-intake-argo.yaml), plus the island table both selector modes read
+# (island_members / island_pattern — membership per island, one island per item).
 #
 #   bash agents/island-intake-test.sh        (run by `devbox run deep-dig-test` — the dig's gate,
 #                                              because intake is the dig's consumer)
@@ -115,6 +116,72 @@ rm -rf "$TS/homelab/intake-gateway-2026-10-27"
 
 INTAKE_TS_DIR="$TS" bash "$SEL" --source dig --island nosuch --out "$TMP/sel.json" 2>/dev/null; rc=$?
 [ "$rc" = 2 ] && ok "an island with no pattern row is refused" || bad "island table" "rc=$rc"
+
+# ── the island table: issue membership per island (INTAKE_ISSUES_JSON seam) ───────────────────
+# Expected islands are derived from the selector's header contract: the FIRST ISLANDS row
+# (gateway, router-pair, mgmt-box, dependency-upgrades, substrate, agent-loop) whose title regex
+# matches or that owns EVERY Touches entry, each path going to its LONGEST matching prefix.
+section "selector issues — the island table"
+ISS="$TMP/issues.json"
+iss() { # <n> <title> <touches|-> [labels-json] [first-comment-line]
+  local body="free text"
+  [ "$3" != - ] && body="$(printf -- '---\nTouches: %s\n---\n\nfree text' "$3")"
+  jq -nc --argjson n "$1" --arg t "$2" --arg b "$body" --argjson l "${4:-[]}" --arg c "${5:-}" \
+    '{number:$n, title:$t, body:$b, labels:($l|map({name:.})), createdAt:"2026-10-20T00:00:00Z",
+      author:{login:"app/homelab-agents-1234"}, comments:(if $c == "" then [] else [{body:$c}] end)}' >> "$ISS.rows"
+}
+rm -f "$ISS.rows"
+iss 1  "gateway: a title row"                 -                                             # gateway title
+iss 2  "catalog drift on GW-CATALOG-GO"       -                                             # gateway GW- id
+iss 3  "no title cue"                         "gateway/specs/a.md, gateway/tests/b.py"      # gateway Touches
+iss 4  "scan: title says agent-loop"          "gateway/src/x.py"                            # gateway row is FIRST
+iss 5  "no title cue"                         "gateway/a.md, agents/b.sh"                   # spans two → none
+iss 6  "scan: a guard"                        -                                             # agent-loop title
+iss 7  "no title cue"                         "agents/coordinator-scan.sh, docs/agents/x.md" # agent-loop Touches
+iss 8  "no title cue"                         "tofu/opnsense-router.tf"                     # longest prefix beats tofu/
+iss 9  "no title cue"                         "tofu/garage.tf, machines/machines.yaml"      # substrate Touches
+iss 10 "opnsense: carp skew"                  -                                             # router-pair title
+iss 11 "no title cue"                         "mgmt/scripts/mgmt-lease.sh"                  # mgmt-box Touches
+iss 12 "renovate: a lane"                     -                                             # dependency-upgrades title
+iss 13 "S9 original 2: lanes by class"        -                                             # dependency-upgrades title
+iss 14 "garage-write-probe: cleanup"          "argocd/resources/garage-write-probe/"        # substrate title + Touches
+iss 15 "no title cue"                         ".github/workflows/ci.yaml"                   # nobody's path → none
+iss 16 "no title cue"                         "tofu/opnsense-router.tf, tofu/garage.tf"     # two islands → none
+iss 17 "scan: labelled"                       - '["agent/queued"]'                          # lifecycle label → out
+iss 18 "scan: ruled"                          - '[]' "intake: standing — not now"           # standing ruling → out
+iss 19 "post-launch: scan bucket"             -                                             # container → out
+iss 20 "garage: title wins over Touches"      "agents/x.sh"                                 # substrate row precedes agent-loop
+iss 21 "mgmt: lease belt"                     "tofu/garage.tf"                              # mgmt-box row precedes substrate
+jq -s . "$ISS.rows" > "$ISS"
+members() { INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$1" --json 2>/dev/null | jq -r '[.[].number] | sort | join(" ")'; }
+for row in "gateway:1 2 3 4" "router-pair:8 10" "mgmt-box:11 21" "dependency-upgrades:12 13" "substrate:9 14 20" "agent-loop:6 7"; do
+  isl="${row%%:*}"; want="${row#*:}"; got="$(members "$isl")"
+  [ "$got" = "$want" ] && ok "--island $isl selects $want" || bad "members $isl" "want '$want' got '$got'"
+done
+all="$(for i in gateway router-pair mgmt-box dependency-upgrades substrate agent-loop; do members "$i"; echo; done | tr ' ' '\n' | grep -c .)"
+[ "$all" = 15 ] && ok "no issue lands on two islands; #5 #15 #16 (mixed / unowned) and #17–#19 land on none" \
+  || bad "exclusivity" "15 memberships expected, got $all"
+INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island nosuch 2>/dev/null; rc=$?
+[ "$rc" = 2 ] && ok "issues mode: an island with no membership row is refused (exit 2)" || bad "issues island table" "rc=$rc"
+INTAKE_ISSUES_JSON="$TMP/nowhere.json" bash "$SEL" --island substrate 2>/dev/null; rc=$?
+[ "$rc" = 2 ] && ok "issues mode: an unreadable issue list is a probe failure (exit 2)" || bad "issues rule #6" "rc=$rc"
+
+section "selector --source dig — island precedence"
+TS2="$TMP/ts2"; mkdir -p "$TS2/homelab/dig-2026-10-26/r"
+for spec in "1|MgmtOpnsenseDrillScoreRegressed: the drill's realism score fell" \
+            "2|agent-gateway pod restarts; agents/agent-session.sh retries" \
+            "3|MgmtLeaseExpiredUnreverted: mgmt-lease left the pin" \
+            "4|Longhorn volume degraded on wk-02"; do
+  jq -n --arg rec "${spec#*|}" '{schema:"dig-finding/v1", verdict:"cause-found", cause:"c", evidence:[], recommendation:$rec,
+    pr:"", related:[], alerts:[], members:[]}' > "$TS2/homelab/dig-2026-10-26/r/finding-${spec%%|*}.json"
+done
+digsel() { INTAKE_TS_DIR="$TS2" INTAKE_NOW="$NOW" bash "$SEL" --source dig --island "$1" --out "$TMP/sel2.json" 2>/dev/null
+           jq -r '[.inputs[].id | sub(".*finding-"; "")] | sort | join(" ")' "$TMP/sel2.json"; }
+for row in "gateway:2" "router-pair:1" "mgmt-box:3" "substrate:4" "agent-loop:" "dependency-upgrades:"; do
+  isl="${row%%:*}"; want="${row#*:}"; got="$(digsel "$isl")"
+  [ "$got" = "$want" ] && ok "dig --island $isl takes '${want:-nothing}' (an earlier row's finding is never re-ruled)" \
+    || bad "dig precedence $isl" "want '$want' got '$got'"
+done
 
 # ── the CronWorkflow, structurally (the dig's FU-198 pins) ──────────────────────────────────────
 section "island-intake-argo.yaml — shape"
