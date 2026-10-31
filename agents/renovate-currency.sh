@@ -1,6 +1,6 @@
 # agents/renovate-currency.sh — the ONE reader of "whose currency is this Renovate PR" (ADR-153),
-# sourced by both update-branch call sites that meet Renovate PRs: agents/update-pr-branch.sh (leg 1 +
-# leg 2, identity homelab-merge) and coordinator-scan.sh's FU-124 nudge (identity coordinator-git).
+# sourced by both update-branch call sites that meet Renovate PRs: agents/update-pr-branch.sh (leg 1,
+# leg 2 and leg 1b's hand-back sweep over their complement, identity homelab-merge) and coordinator-scan.sh's FU-124 nudge (identity coordinator-git).
 # They used to carry two copies of the predicate; the 2026-10-20 zombies (homelab#2754,
 # sleep-tracking#203) were made by the NUDGE copy, which the updater-side fix (#2881) did not reach.
 #

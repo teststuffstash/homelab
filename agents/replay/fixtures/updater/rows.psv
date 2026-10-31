@@ -82,3 +82,15 @@ renovate-superseded-cancel-green-update | board | gh/pr-list.json @ patches/add-
 # which homelab-merge lacks, so every PRIVATE-repo probe failed whole for 10+ days). A refused checks
 # read HOLDS (rule #6) — never "not green", never a hand-back on a half-read.
 renovate-checks-unreadable-hold | board | gh/pr-list.json @ patches/add-renovate-approved.jq | STUB_GH_api_repos_teststuffstash_testrepo_commits_ren150oid789_check_runs_per_page_100=fail | renovate-probe-hold | p1=150 oid=ren150oid789
+# ── homelab#1985 residual 5 (2026-10-31): the hand-back sweep, leg 1b. The hand-back lived only INSIDE
+# legs 1/2, so a merged-into Renovate PR outside their domains (current-but-red; a red codeowner park,
+# which leg 1's pre-filter drops) was never probed and waited, disowned, until master moved under it.
+# Leg 1b runs the same predicate over the complement. All four rows are RED on the pre-1b source (it
+# never probed these PRs); the `-handback` rows are the pin, the `-noop` rows the negative controls,
+# each RED under its own mutation (drop `renovate_merged_into` → untouched-current-red acts; drop the
+# not-green test → merged-current-green acts): green + awaiting review is the reviewer's, an
+# unmerged untouched branch is Renovate's own, and a sweep that acts on nothing prints nothing.
+renovate-merged-current-red-handback | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-handback-probe1 | p1=153 oid=ren153oid789
+renovate-merged-current-green-noop   | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-silent-probe1   | p1=153 oid=ren153oid789
+renovate-untouched-current-red-noop  | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-silent-probe1   | p1=153 oid=ren153oid789
+renovate-merged-park-red-handback    | board | gh/pr-list.json @ patches/add-renovate-park-red.jq       | | sweep-handback-probe1 | p1=154 oid=ren154oid789
