@@ -293,6 +293,9 @@
       "spend-probe-self-test": [
         "python3 argocd/resources/cloudflare-exporter/spend-probe.py --self-test"
       ],
+      "version-sets-selftest": [
+        "python3 argocd/resources/version-sets/probe.py --self-test"
+      ],
       "request-flow-render": [
         "python3 scripts/request-flow-render.py \"$@\""
       ],

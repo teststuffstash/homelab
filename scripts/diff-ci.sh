@@ -64,6 +64,9 @@ MAP=(
   "exporter-self-test:^argocd/resources/github-exporter/"
   "edge-probe-self-test:^argocd/resources/cloudflare-exporter/"
   "spend-probe-self-test:^argocd/resources/cloudflare-exporter/"
+  # the version-set probe's parsers + exposition (homelab#2014), scoped to its deployment dir like the sibling probes.
+  # Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
+  "version-sets-selftest:^argocd/resources/version-sets/"
   "publicroute-tf-validate:$PUBLICROUTE_PATHS"
   # ci.yaml runs it PR-only as `xr-render -- --diff <base>` (base↔head render diff); locally the
   # row renders every input at the worktree. Its ci.yaml step lands operator-direct (pin-only-guarded).
