@@ -3,7 +3,7 @@
 # 1. Request rate calculation works
 # 2. Availability ratio calculation works
 # 3. Volume utilization ratio calculation works
-# 4. The server error ratio is defined for every shape of a scraped store (#1569) — see the five
+# 4. The server error ratio is defined for every shape of a scraped store (#1569) — see the six
 #    "server error ratio —" cases below
 #
 #   devbox run -- promtool test rules argocd/resources/garage-alerts/garage-slo.promtool-test
@@ -190,6 +190,24 @@ tests:
         eval_time: 5m
         exp_samples:
           - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="HeadObject"}'
+            value: 0
+
+  - interval: 1m
+    name: server error ratio — idle endpoint whose 5xx counter is flat reads 0, not NaN
+    input_series:
+      # DeleteObject: an old 500 that has not moved for 5m (the counter series outlives the
+      # incident) and a request counter that has not moved either. The old expr divided 0 by 0
+      # here and returned NaN — a value that is neither a ratio nor absent, and the reason the
+      # denominator is floored.
+      - series: 'api_s3_request_duration_count{api_endpoint="DeleteObject"}'
+        values: "900+0x5"
+      - series: 'api_s3_error_counter{api_endpoint="DeleteObject",status_code="500"}'
+        values: "5+0x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:rate5m
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="DeleteObject"}'
             value: 0
 
   # ── S3 latency by endpoint class ───────────────────────────────────────────────────────────────
