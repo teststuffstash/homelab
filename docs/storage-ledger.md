@@ -12,29 +12,30 @@ jointly blow the tier — which is exactly what happened.
 > **A tier's committed capacity is the sum of every cap charged against it, across every repo, and
 > exactly one ledger owns that sum.** A claim that doesn't appear in the ledger doesn't exist.
 
-## Current shape (2026-09-12 19:20Z, post thinkcentre decommission; the 2026-09-10 00:15Z read in parentheses)
+## Current shape (2026-10-31 20:36Z live read; the 2026-09-12 read in parentheses)
 
 _Tracked by: FU-211 (these numbers are hand-typed — the `--render` generator is the fix); FU-093 owns the ledger._
 
 | tier | zones | raw | allocatable | committed | physically used |
 |---|---|---|---|---|---|
-| `std` | hp-01 **×3 disks** (default unschedulable), m70s `nvme` — wk-02 left the tier 2026-09-14 (disk evicted + removed; the pve box is compute-only) | 1185G | 1020G | 294G (29%) *(was 310G, 58%)* | 337G (28%) *(was 356G)* |
-| `bulk` | wk-metal-01 MX500, **wk-metal-04 intel0 + intel1** (the two 7600p; ⚠ intel0 NotReady since 2026-10-20 — nvme0 EIO), **+ the SN530s in hp-01 and wk-04** (2026-09-24) | 1415G | 1315G | 1160G (88%), of which 300G is the registry's `registry-data` (FU-280) *(was 816G on 902G, 90%)* | 548G (39%) *(re-read 2026-09-24)* |
-| `slow-bulk` | wk-metal-04 MX500 `sata500` (the install disk since 2026-10-20 — the SA400 did not move) — **unschedulable**, holds no replica | 248G | re-read pending (FU-211) | 0 | re-read pending (FU-211) |
-| `fast` | **nx-01 `intel7600p`** since 2026-09-24 (replica-1 ride scratch only; the Optane pair is shelved, FU-234) | 238G | 238G | 0 | 5G (2%) *(re-read 2026-09-24)* |
-| *(untagged)* | m70s Micron 2300 — the `longhorn-local-xfs` Garage zone, selector-less by design | 509G | 402G | 193G | 154G |
+| `std` | hp-01 **×3 disks** (`default-disk` unschedulable; `hg5d`, `intel7600p`), m70s `nvme` (the Micron 2300 — also garage-1's zone volumes, see the untagged row) — wk-02 left the tier 2026-09-14 | 1019G | 874G | 562G (64%) *(was 294G)* | 366G (36%) *(was 337G)* |
+| `bulk` | wk-metal-01 `mx500`, wk-metal-04 `intel1` (`intel0` retired 2026-10-26 — the x16 slot, not the drive; `machines.yaml`), the SN530s in hp-01 and wk-04 — **four disks on four nodes** | 1265G | 1157G | **1267G (110%)**, of which 300G is the registry's `registry-data` (FU-280) *(was 1160G, 88%)* | 361G (29%) |
+| `slow-bulk` | wk-metal-04 MX500 `sata500` (the install disk since 2026-10-20) — **unschedulable**, holds no replica | 247G | 86G | 0 | 79G |
+| `fast` | **nx-01 `intel7600p`** since 2026-09-24 (replica-1 ride scratch only; the Optane pair is shelved, FU-234) | 255G | 255G | 0 | 5G (2%) |
+| *(untagged)* | m70s `pm961` — garage-1's dedicated spindle, **empty**: garage-1's data+meta volumes sit on `nvme` (std) today, the selector-less placement §the selector-less audit warns about | 255G | 255G | 0 | 5G |
 
-Read from the Longhorn node CRs (`storageMaximum`/`storageReserved`/`storageScheduled`/
-`storageAvailable` summed per tag; allocatable = max − reserved, committed = scheduled; physically
-used = max − available, so it includes whatever else lives on a shared partition). The bulk tier's
-allocatable grew 196 G with the 7600p pair (0 reserved — Longhorn-only disks) and its committed
-figure is real again: the 09-06 115 % was the maintenance-window transient. On wk-metal-04 the
-registry mirrors (140 G) sit on `intel0`, garage-0's zone volumes (180 G) + the PyPI/mcr mirrors
-(60 G) on `intel1` — Longhorn's most-free-disk pick, not a choice. **std fell 75 G committed** since
-09-06 (platform volumes freed); wk-02's std disk was briefly schedulable again before it left the tier for good on 2026-09-14.
+Read from the Longhorn node CRs (`storageMaximum`/`storageScheduled`/`storageAvailable` from
+status, `storageReserved` from spec, summed per tag; allocatable = max − reserved, committed =
+scheduled; physically used = max − available, so it includes whatever else lives on a shared
+partition). `bulk` committed above 100 % is the 200 % `storageOverProvisioningPercentage`
+(§the SECOND sum) at work on thin volumes — per disk, wk-metal-04 `intel1` is scheduled 354G on
+255G and wk-04 `sn530` 279G on 255G; physical use is what `LonghornDiskFillingUp` watches.
+Placement 2026-10-31: the registry mirrors on wk-04 `sn530` + wk-metal-01 `mx500`,
+`registry-data` on hp-01 `sn530` + wk-metal-04 `intel1`, garage-0/garage-2 zone volumes on
+`intel1`/`mx500` — Longhorn's most-free-disk pick, not a choice.
 
-⚠ **Only TWO of the std disks are schedulable, on TWO nodes** (hp-01 `hg5d` + `intel7600p`, m70s
-`nvme`): 832G raw / 732G allocatable / 147G committed. thinkcentre left cluster duty 2026-09-12
+⚠ **Only TWO nodes carry schedulable std disks** (hp-01 `hg5d` + `intel7600p`, m70s
+`nvme`): 891G raw / 784G allocatable / 562G committed (2026-10-31). thinkcentre left cluster duty 2026-09-12
 (runbook §"Retire a node from cluster duty") and wk-02 left the std tier 2026-09-14, so every r=2 std
 volume must hold one copy on m70s and one on hp-01 — **there is no third zone to rebuild onto, and
 `replica-soft-anti-affinity=true` makes the failure mode silent CO-LOCATION of both copies, not a
@@ -44,7 +45,7 @@ Pending volume.** Check for it after any eviction (the one-liner is in the runbo
 (CI builds and the like) — single-node replica-1 Optane of modest speed; NEVER load-bearing
 data/metadata (Garage-meta migration onto it was proposed and REJECTED).
 
-Two things to read off it. **`bulk`'s ~88% committed is deliberate, not drift** — the registry
+Two things to read off it (the 2026-09-12 reading). **`bulk`'s ~88% committed is deliberate, not drift** — the registry
 mirrors were oversized on purpose (see homelab#116 below), which spends nominal headroom to buy
 the thing that actually matters, and physical sits at 68% (the 2026-08-25 table above). **`std`'s comfort is new**: it had two zones and
 hp-01 at 105% until wk-02 moved into it the same day.
@@ -509,6 +510,10 @@ class, `longhorn-local-std`, rather than reuse the selector-less one. What the r
 Two mitigations that a human has to remember is a stronger case for a mechanism than an incident
 would be. The false claim is corrected in both places by this edit.
 
+⚠ **Overtaken (live read 2026-10-31): the misplacement has since happened.** garage-1's data and
+meta volumes sit on m70s `nvme` (std, the shared Micron) and `pm961` is empty (§Current shape;
+the 2026-10-29 ceilings table above already read it). The record does not say when or how it moved.
+
 **4. The fix is known, and its cost is now known too.** ADR-089 already records the pattern: a
 `diskSelector` on a StorageClass *"turned out to apply only to PVCs created after it (14 legacy
 volumes had an empty `diskSelector`) — backfilled"*. So the volume CR carries its own selector and
@@ -829,8 +834,8 @@ as the 2026-08-04 history table.
 
 The ledger is not only bookkeeping — it is the **guardrail that defines "mechanical"** for the
 infra-fixer lane: a wrapper change is auto-mergeable only if it is schema-valid *and* within the
-tier quota ([`agents/iac-lane.md`](agents/iac-lane.md) §rollout matrix). Until the ledger exists,
-that predicate is aspirational.
+tier quota ([`agents/iac-lane.md`](agents/iac-lane.md) §rollout matrix). The ledger exists since
+2026-08-02 (`devbox run storage-ledger`, §Build); no lane gate invokes it yet — it is run by hand.
 
 Related: oracle-iac#40 closing comment, oracle-iac#95, TICK-LOG §scratch-pool, FU-116 (the PVC
 leak that feeds the Longhorn side).
