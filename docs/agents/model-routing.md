@@ -316,8 +316,9 @@ scope.
   {serving-shaped, `turn-cap`} ∧ attempts < cap (one automatic retry per
   `(model, provider, class)`, two per task) ⇒ `/route` again and re-run at the SAME round — no
   scan re-queue, no coordinator session; cap reached ⇒ the strike list + doorbell as today.
-  - **`unenforced`** — Goal #1640 acceptance 4 owns it (the launcher-side retry ladder is not
-    built).
+  - anchor: `agents/agent-session.sh` (the `REPLAY:strike-retry` block — Goal #1640 acceptance 4,
+    landed via PR#1934).
+  - evidence: replay `agents/replay/fixtures/strike-retry`.
 - **The FU-200 fleet reader re-keys on `(class, provider)` / `(class, model)` / neither** — a
   repeated serving strike latches the PROVIDER (or nominates the MODEL for the ledger) instead of
   labelling issues; `agent/error` on issues stays for the "us" case only, and a clean retry
@@ -464,7 +465,8 @@ master 2026-09-17 (homelab#1709 — the post-theme-1 flip pass): the theme-1 rul
 the body above and have no row here** — the strike vocabulary (`router.py:STRIKE_CLASSES` /
 `SERVING_CLASSES`), per-task enforcement + cell pricing (`router.py:route`), the per-session pin
 (`openrouter-proxy.py:pin_for`) and the pair cooldown (`router.py:pair_cooldowns`) assembled with
-homelab#1665/#1666 via PR#1734. The rows below are the residue:
+homelab#1665/#1666 via PR#1734; the launcher retry at worker-terminal (acceptance 4) followed via
+PR#1934. The rows below are the residue:
 
 | rule | owner |
 |---|---|
@@ -473,7 +475,6 @@ homelab#1665/#1666 via PR#1734. The rows below are the residue:
 | latency tie-break on measured decode tokens/sec | proposed, no owner — homelab#22's harvest half LANDED (`generations.generation_ms`, `router_observed_decode_tps`); the ordering lever (nothing reads the series) is what is unbuilt |
 | `goose-32602-truncation` as a per-cell signal | proposed, no owner (operator direction 2026-09-14) |
 | the finalizer/watchdog producer half of the strike vocabulary, and the storm-watchdog kill | Goal #1640 acceptance 1 (agent-runtime half) |
-| launcher retry at worker-terminal | Goal #1640 acceptance 4 |
 | strike READERS migrated off the comment to the router store | proposed, no owner (operator ruling 2026-08-19; blocked on the storage-engine question) |
 
 ## The problem, from evidence
