@@ -331,7 +331,7 @@ six OVERSIZE items pointer-ized into
       homelab#884). **ADR-114** + addendum + 2026-09-07 amendment answer both halves; mechanism and
       numbers live in [`garage.md`](garage.md) and the [ledger](storage-ledger.md). Done: rf=3 across
       three physical zones (09-07); the unattended rotation loop (09-09); garage-1 on its own PM961
-      (09-12); CNPG required zone anti-affinity (09-21, #1840/#1842, oracle-iac#900); CNPG replica-1
+      (09-12 — ⚠ 2026-10-31 read: its volumes sit on m70s's shared `nvme`, `pm961` empty; operator asked); CNPG required zone anti-affinity (09-21, #1840/#1842, oracle-iac#900); CNPG replica-1
       (09-21, #1843 — ledger §2026-09-21; stack clusters wait on a zone node label). **Next:** the
       backup CronJob (ADR-114's logical-deletion class). Operator intent: metadata maintenance is
       unattended. Relates FU-013, FU-012, FU-093, FU-223, ADR-031.
@@ -361,7 +361,7 @@ six OVERSIZE items pointer-ized into
       POINTER.** Hard prerequisite for anything that plans/applies off the operator's machine (the
       FU-097 drift belt, the out-of-cluster applier). Migration state, the per-root cone rulings,
       the `use_lockfile = false` ruling and the runbook: [`docs/tofu-state.md`](tofu-state.md) —
-      3 of 5 roots on encrypted Garage state since 2026-08-04; **`main`'s state + the dangerous
+      4 of 5 roots on encrypted Garage state (3 since 2026-08-04, github 2026-09-13 — FU-238); **`main`'s state + the dangerous
       creds MOVED to the R12 box 2026-09-13** (the jail applies main through `devbox run mgmt-tf`).
       **Next:** box-scoped credentials — the `mgmt/scripts/mgmt-provision-secrets.sh` table is the JAIL's
       entries, swapped one line each as minted; **first: a scoped read-only kubeconfig for the box's
@@ -650,7 +650,7 @@ the block needs pruning, not more headings.
       retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
       Sprout series shipped (#209 `goal_sprouts_filed_total`; IL-G04 closed 2026-10-14), depth gate in the reviewer
       (rule 7) — **no machine Next left**; what remains is the operator-deferred list below.
-      **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue` (10-13: subscription
+      **Operator-deferred:** `issueAuthoring.selfQueue` (10-13: subscription
       rides now settle at $0 in the pre-flight — #2545, retro r8 F2);
       the goal lane's PHASE-keyed model/checkpoint design (a `GOAL_MODEL` knob turns the wrong
       axis — [`model-routing-history.md`](spikes/model-routing-history.md) §M10 ⚖, 2026-08-11; design before wiring).
@@ -1115,8 +1115,8 @@ the block needs pruning, not more headings.
 - [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes: POINTER.** Mechanism, evidence
       (incl. the 2026-09-16 FU-246 driver, the 2026-09-28 wk-03 thrash with no kill) and the ⚖ recommendation:
       [`spikes/talos-psi-thresholds.md`](spikes/talos-psi-thresholds.md) §5/§7 (symptom thread homelab#857).
-      **Next:** operator rules tune-vs-accept (the Option A pin experiment first, all metal nodes;
-      cilium-agent's Burstable pod exposure folds in). Relates FU-139/FU-112, ADR-044.
+      **Next:** operator rules tune-vs-accept on Talos 1.14 (Option A was overtaken 2026-09-24 — the fleet is on
+      1.14.1; cilium-agent's Burstable pod exposure folds in). Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-250** — **The apex consumer claim's Workspace is permanently red: RUM is undeliverable.**
       `pr-oracle-fleet-minutark` fails `POST …/rum/site_info → 403` because no RUM write group exists to
       grant (the #1311 residual). The claim's other resources DO apply, but `Synced=False` is then

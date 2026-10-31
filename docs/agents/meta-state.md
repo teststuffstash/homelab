@@ -91,8 +91,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ ADR-156 step 5** — measure tokens / worker rounds / invalid findings / coordinator interventions per completed PR
   ([`specs-reviewer.md`](specs-reviewer.md) §The portable process; next = the #2867/#2868 PRs). oracle-fleet stays on its
   own process until the operator says the gateway has proven it.
-- **⚑ ESCALATED → operator (board-sweep 10-24):** homelab#2588 `agent/error` 9 d (shared rate-pool strikes; class fix
-  #2601 unqueued); #2808 + #2757 unqueued (#2757 blocks circles#129). #2589 must land before stint #1418 can close.
+- **⚑ ESCALATED → operator (board-sweep 10-24; 10-31 update):** #2588 seat-un-latched + re-queued 10-31 (the
+  PR-less latch gap is #3048); #2808 unqueued. #2589 must land before stint #1418 can close.
 - **⚑ wk-metal-04 — Big Data's CPU x16 slot CORRUPTS DATA (2026-10-26, #2926 #2928 #2931).** intel0 (10-20) and intel1
   (10-26, XFS corrupt after 2 min) both failed there; intel0 passed a 4 GiB write+readback in the x4 slot → tested shelf
   spare. intel1 runs in the x4 slot, the x16 stays EMPTY. Firmware never auto-boots the MX500 → PXE → `boot-or-disk.ipxe`
