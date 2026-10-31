@@ -43,8 +43,8 @@ if [ "${OPN_AS_ROOT:-0}" = 1 ]; then unset OPN_API_KEY OPN_API_SECRET; fi
 if [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ]; then
   :
 elif [ -f "$_kp_db" ]; then
-  _kp_get() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
-                -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$_kp_db" "$1" 2>/dev/null; }
+  # the box carries no wallet — its pair is pre-set (above), so only the jail reaches this devbox
+  _kp_get() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$_kp_db" "$1" 2>/dev/null; }   # jail-only fallback (FU-305)
   export OPN_API_KEY="$(_kp_get "$_entry-key")"
   export OPN_API_SECRET="$(_kp_get "$_entry-secret")"
 fi
@@ -52,9 +52,17 @@ fi
 
 PYBIN="$(nix build --no-link --print-out-paths path:./ansible/controller-env)/bin/python3"
 
+# ax = how an ansible tool runs: the lock-resolved bin dir first on PATH when OPN_ANSIBLE_BIN is set, else devbox
+if [ -n "${OPN_ANSIBLE_BIN:-}" ]; then
+  [ -x "$OPN_ANSIBLE_BIN/ansible-playbook" ] || { echo "OPN_ANSIBLE_BIN=$OPN_ANSIBLE_BIN has no executable ansible-playbook" >&2; exit 1; }
+  PATH="$OPN_ANSIBLE_BIN:$PATH"; ax=()
+else
+  ax=(devbox run --)   # jail-only fallback (FU-305): the box's belt passes OPN_ANSIBLE_BIN
+fi
+
 # Fresh jails don't have the collection installed; cheap to ensure each run.
-devbox run -- ansible-galaxy collection install -r ansible/collections/requirements.yml >/dev/null 2>&1 || true
+"${ax[@]}" ansible-galaxy collection install -r ansible/collections/requirements.yml >/dev/null 2>&1 || true
 
 # The opnsense-* playbooks target the `opnsense` inventory host (connection: local);
 # roles live in ansible/roles, config in ansible/group_vars (auto-loaded).
-exec devbox run -- ansible-playbook "$@" -e ansible_python_interpreter="$PYBIN"
+exec "${ax[@]}" ansible-playbook "$@" -e ansible_python_interpreter="$PYBIN"

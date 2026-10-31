@@ -130,8 +130,8 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # Where a tool comes from (FU-305, mgmt-tools.sh): the box's own closure on PATH (yq, kubectl, jq,
 # curl), tofu/talosctl as this checkout's devbox.lock pins them (read as data, mgmt_tree_path below);
-# the jail's devbox shell. devbox itself runs only under check_ansible (opnsense-playbook.sh) — a
-# report-only check, so a bad devbox.lock costs one red belt check, never a wedged gate.
+# the jail's devbox shell. The belt runs no devbox at all: check_ansible hands opnsense-playbook.sh the
+# lock-resolved ansible-core (OPN_ANSIBLE_BIN, FU-305) — the wrapper's devbox path is the jail's.
 # shellcheck source=mgmt-tools.sh
 . "$REPO/mgmt/scripts/mgmt-tools.sh"
 tool() { mgmt_x "$@" 2>&1; }
@@ -642,33 +642,42 @@ _substrate_jq() { mgmt_x jq "$@"; }
 # every recap (ansible_verdict, unchanged): a node/LXC that does not answer reads `unreachable`.
 check_ansible() {
   skip_requested ansible && { skipped ansible requested "SKIP requested"; return; }
-  local out="" rc=0 o r p ran=0 plays=""
+  local out="" rc=0 o r p ran=0 plays="" router=0 rcplays=""
   if [ -f "$REPO/scripts/opnsense-playbook.sh" ] && { [ -n "${OPN_API_KEY:-}" ] || [ -f "$HOME/.claude/homelab-keepass/homelab.kdbx" ]; }; then
-    o="$(bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml --check 2>&1)"; r=$?
-    out+="$o"$'\n'; [ "$rc" = 0 ] && rc=$r; ran=$((ran + 1))
+    router=1
   fi
   # the apply_ansible groups' plays — over the play's own ssh key (PVE_SSH_KEY on the box, the jail's cache else)
   if [ -r "${PVE_SSH_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}" ]; then
     # ssh-connected groups only: a `runner:` row (the router) needs its interpreter + target and is the
-    # opnsense-unbound check above plus the applier's own preflight
+    # opnsense-unbound check below plus the applier's own preflight
     plays="$(mgmt_x yq -r '.apply_ansible // {} | to_entries[] | select(.value.runner == null) | .value.plays[]' policy/mgmt/plan-input.yaml 2>/dev/null)" || plays=""
   fi
   # ansible-core as this checkout's devbox.lock pins it, read as data on the box (mgmt_lock_tool — the
-  # applier's resolution, mgmt-ansible.sh); the jail's devbox shell has it on PATH
-  local apb=ansible-playbook
-  if [ -n "$plays" ] && [ -n "${MGMT_BOX:-}" ]; then
-    apb="$(mgmt_lock_tool "$REPO" ansible ansible-playbook 'python3\.[0-9]+-ansible-core' 2>&1)" \
-      && apb="$apb/bin/ansible-playbook" || { out+="ERROR! ansible-core unresolvable from devbox.lock: $apb"$'\n'; rc=1; plays=""; ran=$((ran + 1)); }
+  # applier's resolution, mgmt-ansible.sh) — for BOTH legs: the router's opnsense-playbook.sh takes the
+  # resolved bin dir as OPN_ANSIBLE_BIN and never runs devbox (FU-305: a python bump's venv prompt red
+  # this leg on every tick). The jail's devbox shell has it on PATH; the wrapper's devbox path stays its own.
+  local apb=ansible-playbook abin=""
+  if [ -n "${MGMT_BOX:-}" ] && { [ -n "$plays" ] || [ "$router" = 1 ]; }; then
+    if abin="$(mgmt_lock_tool "$REPO" ansible ansible-playbook 'python3\.[0-9]+-ansible-core' 2>&1)"; then
+      apb="$abin/bin/ansible-playbook"
+    else
+      out+="ERROR! ansible-core unresolvable from devbox.lock: $abin"$'\n'; rc=1; plays=""; router=0; ran=$((ran + 1))
+    fi
+  fi
+  if [ "$router" = 1 ]; then
+    o="$(if [ -n "$abin" ]; then export OPN_ANSIBLE_BIN="$abin/bin"; fi
+         bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml --check 2>&1)"; r=$?
+    out+="$o"$'\n'; [ "$rc" = 0 ] && rc=$r; [ "$r" = 0 ] || rcplays+=" ansible/opnsense-unbound.yml=$r"; ran=$((ran + 1))
   fi
   while IFS= read -r p; do
     [ -n "$p" ] && [ -f "$REPO/$p" ] || continue
     # `timeout` execs a BINARY: mgmt_x (a shell function) goes FIRST and resolves `timeout` + the play
     # runner — `timeout 900 mgmt_x …` exited 127 on every play and red the belt (2026-10-26 22:02Z on)
     o="$(cd "$REPO" && ANSIBLE_CONFIG="$REPO/ansible/ansible.cfg" ANSIBLE_NOCOLOR=1 mgmt_x timeout 900 "$apb" "$p" --check 2>&1)"; r=$?
-    out+="$o"$'\n'; [ "$rc" = 0 ] && rc=$r; ran=$((ran + 1))
+    out+="$o"$'\n'; [ "$rc" = 0 ] && rc=$r; [ "$r" = 0 ] || rcplays+=" $p=$r"; ran=$((ran + 1))
   done <<<"$plays"
   [ "$ran" -gt 0 ] || { skipped ansible no-input "no OPNsense credential and no ansible SSH key reachable"; return; }
-  ansible_verdict "$rc" "$out"
+  ansible_verdict "$rc" "$out" "${rcplays# }"
 }
 
 # The --check run's verdict, PER HOST from the recap — split out so mgmt-probe-test.sh can drive it
@@ -691,7 +700,7 @@ check_ansible() {
 # that is an open design question in the PR that added this, not something to infer here.
 ANSIBLE_CONNECT_RE='Got timeout calling|Unable to connect|Connection refused|No route to host|timed out|Name or service not known'
 ansible_verdict() {
-  local rc="$1" clean recap host line counts ch un fl
+  local rc="$1" rcplays="${3:-}" clean recap host line counts ch un fl
   local unreach=() errored=() drifted=() answered=0
   clean="$(printf '%s' "$2" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g')"
   recap="$(printf '%s\n' "$clean" | awk '/PLAY RECAP/{f=1; next} f && / : ok=/')"
@@ -735,7 +744,7 @@ ansible_verdict() {
   elif [ ${#unreach[@]} -gt 0 ]; then
     failed ansible unreachable "${unreach[*]} did not answer (connect error/timeout); $answered host(s) checked clean"
   elif [ "$rc" -ne 0 ]; then
-    failed ansible failed "--check exited $rc with a clean recap: $(printf '%s' "$clean" | tail -2 | tr '\n' ' ')"
+    failed ansible failed "--check exited $rc with a clean recap${rcplays:+ (rc≠0: $rcplays)}: $(printf '%s' "$clean" | tail -2 | tr '\n' ' ')"
   else
     passed ansible "--check: plumbing ok on $answered host(s), recap changed=0"
   fi
@@ -979,9 +988,9 @@ case "$MODE" in
     check_creds
     check_substrate
     check_kps_crds
-    # devbox on the box (nixpkgs' 0.17.2, check_ansible's opnsense-playbook.sh) rewrites devbox.lock's
-    # plugin_version fields that the jail's 0.17.5 wrote — package pins unchanged, but the checkout
-    # is left dirty (2026-09-13). Put it back so the tree stays "what git says".
+    # devbox on the box (nixpkgs' 0.17.2) rewrote devbox.lock's plugin_version fields when the belt
+    # still ran it (2026-09-13; gone since FU-305's OPN_ANSIBLE_BIN) — kept as a cheap guard so the
+    # tree stays "what git says" whatever an operator's shell did to it.
     git -C "$REPO" checkout -q -- devbox.lock 2>/dev/null || true
     publish
     log "belt: $PASS pass, $FAIL fail, $SKIPPED skip"
