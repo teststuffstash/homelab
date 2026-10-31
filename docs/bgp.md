@@ -65,7 +65,8 @@ at most two nodes (below), every peer-set change — any worker reboot, every st
 rollout — would reset most HAProxy backend connections where today only the single ingress node's
 own reboot does, and the one bulk workload (registry pulls) is disk-bound at 8–10 MB/s (FU-280),
 so there is no throughput to win. The Tunables-as-code role change in #2534 returns when something
-needs a tunable. Ingress is one worker (hp-01 since #2533's apply, 2026-10-13 16:37Z).
+needs a tunable. Ingress is one worker — hp-01 after #2533's apply (2026-10-13 16:37Z), wk-04
+by FRR weight since (§Which node a VIP's traffic enters).
 
 `net.route.multipath=1` (runtime-writable; OPNsense System > Tunables, `core/tunables` API) would
 let the kernel hold every nexthop, after a real FRR stop + start so zebra re-writes the routes it
@@ -131,7 +132,7 @@ The pair shape instead:
   `ansible/router-nodes/inventory.yml`.
 - **The alerts are per peer** (done 2026-10-01): with two peers a "sum of sessions = 0" would
   stay silent while one router has none — and if that router is MASTER every VIP is down.
-- **Standing nodes are inert until the window** (router-move §The standing nodes): neighbours
-  configured but disabled, and the hypervisor kill switch stops a node that sends a BGP SYN or
-  SYN-ACK. Peering the standing nodes ahead of the window therefore needs that rule settled
-  first — FU-297.
+- **Standing nodes were inert until their window** (router-move §The standing nodes; pre-cutover):
+  neighbours configured but disabled, and the hypervisor kill switch stopped a node that sent a
+  BGP SYN or SYN-ACK. Overtaken: the pair is complete (2026-10-09), and every peering node holds
+  an established session to both `.70` and `.71` (10 nodes × 2 peers, read 2026-10-31).
