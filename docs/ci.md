@@ -28,7 +28,7 @@ GitHub-outage fallback, not a live read path, so its single mostly-idle runner d
 + tool versions live in the repo's `devbox.json` (+ `scripts/`), not in CI YAML. Consequences:
 
 - The same gate runs **locally and in CI**, identically (`devbox run ci` in the STACK repos —
-  homelab itself is the deliberate exception: no aggregate `ci` task, ~45 named `devbox run`
+  homelab itself is the deliberate exception: no aggregate `ci` task, ~55 named `devbox run`
   tasks run by `.github/workflows/ci.yaml`, which also carries inline blocks (the ADR-103
   ratchet, `tofu fmt`, the ghcr pre-warm, the changed-paths skip map) that gate the workflow
   rather than the code. Since 2026-08-31 (#518) the heavy suites (`prometheus-rules-lint`,
