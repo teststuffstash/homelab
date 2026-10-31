@@ -1023,11 +1023,11 @@ waits 30 s for headers). The cache fill is tied to the request that started it, 
 sat wedged on one playwright layer for days (homelab#1985 S9 sweep). Mechanism + evidence: the
 alert's comment block in `argocd/resources/registry-cache/prometheusrule.yaml`.
 
-**The mcr mirror heals this itself** since homelab#1985's fix: its `blob-warmer` sidecar
+**Every pull-through mirror heals this itself** (mcr since homelab#1985's fix, ghcr + docker-io
+since FU-316): its `blob-warmer` sidecar
 (`argocd/resources/registry-cache/blob-warmer.yaml`) finishes every not-stored blob of an image
 manifest cached in the last 72h, within a minute — check its `warmed`/`FAILED` lines in Loki
-(`{namespace="registry-cache", container="blob-warmer"}`). On ghcr/docker-io, or if the warmer
-keeps failing:
+(`{namespace="registry-cache", container="blob-warmer"}`). If the warmer keeps failing:
 
 **Remedy — fetch it once with no client timeout** (a bounce does NOT help: nothing is cached):
 
