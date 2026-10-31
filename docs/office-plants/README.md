@@ -491,8 +491,8 @@ in-RAM soil state inside `do_water_cycle`).
    ```
    In HA: **Profile → Security → Long-lived access tokens** → create one named `prometheus`.
 3. **Stack** — store the token as the wallet entry `ha-prometheus-token` (the Grafana admin password
-   is `grafana-admin-password`; both reach the management box as `TF_VAR_*` via
-   `mgmt/scripts/mgmt-provision-secrets.sh --push`), then apply the main tofu root on the box:
+   is `grafana-admin-password`; both reach the box as `TF_VAR_*` via
+   `mgmt/scripts/mgmt-provision-secrets.sh --push`), then apply the main tofu root on the [management box](../management-box.md):
    ```bash
    devbox run mgmt-tf -- plan            # prints a plan id (runbook: the mgmt-tf recipe)
    devbox run mgmt-tf -- apply <plan-id> # adds ns monitoring + the scrape job + dashboard CM (the stack itself, VIPs and alerts sync from ArgoCD — argocd/platform/kube-prometheus-stack.yaml)
