@@ -1,9 +1,18 @@
-# Gateway API CRDs (experimental channel, v1.4.1) — the prerequisite for Cilium's Gateway API
+# Gateway API CRDs (experimental channel, v1.6.3) — the prerequisite for Cilium's Gateway API
 # support (ADR-092). Cilium 1.19 ships the gateway CONTROLLER but NOT the CRDs; they must be
 # installed separately and exist BEFORE `gatewayAPI.enabled=true` is flipped in tofu/cilium.tf.
 # Installing them here (GitOps) keeps them in the boot-from-git path and version-pinned.
 #
-# v1.4.1 **experimental** channel — a superset of standard (adds TLSRoute/TCPRoute/UDPRoute). We do
+# v1.6.x is a HARD precondition of Cilium 1.20 (it moves in ONE PR with `cilium_version` — a version
+# set): 1.20's operator REQUIRES TLSRoute, ReferenceGrant and BackendTLSPolicy at `v1` (cilium
+# operator/pkg/gateway-api/helpers RequiredGVKs @v1.20.4; upgrade notes "Gateway API must be v1.6.1
+# or later") — v1.4.1 serves TLSRoute only v1alpha2/3 and ReferenceGrant only v1beta1, so the gateway
+# controller would go Degraded. v1.6.3 still SERVES every version 1.19.1 reads (TLSRoute v1alpha2,
+# ReferenceGrant v1beta1) and every stored version, so it is safe to land first. It drops
+# `xlistenersets` (→ `listenersets.gateway.networking.k8s.io`) — prune deletes that CRD; 0 objects
+# live 2026-10-31. Runbook §Class-6 bump: Cilium.
+#
+# **experimental** channel — a superset of standard (adds TLSRoute/TCPRoute/UDPRoute). We do
 # not USE TLS passthrough (TLS terminates at OPNsense HAProxy), but Cilium 1.19's gateway controller
 # *watches* `TLSRoute` unconditionally and errors ("no kind registered for v1alpha2.TLSRouteList",
 # breaking Gateway↔backend reconciliation) if that CRD is absent — verified live 2026-07-15. So the
@@ -23,7 +32,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/kubernetes-sigs/gateway-api
-    targetRevision: v1.4.1
+    targetRevision: v1.6.3
     path: config/crd/experimental
   destination:
     server: https://kubernetes.default.svc
