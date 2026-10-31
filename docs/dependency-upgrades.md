@@ -235,7 +235,8 @@ the table alerts instead of rotting: `github_dependency_coverage_gap_rows` (rows
 `github_dependency_coverage_last_proven_timestamp` (→ `DependencyClassProofStale`) and
 `github_renovate_last_pr_timestamp` (→ `RenovateSilent`, the #502 acceptance-3 liveness gauge).
 Class 11's members live in three other repos and are not extractable here — §Version SETS below
-carries them by hand until #2014 gives them one source.
+carries the cross-repo half by hand (#2014, closed: claude-code + kubectl/kind now have one
+source, `version-sets/devbox.lock`).
 
 ### Last proven end to end — per LANE, org-wide (S9 #1991; hand-kept)
 
@@ -268,8 +269,8 @@ did. Rows whose evidence is a homelab merge live in the generated column and are
 
 Some versions are used in several places and a bump in one place alone is worse than no bump
 ("doing things prematurely is also bad"). The sets, their sources today, and whether they are in
-sync. A SET is a cross-repo relation, so this list stays whole and hand-kept until #2014 gives each
-set one source: the generated register above carries each in-repo member's pin and proof as its
+sync. A SET is a cross-repo relation, so this list stays whole and hand-kept (#2014, closed, gave the
+claude-code and kubectl/kind sets one source — `version-sets/devbox.lock`; the rest have none): the generated register above carries each in-repo member's pin and proof as its
 own row (kubectl in `devbox.lock`, Kubernetes in `tofu/variables.tf`, `DEVBOX_VERSION`/`NIX_VERSION`
 in the arc-runner image, the `python` images), and knows nothing of the cross-repo members (the
 three claude-code installs, the coordinator image's `KUBECTL_VERSION` ARG, kind in the e2e repos,
@@ -284,7 +285,7 @@ each service's python set — class 11). Whether a set is in sync is a fact only
 | **kube-prometheus-stack chart + prometheus-operator CRDs** | chart `targetRevision` in `argocd/platform/kube-prometheus-stack.yaml` (Renovate `argocd` manager, `skipCrds: true`); the ten `monitoring.coreos.com` CRDs installed ONCE by Helm (2026-06-02) and owned by nobody since — upstream ships them as the `prometheus-operator-crds` chart, one major per operator minor | ✅ one Renovate group (`kube-prometheus-stack`) + the CRD Application since #2348 (2026-10-07, ADR-151); the box belt `check_kps_crds` fails on skew. Agreed by accident before (both v0.91.0: every 86.x release shipped the same operator) — G16 |
 | **devbox / nix** | `DEVBOX_VERSION` / `NIX_VERSION` in the arc-runner image (regex-managed); devbox in the jail (`DEVBOX_USE_VERSION`, FU-240); the host `/nix` | ⚠ FU-240's pin is not the runner's |
 | **python (per service)** | image `FROM python:X.Y-slim` (Renovate `dockerfile`, `deps-review`); `devbox.json` `python@X.Y` (hand — `devbox update` re-resolves `@latest` only, a pinned major.minor never moves); `pyproject.toml` `requires-python`, ruff `target-version`, mypy `python_version` (hand) | ❌ openrouter-operator#80 (2026-09-27): image 3.11→3.14, everything else 3.11 — CI ran the old runtime, the review approved "no adaptation"; the lens now names the set (`agents/lenses/migration.md` §Version SETS) |
-| **platform component ↔ stack test pins** (ADR-158) | prod: Grafana = the one the kps chart deploys (`argocd/platform/kube-prometheus-stack.yaml`), Postgres = the CNPG cluster major; stacks: the image pinned in each stack's kind/e2e test manifests. **A WINDOW, not equality:** prod ≤ pin ≤ prod + 1 minor (the product's own minor; patches free; never a major ahead). **Proposes:** each stack's Renovate over its test manifests (sleep-tracking#183's shape), so stacks bump FIRST and fix dashboards/queries ahead of the platform. **Gates:** the migration lens (§Platform compatibility). **The kps / CNPG lane never waits** for a stack — a stack left behind prod is a request-changes on its next pin PR, not a platform hold | ⚠ prod kps 92.11.0 = Grafana 13.2.4: sleep-tracking 13.2.5 in the window (its Renovate proposes 13.3.0, +1 minor — in the window); oracle-fleet e2e Grafana 11.3.0 and `postgres:16-alpine` fixture behind prod, no Renovate over `scripts/e2e/` (2026-10-31) |
+| **platform component ↔ stack test pins** (ADR-158) | prod: Grafana = the one the kps chart deploys (`argocd/platform/kube-prometheus-stack.yaml`), Postgres = the CNPG cluster major; stacks: the image pinned in each stack's kind/e2e test manifests. **A WINDOW, not equality:** prod ≤ pin ≤ prod + 1 minor (the product's own minor; patches free; never a major ahead). **Proposes:** each stack's Renovate over its test manifests (sleep-tracking#183's shape), so stacks bump FIRST and fix dashboards/queries ahead of the platform. **Gates:** the migration lens (§Platform compatibility). **The kps / CNPG lane never waits** for a stack — a stack left behind prod is a request-changes on its next pin PR, not a platform hold | ⚠ prod kps 92.16.1 = Grafana 13.3.0 (live 2026-10-31, after #3065): sleep-tracking 13.2.5 now BEHIND prod (its Renovate's 13.3.0 proposal lands it in the window); oracle-fleet e2e Grafana 11.3.0 and `postgres:16-alpine` fixture behind prod, no Renovate over `scripts/e2e/` (2026-10-31) |
 
 **The model to match:** `devbox-update.yaml` — one weekly job re-resolves every repo together, one PR
 per repo, majors to the human lane. Anything that floats on its own cron (row 11) is a tracked gap,
@@ -304,9 +305,11 @@ Rows 4–6 above lump five state roots that need different rulings:
 
 Two consequences the table above glosses over:
 
-- **Any automated `tofu plan` has a hard prerequisite: FU-012.** Every root's state is local and
-  gitignored **in the jail** — no in-cluster or CI process can plan *at all* until state moves to a
-  remote backend (or to wherever the automation runs).
+- **Any automated `tofu plan` has a hard prerequisite: FU-012** — state off the jail. Met for
+  the box since 2026-09-13: `main`'s state + creds live on the management box and the migrated
+  roots' state on Garage, so the box plans every PR and master move (`management-sentinel`, the
+  belt — [`management-box.md`](management-box.md) §MB2/§MB3); FU-012's open half is the box-scoped
+  credential swap.
 - **The main root's lump is reducible: migrate its helm releases to ArgoCD.** Moving
   kube-prometheus-stack, metrics-server, forgejo(+runner) and garage from `helm_release` to
   `argocd/platform/` Applications converts them class 4 → class 1: the path→deploy edge exists
@@ -372,8 +375,9 @@ classes** — stages 4 and 5 are where the gaps are.
   ARMED `major` (a GRADUATED GitHub Actions dependency, ADR-141 as amended; **a devbox lock major,
   class 7, since 2026-10-07**) is the reflex's: the reviewer's lens approves, CI + the FU-1990 revert
   chain are the gate. Un-graduated Actions majors carry no `major` at all — they ride the grouped
-  `automerge` lane. Terraform providers are neither: `major/awaiting-human` on any type, the human
-  plan is the gate (row 5).
+  `automerge` lane. Terraform providers are neither: patch/minor merge mechanically on the box's
+  `+0` plan, and majors are ARMED since 2026-10-04 behind the `tofu-provider-revert` chain — the
+  lens's APPROVED completes the merge (row 5).
 - **Class 7 (devbox lock) majors ARM — operator ruling 2026-10-07, the ADR-141 rule applied to the
   class (no ADR amendment: the lane detail lives here).** Two lens rides on the same major (#2260,
   #2362 — argo-workflows CLI 3.6 → 4.0) found only N/A and the human merge added nothing to a green
@@ -401,16 +405,18 @@ classes** — stages 4 and 5 are where the gaps are.
 ### 3. Test / lint
 
 What `ci` gates on a homelab PR today: the authoritative list is `.github/workflows/ci.yaml`
-(~28 `devbox run` steps + 3 inline blocks — highlights: `argocd-validate-pins`, `agents-registration-lint`, `merge-path-lint`,
+(64 steps, ~58 distinct `devbox run` tasks — highlights: `argocd-validate-pins`, `agents-registration-lint`, `merge-path-lint`,
 `github-apps-lint`, `router-self-test`, `manifest-lint` (kubeconform, since 2026-08-04),
 `prometheus-rules-lint` (promtool, since 2026-08-11 — FU-158), the ADR-103 replay ratchet,
-`tofu fmt -check`). ⚠ homelab has NO `devbox run ci` aggregate task — the workflow is the list.
+`tofu fmt -check`). ⚠ homelab has NO `devbox run ci` aggregate task — the workflow is the list; the local
+pre-flight is `devbox run diff-ci` (the gates the diff selects, `scripts/diff-ci.sh`).
 
 **What is missing for a dependency bump specifically:**
 
-- **No `tofu validate` / `tofu plan` in CI** for classes 4–6 (`fmt -check` IS in ci since
-  2026-08-04; `validate` stays out — the FU-130 WAN class). A provider bump can merge with
-  nobody having rendered it.
+- **No `tofu validate` / `tofu plan` in `ci`** for classes 4–6 (`fmt -check` IS in ci since
+  2026-08-04; `validate` stays out — the FU-130 WAN class). The plan comes from outside `ci`
+  instead: the box's `management-sentinel` (a required check) plans every PR head touching a
+  root it holds (ADR-131); the roots it does not plan are excluded from the provider manager.
 - ~~No kubeconform for class 2~~ — `manifest-lint` (kubeconform `-strict`) is a required check
   since 2026-08-04; the residue is its CRD skip-set (the G04 sentinel's problem).
 - **No policy-as-code** for the platform invariants above.
