@@ -41,6 +41,13 @@ handoff gate matches them literally):
      chart, the **appVersion delta** (the section below), stated before anything else.
    - **Substrate (Talos, Kubernetes, Cilium, Longhorn, Garage):** notes + known issues + the
      management box's canary; these never self-merge.
+   - **A stack's test pin of a platform component** (Grafana in a kind/e2e manifest vs the
+     Grafana the kps chart deploys; a Postgres fixture image vs the CNPG major; ADR-158): read
+     prod's version from `/work/homelab`, then judge the window — "minor" is whatever the
+     product's own versioning calls one, patches are free. prod ≤ pin ≤ prod + 1 minor →
+     `--approve`. Pin behind prod → `--request-changes` asking for the bump to prod or within
+     the window. More than one minor ahead, or any major ahead → `--request-changes` naming the
+     window. Never hold the platform's own bump (kps, CNPG) for a stack still migrating.
 4. **`## Evidence`** — what you ran and what it showed: the CI run at head, the grep results, the
    upstream URLs, the issue numbers. A claim without a line here is an inference, and you say so.
 

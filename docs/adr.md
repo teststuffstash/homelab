@@ -2958,3 +2958,21 @@ leaves exactly one path.
 **Consequences:** a repo without `pr-gate` cannot open worker PRs (refusal, by design), so every
 recipe repo gains the script before the launcher change lands; `retry:` blocks leave the recipes;
 oracle-fleet's own `scripts/pr-open.sh` retires and its checker moves behind the hook.
+
+### ADR-158 — Stack test pins of platform components run within one minor AHEAD of prod, never behind (2026-10-31)
+**Status:** Accepted (operator, 2026-10-31: stacks bump first and fix their dashboards/logic before
+the platform bump; the platform bump never waits for a stack).
+**Decision:** a stack's kind/e2e pin of a platform component (Grafana, Postgres fixtures, …) sits in
+the window prod ≤ pin ≤ prod + 1 minor, in each product's own versioning; patches free, never a
+major ahead. Stacks' Renovate proposes, the migration lens gates, the platform lane never holds.
+Mechanism: [dependency-upgrades.md §Version SETS](dependency-upgrades.md#version-sets--what-must-move-together-operator-ruling-2026-09-27-owner-2014)
+(the platform-component row); stack side: [kind-ci.md rule 9](patterns/kind-ci.md#platform-component-pins).
+**Considered:** test MUST equal prod (sleep-tracking#184 — rejected: #211 sat blocked 9 days behind
+kps's cooldown, and the rule had already slipped unnoticed at 13.2.5); unbounded ahead (rejected:
+the #176 failure mirrored — tests bless panel options prod lacks); 2–3 minors (deferred: start at 1,
+relax on evidence).
+**Why:** a window ahead lets the stack migrate before prod moves without coupling the platform's
+upgrade cadence to any stack; one minor bounds how much untested-in-prod surface a test can bless.
+**Consequences:** sleep-tracking's equality comment is replaced by a pointer to the rule;
+oracle-fleet's e2e Grafana/Postgres pins (behind prod) are queued for the bump plus Renovate over
+its test manifests.
