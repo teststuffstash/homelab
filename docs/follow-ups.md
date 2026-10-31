@@ -166,13 +166,6 @@ six OVERSIZE items pointer-ized into
       (`tofu/templates/ci-runner-cloud-init.yaml.tftpl:109`, takes effect at the next runner replace).
       (c) `tests/kind-kargo/` is the first platform-component gate on the VM runner (ROADMAP P1 / ADR-082 cover
       stack gates only) — generalise when a second component needs one. Prod install: the PR after #2798.
-- [ ] **FU-316** — **ghcr + docker-io mirrors lack the cold-blob `blob-warmer` mcr got (#2892).** A
-      pull-through fill dies with the client request that started it, so a big new layer can stay uncached
-      for days (mcr `5fd7f2ae…` 10-19→10-24, 22 blob 500s, red sleep-tracking + circles CI; detector
-      `RegistryMirrorColdBlobAbandoned`, #2888). ghcr + docker-io show the same class (2 episodes each in 10 d).
-      2026-10-31: mcr soak passed (no `RegistryMirrorColdBlobAbandoned` in 7 d); ghcr fired 10-28 17:20Z → 10-30
-      19:00Z — the warmer PR for ghcr + docker-io is in flight (seat subagent, this session). **Next:** land it
-      (the same sidecar block in `mirror-ghcr.yaml` + `mirror-docker-io.yaml`). Relates FU-310.
 - [ ] **FU-299** — **Backups: Longhorn target LIVE + drilled; every CNPG Cluster backed up by default (ADR-147) + drilled.**
       Longhorn → [`longhorn-backup.md`](longhorn-backup.md); Postgres → [`postgres.md`](postgres.md) §Backups (plugin,
       admission-wired, daily + `pg-backup-now`; infisical-pg restore 85 s, 704/704 tables). Rollout incident:
@@ -511,12 +504,12 @@ the block needs pruning, not more headings.
       10-07 #2362 → every box `devbox run` exit 1, no sentinel verdict. Class fix #2457 (no gate loop runs devbox;
       iac-sentinel runs the BAKED lock) — docs/management-box.md §Two pins. Caveat: devbox logs `--option access-tokens
       github.com=<mgmt PAT>` into the unit journal on an internal error (root-only) — redact before shipping box logs.
-      2026-10-31 resight: #2919 (python 3.14.7→3.14.8) left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails without a TTY → the belt's OPNsense leg
-      (`scripts/opnsense-playbook.sh`, still `devbox run`) exits 1 before any play → `MgmtBeltCheckFailing{check=ansible}`
-      since 10-28 11:19Z, the Unbound drift check silent meanwhile; #2457 missed this leg. Instance un-wedged 10-31
-      (venv moved aside). **Next:** route the OPNsense leg off `devbox run` — ansible-playbook / keepassxc-cli / the
-      httpx interpreter via `mgmt_lock_tool` like the matchbox plays, + a `mgmt-tools-test.sh` case; then
-      `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z).
+      2026-10-31 resight: #2919 left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails w/o a TTY → the belt's
+      OPNsense leg (still `devbox run`) exit 1 → `MgmtBeltCheckFailing{check=ansible}` since 10-28 11:19Z; #2457 missed
+      it. Un-wedged 10-31 (venv moved aside); class fix #3052 (`5df5ea7f`: the belt resolves ansible from `devbox.lock`,
+      `OPN_ANSIBLE_BIN`; first box tick on it 14:17Z PASS, 0 devbox calls). **Next:** (1) drop `pkgs.devbox` + its stale
+      comment from the `mgmt-belt` unit `path` with the next `mgmt/nixos` change; (2) the ORIGINAL deliverable, still
+      unbuilt: `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z); then archive.
 - [ ] **FU-290** — **Scans + sessions + reflexes exhaust the shared homelab-agents installation pools (142724430)
       under PR churn.** First 09-25 (Renovate wave); detector blindness fixed (#1979 graphql, #2442 core). Drains
       since: 10-04/10-06/10-07 (sleep-tracking#121 storm, oracle-fleet#798 loop — fixed + belted #2204/#2366),
