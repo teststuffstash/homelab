@@ -339,7 +339,8 @@ migrate through).
 > (both legs). The cause was settled the same day and the proxy fixed (§The `x-opencode-session`
 > header below): the proxy was ERASING the harness's own identity, and the FU-213 header was a
 > synthetic replacement for it. The knob stays at `"1"` until a live ride proves the new headers
-> on the wire — that last step is FU-251's remaining action.
+> on the wire — that last step is FU-251's remaining action. *(Overtaken the same evening: proved
+> on the wire, knob back to `"0"` — §Proved on the wire below.)*
 
 ### The `x-opencode-session` header (the park's cause, 2026-09-04 — settled 2026-09-17)
 
@@ -463,6 +464,8 @@ and the fix is still the right one; the defect was granularity, not rejection.
 direct lane, cluster-consumed): the header question the park existed for was answered on the wire,
 and the subscription's 7d window sat at 0.95, so the reviewer's sanctioned Go failover was the only
 path a review could land on. Live-verified `OPENCODE_RAIL_DISABLED=0` on the running pod.
+Since 2026-09-18 the knob reads `"zen"` (`e92d9410`, operator): the Zen leg is parked as
+unmetered, the Go leg stays live.
 
 **What remains (FU-251)** are the seams recorded, not fixed: a claude-code older than v2.1.86
 sends the session id only in `metadata.user_id` (no body parse), a client that identifies nothing
@@ -512,9 +515,9 @@ What stands here is the doctrine the probe produced:
 
 `scripts/claude-model-shim.py` (local rail split: route by body model id, credential per rail,
 oauth never crosses to Go — self-tested + live-proven) · `scripts/claude-go.sh` (claude-or
-pattern; slot map from gitignored `.opencode-go.env`, operator-set 2026-08-17:
-haiku→deepseek-v4-flash, sonnet→kimi-k3, opus→qwen3.8-max, subagent default
-deepseek-v4-flash; main model — fable — stays subscription; `CLAUDE_GO_ALL=1` for pure-Go.
+pattern; slot map from gitignored `.opencode-go.env` — the file is the current map; the
+operator's 2026-08-17 set was haiku→deepseek-v4-flash, sonnet→kimi-k3, opus→qwen3.8-max, subagent
+default deepseek-v4-flash, and the sonnet/opus slots have moved since; main model — fable — stays subscription; `CLAUDE_GO_ALL=1` for pure-Go.
 Takes effect at the next `claude-go` launch, which also picks up the chunk-G gometer —
 jail Go burn self-meters from there) · claude-jail alias `homelab-go` (upload port 8012). The shim is
 deliberately the M11 rail-split shape so lessons transfer to the proxy.
