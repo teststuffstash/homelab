@@ -134,7 +134,8 @@ if [ "$out" = "rc=0 same=y" ]; then ok "tree-path in the jail: a no-op (devbox s
 JAIL_SIDE=" mgmt-state-pull.sh mgmt-provision-secrets.sh mgmt-usb.sh mgmt-human-plan.sh "
 hits=""
 for f in "$REPO"/mgmt/scripts/mgmt-*.sh "$REPO/scripts/maintenance-window.sh" "$REPO/scripts/controlplane-upgrade.sh" "$REPO/scripts/node-maintenance.sh" \
-         "$REPO/scripts/helm-release-evidence.sh" "$REPO/scripts/pg-backup.sh" "$REPO/agents/seat-window.sh"; do
+         "$REPO/scripts/helm-release-evidence.sh" "$REPO/scripts/pg-backup.sh" "$REPO/agents/seat-window.sh" \
+         "$REPO/scripts/opnsense-playbook.sh"; do   # the belt's router leg (its devbox lines: the jail's, marked)
   b="$(basename "$f")"
   case "$b" in *-test.sh) continue ;; esac
   case "$JAIL_SIDE" in *" $b "*) continue ;; esac

@@ -107,6 +107,38 @@ n=$((n+1)); if [ "$(cat "$T/loop.res")" = "ansible pass ok" ] && [ "$(grep -c '^
   echo "ok   check_ansible runs every apply_ansible play through the resolved store path (box)"; else
   echo "FAIL check_ansible loop (box): $(cat "$T/loop.res") calls=$(cat "$STUB_CALLS")"; fails=$((fails+1)); fi
 
+# 5d. the ROUTER leg on the box (FU-305): opnsense-playbook.sh gets the lock-resolved ansible-core as
+#     OPN_ANSIBLE_BIN and must never run devbox — a POISONED devbox (the python-bump venv prompt, exit 1)
+#     first on PATH, a stub `nix` for the controller-env build, the pair pre-set as the unit's env does.
+PB="$T/poison"; mkdir -p "$PB/bin" "$T/py/bin"; export DEVBOX_CALLS="$T/devbox.calls"; : >"$DEVBOX_CALLS"
+printf '%s\n' '#!/bin/sh' 'echo "devbox $*" >>"$DEVBOX_CALLS"' 'echo "Virtual environment … doesn'"'"'t use Devbox Python. Do you want to overwrite it? (y/n)" >&2' 'exit 1' >"$PB/bin/devbox"
+printf '%s\n' '#!/bin/sh' "echo $T/py" >"$PB/bin/nix"
+printf '%s\n' '#!/bin/sh' 'echo "galaxy $*" >>"$STUB_CALLS"' >"$SB/bin/ansible-galaxy"
+chmod +x "$PB/bin/devbox" "$PB/bin/nix" "$SB/bin/ansible-galaxy"
+: >"$STUB_CALLS"; reset
+( export HOME="$T/home" PVE_SSH_KEY="$T/no-key" MGMT_BOX=1 OPN_API_KEY=k OPN_API_SECRET=s PATH="$PB/bin:$PATH"
+  mgmt_lock_tool() { echo "$SB"; }
+  check_ansible >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/loop.res" )
+n=$((n+1)); if [ "$(cat "$T/loop.res")" = "ansible pass ok" ] \
+   && grep -qx "stub ansible/opnsense-unbound.yml --check -e ansible_python_interpreter=$T/py/bin/python3" "$STUB_CALLS" \
+   && grep -q '^galaxy collection install' "$STUB_CALLS" && [ ! -s "$DEVBOX_CALLS" ]; then
+  echo "ok   check_ansible's router leg on the box runs the lock-resolved ansible-playbook, devbox never"; else
+  echo "FAIL router leg (box): $(cat "$T/loop.res") calls=$(cat "$STUB_CALLS") devbox=$(cat "$DEVBOX_CALLS")"; fails=$((fails+1)); fi
+# …and the jail keeps its devbox path (OPN_ANSIBLE_BIN unset → `devbox run -- ansible-playbook`)
+: >"$DEVBOX_CALLS"; reset
+( export HOME="$T/home" PVE_SSH_KEY="$T/no-key" OPN_API_KEY=k OPN_API_SECRET=s PATH="$PB/bin:$PATH"; unset MGMT_BOX
+  check_ansible >/dev/null 2>&1 )
+n=$((n+1)); if grep -q '^devbox run -- ansible-playbook ansible/opnsense-unbound.yml --check' "$DEVBOX_CALLS"; then
+  echo "ok   the jail's router leg still runs through devbox"; else
+  echo "FAIL router leg (jail): devbox=$(cat "$DEVBOX_CALLS")"; fails=$((fails+1)); fi
+
+# 5e. rc≠0 under a clean recap names the play that exited non-zero
+reset; ansible_verdict 2 "PLAY RECAP ***
+$R_NX_OK" "ansible/opnsense-unbound.yml=2" >"$T/rc.out" 2>&1
+check "rc 2 with a clean recap → fail failed" "fail failed"
+n=$((n+1)); if grep -q 'clean recap (rc≠0: ansible/opnsense-unbound.yml=2)' "$T/rc.out"; then echo "ok   the clean-recap failure names the play"; else
+  echo "FAIL clean-recap line: $(cat "$T/rc.out")"; fails=$((fails+1)); fi
+
 # 7. the CRD-owner belt (ADR-151, G16): kps_crds_verdict over captured `get crd` JSON + the image.
 CRDS='{"items":[{"metadata":{"name":"prometheuses.monitoring.coreos.com","annotations":{"operator.prometheus.io/version":"0.91.0"}},"spec":{"group":"monitoring.coreos.com"}},{"metadata":{"name":"servicemonitors.monitoring.coreos.com","annotations":{"operator.prometheus.io/version":"0.91.0"}},"spec":{"group":"monitoring.coreos.com"}},{"metadata":{"name":"workflows.argoproj.io"},"spec":{"group":"argoproj.io"}}]}'
 reset; kps_crds_verdict "$CRDS" "quay.io/prometheus-operator/prometheus-operator:v0.91.0" >/dev/null 2>&1
