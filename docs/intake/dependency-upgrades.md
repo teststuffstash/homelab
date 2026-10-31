@@ -29,4 +29,4 @@
   its class's edge (ArgoCD sync, the box's helm/tofu apply under the upgrade lease — ADR-150/152).
 - **Operator-only**: lane and grouping rules in `renovate-global.json`, an `opentofu` major (the one
   one-way door — state stamp), version-set membership rulings (§Version SETS, owner #2014),
-  anything the stint container (#1985) marks pending.
+  anything the [stint](../glossary.md) container (#1985) marks pending.

@@ -6,7 +6,7 @@
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
 - **Repo** `teststuffstash/homelab`; island root `mgmt/` (`mgmt/nixos/`, `mgmt/scripts/`), plus
-  `argocd/resources/{mgmt-metrics,upgrade-lease-reader,kube-prometheus-stack-lease}/` and the box
+  `argocd/resources/{mgmt-metrics,upgrade-lease-reader,kube-prometheus-stack-lease}/` (the [upgrade lease](../dependency-upgrades.md), ADR-150) and the box
   verbs `scripts/{node,host,runner}-maintenance*`, `scripts/maintenance-window.sh`,
   `scripts/controlplane-upgrade.sh`.
 - **Owning doc**: [`management-box.md`](../management-box.md) — read ONLY the §section the item
@@ -27,6 +27,6 @@
   loop); `argocd/resources/**` by ArgoCD. Belts ride `argocd/resources/mgmt-metrics/` and need a
   promtool fixture ([`agents/jail-seat-card.md`](../../agents/jail-seat-card.md) §Safety).
 - **`seat`, always**: anything the box must APPLY to be proven (a new apply class, a capability
-  ledger row), a declared window or a drain, the box's credentials/state (ADR-129, §Credentials),
+  ledger row), a [declared window](../glossary.md) or a drain, the box's credentials/state (ADR-129, §Credentials),
   hardware (the pilot's replacement), and any sentinel policy widening (`policy/mgmt/**`,
   `codeowner-merge` — ADR-131's input allowlist is a security boundary).
