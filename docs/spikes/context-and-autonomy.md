@@ -22,7 +22,7 @@ that day:
 - **P2** — **BUILT 2026-10-16 (#2606)**: `gateway/` — specs (oracle shape, 14 `GW-*` rows), service, tests, image CI, deploy; live in PARALLEL to the untouched `openrouter-proxy` (operator, 2026-10-15), three rails canaried; the consumer move (begun: the platform session pod rides `AGENT_GATEWAY=sessions`, #2788) + the ladder rows are FU-270's next. The specs reviewer lens (P4(a)'s first half) is LIVE since 2026-10-16 ([ADR-155](../adr.md), [`specs-reviewer.md`](../agents/specs-reviewer.md)).
 - **P3** — in part: ADR-122 (3)'s one parser (`agents/issue_body.py`) is live; the label vocabulary is not one file.
 - **P5** — open as #1224.
-- **P6 — first leg BUILT as a spike 2026-10-27 on the gateway island** ([`island-intake.md`](island-intake.md): brief + selector, two live sittings; wiring + rulings open).
+- **P6 — first leg BUILT as a spike 2026-10-27 on the gateway island** ([`island-intake.md`](island-intake.md): brief + selector, two live sittings; wiring BUILT 2026-10-28 (#3004, FU-320), rulings open).
 - **P4, P6, P7** — proposals, no ruling. P4 (specs reviewer-gated) and P6 (machine admission) each move a gate
   and are ADR-sized; they are taken up when P2/P3 make them buildable.
 
