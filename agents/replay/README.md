@@ -118,7 +118,7 @@ follows fix-density per ADR-103, never big-bang):
    every `world/` file before and after the run and REDS if any moved — hashing rather than
    `git status` so the gate can tell "the run changed a world" from "the author is editing a
    fixture". `--record`/`--rerecord` return before the check: writing worlds is their job. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
-   the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename, and `scout-bench-*`
+   the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename, and `scout-bench/*`
    pins a jq-version float format awaiting its emitter fix (the versions gap below).
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
    `mode: suite` entries (scripts stay put; `entrypoint:` points at them) so "executed replay"
@@ -135,7 +135,7 @@ The homelab#377 fix (`:-null` on every `jq -e 'type == …'` guard over a possib
 plus goal-budget.sh's bash-only runtime guard) ships with NO fixture change, deliberately: the
 divergence it fixes exists only under the coordinator IMAGE's jq 1.6 (empty input exits 0,
 inverting the guard), while this harness runs on devbox's pinned jq ≥ 1.7 — where the fixtures
-pinning those guards (`goal-budget-refusal-unreadable`, `c4c5-infeasible-probe-fail`, …) already
+pinning those guards (`goal-budget-refusal/unreadable`, `c4c5-infeasible/probe-fail`, …) already
 executed the fail-closed branch and keep doing so, byte-identically, after the fix. A fixture
 "for" the fix would assert nothing the suite doesn't already assert. The general gap — the
 harness pins version-sensitive contracts on whichever toolchain serves it, so a green fixture
@@ -622,10 +622,10 @@ Nothing is lost: the index above names every family and the FSM transitions it p
 fixture directory carries its own contract prose, and the essays are in git. What the README
 keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
 
-- **S1 — Source the helper; redefine only its I/O seams.** `harvest-*` (ADR-102, homelab#207)
-  sources `agents/goal-budget.sh` and shadows `gb_ledger` + `gb_cap`; `summary-comment-*`
+- **S1 — Source the helper; redefine only its I/O seams.** `harvest` (ADR-102, homelab#207)
+  sources `agents/goal-budget.sh` and shadows `gb_ledger` + `gb_cap`; `summary-comment`
   (ADR-103, homelab#210) sources `agents/machine-comment.sh` and shadows only `mc_now`;
-  `goal-budget-refusal-*` (homelab#361) and `goal-ancestor-*` (homelab#367) source and redefine
+  `goal-budget-refusal` (homelab#361) and `goal-ancestor` (homelab#367) source and redefine
   **nothing**, because the helper's own seams already reach the PATH-shim. Everything between the
   seams stays real arithmetic over the recorded world. Do it this way round: stubbing the whole
   helper pins the clause's *branching* and nothing else — and the reason the sum lives in a shared
@@ -635,7 +635,7 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   that reaches for I/O with no seam gets one added THERE, never a `REPLAY_*` branch in production
   code — a test-only backdoor in a clause is a clause with an untested path.
 
-- **S2 — Bound the MAGNITUDE through a seam, never the branching.** `argv-payload-*`
+- **S2 — Bound the MAGNITUDE through a seam, never the branching.** `argv-payload/*`
   (homelab#242) shrinks `ag_limit` (the kernel's 128KiB `MAX_ARG_STRLEN`) to 512 bytes rather
   than committing a 128KiB payload to assert arithmetic that does not change with scale. The real
   boundary is verified once against `execve()` (`env true` at 131071 OK / 131072 E2BIG, on the PR
@@ -644,7 +644,7 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   a size check, so "89 % still dispatches" is pinned as behaviour, not trusted to prose.
 
 - **S3 — Record the seam's read as a `CALL` line, and pin the clock loudly.**
-  `fix-debounce-currency-*` (homelab#253) shadows `fc_am_alerts` (the Alertmanager GET, recorded
+  `fix-debounce/currency-*` (homelab#253) shadows `fc_am_alerts` (the Alertmanager GET, recorded
   into `world/alertmanager/alerts.json`) and `fc_now` (the clock the `endsAt > now` split turns
   on). A probe that silently stopped happening is a gate that silently stopped gating, and an
   unrecorded read leaves the stream identical either way — the responder's bridge writes
@@ -654,12 +654,12 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   looking green. (`fixture.yaml`'s subset takes no inline comments — a trailing `# …` rides into
   the value and reaches `jq --argjson` as garbage.)
 
-- **S4 — Shadow the TRANSPORT under the seam you are asserting.** `retro-key-*` (homelab#270)
+- **S4 — Shadow the TRANSPORT under the seam you are asserting.** `retro-key/*` (homelab#270)
   shadows `python3` itself so `estimate_budget.py`'s real pricing, tier choice and `emit_cr`
   rendering all stay under assertion and only the network leaves — prefer this to stubbing the
   mint, since the CR travels `kubectl apply -f -` and the thing worth pinning is the number in it.
   Fields with no fixed value (`expiresAt`) are `scrub:`bed to a shape rather than asserted, the
-  treatment `summary-comment-*` gives its clock. `scout-bench-unkeyed-unbenched` shadows `curl` as
+  treatment `summary-comment` gives its clock. `scout-bench/unkeyed-unbenched` shadows `curl` as
   a **tripwire** — record, then `exit 9` — so a gate that leaked reds instead of reaching the
   network from a cron pod.
 
@@ -670,12 +670,12 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   mechanism, and it is the reverse of the sourced-helper families: seams, bridge, clause.
 
 - **S6 — Split a world's provenance and say which half is which; add a synthetic sibling when the
-  real world conflates two rules.** `scout-variant-batch-rollout` carries digest #234's real ids
-  with reconstructed price/`supported_parameters` rows around them; `scout-bench-mcp-error` pins a
+  real world conflates two rules.** `scout-variant/batch-rollout` carries digest #234's real ids
+  with reconstructed price/`supported_parameters` rows around them; `scout-bench/mcp-error` pins a
   degrade for an upstream envelope this platform has never probed. A fabricated world is
   legitimate for pinning OUR side of a contract; it must not be presented as a recording of
   THEIRS. And because every suppressed id in #234's world was `:batch` AND had a known base, one
-  rule could have been doing all the work — `scout-variant-known-base` separates them on a six-id
+  rule could have been doing all the work — `scout-variant/known-base` separates them on a six-id
   catalog. (The scout family is also the first where the file changed AFTER the family existed:
   legs 3–4 edited the fixtures in the SAME commit as the digest, the ADR-103 move.)
 
@@ -704,8 +704,8 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   streams match byte for byte. When a contract is "X must not be observable", the shape that pins
   it is a pair of runs that differ in X, not a comment saying so.
 
-- **S9 — Don't shadow a seam the harness already stubs.** `dispatch-phase-scan` +
-  `dispatch-phase-session` (FU-160, homelab#319) are a pair split across two files because
+- **S9 — Don't shadow a seam the harness already stubs.** `dispatch-phase/scan` +
+  `dispatch-phase/session` (FU-160, homelab#319) are a pair split across two files because
   `agent_dispatch_phase_seconds` is emitted by two processes and a fixture takes one `source:`.
   The bridge leaves `dp_ring` ALONE so the Workflow read goes through the PATH-shim `kubectl` and
   the `creationTimestamp` → epoch conversion stays real arithmetic over a recorded payload;
@@ -719,25 +719,25 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   that was not newline-TERMINATED and would have 400'd on every real dispatch).
 
 - **S10 — Hold the invocation constant and vary the WORLD; pin the SILENT arms.**
-  `goal-budget-refusal-*` (homelab#361): all five bridges set the same six launcher variables and
+  `goal-budget-refusal` (homelab#361): all five rows set the same six launcher variables and
   differ only in what the goal's timeline already carries — which is where the bug was (the dedup
   read only the LAST comment, so one interleaved `goal-review` re-admitted the refusal). A
   family that varied the CALL would have pinned five call sites and no world. The interesting
   streams are the four that add NO comment (edit-on-move, adoption of a pre-marker refusal, the
   no-op, and the fail-closed on an unreadable timeline via `STUB_GH=fail`) — pin only the
-  first-touch create and every re-spam regression is free to come back. `goal-ancestor-*`
+  first-touch create and every re-spam regression is free to come back. `goal-ancestor`
   (homelab#367) is the same shape pointed at a LOOKUP: the walk is pure shell over `gh`, so the
   hop SEQUENCE is the assertion — the shipped bug computed everything correctly about the WRONG
   issue, no output changed, only the reads moved. Its `post.sh` prints `GATE SUBJECT: #<n>`, the
   value the next clause consumes, which is how a resolution fixture asserts on enforcement it does
-  not run; and `goal-ancestor-unlabelled-budget` exists purely to keep the walk's stop condition
+  not run; and `goal-ancestor/unlabelled-budget` exists purely to keep the walk's stop condition
   (a `task/goal` label, OR a `Budget:` line on a PARENTLESS issue — PR#1398 narrowed the line half) from decaying into an AND — a CONSTRUCTED world, and
   it says so, because a mis-authored goal is exactly what you cannot count on finding live.
 
 ## When the clause lives inside a manifest
 
 - **S11 — A `# >>>REPLAY:<name>>>>` sentinel works inside a YAML block scalar.**
-  `responder-reopen-*` (homelab#228) take their `source:` from
+  `responder-reopen/*` (homelab#228) take their `source:` from
   `agents/coordinator/responder-argo.yaml`, whose `container.args[0]` carries ~300 lines of shell:
   `extract` trims leading whitespace before matching, so the sentinel sits at whatever column the
   manifest indents to and the block composes as ordinary shell. Two supporting rules live in the
@@ -749,7 +749,7 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   as every label write — a third PATH-shim would work and buy nothing.
 
 - **S12 — Read a DECLARATION out of the file; never transcribe it.**
-  `retro-harvest-cell-errored` (homelab#268) is partly about a manifest FIELD: Argo, not any
+  `retro-harvest/cell-errored` (homelab#268) is partly about a manifest FIELD: Argo, not any
   shell, decides that an OOMKilled cell is `Error` rather than `Failed`, and `continueOn` says
   whether the sibling and the harvest survive it — no clause reads that field and kubeconform
   SKIPs the CronWorkflow kind, so nothing was checking it. The bridge `awk`s the two cells'
@@ -776,7 +776,7 @@ returns 1 instead of dying, and the write path passes it.
 Record a write anyway when the clause CONSUMES its output — `gh issue create` prints the new
 issue's URL and `harvest-disposition` parses the number out of it.
 
-`fixtures/_selftest-*` are PROBE-FAIL fixtures — deliberately broken, `expect: fail`, one per
+`fixtures/_selftest/*` are PROBE-FAIL fixtures — deliberately broken, `expect: fail`, one per
 detector the runner owns. They run first (the glob sorts them there) so the harness proves itself
 before it judges anything else. If one of them ever goes green, the run fails loudly: a check
 nobody has watched fail is not a check.
@@ -837,11 +837,11 @@ S5 heat pass; the per-instance prose is in git and in the cited PRs):
   bounded worst-K slice + pipefail), and the **guard stderr-fold fix** (homelab#237 — the
   busy-probe read kubectl's stderr "No resources found" as pod output via `2>&1` and refused
   every fire since unsuspend; fixed to a split-stream read, both legs verified live from the
-  jail). **PARTLY PAID** by homelab#248 (`retro-cell-report-*` + `retro-harvest-*`, the first
-  retro-lane family), extended by homelab#268 (`retro-harvest-cell-errored`, the DAG Error phase
-  — §S12 above) and homelab#269 (`retro-harvest-slug-collision`: two cells on one model under
+  jail). **PARTLY PAID** by homelab#248 (`retro-cell-report/*` + `retro-harvest`, the first
+  retro-lane family), extended by homelab#268 (`retro-harvest/cell-errored`, the DAG Error phase
+  — §S12 above) and homelab#269 (`retro-harvest/slug-collision`: two cells on one model under
   different harnesses derive one slug, so the harvest disambiguates ON COLLISION ONLY, with
-  `retro-harvest-slug` as the proof the ordinary names did not move). **Still unpaid, and still
+  `retro-harvest/slug` as the proof the ordinary names did not move). **Still unpaid, and still
   this entry's debt: the guard (busy-probe legs, ledger delta) and the harvest's git/gh half.**
   No FSM models the retro lane at all (dispatch-on-schedule machinery, roles.md; homelab#280
   ruled: correct the wording, do not model the lane yet), so there is no FSM-side

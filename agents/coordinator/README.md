@@ -243,11 +243,9 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    sleep-tracking#96 2026-08-02; slow free models need the headroom). The openrouter-operator mints the key and writes the Secret
    `<project>-session-issue-<N>-round-<r>-openrouter`. **Wait on the CR**, not the Secret (you can't
    read Secret values): `kubectl -n <project> get openrouterkey <name> -o jsonpath='{.status.openrouter.hash}'`
-   returns non-empty once minted. ⚠ **Re-minting an EXISTING CR name takes the PATCH path, and
-   OpenRouter's PATCH cannot extend a key's real `expires_at`** (openrouter-operator#6, proven live
-   2026-07-09: the CR spec claimed 20:19, the key died at its original 18:40 deadline mid-run). Until
-   the operator's rotate-on-drift fix is deployed AND verified: **`kubectl delete` the old CR first,
-   then apply** — a *created* CR POSTs a genuinely fresh key with its full TTL window. After the fix, the
+   returns non-empty once minted. ⚠ **OpenRouter's PATCH cannot extend a key's real `expires_at`**
+   (openrouter-operator#6), so the operator ROTATES on expiry drift instead of patching (fix live;
+   re-applying an EXISTING CR name mints a fresh key). The
    CR's `.status.openrouter.expires_at` shows the LIVE expiry — assert it covers the run
    (`agent-session.sh` pre-flight refuses keys with <30 min real life). A stale `status.hash` does
    NOT prove the key is live. This is the real breaker — the worker can't outspend `budgetUSD`.
@@ -347,7 +345,8 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > reviewable PR (green ∧ current ∧ unapproved ∧ armed — incl. `changes_requested` re-review rounds) to
 > an **Argo Events** webhook → Sensor → the `review` WorkflowTemplate → `reviewer-session.sh <repo>
 > <pr>`, near-instant instead of the old ≤5-min poll (`agents/coordinator/{review-argo,reflexes-argo}.yaml`);
-> the **review reflex** is now a `*/15` Argo **CronWorkflow BACKSTOP**. GitHub auto-merge completes it.
+> the **review reflex** is now a per-stack `*/15` `review-<stack>` Argo **CronWorkflow BACKSTOP**
+> (AgentStack Composition; the global `review-reflex` CronWorkflow is suspended). GitHub auto-merge completes it.
 > So in the normal path you do **not** run
 > steps 6–7 by hand — you WATCH the reflexes work and only step in for the exception plays (conflict →
 > close + re-dispatch fresh; changes-requested → next round; round-limit / flip-flop / stale-red →
@@ -802,17 +801,14 @@ queue them under the human-authorised goal, `Base:` inherited) — the edge adds
 a lane change.
 
 **Keep the forest in view.** The failure this clause must not have is: decompose once, then only
-ever look at children again. Concretely, today the sub-issue lineage is WRITE-ONLY — the harvest
-creates the links and nothing reads them back — so nothing reconnects a child to its goal unless
-this play does it. Until the parentage read lands (scan carries the parent id; launcher injects a
-bounded Goal+Acceptance card), **you are the backstop**: when you touch any child of a goal,
-re-read the parent before acting, and judge the child against the GOAL's acceptance, not only its
-own.
+ever look at children again. The launcher walks a child's ancestors and injects the goal's
+bounded Goal + Acceptance into the worker's env card, but that informs the WORKER only: **you are
+the backstop** — when you touch any child of a goal, re-read the parent before acting, and judge
+the child against the GOAL's acceptance, not only its own.
 
-⚠ The parent will not move on child traffic alone — nothing wakes a goal whose children are all
-quiet. That backstop is the meta-coordinator's for now (operator, 2026-08-05: observe the loop,
-design the guard from evidence). If you see a goal whose children are all closed and whose
-acceptance is unmet, say so loudly in your report — that is the signal the guard will be built on.
+A goal whose child-set completes pre-launch is woken by the scan — trigger (b) of the
+`goal-checkpoint` clause below. If you see a goal whose children are all closed and whose
+acceptance is unmet, say so loudly in your report.
 
 ## The `goal-checkpoint` clause (ADR-106 (3), 2026-08-12 — the second AUTHORING moment; supersedes the per-closure goal-review play, FU-090 leg (c) 2026-08-05)
 
@@ -1665,7 +1661,7 @@ devbox run coordinator-session -- --run-tick
 > `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator" context is homelab + sleep-iac + the
 > app repos — and a *different* stack is a different context. **Landed:** `coordinator-session.sh`
 > **clones ALL the stack's `--repos`** into `/work/<repo>` and runs with its **cwd in the stack's
-> `--main-repo`** (`agents/stacks.json` `mainRepo`: oracle → `oracle-fleet`, sleep/platform → `homelab`),
+> `--main-repo`** (`agents/stacks.json` `mainRepo`: oracle → `oracle-fleet`, sleep → `sleep-tracking`, circles → `circles`, platform → `homelab`),
 > so that repo's `CLAUDE.md` + specs load as natural cwd context while the brief (this file, the platform
 > *mechanism*) is still loaded by absolute path from `/work/homelab`. The clones are **read-only
 > reference** — the coordinator's only writes stay labels/comments/merge-state via `gh`; a write-tiers
@@ -1697,8 +1693,8 @@ only, the brief's step 5 §Gateway.
 ## Bootstrap (one-time)
 
 > **Now GitOps-managed (2026-07-06).** The subsystem manifests — `rbac.yaml` (Namespace + SA + roles),
-> `transcripts-pvc.yaml`, `git-token.yaml` + `reviewer-git.yaml` (ESO ExternalSecrets), and the five
-> agent-loop reflexes (iac-sentinel joined) as **Argo CronWorkflows** in `reflexes-argo.yaml` + the event-driven review path
+> `transcripts-pvc.yaml`, `git-token.yaml` + `reviewer-git.yaml` (ESO ExternalSecrets), and the
+> agent-loop reflexes as **Argo CronWorkflows** in `reflexes-argo.yaml` and the other `*-argo.yaml` + the event-driven review path
 > in `review-argo.yaml` (ADR-093; each reflex shows in the argo-server UI and emits `argo_workflows_*`
 > Prometheus metrics) — are reconciled from `agents/coordinator/` by the **`agent-coordinator`
 > ArgoCD Application** (`argocd/platform/agent-coordinator.yaml`, wave 5). So a change (e.g. a reflex
@@ -1720,9 +1716,9 @@ devbox run infisical-secret COORDINATOR_CLAUDE_OAUTH_TOKEN="$(claude setup-token
 
 The image is built + pushed by CI in the
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo and **pinned by version**
-(`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) + every
-`agents/coordinator/*-argo.yaml` (the Argo CronWorkflows, ArgoCD-synced) + the transcripts
-manifests; the repo's `deploy.yaml` opens the homelab bump PR (FU-051). The ghcr package
+(`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) +
+`agents/coordinator/kustomization.yaml` `newTag` (every in-cluster manifest, ArgoCD-synced); the
+repo's `build-image.yaml` `deploy-pin` job opens the homelab bump PR (FU-051). The ghcr package
 is public. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
 `claude-token.yaml` — the latter folded into Infisical 2026-07-12, FU-001 leg A).
 
@@ -1745,14 +1741,9 @@ devbox run coordinator-logs -- --raw   # raw jsonl for jq / deeper analysis
 The coordinator's `coordinator-git` (`GH_TOKEN`) is broader than the per-project *worker* git-token
 (which is `contents`+`pull_requests`, one repo, ~1h, minted by the `homelab-agents` GitHub App). The
 coordinator needs, across the agent project repos: **`issues:write`** (apply/move the `agent/*`
-labels) + **`pull_requests:write`** + **`contents`** (merge). Two ways to source it, least-sprawl
-first:
-
-- **Preferred — the existing `homelab-agents` GitHub App.** Add `issues:write` to the App and install
-  it on the coordinator's target repos, then mint the coordinator token from it (ESO, like the worker
-  token) — *no new standing credential to track*.
-- **Interim — a scoped fine-grained PAT** (`issues:write` + `pull_requests:write` + `contents:write`
-  on the agent repos). Simple, but it's one more static token; rotate it like the rest.
+labels) + **`pull_requests:write`** + **`contents`** (merge). It is minted from the same
+`homelab-agents` GitHub App as the worker token (ESO generator, [`git-token.yaml`](git-token.yaml),
+~1h) — no hand PAT; the App private key in Infisical is the only long-lived secret.
 
 The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
 (`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
