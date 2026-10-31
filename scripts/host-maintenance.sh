@@ -23,7 +23,7 @@
 # DOWN order: window → runners → test VMs → workers → CP → LXCs → router → host poweroff (--reboot: reboot);
 #             after a worker went down, each next Talos leg first waits for Longhorn healthy (the worker's
 #             shutdown degrades its volumes, and node-maintenance's preflight refuses ANY degraded one).
-# UP order:   power on (nx-02: BMC via the wallet entry nx-02-bmc-password, else the manual step; pve:
+# UP order:   power on (nx-02: BMC through the box (devbox run bmc), wallet entry nx-02-bmc-password, else the manual step; pve:
 #             by hand) → onboot guests self-start (a host that did NOT reboot: started here, in order)
 #             → workers up → CP up → runners undrain + verify → router check + leave → window closed.
 #
@@ -70,7 +70,7 @@ usage(){ sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exi
 cmd="${1:-}"; HOST="${2:-}"; REBOOT=0
 [ "${3:-}" = --reboot ] && REBOOT=1
 case "$HOST" in
-  nx-02) HIP=192.168.2.59 RNODE=nx02 PARTNER=pve  BMC=192.168.2.173 ;;
+  nx-02) HIP=192.168.2.59 RNODE=nx02 PARTNER=pve  BMC=nx-02 ;;   # machines.yaml bmc: — via the box
   pve)   HIP=192.168.2.3  RNODE=pve  PARTNER=nx02 BMC="" ;;
   *) usage ;;
 esac
@@ -365,12 +365,11 @@ down() {
 # ---------------------------------------------------------------- up
 power_on() {
   if [ -z "$BMC" ]; then log "$HOST has no BMC — power it on by hand; waiting for ssh (≤${HOST_TIMEOUT}s)"; return 0; fi
-  local u p; u="$(kp "$BMC_ENTRY" UserName || true)"; p="$(kp "$BMC_ENTRY" Password || true)"
-  if [ -z "$p" ] || [ -z "$u" ]; then
-    log "no wallet entry $BMC_ENTRY — power on by hand: ipmitool -I lanplus -H $BMC -U <$BMC_ENTRY user> -P <$BMC_ENTRY password> chassis power on"
+  if [ -z "$(kp "$BMC_ENTRY" Password || true)" ]; then
+    log "no wallet entry $BMC_ENTRY — power on by hand: IPMI_PASSWORD=<bmc password> devbox run bmc -- $BMC chassis power on"
     return 0
   fi
-  IPMI_PASSWORD="$p" ipmitool -I lanplus -H "$BMC" -U "$u" -E chassis power on || log "ipmitool power on failed — press the button; still waiting"
+  bash "$ROOT/mgmt/scripts/mgmt-bmc.sh" ipmi "$BMC" chassis power on || log "BMC power on failed — press the button; still waiting"
 }
 up() {
   local booted=0 t=0

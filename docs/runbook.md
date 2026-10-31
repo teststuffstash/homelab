@@ -783,9 +783,10 @@ When a pool VM goes NotReady with its Talos API "no route to host", read the hyp
 `qm status <vmid> --verbose | grep qmpstatus` (`io-error` = paused on a failed write) and
 `lvs -o lv_name,data_percent pve`. The reboot is a window (first run: 2026-08-18, ~15 min total outage):
 
-**Watching the HOST boot (nx-02, the BMC boxes):** `ipmitool -I lanplus -H 192.168.2.173 -U ADMIN -P <bmc-password>
-sol activate` (leave with `~.`; the BMC password has NO wallet entry yet — it is still the factory
-default, rotate + store as `nx-02-bmc-password` under FU-288) shows POST and BIOS setup — and, since 2026-09-27, the GRUB menu and
+**Watching the HOST boot (nx-02, the BMC boxes):** `devbox run bmc -- nx-02 sol activate` — ipmitool
+runs on the management box, the only host on the BMCs' segment ([`management-box.md`](management-box.md)
+§MB4 item 7); leave with `~~.`. The BMC password has NO wallet entry yet — it is still the factory
+default (pass `IPMI_PASSWORD=…`), rotate + store as `nx-02-bmc-password` under FU-288. It shows POST and BIOS setup — and, since 2026-09-27, the GRUB menu and
 the kernel console too (`ansible/pve-serial-console.yml`: `console=ttyS1,115200n8` + GRUB on the
 serial unit, per-host via `host_vars/`). Boot-device class for one boot: `chassis bootdev bios|pxe|disk`;
 ranking two disks is BIOS setup (`Hard Disk Drive BBS Priorities`), driven over SOL with the
