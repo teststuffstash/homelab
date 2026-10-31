@@ -19,7 +19,7 @@
 # The series are the 2026-08-06 ledger's own shape — pod up 18m32s, the deterministic pass handing
 # off to an item session at ~3m — plus the two wedge shapes the alert must still catch.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 RULE_FILE="argocd/resources/pushgateway/prometheusrule.yaml"
 SCAN_FILE="agents/coordinator-scan.sh"

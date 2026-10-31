@@ -15,7 +15,7 @@
 # MINTED tokens flow the other way, into the ORDINARY wallet + caches (keepass-init.sh entries,
 # wallet-files.sh materialization) — this script only ever needs the mint credential.
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
   DB="${CF_ADMIN_KP_DB:-$HOME/Documents/homelab-admin.kdbx}"

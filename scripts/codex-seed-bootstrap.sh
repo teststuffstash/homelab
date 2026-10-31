@@ -149,7 +149,7 @@ cmd_login() {
   mkdir -p "$(dirname "$RECORD")"; chmod 700 "$(dirname "$RECORD")"
   home="$(mktemp -d "$(dirname "$RECORD")/home.XXXXXX")"
   chmod 700 "$home"
-  # shellcheck disable=SC2064 — expand $home now; the trap must survive `set -u` surprises later
+  # shellcheck disable=SC2064  # expand $home now; the trap must survive `set -u` surprises later
   trap "find '$home' -type f -exec shred -u {} + 2>/dev/null; rm -rf '$home'" EXIT
   cat <<EOF
 

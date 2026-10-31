@@ -30,7 +30,7 @@
 # same rule as agents-registration-lint's CALLERS_EXEMPT) — they skip fixer-only checks.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
+cd "$ROOT" || exit 1
 ORG="${ORG:-teststuffstash}"
 
 TARGET="${1:---all}"

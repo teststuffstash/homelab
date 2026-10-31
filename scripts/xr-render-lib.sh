@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # xr-render-lib.sh — sourced (never executed): docker-free `crossplane composition render` at the
 # CLUSTER-PINNED engine + function versions. Shared by scripts/xr-render.sh (render every committed
 # claim, diff base↔head) and scripts/publicroute-tf-validate.sh (render fixtures → tofu validate).

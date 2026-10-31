@@ -114,6 +114,9 @@
     },
     "renovate": {
       "version": "latest"
+    },
+    "shellcheck": {
+      "version": "latest"
     }
   },
   "env": {
@@ -218,6 +221,9 @@
       ],
       "sigpipe-lint": [
         "python3 scripts/sigpipe-lint.py \"$@\""
+      ],
+      "shellcheck-lint": [
+        "python3 scripts/shellcheck-lint.py \"$@\""
       ],
       "label-write-lint": [
         "python3 scripts/label-write-lint.py \"$@\""
