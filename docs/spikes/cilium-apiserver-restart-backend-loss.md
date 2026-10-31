@@ -1,7 +1,8 @@
 # Spike — Cilium drops the `kubernetes` Service backend when the apiserver restarts
 
-**Tracked by:** FU-258. **Status:** reproduced twice, not root-caused; PARKED behind the upgrade
-debt (§Why this is parked). **Environment:** Cilium 1.19.1, `kubeProxyReplacement=true`,
+**Tracked by:** FU-258. **Status:** reproduced twice, not root-caused; was PARKED behind the upgrade
+debt (§Why this is parked) — that prerequisite is MET: Cilium 1.20.4 live since 2026-10-31 (#3054,
+FU-319), and the settling experiment rides its 24 h soak (FU-258 holds the next action). **Environment:** Cilium 1.19.1, `kubeProxyReplacement=true`,
 `bpf-lb-sock=false`, `k8sServiceHost=localhost` / `k8sServicePort=7445` (Talos KubePrism),
 Kubernetes v1.36.1, **one** control plane. First seen 2026-09-20.
 
@@ -99,7 +100,7 @@ after). Revisit once Renovate is live and the fleet is current.
 
 ## What would settle it
 
-1. On **1.20.2**, restart the apiserver deliberately (in a maintenance window) and capture, on at
+1. On **1.20.x** (1.20.4 is what landed, 2026-10-31 — #3054), restart the apiserver deliberately (in a maintenance window) and capture, on at
    least three nodes including the apiserver's own: `cilium-dbg service list`, `cilium-dbg bpf lb
    list`, and the agent log around the restart (k8s watch errors, reflector resync).
 2. If it reproduces: file upstream with that pair of outputs — the divergence question above is

@@ -99,7 +99,8 @@ A Renovate PR is **not** an agent PR, so the coordinator's usual escalation verb
 not the coordinator, owns whether an update should exist:
 
 - **Reviewer requests changes** → the PR stays OPEN (changes-requested doesn't close it), Renovate
-  won't duplicate it, and `rebaseWhen: conflicted` keeps it stable. Action: **a worker adapts the code
+  won't duplicate it, and Renovate keeps it current while nobody else has pushed to it
+  (`rebaseWhen: behind-base-branch`, next bullet). Action: **a worker adapts the code
   on the renovate branch** — since 2026-10-12 the scan's `unarmed-major` unit owns this for an ARMED
   `deps-review` PR too, in its red or changes-requested state (the reflex is green-only; FU-046), and
   since 2026-10-28 an ARMED `automerge` PR in its red state (G12b): five rides, then `agent/arbitrate`
