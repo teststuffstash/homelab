@@ -3,7 +3,7 @@ id: EP-OPENAI-RESPONSES
 use-cases: [UC-1]
 schema: openai-responses.schema.json
 ---
-# POST /openai/v1/responses — the `responses` dialect, on the codex rail (lit 2026-10-22, prober-only)
+# POST /openai/v1/responses — the `responses` dialect, on the codex rail (lit 2026-10-22; every role since 2026-10-23)
 
 The data-plane path a `codex` harness rides: OpenAI **Responses** over SSE (today's `openai`
 dialect stays Chat Completions — [glossary: dialect](../glossary.md#dialect)). Only the `codex`
@@ -36,10 +36,10 @@ admission reasons and the error envelope.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, dark — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP`; `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
+| [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, lit 2026-10-22 — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); `upstream-timeout` rows `🚧 WIP`; `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
 | [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `headroom.poll`, `headroom.upstream`, `admission.reasons` | — | v0 — two report producers, both the gateway's own: its usage poll (§Poll) and the relayed answers' `x-codex-*` headers (§Upstream headers); the jail ingress stays `⚑ gap` |
 | [GW-CODEX-OAUTH](#gw-codex-oauth) | `upstream.codex.auth`, `credential_errors` | `credential-store-unavailable`, `credential-recovery-required`, `credential-revoked`, `credential-refresh-uncertain`, `credential-invalid`, `credential-unresolved`, `credential-transient` | gateway-local SQLite with hash-gated seed recovery; live durability remains unverified |
-| [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport wired; rail absent from policy |
+| [GW-CODEX-REFRESH](#gw-codex-refresh) | `refresh` | `credential-revoked`, `credential-refresh-uncertain`, `credential-recovery-required` | native transport wired; the deployed policy declares the rail (2026-10-22) |
 | [GW-CODEX-CAPTURE](#gw-codex-capture) | `capture` (the bundle `GET /sessions/{id}/capture` answers; its records, sanitization rules and bounds) | `capture-not-found` | v0 — the scoped observer (FU-270, the spike §Recorded live protocol experiment): off unless `CODEX_CAPTURE_TASK_PREFIX` names a task prefix; the live bundle and the rows derived from it are the spike's |
 | [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve) (owned there) | `input.body.model` | `model-not-session` | linked — exact on this rail |
 | [GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary) (owned there) | `input.headers.authorization` | `session-unknown`, `session-expired`, `session-released` | linked |
@@ -385,7 +385,7 @@ and returns the replacement only after saving it `ready`. A persisted `refreshin
 uncertain exchange, an invalid replacement — fails closed as `credential-recovery-required` and is
 never retried automatically (replaying a rotated refresh token is the one unrecoverable move). An
 authoritative revocation persists `revoked`. No failure carries a credential in its message, its
-exception chain or any repr. The durable store and seed recovery are specified below. The deployed policy declares the rail since 2026-10-22 (prober-only).
+exception chain or any repr. The durable store and seed recovery are specified below. The deployed policy declares the rail since 2026-10-22 (every role lists it since 2026-10-23).
 
 On the data plane a lifecycle failure answers before upstream is contacted:
 `credential-store-unavailable` → 503 with `retry-after` (the store may answer next time); every
@@ -468,7 +468,8 @@ Rendered by `scripts/evidence_render.py` from CI.
 ## GW-CODEX-REFRESH
 
 The native Codex refresh transport is an injectable callable for [GW-CODEX-OAUTH](#gw-codex-oauth),
-not a login/import operation and not the SIWC token-sharing profile. It is not wired into production.
+not a login/import operation and not the SIWC token-sharing profile. Production wires it beside the
+SQLite store when `CODEX_UPSTREAM` and `CODEX_SEED_FILE` are set (`__main__.py`; [§Gateway-local durable ownership](#gateway-local-durable-ownership-operator-ruling-2026-10-19)).
 The [profile investigation](../../../docs/spikes/codex-subscription-rail.md#upstream-profile-investigation--2026-10-17-fu-270)
 explains why these profiles must stay separate (FU-270).
 

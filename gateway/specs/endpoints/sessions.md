@@ -26,7 +26,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | Requirement | operation | Governs (schema) | Error codes | Status |
 |---|---|---|---|---|
 | [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
-| [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail ships dark — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
+| [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail lit 2026-10-22 — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `POST /sessions`, `GET /sessions/{id}` | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `DELETE /sessions/{id}`, `GET /sessions/{id}` | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
 | [GW-SESSIONS-PULL](#gw-sessions-pull) | `POST /sessions` (`bind`), `POST /sessions/{id}/env` | `post.input.bind`, `post.output.dispatch_bound`, `pull.output` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found` | v0; Codex same-pod token re-read after first delivery (below) |
@@ -582,7 +582,7 @@ refuses the load, so a stale hand copy can never shadow the catalog); on every o
 policy's declared per-model window (the openrouter rail has no catalog context yet). `null` is "no
 catalog row" / "not declared", never a guess.
 
-**`codex`** (world `policy-codex`; the deployed rail is lit prober-only since 2026-10-22): the pinned CLI reads its provider from
+**`codex`** (world `policy-codex`; the deployed rail lit 2026-10-22, every role lists it since 2026-10-23): the pinned CLI reads its provider from
 config, not from env — observed with codex-cli 0.161.0 (`experiments/codex-rail/compat.py`):
 a bare `OPENAI_BASE_URL` + `OPENAI_API_KEY` with no provider block is ignored (the CLI dialled
 `api.openai.com`, refused by the fixture's closed proxy), while a `[model_providers.<id>]` block
@@ -850,7 +850,7 @@ expiry). The gateway already knows the pod first-hand, from the TokenReviews it 
 
 ⚖ **A pod check, not a TTL-with-renewal.** The pod check is one namespaced `pods get` per live
 session per pass. The cost is a reaper interval (`liveness_check_s`, **60 s**) times the active
-sessions (≤ 28 today, the rails' caps summed) GETs, so at most about 28 requests a minute to the
+sessions (≤ 29 today, the deployed rails' caps summed) GETs, so at most about 29 requests a minute to the
 kube API. A renewal protocol would put a heartbeat into every consumer and every harness wrapper,
 and still lose the session when the heartbeat process itself is what died. The RBAC is a namespaced
 `agent-gateway-session-pods` Role (`pods: get`) in each bind namespace and each caller namespace
