@@ -248,8 +248,8 @@ fi
 
 # DRIFT PIN (homelab#337, operator-lane; made BIDIRECTIONAL in #375): every *.promtool-rules file is
 # a HAND COPY of its CR's groups, and a stale copy makes the behaviour fixtures pass vacuously. For
-# each directory with a rules copy: extract every alert from every PrometheusRule doc in that dir's
-# *.yaml (eval-all — blackbox.yaml is MULTI-DOC).
+# each directory with a rules copy: extract every ALERT and every RECORDING RULE from every
+# PrometheusRule doc in that dir's *.yaml (eval-all — blackbox.yaml is MULTI-DOC).
 #
 # CR→copy (unchanged from #337): for each alert name present in BOTH the CR and the copy, assert
 # expr+for equality. ANY-match per alert name: the copy may carry extra same-named variants (probes'
@@ -261,19 +261,60 @@ fi
 # entry — a renamed/deleted CR alert would otherwise sit unexamined (exactly #337's own failure
 # class). Every copy-only name must be EXPLICITLY DECLARED witness-only via a marker comment in the
 # copy file: `# witness-only: <AlertName>[, <AlertName>…]` for a per-name declaration, or
-# `# witness-only: all` for a file whose every alert is witness-only. An undeclared copy-only name
-# is a DRIFT. A file whose copy-side names are all witness-only (zero CR intersection) counts as
-# "witness-only", not "drift-pinned" — the pin counter says how many files carry real pins.
-pins=0; witness_only=0
+# `# witness-only: all` for a file whose every rule is witness-only. An undeclared copy-only name
+# is a DRIFT.
+#
+# RECORDING RULES (homelab#1563) — the SAME two walks, keyed on `.record` → `.expr`. The alert-only
+# pin let a recording-rule copy go stale behind a green lint: #1561's round-2 case fixed the CR's
+# `garage:s3_latency_seconds:p99_5m` expr while the hand-copy kept the pre-fix one, so the behaviour
+# fixture asserted the OLD expr and passed — the FU-125/FU-108 "a green that saw nothing" class, one
+# recording rule over. A recording rule carries `expr` only (no `for:`), and its labels/annotations
+# are NOT pinned — the same scope as the alert pass. ONE declaration grammar: a copy-only RECORD
+# name is declared with the same `# witness-only:` marker as a copy-only alert name, and
+# `# witness-only: all` covers both kinds.
+#
+# COUNTING: a file with ≥1 CR-shared alert name carries an ALERT pin; a file with ≥1 CR-shared record
+# name carries a RECORD pin. A file with NEITHER asserts nothing against a CR and is NAMED in the
+# summary — never counted into a bucket: the old "recording-only — pinned elsewhere" bucket asserted
+# a pin this script cannot see (and for a recording-only copy there was none to see), so a copy that
+# pins nothing read as covered.
+pins=0; record_pins=0
+unpinned=()
 name_lines() { printf '%s' "$1" | tr ' ' '\n' | sed '/^$/d' | sort -u; }
+# The DECLARATION grammar — ONE marker for both rule kinds: `# witness-only: <Name>[, <Name>…]` names
+# copy-side rules with no CR counterpart, `# witness-only: all` declares every copy-side rule in the
+# file (alerts AND recording rules). One grammar, learned once.
+declared_names() {
+  local body
+  while IFS= read -r line; do
+    body=$(printf '%s' "${line#*witness-only:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    if [ "$body" = "all" ]; then
+      { jq -r '.[].alert' "$cp_json"; jq -r '.[].record' "$cp_rec_json"; } | sort -u | tr '\n' ' '
+      return 0
+    fi
+    printf '%s ' "$(printf '%s' "$body" | tr ',' ' ')"
+  done < <(grep -E '^# witness-only:' "$rf" || true)
+}
 for rf in $(find argocd -name '*.promtool-rules' | sort); do
   d=$(dirname "$rf")
   crs=$(find "$d" -maxdepth 1 -name '*.yaml' | sort)
-  [ -n "$crs" ] || continue
+  if [ -z "$crs" ]; then
+    unpinned+=("$rf|no PrometheusRule CR in this directory (pinned by nothing)")
+    continue
+  fi
+  cr_all="$tmp/cr-rules.json"; cp_all="$tmp/cp-rules.json"
   cr_json="$tmp/cr-alerts.json"; cp_json="$tmp/cp-alerts.json"
+  cr_rec_json="$tmp/cr-records.json"; cp_rec_json="$tmp/cp-records.json"
   # shellcheck disable=SC2086
-  yq eval-all -o=json '[.] | map(select(.kind == "PrometheusRule")) | map(.spec.groups[].rules[]) | flatten | map(select(.alert)) | map({"alert": .alert, "expr": .expr, "for": .for})' $crs 2>/dev/null | jq -s 'flatten | unique_by(.alert)' > "$cr_json" || continue
-  yq -o=json '[.groups[].rules[] | select(.alert)] | map({"alert": .alert, "expr": .expr, "for": .for})' "$rf" 2>/dev/null > "$cp_json" || continue
+  yq eval-all -o=json '[.] | map(select(.kind == "PrometheusRule")) | map(.spec.groups[].rules[]) | flatten | map(select(.alert or .record)) | map({"alert": .alert, "record": .record, "expr": .expr, "for": .for})' $crs 2>/dev/null | jq -s 'flatten' > "$cr_all" \
+    || { unpinned+=("$rf|could not read its PrometheusRule CRs (pinned by nothing)"); continue; }
+  yq -o=json '[.groups[].rules[] | select(.alert or .record)] | map({"alert": .alert, "record": .record, "expr": .expr, "for": .for})' "$rf" 2>/dev/null > "$cp_all" \
+    || { unpinned+=("$rf|could not be parsed as a rules file (pinned by nothing)"); continue; }
+  jq '[.[] | select(.alert) | {"alert": .alert, "expr": .expr, "for": .for}] | unique_by(.alert)' "$cr_all" > "$cr_json"
+  jq '[.[] | select(.alert) | {"alert": .alert, "expr": .expr, "for": .for}]' "$cp_all" > "$cp_json"
+  jq '[.[] | select(.record) | {"record": .record, "expr": .expr}] | unique_by(.record)' "$cr_all" > "$cr_rec_json"
+  jq '[.[] | select(.record) | {"record": .record, "expr": .expr}]' "$cp_all" > "$cp_rec_json"
+  declared=$(declared_names)
   # CR→copy: the #337 assertion, unchanged.
   drift=$(jq -n --slurpfile cr "$cr_json" --slurpfile cp "$cp_json" '
     ($cp[0] | map(.alert) | unique) as $names
@@ -285,19 +326,21 @@ for rf in $(find argocd -name '*.promtool-rules' | sort); do
     echo "  DRIFT $rf: alert(s) [$drift] differ from the CR in $d — re-run the header's yq recipe"
     rc=1
   fi
+  # CR→copy, the RECORDING-RULE half (#1563): the same assertion keyed on `.record` → `.expr`.
+  drift_rec=$(jq -n --slurpfile cr "$cr_rec_json" --slurpfile cp "$cp_rec_json" '
+    ($cp[0] | map(.record) | unique) as $names
+    | $cr[0] | map(select(.record as $a | $names | index($a)))
+    | map(select(. as $want | $cp[0] | map(select(. == $want)) | length == 0) | .record)
+    | unique | join(" ")')
+  drift_rec=$(printf '%s' "$drift_rec" | tr -d '"')
+  if [ -n "$drift_rec" ]; then
+    echo "  DRIFT $rf: record(s) [$drift_rec] differ from the CR in $d — re-render this file from the CR"
+    rc=1
+  fi
   # copy→CR reverse walk: every copy-side name absent from the CR must be declared witness-only.
   copy_only=$(comm -13 <(jq -r '.[].alert' "$cr_json" | sort -u) <(jq -r '.[].alert' "$cp_json" | sort -u) | tr '\n' ' ')
   undeclared=""
   if [ -n "$copy_only" ]; then
-    declared=""
-    while IFS= read -r line; do
-      body=$(printf '%s' "${line#*witness-only:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-      if [ "$body" = "all" ]; then
-        declared=$(jq -r '.[].alert' "$cp_json" | sort -u | tr '\n' ' ')
-        break
-      fi
-      declared="$declared $(printf '%s' "$body" | tr ',' ' ')"
-    done < <(grep -E '^# witness-only:' "$rf" || true)
     undeclared=$(comm -23 <(name_lines "$copy_only") <(name_lines "$declared") | tr '\n' ' ')
     if [ -n "$undeclared" ]; then
       crs_msg=$(printf '%s' "$crs" | tr '\n' ' ')
@@ -305,18 +348,40 @@ for rf in $(find argocd -name '*.promtool-rules' | sort); do
       rc=1
     fi
   fi
-  # Counting: files with ≥1 CR-shared alert name carry a real pin; files with zero shared alerts but
-  # ≥1 declared copy-only (witness) alert are witness-only (the "2 of 13 assert nothing" class, now
-  # named as what they are). A file with no alert rules at all (recording-only copies such as
-  # agent-goals, pinned by exporter-self-test instead) is neither.
-  if [ -n "$(comm -12 <(jq -r '.[].alert' "$cr_json" | sort -u) <(jq -r '.[].alert' "$cp_json" | sort -u))" ]; then
-    pins=$((pins+1))
-  elif [ -n "$copy_only" ] && [ -z "$undeclared" ]; then
-    witness_only=$((witness_only+1))
+  # copy→CR reverse walk, the RECORDING-RULE half (#1563): a copy-only record name is a stale entry
+  # too, and it is declared with the SAME marker (one declaration grammar for both kinds).
+  copy_only_rec=$(comm -13 <(jq -r '.[].record' "$cr_rec_json" | sort -u) <(jq -r '.[].record' "$cp_rec_json" | sort -u) | tr '\n' ' ')
+  undeclared_rec=""
+  if [ -n "$copy_only_rec" ]; then
+    undeclared_rec=$(comm -23 <(name_lines "$copy_only_rec") <(name_lines "$declared") | tr '\n' ' ')
+    if [ -n "$undeclared_rec" ]; then
+      crs_msg=$(printf '%s' "$crs" | tr '\n' ' ')
+      echo "  DRIFT $rf: record(s) [$undeclared_rec] exist only in this copy and are not declared witness-only (CR: $crs_msg) — delete/rename them CR-side or add a 'witness-only:' declaration to the copy"
+      rc=1
+    fi
+  fi
+  # Counting: a file with ≥1 CR-shared ALERT name carries an alert pin; ≥1 CR-shared RECORD name a
+  # record pin. A file with NEITHER pins nothing against its CR and is NAMED below, not counted.
+  alert_shared=$(comm -12 <(jq -r '.[].alert' "$cr_json" | sort -u) <(jq -r '.[].alert' "$cp_json" | sort -u))
+  record_shared=$(comm -12 <(jq -r '.[].record' "$cr_rec_json" | sort -u) <(jq -r '.[].record' "$cp_rec_json" | sort -u))
+  [ -n "$alert_shared" ] && pins=$((pins+1))
+  [ -n "$record_shared" ] && record_pins=$((record_pins+1))
+  if [ -z "$alert_shared" ] && [ -z "$record_shared" ]; then
+    if [ -n "$copy_only$copy_only_rec" ] && [ -z "$undeclared$undeclared_rec" ]; then
+      unpinned+=("$rf|witness-only: no CR counterpart, fully declared")
+    elif [ -n "$copy_only$copy_only_rec" ]; then
+      unpinned+=("$rf|copy-only rule(s) not declared witness-only (see the DRIFT line above)")
+    else
+      unpinned+=("$rf|no rule shared with its CR")
+    fi
   fi
 done
-[ "$pins" -gt 0 ] && echo "prometheus-rules-lint: $pins hand-copy file(s) drift-pinned against their CRs"
-[ "$witness_only" -gt 0 ] && echo "prometheus-rules-lint: $witness_only witness-only copy file(s) (no CR counterpart, fully declared)"
-other=$(( $(find argocd -name "*.promtool-rules" | wc -l) - pins - witness_only ))
-[ "$other" -gt 0 ] && echo "prometheus-rules-lint: $other copy file(s) with no alert rules (recording-only — pinned elsewhere, e.g. exporter-self-test)"
+[ "$pins" -gt 0 ] && echo "prometheus-rules-lint: $pins hand-copy file(s) drift-pinned against their CRs (alerts)"
+[ "$record_pins" -gt 0 ] && echo "prometheus-rules-lint: $record_pins hand-copy file(s) drift-pinned against their CRs (recording rules)"
+if [ "${#unpinned[@]}" -gt 0 ]; then
+  echo "prometheus-rules-lint: copies with no CR-shared rule — each NAMED, not bucketed:"
+  for u in "${unpinned[@]}"; do
+    echo "    ${u%%|*} — ${u#*|}"
+  done
+fi
 exit $rc

@@ -27,6 +27,20 @@
 # `>-` expr as a literal `|-` block (re-fold it by hand, or the drift pin's line comparison trips
 # on formatting rather than meaning), and it regenerates the `agent-goals` group ONLY — the two
 # witness groups at the bottom are not in the CR and must survive the re-copy.
+#
+# The lint's OWN drift pin covers these records too, since homelab#1563: the same two walks the
+# alerts get (CR→copy on `.record` → `.expr`, copy→CR on a declared copy-only name), so a recording
+# rule that drifts out of the CR is NAMED by `devbox run prometheus-rules-lint` and not only by the
+# exporter self-test — which covers the three `agent-goals` records, not the two `regression-witness-
+# pre-348` ones below.
+#
+# ONE DECLARATION GRAMMAR: the copy→CR walk requires every copy-side rule with no CR counterpart to
+# be DECLARED witness-only, and it reads the SAME `# witness-only:` marker for alerts and recording
+# rules. The two `regression-witness-pre-348` records below are copy-only BY DESIGN — the pre-#348
+# exprs, kept runnable so the fixture can EXECUTE the contrast, not shipped rules — so they are
+# declared here. (A name that IS in the CR must NOT be declared: that would let a future CR rename
+# pass the copy→CR walk silently.)
+# witness-only: goal_budget_ratio_pre348, goal_budget_remaining_usd_pre348
 groups:
   - name: agent-goals
     rules:
