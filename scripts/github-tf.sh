@@ -14,7 +14,7 @@
 # prompt. Override with env if it ever moves:
 #   GH_ADMIN_KP_DB=<path/to.kdbx>  GH_ADMIN_KP_KEY=<path/to.keyx, empty ⇒ password prompt>  GH_ADMIN_KP_ENTRY=<title>
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 
 # 0. Currency guard (2026-10-16): the root applies from THIS checkout, and on the host that is the
 #    shared ~/Projects/homelab tree, which nothing keeps current. A PR merged on origin but not pulled

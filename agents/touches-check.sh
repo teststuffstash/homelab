@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # touches-check.sh — compute the escape set for declared `Touches:` footprint (ADR-097, homelab#379).
 # Sourced by reviewer-session.sh and coordinator-scan.sh; unit-tested by agents/touches-check-test.sh
 # (devbox run touches-check-test, wired in ci — homelab#474).

@@ -141,7 +141,7 @@ if [ -n "$push_tasks" ]; then
       continue
     fi
     echo "pre-push: path-selected — running devbox run $t" >&2
-    # shellcheck disable=SC2086 — task strings intentionally word-split (args ride along), same
+    # shellcheck disable=SC2086  # task strings intentionally word-split (args ride along), same
     # convention as scripts/diff-ci.sh's own run loop.
     if ! devbox run $t >&2; then
       echo "pre-push: BLOCKED — devbox run $t is red. Fix, commit, push again." >&2; exit 1

@@ -21,7 +21,7 @@
 # retro-rank.py: blocked first, then rounds desc, then cost desc, then wall desc; KEEP=2), never
 # from running the rank — an expectation derived by running the code pins the code's bugs.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 RANK="agents/retro-rank.py"
 PASS=0; FAIL=0

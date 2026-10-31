@@ -112,6 +112,10 @@ MAP=(
   "py-compile-lint:\.py$"
   # every tracked shell file + the lint itself (the replay suite also runs it, fixtures/sigpipe-lint/)
   "sigpipe-lint:(\.(sh|bash)$|^scripts/sigpipe-lint\.py$|^githooks/|^agents/replay/stubs/)"
+  # ShellCheck -S warning over the same tracked shell, ratcheted by its baseline (ADR-113, FU-185);
+  # ~50s on 8 cores (the 7k-line clause files dominate). Its ci.yaml step lands operator-direct
+  # (ci.yaml is pin-only-guarded); the row is ready for it.
+  "shellcheck-lint:(\.(sh|bash)$|^scripts/shellcheck-(lint\.py|baseline\.txt)$|^githooks/)"
   "shim-self-test:^scripts/claude-model-shim\.py"
   # the self-test's only inputs are scripts/pin-only-lint.sh + scripts/pin-only-lint-test.sh (#2072)
   "pin-only-lint-test:^scripts/pin-only-lint"
@@ -146,7 +150,9 @@ MAP=(
   # push ran it and redded every open PR (#2576). Row widened to the gate's real input set;
   # ~7s, so the wider trigger is cheap. Keep this row and scripts/docs-graph-lint.sh's greps
   # in step — that disagreement is the defect class, not the one comment.
-  "docs-graph-lint:\.(md|sh|py|ya?ml)$"
+  # Widened again to EVERY path (2026-10-31): check #5 scans all tracked text files for committed
+  # merge-conflict markers (#2946's sat on master until #3071), so any changed file is an input.
+  "docs-graph-lint:."
   "mermaid-lint:(\.md$|^scripts/mermaid-lint)"
   "lock-intake-lint-test:^scripts/lock-intake-lint"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with
@@ -304,7 +310,7 @@ for entry in "${MAP[@]}"; do
   fi
   echo "── devbox run $task"
   t0=$SECONDS
-  # shellcheck disable=SC2086 — task strings intentionally word-split (args ride along)
+  # shellcheck disable=SC2086  # task strings intentionally word-split (args ride along)
   if devbox run $task; then
     echo "   ok (${task%% *}, $((SECONDS-t0))s)"
   else
