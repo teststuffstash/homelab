@@ -14972,4 +14972,17 @@ updates or reverts as much as possible — mechanical revert or a responder."
   MgmtLease*/UpgradeLease*/MgmtBeltCheckFailing family clear on its first clean sync. Relayed from the other seat: the
   box reads "degraded" via the belt — verified NOT so: `is-system-running`=running, belt unit Result=success (the probe's
   verdict never fails the unit), and MODE=gate runs box-local checks only, so #3067's nixos activation is not blocked.
+  **#3065 MERGED 19:01Z (a977f45b)**, ArgoCD on 92.16.1 at 19:02Z (op still draining its retry 4 of the 92.11.1 attempt);
+  Monitor on targetRevision/op/lease/operator-image. **Lease-machinery gap confirmed from the ticks (18:43–18:58Z):** the
+  lease stamps `sha` = the sync's master HEAD (`status.sync.revisions[values]`), and the box reverts THAT sha — #3062's
+  sync started 18:13Z after #3067 had landed, so the lease carries f50222b1 and every tick says "not_pin_only — commit
+  touches ROADMAP.md" though the bump was pin-only: ADR-150's revert silently became a human read. Not a tracker item
+  (fu-mint-gate: bounded + decided) — a subagent builds the fix PR unarmed (resolve the pin commit from the subject file's
+  history; fixture in mgmt-lease-test.sh), the seat reads it. Harmless today: the stale lease is replaced by #3065's sync.
+  **kps 92.16.1 LIVE 19:33:04Z:** the 92.11.1 op burnt its retry 5 at ~19:29Z, the forward op opened a new lease
+  (92.11.0→92.16.1 — `from` is the live release, 92.11.1 never deployed), operator v0.94.2 rolled, prometheus + grafana
+  restarted, postsync `crds-match-operator` passed → lease confirmed/deleted, op Succeeded (one retry on the admission
+  hook cleanup). Box belt 19:32:33Z: `kps-crds PASS — 10 CRDs at operator 0.94.2`, **8 pass, 0 fail** — the first fully
+  green belt since #3036. Alerts at 19:33Z still draining: MgmtBeltCheckFailing, MgmtLeaseExpiredUnreverted,
+  UpgradeLeaseInFlight (MgmtLeaseRevertFailed + UpgradeLeasePastExpectedEnd already gone) — resolution watched below.
 - Bookkeeping: FU-319/FU-258 rulings, meta-state S9 bullet rebuilt, #1985 + #1988 status comments; git gc un-wedged.
