@@ -356,10 +356,52 @@ seen `wx-` key, and a RESTORE (`restored-pins:`) — a restore is never exonerat
 ping-pong; the restore's own failure falls to the walk, whose candidate (the original bump) is
 already ledgered. A restore whose `git revert` conflicts is aborted, never forced.
 
-**Not covered:** the lock shape (`revert-lock-*`, check (i)) and the image/provider/chart chains
-have no control leg yet. Replay: `workflow-pin-revert-exonerate` (the decision table, base world =
+**Not covered:** the lock shape (`revert-lock-*`, check (i)) and the image/provider/chart/coordinator
+chains have no control leg yet. Replay: `workflow-pin-revert-exonerate` (the decision table, base world =
 the snore-recorder record) + `workflow-pin-revert-restore-lane`; the memory half is
 `scripts/pin-only-lint-test.sh` `reverted-pin-exonerated`.
+
+## Part 7 — the coordinator image: previous-tag revert on `AgentLoopWorkflowsFailing` (2026-10-31, homelab#1988)
+
+The base-image post-merge half of homelab#1988. A base-image major on agent-coordinator (node
+22 → 24 was agent-coordinator#23) passes `ci` and `build-image`'s runtime smoke, deploy-pin
+auto-merges the homelab bump, and ArgoCD rolls every coordinator/reviewer/reflex pod — and every
+loop CronWorkflow — onto the new tag. If the image dies at runtime, ArgoCD never goes Degraded (a
+CronWorkflow has no health), so FU-044's `deploy-revert` never fires; and Parts 1–3 run ON this very
+image, so a revert hosted on the chain would ride the broken tag. Until this part base-image majors
+parked on `major/awaiting-human` for that reason (§Last proven in
+[`dependency-upgrades.md`](../dependency-upgrades.md)).
+
+**Actor: Part 4's receiver, second target kind.** The `chart-revert` Deployment already sits outside
+the chain's cone, and its image tag lives in `argocd/resources/chart-revert/kustomization.yaml`,
+which the deploy-pin never writes — so it keeps running the tag it ran before the bump (the
+kustomization's header carries the hand-bump rule that keeps it so). No new Deployment, credential
+or route receiver: one more `TARGETS` row (`kind: image`) and one more Alertmanager matcher.
+
+| leg | chart target (Part 4) | image target (this part) |
+|---|---|---|
+| detector | `ArgoControllerSilent` | `AgentLoopWorkflowsFailing` — ≥3 loop workflows Failed/Error in 1 h per loop namespace (`agent-coordinator`, `<stack>-agents`), `for: 10m` (`argocd/resources/argo-workflows-alerts/`); the per-loop-namespace sibling of the fleet `ArgoWorkflowsFailing` (40/6 h, too slow and stack-DAG-polluted). Its labels name a namespace, never an image — the image comes from the CORRELATION, the provider chain's stance |
+| candidate | newest merge ≤120 m touching `argo-workflows.yaml` | newest merge ≤120 m touching `agents/coordinator/kustomization.yaml` (the FU-152 pin file); `revert-*` heads never |
+| predicate | only `targetRevision:` in that file | every changed non-comment line, in every file, is an agent-coordinator pin — `newTag:` (the pin file only), `AGENT_COORDINATOR_IMAGE=…`, `image: …agent-coordinator:<tag>` — and exactly one tag moved (#3040 touched four files). An agent-base pin, another app's `newTag`, a `resources:` edit → `not_pin_only` |
+| previous tag | the removed `targetRevision` | the removed tag: `git revert` of the deploy-pin restores exactly what the bump replaced, in every file it swept |
+| stale guard / ledger | master's `targetRevision`; `revert-chart-<sha8>` | master's `newTag`; `revert-coord-<sha8>` |
+| memory | `reverted-charts:` → check (h) | `reverted-coordinator: <tag>` → `pin-only-lint` check (k), keyed on the tag's `-g<hex>` SOURCE: a weekly rebuild of the same agent-coordinator commit is the same version under a new date; a new commit passes. Lever out early: edit the line out of the merged revert's body |
+
+**A correlation, by design.** A loop failing within 120 m of an unrelated pin reverts a good pin and
+holds that source for 30 d. Replayed over Prometheus retention (2026-10-12 → 10-31): one
+`AgentLoopWorkflowsFailing` episode (2026-10-17 17:31–19:16Z, `agent-coordinator`), nine coordinator
+pins, none in the 120 m before it → `no_candidate`. No control leg yet (Part 6's exoneration covers
+`revert-wf-*` only): a revert whose loop stays red on the previous tag says the image was not the
+cause, and the release is a human edit of the memory line.
+
+**Drill.** Unit tests on #3040's real squash commit (`devbox run chart-revert-self-test`, the image
+classes) + `pin-only-lint-test` `coord-*` (both red on the pre-change code). Dry run 2026-10-31: the
+receiver's `handle_alert` with a drill alert naming #3040, every GitHub/git READ live and every
+write (`push`, `pr create/edit/merge`) intercepted — `revert-coord-df99ff4a`, the clone's
+`git revert` restoring `2026.10.28-g950b7f0b8201` in all four files, the body ending
+`reverted-coordinator: 2026.10.30-g4944d7039514`, and `pin-only-lint` OK on that revert commit. A
+live drill (a synthetic alert POSTed to the pod) opens and merges a real revert — the seat's call,
+and its memory line must be edited out afterwards (the #2209 precedent).
 
 ## Future Work
 

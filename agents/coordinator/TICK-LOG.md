@@ -14879,3 +14879,36 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - First run 22:00Z: 37 attached volumes trimmed, 6 detached skipped (expected warnings). Longhorn actual **859 → 403 GB**;
   mirror-ghcr 199 → 31 G (the removed snapshot object stays, 2 G — unmapped, not deleted); wk-04/sn530 82 % free,
   every disk ≥57 % free; all Longhorn alerts clear; window checks clean, closed.
+
+## 2026-10-31 ~11:40–14:20Z — seat (fable; opus/sonnet subagents): S9 re-verified, class-6 queue minted (FU-319), FU-316 + FU-305 class fix shipped, box belt un-wedged
+
+- Operator: "S9 stint — next steps? `MgmtSubstrateBehind` firing — the plan?" Three read-only research subagents (S9
+  compile with live `gh` verification, the class-6 plan from the docs + upstream releases, the two `MgmtBeltCheckFailing`
+  series), seat kept coordination only.
+- **S9 (#1985):** every 10-24 verify item had resolved (#2819/sleep-tracking#203/allure#11 merged; py3.15 park lifted 10-28
+  via flake-ref). Proven-but-unrecorded: lock-major lane (agent-runtime#183), kps lens major (#2550), G12 (#2968) → doc
+  currency **#3050 MERGED**. Left: #1988's two halves (base-image previous-tag revert → agent-coordinator#29; substrate
+  proposer row AFTER the attended bumps), residuals 5/1/2 (sleep-tracking#199 = live case of 5), event-gated proofs (G12b
+  #2995 etc.). Status comment on #1985; stale `agent/blocked` cleared on #2819 + allure#11. sleep-tracking#211 (grafana
+  13.3.0 vs prod 13.2.4 via kps) needs an operator ruling.
+- **FU-316 → #3049 MERGED:** blob-warmer sidecar on mirror-ghcr + mirror-docker-io (mcr soaked 7 d clean; ghcr fired 10-28
+  17:20Z→10-30 19:00Z). Rolled 12:45:30Z, warmers already fetching. Archived.
+- **#2014 → #3051 MERGED** (`version-sets-selftest` devbox task + diff-ci row); the ci.yaml step committed DIRECT
+  (governance lane) this session; #2014 closes on the push.
+- **`MgmtSubstrateBehind` cilium + kubernetes (1 minor each, since 10-11/13):** no plan owned it. Cilium 1.19 e2e-tests
+  k8s ≤1.35, 1.20 ≤1.36 (we run 1.36.1 on 1.19.1); Talos 1.14 supports k8s ≤1.37; Talos 1.15 (~12-27) flips Talos to
+  `Unsupported` with no grace. The Kubernetes-minor recreate-from-git drill (row 6, 09-25 sitting) was tracked nowhere
+  → **FU-319 minted**: cilium 1.20 (FU-258's bump, retargeted to newest 1.20.x) → drill → k8s 1.37 → talos 1.15, all
+  attended; Renovate on class 6 (#1988 row) after. Operator picks the Cilium window.
+- **`MgmtBeltCheckFailing{ansible}` since 10-28** = NOT the rc-127 bug (#2959 deployed) — #2919's python 3.14.8 staled the
+  box venv, devbox's y/n prompt → exit 1 on the OPNsense leg (FU-305 class, #2457 missed this leg); Unbound drift check
+  silent 3 d. Un-wedged 12:3xZ (venv moved aside), 12:46Z tick PASS, alert resolved. Class fix **#3052 MERGED**
+  (`OPN_ANSIBLE_BIN`; belt resolves ansible from `devbox.lock`; tests 5d/5e). FU-305 keeps its original unbuilt
+  deliverable `MgmtSentinelLoopStale` (a subagent rewrite dropped it; restored).
+- **`MgmtBeltCheckFailing{kps-crds, skew}` since 10-30 04:03Z** = G16 resight: #3036 bumped prometheus-operator-crds alone
+  (operator 0.94.1 vs CRDs 0.94.2) — `separateMinorPatch` + the 7-day age split the kps group; self-clears when kps
+  ≥92.14.1 lands (~11-03 19Z). Class fix = `.github/renovate-global.json` (operator-direct) — recorded in the G16 row (#3050).
+- Archive: FU-215/203/076 expired (ADR-116 buffer). Master pushed once mid-session (FU-319 was blocking #3050's lint).
+- Box: activated 21903082 at 14:03Z (its 14:01Z pull); belt tick 14:17:39Z `PASS ansible — plumbing ok on 6 host(s)` with
+  ZERO devbox mentions in the journal since 14:10Z — #3052's path proven live. Wind-down: tracker/meta-state/TICK-LOG
+  committed, one push, #2014 closed, transcripts synced.
