@@ -395,10 +395,14 @@ alertmanager:
         # other outcome is a counter + a log line (chart_revert_alerts_total{outcome}). group_wait
         # is short on purpose: the rule already waited 30 m + 5 m, and the receiver's own ledger
         # makes a re-delivery a no-op.
+        # 2026-10-31 (homelab#1988, base-image post-merge half): AgentLoopWorkflowsFailing joins —
+        # the receiver reverts the newest agent-coordinator deploy-pin merged within the window
+        # (pin-only across its files), from OUTSIDE that image's cone: its own tag is pinned apart
+        # from the deploy-pin (docs/designs/fu-1990-workflow-pin-revert.md Part 7).
         - continue: true
           group_wait: 10s
           matchers:
-            - alertname = "ArgoControllerSilent"
+            - alertname =~ "ArgoControllerSilent|AgentLoopWorkflowsFailing"
           receiver: chart-revert
         # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
         # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit

@@ -102,6 +102,16 @@
 #       Every read fails closed. The author comes from the Actions event payload
 #       (`.pull_request.user.login` / `.head.ref`), else PIN_ONLY_PR_AUTHOR / PIN_ONLY_PR_BRANCH; unknown = FAIL.
 #       Proof after merge: the box's own `mgmt-confirm` gate + `mgmt-tools-test` (docs/management-box.md §Two pins).
+#   (k) 2026-10-31 (homelab#1988, the base-image post-merge half): the coordinator-image memory. A
+#       diff that ADDS an agent-coordinator pin (`AGENT_COORDINATOR_IMAGE=…agent-coordinator:<tag>` in
+#       agents/images.env, `newTag: <tag>` in agents/coordinator/kustomization.yaml — the two lines
+#       every deploy-pin writes) is keyed on the tag's SOURCE, its `-g<hex>` commit (a tag without one
+#       keys on itself), and refused when a merged `revert-coord-*` PR of the last REVERT_MEMORY_DAYS
+#       names a tag of that source on its `reverted-coordinator: <tag>` body line (the chart-revert
+#       receiver's image target, driven by `AgentLoopWorkflowsFailing`). The tag is a build DATE plus
+#       the source, so the weekly rebuild of an unchanged agent-coordinator re-proposes the same
+#       version under a new date — keying on the full tag would let it straight back in. A new
+#       agent-coordinator commit is a new source and passes. Fail-closed on the read.
 # Seams for the self-test and the reusable caller workflow (never a REPLAY_* branch):
 #   PIN_ONLY_REPO   the repo root to lint (default: this script's parent dir)
 #   PIN_ONLY_GH     the `gh` to call for (d) (default: `gh`)
@@ -309,6 +319,14 @@ for lf in $(grep -E '(^|/)devbox\.lock$' <<< "$all_changed" || true); do
   added_locks="$added_locks $(printf '%s\n' "$moved" | tr '\n' ' ')"
 done
 added_locks="$(printf '%s\n' $added_locks | grep . | sort -u || true)"
+# (k): the ADDED agent-coordinator tags, one per line, from the two pin lines every deploy-pin writes.
+COORD_PIN_ADDED='^\+(AGENT_COORDINATOR_IMAGE=ghcr\.io/teststuffstash/agent-coordinator:|[[:space:]]*newTag:[[:space:]]*)([A-Za-z0-9._-]+)[[:space:]]*$'
+coord_source() { sed -E 's/^.*-(g[0-9a-f]{7,})([^0-9a-f].*)?$/\1/'; }  # tag → its -g<hex> source (else the tag)
+added_coord=""
+for cf in $(grep -xE 'agents/images\.env|agents/coordinator/kustomization\.yaml' <<< "$all_changed" || true); do
+  added_coord="$added_coord $(pr_diff "$cf" | grep -E "$COORD_PIN_ADDED" | sed -E "s#$COORD_PIN_ADDED#\2#" | tr '\n' ' ' || true)"
+done
+added_coord="$(printf '%s\n' $added_coord | grep . | sort -u || true)"
 # (j): the box flake lock — owner replacement (header). Each helper prints the offending reasons.
 FLAKE_LOCK="mgmt/nixos/flake.lock"
 FLAKE_LOCK_AUTHOR="${FLAKE_LOCK_AUTHOR:-homelab-renovate-1234[bot]}"   # devbox-update.yaml's App
@@ -400,7 +418,7 @@ if grep -qxF "$FLAKE_LOCK" <<< "$all_changed"; then
     echo "pin-only-lint: $FLAKE_LOCK — author $fj_author, re-resolve only, every rev on its branch upstream — check (j) ok."
   fi
 fi
-if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ] && [ -z "$added_charts" ] && [ -z "$added_locks" ]; then
+if [ -z "$changed" ] && [ -z "$wf_changed" ] && [ -z "$added_images" ] && [ -z "$added_providers" ] && [ -z "$added_charts" ] && [ -z "$added_locks" ] && [ -z "$added_coord" ]; then
   echo "pin-only-lint: OK — no guarded file touched."
   exit 0
 fi
@@ -487,6 +505,27 @@ if [ -n "$added_locks" ]; then
       rc=1
     fi
   done <<< "$added_locks"
+fi
+# (k) the reverted-coordinator memory — read once, fail-closed like (e)–(i); compared by SOURCE.
+if [ -n "$added_coord" ]; then
+  slug="${PIN_ONLY_SLUG:-${GITHUB_REPOSITORY:-}}"
+  [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
+  cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "$slug" ] || ! reverted_coord="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
+      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-coord-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-coordinator:\")) | ltrimstr(\"reverted-coordinator:\")" 2>&1)"; then
+    echo "pin-only-lint: FAIL — cannot read the merged revert-coord-* PRs of ${slug:-<no repo slug>} (the reverted-coordinator memory, check (k)): ${reverted_coord:-}; refusing to report success." >&2
+    rc=2; reverted_coord=""
+  fi
+  # shellcheck disable=SC2086  # the memory is a whitespace-joined list by contract
+  reverted_sources="$(printf '%s\n' $reverted_coord | grep . | coord_source | sort -u || true)"
+  while read -r ct; do
+    [ -n "$ct" ] || continue
+    src="$(printf '%s\n' "$ct" | coord_source)"
+    if grep -qxF "$src" <<< "$reverted_sources"; then
+      echo "pin-only-lint: FAIL — agent-coordinator:$ct is a REVERTED coordinator source ($src) — the coordinator-image revert rolled a build of it back within the last ${REVERT_MEMORY_DAYS} days (a merged revert-coord-* PR names it); this deploy-pin stays red until agent-coordinator builds from a new commit (or the revert's memory line is edited out)." >&2
+      rc=1
+    fi
+  done <<< "$added_coord"
 fi
 for f in $changed; do
   # Content lines only: pr_diff already strips the +++/--- headers and master's own lines.
@@ -633,4 +672,4 @@ if [ "$rc" != 0 ]; then
 EOF
   exit "$rc"
 fi
-echo "pin-only-lint: OK — every change is a pin line (arc-runner image / chart targetRevision / verified action SHA / tofu image, provider, chart version not in the reverted memory)."
+echo "pin-only-lint: OK — every change is a pin line (arc-runner image / chart targetRevision / verified action SHA / tofu image, provider, chart version, coordinator source not in the reverted memory)."
