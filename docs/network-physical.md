@@ -47,16 +47,19 @@ so it too is off both diagrams.
                       │   │   │   └─► hp-01 (.54)
    ThinkCentre Edge ◄─┘   │   └─► wk-metal-02 (.183)
    (.53)                  └─► wk-metal-01 (.182)
+     │ enp2s0 (second NIC, 192.168.15.53)
+     └─► Management 5-port (UNMANAGED, NO uplink — 192.168.15.0/24)
+           ├─► nx-01 BMC dedicated IPMI port (.15.58)
+           └─► nx-02 BMC dedicated IPMI port (.15.59)
 ```
 
 ## Notes relevant to PXE / provisioning
 
 - **`ThinkCentre Edge` (.53) is still cabled where the tree shows it, but is no longer a cluster
   node** (left cluster duty 2026-09-12 → the R12 out-of-band management-box pilot, FU-097). It is
-  **dual-homed**: its second NIC (`enp2s0`) goes to a dedicated 5-port management switch together
-  with the NX twin's two IPMI ports, nothing else (`192.168.15.0/24`; the sequence is
-  [`management-box.md`](management-box.md) §MB4 item 7 "Cable day"). Once cabled, redraw both the
-  ASCII tree and the mermaid graph in the same edit.
+  **dual-homed since 2026-10-31**: its second NIC (`enp2s0`) is on a dedicated 5-port management
+  switch with the NX twin's two dedicated IPMI ports and nothing else — no uplink, so no LAN host
+  reaches a BMC ([`management-box.md`](management-box.md) §MB4 item 7). Drawn in both diagrams.
 
 - **The office 5-port's `m70s` port wedged into a PAUSE storm (2026-10-13).** After a ~6 min
   m70s-only blackout at 06:10Z (no carrier change), the switch sent m70s ~2,600 802.3x PAUSE
@@ -95,5 +98,8 @@ graph TD
   SW5 --> APO["Office AP (.14)"]
   SW5 --> POP["pop-os (.57)"]
   SW5 --> M70S["m70s (.56)"]
+  TC -->|enp2s0| SWM["Management 5-port (no uplink, 192.168.15.0/24)"]
+  SWM --> BMC1["nx-01 BMC (.15.58)"]
+  SWM --> BMC2["nx-02 BMC (.15.59)"]
   PVE --- VMS["Talos VMs .51/.61/.62/.63 + ci-runner-01 .55 + Matchbox LXC .30 (vmbr0)"]
 ```
