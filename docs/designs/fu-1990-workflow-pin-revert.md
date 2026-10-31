@@ -363,7 +363,7 @@ and the memory line's own name `reverted-<kind>:` — the lock shape (`revert-lo
 `reverted-locks:`) gets `exonerated-locks:` and a restore on `revert-lock-<revert-sha8>` with an empty
 `reverted-locks:` + `restored-locks:` (the lock arm of governance-lint and pin-only-lint (j) key on
 that prefix). The memory half is keyed the same way: pin-only-lint skips every revert body carrying
-an `exonerated-` line, in all five memories ((e)–(i)). One limit, fail-closed: a flake-only lock
+an `exonerated-` line, in every memory ((e)–(i) and the coordinator-image one). One limit, fail-closed: a flake-only lock
 revert has an empty `reverted-locks:` (the flake lock has no package key), so it is never exonerated.
 
 **One pass per alert (homelab#1985 residual 2).** Alertmanager groups by alertname; the walk read

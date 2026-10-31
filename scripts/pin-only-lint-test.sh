@@ -310,6 +310,8 @@ case_ coord-pin ok "" "$CPIN"
 case_ coord-pin-reverted-refused 'is a REVERTED coordinator source (g4944d7039514)' "reverts_coord_ 2026.10.30-g4944d7039514" "$CPIN"
 case_ coord-pin-rebuild-same-source-refused 'is a REVERTED coordinator source (g4944d7039514)' "reverts_coord_ 2026.10.23-g4944d7039514" "$CPIN"
 case_ coord-pin-other-source ok "reverts_coord_ 2026.10.30-g950b7f0b8201.7" "$CPIN"
+# … and an exonerated coord revert releases its memory (header (e)'s `exonerated-` skip covers every memory).
+case_ coord-pin-reverted-exonerated ok "reverts_coord_ 2026.10.30-g4944d7039514; exonerate_closed_ coordinator" "$CPIN"
 case_ coord-non-pin-edit ok "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" "sed -i 's/  - a.yaml/  - a.yaml\\n  - b.yaml/' agents/coordinator/kustomization.yaml"
 case_ coord-memory-unreadable 'cannot read the merged revert-coord-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" "$CPIN"
 # (j) the box flake lock — the owner replacement (pin-only-lint.sh header (j)). Expected verdicts from

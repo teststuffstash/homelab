@@ -46,7 +46,7 @@
 #       greens on its own) — one home, and CI is the gate for both the mechanical and the
 #       lens-reviewed lane. The repo is $PIN_ONLY_SLUG, else $GITHUB_REPOSITORY, else origin.
 #       A revert whose body carries an `exonerated-<kind>:` line is SKIPPED — here and in EVERY
-#       revert memory below ((f)/(g)/(h)/(i)), keyed on the `exonerated-` prefix, never per chain: the
+#       revert memory below ((f)–(i) and the coordinator-image one), keyed on the `exonerated-` prefix, never per chain: the
 #       chain wrote it when the revert's own control failed too (for the workflow chains: the revert's
 #       own post-merge run of the same workflow) — the bump out of the path, still red, so the bump
 #       was not the cause (homelab#1985).
@@ -514,7 +514,7 @@ if [ -n "$added_coord" ]; then
   [ -n "$slug" ] || slug="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##' || true)"
   cutoff="$(date -u -d "-${REVERT_MEMORY_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
   if [ -z "$slug" ] || ! reverted_coord="$("$GH" api "repos/$slug/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
-      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-coord-\")) | (.body // \"\") | split(\"\\n\")[] | select(startswith(\"reverted-coordinator:\")) | ltrimstr(\"reverted-coordinator:\")" 2>&1)"; then
+      --jq ".[] | select((.merged_at // \"\") >= \"$cutoff\") | select(.head.ref | startswith(\"revert-coord-\")) | (.body // \"\") | select(split(\"\\n\") | any(startswith(\"exonerated-\")) | not) | split(\"\\n\")[] | select(startswith(\"reverted-coordinator:\")) | ltrimstr(\"reverted-coordinator:\")" 2>&1)"; then
     echo "pin-only-lint: FAIL — cannot read the merged revert-coord-* PRs of ${slug:-<no repo slug>} (the reverted-coordinator memory, check (k)): ${reverted_coord:-}; refusing to report success." >&2
     rc=2; reverted_coord=""
   fi

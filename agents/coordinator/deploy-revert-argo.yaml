@@ -664,7 +664,7 @@ spec:
             # enumerated) whose `**Failed workflow:**` line names the SAME workflow, the bump is
             # exonerated: (1) the revert's `reverted-<kind>:` memory line gains an
             # `exonerated-<kind>:` twin — pin-only-lint skips every memory body carrying an
-            # `exonerated-` line (checks (e)/(f)/(g)/(i)), so the memory is released; (2) a machine
+            # `exonerated-` line (every revert memory, keyed on the prefix), so the memory is released; (2) a machine
             # comment on the revert says why; (3) the revert is itself reverted (below) on the SAME
             # branch prefix (`revert-<kind>-<revert-sha8>`) — the existing governance-lint /
             # iac-sentinel revert arm admits it unchanged (every file byte-for-byte at <sha8>^) — with
