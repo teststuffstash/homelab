@@ -318,7 +318,8 @@ approval→merge window can bounce a PR back to Behind (rare, self-healing — s
 
 ## Worked examples
 
-Assumptions (today's numbers): `ci` ≈ **8 min** on ARC (~5 min cold start, improves with FU-015);
+Assumptions (design-time numbers, 2026-07): `ci` ≈ **8 min** on ARC (~5 min cold start — FU-015's
+warm runner image, shipped 2026-07-27, cut homelab `ci` to ~38 s and fleet's to ~2 min);
 reviewer session ≈ **4 min**; review dispatch now edge-triggered (near-instant, `*/15` backstop);
 updates are API calls (free) that each induce
 one CI cycle.
@@ -393,7 +394,8 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   escalate.
 - **Conflicted PR** — update-branch API returns 422; the action skips it. It can never become
   current → never reviewed → never merged. Needs a worker re-run or human rebase. The updater
-  workflow should label it (`merge-conflict`) so triage sees it.
+  labels it `merge-conflict` (armed ∧ DIRTY, `agents/update-pr-branch.sh` leg 3) and the scan's
+  merge-conflict clause routes it to the coordinator (MP-T06).
 - **Renovate PR — `close` is NOT terminal.** The escalation table's "close the PR" plays assume an
   *agent* PR; for a `renovate[bot]` PR, Renovate owns whether the update exists — a bare close is at best
   a one-version skip that churns on the next version, and vulnerability PRs are recreated even when closed.
@@ -418,8 +420,8 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   `agents/pr-last-edited.sh` — gh has no such `--json` field — and only the `*/15` backstop
   carries that leg, not the exporter edge (MP-T04).
 - **Code-owner-gated repo — bot approval never flips `reviewDecision`** (found live:
-  oracle-fleet#13, 2026-07-12). With `require_code_owner_review` (oracle-fleet gates `/specs/` +
-  `/.agents/` on Rasmus), `reviewDecision` stays `REVIEW_REQUIRED` after the reviewer approves —
+  oracle-fleet#13, 2026-07-12). With `require_code_owner_review` (oracle-fleet then gated `/specs/` +
+  `/.agents/` on Rasmus; `/specs/` left its CODEOWNERS 2026-10-26, oracle-fleet#925), `reviewDecision` stays `REVIEW_REQUIRED` after the reviewer approves —
   it waits for the human. Reading `reviewDecision != APPROVED` as "unreviewed" re-dispatched a
   reviewer every tick: 12 duplicate approvals in 90 min until the subscription session limit cut
   it off. The reflex therefore tests "reviewer-bot approval newer than the newest commit"
@@ -552,7 +554,7 @@ files against the round-3 directive found it.
 
 ### Guards
 
-Two independent guards, one in each repo:
+Two independent guards were designed, one in each repo; only the homelab half is built:
 
 1. **Launcher-side post-merge-push detector** (`agents/agent-session.sh`, homelab half): after the
    harness exits, if this ride's PR merged during the run and its head branch received commits
@@ -560,9 +562,11 @@ Two independent guards, one in each repo:
    stranded work is salvageable by `--work-branch`. This is the **detection** half — it makes the
    strand visible.
 
-2. **Finalize-side refusal guard** (`agent-finalize`, agent-runtime#66): refuses to push when the
-   PR is already merged, and parks loudly instead of pushing into the void. This is the
-   **prevention** half — it stops the strand from happening.
+2. **Finalize-side refusal guard** (`agent-finalize`) — **NOT BUILT** (re-checked 2026-10-31:
+   agent-runtime master's `agent-base/agent-finalize` has no merged-PR refusal, and
+   agent-runtime#66, cited here before, is the unrelated `agent_run_phase_seconds` issue). The
+   design: refuse to push when the PR is already merged and park loudly instead of pushing into
+   the void — the **prevention** half that would stop the strand from happening.
 
-Both guards name the branch so the stranded work is recoverable via `--work-branch` without a
+The detector names the branch so the stranded work is recoverable via `--work-branch` without a
 by-hand diff (the resume path already works: #1210 resumes `agent/20260901-165514`).
