@@ -50,7 +50,7 @@ never holds the token; credential writes stay with the gateway.
 
 ## rail
 
-A billing/credential lane upstream. v0 has four (one dark); each has one upstream host, one
+A billing/credential lane upstream. v0 has four; each has one upstream host, one
 credential source and one `max_sessions` cap in the policy.
 
 | rail | credential | upstream host | dialects served |
@@ -58,7 +58,7 @@ credential source and one `max_sessions` cap in the policy.
 | `anthropic` | the operator's Claude subscription OAuth token (`AUTH_TOKEN` in the stack's `claude-session` Secret) | `api.anthropic.com` | anthropic |
 | `opencode` | the OpenCode Go subscription key (the gateway's own mounted Secret) | `opencode.ai/zen/go` | anthropic, openai |
 | `openrouter` | the per-stack OpenRouter key minted by openrouter-operator | `openrouter.ai/api/v1` | anthropic, openai |
-| `codex` (**dark**) | the operator's ChatGPT subscription OAuth record, behind the persistence interface — FAKE store only, no production write-back ([GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth)) | unselected (`CODEX_UPSTREAM`, no default) | responses |
+| `codex` (lit 2026-10-22) | the operator's ChatGPT subscription OAuth record (the gateway's own login), behind the persistence interface — gateway-local SQLite seeded from an ESO-mounted file, no write-back ([GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth)) | `chatgpt.com/backend-api/codex` (the deployed `CODEX_UPSTREAM`; no code default) | responses |
 
 Out of v0 and named only as gaps: `zen`.
 
@@ -72,7 +72,7 @@ A harness speaks exactly one dialect; a rail serves one or both (table under *ra
 
 ## harness
 
-The agent CLI the pod runs: `claude`, `opencode`, `goose`, `codex` (its rail ships dark). The
+The agent CLI the pod runs: `claude`, `opencode`, `goose`, `codex` (its rail lit 2026-10-22). The
 harness fixes the dialect (`claude` → anthropic; `opencode`/`goose` → openai; `codex` → responses) and the
 set of env var names the gateway must hand the pod
 ([GW-SESSIONS-ENV](endpoints/sessions.md#gw-sessions-env)).
@@ -238,8 +238,8 @@ scout's canary leg for OpenRouter entrants.
 
 The `Store` seam the codex OAuth lifecycle runs behind — `lock()` / `load()` / `save()`, one
 account per store, the lock held across load → refresh → save, `save` atomic and durable
-([GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth)). Only a FAKE (process-memory)
-implementation exists; the production one is a `⚑ gap`.
+([GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth)). Tests drive a FAKE (process-memory)
+implementation; production runs gateway-local SQLite in `GATEWAY_DB` (`sqlite_oauth.py`).
 
 ## control plane / data plane
 

@@ -45,11 +45,12 @@ Environment: `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is
 logged, and `/healthz` says `db: memory`), `OPENCODE_GO_API_KEY` (the gateway's own mounted Go
 key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Service name),
 `ANTHROPIC_UPSTREAM` / `OPENROUTER_UPSTREAM` / `OPENCODE_GO_UPSTREAM` (base URLs, overridable for
-tests), `CODEX_UPSTREAM` (native backend; no default), `CODEX_SEED_FILE` (ESO-mounted JSON seed; SHA-256-gated import into `GATEWAY_DB`), `CODEX_USAGE_URL` (the account usage endpoint the gateway polls for headroom — GW-CODEX-HEADROOM §Poll; no default), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20),
+tests), `CODEX_UPSTREAM` (native backend; no default), `CODEX_SEED_FILE` (ESO-mounted JSON seed; SHA-256-gated import into `GATEWAY_DB`), `CODEX_USAGE_URL` (the account usage endpoint the gateway polls for headroom — GW-CODEX-HEADROOM §Poll; no default), `CODEX_CAPTURE_TASK_PREFIX` (GW-CODEX-CAPTURE's scope; empty = off) / `CODEX_CAPTURE_MAX_BYTES` (262144) / `CODEX_CAPTURE_RETENTION_DAYS` (7), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20), `GATEWAY_CONNECT_TIMEOUT_S` (10) / `GATEWAY_READ_TIMEOUT_S` (600, the upstream budget),
 `GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_CONFIG_URL` / `GATEWAY_GO_DOCS_URL` (the Go catalog's three
 reads — models.dev, the console overlay, the Go page — overridable for tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule), `GATEWAY_OR_MCP_URL` (the OpenRouter
 MCP the catalog's ranking + benchmark reads ride) and `GATEWAY_OR_CATALOG_REFRESH_S` (21600; 0 = no schedule),
-`GATEWAY_BENCHMARKS` (the committed tier-evidence snapshot mounted beside the policy; its age is a gauge).
+`GATEWAY_BENCHMARKS` (the committed tier-evidence snapshot mounted beside the policy; its age is a gauge),
+`GATEWAY_PORT` (8080) and `GATEWAY_LOG_LEVEL` (INFO).
 
 Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
 `agent-gateway.agent-egress.svc.cluster.local:8080`); image built by
@@ -114,7 +115,7 @@ policy's `tiers` block, and a row fails the suite when a list drifts from the de
 - The codex rail uses gateway-local SQLite in `GATEWAY_DB`; `CODEX_UPSTREAM` and
   `CODEX_SEED_FILE` enable the executable's native backend. The mounted seed is imported only
   when its content hash changes; rotations and recovery markers remain local and durable.
-  The seed is minted by `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed` — the
+  The seed is minted by the repo root's `scripts/codex-seed-bootstrap.sh` (`devbox run codex-seed` there — the
   gateway's OWN device login, never the jail's; runbook §Enrol the gateway's own Codex login).
   The deployed policy declares the rail since 2026-10-22 (the explicit canary cell, `prober` only);
   since 2026-10-23 every role lists it — subscriptions go to all roles, and the walk's harness
