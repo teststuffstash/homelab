@@ -1,0 +1,10 @@
+# homelab#1941 — stale bundle, TERMINAL (Failed) same-key pod: delete + one retry.
+# STUB_KUBECTL_create=already-exists-once (agents/replay/stubs/kubectl) drives the ConfigMap create; the same-key pod phase is a recorded read.
+name: context-prefetch/fix-round-cm-stale-terminal
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+env:
+  - STUB_KUBECTL_create=already-exists-once

@@ -1,0 +1,10 @@
+# homelab#1941 — AlreadyExists while a LIVE (Running) same-key pod holds the bundle: NO delete, NO retry, the fallback names AlreadyExists.
+# STUB_KUBECTL_create=already-exists-once (agents/replay/stubs/kubectl) drives the ConfigMap create; the same-key pod phase is a recorded read.
+name: context-prefetch/fix-round-cm-live-pod
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+env:
+  - STUB_KUBECTL_create=already-exists-once

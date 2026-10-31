@@ -33,6 +33,22 @@ if _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
     printf 'error: the server could not find the requested resource\n' >&2
     exit 1
   fi
+  # homelab#1941: `already-exists-once` refuses the FIRST call with AlreadyExists and lets every later
+  # one through — a stale bundle the launcher must delete before its one retry. The marker lives in
+  # the run's scratch dir (next to $REPLAY_ACTIONS), never in the committed world.
+  if [ "$PC_OVERRIDE" = already-exists-once ]; then
+    _rp_once="${REPLAY_ACTIONS}.$(_rp_slug "$WORDS").once"
+    if [ ! -e "$_rp_once" ]; then
+      : > "$_rp_once"
+      printf 'Error from server (AlreadyExists): configmaps "replay-context" already exists\n' >&2
+      exit 1
+    fi
+  fi
+  # homelab#1941: `forbidden` refuses EVERY call for another cause — no retry, no delete.
+  if [ "$PC_OVERRIDE" = forbidden ]; then
+    printf 'Error from server (Forbidden): configmaps is forbidden: User cannot create resource "configmaps"\n' >&2
+    exit 1
+  fi
   _rp_serve "$WORDS" optional || true
   exit 0
 fi

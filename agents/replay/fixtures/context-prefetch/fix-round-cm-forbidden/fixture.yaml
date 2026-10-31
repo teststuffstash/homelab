@@ -1,0 +1,10 @@
+# homelab#1941 — create refused Forbidden (another cause): NO get, NO delete, NO retry, the fallback names Forbidden.
+# STUB_KUBECTL_create=forbidden (agents/replay/stubs/kubectl) drives the ConfigMap create; the same-key pod phase is a recorded read.
+name: context-prefetch/fix-round-cm-forbidden
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+env:
+  - STUB_KUBECTL_create=forbidden

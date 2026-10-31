@@ -40,6 +40,10 @@ context-prefetch	context-prefetch
 context-prefetch/ci-red	context-prefetch
 context-prefetch/ci-red-unreadable	context-prefetch
 context-prefetch/fix-round	context-prefetch
+context-prefetch/fix-round-cm-forbidden	context-prefetch
+context-prefetch/fix-round-cm-live-pod	context-prefetch
+context-prefetch/fix-round-cm-stale-absent	context-prefetch
+context-prefetch/fix-round-cm-stale-terminal	context-prefetch
 context-prefetch/fix-round-unreadable	context-prefetch
 coordinator-pick-rail-anthropic	coordinator-pick-rail
 coordinator-pick-rail-both	coordinator-pick-rail
