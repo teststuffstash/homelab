@@ -1254,33 +1254,27 @@ any sync of the reinstall class.
    The move is the moment to rotate the factory credentials (FU-288): every BMC setting is re-touched
    anyway, and the wallet entries (`<node>-bmc-password`) are what the verbs below read.
 
-   **The addresses, and a transition that needs no re-address (built 2026-10-31).** Each address
-   mirrors its owner's LAN last octet: the box's mgmt NIC `192.168.15.53` (the TP-Link card, `enp2s0`,
-   matched by MAC in `mgmt/nixos/hosts/mgmt/default.nix` like the LAN leg), `nx-01-bmc` `.15.58`,
-   `nx-02-bmc` `.15.59` (`machines.yaml` `bmc:`, rendered to `mgmt/nixos/hosts/mgmt/bmc.json` for the
-   box's hosts file and the verbs). The BMCs take their FINAL statics while their cables are still on
-   the LAN switch: the box carries a **transition leg**, `192.168.15.254/24` on its LAN NIC at route
-   metric 1024, which reaches them over the shared L2. The mgmt NIC's own route (metric 100) wins the
-   moment it has carrier, so moving cables changes no config. The mgmt leg is `RequiredForOnline=no`:
-   an uncabled NIC must never hold `network-online.target` (a degraded systemd fails mgmt-confirm's
-   gate). Both BMCs run the Supermicro **failover** LAN mode (`raw 0x30 0x70 0x0c 0` → `02`): the
-   dedicated port if it has link at BMC boot, else the host's LAN1 — which would put a BMC back on the
-   LAN, so cable day pins **dedicated** (`raw 0x30 0x70 0x0c 1 0`).
+   **As built — LIVE since 2026-10-31.** Each address mirrors its owner's LAN last octet: the box's
+   mgmt NIC `192.168.15.53` (the TP-Link card, `enp2s0`, matched by MAC in
+   `mgmt/nixos/hosts/mgmt/default.nix` like the LAN leg), `nx-01-bmc` `.15.58`, `nx-02-bmc` `.15.59`
+   (`machines.yaml` `bmc:`, rendered to `mgmt/nixos/hosts/mgmt/bmc.json` for the box's hosts file and
+   the verbs). The 5-port carries exactly three cables — `enp2s0` and the two NX dedicated IPMI ports,
+   no uplink — so only the box reaches a BMC (the jail's direct path was probed dead after the move).
+   The mgmt leg is `RequiredForOnline=no`: a dead switch must never hold `network-online.target` (a
+   degraded systemd fails mgmt-confirm's gate). Both BMCs are pinned to the **dedicated** LAN port
+   (`raw 0x30 0x70 0x0c 1 0`; read back `raw 0x30 0x70 0x0c 0` → `00`) — the factory **failover**
+   mode (`02`) falls back to the host's LAN1 when the dedicated port has no link at BMC boot, which
+   would put a BMC back on the LAN.
 
-   **Re-address — DONE 2026-10-31** (both BMCs static, gateway `0.0.0.0`, verified through the box).
-   The recipe, per BMC over its current LAN address: `lan set 1 ipsrc static` (keeps the current
-   address), `netmask 255.255.255.0`, then `ipaddr 192.168.15.x` (the session drops there); verify with
-   `devbox run bmc -- <node> lan print 1`. No gateway step: the X10 firmware REFUSES `defgw ipaddr
-   0.0.0.0`, and clears the old gateway to `0.0.0.0` by itself once the address leaves its subnet. Recovery if one goes dark: nx-02's in-band `ipmitool`
-   (KCS, no network) from its Proxmox shell; nx-01 (Talos, no shell) via any LAN host given a
-   `192.168.15.x` alias.
-
-   **Cable day:** (1) pin dedicated mode on both BMCs (`devbox run bmc -- <node> raw 0x30 0x70 0x0c 1 0`)
-   — only once their IPMI port is confirmed cabled; (2) cable the 5-port: the box's `enp2s0` + both
-   NX IPMI ports, nothing else, no uplink; (3) `devbox run bmc -- <node> chassis power status` for each
-   — now over `enp2s0` (`ip route get 192.168.15.58` on the box names it); (4) a follow-up PR drops
-   the transition leg and the `nx-0{1,2}-bmc` dnsmasq reservations, and redraws
-   [`network-physical.md`](network-physical.md). After (4) only the box can reach a BMC.
+   **Adding a BMC** (the move's recipe, reusable): add its `bmc:` entry, and have the box carry a
+   transition address on its LAN NIC (`192.168.15.254/24`, route metric above the mgmt NIC's) for as
+   long as the BMC is still cabled to the LAN. Over its current LAN address: `lan set 1 ipsrc static`
+   (keeps the address), `netmask 255.255.255.0`, then `ipaddr 192.168.15.x` (the session drops there).
+   No gateway step: the X10 firmware REFUSES `defgw ipaddr 0.0.0.0`, and clears the old gateway to
+   `0.0.0.0` by itself once the address leaves its subnet. Pin dedicated, move the cable, verify with
+   `devbox run bmc -- <node> lan print 1` (`ip route get` on the box names `enp2s0`), drop the
+   transition address and the BMC's DHCP reservation. Recovery if one goes dark: an in-band
+   `ipmitool` (KCS, no network) from the host's shell, if it has one.
 
    **Access from the operator's workstation (design, 2026-09-30).** SSH forwards TCP only and IPMI-over-LAN
    is UDP 623, so the two kinds of access take two paths, both through the box, as one `mgmt/scripts`
@@ -1313,7 +1307,7 @@ metal half). Spike: [`spikes/tofu-controller-on-the-box.md`](spikes/tofu-control
 (FU-242) → the impact line → box-run maintenance verbs proven by a human-ordered run → `reconcile: auto` on
 the compute tier with WIP 1 → then ADR-133's three control planes (FU-243) → the CARP pair. **Where it stands (2026-09-22):** everything through `reconcile: auto` is built, and the fleet rollout
 (CPs included) has been switched ON since 2026-09-22, when it rolled 13/13 nodes to v1.14.1 (#1879). The three CPs are
-live (FU-243). The CARP pair is complete since 2026-10-09 ([`router-move.md`](router-move.md) §Status); next is the management network.
+live (FU-243). The CARP pair is complete since 2026-10-09 ([`router-move.md`](router-move.md) §Status); the management network is live since 2026-10-31 (§MB4 item 7).
 
 ### The rollout policy — forward by default, less than a day (FU-273, operator 2026-09-22)
 
@@ -1692,7 +1686,7 @@ this section.
 | Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review instruction is live in `.agents/review.md` (2026-09-28) |
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
-| The management network | §MB4 item 7. Built 2026-10-31: the box's second NIC stanza + transition leg, `bmc:` in `machines.yaml`, the `bmc`/`bmc-web` verbs. BMCs re-addressed 2026-10-31. Left: cable day, FU-288's rotation |
+| The management network | §MB4 item 7 — LIVE 2026-10-31 (box `enp2s0` + both NX BMCs on the 5-port, the `bmc`/`bmc-web` verbs). Left: FU-288's rotation + wallet entries |
 | A CI gate on `mgmt/nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 
 ## Prior art worth knowing before trusting NixOS here
