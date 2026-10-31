@@ -51,7 +51,7 @@ Three platform-wide design rules bound every brief (operator, 2026-07-27; the th
 |---|---|---|---|
 | dispatch-on-work | scan-emitted work unit (issue/PR state) | fixer; infra-fixer (FU-106 — detector + infra-enrich 2026-07-27, oracle-iac twin 2026-08-02; both -iac repos have merged rides) | |
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
-| dispatch-on-schedule | cron (level-triggered) | scout; retro | prober (FU-102), audit-pass (FU-101 e-ITS) |
+| dispatch-on-schedule | cron (level-triggered) | scout; retro; prober (FU-102 — `probe-<stack>` since 2026-08-24) | audit-pass (FU-101 e-ITS) |
 | dispatch-on-alert | Alertmanager firing | responder v2 (triage-first, GitOps-verbs) | remediation whitelist; selfQueue |
 | dispatch-on-goal | a human-queued mission (research) / Goal issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
@@ -146,6 +146,9 @@ incident-evidenced in merge-path-fsm.yaml style — the retro role maintains it.
 | helm | helm-best-practices | `chart*/` touched | advisory | **LIVE 2026-07-27** (`agents/lenses/helm.md`) |
 | ASVS | OWASP ASVS v5.0 (May 2025, [asvs.dev](https://asvs.dev/)) | `gh pr diff` grep for auth/input/session/signature code and new route registrations (Go/Python/TS) | advisory | **LIVE 2026-08-24** (`agents/lenses/asvs.md`) — code-class predicate via diff grep, not paths; prefers quiet miss over false alarm |
 | e-ITS | RIA e-ITS baseline | stack-level, scheduled audit-pass | audit report | banked, no owner (FU-101/FU-105 expired from the tracker; revisit with the IdP stack — 2026-10-14 ruling) |
+| migration | upstream release notes + known issues (ADR-141) | label `major`/`deps-review`, or a lockfile-only diff crossing a major | **blocking by construction** | **LIVE 2026-09-27** (`agents/lenses/migration.md`, S9 homelab#1989) |
+| gate-change | the gate-drift report (ADR-142 trial) | diff touches `scripts/` and the repo carries `scripts/gate-drift.sh` on its default branch | **blocking by construction** | **LIVE 2026-09-28** (`agents/lenses/gate-change.md`) |
+| specs | the island's spec rows + CI evidence (ADR-155) | the SECOND identity's own tick ([`specs-reviewer.md`](specs-reviewer.md)), not `reviewer-session.sh` | **blocking by construction** | **LIVE 2026-10-16** (`agents/lenses/specs.md`) |
 
 Mechanism (built with FU-101's first two lenses): `reviewer-session.sh` computes the diff class
 in-pod (deterministic — changed paths + `gh pr diff` grep), fetches matching
@@ -156,7 +159,8 @@ failure skips the lens loudly. The per-stack advisory→blocking knob is rendere
 AgentStack claim as `spec.lenses.<name>: advisory|blocking` (FU-101), sourced through
 the same fail-closed claim read as the reviewer optout — zero extra cluster calls.
 A lens marked blocking appends a `POSTURE: blocking` line to its fetched text so the
-reviewer knows its findings MAY determine the verdict. Absent = every lens stays advisory.
+reviewer knows its findings MAY determine the verdict. Absent = every lens stays advisory — except
+`migration` and `gate-change`, whose blocking posture `reviewer-session.sh` pins regardless of the claim.
 
 Per-stack claim knob graduates a lens advisory → blocking. Audit-lane model rules (reasoning
 tier allowed, dual-model worth it) are FU-095's.
