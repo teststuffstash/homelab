@@ -138,8 +138,8 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    `qm stop`s the VM, then latches `onboot 0` so a host reboot does not bring it back (drift
    against tofu's `on_boot = true` — re-enabling is a reviewed apply. That drift also WEDGES the box's
    apply loop: every master plans `on_boot false → true` and is refused, until git declares `false` —
-   #2180 did it by hand after the 2026-10-02 trip; the class is open, FU-297: the trip proposes that
-   PR, or `lifecycle { ignore_changes = [on_boot] }`); proven by injecting an ARP
+   #2180 did it by hand after the 2026-10-02 trip; moot since windows 1–2 retired both nodes' kill
+   switches — `pve_router_live_vmids` in both hypervisors' host_vars); proven by injecting an ARP
    claim for `.1` from the node's MAC (tripped in <1 s). It is the hypervisor's
    `router-killswitch@<vmid>` unit (`ansible/pve-router-killswitch.yml`, the vmid in the host's
    `host_vars`), enabled at every host boot and ordered before `pve-guests`, so it keeps working
@@ -182,8 +182,8 @@ are the address-independent part — the drills re-measure on `.72`):
 
 So a planned move (firmware, a hypervisor reboot) is hitless by entering maintenance first, and an
 unplanned one costs ~3 s. The window's first step can be the CARP VIP itself — the trial found no
-reason to shrink it to a plain address. **Not yet exercised:** dnsmasq active/passive, and one Cilium peer + one router-id per node
-(pfsync: below). (The HAProxy VIPs need no CARP at all under the `/24` ruling.)
+reason to shrink it to a plain address. **Not yet exercised at the trial:** dnsmasq active/passive, and one Cilium peer + one router-id per node
+(pfsync: below) — both done since: Kea HA and per-node peers/router-ids (§The two windows). (The HAProxy VIPs need no CARP at all under the `/24` ruling.)
 
 **pfsync** (2026-09-30): the same play sets it on each node — `lan`, unicast to the OTHER node's
 inventory address, version **pinned `1400`**, preempt on, no XMLRPC (`synchronize_to_ip` empty).
@@ -451,7 +451,8 @@ the hypervisor's flooding, not the node's config.
   (the WAN gate leaves its WAN without link, so its 400 is structural). Detector `LanCertExpiringSoon`
   (#2927) first, then the role's `fetchCronIntegration` task on the MASTER, then FU-297's cert-carry.
   **Same evening: #2934 landed and was applied to both nodes (cron job + `UpdateCron` set on nx02 and pve),
-  circles re-issued on the MASTER, the alert resolved. The BACKUP's copies still need the carry (FU-297).**
+  circles re-issued on the MASTER, the alert resolved.** The BACKUP's copies were carried live the same night
+  (`opnsense-cert-carry.sh nx02 pve`, #2939); scheduling the carry on the box is FU-297's next.
 
 - 2026-09-29 night: the inventory above. Prod, the test VM baseline and the drill all on 26.7.4_1
   (#2128), plain drill score 12 → SystemHealth pinned (#2129). The rehearsal
