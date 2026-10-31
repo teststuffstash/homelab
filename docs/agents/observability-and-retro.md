@@ -658,9 +658,10 @@ cell pipeline runs `pipefail`. **The platform-series build wave landed 2026-08-1
 stint: rename + ride-ns guard #623, fleet read token + KPI drop #619, content floor #620,
 RetroReportOverdue restart-gap hardening #623). The first unattended platform fire (Mon
 2026-08-24) FAILED (the 529 storm + the #861 cell-model collapse, fixed PR#864); the re-fire
-DELIVERED platform r1 2026-08-25 (PR#918; batch #927–#932) — the clean unattended acceptance
-is the Mon 2026-08-31 cron (FU-058). Remaining FU-058 legs: ledger emitter gaps (brief-v2(b) +
-r4's three blind spots), MCP transcript slices, stack retros second (§The split point 2).
+DELIVERED platform r1 2026-08-25 (PR#918; batch #927–#932); the series has run weekly since —
+r2 2026-08-31 through r9 2026-10-19, both cells each round ([`retros/`](retros/)). Remaining
+FU-058 legs: ledger emitter gaps (brief-v2(b) + r4's three blind spots), MCP transcript slices,
+stack retros second (§The split point 2) — the tracker item holds the current next step.
 
 #### The multi-model pilot — what runs 1–3 taught
 
