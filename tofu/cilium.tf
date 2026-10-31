@@ -41,13 +41,15 @@ resource "helm_release" "cilium" {
     # BGP control plane: advertise LoadBalancer service IPs to OPNsense (FRR).
     bgpControlPlane = { enabled = true }
     # Gateway API (ADR-092): the in-cluster host-router for per-stack subdomain delegation
-    # (`*.<stack>.teststuff.net` → a stack-owned Gateway). Requires the Gateway API v1.4.1
-    # CRDs, installed SEPARATELY and existing BEFORE this flag flips —
+    # (`*.<stack>.teststuff.net` → a stack-owned Gateway). Requires the Gateway API CRDs (v1.6.x
+    # since Cilium 1.20 — it requires TLSRoute/ReferenceGrant at v1), installed SEPARATELY and
+    # existing BEFORE this flag flips (and before any Cilium minor bump) —
     # argocd/platform/gateway-api-crds.yaml (sync that first, then tofu-apply Cilium). Needs
     # kubeProxyReplacement=true (set above) + l7Proxy (default on). The CRD app uses the
-    # EXPERIMENTAL channel: we don't use TLS passthrough (TLS ends at HAProxy), but Cilium 1.19's
-    # gateway controller watches TLSRoute unconditionally and errors if that CRD is missing —
-    # verified live 2026-07-15 (the operator needs a restart after this flag to load the config).
+    # EXPERIMENTAL channel: we don't use TLS passthrough (TLS ends at HAProxy), but Cilium's
+    # gateway controller needs the TLSRoute CRD (1.19 errored without it — verified live
+    # 2026-07-15; 1.20 lists it as REQUIRED at v1) — the operator needs a restart after this flag
+    # to load the config.
     gatewayAPI = { enabled = true }
     # Prometheus metrics: the agent exposes cilium_* incl. cilium_bgp_control_plane_* (BGP session
     # health — the alert that catches a peering drop before every .40.x VIP goes dark). The

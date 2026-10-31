@@ -659,6 +659,55 @@ plan id only (#1827), so the scope rides inside the plan.
 
 Incident: [`2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md) (FU-248).
 
+### Class-6 bump: Cilium — attended, evidence-bracketed (FU-319)
+
+Cilium is class 6 by ruling ([`dependency-upgrades.md`](dependency-upgrades.md) row 6): the box never
+applies it (no `apply_helm` row — [`management-box.md`](management-box.md) §Helm release applies), so
+the seat runs it with the operator present (first run: 1.19.10, 2026-10-31 — clean: 28 pods, 0 restarts,
+BGP 20/20 within 2 min). Read the target minor's [upgrade notes](https://docs.cilium.io/en/v1.20/operations/upgrade/)
+first; the PR carries every set member they require (1.20: Gateway API CRDs ≥ v1.6.1 —
+`argocd/platform/gateway-api-crds.yaml` header) and a `helm template` diff of `cilium-config` rendered with
+the live values (`helm get values cilium -n kube-system`) for both versions — a schema error or an
+unexplained key is a STOP before the window.
+
+1. **Pre-flight, cluster at rest:** `devbox run maint cilium-check` exit 0; `cilium-dbg status --brief`
+   in an agent; `cilium-dbg bgp peers` on every agent — the established count is the baseline (every
+   peering node × both router nodes; CPs do not peer, [`bgp.md`](bgp.md)); no `CiliumBGP*` alert;
+   Longhorn volumes healthy, Garage 3/3. Upstream tests up- and downgrades only from the old minor's
+   NEWEST patch — behind it, step there first through the same path (a pushed branch planned with
+   `MGMT_REF=origin/<branch>`); that patch is also the rollback target.
+2. **Upstream preflight** inside `devbox run maint -- open --reason "cilium <new> preflight"`:
+   `helm template cilium/cilium --version <new> -n kube-system --set preflight.enabled=true --set agent=false --set operator.enabled=false --set k8sServiceHost=localhost --set k8sServicePort=7445 > pf.yaml`,
+   `kubectl create -f pf.yaml`; the `cilium-pre-flight-check` DaemonSet READY = the cilium pod count and
+   its Deployment 1/1 (else read `cnp-validator`); `kubectl delete -f pf.yaml`; `check`; `close`.
+   Watch: `maint -- watch --id <id>` as a line-streaming Monitor ([GAPS](../.claude/skills/GAPS.md) maintenance-window-G8).
+3. **Arm** the bump PR: a hand merge fails `require_code_owner_review` (the reviewer takes ARMED PRs only,
+   [`merge-path.md`](agents/merge-path.md) §Chosen design), and unarmed, strict checks on a moving master
+   force an `update-branch` + re-check loop and a sentinel `+0 ~1 -0` re-read per head. Safe: the merge is not
+   the deploy edge (no box row) — unlike the Kubernetes bump, whose merge IS in the box's allowlist (its window
+   opens WITHOUT `--admit-apply` first). Set members Synced/Healthy (`argocd app get gateway-api-crds`) first.
+4. **Plan + apply:** `devbox run mgmt-tf -- plan` must show exactly one change — `helm_release.cilium`
+   updated in place, version old → new (read it: `mgmt-tf -- show -json /var/lib/mgmt/plan/<id>.bin`,
+   values in clear — jq, never paste) — then `devbox run helm-evidence -- run <plan-id> --label cilium-<new>`
+   (its own declared window; refuses beside another; the plan from `origin/master` stamps the box). Its
+   health compare exits 2 on ANY new alert, other stacks' too, so the window usually stays open: classify
+   each (Cilium-family = STOP; foreign = note, hand to the responder), then `maint -- close --force --id <id>`.
+   The record's Garage copy needs `HELM_EVIDENCE_S3_KEY_ID`/`_SECRET` (wallet `helm-evidence-key-id`/`-secret`),
+   absent in the jail: `scripts/helm-release-evidence.sh upload <dir>` at wind-down.
+5. **Watch the roll** (DaemonSet, `maxUnavailable: 2`): `kubectl -n kube-system rollout status ds/cilium`,
+   operator + hubble-relay Ready, BGP back to baseline, an LB VIP answering (follow the 302 to `/login`:
+   `curl -skL -o /dev/null -w '%{http_code}' https://grafana.teststuff.net` → 200), `cilium-check` 0, verdict clean.
+   **STOP** (window stays open, operator decides): an agent not Ready 10 min after its turn; BGP below
+   baseline after the roll; `cilium-check` exit 2 after one `rollout restart ds/cilium` (FU-258's
+   recovery) or exit 3; the verdict bad; a Gateway listener not `Programmed`.
+6. **Rollback** = `git revert` the bump commit's version line only (GitOps set members newer than
+   the old minor needs may stay — 1.6.x CRDs serve every version 1.19 reads), then steps 4–5 again.
+   Upstream supports rollback between consecutive minors (the guide's §Downgrading: `helm rollback` /
+   `rollout undo`); a 1.20-only feature already in use makes it a STOP, not a revert.
+7. **Soak — 24 h before the next class-6 step:** `cilium-check` clean at +1 h and +24 h, BGP at baseline, no
+   `Cilium*` alert, and the FU-258 settling experiment ([spike](spikes/cilium-apiserver-restart-backend-loss.md)
+   §What would settle it — it restarts an apiserver, so its own window) run inside it.
+
 ### Replacing a ci-runner VM — drained, one at a time
 
 A replace is now always **deliberate**. Since FU-306 (2026-10-14) an edit to
