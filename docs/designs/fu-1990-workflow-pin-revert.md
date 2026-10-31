@@ -313,7 +313,8 @@ grammar is skipped; the branch is `revert-lock-<sha8>`; the memory line is `reve
 their package) — consumed by `pin-only-lint` check (i). Outside the class, by the same file test: a
 worker-adapted lock PR (lock + a fixture, the #2262/#2362 shape) — the responder lane owns that. The
 one consumer the chain can fire on today is `runner-image.yaml` (push to master, `devbox.lock` in its
-paths); `ci.yaml` on master re-runs what the PR already proved. Drill pending (§Next steps 10 there).
+paths); `ci.yaml` on master re-runs what the PR already proved. DRILLED 2026-10-10 (#2478 → #2480) and rerun hands-off 2026-10-11 (#2503 → #2504) — §Last
+proven end to end there.
 Replay: `workflow-pin-revert-candidate` (the widened call line) + `workflow-pin-revert-lock-candidate`
 (a lock-only merge is the candidate).
 
@@ -432,4 +433,5 @@ and its memory line must be edited out afterwards (the #2209 precedent).
 - FU-1990: the major-bump review lens (part 1)
 - `scripts/pin-only-lint.sh`: the pin-only predicate (third shape)
 - ADR-084: the CI-only lane (no approval gate by design)
-- ADR-100: Renovate action pin doctrine
+- ADR-100: owner → rule replacement (`pin-only-lint` stands in for the codeowner); ADR-141: the
+  Actions lane (majors on the mechanical lane, the revert chain as the second gate)

@@ -182,8 +182,9 @@ Why the wrapper exists (the non-obvious bits):
   localhost anyway → the interpreter must be passed as **`-e ansible_python_interpreter=...`**.
 - The collection isn't preinstalled in a fresh jail (`ansible-galaxy collection install -r
   ansible/collections/requirements.yml`).
-- Collection pin must track os-frr / OPNsense version (currently `oxlorg.opnsense==26.1.11` for
-  OPNsense 26.1.x). ⚠ **26.x flipped the collection's global `reload` module-argument default
+- Collection pin must track os-frr / OPNsense version (currently `oxlorg.opnsense==26.1.11`, chosen
+  for OPNsense 26.1.x — the nodes now run 26.7.x and the pin has not moved with them;
+  `ansible/collections/requirements.yml`). ⚠ **26.x flipped the collection's global `reload` module-argument default
   `true` → `false`**: a reload-capable module call without `reload: true` writes *saved* config
   only — it still reports `changed` while the running service never learns the change. Every
   reload-capable call site in `ansible/roles/opnsense-*/` sets it explicitly via a role-scoped
@@ -371,7 +372,7 @@ only LAN DHCP.
 
 ## Storage (Longhorn)
 
-`tofu/longhorn.tf` — Helm 1.12.0, `longhorn` is the **default StorageClass** (replica=2, zone
+`tofu/longhorn.tf` — Helm 1.13.0 (`var.longhorn_version`), `longhorn` is the **default StorageClass** (replica=2, zone
 soft-anti-affinity). All stateful services use Longhorn PVCs (not node-pinned). ⚠ **Since
 2026-09-12 the `std` tier has exactly TWO schedulable nodes** (m70s + hp-01; wk-02 left the tier
 for good on 2026-09-14 and thinkcentre left cluster duty), so every r=2 std volume must hold
@@ -797,7 +798,8 @@ option, so this pod is the mechanism. Applies to every VM in the table above.
 
 ## CloudNativePG (Postgres)
 
-CNPG `Cluster`s (`infisical-pg`, `forgejo-pg`) run with `enablePodMonitor` + the `cnpg`
+CNPG `Cluster`s (`infisical-pg`, `forgejo-pg`, `grafana-pg`, and the stack-owned `oracle-pg` in
+`oracle-fleet`) run with `enablePodMonitor` + the `cnpg`
 PrometheusRule group and Grafana dashboard (`tofu/dashboards/cnpg.json`) — added after forgejo-pg-2
 sat as a broken replica for 2.5 days unnoticed (2026-06).
 
@@ -809,13 +811,13 @@ sat as a broken replica for 2.5 days unnoticed (2026-06).
 
 ## Proxmox host maintenance window (updates + reboot)
 
-The hypervisor is deliberately the one hand-managed box (boot-from-git covers everything above
-it); its routine package maintenance is code anyway: `devbox run -- ansible-playbook
+The hypervisors (pve and nx-02 — the ansible `pve` group) are deliberately the hand-managed boxes
+(boot-from-git covers everything above them); their routine package maintenance is code anyway: `devbox run -- ansible-playbook
 ansible/pve-upgrade.yml` (ANSIBLE_CONFIG=ansible/ansible.cfg; SSH key is jail-local). The play
 snapshots `/etc/pve` to `~/.claude/homelab-pve-backup/`, runs an IN-MAJOR `apt dist-upgrade`
 (8→9-style major jumps are a separate, sources-edit event), and reports REBOOT-PENDING — it
 never reboots. The host's thin pool is metered the same way — `devbox run -- ansible-playbook
-ansible/pve-node-exporter.yml` puts node_exporter + a textfile timer on pve (FU-093; alerts
+ansible/pve-node-exporter.yml` puts node_exporter + a textfile timer on both hypervisors (FU-093; alerts
 `PveThinPool*`/`PveVmIoError` in `argocd/resources/pve-metrics/`; re-run after a reinstall).
 **A VM that reboots itself with nothing in the ring buffer** (wk-03, five times in a week —
 homelab#882, `NodeRebootingRepeatedly`) gets a **serial console**: `serial = true` on the node in
