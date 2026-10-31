@@ -146,7 +146,9 @@ MAP=(
   # push ran it and redded every open PR (#2576). Row widened to the gate's real input set;
   # ~7s, so the wider trigger is cheap. Keep this row and scripts/docs-graph-lint.sh's greps
   # in step — that disagreement is the defect class, not the one comment.
-  "docs-graph-lint:\.(md|sh|py|ya?ml)$"
+  # Widened again to EVERY path (2026-10-31): check #5 scans all tracked text files for committed
+  # merge-conflict markers (#2946's sat on master until #3071), so any changed file is an input.
+  "docs-graph-lint:."
   "mermaid-lint:(\.md$|^scripts/mermaid-lint)"
   "lock-intake-lint-test:^scripts/lock-intake-lint"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with

@@ -40,6 +40,9 @@
 # the fixer-context L-layers) stay out of scope until someone §-references one — at which
 # point ANCHOR-AMBIGUOUS forces the rename the never-reuse rule demands. Historical docs +
 # TICK-LOG + adr.md are exempt as referencers and invisible as definition sites.
+#
+# Check #5 — committed merge-conflict markers in any tracked text file (FAILS; carries its own
+# positive control every run). See the section for why it lives here.
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -187,5 +190,52 @@ if [ "$misfiled" -gt 0 ]; then
   fi
 fi
 
-[ "$status" -eq 0 ] && echo "docs-graph: links resolve, agents doc table complete, ⚓ terms linked"
+# --- 5) committed merge-conflict markers, in ANY tracked text file ---
+# #2946 committed a whole `<<<<<<< HEAD … >>>>>>> <sha>` block into docs/management-box.md and it
+# sat on master unseen until a docs fact-check removed it (#3071) — no gate looked. Not a doc-graph
+# property strictly, but this is the lint that runs UNCONDITIONALLY on every direct master push
+# (githooks/pre-push `must`) and on every PR (diff-ci.sh's docs-graph-lint row is `.` for this
+# reason), so it is the one cheap always-run home. A file is flagged on an opening/closing marker
+# line (`^<<<<<<< ` / `^>>>>>>> `, or bare); a `^=======$` line is reported only inside a file
+# already flagged — alone it is a legitimate markdown setext underline. Binary files are skipped
+# (-I). Exclusions: none needed on master today (grepped 2026-10-31: zero hits); add a
+# `:(exclude)<path>` pathspec here if a doc ever has to QUOTE markers at column 0.
+# marker_scan — run in the repo whose tracked files to scan; prints findings, returns 1 on any.
+marker_scan() {
+  ms_files=$(git grep -lIE '^(<<<<<<<|>>>>>>>)( |$)' 2>/dev/null)
+  [ -n "$ms_files" ] || return 0
+  for ms_f in $ms_files; do
+    echo "CONFLICT-MARKER (check #5): $ms_f — committed merge-conflict markers at: $(grep -nE '^(<<<<<<<|>>>>>>>)( |$)|^=======$' "$ms_f" | cut -d: -f1 | tr '\n' ' ')"
+  done
+  return 1
+}
+# Positive control, every run (~10 ms): plant markers in a throwaway repo and require the scan to
+# go RED there, and stay GREEN on a lone setext `=======` — a scanner that cannot fail reports
+# nothing as convincingly as a clean tree does.
+marker_selftest() {
+  st_dir=$(mktemp -d) || return 1
+  (
+    cd "$st_dir" && git init -q . || exit 1
+    printf 'Title\n=======\n' > setext.md
+    git add setext.md || exit 1
+    marker_scan >/dev/null || { echo "check #5 self-test: lone setext ======= flagged (false positive)"; exit 1; }
+    printf 'a\n<<<<<<< HEAD\nb\n=======\nc\n>>>>>>> 0123abc\n' > planted.md
+    git add planted.md || exit 1
+    out=$(marker_scan) && { echo "check #5 self-test: planted markers NOT detected (scanner cannot fail)"; exit 1; }
+    case "$out" in *"planted.md"*"2 4 6"*) ;; *) echo "check #5 self-test: wrong report: $out"; exit 1 ;; esac
+    case "$out" in *setext.md*) echo "check #5 self-test: setext.md flagged alongside the plant"; exit 1 ;; esac
+  )
+  st_rc=$?
+  rm -rf "$st_dir"
+  return "$st_rc"
+}
+if ! marker_selftest; then
+  echo "CONFLICT-MARKER (check #5): self-test RED — the scan is broken, its green below means nothing"
+  status=1
+fi
+if [ "${1:-}" != "--self-test" ]; then
+  marker_scan || status=1
+fi
+
+[ "$status" -eq 0 ] && echo "docs-graph: links resolve, agents doc table complete, ⚓ terms linked, no conflict markers"
 exit "$status"
