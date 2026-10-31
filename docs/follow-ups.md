@@ -1043,20 +1043,16 @@ the block needs pruning, not more headings.
       `cafe.github.com`; per-stack enforce dial; re-harvest, flip oracle first. Relates FU-020, #1056.
 - [ ] **FU-258** — **Cilium drops the `kubernetes` Service backend on an apiserver restart — POINTER.** Evidence +
       settling experiment: [`docs/spikes/cilium-apiserver-restart-backend-loss.md`](spikes/cilium-apiserver-restart-backend-loss.md).
-      **PARKED (operator, 09-20)** behind 1.20.2. Guard: `cp-upgrade` gates the backend (`devbox run maint
-      cilium-check`); every OTHER apiserver restart is unguarded — run it by hand. **Next:** the attended bump of
-      `cilium_version` to the newest 1.20.x (1.20.4 on 10-31) (class 6, never Renovate; `MgmtSubstrateBehind`
-      standing), then the spike; see FU-319 for the order. Relates FU-246, FU-253.
-- [ ] **FU-319** — **Class-6 substrate bumps have no owner: cilium → kubernetes → talos, and a Kubernetes minor
-      needs a drill nobody tracks.** `MgmtSubstrateBehind` fires on cilium (declared 1.19.1, upstream 1.20.4) and
-      kubernetes (v1.36.1, upstream 1.37.2) since 2026-10-11/13 (`triage: none` — a roadmap bump, not a fault).
-      Talos 1.15 (upstream TBD ~2026-12-27) flips Talos to `MgmtSubstrateUnsupported` with no grace (the belt's
-      current-minor-only window, docs/management-box.md §MB2). Row 6 of docs/dependency-upgrades.md rules Kubernetes
-      minors wait for a recreate-from-git drill (design sitting 2026-09-25) — no item tracked it (grep negative 10-31).
-      Order (Cilium compat pages): Cilium 1.20 first (1.19 e2e-tests k8s ≤1.35, 1.20 ≤1.36; FU-258, newest 1.20.x),
-      then the drill, then Kubernetes 1.37, then Talos 1.15 before its EOL date — each an attended window (operator).
-      Renovate proposing class 6 is #1988's substrate row, AFTER these bumps (ROADMAP G-D). **Next (operator):** pick
-      the Cilium window; seat drafts the bump PR + window plan on request. Relates FU-258, #1988.
+      **PARKED (operator, 09-20)** behind 1.20.x. Guard: `cp-upgrade` gates the backend (`devbox run maint
+      cilium-check`); every OTHER apiserver restart is unguarded — run it by hand. **Next:** the 1.20.4 bump is #3054
+      (window 2026-10-31, after the 1.19.10 step #3061); then the spike's settling experiment inside the 24 h soak
+      (FU-319). Relates FU-246, FU-253.
+- [ ] **FU-319** — **Class-6 substrate bumps have no owner: cilium → kubernetes → talos.** `MgmtSubstrateBehind`
+      fires on cilium and kubernetes since 2026-10-11/13 (`triage: none` — a roadmap bump, not a fault); Talos 1.15
+      flips to `MgmtSubstrateUnsupported` with no grace (docs/management-box.md §MB2). Order: Cilium, Kubernetes, Talos
+      before its EOL; each an attended window (operator); Renovate class 6 = #1988's substrate row, AFTER these.
+      **CILIUM DONE 2026-10-31** (rulings: old minor's newest patch first — it is 1.20's rollback target): 1.19.10 (#3061, helm rev 16, 16:10Z) then 1.20.4 + Gateway API CRDs v1.6.3 (#3054, rev 17, 17:02Z), both via `helm-evidence` — 28/28 pods, 0 restarts, BGP 20/20; evidence on the backup Garage; recipe = runbook §"Class-6 bump: Cilium" (arm the PR — merge ≠ deploy edge for Cilium). Kubernetes 1.37 = #3056 DRAFT, build + dry-run ONLY (its merge IS in the box allowlist → window without `--admit-apply`): waits for a Cilium release that e2e-tests 1.37 (1.21; 1.20 tests ≤1.36) — a Kubernetes minor has no rollback.
+      **Next:** 24 h soak to 2026-11-01 ~17:00Z incl. FU-258's settling experiment (`cilium-check` at +24 h); then #3056 when Cilium 1.21 ships; Talos 1.15 before its EOL date. Relates FU-258, #1988.
 
 ## Hardware & nodes
 
