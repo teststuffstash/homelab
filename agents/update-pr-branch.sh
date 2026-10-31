@@ -197,12 +197,19 @@ label_conflict() {
 # consequence beyond one wasted candidate slot. An APPROVED reviewDecision is ready on the
 # snapshot alone. An unreadable probe HOLDS with a line (rule #6 — this leg fails toward NOT
 # updating; the */15 cron retries).
-cands="$(jq -c '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
+# The leg-1 and leg-2 DOMAINS are named jq defs because the hand-back sweep (leg 1b) is their
+# complement — one spelling of each, read by both the leg and the sweep (homelab#1985 residual 5).
+LEG_DOMAINS_JQ='
+  def breakered: ([.labels[].name] | (index("agent/error") != null or index("agent/arbitrate") != null));
+  def leg1_cand: .autoMergeRequest != null and .mergeStateStatus == "BEHIND"
                 and .reviewDecision != "CHANGES_REQUESTED"
                 and (.reviewDecision != "REVIEW_REQUIRED" or
                      ([((.latestReviews // [])[] | select(((.author.login // "")
                        | startswith("homelab-reviewer")) and .state == "APPROVED"))]
-                      | length) == 0))' <<<"$PRS")"
+                      | length) == 0);
+  def leg2_domain: .autoMergeRequest != null and .mergeStateStatus == "BEHIND"
+                and .reviewDecision == "CHANGES_REQUESTED";'
+cands="$(jq -c "$LEG_DOMAINS_JQ"' .[] | select(leg1_cand)' <<<"$PRS")"
 ready="[]"
 while read -r pr; do
   [ -n "$pr" ] || continue
@@ -321,6 +328,37 @@ else
   echo "updater[$REPO]: no armed+BEHIND PR to update"
 fi
 
+# ── leg 1b: the hand-back sweep (homelab#1985 residual 5, 2026-10-31) ─────────────────────────────
+# The hand-back (renovate-currency.sh, 2026-10-24) was reachable only from INSIDE legs 1 and 2, so a
+# Renovate PR the updater had merged into was handed back only while it sat in one of their domains
+# (armed ∧ BEHIND, plus leg 1's park pre-filter). Disowned-and-stuck does not depend on BEHIND: a
+# merged-into PR that is CURRENT but red, a codeowner park gone red (leg 1's pre-filter drops it), or
+# a current CHANGES_REQUESTED one waited — invisible — until master happened to move under it. So the
+# sweep runs the SAME predicate over the complement: every armed, unbreakered Renovate PR that is in
+# neither leg's domain (no PR is probed twice per pass). Not merge-ready here = a CONCLUDED red
+# (`renovate_red`: checks reported, none in flight, not green — a CURRENT merged-into PR is most often
+# the one leg 1 just updated, its CI re-running; pending or absent checks wait for the next pass) OR
+# CHANGES_REQUESTED — leg 1's test plus leg 2's (an untouched Renovate PR gets no new content but
+# Renovate's, so a CR one is stuck until handed back); green + awaiting review is the reviewer's, and
+# green + APPROVED + current is merging. Silent unless it acts or HOLDS (an out-of-domain PR that
+# needs nothing must not add a line per pass); an unreadable probe HOLDS (rule #6). Breakered PRs
+# are the humans' (leg 2's exclusion). Never an update-branch here — a merge would mint the zombie.
+while read -r pr; do
+  [ -n "$pr" ] || continue
+  renovate_author "$pr" || continue
+  n="$(jq -r '.number' <<<"$pr")"
+  sj="$(renovate_probe "$REPO" "$n" "$(jq -r '.headRefOid // ""' <<<"$pr")")" || sj=""
+  if [ -z "$sj" ]; then
+    echo "handback[$REPO]: #$n commit probe unreadable — HOLDING (rule #6; the */15 cron retries)"
+    continue
+  fi
+  renovate_untouched "$sj" && renovate_merged_into "$sj" || continue
+  if renovate_red "$sj" || [ "$(jq -r '.reviewDecision' <<<"$pr")" = CHANGES_REQUESTED ]; then
+    renovate_handback "$REPO" "$n" "handback[$REPO]:"
+  fi
+done <<<"$(jq -c "$LEG_DOMAINS_JQ"' .[] | select(.autoMergeRequest != null and (leg1_cand | not)
+                                         and (leg2_domain | not) and (breakered | not))' <<<"$PRS")"
+
 # ── leg 2: the CR∧BEHIND crack (2026-08-12, found on homelab#398 twice in one hour) ──────────────
 # The main pick skips CHANGES_REQUESTED PRs, and the review reflex only lifts green+CURRENT PRs —
 # so an armed PR that gets a verdict, a fix push, and then watches master move sits in a state NO
@@ -334,10 +372,7 @@ fi
 # or the belt feeds itself), and never on agent/error / agent/arbitrate PRs (breaker-latched:
 # humans own those). Unreadable commit/review data HOLDS with a line, never updates — rule #6;
 # the */15 cron retries.
-jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
-                    and .reviewDecision == "CHANGES_REQUESTED"
-                    and (([.labels[].name] | index("agent/error")) == null)
-                    and (([.labels[].name] | index("agent/arbitrate")) == null)) | .number' <<<"$PRS" \
+jq -r "$LEG_DOMAINS_JQ"' .[] | select(leg2_domain and (breakered | not)) | .number' <<<"$PRS" \
 | while read -r n; do
     pj="$(gh pr view "$n" --repo "$REPO" --json commits,reviews 2>/dev/null)" || pj=""
     # Same rule as leg 1, minus the exception: a CHANGES_REQUESTED PR is not merge-ready, so an untouched
