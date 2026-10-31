@@ -1,6 +1,6 @@
 # agents/renovate-currency.sh — the ONE reader of "whose currency is this Renovate PR" (ADR-153),
-# sourced by both update-branch call sites that meet Renovate PRs: agents/update-pr-branch.sh (leg 1 +
-# leg 2, identity homelab-merge) and coordinator-scan.sh's FU-124 nudge (identity coordinator-git).
+# sourced by both update-branch call sites that meet Renovate PRs: agents/update-pr-branch.sh (leg 1,
+# leg 2 and leg 1b's hand-back sweep over their complement, identity homelab-merge) and coordinator-scan.sh's FU-124 nudge (identity coordinator-git).
 # They used to carry two copies of the predicate; the 2026-10-20 zombies (homelab#2754,
 # sleep-tracking#203) were made by the NUDGE copy, which the updater-side fix (#2881) did not reach.
 #
@@ -55,6 +55,19 @@ renovate_green() {
          | group_by(.k)
          | map(if any(.c != "CANCELLED") then map(select(.c != "CANCELLED")) else . end | .[].c) | flatten as $c
          | ($c | length) > 0 and ([ $c[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) == 0' <<<"$1" >/dev/null 2>&1
+}
+
+# renovate_red <probe-json> → 0 only on a CONCLUDED red: at least one check reported, none still in
+# flight (a check-run reports QUEUED/IN_PROGRESS/WAITING/REQUESTED/PENDING as its conclusion here, a
+# commit status PENDING), and not green. Absent or in-flight checks are NOT red — the PR the updater
+# just merged master into sits exactly there while its CI re-runs, and a hand-back on that state
+# would throw away the update it is waiting on (#3058 review). The next pass re-reads.
+renovate_red() {
+  jq -e '([ .statusCheckRollup[]? | ((.conclusion // .state) // "") ]) as $c
+         | ($c | length) > 0
+           and ([ $c[] | select(. == "QUEUED" or . == "IN_PROGRESS" or . == "WAITING"
+                                or . == "REQUESTED" or . == "PENDING" or . == "") ] | length) == 0' <<<"$1" >/dev/null 2>&1 \
+    && ! renovate_green "$1"
 }
 
 renovate_untouched() {   # renovate_untouched <json with commits> → 0 when no foreign non-merge commit
