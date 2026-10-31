@@ -1051,8 +1051,8 @@ the block needs pruning, not more headings.
       fires on cilium and kubernetes since 2026-10-11/13 (`triage: none` — a roadmap bump, not a fault); Talos 1.15
       flips to `MgmtSubstrateUnsupported` with no grace (docs/management-box.md §MB2). Order: Cilium, Kubernetes, Talos
       before its EOL; each an attended window (operator); Renovate class 6 = #1988's substrate row, AFTER these.
-      2026-10-31 rulings (operator): Cilium path = 1.19.10 FIRST (upstream tests up/downgrades only from the old minor's newest patch; it is 1.20's rollback target) then 1.20.4; window opened 2026-10-31 ~15:50Z. #3061 (1.19.10) MERGED 16:08Z — apply via `helm-evidence` in progress; #3054 (1.20.4 + Gateway API CRDs v1.6.3, required by 1.20) open, runbook §"Class-6 bump: Cilium" rides it (arm the PR — merge ≠ deploy edge for Cilium; the Kubernetes merge IS in the box allowlist → its window opens without `--admit-apply`). Kubernetes 1.37 = #3056 DRAFT, build + dry-run ONLY: waits for a Cilium release that e2e-tests 1.37 (1.21; 1.20 tests ≤1.36) — a Kubernetes minor has no rollback.
-      **Next:** finish the 1.19.10 leg → 1.20.4 leg (#3054) → 24 h soak incl. FU-258's settling experiment; then #3056 when Cilium 1.21 ships; Talos 1.15 before its EOL date. Relates FU-258, #1988.
+      **CILIUM DONE 2026-10-31** (rulings: old minor's newest patch first — it is 1.20's rollback target): 1.19.10 (#3061, helm rev 16, 16:10Z) then 1.20.4 + Gateway API CRDs v1.6.3 (#3054, rev 17, 17:02Z), both via `helm-evidence` — 28/28 pods, 0 restarts, BGP 20/20; evidence on the backup Garage; recipe = runbook §"Class-6 bump: Cilium" (arm the PR — merge ≠ deploy edge for Cilium). Kubernetes 1.37 = #3056 DRAFT, build + dry-run ONLY (its merge IS in the box allowlist → window without `--admit-apply`): waits for a Cilium release that e2e-tests 1.37 (1.21; 1.20 tests ≤1.36) — a Kubernetes minor has no rollback.
+      **Next:** 24 h soak to 2026-11-01 ~17:00Z incl. FU-258's settling experiment (`cilium-check` at +24 h); then #3056 when Cilium 1.21 ships; Talos 1.15 before its EOL date. Relates FU-258, #1988.
 
 ## Hardware & nodes
 

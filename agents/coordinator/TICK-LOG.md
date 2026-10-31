@@ -14912,3 +14912,64 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Box: activated 21903082 at 14:03Z (its 14:01Z pull); belt tick 14:17:39Z `PASS ansible — plumbing ok on 6 host(s)` with
   ZERO devbox mentions in the journal since 14:10Z — #3052's path proven live. Wind-down: tracker/meta-state/TICK-LOG
   committed, one push, #2014 closed, transcripts synced.
+
+## 2026-10-31 ~14:30–17:00Z — seat (fable; opus builders): stack-pin window ADR-158, S9 leftovers built, first base-image major through, Cilium class-6 path first run (1.19.10 clean, 1.20.4 in flight)
+
+- **Operator rulings:** stack test pins of platform components may run ≤1 minor AHEAD of prod, never behind, never a
+  major ahead ("minor" = the product's own; start at 1, relax on evidence); stacks bump first, the platform bump never
+  waits on a stack. "Put subagents on the S9 left list." "Cilium + Kubernetes bump process built and soaked this weekend."
+- **ADR-158 (#3053 MERGED):** the rule's ONE home = `agents/lenses/migration.md` §Platform compatibility + a Version SETS
+  row + `docs/patterns/kind-ci.md` rule 9. sleep-tracking#217 MERGED (the MUST-equal comment gone), #184 CLOSED;
+  #211 (grafana 13.3.0, +1 minor) waits on Renovate's rebase (DIRTY vs #217; box re-ticked 16:12Z). oracle-fleet#961
+  QUEUED (e2e grafana 11.3.0 two majors behind prod 13.2.4; feedback-db postgres:16 vs CNPG 18; no renovate.json).
+  Why prod Grafana is 13.2.4: it rides kps; 92.15.0 (first with 13.3.0) clears the 7-day age ~11-05.
+- **S9 left list, built:** #3057 MERGED — #1988's base-image half: `AgentLoopWorkflowsFailing` → chart-revert's
+  coordinator-image target → `revert-coord-<sha8>` (previous tag from the pin's git history) → `reverted-coordinator:`
+  memory + pin-only-lint (k), dry-drilled on #3040. Receiver rolled with both targets 15:39Z, AM route live → seat ARMED
+  agent-coordinator#29 (node 26 MAJOR, APPROVED/CLEAN) 15:41Z → merged → build → #3059 pin auto-merged 15:52Z →
+  `2026.10.31-g8f5cedb3b83f` live in every WorkflowTemplate/CronWorkflow; 29 Succeeded / 0 Failed by 16:15Z, alert
+  silent: **the lane's first proof, no human merge.** #3058 MERGED (residual 5: leg 1b hands back every armed Renovate PR
+  finished red / changes-requested; 6 fixture rows; sleep-tracking#199 is NOT that shape — a worker pushed a fix on
+  Renovate's branch, still red → the sleep fix-round lane's call). #3055 MERGED (residuals 1+2: exoneration matches any
+  `revert-<kind>-<sha8>`, writes `exonerated-<kind>:`, every lint memory check honours it; the wf/image/provider templates
+  fan out one pass per alert in a grouped delivery). ⚠ #3055's builder made two accidental live writes on
+  snore-recorder#64 during a dry-run (`bash -lc` reset PATH past the gh stand-in): description line + comment, both reverted
+  and verified gone. Open fork: no control signal to exonerate the non-wf chains (docs/designs/fu-1990-… Part 6).
+- **Class-6 Cilium path (FU-319):** #3054 = 1.20.4 + Gateway API CRDs v1.6.3 (1.20 REQUIRES TLSRoute/ReferenceGrant at v1;
+  live 1.4.1 would degrade 4 Gateways / 13 HTTPRoutes) + runbook §"Class-6 bump: Cilium"; no helm-values change (rendered
+  diff = chart defaults + a new VAP); 27 CNP/CCNP clean of removed features; BGP already v2. #3056 DRAFT = Kubernetes
+  v1.37.2: 13 in-place `talos_machine_configuration_apply` updates ARE in the box's apply allowlist → an un-windowed merge
+  would restart all 3 apiservers at once; the path is `talosctl upgrade-k8s` (CPs first, then wk-03 RECREATED FROM GIT as
+  the first 1.37 kubelet = the row-6 drill), window opened WITHOUT `--admit-apply`; no rollback (etcd snapshot).
+  **Rulings:** 1.19.10 stepping stone FIRST (upstream tests up/downgrades only from the old minor's newest patch);
+  window NOW; Kubernetes = build + dry-run only until a Cilium release e2e-tests 1.37 (1.21; 1.20 tests ≤1.36).
+- **Leg 1 (1.19.10, #3061):** preflight DaemonSet 13/13 (window `seat-1793461931-9213`); hand merge BLOCKED by
+  `require_code_owner_review` (unarmed = no bot review) → ARMED (merge ≠ deploy edge: Cilium is not a box row) → merged
+  28a71906 16:08Z; plan `20261031T160926Z-28a71906` (one attr: version); `helm-evidence` window `seat-1793463018-5612`
+  16:10:30–16:12:03Z rc 0, revision 15→16, 28/28 pods replaced, 0 restarts, BGP 20/20 at 16:12:10Z (all 20 reset once),
+  verdict clean (`~/.claude/helm-evidence/20261031T161013Z-cilium-1-19-10`, upload owed: wallet `helm-evidence-key-id`/
+  `-secret`); soak +15/+30 clean; `close --force` 16:42:55Z over 3 FOREIGN alerts: `MgmtLeaseExpiredUnreverted`
+  (kps lease opened by argocd-presync at 15:39Z for #3057's values-only sync 92.11.0→92.11.0, never closed — a lease-
+  machinery gap, triage dig), `AgentWorkerEgressDropped` (oracle-fleet → mcr mirror, FU-310 class), `AgentDispatchCronWoken`.
+  Runbook fixed on #3054 from the run (arm; `maint -- watch` Monitor; close --force after classifying; `show -json`;
+  upload keys; `curl -skL`). **Leg 2 (1.20.4, #3054) ARMED 16:5xZ, window subagent dispatched** — result below.
+  **Leg 2 CLEAN (~18:10Z read):** #3054 merged 16:57Z (51bb530a); gateway-api-crds self-synced to v1.6.3 (TLSRoute/
+  ReferenceGrant now v1, new `listenersets` CRD; Gateways 4/4 Programmed + HTTPRoutes 13/13 Accepted throughout); plan
+  `20261031T165937Z-51bb530a` = `helm_release.cilium` version only; helm-evidence window `seat-1793466023-4595` 17:00:36–
+  17:02:09Z rc 0, revision 16→17, 28/28 pods replaced, 0 restarts, BGP 20/20 (one reset mid-roll), envoy v1.39.5; window
+  self-closed clean 17:17:48Z (no `--force`); soak +15/+30/+60 identical (0 restarts, cilium-check 0, grafana/specs/games
+  200). New in 1.20: ValidatingAdmissionPolicy `gateway.cilium.io` (TLS listeners need exactly one certificateRef — none of
+  ours terminate TLS). Residue: `xlistenersets` CRD still at bundle v1.4.1 (harmless). Evidence uploaded to the backup
+  Garage (`s3://helm-evidence/20261031T170019Z-cilium-1-20-4/`, beside the 1.19.10 record). 24 h soak runs to 2026-11-01
+  ~17:00Z (FU-258 settling experiment inside it). Cluster line: Cilium 1.19.1 → **1.20.4** in one window, two legs.
+  **kps lease story turned while the window ran:** #3063 (92.13.1) synced 16:56Z → lease `f699f8a9 92.11.0→92.13.1`
+  → postsync `crds-match-operator` fails (operator 0.94.1 vs CRDs 0.94.2, the #3036 split) → expired 17:16:55Z → the BOX
+  cut #3066 (ADR-150 lease revert → 92.11.0, merged 17:20Z) → Renovate #3062 92.11.1 merged 17:35Z. ArgoCD kps op still
+  `Running` from 16:56Z (retry 5/5, hook Job re-spawned 18:03Z; last successful deploy = history 59, 10-28) — nothing has
+  deployed; operator image unchanged v0.94.1. Box lease loop 18:03Z: "already — #3066 exists (closed)". Forward fix stays
+  #3065 (92.16.1, operator v0.94.2): rebased over #3066/#3062 by subagent (CONFLICTING at 18:05Z), then ARMED; presync
+  `open` REPLACES a lease whose sha/from/to differ, postsync `confirm` deletes unconditionally → the stale lease and the
+  MgmtLease*/UpgradeLease*/MgmtBeltCheckFailing family clear on its first clean sync. Relayed from the other seat: the
+  box reads "degraded" via the belt — verified NOT so: `is-system-running`=running, belt unit Result=success (the probe's
+  verdict never fails the unit), and MODE=gate runs box-local checks only, so #3067's nixos activation is not blocked.
+- Bookkeeping: FU-319/FU-258 rulings, meta-state S9 bullet rebuilt, #1985 + #1988 status comments; git gc un-wedged.
