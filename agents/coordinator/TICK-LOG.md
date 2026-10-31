@@ -14977,12 +14977,15 @@ updates or reverts as much as possible — mechanical revert or a responder."
   lease stamps `sha` = the sync's master HEAD (`status.sync.revisions[values]`), and the box reverts THAT sha — #3062's
   sync started 18:13Z after #3067 had landed, so the lease carries f50222b1 and every tick says "not_pin_only — commit
   touches ROADMAP.md" though the bump was pin-only: ADR-150's revert silently became a human read. Not a tracker item
-  (fu-mint-gate: bounded + decided) — a subagent builds the fix PR unarmed (resolve the pin commit from the subject file's
-  history; fixture in mgmt-lease-test.sh), the seat reads it. Harmless today: the stale lease is replaced by #3065's sync.
+  (fu-mint-gate: bounded + decided) — **#3068** (subagent-built: `resolve_pin_commit` walks the subject file's last 20
+  commits at/before the lease sha for the exact from→to pair, the pin reader shared with `pin_only_commit`; revert branch
+  named by the pin commit; 91/91 lease tests, 10 of the new ones fail on the old code) read by the seat and ARMED ~19:50Z
+  — a predicate fix inside ADR-150, not a fork. Harmless today: the stale lease was replaced by #3065's sync.
   **kps 92.16.1 LIVE 19:33:04Z:** the 92.11.1 op burnt its retry 5 at ~19:29Z, the forward op opened a new lease
   (92.11.0→92.16.1 — `from` is the live release, 92.11.1 never deployed), operator v0.94.2 rolled, prometheus + grafana
   restarted, postsync `crds-match-operator` passed → lease confirmed/deleted, op Succeeded (one retry on the admission
   hook cleanup). Box belt 19:32:33Z: `kps-crds PASS — 10 CRDs at operator 0.94.2`, **8 pass, 0 fail** — the first fully
   green belt since #3036. Alerts at 19:33Z still draining: MgmtBeltCheckFailing, MgmtLeaseExpiredUnreverted,
-  UpgradeLeaseInFlight (MgmtLeaseRevertFailed + UpgradeLeasePastExpectedEnd already gone) — resolution watched below.
+  UpgradeLeaseInFlight (MgmtLeaseRevertFailed + UpgradeLeasePastExpectedEnd already gone) — **all CLEARED 19:35:38Z**.
+  Standing after: MgmtSubstrateBehind (kubernetes only), VersionSetMembersDisagree, the agent/router/HA set — unchanged.
 - Bookkeeping: FU-319/FU-258 rulings, meta-state S9 bullet rebuilt, #1985 + #1988 status comments; git gc un-wedged.
