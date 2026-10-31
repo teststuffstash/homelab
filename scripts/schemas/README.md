@@ -20,8 +20,8 @@ version actually running; vendoring it pins exactly that.
 
 | File | CRD | Cilium version at generation |
 |---|---|---|
-| `cilium.io/ciliumnetworkpolicy_v2.json` | `ciliumnetworkpolicies.cilium.io` | 1.19.1 |
-| `cilium.io/ciliumclusterwidenetworkpolicy_v2.json` | `ciliumclusterwidenetworkpolicies.cilium.io` | 1.19.1 |
+| `cilium.io/ciliumnetworkpolicy_v2.json` | `ciliumnetworkpolicies.cilium.io` | 1.20.4 |
+| `cilium.io/ciliumclusterwidenetworkpolicy_v2.json` | `ciliumclusterwidenetworkpolicies.cilium.io` | 1.20.4 |
 
 ## How they were generated
 
