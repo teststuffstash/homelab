@@ -15,8 +15,8 @@ loudly — it plans to **create** everything it already owns. Everything below i
 |---|---|---|
 | Garage bucket `homelab-tofu-state` + rw key | `argocd/resources/tofu-state/garage-workspace.yaml` (Crossplane Workspace, ADR-076 CREATE-pattern, 1Gi cap) | **LIVE** — reconciled, key in the `tofu-state-s3` connection Secret |
 | Credential + endpoint + encryption env | `scripts/tofu-state-env.sh` (source-me) | built |
-| Per-root migration | `scripts/tofu-state-migrate.sh` → `devbox run tofu-state-migrate` | used for real on 3 roots |
-| Generated backend block | written by the script into `<root>/backend.tf` | **3 roots LIVE** |
+| Per-root migration | `scripts/tofu-state-migrate.sh` → `devbox run tofu-state-migrate` | used for real on 4 roots |
+| Generated backend block | written by the script into `<root>/backend.tf` | **4 roots LIVE** (`github` joined 2026-09-13) |
 | Wallet entries | `tofu-state-{key-id,secret,passphrase}`, seeded by `scripts/keepass-init.sh` | **seeded 2026-08-04** |
 
 **Three roots migrated 2026-08-04** — all verified the same way, with the local state file
@@ -33,7 +33,8 @@ Every object in the bucket is genuine ciphertext: top-level keys are
 `encrypted_data`/`encryption_version`/`meta`/`serial`/`lineage`, no `resources`. All three run
 **`use_lockfile = false`**, deliberately — see the ruling below.
 
-`main` and `github` are unmigrated.
+`github` followed on 2026-09-13 (its row in the cone table below); `main` never migrates — it lives
+on the management box (same table).
 
 ## Encryption: OpenTofu's, not the backend's
 

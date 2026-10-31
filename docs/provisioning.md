@@ -97,7 +97,8 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
 ## Known-good examples (entries in `machines/machines.yaml`)
 
 - `wk-metal-01` — ThinkPad X240, .182, `/dev/sda` (500GB MX500), ephemeral tier, BIOS/legacy PXE.
-  ⚠ kata node AND a **Longhorn BULK zone** (ADR-089) — a wipe destroys bulk replicas; drain first.
+  ⚠ a **Longhorn BULK zone** (ADR-089) and the garage-2 zone — a wipe destroys bulk replicas; drain
+  first. NOT a kata node since 2026-09-16 (no rides — the reason is on its `machines.yaml` entry).
 - `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), legacy PXE; kata node.
   **CONTROL PLANE since 2026-09-20** (ADR-133; left the ride pool in #1814, merged 9b978367 —
   the prerequisite §CP5 step 1 names): reinstalled rather than
@@ -111,7 +112,8 @@ exactly one place. After **any** edit to the YAML, regenerate the doc tables:
   one; deliberately left without `avx2: true`, so it is out of `local.avx2_nodes` (Ivy Bridge has no
   AVX2 — Sandy Bridge neither — so goose rides schedule here but opencode SIGILLs) — see the comment on its
   `machines/machines.yaml` entry, and `local.avx2_nodes` in `tofu/locals.tf`.
-- `hp-01` — .54, `/dev/sda`, Longhorn, WoL-capable.
+- `hp-01` — .54, `/dev/disk/by-id/wwn-0x5001b44e2face231` (by wwn since 2026-09-24 — two identical
+  128GB SATA SSDs make `/dev/sda` unsafe, #1965), Longhorn, WoL-capable.
 - `m70s` — Lenovo ThinkCentre M70s SFF, .56, **`/dev/disk/by-id/nvme-Micron_MTFDHBA512TDV_21052D0C4364`**
   — ⚠ by-id since 2026-09-12: the OEM Micron enumerates as `nvme1n1` now that the Garage data disk
   (Samsung PM961, x16 LP) took `nvme0n1`. (The first NVMe install disk in the

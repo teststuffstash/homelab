@@ -95,7 +95,8 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   This is the one spot those App keys are
   deliberately *copied* out of Infisical into GitHub (Actions can't read Infisical; the merge
   key left this class at the ADR-111 cutover — ESO delivers it in-cluster). ⚠ The github
-  provider stores the value in this root's **state** (local + gitignored) — a second at-rest copy of a
+  provider stores the value in this root's **state** (encrypted Garage backend since 2026-09-13,
+  [`tofu-state.md`](tofu-state.md)) — a second at-rest copy of a
   Tier secret, kept minimal by using the dedicated least-privilege App; see the file header.
 
 ## 5. Per-repo settings
@@ -139,7 +140,8 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
 6. **Fork-PR approval** = require approval for outside collaborators.
 7. Create + install the **homelab-agents**, **homelab-reviewer**, **homelab-sentinel** and **homelab-specs-reviewer**
    Apps — `scripts/github-app-bootstrap.sh <slug>` `manifest` → `catch` → Install → `secrets` → `register` (§2's chain;
-   one App per writing role, ADR-130/ADR-155).
+   one App per writing role, ADR-130/ADR-155) — and every other App [`github-apps.yaml`](github-apps.yaml)
+   declares (`homelab-merge`, `-renovate`, `-labels`, `-deploy`), by the same chain.
    Install each as **"Only select repositories"** and pick the agent repos — the install's repo scope
    is click-only (fine-grained PATs 403 on the `/user/installations` API; see §2).
 8. **Branch protection** is code in [`tofu/github/`](../tofu/github/) (org ruleset targets `~ALL`, so
