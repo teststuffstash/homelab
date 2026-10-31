@@ -90,15 +90,15 @@ owner push returns `remote: Bypassed rule violations …` and succeeds), on both
 ruleset and the per-repo required-checks ruleset.
 
 ```sh
-# normal apply — stays active (no flag needed)
-devbox run -- tofu -chdir=tofu/github apply
+# normal apply — stays active (no flag needed); the wrapper sources the Garage state env
+devbox run github-tofu apply
 
 # re-confirm YOUR bypass any time (non-destructive): rules applying to you on a default branch.
 # Empty [] = you bypass (good). A pull_request rule object = you are blocked (bypass broken).
 gh api repos/teststuffstash/agent-runtime/rules/branches/master
 
 # deliberate rollback (turns protection OFF on every repo — explicit only):
-devbox run -- tofu -chdir=tofu/github apply -var enforcement=disabled
+devbox run github-tofu apply -var enforcement=disabled
 ```
 
 The bypass is evaluated on the **pushing identity**, not the token's scopes: your pushes (PAT or local
