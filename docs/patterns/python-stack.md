@@ -78,7 +78,7 @@ interpreter, always. (Three fixes to learn this: fleet#314 → #315 → #316 fou
 | **Ephemeral** (ARC `homelab-ephemeral`) | rebuilt EVERY job — **persist wheels, never venvs** (a persisted venv on ephemeral pods reimports exactly the staleness class #314 keyed away) | `UV_CACHE_DIR=/uv-cache`, a shared Longhorn RWX PVC (`arc-uv-cache`, 20Gi, `argocd/resources/github-runner/uv-cache-pvc.yaml`) mounted by every runner pod (homelab#1299, LIVE); uv's cache is lock-guarded + content-addressed, concurrent pods are supported |
 
 **The long-lived row, spelled out (corrected 2026-09-07 — the fleet sweep found the short
-version misleading).** ci-runner-01 has **two slots**, so two of a repo's PR jobs can run at once.
+version misleading).** Each VM runner (ci-runner-01, ci-runner-02) has **two slots**, so two of a repo's PR jobs can run at once on one VM.
 What matters is whether they can reach the same venv directory:
 
 - **Repo-local venv** — `export UV_PROJECT_ENVIRONMENT=.venv` (circles' `scripts/test-system.sh`).
@@ -106,7 +106,7 @@ copy (still LAN-local, never WAN).
 **Isolation rule (MUST):** agent-worker *sandboxes* never share a writable wheel cache — a
 poisoned unpacked wheel is a cross-ride tampering vector. Writable shared cache = trusted CI
 lane only; the `arc-uv-cache` PVC above is never mounted into a sandbox pod. Sandboxes get speed
-from the read-through PyPI proxy instead (homelab#1300), via `UV_DEFAULT_INDEX`, when it exists.
+from the read-through PyPI proxy instead (homelab#1300), via `UV_DEFAULT_INDEX`.
 
 Why the cache and the proxy are complementary, not redundant: uv's cache stores wheels already
 **unpacked** and installs by hardlink — a hit skips download *and* unpack (~1–3 s). A proxy hit
@@ -115,7 +115,7 @@ the WAN/PyPI-429 dependency (the FU-196 argument, transplanted).
 
 **Endpoint:** the PyPI cache is at `http://192.168.40.34` (BGP VIP, kata-reachable) or
 in-cluster `http://pypi-cache.pypi-cache.svc`. Agent-worker sandbox rides set
-`UV_DEFAULT_INDEX=http://192.168.40.34/simple/` (the launcher env plumbing wires this when the
+`UV_DEFAULT_INDEX=http://192.168.40.34/simple/` (wired by the launcher env plumbing, #1413 — the
 cache is LIVE). The `/simple/` location rewrites upstream `https://files.pythonhosted.org` links
 to point back at this proxy, so artifact fetches land on `/packages/` and are cached.
 
@@ -174,7 +174,7 @@ direct WAN on every layer-cache miss, whatever the mirror family covers for cont
 absorb that with per-repo retry loops or `ARG`-parameterized FROMs: the fix is BuildKit
 per-registry mirrors via a `buildkitd.toml` + a **docker-container** builder (homelab#1308) —
 the default `docker` driver builds inside dockerd and never sees the file. Both docker-capable
-runner classes carry it: ci-runner-01's cloud-init creates a `homelab-mirrors` builder for the
+runner classes carry it: the VM runners' shared cloud-init (`tofu/templates/ci-runner-cloud-init.yaml.tftpl`) creates a `homelab-mirrors` builder for the
 `runner` user at boot; a docker-mode agent ride gets the config written to
 `$BUILDKITD_TOML` (`/docker-run/buildkitd.toml`) by its dind sidecar and must create its own
 builder before a `docker build` with a non-Hub `FROM` — `docker buildx create --driver

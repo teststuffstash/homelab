@@ -245,10 +245,10 @@ app-repo build drives the bump PR instead. Renovate stays in its lane (app deps,
   keep-N-most-recent + a `cut-off`, `latest` skipped — tuned so the pinned tag is never pruned; run
   `workflow_dispatch` with `dry-run` first).
 
-**Post-deploy health / auto-rollback** (watch ArgoCD app health, revert or dispatch a fixer on a
-broken sync) is **FU-044** — half-wired since 2026-08-04 (deterministic pin-only revert,
-`deploy-revert-argo.yaml`; scoped to the reversible class — iac-lane IAC-G09); harden app CI so
-it stays the safety net, not the control.
+**Post-deploy health / auto-rollback**: the deterministic pin-only revert is LIVE
+(argocd-notifications → `deploy-revert`, `agents/coordinator/deploy-revert-argo.yaml`; scoped to the
+reversible class — iac-lane IAC-G09); the remaining roll-FORWARD half (dispatch a fixer on a broken
+deploy) is **FU-044**. Harden app CI so it stays the safety net, not the control.
 
 ## Decisions to record when built
 
