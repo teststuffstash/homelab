@@ -356,10 +356,27 @@ seen `wx-` key, and a RESTORE (`restored-pins:`) — a restore is never exonerat
 ping-pong; the restore's own failure falls to the walk, whose candidate (the original bump) is
 already ledgered. A restore whose `git revert` conflicts is aborted, never forced.
 
-**Not covered:** the lock shape (`revert-lock-*`, check (i)) and the image/provider/chart/coordinator
-chains have no control leg yet. Replay: `workflow-pin-revert-exonerate` (the decision table, base world =
-the snore-recorder record) + `workflow-pin-revert-restore-lane`; the memory half is
-`scripts/pin-only-lint-test.sh` `reverted-pin-exonerated`.
+**Chain-agnostic since 2026-10-31 (homelab#1985 residual 1).** The leg keys on what every chain
+revert shares, never on a list: a merged `revert-<kind>-<sha8>` head, the `**Failed workflow:**`
+line (only the two workflow-triggered shapes write one, so an img/prov/chart revert never matches),
+and the memory line's own name `reverted-<kind>:` — the lock shape (`revert-lock-*`,
+`reverted-locks:`) gets `exonerated-locks:` and a restore on `revert-lock-<revert-sha8>` with an empty
+`reverted-locks:` + `restored-locks:` (the lock arm of governance-lint and pin-only-lint (j) key on
+that prefix). The memory half is keyed the same way: pin-only-lint skips every revert body carrying
+an `exonerated-` line, in every memory ((e)–(i) and the coordinator-image one). One limit, fail-closed: a flake-only lock
+revert has an empty `reverted-locks:` (the flake lock has no package key), so it is never exonerated.
+
+**One pass per alert (homelab#1985 residual 2).** Alertmanager groups by alertname; the walk read
+`… | head -1`, so a second repo's failure in the same delivery was dropped. Each revert template now
+re-runs its own script (`bash -lc "$BASH_EXECUTION_STRING"`) once per admitted alert; the parent's
+exit is red iff any pass was. Replay: `workflow-pin-revert-fanout`, `tofu-image-revert-fanout`,
+`tofu-provider-revert-fanout`.
+
+**Not covered:** the image/provider/chart/coordinator chains have no control leg — their trigger is not a
+workflow run, so "the revert's own run" has no direct analogue (an open design fork, homelab#1985).
+Replay: `workflow-pin-revert-exonerate` (the decision table, base world = the snore-recorder record;
+rows `lock-revert`, `foreign-revert`) + `workflow-pin-revert-restore-lane` (+ `-lock`); the memory
+half is `scripts/pin-only-lint-test.sh` `reverted-pin-exonerated` + `lock-reverted-exonerated`.
 
 ## Part 7 — the coordinator image: previous-tag revert on `AgentLoopWorkflowsFailing` (2026-10-31, homelab#1988)
 

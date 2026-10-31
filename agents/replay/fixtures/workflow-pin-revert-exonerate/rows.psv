@@ -9,3 +9,5 @@ other-workflow       | snore-recorder-64 | alert.json @ other-workflow.jq       
 ledger-seen          | snore-recorder-64 |                                          |                                                                          | seen         |
 run-unreadable       | snore-recorder-64 |                                          | STUB_GH_api_repos_teststuffstash_snore_recorder_actions_runs_39363243469=fail | unreadable |
 edit-refused         | snore-recorder-64 |                                          | STUB_GH_pr_edit_64=fail                                                  | edit-refused |
+lock-revert          | snore-recorder-64 | gh/pr-list.json @ lock-revert.jq         |                                                                          | lock-exonerated |
+foreign-revert       | snore-recorder-64 | gh/pr-list.json @ foreign-revert.jq      |                                                                          | foreign      |

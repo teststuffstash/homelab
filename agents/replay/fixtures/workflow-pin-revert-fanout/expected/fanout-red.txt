@@ -1,0 +1,4 @@
+OUT → 2 firing alerts in one grouped delivery — one pass per alert
+OUT PASS [1,"firing","snore-recorder","master","39363243469"]
+OUT PASS [1,"firing","circles","main","39360000003"]
+RC 1

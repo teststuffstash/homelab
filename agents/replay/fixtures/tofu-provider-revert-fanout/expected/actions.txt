@@ -1,0 +1,4 @@
+OUT → 2 firing alerts in one grouped delivery — one pass per alert
+OUT PASS [1,"kubernetes"]
+OUT PASS [1,"helm"]
+RC 0

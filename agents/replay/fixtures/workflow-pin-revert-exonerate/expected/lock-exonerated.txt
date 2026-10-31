@@ -1,0 +1,12 @@
+CALL gh api repos/teststuffstash/snore-recorder/actions/runs/39362273218 --jq .head_sha
+CALL gh pr list --repo teststuffstash/snore-recorder --state merged --limit 10 --json number,headRefName,mergeCommit,body --jq [.[] | select(.headRefName | test("^revert-[a-z]+-[0-9a-f]{8}$")) | select(.mergeCommit.oid == "161afc12d4caab801a7b18d13c4a0865fa1d2253")] | first | select(.)
+CALL gh api repos/teststuffstash/snore-recorder/actions/runs/39363243469 --jq .head_sha
+CALL gh pr list --repo teststuffstash/snore-recorder --state merged --limit 10 --json number,headRefName,mergeCommit,body --jq [.[] | select(.headRefName | test("^revert-[a-z]+-[0-9a-f]{8}$")) | select(.mergeCommit.oid == "1ceaa31cc9f41c011553ae108d39e0185033b43b")] | first | select(.)
+CALL kubectl -n agent-coordinator get cm responder-seen -o jsonpath={.data.wx-437c8051f5e50b83}
+CALL gh pr edit 64 --repo teststuffstash/snore-recorder --body Lock revert chain (class 7 — docs/dependency-upgrades.md §2 Review): workflow **build-image** failed on `master` within 120m of #63 merging.\n\n**Reverted PR:** #63 — chore: devbox update (align toolchain lock)\n**Failed workflow:** build-image on master (run #25)\n\nreverted-locks: qrencode@4.1.99\n\nexonerated-locks: qrencode@4.1.99
+CALL kubectl -n agent-coordinator patch cm responder-seen --type merge -p {"data":{"wx-437c8051f5e50b83":"TIMESTAMP"}}
+CALL gh pr comment 64 --repo teststuffstash/snore-recorder --body FU-1990 control: workflow **build-image** failed on this revert merge `1ceaa31c` as well (run 39363243469) — the control with the bump out of the path failed, so #63 is exonerated. `exonerated-locks:` added above (the pin-only-lint revert memory no longer refuses them); the chain restores #63 through the same lane. The real fault is the responder lane.\n\nexonerated-locks: qrencode@4.1.99
+OUT → control: teststuffstash/snore-recorder run 39362273218 @ 161afc12 is no chain revert's own run
+OUT → EXONERATED: teststuffstash/snore-recorder#63 — workflow 'build-image' failed on its revert #64's own merge 1ceaa31c (run 39363243469) too: the suspect was out of the path
+OUT EXON_TARGETS=teststuffstash/snore-recorder|64|1ceaa31cc9f41c011553ae108d39e0185033b43b|63|build-image|master|qrencode@4.1.99|locks|revert-lock-;
+RC 0
