@@ -116,8 +116,9 @@ jail/wallet credential, even when one token *could* technically serve both.
 
 ## Boundaries
 
-- **Repos are public** — never commit a value. Tofu state in `tofu/infisical/` is local + gitignored
-  (it holds the ESO client secret); the provider lock is committed.
+- **Repos are public** — never commit a value. Tofu state in `tofu/infisical/` holds the ESO client
+  secret, so it lives on the encrypted Garage backend since 2026-08-04, never in git
+  ([`tofu-state.md`](tofu-state.md)); the provider lock is committed.
 - The Infisical→ESO path is **read-only** — by design (`eso-reader` has project `viewer`) **and** by
   capability (the ESO Infisical provider is read-only; `ClusterSecretStore` reports `ReadOnly`, so ESO
   `PushSecret` to Infisical does not work). Writes happen three ways: `devbox run infisical-secret` /

@@ -13,7 +13,7 @@ that coins the name.
 
 Meanings are one line and a pointer — the owning doc keeps the mechanism (one home per fact).
 
-**⚓ = mechanically linted** (docs-graph-lint check #3, warn-only shadow for now): a living doc
+**⚓ = mechanically linted** (docs-graph-lint check #3, failing since 2026-08-23): a living doc
 using a ⚓ term must link the term's owning doc — or this glossary — somewhere in the file.
 Only distinctive terms carry the anchor; common words (goal, lens, canary, class, pool, band,
 mission) would drown the check in false positives and stay judgment-lint territory.

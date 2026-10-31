@@ -80,15 +80,15 @@ _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled
   Reconciles CloudNativePG → Postgres → Infisical → External Secrets Operator and the app layer.
 - ✅ CI: self-hosted two-tier (`docs/ci.md`) — in-cluster **ARC** (`runs-on: homelab-ephemeral`) +
   the **Proxmox VM runner** (ADR-082) for Docker/binfmt builds; Forgejo `act_runner` for Tier-B.
-- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` + `argocd/resources/npm-cache/` — docker.io, ghcr, mcr, pypi, npm; VIPs in `SERVICES.md`) + the first-party `registry.teststuff.net` (ADR-121); the apt leg of ADR-070 stays open.
+- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` + `pypi-cache/` + `npm-cache/` — docker.io, ghcr, mcr, pypi, npm; VIPs in `SERVICES.md`) + the first-party `registry.teststuff.net` (ADR-121); the apt leg of ADR-070 stays open.
 
 ## 3 · Resource Plane
 
 ```mermaid
 flowchart TB
     subgraph COMPUTE["Compute"]
-        C1["Proxmox (X99) · bare-metal fleet · Talos VMs · Civo (cloud burst)"]
-        C2["Provisioning: Matchbox (MAC table) · WoL / AMT / smart-plug power"]
+        C1["Proxmox (pve X99 + nx-02) · bare-metal fleet · Talos VMs · Civo (cloud burst)"]
+        C2["Provisioning: Matchbox (MAC table) · WoL / AMT / smart-plug / IPMI (nx-01/nx-02) power"]
     end
     subgraph DATA["Data"]
         D1["local-lvm · Longhorn · Garage S3 (bucket-in-git) · Postgres (CNPG)"]
@@ -101,7 +101,7 @@ flowchart TB
     end
 ```
 
-_Fig. 3: Resource Plane — where YAMLs finally meet hardware (and there's no IPMI)._
+_Fig. 3: Resource Plane — where YAMLs finally meet hardware (IPMI only on the Nutanix twin, nx-01/nx-02)._
 
 - ✅ Proxmox host, OPNsense (DHCP/DNS/FW/FRR as code), ESPHome + the `droplet` node.
 - ✅ Talos VMs **and** bare-metal nodes, Matchbox PXE provisioning, Cilium + BGP LoadBalancer,
@@ -153,7 +153,7 @@ flowchart TB
     end
 ```
 
-_Fig. 5: Security Plane — secrets live in git but encrypted; the edge stays locked, the BMC patched._
+_Fig. 5: Security Plane — secret values stay out of git (KeePass/Infisical); the edge stays locked, the BMC patched._
 
 - ✅ Cloudflare edge security at the public edge: client-certificate **mTLS** (WAF-enforced, not
   Enterprise Access) on `ha.teststuff.net`, plus **scoped per-job Cloudflare API tokens** as code
@@ -164,10 +164,10 @@ _Fig. 5: Security Plane — secrets live in git but encrypted; the edge stays lo
   on-device). **SOPS+age is not used.**
 - ✅ Cilium NetworkPolicy for agent workloads (per-stack egress CNPs via the AgentStack composition, enforcing since 2026-07-16).
 - 🔜 AMT hardening, OPNsense firewall as code.
-- 🔜 Policy engine: **Kyverno arrived 2026-08-03 as the IAC-G04 sentinel** — five platform-contract
+- ✅ Policy engine: **Kyverno arrived 2026-08-03 as the IAC-G04 sentinel** — the platform-contract
   policies in `policy/iac/` run cluster-side by `scripts/iac-sentinel.sh` (a CronWorkflow the PR
-  cannot rewrite), deliberately in **shadow** (logs/metrics only) until the enforcement flip.
-  Design + the flip's preconditions: `docs/agents/iac-lane.md` §L0b, FU-106.
+  cannot rewrite); shadow at first, **enforcing since the G01 flip 2026-08-18**.
+  Design + state: `docs/agents/iac-lane.md` §L0b, FU-106.
 - ⬜ A real identity layer — deferred (ADR-055, the PLANNED IDP in `SERVICES.md`).
 
 ---
