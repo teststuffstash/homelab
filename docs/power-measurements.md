@@ -196,8 +196,9 @@ the wall**, about four times the D3hot delta and in line with the 09-08 correcti
 ## Method
 
 Talos nodes have no shell, so "prime95" is a **stress-ng pod pinned to the node** (`nodeName`,
-tolerating all taints). Cordon the node first (laptops: full `drain` — they're the ephemeral tier
-and hold no Longhorn data; storage nodes get cordon-only to avoid disrupting replicas).
+tolerating all taints). Cordon the node first (a node with no Longhorn disk: full `drain`; a node
+carrying Longhorn disks — wk-metal-01's `mx500` + garage-2 among the laptops since 2026-09 — gets
+cordon-only to avoid disrupting replicas; `machines/machines.yaml` `longhorn_disks` says which).
 
 ```bash
 # pinned all-core stressor (nodeName bypasses scheduler, so cordon/taints don't block it)
@@ -250,4 +251,6 @@ Notes:
   figure exists; a 65 W-class SFF meant to be always-on is worth a plug);
   `hp-01` (has `sensor.plug_hp_*` since the 2026-08-18 rename — a plug exists now,
   a stress run just never happened); `pve` / `opnsense` (didn't want to stress the
-  hypervisor / router) — idle draws from the dashboard are ~127 W / ~57 W.
+  hypervisor / router) — idle draws from the dashboard are ~127 W / ~57 W. ⚠ The `opnsense` plug
+  measured Big Data, which retired as the router and became `wk-metal-04` on 2026-10-20; the plug
+  keeps its old name, and which box it powers today is unverified.

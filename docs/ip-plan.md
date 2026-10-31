@@ -43,12 +43,13 @@ Two consequences follow, and both are load-bearing:
 Cleared before assignment (the 2026-09-20 pre-assignment check), per the procedure above: `git grep 192.168.2.50` found nothing and
 `nmap -sn 192.168.2.45-70` showed `.50` down (2026-09-20).
 
-### The router LAN is a `/24`, and `.72` is the CARP trial slot (ADR-088 as amended 2026-09-30)
+### The router LAN is a `/24`, and `.72` was the CARP trial slot (ADR-088 as amended 2026-09-30)
 
 **The ruling (operator, 2026-09-30):** the routers' LAN interface is **`192.168.2.0/24`** — the mask
 every host and every DHCP lease (`255.255.255.0`, `opnsense/dnsmasq-dhcp.py`) already uses. Prod's
 Big Data was found at `.1/22` (2026-09-29, click-ops residue, never in git): only the router saw
-`0.x`–`3.x` as on-link. It keeps that `/22` as the fallback until it retires; the CARP pair's nodes
+`0.x`–`3.x` as on-link. It kept that `/22` as the fallback until it retired (2026-10-20,
+[`router-move.md`](router-move.md) §Status); the CARP pair's nodes
 are `/24` from code (`opnsense/test-vm/seed-shape.py` via `scripts/opnsense-router-node.sh`).
 Consequence: `3.0/24` is router-local by construction — the HAProxy VIPs sit on the router's `lo0`
 and every client reaches them via `.1`, so under CARP only `.1` moves ([`router-move.md`](router-move.md)).
@@ -59,7 +60,8 @@ nodes may hold while prod serves (vhid 72; `ansible/router-nodes/group_vars/opns
 subnet, and `3.x` no longer is); like `.50` it is reserved: never in `machines.yaml`, the DHCP pool
 or `dnsmasq-dhcp.py`. Cleared before assignment: `git grep 192.168.2.72` found nothing and
 `nmap -sn 192.168.2.69,72-79` showed no host up (2026-09-30; `.69` was taken by the CA-rotation
-spike's record). Retires with the trial at the cutover.
+spike's record). **Retired 2026-10-01** (`state: absent` in `router_carp_vips`, ahead of window 1 —
+[`router-move.md`](router-move.md)); the address stays out of `machines.yaml` and the DHCP pool.
 
 ## The partition
 
@@ -67,7 +69,7 @@ spike's record). Retires with the trial at the cutover.
 |---|---|---|---|
 | `192.168.0.0/24` | /24 | 254 | **Avoid** — the most common consumer-router default; guest/double-NAT gear collides here. Free in principle, use last. |
 | `192.168.1.0/24` | /24 | 254 | **Unallocated** — was the Telia-router subnet; all Telia gear removed with the fibre move (2026), so it's free (same consumer-default caveat as `0.0/24`). Carved: the **isolated test-router LAN** — `opnsense-test`'s LAN on nx-02's port-less `vmbr1` and, separately, the rebuild drill's (`opnsense-drill`) on the port-less `vmbr2` — two segments, so the two `.1`s never meet; never routed from `2.0/24` ([`opnsense-test-vm.md`](opnsense-test-vm.md), FU-297); `.1` is OPNsense's own factory LAN address, so the test box keeps the default shape. |
-| `192.168.2.0/24` | /24 | 254 | **Infra LAN (live, frozen map)** — `.1` OPNsense · `.2–.49` legacy static/VIP mix (no NEW VIPs here) · **`.50` control-plane endpoint VIP** (reserved, never a real host — ADR-133, ruling above) · `.51–.99` cluster nodes & servers (**`.72` = CARP trial VIP**, reserved — ruling above) · `.100–.245` DHCP pool. |
+| `192.168.2.0/24` | /24 | 254 | **Infra LAN (live, frozen map)** — `.1` OPNsense · `.2–.49` legacy static/VIP mix (no NEW VIPs here) · **`.50` control-plane endpoint VIP** (reserved, never a real host — ADR-133, ruling above) · `.51–.99` cluster nodes & servers (`.72` = the CARP trial VIP, retired 2026-10-01 — ruling above) · `.100–.245` DHCP pool. |
 | `192.168.3.0/24` | /24 | 254 | **Router-owned service VIPs** (OPNsense HAProxy IP aliases). Never a real host, so ARP collision is impossible by construction. Convention: **last octet mirrors the backend's cluster VIP** (`.3.19` → `.40.19`). |
 | `192.168.4.0/22` | /22 | 1022 | **IoT VLAN** — the ESP32-per-radiator/valve endgame (“couple hundred, definitely < 1000”). |
 | `192.168.8.0/24` | /24 | 254 | **Guest VLAN** (wifi-password → VLAN steering; firewalled off `2.0/24`, `3.0/24`, `32.0/19`). |

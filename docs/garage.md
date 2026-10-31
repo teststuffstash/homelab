@@ -1,7 +1,8 @@
 # Garage — self-hosted S3 object store
 
 Garage (Deuxfleurs) is the in-cluster S3-compatible object store (ADR-031). It's the convergence
-point for the sleep-tracking pipeline (ADR-045) and a future home for Longhorn/HA backups.
+point for the sleep-tracking pipeline (ADR-045). Longhorn and CNPG backups do NOT land here — they
+go to a separate single-node backup Garage outside Longhorn ([`longhorn-backup.md`](longhorn-backup.md)).
 
 - **Deploy:** `argocd/platform/garage.yaml` (ArgoCD, since 2026-08-04 — FU-136; chart vendored at
   `argocd/charts/garage`, Garage **v2.3.0**). `tofu/garage.tf` keeps only the namespace, two
@@ -29,7 +30,7 @@ G="devbox run -- kubectl $KC -n garage exec -i garage-0 -- /garage"
 $G status
 
 # 2. Give this single node a layout role, then commit it (v2 capacity is a size; live value
-#    today: 130.4 GiB per zone × 3 zones on longhorn-local-xfs, layout v4 — §Target architecture).
+#    2026-10-31: 130.4 GiB per zone × 3 zones on longhorn-local-xfs, layout v5 — §Target architecture).
 #    Use the node id from step 1. Verify flag names with `$G layout assign --help` (v2 syntax).
 $G layout assign -z dc1 -c 140G <NODE_ID>
 $G layout apply --version 1
@@ -110,7 +111,8 @@ invalidated by the 2026-08-07 `diskSelector` stamping — read the ledger, not a
 
 **What does not protect it:** nothing backs Garage *out*. FU-013 backs other things *into* it. The
 sharp edge is the **meta volume** — LMDB on `longhorn`, tiny next to the data, and losing it makes
-the ~60 GB of blocks unreadable. **30Gi with `numberOfReplicas: 1` (wk-02) since 2026-08-25**: it
+the ~60 GB of blocks unreadable. *(Single-node era — since 2026-09-07 each zone carries its own 30Gi
+meta volume on `longhorn-local-xfs`, §Target architecture.)* **30Gi with `numberOfReplicas: 1` (wk-02) since 2026-08-25**: it
 was 10Gi/2 replicas until the Tier-3 restore filled it, and the `std` tier had no disk that could
 take a second grown replica (hp-01 sits below Longhorn's 25% floor), so redundancy was traded for
 the headroom to finish. Both halves come back with the ADR-114 build-out — **FU-137**. The
@@ -279,16 +281,20 @@ engines replicate; storage stores singles — the same ruling moves CNPG to
 replica-1 storage + *required* zone anti-affinity). Zones come from `machines.yaml`'s `zone`
 field → `topology.kubernetes.io/zone`: physical box = zone, every pve-pool VM = `proxmox`.
 
-- **Layout:** `wk-metal-01` (500G MX500), `wk-metal-04` (500G SATA), and — since 2026-09-07 —
+- **Layout:** `wk-metal-01` (500G MX500), `wk-metal-04` (its 256G 7600p `intel1` since the
+  2026-09-09 rotation — it was the 500G SATA at build-out), and — since 2026-09-07 —
   **`m70s`** (512G Micron 2300) as the real third zone; the interim `proxmox`/wk-02 zone was never
-  built. Losing any one zone keeps quorum (2/3, reads+writes continue). Capacity 140G/zone,
+  built. Losing any one zone keeps quorum (2/3, reads+writes continue). Capacity 140G/zone at
+  build-out, 130.4 GiB/zone since (layout v5, read 2026-10-31),
   balanced (usable = smallest zone); the reclaimed footprint is Garage's own old
   `longhorn-bulk` 150Gi×2 + the 30Gi std meta volume, freed when the last pre-build-out pod
   rotated onto the new class.
 - **Storage:** each pod's two PVCs on **`longhorn-local-xfs`** (`tofu/longhorn.tf`: replica 1,
   `fsType: xfs`, `strict-local`, `WaitForFirstConsumer`, no diskSelector — the pod's zone
-  affinity in [`argocd/platform/garage.yaml`](../argocd/platform/garage.yaml) is the fence; m70s's
-  disk is untagged so nothing else lands there). One pod per zone by required anti-affinity on
+  affinity in [`argocd/platform/garage.yaml`](../argocd/platform/garage.yaml) is the fence. The
+  fence is per NODE, not per disk: on m70s garage-1's volumes sit on the std-tagged Micron `nvme`,
+  not its dedicated untagged `pm961` (empty, read 2026-10-31 — [ledger](storage-ledger.md)
+  §the selector-less audit). One pod per zone by required anti-affinity on
   `topology.kubernetes.io/zone`; a pod whose node is down stays Pending rather than following a
   reschedule into another zone, which is what keeps `layout assign -z` true.
 - **Layout ops discipline** (garagehq layout doc): stage assigns, review `layout show`, ONE
@@ -530,6 +536,12 @@ Symptoms, not guessed causes; each names where to read next. In
   unauthenticated `/health`, whose body says "some storage nodes are unavailable" while its
   status stays 200. Added after 2026-09-08, when garage-0 dropped off the mesh hourly for three
   days with nothing Garage-shaped firing (ledger §The SA400 zone under rf=3 load).
+- **`GarageZoneDegraded`** — `min(cluster_healthy) == 0` for 5m: a partition is missing a
+  replica, so Garage serves on quorum (2 of 3 zones) and one more zone loss stops writes. Catches
+  the ~10-minute zone absences `GarageClusterDegraded`'s ≥15 min window lets through.
+- **`GarageBucketQuotaNear`** / **`GarageBucketGaugesStale`** — a bucket over 80 % of its
+  `max_size` for 30m (the quota sum: [ledger](storage-ledger.md) §Garage bucket quotas), and the
+  rotation CronJob's pushed bucket gauges older than an hour or absent.
 - **`GarageTableGcBacklog`** — >500k GC items parked on a pod for **26h** (was 2h until #1588):
   deletions are not propagating (each tombstone must reach every replica — an unreachable peer
   parks the queue; garage-2 held 1.77 M through the 2026-09-08 stall and drained at ~130k/h after
