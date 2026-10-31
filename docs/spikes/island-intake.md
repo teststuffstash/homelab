@@ -3,7 +3,8 @@
 _Opened 2026-10-27 (operator ask: an overnight, unattended spike — "the main problem to solve is
 adding the `agent/queued` label … right now I am the blocker in queueing issues"). Status:
 **a brief + a selector built and run twice against the live pile (dry-run, then apply); no
-decision taken here** — the wiring into the scan and the rulings in §Open questions are the
+decision taken here** — the wiring was RULED and BUILT 2026-10-28 (its own CronWorkflow, dig
+source first — §Open questions 1, #3004); the remaining rulings in §Open questions are the
 operator's; tracked by FU-320. Relates: [`context-and-autonomy.md`](context-and-autonomy.md) §The plan **P6**
 (machine admission for `agent-fix` filings — "safe once the lens is the gate") and §C7 (islands),
 ADR-139 (the island), ADR-155/156 (the specs reviewer — the lens that makes P6 safe here),
