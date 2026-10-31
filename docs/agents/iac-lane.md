@@ -182,7 +182,8 @@ is granted ONLY by the set-judged debouncer:
   reconcile](issue-lifecycle-fsm.md) or C4/C5 re-dispatch: both are the *scan's*, both re-add
   `agent/queued` themselves (IL-T16 queued-first, in-progress-second), and an issue wearing
   `agent/queued` was outside the pending set under the old predicate too — so nothing downstream
-  loses a trigger. Same rule the scan holds on its side (`coordinator-scan.sh:17`).
+  loses a trigger. Same rule the scan holds on its side (`coordinator-scan.sh`'s header, the "Deliberately
+  EXCLUDES" block).
 - **Decide**: 0 pending → exit. 1 → deterministic gates, queue. ≥2 → ONE sonnet set-pass
   (latch-gated, subscription-semaphore held only across decide) emits cause/downstream/
   independent as fenced JSON; the SHELL applies it (ADR-094 — the LLM judges, launcher-owned
