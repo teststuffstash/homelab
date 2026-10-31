@@ -75,5 +75,5 @@ OUT → index downgrades pr.md to MISSING/argv-fallback
 OUT → index downgrades reviews.md to MISSING/argv-fallback
 OUT → index leaves ci-failure.md's pre-existing MISSING reason untouched
 OUT → issue.md content verified
-ERR → context pre-fetch: ConfigMap creation failed — falling back to argv delivery
+ERR → context pre-fetch: ConfigMap creation failed — falling back to argv delivery (error: the server could not find the requested resource)
 RC 0
