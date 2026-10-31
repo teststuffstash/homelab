@@ -106,5 +106,9 @@ settling explicitly when the segment is built, rather than inferring either way.
 - Price + power the delta (2 SFF hosts, NUC, switch, PiKVM) against the budget lens.
 - A one-weekend trial of the OPNsense pair on the *existing* single Proxmox host (no host
   redundancy yet, but proves CARP + per-node ansible + the canary/probe/failback machinery).
+  **Overtaken:** the pair was built for real across two hosts instead (nx-02 + pve, ADR-144/-145,
+  complete 2026-10-09 — [`../router-move.md`](../router-move.md) §Status).
 - The FU-097 ruling table, written with this end-state as the vanishing point: each surface's
   ruling is then "which recovery path is it waiting on", not "automate: yes/no".
+  **Exists since 2026-10-11:** the per-surface rulings in
+  [`../dependency-classes.yaml`](../dependency-classes.yaml) (ADR-152; ROADMAP §Deploy paths).
