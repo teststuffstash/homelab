@@ -204,7 +204,7 @@ never pad it, never leave it out.
 - The specs reviewer is the second required approval on `gateway/specs/**` + `gateway/tests/**`
   (ADR-155); the `Spec changes:` PR-body heading, ⚖ on judgment rows, per-row OBSERVED values —
   the review classes that cost rounds (TICK-LOG 10-19, 10-20).
-- Pinned process: `allure-behavior-snippets` RULES.md/CONVENTIONS.md v0.6.2
+- Pinned process: `allure-behavior-snippets` RULES.md/CONVENTIONS.md v0.6.6
   (`gateway/specs/README.md` §Rules). "Rule N" means rule N there.
 - Operator-only, not yours to reason around: the Go key mint (FU-313), the codex login (seed), a
   canary / maintenance window, any ruling the tracker marks "ruling pending" (FU-270 names them).
