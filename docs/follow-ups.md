@@ -507,9 +507,9 @@ the block needs pruning, not more headings.
       2026-10-31 resight: #2919 left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails w/o a TTY → the belt's
       OPNsense leg (still `devbox run`) exit 1 → `MgmtBeltCheckFailing{check=ansible}` since 10-28 11:19Z; #2457 missed
       it. Un-wedged 10-31 (venv moved aside); class fix #3052 (`5df5ea7f`: the belt resolves ansible from `devbox.lock`,
-      `OPN_ANSIBLE_BIN`; tested). **Next:** (1) read the first belt `ansible` verdict after the box activates `5df5ea7f`
-      (14:01Z pull); (2) drop `pkgs.devbox` + its stale comment from the `mgmt-belt` unit `path` with the next `mgmt/nixos`
-      change; (3) the ORIGINAL deliverable, still unbuilt: `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z); then archive.
+      `OPN_ANSIBLE_BIN`; first box tick on it 14:17Z PASS, 0 devbox calls). **Next:** (1) drop `pkgs.devbox` + its stale
+      comment from the `mgmt-belt` unit `path` with the next `mgmt/nixos` change; (2) the ORIGINAL deliverable, still
+      unbuilt: `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z); then archive.
 - [ ] **FU-290** — **Scans + sessions + reflexes exhaust the shared homelab-agents installation pools (142724430)
       under PR churn.** First 09-25 (Renovate wave); detector blindness fixed (#1979 graphql, #2442 core). Drains
       since: 10-04/10-06/10-07 (sleep-tracking#121 storm, oracle-fleet#798 loop — fixed + belted #2204/#2366),

@@ -18,9 +18,10 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ S9 (homelab#1985) — what is left, re-verified 2026-10-31 (TICK-LOG 10-31).** In flight this session: FU-316
-  warmer PR (ghcr + docker-io), #2014's `probe.py --self-test` ci gate, a doc-currency PR on `docs/dependency-upgrades.md`
-  (lock-major lane PROVEN by agent-runtime#183 10-26; kps 92.x lens major PROVEN by #2550 10-13; G12 proven by #2968).
+- **⚑ S9 (homelab#1985) — what is left, re-verified 2026-10-31 (TICK-LOG 10-31).** Landed this session: FU-316
+  warmer (#3049, archived), #2014's `probe.py --self-test` ci gate (#3051 + the ci.yaml step direct; #2014 closed
+  10-31), doc currency #3050 (lock-major lane PROVEN by agent-runtime#183; kps lens major by #2550;
+  G12 by #2968), FU-305 class fix #3052 (first box tick PASS 14:17Z).
   Left: #1988's two halves (base-image previous-tag revert → unblocks agent-coordinator#29; then the substrate proposer
   row, AFTER FU-319's attended bumps); #1985 residuals 5 (updater hand-back — live case sleep-tracking#199, BEHIND 12 d),
   1 (exoneration beyond `revert-wf`), 2 (`head -1` grouped-alert read); event-gated proofs stay with the loop (G12b #2995,
