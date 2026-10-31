@@ -1267,10 +1267,11 @@ any sync of the reinstall class.
    dedicated port if it has link at BMC boot, else the host's LAN1 — which would put a BMC back on the
    LAN, so cable day pins **dedicated** (`raw 0x30 0x70 0x0c 1 0`).
 
-   **Re-address (one window, from the jail, after the box runs a closure with the transition leg):**
-   per BMC over its current LAN address — `lan set 1 ipsrc static`, `netmask 255.255.255.0`,
-   `defgw ipaddr 0.0.0.0`, then `ipaddr 192.168.15.x` LAST (the session drops there); verify with
-   `devbox run bmc -- <node> lan print 1`. Recovery if one goes dark: nx-02's in-band `ipmitool`
+   **Re-address — DONE 2026-10-31** (both BMCs static, gateway `0.0.0.0`, verified through the box).
+   The recipe, per BMC over its current LAN address: `lan set 1 ipsrc static` (keeps the current
+   address), `netmask 255.255.255.0`, then `ipaddr 192.168.15.x` (the session drops there); verify with
+   `devbox run bmc -- <node> lan print 1`. No gateway step: the X10 firmware REFUSES `defgw ipaddr
+   0.0.0.0`, and clears the old gateway to `0.0.0.0` by itself once the address leaves its subnet. Recovery if one goes dark: nx-02's in-band `ipmitool`
    (KCS, no network) from its Proxmox shell; nx-01 (Talos, no shell) via any LAN host given a
    `192.168.15.x` alias.
 
@@ -1691,7 +1692,7 @@ this section.
 | Which surfaces may it reconcile? | Answered per surface by evidence, not a ruling table: §The capability ledger (FU-097). The intent-review instruction is live in `.agents/review.md` (2026-09-28) |
 | **The pilot's firmware — UEFI or legacy BIOS?** | **Read 2026-09-13: UEFI-capable, but a CSM firmware whose BIOS-setup priority is authoritative** — a UEFI install landed, yet the firmware re-derives the NVRAM order from the setup list on every boot (legacy entries first), so an `efibootmgr -o` was overwritten and the box booted the stick. So `bootMode = "bios"`: GRUB in the BIOS-boot partition is what the setup's "disk" entry boots, with no NVRAM dependency. Setup order for the pilot: disk first, USB and PXE removed. Automatic boot-failure rollback stays unavailable (it was in this pin regardless) |
 | `bootCounting` in the pin | only if that read says UEFI — then one `nix eval` settles it |
-| The management network | §MB4 item 7. Built 2026-10-31: the box's second NIC stanza + transition leg, `bmc:` in `machines.yaml`, the `bmc`/`bmc-web` verbs. Left: the BMC re-address, cable day, FU-288's rotation |
+| The management network | §MB4 item 7. Built 2026-10-31: the box's second NIC stanza + transition leg, `bmc:` in `machines.yaml`, the `bmc`/`bmc-web` verbs. BMCs re-addressed 2026-10-31. Left: cable day, FU-288's rotation |
 | A CI gate on `mgmt/nixos/` | the repo's CI is a list of `devbox run` steps; a `nix flake check` step wants the nix cache warm on the runner first |
 
 ## Prior art worth knowing before trusting NixOS here
