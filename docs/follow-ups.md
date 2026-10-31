@@ -166,13 +166,6 @@ six OVERSIZE items pointer-ized into
       (`tofu/templates/ci-runner-cloud-init.yaml.tftpl:109`, takes effect at the next runner replace).
       (c) `tests/kind-kargo/` is the first platform-component gate on the VM runner (ROADMAP P1 / ADR-082 cover
       stack gates only) — generalise when a second component needs one. Prod install: the PR after #2798.
-- [ ] **FU-316** — **ghcr + docker-io mirrors lack the cold-blob `blob-warmer` mcr got (#2892).** A
-      pull-through fill dies with the client request that started it, so a big new layer can stay uncached
-      for days (mcr `5fd7f2ae…` 10-19→10-24, 22 blob 500s, red sleep-tracking + circles CI; detector
-      `RegistryMirrorColdBlobAbandoned`, #2888). ghcr + docker-io show the same class (2 episodes each in 10 d).
-      2026-10-31: mcr soak passed (no `RegistryMirrorColdBlobAbandoned` in 7 d); ghcr fired 10-28 17:20Z → 10-30
-      19:00Z — the warmer PR for ghcr + docker-io is in flight (seat subagent, this session). **Next:** land it
-      (the same sidecar block in `mirror-ghcr.yaml` + `mirror-docker-io.yaml`). Relates FU-310.
 - [ ] **FU-299** — **Backups: Longhorn target LIVE + drilled; every CNPG Cluster backed up by default (ADR-147) + drilled.**
       Longhorn → [`longhorn-backup.md`](longhorn-backup.md); Postgres → [`postgres.md`](postgres.md) §Backups (plugin,
       admission-wired, daily + `pg-backup-now`; infisical-pg restore 85 s, 704/704 tables). Rollout incident:
