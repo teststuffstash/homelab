@@ -282,6 +282,13 @@ case_ lock-reverted-refused 'is a REVERTED lock version' "reverts_lock_ curl@8.2
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 case_ lock-other-name-same-version ok "reverts_lock_ jq@8.22.0" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
+# … and an EXONERATED lock revert releases its memory: the chain's control (the revert-lock merge's own
+# run of the same workflow failed too) appends `exonerated-locks:` to the body, and header (e)'s skip
+# is keyed on the `exonerated-` prefix for every memory, (i) included → the same re-resolve is OK
+# (homelab#1985 residual 1; red before it: (i) read the body with no skip).
+exonerate_closed_() { local f="$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; jq --arg k "$1" 'map(.body += "\n\nexonerated-\($k): x")' "$f" >"$f.x" && mv "$f.x" "$f"; }
+case_ lock-reverted-exonerated ok "reverts_lock_ curl@8.22.0; exonerate_closed_ locks" \
+  "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 case_ lock-memory-unreadable 'cannot read the merged revert-lock-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 # (i)'s 30-day window, in the 2026-10-10 drill's own terms (#2480 reverted qrencode 4.1.99, the
@@ -303,6 +310,8 @@ case_ coord-pin ok "" "$CPIN"
 case_ coord-pin-reverted-refused 'is a REVERTED coordinator source (g4944d7039514)' "reverts_coord_ 2026.10.30-g4944d7039514" "$CPIN"
 case_ coord-pin-rebuild-same-source-refused 'is a REVERTED coordinator source (g4944d7039514)' "reverts_coord_ 2026.10.23-g4944d7039514" "$CPIN"
 case_ coord-pin-other-source ok "reverts_coord_ 2026.10.30-g950b7f0b8201.7" "$CPIN"
+# … and an exonerated coord revert releases its memory (header (e)'s `exonerated-` skip covers every memory).
+case_ coord-pin-reverted-exonerated ok "reverts_coord_ 2026.10.30-g4944d7039514; exonerate_closed_ coordinator" "$CPIN"
 case_ coord-non-pin-edit ok "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" "sed -i 's/  - a.yaml/  - a.yaml\\n  - b.yaml/' agents/coordinator/kustomization.yaml"
 case_ coord-memory-unreadable 'cannot read the merged revert-coord-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" "$CPIN"
 # (j) the box flake lock — the owner replacement (pin-only-lint.sh header (j)). Expected verdicts from

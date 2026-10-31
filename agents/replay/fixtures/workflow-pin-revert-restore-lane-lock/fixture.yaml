@@ -1,0 +1,16 @@
+# workflow-pin-revert-restore-lane-lock — the RESTORE leg for the LOCK shape (homelab#1985 residual 1;
+# sibling of workflow-pin-revert-restore-lane, same block). The exonerate block now reads the revert's
+# shape from its own record — the branch prefix (`revert-lock-`) and the memory line's name
+# (`reverted-locks:`) — and emits both on the EXON_TARGETS line (workflow-pin-revert-exonerate row
+# lock-revert). Contract (agents/coordinator/deploy-revert-argo.yaml block
+# workflow-pin-revert-restore-lane): the restore is pushed on the SAME prefix (`revert-lock-<revert-sha8>`
+# — governance-lint's revert-lock arm and pin-only-lint (j) key on it) and its body carries the SAME
+# kind's trailer: an EMPTY `reverted-locks:` (the arm's trailer; nothing enters check (i)'s memory) and
+# `restored-locks: <versions>` (the exonerate block's ping-pong guard reads `restored-<kind>:`). A body
+# that said `reverted-pins:` on a lock restore is refused by the lock arm (no `reverted-locks:` line).
+name: workflow-pin-revert-restore-lane-lock
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:workflow-pin-revert-restore-lane

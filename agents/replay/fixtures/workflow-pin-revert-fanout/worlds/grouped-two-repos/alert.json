@@ -1,0 +1,6 @@
+{"receiver":"deploy-pin-revert","status":"firing","alerts":[
+  {"status":"firing","labels":{"alertname":"GithubWorkflowRunFailed","owner":"teststuffstash","repo":"snore-recorder","workflow":"build-image","branch":"master","event":"push","number":"26","attempt":"1","id":"39363243469","conclusion":"failure"}},
+  {"status":"resolved","labels":{"alertname":"GithubWorkflowRunFailed","owner":"teststuffstash","repo":"oracle-fleet","workflow":"CI","branch":"master","event":"push","number":"880","attempt":"1","id":"39360000001","conclusion":"failure"}},
+  {"status":"firing","labels":{"alertname":"GithubWorkflowRunFailed","owner":"teststuffstash","repo":"circles","workflow":"CI","branch":"renovate/foo","event":"push","number":"140","attempt":"1","id":"39360000002","conclusion":"failure"}},
+  {"status":"firing","labels":{"alertname":"GithubWorkflowRunFailed","owner":"teststuffstash","repo":"circles","workflow":"CI","branch":"main","event":"push","number":"141","attempt":"1","id":"39360000003","conclusion":"failure"}}
+]}

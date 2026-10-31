@@ -563,9 +563,11 @@ is stale, so it cannot drift the way the prose register did.
 | `tofu-image-revert-coupling-match` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-image-revert-coupling-mismatch` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-image-revert-coupling-second-resource` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-image-revert-fanout` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-image-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-provider-revert-alert-foreign-root` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-provider-revert-alert` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `tofu-provider-revert-fanout` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-provider-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-provider-revert-ref-pr` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `tofu-provider-revert-ref-sha` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
@@ -603,9 +605,11 @@ is stale, so it cannot drift the way the prose register did.
 | `workflow-pin-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-coupling` | table | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-exonerate` | table | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `workflow-pin-revert-fanout` | table | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-lock-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-lock-flake-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-merge-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
+| `workflow-pin-revert-restore-lane-lock` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-restore-lane` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 <!-- replay-index:end -->
 

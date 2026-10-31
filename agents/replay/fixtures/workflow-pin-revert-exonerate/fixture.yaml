@@ -29,6 +29,14 @@
 #   snore-recorder-64  — THE FIXED ROW (red on base: the block does not exist; the chain did nothing).
 #   restore-never / already-exonerated / other-workflow / ledger-seen / run-unreadable /
 #   edit-refused — the guards above, one per row.
+# CHAIN-AGNOSTIC (homelab#1985 residual 1, 2026-10-31): the revert is found by its branch SHAPE
+# (`^revert-[a-z]+-[0-9a-f]{8}$`), its kind by its own memory line (`reverted-<kind>:`), and the
+# EXON_TARGETS line gains `|<kind>|<branch prefix>` (the restore rides the same arm).
+#   lock-revert    — #64 as a LOCK revert (`revert-lock-161afc12`, `reverted-locks: qrencode@4.1.99`):
+#                    exonerated with `exonerated-locks:`, target `…|locks|revert-lock-` (red on the
+#                    old `startswith("revert-wf-")` read: "no chain revert's own run").
+#   foreign-revert — #64 as an IMAGE revert (no `**Failed workflow:**` line): matched by shape, then
+#                    refused by the workflow guard — never exonerated off a workflow run.
 name: workflow-pin-revert-exonerate
 mode: table
 source: agents/coordinator/deploy-revert-argo.yaml
