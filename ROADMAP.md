@@ -137,8 +137,8 @@ work survivable.
       (`docs/router-move.md` §Status); Big Data retired 2026-10-20 (its hardware is now `wk-metal-04`, #2758).
    Done along the way: per-node inventory, Kea hot-standby HA (ADR-145), Cilium peering with both
    nodes, pfsync over the LAN (HAProxy VIPs stay IP aliases — the `/24` ruling; only `.1` is CARP).
-   Still needed: the management network (the NX BMCs + the box's second
-   NIC; the routers are not on it — each is managed at its own LAN IP).
+   The management network (the NX BMCs + the box's second NIC; the routers are not on it — each
+   is managed at its own LAN IP) is live since 2026-10-31 ([`docs/management-box.md`](docs/management-box.md) §MB4 item 7).
 3. **Compute HA — 3-node Proxmox cluster** (Proxmox HA + replicated storage, e.g. Ceph).
    A node dies → its VMs restart/migrate to a survivor.
 4. **Public-service HA — Cloudflare LB** → home primary, Civo (scale-to-zero) failover.

@@ -85,12 +85,6 @@ in
   systemd.network.networks."10-lan" = {
     matchConfig.MACAddress = "8c:89:a5:23:49:da";
     address = [ "192.168.2.53/24" ];
-    # TRANSITION LEG of the management segment: while the BMCs' IPMI cables are still on the LAN
-    # switch, they already sit at their final 192.168.15.x statics (machines.yaml `bmc:`), and this
-    # second address reaches them over the shared L2. Metric 1024 loses to the mgmt NIC's route the
-    # moment enp2s0 has carrier, so the cable swap needs no config change. Remove this address once
-    # every BMC is behind the management switch (docs/management-box.md §MB4 item 7, "cable day").
-    addresses = [{ Address = "192.168.15.254/24"; RouteMetric = 1024; }];
     # STATIC on purpose: a DHCP-reserved address makes the box's identity depend on the router's
     # dnsmasq being up when it boots (the ghost-node class in docs/runbook.md). The reservation
     # STAYS anyway — the installer boots before any config exists and needs a lease.
@@ -106,7 +100,7 @@ in
   # mgmt-confirm's gate reboots the box back. Without carrier networkd configures nothing here.
   systemd.network.networks."20-mgmt" = {
     matchConfig.MACAddress = "50:3e:aa:10:ae:16";
-    addresses = [{ Address = "192.168.15.53/24"; RouteMetric = 100; }];
+    address = [ "192.168.15.53/24" ];
     linkConfig.RequiredForOnline = "no";
     networkConfig.LinkLocalAddressing = "no";
   };
