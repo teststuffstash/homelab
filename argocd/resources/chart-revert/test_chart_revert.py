@@ -280,5 +280,151 @@ class HandleAlert(unittest.TestCase):
         self.assertEqual(cr.handle_alert(alert(name="Other"), FakeRunner({}), now=NOW)[0], "no_candidate")
 
 
+# ── the image target (homelab#1988's base-image post-merge half, Part 7) ─────────────────────
+# The fixture is the REAL squash commit of #3040, the 2026-10-30 coordinator deploy-pin
+# (gh api repos/teststuffstash/homelab/commits/df99ff4a): four files, one tag moved everywhere.
+# Expected values come from that diff and the predicate's contract (chart_revert.classify_image_commit
+# docstring): old = the removed tag, new = the added tag, memory line = `reverted-coordinator: <new>`.
+IMG = cr.TARGETS["AgentLoopWorkflowsFailing"]
+KUST = "agents/coordinator/kustomization.yaml"
+ISHA = "df99ff4a58ae1e0e31ff9b7cada5be41554de570"
+T_OLD, T_NEW = "2026.10.28-g950b7f0b8201", "2026.10.30-g4944d7039514"
+REF = "ghcr.io/teststuffstash/agent-coordinator"
+
+
+def _img_patch(line_fmt):
+    return f"@@ -1,3 +1,3 @@\n context\n-{line_fmt.format(T_OLD)}\n+{line_fmt.format(T_NEW)}\n context"
+
+
+COMMIT_3040 = [
+    {"filename": KUST, "status": "modified", "patch": _img_patch("    newTag: {}")},
+    {"filename": "agents/images.env", "status": "modified", "patch": "@@ -17,7 +17,7 @@\n # agent-base — worker/fixer pods (agent-runtime's deploy-pin).\n AGENT_BASE_IMAGE=ghcr.io/teststuffstash/agent-base:2026.10.28-g2a1ab2455a9c.122\n # agent-coordinator — coordinator/reviewer/reflex pods (agent-coordinator's deploy-pin).\n" + f"-AGENT_COORDINATOR_IMAGE={REF}:{T_OLD}\n+AGENT_COORDINATOR_IMAGE={REF}:{T_NEW}\n # dind sidecar"},
+    {"filename": "argocd/resources/agentstack/composition.yaml", "status": "modified",
+     "patch": "\n".join([_img_patch("                      image: " + REF + ":{}")] * 4)},
+    {"filename": "argocd/resources/registry-cache/gc-mirrors.yaml", "status": "modified", "patch": _img_patch("              image: " + REF + ":{}")},
+]
+
+
+def alert_img(**labels):
+    return alert(name="AgentLoopWorkflowsFailing", exported_namespace="agent-coordinator", **labels)
+
+
+def pr_img(number=3040, merged="2026-10-30T18:37:21Z", head="deploy/agent-coordinator", files=(KUST, "agents/images.env"), oid=ISHA):
+    return pr(number, merged, head, files, oid) | {"title": f"deploy: agent-coordinator {T_NEW} (#{number})"}
+
+
+class ImageSelect(unittest.TestCase):
+    # The pre-fix guard: TARGETS held ArgoControllerSilent only, so this alert was `ignored` and
+    # the coordinator image had no revert actor at all — this assertion reds on that receiver.
+    def test_loop_failing_alert_is_a_target(self):
+        self.assertEqual(len(cr.select_alerts({"alerts": [alert_img(), alert(name="ArgoWorkflowsFailing")]})), 1)
+
+
+class ImageClassify(unittest.TestCase):
+    def test_3040_is_pin_only(self):
+        self.assertEqual(cr.classify_image_commit(COMMIT_3040, IMG), ("pin_only", T_OLD, T_NEW))
+
+    def test_pin_file_required(self):
+        with self.assertRaises(cr.Outcome) as cm:
+            cr.classify_image_commit(COMMIT_3040[1:], IMG)
+        self.assertEqual(cm.exception.outcome, "not_pin_only")
+
+    def test_smuggled_line_is_not_pin_only(self):
+        bad = [dict(COMMIT_3040[0]), *COMMIT_3040[1:]]
+        bad[0]["patch"] += "\n+  - island-intake-argo.yaml"
+        with self.assertRaises(cr.Outcome) as cm:
+            cr.classify_image_commit(bad, IMG)
+        self.assertEqual(cm.exception.outcome, "not_pin_only")
+
+    def test_other_image_or_other_newtag_is_not_pin_only(self):
+        # agent-base moving in the same commit is ANOTHER consumer's pin — outside this revert
+        base = COMMIT_3040 + [{"filename": "agents/images.env", "patch": "@@ -1 +1 @@\n-AGENT_BASE_IMAGE=ghcr.io/teststuffstash/agent-base:a\n+AGENT_BASE_IMAGE=ghcr.io/teststuffstash/agent-base:b"}]
+        with self.assertRaises(cr.Outcome):
+            cr.classify_image_commit(base, IMG)
+        # a newTag in ANOTHER kustomization (agent-gateway's) is not this image's pin
+        gw = COMMIT_3040 + [{"filename": "argocd/resources/agent-gateway/kustomization.yaml", "patch": _img_patch("    newTag: {}")}]
+        with self.assertRaises(cr.Outcome):
+            cr.classify_image_commit(gw, IMG)
+
+    def test_two_tags_or_unchanged(self):
+        split = [dict(f) for f in COMMIT_3040]
+        split[3]["patch"] = split[3]["patch"].replace(T_NEW, "2026.10.31-gdeadbeef0000")
+        with self.assertRaises(cr.Outcome):
+            cr.classify_image_commit(split, IMG)
+        same = [{"filename": KUST, "patch": f"@@ -1 +1 @@\n-    newTag: {T_NEW}\n+    newTag: {T_NEW}"}]
+        with self.assertRaises(cr.Outcome):
+            cr.classify_image_commit(same, IMG)
+
+    def test_missing_patch_fails_closed(self):
+        with self.assertRaises(cr.RunError):
+            cr.classify_image_commit([{"filename": KUST}], IMG)
+        with self.assertRaises(cr.RunError):
+            cr.classify_image_commit([], IMG)
+
+
+class ImageShapes(unittest.TestCase):
+    def test_branch_title_body(self):
+        self.assertEqual(cr.revert_branch(ISHA, "image"), "revert-coord-df99ff4a")
+        self.assertEqual(cr.image_pr_title("agent-coordinator", T_NEW, T_OLD, "AgentLoopWorkflowsFailing"),
+                         f"revert: agent-coordinator image {T_NEW} → {T_OLD} (AgentLoopWorkflowsFailing)")
+        body = cr.image_pr_body("agent-coordinator", T_NEW, T_OLD, "AgentLoopWorkflowsFailing", "t0", 3040, "t", 120, False)
+        self.assertEqual(body.splitlines()[-1], f"reverted-coordinator: {T_NEW}")
+        self.assertIn(f"{T_NEW} → {T_OLD}", body)
+
+    def test_newtag_in_file(self):
+        self.assertEqual(cr.newtag_in_file(f"images:\n  - name: {REF}\n    newTag: {T_NEW}\n"), T_NEW)
+        with self.assertRaises(cr.RunError):
+            cr.newtag_in_file("images: []\n")
+
+
+class ImageRunner(FakeRunner):
+    def read_file(self, path):
+        return f"images:\n  - name: {REF}\n    newTag: {self.master_pin}\n"
+
+
+IMG_HAPPY = {
+    "gh pr list": ok_json([pr_img(), pr(3041, "2026-10-30T19:00:00Z", files=("docs/x.md",))]),
+    "git -c http.extraHeader=Authorization: Basic": (2, "", ""),
+    "gh api repos/teststuffstash/homelab/commits/" + ISHA: ok_json({"files": COMMIT_3040}),
+    "gh pr create": (0, "https://github.com/teststuffstash/homelab/pull/3060\n", ""),
+}
+NOW_IMG = datetime(2026, 10, 30, 19, 40, tzinfo=timezone.utc)
+
+
+class ImageHandleAlert(unittest.TestCase):
+    def test_reverted_to_previous_tag(self):
+        r = ImageRunner(dict(IMG_HAPPY), master_pin=T_NEW)
+        outcome, reason = cr.handle_alert(alert_img(), r, now=NOW_IMG, workdir="/tmp/x")
+        self.assertEqual(outcome, "reverted", reason)
+        joined = [" ".join(c) for c in r.calls]
+        self.assertIn("git checkout -b revert-coord-df99ff4a", joined)
+        self.assertIn(f"git revert --no-edit {ISHA}", joined)
+        self.assertIn("git push origin revert-coord-df99ff4a", joined)
+        self.assertIn("gh pr merge --auto --squash 3060 --repo teststuffstash/homelab", joined)
+        create = next(c for c in r.calls if c[:3] == ["gh", "pr", "create"])
+        self.assertEqual(create[create.index("--title") + 1], f"revert: agent-coordinator image {T_NEW} → {T_OLD} (AgentLoopWorkflowsFailing)")
+        self.assertEqual(create[create.index("--body") + 1].splitlines()[-1], f"reverted-coordinator: {T_NEW}")
+
+    def test_already_when_master_moved_on(self):
+        r = ImageRunner(dict(IMG_HAPPY), master_pin=T_OLD)
+        self.assertEqual(cr.handle_alert(alert_img(), r, now=NOW_IMG, workdir="/tmp/x")[0], "already")
+        self.assertFalse(any(c[:2] == ["git", "push"] for c in r.calls))
+
+    def test_no_pin_in_window_is_no_candidate(self):
+        # the 2026-10-17 17:31Z episode (the only firing in retention): no coordinator pin merged
+        # in the 120 m before it — the newest was #2592 at 2026-10-15T18:49Z → not a rollback case.
+        s = dict(IMG_HAPPY)
+        s["gh pr list"] = ok_json([pr_img(2592, "2026-10-15T18:49:26Z")])
+        r = ImageRunner(s, master_pin=T_NEW)
+        now = datetime(2026, 10, 17, 17, 31, tzinfo=timezone.utc)
+        self.assertEqual(cr.handle_alert(alert_img(), r, now=now, workdir="/tmp/x")[0], "no_candidate")
+        self.assertFalse(any(c[:2] == ["git", "clone"] for c in r.calls))
+
+    def test_non_pin_merge_to_the_pin_file_stays_human(self):
+        # #3004 (island intake) edited the kustomization's resources: list — not a pin
+        s = dict(IMG_HAPPY)
+        s["gh api repos/teststuffstash/homelab/commits/" + ISHA] = ok_json({"files": [{"filename": KUST, "patch": "@@ -1 +1,2 @@\n   - island-intake-argo.yaml\n+  - x.yaml"}]})
+        self.assertEqual(cr.handle_alert(alert_img(), ImageRunner(s, master_pin=T_NEW), now=NOW_IMG, workdir="/tmp/x")[0], "not_pin_only")
+
 if __name__ == "__main__":
     unittest.main()

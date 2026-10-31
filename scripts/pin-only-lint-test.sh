@@ -54,6 +54,9 @@ reverts_img_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%
 reverts_chart_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-chart-abcd1234"},"body":"FU-304 rollback\\n\\nreverted-charts: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 # reverts_lock_ <name@version …>: ONE merged revert-lock-* PR naming those lock versions (check (i),
 # the lock shape of workflow-pin-revert — class 7 majors armed 2026-10-07).
+# reverts_coord_ <tag …>: ONE merged revert-coord-* PR naming those coordinator tags (check (k), the
+# chart-revert receiver's image target — homelab#1988's base-image post-merge half).
+reverts_coord_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-coord-df99ff4a"},"body":"coordinator rollback\\n\\nreverted-coordinator: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 reverts_lock_() { mkdir -p "$STUB/repos/$PIN_ONLY_SLUG"; printf '[{"merged_at":"%s","head":{"ref":"revert-lock-abcd1234"},"body":"lock rollback\\n\\nreverted-locks: %s"}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >"$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; }
 
 # 40-hex SHAs with a readable first byte; the values only need to be distinct and well-formed.
@@ -125,6 +128,9 @@ cat >"$R/mgmt/nixos/flake.lock" <<'EOF2'
   "version": 7
 }
 EOF2
+# check (k)'s home: the coordinator pin's two files, in the deploy-pin's own shapes (#3040's base).
+printf '# agent-base\nAGENT_BASE_IMAGE=ghcr.io/teststuffstash/agent-base:2026.10.28-g2a1ab2455a9c.122\n# agent-coordinator\nAGENT_COORDINATOR_IMAGE=ghcr.io/teststuffstash/agent-coordinator:2026.10.28-g950b7f0b8201\n' >"$R/agents/images.env"
+printf 'resources:\n  - a.yaml\nimages:\n  - name: ghcr.io/teststuffstash/agent-coordinator\n    newTag: 2026.10.28-g950b7f0b8201\n' >"$R/agents/coordinator/kustomization.yaml"
 git -C "$R" add -A && git -C "$R" commit -q -m base
 BASE="$(git -C "$R" rev-parse HEAD)"
 
@@ -287,6 +293,18 @@ case_ lock-reproposal-day29-refused 'qrencode@4.1.99 is a REVERTED lock version'
   "sed -i 's/\"4.1.1\"/\"4.1.99\"/' devbox.lock"
 case_ lock-reproposal-day31-expired ok "reverts_lock_aged_ 31 qrencode@4.1.99" \
   "sed -i 's/\"4.1.1\"/\"4.1.99\"/' devbox.lock"
+# (k) the reverted-coordinator memory (header (k)): a deploy-pin (both files, one tag) passes on an
+# empty memory; is REFUSED when a merged revert-coord-* PR names a tag of the SAME `-g<hex>` source —
+# the reverted tag itself, and a later rebuild of that source under a new date (the weekly-rebuild
+# re-proposal the full-tag key would miss); passes when the memory names another source; a non-pin
+# edit of the kustomization never reads the memory (unreadable stub); an unreadable memory is a FAIL.
+CPIN="sed -i 's/2026.10.28-g950b7f0b8201/2026.10.30-g4944d7039514/' agents/images.env agents/coordinator/kustomization.yaml"
+case_ coord-pin ok "" "$CPIN"
+case_ coord-pin-reverted-refused 'is a REVERTED coordinator source (g4944d7039514)' "reverts_coord_ 2026.10.30-g4944d7039514" "$CPIN"
+case_ coord-pin-rebuild-same-source-refused 'is a REVERTED coordinator source (g4944d7039514)' "reverts_coord_ 2026.10.23-g4944d7039514" "$CPIN"
+case_ coord-pin-other-source ok "reverts_coord_ 2026.10.30-g950b7f0b8201.7" "$CPIN"
+case_ coord-non-pin-edit ok "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" "sed -i 's/  - a.yaml/  - a.yaml\\n  - b.yaml/' agents/coordinator/kustomization.yaml"
+case_ coord-memory-unreadable 'cannot read the merged revert-coord-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" "$CPIN"
 # (j) the box flake lock — the owner replacement (pin-only-lint.sh header (j)). Expected verdicts from
 # the header's rules: the devbox-update App's re-resolve to a rev its branch CONTAINS passes; a rev the
 # compare API cannot place (404 — a fork commit served under the parent's URL), an off-branch rev
