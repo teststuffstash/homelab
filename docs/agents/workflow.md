@@ -87,7 +87,7 @@ transitions run as deterministic reflexes without an LLM turn
 ([`merge-path.md`](merge-path.md) §Reflexes vs judgment).
 
 The state machine itself is maintained in ONE place — **[`merge-path-fsm.md`](merge-path-fsm.md)**
-(generated, lint-anchored; transitions MP-T01…T13 + gap register). The coordinator's two
+(generated, lint-anchored; transitions MP-T01…T14 + gap register). The coordinator's two
 entry/exit arcs around it: `triaged` (labelled, repro + synthetic data table) → spawn worker
 round 1; `cant-repro | max-rounds | flip-flop` → tie-break/escalate to a human. Spawning a
 round = `agents/agent-session.sh` (→ an `agent-sandbox` `Sandbox` CR once that lands,
@@ -245,10 +245,10 @@ from this repo's own code now carries `{stack, loop_ns}` for a graduated repo:
 `fix-debounce-argo.yaml` (from birth, `83907ea`), `.github/workflows/coordinate-doorbell.yaml`,
 and the github-exporter's five dispatchers — review (FU-100), CI-red (FU-115), `merge-conflict`
 (#285), since 2026-08-12 PR-merge (ADR-106 (6)) and, since 2026-08-18, the queued-label edge
-(#505; repo-dumb, grouped below). The `{repo}`-only emitters — `.github/workflows/renovate.yaml`
-(`{"repo":"all"}`), `.github/workflows/devbox-update.yaml` (`{"repo":"<matrix.repo>"}`) and
+(#505; repo-dumb, grouped below). The `{repo}`-only emitters — `.github/workflows/devbox-update.yaml` (`{"repo":"<matrix.repo>"}`) and
 `maybe_dispatch_queued` (`{repo, number}`) — are **served by the FU-144 receiver-side fan-out
-since 2026-08-12** (the ⚠ block above): repo-dumb payloads are the SUPPORTED shape now, and new
+since 2026-08-12** (the ⚠ block above; `.github/workflows/renovate.yaml`'s `{"repo":"all"}` ring
+was REMOVED 2026-09-25, FU-290 — the table row above): repo-dumb payloads are the SUPPORTED shape now, and new
 emitters should prefer them over learning stack mechanics. The operator-lane note stands for the
 files themselves (`.github/**` executes from a PR's own branch, so the fixer lane may not edit
 them). `devbox run coordinate-now` retired with the global cron (ADR-120) — wake a stack via
