@@ -40,9 +40,9 @@ must be launchable ("an opencode ride, idp stack, coordinator role, kimi model")
 | axis | values today | future | owned by |
 |---|---|---|---|
 | **harness** | goose, opencode (agent-base) · claude (coordinator image) | hermes, … | agent-runtime (one image per harness family, **stack-agnostic**) |
-| **role** | fixer, coordinator, reviewer(+lenses), retro, scout, responder, researcher, infra-fixer | prober, meta-coordinator, large-job | **[`roles.md`](roles.md)** — recipes/briefs + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
+| **role** | fixer, coordinator, reviewer(+lenses), retro, scout, responder, researcher, infra-fixer, prober (FU-102) | meta-coordinator, large-job | **[`roles.md`](roles.md)** — recipes/briefs + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
 | **stack** | sleep, oracle, platform, circles | … | AgentStack claim (ns, keys, repos) + the stack repo itself |
-| **model / billing** | Claude subscription · OpenRouter API (registry + chains) | opencode subscription, … | model-routing registry + the ADR-081 proxy |
+| **model / billing** | Claude subscription · OpenCode Go subscription · ChatGPT (codex) subscription · OpenRouter API (registry; static chains deleted — ADR-107) — the gateway's four rails ([`../../gateway/README.md`](../../gateway/README.md)) | … | model-routing registry + the ADR-081 proxy |
 
 Known constraint couplings (encode them, don't fight them):
 
@@ -110,7 +110,7 @@ plane, without copying scripts into its repo. What the stack writes is the **cla
 Pragmatic stand-ins that already run, structured to become the above:
 
 - **`agents/stacks.json`** — a claim-shaped list of stacks
-  (`{name, repos, mainRepo, coordinatorModel, workerModel}`). The claims EXIST now (step 3
+  (`{name, repos, mainRepo, …}` — `workerModel` left it with the chainless sweep). The claims EXIST now (step 3
   below, done 2026-07-12) — this file survives as their **committed mirror** (the CI/registration
   lint's universe + the probe-failed belt; [`agentstack.md`](agentstack.md) §Consumption).
   `mainRepo` (see below) is stack policy: the coordinator's cwd.
@@ -130,17 +130,19 @@ Pragmatic stand-ins that already run, structured to become the above:
     coordinator sequences by), and `homelab` for stacks whose coordination knowledge still lives in homelab
     docs (`sleep`, `platform`) until it migrates out. It is distinct from the platform *mechanism*: the
     coordinator **brief** (`agents/coordinator/README.md`) is always loaded by absolute path from
-    `/work/homelab`, whatever the cwd. `mainRepo` is a field of the future `AgentStack` claim, defaulting to
+    `/work/homelab`, whatever the cwd. `mainRepo` is an `AgentStack` claim field (since 2026-07-12), defaulting to
     `homelab`. All the stack's repos are cloned regardless of which is `mainRepo`; the clones are **read-only
     reference** (coordinator writes stay labels/comments/merge via `gh`; a direct-write tier is FU-059).
 - **`agents/fixer/<repo>/` + the `agent-fixer` ApplicationSet** — the per-repo *fixer infra* (the
   project's `OpenRouterKey` budget key + the `agent-git-token` ESO `GithubAccessToken`, namespace ==
   repo). One `argocd/platform/agent-fixer.yaml` ApplicationSet (git **directory generator** over
   `agents/fixer/*`) emits an Application per subdir, so **onboarding a repo's fixer infra is just adding
-  its `agents/fixer/<repo>/` dir** — no per-repo Application file, no shell (the "yaml way", FU-052). The
-  per-repo `.agents/fix.yaml`+`review.md` recipes and the GitHub-side (repo/labels/rulesets/callers, still
-  `tofu/github` + reusable workflows) are the parts *not* yet folded in; the `AgentStack` XRD (FU-048)
-  collapses both into one claim.
+  its `agents/fixer/<repo>/` dir** — no per-repo Application file, no shell (the "yaml way", FU-052). Since
+  the claims, the key + token are Composition-rendered ([`agentstack.md`](agentstack.md) §What a claim
+  renders): `agents/fixer/` now holds only the platform stack's claim, and the same ApplicationSet syncs each
+  `<stack>-iac` repo's `*/agent` dir. Of the parts once slated to fold into the claim, labels did (FU-068,
+  [`agentstack.md`](agentstack.md) §The GitHub side); the Administration tier (repos/rulesets) stays in
+  `tofu/github` and the `.agents/` recipes stay repo content — both deliberately outside the claim.
 - **Orphan backstop** in `coordinator-scan` — reports any open `dependencies` PR that is un-armed AND
   carries no lane label (`automerge`/`deps-review`/`major`), i.e. owned by nobody (Renovate is meant to
   classify+arm every bump; escapes rot silently otherwise — a disabled manager's leftovers, stale PRs, a
@@ -159,9 +161,9 @@ coordinator toolchain = platform **mechanism** (in the image); per-repo build to
 YAML it's `git` + maybe `yq` — still fixed and stack-independent; genuinely stack-specific coordinator
 tooling would be a per-stack image variant selected by the future `AgentStack` Composition.
 
-**The one swap-point:** `coordinator-scan.sh`'s `stacks_json()` reads `stacks.json` today; the target
-is `kubectl get agentstacks -o json`. Everything downstream (the per-stack loop, the gate, the spawn) is
-already source-agnostic, so flipping the source is the migration.
+**The one swap-point:** `coordinator-scan.sh`'s `stacks_json()` — it reads `kubectl get agentstacks -o
+json` merged over `stacks.json` since 2026-07-12 (migration step 3 below). Everything downstream (the
+per-stack loop, the gate, the spawn) was already source-agnostic, so flipping the source was the migration.
 
 ## Why per-stack is the coordinator's context (not per-issue, not global)
 

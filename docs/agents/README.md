@@ -327,8 +327,9 @@ enumeration of ADRs outside `../adr.md` is a copy that will rot; go read the fil
   **responder** role (alert-triggered, one bounded session per fingerprint) and as the jail-side
   meta-coordinator, both of which needed no new server. Revisit only if a consumer appears that
   can't be served by either — the retro's transcript slices (FU-058) are the nearest candidate.
-- **CI-cluster-with-ARC upgrade** — VMs now; revisit a dedicated CI cluster with autoscaling
-  privileged runners only if parallel PR volume outgrows a single VM.
+- **CI-cluster-with-ARC upgrade** — VMs now (`ci-runner-01` + `ci-runner-02`, one per hypervisor,
+  FU-266); revisit a dedicated CI cluster with autoscaling privileged runners only if parallel PR
+  volume outgrows them.
 
 ## Roadmap
 
