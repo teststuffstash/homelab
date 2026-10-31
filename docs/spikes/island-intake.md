@@ -135,7 +135,9 @@ territory, §Open questions 4).
    belongs in the pinned text (allure-behavior-snippets), not here.
 5. **Other islands.** The brief's rules are island-agnostic; the §Island facts block is the
    gateway's. oracle-fleet has the same shape (specs, reviewer, read map) — the second island is
-   where the brief's generality is tested.
+   where the brief's generality is tested. **Facts + membership written for five platform islands**
+   (agent-loop, substrate, dependency-upgrades, mgmt-box, router-pair): [`../intake/`](../intake/) +
+   `intake-select.sh --island` (one table, first row wins); open until a sitting runs on one.
 
 ## What would settle it
 

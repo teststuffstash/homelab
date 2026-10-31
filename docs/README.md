@@ -25,6 +25,7 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [follow-ups-archive.md](follow-ups-archive.md) | Resolved-FU residue — rolling buffer (≈a month) of archived items, trimmed to the grep residue |
 | [incidents/](incidents/README.md) | **Postmortems** — one file per incident: timeline, root cause, collateral, fixes, probe lesson. The FU carries only the residual work |
 | [spikes/](spikes/) | Investigations with no decision yet — findings + what would settle it |
+| [intake/](intake/) | **Island intake facts** — one short §Island facts file per platform island (agent-loop, substrate, dependency-upgrades, mgmt-box, router-pair); the rules live once in [`../gateway/intake.md`](../gateway/intake.md) |
 | [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps + tier eligibility rulings; Longhorn metering built 2026-08-04, quota armed 2026-08-07, Garage admin metrics + belts since #965 (2026-08-25), the pve thin-pool meter since PR#1367 (2026-09-04); open legs in FU-093 |
 | [longhorn-backup.md](longhorn-backup.md) | Longhorn's backup target (single-node Garage LXC on nx-02, outside Longhorn), the per-volume backup classes, the restore recipe (FU-299) |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
