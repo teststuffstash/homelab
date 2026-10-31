@@ -1,0 +1,29 @@
+# workflow-pin-revert-fanout — ONE PASS PER ALERT (homelab#1985 S9 residual 2, 2026-10-31).
+#
+# THE DEFECT. Alertmanager groups GithubWorkflowRunFailed by alertname, so ONE delivery to
+# deploy-pin-revert carries every firing run — other repos included. The candidate walk read
+# `.alerts[] | select(firing) | select(master/main) | .labels | head -1`: the first alert only, so a
+# second repo's master failure in the same group was never walked (no revert, no report line).
+#
+# THE CONTRACT (agents/coordinator/deploy-revert-argo.yaml block workflow-pin-revert-fanout — lifted
+# by sentinel, never retyped): the alerts the walk would admit (status firing AND branch master/main)
+# are counted; more than one → the template re-runs its own script once per admitted alert with a
+# payload of exactly that alert (`{alerts: [<alert>]}`), in delivery order, EVERY pass runs even when
+# one is red, and the parent's exit is red iff any pass was. Exactly one (or none) → fall through to
+# the single-alert path unchanged — which is also what every child sees, so the recursion is one level.
+#
+# THE ROWS. World grouped-two-repos: 4 alerts — snore-recorder master (firing), oracle-fleet master
+# (RESOLVED — not admitted), circles renovate/foo (non-default branch — not admitted), circles main
+# (firing) → 2 admitted.
+#   two-repos      — THE FIXED ROW (red on base: the block does not exist; `head -1` walked only
+#                    snore-recorder) → two passes, snore-recorder then circles, RC 0.
+#   one-red-child  — the snore-recorder pass fails → circles still runs, RC 1.
+#   single-alert   — one admitted alert → no fan-out, falls through (n=1).
+name: workflow-pin-revert-fanout
+mode: table
+source: agents/coordinator/deploy-revert-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:workflow-pin-revert-fanout
+  - file:post.sh
+rows: rows.psv

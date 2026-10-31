@@ -1,0 +1,1 @@
+map(if .number == 64 then .headRefName = "revert-img-161afc12" | .body = "#1988 rollback: Deployment homeassistant/ha rollout stuck.\n\n**Reverted PR:** #63 — chore(deps): update ha image\n\nreverted-images: ghcr.io/home-assistant/home-assistant:2026.10.1" else . end)

@@ -282,6 +282,13 @@ case_ lock-reverted-refused 'is a REVERTED lock version' "reverts_lock_ curl@8.2
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 case_ lock-other-name-same-version ok "reverts_lock_ jq@8.22.0" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
+# … and an EXONERATED lock revert releases its memory: the chain's control (the revert-lock merge's own
+# run of the same workflow failed too) appends `exonerated-locks:` to the body, and header (e)'s skip
+# is keyed on the `exonerated-` prefix for every memory, (i) included → the same re-resolve is OK
+# (homelab#1985 residual 1; red before it: (i) read the body with no skip).
+exonerate_closed_() { local f="$STUB/repos/$PIN_ONLY_SLUG/$CLOSED"; jq --arg k "$1" 'map(.body += "\n\nexonerated-\($k): x")' "$f" >"$f.x" && mv "$f.x" "$f"; }
+case_ lock-reverted-exonerated ok "reverts_lock_ curl@8.22.0; exonerate_closed_ locks" \
+  "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 case_ lock-memory-unreadable 'cannot read the merged revert-lock-* PRs' "rm -f \"\$STUB/repos/\$PIN_ONLY_SLUG/\$CLOSED\"" \
   "sed -i 's/8.17.0/8.22.0/' devbox.lock"
 # (i)'s 30-day window, in the 2026-10-10 drill's own terms (#2480 reverted qrencode 4.1.99, the

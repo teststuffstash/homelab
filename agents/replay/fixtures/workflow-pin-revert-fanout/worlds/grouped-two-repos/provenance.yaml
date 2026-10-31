@@ -1,0 +1,4 @@
+recorded:
+  at: 2026-10-31
+  source: the snore-recorder run-26 alert verbatim from fixtures/workflow-pin-revert-exonerate/worlds/snore-recorder-64/alert.json (github-exporter label set)
+  constructed: three more alerts in the SAME GithubWorkflowRunFailed group, as Alertmanager delivers it — a RESOLVED master alert (oracle-fleet), a firing alert on a non-default branch (circles renovate/foo), and a firing `main` alert of ANOTHER repo (circles) — the one `head -1` lost

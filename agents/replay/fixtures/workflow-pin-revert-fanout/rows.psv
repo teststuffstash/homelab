@@ -1,0 +1,3 @@
+two-repos            | grouped-two-repos |                                |                     | fanout       |
+one-red-child        | grouped-two-repos |                                | FAIL_REPO=snore-recorder | fanout-red |
+single-alert         | grouped-two-repos | alert.json @ one-alert.jq      |                     | single       |

@@ -1,0 +1,12 @@
+# tofu-provider-revert-fanout — ONE PASS PER ALERT for the provider revert chain (homelab#1985 S9 residual 2, 2026-10-31; the
+# twin of workflow-pin-revert-fanout, whose header carries the defect and the contract). The template
+# read `.alerts[] | select(firing) | select(alertname == "MgmtApplyErroredOnNewProvider") | .labels | head -1`, so a second
+# provider in the same Alertmanager group was never walked. Contract (agents/coordinator/deploy-revert-argo.yaml
+# block tofu-provider-revert-fanout): more than one admitted alert (firing AND alertname MgmtApplyErroredOnNewProvider) → one pass of the template per
+# admitted alert, payload `{alerts: [<alert>]}`, delivery order; the Watchdog alert is not admitted.
+name: tofu-provider-revert-fanout
+mode: actions
+source: agents/coordinator/deploy-revert-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:tofu-provider-revert-fanout
