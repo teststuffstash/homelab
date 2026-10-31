@@ -5,8 +5,9 @@ _Part of the [homelab docs](README.md). Logical/IP view: [`/README.md`](../READM
 service exposure / BGP rationale: [`adr.md`](adr.md) ADR-021._
 
 > ⚠ **The router changed after the last capture:** `.1` is the nx-02 + pve CARP pair since 2026-10-09
-> ([`router-move.md`](router-move.md) §Status); Big Data is powered off as the fallback. The diagram
-> below predates the pair and needs a re-capture.
+> ([`router-move.md`](router-move.md) §Status); Big Data's router role is RETIRED (2026-10-20 — its
+> hardware is now `wk-metal-04`, OPNsense disk wiped). The diagram below predates the pair and needs a
+> re-capture.
 
 Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; re-captured
 2026-08-12 (operator cabling + live guest-agent reads: the wk-metal fleet, hp-01, ci-runner-01).
@@ -71,15 +72,16 @@ so it too is off both diagrams.
   rate vs the neighbours, then `talosctl pcap` and count ethertype `0x8808`.
 - **Everything above is ONE flat L2 domain** (every switch unmanaged or L2-only; no VLANs), so
   DHCP/PXE broadcasts reach Matchbox (LXC on Proxmox `vmbr0`) from EVERY port — including
-  wk-metal-03/-04 two switch hops away in the office. Verified in practice: all four wk-metal
+  m70s two switch hops away in the office. Verified in practice: all four wk-metal
   nodes + hp-01 PXE-provisioned through this layout.
 - **ThinkCentre, hp-01, wk-metal-01/-02 and Proxmox share the core TP-Link 10-port switch**, one
   hop from OPNsense LAN. (The ThinkCentre's 2026-06 "flaky PXE" was ultimately a **bad NIC
   cable** — 100Mbps + link flapping — replaced 2026-06-11; PXE has worked since.)
 - **Unmanaged switches** (TP-Link 10-port, office 5-port) → no STP forwarding delay to
   blame for a PXE-vs-STP race.
-- The managed UniFi switch (.11) is **downstream** of the core switch; wk-metal-03/-04 and
-  pop-os (the jail host) sit below it on the office 5-port.
+- The managed UniFi switch (.11) is **downstream** of the core switch; m70s and pop-os (the jail
+  host) sit below it on the office 5-port (wk-metal-03/-04 moved to the basement — see the capture
+  notes above).
 
 ```mermaid
 graph TD
