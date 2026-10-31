@@ -1166,8 +1166,19 @@ case "${MODEL:-}" in
   *)             REVIEW_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
 esac
 # <<<REPLAY:reviewer-rail-label<<<
-cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
-  || { echo "REVIEW REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (pr, head) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
+# The create's stderr is captured so a refusal can name its cause: a Forbidden is RBAC (this SA cannot
+# write the namespace it was pointed at), not a lost race or a bad manifest.
+CREATE_ERR="$(mktemp)"
+create_refusal() {
+  cat "$CREATE_ERR" >&2
+  if grep -q 'Forbidden' "$CREATE_ERR"; then
+    echo "REVIEW REFUSED (atomic): create of ${POD} in ns ${NS} is Forbidden — this SA cannot create pods there. The flagless default ns agent-coordinator is the legacy single-tenant one; a per-stack coordinator passes --loop-ns <stack>-agents." >&2
+  else
+    echo "REVIEW REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (pr, head) key, or the manifest is invalid (see kubectl error above)." >&2
+  fi
+  rm -f "$CREATE_ERR"; exit 3
+}
+cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - 2>"$CREATE_ERR" || create_refusal
 apiVersion: v1
 kind: Pod
 metadata:
@@ -1270,6 +1281,7 @@ spec:
     - name: reviewer-git
       secret: { secretName: ${REVIEWER_GIT}, optional: true }
 EOF
+rm -f "$CREATE_ERR"
 
 echo "→ waiting for ${POD} (clone + checkout + review)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=120s || true

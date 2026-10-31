@@ -386,8 +386,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    `gh pr checkout`s the PR, runs `/code-review`, and submits exactly one
    `gh pr review --approve|--request-changes` as the review bot):
    ```sh
-   bash agents/reviewer-session.sh <project> <PR>
+   bash agents/reviewer-session.sh <project> <PR> --loop-ns <stack>-agents
    ```
+   `--loop-ns` is required from a per-stack coordinator: the flagless default ns `agent-coordinator` is the
+   legacy single-tenant one, which a per-stack SA cannot write.
    Then read the verdict and drive the round:
    ```sh
    gh pr view <PR> --repo teststuffstash/<project> --json reviewDecision -q .reviewDecision
@@ -1576,11 +1578,14 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    as an issue on the owning repo naming the failing step and the closed PR — a mechanical bump comes
    back on Renovate's next run, so the closed PR is not the record; the issue is. Same five-ride bound.
 2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
-   **reviewer directly** — even while red (the reflex won't, but you can; a major review is an
-   *investigation* whose whole job is to explain the red — the reviewer's STEP 0 treats a concluded
-   FAILURE on an un-armed major as the subject, not a precondition, since 2026-09-28):
+   **reviewer directly** once the checks have **CONCLUDED — green or red**. Red is the subject: a major
+   review is an *investigation* whose whole job is to explain the red (the reviewer's STEP 0 treats a
+   concluded FAILURE on an un-armed major as the subject, not a precondition, since 2026-09-28). **Pending
+   is not reviewable**: the reviewer stands aside on pending and the run is spent, and the review reflex
+   never re-picks an un-armed `major` PR. If CI is still running, report that and let the next
+   `unarmed-major` dispatch pick it up:
    ```sh
-   bash agents/reviewer-session.sh <project> <PR>
+   bash agents/reviewer-session.sh <project> <PR> --loop-ns <stack>-agents
    ```
    The reviewer reads the tool's upstream migration notes, maps them onto this repo's usage, and comments
    exactly what must change (e.g. helm-4 needs `--verify=false` on `helm plugin install`).
