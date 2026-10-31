@@ -10,6 +10,9 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-316** *(archived 2026-10-31)* — **Cold-blob `blob-warmer` on the ghcr + docker-io mirrors.** PR #3049 (master
+  `94e889e7`) added the mcr-style sidecar to `mirror-ghcr` + `mirror-docker-io`; ArgoCD rolled both 2026-10-31 12:45:30Z
+  and the warmer logs show blobs warmed on each. Origin: mcr episode #2892, detector `RegistryMirrorColdBlobAbandoned` (#2888).
 - **FU-152** *(archived 2026-10-24)* — **One version file for the agent-coordinator image.** agent-coordinator#27
   (10-15, deploy-pin sweeps the Composition + gc-mirrors) + homelab#2593 (equality check in `manifest-lint.sh`, closes
   #2566); first bump PR #2751 (10-20) moved kustomization + images.env + all 5 Composition literals + gc-mirrors
