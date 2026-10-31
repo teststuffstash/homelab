@@ -32,10 +32,10 @@ of this repo._
   bucket alias `oracle-specs`, so no bucket/publish change; ⚠ the OLD name/VIP 3.20 is KEPT LIVE
   until this stack migrates it — both serve as of 2026-08-11). New oracle hostnames = an HTTPRoute PR in
   oracle-iac, no homelab change.
-- **Seeded skeleton**: `apps/` is empty (root app syncs clean with zero resources). The first child
-  Application, `values/`, and the deploy-bump pipeline (app-repo `deploy.yaml` + `deploy-pin.sh` +
-  the `homelab-deploy` App installed on oracle-iac) are wired when the fleet publishes its first
-  chart — copy the sleep shapes (`sleep-iac.md` §"Deploy pipeline"). `oracle-iac`'s ruleset already
+- **Seeded skeleton, since filled**: `apps/` was empty at bring-up (root app synced clean with zero
+  resources); it now carries the `oracle-fleet` and `oracle-fleet-ingester` child Applications, and
+  the deploy-bump pipeline (app-repo `deploy.yaml` + `deploy-pin.sh` + the `homelab-deploy` App on oracle-iac) follows
+  the sleep shapes (`sleep-iac.md` §"Deploy pipeline"). `oracle-iac`'s ruleset already
   matches sleep-iac (`ci` required, `require_approval = false` — mechanical bumps merge on ci-green).
 
 ## Bring-up record (completed 2026-07-08 — this order is the recipe for the next stack)
