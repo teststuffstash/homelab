@@ -18,10 +18,14 @@ configMapGenerator:
     files:
       - chart_revert.py
 
-# The chain's image, pinned to the tag agents/coordinator/kustomization.yaml pins TODAY. The
-# agent-coordinator repo's deploy-pin job bumps THAT file on every weekly image rebuild and does
-# not know about this one — a stable tool image (git, gh, python3) makes the drift harmless, and
-# the seat decides whether the deploy-pin job grows a second file or this stays hand-bumped.
+# The chain's image, pinned to the tag agents/coordinator/kustomization.yaml pinned on 2026-10-05.
+# The agent-coordinator repo's deploy-pin job bumps THAT file on every weekly image rebuild and does
+# not know about this one — a stable tool image (git, gh, python3) makes the drift harmless.
+# ⚠ LOAD-BEARING since 2026-10-31 (homelab#1988, the coordinator-image target, Part 7 of
+# docs/designs/fu-1990-workflow-pin-revert.md): this receiver reverts a BROKEN coordinator deploy-pin,
+# so it must never ride that pin. The deploy-pin sweep rewrites wherever the CURRENT tag string
+# appears, so a tag that differs from the live coordinator pin is never swept: hand-bump this only
+# to a tag the loop has already run on for at least a week — never to the newest pin.
 images:
   - name: ghcr.io/teststuffstash/agent-coordinator
     newTag: 2026.10.5-gca94f4a2dd99

@@ -72,6 +72,12 @@ CI — the OOTB principle):
    e2e header documents the exact failure).
 8. **Evidence out, cluster gone**: write per-round logs/assertions to an `e2e-evidence/<ts>/`
    dir and publish in a trailing non-required job; the cluster itself is never the artifact.
+9. <a id="platform-component-pins"></a>**Platform components in the test cluster run within ONE
+   minor AHEAD of prod, never behind** (Grafana, Postgres fixtures, …; ADR-158). Pin the image
+   explicitly in the test manifest and let Renovate see it (sleep-tracking#183's
+   `renovate.json`); prod ≤ pin ≤ prod + 1 minor, patches free, never a major ahead. Bump FIRST
+   and fix your dashboards/queries there — the platform bump never waits for you. The window and
+   its gate: [dependency-upgrades.md §Version SETS](../dependency-upgrades.md#version-sets--what-must-move-together-operator-ruling-2026-09-27-owner-2014).
 
 ## Reference implementations
 

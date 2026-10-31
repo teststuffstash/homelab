@@ -16,6 +16,18 @@ snapshot). Design: docs/designs/fu-1990-workflow-pin-revert.md Part 4. Operator 
 terraform provider majors do (ADR-141 as amended 2026-10-04) — a detector (`ArgoControllerSilent`,
 step 1) + this revert actor (step 2) behind them.
 
+SECOND TARGET KIND (2026-10-31, homelab#1988's base-image post-merge half): the coordinator IMAGE
+pin. A deploy-pin of `ghcr.io/teststuffstash/agent-coordinator` that breaks the image at runtime
+reddens every loop workflow (`AgentLoopWorkflowsFailing`, the per-loop-namespace failure belt) —
+and the four chain templates RUN ON that image, so the chain would revert itself out of existence.
+This receiver does not: its own image tag is pinned in ITS kustomization, which the deploy-pin
+never writes, so it keeps running the tag it ran before the bump. The revert is `git revert` of the
+deploy-pin squash commit (every changed line an agent-coordinator pin: kustomize `newTag:`,
+`AGENT_COORDINATOR_IMAGE=`, `image: …agent-coordinator:<tag>`), which restores exactly the PREVIOUS
+tag the bump replaced. Memory: `reverted-coordinator: <tag>` → pin-only-lint check (k), keyed on
+the tag's `-g<sha>` source commit (a weekly rebuild of the same source is the same version).
+Design: docs/designs/fu-1990-workflow-pin-revert.md Part 7.
+
 Runs from a ConfigMap (the repo's DIY pattern — github-exporter, openrouter-proxy; kustomize's
 configMapGenerator hash rolls the pod on edits). The operator flagged ConfigMap-shipped scripts as
 an IMAGE candidate; at ~10 KiB this one is accepted here as is. Stdlib only; `git` and `gh` come
@@ -39,12 +51,14 @@ HTTP (:8080):
 
 Outcomes (the `outcome` label):
   reverted      the revert PR is open, labelled automerge+dependencies and armed
-  already       branch revert-chart-<sha8> exists (a racing/previous instance owns it), or master's
-                pin is no longer the bumped version (already reverted or bumped again — stale alert)
-  no_candidate  no merged PR in the window touched the chart file (not a rollback case —
+  already       branch revert-chart-<sha8> / revert-coord-<sha8> exists (a racing/previous instance
+                owns it), or master's pin is no longer the bumped version (already reverted or
+                bumped again — stale alert)
+  no_candidate  no merged PR in the window touched the target's pin file (not a rollback case —
                 responder/operator lane owns it), or the alert has no target
-  not_pin_only  the squash commit changed something besides `targetRevision:` (+ comments) in that
-                one file — values edits, other files: outside the revert class, a human reads it
+  not_pin_only  chart: the squash commit changed something besides `targetRevision:` (+ comments)
+                in that one file; image: a changed line that is not an agent-coordinator pin, or
+                not exactly one tag moved — outside the revert class, a human reads it
   conflict      `git revert` conflicted — never forced, nothing pushed
   error         a read failed (gh/git unreadable, no token, a drill without a merged PR): no revert
                 on bad data, fail closed
@@ -67,16 +81,23 @@ import time
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# alertname → the chart pin it guards. One home per chart: the file ArgoCD reads the pin from and
-# the chart name the `reverted-charts:` memory line names (pin-only-lint reads exactly that line
-# from merged `revert-chart-*` PRs — the sibling check beside (e)/(f)/(g)).
+# alertname → the pin it guards. kind=chart: the file ArgoCD reads the pin from and the chart name
+# the `reverted-charts:` memory line names (pin-only-lint reads exactly that line from merged
+# `revert-chart-*` PRs — check (h)). kind=image: the coordinator image's ONE pin file (kustomize
+# `newTag`, FU-152) — a candidate must touch it — and the image every changed line must name; the
+# memory line is `reverted-coordinator:` on `revert-coord-*` PRs (check (k)).
 TARGETS = {
-    "ArgoControllerSilent": {"file": "argocd/platform/argo-workflows.yaml", "chart": "argo-workflows"},
+    "ArgoControllerSilent": {"kind": "chart", "file": "argocd/platform/argo-workflows.yaml", "chart": "argo-workflows"},
+    "AgentLoopWorkflowsFailing": {"kind": "image", "file": "agents/coordinator/kustomization.yaml",
+                                  "image": "ghcr.io/teststuffstash/agent-coordinator", "chart": "agent-coordinator"},
 }
 OUTCOMES = ("reverted", "already", "no_candidate", "not_pin_only", "conflict", "error")
 WEBHOOK_RESULTS = ("queued", "ignored", "bad_request")
 BRANCH_PREFIX = "revert-chart-"
+BRANCH_PREFIXES = {"chart": BRANCH_PREFIX, "image": "revert-coord-"}
 PIN_LINE_RE = re.compile(r"^targetRevision:\s*(\S+)\s*(#.*)?$")
+TAG = r"([A-Za-z0-9._-]+)"
+NEWTAG_LINE_RE = re.compile(r"^newTag:\s*" + TAG + r"$")
 PR_URL_RE = re.compile(r"/pull/(\d+)\s*$")
 
 REPO_SLUG = os.environ.get("REPO_SLUG", "teststuffstash/homelab")
@@ -192,8 +213,62 @@ def classify_commit(files, target_file):
     return "pin_only", removed[0], added[0]
 
 
-def revert_branch(sha):
-    return BRANCH_PREFIX + sha[:8]
+def image_line_tag(content, filename, target):
+    """The tag a deploy-pin line names, or None. The three shapes the deploy-pin sweep writes:
+    `newTag: <tag>` (only in the target's kustomization — another app's newTag is not this image),
+    `AGENT_COORDINATOR_IMAGE=<image>:<tag>` (agents/images.env) and `[- ]image: <image>:<tag>`."""
+    if filename == target["file"]:
+        m = NEWTAG_LINE_RE.match(content)
+        if m:
+            return m.group(1)
+    img = re.escape(target["image"])
+    m = re.match(r"^(?:(?:-\s*)?image:\s*|AGENT_COORDINATOR_IMAGE=)" + img + ":" + TAG + r"$", content)
+    return m.group(1) if m else None
+
+
+def classify_image_commit(files, target):
+    """The image pin-only predicate over a commit's `files`. Returns ("pin_only", old, new) or
+    raises Outcome(not_pin_only) / RunError.
+
+    Pin-only = the commit touched the target's pin file, and in EVERY file every changed line that
+    is not a `#` comment names the target image's tag in one of image_line_tag's shapes; across the
+    whole commit exactly one tag removed and one added, and they differ (a deploy-pin moves one tag
+    everywhere at once — #3040 touched four files). An absent patch fails closed."""
+    if not isinstance(files, list) or not files:
+        raise RunError("commit has no files[] — cannot classify")
+    names = sorted({f.get("filename", "") for f in files if isinstance(f, dict)})
+    if target["file"] not in names:
+        raise Outcome("not_pin_only", f"commit touches {names}, not the pin file {target['file']}")
+    removed, added, offending = set(), set(), []
+    for f in files:
+        if not isinstance(f, dict):
+            continue
+        patch = f.get("patch")
+        if not patch or not isinstance(patch, str):
+            raise RunError(f"commit's patch for {f.get('filename')} is empty/unreadable")
+        for line in patch.splitlines():
+            if not line or line[0] not in "+-":
+                continue
+            content = line[1:].strip()
+            if content.startswith("#"):
+                continue
+            tag = image_line_tag(content, f.get("filename"), target)
+            if tag is None:
+                offending.append(f"{f.get('filename')}: {line}")
+                continue
+            (removed if line[0] == "-" else added).add(tag)
+    if offending:
+        raise Outcome("not_pin_only", "changed lines outside the image-pin grammar: " + " | ".join(offending[:5]))
+    if len(removed) != 1 or len(added) != 1:
+        raise Outcome("not_pin_only", f"expected one tag moved, got -{sorted(removed)} +{sorted(added)}")
+    old, new = removed.pop(), added.pop()
+    if old == new:
+        raise Outcome("not_pin_only", f"tag unchanged ({new}) — nothing to revert")
+    return "pin_only", old, new
+
+
+def revert_branch(sha, kind="chart"):
+    return BRANCH_PREFIXES[kind] + sha[:8]
 
 
 def pin_in_file(text):
@@ -202,6 +277,41 @@ def pin_in_file(text):
     if len(pins) != 1:
         raise RunError(f"expected exactly one targetRevision in the file, found {len(pins)}")
     return pins[0]
+
+
+def newtag_in_file(text):
+    """The kustomize `newTag:` of the coordinator's kustomization (one image entry by design)."""
+    tags = [m.group(1) for m in (NEWTAG_LINE_RE.match(line.strip()) for line in text.splitlines()) if m]
+    if len(tags) != 1:
+        raise RunError(f"expected exactly one newTag in the file, found {len(tags)}")
+    return tags[0]
+
+
+def image_pr_title(name, new, old, alertname):
+    return f"revert: {name} image {new} → {old} ({alertname})"
+
+
+def image_pr_body(name, new, old, alertname, starts_at, pr_number, pr_title_text, window_min, drill):
+    """The image revert PR body. The LAST line is the one machine line pin-only-lint check (k) reads."""
+    how = ("DRILL — the alert was synthetic and named this PR" if drill
+           else f"the merge was within {window_min}m of the alert")
+    return (
+        f"Deterministic coordinator-image rollback (homelab#1988, the base-image post-merge half): "
+        f"**{alertname}** fired (startsAt {starts_at}) and {how}. The squash commit of #{pr_number} "
+        f"changed only `{name}` image pins, so reverting it restores the PREVIOUS tag {new} → {old} "
+        f"and ArgoCD re-syncs every coordinator/reviewer/reflex pod onto it. A correlation, by "
+        f"design — the revert is the cheap probe: if the loop stays red on {old}, the image was not "
+        f"the cause and the failure stays with the responder/operator (re-pin {new} by editing the "
+        f"memory line out of this body). A deploy-pin of a tag built from the same source commit "
+        f"(`-g<sha>`) is refused by pin-only-lint check (k) for 30 days — a fixed agent-coordinator "
+        f"commit builds a new source and passes. Mechanical lane: `automerge` + `dependencies` → the "
+        f"reflex approves, CI is the gate. Actor: the `chart-revert` receiver (argocd/resources/"
+        f"chart-revert/), whose own image tag the deploy-pin never moves — it runs the tag it ran "
+        f"before the bump (docs/designs/fu-1990-workflow-pin-revert.md Part 7).\n\n"
+        f"**Reverted PR:** #{pr_number} — {pr_title_text}\n"
+        f"**Alert:** {alertname} startsAt {starts_at}\n\n"
+        f"reverted-coordinator: {new}"
+    )
 
 
 def pr_title(chart, new, old, alertname):
@@ -323,7 +433,8 @@ def handle_alert(alert, runner, now=None, slug=REPO_SLUG, window_min=REVERT_WIND
                 raise Outcome("no_candidate", f"no merged PR since {cutoff} touched {target['file']} — not a rollback case")
         sha = cand["mergeCommit"]["oid"]
         number, title = cand["number"], cand.get("title", "")
-        branch = revert_branch(sha)
+        kind = target.get("kind", "chart")
+        branch = revert_branch(sha, kind)
         url = f"https://github.com/{slug}.git"
         hdr = auth_header(token)
         # Ledger: the deterministic branch name. rc 0 = exists, rc 2 = absent, anything else = unreadable.
@@ -333,7 +444,10 @@ def handle_alert(alert, runner, now=None, slug=REPO_SLUG, window_min=REVERT_WIND
         if rc != 2:
             raise RunError(f"git ls-remote failed rc={rc}: {err.strip()[:200]}")
         commit = gh_json(runner, ["api", f"repos/{slug}/commits/{sha}"])
-        _, old, new = classify_commit(commit.get("files"), target["file"])
+        if kind == "image":
+            _, old, new = classify_image_commit(commit.get("files"), target)
+        else:
+            _, old, new = classify_commit(commit.get("files"), target["file"])
         repo = os.path.join(workdir, "repo")
         runner.fresh_dir(repo)
         # Preemptive auth (homelab#1136: token-in-URL clones are anonymous-first and get throttled);
@@ -348,7 +462,8 @@ def handle_alert(alert, runner, now=None, slug=REPO_SLUG, window_min=REVERT_WIND
             if rc != 0:
                 raise RunError(f"git {args[0]} failed: {err.strip()[:200]}")
         # Stale-alert guard: master must still pin the version the candidate introduced.
-        current = pin_in_file(runner.read_file(os.path.join(repo, target["file"])))
+        read_pin = newtag_in_file if kind == "image" else pin_in_file
+        current = read_pin(runner.read_file(os.path.join(repo, target["file"])))
         if current != new:
             raise Outcome("already", f"master pins {target['chart']} at {current}, not {new} — already reverted or bumped again")
         rc, _, err = runner.run(["git", "checkout", "-b", branch], cwd=repo)
@@ -361,9 +476,10 @@ def handle_alert(alert, runner, now=None, slug=REPO_SLUG, window_min=REVERT_WIND
         rc, _, err = runner.run(["git", "push", "origin", branch], cwd=repo)
         if rc != 0:
             raise RunError(f"git push failed: {err.strip()[:200]}")
-        body = pr_body(target["chart"], new, old, alertname, starts_at, number, title, window_min, bool(drill_pr))
+        body_fn, title_fn = (image_pr_body, image_pr_title) if kind == "image" else (pr_body, pr_title)
+        body = body_fn(target["chart"], new, old, alertname, starts_at, number, title, window_min, bool(drill_pr))
         rc, out, err = runner.run(["gh", "pr", "create", "--repo", slug, "--base", "master", "--head", branch,
-                                   "--title", pr_title(target["chart"], new, old, alertname), "--body", body], cwd=repo)
+                                   "--title", title_fn(target["chart"], new, old, alertname), "--body", body], cwd=repo)
         m = PR_URL_RE.search(out or "")
         if rc != 0 or not m:
             raise RunError(f"gh pr create failed rc={rc}: {(err or out).strip()[:200]}")

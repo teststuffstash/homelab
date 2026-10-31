@@ -1,4 +1,5 @@
-# chart-revert — the chart-pin revert receiver (docs/designs/fu-1990-workflow-pin-revert.md Part 4).
+# chart-revert — the chart-pin revert receiver (docs/designs/fu-1990-workflow-pin-revert.md Part 4),
+# and since 2026-10-31 the coordinator-image revert actor (Part 7: AgentLoopWorkflowsFailing).
 # A plain Deployment OUTSIDE Argo Workflows' dependency cone: Alertmanager POSTs ArgoControllerSilent
 # straight here, and the revert runs in this pod on the chain's own image (git + gh + python3 —
 # ghcr.io/teststuffstash/agent-coordinator, tag pinned in kustomization.yaml) and credential (the
