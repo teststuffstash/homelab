@@ -267,7 +267,8 @@ ceiling over the issue's `Touches:`** (a `Touches:` line may narrow the tiers, n
 with no `devbox run ci` here the recipe names the lints **per path** and makes the PR state which
 ran; and the PR must reference its issue or the scan re-dispatches. The fixer block landed the
 same day (`agents/fixer/openrouter-operator/agentstack.yaml`: budget $5/week, `guardrail: none` —
-the stack chain is a paid model, `claudeTier: false` per the FU-134 ruling, egress `none`+enforced),
+the stack chain is a paid model, `claudeTier: false` per the FU-134 ruling — flipped to `true` at the
+2026-08-07 subscription cutover — egress `none`+enforced),
 which is what creates the per-repo namespace its worker RoleBinding needs (`agent-read-infra`,
 since homelab is the platform's own `-iac`).
 
@@ -431,9 +432,10 @@ claim diff, never a silent flip. ⚠ **The first live dispatch is what exposed I
   OPEN choice between Kyverno and OPA Gatekeeper, deliberately gated on a SECOND use case before
   deciding, per the ≥2-pattern rule. The two seats are different jobs: the sentinel evaluates a
   PR tree offline, while admission puts a webhook in the pod-creation path where `failurePolicy`
-  and availability dominate. Tracked with its first use case as FU-191):** `policy/iac/*.yaml` (5 Kyverno policies:
+  and availability dominate. Tracked with its first use case as FU-191):** `policy/iac/*.yaml` (the v1 five Kyverno policies:
   raw-Secret, public-bucket, explicit-Delete deletionPolicy, VIP∈192.168.32.0/19,
-  cluster-scoped power kinds — all synthetically verified firing), gitleaks (secret values,
+  cluster-scoped power kinds — all synthetically verified firing; a sixth file joined 2026-10-09,
+  `pinned-pods-priority.yaml` — a `nodeName`-pinned pod must carry a PriorityClass, #2405), gitleaks (secret values,
   fleet-standard), and a bash path-rule (worker-authored PRs must not touch
   `.github/workflows/**` — the sleep-iac#28 hole; a GitHub **push ruleset** with restricted
   file paths is the enforcement-grade native version, to verify+tofu at the flip).
@@ -444,7 +446,9 @@ claim diff, never a silent flip. ⚠ **The first live dispatch is what exposed I
   head (success/failure; `error` on probe failure — fail-closed, healed next tick) when
   `SENTINEL_STATUS_TOKEN` is present (the reviewer-git Secret; empty = shadow). The context is
   REQUIRED on the four sentinel repos (tofu `protected_repos`), and the tick tightened
-  */15 → */5 so a PR waits ≤ one tick. The workflow push ruleset (`workflow_push_guard`,
+  */15 → */5 so a PR waits ≤ one tick (since 2026-08-20 the github-exporter's head-changed
+  `/sentinel` doorbell serves evaluations — homelab#650, `agents/coordinator/sentinel-argo.yaml` —
+  and the cron is back to a */15 backstop). The workflow push ruleset (`workflow_push_guard`,
   `restrict_workflow_pushes`) rejects `.github/workflows/**` pushes by non-bypass actors —
   but GitHub allows push rules on PRIVATE repos only (422 at the flip apply), so it exists
   solely on oracle-iac; on the public repos (homelab, sleep-iac, circles-iac) the fence is the
@@ -576,7 +580,9 @@ by design) supports three rungs; **eventually Cloudflare fronts all services** (
   sense, distinct from the scout's rail probe): Gateway API weighted `backendRefs` (Cilium
   implements them; the ADR-092 sleep Gateway is already this stack): stable + canary Deployments, promotion =
   a weight flip driven by a Workflow step reading Prometheus. If/when analysis-driven promotion
-  should be declarative, **Argo Rollouts + its Gateway API plugin** is the fit — the
+  should be declarative, **Argo Rollouts + its Gateway API plugin** is the fit (Argo Rollouts is
+  LIVE since 2026-10-28 only as Kargo's `AnalysisRun` engine — no `Rollout` objects, no traffic
+  plugin; [`SERVICES.md`](../../SERVICES.md)) — the
   [README](README.md) §Open "revisit Rollouts only if reality proves testing insufficient" clause
   fires for oracle *differently than written*: not because testing failed, but because runtime
   evidence IS the product's decision signal (the free tier is the canary — the business design).

@@ -88,8 +88,9 @@ are the only thing that matters."* A wasted ride costs pennies. A bad merge cost
 That target is already partly real: the alert lane self-queues from the responder's shell
 (§below), the fixer and reviewer are automatic, and the CODEOWNERS path tiers
 ([iac-lane.md](iac-lane.md) §The platform lane) are what decide whether the last step needs a human.
-The remaining work is on the merge side — tier 1 dropping back to unowned once the IAC-G04 sentinel
-covers homelab — **not** on adding more checks before the launch.
+The remaining work is on the merge side — tier 1 dropping back to unowned, now the operator's trust
+call since the IAC-G04 sentinel covers homelab (2026-08-18 enforcement flip, [iac-lane.md](iac-lane.md)
+§L0b) — **not** on adding more checks before the launch.
 
 ## The lineage contract — what being an EPIC means (operator ruling, 2026-08-19)
 
@@ -387,7 +388,9 @@ Prompt-only, no index yet: `agents/reviewer-session.sh` gained a **complete-the-
 blocking case and a **HARVEST BAR** (inert / not-a-gap / won't-fix / style stay comments, never
 `Follow-ups:`). Rung 1 — the structured native sub-issue lineage — **shipped 2026-08-02** in the
 merged-closeout play (PR provenance stays in the body; a failed link is non-fatal and noted).
-**Next rungs:** the exporter sprout-RATE gauge and the depth-aware harvest gate reading it.
+The later rungs shipped too: the depth gate in the reviewer (2026-08-05, rung 2 above) and the
+exporter's sprout series (homelab#209, closed 2026-08-09 — `goal_sprouts_filed_total` in
+`argocd/resources/github-exporter/github-exporter.py` + the agent-goals dashboard).
 
 ## The machine block (ADR-122 (3), 2026-09-05)
 
