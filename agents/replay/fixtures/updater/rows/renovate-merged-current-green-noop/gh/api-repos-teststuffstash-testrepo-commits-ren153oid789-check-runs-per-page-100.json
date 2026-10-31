@@ -1,0 +1,14 @@
+{
+  "check_runs": [
+    {
+      "name": "ci",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "system-test",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
+}
