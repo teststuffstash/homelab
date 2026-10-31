@@ -106,7 +106,7 @@ variable "kubernetes_version" {
 variable "cilium_version" {
   description = "Cilium chart/version (CNI)."
   type        = string
-  default     = "1.19.10"
+  default     = "1.20.4"
 }
 
 variable "kube_prometheus_stack_version" {
