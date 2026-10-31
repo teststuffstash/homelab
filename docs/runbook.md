@@ -659,6 +659,46 @@ plan id only (#1827), so the scope rides inside the plan.
 
 Incident: [`2026-09-16-targeted-apply-replaced-three-vms.md`](incidents/2026-09-16-targeted-apply-replaced-three-vms.md) (FU-248).
 
+### Class-6 bump: Kubernetes — control planes first, a recreate-from-git canary (FU-319)
+
+**What carries the version.** `kubernetes_version` renders into every node's machine config
+(`tofu/talos.tf`, `tofu/metal.tf`): the apiserver/controller-manager/scheduler images on control
+planes, the kubelet image everywhere (kube-proxy is disabled). Those 13
+`talos_machine_configuration_apply` updates are `no_reboot` and inside the box's apply allowlist
+([`management-box.md`](management-box.md) §Talos config applies), so a merge OUTSIDE a window is
+applied by the box in one parallel apply: every apiserver restarts at once (an API outage, and the
+FU-258 trigger) and kubelets can land before their apiserver — the
+[skew policy](https://kubernetes.io/releases/version-skew-policy/) forbids a kubelet newer than
+kube-apiserver — and Talos's bootstrap manifests are not re-applied. So the roll is Talos's
+documented [`talosctl upgrade-k8s`](https://docs.siderolabs.com/kubernetes-guides/advanced-guides/upgrading-kubernetes)
+(control planes one at a time, then each kubelet, then the manifests; resumable), run inside a
+window that holds the apply loop; the merged config then converges as a content no-op.
+
+0. **Preconditions:** Cilium's e2e list for the running minor covers the target
+   ([compatibility](https://docs.cilium.io/en/stable/network/kubernetes/compatibility/)) or the
+   operator rules otherwise; the [Talos support matrix](https://docs.siderolabs.com/talos/v1.14/getting-started/support-matrix)
+   covers it; the release is ≥ 7 days old; `kubectl get --raw /metrics | grep apiserver_requested_deprecated_apis`
+   on EACH control plane names no `removed_release` ≤ target; `talosctl -n <cp> upgrade-k8s --to <v> --dry-run`
+   clean; no VM with a pending replace (a full `mgmt-tf -- plan` of master).
+1. `devbox run maint -- open --reason "kubernetes <v>"` (no `--admit-apply` — the box defers), the
+   `watch` in the background; `talosctl -n <cp> etcd snapshot <scratch>/etcd-pre.db` (the only net, step 6).
+2. **Merge** the PR (never armed).
+3. **Control planes:** `talosctl -n <cp> upgrade-k8s --to <v> --upgrade-kubelet=false --with-docs=false --with-examples=false`;
+   then `devbox run maint cilium-check` (exit 2 → one `rollout restart ds/cilium`, FU-258) and `maint check`.
+4. **Canary = the recreate-from-git drill on `wk-03`** (removable CI tier: no Longhorn, no kata):
+   `node-maintenance.sh down wk-03`; `devbox run mgmt-tf -- plan -replace='proxmox_virtual_environment_vm.node["wk-03"]' -replace='talos_machine_configuration_apply.node["wk-03"]' -target='talos_machine_configuration_apply.node["wk-03"]'`
+   — it must replace exactly those two (anything else: abort; §Recreating a Talos VM, no `-exclude`
+   beside `-replace`); apply the id; `node-maintenance.sh up wk-03`. PASS = Ready on `<v>` with its
+   label + taint and an ARC job run there, NO hand step (needing §Recreating step 5 = drill FAIL, recorded).
+5. **Workers:** the same `upgrade-k8s` without `--upgrade-kubelet=false` (control planes skip as done).
+   Then a full `mgmt-tf -- plan`: only in-place `talos_machine_configuration_apply` updates → close
+   the window; the box applies them as no-ops. kubectl follows on the Monday `devbox-update` stamp
+   (`VersionSetKubectlSkew` tolerates ±1 minor meanwhile — dependency-upgrades.md §Version SETS).
+6. **STOP** (window stays open): `upgrade-k8s` fails twice (resume once); `cilium-check` still 2
+   after one roll, or 3; a node NotReady > 10 min; any `maint check` regression. **No rollback**:
+   a control-plane minor does not downgrade (only inside a [KEP-4330](https://github.com/kubernetes/enhancements/tree/master/keps/sig-architecture/4330-compatibility-versions)
+   emulated-version two-step, which `upgrade-k8s` is not) — forward-fix, or restore the step-1 etcd snapshot.
+
 ### Replacing a ci-runner VM — drained, one at a time
 
 A replace is now always **deliberate**. Since FU-306 (2026-10-14) an edit to

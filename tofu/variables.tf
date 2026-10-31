@@ -100,7 +100,7 @@ variable "talos_version_worker" {
 variable "kubernetes_version" {
   description = "Kubernetes version to install."
   type        = string
-  default     = "v1.36.1"
+  default     = "v1.37.2"
 }
 
 variable "cilium_version" {

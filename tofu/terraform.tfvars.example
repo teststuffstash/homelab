@@ -10,7 +10,7 @@ network_bridge   = "vmbr0"
 cluster_name       = "homelab"
 talos_version_controlplane = "v1.13.2"
 talos_version_worker       = "v1.13.10"
-kubernetes_version = "v1.36.1"
+kubernetes_version = "v1.37.2"
 
 gateway     = "192.168.2.1"
 nameservers = ["192.168.2.1"]
