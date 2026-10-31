@@ -88,7 +88,7 @@ ssh -i ~/.claude/homelab-pve-ssh/id_ed25519 root@192.168.2.59 qm rollback 9110 b
    [maintenance window](../.claude/skills/maintenance-window/SKILL.md) — the bridge is a host
    network change on the hypervisor that carries `cp-02`.
 2. `bash scripts/opnsense-test-vm-bootstrap.sh bootstrap` — wallet entries (created if missing) →
-   seed ISO → first boot through the importer → firmware update to `SERIES` (26.7.5) → plugins → clean
+   seed ISO → first boot through the importer → firmware update to the `SERIES` head → plugins → clean
    shutdown → seed CD removed → snapshot `baseline` → started.
 
 **Recovery — a bootstrap that died after the import** (VM up, API answering with the wallet key,

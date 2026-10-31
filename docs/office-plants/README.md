@@ -84,13 +84,13 @@ flowchart TB
       sensors --> droplet
     end
 
-    subgraph net["Network (OPNsense 192.168.2.1 / 26.1.8)"]
+    subgraph net["Network (OPNsense CARP pair, VIP 192.168.2.1 / 26.7)"]
       aps["Ubiquiti APs — SSID 'Walther'"]
       ntpd["NTP server"]
       haproxy["HAProxy + ACME<br/>homeassistant.teststuff.net"]
     end
 
-    subgraph cluster["Talos k8s cluster on Proxmox 'pve' (192.168.2.3)"]
+    subgraph cluster["Talos k8s cluster (Proxmox VMs + bare metal)"]
       ha["**Home Assistant** pod (ns home-assistant)<br/>VIP 192.168.40.10:8123 (Cilium BGP)<br/>Longhorn PVC (replicated)"]
       irr["irrigation package:<br/>input_number.moisture_level_for_pumpN<br/>input_number.watering_minutes_pumpN"]
       ha --- irr
@@ -124,7 +124,7 @@ attach to the controller on brass barbed fittings.
 | Droplet controller | Office, mains/USB powered | `192.168.2.245` (`office-plants-irrigation`, MAC `30:c6:f7:22:a8:fc`) | ESP32 `esp32dev`, ESPHome; always-on (no deep sleep) |
 | Pumps 1–4 | Droplet board outputs | GPIO 13 / 4 / 16 / 17 | one per plant, via soaker hoses |
 | Soil sensors 1–4 | Droplet ADC inputs | GPIO 34 / 35 / 32 / 33 | capacitive; calibrated dry 2.30 V→0 %, water 0.89 V→100 % |
-| Home Assistant | k8s (Talos) on Proxmox `pve` | VIP `192.168.40.10:8123`, `https://homeassistant.teststuff.net` (LAN), `https://ha.teststuff.net` (remote, Cloudflare Tunnel + mTLS) | thresholds, run-times, dashboard, time peer |
+| Home Assistant | k8s (Talos; not node-pinned — any untainted worker) | VIP `192.168.40.10:8123`, `https://homeassistant.teststuff.net` (LAN), `https://ha.teststuff.net` (remote, Cloudflare Tunnel + mTLS) | thresholds, run-times, dashboard, time peer |
 | HA config (package + dashboard) | git → HA `/config` Longhorn PVC | `homeassistant/ha-config/...` | applied via `kubectl cp` + reload/restart |
 | WiFi | Ubiquiti APs | SSID `Walther` | UniFi controller now **in-cluster** (`192.168.40.12`, see [runbook](../runbook.md#unifi)); APs adopt via `ubiquiti.teststuff.net` |
 | NTP | OPNsense | `192.168.2.1` (+ `pool.ntp.org` fallback) | used for the day/night guard |
@@ -174,7 +174,7 @@ flowchart LR
     ntp["NTP (OPNsense)"]
     ha["Home Assistant"]
     k8s["Talos cluster"]
-    pve["Proxmox 'pve'"]
+    pve["Proxmox hosts + metal nodes"]
 
     water --> power
     water --> wifi
@@ -189,7 +189,7 @@ flowchart LR
 | **WiFi (`Walther`, Ubiquiti AP)** | device connectivity | device offline; APs run standalone even if the controller is down |
 | **NTP (OPNsense `.1` / pool)** | day/night guard (auto only) | clock invalid → daytime guard fails closed → **no auto watering** (manual Water Now still works) |
 | **Home Assistant** | thresholds + run-times | values go `NaN` → **no watering at all** (fail-safe) |
-| **Talos k8s + Proxmox `pve`** | hosting Home Assistant | HA down → see above |
+| **Talos k8s (Proxmox VMs + metal nodes)** | hosting Home Assistant | HA down → see above |
 | **ESPHome toolchain (devbox)** | firmware changes only | no runtime impact |
 
 Local-first: NTP and the cluster are on-LAN, so watering does **not** depend on the internet
@@ -216,7 +216,8 @@ From a machine with the repo + devbox (`devbox run flash-irrigation`, which wrap
 devbox run flash-irrigation
 #   (equivalent to: esphome run esphome/config/office-plants-irrigation.yaml --device 192.168.2.245)
 ```
-- **OTA password** is recorded at `~/.claude/homelab-droplet/ota_password`.
+- **OTA password** is a wallet string (FU-001); `scripts/wallet-files.sh` materializes the gitignored
+  `esphome/config/secrets.yaml` from the wallet attachment `droplet-esphome`.
 - If OTA auth ever fails: block the device in UniFi → it starts its fallback AP → upload the
   built `.bin` via the captive portal (`http://192.168.4.1`). USB-UART is the last resort.
 - The old standalone ESPHome **web dashboard** (it ran on pop-os via docker-compose) is retired —
@@ -415,9 +416,9 @@ daylight / an NIR lamp is mandatory. Cheap to prototype (camera + a blue gel).
 ### Endpoints (HTTPS, valid Let's Encrypt certs)
 | Service | URL | Backend VIP | LAN VIP (HAProxy) |
 |---|---|---|---|
-| Grafana | **https://grafana.teststuff.net** | `192.168.40.11:80` | `192.168.2.6:443` |
-| Prometheus | **https://prometheus.teststuff.net** | `192.168.40.13:9090` | `192.168.2.7:443` |
-| Alertmanager | **https://alertmanager.teststuff.net** | `192.168.40.14:9093` | `192.168.2.8:443` |
+| Grafana | **https://grafana.teststuff.net** | `192.168.40.11:80` | `192.168.3.11:443` |
+| Prometheus | **https://prometheus.teststuff.net** | `192.168.40.13:9090` | `192.168.3.13:443` |
+| Alertmanager | **https://alertmanager.teststuff.net** | `192.168.40.14:9093` | `192.168.3.14:443` |
 
 Same pattern as Home Assistant: OPNsense HAProxy terminates TLS (per-service LAN IP-alias
 VIP) and proxies to the in-cluster BGP LoadBalancer VIP; certs via os-acme-client (DNS-01 via
@@ -489,24 +490,24 @@ in-RAM soil state inside `do_water_cycle`).
    # then: HA → Developer Tools → YAML → Restart (packages load at startup)
    ```
    In HA: **Profile → Security → Long-lived access tokens** → create one named `prometheus`.
-3. **Stack** — from `tofu/` (devbox shell):
+3. **Stack** — store the token as the wallet entry `ha-prometheus-token` (the Grafana admin password
+   is `grafana-admin-password`; both reach the box as `TF_VAR_*` via
+   `mgmt/scripts/mgmt-provision-secrets.sh --push`), then apply the main tofu root on the [management box](../management-box.md):
    ```bash
-   export TF_VAR_ha_prometheus_token='<the long-lived token>'
-   export TF_VAR_grafana_admin_password='<pick one>'
-   tofu apply        # adds ns monitoring + the scrape job + dashboard CM (the stack itself, VIPs and alerts sync from ArgoCD — argocd/platform/kube-prometheus-stack.yaml)
+   devbox run mgmt-tf -- plan            # prints a plan id (runbook: the mgmt-tf recipe)
+   devbox run mgmt-tf -- apply <plan-id> # adds ns monitoring + the scrape job + dashboard CM (the stack itself, VIPs and alerts sync from ArgoCD — argocd/platform/kube-prometheus-stack.yaml)
    ```
 4. **Verify:** Grafana at `https://grafana.teststuff.net` (admin / your password) → *Office Plants — Irrigation*;
    Prometheus *Targets* shows `home-assistant` UP.
 
-> **Storage:** Prometheus's TSDB is on **Longhorn** (replicated, default StorageClass, 90-day
-> retention) — dynamically provisioned via a `volumeClaimTemplate`, no node pinning, so the old
+> **Storage:** Prometheus's TSDB is on **Longhorn** (replicated, default StorageClass; retention
+> `31d` or `45GB`, the size cap binds — [`patterns/observability.md`](../patterns/observability.md)) — dynamically provisioned via a `volumeClaimTemplate`, no node pinning, so the old
 > single-node-disk SPOF is gone (the earlier hostPath PV + its `kubelet.extraMounts` bind and the
 > placeholder `manual` StorageClass have been removed). Grafana keeps no state. One Talos quirk
 > remains in code: the `monitoring` namespace is labelled
 > `pod-security.kubernetes.io/enforce=privileged` (Talos enforces `baseline`; node-exporter needs
-> host access). Credentials live outside the repo: HA scrape token at
-> `~/.claude/homelab-ha/prometheus_llat`, Grafana admin password at
-> `~/.claude/homelab-ha/grafana_admin_password`.
+> host access). Credentials live outside the repo, as wallet strings (FU-001):
+> `ha-prometheus-token` (the HA scrape token) and `grafana-admin-password`.
 
 ---
 
