@@ -34,7 +34,7 @@ most resources — everything here was validated against the v5 schema.
 | File | Resources |
 |---|---|
 | `mtls.tf` | client key+CSR (`tls`), CF managed-CA signs it, the zone's managed-CA hostname association (per-zone singleton) — the credential half |
-| `dns.tf` | `*.local` A → 127.0.0.1 (DNS-only, work envs); `wg` A (WireGuard endpoint — tofu owns existence, ddclient the content) |
+| `dns.tf` | `*.local` A → 127.0.0.1 (DNS-only, work envs); `wg` A (WireGuard endpoint — tofu owns existence, ddclient the content); the Proton Mail records (verification TXT, MX, SPF, DKIM, DMARC) |
 | `removed.tf` | the `ha` CNAME + mTLS ruleset FORGOTTEN (not destroyed) at the retrofit — the claim adopted them |
 | `outputs.tf` | `ha_url`, client cert/key (sensitive), `make_p12_command` |
 | `minutark.tf` | minutark.ee product-zone bootstrap — hygiene records, TLS 1.2 floor, always-HTTPS, DNSSEC (oracle-iac#351) |
@@ -48,7 +48,8 @@ destroy the old connector, and after that it manages nothing (dropping it is a `
 1. `teststuff.net` is on Cloudflare and **Active** (NS cutover done — it is).
 2. The scoped write token exists (`tofu/cloudflare-token/`) and is saved at
    `~/.claude/cloudflare/write-key`.
-3. `tofu/kubeconfig` exists (the main root writes it) — the configured kubernetes provider reads it.
+3. `tofu/kubeconfig` exists (`devbox run kubeconfig` writes it from the main root's state) — the
+   configured kubernetes provider reads it.
 
 ## Apply
 
