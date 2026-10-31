@@ -277,6 +277,12 @@ jobs:
         if: steps.diff.outputs.edge-probe-self-test != 'false'
         run: devbox run edge-probe-self-test
 
+      # #2014 (version sets, #3051): the version-set probe's self-test — the committed
+      # expectations replayed against fixtures; shape copied from the two rows above.
+      - name: version-set probe self-test (devbox run version-sets-selftest)
+        if: steps.diff.outputs.version-sets-selftest != 'false'
+        run: devbox run version-sets-selftest
+
       # ADR-124: the public request map's renderer — the committed example must render
       # byte-identical from the committed platform map (a platform-map edit that changes the
       # picture reds here until the example is regenerated with it); validator teeth included.
