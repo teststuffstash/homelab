@@ -18,6 +18,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ S9 (homelab#1985) — what is left, re-verified 2026-10-31 (TICK-LOG 10-31).** In flight this session: FU-316
+  warmer PR (ghcr + docker-io), #2014's `probe.py --self-test` ci gate, a doc-currency PR on `docs/dependency-upgrades.md`
+  (lock-major lane PROVEN by agent-runtime#183 10-26; kps 92.x lens major PROVEN by #2550 10-13; G12 proven by #2968).
+  Left: #1988's two halves (base-image previous-tag revert → unblocks agent-coordinator#29; then the substrate proposer
+  row, AFTER FU-319's attended bumps); #1985 residuals 5 (updater hand-back — live case sleep-tracking#199, BEHIND 12 d),
+  1 (exoneration beyond `revert-wf`), 2 (`head -1` grouped-alert read); event-gated proofs stay with the loop (G12b #2995,
+  first lens-gated provider major, first real lock regression, residual 3). `kps-crds` belt skew (operator 0.94.1 vs CRDs
+  0.94.2, #3036) = a G16 resight: `separateMinorPatch` + the 7-day age split the group; self-clears when Renovate's kps
+  ≥92.14.1 lands (~2026-11-03 19Z); the class fix is `.github/renovate-global.json` (operator-direct).
+  sleep-tracking#211 (grafana 13.3.0 vs prod 13.2.4 via kps) needs a human ruling.
 - **⚑ PICKUP (2026-10-29 — specs process delivery; TICK-LOG 10-29 ~17:30Z + the night entry).** ROLLED OUT: snippets
   v0.6.6 tagged (author brief), homelab#3030 (pins + README links + the homelab claim's `specs` field) and oracle-iac#1151
   (oracle-fleet claim) MERGED, both claims live; oracle-fleet#958 (pin + process README/conventions links) in the lane.
@@ -48,11 +58,6 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   per `classify_touches`) + oracle-fleet's ci.yaml `mc` comment — then the weekly devbox-update's stack legs go green.
   circles#135 r1/r2 were the opencode 2.x stdin hang (#2998); confirm r3 actually progresses. Also owed: G12b proof (#2995 —
   the next red ARMED automerge PR gets a ride) and the FU-187 detector (operator to pick).
-- **⚑ PICKUP (2026-10-24 12:30Z — S9 Renovate sweep; TICK-LOG 10-24).** Verify next session: homelab#2819 regrouped
-  (chart 2.4.3 + digest) after #2886; sleep-tracking#203 rebuilt by Renovate after the 12:01Z hand-back; allure#11
-  regrouped with tests/Dockerfile after allure#35 (`ArmedBehindNoApprovalStranded` fires on it, no dig yet).
-  Python 3.15 wave PARKED org-wide (#2610 / oracle-fleet#883 ruling + `Un-park:` line; circles#124 stack-side): un-park
-  when `devbox search python@3.15` resolves the final (rc2 today). Residual list: #1985 comment 6383963515; FU-316.
 - **⚑ MORNING READS (2026-10-26, operator) — two HELD PRs + one direct push landed overnight (TICK-LOG 10-25):**
   (1) **homelab#2902** Kargo prod install — MERGED + live 2026-10-28, see the KARGO bullet below.
   (2) **homelab#2911** component checker @ 1b720e68 (CI in progress at wind-down) — `scripts/component-check.sh` renders every
@@ -110,9 +115,6 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   PR (clone `fix/retro-quiet-week`); once merged + ArgoCD-synced, hand-fire `retro-session` →
   expect Succeeded, 3 tasks Skipped, the alert clears. The 1-task week itself is the real signal (loop near idle).
   GoCatalog alerts → queued as #2933 (drop-unknown-dialect ruling).
-- `LonghornDiskNotReady` (#2898, `triage: dig`) also catches **wk-02 `default-disk-080500000000`** (DiskFilesystemChanged since
-  09-14 — the std-tier exit left the Longhorn node record's disk entry behind). **Next (seat):** once it FIRES (~15:53Z
-  10-24), remove that stale entry in a maintenance window, through the script that owns disk records.
 - **⚑ wk-metal-04 on Big Data (#2758, 2026-10-20).** Watch the MX500's 34 % lifetime used (attr 202). **OPERATOR:** the
   switch-port row (docs/network-physical.md) + whether `sensor.plug_opnsense_power` still meters the box
   (router-move.md:62 retires it).
