@@ -5,7 +5,7 @@ Provisions the Talos Linux Kubernetes cluster (VMs on the Proxmox hosts `pve` `1
 carries the platform substrate that ArgoCD can't manage for itself (ADR-005): storage, monitoring,
 Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1–2.
 
-> **Status: APPLIED & LIVE.** Talos `v1.14.1` / Kubernetes `v1.36.1`, Cilium `1.19.1`
+> **Status: APPLIED & LIVE.** Talos `v1.14.1` / Kubernetes `v1.36.1`, Cilium `1.20.4`
 > (kube-proxy-free). Nodes: VMs on **pve** cp-01 `.51` / wk-01 `.61` / wk-02 `.62` / wk-03 `.63`,
 > VMs on **nx-02** (the second hypervisor) cp-02 `.65` / wk-04 `.64`, **+ bare-metal**
 > hp-01 `.54`, nx-01 `.58` (NX-6035-G5 node 1), wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250, a control plane),
@@ -28,7 +28,7 @@ Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1�
 | Thing | Version |
 |---|---|
 | Talos Linux | `v1.14.1` (Kubernetes `v1.36.1`) |
-| Cilium (CNI) | `1.19.1` |
+| Cilium (CNI) | `1.20.4` (`var.cilium_version`) |
 | providers | constraints in `versions.tf`, exact versions in `.terraform.lock.hcl` (Renovate-bumped — no copy here) |
 
 Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
@@ -48,7 +48,8 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
   (`localhost:7445`), `bgpControlPlane.enabled`, Talos-specific cgroup/capabilities,
   `operator.replicas=1`. Recreating the cluster restores the CNI (boot-from-git).
 - `cilium-bgp.tf` — service exposure on the LAN. `CiliumLoadBalancerIPPool 192.168.40.0/24`,
-  BGP cluster ASN `64513` peering OPNsense ASN `64512` (`192.168.2.1`); only Services
+  BGP cluster ASN `64513` peering OPNsense ASN `64512` on each router node's own address
+  (`.70`/`.71`, never the `.1` CARP VIP — `../docs/bgp.md`); only Services
   labelled `bgp=advertise` are advertised. **OPNsense side is `../ansible/opnsense-bgp.yml`**
   (os-frr) — both ends are code.
 - `homeassistant.tf` — Home Assistant via the kubernetes provider: namespace, **Longhorn** PVC,
@@ -141,7 +142,8 @@ it. ⚠ `hostpci` is not hot-pluggable: the VM needs a full stop/start, so it ri
 > The main root uses a **scoped `tofu@pve!provisioner` token** (`TerraformProv` role, in the
 > gitignored `terraform.tfvars`) — rotated off the broad bootstrap `root@pam!tofu` token, which is
 > now revoked (FU-004, 2026-07-15). A recovery copy of the token value is in the KeePass wallet
-> (`pve-api-token-tofu`); `terraform.tfvars` remains the source tofu reads. The SSH key bpg uses for disk import
+> (`pve-api-token-tofu`); the tfvars tofu reads is the box's `/var/lib/mgmt/main.tfvars` since
+> 2026-09-13 (`mgmt/scripts/mgmt-provision-secrets.sh`). The SSH key bpg uses for disk import
 > lives outside the repo at `~/.claude/homelab-pve-ssh/` (authorize its `.pub` in pve root's
 > `authorized_keys` — the one-time root-of-trust seed; no Proxmox API can inject it).
 
@@ -154,10 +156,10 @@ devbox run tf-validate                         # syntax-only, from the repo root
 devbox run mgmt-tf -- plan                     # main root state + creds live on the management box
 devbox run mgmt-tf -- apply <plan-id>          # the id the plan printed (.claude/skills/tofu-apply)
 
-# grab credentials (gitignored)
-tofu output -raw talosconfig > talosconfig
-tofu output -raw kubeconfig  > kubeconfig
-KUBECONFIG=$PWD/kubeconfig kubectl get nodes
+# grab credentials (gitignored) — read from the box's state (scripts/client-configs.sh);
+# never `tofu output` here: it answers from the frozen pre-migration tofu/terraform.tfstate
+devbox run kubeconfig && devbox run talosconfig
+devbox run -- kubectl --kubeconfig tofu/kubeconfig get nodes
 # convenience: `devbox run k9s` (from repo root) opens k9s on this kubeconfig
 ```
 

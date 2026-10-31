@@ -168,8 +168,8 @@ reproducibility — we're ahead here. Banks the reproducibility leg early; usefu
 > node-privileged containers (the FU-020/ADR-087 sandbox survives; Cilium egress still applies at
 > the veth). **The primitive is LIVE since 2026-07-14**: RuntimeClass `kata` (`tofu/kata.tf`) +
 > the `metal_kata` schematic (`tofu/image.tf`) run agent worker rides as kata microVMs today on
-> FOUR nodes (`machines.yaml` `kata: true`: wk-metal-01..03 ~8G laptops ⇒ one ~4-5G microVM each,
-> plus wk-metal-04, the roomy 16G desktop). Tekton+Chains later rides the same RuntimeClass. Kata is necessary-not-sufficient for L3 (the
+> the `kata: true` nodes in [`machines.yaml`](../machines/machines.yaml) (the set has moved since —
+> as of 2026-10-31 wk-metal-02..04 + nx-01; wk-metal-01 left it 2026-09-16). Tekton+Chains later rides the same RuntimeClass. Kata is necessary-not-sufficient for L3 (the
 > provenance non-falsifiability comes from the Chains key split); for the agent gate it is
 > sufficient alone. Phase 4's CoCo is the same primitive again on SEV-SNP hardware — one
 > RuntimeClass, three consumers.

@@ -114,7 +114,7 @@ act on it if you've *restricted* the Default group: Org → Settings → Actions
 ## 6. Deploy ARC (GitOps)
 
 The manifests are already in git — ArgoCD's `platform` app-of-apps picks them up:
-`argocd/platform/{arc-controller,github-runner-secrets,arc-runners}.yaml` +
+`argocd/platform/{arc-controller,github-runner-secrets,arc-runners,arc-runners-large}.yaml` +
 `argocd/resources/github-runner/`. Just merge/push to `master`, or force it:
 
 ```bash
@@ -122,10 +122,11 @@ devbox run -- kubectl --kubeconfig tofu/kubeconfig -n argocd \
   annotate app platform argocd.argoproj.io/refresh=hard --overwrite
 ```
 
-> **Chart version.** `arc-controller.yaml` and `arc-runners.yaml` pin `targetRevision: 0.14.2`
+> **Chart version.** `arc-controller.yaml`, `arc-runners.yaml` and `arc-runners-large.yaml` pin one
+> `targetRevision` (0.15.1 as of 2026-10-31)
 > (⚠ what RUNS is the custom warm image `ghcr.io/…/arc-runner:<calver>` since 2026-07-25 — FU-015,
-> `ci.md` §ARC — not upstream's runner build). Controller + scale-set versions **must match**; bump both together to the same
-> current release (github.com/actions/actions-runner-controller/releases).
+> `ci.md` §ARC — not upstream's runner build). Controller + scale-set versions **must match** —
+> Renovate bumps all three in one grouped PR (`arc`, `renovate-global.json`).
 
 ## 7. Verify
 
@@ -137,14 +138,14 @@ ESO-rendered `arc-github-app` secret, and whether the runner is registered with 
 
 ```bash
 gh workflow run -R teststuffstash/sleep-tracking ci.yaml --ref master
-devbox run -- kubectl --kubeconfig tofu/kubeconfig -n arc-runners get pods -w   # a runner pod appears on a wk-metal node
+devbox run -- kubectl --kubeconfig tofu/kubeconfig -n arc-runners get pods -w   # a runner pod appears on an `arc: true` node (machines.yaml)
 ```
 
 ## Rollback / rotate
 
 - **Rotate the App key:** regenerate it in the App settings, re-run `secrets` (ESO repropagates within
   `refreshInterval`, 1h).
-- **Tear down:** delete the two `argocd/platform/arc-*.yaml` + `github-runner-secrets.yaml` (ArgoCD
+- **Tear down:** delete the three `argocd/platform/arc-*.yaml` + `github-runner-secrets.yaml` (ArgoCD
   prunes), uninstall the App from the org. The Forgejo Tier-B runner is unaffected.
 
 ## Notes
