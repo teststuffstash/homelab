@@ -9,9 +9,11 @@
 # system, never its tests), the header IS the parameter list, ROW_UNKEYED + HEADER_UNTHREADED in the
 # digest (the GW-REDACT walkthrough, 2026-10-23); v0.6.2 = prose rules soft, unproven facts MARKED (rule 11);
 # v0.6.4 = `evidence-pack --mask-descriptions`, the specs reviewer's staged read (rows-brief check 10).
+# v0.6.7 = the finding contract keeps a surviving blocking finding in the verdict until it carries a
+# permitted disposition (an existing open issue + the page marker) — snippets#43.
 # Bump TOGETHER with SNIPPETS_VERSION in
 # agents/specs-reviewer-session.sh (the reviewer's context pack) — one process, two consumers.
-SNIPPETS_WHEEL=https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v0.6.6/allure_behavior_snippets-0.6.6-py3-none-any.whl
+SNIPPETS_WHEEL=https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v0.6.7/allure_behavior_snippets-0.6.7-py3-none-any.whl
 
 # allure_evidence <args…> — run the pinned tool's `allure-evidence` console script.
 allure_evidence() {
