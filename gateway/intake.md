@@ -1,7 +1,13 @@
 # Island intake — the sitting that turns an island's unshaped inputs into queued work
 
-> **Brief, v0 (spike, 2026-10-27).** The gateway is the first island to run it; the rules are
-> island-agnostic, the §Island facts block is the gateway's. Design, evidence and the open
+> **Brief, v0 (spike, 2026-10-27).** The gateway is the first island to run it. **The rules here
+> are island-agnostic and live only here;** the §Island facts block at the end is the gateway's,
+> and every other island's lives in [`docs/intake/<island>.md`](../docs/intake/) —
+> [agent-loop](../docs/intake/agent-loop.md), [substrate](../docs/intake/substrate.md),
+> [dependency-upgrades](../docs/intake/dependency-upgrades.md), [mgmt-box](../docs/intake/mgmt-box.md),
+> [router-pair](../docs/intake/router-pair.md). A sitting for another island reads this brief, then
+> that file IN PLACE OF §Island facts and the gateway rows of §What you read (`README.md`,
+> `specs/`, `src/`); membership is `intake-select.sh --island <island>`. Design, evidence and the open
 > questions: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) (tracked by FU-320). The ancestor is
 > the coordinator's `goal-decompose` clause
 > ([`agents/coordinator/README.md`](../agents/coordinator/README.md) §The `goal-decompose` clause):
