@@ -8,13 +8,13 @@
 #   (2) the record: one ConfigMap per in-flight upgrade in ns `agent-coordinator` (a sibling of the
 #       `responder-window` registry, read on the same path), name `upgrade-lease-<subject-slug>`,
 #       label `homelab.teststuff.net/upgrade-lease=true`; `creationTimestamp` = started; data:
-#       subject (the Application file), chart, sha (the homelab commit synced), from, to,
+#       subject (the Application file), chart, sha (the homelab revision the sync ran at), from, to,
 #       expected-end, max-end (RFC3339 UTC), by, reason. ONE decisive field: `expected-end`;
 #   (3) ARM = the Application's PreSync hook creates it; CONFIRM = the PostSync hook runs the real
 #       checks and deletes it (the cluster half — argocd/resources/kube-prometheus-stack-lease/);
 #       a renewal moves `expected-end`, never past `max-end`;
 #   (4) REVERT = this loop, on the sentinel/apply cadence (`*:3/5`): for every lease with
-#       `expected-end` in the past it opens ONE pin-only revert PR of the lease's sha — `automerge`
+#       `expected-end` in the past it opens ONE pin-only revert PR of the lease's PIN COMMIT — `automerge`
 #       + `dependencies`, auto-merge armed, the reflex approves, the lane's checks still run — never a
 #       direct push; the LAST body line `reverted-charts: <chart>@<to>` is pin-only-lint check (h)'s
 #       30-day memory;
@@ -31,11 +31,16 @@
 # confirmed" — which is what makes a dumb box safe; a healthy roll that outlasts its deadline reverts,
 # and the fix is that subject's deadline, never a smarter box.
 #
+# THE PIN COMMIT: the lease's sha is whatever master HEAD the sync ran at — a later, unrelated commit
+# when the sync was delayed — so the commit judged and reverted is RESOLVED from the subject file's
+# history: the newest of its last MGMT_LEASE_RESOLVE_DEPTH (20) commits at/before the sha whose change
+# to `file` is exactly the lease's from → to pair (resolve_pin_commit); none → `not_pin_only`.
+#
 # THE REVERT, mechanically: in this loop's own clone (never the box's system checkout) `git revert
-# --no-edit <sha>` of the lease's commit, then the policy's `keep` files restored to the sha's
+# --no-edit <pin-commit>`, then the policy's `keep` files restored to the pin commit's
 # FORWARD content (a lease revert never downgrades CRDs — ADR-150/151) and amended into the one
 # commit; the policy's `regen` files (rendered from the pin) revert with it. Admitted only when the
-# commit is PIN-ONLY — touched nothing but `file` + `keep` + `regen`, and in `file`/`keep` every
+# pin commit is PIN-ONLY — touched nothing but `file` + `keep` + `regen`, and in `file`/`keep` every
 # changed non-comment line is a `targetRevision:` line, with `file`'s one pair equal to the lease's
 # from/to (the predicate of argocd/resources/chart-revert/chart_revert.py classify_commit) — else
 # `not_pin_only`.
@@ -43,10 +48,10 @@
 # OUTCOMES (the `outcome` label of mgmt_lease_revert_total, every value pre-initialised at 0 so
 # increase() sees the first one — the pod-admission lesson):
 #   reverted      the revert PR is open, labelled automerge+dependencies and armed
-#   already       a PR for branch revert-chart-lease-<sha8> exists (open or merged), or master's pin
+#   already       a PR for branch revert-chart-lease-<pin-commit sha8> exists (open or merged), or master's pin
 #                 in the subject file is no longer the lease's `to` (reverted or bumped again — stale)
 #   no_policy     the lease's subject is not in policy/mgmt/upgrade-leases.yaml
-#   not_pin_only  the lease's commit changed more than the pin (+ keep/regen) — a human reads it
+#   not_pin_only  no pin commit resolves, or it changed more than the pin (+ keep/regen) — a human reads it
 #   conflict      `git revert` conflicted — never forced, nothing pushed
 #   forward_only  the lease's subject is a `tofu/helm_release.*` the management box applied itself (FU-301,
 #                 mgmt/scripts/mgmt-helm.sh): the operator's ruling is forward only — NEVER a revert PR. The
@@ -159,6 +164,23 @@ pin_at() {
   [ "$(printf '%s\n' "$pins" | grep -c .)" = 1 ] || return 1
   printf '%s' "$pins"
 }
+# file_diff <sha> <file> → the commit's changed lines in <file> (`-`/`+` prefixed, no headers)
+file_diff() { git -C "$REPO" show --format= --unified=0 "$1" -- "$2" | grep -E '^[-+]' | grep -vE '^(\+\+\+|---) '; }
+# pin_side <-|+> <diff-lines> → the targetRevision value(s) that side of the diff carries
+pin_side() { printf '%s\n' "$2" | sed -n -E "s/^[$1][[:space:]]*targetRevision:[[:space:]]*\"?([^[:space:]\"#]+)\"?.*\$/\\1/p"; }
+# resolve_pin_commit <lease-sha> <file> <from> <to> → the pin commit on stdout, or rc 1. The lease's
+# sha is the git revision the SYNC ran at (the PreSync hook reads it) — any later master HEAD when
+# the sync was delayed — so the commit to judge and revert is resolved from <file>'s own history:
+# the newest of its last MGMT_LEASE_RESOLVE_DEPTH (20) commits at/before <lease-sha> whose change
+# to <file> is exactly the lease's targetRevision pair <from> → <to> (pin_only_commit's pair read).
+resolve_pin_commit() {
+  local c d
+  for c in $(git -C "$REPO" log -n "${MGMT_LEASE_RESOLVE_DEPTH:-20}" --format=%H "$1" -- "$2" 2>/dev/null); do
+    d="$(file_diff "$c" "$2")" || d=""
+    [ "$(pin_side - "$d")" = "$3" ] && [ "$(pin_side + "$d")" = "$4" ] && { printf '%s' "$c"; return 0; }
+  done
+  return 1
+}
 # pin_only_commit <sha> <file> <keep…(space-sep)> <regen…(space-sep)> <from> <to> → 0, or 1 with the reason on stdout
 pin_only_commit() {
   local sha="$1" file="$2" keep="$3" regen="$4" from="$5" to="$6" names n allowed f diffl bad removed added
@@ -169,12 +191,11 @@ pin_only_commit() {
   grep -qx -- "$file" <<<"$names" || { echo "commit does not touch $file"; return 1; }
   for f in $file $keep; do
     grep -qx -- "$f" <<<"$names" || continue
-    diffl="$(git -C "$REPO" show --format= --unified=0 "$sha" -- "$f" | grep -E '^[-+]' | grep -vE '^(\+\+\+|---) ')" || diffl=""
+    diffl="$(file_diff "$sha" "$f")" || diffl=""
     bad="$(printf '%s\n' "$diffl" | sed -E 's/^[-+][[:space:]]*//' | grep -v '^#' | grep -vE '^targetRevision:[[:space:]]*"?[^[:space:]"#]+"?[[:space:]]*(#.*)?$' | grep -c .)"
     [ "$bad" = 0 ] || { echo "$f: $bad changed line(s) outside the pin grammar"; return 1; }
     if [ "$f" = "$file" ]; then
-      removed="$(printf '%s\n' "$diffl" | sed -n -E 's/^-[[:space:]]*targetRevision:[[:space:]]*"?([^[:space:]"#]+)"?.*$/\1/p')"
-      added="$(printf '%s\n' "$diffl" | sed -n -E 's/^\+[[:space:]]*targetRevision:[[:space:]]*"?([^[:space:]"#]+)"?.*$/\1/p')"
+      removed="$(pin_side - "$diffl")"; added="$(pin_side + "$diffl")"
       [ "$removed" = "$from" ] && [ "$added" = "$to" ] || { echo "$f: pin pair -$removed +$added is not the lease's $from → $to"; return 1; }
     fi
   done
@@ -191,13 +212,22 @@ reverted-charts: $1@$2"
 
 # ── the revert of ONE expired lease (one outcome line) ─────────────────────────────────────────
 revert_lease() {  # <lease-json> <policy-file>
-  local L="$1" POL="$2" name subject chart sha from to started exp by reason row keep regen branch sha8 mpin why prs pr num node f
-  name="$(jq -r .name <<<"$L")"; subject="$(jq -r .subject <<<"$L")"; sha="$(jq -r .sha <<<"$L")"
+  local L="$1" POL="$2" name subject chart sha lsha from to started exp by reason row keep regen branch sha8 mpin why prs pr num node f
+  name="$(jq -r .name <<<"$L")"; subject="$(jq -r .subject <<<"$L")"; lsha="$(jq -r .sha <<<"$L")"
   from="$(jq -r .from <<<"$L")"; to="$(jq -r .to <<<"$L")"; started="$(jq -r .started <<<"$L")"; exp="$(jq -r .expected_end <<<"$L")"
   by="$(jq -r .by <<<"$L")"; reason="$(jq -r .reason <<<"$L")"
   if ! row="$(policy_subject "$POL" "$subject")"; then outcome no_policy "$name" "subject '$subject' is not in $POLICY_PATH — a human reads it"; return; fi
   chart="$(jq -r '.chart // ""' <<<"$row")"; keep="$(jq -r '(.keep // []) | join(" ")' <<<"$row")"; regen="$(jq -r '(.regen // []) | join(" ")' <<<"$row")"
-  case "$sha" in *[!0-9a-f]*|'') outcome error "$name" "lease carries no usable sha ('$sha')"; return ;; esac
+  case "$lsha" in *[!0-9a-f]*|'') outcome error "$name" "lease carries no usable sha ('$lsha')"; return ;; esac
+  # ledger 2: master's pin is no longer the lease's `to` → reverted or bumped again, a stale lease
+  if ! mpin="$(pin_at origin/master "$subject" "$chart")"; then outcome error "$name" "cannot read the $chart pin of $subject at origin/master"; return; fi
+  if [ "$mpin" != "$to" ]; then outcome already "$name" "master's $subject pin is $mpin, not the lease's $to — stale lease"; return; fi
+  git -C "$REPO" cat-file -e "${lsha}^{commit}" 2>/dev/null || { outcome error "$name" "commit $lsha is not in the clone (fetch depth?)"; return; }
+  # the lease's sha is the sync's revision; the commit judged and reverted is the PIN commit behind it
+  if ! sha="$(resolve_pin_commit "$lsha" "$subject" "$from" "$to")"; then
+    outcome not_pin_only "$name" "no pin commit for $from→$to at/before ${lsha:0:8} in $subject's last ${MGMT_LEASE_RESOLVE_DEPTH:-20} commits"; return
+  fi
+  log "lease $name: lease sha ${lsha:0:8} → pin commit ${sha:0:8}"
   sha8="${sha:0:8}"; branch="${BRANCH_PREFIX}${sha8}"
   # ledger 1: a PR for the revert branch exists — a previous tick owns it. OPEN but un-labelled or
   # un-armed (a label/arm call failed on that tick) → RESUME at the labels, never rebuild: the
@@ -215,10 +245,6 @@ revert_lease() {  # <lease-json> <policy-file>
       label_and_arm "$name" "$num" "$node" "re-armed" && return; return
     fi
   fi
-  # ledger 2: master's pin is no longer the lease's `to` → reverted or bumped again, a stale lease
-  if ! mpin="$(pin_at origin/master "$subject" "$chart")"; then outcome error "$name" "cannot read the $chart pin of $subject at origin/master"; return; fi
-  if [ "$mpin" != "$to" ]; then outcome already "$name" "master's $subject pin is $mpin, not the lease's $to — stale lease"; return; fi
-  git -C "$REPO" cat-file -e "${sha}^{commit}" 2>/dev/null || { outcome error "$name" "commit $sha is not in the clone (fetch depth?)"; return; }
   if ! why="$(pin_only_commit "$sha" "$subject" "$keep" "$regen" "$from" "$to")"; then outcome not_pin_only "$name" "$why"; return; fi
   # ledger 3: the branch is already on origin (a previous tick pushed it, then the PR call failed —
   # a 5xx, a blip, a secondary rate limit). RESUME at the PR step: a rebuilt revert carries a new
