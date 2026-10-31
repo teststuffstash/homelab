@@ -504,12 +504,12 @@ the block needs pruning, not more headings.
       10-07 #2362 → every box `devbox run` exit 1, no sentinel verdict. Class fix #2457 (no gate loop runs devbox;
       iac-sentinel runs the BAKED lock) — docs/management-box.md §Two pins. Caveat: devbox logs `--option access-tokens
       github.com=<mgmt PAT>` into the unit journal on an internal error (root-only) — redact before shipping box logs.
-      2026-10-31 resight: #2919 (python 3.14.7→3.14.8) left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails without a TTY → the belt's OPNsense leg
-      (`scripts/opnsense-playbook.sh`, still `devbox run`) exits 1 before any play → `MgmtBeltCheckFailing{check=ansible}`
-      since 10-28 11:19Z, the Unbound drift check silent meanwhile; #2457 missed this leg. Instance un-wedged 10-31
-      (venv moved aside). **Next:** route the OPNsense leg off `devbox run` — ansible-playbook / keepassxc-cli / the
-      httpx interpreter via `mgmt_lock_tool` like the matchbox plays, + a `mgmt-tools-test.sh` case; then
-      `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z).
+      2026-10-31 resight: #2919 left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails w/o a TTY → the belt's
+      OPNsense leg (still `devbox run`) exit 1 → `MgmtBeltCheckFailing{check=ansible}` since 10-28 11:19Z; #2457 missed
+      it. Un-wedged 10-31 (venv moved aside); class fix #3052 (`5df5ea7f`: OPNsense leg + `check_ansible` resolve ansible
+      from `devbox.lock`, `OPN_ANSIBLE_BIN`, cases 5d/5e, wrapper in the no-`devbox run` lint). **Next:** (1) read the first
+      belt `ansible` verdict after the box activates `5df5ea7f` (14:01Z pull); (2) drop `pkgs.devbox` + its stale comment from
+      the `mgmt-belt` unit `path` with the next `mgmt/nixos` change (needs activation); then archive.
 - [ ] **FU-290** — **Scans + sessions + reflexes exhaust the shared homelab-agents installation pools (142724430)
       under PR churn.** First 09-25 (Renovate wave); detector blindness fixed (#1979 graphql, #2442 core). Drains
       since: 10-04/10-06/10-07 (sleep-tracking#121 storm, oracle-fleet#798 loop — fixed + belted #2204/#2366),
