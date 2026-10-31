@@ -1,0 +1,14 @@
+{
+  "nx-01-bmc": {
+    "ip": "192.168.15.58",
+    "mac": "ac:1f:6b:60:e5:5c",
+    "node": "nx-01",
+    "wallet": "nx-01-bmc-password"
+  },
+  "nx-02-bmc": {
+    "ip": "192.168.15.59",
+    "mac": "ac:1f:6b:60:e5:8e",
+    "node": "nx-02",
+    "wallet": "nx-02-bmc-password"
+  }
+}

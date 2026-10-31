@@ -34,6 +34,9 @@
 #   Derived columns (perf/W, load delta) are computed by the generator — don't hand-edit them.
 #   remote_power = how the box is powered on/cycled remotely (WoL, smart-plug, hypervisor, …).
 #   Matters for power-loss recovery — see docs/runbook.md "Power-loss / ghost-node recovery".
+#   bmc = { ip, mac, wallet } for a box with a BMC: its static address on the management segment
+#   (192.168.15.0/24, docs/management-box.md §MB4 item 7) and the wallet entry holding its password.
+#   Rendered to mgmt/nixos/hosts/mgmt/bmc.json; reached with `devbox run bmc|bmc-web -- <name>`.
 #
 # Talos / cluster flags (consumed by tofu):
 #   talos_metal_node  true ⇒ tofu/metal.tf manages this node's machine config (PXE-installed
@@ -641,7 +644,11 @@ machines:
     load_w: null
     singlecore_bogo_s: null
     multicore_bogo_s: null
-    remote_power: "IPMI/BMC — the fleet's FIRST (ADR-013 assumed none): `ipmitool -I lanplus -H 192.168.2.123 -U ADMIN -P ADMIN chassis power on|off|cycle`. No WoL or smart plug needed."
+    remote_power: "IPMI/BMC — the fleet's FIRST (ADR-013 assumed none): `devbox run bmc -- nx-01 chassis power on|off|cycle` (through [the management box](../docs/management-box.md)). No WoL or smart plug needed."
+    # The management segment (docs/management-box.md §MB4 item 7): STATIC, last octet mirrors the
+    # node's LAN address, no gateway. Rendered into the box's hosts file (mgmt/nixos/hosts/mgmt/
+    # bmc.json, by generate.py); the verbs read the password from the wallet entry.
+    bmc: { ip: 192.168.15.58, mac: "ac:1f:6b:60:e5:5c", wallet: nx-01-bmc-password }
     # 2026-09-16: the day-one reboot storm was the Talos v1.13.2 kernel's page_table_check bug under
     # ARC jobs (docs/incidents/2026-09-16-page-table-check-reboots.md, FU-246), NOT this hardware —
     # cordoned until it runs Talos ≥ v1.13.10. SEL notes: CMOS cell dead (VBAT 1.16 V), PS2 uncabled.
@@ -719,7 +726,7 @@ machines:
       # NETWORK. Consumers move to `longhorn-fast` here; retiring one of the two replica-1 scratch
       # classes is the still-open half of the ledger plan's step 4.
       - { device: /dev/disk/by-id/nvme-eui.5cd2e42a81a41125, name: intel7600p, tags: [fast] }
-    notes: Nutanix NX-6035-G5 node 1; the fleet's RIDE/ARC box (storage-ledger §a RIDE/ARC box); BMC 192.168.2.123; onboarded 2026-09-15, converted from compute-only 2026-09-15.
+    notes: Nutanix NX-6035-G5 node 1; the fleet's RIDE/ARC box (storage-ledger §a RIDE/ARC box); BMC `nx-01-bmc` (management segment); onboarded 2026-09-15, converted from compute-only 2026-09-15.
 
   - name: nx-02
     kind: metal
@@ -740,18 +747,18 @@ machines:
     load_w: null
     singlecore_bogo_s: null
     multicore_bogo_s: null
-    remote_power: "IPMI/BMC: `ipmitool -I lanplus -H 192.168.2.173 -U ADMIN -P ADMIN chassis power on|off|cycle`. BMC `nx-02-bmc` 192.168.2.173 (DHCP-reserved)."
+    remote_power: "IPMI/BMC: `devbox run bmc -- nx-02 chassis power on|off|cycle` (through [the management box](../docs/management-box.md))."
+    bmc: { ip: 192.168.15.59, mac: "ac:1f:6b:60:e5:8e", wallet: nx-02-bmc-password }
     # Installed unattended 2026-09-15 from an answer-file ISO mounted over the BMC's NFS virtual
     # media — no console, no Java iKVM (private register docs/nx-6035-g5.md). Proxmox VE 9.2.2.
     # Storage: `nvme-thin` (233Gi Micron NVMe thin pool — the VM tier) + `local-lvm` (337Gi on the
     # WD5000AAKX boot spinner, deliberately unused by VMs). BIOS boot order was fixed the same day
     # (Hard Disk #1, Network #2) so a mounted virtual CD can never hijack a boot again.
-    # ⚠ BMC still on the factory ADMIN/ADMIN — LAN-only and never routed (ADR-013 posture),
-    # to change before the box is load-bearing.
+    # ⚠ BMC still on the factory credentials — rotation rides the management-segment move (FU-288).
     # ⚠ DR: tofu reaches this box over SSH with the shared pve seed key, and no Proxmox API can
     # inject it — a rebuilt nx-02 needs `ssh-copy-id -i ~/.claude/homelab-pve-ssh/id_ed25519.pub
     # root@192.168.2.59` before the first apply, or the apply dies mid-run at disk import.
-    notes: Nutanix NX-6035-G5 node 2; Proxmox VE 9.2.2 hypervisor for wk-04; BMC 192.168.2.173; installed 2026-09-15.
+    notes: Nutanix NX-6035-G5 node 2; Proxmox VE 9.2.2 hypervisor for wk-04; BMC `nx-02-bmc` (management segment); installed 2026-09-15.
 
   - name: ci-runner-01
     kind: vm

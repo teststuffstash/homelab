@@ -7,6 +7,8 @@ same file for the metal-node flags via `yamldecode`). This script writes:
     machines/README.md        power/benchmark table (physical boxes only) + machines.html
     machines/machines.html    the same table as a static page
     README.md, CLAUDE.md      the marker-delimited host table + the Talos/k8s/Cilium version line
+    mgmt/nixos/hosts/mgmt/bmc.json   the BMC hosts on the management segment (`bmc:` entries), read
+                              by the box's NixOS config for its hosts file and the `bmc` verbs
 
 The version triple is NOT copied into the YAML: it is read straight from `tofu/variables.tf`'s
 defaults, which is where the cluster actually gets its versions from.
@@ -22,6 +24,8 @@ import os, re, sys, json, subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 YAML = os.path.join(HERE, "machines.yaml")
+BMC_JSON = os.path.join(ROOT, "mgmt", "nixos", "hosts", "mgmt", "bmc.json")
+MGMT_PREFIX = "192.168.15."   # docs/ip-plan.md — the management segment
 TOFU_VARS = os.path.join(ROOT, "tofu", "variables.tf")
 
 KINDS = {"metal", "vm", "lxc", "device"}
@@ -63,6 +67,13 @@ def check(machines):
             if not m.get("install_disk"):
                 die(f"{name}: talos_metal_node needs install_disk (tofu/metal.tf would fail)")
         check_reconcile(m)
+        if m.get("bmc"):
+            for field in ("ip", "mac", "wallet"):
+                if not m["bmc"].get(field):
+                    die(f"{name}: bmc needs {field!r}")
+            if not m["bmc"]["ip"].startswith(MGMT_PREFIX):
+                die(f"{name}: bmc.ip {m['bmc']['ip']} is outside the management segment "
+                    f"{MGMT_PREFIX}0/24 (docs/ip-plan.md)")
 
 
 def vm_roles():
@@ -209,6 +220,12 @@ def render_hosts(machines):
     return "\n".join(lines)
 
 
+def render_bmc(machines):
+    """{"<node>-bmc": {node, ip, mac, wallet}} — the box's hosts file + the bmc verbs' lookup."""
+    out = {f"{m['name']}-bmc": {"node": m["name"], **m["bmc"]} for m in machines if m.get("bmc")}
+    return json.dumps(out, indent=2, sort_keys=True) + "\n"
+
+
 def render_versions():
     talos_cp = tofu_default("talos_version_controlplane")
     talos_wk = tofu_default("talos_version_worker")
@@ -251,14 +268,18 @@ def main():
     with open(os.path.join(HERE, "machines.html"), "w") as f:
         f.write(render_html(machines))
 
+    with open(BMC_JSON, "w") as f:
+        f.write(render_bmc(machines))
+
     hosts, versions = render_hosts(machines), render_versions()
     for doc in ("README.md", "CLAUDE.md"):
         inject(os.path.join(ROOT, doc), "hosts", hosts)
         inject(os.path.join(ROOT, doc), "versions", versions)
 
     print(f"wrote machines/README.md + machines/machines.html "
-          f"({len(power_rows(machines))} physical of {len(machines)} machines) "
-          f"and the hosts/versions blocks in README.md + CLAUDE.md")
+          f"({len(power_rows(machines))} physical of {len(machines)} machines), "
+          f"the hosts/versions blocks in README.md + CLAUDE.md "
+          f"and {os.path.relpath(BMC_JSON, ROOT)}")
 
 
 if __name__ == "__main__":

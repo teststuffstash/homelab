@@ -3,8 +3,8 @@
 # and for the Talos version pins that must follow `var.talos_version_worker` (FU-246).
 #
 # machines/machines.yaml is the one machine inventory; machines/generate.py regenerates
-# machines/README.md, machines/machines.html, and the marker-delimited hosts/versions blocks in
-# the repo-root README.md and CLAUDE.md. Nothing checked in CI that those outputs are current —
+# machines/README.md, machines/machines.html, the marker-delimited hosts/versions blocks in
+# the repo-root README.md and CLAUDE.md, and the box's mgmt/nixos/hosts/mgmt/bmc.json. Nothing checked in CI that those outputs are current —
 # an edit to machines.yaml without re-running the generator silently reopens generated-block
 # drift. This lint is that gate: it fails (exit 1) naming the drifted file(s) + the fix, and
 # exits 0 when everything is current.
@@ -19,7 +19,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/machines" "$tmp/tofu"
+mkdir -p "$tmp/machines" "$tmp/tofu" "$tmp/mgmt/nixos/hosts/mgmt"
 
 # Inputs the generator reads (machines/machines.yaml, tofu/variables.tf) + the files it writes
 # (machines/README.md, machines/machines.html, README.md, CLAUDE.md). Copying the whole
@@ -27,12 +27,13 @@ mkdir -p "$tmp/machines" "$tmp/tofu"
 cp machines/machines.yaml machines/generate.py machines/README.md machines/machines.html "$tmp/machines/"
 cp tofu/variables.tf "$tmp/tofu/"
 cp README.md CLAUDE.md "$tmp/"
+cp mgmt/nixos/hosts/mgmt/bmc.json "$tmp/mgmt/nixos/hosts/mgmt/"
 
 # Run the generator against the copy. `set -e` aborts here (with the trap cleaning up) if it dies.
 devbox run -- python3 "$tmp/machines/generate.py" >/dev/null
 
 drift=""
-for f in machines/README.md machines/machines.html README.md CLAUDE.md; do
+for f in machines/README.md machines/machines.html README.md CLAUDE.md mgmt/nixos/hosts/mgmt/bmc.json; do
   if ! cmp -s "$f" "$tmp/$f"; then
     drift="$drift $f"
   fi
@@ -44,7 +45,7 @@ if [ -n "$drift" ]; then
   exit 1
 fi
 
-echo "machines-lint: machines/generate.py outputs are current (machines/README.md, machines/machines.html, README.md, CLAUDE.md)"
+echo "machines-lint: machines/generate.py outputs are current (machines/README.md, machines/machines.html, README.md, CLAUDE.md, bmc.json)"
 
 # --- check 2: the PXE/USB Talos pins follow var.talos_version_worker (FU-246) -----------------
 #

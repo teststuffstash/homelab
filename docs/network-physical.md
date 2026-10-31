@@ -52,10 +52,11 @@ so it too is off both diagrams.
 ## Notes relevant to PXE / provisioning
 
 - **`ThinkCentre Edge` (.53) is still cabled where the tree shows it, but is no longer a cluster
-  node** (left cluster duty 2026-09-12 → the R12 out-of-band management-box pilot, FU-097). When it
-  is stood up, R12 wants it **dual-homed** — a second NIC on a dedicated management switch — which
-  is a change to this map, not just to the box; update both the ASCII tree and the mermaid graph in
-  the same edit.
+  node** (left cluster duty 2026-09-12 → the R12 out-of-band management-box pilot, FU-097). It is
+  **dual-homed**: its second NIC (`enp2s0`) goes to a dedicated 5-port management switch together
+  with the NX twin's two IPMI ports, nothing else (`192.168.15.0/24`; the sequence is
+  [`management-box.md`](management-box.md) §MB4 item 7 "Cable day"). Once cabled, redraw both the
+  ASCII tree and the mermaid graph in the same edit.
 
 - **The office 5-port's `m70s` port wedged into a PAUSE storm (2026-10-13).** After a ~6 min
   m70s-only blackout at 06:10Z (no carrier change), the switch sent m70s ~2,600 802.3x PAUSE

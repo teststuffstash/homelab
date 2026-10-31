@@ -140,6 +140,12 @@
       "mgmt-state-pull": [
         "bash mgmt/scripts/mgmt-state-pull.sh \"$@\""
       ],
+      "bmc": [
+        "bash mgmt/scripts/mgmt-bmc.sh ipmi \"$@\""
+      ],
+      "bmc-web": [
+        "bash mgmt/scripts/mgmt-bmc.sh web \"$@\""
+      ],
       "mgmt-human-plan": [
         "bash mgmt/scripts/mgmt-human-plan.sh \"$@\""
       ],
