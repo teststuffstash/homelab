@@ -301,16 +301,16 @@ read-only at `/mnt/snippets` through the ADR-135 image-volume path whenever the 
 `Touches:` reaches `root/` or `tests/`, and its env card says: read `briefs/author.md` first, list
 every specs change under `Spec changes:` with ⚖ on judgment rows, the reviewer judges against this
 same text. This reviewer's `pack_roots` reads the same claim field, so the ride, the trigger and the
-pack name one set of roots. The author brief itself ships with the snippets release; until a
-release carries it, the card's instruction names a file the mount does not yet have.
+pack name one set of roots. The author brief itself ships with the snippets release (since v0.6.6).
 
 **Order** (status kept here):
 1. This record — DONE 2026-10-16 (#2621).
 2. The homelab launcher inputs that need no Allure (issue acceptance text, previous review,
    baseline, finding contract with round tracking) — DONE 2026-10-16 (#2622).
 3. Snippets v0.5 carries the briefs, conventions, `touched-rules` and the pack builder — DONE
-   (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join; v0.6.1 (2026-10-23, the GW-REDACT walkthrough) adds rule 11 — the requirement describes the system, never its tests — the header-is-the-parameter-list convention, rows-brief checks 8–9 and the `ROW_UNKEYED` / `HEADER_UNTHREADED` digest codes; homelab's `spec_gate.py` ratchets the same four join counts; v0.6.2 (operator ruling on #2862, the first v0.6 rewrite): prose rules start SOFT — rule 11's unproven facts are MARKED in place, not gated; rows-brief check 8 advisory, lint item 7 withdrawn). oracle-fleet keeps its own process and v0.4.2
-   until the gateway has proven this one (operator, 2026-10-16).
+   (v0.5.0; v0.5.1 adds `evidence/<RULE>.json`; v0.5.2 reads `||`-divided decision tables and plain sub-sections, so the gateway rules join; v0.6.1 (2026-10-23, the GW-REDACT walkthrough) adds rule 11 — the requirement describes the system, never its tests — the header-is-the-parameter-list convention, rows-brief checks 8–9 and the `ROW_UNKEYED` / `HEADER_UNTHREADED` digest codes; homelab's `spec_gate.py` ratchets the same four join counts; v0.6.2 (operator ruling on #2862, the first v0.6 rewrite): prose rules start SOFT — rule 11's unproven facts are MARKED in place, not gated; rows-brief check 8 advisory, lint item 7 withdrawn). oracle-fleet kept its own process and v0.4.2
+   until the gateway had proven this one (operator, 2026-10-16); it pins v0.6.6 since 2026-10-29
+   (its `scripts/lib/snippets.sh`).
 4. Gateway tests on Allure, the raw results uploaded as the `gateway-evidence` CI artifact — DONE
    2026-10-16 (#2623; ci.yaml c63dbe1); moved to the `gateway-specs` bucket 2026-10-21
    (`gateway/scripts/evidence-publish.sh` — Actions storage quota).
@@ -323,10 +323,11 @@ release carries it, the card's instruction names a file the mount does not yet h
 7. The process rides with the worker — the claim's `repos[].specs {root, tests, pin?}`, the pinned
    process mounted read-only through the ADR-135 image-volume path, a static card block, the
    reviewer's `pack_roots` off the same field — MERGED 2026-10-29 (#3025; inert until a claim
-   carries the field). `briefs/author.md`, the author's 40-line pointer checklist, is snippets#42
-   (held for the operator's read). Next, in order: tag snippets v0.6.6; bump the pins (gateway
-   `snippets.sh` + this launcher, oracle-fleet); add the field to the homelab and oracle claims;
-   retire the restated process text in the recipes (oracle-fleet#947 step 0, `.agents/fix.yaml`).
+   carries the field). `briefs/author.md`, the author's 40-line pointer checklist, shipped in
+   snippets v0.6.6 (snippets#42); the pins moved to v0.6.6 (gateway `snippets.sh` + this launcher,
+   #3030; oracle-fleet) and both the homelab claim (#3030) and the oracle claim (oracle-iac) carry
+   the field. Next: retire the restated process text in the recipes (oracle-fleet#947 step 0,
+   `.agents/fix.yaml`).
 8. The process home as platform infrastructure (operator direction 2026-10-29) — NOT STARTED; the
    program is [ROADMAP §Backlog](../../ROADMAP.md#portable-specevidence-review--one-process-for-every-specs-repo-2026-10-16-adr-156):
    re-home + governance + a CI gate + `CLAUDE.md` + review rubric, evals for the process markdowns,
