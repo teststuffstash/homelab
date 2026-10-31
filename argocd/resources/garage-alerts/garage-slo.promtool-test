@@ -3,6 +3,8 @@
 # 1. Request rate calculation works
 # 2. Availability ratio calculation works
 # 3. Volume utilization ratio calculation works
+# 4. The server error ratio is defined for every shape of a scraped store (#1569) — see the five
+#    "server error ratio —" cases below
 #
 #   devbox run -- promtool test rules argocd/resources/garage-alerts/garage-slo.promtool-test
 #
@@ -113,6 +115,82 @@ tests:
           # ListObjectsV2: 0 errors/min / 20 requests/min = 0 (at eval_time 5m, counter increments start at t=0, so sum is 1 over 5m)
           - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="ListObjectsV2"}'
             value: 0.0
+
+  # ── Server error ratio — the shapes of the recording rule (#1569) ──────────────────────────────
+  # The rows above only ever exercise the "both sides present" shape. These cover what a HEALTHY
+  # store actually looks like, which is what the old bare-`/` expr could not express: Garage only
+  # exports a 500/503 counter for an endpoint that HAS served a 5xx, so on a healthy store the
+  # numerator was ABSENT and the whole ratio was absent for every endpoint (measured live
+  # 2026-10-31 22:38Z: the rule returned zero series while 16 endpoints were scraped).
+  - interval: 1m
+    name: server error ratio — both present (the value the SLO panel and docs/garage.md §SLO read)
+    input_series:
+      # GetObject: 1 error/s and 100 requests/s
+      - series: 'api_s3_request_duration_count{api_endpoint="GetObject"}'
+        values: "1234+6000x5"
+      - series: 'api_s3_error_counter{api_endpoint="GetObject",status_code="500"}'
+        values: "7+60x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:rate5m
+        eval_time: 5m
+        exp_samples:
+          # 1 / 100 = 0.01 — UNCHANGED by the fix
+          - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="GetObject"}'
+            value: 0.01
+
+  - interval: 1m
+    name: "server error ratio — requests but no 5xx (the healthy store: \"no data\" before the fix)"
+    input_series:
+      # PutObject: 100 requests/s and NO 5xx series at all (Garage exports none until a 5xx happens)
+      - series: 'api_s3_request_duration_count{api_endpoint="PutObject"}'
+        values: "4321+6000x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:rate5m
+        eval_time: 5m
+        exp_samples:
+          # A healthy store reads 0, not "no data"
+          - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="PutObject"}'
+            value: 0
+
+  - interval: 1m
+    name: server error ratio — 5xx but no request-duration series for that endpoint
+    input_series:
+      # ListObjectsV2: 1 error/s and NO request-duration series (the PR #1561 review finding).
+      # Not reachable from a live Garage — every 5xx is also counted in api_s3_request_duration_count
+      # (measured 2026-10-31 on the always-501 GetObjectLockConfiguration endpoint) — so this row
+      # guards the metric-semantics-drift case, where the two families stop moving together.
+      - series: 'api_s3_error_counter{api_endpoint="ListObjectsV2",status_code="503"}'
+        values: "3+60x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:rate5m
+        eval_time: 5m
+        exp_samples:
+          # Every counted request errored → 1
+          - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="ListObjectsV2"}'
+            value: 1
+
+  - interval: 1m
+    name: server error ratio — no Garage scrape at all (must stay distinguishable from a healthy 0)
+    input_series: []
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:rate5m
+        eval_time: 5m
+        exp_samples: []
+
+  - interval: 1m
+    name: server error ratio — idle endpoint (request rate exactly 0) reads 0, not NaN
+    input_series:
+      # HeadObject: the counter exists but has not moved for 5m → its rate is exactly 0, and 0/0
+      # is NaN. Measured 2026-10-31: 12 of the 16 scraped endpoints sat at rate 0, so this is the
+      # common case. The old expr returned NaN here; the fix floors the denominator.
+      - series: 'api_s3_request_duration_count{api_endpoint="HeadObject"}'
+        values: "900+0x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:rate5m
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="HeadObject"}'
+            value: 0
 
   # ── S3 latency by endpoint class ───────────────────────────────────────────────────────────────
   - interval: 1m

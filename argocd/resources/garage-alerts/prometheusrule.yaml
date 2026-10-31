@@ -262,10 +262,46 @@ spec:
 
         # Server error ratio (500/503 over all requests). 4xx are client errors, excluded.
         # Objective: < 0.1% error ratio over 30 days (from the SLO tracking)
+        #
+        # The two-sided form (#1569). The OLD expr divided the 5xx rate by the request rate with a
+        # bare `/`, so BOTH sides had to exist for a series to appear. Garage only exports a
+        # 500/503 counter for an endpoint that HAS served a 5xx, so a healthy store has none and the
+        # ratio was ABSENT for every endpoint — measured live 2026-10-31 22:38Z: this rule returned
+        # ZERO series while 16 endpoints were being scraped (the only 500/503 series in 60 days was
+        # one PutObject on a garage-2 replaced on 2026-10-17, and it is gone from the scrape). A
+        # panel that reads "no data" cannot tell a healthy store from a broken one.
+        # The floors are PER ENDPOINT, never a global `or vector(0)`: an unlabelled floor would put
+        # one series on the chart for a store that is not being scraped at all — the exact
+        # "broken scrape looks healthy" confusion this rule must not add.
+        #   numerator:   the 5xx rate, or 0 for every endpoint that IS being scraped → a healthy
+        #                store reads 0, not "no data".
+        #   denominator: the request rate, or the 5xx rate when that endpoint has no request
+        #                series → the ratio is 1 (every counted request errored).
+        #   clamp_min(…, 1e-9): an idle endpoint's request rate is exactly 0, and 0/0 is NaN —
+        #                "no data" again by another route. The floor sits far below any measured
+        #                request rate (a real one is either 0 or ≥ ~1e-4/s), so no measured ratio
+        #                moves; it only turns 0/0 into 0. Measured 2026-10-31: 12 of the 16 scraped
+        #                endpoints sat at rate 0, so this is the COMMON case, not an edge.
+        # ASSUMPTION (measured live 2026-10-31): every 5xx is ALSO counted in
+        # api_s3_request_duration_count, so the "errors without a request series" branch is a guard,
+        # not a routine path. Proof: GetObjectLockConfiguration answers 501 to every request, and
+        # its 501 counter and its request_duration_count grew by the same amount on every pod
+        # (30d increase: garage-2 478.011, garage-0 511.271, garage-1 515.012 — equal to four
+        # decimals on both sides).
         - record: garage:s3_server_error_ratio:rate5m
           expr: |
-            sum by (api_endpoint) (rate(api_s3_error_counter{status_code=~"500|503"}[5m]))
-            / on (api_endpoint) group_left sum by (api_endpoint) (rate(api_s3_request_duration_count[5m]))
+            (
+              sum by (api_endpoint) (rate(api_s3_error_counter{status_code=~"500|503"}[5m]))
+              or
+              sum by (api_endpoint) (rate(api_s3_request_duration_count[5m]) * 0)
+            )
+            / on (api_endpoint) group_left
+            clamp_min(
+              sum by (api_endpoint) (rate(api_s3_request_duration_count[5m]))
+              or
+              sum by (api_endpoint) (rate(api_s3_error_counter{status_code=~"500|503"}[5m])),
+              1e-9
+            )
 
         # Latency percentiles (p50, p99) by request class.
         # Classes: read (GetObject, HeadObject), write (PutObject, UploadPart, CompleteMultipartUpload, DeleteObject),
