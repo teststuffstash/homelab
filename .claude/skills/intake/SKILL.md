@@ -53,8 +53,10 @@ islands and feeds it the inputs the selector cannot see. Design + evidence:
    island `island_members` knows (exit 2 = a failed probe, never "nothing to do"). The
    board-sweep's ISLAND column is the positive control: an island issue the selector misses
    either carries a lifecycle label / an `intake:` ruling, or the table has a hole — fix the table
-   by PR, never hand-rule around it. Issues no island claims go to the report's `none` list; two
-   sightings of one shape = a new island row.
+   by PR, never hand-rule around it. Bot-filed issues no island claims are the agent-loop
+   sitting's attribution inputs (`kind: attribution`; it names their island and `split`s), so the
+   report's `none` list holds only HUMAN-filed unclaimed issues; two sightings of one shape = a new
+   island row.
 3. **Add the text inputs** — tracker items whose **Next:** is mechanical (decided, bounded; no
    window, mint, ruling or measurement) become `text:` inputs (`source: FU-NNN`) of their island's
    sitting, which `file`s and rules them; the seat then points the FU line at the issue (the
