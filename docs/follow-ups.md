@@ -463,7 +463,8 @@ six OVERSIZE items pointer-ized into
       (flapped 2026-08-23 ×2; the ALERT arm's twin quickfixed f703ec39). **Gate LIVE 2026-10-31:**
       `shellcheck-lint` (#3081, 145 findings baselined in `scripts/shellcheck-baseline.txt` — ~160 standing,
       not ~8) + its `ci` step (seat-direct); dataflow analysis OFF since #3102 (it peaked 4.3 GiB on
-      coordinator-scan.sh and OOMKilled every 4Gi worker running diff-ci, #3094). **Next:** the `meta-needs-attention.sh` empty-read (still
+      coordinator-scan.sh and OOMKilled every 4Gi worker running diff-ci, #3094; turning it back on now means the `large`
+      runner class (#3132) — it cannot fit the normal 3Gi limit). **Next:** the `meta-needs-attention.sh` empty-read (still
       `2>/dev/null | tail -1 | jq` per clause — fail loud on a gh error). Relates ADR-113, ADR-103, #854.
 
 ## Agents
@@ -509,9 +510,11 @@ the block needs pruning, not more headings.
       2026-10-31 resight: #2919 left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails w/o a TTY → the belt's
       OPNsense leg (still `devbox run`) exit 1 → `MgmtBeltCheckFailing{check=ansible}` since 10-28 11:19Z; #2457 missed
       it. Un-wedged 10-31 (venv moved aside); class fix #3052 (`5df5ea7f`: the belt resolves ansible from `devbox.lock`,
-      `OPN_ANSIBLE_BIN`; first box tick on it 14:17Z PASS, 0 devbox calls). **Next:** (1) drop `pkgs.devbox` + its stale
-      comment from the `mgmt-belt` unit `path` with the next `mgmt/nixos` change; (2) the ORIGINAL deliverable, still
-      unbuilt: `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z); then archive.
+      `OPN_ANSIBLE_BIN`; first box tick on it 14:17Z PASS, 0 devbox calls). 2026-11-01: a SECOND wedge shape — an un-timed
+      `kubectl exec` into a hung cilium agent froze every box loop, the sentinel starved 3 h+ and nothing alerted
+      (bounded in #3123). **Next:** (1) drop `pkgs.devbox` + its stale comment from the `mgmt-belt` unit `path` with the
+      next `mgmt/nixos` change; (2) the ORIGINAL deliverable, still unbuilt and now twice-evidenced:
+      `MgmtSentinelLoopStale` (+ replays 10-07 20:15–21:10Z and 11-01's 3 h starve); then archive.
 - [ ] **FU-290** — **Scans + sessions + reflexes exhaust the shared homelab-agents installation pools (142724430)
       under PR churn.** First 09-25 (Renovate wave); detector blindness fixed (#1979 graphql, #2442 core). Drains
       since: 10-04/10-06/10-07 (sleep-tracking#121 storm, oracle-fleet#798 loop — fixed + belted #2204/#2366),
@@ -684,8 +687,11 @@ the block needs pruning, not more headings.
       requests 1536 Mi with no limit, so jobs size to the HOST (`pytest -n auto` = one worker per CPU)
       and vanish on 8 GB nodes; the recurring "move off 8 GB" pressure. 2026-10-02 evidence: the same
       suite fits an 8 GB node once workers are bounded (oracle-fleet #783: 3 workers, 3.1 GiB, pass).
-      Option A spike DONE (PR#2185: in-place `pods/resize` proven on nx-01). **Next (operator):** the
-      spike's sizing calls (8 GB acceptance line, dind inside/outside the budget, per-runner cap) → ADR. Design, history, options, acceptance:
+      Option A spike DONE (PR#2185: in-place `pods/resize` proven on nx-01). Static limits LIVE 2026-11-01
+      (#3132: normal 3Gi runner + 1Gi dind; large = big-memory + big-disk on nx-01, 12Gi, max 2; oracle's ci on
+      large, oracle-fleet#983 7.8 min / 7.59 GiB peak); the nx-01 ride reserve ruled "none for now" (#3134, in the
+      spike). **Next (operator):** is a resize controller still worth building for nx-01's spare memory, or does the
+      static class pair close this → ADR + archive. Design, history, options, acceptance:
       [`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md). Relates FU-208, ADR-082.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
       pick has no green requirement on purpose — wrong for a gate a catch-up merge cannot move (PR#1468: 26 merges,
