@@ -1,0 +1,8 @@
+{
+  "number": 100,
+  "comments": [
+    {
+      "body": "<!-- fleet-fault cause=teststuffstash/homelab#1000 prs=20 -->\nAGENT_ERROR: issue-side fleet fault test"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "number": 100,
+    "title": "Test issue with fleet fault",
+    "labels": [{"name": "agent/error"}],
+    "body": "This is a test issue"
+  }
+]

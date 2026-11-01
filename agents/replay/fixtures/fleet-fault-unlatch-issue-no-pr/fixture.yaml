@@ -1,4 +1,4 @@
-# fleet-fault-unlatch-issue-no-pr: issue with marker + cause CLOSED + NO referencing PR (PR list read ok) ⇒ agent/error REMOVED, CI leg vacuous
+# fleet-fault-unlatch-issue case 2: PR-less issue latch, cause CLOSED, open-PR list READ ⇒ agent/error REMOVED with the CI leg vacuous (homelab#3048)
 name: fleet-fault-unlatch-issue-no-pr
 mode: actions
 source: agents/coordinator-scan.sh
