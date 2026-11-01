@@ -134,8 +134,8 @@
   "callers": {
     "system:serviceaccount:platform-agents:agentstack-loop": {
       "stacks": ["platform"],
-      "roles": ["worker", "prober"],
-      "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]
+      "roles": ["worker", "prober", "coordinator", "reviewer"],
+      "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator", "platform-agents"]
     },
     "system:serviceaccount:oracle-agents:agentstack-loop": {
       "stacks": ["oracle"],
@@ -145,6 +145,11 @@
     "system:serviceaccount:agent-coordinator:specs-review": {
       "stacks": ["platform"],
       "roles": ["reviewer", "worker"],
+      "bind_namespaces": []
+    },
+    "system:serviceaccount:agent-coordinator:agent-coordinator": {
+      "stacks": ["platform"],
+      "roles": ["coordinator", "responder"],
       "bind_namespaces": []
     },
     "system:serviceaccount:agent-coordinator:outcome-judge": {

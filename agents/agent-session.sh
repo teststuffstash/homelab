@@ -263,41 +263,13 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 # written (the loop SA cannot create one in a fixer namespace, deliberately). A gateway that answers
 # a token to a bound request anyway is refused, released and not dispatched.
 # >>>REPLAY:gateway-sessions>>>
-GW_SESSIONS=""; GW_SESSION_ID=""; GW_ENV_KEYS=""; GW_PULL_URL=""; GW_RAIL=""; GW_CLAUDE_MODEL=""; GW_CONTEXT_TOKENS=""
-GW_POD=""; GW_PULL_PRELUDE=""; GW_TRAP_HOOK=""; GW_EXPIRES_AT=""; GW_CALLER_DESC=""
-GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local:8080}"
-GW_CALLER_TOKEN_FILE="${AGENT_GATEWAY_CALLER_TOKEN_FILE:-/var/run/secrets/agent-gateway/token}"
-# gw_caller_token — a FRESH caller token on stdout (GW-SESSIONS-AUTH), fetched per call and never
-# kept in a variable: the release may run hours after admission, past a 10-minute mint and past a
-# kubelet rotation of the projected file. Non-zero = no token.
-gw_caller_token() {
-  local _t=""
-  if [ -n "${AGENT_GATEWAY_CALLER_SA:-}" ]; then
-    # JAIL CANARY: the admin kubeconfig impersonates the named dispatcher SA (comment above).
-    _t="$("$KUBECTL" $KUBE -n "${AGENT_GATEWAY_CALLER_SA%%/*}" create token "${AGENT_GATEWAY_CALLER_SA#*/}" \
-          --audience agent-gateway --duration 10m 2>/dev/null)" || return 1
-  elif [ -r "$GW_CALLER_TOKEN_FILE" ]; then
-    _t="$(cat "$GW_CALLER_TOKEN_FILE" 2>/dev/null)" || return 1
-  fi
-  [ -n "$_t" ] || return 1
-  printf '%s' "$_t"
-}
-# gw_auth_header — the header for curl's `-H @<file>`: the token never rides argv (ps-visible).
-gw_auth_header() { local _t; _t="$(gw_caller_token)" || return 1; printf 'Authorization: Bearer %s\n' "$_t"; }
-# gw_release — DELETE /sessions/{id} (GW-SESSIONS-RELEASE: idempotent server-side). Idempotent here
-# too (clears the id first), so the explicit call after the headless follow and the EXIT trap may
-# both run. A failed DELETE is non-fatal: the session expires by the policy TTL (4 h), and saying so
-# is the whole remedy.
-gw_release() {
-  [ -n "${GW_SESSION_ID:-}" ] || return 0
-  local _sid="$GW_SESSION_ID"; GW_SESSION_ID=""
-  if curl -fsS --max-time 10 -H @<(gw_auth_header) -X DELETE "${GW_URL}/sessions/${_sid}" >/dev/null 2>&1; then
-    echo "→ gateway(sessions): released ${_sid}"
-  else
-    echo "WARN gateway(sessions): release of ${_sid} FAILED — it holds its rail slot until the session TTL" >&2
-  fi
-  return 0
-}
+# The mechanics (caller token, POST /sessions, the answer's checks, the release, the in-pod pull
+# prelude) are the shared helper's — agents/gateway-admit.sh, one implementation for every launcher
+# the gateway admits; this block owns only what is THIS launcher's: the platform-only guard, the
+# --model / interactive refusals, the bind (its pod), and the harness invocation model.
+# A replay composition has no $HERE — $REPLAY_ROOT/agents covers it (coordinator-scan.sh's idiom).
+. "${HERE:-${REPLAY_ROOT:+$REPLAY_ROOT/agents}}/gateway-admit.sh"
+GW_SESSIONS=""; GW_CLAUDE_MODEL=""; GW_POD=""; GW_TRAP_HOOK=""
 if [ "${AGENT_GATEWAY:-}" = "sessions" ]; then
   _gw_stack="$(printf '%s' "$_srow" | jq -r '.name // ""' 2>/dev/null)" || _gw_stack=""
   if [ "$_gw_stack" = "platform" ]; then
@@ -313,39 +285,18 @@ if [ -n "${GW_SESSIONS:-}" ]; then
     echo "PREFLIGHT REFUSED: --model ${MODEL} under AGENT_GATEWAY=sessions — the gateway owns the model (FU-270). Drop --model or unset AGENT_GATEWAY. No session, no pod." >&2
     exit 2
   fi
-  case "$ROUND" in ''|*[!0-9]*)
-    echo "PREFLIGHT REFUSED: --round '${ROUND}' is not a non-negative integer (sessions.schema.json post.input.round). No session, no pod." >&2
-    exit 2;;
-  esac
-  # The retry contract (GW-SESSIONS-ADMIT): AGENT_GATEWAY_ATTEMPT is this launcher's automatic
-  # re-admission counter at the SAME round — set only by its own strike re-entry (the
-  # gateway-outcome block); unset = attempt 1, which the request then omits (the gateway's default).
-  case "${AGENT_GATEWAY_ATTEMPT:-1}" in ''|0|*[!0-9]*)
-    echo "PREFLIGHT REFUSED: AGENT_GATEWAY_ATTEMPT='${AGENT_GATEWAY_ATTEMPT}' is not a positive integer (sessions.schema.json post.input.attempt). No session, no pod." >&2
-    exit 2;;
-  esac
-  # The pod pulls its env in its OWN command (the prelude below) — an interactive pod has none, so
+  # AGENT_GATEWAY_ATTEMPT is this launcher's automatic re-admission counter at the SAME round — set
+  # only by its own strike re-entry (the gateway-outcome block); unset = attempt 1.
+  gw_preflight_request "$ROUND" "${AGENT_GATEWAY_ATTEMPT:-1}" || exit 2
+  # The pod pulls its env in its OWN command (the prelude) — an interactive pod has none, so
   # nothing would ever pull and an exec'd shell would hold no LLM env. Refused, not degraded.
   if [ -z "${RUN_CMD:-}" ] && [ -z "${RECIPE:-}" ]; then
     echo "PREFLIGHT REFUSED: an interactive session under AGENT_GATEWAY=sessions — the pod pulls its LLM env once, in its command (GW-SESSIONS-PULL); pass --run or --recipe. No session, no pod." >&2
     exit 2
   fi
   # The caller's identity (GW-SESSIONS-AUTH) — resolved once up front so a missing token refuses
-  # before any request; every call below fetches its own fresh one.
-  if [ -n "${AGENT_GATEWAY_CALLER_SA:-}" ] && ! [[ "$AGENT_GATEWAY_CALLER_SA" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]]; then
-    echo "PREFLIGHT REFUSED: AGENT_GATEWAY_CALLER_SA='${AGENT_GATEWAY_CALLER_SA}' is not <namespace>/<serviceaccount> (GW-SESSIONS-AUTH). No session, no pod." >&2
-    exit 2
-  fi
-  if ! gw_caller_token >/dev/null; then
-    if [ -n "${AGENT_GATEWAY_CALLER_SA:-}" ]; then
-      echo "PREFLIGHT REFUSED: could not mint a caller token for ${AGENT_GATEWAY_CALLER_SA} (kubectl create token --audience agent-gateway) — GW-SESSIONS-AUTH. No session, no pod." >&2
-    else
-      echo "PREFLIGHT REFUSED: no gateway caller token — ${GW_CALLER_TOKEN_FILE} is not mounted, and AGENT_GATEWAY_CALLER_SA (jail canary: <ns>/<sa> of the dispatcher, e.g. platform-agents/agentstack-loop) is unset. /sessions authenticates its caller (GW-SESSIONS-AUTH). No session, no pod." >&2
-    fi
-    exit 2
-  fi
-  GW_CALLER_DESC="${AGENT_GATEWAY_CALLER_SA:+${AGENT_GATEWAY_CALLER_SA} (minted, jail canary)}"
-  GW_CALLER_DESC="${GW_CALLER_DESC:-the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)}"
+  # before any request; every call after fetches its own fresh one.
+  gw_preflight_caller || exit 2
   # The bind: the pod this launcher is about to create — its namespace (NS = PROJECT), its
   # ServiceAccount (the pod manifest's serviceAccountName) and its NAME, computed here by the same
   # rule the pod-name block applies later (which then reuses GW_POD verbatim).
@@ -353,92 +304,25 @@ if [ -n "${GW_SESSIONS:-}" ]; then
     issue-[0-9]*|pr-[0-9]*) GW_POD="agent-${PROJECT}-${TASK//[^a-z0-9]/-}-r${ROUND}";;
     *) GW_POD="agent-${PROJECT}-$(date -u +%H%M%S)";;
   esac
-  # sessions.schema.json post.input: harness only when --harness was EXPLICIT (it narrows the walk
-  # to its dialect); rail only from the operator knob (an override the gateway logs).
-  _gw_req="$(jq -nc --arg task "${TASK:-adhoc}" --argjson round "$ROUND" \
-      --arg harness "${HARNESS_SET:+$HARNESS}" --arg rail "${AGENT_GATEWAY_RAIL:-}" \
-      --arg role "${AGENT_GATEWAY_ROLE:-worker}" --arg canary "${AGENT_GATEWAY_CANARY:-}" \
-      --arg ns "$PROJECT" --arg pod "$GW_POD" --argjson attempt "${AGENT_GATEWAY_ATTEMPT:-1}" \
-      '{stack: "platform", role: $role, task: $task, round: $round}
-       + (if $attempt > 1 then {attempt: $attempt} else {} end)
-       + (if $harness != "" then {harness: $harness} else {} end)
-       + (if $rail != "" then {rail: $rail} else {} end)
-       + (if $canary != "" then {canary: {model: ($canary | split("@")[0]), provider: ($canary | split("@")[1])}} else {} end)
-       + {bind: {namespace: $ns, serviceaccount: "agentstack-worker", pod: $pod}}')"
-  _gw_resp="$(mktemp)"
-  _gw_http="$(curl -sS --max-time 20 -o "$_gw_resp" -w '%{http_code}' -H 'Content-Type: application/json' \
-      -H @<(gw_auth_header) -X POST "${GW_URL}/sessions" -d "$_gw_req" 2>/dev/null)" || _gw_http="000"
-  _gw_decision=""
-  [ "$_gw_http" != "200" ] || _gw_decision="$(jq -r '.decision // ""' "$_gw_resp" 2>/dev/null)" || _gw_decision=""
-  case "$_gw_decision" in
-    defer)
-      # Exactly the router-defer exit (stderr line, exit 1): the dispatcher's requeue path is unchanged.
-      echo "→ gateway(sessions): defer — [$(jq -r '.reason // "?"' "$_gw_resp")] retry_after=$(jq -r '.retry_after_s // "?"' "$_gw_resp")s — not dispatching (task=${TASK:-adhoc}, round=${ROUND})." >&2
-      rm -f "$_gw_resp"; exit 1;;
-    dispatch) ;;
-    *)
-      # Only a NON-200 body is echoed: it is the gateway's error envelope, redacted by GW-REDACT. A
-      # 200 that is neither verdict could carry a token, so its body is never printed.
-      _gw_why="http ${_gw_http}"; [ "$_gw_http" != "000" ] || _gw_why="unreachable"
-      [ "$_gw_http" = "200" ] && _gw_why="http 200, unknown decision '${_gw_decision}'" \
-        || _gw_why="${_gw_why}$(head -c 200 "$_gw_resp" 2>/dev/null | tr '\n' ' ' | sed 's/^./: &/')"
-      echo "→ gateway(sessions): defer — [gateway-${_gw_why}] retry_after=?s — FAIL CLOSED at ${GW_URL}/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy)." >&2
-      rm -f "$_gw_resp"; exit 1;;
-  esac
-  GW_SESSION_ID="$(jq -r '.session.id // ""' "$_gw_resp")"
+  # harness only when --harness was EXPLICIT (it narrows the walk to its dialect); rail only from
+  # the operator knob (an override the gateway logs). Defer and fail-closed are the router-defer
+  # exit (stderr line, exit 1): the dispatcher's requeue path is unchanged, and an unusable
+  # dispatch was released by the helper before it returned.
+  _gw_rc=0
+  gw_admit --stack platform --role "${AGENT_GATEWAY_ROLE:-worker}" --task "${TASK:-adhoc}" --round "$ROUND" \
+      --attempt "${AGENT_GATEWAY_ATTEMPT:-1}" --harness "${HARNESS_SET:+$HARNESS}" --rail "${AGENT_GATEWAY_RAIL:-}" \
+      --canary "${AGENT_GATEWAY_CANARY:-}" --bind "${PROJECT}/agentstack-worker/${GW_POD}" || _gw_rc=$?
+  case "$_gw_rc" in 0) ;; 2) exit 2;; *) exit 1;; esac
   # Released on ANY exit from here (pre-pod refusals included); the context-prefetch trap below
   # chains this hook, because a later `trap … EXIT` replaces an earlier one.
   GW_TRAP_HOOK="gw_release"; trap 'gw_release' EXIT
-  _gw_bad=""
-  [[ "$GW_SESSION_ID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || _gw_bad="session id"
-  # A bound answer carries NO credential (GW-SESSIONS-PULL). A token or an env map here means the
-  # gateway ignored the bind (a pre-pull build): refuse, so the launcher never holds a token.
-  jq -e '(.session.token == null) and (.env == null)' "$_gw_resp" >/dev/null 2>&1 \
-    || _gw_bad="${_gw_bad:+$_gw_bad, }a credential in a bound answer"
-  # Every env key becomes an in-pod `export` name — a hostile key is a refusal.
-  jq -e '(.env_keys | type == "array") and (.env_keys | length > 0) and ([.env_keys[] | select((type != "string") or (test("^[A-Za-z_][A-Za-z0-9_]*$") | not))] | length == 0)' \
-    "$_gw_resp" >/dev/null 2>&1 || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys"
-  GW_ENV_KEYS="$(jq -r '(.env_keys // []) | map(tostring) | join(",")' "$_gw_resp" 2>/dev/null)" || GW_ENV_KEYS=""
-  GW_PULL_URL="$(jq -r '.pull_url // ""' "$_gw_resp")"
-  [[ "$GW_PULL_URL" =~ ^https?://[A-Za-z0-9.:-]+(/[A-Za-z0-9._-]+)*/sessions/${GW_SESSION_ID}/env$ ]] \
-    || _gw_bad="${_gw_bad:+$_gw_bad, }pull_url"
-  GW_RAIL="$(jq -r '.rail // ""' "$_gw_resp")"
-  GW_EXPIRES_AT="$(jq -r '.session.expires_at // "?"' "$_gw_resp")"
-  GW_CONTEXT_TOKENS="$(jq -r '.context_tokens // "" | tostring' "$_gw_resp")"
-  HARNESS="$(jq -r '.harness // ""' "$_gw_resp")"
-  MODEL="$(jq -r '.model // ""' "$_gw_resp")"
-  rm -f "$_gw_resp"
-  [ -n "$MODEL" ] || _gw_bad="${_gw_bad:+$_gw_bad, }model"
-  # The harness invocation's model comes from the gateway's answer, never the static chain: the
-  # policy id with its rail prefix removed — GW-MODEL-RESOLVE's strip, which this launcher performed
-  # first — and, for opencode, under the `gateway` provider GW-SESSIONS-ENV names. The pulled env
-  # carries the same values; the launcher just cannot read them, by design.
-  case "$GW_RAIL" in
-    anthropic) _gw_wire="${MODEL#claude/}";;
-    opencode)  _gw_wire="${MODEL#opencode-go/}";;
-    codex)     _gw_wire="${MODEL#codex/}";;
-    *)         _gw_wire="$MODEL";;
-  esac
+  HARNESS="$GW_HARNESS"; MODEL="$GW_MODEL"
+  # The harness invocation's model: the gateway's, rail prefix stripped (GW-MODEL-RESOLVE), and for
+  # opencode under the `gateway` provider GW-SESSIONS-ENV names.
   case "$HARNESS" in
-    claude)   GW_CLAUDE_MODEL="$_gw_wire"
-              [[ ",${GW_ENV_KEYS}," == *",ANTHROPIC_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks ANTHROPIC_MODEL";;
-    opencode) OPENCODE_MODEL="gateway/${_gw_wire}"
-              [[ ",${GW_ENV_KEYS}," == *",OPENCODE_CONFIG_CONTENT,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks OPENCODE_CONFIG_CONTENT";;
-    goose)    [[ ",${GW_ENV_KEYS}," == *",GOOSE_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks GOOSE_MODEL";;
-    codex)    [[ ",${GW_ENV_KEYS}," == *",CODEX_MODEL,"* ]] || _gw_bad="${_gw_bad:+$_gw_bad, }env_keys lacks CODEX_MODEL";;  # the codex cell (FU-270): the pod's agent-codex renders the provider block from the pulled OPENAI_BASE_URL / CODEX_MODEL (GW-SESSIONS-ENV)
-    *)        _gw_bad="${_gw_bad:+$_gw_bad, }harness '${HARNESS}' (this launcher runs claude|opencode|goose|codex)";;
+    claude)   GW_CLAUDE_MODEL="$GW_WIRE_MODEL";;
+    opencode) OPENCODE_MODEL="gateway/${GW_WIRE_MODEL}";;
   esac
-  if [ -n "$_gw_bad" ]; then
-    echo "→ gateway(sessions): defer — [dispatch-unusable: ${_gw_bad}] retry_after=?s — FAIL CLOSED, releasing and not dispatching." >&2
-    exit 1   # the EXIT trap releases the session
-  fi
-  echo "→ gateway(sessions): dispatch ${MODEL} [rail=${GW_RAIL},harness=${HARNESS},session=${GW_SESSION_ID},context_tokens=${GW_CONTEXT_TOKENS:-null}] (task=${TASK:-adhoc}, round=${ROUND}) — bound to ${PROJECT}/agentstack-worker pod ${GW_POD}; the pod pulls env ${GW_ENV_KEYS}; caller ${GW_CALLER_DESC}"
-  # The pod command's FIRST step (WRAPPED, ahead of the harness and outside its tee — nothing of it
-  # reaches /tmp/run.log): read the projected token, POST the pull URL, export exactly the
-  # `env_keys` from the answer, drop the locals. Any failure exits 97 BEFORE the harness starts.
-  # Every harness gets this same text. Static: it reads only in-pod env (AGENT_GATEWAY_PULL_URL /
-  # AGENT_GATEWAY_ENV_KEYS, rendered by the gateway-env-pull block) and expands only in the pod.
-  GW_PULL_PRELUDE='_gw_t="$(cat /var/run/secrets/agent-gateway/token)" && _gw_env="$(curl -fsS --max-time 30 --retry 3 --retry-delay 2 --retry-connrefused -X POST -H "Authorization: Bearer ${_gw_t}" "$AGENT_GATEWAY_PULL_URL")" || { echo "→ gateway(sessions): env pull FAILED at ${AGENT_GATEWAY_PULL_URL} — the harness does not start (FU-270)" >&2; exit 97; }; unset _gw_t; for _gw_k in ${AGENT_GATEWAY_ENV_KEYS//,/ }; do _gw_v="$(printf "%s" "$_gw_env" | jq -er --arg k "$_gw_k" ".env[\$k] | strings")" || { echo "→ gateway(sessions): the env pull answer lacks ${_gw_k} — the harness does not start (FU-270)" >&2; exit 97; }; export "${_gw_k}=${_gw_v}"; done; unset _gw_env _gw_v _gw_k; echo "→ gateway(sessions): env pulled (${AGENT_GATEWAY_ENV_KEYS})"; '
 
   # The skipped region's outputs, as the gateway decided them (set -u reads them downstream).
   AGENT_ROUTER="off"; OR_MIN="${OPENROUTER_MIN_CREDIT:-0.25}"; OR_CREDITS=""; OR_CAPACITY_DOWN=""; RAIL_DEGRADED=""

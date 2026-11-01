@@ -1,0 +1,9 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"responder","task":"t","round":0}
+OUT rc=3
+OUT GW_SESSION_ID='' GW_RAIL='' GW_HARNESS='' GW_MODEL='' GW_WIRE_MODEL=''
+OUT GW_ENV_KEYS='' GW_PULL_URL='' GW_PULL_PRELUDE set: no
+OUT GW_DEFER_REASON='gateway-http 503: {"error":"tokenreview-transient"}' GW_RETRY_AFTER='?'
+OUT env file: absent
+OUT gws_ in shell state: 0
+ERR → gateway(sessions): defer — [gateway-http 503: {"error":"tokenreview-transient"}] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy).
+RC 0

@@ -1,0 +1,11 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"responder","task":"respond homelab#7","round":0}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-resp-1 [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): dispatch claude/sonnet [rail=anthropic,harness=claude,session=s-resp-1,context_tokens=200000] (task=respond homelab#7, round=0) — unbound; env ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL written to $TMP/gateway-admit.unbound-dispatch.fx/world/llm.env; caller the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)
+OUT rc=0
+OUT GW_SESSION_ID='s-resp-1' GW_RAIL='anthropic' GW_HARNESS='claude' GW_MODEL='claude/sonnet' GW_WIRE_MODEL='sonnet'
+OUT GW_ENV_KEYS='ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL' GW_PULL_URL='' GW_PULL_PRELUDE set: no
+OUT GW_DEFER_REASON='' GW_RETRY_AFTER=''
+OUT env file: mode 600, keys ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL, gws_ lines 1
+OUT gws_ in shell state: 0
+OUT → gateway(sessions): released s-resp-1
+RC 0
