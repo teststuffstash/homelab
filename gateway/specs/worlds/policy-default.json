@@ -42,9 +42,9 @@
       "user_agent": "fixed",
       "credential_probe": {"method": "POST", "path": "/v1/chat/completions", "body": {"model": "deepseek-v4.1-flash", "max_tokens": 1, "messages": [{"role": "user", "content": "."}]}, "backoff_s": [60, 3600]},
       "admission": {
-        "_comment": "Rules only (GW-CATALOG-GO, operator ruling 5, 2026-10-17): prices, peak rows and hours, per-model monthly limits and the window shares come from the Go catalog snapshot, never from here. latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900: the hold a Go 429 that names no reset cools its CELL for; latch_scope model = a Go 429 never latches the whole rail (ruling 3: each model has its own limits). windows: the anchors are gometer _GO_WINDOW_DEFAULTS (chain / weekly mon 00:00 / monthly 13 11:30 — self-measured, no vendor source; GO_WINDOW_ANCHORS unset in deployment.yaml), threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
+        "_comment": "Rules only (GW-CATALOG-GO, operator ruling 5, 2026-10-17): prices, peak rows and hours, per-model monthly limits and the window shares come from the Go catalog snapshot, never from here. latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900: the hold a Go 429 that names no reset latches the RAIL for; latch_scope account = a Go 429 latches the whole rail for its retry-after, because every paid Go model draws ONE account allowance and the per-model limits only weight the draw (vendor support, anomalyco/opencode#54875; supersedes the spike's ruling 3 — 2026-11-01, sessions.md §Capacity). windows: the anchors are gometer _GO_WINDOW_DEFAULTS (chain / weekly mon 00:00 / monthly 13 11:30 — self-measured, no vendor source; GO_WINDOW_ANCHORS unset in deployment.yaml), threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
         "latch_429_hold_s": 900,
-        "latch_scope": "model",
+        "latch_scope": "account",
         "window_draw": {
           "windows": {
             "5h":  {"threshold": 0.80, "anchor": "chain", "span_s": 18000, "chain_lookback_s": 604800},

@@ -67,7 +67,7 @@ fx/none unbenched · 0/0.
 | a tier is a band of the rail's best | bands 0.9/0.75/0.5; every listed id scores ≥ band × its rail's top |
 | each list is cheapest per clean ride first, capped at 3 | cap 3; priced-rail lists ≤ 3, cost per clean ride non-decreasing |
 | the subscription rail has no price: score ascending is its cost proxy | anthropic and codex rows unpriced; lists strictly score-ascending |
-| the candidates per rail | opencode keys opencode-go/<id> priced promise/measured/unlimited or unpriced; openrouter keys = the OpenRouter catalog's vendor/model ids, priced at the selected endpoint (basis endpoint with its provider) or unpriced; anthropic keys = the rail's claude/ aliases, unpriced; codex keys ⊇ the deployed codex rail's ids (a key on no list is unbenched or below every band), unpriced; source artificial-analysis |
+| the candidates per rail | opencode keys opencode-go/<id>, none the twin of a subscription candidate's AA row, priced promise/measured/unlimited or unpriced; openrouter keys = the OpenRouter catalog's vendor/model ids, priced at the selected endpoint (basis endpoint with its provider) or unpriced; anthropic keys = the rail's claude/ aliases, unpriced; codex keys ⊇ the deployed codex rail's ids (a key on no list is unbenched or below every band), unpriced; source artificial-analysis |
 | the join to the AA row is a rule, not a table | every row's aa_id == join_aa_id over the snapshot's AA ids |
 | unbenched never tiers | no listed id has a null aa_id, nor a null out_price on a priced rail |
 
@@ -561,6 +561,9 @@ def test_snapshot_candidates():
     with when("the snapshot's rails are read"):
         rails = bench["rails"]
     then_eq("opencode keys", sorted(k for k in rails["opencode"] if not k.startswith("opencode-go/")), [], claim="every opencode key is opencode-go/<id>")
+    sub_aa = [r["aa_id"] for rail_ in PRICELESS_RAILS for r in rails[rail_].values() if r.get("aa_id")]
+    then_eq("opencode keys a subscription rail already serves", sorted(k for k in rails["opencode"] if any(same_model(k, aa) for aa in sub_aa)), [],
+            claim="no Go candidate is the twin of a subscription candidate's AA row — Go is the cheaper door to the priced catalog, never a second door to a subscription's model")
     then_eq("opencode price bases", sorted({r["price_basis"] for r in rails["opencode"].values()} - {"promise", "measured", "unlimited", None}), [],
             claim="every opencode row's price_basis is promise / measured / unlimited / null")
     then_eq("openrouter keys", sorted(k for k in rails["openrouter"] if k.count("/") != 1 or k.startswith(("opencode-go/", "claude/"))), [],
