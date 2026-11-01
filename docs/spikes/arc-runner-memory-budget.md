@@ -129,3 +129,45 @@ What that settles, question by question:
 - The per-runner cap and the nx-01 ride reserve. The ride size class (`fixer.rideSize: large`,
   ~16.5 GiB per ride) sets how much nx-01 must keep free for rides.
 
+
+## 2026-11-01: static class limits, kata trial, CI harvest
+
+**Trigger.** A runner with no limit (ShellCheck's dataflow pass, 5.4 GB RSS) thrashed wk-metal-03
+NotReady for ~4 h (homelab#3107). The node never OOM-killed anything: it thrashed page cache
+instead, and kubelet starved. wk-03 hit MemoryPressure the same morning. The
+old outcome, "the job vanishes", had become "the node is gone".
+
+**CI harvest (20 days, 10-12 → 11-01, Prometheus; September sampled via the GitHub API).**
+- **Sizes:** every recurring ARC job except oracle-fleet `ci` stays ≤ 1.4 GiB runner p90 and
+  ≤ 2.7 GiB max. dind peaks at ≤ 0.3 GiB: **no ARC job runs kind**, because kind/e2e runs on the
+  ci-runner VMs.
+- **oracle-fleet `ci`** grows to fit its host: 19–24 GiB and ~35 cores on nx-01, versus 3–4.6 GiB
+  on the laptops, where it passes 2–3× slower. It is a speed class, not a need class.
+- **Load:** ARC concurrency p95 3, max 8; the cap was full 0.02 % of the time. Zero runner pods
+  went unschedulable. Big jobs overlapped (≥ 2 at once) 0.9 % of the time.
+- **Queue:** p50 18 s / p90 76 s. Week 44's rise was one stuck runner pod
+  (`ArcRunnerPodOverstayed`), not capacity.
+
+**Kata trial (option B, on wk-metal-03).**
+- **What works:** pod limits alone size the VM (2 GiB + 1 vCPU base + the sum of limits), and
+  an overrun dies inside the VM with the node untouched. dind and kind run with four template
+  workarounds.
+- **Why it was rejected:**
+  - The job sees base + limits, so `-n auto` still over-sizes.
+  - A step killed for memory leaves no `OOMKilled` on the pod (it reads `Error`).
+  - An 8 GB laptop gives a pod only about 2.6 GiB.
+
+  With no ARC job needing kind, plain runc plus a limit gives the same "dies alone" with honest
+  OOMKilled attribution.
+
+**Decision (operator, 2026-11-01).** Static limits per class instead of option A's resize
+controller:
+- **normal** (`homelab-ephemeral`): runner 3Gi + dind 1Gi limits.
+- **large** (`homelab-ephemeral-large`, merged with the old large-scratch class): 12Gi request ==
+  limit (nx-01 today), 16Gi scratch request, max 2. oracle-fleet `ci` moves to it.
+- Self-sizing tools read `memory.max` (oracle's `ci.sh` already does).
+
+**Open:**
+- the nx-01 ride reserve: two large jobs reserve 24Gi of ~49Gi free, leaving less than one
+  `rideSize: large` ride;
+- whether option A is still worth building for nx-01's spare memory.
