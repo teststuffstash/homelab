@@ -15032,4 +15032,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
   README links; the worker's process-image tag follows the gateway pin file; sha + ghcr manifest verified).
 - **Operator applied `tofu/github` ~20:00Z: 0 added, 2 changed** — `required-approval-goal` = 2 approvals on oracle-fleet (ruleset
   20494590) and homelab, verified via the API. ADR-155's amendment is live.
+- **#3148 MERGED 20:16Z** (snippets v0.6.9 pins). **#3144** (the runner-image auto-bump to 2026.11.1, built off the workflow fix)
+  sat `DIRTY` + `merge-conflict`: it and #3142 edited the same `arc-runners-large.yaml` lines within the hour, and the updater
+  cannot rebase a conflict — the auto-bump re-applies its sed on fresh master only at CREATION. Seat re-applied the sed on
+  master (7 pins 2026.10.31 → 2026.11.1, pins only) and force-pushed the bot's branch; label dropped; re-review pending.
 
