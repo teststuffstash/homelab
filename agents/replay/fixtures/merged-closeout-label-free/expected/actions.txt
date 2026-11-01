@@ -1,0 +1,10 @@
+CALL gh issue list --repo teststuffstash/homelab --state closed --label agent/in-progress --limit 30 --json number,title,labels,updatedAt
+CALL gh issue list --repo teststuffstash/homelab --state closed --label agent/review --limit 30 --json number,title,labels,updatedAt
+OUT UNIT merged-closeout|homelab|issue-97
+OUT UNIT merged-closeout|homelab|issue-96
+OUT ITEM [homelab] issue #97 — merged-closeout (closed, still non-terminal agent/*)
+OUT ITEM [homelab] issue #96 — merged-closeout (closed, still non-terminal agent/*)
+OUT REACHED: end
+ERR item_class_push: homelab issue-97 riding machine
+ERR item_class_push: homelab issue-96 riding machine
+RC 0

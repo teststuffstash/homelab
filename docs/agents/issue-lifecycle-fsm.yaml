@@ -40,7 +40,7 @@ diagram: |
       InProgress --> MergedIntoGoal: PR merges into goal/** — keyword INERT (IL-T08)
       MergedIntoGoal --> ClosedByMerge: FU-143 widened C6 closes it (IL-T08)
       ClosedByMerge --> Done: merged-closeout — verify, flip, harvest (IL-T09)
-      ClosedByMerge --> Done: stale label, persisted → scan reconciles it (IL-T28)
+      ClosedByMerge --> Done: stale label → scan reconciles it — closure-by-merge fast path, else persisted (IL-T28)
       Done --> [*]
       state GoalLane {
           [*] --> GoalQueued: human authors AND queues (breaker up, IL-T10)
@@ -379,13 +379,19 @@ transitions:
   - id: IL-T28
     name: phantom done reconciled — closed issue + merged PR + stale label → agent/done (the belt)
     owner: coordinator-scan, deterministically — no LLM tick in the path
-    when: "CLOSED ∧ agent-fix ∧ (agent/blocked ∨ agent/review) ∧ a MERGED PR mentions the issue ∧ the state PERSISTED past C4C5_PERSIST_S (issue quiet) → add agent/done, remove the stale label, comment the audit. Bookkeeping on dead state: the issue is already CLOSED, so a wrong flip costs a mislabeled closed issue, not a duplicate ride. The merged-closeout clause (C6) is the primary path; this belt catches cases where C6 was skipped."
+    when: "CLOSED ∧ (agent/blocked ∨ agent/review ∨ agent/in-progress) ∧ a MERGED PR STRONGLY LINKS the issue (`implements|closes|fixes|resolves #N` — the C6 grammar) ∧ (the issue was CLOSED within ~60s of the strong-link PR's `mergedAt` — closure-by-merge, the FAST PATH — OR the state PERSISTED past C4C5_PERSIST_S) → add agent/done, remove the stale label, comment the audit. The read is LABEL-INDEPENDENT: the C4/C5 dispatch selector excludes agent/blocked (a human gate is never re-dispatched, IL-T06), but dispatch exclusion ≠ reconciliation exclusion — a CLOSED issue wearing agent/blocked whose PR merged is finished work. No agent-fix term (homelab#2808): label-free carriers and gateway rides close with agent/review left behind; the strong link ties a candidate to agent work. Bookkeeping on dead state: the issue is already CLOSED, so a wrong flip costs a mislabeled closed issue, not a duplicate ride. The merged-closeout clause (C6) is the primary path; this belt catches cases where C6 was skipped."
     status: guarded
     replay:
       - agents/replay/fixtures/done-phantom-belt
     guards:
-      - desc: "persistence guard — never actuate on the same instant of state the scan first saw"
+      - desc: "strong-link requirement — a bare mention is a sibling-seam citation, not a closeout (the circles#36 asymmetry); holding beats guessing"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "NOT strongly linked" }
+      - desc: "persistence guard — never actuate on the same instant of state the scan first saw; the ONE exception is closure-by-merge (a merge proves no worker is racing)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }
+      - desc: "closure-by-merge fast path — an issue CLOSED within ~60s of the strong-link PR's mergedAt fires WITHOUT waiting out C4C5_PERSIST_S"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "CLOSURE-BY-MERGE" }
+      - desc: "no agent-fix term — the lifecycle label selects, the strong link admits (label-free carriers and gateway rides, homelab#2808)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "NO .agent-fix. TERM" }
       - desc: "merged-PR requirement — without a merged PR mentioning the issue, the close may be unrelated to agent work; holding beats guessing"
         anchor: { file: agents/coordinator-scan.sh, pattern: "NOT mentioned by any merged PR" }
       - desc: "add agent/done FIRST, remove the stale label SECOND, then re-read and prove the end state (the edit is not atomic — IL-T16's lesson)"
@@ -508,10 +514,13 @@ transitions:
     replay:
       - agents/replay/fixtures/merged-closeout-default-branch
       - agents/replay/fixtures/merged-closeout-ilg06-detect
+      - agents/replay/fixtures/merged-closeout-label-free   # homelab#2808: the closed-issue selector keys on the lifecycle label, never agent-fix
     unreplayed: "LLM play — the play layer is outside the harness by design. The IL-G06 detection semantics (strong-link vs bare-mention, dref exclusion, the claim-after-merge hold) are replayed by merged-closeout-ilg06-detect since homelab#1199/#1472."
     guards:
       - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
+      - desc: "the closed-issue read keys on the pre-merge LIFECYCLE label (agent/in-progress, agent/review), never agent-fix — label-free carriers and gateway rides close with agent/review left behind (homelab#2808; replay: merged-closeout-label-free)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "for c6lbl in agent/in-progress agent/review" }
       - desc: "IL-G06 fires ONCE per merge, never once per tick (homelab#1472): an OPEN default-branch issue whose newest `agent/in-progress` labeled event post-dates the newest strong-link merge has already been re-queued and re-claimed — the closeout for that merge is spent, the current round is the ride's / C4-C5's (IL-T29), and the arm reports instead of emitting. Derived from GitHub state each tick, no marker written; an unreadable events probe or merge time HOLDS (rule #6). oracle-fleet#397: 8 closeout sessions in 40 min against a live r6 pod"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'already CLAIMED since the merge' }
       - desc: "goal children verify against the GOAL branch, not master/ArgoCD"
