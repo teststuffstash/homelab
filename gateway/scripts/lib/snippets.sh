@@ -11,9 +11,14 @@
 # v0.6.4 = `evidence-pack --mask-descriptions`, the specs reviewer's staged read (rows-brief check 10).
 # v0.6.7 = the finding contract keeps a surviving blocking finding in the verdict until it carries a
 # permitted disposition (an existing open issue + the page marker) — snippets#43.
+# v0.6.8 = pass1-prior.tsv (the prior rounds' pass-2 rulings reach the masked pass as keys, snippets#46)
+# + touched-rules scopes the glossary source by changed term, CommonMark fences (#48); v0.6.9 = the
+# hygiene-repeat belt escalates only cases the PR added or changed, `**Cases:**` + [added|changed|
+# unchanged|no baseline] marks in the digest — the exemption applies only where the consuming repo
+# declares a hygiene ratchet (#49/#50); the gateway suite declares none yet, so its belt is unchanged.
 # Bump TOGETHER with SNIPPETS_VERSION in
 # agents/specs-reviewer-session.sh (the reviewer's context pack) — one process, two consumers.
-SNIPPETS_WHEEL=https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v0.6.7/allure_behavior_snippets-0.6.7-py3-none-any.whl
+SNIPPETS_WHEEL=https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v0.6.9/allure_behavior_snippets-0.6.9-py3-none-any.whl
 
 # allure_evidence <args…> — run the pinned tool's `allure-evidence` console script.
 allure_evidence() {
