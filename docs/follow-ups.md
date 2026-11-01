@@ -814,8 +814,10 @@ the block needs pruning, not more headings.
       rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270). Live: the PLATFORM session pod rides
       `AGENT_GATEWAY=sessions` (#2788); codex rail lit 10-22, subscriptions on every role (ruled 10-23, #2845), codex MCP
       (#2844), harness-scoped strikes (#2880); the harness-follows-the-cell ruling is #2870 (queued). **Next (seat):** a canary
-      window per 6 h refresh, re-cut when the lists move (last #2903, 10-24); read the first platform worker ride through
-      `/sessions` and the first non-prober codex ride; the jail's codex refresh reading ~10-26. **Operator-only:** FU-313;
+      window per 6 h refresh, re-cut when the lists move (last #2903, 10-24; 11-01 check: lists = derivation, terra in the
+      snapshot but in no codex tier); the weekly AA capability pull misses release-day models (terra scored 10-26, a day after
+      the pull) — the cadence is `benchmarks-snapshot.sh`'s knob; codex candidates are hand-passed → #3145 (catalog leg); read
+      the first platform worker ride through `/sessions` and the first non-prober codex ride; the jail's codex refresh reading ~10-26. **Operator-only:** FU-313;
       ruling #2768; #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
       codex child (#2904/#2905 live) waits on oracle-fleet#933 → arm oracle-iac#1141 (TICK-LOG 10-24).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
