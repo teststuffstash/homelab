@@ -602,7 +602,8 @@ the block needs pruning, not more headings.
       carrier is the EXISTING size label. **Next:** (a) `agent-budget/*` RE-GRADE by arbitrate/breaker plays
       (label_map md/lg rows); (b) a brief section naming the label vocabulary per play; (c) strikes gain the
       served-provider column, serving-shaped strikes exclude the (model, provider) pair on re-pick — BUILT but
-      dead in production 3× (#1268; 09-13 `no-output`; 09-23 `repetition-loop`) → homelab#1640 acceptances 1+3.
+      dead in production 3× (#1268; 09-13 `no-output`; 09-23 `repetition-loop`) → now the gateway's per-cell strikes
+      (GW-SESSIONS-OUTCOME; Goal #1640 closed superseded 2026-11-01).
       Rejected options + history: [`chainless-redesign.md`](agents/chainless-redesign.md) §cost rethink; identity:
       [`model-identity-free-vs-paid.md`](spikes/model-identity-free-vs-paid.md). Relates FU-174, FU-186, ADR-094/096/115.
 
@@ -668,8 +669,8 @@ the block needs pruning, not more headings.
 - [ ] **FU-200** — **The brief's fleet-strike rule: reader BUILT, re-key open.** "Same `error_class=` on ≥2 issues
       in 24 h ⇒ one `AGENT_ERROR` + one platform issue" (retro r4 F2) was prose; 09-01's four `unknown` strikes went
       uncorrelated. Reader BUILT (#1235; IL-T30 in [`issue-lifecycle-fsm.md`](agents/issue-lifecycle-fsm.md));
-      09-13 it latched five ISSUES for one PROVIDER fault. **Next:** re-key provider/model/neither = homelab#1640
-      acceptance 5 (open). Relates FU-199, agent-runtime#85, model-routing §M1a.
+      09-13 it latched five ISSUES for one PROVIDER fault. **Next:** re-key provider/model/neither against the gateway's
+      strike store (GW-SESSIONS-OUTCOME; Goal #1640 closed superseded 2026-11-01). Relates FU-199, agent-runtime#85, model-routing §M1a.
 
 - [ ] **FU-320** — **Island intake: the gateway admits its own ordinary work (P6 first leg).** Brief
       [`gateway/intake.md`](../gateway/intake.md), selector `gateway/scripts/intake-select.sh`, design + evidence
@@ -772,8 +773,8 @@ the block needs pruning, not more headings.
       classes; the scout rides its class's provider policy; `@` arms = the experiment
       instrument, shipped PR#963). **Step 1 FLIPPED 2026-09-13 (PR#1639; operator: the five
       open-inference tool-loops ARE the trial) — the suffix rides paid OpenRouter picks only.
-      Step 1 CONFIRMED STANDING 2026-10-14** (homelab#1669 strike read, thin traffic). **Next:** the 0731 matrix run (step 2,
-      #1238 — open; parent Goal #1231 closed 2026-09-14, so unparented). Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
+      Step 1 CONFIRMED STANDING 2026-10-14** (homelab#1669 strike read, thin traffic). **Next:** none on the old router — #1238 closed superseded
+      2026-11-01; per-job provider pricing is the gateway's tier evidence (GW-MODEL-TIERS). Archive candidate. Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
       the #783 provider-attribution legs.
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design,
@@ -866,7 +867,7 @@ the block needs pruning, not more headings.
       ruling, legs: [`incidents/2026-08-26-reviewer-404-loop.md`](incidents/2026-08-26-reviewer-404-loop.md) §Residual
       work. Build = the dated role×harness×rail×model table in git; router filters on it, launcher derives from it.
       (b) router half SHIPPED (PR#1929); (d) failure half SHIPPED (`ArgoWorkflowsFailing`), verdict-throughput half
-      open. Reviewer pin LIVE; its deletion = #1769 acceptance 4 (Goal open). **Next:** schema design pass, then
+      open. Reviewer pin: on the gateway for the platform (#3116, policy rails + `harness: claude`), old-proxy path for other stacks; Goal #1769 closed superseded 2026-11-01. **Next:** schema design pass, then
       the issue tree.
 
 - [ ] **FU-164** — **doc-heat — POINTER.** Doctrine, v0 (`devbox run doc-heat`), settle runs 1–3, serving plan:
