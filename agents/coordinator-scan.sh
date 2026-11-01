@@ -5725,11 +5725,13 @@ EOF_GTHEMES_OPEN
     done
     # <<<REPLAY:arbitrate-ordinary-path-belt<<<
 
-    # fleet-fault un-latch (FU-069, homelab#1539; ISSUE side homelab#1714): when an item carries
-    # `agent/error` from a fleet fault and the cited cause issue is CLOSED with green CI, remove the
-    # label and post one line. Rule #6 holds all unreadable probes. Human-applied latches (no
-    # marker) and anomaly latches (STEP-0, verdict-count) are untouched — those are human-first
-    # cases that stay human-first.
+    # fleet-fault un-latch (FU-069, homelab#1539; ISSUE side homelab#1714; vacuous CI leg
+    # homelab#3048): when an item carries `agent/error` from a fleet fault, the cited cause issue is
+    # CLOSED, and the item's CI leg is satisfied, remove the label and post one line. The CI leg is
+    # satisfied either by GREEN CI at the item's PR head or by being VACUOUS — an item with no PR at
+    # all has nothing that could be red (see the CI leg below). Rule #6 holds all unreadable
+    # probes. Human-applied latches (no marker) and anomaly latches (STEP-0, verdict-count) are
+    # untouched — those are human-first cases that stay human-first.
     #
     # ITEM-KIND-AGNOSTIC (homelab#1714). The latch is per-item, so its route out is per-item: a PR
     # and an ISSUE carrying `agent/error` are both latched items, and both carry the SAME marker —
@@ -5740,8 +5742,11 @@ EOF_GTHEMES_OPEN
     #
     # The CI leg reads the item's PR head: the PR itself for a PR, and for an issue the OPEN PR that
     # references it (the sibling-match rule the ci-red clause already uses — branch `issue-<n>-`,
-    # else a body closing keyword, both boundary-anchored). An issue with no referencing PR has no
-    # CI to read: HOLD (rule #6), never fail INTO a write.
+    # else a body closing keyword, both boundary-anchored). An issue the open-PR list does NOT
+    # reference has no CI to be red, so its CI leg is VACUOUS and the latch clears once the cause is
+    # CLOSED (homelab#3048) — the un-latch comment says the leg was vacuous, never "CI is green".
+    # "No referencing PR" is only a fact when the open-PR list was READ: an UNREADABLE list yields no
+    # PR either, so it HOLDs (rule #6), as does an unreadable cause — never fail INTO a write.
     # The marker format: `<!-- fleet-fault cause=<owner/repo>#<n> prs=520,521,522,524 -->`
     # >>>REPLAY:fleet-fault-unlatch>>>
     ff_items="$(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"pr \(.number)"' 2>/dev/null || true)"
