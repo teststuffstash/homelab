@@ -186,6 +186,7 @@ is stale, so it cannot drift the way the prose register did.
 | `assembly-cr-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-emit` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-merge-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-themed-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `asvs` | suite | - | `-` | - |
@@ -218,6 +219,7 @@ is stale, so it cannot drift the way the prose register did.
 | `ci-cause-grammar` | table | - | `-` | - |
 | `ci-failure-run-select/ci-failure-run-select` | table | base | `agents/agent-session.sh` | MP-T12 |
 | `ci-red-arbitrate-belt` | table | base | `agents/coordinator-scan.sh` | MP-T13 |
+| `ci-red-fleet-hold` | table | fleet | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-human-ruling-hold` | table | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
@@ -360,6 +362,7 @@ is stale, so it cannot drift the way the prose register did.
 | `merge-conflict/source-issue-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `merged-closeout-default-branch` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
 | `merged-closeout-ilg06-detect` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
+| `merged-closeout-label-free` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `nix-registry-env` | actions | - | `agents/agent-session.sh` | - |
