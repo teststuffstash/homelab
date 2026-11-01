@@ -453,7 +453,7 @@ EOF
 #   riding, phantom, strike-held, parked-blocked, parked-infeasible,
 #   arbitrate-standing, queued-held, queued-held-by-ghost, queued-held-malformed-block, queued-ready,
 #   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate,
-#   footprint-held, cap-held, blockpark
+#   footprint-held, cap-held, blockpark, ci-red-held
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
 # Per-pass accumulator: newline-joined lines "repo|item|class|who|base" (ADR-125 lane label)
@@ -591,6 +591,61 @@ NOOP_ROUND_JQ="${STATS_TS_DEF}"'
   | ([ stats_ts[] | select($head == "" or . > $head) ] | max // "") as $newest_noop_ts
   | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
+# ── NO-OP AFTER A DIRECTIVE: RE-RUN, DON'T RE-RULE (Goal #1906 pin 3, homelab#1910) ─────────────
+# Read ONLY once NOOP_ROUND_JQ above said "the last completed round pushed nothing". Most no-op
+# rulings (14 of 20 in retro r5) were "the directive stands unchanged — re-dispatch": a session
+# spent to restate a directive already on the thread. So the FIRST no-op after an `ARBITRATE`
+# directive is re-run by the LAUNCHER at the same round (the prefetch bundle already hands the
+# directive to the ride, homelab#1205); only what the re-run cannot answer reaches arbitrate.
+#   directive = the newest top-level comment matching `^ARBITRATE\b` on the PR OR its issue — the
+#               launcher prefetch's own selector (the #1467 marker contract); the scan's escalation
+#               lines live inside the agent-summary comment and never match.
+#   rerun     ⇔ a directive exists ∧ exactly ONE completed round post-dates it (the no-op is the
+#               first after it) ∧ no `kind=noop-rerun` event post-dates it (one re-run per directive).
+#   otherwise → arbitrate, exactly as before: no directive (a ruling is genuinely needed), ≥2 rounds
+#               since it (the re-run's own stats marker is what makes the next no-op the second),
+#               or a re-run already spent that completed no round.
+# The round is the PR's completed-round count — the no-op round's own number under the brief's
+# dispatch numbering — so the re-run lands on the same pod-name key (agent-<project>-<task>-r<k>).
+# An unreadable issue read degrades to PR-side directives only (worst case: today's arbitrate).
+# >>>REPLAY:noop-rerun-predicate>>>
+NOOP_RERUN_JQ="${STATS_TS_DEF}"'
+  ([ (.comments[]?), ($ic[]?) | select((.body // "") | test("^ARBITRATE\\b")) | .createdAt ] | max // "") as $dir
+  | ([ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->"))
+       | (.body | [scan("kind=noop-rerun ts=([^ >]+)")][] | .[0]) ] | max // "") as $rr
+  | ([ stats_ts[] | select($dir != "" and . > $dir) ] | length) as $after
+  | if $dir == "" then "arbitrate|no ARBITRATE directive on the PR or its issue"
+    elif $after != 1 then "arbitrate|\($after) completed rounds since the directive at \($dir)"
+    elif $rr != "" and $rr > $dir then "arbitrate|the launcher re-run of the directive at \($dir) (\($rr)) completed no round"
+    else "rerun|\([ stats_ts[] ] | length)" end'
+noop_rerun_check() {   # <slug> <pr-probe-json> <issue-or-empty> → "rerun|<round>" | "arbitrate|<reason>"
+  local ic='[]' v
+  if [ -n "${3:-}" ]; then
+    ic="$(gh issue view "$3" --repo "$1" --json comments 2>/dev/null | jq -c '.comments' 2>/dev/null)" || ic=''
+    if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${ic:-null}"; then
+      echo "  WARN: noop-rerun: comments of ${1}#${3} unreadable — PR-side directives only (homelab#1910)" >&2
+      ic='[]'
+    fi
+  fi
+  v="$(printf '%s' "$2" | jq -r --argjson ic "$ic" "$NOOP_RERUN_JQ" 2>/dev/null)" || v=''
+  case "$v" in rerun\|[0-9]*|arbitrate\|*) printf '%s\n' "$v" ;; *) printf 'arbitrate|noop-rerun predicate unreadable\n' ;; esac
+}
+# The unit: `noop-rerun|<repo>|pr-<n>` + what the launcher call needs, nothing more (ADR-094 — the
+# scan supplies repo/PR/branch/round/class; model, rail, key and Base stay the launcher's). The
+# recipe is the brief's mapping: the issue's `task/<c>` label → `.agents/<c>.yaml`, none → fix.
+# Executed by the deterministic pass (the noop-rerun-exec block, before the unit walk), never by a coordinator session.
+noop_rerun_emit() {   # <repo> <slug> <pr> <issue-or-empty> <round> <branch>
+  local key="pr-$3" cls="fix"
+  if [ -n "${4:-}" ]; then
+    key="issue-$4"
+    cls="$(printf '%s' "${openall:-null}" | jq -r --argjson n "$4" '[.[]? | select(.number == $n) | .labels[]?.name | select(startswith("task/")) | ltrimstr("task/")] | first // "fix"' 2>/dev/null)" || cls="fix"
+    case "$cls" in ''|*[!a-z0-9-]*) cls="fix" ;; esac
+  fi
+  noop_units="${noop_units:-}noop-rerun|$1|pr-$3|$2|${key}|$5|$6|${cls}\n"
+  items="${items:-}[$1] PR #$3 — noop-rerun (first no-op after an ARBITRATE directive: the launcher re-runs round $5 on $6, no coordinator session — homelab#1910)\n"
+  item_class_push "$1" "pr-$3" "riding" "machine"
+}
+# <<<REPLAY:noop-rerun-predicate<<<
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
 # FU-199 / #1240 CAP SPLIT: codeowner-parked PRs (bot-approved ∧ REVIEW_REQUIRED) count
 # against their own larger bound so parked nits never freeze the dispatch lane.
@@ -666,7 +721,7 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
 #     third-party heartbeat re-posts must not re-arm (`iac-sentinel` re-posts on every open head
 #     every ~4 min, 30 posts in 2 h on PR #2047; the #2065 all-startedAt fold bought a ride per beat).
 # Statuses arrive as {context,state,startedAt} and check-runs as {name,conclusion,startedAt}; the
-# fold reads both shapes. Sibling #1939 (assembly-cr over-sensitivity) is left as is here.
+# fold reads both shapes. Sibling #1939 (assembly-cr over-sensitivity) rides STATE_FP_JQ_ARBITRATE.
 STATE_FP_JQ_UNARMED='[ (if ((.contentId // "") != "") then "content=" + .contentId else "head=" + (.headRefOid // "") end)
   , "review=" + (.reviewDecision // "NONE")
   , "checks=" + ([ .statusCheckRollup[]?
@@ -679,7 +734,7 @@ STATE_FP_JQ_UNARMED='[ (if ((.contentId // "") != "") then "content=" + .content
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
-# arbitrate clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
+# arbitrate (+ assembly-cr, homelab#1939) clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
 # conclusions (PR#1003's mover — checks completing one at a time inside a rollup are not
 # arbitration-relevant) and narrows head= to the newest NON-merge commit (PR#1030's mover —
 # the updater merging master rewrites head unconditionally, reusing the NOOP_ROUND_JQ idiom).
@@ -740,7 +795,8 @@ issue_state_fp_for_clause() {   # $1 clause, $2 comments json (bare array)
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
 # When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
-# conclusions and narrows head to the newest non-merge commit — homelab#1011); "unarmed-major"
+# conclusions and narrows head to the newest non-merge commit — homelab#1011; "assembly-cr" too,
+# homelab#1939); "unarmed-major"
 # uses STATE_FP_JQ_UNARMED (content id for head, non-passing checks only, startedAt for a
 # non-passing management-sentinel — homelab#2066, #2100); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
@@ -784,7 +840,11 @@ pr_state_fp_pair() {
         fp_raw="$(printf '%s' "$fp_probe" | jq -c --arg c "$fp_cid" '. + {contentId: $c}' 2>/dev/null)" && fp_probe="$fp_raw"
       fi
       ;;
-    arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
+    # assembly-cr (homelab#1939) shares arbitrate's fold: the condition is a stale
+    # CHANGES_REQUESTED, so only a verdict, a reviewDecision flip or a non-merge push may re-arm
+    # it. The assembly PR is BEHIND by construction (#1935), so every updater master-merge moved
+    # the generic head= and re-ran CI (per-check flips) — a ride per merge that ruled nothing.
+    arbitrate|assembly-cr) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
   fp_raw="$(printf '%s' "$fp_probe" | jq -r "$fp_jq" 2>/dev/null)" || fp_raw=''
@@ -1819,7 +1879,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""
+  items=""; orphans=""; units=""; punits=""; noop_units=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
@@ -4076,6 +4136,15 @@ EOF_GTHEMES_OPEN
         cr_noop="$(printf '%s' "$cr_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || cr_noop=""
       fi
       if [ -n "$cr_noop" ]; then
+        # homelab#1910: the first no-op after an ARBITRATE directive re-runs at the launcher; the
+        # second (or one with no directive to re-run) escalates below exactly as before.
+        cr_nr="$(noop_rerun_check "$slug" "$cr_probe" "$pr_issue")"
+        cr_head="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[] | select(.number == $n) | .headRefName // ""' 2>/dev/null)" || cr_head=""
+        if [ "${cr_nr%%|*}" = rerun ] && [ -n "$cr_head" ]; then
+          noop_rerun_emit "$repo" "$slug" "$u" "$pr_issue" "${cr_nr#rerun|}" "$cr_head"
+          continue
+        fi
+        orphans="${orphans}[$repo] changes-requested no-op on PR #${u} is not a re-run case — ${cr_nr#*|} (homelab#1910)\n"
         gh_label_add "$slug" "$u" agent/arbitrate \
           && mc_event "$slug" "$u" arbitrate "ARBITRATE (changes-requested no-op round, FU-147): the last completed fix round posted its run stats without pushing a commit, so the reviewer findings are untouched and another identical round cannot converge. The coordinator arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ⚠ changes-requested NO-OP round → agent/arbitrate: PR #${u} (a completed round pushed nothing)\n" \
@@ -5092,20 +5161,39 @@ EOF_GTHEMES_OPEN
           fi
           # <<<REPLAY:c4c5-bodies-probe<<<
       fi
-    # ── THE BELT (homelab#1106): RECONCILE the phantom `agent/done` label ──────────────────────
-    # A closed issue with a merged PR mentioning it, still labelled `agent/blocked` or
-    # `agent/review` past C4C5_PERSIST_S, gets `agent/done`. This is bookkeeping on dead state:
-    # the issue is already CLOSED, so a wrong flip costs a mislabeled closed issue, not a
-    # duplicate ride. The merged-closeout clause (C6) is the primary path; this belt catches
-    # cases where C6 was skipped (e.g. the issue was closed by keyword before C6 ran, or the
-    # merged PR's reference was non-closing and the issue was closed by hand).
+    # ── THE BELT (homelab#1106, homelab#1908): RECONCILE the phantom `agent/done` label ────────
+    # A CLOSED issue with a strong-link merged PR, still wearing a stale lifecycle label
+    # (`agent/blocked` | `agent/review` | `agent/in-progress`), gets `agent/done`. This is
+    # bookkeeping on dead state: the issue is already CLOSED, so a wrong flip costs a mislabeled
+    # closed issue, not a duplicate ride. The merged-closeout clause (C6) is the primary path;
+    # this belt catches cases where C6 was skipped (e.g. the issue was closed by keyword before
+    # C6 ran, or the merged PR's reference was non-closing and the issue was closed by hand).
+    #
+    # ⚠ DISPATCH EXCLUSION ≠ RECONCILIATION EXCLUSION (Goal #1906 acceptance 1, homelab#1908).
+    # The C4/C5 dispatch selector EXCLUDES `agent/blocked` — a human gate is never re-dispatched
+    # (IL-T06). That exclusion is correct for DISPATCH and must not leak into RECONCILIATION: a
+    # CLOSED issue wearing `agent/blocked` whose PR merged is finished work, and leaving it
+    # labelled holds every sibling through the ADR-097 footprint intersection. So this belt reads
+    # CLOSED issues by ISSUE STATE + a strong-link merged PR, whatever lifecycle label they wear.
+    # `agent/error` stays excluded (human-first breaker).
+    #
+    # ⚠ NO `agent-fix` TERM (homelab#2808). The lifecycle label is the selector, not the
+    # admission label: carrier issues are authored label-free and gateway rides are queued with
+    # `agent/queued` + `agent-budget/*` and no `agent-fix`, so an `agent-fix` requirement orphaned
+    # exactly the population whose merge left `agent/review` behind. The strong-link hold (c)
+    # is what ties a candidate to agent work.
     #
     # Two holds before it writes, both fail-SAFE — an unreadable probe HOLDS, it never clears
     # (rule #6: never fail INTO a write):
-    #   (c) PERSISTENCE. The issue must have been quiet (`updatedAt`) past C4C5_PERSIST_S
-    #       to avoid racing with the merged-closeout clause.
-    #   (d) A MERGED PR must mention the issue. Without a merged PR, the issue may have been
-    #       closed for reasons unrelated to agent work — holding beats guessing.
+    #   (c) A STRONG LINK. A merged PR must STRONGLY link the issue (`implements|closes|fixes|
+    #       resolves #N` — the C6 grammar). A bare mention is a sibling-seam citation, not a
+    #       closeout (the circles#36 asymmetry): holding beats guessing.
+    #   (d) PERSISTENCE — UNLESS closure-by-merge. The issue must have been quiet (`updatedAt`)
+    #       past C4C5_PERSIST_S, to avoid racing the merged-closeout clause. The ONE exception is
+    #       closure-by-merge: an issue CLOSED within ~60s of the strong-link PR's `mergedAt` is
+    #       finished work — a merge proves no worker is racing, so the persist timer (which exists
+    #       to avoid racing a live worker) does not apply. The persist timer still guards the
+    #       OPEN/abandonment cases (the other belts).
     # Anything the belt HOLDS keeps today's behaviour exactly — reported, and the merged-closeout
     # unit (C6) still carries it. Anything it CLEARS becomes an ordinary `agent/done` issue.
     # >>>REPLAY:done-phantom-belt>>>
@@ -5113,37 +5201,65 @@ EOF_GTHEMES_OPEN
     done_phantom_cands=""
     # Query CLOSED issues that still carry stale lifecycle labels. `gh issue list --state closed`
     # returns issues closed in the last ~30 days by default; the `--limit` bounds the window.
-    # agent/error is excluded (human-first, never auto-relabel).
-    done_closed="$(gh issue list --repo "$slug" --state closed --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,updatedAt \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/blocked")) or ($L|index("agent/review"))) and (($L|index("agent/error"))|not))]' 2>/dev/null || echo '[]')"
+    # agent/error is excluded (human-first, never auto-relabel). `closedAt` is REQUIRED: the
+    # closure-by-merge fast path compares it to the strong-link PR's `mergedAt`.
+    done_closed="$(gh issue list --repo "$slug" --state closed --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,updatedAt,closedAt \
+      --jq '[.[]|(.labels|map(.name)) as $L|select((($L|index("agent/blocked")) or ($L|index("agent/review")) or ($L|index("agent/in-progress"))) and (($L|index("agent/error"))|not))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"${done_closed:-null}" || done_closed='[]'
     [ -n "$dispatchable" ] && done_phantom_cands="$(printf '%s' "$done_closed" \
       | jq -r --arg done "${done_phantom_cleared:-}" \
         '[.[] | (.labels|map(.name)) as $L
-               | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked")) or ($L|index("agent/review"))))
+               | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked")) or ($L|index("agent/review")) or ($L|index("agent/in-progress"))))
                | (.number|tostring) as $n
                | select((($done | split(" ") | map(select(. != ""))) | index($n)) | not)
-               | "\($n)|\(.updatedAt // "")"] | .[]')"
+               | "\($n)|\(.updatedAt // "")|\(.closedAt // "")"] | .[]')"
     if [ -n "$done_phantom_cands" ]; then
       now_s="$(date -u +%s)"
-      done_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || done_merged=""
+      # `mergedAt` is REQUIRED: the closure-by-merge fast path compares it to the issue's
+      # `closedAt`. A selector field added without adding it to --json is the silent-null failure
+      # mode (see the mergeStateStatus note above) — the fast path would never fire.
+      done_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body,mergedAt 2>/dev/null)" || done_merged=""
       if ! jq -e . >/dev/null 2>&1 <<<"${done_merged:-null}"; then
         orphans="${orphans}[$repo] ⚠ PROBE_FAILED (merged PRs) — the agent/done phantom-label belt held every candidate this tick (rule #6)\n"
       else
         for cand in $done_phantom_cands; do
-          dcn="${cand%%|*}"; dcupd="${cand#*|}"
+          dcn="${cand%%|*}"; dcrest="${cand#*|}"; dcupd="${dcrest%%|*}"; dcclosed="${dcrest#*|}"
+          # STRONG LINK REQUIRED (the C6 grammar), never a bare mention: a `#<n>` alone cannot
+          # tell "the PR that IMPLEMENTS the issue" from "a PR that NAMES it as a sibling seam"
+          # (the circles#36 asymmetry). Same predicate the merged-closeout clause uses.
+          dlink_n="$(jq -r --argjson nn "$dcn" \
+            '[.[] | select((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($nn)\\b"; "i"))] | length' <<<"$done_merged" 2>/dev/null || echo 0)"
+          if [ "${dlink_n:-0}" -eq 0 ]; then
+            # No strong link. Distinguish "mentioned but not linked" (the circles#36 asymmetry)
+            # from "not mentioned at all" — both HOLD, but the report says which.
+            if [ "$(jq -r --argjson nn "$dcn" '[.[] | select((.body // "") | test("#\($nn)\\b"))] | length' <<<"$done_merged" 2>/dev/null || echo 0)" -gt 0 ]; then
+              orphans="${orphans}[$repo] ⏳ agent/done phantom-label belt HELD — issue #${dcn} is MENTIONED by a merged PR but NOT strongly linked (implements/closes/fixes/resolves): a sibling-seam citation, not a closeout. Holding beats guessing (the circles#36 asymmetry).\n"
+            else
+              orphans="${orphans}[$repo] ⏳ agent/done phantom-label belt HELD — issue #${dcn} is NOT mentioned by any merged PR: the close may be unrelated to agent work. Holding beats guessing.\n"
+            fi
+            continue
+          fi
           # jq parses the timestamps — same reader the pod janitor uses. An UNPARSEABLE
           # stamp yields -1, which is < the window, so it holds.
           dcage="$(jq -rn --arg t "$dcupd" --argjson now "$now_s" \
             '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
           case "$dcage" in ''|*[!0-9-]*) dcage=-1;; esac
-          if [ "$dcage" -lt "$C4C5_PERSIST_S" ]; then
+          # CLOSURE-BY-MERGE (Goal #1906 acceptance 1): the newest strong-link PR's `mergedAt`
+          # vs the issue's `closedAt`. Within ~60s ⇒ finished work; a merge proves no worker is
+          # racing, so the persist guard does not apply. Unparseable stamps ⇒ -1 ⇒ persist path.
+          dlink_at="$(jq -r --argjson nn "$dcn" \
+            '[.[] | select((.body // "") | test("(^|[^a-z])(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($nn)\\b"; "i")) | .mergedAt // empty] | sort | last // ""' <<<"$done_merged" 2>/dev/null || echo "")"
+          dmerge_age="$(jq -rn --arg c "$dcclosed" --arg m "$dlink_at" \
+            '($c | fromdateiso8601? // null) as $cs | ($m | fromdateiso8601? // null) as $ms
+             | if $cs == null or $ms == null then -1 else (($cs - $ms) | if . < 0 then -. else . end) end' 2>/dev/null || echo -1)"
+          case "$dmerge_age" in ''|*[!0-9-]*) dmerge_age=-1;; esac
+          dpath=""
+          if [ "$dmerge_age" -ge 0 ] && [ "$dmerge_age" -le 60 ]; then
+            dpath="merge"
+          elif [ "$dcage" -ge "$C4C5_PERSIST_S" ]; then
+            dpath="persist"
+          else
             orphans="${orphans}[$repo] ⏳ agent/done phantom-label belt HELD — issue #${dcn} was touched $(( dcage < 0 ? 0 : dcage / 60 ))m ago (< the ${C4C5_PERSIST_S}s transition-race guard, or an unreadable timestamp); re-checked next scan\n"
-            continue
-          fi
-          # A merged PR must mention the issue — otherwise the close may be unrelated to agent work.
-          if [ "$(jq -r --argjson nn "$dcn" '[.[] | select(test("#\($nn)\\b"))] | length' <<<"$done_merged" 2>/dev/null || echo 0)" -eq 0 ]; then
-            orphans="${orphans}[$repo] ⏳ agent/done phantom-label belt HELD — issue #${dcn} is NOT mentioned by any merged PR: the close may be unrelated to agent work. Holding beats guessing.\n"
             continue
           fi
           # ⚠ ORDER IS LOAD-BEARING, and `gh issue edit --add-label X --remove-label Y` is
@@ -5153,32 +5269,49 @@ EOF_GTHEMES_OPEN
           # ⚠ `set -euo pipefail` is on: a bare `A && B` whose result is non-zero is NOT in a
           # condition context and would ABORT THE WHOLE SCAN mid-write. The `if` and the
           # `|| true` are what keep a refused write a REPORTED write.
-          # The jq filter already selected for agent/blocked or agent/review, so we know
-          # one of them is present. Try removing both; the one that doesn't exist fails
-          # harmlessly under `|| true`.
+          # The jq filter already selected for agent/blocked, agent/review or agent/in-progress,
+          # so we know one of them is present. Try removing all three; the ones that don't exist
+          # fail harmlessly under `|| true`.
           dok=""
           if gh_label_add "$slug" "$dcn" agent/done; then
             gh_label_rm "$slug" "$dcn" agent/blocked || true
             gh_label_rm "$slug" "$dcn" agent/review || true
+            gh_label_rm "$slug" "$dcn" agent/in-progress || true
           fi
           dend="$(gh issue view "$dcn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
           case ",${dend}," in
-            *",agent/done,"*) case ",${dend}," in *",agent/blocked,"*|*",agent/review,"*) : ;; *) dok=1;; esac;;
+            *",agent/done,"*) case ",${dend}," in *",agent/blocked,"*|*",agent/review,"*|*",agent/in-progress,"*) : ;; *) dok=1;; esac;;
           esac
           if [ -n "$dok" ]; then
-            gh issue comment "$dcn" --repo "$slug" --body "$(printf '%s\n' \
-              "🤖 **Stale label reconciled → \`agent/done\`** (deterministic scan belt, homelab#1106)." \
-              "" \
-              "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
-              "" \
-              "- **Issue is CLOSED** and a merged PR mentions \`#${dcn}\`." \
-              "- **The stale label persisted.** The issue had been untouched for $(( dcage / 60 ))m — past the $(( C4C5_PERSIST_S / 60 ))m guard." \
-              "" \
-              "The merged-closeout clause (C6) is the primary path for this transition; this belt catches cases where C6 was skipped. The issue is already closed, so this is bookkeeping on dead state — the label now reflects the merged terminal." \
-              "" \
-              "If the issue is genuinely not done (e.g. the merged PR was a partial fix), reopen it and re-apply the appropriate lifecycle label. Re-applying a stale label by hand on a closed issue will simply be cleared again after the guard window." )" >/dev/null 2>&1 || true
-            done_phantom_cleared="${done_phantom_cleared}${dcn} "
-            orphans="${orphans}[$repo] ⚠ stale label RECONCILED → \`agent/done\`: issue #${dcn} (closed, merged PR mentions it, state persisted $(( dcage / 60 ))m — audit commented; homelab#1106).\n"
+            if [ "$dpath" = merge ]; then
+              gh issue comment "$dcn" --repo "$slug" --body "$(printf '%s\n' \
+                "🤖 **Stale label reconciled → \`agent/done\`** (deterministic scan belt, homelab#1106)." \
+                "" \
+                "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+                "" \
+                "- **Issue is CLOSED** and a merged PR strongly links \`#${dcn}\` (\`implements\`/\`closes\`/\`fixes\`/\`resolves\`)." \
+                "- **Closure-by-merge.** The issue was closed within ${dmerge_age}s of the merge — a merge proves no worker is racing, so the ${C4C5_PERSIST_S}s persist guard does not apply." \
+                "" \
+                "The merged-closeout clause (C6) is the primary path for this transition; this belt catches cases where C6 was skipped. The issue is already closed, so this is bookkeeping on dead state — the label now reflects the merged terminal." \
+                "" \
+                "If the issue is genuinely not done (e.g. the merged PR was a partial fix), reopen it and re-apply the appropriate lifecycle label. Re-applying a stale label by hand on a closed issue will simply be cleared again after the guard window." )" >/dev/null 2>&1 || true
+              done_phantom_cleared="${done_phantom_cleared}${dcn} "
+              orphans="${orphans}[$repo] ⚠ stale label RECONCILED → \`agent/done\`: issue #${dcn} (closed, merged PR strongly links it, closure-by-merge ${dmerge_age}s — audit commented; homelab#1908).\n"
+            else
+              gh issue comment "$dcn" --repo "$slug" --body "$(printf '%s\n' \
+                "🤖 **Stale label reconciled → \`agent/done\`** (deterministic scan belt, homelab#1106)." \
+                "" \
+                "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+                "" \
+                "- **Issue is CLOSED** and a merged PR mentions \`#${dcn}\`." \
+                "- **The stale label persisted.** The issue had been untouched for $(( dcage / 60 ))m — past the $(( C4C5_PERSIST_S / 60 ))m guard." \
+                "" \
+                "The merged-closeout clause (C6) is the primary path for this transition; this belt catches cases where C6 was skipped. The issue is already closed, so this is bookkeeping on dead state — the label now reflects the merged terminal." \
+                "" \
+                "If the issue is genuinely not done (e.g. the merged PR was a partial fix), reopen it and re-apply the appropriate lifecycle label. Re-applying a stale label by hand on a closed issue will simply be cleared again after the guard window." )" >/dev/null 2>&1 || true
+              done_phantom_cleared="${done_phantom_cleared}${dcn} "
+              orphans="${orphans}[$repo] ⚠ stale label RECONCILED → \`agent/done\`: issue #${dcn} (closed, merged PR mentions it, state persisted $(( dcage / 60 ))m — audit commented; homelab#1106).\n"
+            fi
           else
             orphans="${orphans}[$repo] ⛔ agent/done phantom-label reconcile FAILED or landed HALF-APPLIED on issue #${dcn} — labels are now [${dend}]. Check by hand.\n"
           fi
@@ -5904,6 +6037,123 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
           continue
         fi
         # <<<REPLAY:ci-red-goal-head-exclusion<<<
+        # >>>REPLAY:ci-red-fleet-hold>>>
+        # FLEET-CLASS HOLD (Goal #1906 acceptance 2, homelab#1909): a red the PR did not cause is
+        # ONE fleet fact, read BEFORE the attempt counter. Retro r5 opus F2 measured the cost of
+        # treating every armed red PR as its own fault: one master-origin red (#1565,
+        # `ci/OpenTofu formatting`) drew the identical `ARBITRATE (ci-red, FU-115) … cap 3`
+        # escalation on PR#1545/#1541/#1540 within 19 s, then a corrective ride each ("the red is
+        # not this PR's"), and the whole sequence repeated two days later — 11 arbitrate rides on
+        # 3 PRs from 2 reds, ~50 h × 3 PRs of held wall. The brief's "one fleet fault, not N
+        # parks" play was PROSE a session executed only if it happened to see both PRs; this makes
+        # it a deterministic HOLD.
+        #
+        # The identifier is the check-run's job + step name (`<job>/<step>` — the §ci-cause grammar
+        # and the fleet-fault rule's stable identifier), NEVER a log excerpt: shas, timestamps and
+        # paths make two instances of one fault look like two faults, and a false match freezes a
+        # PR human-first whose red really is its own code.
+        #
+        # Two arms, each independently fail-open (rule #6: a hold is a WRITE on the loop's
+        # throughput, so an unreadable probe HOLDS NOTHING and falls through to today's behaviour):
+        #   master-red  — master's newest `ci` run fails the SAME <job>/<step> as this PR's red.
+        #   fleet-class — a line-anchored `ci-cause: <job>/<step> class=infra|environment …` marker
+        #                 naming the SAME <job>/<step> was posted on ANOTHER open PR of this repo
+        #                 inside 24 h. Only `class=` is read; `basis=` is DATA and stays unread
+        #                 (#1280 — no basis-keyed branching anywhere).
+        # On a hit: NO unit, NO `state-fp:` marker, NO attempt counted — one report line naming the
+        # fault and the arm, plus a `who=machine` board row. Release is LEVEL-TRIGGERED: the next
+        # pass re-evaluates (master green / the 24 h window lapses → the ordinary ci-red flow
+        # resumes), so nothing has to be un-done.
+        #
+        # This REMOVES the per-PR re-diagnosis of a shared red (11 arbitrate rides → 0 for the r5
+        # instance) and the N-way `agent/blocked` park that the stale-label belt then inherits.
+        #
+        # The `<job>/<step>` reader: the first failed job's first failed step. BOTH halves are
+        # required — a job name alone is not the fleet-fault rule's stable identifier, and a
+        # job-only match would hold a PR whose red is a different step of the same job.
+        # The identifier is VERBATIM, spaces included — the §ci-cause grammar writes it that way
+        # (agents/coordinator/README.md §ci-cause; agents/ledger.py's CI_CAUSE_RE captures up to
+        # ` class=`, homelab#1775): a real step name carries spaces (`OpenTofu formatting
+        # (fmt -check, all roots)`), and a marker copies it straight from `gh run view --json jobs`.
+        # Both sides of every comparison collapse whitespace runs to ONE space (this reader and the
+        # marker capture below) — a marker differing from the run only in spacing names the same
+        # fault; any real name, which has no runs, reads back verbatim.
+        CI_FAILED_JOB_STEP_JQ='[ .jobs[]? | select((.conclusion // "") == "failure")
+          | . as $j
+          | ([ $j.steps[]? | select((.conclusion // "") == "failure") | .name ][0] // "") as $s
+          | select($s != "") | "\($j.name)/\($s)" | gsub("\\s+"; " ") ][0] // ""'
+        # The PR's own red identifier: the newest FAILED `ci` run on the PR head, its first failed
+        # job's first failed step. `--status failure` (not `--limit 1` alone) is the homelab#1440
+        # lesson — the newest run on a branch can be a skipped/success workflow while an older one
+        # is the red. No failed step → no identifier → no hold (fail-open).
+        ci_red_js=""
+        if ci_red_run="$(gh run list --repo "$slug" --branch "$u_head" --workflow ci --status failure --limit 1 --json databaseId 2>/dev/null)"; then
+          ci_red_run_id="$(printf '%s' "$ci_red_run" | jq -r '.[0].databaseId // ""' 2>/dev/null)" || ci_red_run_id=""
+          if [ -n "$ci_red_run_id" ] \
+             && ci_red_jobs="$(gh run view "$ci_red_run_id" --repo "$slug" --json jobs 2>/dev/null)"; then
+            ci_red_js="$(printf '%s' "$ci_red_jobs" | jq -r "$CI_FAILED_JOB_STEP_JQ" 2>/dev/null)" || ci_red_js=""
+          fi
+        fi
+        ci_hold_arm=""
+        if [ -n "$ci_red_js" ]; then
+          # master-red arm — ONE probe per repo per scan: the fault is repo-level, not per-PR.
+          # Keyed on `$slug`, not a bare flag: this clause sits inside the per-repo loop, so a
+          # flag would hand repo B the probe repo A took.
+          if [ "${ci_master_probed_for:-}" != "$slug" ]; then
+            ci_master_probed_for="$slug"; ci_master_js=""
+            if ci_master_run="$(gh run list --repo "$slug" --branch "${default_branch:-master}" --workflow ci --limit 1 --json databaseId,conclusion 2>/dev/null)"; then
+              if [ "$(printf '%s' "$ci_master_run" | jq -r '.[0].conclusion // ""' 2>/dev/null)" = "failure" ]; then
+                ci_master_run_id="$(printf '%s' "$ci_master_run" | jq -r '.[0].databaseId // ""' 2>/dev/null)" || ci_master_run_id=""
+                if [ -n "$ci_master_run_id" ] \
+                   && ci_master_jobs="$(gh run view "$ci_master_run_id" --repo "$slug" --json jobs 2>/dev/null)"; then
+                  ci_master_js="$(printf '%s' "$ci_master_jobs" | jq -r "$CI_FAILED_JOB_STEP_JQ" 2>/dev/null)" || ci_master_js=""
+                fi
+              fi
+            fi
+          fi
+          if [ -n "${ci_master_js:-}" ] && [ "$ci_master_js" = "$ci_red_js" ]; then
+            ci_hold_arm="master-red"
+          else
+            # fleet-class arm — a sibling open PR's ci-cause marker naming the same <job>/<step>.
+            # ONE read per repo per scan (the sibling set is repo-level); the match is per-PR
+            # because the identifier is.
+            if [ "${ci_fleet_probed_for:-}" != "$slug" ]; then
+              ci_fleet_probed_for="$slug"
+              ci_fleet_probe="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,comments 2>/dev/null)" || ci_fleet_probe=""
+            fi
+            if [ -n "${ci_fleet_probe:-}" ]; then
+              ci_hold_cutoff="${CI_HOLD_CUTOFF:-$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)}"
+              # `select(test(...))` BEFORE `capture`: a `ci-cause:` line that does not carry the
+              # full grammar (the arbitrate lane's `ci-cause: policy-ambiguity` shape is live in
+              # the tree) must be IGNORED, never allowed to abort the expression — one malformed
+              # sibling marker would otherwise silently disable the arm for every other sibling.
+              # The filter states that explicitly rather than resting on `capture`'s no-match
+              # behaviour, which is a jq-version detail (devbox pins jq `latest`).
+              # The shape is the ledger's reader (CI_CAUSE_RE, homelab#1775): `<job>/<step>` is
+              # captured non-greedy up to ` class=`, and a `basis=` field must follow — so a step
+              # name containing spaces parses, and one containing the text ` class=` cannot drag
+              # the capture to a later field.
+              ci_fleet_hit="$(printf '%s' "$ci_fleet_probe" | jq -r --arg js "$ci_red_js" --argjson self "$u" --arg cutoff "$ci_hold_cutoff" '
+                [ .[] | select(.number != $self)
+                  | (.comments // [])[]
+                  | select((.createdAt // "") > $cutoff)
+                  | [ (.body // "") | split("\n")[] | select(startswith("ci-cause:")) ][0] // empty
+                  | select(test("^ci-cause: .+? class=\\S+ basis=\\S+"))
+                  | capture("^ci-cause: (?<js>.+?) class=(?<cls>\\S+) basis=\\S+")
+                  | select(.cls == "infra" or .cls == "environment")
+                  | (.js | gsub("\\s+"; " ")) as $mjs
+                  | select($mjs == $js)
+                  | $mjs ][0] // ""' 2>/dev/null)" || ci_fleet_hit=""
+              [ -n "$ci_fleet_hit" ] && ci_hold_arm="fleet-class"
+            fi
+          fi
+        fi
+        if [ -n "$ci_hold_arm" ]; then
+          orphans="${orphans}[$repo] ⏳ ci-red HELD (${ci_hold_arm}) — PR #${u}: ${ci_red_js}\n"
+          item_class_push "$repo" "pr-${u}" "ci-red-held" "machine"
+          continue
+        fi
+        # <<<REPLAY:ci-red-fleet-hold<<<
         # attempts = durable count of completed fix rounds on THIS PR — the fast path under the
         # issue-keyed ceiling below, and still what the no-op detector needs. Restart-safe: it reads
         # GitHub, never launcher memory. Bounds the loop: a no-op round costs at most
@@ -6119,7 +6369,17 @@ EOF_BELT
         # <<<REPLAY:ci-red-arbitrate-belt<<<
         # >>>REPLAY:ci-red-arbitrate>>>
         if [ -n "$noop_round" ]; then
+          # homelab#1910: inside every gate the escalation itself passes (stale-sha, human-ruling
+          # hold, footprint belt), the first no-op after an ARBITRATE directive re-runs at the
+          # launcher instead; the second — or one with no directive — escalates as before.
+          ci_nr=""
           if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
+            ci_nr="$(noop_rerun_check "$slug" "$round_probe" "${red_issue:-${red_key:-}}")"
+          fi
+          if [ "${ci_nr%%|*}" = rerun ] && [ -n "$u_head" ]; then
+            noop_rerun_emit "$repo" "$slug" "$u" "${red_issue:-${red_key:-}}" "${ci_nr#rerun|}" "$u_head"
+          elif [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
+            orphans="${orphans}[$repo] ci-red no-op on PR #${u} is not a re-run case — ${ci_nr#*|} (homelab#1910)\n"
             gh_label_add "$slug" "$u" agent/arbitrate \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
@@ -6177,6 +6437,7 @@ EOF_BELT
             # The marker is stale; fall through to re-evaluate dispatch.
           fi
           # <<<REPLAY:ci-red-gate<<<
+          # >>>REPLAY:ci-red-dispatch>>>
           # DISPATCH a fix round (under the attempt cap — the ISSUE-keyed one, see above)
           if [ "$red_n" -lt 2 ]; then
             # FU-106 (c): a RED deploy/* bump PR in an -iac repo is the typed infra-delta — the
@@ -6191,6 +6452,7 @@ EOF_BELT
             item_class_push "$repo" "pr-${u}" "riding" "machine"
             red_n=$((red_n+1))
           fi
+          # <<<REPLAY:ci-red-dispatch<<<
         else
           # ARBITRATE: red rounds EXHAUSTED. Reuse the review path's MP-T11 machinery — label
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
@@ -6223,9 +6485,19 @@ EOF_BELT
     # session verifies, flips agent/done, harvests the bullets as INERT issues — breaker #1).
     # Level-triggered off closed-issue state; capped at 3/repo/scan (a housekeeping trickle — first
     # run meets history) with the overflow reported, 21-day window (older = archaeology).
-    closed_ip="$(gh issue list --repo "$slug" --state closed --label agent-fix --limit 30 \
-      --json number,title,labels,updatedAt 2>/dev/null)" || closed_ip='[]'
-    jq -e . >/dev/null 2>&1 <<<"${closed_ip:-null}" || closed_ip='[]'
+    # The server-side filter is the LIFECYCLE label, never `agent-fix` (homelab#2808): carrier
+    # issues are authored label-free and gateway rides are admitted with no `agent-fix`, so an
+    # `agent-fix` pre-filter silently excluded the very closes that left `agent/review` behind.
+    # `gh --label` ANDs, so the two pre-merge states are two reads, merged by issue number; a read
+    # that fails or is not JSON contributes nothing (today's fail-quiet shape — C6 only emits units).
+    # Newest-created first, as gh's own default order was — the 3/scan cap takes the newest.
+    closed_ip='[]'
+    for c6lbl in agent/in-progress agent/review; do
+      c6part="$(gh issue list --repo "$slug" --state closed --label "$c6lbl" --limit 30 \
+        --json number,title,labels,updatedAt 2>/dev/null)" || c6part='[]'
+      jq -e 'type == "array"' >/dev/null 2>&1 <<<"${c6part:-null}" || c6part='[]'
+      closed_ip="$(jq -c --argjson p "$c6part" '. + $p | unique_by(.number) | sort_by(.number) | reverse' <<<"$closed_ip")"
+    done
     c6_all="$(printf '%s' "$closed_ip" | jq -r --arg cutoff "$(date -u -d '-21 days' +%Y-%m-%dT%H:%M:%SZ)" \
       '[.[] | (.labels|map(.name)) as $L
              | select(($L|index("agent/error"))|not)
@@ -6357,6 +6629,47 @@ EOF_BELT
     echo "  coordinator.enabled=false for stack ${name} — NOT spawning (report-only; enable in the AgentStack claim)."
     continue
   fi
+  # >>>REPLAY:noop-rerun-exec>>>
+  # homelab#1910 (Goal #1906 pin 3): the DETERMINISTIC pass executes every `noop-rerun` unit itself
+  # — a launcher call, never a coordinator session, and outside the per-lane unit walk below (it is
+  # the re-run of a dispatch already ruled, not new work competing for a lane). The call is
+  # `agent-session.sh <project> --task --round --work-branch --recipe`, VERBATIM the brief's fix-round
+  # line; it rides a detached item-keyed pod (`coordinator-session.sh --launch`, which runs the
+  # launcher instead of claude) because the launcher follows its ride for up to 30 min and needs
+  # the loop pod's SA, gateway token and AGENT_GATEWAY knob — none of which this scan pod may hold
+  # for that long. Every gate stays the launcher's: the FU-088 latch / credit floor, AGENT_WIP_LIMIT
+  # (scan-computed, `--wip` as for every unit), the pre-flight (the open agent PR is this one — the
+  # fix-round exception; a running pod refuses), Base and arming. The pod name is the item key, so a
+  # live holder refuses a double emit (exit 3). A refusal is a report line, never a second unit.
+  # The `kind=noop-rerun` event is what spends the directive's one re-run (NOOP_RERUN_JQ).
+  if [ -n "${noop_units:-}" ]; then
+    while IFS='|' read -r _nr_u nr_repo nr_pr nr_slug nr_key nr_round nr_branch nr_class; do
+      [ "$_nr_u" = noop-rerun ] || continue
+      nr_n="${nr_pr#pr-}"
+      nr_launch="${nr_repo} --task ${nr_key} --round ${nr_round} --work-branch ${nr_branch} --recipe /work/${nr_repo}/.agents/${nr_class}.yaml"
+      if [ -z "$SPAWN" ]; then
+        echo "  [${nr_repo}] noop-rerun PR #${nr_n} (report-only, no --spawn): would launch agent-session.sh ${nr_launch}"
+        continue
+      fi
+      nr_wip="$(printf '%b' "$wipmap" | awk -v r="$nr_repo" '$1==r{print $2}' | sed -n 1p)"
+      echo "→ noop-rerun ${nr_repo} PR #${nr_n}: launcher-direct re-run (no coordinator session) — agent-session.sh ${nr_launch}"
+      scan_phase dispatch
+      nr_rc=0
+      bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
+        ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "${nr_wip:-1}" --detach \
+        --item "repo=${nr_repo} item=${nr_key} clause=noop-rerun" --launch "$nr_launch" || nr_rc=$?
+      scan_phase deterministic
+      if [ "$nr_rc" = 0 ]; then
+        mc_event "$nr_slug" "$nr_n" noop-rerun "**no-op re-run** (homelab#1910): round ${nr_round} completed without a push after an ARBITRATE directive, so the launcher re-runs it once at the same round on \`${nr_branch}\` with the directive in context — no coordinator session. A second consecutive no-op escalates to \`agent/arbitrate\`." >/dev/null 2>&1 \
+          || echo "  [${nr_repo}] ⚠ noop-rerun PR #${nr_n}: launched, but the kind=noop-rerun event write FAILED — the next no-op may re-run once more"
+      else
+        echo "  [${nr_repo}] ⏳ noop-rerun PR #${nr_n} REFUSED (launch rc ${nr_rc} — a live holder of ${nr_key}, or the launch pod failed); level-triggered, the next pass re-reads"
+      fi
+    done <<EOF_NOOP_RERUN
+$(printf '%b' "$noop_units")
+EOF_NOOP_RERUN
+  fi
+  # <<<REPLAY:noop-rerun-exec<<<
   if [ -n "$SPAWN" ]; then
     # ADR-094/FU-086 item dispatch: the scan SCHEDULES (one highest-priority unit — WIP=1; the
     # FU-088 gates are the belt), the session JUDGES one item. Priority finishes in-flight work

@@ -34,13 +34,14 @@ diagram: |
       InProgress --> InProgress: fleet-strike attributed to a cell — provider latched in the router or model nominated, no label (IL-T30)
       InProgress --> Queued: phantom label, persisted → scan reconciles it (IL-T16)
       Review --> Queued: phantom label, persisted → scan reconciles it (IL-T27)
+      Review --> Review: first no-op round after an ARBITRATE directive → the launcher re-runs it, no session (IL-T31)
       InProgress --> Blocked: worker ruled it NOT IMPLEMENTABLE → AGENT_INFEASIBLE parks it (IL-T26)
       Blocked --> Queued: a human re-scopes it and strips agent/blocked (IL-T26)
       InProgress --> ClosedByMerge: PR merges into MASTER — keyword fires (IL-T07)
       InProgress --> MergedIntoGoal: PR merges into goal/** — keyword INERT (IL-T08)
       MergedIntoGoal --> ClosedByMerge: FU-143 widened C6 closes it (IL-T08)
       ClosedByMerge --> Done: merged-closeout — verify, flip, harvest (IL-T09)
-      ClosedByMerge --> Done: stale label, persisted → scan reconciles it (IL-T28)
+      ClosedByMerge --> Done: stale label → scan reconciles it — closure-by-merge fast path, else persisted (IL-T28)
       Done --> [*]
       state GoalLane {
           [*] --> GoalQueued: human authors AND queues (breaker up, IL-T10)
@@ -379,13 +380,19 @@ transitions:
   - id: IL-T28
     name: phantom done reconciled — closed issue + merged PR + stale label → agent/done (the belt)
     owner: coordinator-scan, deterministically — no LLM tick in the path
-    when: "CLOSED ∧ agent-fix ∧ (agent/blocked ∨ agent/review) ∧ a MERGED PR mentions the issue ∧ the state PERSISTED past C4C5_PERSIST_S (issue quiet) → add agent/done, remove the stale label, comment the audit. Bookkeeping on dead state: the issue is already CLOSED, so a wrong flip costs a mislabeled closed issue, not a duplicate ride. The merged-closeout clause (C6) is the primary path; this belt catches cases where C6 was skipped."
+    when: "CLOSED ∧ (agent/blocked ∨ agent/review ∨ agent/in-progress) ∧ a MERGED PR STRONGLY LINKS the issue (`implements|closes|fixes|resolves #N` — the C6 grammar) ∧ (the issue was CLOSED within ~60s of the strong-link PR's `mergedAt` — closure-by-merge, the FAST PATH — OR the state PERSISTED past C4C5_PERSIST_S) → add agent/done, remove the stale label, comment the audit. The read is LABEL-INDEPENDENT: the C4/C5 dispatch selector excludes agent/blocked (a human gate is never re-dispatched, IL-T06), but dispatch exclusion ≠ reconciliation exclusion — a CLOSED issue wearing agent/blocked whose PR merged is finished work. No agent-fix term (homelab#2808): label-free carriers and gateway rides close with agent/review left behind; the strong link ties a candidate to agent work. Bookkeeping on dead state: the issue is already CLOSED, so a wrong flip costs a mislabeled closed issue, not a duplicate ride. The merged-closeout clause (C6) is the primary path; this belt catches cases where C6 was skipped."
     status: guarded
     replay:
       - agents/replay/fixtures/done-phantom-belt
     guards:
-      - desc: "persistence guard — never actuate on the same instant of state the scan first saw"
+      - desc: "strong-link requirement — a bare mention is a sibling-seam citation, not a closeout (the circles#36 asymmetry); holding beats guessing"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "NOT strongly linked" }
+      - desc: "persistence guard — never actuate on the same instant of state the scan first saw; the ONE exception is closure-by-merge (a merge proves no worker is racing)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }
+      - desc: "closure-by-merge fast path — an issue CLOSED within ~60s of the strong-link PR's mergedAt fires WITHOUT waiting out C4C5_PERSIST_S"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "CLOSURE-BY-MERGE" }
+      - desc: "no agent-fix term — the lifecycle label selects, the strong link admits (label-free carriers and gateway rides, homelab#2808)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "NO .agent-fix. TERM" }
       - desc: "merged-PR requirement — without a merged PR mentioning the issue, the close may be unrelated to agent work; holding beats guessing"
         anchor: { file: agents/coordinator-scan.sh, pattern: "NOT mentioned by any merged PR" }
       - desc: "add agent/done FIRST, remove the stale label SECOND, then re-read and prove the end state (the edit is not atomic — IL-T16's lesson)"
@@ -475,6 +482,44 @@ transitions:
     incidents:
       - "2026-09-01: FOUR goal-#326 r1 strikes with identical error_class=unknown were never correlated; the operator + seat did it by hand. Prose-warned classes recur; executable gates hold (ADR-103)."
 
+  - id: IL-T31
+    name: first no-op after an ARBITRATE directive → launcher-direct re-run at the same round (Goal #1906 pin 3)
+    owner: coordinator-scan, deterministically — no coordinator session in the path
+    when: "agent/review ∧ the PR's newest completed fix round pushed nothing (NOOP_ROUND_JQ, on the
+      ci-red AND the changes-requested path) ∧ every gate its escalation passes (holds, stale-sha,
+      human-ruling, footprint belt) ∧ an `^ARBITRATE` directive on the PR or its issue is newer than
+      the PREVIOUS round (exactly one completed round post-dates it) ∧ no `kind=noop-rerun` event
+      post-dates it ⇒ the scan emits `noop-rerun|<repo>|pr-<n>` and its deterministic pass runs the
+      brief's fix-round line `agent-session.sh <project> --task --round <same r> --work-branch
+      <head> --recipe <class>` in a detached item pod (`coordinator-session.sh --launch`), then
+      appends the `kind=noop-rerun` event. ADR-094 holds: repo/PR/branch/round/class only; model,
+      rail, key, Base and arming stay the launcher's, and so do its gates (FU-088, WIP, pre-flight).
+      Otherwise — no directive, ≥2 rounds since it (the re-run's own stats marker makes the next
+      no-op the second), or a re-run already spent — agent/arbitrate exactly as before (MP-T11)."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cired-first
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cired-second
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cired-undirected
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-first
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-second
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-stale-directive
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-rerun-spent
+      - agents/replay/fixtures/coordinator-launch-mode
+    guards:
+      - desc: "the directive is the launcher prefetch's own selector — a top-level comment matching `^ARBITRATE\\b` on the PR or its issue (the #1467 contract); the scan's escalation lines live in the agent-summary comment and never match"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "NOOP_RERUN_JQ=" }
+      - desc: "one re-run per directive — a `kind=noop-rerun` event newer than the directive, or a second completed round after it, falls to agent/arbitrate"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "kind=noop-rerun ts=" }
+      - desc: "both no-op legs route through the predicate before their label write (ci-red FU-115b inside the stale-sha/human-ruling/belt gates; changes-requested FU-147 after the holds)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "noop_rerun_check \"\\$slug\"" }
+      - desc: "the deterministic pass executes the unit — a launcher call riding a detached item pod, never a coordinator session; a refusal is a report line, never a second unit"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "launcher-direct re-run \\(no coordinator session\\)" }
+      - desc: "the launch pod runs agent-session.sh instead of claude and carries no FU-088 semaphore label"
+        anchor: { file: agents/coordinator-session.sh, pattern: "homelab.teststuff.net/launch" }
+    incidents:
+      - "retro r5 (PR#1819) opus F3: 20 arbitrate rulings on no-op rounds, 14 of them 'the directive stands unchanged — re-dispatch' (PR#1540 ×4, PR#1541 ×4, PR#1208 ×3); PR#1540 held 18.6 h on a ruling no pod ever ran."
+
   - id: IL-T07
     name: close by master merge
     owner: GitHub (closing keyword)
@@ -508,10 +553,13 @@ transitions:
     replay:
       - agents/replay/fixtures/merged-closeout-default-branch
       - agents/replay/fixtures/merged-closeout-ilg06-detect
+      - agents/replay/fixtures/merged-closeout-label-free   # homelab#2808: the closed-issue selector keys on the lifecycle label, never agent-fix
     unreplayed: "LLM play — the play layer is outside the harness by design. The IL-G06 detection semantics (strong-link vs bare-mention, dref exclusion, the claim-after-merge hold) are replayed by merged-closeout-ilg06-detect since homelab#1199/#1472."
     guards:
       - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
+      - desc: "the closed-issue read keys on the pre-merge LIFECYCLE label (agent/in-progress, agent/review), never agent-fix — label-free carriers and gateway rides close with agent/review left behind (homelab#2808; replay: merged-closeout-label-free)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "for c6lbl in agent/in-progress agent/review" }
       - desc: "IL-G06 fires ONCE per merge, never once per tick (homelab#1472): an OPEN default-branch issue whose newest `agent/in-progress` labeled event post-dates the newest strong-link merge has already been re-queued and re-claimed — the closeout for that merge is spent, the current round is the ride's / C4-C5's (IL-T29), and the arm reports instead of emitting. Derived from GitHub state each tick, no marker written; an unreadable events probe or merge time HOLDS (rule #6). oracle-fleet#397: 8 closeout sessions in 40 min against a live r6 pod"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'already CLAIMED since the merge' }
       - desc: "goal children verify against the GOAL branch, not master/ArgoCD"
@@ -564,7 +612,8 @@ transitions:
       undispositioned store findings, the child-set completing pre-launch (the 2026-08-05
       deadlock backstop, carried from the retired per-closure clause), or (ADR-122 (4)) >= 1
       UNDISPOSITIONED tree MEMBER — a bound child the container has never ruled, which WAKES the
-      checkpoint and never blocks it (it is excluded from the completion predicate, so trigger
+      checkpoint ONCE per undispositioned set (the `state-fp:goal-checkpoint-c` hold, homelab#2565 —
+      never every tick) and never blocks it (it is excluded from the completion predicate, so trigger
       (b) fires in the same tick), or (e) (ADR-126 v1.3.1, homelab#1423) an open `theme:` container
       whose descendants are ALL closed and whose `goal/<goal-n>-<slug>` branch has NO PR yet
       (`theme-complete=<theme-n>` on the unit — the assembly PR is DUE). Theme NOMINATION is NOT a

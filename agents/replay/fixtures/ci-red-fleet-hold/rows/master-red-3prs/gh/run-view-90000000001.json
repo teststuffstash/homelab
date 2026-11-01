@@ -1,0 +1,20 @@
+{
+  "jobs": [
+    {
+      "name": "ci",
+      "conclusion": "failure",
+      "steps": [
+        { "number": 1, "name": "checkout", "conclusion": "success" },
+        { "number": 2, "name": "OpenTofu formatting (fmt -check, all roots)", "conclusion": "failure" },
+        { "number": 3, "name": "manifest-lint", "conclusion": "skipped" }
+      ]
+    },
+    {
+      "name": "e2e",
+      "conclusion": "success",
+      "steps": [
+        { "number": 1, "name": "run", "conclusion": "success" }
+      ]
+    }
+  ]
+}
