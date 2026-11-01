@@ -25,14 +25,31 @@ if _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
     *" -f - "*|*" --filename - "*|*" -f- "*)
       sed 's/^/STDIN /' >> "$REPLAY_ACTIONS" ;;
   esac
-  # Per-call failure injection (homelab#1386): STUB_KUBECTL_<slug>=fail refuses ONE named write —
+  # Per-call failure injection (homelab#1386): STUB_KUBECTL_<slug>=<mode> refuses ONE named write —
   # a clause with a create-then-fallback branch (context-prefetch's ConfigMap) needs to observe a
-  # REFUSED write, and writes otherwise always succeed unconditionally.
+  # REFUSED write, and writes otherwise always succeed unconditionally. Modes (homelab#1941):
+  #   fail               refused, generic error
+  #   alreadyexists      refused every time with AlreadyExists (a stale bundle a retry cannot fix)
+  #   alreadyexists-once refused with AlreadyExists on the FIRST create of the run, then succeeds — the
+  #                      count reads the action stream, which _rp_record has just appended to
+  #   forbidden          refused with Forbidden (a cause the launcher must NOT delete-and-retry past)
   PC_OVERRIDE="$(_rp_per_call_override "$(_rp_slug "$WORDS")")" || PC_OVERRIDE=''
-  if [ "$PC_OVERRIDE" = fail ]; then
-    printf 'error: the server could not find the requested resource\n' >&2
-    exit 1
-  fi
+  case "$PC_OVERRIDE" in
+    fail)
+      printf 'error: the server could not find the requested resource\n' >&2
+      exit 1 ;;
+    alreadyexists)
+      printf 'Error from server (AlreadyExists): configmaps already exists\n' >&2
+      exit 1 ;;
+    alreadyexists-once)
+      if [ "$(grep -c ' create -f -$' "$REPLAY_ACTIONS")" -le 1 ]; then
+        printf 'Error from server (AlreadyExists): configmaps already exists\n' >&2
+        exit 1
+      fi ;;
+    forbidden)
+      printf 'Error from server (Forbidden): configmaps is forbidden: User cannot create resource "configmaps"\n' >&2
+      exit 1 ;;
+  esac
   _rp_serve "$WORDS" optional || true
   exit 0
 fi
