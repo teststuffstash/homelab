@@ -183,7 +183,11 @@ never harder posture on quiet ones.
   (claude/haiku — operator direction 2026-08-07, platform roles ride the subscription;
   latch-gated). `spec.prober.childRail: codex` (FU-270, operator ruling 2026-10-24) puts the brief's
   NESTED client on the agent-gateway's codex rail — the pod (agent-base image) admits one unbound
-  prober session as its loop SA and hands the child its env; the outer session stays claude; the
+  prober session as its loop SA and hands the child its env; the outer session stays claude.
+  `spec.prober.gateway: sessions` (FU-270, operator ruling 2026-11-01 — the platform claim only)
+  admits the OUTER session too, through the shared helper `agents/gateway-admit.sh` (one unbound
+  prober session, harness claude, the gateway's model); a refusal falls the tick back to the pod's
+  old-proxy env until the old proxy retires. The
   brief's artifacts (`PROBE_ARTIFACTS`) upload beside the report. no git/cluster writes by construction (operator ruling 2026-08-30). A feedback row filed through a stack's own MCP is a report into that stack's product sink — not a write to git or the cluster. Still
   missing: the post-deploy sync-succeeded edge, 🌱 issue filing, (endpoint, digest) keying —
   and every stack brief but the platform's (`homelab/.agents/probe.md`, #835 — belt-gap

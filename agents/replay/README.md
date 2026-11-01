@@ -399,6 +399,7 @@ is stale, so it cannot drift the way the prose register did.
 | `pr-cap-per-base/counts` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
 | `preflight-malformed-block` | actions | - | `agents/agent-session.sh` | - |
+| `probe-parent-admit` | table | - | `argocd/resources/agentstack/composition.yaml` | - |
 | `python-profile-env/other` | actions | - | `agents/agent-session.sh` | - |
 | `python-profile-env/python` | actions | - | `agents/agent-session.sh` | - |
 | `queued-body-tsv` | table | - | `agents/coordinator-scan.sh` | - |
