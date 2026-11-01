@@ -632,9 +632,13 @@ async def test_no_verdict_consumes_no_admission(gw, app, store, upstreams):
     world(upstream=THROTTLED, note=f"{WORLD}; max_per_refresh 3; the first canary 429s")
     await _refresh(app)
     with given("3 canaries admitted this refresh: (M, deepinfra) answered upstream-429-shared-pool (no outcome), then (M, atlas-cloud) and (M, morph) clean"):
-        await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
-        await _canary_ride(gw, app, upstreams, "atlas-cloud")
-        await _canary_ride(gw, app, upstreams, "morph")
+        with quiet():  # the three rides' summaries fold into one arranged table (ATTACH_BULK: ≤ 8 per case)
+            await _canary_ride(gw, app, upstreams, behaviour=THROTTLED, outcome=None)
+            await _canary_ride(gw, app, upstreams, "atlas-cloud")
+            await _canary_ride(gw, app, upstreams, "morph")
+        attach_json("arranged canary rides: (provider, upstream, outcome) → cell state",
+                    [(p, b, o, _states(store, M).get(p)) for p, b, o in
+                     (("deepinfra", THROTTLED, None), ("atlas-cloud", "upstream-ok", "clean"), ("morph", "upstream-ok", "clean"))])
     then_eq("before the 4th: (admitted_this_refresh, gateway_canary_budget_exhausted)",
             ((await _view(gw))["canary"]["admitted_this_refresh"], await _series(gw, "gateway_canary_budget_exhausted")), (2, 0))
     r = await _canary(gw, M, "inference-net", " (a 4th canary, another cell)")
