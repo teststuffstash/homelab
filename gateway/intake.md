@@ -96,8 +96,10 @@ Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islan
    "Worth it" is the island's contract gaining a row it relies on or losing a gap a consumer hits;
    it is not "the issue exists".
 
-Cap: **at most 3 `queue` outcomes (children included) per sitting.** The rest get their ruling
-(`standing`, `seat`, …) or are left for the next sitting with no write at all — say which.
+Cap: **at most 3 `queue` outcomes (children included) per sitting.** The cap limits `queue`, not
+ruling: rule EVERY input. Only an input whose ruling would be `queue` and arrives over the cap is
+left for the next sitting with no write at all (the selector re-offers it) — the report lists it as
+`deferred (cap)`.
 
 ## A queue-ready body — the spec is written into the issue (rule 2)
 
@@ -109,7 +111,7 @@ prose to avoid being wrong — a row the reviewer bounces costs one round, a vag
 ```markdown
 <machine block — written by issue_body.py set, never by hand:
  Touches=<the spec page, the test file, the src module — exact paths>
- Origin=<owner/repo>#<the input, or the survivor>
+ Origin=<kept verbatim when the input already has one; else owner/repo#<the input, or the survivor>>
  Class=fix|build  (mirrored by the task/* label)>
 
 ## Deliverable
@@ -119,7 +121,7 @@ prose to avoid being wrong — a row the reviewer bounces costs one round, a vag
 1. <checkable; names the rule id and the row>
 2. …
 
-## Spec changes
+## Spec changes   ← on an island without specs/: `## Key rows`, the rows its facts file names
 Requirement: `GW-<REQ>` on `specs/endpoints/<page>.md` — world `<world>`.
 | description | <input cols> || <expected cols> |
 |---|---||---|

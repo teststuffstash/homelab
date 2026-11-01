@@ -4,7 +4,7 @@ description: >
   Sweep the recent LIVE board — alerts, issues, responder/fixer activity, and especially the
   items where nothing was done — across the claim-derived repo universe (every AgentStack's
   repos; never "homelab" by name). Machine truth first: the first stage of the
-  board-sweep → fu-sweep → docs-cleanup pipeline. Use on "/board-sweep", "what happened while
+  board-sweep → intake → fu-sweep → docs-cleanup pipeline. Use on "/board-sweep", "what happened while
   I was away", "sweep the board", "what did the loop do / miss", or after any meta stand-down.
 ---
 
@@ -105,7 +105,7 @@ deliberately deferred (§Graduation).
 
 ## Pipeline
 
-**board-sweep → [`fu-sweep`](../fu-sweep/SKILL.md) → [`docs-cleanup`](../docs-cleanup/SKILL.md).**
+**board-sweep → [`intake`](../intake/SKILL.md) → [`fu-sweep`](../fu-sweep/SKILL.md) → [`docs-cleanup`](../docs-cleanup/SKILL.md).**
 This pass establishes machine truth; fu-sweep's step-2 machine-lane reconcile consumes the
 HANDLED bucket instead of re-deriving it; docs-cleanup propagates what both changed. One session
 running all three shares the slices already read.
