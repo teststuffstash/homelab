@@ -1,0 +1,13 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"reviewer","task":"review-homelab-42","round":1,"harness":"claude","bind":{"namespace":"platform-agents","serviceaccount":"agentstack-loop","pod":"reviewer-homelab-42-0a1b2c3d"}}
+OUT GW_SESSIONS='' MODEL='sonnet' MODEL_RAIL='' GO_SERVED=0
+OUT AGENT_ROUTER='' _router_adopted='' GW_PULL_PRELUDE set: no
+OUT LABEL:
+OUT POD LLM ENV:
+OUT         - name: ANTHROPIC_BASE_URL
+OUT           value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+OUT         - name: ANTHROPIC_AUTH_TOKEN
+OUT           value: "ref:agent-coordinator/coordinator-claude"
+OUT MOUNT:none VOLUME:none
+ERR → gateway(sessions): defer — [gateway-unreachable] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy).
+ERR WARN gateway admission refused rc=3 — old-proxy fallback
+RC 0

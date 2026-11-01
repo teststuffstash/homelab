@@ -1,0 +1,2 @@
+# row dispatch-subscription — the reviewer's first walk cell (policy reviewer: anthropic first, heavy → claude/sonnet)
+GW_REPLY_BODY='{"decision":"dispatch","session":{"id":"0123abcd","expires_at":"2026-11-01T16:00:00Z"},"rail":"anthropic","harness":"claude","model":"claude/sonnet","env_keys":["ANTHROPIC_BASE_URL","ANTHROPIC_AUTH_TOKEN","ANTHROPIC_MODEL"],"pull_url":"http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env","context_tokens":null}'
