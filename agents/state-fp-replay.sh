@@ -505,6 +505,34 @@ want     "A6: identical arbitrate state DEBOUNCES"                  "arbitrate D
 wantnot  "A6: no unit emitted"                                      "UNITS arbitrate|"
 survives "A6"
 
+# ── 6c ── ASSEMBLY-CR ROUTES TO THE ARBITRATE FOLD (homelab#1939). The assembly-cr clause's
+# condition is a stale CHANGES_REQUESTED on a `goal/**` assembly PR — BEHIND by construction
+# (#1935), so the updater merges master into it and CI re-runs on every merge. Under the generic
+# STATE_FP_JQ both movers (raw head= and per-check conclusions) re-armed it: PR #1934's 09:39:49Z
+# ride (2026-09-23) was bought by a `Merge branch 'master'` head alone. Expected values come from
+# the issue's acceptance, not from running the code: assembly-cr == arbitrate on the same probe;
+# a master-merge head + a check flip are inert; a reviewDecision flip and a real push move it.
+section "6c — assembly-cr uses the arbitrate fold: master-merge heads and check flips are inert"
+fx_base
+UCLAUSE=assembly-cr _go probe; BASE_ASM="$(field CUR)"
+nonempty "AC0: assembly-cr fingerprint is non-empty"                  "$BASE_ASM"
+eq       "AC0: assembly-cr hashes exactly what arbitrate hashes"      "$BASE_ASM" "$BASE_ARB"
+# The updater merges master: a NEW head oid that IS the merge commit, and CI re-runs (e2e flips).
+fx ".headRefOid = \"eeeeeeee55555555555555555555555555555555\"
+    | .commits += [{\"oid\":\"eeeeeeee55555555555555555555555555555555\",\"messageHeadline\":\"Merge branch 'master' into goal/1640-launcher\"}]
+    | (.statusCheckRollup[] | select(.name==\"e2e\")) |= (.conclusion=\"\" | .status=\"IN_PROGRESS\")"
+UCLAUSE=assembly-cr _go probe
+same     "AC1: a master-merge head + CI re-run does NOT move assembly-cr" "$BASE_ASM" "$(field CUR)"
+# The push that dismisses the stale verdict (#1934 live: CHANGES_REQUESTED → REVIEW_REQUIRED).
+fx '.reviewDecision = "REVIEW_REQUIRED"'
+UCLAUSE=assembly-cr _go probe
+differs  "AC2: a reviewDecision flip MOVES the assembly-cr hash"      "$BASE_ASM" "$(field CUR)"
+fx_base
+fx ".headRefOid = \"ffffffff66666666666666666666666666666666\"
+    | .commits += [{\"oid\":\"ffffffff66666666666666666666666666666666\",\"messageHeadline\":\"fix: address the requested change\"}]"
+UCLAUSE=assembly-cr _go probe
+differs  "AC3: a real non-merge push MOVES the assembly-cr hash"      "$BASE_ASM" "$(field CUR)"
+
 # ── 7 ── FAIL-OPEN. An unreadable probe must behave exactly as the pre-#198 clause did: EMIT. The
 # guard is worth less than the loop it guards (FU-104), so every unknown resolves to "ride".
 section "7 — fail-open: an unreadable probe never holds a unit back"
