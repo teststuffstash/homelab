@@ -1,0 +1,2 @@
+ERR FATAL: harness 'opencode' has no old-proxy transition model — pass --cell opencode:<model>
+RC 2

@@ -1,6 +1,6 @@
 # ── observation point ── shared across all five retro-harvest rows (not harvest code). DEAD_CELL
 # is this row's OWN declaration of which cell (if any) it expects the harvest to have lost — set
-# via the row's `env:` column, never re-derived from CELL_A/CELL_B, so a row that renames its
+# via the row's `env:` column, never re-derived from the harness/served-model pair, so a row that renames its
 # cells without updating DEAD_CELL reds instead of silently asserting the wrong thing.
 #
 # Two shapes, merged from the two originals (fixture.yaml carries the per-row contract):

@@ -34,6 +34,21 @@
 # under the project's standing ceiling; the estimator's ESCALATE verdict stops that model's
 # dispatch (not the whole fan-out).
 #
+# PLATFORM STACK (FU-270, operator ruling 2026-11-01): no draw at all — each arm is ONE agent-gateway
+# admission for role `researcher` (agent-session.sh under AGENT_GATEWAY=sessions, the shared helper
+# agents/gateway-admit.sh); the gateway picks the model per role/tier and every arm's log records
+# the model it SERVED, which the closing arm table prints. The arms are independent admissions: if
+# the policy serves one model twice, the table says so — nothing here forces them apart (the
+# controlled comparison is given up). Arm tasks are `research-<issue>-arm<slot>` (no model is known
+# before admission). No key mint, no ESCALATE gate: the gateway holds the credentials and the
+# budget. The jail authenticates as the platform dispatcher SA (AGENT_GATEWAY_CALLER_SA, default
+# platform-agents/agentstack-loop — the entry canary's honest impersonation) and reaches the
+# gateway at AGENT_GATEWAY_URL (a port-forward to svc/agent-gateway in ns agent-egress, exactly as
+# AGENT_EGRESS_PROXY reaches the old router). FU-270: transition fallback — an arm whose admission
+# is refused before any request or fails closed re-runs as a one-arm OLD-path fan-out on its slot
+# (RESEARCH_GATEWAY=0, the draw below); a defer is that arm's terminal, like a deferred draw slot.
+# Every other stack keeps the draw.
+#
 # Jail-run (operator-invoked; FU-090(c) remains the future auto-dispatch path).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -81,6 +96,59 @@ rf_route() {   # rf_route <class> <slot> <session> → the /route decision JSON 
        class: $cls, slot: $slot, jitter: false}' \
   | curl -fsS --max-time 10 -H "Content-Type: application/json" -d @- "${ROUTER_URL}/route"
 }
+
+# >>>REPLAY:research-gateway-arms>>>
+# FU-270 (header): the platform stack's arms admit through the gateway. RESEARCH_GATEWAY=0 is the
+# transition fallback's own re-entry (one slot, the old draw) — not an operator knob.
+rf_gateway_arm() {   # rf_gateway_arm <slot> <arm-count> <log> — one admission + ride; FU-270 fallback on exit 75
+  local _rc=0
+  AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=researcher AGENT_GATEWAY_FALLBACK_EXIT=75 \
+  AGENT_GATEWAY_CALLER_SA="${AGENT_GATEWAY_CALLER_SA:-platform-agents/agentstack-loop}" AGENT_WIP_LIMIT="$2" \
+    bash "${HERE}/agent-session.sh" "$PROJECT" --task "research-${ISSUE}-arm${1}" --round 1 --recipe "$RECIPE" \
+    2>&1 | tee "$3" || _rc="${PIPESTATUS[0]}"
+  if [ "$_rc" -eq 75 ]; then
+    # FU-270: transition fallback — agent-session.sh printed the loud line into the arm log.
+    echo "  arm ${1}: gateway admission refused — old-proxy fallback (one-arm draw on slot ${1})"
+    _rc=0
+    RESEARCH_GATEWAY=0 bash "${HERE}/research-fanout.sh" "$PROJECT" "$ISSUE" --arms 1 --start-slot "$1" --class "$CLASS" \
+      2>&1 | tee -a "$3" || _rc="${PIPESTATUS[0]}"
+  fi
+  return "$_rc"
+}
+rf_arm_served() {   # rf_arm_served <log> → the arm table cell: the served model, the fallback's draw, or why none
+  local _m
+  _m="$(sed -n -E '/^→ gateway\(sessions\): dispatch [^ ]+ \[/{s/^→ gateway\(sessions\): dispatch ([^ ]+) \[.*/\1/p;q}' "$1" 2>/dev/null)" || _m=""
+  if [ -n "$_m" ]; then printf 'served %s\n' "$_m"; return 0; fi
+  _m="$(sed -n -E '/^  slot [0-9]+: [^ ]+$/{s/^  slot [0-9]+: ([^ ]+)$/\1/p;q}' "$1" 2>/dev/null)" || _m=""
+  if [ -n "$_m" ]; then printf 'old-proxy fallback, drew %s\n' "$_m"; return 0; fi
+  _m="$(sed -n -E '/^→ gateway\(sessions\): defer — \[/{s/^→ gateway\(sessions\): defer — \[([^]]*)\].*/\1/p;q}' "$1" 2>/dev/null)" || _m=""
+  printf 'no ride (%s)\n' "${_m:-see the arm log}"
+}
+if [ "$STACK" = "platform" ] && [ "${RESEARCH_GATEWAY:-1}" != "0" ]; then
+  echo "→ FU-126 fan-out: ${PROJECT}#${ISSUE} → ${ARMS} arm(s), each admitted by the agent-gateway as role researcher (FU-270 — the gateway serves the model)"
+  if [ "$DRY" = 1 ]; then
+    echo "→ --dry-run: nothing to draw on the gateway path — each arm's model is served at admission"
+    exit 0
+  fi
+  ARMLOGS="$(mktemp -d)"
+  _slot="$START_SLOT"; _last=$(( START_SLOT + ARMS - 1 ))
+  while [ "$_slot" -le "$_last" ]; do
+    echo "── arm ${_slot}: task research-${ISSUE}-arm${_slot} (log ${ARMLOGS}/arm-${_slot}.log) ──"
+    rf_gateway_arm "$_slot" "$ARMS" "${ARMLOGS}/arm-${_slot}.log" &
+    sleep 5   # stagger pod creates (image-pull thundering herd on one node; distinct ad-hoc pod names)
+    _slot=$(( _slot + 1 ))
+  done
+  wait || true
+  echo "→ arm table (the model each admission SERVED):"
+  _slot="$START_SLOT"
+  while [ "$_slot" -le "$_last" ]; do
+    echo "  arm ${_slot}: $(rf_arm_served "${ARMLOGS}/arm-${_slot}.log")"
+    _slot=$(( _slot + 1 ))
+  done
+  echo "→ branches arrive as research/issue-${ISSUE}-<model-slug> (two arms served one model share a slug — the recipe's branch rule); arm logs in ${ARMLOGS}"
+  exit 0
+fi
+# <<<REPLAY:research-gateway-arms<<<
 
 echo "→ FU-126 fan-out: ${PROJECT}#${ISSUE} → drawing ${ARMS} arm(s) from the ${CLASS} pool"
 
