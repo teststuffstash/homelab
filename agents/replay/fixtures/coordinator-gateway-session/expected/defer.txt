@@ -1,0 +1,8 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"coordinator","task":"coordinator-homelab-issue-2700","round":0,"harness":"claude"}
+OUT GW_COORD='1'
+OUT RUNNER coord_gw_claude; RC=$?; upload_transcripts
+OUT → coordinator tick deferred — gateway: subscription-sessions-full (retry_after=120s)
+OUT rc=0 CS_DEFERRED='1' MODEL='fable' env file left: no
+OUT REACHED: end
+ERR → gateway(sessions): defer — [subscription-sessions-full] retry_after=120s — not dispatching (task=coordinator-homelab-issue-2700, round=0).
+RC 0

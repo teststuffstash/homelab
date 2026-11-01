@@ -249,6 +249,7 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
 | `context-repos-prelude` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
+| `coordinator-gateway-session` | table | - | `agents/coordinator-session.sh` | - |
 | `coordinator-launch-mode` | actions | - | `agents/coordinator-session.sh` | IL-T31 |
 | `coordinator-pick-rail/anthropic` | actions | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-pick-rail/both` | actions | - | `agents/coordinator-scan.sh` | - |

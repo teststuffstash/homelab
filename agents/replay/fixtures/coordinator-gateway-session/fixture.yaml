@@ -1,0 +1,33 @@
+# coordinator-gateway-session — the coordinator's OWN claude session admits through the
+# agent-gateway (FU-270, the platform rollout's coordinator row), via the ONE shared helper
+# (agents/gateway-admit.sh — its interface is pinned by the gateway-admit family; this one pins
+# the ADOPTER).
+#
+# THE CONTRACT (the block's header in agents/coordinator-session.sh is the one home):
+#   1. The gate: STACK=platform AND a headless claude session (RUN_CMD set) AND not a --launch pod.
+#      Any other stack, an interactive pod or a launch pod renders no gateway function and keeps
+#      today's runner verbatim (the oracle / launch / interactive rows).
+#   2. In the pod, unbound: POST /sessions as role coordinator, harness claude (the only harness
+#      this pod runs), task = the pod name, tier heavy for a goal-decompose item (else the role's).
+#      dispatch → claude runs with the dispatch env (it overrides the manifest's old-proxy
+#      ANTHROPIC_*), --model = the wire model, CLAUDE_CODE_MAX_CONTEXT_TOKENS = context_tokens;
+#      then ONE DELETE.
+#   3. defer (rc 1) → no claude, no latch probe, CS_DEFERRED=1 (detach_post rings no doorbell), rc 0.
+#   4. refused before any request (rc 2: no caller token) or fail closed (rc 3: non-200 /
+#      unreachable) → the loud line `gateway admission refused rc=N — old-proxy fallback`, then
+#      today's path: the FU-088 latch (skipped for an opencode-go fallback model, as the launcher
+#      gate skips it) and claude on the manifest env with the scan's --model; a latched
+#      subscription defers (CS_DEFERRED=1, rc 0, no claude).
+#
+# Seams: `curl` is the gateway (gateway-admit's bridge shape), `claude` a PATH stub recording argv
+# + the auth env it SEES, COORD_HOMELAB a tree holding the real helper + a subscription-latch stub,
+# `cat` serves /work/coord-run. Row state in rows/<id>/vars.sh.
+name: coordinator-gateway-session
+mode: table
+source: agents/coordinator-session.sh
+parts:
+  - file:bridge.sh
+  - block:coordinator-gateway-session
+  - block:coordinator-launch-runner
+  - file:post.sh
+rows: rows.psv
