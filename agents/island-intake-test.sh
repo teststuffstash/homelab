@@ -235,8 +235,9 @@ yq -r "$CW | .spec.workflowSpec.templates[] | select(.name == \"intake\") | .con
 BIN="$TMP/bin"; mkdir -p "$BIN" "$TMP/run" "$TMP/up"
 cat > "$BIN/git" <<EOF
 #!/bin/bash
-# clone stub: the checkout under test, minus .git
-dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && tar --exclude=.git -cf - .) | (cd "\$dest" && tar -xf -)
+# clone stub: the checkout under test, minus .git (untracked/ignored excluded; a re-entry guard makes a PATH loop fail, never fork-bomb)
+[ -n "\${STUB_GIT_ACTIVE:-}" ] && { echo "git stub re-entered" >&2; exit 97; }; export STUB_GIT_ACTIVE=1
+dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && $(command -v git) ls-files -z | tar --null -T - -cf -) | (cd "\$dest" && tar -xf -)
 # the rail + model resolution are the proxy's — served flat here
 printf '#!/bin/bash\necho anthropic\n' > "\$dest/agents/subscription-latch.sh"
 printf '#!/bin/bash\necho opus\n' > "\$dest/agents/resolve-model.sh"
