@@ -553,38 +553,42 @@ def test_snapshot_candidates():
     """row: the candidates per rail"""
     world(note="against the committed snapshot")
     policy, bench = _deployed()
-    with given("the deployed anthropic rail's model + side-model ids; the snapshot's sources"):
+    with given("the deployed anthropic rail's model + side-model ids, the deployed codex ids, the tiers block"):
         rail = policy["rails"]["anthropic"]
         aliases = sorted({x for lst in rail["models"].values() for x in ([lst] if isinstance(lst, str) else lst)} | set(rail.get("side_models", [])))
-        attach_json("expected anthropic aliases", aliases)
-        attach_json("sources", bench["sources"])
+        codex_ids = sorted({x for lst in policy["rails"]["codex"]["models"].values() for x in ([lst] if isinstance(lst, str) else lst)})
+        tp = tiers_policy(policy["tiers"])
+        attach_json("deployed ids", {"anthropic aliases": aliases, "codex ids": codex_ids})
     with when("the snapshot's rails are read"):
         rails = bench["rails"]
-    then_eq("opencode keys", sorted(k for k in rails["opencode"] if not k.startswith("opencode-go/")), [], claim="every opencode key is opencode-go/<id>")
-    sub_aa = [r["aa_id"] for rail_ in PRICELESS_RAILS for r in rails[rail_].values() if r.get("aa_id")]
-    then_eq("opencode keys a subscription rail already serves", sorted(k for k in rails["opencode"] if any(same_model(k, aa) for aa in sub_aa)), [],
-            claim="no Go candidate is the twin of a subscription candidate's AA row — Go is the cheaper door to the priced catalog, never a second door to a subscription's model")
-    then_eq("opencode price bases", sorted({r["price_basis"] for r in rails["opencode"].values()} - {"promise", "measured", "unlimited", None}), [],
-            claim="every opencode row's price_basis is promise / measured / unlimited / null")
-    then_eq("openrouter keys", sorted(k for k in rails["openrouter"] if k.count("/") != 1 or k.startswith(("opencode-go/", "claude/"))), [],
-            claim="every openrouter key is a vendor/model id")
-    then_eq("openrouter price bases", sorted(f"{k}: {r['price_basis']}/{r['provider']}" for k, r in rails["openrouter"].items()
-                                              if r["price_basis"] not in ("endpoint", None) or (r["price_basis"] == "endpoint") != (r["provider"] is not None)), [],
-            claim="every openrouter row is priced at its selected endpoint (basis endpoint, with the provider) or unpriced")
-    then_eq("anthropic keys", sorted(rails["anthropic"]), aliases, claim="the anthropic keys = the deployed rail's claude/ aliases")
-    then_eq("anthropic rows priced", [k for k, r in rails["anthropic"].items() if r["out_price"] is not None], [])
-    codex_ids = sorted({x for lst in policy["rails"]["codex"]["models"].values() for x in ([lst] if isinstance(lst, str) else lst)})
-    then_eq("deployed codex ids missing from the snapshot", [i for i in codex_ids if i not in rails["codex"]], [],
-            claim="every deployed codex id is a snapshot key (the enrolled account's model evidence)")
-    tp = tiers_policy(policy["tiers"])
-    benched = {k: float(r[tp.score]) for k, r in rails["codex"].items() if r.get("aa_id") and isinstance(r.get(tp.score), (int, float))}
-    top = max(benched.values(), default=0.0)
-    then_eq("codex keys on no list that are benched within a band", sorted(k for k in rails["codex"] if k not in codex_ids
-            and k in benched and benched[k] >= min(tp.bands.values()) * top), [],
-            claim="a codex key no list carries is unbenched or below every band — never a dropped candidate")
-    then_eq("codex rows priced", [k for k, r in rails["codex"].items() if r["out_price"] is not None], [])
-    then_eq("capability source · openrouter catalog fetched_at present",
-            (bench["sources"]["capability"]["source"], bench["sources"]["openrouter_catalog"]["fetched_at"] is not None), ("artificial-analysis", True))
+        sub_aa = [r["aa_id"] for rail_ in PRICELESS_RAILS for r in rails[rail_].values() if r.get("aa_id")]
+        benched = {k: float(r[tp.score]) for k, r in rails["codex"].items() if r.get("aa_id") and isinstance(r.get(tp.score), (int, float))}
+        top = max(benched.values(), default=0.0)
+
+    def verdict(claim: str, **pairs) -> None:
+        # one Then per rail: every (key: expected, actual) of that rail compared under ONE step, attached once
+        with then(claim, **{k: {"expected": e, "actual": a} for k, (e, a) in pairs.items()}):
+            for k, (e, a) in pairs.items():
+                assert a == e, f"{k}: expected {e!r}, got {a!r}"
+
+    verdict("opencode: every key is opencode-go/<id>, none the twin of a subscription candidate's AA row, priced promise / measured / unlimited or unpriced",
+            **{"keys not opencode-go/<id>": ([], sorted(k for k in rails["opencode"] if not k.startswith("opencode-go/"))),
+               "keys a subscription rail already serves": ([], sorted(k for k in rails["opencode"] if any(same_model(k, aa) for aa in sub_aa))),
+               "price bases outside promise / measured / unlimited / null": ([], sorted({r["price_basis"] for r in rails["opencode"].values()} - {"promise", "measured", "unlimited", None}))})
+    verdict("openrouter: every key is a vendor/model id, priced at its selected endpoint (basis endpoint, with the provider) or unpriced",
+            **{"keys not vendor/model": ([], sorted(k for k in rails["openrouter"] if k.count("/") != 1 or k.startswith(("opencode-go/", "claude/")))),
+               "rows priced off their selected endpoint": ([], sorted(f"{k}: {r['price_basis']}/{r['provider']}" for k, r in rails["openrouter"].items()
+                                                              if r["price_basis"] not in ("endpoint", None) or (r["price_basis"] == "endpoint") != (r["provider"] is not None)))})
+    verdict("anthropic: the keys are the deployed rail's claude/ aliases, unpriced",
+            **{"keys": (aliases, sorted(rails["anthropic"])),
+               "rows priced": ([], [k for k, r in rails["anthropic"].items() if r["out_price"] is not None])})
+    verdict("codex: every deployed codex id is a snapshot key (the enrolled account's model evidence); a key on no list is unbenched or below every band; unpriced",
+            **{"deployed codex ids missing from the snapshot": ([], [i for i in codex_ids if i not in rails["codex"]]),
+               "keys on no list that are benched within a band": ([], sorted(k for k in rails["codex"] if k not in codex_ids and k in benched and benched[k] >= min(tp.bands.values()) * top)),
+               "rows priced": ([], [k for k, r in rails["codex"].items() if r["out_price"] is not None])})
+    verdict("sources: capability is artificial-analysis, the openrouter catalog's fetched_at is present",
+            **{"capability source": ("artificial-analysis", bench["sources"]["capability"]["source"]),
+               "openrouter catalog fetched_at present": (True, bench["sources"]["openrouter_catalog"]["fetched_at"] is not None)})
 
 
 @deployed
