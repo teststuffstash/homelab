@@ -1,0 +1,6 @@
+{
+  "commits": [
+    {"sha": "abc123de", "commit": {"message": "feat: add context prefetch rows 2-4\n\nBuilds pr.md, reviews.md, ci-failure.md prefetch."}},
+    {"sha": "fgh456ij", "commit": {"message": "fix: address review comments\n\nAdd error handling for ConfigMap fallback."}}
+  ]
+}
