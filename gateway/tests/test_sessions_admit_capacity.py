@@ -28,12 +28,12 @@ Subscription window utilization (reviewer; arrange = one anthropic ride whose an
 | a 429 without retry-after latches for the policy hold | reviewer ride on anthropic → 429, no retry-after | — | reviewer, rail anthropic || defer | — | rail-latched | 900 |
 | the latch lifts at its expiry | reviewer ride on anthropic → 429 | +30 s | reviewer, rail anthropic || dispatch | anthropic | — | — |
 | any 2xx on the rail clears the latch | reviewer ride on anthropic → 429, then the same session → 200 | — | reviewer, rail anthropic || dispatch | anthropic | — | — |
-| a Go 429 cools only its cell, for its retry-after | worker ride on opencode → 429 | — | worker, rail opencode || defer | — | cell-cooled | 30 |
-| a Go 429 without retry-after cools its cell for the rail's hold | worker ride on opencode → 429, no retry-after | — | worker, rail opencode || defer | — | cell-cooled | 900 |
-| one Go model's 429 never blocks another Go model | worker ride on opencode → 429 | — | worker, rail opencode, tier heavy || dispatch | opencode | — | — |
-| a cooled Go cell is skipped, the walk continues | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
+| a Go 429 latches the rail for its retry-after | worker ride on opencode → 429 | — | worker, rail opencode || defer | — | rail-latched | 30 |
+| a Go 429 without retry-after latches for the rail's hold | worker ride on opencode → 429, no retry-after | — | worker, rail opencode || defer | — | rail-latched | 900 |
+| one Go model's 429 blocks every Go model: one shared allowance ⚖ | worker ride on opencode → 429 | — | worker, rail opencode, tier heavy || defer | — | rail-latched | 30 |
+| a latched Go rail is skipped, the walk continues | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
 | a rail whose policy declares no latch is not latched: its other model admits | worker ride on openrouter → 429 | — | worker, rail openrouter, tier heavy || dispatch | openrouter | — | — |
-| every rail blocked: the rail that frees first names the defer | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | cell-cooled | 30 |
+| every rail blocked: the rail that frees first names the defer | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | rail-latched | 30 |
 
 Go window draw (the world's Go catalog: catalog-ok + docs-ok, plan go). worker on opencode =
 opencode-go/deepseek-v4.1-flash ($80/month → 5h $16 · 7d $40 · 30d $80; × 0.80 = $12.80 / $32 /
@@ -193,22 +193,23 @@ LATCH_ROWS = [
      {"role": "reviewer", "rail": "anthropic"}, {"decision": "dispatch", "rail": "anthropic"}),
     ("any 2xx on the rail clears the latch", [("anthropic", "reviewer", "upstream-429"), ("anthropic", "reviewer", "upstream-ok")], 0,
      {"role": "reviewer", "rail": "anthropic"}, {"decision": "dispatch", "rail": "anthropic"}),
-    ("a Go 429 cools only its cell, for its retry-after", [("opencode", "worker", "upstream-429")], 0,
-     {"rail": "opencode"}, {"decision": "defer", "reason": "cell-cooled", "retry_after_s": 30}),
-    ("a Go 429 without retry-after cools its cell for the rail's hold", [("opencode", "worker", "upstream-429-no-header")], 0,
-     {"rail": "opencode"}, {"decision": "defer", "reason": "cell-cooled", "retry_after_s": 900}),
-    # the worker's standard cell (deepseek-v4.1-flash) cooled; its heavy tier is claude-haiku-5-5
-    ("one Go model's 429 never blocks another Go model", [("opencode", "worker", "upstream-429")], 0,
-     {"rail": "opencode", "tier": "heavy"}, {"decision": "dispatch", "rail": "opencode"}),
-    ("a cooled Go cell is skipped, the walk continues", [("opencode", "worker", "upstream-429")], 0,
+    # the Go rail is one account allowance (latch_scope account since 2026-11-01): the 429 on the worker's
+    # standard cell (deepseek-v4.1-flash) latches the rail, so its heavy tier (claude-haiku-5-5) defers too
+    ("a Go 429 latches the rail for its retry-after", [("opencode", "worker", "upstream-429")], 0,
+     {"rail": "opencode"}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 30}),
+    ("a Go 429 without retry-after latches for the rail's hold", [("opencode", "worker", "upstream-429-no-header")], 0,
+     {"rail": "opencode"}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 900}),
+    ("one Go model's 429 blocks every Go model: one shared allowance ⚖", [("opencode", "worker", "upstream-429")], 0,
+     {"rail": "opencode", "tier": "heavy"}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 30}),
+    ("a latched Go rail is skipped, the walk continues", [("opencode", "worker", "upstream-429")], 0,
      {}, {"decision": "dispatch", "rail": "openrouter"}),
     # openrouter declares no latch: the 429 cooled only its cell (deepseek-v4-flash, the worker's standard
     # tier — test_sessions_admit_cells.py); the heavy tier's deepseek-v4.1-flash cell is untouched
     ("a rail whose policy declares no latch is not latched: its other model admits", [("openrouter", "worker", "upstream-429")], 0,
      {"rail": "openrouter", "tier": "heavy"}, {"decision": "dispatch", "rail": "openrouter"}),
-    # opencode frees at +30 (the cell), openrouter at +60 (full → defer_retry_s): the earlier names the defer
+    # opencode frees at +30 (the latch), openrouter at +60 (full → defer_retry_s): the earlier names the defer
     ("every rail blocked: the rail that frees first names the defer", [("opencode", "worker", "upstream-429"), ("fill", "openrouter", 20)], 0,
-     {}, {"decision": "defer", "reason": "cell-cooled", "retry_after_s": 30}),
+     {}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 30}),
 ]
 
 
