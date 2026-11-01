@@ -666,7 +666,7 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
 #     third-party heartbeat re-posts must not re-arm (`iac-sentinel` re-posts on every open head
 #     every ~4 min, 30 posts in 2 h on PR #2047; the #2065 all-startedAt fold bought a ride per beat).
 # Statuses arrive as {context,state,startedAt} and check-runs as {name,conclusion,startedAt}; the
-# fold reads both shapes. Sibling #1939 (assembly-cr over-sensitivity) is left as is here.
+# fold reads both shapes. Sibling #1939 (assembly-cr over-sensitivity) rides STATE_FP_JQ_ARBITRATE.
 STATE_FP_JQ_UNARMED='[ (if ((.contentId // "") != "") then "content=" + .contentId else "head=" + (.headRefOid // "") end)
   , "review=" + (.reviewDecision // "NONE")
   , "checks=" + ([ .statusCheckRollup[]?
@@ -679,7 +679,7 @@ STATE_FP_JQ_UNARMED='[ (if ((.contentId // "") != "") then "content=" + .content
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
-# arbitrate clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
+# arbitrate (+ assembly-cr, homelab#1939) clause fingerprint (homelab#1011): narrower than STATE_FP_JQ — drops per-check
 # conclusions (PR#1003's mover — checks completing one at a time inside a rollup are not
 # arbitration-relevant) and narrows head= to the newest NON-merge commit (PR#1030's mover —
 # the updater merging master rewrites head unconditionally, reusing the NOOP_ROUND_JQ idiom).
@@ -740,7 +740,8 @@ issue_state_fp_for_clause() {   # $1 clause, $2 comments json (bare array)
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
 # When clause is "ci-red" uses STATE_FP_JQ_CIRED (includes check startedAt — homelab#1108) so a
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
-# conclusions and narrows head to the newest non-merge commit — homelab#1011); "unarmed-major"
+# conclusions and narrows head to the newest non-merge commit — homelab#1011; "assembly-cr" too,
+# homelab#1939); "unarmed-major"
 # uses STATE_FP_JQ_UNARMED (content id for head, non-passing checks only, startedAt for a
 # non-passing management-sentinel — homelab#2066, #2100); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
@@ -784,7 +785,11 @@ pr_state_fp_pair() {
         fp_raw="$(printf '%s' "$fp_probe" | jq -c --arg c "$fp_cid" '. + {contentId: $c}' 2>/dev/null)" && fp_probe="$fp_raw"
       fi
       ;;
-    arbitrate) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
+    # assembly-cr (homelab#1939) shares arbitrate's fold: the condition is a stale
+    # CHANGES_REQUESTED, so only a verdict, a reviewDecision flip or a non-merge push may re-arm
+    # it. The assembly PR is BEHIND by construction (#1935), so every updater master-merge moved
+    # the generic head= and re-ran CI (per-check flips) — a ride per merge that ruled nothing.
+    arbitrate|assembly-cr) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
   fp_raw="$(printf '%s' "$fp_probe" | jq -r "$fp_jq" 2>/dev/null)" || fp_raw=''
