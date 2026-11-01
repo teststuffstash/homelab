@@ -40,6 +40,7 @@ from .config import (
 )
 from .control import ControlPlaneAuth, authorize_outcome, visible_to
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
+from .headroom import Headroom, Verdict
 from .liveness import PodSource
 from .metrics import Metrics
 from .outcomes import OutcomeRefused, Outcomes, parse_outcome, public_outcome
@@ -259,6 +260,7 @@ class SessionService:
         self.pods: PodSource | None = None  # GW-SESSIONS-LIVENESS: app.py hands the kube one in
         self.auth = ControlPlaneAuth(policy, self, metrics)  # reviews through self.reviewer (one TokenReview path)
         self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
+        self.go_headroom: Headroom | None = None  # the Go rail's account headroom when its policy declares one (app.py hands it in)
         self.outcomes = Outcomes(store, metrics, policy.outcome_window_s, clock)  # GW-SESSIONS-OUTCOME
         self.providers: EndpointSnapshot | None = None  # GW-RAIL-OPENROUTER: the endpoint snapshot (app.py hands it in)
         self.orcatalog = None  # an orcatalog.OpenRouterCatalog: the cells' entry states + the canary gate (app.py hands it in)
@@ -407,6 +409,15 @@ class SessionService:
             if self.store.active_count(rail, now) >= rp.max_sessions:
                 capacity_blocked.append((rail, "rail-capacity", now + self.policy.defer_retry_s, f"{rail} at max_sessions"))
                 continue
+            if rail == "opencode" and self.go_headroom is not None:
+                # GW-SESSIONS-ADMIT §Capacity, the Go account headroom: ONE account allowance under every Go model, so
+                # its verdict holds the whole rail before any model is walked (the codex twin is per candidate below).
+                verdict = self.go_headroom.verdict()
+                if verdict != Verdict.ADMIT:
+                    retry_s = self.go_headroom.retry_after(self.policy.defer_retry_s)
+                    log.info("session: rail %s account headroom %s — skipped for %ds", rail, verdict.value, retry_s)
+                    capacity_blocked.append((rail, verdict.value, now + retry_s, f"opencode account headroom {verdict.value}"))
+                    continue
             block = self.capacity.blocked(rail, now)
             if block is not None:
                 log.info("session: rail %s capacity-blocked (%s) until %s — skipped", rail, block.detail, iso(block.free_at))

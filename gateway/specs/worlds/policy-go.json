@@ -1,0 +1,124 @@
+{
+  "_comment": "The `policy-go` world — `policy-default` plus the Go account headroom (specs/worlds/README.md), for the GW-SESSIONS-ADMIT §Capacity Go headroom rows ONLY. `rails.opencode.headroom` = 120 s freshness, 0.95 ceiling, the three named windows (`rolling` / `weekly` / `monthly`), 30 s poll — fixture values, not production policy (⚖ GW-SESSIONS-ADMIT). The DEPLOYED policy declares no headroom block yet (Goal #3118 post-launch leg), so `policy-default` admits the Go rail as before. The window names are the vendor's (GET /zen/go/v1/usage, probed 2026-11-01). Everything else is `policy-default`.",
+  "stacks": {
+    "platform": {
+      "loop_ns": "platform-agents",
+      "openrouter_ref": "platform-agents/platform-openrouter",
+      "anthropic_ref": "platform-agents/claude-session"
+    },
+    "oracle": {
+      "loop_ns": "oracle-agents",
+      "openrouter_ref": "oracle-agents/oracle-openrouter",
+      "anthropic_ref": "oracle-agents/claude-session"
+    }
+  },
+  "roles": {
+    "worker":      {"rails": ["opencode", "openrouter"],  "tier": "standard", "harness": "opencode"},
+    "reviewer":    {"rails": ["anthropic", "opencode"],   "tier": "heavy",    "harness": "claude"},
+    "coordinator": {"rails": ["anthropic", "opencode"],   "tier": "standard", "harness": "claude"},
+    "responder":   {"rails": ["anthropic", "opencode"],   "tier": "standard", "harness": "claude"},
+    "retro":       {"rails": ["anthropic", "openrouter"], "tier": "heavy",    "harness": "claude"},
+    "prober":      {"rails": ["anthropic"],               "tier": "light",    "harness": "claude"},
+    "researcher":  {"rails": ["openrouter", "anthropic"], "tier": "heavy",    "harness": "goose"}
+  },
+  "rails": {
+    "anthropic": {
+      "user_agent": "forward",
+      "admission": {
+        "_comment": "⚖ the old proxy's values, copied (sessions.md §Capacity): utilization_thresholds 5h = ANTHROPIC_UTIL_THRESHOLD's code default 0.80 (openrouter-proxy.py; unset in its deployment.yaml), 7d = ANTHROPIC_UTIL_THRESHOLD_7D 0.95 (deployment.yaml); latch_429_hold_s = ANTHROPIC_429_HOLD_S 900. reading_stale_s 900 has NO old-proxy precedent (it only drops a reading whose reset passed) — the gateway's own guess, ⚖.",
+        "utilization_thresholds": {"5h": 0.80, "7d": 0.95},
+        "reading_stale_s": 900,
+        "latch_429_hold_s": 900
+      },
+      "max_sessions": 5,
+      "side_models": ["claude/haiku"],
+      "models": {
+        "light": "claude/haiku",
+        "standard": "claude/sonnet",
+        "heavy": ["claude/sonnet", "claude/opus"]
+      }
+    },
+    "opencode": {
+      "user_agent": "fixed",
+      "credential_probe": {"method": "POST", "path": "/v1/chat/completions", "body": {"model": "deepseek-v4.1-flash", "max_tokens": 1, "messages": [{"role": "user", "content": "."}]}, "backoff_s": [60, 3600]},
+      "admission": {
+        "_comment": "Rules only (GW-CATALOG-GO, operator ruling 5, 2026-10-17): prices, peak rows and hours, per-model monthly limits and the window shares come from the Go catalog snapshot, never from here. latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900: the hold a Go 429 that names no reset latches the RAIL for; latch_scope account = a Go 429 latches the whole rail for its retry-after, because every paid Go model draws ONE account allowance and the per-model limits only weight the draw (vendor support, anomalyco/opencode#54875; supersedes the spike's ruling 3 — 2026-11-01, sessions.md §Capacity). windows: the anchors are gometer _GO_WINDOW_DEFAULTS (chain / weekly mon 00:00 / monthly 13 11:30 — self-measured, no vendor source; GO_WINDOW_ANCHORS unset in deployment.yaml), threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
+        "latch_429_hold_s": 900,
+        "latch_scope": "account",
+        "window_draw": {
+          "windows": {
+            "5h":  {"threshold": 0.80, "anchor": "chain", "span_s": 18000, "chain_lookback_s": 604800},
+            "7d":  {"threshold": 0.80, "anchor": "weekly", "weekday": "mon", "hour": 0, "minute": 0},
+            "30d": {"threshold": 0.80, "anchor": "monthly", "month_day": 13, "hour": 11, "minute": 30}
+          }
+        }
+      },
+      "plan": "go",
+      "headroom": {
+        "max_age_s": 120,
+        "ceiling": 0.95,
+        "windows": [
+          "rolling",
+          "weekly",
+          "monthly"
+        ],
+        "poll_interval_s": 30
+      },
+      "max_sessions": 3,
+      "models": {
+        "light": "opencode-go/deepseek-v4.1-flash",
+        "standard": "opencode-go/deepseek-v4.1-flash",
+        "heavy": "opencode-go/claude-haiku-5-5"
+      }
+    },
+    "openrouter": {
+      "user_agent": "forward",
+      "credential_probe": {"method": "GET", "path": "/v1/key", "backoff_s": [60, 3600]},
+      "providers": {
+        "_comment": "GW-RAIL-OPENROUTER §Selection / §Failover (homelab#2741) — the provider floors and the failover bound; the endpoints themselves are the store's snapshot (the catalog leg, homelab#2742), never policy. ⚖ every value: quantization_ladder = OpenRouter's `quantization` vocabulary in ascending precision (a value off it — `unknown` — is excluded); quantization_floor fp8 (operator 2026-10-19: fp8 vs fp8); uptime_1d_floor 95 % of `uptime_last_1d` (a gateway guess — the old proxy's UPTIME_FLOOR read uptime_last_30m); min_rides 5 judged rides before a cell's measured clean rate replaces its uptime prior; max_providers_per_request 3 = one pin + two failovers; tool_choice = the modes each harness's requests carry, every one of which the endpoint must support (opencode / goose: `auto`; claude's anthropic-dialect `any` / `tool` are OpenRouter's `required` / `function`) — verify on the wire.",
+        "quantization_ladder": ["int4", "fp4", "mxfp4", "int8", "fp8", "bf16", "fp16", "fp32"],
+        "quantization_floor": "fp8",
+        "uptime_1d_floor": 95,
+        "min_rides": 5,
+        "max_providers_per_request": 3,
+        "tool_choice": {"opencode": ["auto"], "goose": ["auto"], "claude": ["auto", "required", "function"]}
+      },
+      "catalog": {
+        "_comment": "GW-CATALOG-OR (homelab#2742) — the registry's SOURCES, never its candidates: account_ref = the labelled Secret holding the openrouter ACCOUNT key the MCP reads ride (the old proxy's ROUTER_ACCOUNT_REF, the same Secret); ranking_slices = the vendor's weekly ranking slices whose union is the ranked set (⚖ programming + tool_calling, operator 2026-10-19); ranking_top_n = per slice, the top N by tokens (⚖ 30 — the old proxy's RANKINGS_TOP_N). Candidates = ranked ∩ AA-benched; the endpoints are read per candidate.",
+        "account_ref": "agent-egress/router-account-key",
+        "ranking_slices": ["programming", "tool_calling"],
+        "ranking_top_n": 30
+      },
+      "canary": {
+        "_comment": "GW-CATALOG-OR §The entry canary (operator 2026-10-19: on demand, budget-capped) — ⚖ every value: role = the prober (the FU-102 role whose rides are probes), harness = the one the openrouter cells serve (opencode); max_per_refresh 3 canary admissions between catalog refreshes; usd_per_day 1.0 of metered canary spend (a canary ride is a few thousand tokens — a dollar a day is ~a hundred of them at the fp8 prices of 2026-10-19); cooldown_s 86400 before an excluded cell is a candidate again; backoff_s 3600 / backoff_max_s 14400 = a 429'd canary's re-try horizon (operator 2026-10-22: no verdict, exponential backoff, the walk moves on) — the world's cap is low so four rides show it (prod: a day).",
+        "role": "prober",
+        "harness": "opencode",
+        "max_per_refresh": 3,
+        "usd_per_day": 1.0,
+        "cooldown_s": 86400,
+        "backoff_s": 3600,
+        "backoff_max_s": 14400
+      },
+      "max_sessions": 20,
+      "models": {
+        "light": ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash"],
+        "standard": "deepseek/deepseek-v4-flash",
+        "heavy": "deepseek/deepseek-v4.1-flash"
+      }
+    }
+  },
+  "tiers": {"score": "intelligence", "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5}, "cap": 3, "cost": {"ride_tokens_out_m": 0.01, "strike_overhead_usd": 0, "min_rides": 5}},
+  "context_tokens": {
+    "_comment": "per-model harness window for the NON-Go rails; absent = null in the dispatch answer, never a guess. A Go model's window is the Go catalog's `context` (GW-CATALOG-GO ruling 5, GW-SESSIONS-ENV) — an `opencode-go/*` entry here refuses the load. The openrouter value below is a WORLD value for the echo row, not a vendor fact (the openrouter rail has no catalog context yet).",
+    "deepseek/deepseek-v4.1-flash": 163840
+  },
+  "control_plane_auth": "observe",
+  "callers": {
+    "_comment": "GW-SESSIONS-AUTH — fixture identities (specs/worlds/README.md): the platform loop's dispatcher (worker admissions bound into its fixture worker namespace, and the entry canary's prober rides \u2014 GW-CATALOG-OR \u00a7The entry canary \u2014 unbound) and the specs reviewer's tick (reviewer + the worker-role shadow cell, never a bind), and a JUDGE (GW-SESSIONS-OUTCOME: admits nothing, `outcome: any` — may report an outcome on any platform session). `observe` here: a caller with no token is admitted and counted, so every row that does not test the caller check runs unchanged; the enforce rows ride the `policy-enforce` world.",
+    "system:serviceaccount:platform-agents:agentstack-loop": {"stacks": ["platform"], "roles": ["worker", "prober"], "bind_namespaces": ["platform-agents"]},
+    "system:serviceaccount:agent-coordinator:agent-coordinator": {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": []},
+    "system:serviceaccount:agent-coordinator:outcome-judge": {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"}
+  },
+  "session_ttl_s": 14400,
+  "outcome_window_s": 86400
+}

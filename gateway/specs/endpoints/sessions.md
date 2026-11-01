@@ -25,7 +25,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 
 | Requirement | operation | Governs (schema) | Error codes | Status |
 |---|---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint); `⚑ gap (2026-11-01, PR #3105 → work #3108)`: the Go account headroom is unread — the rail's one shared allowance is learnt from a ride's first 429 (the "⚑ gap: the Go account headroom" row) |
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the Go account headroom ([§Go account headroom](#go-account-headroom)), the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail lit 2026-10-22 — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `POST /sessions`, `GET /sessions/{id}` | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `DELETE /sessions/{id}`, `GET /sessions/{id}` | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
@@ -352,8 +352,8 @@ blocks lifts.
   at the model's first request after its previous one expired (`router.go_usage_chain_open`).
   Prices apply at READ time from the ledger (`requests` × `sessions.model`), so a catalog refresh
   re-prices the open windows. A model whose monthly limit is `unlimited` draws against no window.
-  ⚠ Since the allowance is ONE pool (the latch bullet above), a per-model draw under-reads it: the
-  account reading is the "⚑ gap: the Go account headroom" row under §Named gaps.
+  ⚠ Since the allowance is ONE pool (the latch bullet above), this per-model draw is a lower bound of
+  that pool, not the pool: the account reading is [§Go account headroom](#go-account-headroom).
 - **Not in the catalog** (`opencode`, per cell): a Go model the catalog's config snapshot does not
   list, or that has no monthly-limit row under the policy's plan (or no snapshot exists yet), is
   refused — `not-in-catalog`, `retry_after_s` = the next scheduled catalog refresh — never priced at
@@ -468,6 +468,54 @@ after the one just run).
 | "the other Go models still admit ⚖" | `catalog-retired` | worker, `rail: opencode`, `tier: heavy` || dispatch | opencode | — | — |
 | "no catalog snapshot at all: every Go model is not-in-catalog ⚖" | none — a fresh store, no refresh yet | worker, `rail: opencode` || defer | — | not-in-catalog | 60 (`defer_retry_s`: no refresh is scheduled yet) |
 
+### Go account headroom
+
+The Go rail's one account allowance (the latch bullet above) is read, not learnt from a ride's first
+429. The vendor publishes the reading at `GET /zen/go/v1/usage`, probed 200 with the gateway's own Go
+key on 2026-11-01: `{usage: {rolling, weekly, monthly: {status, percent, resetsAt}}}`, account-level
+only (no per-model split, no absolute amounts). The gateway polls the URL named by
+`OPENCODE_USAGE_URL` (no default: unset = no poll) with its own key, every `poll_interval_s` ⚖ (30 s),
+and keeps ONE snapshot as the codex rail does ([GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom)):
+a strictly newer valid reading replaces it, and the verdicts are the same — `admit`, `quota-unknown`,
+`quota-stale`, `quota-limited` — read from `rails.opencode.headroom`. A reading older than `max_age_s`
+(120 s ⚖) is stale. A window at or above `ceiling` (0.95 ⚖) limits the account until that window's
+reset. A window whose `status` is not `ok` limits it for the default hold ⚖ — the vendor's other
+status spellings are unverified, and `percent` is taken as a number from 0 to 100 (observed as whole
+numbers).
+
+The window profile is the names `rolling`, `weekly`, `monthly`, not spans: the monthly window is
+anchored at the subscription, so a span would be a guess. Every reading carries exactly that profile.
+The verdict gates the whole Go rail before any Go model is walked, because it is one allowance under
+every Go model: no ride admits onto a Go cell against an exhausted block. A reading the gateway refuses
+(a window missing, a window outside the profile, a reset already passed) changes nothing: the last
+accepted reading stands. A policy without `rails.opencode.headroom` admits the Go rail as it did before
+this block existed, on the window draw and the latch alone.
+
+Times are offsets from T0 = Fri 2027-01-15 08:00:00Z: `ask` is the seconds after T0 the admission is
+asked, a poll at `T0 − n` is the gateway's own poll n seconds before it, and a `resets T0 + n` window
+resets n seconds after T0. A reading named `fresh` is rolling 20 %, weekly 46 %, monthly 36 %, every
+window `ok`, resetting at T0 + 18000, T0 + 80000 and T0 + 2000000; "others fresh" keeps those values for
+the windows a cell does not name. `none` is no poll answered. The `policy` cell names the policy world.
+
+| description | policy | polls | ask | body || decision | rail | reason | retry_after_s |
+|---|---|---|---|---||---|---|---|---|
+| "a fresh Go reading under the ceiling admits the opencode rail" | policy-go | fresh @ T0 − 10 → accepted | 0 | rail: opencode || dispatch | opencode | — | — |
+| "the rolling block at the ceiling defers until its reset ⚖" | policy-go | rolling 95 % resets T0 + 1000, others fresh @ T0 − 10 → accepted | 0 | rail: opencode || defer | — | quota-limited | 1000 |
+| "two exhausted windows wait for the later reset ⚖" | policy-go | rolling 96 % resets T0 + 1000, weekly 97 % resets T0 + 8000, others fresh @ T0 − 10 → accepted | 0 | rail: opencode || defer | — | quota-limited | 8000 |
+| "a window whose status is not ok limits ⚖" | policy-go | rolling limited at 20 %, others fresh @ T0 − 10 → accepted | 0 | rail: opencode || defer | — | quota-limited | 60 |
+| "no reading yet is unknown — fail closed" | policy-go | none | 0 | rail: opencode || defer | — | quota-unknown | 60 |
+| "a stale reading is stale" | policy-go | fresh @ T0 − 10 → accepted | 115 | rail: opencode || defer | — | quota-stale | 60 |
+| "a missing window refuses the whole report, the last accepted reading stands" | policy-go | fresh @ T0 − 20 → accepted; monthly absent @ T0 − 10 → quota-invalid | 0 | rail: opencode || dispatch | opencode | — | — |
+| "a passed resetsAt refuses the report, the last accepted reading stands" | policy-go | fresh @ T0 − 20 → accepted; rolling resets T0 − 15, others fresh @ T0 − 10 → quota-invalid | 0 | rail: opencode || dispatch | opencode | — | — |
+| "a limited Go rail is skipped, the walk continues" | policy-go | rolling 96 % resets T0 + 1000, others fresh @ T0 − 10 → accepted | 0 | (policy walk) || dispatch | openrouter | — | — |
+| "the poll carries the Go key and no identity reaches a log" | policy-go | fresh @ T0 − 10 → accepted | 0 | rail: opencode || dispatch | opencode | — | — |
+| "no headroom block keeps today's admission ⚖" | policy-default | none | 0 | rail: opencode || dispatch | opencode | — | — |
+| "a headroom block with no usage URL sends no poll: the Go rail answers quota-unknown ⚖" | policy-go, no usage URL | none | 0 | rail: opencode || defer | — | quota-unknown | 60 |
+
+The poll's request carries `authorization: Bearer <the Go key>`. The answer's fields beyond `usage` are
+never read, stored or logged. Each outcome is logged as one line (`opencode usage poll: <outcome>`),
+with no counter family yet ⚖.
+
 ### Kept across a restart
 
 The capacity state is written through to the store's `capacity_marks` table as it changes — one row
@@ -540,8 +588,6 @@ parasail/fp8, none of which clears the floors ([worlds/README.md](../worlds/READ
 | "⚑ gap: the OpenRouter account latch" | 402s / credit below the floor on a stack key || no latch | the old proxy's `rpd` / `credit` / hard-402 legs (homelab#158) and the key headroom poll ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)); cross-model 429s are per-cell facts here (§Capacity), not an account signal |
 | "⚑ gap: the free-tier key budget spans every `:free` cell" | a 429 whose body says `limit_source: openrouter_free_tier_per_minute` || only the cell that saw it cools; the next `:free` cell 429s once and cools itself | the limit is the key's across `:free` models (20 req/min in the experiment's headers); reading the body's `limit_source` would cool them as one group — not built |
 | "⚑ gap: a Go 402" | an upstream 402 on opencode || no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
-| "⚑ gap: the Go draw is the gateway's own traffic only" | Go spend through the old proxy or the jail shim || not in this ledger — this draw is a lower bound of the account's | the account-wide reading (the old proxy's ledger, the jail shim's reports) |
-| "⚑ gap: the Go account headroom" | (work #3108) the vendor's account windows — `GET /zen/go/v1/usage` answers the Go key `{usage: {rolling, weekly, monthly: {status, percent, resetsAt}}}` (account-level, no per-model split; probed 200 on 2026-11-01) || not read — an exhausted block is learnt from the first 429 of a ride, which the harness does not survive (opencode retries three times and exits: 2026-11-01, three rides died mid-work) | a Go twin of [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom), admitting on the account reading and deferring `quota-limited` until `resetsAt`; the per-model window draw above is then a lower bound of one shared pool, not the pool |
 | "⚑ gap: one model across rails" | a model strike on `claude/sonnet` || `opencode-go/claude-haiku-5-5` still admits | the policy names rail-prefixed ids; `model-classes.json` groups them per model, and that grouping is not in the gateway policy |
 | "⚑ gap: labels, urgency, budget class" | body carries none, none read || — | the ADR-096 ladder's inputs; `tier` is the only size knob |
 | "⚑ gap: `POST /route`" | any || 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |

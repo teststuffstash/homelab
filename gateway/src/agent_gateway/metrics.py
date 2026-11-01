@@ -214,14 +214,14 @@ class Metrics:
                 self.sub_reset[(r, w)] = reset
 
     def subscription_report(self, rail: str, windows: Iterable) -> None:
-        """GW-CODEX-HEADROOM §Gauges: an ACCEPTED headroom report's normalised windows (`minutes`,
+        """GW-CODEX-HEADROOM §Gauges: an ACCEPTED headroom report's normalised windows (`key`,
         `used` 0–1, `resets_at`) set the same two gauges the subscription rail renders from headers;
         the caller (headroom's `on_accept`) never fires for a refused report, so a refusal changes
         nothing here."""
         r = _bounded(rail, RAILS)
         with self._lock:
             for w in windows:
-                label = _bounded(window_label(w.minutes), SUBSCRIPTION_WINDOWS)
+                label = _bounded(window_label(w.key), SUBSCRIPTION_WINDOWS)
                 self.sub_util[(r, label)] = w.used
                 self.sub_reset[(r, label)] = w.resets_at
 
