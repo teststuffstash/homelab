@@ -5,6 +5,8 @@
 # 3. Volume utilization ratio calculation works
 # 4. The server error ratio is defined for every shape of a scraped store (#1569) — see the six
 #    "server error ratio —" cases below
+# 5. The 30-day server error ratio is defined for every shape of a scraped store (#3087) — see the
+#    "30-day server error ratio —" cases below
 #
 #   devbox run -- promtool test rules argocd/resources/garage-alerts/garage-slo.promtool-test
 #
@@ -209,6 +211,72 @@ tests:
         exp_samples:
           - labels: '{__name__="garage:s3_server_error_ratio:rate5m",api_endpoint="DeleteObject"}'
             value: 0
+
+  # ── 30-day server error ratio — the shapes of the recording rule (#3087) ──────────────────────────
+  # The 30d rule is the store-wide objective read in docs/garage.md §SLO. The OLD expr divided the
+  # 30d 5xx increase by the 30d request increase with a bare `/`, so BOTH sides had to exist for a
+  # series to appear — and `sum()` over an EMPTY vector is an EMPTY vector. Garage only exports a
+  # 500/503 counter for an endpoint that HAS served a 5xx, so the numerator vanishes as soon as no
+  # 5xx series is inside the window: measured live 2026-10-31 22:38Z, the SAME numerator read `0`
+  # for W=30d only because one stale series was still inside it, and was EMPTY for W=6d/5d/4d — so
+  # on ≈2026-11-24 20:24Z the 30d ratio would go "No data" on its own, with no store event.
+  # The floor is taken from the REQUEST series, never a global `or vector(0)` — an unlabelled floor
+  # would put a series on the chart for a store that is not being scraped at all.
+  - interval: 1m
+    name: "30-day server error ratio — both present (the value docs/garage.md §SLO reads)"
+    input_series:
+      # GetObject: 100 requests/min and 1 error/min over the window
+      - series: 'api_s3_request_duration_count{api_endpoint="GetObject"}'
+        values: "1000+100x5"
+      - series: 'api_s3_error_counter{api_endpoint="GetObject",status_code="500"}'
+        values: "10+1x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:30d
+        eval_time: 5m
+        exp_samples:
+          # 1 / 100 = 0.01 — UNCHANGED by the fix
+          - labels: '{__name__="garage:s3_server_error_ratio:30d"}'
+            value: 0.01
+
+  - interval: 1m
+    name: "30-day server error ratio — requests but no 5xx in the window (the healthy store: \"no data\" before the fix)"
+    input_series:
+      # PutObject: 100 requests/min and NO 5xx series at all (Garage exports none until a 5xx
+      # happens, and a stale one falls out of the 30d window on ≈2026-11-24)
+      - series: 'api_s3_request_duration_count{api_endpoint="PutObject"}'
+        values: "1000+100x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:30d
+        eval_time: 5m
+        exp_samples:
+          # A healthy store reads 0, not "no data"
+          - labels: '{__name__="garage:s3_server_error_ratio:30d"}'
+            value: 0
+
+  - interval: 1m
+    name: 30-day server error ratio — 5xx but no request-duration series
+    input_series:
+      # ListObjectsV2: 1 error/min and NO request-duration series (the guard case, the 30d twin of
+      # the 5m rule's third shape). Not reachable from a live Garage — every 5xx is also counted in
+      # api_s3_request_duration_count (measured 2026-10-31 on the always-501 GetObjectLockConfiguration
+      # endpoint) — so this row guards the metric-semantics-drift case.
+      - series: 'api_s3_error_counter{api_endpoint="ListObjectsV2",status_code="503"}'
+        values: "10+1x5"
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:30d
+        eval_time: 5m
+        exp_samples:
+          # Every counted request errored → 1
+          - labels: '{__name__="garage:s3_server_error_ratio:30d"}'
+            value: 1
+
+  - interval: 1m
+    name: 30-day server error ratio — no Garage scrape at all (must stay distinguishable from a healthy 0)
+    input_series: []
+    promql_expr_test:
+      - expr: garage:s3_server_error_ratio:30d
+        eval_time: 5m
+        exp_samples: []
 
   # ── S3 latency by endpoint class ───────────────────────────────────────────────────────────────
   - interval: 1m
