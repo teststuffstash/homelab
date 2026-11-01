@@ -168,6 +168,10 @@ fetched 19:32:58Z–19:33:13Z):
   200 with `spent_micro_cents "0"` and `resets_at 2026-11-01T00:00:00Z`.
 - **No endpoint** for Go usage per window or per model, remaining allowance, or window anchors.
   The docs only say *"track your current usage in the console"* (a UI).
+  *Stale as of 2026-11-01:* `GET /zen/go/v1/usage` (also under `/inference/go/v1/`) answers the
+  Go key `{usage: {rolling, weekly, monthly: {status, percent, resetsAt}}}` — account-level, no
+  per-model split, no absolute amounts; probed 200 from the jail. Not in the API index, found via
+  the community `cmd-usage` client.
 - **No endpoint** for key metadata such as expiry. Expiry is set when the key is created in the
   UI. *"Automations using a revoked or expired key get HTTP 401 immediately."*
 - **Service accounts and scopes.** Keys are `oc_sk_…` and belong to a service account. Two
@@ -310,6 +314,12 @@ means prose or a TypeScript literal, open to format drift.
    while `go-models.ts` keys them by family (`deepseek-flash`), which ruling 3 rules out.
 3. **Limits are keyed PER MODEL** — RULED: each model's windows are 20% / 50% / 100% of its own
    monthly limit; one model's 429 or latch never blocks another Go model.
+   **Superseded 2026-11-01 by the wire:** every paid Go model draws ONE account allowance; the
+   per-model limits only weight a request's cost against it (OpenCode support's statement,
+   anomalyco/opencode#54875; the docs still read per model, anomalyco/opencode#60311). Three Go
+   cells 429'd within eight minutes against one reset, two admitted fresh after the first. The
+   gateway's opencode rail declares `latch_scope: account` since (sessions.md §Capacity); the
+   account reading is F5's usage endpoint.
 4. **An id missing from the live catalog is REFUSED** — RULED: a typed defer `not-in-catalog`,
    never the fallback price. The policy declares the plan (`plan: "go"`), since no API says.
 5. **The policy keeps only RULES** (model per tier, thresholds, latch hold, max sessions, anchors,

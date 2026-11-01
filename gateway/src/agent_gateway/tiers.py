@@ -250,7 +250,10 @@ def build_snapshot(*, capability: list, go_catalog: dict, openrouter_catalog: di
                    snapshot_at: str, codex_candidates: list[str] = ()) -> dict:
     """The benchmarks snapshot from its three inputs (the shape: catalog.schema.json
     `$defs.benchmarks_snapshot`). Candidates: the Go catalog's listed models with a monthly limit
-    under the deployed plan (`opencode-go/<id>`), priced at the plan's discounted list price
+    under the deployed plan (`opencode-go/<id>`) minus any model a subscription rail already serves
+    (its twin is a subscription candidate's AA row — Go is the cheaper door to the priced catalog,
+    never a second door to a model the subscription pays for; operator ruling 2026-11-01), priced
+    at the plan's discounted list price
     (`GET /catalog/opencode` `pricing`); the OpenRouter catalog's models (`GET /catalog/openrouter`),
     priced at the SELECTED endpoint — null until a cell passed the entry canary (never the
     headline); the subscription rails' candidates as given, unpriced — the anthropic aliases, and the
@@ -275,8 +278,11 @@ def build_snapshot(*, capability: list, go_catalog: dict, openrouter_catalog: di
             raise ValueError(f"codex candidate {pid!r} is not spelled codex/<id>")
         rails["codex"][pid] = row(pid)
     pricing = (go_catalog.get("pricing") or {}).get("models") or {}
+    subscription_aa = [r["aa_id"] for rail in PRICELESS_RAILS for r in rails[rail].values() if r["aa_id"]]
     for mid, m in sorted(go_catalog["models"].items()):
         if m.get("listed") and m.get("monthly_limit_usd") is not None:
+            if any(same_model(RAIL_PREFIX["opencode"] + mid, aa) for aa in subscription_aa):
+                continue  # a subscription rail serves this model: not a Go candidate (ruling 2026-11-01)
             p = pricing.get(mid) or {}
             rides = p.get("rides") or {}
             rails["opencode"][RAIL_PREFIX["opencode"] + mid] = row(
