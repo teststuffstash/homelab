@@ -123,12 +123,13 @@ INTAKE_TS_DIR="$TS" bash "$SEL" --source dig --island nosuch --out "$TMP/sel.jso
 # matches or that owns EVERY Touches entry, each path going to its LONGEST matching prefix.
 section "selector issues — the island table"
 ISS="$TMP/issues.json"
-iss() { # <n> <title> <touches|-> [labels-json] [first-comment-line]
+iss() { # <n> <title> <touches|-> [labels-json] [first-comment-line] [author-json]
   local body="free text"
   [ "$3" != - ] && body="$(printf -- '---\nTouches: %s\n---\n\nfree text' "$3")"
   jq -nc --argjson n "$1" --arg t "$2" --arg b "$body" --argjson l "${4:-[]}" --arg c "${5:-}" \
+    --argjson au "${6:-{\"login\":\"app/homelab-agents-1234\"\}}" \
     '{number:$n, title:$t, body:$b, labels:($l|map({name:.})), createdAt:"2026-10-20T00:00:00Z",
-      author:{login:"app/homelab-agents-1234"}, comments:(if $c == "" then [] else [{body:$c}] end)}' >> "$ISS.rows"
+      author:$au, comments:(if $c == "" then [] else [{body:$c}] end)}' >> "$ISS.rows"
 }
 rm -f "$ISS.rows"
 iss 1  "gateway: a title row"                 -                                             # gateway title
@@ -152,15 +153,43 @@ iss 18 "scan: ruled"                          - '[]' "intake: standing — not n
 iss 19 "post-launch: scan bucket"             -                                             # container → out
 iss 20 "garage: title wins over Touches"      "agents/x.sh"                                 # substrate row precedes agent-loop
 iss 21 "mgmt: lease belt"                     "tofu/garage.tf"                              # mgmt-box row precedes substrate
+# Attribution inputs (homelab#3094): claimed by no island ∧ bot-filed ∧ unlabelled ∧ unruled ∧ not a Goal/container
+# → agent-loop's sitting, kind=attribution; by the header contract #5 #15 #16 (bot-filed, nobody's) join them.
+HUMAN='{"login":"rsoot","is_bot":false}'
+iss 22 "worker OOMKilled at 4Gi on the opencode 1M-context cell" - '["agent-fix"]' "" '{"login":"app/homelab-agents-1234","is_bot":true}'  # #3094 itself
+iss 23 "no title cue, human-filed"            -                         '[]' "" "$HUMAN"     # human + nobody's → none
+iss 24 "no title cue, human, mixed"           "gateway/a.md, agents/b.sh" '[]' "" "$HUMAN"   # human + spans two → none
+iss 25 "no title cue, a [bot] login"          -                         '[]' "" '{"login":"homelab-agents-1234[bot]"}' # REST spelling
+iss 26 "no title cue, bot, queued"            -                         '["agent/queued"]'   # lifecycle label → out
+iss 27 "no title cue, bot, ruled"             -                         '[]' "intake: standing — not now" # ruled → out
+iss 28 "no title cue, bot Goal"               -                         '["task/goal"]'      # a Goal → out
+iss 29 "stint: bot container"                 -                                              # container → out
+iss 30 "gateway: human-filed member"          -                         '[]' "" "$HUMAN"     # claimed: author is irrelevant
 jq -s . "$ISS.rows" > "$ISS"
-members() { INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$1" --json 2>/dev/null | jq -r '[.[].number] | sort | join(" ")'; }
-for row in "gateway:1 2 3 4" "router-pair:8 10" "mgmt-box:11 21" "dependency-upgrades:12 13" "substrate:9 14 20" "agent-loop:6 7"; do
+# members = the island TABLE's selection (kind member); attrs = the attribution inputs (kind attribution)
+members() { INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$1" --json 2>/dev/null | jq -r '[.[] | select(.kind == "member") | .number] | sort | join(" ")'; }
+attrs()   { INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$1" --json 2>/dev/null | jq -r '[.[] | select(.kind == "attribution") | .number] | sort | join(" ")'; }
+for row in "gateway:1 2 3 4 30" "router-pair:8 10" "mgmt-box:11 21" "dependency-upgrades:12 13" "substrate:9 14 20" "agent-loop:6 7"; do
   isl="${row%%:*}"; want="${row#*:}"; got="$(members "$isl")"
   [ "$got" = "$want" ] && ok "--island $isl selects $want" || bad "members $isl" "want '$want' got '$got'"
 done
 all="$(for i in gateway router-pair mgmt-box dependency-upgrades substrate agent-loop; do members "$i"; echo; done | tr ' ' '\n' | grep -c .)"
-[ "$all" = 15 ] && ok "no issue lands on two islands; #5 #15 #16 (mixed / unowned) and #17–#19 land on none" \
-  || bad "exclusivity" "15 memberships expected, got $all"
+[ "$all" = 16 ] && ok "no issue lands on two islands; #5 #15 #16 (mixed / unowned) and #17–#19 land on none" \
+  || bad "exclusivity" "16 memberships expected, got $all"
+got="$(attrs agent-loop)"
+[ "$got" = "5 15 16 22 25" ] && ok "--island agent-loop takes the bot-filed unclaimed (#3094's shape, app/ and [bot] logins) as attribution inputs" \
+  || bad "attribution agent-loop" "want '5 15 16 22 25' got '$got'"
+other="$(for i in gateway router-pair mgmt-box dependency-upgrades substrate; do attrs "$i"; done | tr -d '\n')"
+[ -z "$other" ] && ok "no other island receives an attribution input" || bad "attribution elsewhere" "got '$other'"
+allsel="$(for i in gateway router-pair mgmt-box dependency-upgrades substrate agent-loop; do
+  INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$i" --json 2>/dev/null | jq -r '.[].number'; done | sort -n | tr '\n' ' ')"
+case " $allsel" in *" 23 "*|*" 24 "*|*" 26 "*|*" 27 "*|*" 28 "*|*" 29 "*) bad "attribution filters" "selected: $allsel";;
+  *) ok "human-filed unclaimed (#23 #24) stay none; a labelled / ruled / Goal / container bot filing (#26–#29) is never an attribution input";; esac
+line="$(INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island agent-loop 2>/dev/null | awk -F'\t' '$1 == 22')"
+[ "$(printf '%s' "$line" | awk -F'\t' '{print $5}')" = attribution ] && ok "line output marks an attribution input (fifth column)" \
+  || bad "attribution line" "got: $line"
+line="$(INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island agent-loop 2>/dev/null | awk -F'\t' '$1 == 6')"
+[ "$(printf '%s' "$line" | awk -F'\t' '{print NF}')" = 4 ] && ok "a member's line keeps the four columns" || bad "member line" "got: $line"
 INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island nosuch 2>/dev/null; rc=$?
 [ "$rc" = 2 ] && ok "issues mode: an island with no membership row is refused (exit 2)" || bad "issues island table" "rc=$rc"
 INTAKE_ISSUES_JSON="$TMP/nowhere.json" bash "$SEL" --island substrate 2>/dev/null; rc=$?
