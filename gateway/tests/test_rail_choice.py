@@ -259,9 +259,9 @@ async def test_openrouter_wins_clean_rate(gw, app, store, upstreams):
     world(upstream="upstream-ok", note=f"{WORLD}; six judged Go rides on MG, one clean")
     _seed(app, store, upstreams)
     with given("six judged worker rides on opencode-go/deepseek-v4.1-flash (distinct tasks), one clean, five harness-gave-up"):
-        with quiet():  # the six rides' per-ride summaries fold into the cell's one ride table (ATTACH_BULK: ≤ 8 per case)
-            for i in range(6):
-                doc = await _go_ride(gw, upstreams, {"input_tokens": 12, "output_tokens": 7}, task=f"homelab-2743-rate-{i}")
+        for i in range(6):
+            doc = await _go_ride(gw, upstreams, {"input_tokens": 12, "output_tokens": 7}, task=f"homelab-2743-rate-{i}")
+            with quiet():
                 await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "clean" if i == 0 else "harness-gave-up"})
                 await gw.delete(f"/sessions/{doc['session']['id']}")
         attach_json("the Go cell's rides", store.cell_outcomes("opencode", MG))
@@ -359,7 +359,7 @@ AGE_ROWS = [("age is seconds since snapshot_at", True, 600.0), ("no snapshot mou
 async def test_evidence_age(settings, policy, secrets, store, mcp_transport, clock, reviews, pods, tmp_path, mounted, age):
     world(note="policy-default; GATEWAY_BENCHMARKS = a scratch file")
     path = tmp_path / "benchmarks.json"
-    with given(f"mounted {mounted}: GATEWAY_BENCHMARKS {path.name} is " + ("a snapshot with snapshot_at T0 − 600 s" if mounted else "no such file")):
+    with given(f"GATEWAY_BENCHMARKS {path.name}: " + ("a snapshot with snapshot_at T0 − 600 s" if mounted else "no such file")):
         if mounted:
             at = clock() - 600
             from agent_gateway.tiers import _iso

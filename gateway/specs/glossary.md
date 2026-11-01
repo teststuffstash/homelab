@@ -230,9 +230,9 @@ rail — a session admitted with `canary: {model, provider}` (the policy's `cana
 `canary.harness`), pinned with fallbacks off and no failover — whose outcome is the cell's verdict:
 `clean` → `eligible`, a strike → `excluded`. It is the catalog's own gate, on demand (as the
 catalog refreshes) and budget-capped (`canary.max_per_refresh`, `canary.usd_per_day`). The
-platform's unqualified **canary** ([`docs/glossary.md`](../../docs/glossary.md)) was first the
-model scout's rail probe of a (model, harness, class) cell; this one adds the provider axis, and since
-the scout's retirement (2026-11-01) it is the platform's only canary.
+platform's unqualified **canary** ([`docs/glossary.md`](../../docs/glossary.md)) is the scout's
+rail probe of a (model, harness, class) cell; this one adds the provider axis and supersedes the
+scout's canary leg for OpenRouter entrants.
 
 ## persistence interface
 

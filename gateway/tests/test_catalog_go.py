@@ -289,18 +289,12 @@ async def test_docs_refresh(cworld, vendor, clock, last, behaviour, outcome, mod
     if behaviour == "docs-promo":
         with then("gemini-4-argon: the promotion multiplier 0.5, the limits $30 / $120, every other model unchanged; bonus stays the Nx map only"):
             docs = app.state.catalog.snapshots["docs"].body
-            # the five facts in ONE verdict attachment (ATTACH_BULK: ≤ 8 per case) — every assertion kept
-            check("promotion map · gemini-4-argon limits (go / go-plus) · other models (go) · other models (go-plus) · bonus",
-                  {"promotion": docs["promotion"],
-                   "gemini-4-argon limits": (docs["plans"]["go"]["gemini-4-argon"], docs["plans"]["go-plus"]["gemini-4-argon"]),
-                   "other models (go)": sorted(set(docs["plans"]["go"]) - {"gemini-4-argon"}),
-                   "other models (go-plus)": sorted(set(docs["plans"]["go-plus"]) - {"gemini-4-argon"}),
-                   "bonus": docs["bonus"].get("gemini-4-argon")},
-                  {"promotion": {"gemini-4-argon": 0.5},
-                   "gemini-4-argon limits": (30.0, 120.0),
-                   "other models (go)": sorted(LISTED_FIVE),
-                   "other models (go-plus)": sorted(LISTED_FIVE),
-                   "bonus": None})
+            check("the docs snapshot's promotion map", docs["promotion"], {"gemini-4-argon": 0.5})
+            check("gemini-4-argon's monthly limit (go / go-plus)",
+                  (docs["plans"]["go"]["gemini-4-argon"], docs["plans"]["go-plus"]["gemini-4-argon"]), (30.0, 120.0))
+            check("the other models' limits unchanged (go)", sorted(set(docs["plans"]["go"]) - {"gemini-4-argon"}), sorted(LISTED_FIVE))
+            check("the other models' limits unchanged (go-plus)", sorted(set(docs["plans"]["go-plus"]) - {"gemini-4-argon"}), sorted(LISTED_FIVE))
+            check("bonus stays the Nx map only", docs["bonus"].get("gemini-4-argon"), None)
 
 
 # ── A Plan-table row naming a plan the leg does not model is passed over (#3011) ──────────────
