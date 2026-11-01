@@ -301,6 +301,9 @@ is stale, so it cannot drift the way the prose register did.
 | `fleet-fault-unlatch-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-issue-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fleet-fault-unlatch-issue-no-pr-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fleet-fault-unlatch-issue-no-pr-list-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
+| `fleet-fault-unlatch-issue-no-pr` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-no-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-reader-rekey` | table | - | `agents/coordinator-scan.sh` | IL-T30 |
