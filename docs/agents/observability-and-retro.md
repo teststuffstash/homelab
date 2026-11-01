@@ -737,6 +737,7 @@ health signal.
 | `footprint-held` | operator | Queued issue held by an in-progress issue's `Touches` (ADR-097 intersection) |
 | `cap-held` | operator | Queued issue held by the per-base PR budget cap (`REPO_PR_CAP`, machine-flowing PRs only) |
 | `blockpark` | operator | Queued issue held by the codeowner-parked PR budget (`REPO_BLOCKPARK_CAP`) |
+| `ci-red-held` | machine | Armed red PR held by the ci-red clause's fleet-class hold — the red is master's or a sibling-ruled infra/environment fault (homelab#1909); releases when master greens / the 24 h window lapses |
 | `guarded-path` | operator | Pin-only guarded path — operator push needed |
 | `orphan-unarmed` | operator | Open PR not on merge path — arm or park |
 | `container` | none | Post-launch bucket, container issue |
