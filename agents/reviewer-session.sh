@@ -1169,6 +1169,7 @@ esac
 # The create's stderr is captured so a refusal can name its cause: a Forbidden is RBAC (this SA cannot
 # write the namespace it was pointed at), not a lost race or a bad manifest.
 CREATE_ERR="$(mktemp)"
+# >>>REPLAY:reviewer-create-refusal>>>
 create_refusal() {
   cat "$CREATE_ERR" >&2
   if grep -q 'Forbidden' "$CREATE_ERR"; then
@@ -1178,6 +1179,7 @@ create_refusal() {
   fi
   rm -f "$CREATE_ERR"; exit 3
 }
+# <<<REPLAY:reviewer-create-refusal<<<
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - 2>"$CREATE_ERR" || create_refusal
 apiVersion: v1
 kind: Pod
