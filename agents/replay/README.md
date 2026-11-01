@@ -118,8 +118,8 @@ follows fix-density per ADR-103, never big-bang):
    every `world/` file before and after the run and REDS if any moved — hashing rather than
    `git status` so the gate can tell "the run changed a world" from "the author is editing a
    fixture". `--record`/`--rerecord` return before the check: writing worlds is their job. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
-   the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename, and `scout-bench/*`
-   pins a jq-version float format awaiting its emitter fix (the versions gap below).
+   and the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename. (The third member,
+   `scout-bench/*`, left with `model-scout.sh` when the scout retired 2026-11-01.)
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
    `mode: suite` entries (scripts stay put; `entrypoint:` points at them) so "executed replay"
    has one runner and one index. Bulk executed by stint #661 (PR#671, 5 standalone harnesses
@@ -540,16 +540,6 @@ is stale, so it cannot drift the way the prose register did.
 | `scan-phase-marker/scan-phase-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-touches-footprint-hold/scan-touches-footprint-hold` | actions | - | `agents/touches-check.sh` | - |
 | `scan-wedge-alert/scan-wedge-alert` | suite | - | `-` | - |
-| `scout-bench/mcp-error` | actions | - | `agents/model-scout.sh` | - |
-| `scout-bench/ranked-columns` | actions | - | `agents/model-scout.sh` | - |
-| `scout-bench/unkeyed-unbenched` | actions | - | `agents/model-scout.sh` | - |
-| `scout-canary-filing-gate` | table | - | `agents/model-scout.sh` | - |
-| `scout-canary-mint-unbound` | actions | - | `agents/model-scout.sh` | - |
-| `scout-canary-ride-model-prefix` | actions | - | `agents/model-scout.sh` | - |
-| `scout-intake-stateless` | actions | - | `agents/model-scout.sh` | - |
-| `scout-state-unkeyed` | actions | - | `agents/model-scout.sh` | - |
-| `scout-variant/batch-rollout` | actions | - | `agents/model-scout.sh` | - |
-| `scout-variant/known-base` | actions | - | `agents/model-scout.sh` | - |
 | `session-atomic-gate/session-atomic-gate` | actions | - | `agents/coordinator-session.sh` | - |
 | `session-belt/c4c5` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt/fast-path-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -666,6 +656,10 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   recorded `endsAt` would drift into the past and the family would converge on "resolved" while
   looking green. (`fixture.yaml`'s subset takes no inline comments — a trailing `# …` rides into
   the value and reaches `jq --argjson` as garbage.)
+
+> The `scout-*` fixtures cited in S4–S6 below left with `agents/model-scout.sh` when the model
+> scout retired (2026-11-01, superseded by the agent-gateway's entry canary — `GW-CATALOG-OR`);
+> the patterns stand, and the fixtures are in git history.
 
 - **S4 — Shadow the TRANSPORT under the seam you are asserting.** `retro-key/*` (homelab#270)
   shadows `python3` itself so `estimate_budget.py`'s real pricing, tier choice and `emit_cr`

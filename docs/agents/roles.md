@@ -51,7 +51,7 @@ Three platform-wide design rules bound every brief (operator, 2026-07-27; the th
 |---|---|---|---|
 | dispatch-on-work | scan-emitted work unit (issue/PR state) | fixer; infra-fixer (FU-106 — detector + infra-enrich 2026-07-27, oracle-iac twin 2026-08-02; both -iac repos have merged rides) | |
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
-| dispatch-on-schedule | cron (level-triggered) | scout; retro; prober (FU-102 — `probe-<stack>` since 2026-08-24) | audit-pass (FU-101 e-ITS) |
+| dispatch-on-schedule | cron (level-triggered) | retro; prober (FU-102 — `probe-<stack>` since 2026-08-24) | audit-pass (FU-101 e-ITS) |
 | dispatch-on-alert | Alertmanager firing | responder v2 (triage-first, GitOps-verbs) | remediation whitelist; selfQueue |
 | dispatch-on-goal | a human-queued mission (research) / Goal issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
@@ -108,15 +108,14 @@ Three platform-wide design rules bound every brief (operator, 2026-07-27; the th
   weekly window (FU-058 activity windows; a refused window rolls forward); no edge;
   keys/breakers inherit launcher defaults. Planned duty: harvests the local rules delta (§Lenses maintenance).
 
-### scout (model-scout)
+### scout (model-scout) — RETIRED
 
-- **brief**: scout probe (model-routing-history.md §M7 — v3 redesign 2026-08-10: variant filter,
-  benchmark cross-check, typed cell-keyed canary verdicts, and the §M13 pool-curation duty;
-  FU-161/FU-162)
-- **boundary**: ephemeral only-free capped keys (canary)
-- **machinery**: backstop = weekly `model-scout` cron (reflexes-argo.yaml); no edge; FU-095(b)
-  extends its candidate source to a maintained rotation. Documented under the model axis today;
-  it is a *role* — machinery listed here, content stays in model-routing.md.
+**Retired 2026-11-01**, superseded by the agent-gateway's entry canary + tier evidence
+(`GW-CATALOG-OR` / `GW-MODEL-TIERS`, `gateway/scripts/canary-entrants.sh` —
+[`gateway/README.md`](../../gateway/README.md)): new candidate models now enter through the
+gateway's catalog, canaried per (model, provider) cell before they join a provider order. The
+weekly `model-scout` cron, `agents/model-scout.sh`, its `scout-account` key and its replay family
+are gone; design history stays in [`model-routing-history.md`](../spikes/model-routing-history.md) §M7.
 
 ### meta-coordinator
 
@@ -176,7 +175,7 @@ never harder posture on quiet ones.
 ## Role machinery checklists (built + planned)
 
 - **prober** (FU-102) — the **contract probe** role (glossary ruling: *canary* unqualified is
-  the scout's rail probe; the early "agentic canary" name is retired). Product-contract probes (oracle UC-1 probe-e2e is
+  a rail probe — the retired scout's, now the gateway's entry canary; the early "agentic canary" name is retired). Product-contract probes (oracle UC-1 probe-e2e is
   the proven brief); prod-read + report-only. **Scheduled leg BUILT 2026-08-07; FIRST FLIP 2026-08-24
   (platform stack, homelab#835)**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
   (CronWorkflow, loop ns) running `<mainRepo>/.agents/probe.md` on the SUBSCRIPTION

@@ -1796,8 +1796,7 @@ resumable_branches=""   # FU-199: space-separated repo#N=branch pairs for goal c
 # ── Ratchet clause files (homelab#825, #853) ─────────────────────────────
 # CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
 # Parity assertion below verifies this list matches the regex at runtime.
-clause_files="agents/model-scout.sh
-agents/coordinator-scan.sh
+clause_files="agents/coordinator-scan.sh
 agents/review-reflex.sh
 agents/reviewer-session.sh
 agents/reviewer-optout.sh
