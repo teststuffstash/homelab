@@ -1,0 +1,17 @@
+# 2026-11-01 (FU-270) — a GATEWAY-admitted review served from the Go rail is still a Go ride.
+#
+# CONDITION UNDER REPLAY. The reviewer admitted through the agent-gateway, which picked an
+# anthropic-dialect Go cell (opencode-go/claude-haiku-5-5). The pod's claude invocation model is the
+# gateway's wire id — the rail prefix STRIPPED (GW-MODEL-RESOLVE) — so MODEL alone no longer says
+# which rail the ride draws.
+#
+# THE CONTRACT: the label is decided from the gateway's own model id (GW_MODEL, prefix kept) when the
+# review was admitted, so the pod is counted by the Go semaphore, not the Anthropic one — the same
+# inversion the `go` row pins for the old failover.
+name: reviewer-rail-label-gateway-go
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-rail-label
+  - file:post.sh

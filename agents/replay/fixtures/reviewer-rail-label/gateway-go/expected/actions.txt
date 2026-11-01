@@ -1,0 +1,3 @@
+OUT COUNTED BY: the Go semaphore (OPENCODE_MAX_RUNNING)
+OUT LABEL: , "homelab.teststuff.net/rail": opencode-go
+RC 0

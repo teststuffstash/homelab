@@ -1,0 +1,15 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"reviewer","task":"review-homelab-42","round":1,"harness":"claude","bind":{"namespace":"platform-agents","serviceaccount":"agentstack-loop","pod":"reviewer-homelab-42-0a1b2c3d"}}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): dispatch claude/sonnet [rail=anthropic,harness=claude,session=0123abcd,context_tokens=null] (task=review-homelab-42, round=1) — bound to platform-agents/agentstack-loop pod reviewer-homelab-42-0a1b2c3d; the pod pulls env ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL; caller the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)
+OUT → gateway(sessions): reviewer served claude/sonnet; author's served model opencode-go/mimo-v2.6-pro (evidence only — no family exclusion at the gateway; FU-188)
+OUT GW_SESSIONS='1' MODEL='sonnet' MODEL_RAIL='anthropic' GO_SERVED=0
+OUT AGENT_ROUTER='off' _router_adopted='gateway' GW_PULL_PRELUDE set: yes
+OUT LABEL:, "homelab.teststuff.net/gateway-session": "0123abcd"
+OUT POD LLM ENV:
+OUT         - name: AGENT_GATEWAY_PULL_URL
+OUT           value: "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env"
+OUT         - name: AGENT_GATEWAY_ENV_KEYS
+OUT           value: "ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL"
+OUT MOUNT:gateway-token VOLUME:gateway-token
+OUT → gateway(sessions): released 0123abcd
+RC 0

@@ -1,0 +1,15 @@
+# 2026-11-01 (FU-270) — a refused gateway admission labels by the model the pod really rides.
+#
+# CONDITION UNDER REPLAY. The gateway answered a dispatch this claude-only pod cannot run; the helper
+# released it and the launcher fell back to the old-proxy path (the transition fallback). The
+# helper's GW_MODEL survives the refusal.
+#
+# THE CONTRACT: only an ADMITTED review (GW_SESSIONS) labels from GW_MODEL; a fallback review is the
+# ordinary subscription ride and keeps the FU-088 semaphore label.
+name: reviewer-rail-label-gateway-fallback
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-rail-label
+  - file:post.sh

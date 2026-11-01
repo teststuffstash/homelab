@@ -859,6 +859,15 @@ spec:
                 entrypoint: main
                 volumes:
                   - { name: work, emptyDir: {} }
+                  {{- if eq $stack "platform" }}
+                  # FU-270 (GW-SESSIONS-AUTH): the gateway caller token for reviewer-session.sh's
+                  # admission (it runs in THIS pod, under review-reflex.sh), audience agent-gateway;
+                  # kubelet rotates it and the helper re-reads it per call. Platform only, with the knob.
+                  - name: gateway-token
+                    projected:
+                      sources:
+                        - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
+                  {{- end }}
                 templates:
                   - name: main
                     container:
@@ -883,8 +892,18 @@ spec:
                         # goal→master shape) — review-reflex.sh routes on it; all other PRs
                         # keep the reviewer default. Claim-owned; see model-routing-history.md §M10.
                         - { name: REVIEW_GOAL_MODEL, value: {{ default "sonnet" (get (default dict (get $xr.spec "reviewer")) "goalModel") | quote }} }
+                        {{- if eq $stack "platform" }}
+                        # FU-270, the reviewer flip: the PLATFORM stack's reviews admit through the
+                        # agent-gateway's POST /sessions (agents/reviewer-session.sh, the
+                        # reviewer-gateway-admit block, which guards on the same stack name). Env-only
+                        # knob, gated here like the worker's (coordinator-session.sh GW_KNOB_ENV).
+                        - { name: AGENT_GATEWAY, value: "sessions" }
+                        {{- end }}
                       volumeMounts:
                         - { name: work, mountPath: /work }
+                        {{- if eq $stack "platform" }}
+                        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
+                        {{- end }}
                       resources:
                         requests: { cpu: "100m", memory: "256Mi" }
                         limits: { memory: "512Mi" }
