@@ -114,3 +114,33 @@ tests:
         alertname: CiRunnerNodeExporterDown
         exp_alerts:
           - exp_labels: { severity: warning, triage: none, job: ci-runner-node }
+
+  # ArcRunnerPodOverstayed — the krhxv shape (2026-10-26): a runner pod created at t=0 that never
+  # goes away is over 16 h from the 16h15m evaluation (this file's 15m interval) and fires 30 m
+  # later, at 16h45m. A healthy runner living 7.8 h (the 20-day max) and the
+  # prepull DaemonSet pod (days old by design) stay quiet. kube_pod_created is the pod's creation
+  # time in seconds; promtool's clock starts at 0, so a pod created at t=0 has value 0 and one
+  # created at 1 h has 3600.
+  - interval: 15m
+    input_series:
+      - series: 'kube_pod_created{namespace="arc-runners",pod="homelab-ephemeral-runner-krhxv"}'
+        values: '0x120'
+      - series: 'kube_pod_created{namespace="arc-runners",pod="homelab-ephemeral-runner-cflwt"}'
+        values: '3600x31 _x88'
+      - series: 'kube_pod_created{namespace="arc-runners",pod="runner-image-prepull-qrld2"}'
+        values: '0x120'
+    alert_rule_test:
+      - eval_time: 8h
+        alertname: ArcRunnerPodOverstayed
+        exp_alerts: []
+      - eval_time: 16h30m
+        alertname: ArcRunnerPodOverstayed
+        exp_alerts: []
+      - eval_time: 16h45m
+        alertname: ArcRunnerPodOverstayed
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, namespace: arc-runners, pod: homelab-ephemeral-runner-krhxv }
+      - eval_time: 30h
+        alertname: ArcRunnerPodOverstayed
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, namespace: arc-runners, pod: homelab-ephemeral-runner-krhxv }
