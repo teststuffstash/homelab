@@ -79,3 +79,35 @@ spec:
               may be parked by `ci_runner_02_running = false` in tofu/ci-runner.tf), then
               `systemctl status prometheus-node-exporter` on the VM. A VM created before the exporter
               joined the runner cloud-init (2026-10-08) has none until it is recreated.
+
+    # ARC runner pods that outlive any job (2026-11-01, #3107 dig). An ARC runner pod is single-use:
+    # idle wait + ONE job, then ARC deletes it. homelab-ephemeral-runner-krhxv took a job on
+    # 10-26 23:03Z (right after the actions-runner bump), its listener hung at the token request,
+    # GitHub failed the job at 23:13Z — and the pod stayed Running for 5.6 days: one of the
+    # maxRunners slots dead and no warm idle runner, so every job cold-started (queue p50 3 s →
+    # 29 s). Nothing alerted: the pod was Ready, the scale set healthy, the queue never stalled.
+    # Signal: pod age. Over the 20 days of retention the longest healthy runner pod lived 7.8 h
+    # (idle wait + job); 16 h is ~2× that, under GitHub's 6 h default job timeout + a long idle
+    # wait. kube_pod_created exists only while the pod does, so the alert resolves on deletion.
+    # The pod regex is the ARC runner naming (`<scale-set>-runner-<5>`) — every scale set, never
+    # the runner-image-prepull DaemonSets in the same namespace.
+    - name: arc-runner-pods
+      rules:
+        - alert: ArcRunnerPodOverstayed
+          expr: |
+            time() - kube_pod_created{namespace="arc-runners",pod=~".+-runner-[a-z0-9]{5}"} > 16 * 3600
+          for: 30m
+          # triage dig: the remedy is readable in-cluster (the EphemeralRunner's JOBID vs the job's
+          # GitHub state); not acute — the pool degrades by one slot, it does not stop
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "ARC runner pod {{ $labels.pod }} alive {{ $value | humanizeDuration }} — single-use runner stuck"
+            description: >-
+              An ARC runner pod lives for one idle wait plus one job (longest healthy 2026-10/11:
+              7.8 h); {{ $labels.pod }} has existed {{ $value | humanizeDuration }}. Likely a
+              runner whose job ended on GitHub while the pod kept running (the 2026-10-26 krhxv
+              hang: listener stuck after acknowledging the job), or a pod that never started.
+              It holds a maxRunners slot and, while it lasts, ARC keeps no warm idle runner.
+              Check: `kubectl -n arc-runners get ephemeralrunners -o wide` (JOBID/JOBREPOSITORY),
+              the job's state on GitHub, the runner container's log tail. If the job is finished:
+              `kubectl -n arc-runners delete ephemeralrunner {{ $labels.pod }}` — ARC replaces it.
