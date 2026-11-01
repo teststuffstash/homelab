@@ -1,0 +1,10 @@
+# fix-debounce-setpass-admit — the decision table (family contract in fixture.yaml). Row state (the
+# set's repos, the gateway's reply, the caller token) lives in rows/<id>/vars.sh.
+# id                       | world | patch | env                    | expect                   | params
+platform-dispatch          |       |       | AGENT_GATEWAY=sessions | platform-dispatch        |
+mixed-set-old-proxy        |       |       | AGENT_GATEWAY=sessions | mixed-set-old-proxy      |
+unclaimed-repo-old-proxy   |       |       | AGENT_GATEWAY=sessions | unclaimed-repo-old-proxy |
+knob-off                   |       |       |                        | knob-off                 |
+defer                      |       |       | AGENT_GATEWAY=sessions | defer                    |
+fail-closed-fallback       |       |       | AGENT_GATEWAY=sessions | fail-closed-fallback     |
+no-token-fallback          |       |       | AGENT_GATEWAY=sessions | no-token-fallback        |

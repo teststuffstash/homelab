@@ -217,6 +217,11 @@ spec:
   volumes:
     - { name: work, emptyDir: {} }
     - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    # GW-SESSIONS-AUTH (FU-270): this pod's projected ServiceAccount token for the gateway's caller check.
+    - name: gateway-token
+      projected:
+        sources:
+          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
   templates:
     - name: main
       steps:
@@ -343,6 +348,10 @@ spec:
           # Payload rides an env var, NOT shell interpolation — an apostrophe in an alert
           # annotation must not break quoting (k8s env delivery is byte-safe).
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
+          # FU-270: the agent-gateway admits each PLATFORM-routed triage (the deep dig's wiring,
+          # deep-dig-argo.yaml); the ref rail below stays the old-proxy path for every other stack
+          # and for the transition fallback.
+          - { name: AGENT_GATEWAY, value: "sessions" }
           # Subscription auth via the ADR-087 ref rail (the reviewer pattern — never the raw token).
           - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
           - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
@@ -380,6 +389,7 @@ spec:
         volumeMounts:
           - { name: work, mountPath: /work }
           - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
         command: [bash, -lc]
         args:
           - |
@@ -685,6 +695,8 @@ spec:
             # `^fix-verdict:`/`^alert-fp:` greps stay legacy until the clone moves (homelab#1431
             # closeout; moving it would clone on every resolve-only payload, a separate call).
             ib() { python3 /work/homelab/agents/issue_body.py "$@"; }
+            # The shared gateway admission helper (FU-270) — gw_admit_lane at the claude call below.
+            . /work/homelab/agents/gateway-admit.sh
 
             TODAY="$(date -u +%Y-%m-%d)"
             # FU-113(a): every non-triaging outcome writes a LEDGER MARKER (value forms that do
@@ -701,6 +713,9 @@ spec:
             fi
             # Log which rail we're on (Go rail only when Anthropic is latched)
             case "$rail" in opencode-go/*) echo "→ Anthropic latched — serving triage on the Go rail ($rail)";; esac
+            # The latch's pick is the payload's OLD-PROXY rail; a gateway-admitted session records its
+            # own rail per alert (FU-270, at the claude call), so the loop resets from this each time.
+            LATCH_RAIL="$rail"
 
             # ── FU-149: THE DAILY BUDGET, CHECKED FIRST AND BINDING ─────────────────────────
             # This runs BEFORE any per-alert work because it is the only gate that bounds the DAY.
@@ -1417,14 +1432,30 @@ spec:
               # Touched HERE, immediately before the run, so a multi-alert payload never uploads a
               # predecessor's transcript into this alert's prefix.
               : > "$SCRATCH/ts-mark"; : > "$SCRATCH/triage.log"
-              TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)"
+              # FU-270: the agent-gateway admits this session — PLATFORM-ROUTED alerts only (the route
+              # default above; every other stack's triage stays on the old proxy, the helper's gate).
+              # agents/gateway-admit.sh's UNBOUND lane shape: the dispatch env rides `env` onto the
+              # claude call, overriding the pod's old-proxy ANTHROPIC_*. A gateway DEFER defers like the
+              # latch does above — but the ledger already reads this alert (and its subject) as triaged
+              # today, so both are re-marked `deferred-` (a value neither dedup matches) and the exit 1
+              # hands the payload to Argo's retry; the write-once spawn- key stays, so a deferring
+              # gateway spends budget and cannot loop past the FU-149 cap. rc 4 = the old path (knob
+              # off, another stack, or the FU-270 transition fallback, logged by the helper).
+              rail="$LATCH_RAIL"; TS_MODEL=""; _gw=0
+              gw_admit_lane "$SCRATCH/gw-llm.env" --stack "$ROUTE_STACK" --role responder --task "alert-$FP" || _gw=$?
+              case "$_gw" in
+                0) trap gw_release EXIT; rail="gateway:$GW_RAIL"; TS_MODEL="$GW_WIRE_MODEL";;
+                1) kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"deferred-$TODAY\",\"$SUBJ_KEY\":\"deferred-$TODAY\"}}" >/dev/null 2>&1 || true
+                   echo "triage DEFERRED — the gateway deferred $NAME ($FP) [$GW_DEFER_REASON]; markers written, exit 1 → Argo retries with backoff (FU-113b)"; exit 1;;
+              esac
+              [ -n "$TS_MODEL" ] || TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)"
               # The routed answer is a rail-prefixed id (`claude/sonnet`); the claude CLI takes the BARE
               # alias — parse through the ONE parser (model_id.py), coordinator-session.sh's exact move
               # (FU-127, PR#813). Passed verbatim, EVERY triage session since 2026-09-01 19:24 died at
               # model selection ("There's an issue with the selected model (claude/sonnet)") while the
               # workflow still Succeeded — 8/12 of the daily budget spent on sessions that never ran,
               # 156 in the 7 days Loki holds, and no alert consumer sees a WARN inside a green run.
-              claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
+              env "${GW_LLM_ENV[@]}" claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
             THE ALERT (JSON): $(cat "$SCRATCH/alert-one.json")
 
@@ -1471,6 +1502,7 @@ spec:
                 --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 40 </dev/null 2>&1 \
                 | tee "$SCRATCH/triage.log" \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow" | tee -a "$SCRATCH/triage.log"
+              gw_release   # FU-270: this alert's gateway session (no-op on the old path); the trap is the backstop
               # The model resolution moved ABOVE the call (TS_MODEL) so the manifest can record
               # which model actually ran. It is the same one-parser expression, not a second read:
               # passing the routed answer verbatim is what killed EVERY triage session for a week

@@ -39,6 +39,17 @@
 #       rc 2  refused before any request (a bad round/attempt).
 #   gw_release        DELETE /sessions/{id}; idempotent, non-fatal (the TTL is the backstop).
 #   gw_auth_header    the caller header for `curl -H @<(gw_auth_header)` — the token never rides argv.
+#   gw_admit_lane <env-file> --stack S --role R --task T [gw_admit options]
+#       The UNBOUND LANE shape: a workflow pod that runs its OWN claude (the coordinator namespace's
+#       responder, deep dig, island intake, fix-debounce set-pass). Knob, platform gate, caller
+#       preflight and gw_admit in one call; the dispatch env lands in the array GW_LLM_ENV (KEY=VALUE
+#       items for `env "${GW_LLM_ENV[@]}" claude …`, which overrides the pod's old-proxy ANTHROPIC_*;
+#       the file is read and removed). --harnesses defaults to claude (later options override).
+#       rc 0 dispatch — GW_LLM_ENV + gw_admit's outputs set; the caller owns `trap gw_release EXIT`.
+#       rc 1 defer — the caller defers exactly as it defers today.
+#       rc 4 the old-proxy path — AGENT_GATEWAY is not `sessions` (silent), the stack is not platform
+#            (one line: the flip is platform-only), or the TRANSITION FALLBACK (FU-270): a refusal
+#            before any request (2) or a fail-closed (3), logged as one loud line.
 #
 # The model is the GATEWAY's: no argument names one. --harness only narrows the walk to a dialect.
 # A bound answer that carries a credential (a token or an env map) is refused: the launcher never
@@ -49,7 +60,7 @@ GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local
 GW_CALLER_TOKEN_FILE="${AGENT_GATEWAY_CALLER_TOKEN_FILE:-/var/run/secrets/agent-gateway/token}"
 GW_SESSION_ID=""; GW_ENV_KEYS=""; GW_PULL_URL=""; GW_RAIL=""; GW_CONTEXT_TOKENS=""; GW_EXPIRES_AT=""
 GW_HARNESS=""; GW_MODEL=""; GW_WIRE_MODEL=""; GW_PULL_PRELUDE=""; GW_CALLER_DESC=""
-GW_DEFER_REASON=""; GW_RETRY_AFTER=""
+GW_DEFER_REASON=""; GW_RETRY_AFTER=""; GW_LLM_ENV=()
 
 # gw_caller_token — a FRESH caller token on stdout (GW-SESSIONS-AUTH), fetched per call and never
 # kept in a variable: the release may run hours after admission, past a 10-minute mint and past a
@@ -251,4 +262,30 @@ gw_admit() {
     echo "→ gateway(sessions): dispatch ${GW_MODEL} [rail=${GW_RAIL},harness=${GW_HARNESS},session=${GW_SESSION_ID},context_tokens=${GW_CONTEXT_TOKENS:-null}] (task=${task}, round=${round}) — unbound; env ${GW_ENV_KEYS} written to ${envfile}; caller ${GW_CALLER_DESC:-?}"
   fi
   return 0
+}
+
+# gw_admit_lane — the interface is in the header. The platform-only gate lives HERE, once, for every
+# lane (operator ruling 2026-11-01: other stacks stay on the old proxy), so a lane that serves several
+# stacks passes the item's stack and never re-states the rule.
+gw_admit_lane() {
+  local envfile="${1-}" stack="" prev="" a rc=0
+  [ $# -gt 0 ] && shift
+  GW_LLM_ENV=()
+  [ "${AGENT_GATEWAY:-}" = "sessions" ] || return 4
+  for a in "$@"; do [ "$prev" = "--stack" ] && stack="$a"; prev="$a"; done
+  if [ "$stack" != "platform" ]; then
+    echo "→ gateway(sessions): stack '${stack:-unresolved}' stays on the old proxy — the /sessions flip is platform-only (FU-270)" >&2
+    return 4
+  fi
+  [ -n "$envfile" ] || { echo "gw_admit_lane: an env-file path is required" >&2; rc=2; }
+  [ "$rc" -ne 0 ] || gw_preflight_caller || rc=$?
+  [ "$rc" -ne 0 ] || gw_admit --harnesses claude "$@" --env-file "$envfile" || rc=$?
+  case "$rc" in
+    0) mapfile -t GW_LLM_ENV < "$envfile"; rm -f "$envfile"; return 0;;
+    1) return 1;;
+  esac
+  # FU-270: transition fallback — deleted when the old proxy retires. A gateway outage must never
+  # stop a lane while the old proxy still serves it.
+  echo "gateway admission refused rc=${rc} — old-proxy fallback" >&2
+  return 4
 }
