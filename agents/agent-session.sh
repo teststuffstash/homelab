@@ -238,6 +238,12 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 #                            (`kubectl create token … --audience agent-gateway --duration 10m`).
 #   AGENT_GATEWAY_CALLER_TOKEN_FILE=<path>  in a pod: the projected caller token
 #                            (default /var/run/secrets/agent-gateway/token).
+#   AGENT_GATEWAY_FALLBACK_EXIT=<n>  FU-270: transition fallback — set by a wrapping launcher that
+#                            keeps an old-proxy path (retro-session.sh, research-fanout.sh): an
+#                            admission refused before any request (helper rc 2) or failed closed
+#                            (rc 3) prints `gateway admission refused rc=N — old-proxy fallback` and
+#                            exits <n> (no pod), so the wrapper re-runs its old path; a defer (rc 1)
+#                            stays the router-defer exit. Unset = no fallback (the worker's contract).
 #
 # The CALLER authenticates (GW-SESSIONS-AUTH): every POST / DELETE /sessions carries
 # `Authorization: Bearer <a projected ServiceAccount token, audience agent-gateway>`, and the
@@ -254,8 +260,9 @@ _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {
 # capacity answer (count + window + latch + credential), and a second launcher-side opinion would
 # re-introduce the self-routing UC-1 exists to delete. PLATFORM STACK ONLY: the gateway's policy
 # names its stacks, and the canary is platform's — any other stack keeps today's path, loudly.
-# FAIL CLOSED: unreachable / non-200 / unparseable = the router-defer exit (no pod). It is an
-# explicit experiment, so it never falls back onto the old proxy's rail.
+# FAIL CLOSED: unreachable / non-200 / unparseable = the router-defer exit (no pod). It never falls
+# back onto the old proxy's rail by itself — only a wrapper's AGENT_GATEWAY_FALLBACK_EXIT (above)
+# hands the refusal back to a caller that keeps one (FU-270: transition fallback).
 # ⚠ The launcher NEVER holds the session token (operator ruling 2026-10-17, GW-SESSIONS-PULL): the
 # request carries `bind` (the pod's namespace, ServiceAccount and name), the answer carries only
 # `env_keys` + `pull_url`, and the POD pulls its env itself — POST /sessions/{id}/env with its
@@ -287,7 +294,14 @@ if [ -n "${GW_SESSIONS:-}" ]; then
   fi
   # AGENT_GATEWAY_ATTEMPT is this launcher's automatic re-admission counter at the SAME round — set
   # only by its own strike re-entry (the gateway-outcome block); unset = attempt 1.
-  gw_preflight_request "$ROUND" "${AGENT_GATEWAY_ATTEMPT:-1}" || exit 2
+  # FU-270: transition fallback — rc 2 / 3 exit AGENT_GATEWAY_FALLBACK_EXIT for a wrapper that keeps
+  # an old-proxy path (header); a non-integer knob is ignored. Deleted when the old proxy retires.
+  _gw_fallback() {
+    case "${AGENT_GATEWAY_FALLBACK_EXIT:-}" in ''|*[!0-9]*) return 0;; esac
+    echo "gateway admission refused rc=$1 — old-proxy fallback" >&2
+    exit "$AGENT_GATEWAY_FALLBACK_EXIT"
+  }
+  gw_preflight_request "$ROUND" "${AGENT_GATEWAY_ATTEMPT:-1}" || { _gw_fallback 2; exit 2; }
   # The pod pulls its env in its OWN command (the prelude) — an interactive pod has none, so
   # nothing would ever pull and an exec'd shell would hold no LLM env. Refused, not degraded.
   if [ -z "${RUN_CMD:-}" ] && [ -z "${RECIPE:-}" ]; then
@@ -296,7 +310,7 @@ if [ -n "${GW_SESSIONS:-}" ]; then
   fi
   # The caller's identity (GW-SESSIONS-AUTH) — resolved once up front so a missing token refuses
   # before any request; every call after fetches its own fresh one.
-  gw_preflight_caller || exit 2
+  gw_preflight_caller || { _gw_fallback 2; exit 2; }
   # The bind: the pod this launcher is about to create — its namespace (NS = PROJECT), its
   # ServiceAccount (the pod manifest's serviceAccountName) and its NAME, computed here by the same
   # rule the pod-name block applies later (which then reuses GW_POD verbatim).
@@ -312,7 +326,7 @@ if [ -n "${GW_SESSIONS:-}" ]; then
   gw_admit --stack platform --role "${AGENT_GATEWAY_ROLE:-worker}" --task "${TASK:-adhoc}" --round "$ROUND" \
       --attempt "${AGENT_GATEWAY_ATTEMPT:-1}" --harness "${HARNESS_SET:+$HARNESS}" --rail "${AGENT_GATEWAY_RAIL:-}" \
       --canary "${AGENT_GATEWAY_CANARY:-}" --bind "${PROJECT}/agentstack-worker/${GW_POD}" || _gw_rc=$?
-  case "$_gw_rc" in 0) ;; 2) exit 2;; *) exit 1;; esac
+  case "$_gw_rc" in 0) ;; 2) _gw_fallback 2; exit 2;; 3) _gw_fallback 3; exit 1;; *) exit 1;; esac
   # Released on ANY exit from here (pre-pod refusals included); the context-prefetch trap below
   # chains this hook, because a later `trap … EXIT` replaces an earlier one.
   GW_TRAP_HOOK="gw_release"; trap 'gw_release' EXIT

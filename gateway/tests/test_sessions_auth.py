@@ -483,11 +483,11 @@ async def test_deployed_callers():
         check("control_plane_auth", p.control_plane_auth, "enforce")
     with then("callers = exactly the platform loop, the oracle prober, the specs-review tick, the coordinator namespace's lanes and the outcome judge, with today's scopes"):
         check("callers", got, {
-            LOOP: {"stacks": ["platform"], "roles": ["coordinator", "prober", "reviewer", "worker"],
+            LOOP: {"stacks": ["platform"], "roles": ["coordinator", "prober", "researcher", "reviewer", "worker"],
                    "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator", "platform-agents"], "outcome": "own"},
             ORACLE_LOOP: {"stacks": ["oracle"], "roles": ["prober"], "bind_namespaces": [], "outcome": "own"},
             DEPLOYED_SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": [], "outcome": "own"},
-            COORDINATOR_NS: {"stacks": ["platform"], "roles": ["coordinator", "responder"], "bind_namespaces": [], "outcome": "own"},
+            COORDINATOR_NS: {"stacks": ["platform"], "roles": ["coordinator", "responder", "retro"], "bind_namespaces": ["openrouter-operator"], "outcome": "own"},
             JUDGE: {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"},
         })
 
