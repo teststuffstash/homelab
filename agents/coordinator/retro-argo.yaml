@@ -3,9 +3,12 @@
 # the hand-fired runs proved clean — Mondays 05:00 UTC on its own. Manual fire stays available:
 #   argo -n agent-coordinator submit --from cronworkflow/retro-session
 #
-# Shape (run-3, docs/agents/retros/BRIEF.md is the spec): guard → assemble → cell A (claude+opus,
-# subscription, FU-088 semaphore) → cell B (goose+API model) → harvest→PR. Sequential cells: the
-# claude cell holds a subscription slot and both cells hold the stack's fixer WIP slot (the P3
+# Shape (run-3, docs/agents/retros/BRIEF.md is the spec): guard → assemble → cell A (claude
+# harness) → cell B (goose harness) → harvest→PR. A cell is a HARNESS; on the platform stack each
+# cell is ONE agent-gateway admission for role `retro` and the gateway serves the model (FU-270,
+# operator ruling 2026-11-01 — the controlled two-model comparison is given up); the harvest names
+# each report after the model its session was SERVED. Sequential cells: the claude cell may hold a
+# subscription slot and both cells hold the stack's fixer WIP slot (the P3
 # outside-the-fixer-ns placement is future work) — the guard refuses to run while the fixer queue
 # is busy. Cross-review legs stay MANUAL for v1 (agents/retro-session.sh --review) — run them from
 # the harvested PR. Reports land via PR (human-gated); the workflow never merges its own output.
@@ -63,9 +66,15 @@ spec:
     arguments:
       parameters:
         - { name: stack, value: "platform" }
-        - { name: cellA, value: "claude:opus" }
-        - { name: cellB, value: "goose:deepseek/deepseek-v4-pro" }
-        # A PRE-MINTED OpenRouterKey Secret to pin for the API cell. Empty (the default) no longer
+        # The two cells' HARNESSES — never models (FU-270, operator ruling 2026-11-01: the gateway
+        # picks the model per role/tier and the report records the one it served). The harness
+        # stays a choice because retro-session.sh's ride command is harness-literal (`claude -p` /
+        # `goose run`), so it narrows each admission to its dialect. Off-platform stacks (and a
+        # refused platform admission — FU-270: transition fallback) ride the old proxy on the
+        # harness's transition model in retro-session.sh (claude → opus, goose → deepseek-v4-pro).
+        - { name: harnessA, value: "claude" }
+        - { name: harnessB, value: "goose" }
+        # A PRE-MINTED OpenRouterKey Secret to pin for the API cell (old-proxy path only). Empty (the default) no longer
         # means "spend the stack's fixer budget key" — since homelab#270 retro-session.sh mints the
         # cell its OWN ephemeral xs/$0.50 key (the xs ENFORCED cap since PR#1650) and refuses the ride if it can't. Set this only to
         # override that (e.g. a hand-minted key with a different cap).
@@ -105,7 +114,7 @@ spec:
               continueOn: { failed: true, error: true }
               arguments:
                 parameters:
-                  - { name: cell, value: "{{workflow.parameters.cellA}}" }
+                  - { name: cell, value: "{{workflow.parameters.harnessA}}" }
                   - { name: subscription, value: "1" }
                 artifacts:
                   - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
@@ -116,7 +125,7 @@ spec:
               continueOn: { failed: true, error: true }
               arguments:
                 parameters:
-                  - { name: cell, value: "{{workflow.parameters.cellB}}" }
+                  - { name: cell, value: "{{workflow.parameters.harnessB}}" }
                   - { name: subscription, value: "0" }
                 artifacts:
                   - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
@@ -273,6 +282,15 @@ spec:
             # run — see continueOn on the DAG tasks). A missing log is a WARN in the harvest, not an
             # artifact-save error that reports as something else entirely.
             - { name: ride-log, path: /work/ride.log, archive: { none: {} }, optional: true }
+        # GW-SESSIONS-AUTH (FU-270): the platform cell's admission is authenticated as THIS pod's
+        # ServiceAccount (agent-coordinator) — the gateway policy's `callers` entry grants it role
+        # retro and the bind into the ride namespace (openrouter-operator). The projected token is
+        # read per call by agents/gateway-admit.sh (its default path); kubelet rotates it.
+        volumes:
+          - name: gateway-token
+            projected:
+              sources:
+                - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
         container:
           image: ghcr.io/teststuffstash/agent-coordinator
           command: ["bash", "-lc"]
@@ -348,6 +366,8 @@ spec:
               fi
               # <<<REPLAY:retro-cell-marker-selfcheck<<<
           env: *tsenv
+          volumeMounts:
+            - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
           resources:
             requests: { cpu: "100m", memory: "256Mi" }
             limits: { memory: "1Gi" }
@@ -389,13 +409,29 @@ spec:
               DATE=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["prepared_at"][:10])')
               RUN=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["run_id"])')
               # The cell→log pairing, threaded from the workflow's OWN parameters (homelab#248).
-              LOG_A=/work/log-a; CELL_A="{{workflow.parameters.cellA}}"
-              LOG_B=/work/log-b; CELL_B="{{workflow.parameters.cellB}}"
+              LOG_A=/work/log-a; HARNESS_A="{{workflow.parameters.harnessA}}"
+              LOG_B=/work/log-b; HARNESS_B="{{workflow.parameters.harnessB}}"
               # >>>REPLAY:retro-harvest-slug>>>
-              # Naming is a TWO-PASS over the legs, and it is a function of the DISPATCH PARAMETERS
-              # ONLY (homelab#269) — derived identically whether or not a cell produced a report, so
-              # a dead cell can never change the surviving cell's filename.
-              # Pass 1, per leg: <harness>:<vendor>/<model> → <model>: "claude:opus" → opus,
+              # The SERVED model per leg (FU-270): the cell names only a harness, so the model is
+              # read off the cell's own ride log, from a DISPATCH fact, never the report's prose —
+              # the gateway admission's `→ gateway(sessions): dispatch <model> [` line (printed
+              # by agents/gateway-admit.sh from the admission response), else retro-session.sh's
+              # old-proxy line `→ <stack> <run> cell <harness>:<model> —` (off-platform, or the
+              # FU-270 transition fallback). The scan stops at the report's BEGIN marker, so a
+              # report quoting either line cannot rename itself. No log, or no admission = no
+              # served model: the cell is `<harness>:unserved` (it produced no report either).
+              served_model() {
+                [ -f "$1" ] || return 0
+                sed -n -E '/BEGIN-RETRO-REPORT/q; /^→ gateway\(sessions\): dispatch [^ ]+ \[/{s/^→ gateway\(sessions\): dispatch ([^ ]+) \[.*/\1/p;q}; /^→ [^ ]+ r[0-9]+ cell [a-z0-9]+:[^ ]+ /{s/^→ [^ ]+ r[0-9]+ cell [a-z0-9]+:([^ ]+) .*/\1/p;q}' "$1"
+              }
+              SERVED_A="$(served_model "$LOG_A")"; CELL_A="${HARNESS_A}:${SERVED_A:-unserved}"
+              SERVED_B="$(served_model "$LOG_B")"; CELL_B="${HARNESS_B}:${SERVED_B:-unserved}"
+              echo "served: cell A ${CELL_A}, cell B ${CELL_B}"
+              # Naming is a TWO-PASS over the legs, and it is a function of the DISPATCH FACTS
+              # ONLY (homelab#269) — the harness parameter and the served model, derived identically
+              # whether or not a cell produced a report, so a missing report can never change the
+              # surviving cell's filename.
+              # Pass 1, per leg: <harness>:<vendor>/<model> → <model>: "claude:claude/opus" → opus,
               # "goose:deepseek/deepseek-v4-pro" → deepseek-v4-pro — the r1/r2 filename convention,
               # DERIVED from the dispatch instead of sniffed off the report. The last-word-of-the-
               # title parse this replaces read a model-authored prose heading, so

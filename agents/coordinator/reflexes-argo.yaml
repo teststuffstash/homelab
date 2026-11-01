@@ -5,7 +5,7 @@
 # folds into the single step. review-reflex is now the *backstop* (the edge-trigger Sensor +
 # exporter POST is the fast path — review-argo.yaml) so it drops to */15. The per-stack split with
 # the two knobs (coordinator.enabled off / reviewer.enabled on) is the FU-080 continuation; these
-# stay GLOBAL in agent-coordinator until then (model-scout + ledger stay global permanently).
+# stay GLOBAL in agent-coordinator until then (the ledger stays global permanently; model-scout did until its 2026-11-01 retirement).
 ---
 # FU-088 Argo layer: the subscription-capacity semaphore. Workflows that HOLD a live subscription
 # session (review-reflex tick, coordinator tick, the Sensor-submitted review Workflow — their
@@ -101,76 +101,8 @@ spec:
 # per-stack coordinate-<stack> crons are the level-triggered failure detector. The global
 # Sensor edge survives as the SWITCHBOARD (coordinate-argo.yaml): resolve repo-dumb rings +
 # capacity fan-out, never a board scan.
-# Model scout — weekly catalog diff + canary (FU-062). GLOBAL (fleet-wide by nature).
-apiVersion: argoproj.io/v1alpha1
-kind: CronWorkflow
-metadata:
-  name: model-scout
-  namespace: agent-coordinator
-spec:
-  schedules:
-    - "0 6 * * 1" # weekly, Monday 06:00 UTC
-  concurrencyPolicy: Forbid
-  startingDeadlineSeconds: 3600
-  workflowSpec:
-    serviceAccountName: agent-coordinator
-    activeDeadlineSeconds: 1800
-    ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 86400 }
-    entrypoint: main
-    volumes:
-      - { name: work, emptyDir: {} }
-      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
-    templates:
-      - name: main
-        container:
-          image: ghcr.io/teststuffstash/agent-coordinator
-          command: ["bash", "-lc"]
-          args:
-            - |
-              set -e
-              rm -rf /work/homelab
-              # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
-              # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
-              # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
-              # old anonymous behavior (degrade, never a new hard dependency).
-              # Preemptive auth (the 2026-09-03 throttle recurrence): the token rides `http.extraHeader` on the
-              # FIRST request. Token-in-URL still made two ANONYMOUS requests per clone (GET refs + POST
-              # upload-pack → 401 → authenticated retry) — ~700 anonymous hits/day on GitHub's per-IP throttle
-              # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
-              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
-              exec bash /work/homelab/agents/model-scout.sh
-          env:
-            - { name: HOME, value: "/home/node" }
-            - { name: ORG, value: "teststuffstash" }
-            - { name: DIGEST_REPO, value: "homelab" }
-            - { name: PRICE_CEILING, value: "0.50" }
-            # FU-161 leg 2 (homelab#299/PR#306): the MCP get-model benchmark pull. OPERATOR
-            # direct-to-master by design — this file is pin-only-lint-guarded, so no PR can land
-            # non-pin lines; the Secret is ESO-minted by scout-account-key.yaml. optional: the
-            # scout degrades to `unbenched` columns without it.
-            - name: SCOUT_MCP_KEY
-              valueFrom: { secretKeyRef: { name: scout-account-key, key: OPENROUTER_API_KEY, optional: true } }
-            - name: GH_TOKEN
-              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
-            - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
-            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
-            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
-            - name: AGENT_TS_READER_ID
-              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
-            - name: AGENT_TS_READER_SECRET
-              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
-            - name: AGENT_TS_WRITER_ID
-              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
-            - name: AGENT_TS_WRITER_SECRET
-              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
-          volumeMounts:
-            - { name: work, mountPath: /work }
-            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
-          resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits: { memory: "512Mi" }
----
+# Model scout — RETIRED 2026-11-01 (superseded by the agent-gateway's entry canary, GW-CATALOG-OR /
+# GW-MODEL-TIERS; gateway/README.md). The CronWorkflow and agents/model-scout.sh are gone.
 # Ledger — cost/model-health accounting (FU-057). GLOBAL (fleet-wide by nature).
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow

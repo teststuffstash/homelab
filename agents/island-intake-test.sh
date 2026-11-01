@@ -123,12 +123,13 @@ INTAKE_TS_DIR="$TS" bash "$SEL" --source dig --island nosuch --out "$TMP/sel.jso
 # matches or that owns EVERY Touches entry, each path going to its LONGEST matching prefix.
 section "selector issues — the island table"
 ISS="$TMP/issues.json"
-iss() { # <n> <title> <touches|-> [labels-json] [first-comment-line]
+iss() { # <n> <title> <touches|-> [labels-json] [first-comment-line] [author-json]
   local body="free text"
   [ "$3" != - ] && body="$(printf -- '---\nTouches: %s\n---\n\nfree text' "$3")"
   jq -nc --argjson n "$1" --arg t "$2" --arg b "$body" --argjson l "${4:-[]}" --arg c "${5:-}" \
+    --argjson au "${6:-{\"login\":\"app/homelab-agents-1234\"\}}" \
     '{number:$n, title:$t, body:$b, labels:($l|map({name:.})), createdAt:"2026-10-20T00:00:00Z",
-      author:{login:"app/homelab-agents-1234"}, comments:(if $c == "" then [] else [{body:$c}] end)}' >> "$ISS.rows"
+      author:$au, comments:(if $c == "" then [] else [{body:$c}] end)}' >> "$ISS.rows"
 }
 rm -f "$ISS.rows"
 iss 1  "gateway: a title row"                 -                                             # gateway title
@@ -152,15 +153,43 @@ iss 18 "scan: ruled"                          - '[]' "intake: standing — not n
 iss 19 "post-launch: scan bucket"             -                                             # container → out
 iss 20 "garage: title wins over Touches"      "agents/x.sh"                                 # substrate row precedes agent-loop
 iss 21 "mgmt: lease belt"                     "tofu/garage.tf"                              # mgmt-box row precedes substrate
+# Attribution inputs (homelab#3094): claimed by no island ∧ bot-filed ∧ unlabelled ∧ unruled ∧ not a Goal/container
+# → agent-loop's sitting, kind=attribution; by the header contract #5 #15 #16 (bot-filed, nobody's) join them.
+HUMAN='{"login":"rsoot","is_bot":false}'
+iss 22 "worker OOMKilled at 4Gi on the opencode 1M-context cell" - '["agent-fix"]' "" '{"login":"app/homelab-agents-1234","is_bot":true}'  # #3094 itself
+iss 23 "no title cue, human-filed"            -                         '[]' "" "$HUMAN"     # human + nobody's → none
+iss 24 "no title cue, human, mixed"           "gateway/a.md, agents/b.sh" '[]' "" "$HUMAN"   # human + spans two → none
+iss 25 "no title cue, a [bot] login"          -                         '[]' "" '{"login":"homelab-agents-1234[bot]"}' # REST spelling
+iss 26 "no title cue, bot, queued"            -                         '["agent/queued"]'   # lifecycle label → out
+iss 27 "no title cue, bot, ruled"             -                         '[]' "intake: standing — not now" # ruled → out
+iss 28 "no title cue, bot Goal"               -                         '["task/goal"]'      # a Goal → out
+iss 29 "stint: bot container"                 -                                              # container → out
+iss 30 "gateway: human-filed member"          -                         '[]' "" "$HUMAN"     # claimed: author is irrelevant
 jq -s . "$ISS.rows" > "$ISS"
-members() { INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$1" --json 2>/dev/null | jq -r '[.[].number] | sort | join(" ")'; }
-for row in "gateway:1 2 3 4" "router-pair:8 10" "mgmt-box:11 21" "dependency-upgrades:12 13" "substrate:9 14 20" "agent-loop:6 7"; do
+# members = the island TABLE's selection (kind member); attrs = the attribution inputs (kind attribution)
+members() { INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$1" --json 2>/dev/null | jq -r '[.[] | select(.kind == "member") | .number] | sort | join(" ")'; }
+attrs()   { INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$1" --json 2>/dev/null | jq -r '[.[] | select(.kind == "attribution") | .number] | sort | join(" ")'; }
+for row in "gateway:1 2 3 4 30" "router-pair:8 10" "mgmt-box:11 21" "dependency-upgrades:12 13" "substrate:9 14 20" "agent-loop:6 7"; do
   isl="${row%%:*}"; want="${row#*:}"; got="$(members "$isl")"
   [ "$got" = "$want" ] && ok "--island $isl selects $want" || bad "members $isl" "want '$want' got '$got'"
 done
 all="$(for i in gateway router-pair mgmt-box dependency-upgrades substrate agent-loop; do members "$i"; echo; done | tr ' ' '\n' | grep -c .)"
-[ "$all" = 15 ] && ok "no issue lands on two islands; #5 #15 #16 (mixed / unowned) and #17–#19 land on none" \
-  || bad "exclusivity" "15 memberships expected, got $all"
+[ "$all" = 16 ] && ok "no issue lands on two islands; #5 #15 #16 (mixed / unowned) and #17–#19 land on none" \
+  || bad "exclusivity" "16 memberships expected, got $all"
+got="$(attrs agent-loop)"
+[ "$got" = "5 15 16 22 25" ] && ok "--island agent-loop takes the bot-filed unclaimed (#3094's shape, app/ and [bot] logins) as attribution inputs" \
+  || bad "attribution agent-loop" "want '5 15 16 22 25' got '$got'"
+other="$(for i in gateway router-pair mgmt-box dependency-upgrades substrate; do attrs "$i"; done | tr -d '\n')"
+[ -z "$other" ] && ok "no other island receives an attribution input" || bad "attribution elsewhere" "got '$other'"
+allsel="$(for i in gateway router-pair mgmt-box dependency-upgrades substrate agent-loop; do
+  INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$i" --json 2>/dev/null | jq -r '.[].number'; done | sort -n | tr '\n' ' ')"
+case " $allsel" in *" 23 "*|*" 24 "*|*" 26 "*|*" 27 "*|*" 28 "*|*" 29 "*) bad "attribution filters" "selected: $allsel";;
+  *) ok "human-filed unclaimed (#23 #24) stay none; a labelled / ruled / Goal / container bot filing (#26–#29) is never an attribution input";; esac
+line="$(INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island agent-loop 2>/dev/null | awk -F'\t' '$1 == 22')"
+[ "$(printf '%s' "$line" | awk -F'\t' '{print $5}')" = attribution ] && ok "line output marks an attribution input (fifth column)" \
+  || bad "attribution line" "got: $line"
+line="$(INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island agent-loop 2>/dev/null | awk -F'\t' '$1 == 6')"
+[ "$(printf '%s' "$line" | awk -F'\t' '{print NF}')" = 4 ] && ok "a member's line keeps the four columns" || bad "member line" "got: $line"
 INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island nosuch 2>/dev/null; rc=$?
 [ "$rc" = 2 ] && ok "issues mode: an island with no membership row is refused (exit 2)" || bad "issues island table" "rc=$rc"
 INTAKE_ISSUES_JSON="$TMP/nowhere.json" bash "$SEL" --island substrate 2>/dev/null; rc=$?
@@ -206,8 +235,9 @@ yq -r "$CW | .spec.workflowSpec.templates[] | select(.name == \"intake\") | .con
 BIN="$TMP/bin"; mkdir -p "$BIN" "$TMP/run" "$TMP/up"
 cat > "$BIN/git" <<EOF
 #!/bin/bash
-# clone stub: the checkout under test, minus .git
-dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && tar --exclude=.git -cf - .) | (cd "\$dest" && tar -xf -)
+# clone stub: the checkout under test, minus .git (untracked/ignored excluded; a re-entry guard makes a PATH loop fail, never fork-bomb)
+[ -n "\${STUB_GIT_ACTIVE:-}" ] && { echo "git stub re-entered" >&2; exit 97; }; export STUB_GIT_ACTIVE=1
+dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && $(command -v git) ls-files -z | tar --null -T - -cf -) | (cd "\$dest" && tar -xf -)
 # the rail + model resolution are the proxy's — served flat here
 printf '#!/bin/bash\necho anthropic\n' > "\$dest/agents/subscription-latch.sh"
 printf '#!/bin/bash\necho opus\n' > "\$dest/agents/resolve-model.sh"
@@ -271,6 +301,82 @@ receipt 2026-10-26 intake-r1-e apply 2026-10-26T06:00:00Z \
   "[{\"input\":\"dig-2026-10-25/$R1/finding-2\",\"outcome\":\"close\",\"refs\":[]},{\"input\":\"dig-2026-10-26/$R2/finding-2\",\"outcome\":\"fold\",\"refs\":[]}]"
 run_script apply
 [ ! -s "$TMP/claude.calls" ] && grep -q "hold" "$TMP/run.log" && ok "hold: no session, exit 0" || bad "hold" "$(tail -3 "$TMP/run.log")"
+
+# ── FU-270: the sitting is admitted by the agent-gateway (gateway rollout, #1640/#1769) ──────────
+section "island-intake-argo.yaml — the gateway admits the sitting (FU-270)"
+# Rulings 2026-11-01: intake acts for the platform (platform islands; the bell rings platform), so
+# its ONE sitting admits as stack platform, role coordinator, tier heavy (the goal-decompose sitting
+# the old path runs on opus), through agents/gateway-admit.sh's unbound lane shape — the dispatch env
+# overrides the pod's old-proxy pair on the claude call. Refusal-before-request / fail-closed = the
+# FU-270 transition fallback (one loud line, the old path); defer = exit 1 like a rail not clear.
+# Same extracted script and stubs as above, with `curl` answering POST /sessions and `claude`
+# recording the env it was handed (GBIN shadows BIN).
+GBIN="$TMP/gbin"; mkdir -p "$GBIN"
+cat > "$GBIN/curl" <<'EOF'
+#!/bin/bash
+echo "curl $*" >> "$H/curl.calls"
+case "$*" in
+  *"-X DELETE"*/sessions/*) exit 0 ;;
+  *"-X POST"*/sessions*)
+    [ -f "$H/gw-reply.json" ] || { printf '000'; exit 7; }
+    _o=""; _p=""; for _a in "$@"; do [ "$_p" = "-o" ] && _o="$_a"; _p="$_a"; done
+    [ -z "$_o" ] || cat "$H/gw-reply.json" > "$_o"
+    cat "$H/gw-http" 2>/dev/null || printf '200'; exit 0 ;;
+esac
+exit 0
+EOF
+cat > "$GBIN/claude" <<'EOF'
+#!/bin/bash
+echo "claude $*" | cut -c1-80 >> "$H/claude.calls"
+for a in "$@"; do case "$a" in --model) m=1;; *) [ -n "${m:-}" ] && { echo "model $a" >> "$H/claude.calls"; m=""; };; esac; done
+echo "env ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-} ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}" >> "$H/claude.calls"
+cat "$H/claude.out"
+EOF
+chmod +x "$GBIN"/*
+printf 'fake-caller-token-projected' > "$TMP/gw-caller-token"
+I_OLD_BASE="http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+I_GW_BASE="http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic"
+gw_intake_run() { # <reply-kind> [knob]
+  rm -rf "$TMP/work" "$TMP/up"/* "$TMP/run"/* "$TMP/gw-reply.json" "$TMP/gw-http"
+  : > "$TMP/claude.calls"; : > "$TMP/curl.calls"; mkdir -p "$TMP/work"
+  case "$1" in
+    dispatch) printf '%s' '{"decision":"dispatch","session":{"id":"s-int-1","token":"gws_INTAKETOKEN","expires_at":"2026-10-27T09:00:00Z"},"rail":"anthropic","harness":"claude","model":"claude/gw-intake-model","env":{"ANTHROPIC_BASE_URL":"'"$I_GW_BASE"'","ANTHROPIC_AUTH_TOKEN":"gws_INTAKETOKEN","ANTHROPIC_MODEL":"gw-intake-model"},"context_tokens":200000}' > "$TMP/gw-reply.json";;
+    defer)    printf '%s' '{"decision":"defer","reason":"subscription-sessions-full","retry_after_s":600}' > "$TMP/gw-reply.json";;
+    fallback) printf '{"error":"down"}' > "$TMP/gw-reply.json"; printf '503' > "$TMP/gw-http";;
+  esac
+  ( cd "$TMP" && H="$TMP" PATH="$GBIN:$BIN:$PATH" HOME="$TMP/home" MODE=apply ISLAND=gateway \
+      INTAKE_TS_DIR="$TS" INTAKE_NOW="$NOW" GH_TOKEN=x AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
+      AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s PUSHGATEWAY="" \
+      AGENT_GATEWAY="${2-sessions}" AGENT_GATEWAY_CALLER_TOKEN_FILE="$TMP/gw-caller-token" \
+      ANTHROPIC_BASE_URL="$I_OLD_BASE" ANTHROPIC_AUTH_TOKEN="ref:agent-coordinator/coordinator-claude" \
+      bash "$TMP/script.sh" ) > "$TMP/run.log" 2>&1
+}
+rm -rf "$TS/homelab/intake-gateway-2026-10-26/intake-r1-e"   # un-rule the hold row's inputs: these rows need a sitting
+gw_intake_run dispatch; rc=$?
+grep -qF '"stack":"platform","role":"coordinator","task":"intake-gateway-' "$TMP/curl.calls" && grep -qF '"tier":"heavy"' "$TMP/curl.calls" \
+  && ok "dispatch → POST /sessions as stack platform, role coordinator, tier heavy, task intake-<island>-<day>" \
+  || bad "gw admit body" "$(grep sessions "$TMP/curl.calls" | head -2) | $(tail -3 "$TMP/run.log")"
+grep -qx "model gw-intake-model" "$TMP/claude.calls" && ok "…the sitting runs on the GATEWAY's model (rail prefix stripped)" || bad "gw model" "$(cat "$TMP/claude.calls")"
+grep -qxF "env ANTHROPIC_BASE_URL=$I_GW_BASE ANTHROPIC_AUTH_TOKEN=gws_INTAKETOKEN" "$TMP/claude.calls" \
+  && ok "…and its dispatch env overrides the pod's old-proxy pair" || bad "gw env" "$(grep '^env' "$TMP/claude.calls")"
+grep -qF -- "-X DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-int-1" "$TMP/curl.calls" \
+  && ok "…and the EXIT trap releases the session" || bad "gw release" "$(grep sessions "$TMP/curl.calls")"
+[ "$rc" = 0 ] && jq -e '.rail == "gateway:anthropic" and .model == "gw-intake-model"' "$TMP/up/receipt.json" >/dev/null 2>&1 \
+  && ok "…and the receipt records the gateway's rail and model" || bad "gw receipt" "rc=$rc $(jq -c '{rail,model}' "$TMP/up/receipt.json" 2>/dev/null)"
+
+gw_intake_run defer; rc=$?
+{ [ "$rc" = 1 ] && ! grep -q '^claude' "$TMP/claude.calls" && grep -qF "the gateway deferred [subscription-sessions-full]" "$TMP/run.log"; } \
+  && ok "defer → no sitting, exit 1 → the retry wrapper (as a rail not clear does)" || bad "gw defer" "rc=$rc $(tail -3 "$TMP/run.log")"
+
+gw_intake_run fallback; rc=$?
+grep -qF "gateway admission refused rc=3 — old-proxy fallback" "$TMP/run.log" \
+  && ok "gateway 503 (fail-closed) → the ONE loud transition-fallback line" || bad "gw fallback line" "$(tail -5 "$TMP/run.log")"
+{ [ "$rc" = 0 ] && grep -qx "model opus" "$TMP/claude.calls" && grep -qxF "env ANTHROPIC_BASE_URL=$I_OLD_BASE ANTHROPIC_AUTH_TOKEN=ref:agent-coordinator/coordinator-claude" "$TMP/claude.calls"; } \
+  && ok "…and the sitting runs on the old path (resolved model, old-proxy pair)" || bad "gw fallback path" "rc=$rc $(cat "$TMP/claude.calls")"
+
+gw_intake_run dispatch ""; rc=$?
+{ ! grep -q '/sessions' "$TMP/curl.calls" && grep -qx "model opus" "$TMP/claude.calls"; } \
+  && ok "AGENT_GATEWAY unset → no /sessions call, the old path byte-for-byte" || bad "gw knob off" "$(grep sessions "$TMP/curl.calls")"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi

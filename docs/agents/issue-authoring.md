@@ -718,6 +718,7 @@ duplicate `Budget:` lines, a `€12`/`$16` prose split, a mis-spelled or indente
 | `Base: master` | legitimate only with a stated reason — a direct-master Goal is more likely a **stint** (operator, 2026-08-30); if no reason survives writing it down, it isn't a Goal. On a deploy-to-test stack the reason is themes: `goal-lint` reads it `ok` once the Goal carries ≥ 1 theme (S8 #1423) |
 | children filed without sub-issue binding | an orphan tree nothing owns (goal-174: 19 sprouts, 3 generations, still growing 34h after close) |
 | children with no `Class` and no `blockedBy` edges | they ride the wrong recipe, in arbitrary order — act 2 (oracle-fleet#326) |
+| `## Acceptance` names a step only the seat can take — an entitlement turn on an operator account, `kubectl exec` into another namespace, a console click | the worker rules it `AGENT_INFEASIBLE` after a spent ride (homelab#3016: the codex rail's entitlement turn + an `agent-egress` exec were queued as acceptance). Acceptance holds only ride-reachable steps; the seat-only step is the Goal's pin or a `seat` item (gateway/intake.md), done BEFORE the child is queued, and the child's acceptance names its result |
 | `agent/queued` on a Goal whose children already exist | the decomposer re-decomposes — act 3 |
 | Goal closed at assembly merge | post-launch sprouts fall into master-limbo — reopen; the post-launch sub-issue is the harvest target |
 
@@ -818,7 +819,7 @@ flowchart TD
     TICK -->|"N≥5 piled · child-set done ·<br/>budget fraction · pre-verdict"| CKPT["<b>CHECKPOINT</b> — reasoning tier<br/>AUTHORING MOMENT 2:<br/>fold-by-footprint / mint real children / drop"]:::reason
     CKPT -->|new children| RIDE
   end
-  SUB -->|acceptance built| ASM["assembly-complete ruling (sonnet)<br/>assembly PR opened + armed<br/>bot review, REVIEW_GOAL_MODEL ≠ decomposer"]:::cheap
+  SUB -->|acceptance built| ASM["assembly-complete ruling (sonnet)<br/>assembly PR opened + armed<br/>bot review, no model pin (gateway picks;<br/>no decorrelation from the decomposer)"]:::cheap
   ASM --> TAX["🧾 <b>THE ONE CODEOWNER TAX</b><br/>human reads + merges goal → master<br/>every nit already solved in-tree"]:::human
   TAX --> PL["POST-LAUNCH — goal stays OPEN<br/>ship-then-fix: sprouts → store → checkpoints<br/>children base master · Production-leg<br/>verified IN-TREE (deploy + KPIs)"]:::det
   PL --> V{"VERDICT — human<br/>validated / reverted / abandoned"}:::human

@@ -465,6 +465,94 @@ _retry_backoff="$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-ret
 [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-retry") | .steps[][] | .template')" = dig ] \
   && ok "…and the wrapper's step calls the dig leaf" || bad "FU-198 caller edge" "dig-retry does not call dig"
 
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-270 — the dig's session is admitted by the agent-gateway (the manifest's script, run)"
+# The gateway rollout (#1640/#1769, rulings 2026-11-01): the dig acts for the platform, so its ONE
+# session admits as stack platform, role responder, through agents/gateway-admit.sh's unbound lane
+# shape; the dispatch env overrides the pod's old-proxy pair on the claude call. A refusal before a
+# request / a fail-closed falls back to the old proxy with one loud line (FU-270: transition
+# fallback); a defer defers as the latched rail does (exit 1 → Argo's retry). The script is EXTRACTED
+# from the manifest (island-intake-test.sh's seams: /tmp and the clone path redirected; the clone,
+# the selector, the latch and the model resolver stubbed — the selection is not what is under test).
+yq -r "$CW | .spec.workflowSpec.templates[] | select(.name == \"dig\") | .container.args[0]" "$YAML" \
+  | sed -e "s#/tmp/#$TMP/dr/#g" -e "s#/work/homelab#$TMP/dw/homelab#g" > "$TMP/dig-script.sh"   # /tmp/ FIRST: $TMP is under /tmp
+DBIN="$TMP/dbin"; mkdir -p "$DBIN"
+cat > "$DBIN/git" <<EOF
+#!/bin/bash
+[ -n "\${STUB_GIT_ACTIVE:-}" ] && { echo "git stub re-entered" >&2; exit 97; }; export STUB_GIT_ACTIVE=1
+dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && $(command -v git) ls-files -z | tar --null -T - -cf -) | (cd "\$dest" && tar -xf -)
+printf '#!/bin/bash\necho anthropic\n' > "\$dest/agents/subscription-latch.sh"
+printf '#!/bin/bash\necho old-proxy-model\n' > "\$dest/agents/resolve-model.sh"
+cat > "\$dest/agents/deep-dig-select.sh" <<'SEL'
+#!/bin/bash
+case "\$1" in
+  select) jq -n '{ts:"2026-10-04T06:00:00Z", params:{}, counts:{candidates:2, selected:1, explained:0},
+                  groups:[{key:"onset|wk-02"}], explained:[], deferred:[], windows:[]}' > "\$3";;
+  harvest) mkdir -p "\$3"; printf '{"verdict":"unexplained","group":"onset|wk-02","cause":"c","pr":""}' > "\$3/finding-1.json";;
+esac
+SEL
+EOF
+cat > "$DBIN/claude" <<'EOF'
+#!/bin/bash
+for a in "$@"; do case "$a" in --model) m=1;; *) [ -n "${m:-}" ] && { echo "claude --model $a" >> "$H/calls.log"; m=""; };; esac; done
+printf 'claude-env ANTHROPIC_BASE_URL=%s ANTHROPIC_AUTH_TOKEN=%s\n' "${ANTHROPIC_BASE_URL:-}" "${ANTHROPIC_AUTH_TOKEN:-}" >> "$H/calls.log"
+echo "BEGIN-DIG-FINDING"; echo '{}'; echo "END-DIG-FINDING"
+EOF
+cat > "$DBIN/curl" <<'EOF'
+#!/bin/bash
+echo "curl $*" >> "$H/calls.log"
+case "$*" in
+  *"-X DELETE"*/sessions/*) exit 0 ;;
+  *"-X POST"*/sessions*)
+    [ -f "$H/gw-reply.json" ] || { printf '000'; exit 7; }
+    _o=""; _p=""; for _a in "$@"; do [ "$_p" = "-o" ] && _o="$_a"; _p="$_a"; done
+    [ -z "$_o" ] || cat "$H/gw-reply.json" > "$_o"
+    cat "$H/gw-http" 2>/dev/null || printf '200'; exit 0 ;;
+esac
+exit 0
+EOF
+printf '#!/bin/bash\nexit 0\n' > "$DBIN/s5cmd"
+chmod +x "$DBIN"/*
+printf 'fake-caller-token-projected' > "$TMP/gw-caller-token"
+DIG_OLD_BASE="http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+DIG_GW_BASE="http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic"
+dig_run() { # <scenario> [knob]
+  H="$TMP/dig-$1"; rm -rf "$H" "$TMP/dr" "$TMP/dw"; mkdir -p "$H" "$TMP/dr" "$TMP/dw" "$TMP/dhome"; export H
+  [ "$1" = dispatch ] || [ "$1" = knob-off ] && printf '%s' '{"decision":"dispatch","session":{"id":"s-dig-1","token":"gws_DIGTOKEN","expires_at":"2026-10-04T10:00:00Z"},"rail":"anthropic","harness":"claude","model":"claude/gw-dig-model","env":{"ANTHROPIC_BASE_URL":"'"$DIG_GW_BASE"'","ANTHROPIC_AUTH_TOKEN":"gws_DIGTOKEN","ANTHROPIC_MODEL":"gw-dig-model"},"context_tokens":200000}' > "$H/gw-reply.json"
+  [ "$1" = defer ] && printf '%s' '{"decision":"defer","reason":"subscription-sessions-full","retry_after_s":600}' > "$H/gw-reply.json"
+  [ "$1" = fallback ] && { printf '{"error":"down"}' > "$H/gw-reply.json"; printf '502' > "$H/gw-http"; }
+  ( cd "$TMP" && env -u AGENT_TS_ACCESS_KEY_ID -u AGENT_TS_SECRET_ACCESS_KEY -u AGENT_TS_READER_ID -u AGENT_TS_READER_SECRET \
+      PATH="$DBIN:$PATH" HOME="$TMP/dhome" GH_TOKEN=x PUSHGATEWAY="" AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
+      AGENT_GATEWAY="${2-sessions}" AGENT_GATEWAY_CALLER_TOKEN_FILE="$TMP/gw-caller-token" \
+      ANTHROPIC_BASE_URL="$DIG_OLD_BASE" ANTHROPIC_AUTH_TOKEN="ref:agent-coordinator/coordinator-claude" \
+      bash "$TMP/dig-script.sh" ) > "$H/out.txt" 2> "$H/err.txt"
+  RC=$?
+}
+dcall()   { grep -qF -- "$2" "$H/calls.log" 2>/dev/null && ok "$1" || bad "$1" "no call: $2 | $(tail -3 "$H/err.txt" "$H/out.txt" 2>/dev/null | tr '\n' ' ')"; }
+dnocall() { grep -qF -- "$2" "$H/calls.log" 2>/dev/null && bad "$1" "unexpected call: $2" || ok "$1"; }
+
+dig_run dispatch
+dcall   "dispatch → POST /sessions as stack platform, role responder, task dig-<day>" '"stack":"platform","role":"responder","task":"dig-'
+dcall   "…the session runs on the GATEWAY's model (rail prefix stripped)" "claude --model gw-dig-model"
+dcall   "…and its dispatch env overrides the pod's old-proxy pair" "claude-env ANTHROPIC_BASE_URL=$DIG_GW_BASE ANTHROPIC_AUTH_TOKEN=gws_DIGTOKEN"
+dcall   "…and the EXIT trap releases the session" "-X DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-dig-1"
+[ "$RC" -eq 0 ] && ok "…and the run succeeds" || bad "dig gw dispatch rc" "rc=$RC $(tail -3 "$H/out.txt")"
+
+dig_run defer
+dnocall "defer → no session" "claude --model"
+grep -qF "the gateway deferred [subscription-sessions-full]" "$H/out.txt" && ok "…the defer is said" || bad "dig gw defer line" "$(tail -3 "$H/out.txt")"
+[ "$RC" -eq 1 ] && ok "…and exit 1 → the dig-retry wrapper's backoff (as a latched rail does)" || bad "dig gw defer rc" "rc=$RC"
+
+dig_run fallback
+grep -qF "gateway admission refused rc=3 — old-proxy fallback" "$H/err.txt" && ok "gateway 502 (fail-closed) → the ONE loud transition-fallback line" || bad "dig fallback line" "$(cat "$H/err.txt")"
+dcall   "…and the dig runs on the old proxy's model and pair" "claude --model old-proxy-model"
+dcall   "…(the old-proxy pair reached claude)" "claude-env ANTHROPIC_BASE_URL=$DIG_OLD_BASE"
+[ "$RC" -eq 0 ] && ok "…and a gateway outage never fails the dig" || bad "dig fallback rc" "rc=$RC"
+
+dig_run knob-off ""
+dnocall "AGENT_GATEWAY unset → no /sessions call" "/sessions"
+dcall   "…the old path, byte-for-byte" "claude --model old-proxy-model"
+
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 # The dig's CONSUMER (FU-320): island intake admits the dig's island findings, so its harness rides
 # this gate — diff-ci's deep-dig-test row also selects on the selector's path for that reason.

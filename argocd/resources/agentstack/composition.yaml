@@ -859,6 +859,15 @@ spec:
                 entrypoint: main
                 volumes:
                   - { name: work, emptyDir: {} }
+                  {{- if eq $stack "platform" }}
+                  # FU-270 (GW-SESSIONS-AUTH): the gateway caller token for reviewer-session.sh's
+                  # admission (it runs in THIS pod, under review-reflex.sh), audience agent-gateway;
+                  # kubelet rotates it and the helper re-reads it per call. Platform only, with the knob.
+                  - name: gateway-token
+                    projected:
+                      sources:
+                        - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
+                  {{- end }}
                 templates:
                   - name: main
                     container:
@@ -879,12 +888,18 @@ spec:
                       env:
                         - { name: HOME, value: "/home/node" }
                         - { name: ORG, value: "teststuffstash" }
-                        # reviewer.goalModel → the ASSEMBLY review's model (head goal/**, the
-                        # goal→master shape) — review-reflex.sh routes on it; all other PRs
-                        # keep the reviewer default. Claim-owned; see model-routing-history.md §M10.
-                        - { name: REVIEW_GOAL_MODEL, value: {{ default "sonnet" (get (default dict (get $xr.spec "reviewer")) "goalModel") | quote }} }
+                        {{- if eq $stack "platform" }}
+                        # FU-270, the reviewer flip: the PLATFORM stack's reviews admit through the
+                        # agent-gateway's POST /sessions (agents/reviewer-session.sh, the
+                        # reviewer-gateway-admit block, which guards on the same stack name). Env-only
+                        # knob, gated here like the worker's (coordinator-session.sh GW_KNOB_ENV).
+                        - { name: AGENT_GATEWAY, value: "sessions" }
+                        {{- end }}
                       volumeMounts:
                         - { name: work, mountPath: /work }
+                        {{- if eq $stack "platform" }}
+                        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
+                        {{- end }}
                       resources:
                         requests: { cpu: "100m", memory: "256Mi" }
                         limits: { memory: "512Mi" }
@@ -1138,7 +1153,14 @@ spec:
             # provider block through agent-codex, hands the child's env to the outer session and
             # releases the session on exit. A defer (headroom, cap, credential) is not a failed tick:
             # the child falls back to claude and the report names the harness it ran (⚖).
+            # prober.gateway: sessions (FU-270, operator ruling 2026-11-01 — the platform claim's
+            # lanes move onto the agent-gateway): the PARENT session admits too — one unbound
+            # prober session through the shared helper agents/gateway-admit.sh (the pod's homelab
+            # clone), its env handed to the outer claude; the model is the gateway's. A defer is
+            # the latch's defer (next tick); a refusal or fail-closed falls back to this pod's
+            # old-proxy env (FU-270: transition fallback). Absent = the parent stays on the ref rail.
             {{- $childRail := default "" (get $pr "childRail") }}
+            {{- $parentGw := default "" (get $pr "gateway") }}
             apiVersion: argoproj.io/v1alpha1
             kind: CronWorkflow
             metadata:
@@ -1159,7 +1181,7 @@ spec:
                 entrypoint: main
                 volumes:
                   - { name: work, emptyDir: {} }
-                  {{- if $childRail }}
+                  {{- if or $childRail $parentGw }}
                   # GW-SESSIONS-AUTH: the caller token, audience agent-gateway, pod-bound (the reaper's pod).
                   - name: gateway-token
                     projected:
@@ -1211,13 +1233,41 @@ spec:
                             fi
                             rm -f /work/gw-admit.json
                           fi
+                          # >>>REPLAY:probe-parent-admit>>>
+                          # The PARENT session's rail (prober.gateway). Default: this pod's env (the old proxy's ref rail).
+                          PROBE_PARENT_ENV=(); PROBE_PARENT_MODEL="$PROBE_MODEL"
+                          if [ "${PROBE_GATEWAY:-}" = sessions ]; then
+                            . "${REPLAY_ROOT:-/work/homelab}/agents/gateway-admit.sh"
+                            _gwp_env="$(mktemp)"; _gwp_rc=0
+                            gw_preflight_caller || _gwp_rc=$?
+                            if [ "$_gwp_rc" -eq 0 ]; then
+                              gw_admit --stack "$PROBE_STACK" --role prober --task "probe-parent-$(hostname)" \
+                                --harness claude --harnesses claude --env-file "$_gwp_env" || _gwp_rc=$?
+                            fi
+                            case "$_gwp_rc" in
+                              0)
+                                mapfile -t PROBE_PARENT_ENV < "$_gwp_env"
+                                PROBE_PARENT_MODEL="$GW_WIRE_MODEL"
+                                # A claude child inherits the parent's env, so it rides the same session and model.
+                                if [ "$PROBE_CHILD_HARNESS" = claude ]; then PROBE_CHILD_MODEL="$GW_WIRE_MODEL"; fi
+                                trap 'gw_release; if declare -F _gw_release >/dev/null; then _gw_release; fi' EXIT;;
+                              1)
+                                rm -f "$_gwp_env"
+                                echo "probe DEFERRED — gateway: [${GW_DEFER_REASON}] retry_after=${GW_RETRY_AFTER}s; next cron tick retries"; exit 0;;
+                              *)
+                                # FU-270: transition fallback — deleted when the old proxy retires.
+                                echo "gateway admission refused rc=${_gwp_rc} — old-proxy fallback" >&2;;
+                            esac
+                            rm -f "$_gwp_env"
+                          fi
+                          # <<<REPLAY:probe-parent-admit<<<
                           # Run the probe session, capturing the full report
                           CLAUDE_EXIT=0
-                          claude -p "You are the PROBER for stack {{ $stack }} (homelab docs/agents/roles.md §prober): an agentic canary probing the LIVE product contract, prod-READ and report-only. Your brief follows between the BEGIN/END markers. You hold NO git or GitHub credentials by construction — your entire output is this session's stdout report: state what you probed, what answered correctly, and what broke, with evidence. Never mutate anything. The platform hands you, in env: PROBE_CHILD_HARNESS (claude|codex) and PROBE_CHILD_MODEL — the harness and model of any nested client the brief starts (a codex child is already configured for its provider; never print OPENAI_API_KEY) — and PROBE_ARTIFACTS, a directory uploaded verbatim beside your report: put the files the brief names there.
+                          env "${PROBE_PARENT_ENV[@]}" claude -p "You are the PROBER for stack {{ $stack }} (homelab docs/agents/roles.md §prober): an agentic canary probing the LIVE product contract, prod-READ and report-only. Your brief follows between the BEGIN/END markers. You hold NO git or GitHub credentials by construction — your entire output is this session's stdout report: state what you probed, what answered correctly, and what broke, with evidence. Never mutate anything. The platform hands you, in env: PROBE_CHILD_HARNESS (claude|codex) and PROBE_CHILD_MODEL — the harness and model of any nested client the brief starts (a codex child is already configured for its provider; never print OPENAI_API_KEY) — and PROBE_ARTIFACTS, a directory uploaded verbatim beside your report: put the files the brief names there.
                           ----BEGIN BRIEF----
                           $(cat /work/main/.agents/probe.md)
                           ----END BRIEF----" \
-                            --model "$PROBE_MODEL" --permission-mode bypassPermissions --max-turns 30 </dev/null \
+                            --model "$PROBE_PARENT_MODEL" --permission-mode bypassPermissions --max-turns 30 </dev/null \
                             > /work/report.md 2>&1 || CLAUDE_EXIT=$?
                           cat /work/report.md
                           if [ "$CLAUDE_EXIT" -ne 0 ]; then
@@ -1246,6 +1296,12 @@ spec:
                         - { name: PROBE_ARTIFACTS, value: "/work/artifacts" }
                         {{- if $childRail }}
                         - { name: PROBE_CHILD_RAIL, value: {{ $childRail | quote }} }
+                        {{- end }}
+                        {{- if $parentGw }}
+                        - { name: PROBE_GATEWAY, value: {{ $parentGw | quote }} }
+                        - { name: PROBE_STACK, value: {{ $stack | quote }} }
+                        {{- end }}
+                        {{- if or $childRail $parentGw }}
                         - { name: AGENT_GATEWAY_URL, value: "http://agent-gateway.agent-egress.svc.cluster.local:8080" }
                         {{- end }}
                         - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
@@ -1260,7 +1316,7 @@ spec:
                             secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key }
                       volumeMounts:
                         - { name: work, mountPath: /work }
-                        {{- if $childRail }}
+                        {{- if or $childRail $parentGw }}
                         - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
                         {{- end }}
                       resources:

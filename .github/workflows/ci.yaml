@@ -328,7 +328,7 @@ jobs:
           # pull_request branch had never run — the exact unexecuted-gate class ADR-103 exists
           # to kill, in the gate itself). gh comes from devbox (slim runner has no gh).
           changed=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq '.[].filename')
-          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(model-scout\.sh|coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo|corpus-dispatch-argo)\.ya?ml)$' || true)
+          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo|corpus-dispatch-argo)\.ya?ml)$' || true)
           replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
           # homelab#1028: `mode: suite` fixtures name an ENTRYPOINT outside agents/replay/
           # (agents/asvs-replay.sh, agents/slo-teeth-replay.sh, …). Growing one IS the replay
@@ -523,6 +523,12 @@ jobs:
       - name: governance-lint self-test (devbox run governance-lint-test)
         if: steps.diff.outputs.governance-lint-test != 'false'
         run: devbox run governance-lint-test
+
+      # FU-185 / ADR-113: ShellCheck -S warning over the tracked shell, ratcheted against
+      # scripts/shellcheck-baseline.txt (#3081 shipped the lint + MAP row; this is its ci step).
+      - name: shellcheck-lint (devbox run shellcheck-lint)
+        if: steps.diff.outputs.shellcheck-lint != 'false'
+        run: devbox run shellcheck-lint
 
       # G17 (ADR-141 as amended 2026-10-06): the devbox-update lock-diff gate over #2260's recorded
       # lock diff — the major gate, the downgrade + line-move lists the second body section carries.

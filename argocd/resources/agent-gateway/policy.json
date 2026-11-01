@@ -22,12 +22,12 @@
     }
   },
   "roles": {
-    "worker":      {"rails": ["opencode", "codex", "anthropic", "openrouter"],  "tier": "standard", "harness": "opencode"},
+    "worker":      {"rails": ["anthropic", "codex", "opencode", "openrouter"],  "tier": "standard", "harness": "opencode"},
     "reviewer":    {"rails": ["anthropic", "opencode", "codex"],                "tier": "heavy",    "harness": "claude"},
     "coordinator": {"rails": ["anthropic", "opencode", "codex"],                "tier": "standard", "harness": "claude"},
     "responder":   {"rails": ["anthropic", "opencode", "codex"],                "tier": "standard", "harness": "claude"},
-    "retro":       {"rails": ["opencode", "codex", "anthropic", "openrouter"],  "tier": "heavy",    "harness": "opencode"},
-    "researcher":  {"rails": ["opencode", "codex", "anthropic", "openrouter"],  "tier": "heavy",    "harness": "opencode"},
+    "retro":       {"rails": ["anthropic", "codex", "opencode", "openrouter"],  "tier": "heavy",    "harness": "opencode"},
+    "researcher":  {"rails": ["anthropic", "codex", "opencode", "openrouter"],  "tier": "heavy",    "harness": "opencode"},
     "prober":      {"rails": ["openrouter", "opencode", "codex", "anthropic"],  "tier": "light",    "harness": "opencode"}
   },
   "rails": {
@@ -51,9 +51,9 @@
       "user_agent": "fixed",
       "credential_probe": {"method": "POST", "path": "/v1/chat/completions", "body": {"model": "deepseek-v4.1-flash", "max_tokens": 1, "messages": [{"role": "user", "content": "."}]}, "backoff_s": [60, 3600]},
       "admission": {
-        "_comment": "Rules only (GW-CATALOG-GO, operator ruling 5, 2026-10-17): prices, peak rows and hours, per-model monthly limits and the window shares come from the Go catalog snapshot, never from here. latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900: the hold a Go 429 that names no reset cools its CELL for; latch_scope model = a Go 429 never latches the whole rail (ruling 3: each model has its own limits). windows: the anchors are gometer _GO_WINDOW_DEFAULTS (chain / weekly mon 00:00 / monthly 13 11:30 — self-measured, no vendor source; GO_WINDOW_ANCHORS unset in deployment.yaml), threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
+        "_comment": "Rules only (GW-CATALOG-GO, operator ruling 5, 2026-10-17): prices, peak rows and hours, per-model monthly limits and the window shares come from the Go catalog snapshot, never from here. latch_429_hold_s = openrouter-proxy.py GO_CAPACITY_HOLD_S 900: the hold a Go 429 that names no reset latches the RAIL for; latch_scope account = a Go 429 latches the whole rail for its retry-after, because every paid Go model draws ONE account allowance and the per-model limits only weight the draw (vendor support, anomalyco/opencode#54875; supersedes the spike's ruling 3 — 2026-11-01, sessions.md §Capacity). windows: the anchors are gometer _GO_WINDOW_DEFAULTS (chain / weekly mon 00:00 / monthly 13 11:30 — self-measured, no vendor source; GO_WINDOW_ANCHORS unset in deployment.yaml), threshold = OPENCODE_UTIL_THRESHOLD's code default 0.80 (unset in deployment.yaml).",
         "latch_429_hold_s": 900,
-        "latch_scope": "model",
+        "latch_scope": "account",
         "window_draw": {
           "windows": {
             "5h":  {"threshold": 0.80, "anchor": "chain", "span_s": 18000, "chain_lookback_s": 604800},
@@ -65,8 +65,8 @@
       "plan": "go",
       "max_sessions": 3,
       "models": {
-        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/minimax-m3", "opencode-go/minimax-m3.1-flash"],
-        "standard": ["opencode-go/minimax-m3.1-flash", "opencode-go/claude-haiku-5-5", "opencode-go/mimo-v2.6-pro"],
+        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/minimax-m3", "opencode-go/mimo-v2.6-pro"],
+        "standard": ["opencode-go/mimo-v2.6-pro", "opencode-go/minimax-m3.1-flash", "opencode-go/step-5-preview"],
         "heavy":    ["opencode-go/kimi-k3.1-pro"]
       }
     },
@@ -134,8 +134,8 @@
   "callers": {
     "system:serviceaccount:platform-agents:agentstack-loop": {
       "stacks": ["platform"],
-      "roles": ["worker", "prober"],
-      "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"]
+      "roles": ["worker", "prober", "coordinator", "reviewer", "researcher"],
+      "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator", "platform-agents"]
     },
     "system:serviceaccount:oracle-agents:agentstack-loop": {
       "stacks": ["oracle"],
@@ -146,6 +146,11 @@
       "stacks": ["platform"],
       "roles": ["reviewer", "worker"],
       "bind_namespaces": []
+    },
+    "system:serviceaccount:agent-coordinator:agent-coordinator": {
+      "stacks": ["platform"],
+      "roles": ["coordinator", "responder", "retro"],
+      "bind_namespaces": ["openrouter-operator"]
     },
     "system:serviceaccount:agent-coordinator:outcome-judge": {
       "stacks": ["platform"],

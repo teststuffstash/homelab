@@ -1,0 +1,9 @@
+CALL subscription-latch SUBSCRIPTION_TIER=dispatch
+CALL claude -p --model fable --append-system-prompt-file /work/homelab/agents/coordinator/README.md --permission-mode bypassPermissions Reconcile EXACTLY ONE work unit [ANTHROPIC_BASE_URL=http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic ANTHROPIC_AUTH_TOKEN=ref:agent-coordinator/coordinator-claude ANTHROPIC_MODEL= CLAUDE_CODE_MAX_CONTEXT_TOKENS=]
+OUT GW_COORD='1'
+OUT RUNNER coord_gw_claude; RC=$?; upload_transcripts
+OUT rc=0 CS_DEFERRED='' MODEL='fable' env file left: no
+OUT REACHED: end
+ERR PREFLIGHT REFUSED: no gateway caller token — $TMP/coordinator-gateway-session.no-token-fallback.fx/world/pod/caller-token is not mounted, and AGENT_GATEWAY_CALLER_SA (jail canary: <ns>/<sa> of the dispatcher, e.g. platform-agents/agentstack-loop) is unset. /sessions authenticates its caller (GW-SESSIONS-AUTH). No session, no pod.
+ERR gateway admission refused rc=2 — old-proxy fallback
+RC 0

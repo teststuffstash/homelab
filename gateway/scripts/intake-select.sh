@@ -20,8 +20,15 @@
 #   - has no standing intake ruling: no comment whose FIRST line starts with `intake:` — a ruled
 #     item is either labelled (queue/seat), closed (close/fold) or standing (comment only), and
 #     the standing ones are exactly the ones this predicate skips.
+# ATTRIBUTION inputs (homelab#3094's shape): an issue that passes the two filters above, is claimed
+# by NO island and is BOT-filed (the brief's §Hard limits test: not author type `User` — `is_bot`,
+# an `app/<slug>` or `<login>[bot]` login) is selected by `--island $ATTRIBUTION_ISLAND` only, marked
+# `kind: attribution` (members are `kind: member`). The loop's filers leave component attribution to
+# intake, so that sitting names the owning island(s) first (gateway/intake.md outcome `split`). A
+# human-filed unclaimed issue stays nobody's — the seat's `none` list.
 #
-# Output: one line per candidate `<number>\t<age_h>\t<author>\t<title>`, then a verdict line
+# Output: one line per candidate `<number>\t<age_h>\t<author>\t<title>` (an attribution input adds
+# a fifth column `attribution`), then a verdict line
 # `fire: <reason>` or `hold: <reason>` on stderr. Exit 0 = fire, 1 = hold, 2 = a probe failed
 # (an empty answer from a failed read is NOT "no candidates" — jail-subagent-card, 2026-10-26).
 # --json prints the candidate array instead of the lines (the verdict line still goes to stderr).
@@ -61,7 +68,7 @@ while [ $# -gt 0 ]; do
     --min)   MIN="$2"; shift 2;;
     --age-h) AGE_H="$2"; shift 2;;
     --json)  JSON=1; shift;;
-    -h|--help) sed -n '2,52p' "$0"; exit 0;;
+    -h|--help) sed -n '2,57p' "$0"; exit 0;;
     *) echo "intake-select: unknown arg $1" >&2; exit 2;;
   esac
 done
@@ -72,6 +79,9 @@ done
 # PRECEDENCE order — most specific first, gateway first so its selection never moves: an item
 # belongs to the first island that claims it, so it is never ruled by two sittings.
 ISLANDS="gateway router-pair mgmt-box dependency-upgrades substrate agent-loop"
+# The island whose sitting receives the bot-filed issues no island claims (header: ATTRIBUTION
+# inputs) — the loop's own filings, so the loop's island owns their first ruling.
+ATTRIBUTION_ISLAND=agent-loop
 
 # island_pattern <island> → the ERE (jq test) a dig finding's text must match to be this island's.
 island_pattern() {
@@ -294,7 +304,15 @@ while [ "$i" -lt "$count" ]; do
   fi
   # membership: the island table (island_of_issue — title, else every Touches entry, first row wins)
   touches="$(printf '%s' "$row" | jq -r '.body // ""' | python3 "$PARSER" get Touches --ref "${REPO}#${num}" 2>/dev/null || true)"
-  [ "$(island_of_issue "$title" "$touches")" = "$ISLAND" ] || continue
+  kind=member
+  case "$(island_of_issue "$title" "$touches")" in
+    "$ISLAND") ;;
+    "") # nobody's: an attribution input for ATTRIBUTION_ISLAND when bot-filed (not author type User)
+      [ "$ISLAND" = "$ATTRIBUTION_ISLAND" ] || continue
+      printf '%s' "$row" | jq -e '(.author.is_bot == true) or ((.author.login // "") | test("^app/|\\[bot\\]$"))' >/dev/null || continue
+      kind=attribution;;
+    *) continue;;
+  esac
   # a standing ruling: a comment whose first line starts with `intake:`
   if printf '%s' "$row" | jq -e '[.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | length > 0' >/dev/null; then
     continue
@@ -303,8 +321,8 @@ while [ "$i" -lt "$count" ]; do
   cts="$(date -u -d "$created" +%s 2>/dev/null || echo "$now")"
   age_h=$(( (now - cts) / 3600 ))
   cands="$(printf '%s' "$cands" | jq -c --argjson n "$num" --argjson a "$age_h" \
-    --arg t "$title" --arg au "$(printf '%s' "$row" | jq -r '.author.login')" \
-    '. + [{number: $n, age_h: $a, author: $au, title: $t}]')"
+    --arg t "$title" --arg au "$(printf '%s' "$row" | jq -r '.author.login')" --arg k "$kind" \
+    '. + [{number: $n, age_h: $a, author: $au, title: $t, kind: $k}]')"
 done
 
 n="$(printf '%s' "$cands" | jq 'length')"
@@ -312,7 +330,7 @@ oldest="$(printf '%s' "$cands" | jq '[.[].age_h] | max // 0')"
 if [ "$JSON" = 1 ]; then
   printf '%s\n' "$cands" | jq .
 else
-  printf '%s' "$cands" | jq -r '.[] | "\(.number)\t\(.age_h)h\t\(.author)\t\(.title)"'
+  printf '%s' "$cands" | jq -r '.[] | "\(.number)\t\(.age_h)h\t\(.author)\t\(.title)\(if .kind == "attribution" then "\tattribution" else "" end)"'
 fi
 if [ "$n" -ge "$MIN" ]; then
   echo "fire: $n unruled $ISLAND issues (min $MIN)" >&2; exit 0

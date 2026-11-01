@@ -33,7 +33,10 @@ The dispatch prompt names them:
 
 - `issues:` `<owner/repo>#<n>` …, selected by [`scripts/intake-select.sh`](scripts/intake-select.sh)
   (island membership + no `agent/*` lifecycle label + no standing intake ruling). Trigger: ≥ 3 such
-  issues, or the oldest ≥ 24 h — one sitting per trigger, never per issue.
+  issues, or the oldest ≥ 24 h — one sitting per trigger, never per issue. **Attribution inputs**
+  (`kind: attribution` — the agent-loop sitting's only): bot-filed (§Hard limits) issues no island
+  claims, because the loop's filers leave component attribution to intake. The first act on one is
+  naming its island(s) (step 0 of §The procedure).
 - `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`,
   `dig`) — prose someone wrote instead of an issue. **`dig` is the wired source:**
   [`agents/coordinator/island-intake-argo.yaml`](../agents/coordinator/island-intake-argo.yaml)
@@ -72,10 +75,16 @@ Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islan
 | **fold** | two or more inputs are one change (same requirement, same fix) | the SURVIVOR takes the merged body and its outcome; the others get `intake: fold → #<survivor>` and close as duplicate — bot-filed only (§Hard limits) |
 | **close** | the claim no longer holds (live-verified), the work merged since filing, or the honest answer is "leave the `⚑ gap` standing" and nothing live depends on it | `intake: close — <evidence: the line, the PR, the date>` and close (`not planned` for standing gaps; bot-filed only — a human-filed one is `seat` with the same recommendation) |
 | **standing** | a valid gap the island records honestly and nobody should spend a ride on now | `intake: standing — <why not now>` (the selector skips it from then on); no labels |
+| **split** | one input carries deliverables owned by two or more islands (typically an attribution input) | `file` one issue per island-owned part — its body names the island, narrows `Touches` to that island's paths, `Origin=<the input>`; one `intake: split → #a, #b` comment on the input, then close it — bot-filed only; a human-filed input stays open as `seat` with the split done. A part owned by ANOTHER island is filed and left for that island's sitting (no labels, no ruling); a part owned by yours is ruled in this sitting like any other input |
 | **file** | a `text:` input worth an issue | create the issue (machine block through the writer, `Origin=<source>` as prose when the source is not an issue), then rule it like any other input in the same sitting |
 
 ## The procedure, per input, in this order
 
+0. **Whose is it?** (attribution inputs only.) Name the island(s) that own its deliverables, from
+   the facts files' membership lines. All yours → continue as a member. All one OTHER island's →
+   `split` with one part (re-filed under that island's title/`Touches`, so its selector claims it).
+   Two or more islands → `split`. No island owns a part → that part is `seat`, naming the missing
+   owner. You never rule another island's part — its sitting does.
 1. **Is it still real?** Live-verify against the spec page and the repo: the flag is on the line
    it names; the behaviour the body describes is still what the row says. A claim that no longer
    holds is `close` with the evidence (the line, the PR that changed it, the date). Trust the
@@ -96,8 +105,10 @@ Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islan
    "Worth it" is the island's contract gaining a row it relies on or losing a gap a consumer hits;
    it is not "the issue exists".
 
-Cap: **at most 3 `queue` outcomes (children included) per sitting.** The rest get their ruling
-(`standing`, `seat`, …) or are left for the next sitting with no write at all — say which.
+Cap: **at most 3 `queue` outcomes (children included) per sitting.** The cap limits `queue`, not
+ruling: rule EVERY input. Only an input whose ruling would be `queue` and arrives over the cap is
+left for the next sitting with no write at all (the selector re-offers it) — the report lists it as
+`deferred (cap)`.
 
 ## A queue-ready body — the spec is written into the issue (rule 2)
 
@@ -109,7 +120,7 @@ prose to avoid being wrong — a row the reviewer bounces costs one round, a vag
 ```markdown
 <machine block — written by issue_body.py set, never by hand:
  Touches=<the spec page, the test file, the src module — exact paths>
- Origin=<owner/repo>#<the input, or the survivor>
+ Origin=<kept verbatim when the input already has one; else owner/repo#<the input, or the survivor>>
  Class=fix|build  (mirrored by the task/* label)>
 
 ## Deliverable
@@ -119,7 +130,7 @@ prose to avoid being wrong — a row the reviewer bounces costs one round, a vag
 1. <checkable; names the rule id and the row>
 2. …
 
-## Spec changes
+## Spec changes   ← on an island without specs/: `## Key rows`, the rows its facts file names
 Requirement: `GW-<REQ>` on `specs/endpoints/<page>.md` — world `<world>`.
 | description | <input cols> || <expected cols> |
 |---|---||---|

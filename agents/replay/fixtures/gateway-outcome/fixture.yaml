@@ -3,7 +3,7 @@
 #
 # THE CONTRACT. Off (no /sessions ride, or no session id) → nothing: no request, no release. On:
 #   • a TASKED ride (STRIKE_APPLIES) that struck → `class` = its ERR_CLASS when a vocabulary member
-#     (quota → harness-gave-up; anything else → unknown), the pod's own strike reading its class off
+#     (quota → harness-gave-up; anything else → unknown, its class sent as `subclass`), the pod's own strike reading its class off
 #     the stats line; a tasked ride that did not strike → `clean`; a key-class marker → nothing;
 #   • an AD-HOC ride → `clean` when its stats line says `exit_status: clean` or its pod Succeeded,
 #     else NO report (its task key is shared by every ad-hoc ride);
@@ -11,6 +11,8 @@
 #   • a counted strike (the answer's `strike`) on a tasked ride with salvage none and attempt ≤
 #     AGENT_GATEWAY_AUTO_ATTEMPTS (2) → the launcher re-enters itself with the SAME argv and
 #     AGENT_GATEWAY_ATTEMPT + 1, and exits with the re-entry's code; otherwise one line, no retry.
+#     An `oom` strike's salvage is `unknown` (finalize died with the container — homelab#3094), so
+#     it never re-admits.
 #   A failed report is non-fatal: a WARN line, the release, no retry.
 #
 # `curl` is the gateway seam (recorded with its body; `$GW_OUTCOME_HTTP` 22 = curl -f's failure),

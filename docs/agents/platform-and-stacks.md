@@ -40,7 +40,7 @@ must be launchable ("an opencode ride, idp stack, coordinator role, kimi model")
 | axis | values today | future | owned by |
 |---|---|---|---|
 | **harness** | goose, opencode (agent-base) · claude (coordinator image) | hermes, … | agent-runtime (one image per harness family, **stack-agnostic**) |
-| **role** | fixer, coordinator, reviewer(+lenses), retro, scout, responder, researcher, infra-fixer, prober (FU-102) | meta-coordinator, large-job | **[`roles.md`](roles.md)** — recipes/briefs + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
+| **role** | fixer, coordinator, reviewer(+lenses), retro, responder, researcher, infra-fixer, prober (FU-102) | meta-coordinator, large-job | **[`roles.md`](roles.md)** — recipes/briefs + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
 | **stack** | sleep, oracle, platform, circles | … | AgentStack claim (ns, keys, repos) + the stack repo itself |
 | **model / billing** | Claude subscription · OpenCode Go subscription · ChatGPT (codex) subscription · OpenRouter API (registry; static chains deleted — ADR-107) — the gateway's four rails ([`../../gateway/README.md`](../../gateway/README.md)) | … | model-routing registry + the ADR-081 proxy |
 
@@ -59,8 +59,8 @@ Known constraint couplings (encode them, don't fight them):
   Workflow), the level-triggered backstop cron, idempotency/serialization keys, capacity
   gates, and breaker hooks. Never a baked image variant. The reviewer's machinery is
   inventoried guard-by-guard in [`merge-path-fsm.md`](merge-path-fsm.md) (MP-T03/T04/T08);
-  the coordinator's is the doorbell + scan clauses (ADR-094); retro/scout live
-  in `retro-argo.yaml`/`reflexes-argo.yaml`. Two consequences (operator observation
+  the coordinator's is the doorbell + scan clauses (ADR-094); retro lives
+  in `retro-argo.yaml` (the scout's `reflexes-argo.yaml` cron retired 2026-11-01, superseded by the agent-gateway's entry canary + tier evidence (`GW-CATALOG-OR` / `GW-MODEL-TIERS`, [`gateway/README.md`](../../gateway/README.md))). Two consequences (operator observation
   2026-07-27): standing up a NEW role is mostly machinery design, not prompt work — count the
   reviewer: one rubric vs ~ten machinery pieces; and rendering a role per-stack means the
   AgentStack Composition renders the whole machinery set, not just SA + secrets (FU-080's
@@ -205,8 +205,8 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
   `/loop-git-token`); oracle graduated 2026-07-18 and runs per-stack since. **COMPLETE 2026-07-27 (circles joined 2026-08-03 — four):
   all stacks graduated (coordinate + review loops in-ns, 2026-07-26); the global surface is the
   ADR-120 **[switchboard](workflow.md)** since 2026-08-31 (Sensor-edge resolver — repo-dumb rings + capacity
-  fan-out; the coordinator-reflex cron retired, per-stack crons are the failure detector); the per-stack review EDGE shipped as FU-100 (2026-07-27).** model-scout +
-  ledger stay global. [`agentstack.md`](agentstack.md) §Decisions.
+  fan-out; the coordinator-reflex cron retired, per-stack crons are the failure detector); the per-stack review EDGE shipped as FU-100 (2026-07-27).** The ledger
+  stays global (model-scout did too until its retirement, 2026-11-01). [`agentstack.md`](agentstack.md) §Decisions.
 
 ## Stack economics — scaling the merge path (moved from merge-path.md, 2026-07-27 / FU-107)
 

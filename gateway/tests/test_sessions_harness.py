@@ -184,7 +184,7 @@ async def test_harness_scoped_strike(codex_app, codex_gw, clock, arrange, body, 
     world("policy-codex")
     await _arrange_strike(codex_app, codex_gw, clock, arrange)
     req = {**WORKER_T, **BODIES[body]}
-    with when(f"POST /sessions {req}"):
+    with when(f"POST /sessions — body {body}: {req}"):
         r = await codex_gw.post("/sessions", json=req)
     then_eq("status", r.status_code, 200)
     doc = r.json()
@@ -193,6 +193,8 @@ async def test_harness_scoped_strike(codex_app, codex_gw, clock, arrange, body, 
     else:
         expected = {"decision": "defer", "reason": reason}
     claim = "expected " + ", ".join(f"{k} = {v}" for k, v in expected.items())
+    # the row's dash cells, named so every parameter threads a step (THREAD_BROKEN)
+    claim += f" · reason {reason}" if decision == "dispatch" else f" · rail {rail}, harness {harness}, model {model}"
     with then(claim, **{k: {"expected": v, "actual": doc.get(k)} for k, v in expected.items()}):
         for k, v in expected.items():
             assert doc.get(k) == v, f"{k}: expected {v!r}, got {doc.get(k)!r}"

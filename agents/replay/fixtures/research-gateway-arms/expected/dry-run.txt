@@ -1,0 +1,3 @@
+OUT → FU-126 fan-out: homelab#210 → 2 arm(s), each admitted by the agent-gateway as role researcher (FU-270 — the gateway serves the model)
+OUT → --dry-run: nothing to draw on the gateway path — each arm's model is served at admission
+RC 0

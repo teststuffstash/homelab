@@ -169,14 +169,14 @@ if has_type arc; then
   here="label_replace(max by (pod) (max_over_time(kube_pod_info{namespace=\"arc-runners\",created_by_kind=\"EphemeralRunner\",node=\"$NODE\"}[$RANGE])), \"runner_name\", \"\$1\", \"pod\", \"(.*)\")"
   if ! fresh="$(prom "time() - max(github_exporter_last_success_timestamp)")" \
      || ! fam="$(prom_count "count(max_over_time(github_ci_job_completed_timestamp[1d]))")" \
-     || ! jobs="$(prom "(max by (runner_name, repo, job, run_id) (max_over_time(github_ci_job_completed_timestamp{conclusion=\"success\"}[$RANGE])) >= $SINCE) and on (runner_name) $here")" \
+     || ! jobs="$(prom "(max by (runner_name, repo, ci_job, run_id) (max_over_time(github_ci_job_completed_timestamp{conclusion=\"success\"}[$RANGE])) >= $SINCE) and on (runner_name) $here")" \
      || ! npods="$(prom_count "count($here)")"; then
     cant arc "Prometheus at $PROM unreadable"
   elif ! age="$(jq -er '.[0].value[1] | tonumber | floor' <<<"$fresh" 2>/dev/null)" || [ "$fam" -eq 0 ]; then
     cant arc "no github-exporter job-completion series (exporter down, or older than FU-273) — no job read is possible"
   else
     hit="$(jq -r 'sort_by(.value[1] | tonumber)
-      | if length == 0 then "" else "\(length) job(s), latest \(.[-1].metric.repo)/\(.[-1].metric.job) run \(.[-1].metric.run_id) on \(.[-1].metric.runner_name)" end' <<<"$jobs")"
+      | if length == 0 then "" else "\(length) job(s), latest \(.[-1].metric.repo)/\(.[-1].metric.ci_job) run \(.[-1].metric.run_id) on \(.[-1].metric.runner_name)" end' <<<"$jobs")"
     if [ -n "$hit" ]; then have arc "$hit succeeded"
     # A stale exporter cannot say "no job" — its absence of evidence is a read failure.
     elif [ "$age" -ge "$EXPORTER_MAX_AGE" ]; then cant arc "github-exporter last full poll ${age}s ago — no job seen, but it may just not have been read"

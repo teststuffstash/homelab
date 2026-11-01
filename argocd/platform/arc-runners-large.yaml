@@ -1,19 +1,28 @@
-# The LARGE-SCRATCH runner scale set — `runs-on: homelab-ephemeral-large` — for the handful of jobs
-# that write ≥10 GB to the runner's scratch (the oracle corpus release: a 10.6 GB OCI layout untarred
-# into `_work`, then pushed). Same image, same dind shape, same tier as `homelab-ephemeral`
-# (arc-runners.yaml) with three deltas:
+# The LARGE runner scale set — `runs-on: homelab-ephemeral-large` — for jobs that need more than
+# the general set's laptop-sized budget (arc-runners.yaml: runner 3Gi + dind 1Gi): BIG MEMORY
+# (oracle-fleet `ci`, whose pytest-xdist sizes its workers from the cgroup's memory.max) and BIG
+# SCRATCH (the oracle corpus release: a 10.6 GB OCI layout untarred into `_work`, then pushed).
+# One class for both (operator, 2026-11-01, FU-218): the 20-day CI harvest saw ≥2 such jobs at
+# once 0.9 % of the time. Same image, same dind shape, same tier as `homelab-ephemeral`, with
+# these deltas:
+#   - the runner container REQUESTS == LIMITS `memory: 12Gi` — the job's budget, reserved. 12Gi
+#     fits only nx-01 today (the laptops' allocatable is ~6Gi), so a large job never lands on a
+#     laptop; when nx-01 is down large jobs queue (CiDispatchStalled) rather than thrash a laptop.
+#     ~9 xdist workers at oracle's 1280 MiB/worker (vs ~35 cores / 20+ GiB uncapped).
 #   - placement EXCLUDES the pool VMs (`topology.kubernetes.io/zone: proxmox`): the 2026-09-10
 #     07:15Z eviction — wk-03's root disk is 36 GB shared with the image store, the kubelet's
 #     nodefs floor sat 13 GB under the job's need, and every GB written there is pve thin-pool
-#     growth besides. The metal laptops (wk-metal-01 447 GB, -02 113 GB allocatable) always fit.
+#     growth besides. (The old preference for the laptop without a Garage zone is gone with the
+#     laptops; nx-01 carries no Garage zone — garage-0/1/2 run on wk-metal-04/m70s/wk-metal-01.)
 #   - the runner container REQUESTS `ephemeral-storage: 16Gi` (the layout + the kubelet floor +
-#     slack), so two large jobs cannot co-schedule onto one node's disk. Requests-not-limits, as
-#     in the general set: a limit would evict THIS pod at the line instead of not placing it.
-#   - scale-to-zero (minRunners 0, maxRunners 1): one such job a week, ~20 min; the runner image
-#     is pre-pulled on metal by runner-image-prepull.yaml so a cold start is registration only.
+#     slack), so two large jobs cannot co-schedule onto one node's disk beyond what it holds
+#     (nx-01 /var: ~164 GB free). Requests-not-limits for DISK: a limit would evict THIS pod at
+#     the line instead of not placing it.
+#   - scale-to-zero (minRunners 0, maxRunners 2): two large jobs at once covers the harvest's
+#     peak overlap; the 24Gi worst case is what nx-01 reserves away from rides while both run.
+#     The runner image is pre-pulled (runner-image-prepull.yaml), so a cold start is registration.
 # A separate scale set is the only way ARC lets a WORKFLOW choose placement — scale sets have no
-# labels, `runs-on` IS the set name — and a request on the general set cannot discriminate per job
-# (the scheduler compares requests to allocatable, never to the disk the image store already took).
+# labels, `runs-on` IS the set name — and a request on the general set cannot discriminate per job.
 # ⚠ This is a COPY of arc-runners.yaml's template (helm values cannot inherit): on any change there
 # (image tag, dind pin, mirrors, uv cache) diff the two — `diff <(sed -n '/template:/,/destination:/p'
 # argocd/platform/arc-runners.yaml) <(sed -n '/template:/,/destination:/p' argocd/platform/arc-runners-large.yaml)`.
@@ -44,7 +53,7 @@ spec:
           name: arc-controller-gha-rs-controller
         runnerScaleSetName: homelab-ephemeral-large
         minRunners: 0 # scale-to-zero — see header
-        maxRunners: 1 # one large job at a time — see header
+        maxRunners: 2 # two large jobs at a time — see header
         # NO containerMode: the spec below is the chart's own dind template (rendered at 0.14.2 and
         # transcribed), owned here because dind customization requires it (the chart APPENDS user
         # initContainers — a name-merge dupes the dind container; render-verified). We own it to:
@@ -76,36 +85,20 @@ spec:
                   value: "1"
             nodeSelector:
               homelab.io/ephemeral: "true"
-            # Metal only — never a pool VM (the 36 GB-root, thin-pool-backed wk-03 class). See header.
+            # Metal only — never a pool VM (the 36 GB-root, thin-pool-backed wk-03 class); the 12Gi
+            # memory request does the rest (nx-01 today). See header.
             affinity:
               nodeAffinity:
                 requiredDuringSchedulingIgnoredDuringExecution:
                   nodeSelectorTerms:
                     - matchExpressions:
                         - { key: topology.kubernetes.io/zone, operator: NotIn, values: [proxmox] }
-                # PREFER the laptop that carries no Garage zone. 2026-09-10 (#884): a 10 GB push
-                # ran its skopeo on wk-metal-01 while garage-2 — same 4 cores, its volumes behind
-                # Longhorn engines on the same MX500 — coordinated the S3 writes; the node hit 9 %
-                # idle (system 37 %, iowait 19 %), the zone fell 12k blocks behind its own replica
-                # and dropped off the RPC mesh (GarageClusterFlapping). A preference, not a rule:
-                # if the preferred laptop is full the job still runs, on the slower box.
-                # (Until 2026-09-20 the preferred box was wk-metal-02; it leaves the ride pool for
-                # control-plane duty — ADR-133 as amended — so this now resolves to wk-metal-03.)
-                preferredDuringSchedulingIgnoredDuringExecution:
-                  - weight: 100
-                    preference:
-                      matchExpressions:
-                        - { key: kubernetes.io/hostname, operator: NotIn, values: [wk-metal-01] }
             tolerations:
               - key: homelab.io/ephemeral
                 operator: Exists
-            # Soft spread across the two ephemeral nodes + a real memory request (2026-08-11
-            # incident: all 4 runners binpacked onto wk-metal-02 while its WAN was dead — 100% of
-            # CI on one node's failure). Requests-not-limits by intent: a runner's true footprint
-            # depends on which job lands (lint vs cold nix build vs dind), so requests state the
-            # ~2-per-node envelope for honest packing and the spread halves the blast radius;
-            # BestEffort→Burstable also keeps runners first-kill under node pressure, which is
-            # correct for retryable CI. maxRunners stays the concurrency contract.
+            # Spread + Burstable as in the general set. LIMITS: see the header — 12Gi runner
+            # (request == limit: the scheduler reserves what the job may use, which is what
+            # confines this set to nx-01 today), dind 1Gi.
             topologySpreadConstraints:
               - maxSkew: 1
                 topologyKey: kubernetes.io/hostname
@@ -115,7 +108,7 @@ spec:
                     actions.github.com/scale-set-name: homelab-ephemeral-large
             initContainers:
               - name: init-dind-externals
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.7-gc1ffe25de7ea
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.31-ge2e6bfaa9b75
                 command: ["cp"]
                 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
                 volumeMounts:
@@ -126,6 +119,8 @@ spec:
                 resources:
                   requests:
                     memory: 1Gi
+                  limits:
+                    memory: 1Gi # docker's budget (FU-218)
                 args:
                   - dockerd
                   - --host=unix:///var/run/docker.sock
@@ -154,12 +149,14 @@ spec:
                     mountPath: /home/runner/externals
             containers:
               - name: runner
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.9.7-gc1ffe25de7ea
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.31-ge2e6bfaa9b75
                 command: ["/home/runner/run.sh"]
                 resources:
                   requests:
-                    memory: 1536Mi
+                    memory: 12Gi
                     ephemeral-storage: 16Gi # the 10.6 GB layout + the kubelet nodefs floor + slack — see header
+                  limits:
+                    memory: 12Gi # == the request: the job's budget, reserved (FU-218) — see header
                 env:
                   - name: DOCKER_HOST
                     value: unix:///var/run/docker.sock

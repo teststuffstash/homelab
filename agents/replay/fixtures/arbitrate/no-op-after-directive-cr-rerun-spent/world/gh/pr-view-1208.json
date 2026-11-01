@@ -1,0 +1,25 @@
+{
+  "comments": [
+    {
+      "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103).\n\n- `2026-09-09T10:05:00Z` · **run stats** — `deepseek-v4-flash` · $0.21 · 900s · ci=false <!-- agent-event kind=stats ts=2026-09-09T10:05:00Z -->\n- `2026-09-09T11:00:00Z` · **run stats** — `deepseek-v4-flash` · $0.21 · 900s · ci=false <!-- agent-event kind=stats ts=2026-09-09T11:00:00Z -->\n- `2026-09-09T11:05:00Z` · ARBITRATE (changes-requested no-op round, FU-147): the last completed fix round posted its run stats without pushing a commit. <!-- agent-event kind=arbitrate ts=2026-09-09T11:05:00Z -->\n- `2026-09-09T12:00:00Z` · **run stats** — `deepseek-v4-flash` · $0.21 · 900s · ci=false <!-- agent-event kind=stats ts=2026-09-09T12:00:00Z -->\n- `2026-09-09T12:05:00Z` · **no-op re-run** (homelab#1910): round 3 re-run at the launcher. <!-- agent-event kind=noop-rerun ts=2026-09-09T12:05:00Z -->",
+      "createdAt": "2026-09-09T10:05:00Z"
+    },
+    {
+      "body": "ARBITRATE: the directive stands unchanged — re-run with the reviewer's suggested fix verbatim (the round truncated before pushing).\n\nci-cause: class=content step=ci/lint",
+      "createdAt": "2026-09-09T11:30:00Z"
+    }
+  ],
+  "commits": [
+    {
+      "oid": "5b353fe9abcdef0123456789abcdef0123456789",
+      "committedDate": "2026-09-09T10:00:00Z",
+      "messageHeadline": "fix: address the red step"
+    }
+  ],
+  "reviews": [
+    {
+      "state": "CHANGES_REQUESTED",
+      "submittedAt": "2026-09-09T10:10:00Z"
+    }
+  ]
+}

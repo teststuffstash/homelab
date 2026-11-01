@@ -1,0 +1,10 @@
+CALL gh run list --repo teststuffstash/homelab --branch fix/issue-1540-x --workflow ci --status failure --limit 1 --json databaseId
+CALL gh run view 90000001540 --repo teststuffstash/homelab --json jobs
+CALL gh run list --repo teststuffstash/homelab --branch master --workflow ci --limit 1 --json databaseId,conclusion
+CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json number,comments
+OUT ORPHANS 
+OUT UNITS ci-red|homelab|pr-1540\n
+OUT ITEMS [homelab] PR #1540 — ci-red (CI red, armed; attempt 1/5 on PR #1540 @ aaaaaaaa)\n
+OUT ITEM_CLASS homelab|pr-1540|riding|machine\n
+OUT REACHED: end
+RC 0

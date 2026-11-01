@@ -706,6 +706,19 @@ cap nothing at ~$0.54. Before #270 the key was an operator step with a warning b
 ride fell back to the stack FIXER's standing budget key — which is what run 3's dead cell-b spent
 a provider retry against.
 
+**On the gateway (FU-270, operator ruling 2026-11-01): the cells stop naming models.** A cell is a
+harness (`retro-argo.yaml` `harnessA=claude`, `harnessB=goose` — the ride command is
+harness-literal, so the harness narrows each admission to its dialect); on the platform stack each
+is ONE `POST /sessions` admission for role `retro` (caller `agent-coordinator:agent-coordinator`,
+bound into the ride namespace), and the gateway picks the model per role/tier. The harvest names
+each report after the model its session was SERVED — read off the cell's ride log, from the
+admission's dispatch line — so the report filename and the published ledger key carry it. The
+controlled two-model comparison above is given up: two admissions may be served one model, and the
+report names record that instead of forcing them apart. Off-platform stacks, and a platform
+admission refused before any request or failed closed (FU-270: transition fallback), ride the old
+proxy on the harness's transition model (claude → opus, goose → deepseek-v4-pro;
+`agents/retro-session.sh`).
+
 ## Part C — the attention layer v1: derived-class export, board --machine, standing belt (#892)
 
 **Leg 5 of container #628.** The scan classifies every issue/PR it sees; that classification was
@@ -737,6 +750,7 @@ health signal.
 | `footprint-held` | operator | Queued issue held by an in-progress issue's `Touches` (ADR-097 intersection) |
 | `cap-held` | operator | Queued issue held by the per-base PR budget cap (`REPO_PR_CAP`, machine-flowing PRs only) |
 | `blockpark` | operator | Queued issue held by the codeowner-parked PR budget (`REPO_BLOCKPARK_CAP`) |
+| `ci-red-held` | machine | Armed red PR held by the ci-red clause's fleet-class hold — the red is master's or a sibling-ruled infra/environment fault (homelab#1909); releases when master greens / the 24 h window lapses |
 | `guarded-path` | operator | Pin-only guarded path — operator push needed |
 | `orphan-unarmed` | operator | Open PR not on merge path — arm or park |
 | `container` | none | Post-launch bucket, container issue |

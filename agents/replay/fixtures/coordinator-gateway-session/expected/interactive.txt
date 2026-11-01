@@ -1,0 +1,5 @@
+OUT GW_COORD=''
+OUT RUNNER claude -p --model fable --append-system-prompt-file /work/homelab/agents/coordinator/README.md --permission-mode bypassPermissions "$(cat /work/coord-run)"; RC=$?; upload_transcripts
+OUT COORD_GW_FN: empty
+OUT REACHED: end
+RC 0

@@ -80,10 +80,14 @@ same-sha runs serialize, different PRs still use both slots.
 
 - ArgoCD apps: `argocd/platform/arc-controller.yaml` (operator, `arc-systems`, stable tier) +
   `arc-runners.yaml` (the `homelab-ephemeral` scale set, `arc-runners` ns, ephemeral tier,
-  scale-to-zero, `containerMode: dind`) + `arc-runners-large.yaml` (`homelab-ephemeral-large`:
-  metal-only, `ephemeral-storage: 16Gi` requested — for jobs that write ≥10 GB of scratch, the
-  oracle corpus release; a 36 GB pool VM evicted one mid-untar 2026-09-10) + `github-runner-secrets.yaml` →
+  `containerMode: dind`; the **normal** class — fits a laptop, no kind: runner limit 3Gi + dind
+  1Gi) + `arc-runners-large.yaml` (`homelab-ephemeral-large`: the **large** class — big memory
+  AND big scratch, metal-only, 12Gi memory request == limit (nx-01 today) + `ephemeral-storage:
+  16Gi` requested, max 2; oracle-fleet `ci` and the corpus release). Sizing evidence + the
+  decision: [`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md) §2026-11-01
+  (FU-218)) + `github-runner-secrets.yaml` →
   `argocd/resources/github-runner/` (ns + the `arc-github-app` ESO `ExternalSecret`).
+  Docker/kind-heavy jobs stay on Tier B's runner VMs.
 - Auth: a **GitHub App** on the org (permissions: Organization → Self-hosted runners: R/W, +
   Metadata: Read); creds in Infisical (`GHARC_APP_ID`/`GHARC_INSTALL_ID`/`GHARC_PRIVATE_KEY`) → ESO →
   `arc-github-app` secret → chart `githubConfigSecret`. Bootstrap is scripted:

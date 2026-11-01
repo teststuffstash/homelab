@@ -100,13 +100,19 @@ spec:
             tolerations:
               - key: homelab.io/ephemeral
                 operator: Exists
-            # Soft spread across the two ephemeral nodes + a real memory request (2026-08-11
-            # incident: all 4 runners binpacked onto wk-metal-02 while its WAN was dead — 100% of
-            # CI on one node's failure). Requests-not-limits by intent: a runner's true footprint
-            # depends on which job lands (lint vs cold nix build vs dind), so requests state the
-            # ~2-per-node envelope for honest packing and the spread halves the blast radius;
-            # BestEffort→Burstable also keeps runners first-kill under node pressure, which is
-            # correct for retryable CI. maxRunners stays the concurrency contract.
+            # Soft spread across the ephemeral nodes + a real memory request (2026-08-11 incident:
+            # all 4 runners binpacked onto wk-metal-02 while its WAN was dead — 100% of CI on one
+            # node's failure); the spread halves the blast radius, Burstable keeps runners
+            # first-kill under node pressure (correct for retryable CI). maxRunners stays the
+            # concurrency contract.
+            # LIMITS (FU-218, 2026-11-01): requests state the packing envelope, limits are the
+            # job's BUDGET — runner 3Gi + dind 1Gi. Without them a job sized to the HOST: a
+            # ShellCheck dataflow pass hit 5.4 GB on wk-metal-03 and thrashed it NotReady for
+            # ~4 h (#3107). This set is the "normal" class — fits a laptop, no kind (20-day
+            # harvest: every recurring job ≤ 2.7 GiB runner peak, dind ≤ 0.3 GiB; kind/e2e
+            # runs on the ci-runner VMs). An overrun is now the job's own OOMKilled, never the
+            # node. Bigger jobs: `runs-on: homelab-ephemeral-large` (arc-runners-large.yaml).
+            # Tools that self-size read the cgroup (`/sys/fs/cgroup/memory.max`), not nproc.
             topologySpreadConstraints:
               - maxSkew: 1
                 topologyKey: kubernetes.io/hostname
@@ -127,6 +133,8 @@ spec:
                 resources:
                   requests:
                     memory: 1Gi
+                  limits:
+                    memory: 1Gi # docker's budget — the daemon + every container it runs (FU-218)
                 args:
                   - dockerd
                   - --host=unix:///var/run/docker.sock
@@ -160,6 +168,8 @@ spec:
                 resources:
                   requests:
                     memory: 1536Mi
+                  limits:
+                    memory: 3Gi # the job's budget (FU-218) — see the block above topologySpreadConstraints
                 env:
                   - name: DOCKER_HOST
                     value: unix:///var/run/docker.sock

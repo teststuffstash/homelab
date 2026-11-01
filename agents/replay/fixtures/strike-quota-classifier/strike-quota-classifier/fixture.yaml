@@ -40,6 +40,14 @@
 #      key, no strike), mirroring agent-finalize — the credit-floor gate (FU-088b) defers dispatch
 #      when the account is low, so the line means the session key hit its cap.
 #
+# homelab#3094: an OOMKilled agent container takes agent-finalize with it (no stats line), so only
+# the raw-log fallback sees the ride:
+#   6. The kubelet's terminated reason for the `agent` container is the evidence — read in the SAME
+#      call as the pod's status.reason (`<pod reason>/<agent terminated reason>`; a world file with no
+#      `/` is a pod reason alone). OOMKilled → error_class=oom, after DeadlineExceeded and before
+#      every log signature; it strikes with and without a PR. Any other terminated reason classifies
+#      from the log as before.
+#
 # CONDITION UNDER REPLAY. The strike classifier sits in two branches of agent-session.sh:
 #   - STATS path (AGENT_RUN_STATS line exists): if exit_status classifies as "unknown", the
 #     run log is checked for config-death and provider-5xx signatures. Must not over-trigger on clean logs.
