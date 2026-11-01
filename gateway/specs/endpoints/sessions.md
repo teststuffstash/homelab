@@ -25,7 +25,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 
 | Requirement | operation | Governs (schema) | Error codes | Status |
 |---|---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint) |
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0 + the ladder's capacity half ([§Capacity](#capacity--the-ladders-capacity-half): window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential) + the openrouter provider axis ([§The provider axis](#the-provider-axis-openrouter) — the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); the ladder's class/tier walk, strikes and the capacity doorbell are `⚑ gap` (rows below); `/route` compatibility is `⚑ gap` (not served; consumers move to this endpoint); `⚑ gap (2026-11-01, PR #3105 → work #3108)`: the Go account headroom is unread — the rail's one shared allowance is learnt from a ride's first 429 (the "⚑ gap: the Go account headroom" row) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail lit 2026-10-22 — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only (the "⚖ local evidence" row); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI (the "⚖ cluster evidence" row; the shadow cells are the end-to-end check), and opencode's provider-package fetch under enforced egress is unobserved (the "⚑ gap: opencode's provider package" row) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `POST /sessions`, `GET /sessions/{id}` | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `DELETE /sessions/{id}`, `GET /sessions/{id}` | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
@@ -295,16 +295,21 @@ blocks lifts.
   `upstream_provider_shared_pool` 105, `openrouter_shared_capacity` 3,
   `openrouter_free_tier_per_minute` 7), while two other models on the same key served 200s
   throughout; an experiment rail latch on one model's 429 deferred a different model.
-- **429 latch** (`anthropic`): the ACCOUNT-scope signal. ⚖ Scope is a property the policy
+- **429 latch** (`anthropic`, `opencode`): the ACCOUNT-scope signal. ⚖ Scope is a property the policy
   declares, never inferred from a count: a rail whose policy sets `latch_429_hold_s` with
   `latch_scope: account` (the default) is one subscription account whose limits are account
   windows (the subscription's 5h/7d), so a 429 there latches the whole rail as well as cooling its
   cell, for the same reset (a reset-less 429 → the hold); any 2xx on the rail clears it early.
   ⚖ hold **900 s** = `ANTHROPIC_429_HOLD_S` (`openrouter-proxy.py`). `opencode` declares
-  `latch_scope: model`: the vendor meters each Go model against **its own** monthly limit
-  (operator ruling 3, [the spike §F2](../../../docs/spikes/opencode-go-catalog.md)), so a Go 429
-  cools only its cell — for its reset, else the rail's `latch_429_hold_s` (**900 s** =
-  `GO_CAPACITY_HOLD_S`) — and never blocks another Go model. `openrouter` declares none: its 429s
+  `latch_scope: account` too (since 2026-11-01): the vendor meters every paid Go model against **one**
+  shared account allowance — the published per-model limits only WEIGHT a request's cost against
+  that pool (OpenCode support's statement in anomalyco/opencode#54875; the docs still say per model,
+  anomalyco/opencode#60311) — so a Go 429 latches the rail for its `retry-after` (the vendor names
+  the block's reset: ~2 h on 2026-11-01), else the rail's `latch_429_hold_s` (**900 s** =
+  `GO_CAPACITY_HOLD_S`). The spike's ruling 3 (per model, [§F2](../../../docs/spikes/opencode-go-catalog.md))
+  is superseded by the wire: on 2026-11-01 three Go cells 429'd within eight minutes against one
+  reset, two of them admitted fresh after the first — the per-model scope re-admitted the rail
+  twice into the same exhausted block. `openrouter` declares none: its 429s
   are per model (the experiment above). A count rule ("≥ 2 models 429'd") would have latched it
   wrongly: two models' independent provider-pool 429s overlapped there while two others served.
 - **Credential rejected** (every rail): an upstream 401, or a 403 whose error names a credential
@@ -347,6 +352,8 @@ blocks lifts.
   at the model's first request after its previous one expired (`router.go_usage_chain_open`).
   Prices apply at READ time from the ledger (`requests` × `sessions.model`), so a catalog refresh
   re-prices the open windows. A model whose monthly limit is `unlimited` draws against no window.
+  ⚠ Since the allowance is ONE pool (the latch bullet above), a per-model draw under-reads it: the
+  account reading is the "⚑ gap: the Go account headroom" row under §Named gaps.
 - **Not in the catalog** (`opencode`, per cell): a Go model the catalog's config snapshot does not
   list, or that has no monthly-limit row under the policy's plan (or no snapshot exists yet), is
   refused — `not-in-catalog`, `retry_after_s` = the next scheduled catalog refresh — never priced at
@@ -375,12 +382,12 @@ upstream answers as stated) — never seeded.
 | "a 429 without retry-after latches for the policy hold" | reviewer ride on anthropic → 429, no `retry-after` | — | reviewer, `rail: anthropic` || defer | — | rail-latched | 900 |
 | "the latch lifts at its expiry" | reviewer ride on anthropic → 429 | +30 s | reviewer, `rail: anthropic` || dispatch | anthropic | — | — |
 | "any 2xx on the rail clears the latch" | reviewer ride on anthropic → 429, the same session → 200 | — | reviewer, `rail: anthropic` || dispatch | anthropic | — | — |
-| "a Go 429 cools only its cell, for its retry-after" | worker ride on opencode → 429 | — | worker, `rail: opencode` || defer | — | cell-cooled | 30 |
-| "a Go 429 without retry-after cools its cell for the rail's hold" | worker ride on opencode → 429, no `retry-after` | — | worker, `rail: opencode` || defer | — | cell-cooled | 900 |
-| "one Go model's 429 never blocks another Go model" | worker ride on opencode → 429 (`deepseek-v4.1-flash`) | — | worker, `rail: opencode`, `tier: heavy` (`claude-haiku-5-5`) || dispatch | opencode | — | — |
-| "a cooled Go cell is skipped, the walk continues" | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
+| "a Go 429 latches the rail for its retry-after" | worker ride on opencode → 429 | — | worker, `rail: opencode` || defer | — | rail-latched | 30 |
+| "a Go 429 without retry-after latches for the rail's hold" | worker ride on opencode → 429, no `retry-after` | — | worker, `rail: opencode` || defer | — | rail-latched | 900 |
+| "one Go model's 429 blocks every Go model: one shared allowance ⚖" | worker ride on opencode → 429 (`deepseek-v4.1-flash`) | — | worker, `rail: opencode`, `tier: heavy` (`claude-haiku-5-5`) || defer | — | rail-latched | 30 |
+| "a latched Go rail is skipped, the walk continues" | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
 | "a rail whose policy declares no latch is not latched: its other model admits ⚖" | worker ride on openrouter → 429 | — | worker, `rail: openrouter`, `tier: heavy` || dispatch | openrouter | — | — |
-| "every rail blocked: the rail that frees first names the defer ⚖" | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | cell-cooled | 30 |
+| "every rail blocked: the rail that frees first names the defer ⚖" | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | rail-latched | 30 |
 
 The cell rows ride `upstream-429-reset` — OpenRouter's shape, `x-ratelimit-limit` / `-remaining` /
 `-reset` (epoch ms) and no `retry-after` — unless stated. A worker on openrouter rides the standard
@@ -534,6 +541,7 @@ parasail/fp8, none of which clears the floors ([worlds/README.md](../worlds/READ
 | "⚑ gap: the free-tier key budget spans every `:free` cell" | a 429 whose body says `limit_source: openrouter_free_tier_per_minute` || only the cell that saw it cools; the next `:free` cell 429s once and cools itself | the limit is the key's across `:free` models (20 req/min in the experiment's headers); reading the body's `limit_source` would cool them as one group — not built |
 | "⚑ gap: a Go 402" | an upstream 402 on opencode || no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
 | "⚑ gap: the Go draw is the gateway's own traffic only" | Go spend through the old proxy or the jail shim || not in this ledger — this draw is a lower bound of the account's | the account-wide reading (the old proxy's ledger, the jail shim's reports) |
+| "⚑ gap: the Go account headroom" | (work #3108) the vendor's account windows — `GET /zen/go/v1/usage` answers the Go key `{usage: {rolling, weekly, monthly: {status, percent, resetsAt}}}` (account-level, no per-model split; probed 200 on 2026-11-01) || not read — an exhausted block is learnt from the first 429 of a ride, which the harness does not survive (opencode retries three times and exits: 2026-11-01, three rides died mid-work) | a Go twin of [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom), admitting on the account reading and deferring `quota-limited` until `resetsAt`; the per-model window draw above is then a lower bound of one shared pool, not the pool |
 | "⚑ gap: one model across rails" | a model strike on `claude/sonnet` || `opencode-go/claude-haiku-5-5` still admits | the policy names rail-prefixed ids; `model-classes.json` groups them per model, and that grouping is not in the gateway policy |
 | "⚑ gap: labels, urgency, budget class" | body carries none, none read || — | the ADR-096 ladder's inputs; `tier` is the only size knob |
 | "⚑ gap: `POST /route`" | any || 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
@@ -1047,15 +1055,34 @@ that stack).
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
 | "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
 | "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
-| "the deployed callers are today's three dispatchers and the judge, under enforce ⚖" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[worker, prober]`, bind namespaces `[agent-runtime, homelab, openrouter-operator]`, outcome `own`), `system:serviceaccount:oracle-agents:agentstack-loop` (`[oracle]`, `[prober]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`, `own`) and `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**) |
+| "the deployed callers are today's four dispatchers and the judge, under enforce ⚖" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[coordinator, prober, researcher, reviewer, worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator, platform-agents]`, outcome `own`), `system:serviceaccount:oracle-agents:agentstack-loop` (`[oracle]`, `[prober]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:agent-coordinator` (`[platform]`, `[coordinator, responder, retro]`, `[openrouter-operator]`, `own`) and `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
 is the one in-cluster caller of `agents/agent-session.sh`; the jail's `canary-entrants.sh` mints
 the same SA's token to ride the entry canary, which is why its entry grants `prober` beside
-`worker` (2026-10-20 — until then every canary admission was 403 `caller-role-denied`). It binds
+`worker` (2026-10-20 — until then every canary admission was 403 `caller-role-denied`). The same
+`prober` grant admits the `probe-platform` tick's outer session — ONE unbound session from the
+AgentStack Composition's prober pod (`prober.gateway: sessions`, the shared helper
+`agents/gateway-admit.sh`), no bind. It binds
 into the platform repo namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
-no `agentstack-worker`, so a bind there could never be pulled and is not granted. ⚖ The **oracle
+no `agentstack-worker`, so a bind there could never be pulled and is not granted. ⚖ The same SA
+also holds `coordinator` and `reviewer`, bound into its OWN namespace `platform-agents` (operator
+ruling 2026-11-01, the platform lanes' move onto the gateway, FU-270): the loop's coordinator and
+reviewer pods run there as `agentstack-loop` (`agents/coordinator-session.sh` /
+`agents/reviewer-session.sh --loop-ns`), launched by that same SA — granted ahead of the launchers
+that will use it; until they do, the grant admits nothing new. ⚖ It also holds `researcher`: the
+jail's `agents/research-fanout.sh` mints this SA's token (the entry canary's impersonation) and each
+platform arm is a worker-launcher ride bound into a platform repo namespace, as `researcher`. ⚖ **The coordinator namespace's
+shared SA** `agent-coordinator:agent-coordinator` holds `coordinator` + `responder`, no bind: the
+responder, the deep dig, island intake and the fix-debounce set-pass run as it
+(`agents/coordinator/{responder,deep-dig,island-intake,fix-debounce}-argo.yaml`) and will admit
+ONE unbound session each, the specs reviewer's shape. ⚖ It also holds `retro`, bound into
+`openrouter-operator`: the retro cron's cells (`agents/coordinator/retro-argo.yaml`) run as this SA
+and hand each cell to the worker launcher, whose ride pod lives in the platform retro's ride
+namespace (`agents/retro-project.sh`) — so the shared grant now reaches a bind there too. Being shared, the grant reaches every
+workflow on that SA; a per-workflow SA (the specs reviewer's #2685 split) is the narrower
+alternative, deferred until a lane needs to be told apart from the others at the gateway. ⚖ The **oracle
 loop** `oracle-agents:agentstack-loop` (operator ruling 2026-10-24, FU-270) is the `probe-oracle`
 CronWorkflow's pod (the AgentStack Composition's prober template, `prober.childRail: codex`): role
 `prober` only, stack `oracle` only, **no bind** — the pod admits ONE unbound session for its own

@@ -91,7 +91,7 @@ while IFS= read -r cell; do
   n=$((n + 1))
   echo "== canary $n/$MAX: $cell"
   if [ "$DRY" = 1 ]; then continue; fi
-  # The ride (the scout's canary shape, agents/model-scout.sh scout_canary_ride, minus its model
+  # The ride (the retired model scout's canary shape — its scout_canary_ride, minus the model
   # arguments): one trivial closed task that makes the harness call a tool — a headless `opencode run`;
   # agent-session.sh builds the admission with `canary: {model, provider}` from the knob (harness
   # opencode, the gateway's canary.harness) and reports the outcome on exit. A dispatch is the

@@ -221,7 +221,14 @@ resource "github_repository_ruleset" "required_approval_goal" {
 
   rules {
     pull_request {
-      required_approving_review_count   = 1    # the reviewer bot's approval
+      # The SAME count as master's (ADR-155 amended 2026-11-01): 1 = the code reviewer bot alone;
+      # 2 = the specs reviewer identity as well. The twin used to keep 1 — "a second gate on the
+      # children would serialise the fan-out like the codeowner flag did" — but that gate is a
+      # bot ticking ≤ 5 min (edge-rung right after the code approval; mechanical on a child with
+      # no specs path), not a human read. At 1, every specs-touching child merged into goal/** 1–2
+      # min BEFORE its specs verdict (oracle-fleet #967/#968/#973 → goal/950), so the assembly PR
+      # absorbed the whole specs gate in one oversized pack (#977: 4 rounds, a partial read).
+      required_approving_review_count   = each.value.required_approvals
       dismiss_stale_reviews_on_push     = true # new commits after approval re-open the gate
       require_last_push_approval        = false
       required_review_thread_resolution = false

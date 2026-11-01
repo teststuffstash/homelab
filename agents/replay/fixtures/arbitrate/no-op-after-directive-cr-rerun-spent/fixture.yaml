@@ -1,0 +1,28 @@
+# arbitrate/no-op-after-directive (b') changes-requested, the directive's re-run SPENT without a round → arbitrate (homelab#1910).
+#
+# The cr-first world after its re-run was launched (kind=noop-rerun 12:05) but before any new
+# stats: the re-run died or was refused without completing a round, and no worker or launch pod
+# holds the item any more (the clause is reached only with every hold clear). One re-run per
+# directive: a `kind=noop-rerun` event newer than the directive ⇒ no second launch, the FU-147
+# label + event as today — the bound that keeps a dying re-run from relaunching every tick.
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cr-rerun-spent
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cr-bridge.sh
+  - block:changes-requested-gate
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - MC_NOW=2026-09-09T12:40:00Z

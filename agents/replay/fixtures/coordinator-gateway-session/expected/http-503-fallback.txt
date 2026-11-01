@@ -1,0 +1,10 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"coordinator","task":"coordinator-homelab-issue-2700","round":0,"harness":"claude"}
+CALL subscription-latch SUBSCRIPTION_TIER=dispatch
+CALL claude -p --model fable --append-system-prompt-file /work/homelab/agents/coordinator/README.md --permission-mode bypassPermissions Reconcile EXACTLY ONE work unit [ANTHROPIC_BASE_URL=http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic ANTHROPIC_AUTH_TOKEN=ref:agent-coordinator/coordinator-claude ANTHROPIC_MODEL= CLAUDE_CODE_MAX_CONTEXT_TOKENS=]
+OUT GW_COORD='1'
+OUT RUNNER coord_gw_claude; RC=$?; upload_transcripts
+OUT rc=0 CS_DEFERRED='' MODEL='fable' env file left: no
+OUT REACHED: end
+ERR → gateway(sessions): defer — [gateway-http 503: {"error":"tokenreview-transient"}] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (rc 3 — the caller decides the next path).
+ERR gateway admission refused rc=3 — old-proxy fallback
+RC 0

@@ -9,6 +9,7 @@ treat a skill edit like a doc edit (routing table, one home per fact).
 | [design-agents](design-agents/SKILL.md) | `/design` for the agent platform — full-corpus read; **operator-typed only** (2026-09-27), the `.claude/hooks/` gate denies self-invocation |
 | [board-sweep](board-sweep/SKILL.md) | Sweep the live board: what the loop did, and what escalated unseen |
 | [docs-cleanup](docs-cleanup/SKILL.md) | Fine-comb grooming: sync every doc with tracker truth |
+| [intake](intake/SKILL.md) | Admission pass: one island-intake sitting per island, so nothing that needs no operator input waits on the operator |
 | [fu-sweep](fu-sweep/SKILL.md) | Triage every open FU and act (pipeline: board-sweep → this → docs-cleanup) |
 | [meta-coordinate](meta-coordinate/SKILL.md) | Resume the meta-coordinator role in a fresh session |
 | [handoff](handoff/SKILL.md) | Process the stack-jail → mono-jail work queue |
@@ -17,6 +18,7 @@ treat a skill edit like a doc edit (routing table, one home per fact).
 | [opnsense-as-code](opnsense-as-code/SKILL.md) | Router changes as code (Unbound/HAProxy/ACME/BGP/DHCP) |
 | [tofu-apply](tofu-apply/SKILL.md) | Run tofu correctly (secrets, `-chdir`, plan-first) |
 | [skill-retro](skill-retro/SKILL.md) | Batched retro over jail transcripts → the GAPS ledger |
+| [seat-review](seat-review/SKILL.md) | The platform reviewer run by hand (a sonnet subagent with the bot's own instructions) on an operator-path change — a red-by-design guarded-file PR or a direct-to-master edit — before the operator admin-merges |
 | [second-jail](second-jail/SKILL.md) | A SECONDARY mono jail beside the primary: clone-only, no shared records, PR lane; **operator-typed only** |
 
 ## Improvement contract

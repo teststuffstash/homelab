@@ -45,7 +45,6 @@ resources:
   - review-argo.yaml
   - reviewer-git.yaml
   - sentinel-git.yaml
-  - scout-account-key.yaml
   - transcripts-pvc.yaml
   - transcripts-sync-script.yaml
   - transcripts-sync.yaml

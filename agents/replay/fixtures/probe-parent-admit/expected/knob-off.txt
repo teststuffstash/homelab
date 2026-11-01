@@ -1,0 +1,4 @@
+OUT parent model: haiku · child: claude/haiku
+OUT claude sees: ANTHROPIC_BASE_URL=http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic ANTHROPIC_AUTH_TOKEN=ref:… ANTHROPIC_MODEL=unset
+OUT env file left behind: no
+RC 0

@@ -20,7 +20,8 @@ if [ "${DECLARE_CONTINUEON:-0}" = "1" ]; then
 fi
 
 # HALF 2 (harvest world): the six variables retro-argo.yaml's harvest step sets above the block —
-# the run coordinates and the two cell→log pairs — now come off this row's `env:` column instead
+# the run coordinates and the two harness→log pairs (the served model is the block's own read of
+# each log, FU-270) — now come off this row's `env:` column instead
 # of being hardcoded per copied directory (family defaults in fixture.yaml cover the ordinary
 # case; a row overrides only its delta). LOG_A/LOG_B resolve under the family's shared,
 # COMMITTED `logs/` directory via $REPLAY_ROOT — deliberately NOT the table harness's per-row
@@ -33,8 +34,8 @@ fi
 DATE="${DATE:?fixture must pin DATE}"
 STACK="${STACK:?fixture must pin STACK}"
 RUN="${RUN:?fixture must pin RUN}"
-CELL_A="${CELL_A:?fixture must pin CELL_A}"
-CELL_B="${CELL_B:?fixture must pin CELL_B}"
+HARNESS_A="${HARNESS_A:?fixture must pin HARNESS_A}"
+HARNESS_B="${HARNESS_B:?fixture must pin HARNESS_B}"
 LOG_A="$REPLAY_ROOT/agents/replay/fixtures/retro-harvest/logs/${LOG_A_NAME:?fixture must pin LOG_A_NAME}"
 LOG_B="$REPLAY_ROOT/agents/replay/fixtures/retro-harvest/logs/${LOG_B_NAME:?fixture must pin LOG_B_NAME}"
 

@@ -1,0 +1,33 @@
+# reviewer-gateway-admit — FU-270, the reviewer flip: reviewer-session.sh admits its review through
+# the agent-gateway's POST /sessions via the ONE shared helper (agents/gateway-admit.sh), as one
+# decision table. The helper's own arms are pinned by gateway-admit; this family pins what is the
+# REVIEWER launcher's: the platform guard, the explicit --model carve-out, the request it sends, what
+# a dispatch sets for the rest of the launcher, and the transition fallback.
+#
+# THE CONTRACT. `AGENT_GATEWAY=sessions` (set by the review dispatchers for the platform stack only)
+# is honoured for a repo whose claims-mirror stack is `platform`. Unset → nothing happens: no request,
+# the pod keeps the old-proxy /anthropic ref env. Set on another stack, or with an explicit --model
+# (a hand-run model pin, which the gateway cannot take — no dispatcher passes one) → one loud line,
+# no request, the old-proxy path. Otherwise ONE request: `{stack: platform, role: reviewer, task: review-<repo>-<pr>,
+# round, harness: claude, bind: {<loop ns>, <pod SA>, <reviewer pod name>}}` — `harness: claude`
+# because the reviewer pod runs claude only (the FU-188 pin's constraint, expressed as the request's
+# dialect narrowing). `dispatch` → MODEL = the gateway's wire model (rail prefix stripped), GO_SERVED
+# from the rail, the /route consult and the FU-088/Go ladder skipped (AGENT_ROUTER=off,
+# _router_adopted=gateway), the pod env = the pull URL + key names (no ref, no token), the
+# gateway-token mount + volume and the gateway-session label set, the author's served model logged
+# beside the admitted one, and the session RELEASED on exit. `defer` → the review defers as the
+# FU-088 latch does (one line, exit 0). Refused before any request (no caller token) or fail closed
+# (unreachable, a harness this pod cannot run) → `gateway admission refused rc=N — old-proxy
+# fallback`, and everything stays on the old-proxy path (the seat's transition rule, FU-270).
+#
+# `curl` is shadowed as the gateway seam (the POST body IS the asserted request; the DELETE is the
+# release). HERE is a temp dir holding the real helper + a fixture claims mirror, so the stack guard
+# reads a recorded mirror, never the live one. Row state lives in rows/<id>/vars.sh.
+name: reviewer-gateway-admit
+mode: table
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-gateway-admit
+  - file:post.sh
+rows: rows.psv

@@ -1,0 +1,30 @@
+# arbitrate/no-op-after-directive (a) changes-requested, FIRST no-op after a directive → the launcher re-runs it (homelab#1910, Goal #1906 pin 3).
+#
+# Timeline (2026-09-09, homelab PR #1208 ⇐ issue #1200 `task/build`): head commit 10:00; stats
+# 10:05; CHANGES_REQUESTED 10:10; stats 11:00 (no push); escalation event 11:05; the `ARBITRATE:`
+# directive on the PR at 11:30; stats 12:00 (no push). Expected (homelab#1910 §deliverable 1):
+#   directive = 11:30 (PR side); rounds after it = 1; no re-run spent ⇒ RE-RUN at round 3,
+#   task issue-1200, branch fix/issue-1200-review-findings, recipe `.agents/build.yaml` (the brief's
+#   task/<c> → .agents/<c>.yaml mapping). No unit for a coordinator session, no label.
+# RED ON BASE: master labels agent/arbitrate here (the FU-147 no-op leg had no re-run).
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cr-first
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cr-bridge.sh
+  - block:changes-requested-gate
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - MC_NOW=2026-09-09T12:10:00Z

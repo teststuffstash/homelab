@@ -118,8 +118,8 @@ follows fix-density per ADR-103, never big-bang):
    every `world/` file before and after the run and REDS if any moved — hashing rather than
    `git status` so the gate can tell "the run changed a world" from "the author is editing a
    fixture". `--record`/`--rerecord` return before the check: writing worlds is their job. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
-   the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename, and `scout-bench/*`
-   pins a jq-version float format awaiting its emitter fix (the versions gap below).
+   and the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename. (The third member,
+   `scout-bench/*`, left with `model-scout.sh` when the scout retired 2026-11-01.)
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
    `mode: suite` entries (scripts stay put; `entrypoint:` points at them) so "executed replay"
    has one runner and one index. Bulk executed by stint #661 (PR#671, 5 standalone harnesses
@@ -175,6 +175,13 @@ is stale, so it cannot drift the way the prose register did.
 | `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/goal-child` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/no-op-after-directive-cired-first` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cired-second` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cired-undirected` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-first` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-rerun-spent` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-second` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-stale-directive` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
 | `arbitrate/no-op-after-directive` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/ordinary-path-removal` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/probe-unreadable` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
@@ -186,8 +193,11 @@ is stale, so it cannot drift the way the prose register did.
 | `assembly-cr-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-emit` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-merge-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-themed-emit` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-review-dispatch/child-head` | actions | - | `agents/review-reflex.sh` | - |
+| `assembly-review-dispatch/goal-head` | actions | - | `agents/review-reflex.sh` | - |
 | `asvs` | suite | - | `-` | - |
 | `base-arm-authoring` | table | - | `agents/agent-session.sh` | - |
 | `base-arm-master` | actions | - | `agents/agent-session.sh` | - |
@@ -218,6 +228,7 @@ is stale, so it cannot drift the way the prose register did.
 | `ci-cause-grammar` | table | - | `-` | - |
 | `ci-failure-run-select/ci-failure-run-select` | table | base | `agents/agent-session.sh` | MP-T12 |
 | `ci-red-arbitrate-belt` | table | base | `agents/coordinator-scan.sh` | MP-T13 |
+| `ci-red-fleet-hold` | table | fleet | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-human-ruling-hold` | table | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
@@ -240,6 +251,8 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
 | `context-repos-prelude` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
+| `coordinator-gateway-session` | table | - | `agents/coordinator-session.sh` | - |
+| `coordinator-launch-mode` | actions | - | `agents/coordinator-session.sh` | IL-T31 |
 | `coordinator-pick-rail/anthropic` | actions | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-pick-rail/both` | actions | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-pick-rail/go-goal-lane` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -283,6 +296,7 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-mcp-present` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `epic-dispositions` | suite | - | `agents/epic_dispositions.py` | IL-T12 |
+| `fix-debounce-setpass-admit` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `fleet-fault-unlatch-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -306,6 +320,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-resumable-quoted` | table | - | `agents/coordinator-scan.sh` | - |
+| `gateway-admit` | table | - | `agents/gateway-admit.sh` | - |
 | `gateway-env-pull` | table | - | `agents/agent-session.sh` | - |
 | `gateway-outcome` | table | - | `agents/agent-session.sh` | - |
 | `gateway-sessions` | table | - | `agents/agent-session.sh` | - |
@@ -363,6 +378,7 @@ is stale, so it cannot drift the way the prose register did.
 | `merge-conflict/source-issue-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `merged-closeout-default-branch` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
 | `merged-closeout-ilg06-detect` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
+| `merged-closeout-label-free` | actions | - | `agents/coordinator-scan.sh` | IL-T09 |
 | `model-id-carrier` | table | - | `agents/agent-session.sh` | - |
 | `model-id-parse-drift/model-id-parse-drift` | suite | - | `-` | - |
 | `nix-registry-env` | actions | - | `agents/agent-session.sh` | - |
@@ -388,6 +404,7 @@ is stale, so it cannot drift the way the prose register did.
 | `pr-cap-per-base/counts` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
 | `preflight-malformed-block` | actions | - | `agents/agent-session.sh` | - |
+| `probe-parent-admit` | table | - | `argocd/resources/agentstack/composition.yaml` | - |
 | `python-profile-env/other` | actions | - | `agents/agent-session.sh` | - |
 | `python-profile-env/python` | actions | - | `agents/agent-session.sh` | - |
 | `queued-body-tsv` | table | - | `agents/coordinator-scan.sh` | - |
@@ -403,6 +420,7 @@ is stale, so it cannot drift the way the prose register did.
 | `renovate-rebase-tick-no-checkbox` | actions | - | `agents/coordinator-scan.sh` | - |
 | `renovate-rebase-tick-unticked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
+| `research-gateway-arms` | table | - | `agents/research-fanout.sh` | - |
 | `resolve-model` | table | - | `agents/resolve-model.sh` | - |
 | `responder-behaviour/responder-behaviour` | suite | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-capture/no-key` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
@@ -458,6 +476,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-cell-report/multi-block` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/present` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/skeleton` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
+| `retro-gateway-cell` | table | - | `agents/retro-session.sh` | - |
 | `retro-gh-token-env/mount-set` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/mount-unset` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/set` | actions | - | `agents/agent-session.sh` | - |
@@ -492,6 +511,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-depth-lane-split` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-epic-container` | actions | - | `agents/reviewer-session.sh` | IL-T15 |
 | `reviewer-exit-contract` | table | - | `agents/reviewer-session.sh` | MP-T03 |
+| `reviewer-gateway-admit` | table | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/limited` | actions | - | `agents/reviewer-session.sh` | - |
@@ -500,6 +520,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-mcp-prep/absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-mcp-prep/present` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
+| `reviewer-rail-label/gateway-fallback` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-rail-label/gateway-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-rail-label/go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-rail-label/subscription` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |
@@ -530,16 +552,6 @@ is stale, so it cannot drift the way the prose register did.
 | `scan-phase-marker/scan-phase-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-touches-footprint-hold/scan-touches-footprint-hold` | actions | - | `agents/touches-check.sh` | - |
 | `scan-wedge-alert/scan-wedge-alert` | suite | - | `-` | - |
-| `scout-bench/mcp-error` | actions | - | `agents/model-scout.sh` | - |
-| `scout-bench/ranked-columns` | actions | - | `agents/model-scout.sh` | - |
-| `scout-bench/unkeyed-unbenched` | actions | - | `agents/model-scout.sh` | - |
-| `scout-canary-filing-gate` | table | - | `agents/model-scout.sh` | - |
-| `scout-canary-mint-unbound` | actions | - | `agents/model-scout.sh` | - |
-| `scout-canary-ride-model-prefix` | actions | - | `agents/model-scout.sh` | - |
-| `scout-intake-stateless` | actions | - | `agents/model-scout.sh` | - |
-| `scout-state-unkeyed` | actions | - | `agents/model-scout.sh` | - |
-| `scout-variant/batch-rollout` | actions | - | `agents/model-scout.sh` | - |
-| `scout-variant/known-base` | actions | - | `agents/model-scout.sh` | - |
 | `session-atomic-gate/session-atomic-gate` | actions | - | `agents/coordinator-session.sh` | - |
 | `session-belt/c4c5` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt/fast-path-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -656,6 +668,10 @@ keeps is DOCTRINE — the reusable seam shapes and the rule each one encodes.
   recorded `endsAt` would drift into the past and the family would converge on "resolved" while
   looking green. (`fixture.yaml`'s subset takes no inline comments — a trailing `# …` rides into
   the value and reaches `jq --argjson` as garbage.)
+
+> The `scout-*` fixtures cited in S4–S6 below left with `agents/model-scout.sh` when the model
+> scout retired (2026-11-01, superseded by the agent-gateway's entry canary — `GW-CATALOG-OR`);
+> the patterns stand, and the fixtures are in git history.
 
 - **S4 — Shadow the TRANSPORT under the seam you are asserting.** `retro-key/*` (homelab#270)
   shadows `python3` itself so `estimate_budget.py`'s real pricing, tier choice and `emit_cr`

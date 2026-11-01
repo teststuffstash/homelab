@@ -1,0 +1,13 @@
+# coordinator-gateway-session — the decision table (family contract in fixture.yaml). Row state lives
+# in rows/<id>/vars.sh.
+# id                    | world | patch | env | expect                | params
+dispatch                |       |       |     | dispatch              |
+goal-heavy-tier         |       |       |     | goal-heavy-tier       |
+defer                   |       |       |     | defer                 |
+http-503-fallback       |       |       |     | http-503-fallback     |
+unreachable-latched     |       |       |     | unreachable-latched   |
+no-token-fallback       |       |       |     | no-token-fallback     |
+go-model-fallback       |       |       |     | go-model-fallback     |
+oracle-stack            |       |       |     | oracle-stack          |
+launch-pod              |       |       |     | launch-pod            |
+interactive             |       |       |     | interactive           |

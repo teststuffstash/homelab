@@ -206,7 +206,8 @@ then moved past itself):
   paths*, below); the **verify** half is the open piece — deterministic rollback shipped, deep
   post-deploy acceptance is still the prober (FU-044, FU-102).
 - **P3 — local/cheap tier + shared memory.** 🟡 the cheap tier is live and far past "a model knob":
-  chains, strikes, a live registry, a scout and the ADR-096 **router/budgeter**
+  chains, strikes, a live registry, a scout (retired 2026-11-01 for the agent-gateway's entry
+  canary) and the ADR-096 **router/budgeter**
   ([`docs/agents/model-routing.md`](docs/agents/model-routing.md)). Shared memory-as-MCP is
   untouched. Local-LLM *serving* (vLLM/prefix-cache) remains unbuilt and unscheduled.
 
@@ -216,7 +217,7 @@ cross-boundary secrets (AgentStack claim, ADR-085); dispatch is **item-scoped** 
 scan emits work units and the LLM judges one item (ADR-094); Argo Workflows + Events is the
 orchestration engine (ADR-093); model and budget decisions are moving into the egress proxy as a
 router (ADR-096). Roles beyond fixer now exist or are specified: coordinator, reviewer, retro,
-scout, responder, researcher, infra-fixer, prober
+responder, researcher, infra-fixer, prober
 ([`docs/agents/roles.md`](docs/agents/roles.md)).
 
 **Identity/secrets** reuse existing primitives (Infisical+ESO, Cilium FQDN policy, the

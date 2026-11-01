@@ -100,7 +100,16 @@ resources:
 # it — and `prober` (2026-10-20): the ENTRY CANARY (gateway/scripts/canary-entrants.sh,
 # AGENT_GATEWAY_ROLE=prober, GW-CATALOG-OR §The entry canary) rides as this SA, so without the
 # role every canary admission was 403 caller-role-denied and no openrouter cell could become
-# eligible; `prober` binds nothing (the canary pod is unbound). `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
+# eligible; `prober` binds nothing (the canary pod is unbound). It also holds `coordinator` +
+# `reviewer`, bound into its own `platform-agents` (2026-11-01, FU-270: the platform loop's
+# coordinator and reviewer pods run there as this SA — granted ahead of the launchers that will use
+# it) — and `researcher` (the jail's agents/research-fanout.sh mints this SA's token; each platform
+# arm is a worker-launcher ride, FU-270). `agent-coordinator:agent-coordinator` = the coordinator
+# namespace's SHARED SA — the responder, deep dig, island intake and fix-debounce workflows:
+# `coordinator` + `responder`, unbound; and `retro`, bound into `openrouter-operator` (the retro
+# cron's cells hand off to the worker launcher, whose ride pod lives in the platform retro's ride
+# namespace — agents/retro-project.sh) (shared, so the grant reaches every workflow on it — the
+# #2685 per-SA split is the narrower alternative). `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
 # (agents/coordinator/specs-review-argo.yaml), their OWN ServiceAccount since #2685 (callers are
 # per SA; as `agent-coordinator` the key covered every workflow in that namespace): `reviewer`, and
 # `worker` for the goose@openrouter shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it
@@ -137,4 +146,4 @@ configMapGenerator:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.10.31-g2bb17127d1d8
+    newTag: 2026.11.1-g7c9c43b82512

@@ -1,5 +1,5 @@
 {
-  "snapshot_at": "2026-10-29T19:03:52Z",
+  "snapshot_at": "2026-11-01T09:49:26Z",
   "sources": {
     "capability": {
       "source": "artificial-analysis",
@@ -7,14 +7,14 @@
       "rows": 347
     },
     "go_catalog": {
-      "fetched_at": "2026-10-29T13:36:21Z",
+      "fetched_at": "2026-11-01T07:36:31Z",
       "fee_usd_month": 10.0,
-      "draw_30d_usd": 1.471611
+      "draw_30d_usd": 5.498803
     },
     "openrouter_catalog": {
-      "fetched_at": "2026-10-29T18:22:20Z",
+      "fetched_at": "2026-11-01T06:22:58Z",
       "cells": {
-        "candidate": 210,
+        "candidate": 200,
         "eligible": 15,
         "excluded": 0
       }
@@ -88,22 +88,6 @@
           "prior": 1.0
         }
       },
-      "opencode-go/claude-haiku-5-5": {
-        "aa_id": "anthropic/claude-haiku-5.5",
-        "intelligence": 43.4,
-        "coding": null,
-        "agentic": null,
-        "out_price": 0.333333333,
-        "in_price": 0.066666667,
-        "monthly_limit_usd": 15.0,
-        "provider": null,
-        "price_basis": "promise",
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
       "opencode-go/deepseek-v4-pro": {
         "aa_id": "deepseek/deepseek-v4-pro",
         "intelligence": 30.4,
@@ -125,9 +109,9 @@
         "intelligence": 24.7,
         "coding": null,
         "agentic": null,
-        "out_price": 0.075,
-        "in_price": 0.01875,
-        "monthly_limit_usd": 80.0,
+        "out_price": 0.06,
+        "in_price": 0.015,
+        "monthly_limit_usd": 100.0,
         "provider": null,
         "price_basis": "promise",
         "rides": {
@@ -387,8 +371,8 @@
         "provider": null,
         "price_basis": "promise",
         "rides": {
-          "clean": 0,
-          "judged": 0,
+          "clean": 1,
+          "judged": 6,
           "prior": 1.0
         }
       },
@@ -511,8 +495,8 @@
         "intelligence": 24.4,
         "coding": 52.0,
         "agentic": 26.3,
-        "out_price": 0.14,
-        "in_price": 0.07,
+        "out_price": 0.0798,
+        "in_price": 0.0399,
         "monthly_limit_usd": null,
         "provider": "streamlake",
         "price_basis": "endpoint",
@@ -570,22 +554,6 @@
           "prior": 1.0
         }
       },
-      "minimax/minimax-m3": {
-        "aa_id": "minimax/minimax-m3",
-        "intelligence": 29.2,
-        "coding": 58.6,
-        "agentic": 29.5,
-        "out_price": null,
-        "in_price": null,
-        "monthly_limit_usd": null,
-        "provider": null,
-        "price_basis": null,
-        "rides": {
-          "clean": 0,
-          "judged": 0,
-          "prior": 1.0
-        }
-      },
       "minimax/minimax-m3.1-flash": {
         "aa_id": "minimax/minimax-m3.1-flash",
         "intelligence": 42.7,
@@ -607,7 +575,7 @@
         "intelligence": 43.6,
         "coding": 76.2,
         "agentic": 50.0,
-        "out_price": 14.626,
+        "out_price": 12.0,
         "in_price": 1.278,
         "monthly_limit_usd": null,
         "provider": "morph",
@@ -615,7 +583,7 @@
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 0.999291
+          "prior": 0.998594
         }
       },
       "moonshotai/kimi-k3.1-pro": {
@@ -730,6 +698,22 @@
           "prior": 1.0
         }
       },
+      "openai/gpt-6.1-terra": {
+        "aa_id": null,
+        "intelligence": null,
+        "coding": null,
+        "agentic": null,
+        "out_price": null,
+        "in_price": null,
+        "monthly_limit_usd": null,
+        "provider": null,
+        "price_basis": null,
+        "rides": {
+          "clean": 0,
+          "judged": 0,
+          "prior": 1.0
+        }
+      },
       "stepfun/step-5-preview": {
         "aa_id": "stepfun/step-5-preview",
         "intelligence": 43.7,
@@ -791,7 +775,7 @@
         "rides": {
           "clean": 1,
           "judged": 1,
-          "prior": 0.963794
+          "prior": 0.979167
         }
       },
       "xiaomi/mimo-v2.6-pro": {
@@ -855,7 +839,7 @@
         "rides": {
           "clean": 1,
           "judged": 4,
-          "prior": 0.991667
+          "prior": 0.995139
         }
       }
     },

@@ -57,12 +57,13 @@ JSON
   *"get pod -l k8s-app=cilium"*)
     [ "${FAKE_CILIUM_LIST_FAIL:-0}" = 1 ] && exit 1
     # `partial` needs two agents: one answers, one does not.
-    [ "${FAKE_CILIUM_EXEC_FAIL:-0}" = partial ] && { printf 'pod/cilium-aaa\npod/cilium-bbb\n'; exit 0; }
+    case "${FAKE_CILIUM_EXEC_FAIL:-0}" in partial|hang) printf 'pod/cilium-aaa\npod/cilium-bbb\n'; exit 0 ;; esac
     printf 'pod/cilium-aaa\n' ;;
   *"exec"*cilium-dbg*)
     case "${FAKE_CILIUM_EXEC_FAIL:-0}" in
       all) exit 1 ;;
       partial) case "$*" in *cilium-bbb*) exit 1 ;; esac ;;
+      hang) case "$*" in *cilium-bbb*) exec sleep 600 ;; esac ;;
     esac
     # Unreadable only AFTER the reboot: the post-rejoin read failing is a different case from
     # the pre-flight one, and the CP verb must not roll the DaemonSet on either.
@@ -193,6 +194,17 @@ grep -q "ok  cilium apiserver backend: have=1 missing=0 unknown=1" <<<"$out" \
                 || bad "a partially-unknown cilium fleet was not reported as ok: $out"
 grep -q "unknown = exec did not answer twice" <<<"$out" && ok "the partial case keeps its footnote" \
                 || bad "the partial case lost its footnote: $out"
+
+# 3h2. An agent whose exec HANGS (node accepts, kubelet never answers — #3107) is bounded: it
+# reads as unknown within the timeout instead of wedging check (and every caller holding a lock).
+t0=$(date +%s)
+out="$(PROM_URL="$DEAD_PROM" FAKE_CILIUM_EXEC_FAIL=hang MAINT_EXEC_TIMEOUT=1 timeout 60 bash "$SUT" check 2>&1)"; rc=$?
+el=$(( $(date +%s) - t0 ))
+[ "$rc" -ne 124 ] && [ "$el" -lt 30 ] && ok "a hung agent exec is bounded (${el}s, rc=$rc)" \
+                || bad "a hung agent exec wedged check (${el}s, rc=$rc)"
+grep -q "ok  cilium apiserver backend: have=1 missing=0 unknown=1" <<<"$out" \
+                && ok "the hung agent reads as unknown, not missing" \
+                || bad "a hung agent was not counted as unknown: $out"
 
 # 3i. And open never banks a baseline the cilium read could not fill.
 rm -rf "$MAINT_STATE_DIR"/*

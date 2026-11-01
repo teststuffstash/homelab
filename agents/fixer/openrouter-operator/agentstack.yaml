@@ -33,7 +33,6 @@ spec:
   # window accepted 2026-08-11, guards staged in tofu/github/variables.tf + repo CODEOWNERS.
   reviewer:
     enabled: true
-    goalModel: sonnet   # declared-not-defaulted (M10; the server default drifted the app 2026-08-12)
   loop:
     perStack: true
     graduated: true
@@ -44,7 +43,11 @@ spec:
   prober:
     enabled: true
     schedule: "41 */6 * * *"
-    model: haiku
+    model: haiku # the old-proxy fallback's model; under `gateway` the gateway picks
+    # FU-270 (operator ruling 2026-11-01): the outer session admits through the agent-gateway
+    # (prober.gateway in the XRD). Platform claim only — every other stack's prober parent stays
+    # on the ref rail.
+    gateway: sessions
   # 0731 DENY — kept UNCHANGED across the chainless flip (2026-09-19). Head-swapped 2026-08-05 on
   # wall-clock evidence, not on scores: the 0731 ride produced eight consecutive ~max_tokens
   # completions (~1.25 MB each, latency climbing 162s → 299s) in 30 minutes with no branch, no

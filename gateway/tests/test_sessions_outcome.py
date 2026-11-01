@@ -432,8 +432,9 @@ async def _provider_ride(gw, app, store, upstreams, task: str, behaviours: dict 
     app.state.providers.reload()
     upstreams["openrouter"].provider_behaviours.update(behaviours or {})
     with given(f"a worker session on rail openrouter, tier heavy ({PROVIDER_M}), task {task}; one ride (provider_behaviours {behaviours or {}})"):
-        doc = await open_session(gw, role="worker", harness="opencode", rail="openrouter", tier="heavy", task=task)
-        r = await gw.post(PROVIDER_PATH, json={"model": PROVIDER_M, "messages": []}, headers=bearer(doc))
+        with quiet():  # the session + ride exchanges fold into the one ride summary below (ATTACH_BULK: ≤ 8 per case)
+            doc = await open_session(gw, role="worker", harness="opencode", rail="openrouter", tier="heavy", task=task)
+            r = await gw.post(PROVIDER_PATH, json={"model": PROVIDER_M, "messages": []}, headers=bearer(doc))
         attach_json("the ride", {"status": r.status_code, "served_by": r.json().get("provider") if r.status_code == 200 else None})
     return doc
 

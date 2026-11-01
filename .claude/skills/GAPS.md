@@ -32,6 +32,9 @@ bounded build); handoff-G4 waits on claude-jail#11.
       sent one malformed delete and the unchanged listing was explained away (~2026-10-21).
       **promoted→** the live-verify hard rule, the seat card §Claims and the subagent card: an
       empty/"none" read is absence only once the query's own success is shown (2026-10-26).
+- [ ] board-sweep-G3 — a read-only sweep subagent downloaded the lane records (dig/responder
+      findings) into the SHARED checkout as an untracked `lane/` dir (2026-10-31; the seat moved it
+      out). The gather step names no destination — it should say "the scratchpad, never the tree".
 
 ## handoff
 
@@ -43,7 +46,10 @@ bounded build); handoff-G4 waits on claude-jail#11.
       **promoted→** the description gains those cue phrases (2026-10-26).
 - [x] handoff-G3 — an inbox file judged "already resolved" was left in `inbox/` unverified
       (2026-10-16). **promoted→** step 2's already-resolved exit: same verify, `## Result: already
-      resolved — <evidence>`, move to `done/` (2026-10-26).
+      resolved — <evidence>`, move to `done/` (2026-10-26). Resight 2026-11-01: 11 files from
+      2026-09-05 → 10-21 still sat in `inbox/` (6 of them long resolved) — the promoted step holds
+      only when the skill is invoked on EVERY inbox file, not the ones the operator named; done by
+      a fork that day.
 - [ ] handoff-G4 — two shapes the protocol lacked, improvised the same way three times (2026-10-16,
       10-19, ~10-22): OUTBOUND mono→stack notices written to `<stack>/done/`, and a second jail's
       durable record (step 6 collides with second-jail rule 2). Operator 2026-10-26: expand the
@@ -174,6 +180,12 @@ bounded build); handoff-G4 waits on claude-jail#11.
 - [x] docs-cleanup-G1 — a generated marker-delimited block was hand-edited; the pre-push hook caught
       it (2026-10-14). **promoted→** first hard rule: fix `machines.yaml`, re-run
       `machines/generate.py`, never the block (2026-10-26).
+- [ ] docs-cleanup-G2 — the §Scale note keeps edits in the main session; on 2026-10-31 (operator:
+      "let subagents go over all docs") nine per-island fact-check subagents each EDITED their own
+      partition in a clone + PR (9 PRs, all approved without a requested change; tracker/ADR
+      corrections came back to the seat). Found what the comb never did: committed conflict
+      markers on master (#2946 → gate #3082), a register failing its own `--check`. One sighting —
+      a second run like it promotes "fan out edits by island, tracker stays with the seat".
 
 ## second-jail
 

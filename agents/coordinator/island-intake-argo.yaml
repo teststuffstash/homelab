@@ -73,6 +73,11 @@ spec:
     entrypoint: intake-retry
     volumes:
       - { name: work, emptyDir: {} }
+      # GW-SESSIONS-AUTH: this pod's projected ServiceAccount token for the gateway's caller check.
+      - name: gateway-token
+        projected:
+          sources:
+            - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
     templates:
       # THE RETRY WRAPPER — no semaphore here; every attempt is a fresh `intake` node that acquires
       # and releases the slot (FU-198, the dig's and the responder's split).
@@ -98,6 +103,8 @@ spec:
             - { name: MODE, value: "{{workflow.parameters.mode}}" }
             - { name: ISLAND, value: "{{workflow.parameters.island}}" }
             - { name: INTAKE_DAILY_MAX, value: "2" }
+            # FU-270: the agent-gateway admits this sitting (the deep dig's wiring, deep-dig-argo.yaml).
+            - { name: AGENT_GATEWAY, value: "sessions" }
             - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
             - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
             - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
@@ -127,6 +134,7 @@ spec:
             - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
           volumeMounts:
             - { name: work, mountPath: /work }
+            - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
           command: [bash, -lc]
           args:
             - |
@@ -173,13 +181,25 @@ spec:
               NIN="$(jq -r '.counts.inputs // 0' /tmp/sel.json 2>/dev/null || echo 0)"
               if [ "$rc" -ne 0 ]; then _push 1 "$NIN" 0 0 0; echo "island-intake: hold — no sitting today"; exit 0; fi
 
-              # ── 2. one sitting, on the subscription rail (the goal-decompose class is not on Go) ──
+              # ── 2. one sitting: admitted by the agent-gateway (FU-270) as the platform's coordinator
+              # (the islands are platform islands; the bell below rings platform), tier heavy — the
+              # goal-decompose sitting the old path runs on opus. agents/gateway-admit.sh's UNBOUND
+              # lane shape: the dispatch env rides `env` onto the claude call below. rc 4 = the old
+              # path (knob off, or the FU-270 transition fallback, logged by the helper): the
+              # subscription rail (the goal-decompose class is not on Go).
+              . agents/gateway-admit.sh
+              _gw=0; gw_admit_lane /tmp/gw-llm.env --stack platform --role coordinator --task "intake-${ISLAND}-$DAY" --tier heavy || _gw=$?
+              case "$_gw" in
+                0) trap gw_release EXIT; rail="gateway:$GW_RAIL"; TS_MODEL="$GW_WIRE_MODEL";;
+                1) _push 1 "$NIN" 0 0 0; echo "island-intake: the gateway deferred [$GW_DEFER_REASON] — exit 1, Argo retries with backoff"; exit 1;;
+                *)
               rail="$(SUBSCRIPTION_TIER=heavy bash agents/subscription-latch.sh --pick-rail)" || rail=""
               case "$rail" in
                 ''|opencode-go/*) _push 1 "$NIN" 0 0 0; echo "island-intake: subscription rail not clear (rail='$rail') — exit 1, Argo retries with backoff"; exit 1;;
               esac
               _rm="$(bash agents/resolve-model.sh --role coordinator --class goal-decompose --fallback opus)"
-              eval "$(python3 agents/model_id.py --shell "$_rm")"; TS_MODEL="${MODEL_MODEL:-$_rm}"
+              eval "$(python3 agents/model_id.py --shell "$_rm")"; TS_MODEL="${MODEL_MODEL:-$_rm}";;
+              esac
 
               {
               cat <<BRIEF
@@ -217,7 +237,7 @@ spec:
               _ts_put /tmp/sel.json inputs.json || true
 
               : > /tmp/ts-mark; : > /tmp/intake.log
-              claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 120 </dev/null 2>&1 \
+              env "${GW_LLM_ENV[@]}" claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 120 </dev/null 2>&1 \
                 | tee /tmp/intake.log \
                 || echo "WARN: the intake session failed — whatever it printed is still harvested" | tee -a /tmp/intake.log
 

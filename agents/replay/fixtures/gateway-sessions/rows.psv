@@ -25,3 +25,7 @@ no-caller-token                |       |       | AGENT_GATEWAY=sessions AGENT_GA
 dispatch-attempt-2             |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_RAIL=opencode AGENT_GATEWAY_ATTEMPT=2 | dispatch-attempt-2           |
 attempt-refused                |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_ATTEMPT=0 | attempt-refused              |
 dispatch-canary                |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=prober AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra | dispatch-canary              |
+fallback-unreachable           |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_FALLBACK_EXIT=75 | fallback-unreachable |
+fallback-no-caller-token       |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_FALLBACK_EXIT=75 AGENT_GATEWAY_CALLER_TOKEN_FILE=/nonexistent/agent-gateway/token | fallback-no-caller-token |
+fallback-defer                 |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_FALLBACK_EXIT=75 | defer                        |
+fallback-model-refused         |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_FALLBACK_EXIT=75 | model-refused                |

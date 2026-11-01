@@ -154,6 +154,11 @@ spec:
   volumes:
     - { name: work, emptyDir: {} }
     - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    # GW-SESSIONS-AUTH (FU-270): this pod's projected ServiceAccount token for the gateway's caller check.
+    - name: gateway-token
+      projected:
+        sources:
+          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
   templates:
     - name: debounce
       steps:
@@ -187,6 +192,9 @@ spec:
           # to depend on from a pod (the same rule the responder's Prometheus query states).
           # Reachability verified from an agent pod on 2026-08-11 (HTTP 200 on /api/v2/status).
           - { name: AM_URL, value: "http://kube-prometheus-stack-alertmanager.monitoring.svc:9093" }
+          # FU-270: the agent-gateway admits the set-pass when the whole set is platform's (the
+          # deep dig's wiring, deep-dig-argo.yaml); the ref rail below is the old-proxy path.
+          - { name: AGENT_GATEWAY, value: "sessions" }
           - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
           - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
           - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
@@ -204,6 +212,7 @@ spec:
         volumeMounts:
           - { name: work, mountPath: /work }
           - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
         command: [bash, -lc]
         args:
           - |
@@ -241,6 +250,9 @@ spec:
             # and /work/homelab is the clone made 20 lines above — both are hard preconditions of
             # this step, and a missing one is a crash, not a silent legacy fallback.
             ib() { python3 /work/homelab/agents/issue_body.py "$@"; }
+            # The shared gateway admission helper (FU-270) — gw_admit_lane in the set-pass block. Sourced
+            # OUTSIDE the replay blocks for the same reason as ib(): a fixture sources the checkout's copy.
+            . /work/homelab/agents/gateway-admit.sh
 
             # >>>REPLAY:fix-debounce-pending-set>>>
             : > /tmp/cand.jsonl
@@ -498,7 +510,32 @@ spec:
             fi
             # <<<REPLAY:fix-debounce-gates<<<
 
-            # ── ≥2 pending: ONE set-pass session (subscription; latch-gated like every spawn) ──
+            # ── ≥2 pending: ONE set-pass session — admitted by the agent-gateway (FU-270), else
+            # subscription, latch-gated like every spawn ──
+            # >>>REPLAY:fix-debounce-setpass-admit>>>
+            # The set spans every claimed repo, and the gateway flip is PLATFORM-ONLY: the session is
+            # admitted as stack platform only when EVERY issue in the set lives in a platform repo
+            # (homelab, or a repo the claims map to `platform`); a set touching another stack names
+            # that stack and stays on the old proxy whole (the helper's gate). role coordinator —
+            # dispatch-unit has no gateway role. A gateway DEFER defers exactly as the latch does
+            # below (exit 0: the pending set stays, the backstop / next bell retries). rc 4 = the old
+            # path (knob off, another stack, or the FU-270 transition fallback, logged by the helper).
+            SP_STACK="platform"; SP_MODEL=""; _gw=0
+            while IFS= read -r _r; do
+              [ -n "$_r" ] || continue
+              _s="$(awk -F'\t' -v r="${_r##*/}" '$1==r{print $2; exit}' /tmp/stackmap.tsv)"
+              [ "${_r##*/}" = homelab ] && _s="platform"
+              [ "$_s" = platform ] || { SP_STACK="${_s:-unclaimed:${_r}}"; break; }
+            done < <(jq -r '.repo // ""' /tmp/set.jsonl)
+            gw_admit_lane /tmp/gw-llm.env --stack "$SP_STACK" --role coordinator --task "fix-debounce-set:$(jq -r '"\(.repo | split("/") | last)#\(.number)"' /tmp/set.jsonl | paste -sd, -)" || _gw=$?
+            case "$_gw" in
+              0) trap gw_release EXIT; rail="gateway:$GW_RAIL"; SP_MODEL="$GW_WIRE_MODEL"
+                 echo "→ set-pass admitted by the gateway (rail $GW_RAIL, model $GW_MODEL)";;
+              1) echo "set-pass DEFERRED — the gateway deferred [$GW_DEFER_REASON]; pending set stays, backstop/next bell retries"
+                 exit 0;;
+            esac
+            # <<<REPLAY:fix-debounce-setpass-admit<<<
+            if [ -z "$SP_MODEL" ]; then
             # homelab#439: --pick-rail mode — when ANY rail is clear the session proceeds.
             rail="$(SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh --pick-rail)" || rail=""
             if [ -z "$rail" ]; then
@@ -507,10 +544,12 @@ spec:
             fi
             # Log which rail we're on (Go rail only when Anthropic is latched)
             case "$rail" in opencode-go/*) echo "→ Anthropic latched — serving set-pass on the Go rail ($rail)";; esac
-            jq -c 'del(.body)' /tmp/set.jsonl > /tmp/set-brief.json
             # The routed answer is rail-prefixed (`claude/sonnet`); the claude CLI takes the BARE alias — parsed through
             # model_id.py like the responder and coordinator-session.sh (FU-127; PR#1522 — the responder died on this for a week).
-            claude -p "You are the FIX-DEBOUNCE SET-PASS (homelab docs/agents/iac-lane.md, section 'one root cause, N alert issues'): several alert-triage issues carry a fix verdict and await dispatch. Your job is to decide queueing for the SET — the trap you exist to prevent is several fixers attacking symptoms of ONE root cause in parallel (e.g. a node-pressure alert and an OOM-kill alert that are the same memory problem).
+            SP_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role dispatch-unit --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)"
+            fi
+            jq -c 'del(.body)' /tmp/set.jsonl > /tmp/set-brief.json
+            env "${GW_LLM_ENV[@]}" claude -p "You are the FIX-DEBOUNCE SET-PASS (homelab docs/agents/iac-lane.md, section 'one root cause, N alert issues'): several alert-triage issues carry a fix verdict and await dispatch. Your job is to decide queueing for the SET — the trap you exist to prevent is several fixers attacking symptoms of ONE root cause in parallel (e.g. a node-pressure alert and an OOM-kill alert that are the same memory problem).
 
             THE PENDING SET (one JSON object per line): $(cat /tmp/set-brief.json)
 
@@ -523,7 +562,7 @@ spec:
             {\"queue\": [{\"repo\": \"owner/name\", \"number\": 1, \"why\": \"...\"}], \"link\": [{\"repo\": \"owner/name\", \"number\": 2, \"cause_repo\": \"owner/name\", \"cause_number\": 1, \"why\": \"...\"}], \"unsure\": [{\"repo\": \"owner/name\", \"number\": 3, \"why\": \"...\"}]}
             \`\`\`
             HARD RULES: do NOT label, comment, edit, file, close or reopen anything — the shell applies your JSON deterministically (ADR-094). No kubectl mutations. Every issue in the set appears in exactly one of queue/link/unsure." \
-              --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash /work/homelab/agents/resolve-model.sh --role dispatch-unit --fallback sonnet)"; eval "$(python3 /work/homelab/agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)" --permission-mode bypassPermissions --max-turns 25 </dev/null \
+              --model "$SP_MODEL" --permission-mode bypassPermissions --max-turns 25 </dev/null \
               > /tmp/setpass.out 2>&1 || { echo "WARN: set-pass session failed — set stays pending"; tail -5 /tmp/setpass.out; exit 0; }
 
             awk '/^```json[[:space:]]*$/{f=1;buf="";next} /^```[[:space:]]*$/{if(f){last=buf};f=0;next} f{buf=buf $0 "\n"} END{printf "%s", last}' /tmp/setpass.out > /tmp/decision.json
