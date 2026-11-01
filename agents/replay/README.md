@@ -501,6 +501,8 @@ is stale, so it cannot drift the way the prose register did.
 | `review-pick/same-lane-oldest` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/superseded-cancel-admitted` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/two-lanes-two-picks` | actions | - | `agents/review-reflex.sh` | MP-T03 |
+| `reviewer-create-refusal/already-exists` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-create-refusal/forbidden` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/behind-proceeds` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
 | `reviewer-currency/current-proceeds` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-currency/dirty-skips` | actions | - | `agents/reviewer-session.sh` | MP-T03 |
