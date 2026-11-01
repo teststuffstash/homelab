@@ -1243,8 +1243,9 @@ cilium_on_node() {
   [ -n "$p" ] || { fail "cilium: no running cilium-agent pod on $NODE"; return 1; }
   jq -e --arg p "$p" '.items[] | select(.metadata.name == $p) | any(.status.conditions[]?; .type == "Ready" and .status == "True")' \
     >/dev/null <<<"$pj" || { fail "cilium: $p on $NODE is not Ready"; return 1; }
-  out="$(kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
-    || { fail "cilium: $p on $NODE does not answer (exec failed)"; return 1; }
+  # Bounded: a hung agent's exec never returns (#3107) — the timeout reads as "does not answer".
+  out="$(timeout -k 5 "${MAINT_EXEC_TIMEOUT:-20}" kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
+    || { fail "cilium: $p on $NODE does not answer (exec failed or timed out)"; return 1; }
   awk '$2=="10.96.0.1:443/TCP"' <<<"$out" | grep -q '=>' \
     || { fail "cilium: $p on $NODE has NO backend for 10.96.0.1:443"; return 1; }
   ok "cilium: $p Ready and holding the apiserver backend"
