@@ -104,9 +104,7 @@ spec:
             summary: "ARC runner pod {{ $labels.pod }} alive {{ $value | humanizeDuration }} — single-use runner stuck"
             description: >-
               An ARC runner pod lives for one idle wait plus one job (longest healthy 2026-10/11:
-              7.8 h); {{ $labels.pod }} has existed {{ $value | humanizeDuration }}. Likely a
-              runner whose job ended on GitHub while the pod kept running (the 2026-10-26 krhxv
-              hang: listener stuck after acknowledging the job), or a pod that never started.
+              7.8 h); {{ $labels.pod }} has existed {{ $value | humanizeDuration }}.
               It holds a maxRunners slot and, while it lasts, ARC keeps no warm idle runner.
               Check: `kubectl -n arc-runners get ephemeralrunners -o wide` (JOBID/JOBREPOSITORY),
               the job's state on GitHub, the runner container's log tail. If the job is finished:
