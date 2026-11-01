@@ -35,7 +35,8 @@
 #             The caller owns the release from here: `trap gw_release EXIT` (or chain it).
 #       rc 1  defer — the gateway said so. GW_DEFER_REASON / GW_RETRY_AFTER set; no session.
 #       rc 3  fail closed — unreachable, non-200, unknown decision, or an unusable dispatch
-#             (released here before returning). GW_DEFER_REASON names it. Never falls back.
+#             (released here before returning). GW_DEFER_REASON names it. gw_admit picks no
+#             other path itself — the CALLER decides (gw_admit_lane maps it to rc 4).
 #       rc 2  refused before any request (a bad round/attempt).
 #   gw_release        DELETE /sessions/{id}; idempotent, non-fatal (the TTL is the backstop).
 #   gw_auth_header    the caller header for `curl -H @<(gw_auth_header)` — the token never rides argv.
@@ -190,7 +191,7 @@ gw_admit() {
       [ "$http" = "200" ] && why="http 200, unknown decision '${decision}'" \
         || why="${why}$(head -c 200 "$resp" 2>/dev/null | tr '\n' ' ' | sed 's/^./: &/')"
       GW_DEFER_REASON="gateway-${why}"; GW_RETRY_AFTER="?"
-      echo "→ gateway(sessions): defer — [${GW_DEFER_REASON}] retry_after=?s — FAIL CLOSED at ${GW_URL}/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy)." >&2
+      echo "→ gateway(sessions): defer — [${GW_DEFER_REASON}] retry_after=?s — FAIL CLOSED at ${GW_URL}/sessions, not dispatching (rc 3 — the caller decides the next path)." >&2
       rm -f "$resp"; return 3;;
   esac
 

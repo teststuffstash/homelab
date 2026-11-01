@@ -7,8 +7,8 @@
 # THE CONTRACT. `AGENT_GATEWAY=sessions` (set by the review dispatchers for the platform stack only)
 # is honoured for a repo whose claims-mirror stack is `platform`. Unset → nothing happens: no request,
 # the pod keeps the old-proxy /anthropic ref env. Set on another stack, or with an explicit --model
-# (the assembly review's model pin, which the gateway cannot take) → one loud line, no request, the
-# old-proxy path. Otherwise ONE request: `{stack: platform, role: reviewer, task: review-<repo>-<pr>,
+# (a hand-run model pin, which the gateway cannot take — no dispatcher passes one) → one loud line,
+# no request, the old-proxy path. Otherwise ONE request: `{stack: platform, role: reviewer, task: review-<repo>-<pr>,
 # round, harness: claude, bind: {<loop ns>, <pod SA>, <reviewer pod name>}}` — `harness: claude`
 # because the reviewer pod runs claude only (the FU-188 pin's constraint, expressed as the request's
 # dialect narrowing). `dispatch` → MODEL = the gateway's wire model (rail prefix stripped), GO_SERVED

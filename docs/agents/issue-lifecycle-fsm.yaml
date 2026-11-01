@@ -672,8 +672,8 @@ transitions:
         anchor: { file: agents/coordinator/README.md, pattern: "open the ASSEMBLY PR" }
       - desc: "the verdict is named assembly-complete — 'built as specified', never 'idea validated' (the #17 lesson)"
         anchor: { file: agents/coordinator/README.md, pattern: "Assembly-complete.*ADR-102" }
-      - desc: "the reflex reviews it on the assembly rubric, model = claim reviewer.goalModel"
-        anchor: { file: agents/review-reflex.sh, pattern: "REVIEW_GOAL_MODEL" }
+      - desc: "the reflex reviews it on the assembly rubric, no model pin (the gateway picks; no decorrelation from the decomposer)"
+        anchor: { file: agents/review-reflex.sh, pattern: 'goal/\*\) extra="--rubric \.agents/review-goal\.md"' }
       - desc: "the scan never dispatches a fix round at a goal/** HEAD (protected base — push would be refused)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ASSEMBLY PR #" }
 

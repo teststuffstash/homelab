@@ -1034,7 +1034,7 @@ Rule exactly one of:
   deterministically (at assembly merge, or at tree-empty for a `Base: master` Goal — ADR-126,
   homelab#1450), and posts the assembly-complete audit comment with it. The armed PR is SAFE by construction:
   the reviewer bot's approval satisfies the approval rule (rubric `.agents/review-goal.md`,
-  model `reviewer.goalModel` on the claim), but master's codeowner gate (/specs/ is always in
+  no model pin — the gateway picks), but master's codeowner gate (/specs/ is always in
   the assembly diff) blocks auto-merge on a human — the operator merges via OrgAdmin override
   (their ruling: codeowners block agents). NEVER open this PR at decompose time: a half-built
   assembly draws a review of nothing, and a CHANGES_REQUESTED on it summons fix rounds at the

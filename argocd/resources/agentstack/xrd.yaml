@@ -122,12 +122,11 @@ spec:
                     goalModel:
                       type: string
                       description: >-
-                        Claude model alias for the ASSEMBLY review only — a PR whose head is
-                        goal/** (the goal→master shape, review-goal.md). Rendered into the
-                        per-stack review reflex as REVIEW_GOAL_MODEL; every other PR keeps
-                        the reviewer default (sonnet). NB must DIFFER from the model that
-                        decomposed the goal (goal-decompose runs GOAL_MODEL, default opus) —
-                        model-routing-history.md §M10.
+                        DEPRECATED — ignored. The ASSEMBLY review (head goal/**) pins no model:
+                        it takes what every review takes, the gateway's pick (FU-270), and no
+                        decorrelation from the decomposing session is enforced. Kept in the
+                        schema only so claims still declaring it are not pruned into a
+                        permanent ArgoCD diff; drop it from your claim.
                 slo:
                   type: object
                   description: >-

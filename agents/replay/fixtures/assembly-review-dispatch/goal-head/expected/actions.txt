@@ -1,0 +1,3 @@
+→ assembly PR (head goal/oracle-v2): rubric review-goal.md, no model pin
+OUT extra='--rubric .agents/review-goal.md'
+RC 0

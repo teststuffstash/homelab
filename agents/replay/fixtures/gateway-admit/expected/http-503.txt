@@ -5,5 +5,5 @@ OUT GW_ENV_KEYS='' GW_PULL_URL='' GW_PULL_PRELUDE set: no
 OUT GW_DEFER_REASON='gateway-http 503: {"error":"tokenreview-transient"}' GW_RETRY_AFTER='?'
 OUT env file: absent
 OUT gws_ in shell state: 0
-ERR → gateway(sessions): defer — [gateway-http 503: {"error":"tokenreview-transient"}] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy).
+ERR → gateway(sessions): defer — [gateway-http 503: {"error":"tokenreview-transient"}] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (rc 3 — the caller decides the next path).
 RC 0
