@@ -2194,8 +2194,11 @@ EOF_DBCAND
     # `body` is fetched for the FU-146 per-item hold: it carries the `Implements #<n>` line that
     # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
     # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
-    prsjson="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid 2>/dev/null)" || prsjson='[]'
-    jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || prsjson='[]'
+    # `prsjson_read_ok` (fleet-fault un-latch, #3048): a failed or non-JSON read collapses to `[]`,
+    # which is indistinguishable from "no open PRs" — the un-latch's vacuous CI leg needs the difference.
+    prsjson_read_ok=1
+    prsjson="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid 2>/dev/null)" || { prsjson='[]'; prsjson_read_ok=0; }
+    jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || { prsjson='[]'; prsjson_read_ok=0; }
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
     # autoMergeRequest != null; un-armed PRs are "invisible to the merge path", FU-079). Counting
@@ -5785,7 +5788,18 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
         # The issue's PR head: the open PR that references it (sibling-match, boundary-anchored).
         ff_pr="$(printf '%s' "$prsjson" | jq -r --arg n "$ff_n" '[.[] | select((((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)")) or ((.body // "") | test("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"))))] | first | .number // ""' 2>/dev/null)" || ff_pr=''
         if [ -z "$ff_pr" ]; then
-          orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — issue #${ff_n}: no open PR references it, CI leg unverifiable (rule #6). No label write; next tick.\n"
+          # No referencing PR. An UNREADABLE PR list also yields "" — that is a HOLD (rule #6: never
+          # fail INTO a write), not evidence that no PR exists.
+          if [ "${prsjson_read_ok:-0}" != 1 ]; then
+            orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — issue #${ff_n}: open-PR list unreadable, cannot prove no PR references it (rule #6). No label write; next tick.\n"
+            continue
+          fi
+          # Read OK and no PR ⇒ no CI to be red: the CI leg is vacuous, not green. The cause gate above
+          # has already passed (CLOSED), so this clears only a latch whose cited cause is resolved.
+          gh_label_rm "$slug" "$ff_n" agent/error \
+            && gh issue comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #3048): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED. This issue has no open PR, so the CI leg is vacuous — there is no CI to be red — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
+            && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: issue #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, no PR so CI leg vacuous)\n" \
+            || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on issue #${ff_n} — human check\n"
           continue
         fi
         ff_ci="$(gh pr view "$ff_pr" --repo "$slug" --json statusCheckRollup 2>/dev/null | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''

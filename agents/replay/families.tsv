@@ -64,6 +64,7 @@ env-card-mcp-present/opencode	env-card-mcp-present
 fleet-fault-unlatch-cause-closed-green	fleet-fault-unlatch
 fleet-fault-unlatch-cause-open	fleet-fault-unlatch
 fleet-fault-unlatch-issue-cause-closed-green	fleet-fault-unlatch
+fleet-fault-unlatch-issue-no-pr	fleet-fault-unlatch
 fleet-fault-unlatch-no-marker	fleet-fault-unlatch
 fleet-fault-unlatch-probe-fail	fleet-fault-unlatch
 footprint-conflict-predicate	footprint-conflict-predicate
