@@ -313,6 +313,7 @@ is stale, so it cannot drift the way the prose register did.
 | `fu146-dispatch-loop-exit1` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-dispatch-loop-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fu146-resumable-quoted` | table | - | `agents/coordinator-scan.sh` | - |
+| `gateway-admit` | table | - | `agents/gateway-admit.sh` | - |
 | `gateway-env-pull` | table | - | `agents/agent-session.sh` | - |
 | `gateway-outcome` | table | - | `agents/agent-session.sh` | - |
 | `gateway-sessions` | table | - | `agents/agent-session.sh` | - |

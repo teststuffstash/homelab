@@ -1,0 +1,11 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"coordinator","task":"t","round":0,"bind":{"namespace":"platform-agents","serviceaccount":"agentstack-loop","pod":"p1"}}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-oc-1 [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): released s-oc-1
+OUT rc=3
+OUT GW_SESSION_ID='' GW_RAIL='opencode' GW_HARNESS='opencode' GW_MODEL='opencode-go/glm-5' GW_WIRE_MODEL='glm-5'
+OUT GW_ENV_KEYS='OPENCODE_CONFIG_CONTENT' GW_PULL_URL='http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-oc-1/env' GW_PULL_PRELUDE set: no
+OUT GW_DEFER_REASON='dispatch-unusable: harness 'opencode' (this launcher runs claude)' GW_RETRY_AFTER='?'
+OUT env file: absent
+OUT gws_ in shell state: 0
+ERR → gateway(sessions): defer — [dispatch-unusable: harness 'opencode' (this launcher runs claude)] retry_after=?s — FAIL CLOSED, releasing and not dispatching.
+RC 0

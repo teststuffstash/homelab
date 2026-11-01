@@ -40,7 +40,13 @@ added 2026-10-16); a cell is what the launcher does, not what a doc says it shou
 **Role × caller.** Which CALLER may ask for which role is the policy's `callers` map, per
 ServiceAccount ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)): the platform loop's
 dispatcher SA (`platform-agents:agentstack-loop`) `worker` + `prober` — its graduated workers and the
-entry canary's rides; the oracle loop's SA (`oracle-agents:agentstack-loop`) `prober` only, no bind —
+entry canary's rides — and `coordinator` + `reviewer`, bound into its own `platform-agents`, for the
+loop's coordinator and reviewer pods (operator ruling 2026-11-01: the platform lanes move onto the
+gateway; granted ahead of the launchers, which adopt the shared admission helper
+`agents/gateway-admit.sh` one PR at a time — until then the inventory rows above stay as they are);
+the coordinator namespace's shared SA (`agent-coordinator:agent-coordinator`) `coordinator` +
+`responder`, no bind — the responder, deep dig, island intake and fix-debounce lanes, each one
+unbound session (the fix-debounce set-pass's `dispatch-unit` class maps to `coordinator`); the oracle loop's SA (`oracle-agents:agentstack-loop`) `prober` only, no bind —
 the `probe-oracle` tick's nested mission child on the codex rail (operator ruling 2026-10-24); the specs reviewer's SA (`agent-coordinator:specs-review`) `reviewer` +
 `worker` — the tick and its shadow cell; the [judge](glossary.md#judge)'s SA
 (`agent-coordinator:outcome-judge`, the deploy-revert chain's judge step, FU-270 (b)) no role at

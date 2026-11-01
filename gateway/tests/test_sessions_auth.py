@@ -98,6 +98,7 @@ ENFORCE_POLICY = POLICY_FIXTURE.parent / "policy-enforce.json"
 LOOP = "system:serviceaccount:platform-agents:agentstack-loop"
 SPECS = "system:serviceaccount:agent-coordinator:agent-coordinator"   # the fixture world's specs reviewer
 DEPLOYED_SPECS = "system:serviceaccount:agent-coordinator:specs-review"   # the deployed tick's own SA (#2685)
+COORDINATOR_NS = "system:serviceaccount:agent-coordinator:agent-coordinator"   # the coordinator namespace's shared SA (responder, dig, intake, fix-debounce)
 JUDGE = "system:serviceaccount:agent-coordinator:outcome-judge"   # the fixture AND deployed judge (`outcome: any`, admits nothing)
 ORACLE_LOOP = "system:serviceaccount:oracle-agents:agentstack-loop"   # not a fixture caller: an oracle session's recorded admitter
 UNLISTED = "system:serviceaccount:platform-agents:default"
@@ -472,7 +473,7 @@ async def test_policy_shape(kind):
 
 
 async def test_deployed_callers():
-    """row: the deployed callers are today's three dispatchers and the judge, under enforce ⚖"""
+    """row: the deployed callers are today's four dispatchers and the judge, under enforce ⚖"""
     world(note="the DEPLOYED policy is read, not the world's")
     with when(f"Policy.from_dict({DEPLOYED_POLICY.relative_to(ISLAND.parent)})"):
         p = Policy.from_dict(json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")))
@@ -480,11 +481,13 @@ async def test_deployed_callers():
                for k, c in p.callers.items()}
     with then("control_plane_auth = enforce"):
         check("control_plane_auth", p.control_plane_auth, "enforce")
-    with then("callers = exactly the platform loop, the oracle prober, the specs-review tick and the outcome judge, with today's scopes"):
+    with then("callers = exactly the platform loop, the oracle prober, the specs-review tick, the coordinator namespace's lanes and the outcome judge, with today's scopes"):
         check("callers", got, {
-            LOOP: {"stacks": ["platform"], "roles": ["prober", "worker"], "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator"], "outcome": "own"},
+            LOOP: {"stacks": ["platform"], "roles": ["coordinator", "prober", "reviewer", "worker"],
+                   "bind_namespaces": ["agent-runtime", "homelab", "openrouter-operator", "platform-agents"], "outcome": "own"},
             ORACLE_LOOP: {"stacks": ["oracle"], "roles": ["prober"], "bind_namespaces": [], "outcome": "own"},
             DEPLOYED_SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": [], "outcome": "own"},
+            COORDINATOR_NS: {"stacks": ["platform"], "roles": ["coordinator", "responder"], "bind_namespaces": [], "outcome": "own"},
             JUDGE: {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"},
         })
 
