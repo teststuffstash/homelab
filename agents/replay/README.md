@@ -294,6 +294,7 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-mcp-present` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `epic-dispositions` | suite | - | `agents/epic_dispositions.py` | IL-T12 |
+| `fix-debounce-setpass-admit` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `fleet-fault-unlatch-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
