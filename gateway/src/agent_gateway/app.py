@@ -21,6 +21,8 @@ from .codex import CodexBackend, CodexProxy, CodexRail, get_session_capture, ope
 from .codex_usage import UsagePoll
 from .config import Policy, Settings, wire_model
 from .credentials import CredentialResolver, CredentialSource, KubeSecrets
+from .go_usage import GoUsagePoll
+from .headroom import Headroom
 from .liveness import KubePods, PodSource
 from .logging import register_literal
 from .metrics import Metrics
@@ -170,6 +172,15 @@ def create_app(
     if codex is not None and not (codex_poll and codex_poll.enabled):
         log.warning("codex usage poll dark: %s — the rail answers quota-unknown",
                     "CODEX_USAGE_URL unset" if not settings.codex_usage_url else "no credential backend")
+    # GW-SESSIONS-ADMIT §Capacity (the Go account headroom): gated by `rails.opencode.headroom` — a policy without the
+    # block admits the Go rail exactly as before, with no poll. The poll uses the gateway's own Go key.
+    go_headroom = (Headroom(clock, policy.rails["opencode"].headroom)
+                   if "opencode" in policy.rails and policy.rails["opencode"].headroom is not None else None)
+    sessions.go_headroom = go_headroom
+    go_poll = (GoUsagePoll(go_headroom, client, settings.opencode_usage_url, settings.opencode_go_api_key, clock)
+               if go_headroom is not None else None)
+    if go_poll is not None and not go_poll.enabled:
+        log.warning("opencode usage poll dark: OPENCODE_USAGE_URL unset — the Go rail answers quota-unknown")
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -191,10 +202,13 @@ def create_app(
         # report — the headroom is forgotten with the process), then every poll_interval_s.
         poller = (asyncio.create_task(codex_poll.run(), name="codex-usage-poll")
                   if codex_poll is not None and codex_poll.enabled else None)
+        # The Go usage poll's schedule (GW-SESSIONS-ADMIT §Capacity): the same rule — a poll at start, then every poll_interval_s.
+        go_poller = (asyncio.create_task(go_poll.run(), name="go-usage-poll")
+                     if go_poll is not None and go_poll.enabled else None)
         try:
             yield
         finally:
-            for t in (task, reaper, refresher, or_refresher, poller):
+            for t in (task, reaper, refresher, or_refresher, poller, go_poller):
                 if t is not None:
                     t.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -241,6 +255,7 @@ def create_app(
     app.state.proxy = proxy
     app.state.codex = codex
     app.state.codex_proxy = codex_proxy
+    app.state.go_usage = go_poll
     app.state.codex_poll = codex_poll
     app.state.catalog = catalog
     app.state.providers = providers

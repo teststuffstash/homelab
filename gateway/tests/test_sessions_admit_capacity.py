@@ -65,13 +65,40 @@ deepseek-v4.1-flash from the catalog; `docs-retired` drops claude-haiku-5-5's pl
 | a listed model with no monthly limit under the plan defers not-in-catalog | docs-retired | — | worker, rail opencode, tier heavy || defer | — | not-in-catalog | 21600 |
 | the other Go models still admit | catalog-retired | — | worker, rail opencode, tier heavy || dispatch | opencode | — | — |
 | no catalog snapshot at all: every Go model is not-in-catalog | none (a fresh store) | — | worker, rail opencode || defer | — | not-in-catalog | 60 |
+
+Go account headroom (GW-SESSIONS-ADMIT §Capacity): the rows are `GO_ROWS` below, read against the
+world `policy-go` (its `rails.opencode.headroom`) and a fake Go usage endpoint polled by the gateway.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import json
+import logging
+from datetime import UTC, datetime
+
+import httpx
 import pytest
 
-from .conftest import attach_json, bearer, given, open_session, quiet, rule, then, then_eq, when, world
+from agent_gateway.app import create_app
+from agent_gateway.config import Policy
+
+from .conftest import (
+    GO_KEY,
+    HERE,
+    POLICY_FIXTURE,
+    ObservedAsyncClient,
+    attach_json,
+    bearer,
+    given,
+    open_session,
+    quiet,
+    rule,
+    then,
+    then_eq,
+    when,
+    world,
+)
 
 pytestmark = rule("GW-SESSIONS-ADMIT")
 
@@ -341,3 +368,137 @@ async def test_no_snapshot(cworld):
         app = cworld.build()
     async with gw_client(app) as gw:
         _verdict(await _admit(gw, {"rail": "opencode"}), {"decision": "defer", "reason": "not-in-catalog", "retry_after_s": 60})
+
+
+# -- Go account headroom (GW-SESSIONS-ADMIT §Capacity) -----------------------------------------------
+# The Go twin of GW-CODEX-HEADROOM: the gateway polls the account usage endpoint with its own Go key and
+# admits the opencode rail only on a fresh reading under the ceiling. Every cell is a parameter value
+# verbatim; the maps below turn a cell's text into what it means (the spec's §Go account headroom reads
+# the same texts). Times are offsets from T0; a poll before the ask sets the clock back for that poll.
+GO_USAGE_URL = "https://opencode.test/zen/go/v1/usage"
+FRESH = {"rolling": ("ok", 20, 18000), "weekly": ("ok", 46, 80000), "monthly": ("ok", 36, 2000000)}  # name: (status, percent, resetsAt − T0)
+DUMMY_IDENTITY = {"account_id": "acct-DUMMY-0001", "email": "dummy@example.test"}  # never a log line, never a read field
+
+
+def _iso(t: float) -> str:
+    return datetime.fromtimestamp(t, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _usage_doc(windows: dict) -> dict:
+    """The vendor payload (`GET /zen/go/v1/usage`) for the windows: name → (status, percent, resetsAt − T0)."""
+    usage = {name: {"status": status, "percent": pct, "resetsAt": _iso(T0 + off)} for name, (status, pct, off) in windows.items()}
+    return {"usage": usage, **DUMMY_IDENTITY}
+
+
+class _GoUsage(httpx.AsyncBaseTransport):
+    """The Go account usage endpoint, offline: the usage URL is answered from `doc`; every other request
+    goes to the rest of the world's transport (the rails' fakes and the Go catalog's vendor)."""
+
+    def __init__(self, rest: httpx.AsyncBaseTransport):
+        self.rest, self.doc, self.calls = rest, None, []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if str(request.url) != GO_USAGE_URL:
+            return await self.rest.handle_async_request(request)
+        self.calls.append(request)
+        body = json.dumps(self.doc).encode()
+        attach_json("upstream usage GET → 200", {
+            "request": {"headers": {k: ("<bearer>" if k == "authorization" else v) for k, v in request.headers.items()}},
+            "response": {"status": 200, "bytes": len(body)}})
+        return httpx.Response(200, headers={"content-type": "application/json"}, content=body)
+
+
+@pytest.fixture
+def go_usage(mcp_transport) -> _GoUsage:
+    return _GoUsage(mcp_transport)
+
+
+def _go_app(settings, secrets, store, clock, reviews, pods, usage: _GoUsage, policy_path, url: str):
+    """The gateway composed over one policy document and one usage URL; its client reaches the usage fake."""
+    client = httpx.AsyncClient(transport=usage)
+    cfg = dataclasses.replace(settings, opencode_usage_url=url)
+    app = create_app(cfg, policy=Policy.load(policy_path), source=secrets, store=store, client=client, clock=clock,
+                     reviewer=reviews, pods=pods)
+    return app, client
+
+
+# policy cell → (the policy document, the usage URL the gateway is configured with)
+GO_POLICIES = {
+    "policy-go": (HERE / "fixtures" / "policy-go.json", GO_USAGE_URL),
+    "policy-go, no usage URL": (HERE / "fixtures" / "policy-go.json", ""),
+    "policy-default": (POLICY_FIXTURE, GO_USAGE_URL),
+}
+# polls cell → [(at, the windows of that reading, the poll's outcome)]; "others fresh" = FRESH for the windows not named
+GO_POLLS = {
+    "none": [],
+    "fresh @ T0 − 10 → accepted": [(-10, FRESH, "accepted")],
+    "rolling 95 % resets T0 + 1000, others fresh @ T0 − 10 → accepted":
+        [(-10, {**FRESH, "rolling": ("ok", 95, 1000)}, "accepted")],
+    "rolling 96 % resets T0 + 1000, weekly 97 % resets T0 + 8000, others fresh @ T0 − 10 → accepted":
+        [(-10, {**FRESH, "rolling": ("ok", 96, 1000), "weekly": ("ok", 97, 8000)}, "accepted")],
+    "rolling limited at 20 %, others fresh @ T0 − 10 → accepted":
+        [(-10, {**FRESH, "rolling": ("limited", 20, 18000)}, "accepted")],
+    "rolling 96 % resets T0 + 1000, others fresh @ T0 − 10 → accepted":
+        [(-10, {**FRESH, "rolling": ("ok", 96, 1000)}, "accepted")],
+    "fresh @ T0 − 20 → accepted; monthly absent @ T0 − 10 → quota-invalid":
+        [(-20, FRESH, "accepted"), (-10, {"rolling": FRESH["rolling"], "weekly": FRESH["weekly"]}, "quota-invalid")],
+    "fresh @ T0 − 20 → accepted; rolling resets T0 − 15, others fresh @ T0 − 10 → quota-invalid":
+        [(-20, FRESH, "accepted"), (-10, {**FRESH, "rolling": ("ok", 20, -15)}, "quota-invalid")],
+}
+GO_BODIES = {"rail: opencode": {"rail": "opencode"}, "(policy walk)": {}}  # body cell → the admit body
+
+
+def _cell(value):
+    return None if value == "—" else value  # a `—` cell is the field the answer does not carry
+
+
+# (description, policy, polls, ask, body, decision, rail, reason, retry_after_s)
+GO_ROWS = [
+    ("a fresh Go reading under the ceiling admits the opencode rail", "policy-go", "fresh @ T0 − 10 → accepted", 0, "rail: opencode", "dispatch", "opencode", "—", "—"),
+    ("the rolling block at the ceiling defers until its reset ⚖", "policy-go",
+     "rolling 95 % resets T0 + 1000, others fresh @ T0 − 10 → accepted", 0, "rail: opencode", "defer", "—", "quota-limited", 1000),
+    ("two exhausted windows wait for the later reset ⚖", "policy-go",
+     "rolling 96 % resets T0 + 1000, weekly 97 % resets T0 + 8000, others fresh @ T0 − 10 → accepted", 0, "rail: opencode", "defer", "—", "quota-limited", 8000),
+    ("a window whose status is not ok limits ⚖", "policy-go",
+     "rolling limited at 20 %, others fresh @ T0 − 10 → accepted", 0, "rail: opencode", "defer", "—", "quota-limited", 60),
+    ("no reading yet is unknown — fail closed", "policy-go", "none", 0, "rail: opencode", "defer", "—", "quota-unknown", 60),
+    ("a stale reading is stale", "policy-go", "fresh @ T0 − 10 → accepted", 115, "rail: opencode", "defer", "—", "quota-stale", 60),
+    ("a missing window refuses the whole report, the last accepted reading stands", "policy-go",
+     "fresh @ T0 − 20 → accepted; monthly absent @ T0 − 10 → quota-invalid", 0, "rail: opencode", "dispatch", "opencode", "—", "—"),
+    ("a passed resetsAt refuses the report, the last accepted reading stands", "policy-go",
+     "fresh @ T0 − 20 → accepted; rolling resets T0 − 15, others fresh @ T0 − 10 → quota-invalid", 0, "rail: opencode", "dispatch", "opencode", "—", "—"),
+    ("a limited Go rail is skipped, the walk continues", "policy-go",
+     "rolling 96 % resets T0 + 1000, others fresh @ T0 − 10 → accepted", 0, "(policy walk)", "dispatch", "openrouter", "—", "—"),
+    ("the poll carries the Go key and no identity reaches a log", "policy-go", "fresh @ T0 − 10 → accepted", 0, "rail: opencode", "dispatch", "opencode", "—", "—"),
+    ("no headroom block keeps today's admission ⚖", "policy-default", "none", 0, "rail: opencode", "dispatch", "opencode", "—", "—"),
+    ("a headroom block with no usage URL sends no poll: the Go rail answers quota-unknown ⚖", "policy-go, no usage URL", "none", 0,
+     "rail: opencode", "defer", "—", "quota-unknown", 60),
+]
+
+
+@pytest.mark.parametrize(("policy", "polls", "ask", "body", "decision", "rail", "reason", "retry_after_s"),
+                         [r[1:] for r in GO_ROWS], ids=[r[0] for r in GO_ROWS])
+async def test_go_headroom(settings, secrets, store, clock, reviews, pods, go_usage, caplog,
+                           policy, polls, ask, body, decision, rail, reason, retry_after_s):
+    path, url = GO_POLICIES[policy]
+    app, client = _go_app(settings, secrets, store, clock, reviews, pods, go_usage, path, url)
+    caplog.set_level(logging.INFO)
+    world(policy=path.stem, upstream="upstream-ok", note=f"{policy}: the Go usage endpoint answers the row's readings; the rails answer upstream-ok")
+    try:
+        for at, windows, outcome in GO_POLLS[polls]:
+            clock.t = T0 + at
+            go_usage.doc = _usage_doc(windows)
+            with given(f"a usage poll at T0{at:+d} s answers {windows}"):
+                got = await app.state.go_usage.poll()
+            then_eq("poll outcome", got, outcome)
+        clock.t = T0 + ask
+        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as gw:
+            doc = await _admit(gw, GO_BODIES[body])
+        _verdict(doc, {"decision": decision, "rail": _cell(rail), "reason": _cell(reason), "retry_after_s": _cell(retry_after_s)})
+        then_eq("usage requests sent", len(go_usage.calls), len(GO_POLLS[polls]))
+        if go_usage.calls:
+            then_eq("poll authorization", go_usage.calls[-1].headers["authorization"], f"Bearer {GO_KEY}")
+        with then("no identity value reaches a log line"):
+            assert not any(v in caplog.text for v in DUMMY_IDENTITY.values()), "an identity value reached a log"
+    finally:
+        await client.aclose()

@@ -171,13 +171,15 @@ class AdmissionPolicy:
 
 @dataclass(frozen=True)
 class HeadroomPolicy:
-    """The codex rail's account-headroom admission (GW-CODEX-HEADROOM): an observation older than
-    `max_age_s` is stale; a window at or above `ceiling` (0–1) is limited; `windows_minutes` is the
-    window profile every observation must carry exactly (the fixture profile, not a discovered
-    entitlement)."""
+    """An account-headroom admission (GW-CODEX-HEADROOM; the Go rail's twin, GW-SESSIONS-ADMIT §Capacity):
+    an observation older than `max_age_s` is stale; a window at or above `ceiling` (0–1) is limited;
+    `windows` is the window profile every observation must carry exactly (the fixture profile, not a
+    discovered entitlement), read from each window's `window_key` field — the span in minutes on codex,
+    the window's name on opencode."""
     max_age_s: float
     ceiling: float
-    windows_minutes: tuple[int, ...]
+    window_key: str  # `window_minutes` (codex) / `window` (opencode)
+    windows: tuple[int | str, ...]
     poll_interval_s: float  # the gateway's own usage poll (§Poll); must leave room under max_age_s
 
 
@@ -352,7 +354,7 @@ class RailPolicy:
     models: dict[str, tuple[str, ...]]  # tier -> the ORDERED policy model ids (model-classes.json spelling, rail-prefixed); a string in the file = a one-item list
     side_models: tuple[str, ...] = ()  # policy ids a harness's side-calls name, admitted on every session of this rail
     admission: AdmissionPolicy = field(default_factory=AdmissionPolicy)
-    headroom: HeadroomPolicy | None = None  # codex only (required there)
+    headroom: HeadroomPolicy | None = None  # codex (required) / opencode (optional: absent = the Go rail admits as today)
     refresh_margin_s: float | None = None  # codex only: refresh an OAuth access token this close to expiry
     # The User-Agent the upstream sees: `fixed` (the gateway's own, the default) or `forward` (the
     # harness's) — a per-rail ⚖ (GW-CRED-BOUNDARY): an edge that judges the client's signature
@@ -464,27 +466,49 @@ def _finite(v) -> bool:
     return type(v) in (int, float) and math.isfinite(v)
 
 
-def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
-    """The codex rail's two policy blocks; both required — a missing knob never becomes a code default."""
-    h = r.get("headroom")
+def _headroom(rail: str, h) -> HeadroomPolicy:
+    """`rails.<rail>.headroom` — the account-headroom block (GW-CODEX-HEADROOM; the Go rail's, GW-SESSIONS-ADMIT
+    §Capacity). The codex profile names span minutes, the opencode profile names its windows; both are
+    fixture profiles, never code literals."""
+    where = f"policy: rails.{rail}.headroom"
     if not isinstance(h, dict):
-        raise PolicyError("policy: rails.codex.headroom {max_age_s, ceiling, windows_minutes} is required")
-    max_age, ceiling, windows = h.get("max_age_s"), h.get("ceiling"), h.get("windows_minutes")
+        windows = "windows_minutes" if rail == "codex" else "windows"
+        raise PolicyError(f"{where} {{max_age_s, ceiling, {windows}, poll_interval_s}} is required")
+    max_age, ceiling = h.get("max_age_s"), h.get("ceiling")
     if not _finite(max_age) or max_age <= 0:
-        raise PolicyError("policy: rails.codex.headroom.max_age_s must be a positive number")
+        raise PolicyError(f"{where}.max_age_s must be a positive number")
     if not _finite(ceiling) or not 0 < ceiling <= 1:
-        raise PolicyError("policy: rails.codex.headroom.ceiling must be in (0, 1]")
-    if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
-            or any(type(w) is not int or w <= 0 for w in windows)):
-        raise PolicyError("policy: rails.codex.headroom.windows_minutes must be distinct positive integers")
+        raise PolicyError(f"{where}.ceiling must be in (0, 1]")
+    if rail == "codex":
+        key, windows = "window_minutes", h.get("windows_minutes")
+        if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
+                or any(type(w) is not int or w <= 0 for w in windows)):
+            raise PolicyError(f"{where}.windows_minutes must be distinct positive integers")
+    else:
+        key, windows = "window", h.get("windows")
+        if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
+                or any(not isinstance(w, str) or not w for w in windows)):
+            raise PolicyError(f"{where}.windows must be distinct non-empty window names")
     interval = h.get("poll_interval_s")
     if not _finite(interval) or not 0 < interval < max_age:
-        raise PolicyError("policy: rails.codex.headroom.poll_interval_s must be a positive number below max_age_s")
+        raise PolicyError(f"{where}.poll_interval_s must be a positive number below max_age_s")
+    return HeadroomPolicy(float(max_age), float(ceiling), key, tuple(sorted(windows)), float(interval))
+
+
+def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
+    """The codex rail's two policy blocks; both required — a missing knob never becomes a code default."""
+    headroom = _headroom("codex", r.get("headroom"))
     oauth = r.get("oauth")
     margin = oauth.get("refresh_margin_s") if isinstance(oauth, dict) else None
     if not _finite(margin) or margin < 0:
         raise PolicyError("policy: rails.codex.oauth.refresh_margin_s must be a non-negative number")
-    return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows)), float(interval)), float(margin)
+    return headroom, float(margin)
+
+
+def _opencode_headroom(r: dict) -> HeadroomPolicy | None:
+    """`rails.opencode.headroom` — optional: absent = the Go rail admits exactly as before its headroom
+    existed (the window draw and the account latch only). The code ships before the policy does."""
+    return _headroom("opencode", r["headroom"]) if "headroom" in r else None
 
 
 SCORE_AXES = ("intelligence", "coding", "agentic")  # the AA capability row's three indices (GW-MODEL-TIERS)
@@ -677,7 +701,7 @@ class Policy:
             side = r.get("side_models") or []
             if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
                 raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")
-            headroom, margin = (_codex_policy(r) if name == "codex" else (None, None))
+            headroom, margin = (_codex_policy(r) if name == "codex" else (_opencode_headroom(r), None))
             plan = r.get("plan")
             if name == "opencode" and plan not in GO_PLANS:
                 raise PolicyError(f"policy: rails.opencode.plan is required, one of {', '.join(GO_PLANS)} "
@@ -760,6 +784,10 @@ class Settings:
     # NO default — like CODEX_UPSTREAM it names a vendor profile (the native backend's usage path);
     # unset = no poll, the rail stays `quota-unknown` (fail closed).
     codex_usage_url: str = ""
+    # GW-SESSIONS-ADMIT §Capacity: the Go account usage endpoint the gateway polls with its own Go key
+    # (`OPENCODE_GO_API_KEY`). The same rule: NO default — unset = no poll, the Go rail with a headroom block
+    # stays `quota-unknown` (fail closed).
+    opencode_usage_url: str = ""
     # GW-CODEX-CAPTURE: the four-boundary recorder's scope (a task-key prefix; "" = off) and its byte
     # bound per request; retention of persisted records in days (the bundle is pulled and reviewed, not kept).
     codex_capture_task_prefix: str = ""
@@ -792,6 +820,7 @@ class Settings:
                              "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             codex_usage_url=e.get("CODEX_USAGE_URL", "").strip(),
+            opencode_usage_url=e.get("OPENCODE_USAGE_URL", "").strip(),
             codex_capture_task_prefix=e.get("CODEX_CAPTURE_TASK_PREFIX", "").strip(),
             codex_capture_max_bytes=int(e.get("CODEX_CAPTURE_MAX_BYTES", "262144")),
             codex_capture_retention_days=float(e.get("CODEX_CAPTURE_RETENTION_DAYS", "7")),
