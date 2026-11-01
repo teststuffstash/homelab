@@ -78,7 +78,7 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 
 | Requirement | Page | What it pins |
 |---|---|---|
-| [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit) | sessions | may this unit run now, on which rail |
+| [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit) | sessions | may this unit run now, on which rail · `⚑ gap (2026-11-01, PR #3105 → work #3108)`: Go account headroom unread |
 | [GW-SESSIONS-ENV](endpoints/sessions.md#gw-sessions-env) | sessions | the pod's complete LLM env per harness |
 | [GW-SESSIONS-TOKEN](endpoints/sessions.md#gw-sessions-token) | sessions | the session token's shape, storage, lifetime |
 | [GW-SESSIONS-RELEASE](endpoints/sessions.md#gw-sessions-release) | sessions | release and expiry refuse the token |
