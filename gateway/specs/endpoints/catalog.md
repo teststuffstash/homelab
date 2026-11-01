@@ -351,8 +351,8 @@ Who RIDES the canaries is the jail's `gateway/scripts/canary-entrants.sh` (reads
 one prober ride per candidate cell through `agents/agent-session.sh`'s `AGENT_GATEWAY_CANARY`
 knob — the ride names no model: the launcher's preflight refuses `--model` under
 `AGENT_GATEWAY=sessions`, and the pod's provider + model are the admission's
-`OPENCODE_CONFIG_CONTENT`); FU-161's scout keeps its digest, its canary leg for OpenRouter entrants
-is superseded by this.
+`OPENCODE_CONFIG_CONTENT`). It superseded FU-161's model scout, whose canary leg and digest both
+retired on 2026-11-01.
 
 ⚖ **Which candidates, in what order** (operator ruling 2026-10-21, homelab#2775 — a bug, not a
 design question: the first canary admission of 2026-10-20 went to `deepseek-v4.1-flash@open-inference`,
