@@ -76,6 +76,7 @@ its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar
 |---|---|
 | a live own verdict (APPROVED / CHANGES_REQUESTED, never DISMISSED) | nothing — done |
 | more than one live own verdict | ONE `AGENT_ERROR:` comment with a `head=` marker (idempotent), no label — this identity has no `issues:write` |
+| an own `PARTIAL READ:` hold comment keyed to the content commit | nothing — held until a push moves the content commit (§The partial read) |
 | no live `homelab-reviewer` APPROVED | nothing — the code gate goes first ("one old reviewer and THEN the new"; a Renovate PR's approval comes from the renovate-approve reflex, so this holds for it too) |
 | CI not green, or label `agent/error` | nothing |
 | no specs path and no rule-test path among the PR's files (REST, paginated; `review_path_re`: `(^\|/)specs/` or the repo's tests root, `gateway/tests/` here) | **mechanical** `--approve` with a fixed body, no LLM — the price of GitHub's repo-wide count; many per tick |
@@ -104,7 +105,7 @@ default`, so in `-p` mode any read outside the inputs (the token file under `/va
 homelab's wiring lens (`agents/lenses/specs.md`, fetched from `LENS_BASE`, default the public
 master raw URL; a fetch failure is no review) followed by the pinned finding contract, rows brief
 and evidence brief from the pack's `process/briefs/`. The verdict is parsed from the model's `Verdict:` line and submitted
-by the SCRIPT, **pinned to the reviewed head**: the head is re-read immediately before the
+by the SCRIPT — a third line, `Verdict: PARTIAL READ — <files>`, is no verdict at all (§The partial read) — **pinned to the reviewed head**: the head is re-read immediately before the
 submit (moved = the verdict is dropped and the next tick reads the new head — a push during the
 minutes the model runs must never land a verdict on an unreviewed head), and the review is
 posted through the REST reviews endpoint with `commit_id` = the reviewed head (`APPROVE` →
@@ -129,6 +130,19 @@ harness death with no pass 2. The first trial, oracle-fleet#946 on the riigiteat
 41 structural findings that survived the reveal; nine ordinary review rounds had passed that
 class. The masked surface comes from allure-behavior-snippets#39.
 
+**The partial read.** A verdict is a claim that the touched contract was read in full (the lens
+§Verdict mechanics): a model that cannot finish every named file within its budget writes
+`Verdict: PARTIAL READ — <what it did not finish>` and no finding judged from a digest line in
+place of the section. The tick posts NO review on it: one `PARTIAL READ:` comment keyed to the
+content commit holds the PR (`classify` → `partial-held`) until a push moves it, and the tick
+counts `kind=partial` (the `SpecsReviewPartialRead` belt fires on any occurrence). It is not an
+error (the model did its job, no gateway strike) and not a round (a worker cannot fix the
+reviewer's read): the lever is the pack's size — a smaller PR, a narrower touched-rule scope (a
+page-preamble rewrite marks every rule on the page), or the read-map unit — the stack's or the
+operator's call. Pass 1 of the staged read honours `pass1-prior.tsv` when the pack carries it
+(snippets ≥ 0.6.8: the prior rounds' pass-2 rulings as keys, so a survivor is re-listed, never
+re-argued).
+
 **Evidence at head.** Only a run stamped `git.commit=<head>` in `environment.properties` counts
 (CONVENTIONS § The head/artifact stamp); the pack's `Stamp:` line says whether it does. The gateway
 suite runs against the PR head's source in-process, so its stamp carries no `image.digest`: it is
@@ -141,9 +155,10 @@ must exist, else exit 10 (a silent green would mask a dead review plane — the
 **Belts.** Pushgateway `job/specs-review`: `specs_review_last_tick_timestamp_seconds` (every
 tick, shadow and zero-PR ticks included — the `SpecsReviewTickStale` alert in
 `argocd/resources/pushgateway/prometheusrule.yaml` reads it, 30 m), `specs_review_shadow`,
-`specs_review_tick_verdicts{kind=mechanical|approve|request_changes|defer|error}` (per-tick
+`specs_review_tick_verdicts{kind=mechanical|approve|request_changes|defer|error|partial}` (per-tick
 counts — a push replaces the group; `SpecsReviewNoProgress` fires when every tick for an hour
-reported an `error` or a `defer`, the stuck-but-ticking case the heartbeat cannot see). The model
+reported an `error` or a `defer`, the stuck-but-ticking case the heartbeat cannot see;
+`SpecsReviewPartialRead` on any `partial`). The model
 run is bounded by `timeout ${LLM_TIMEOUT_S}` (600 s; a staged read's two passes share it) inside the pod's 900 s deadline, because a
 deadline kill skips the EXIT trap and leaves the gateway session holding its slot until the 4 h
 TTL. OTEL with `role=specs-reviewer` so the subscription spend
