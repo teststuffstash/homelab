@@ -415,10 +415,45 @@ spec:
           expr: |
             avg_over_time(garage:cluster_health:availability_ratio_1h[30d])
 
+        # The 30-day error ratio — the store-wide objective read in docs/garage.md §SLO.
+        #
+        # The two-sided form, the sibling of the 5m rule's (#1569) — the same zero-floor shape at
+        # the 30-day scale. The OLD expr divided the 30d 5xx increase by the 30d request increase
+        # with a bare `/`, so BOTH sides had to exist for a series to appear, and `sum()` over an
+        # EMPTY vector is an EMPTY vector. Garage only exports a 500/503 counter for an endpoint
+        # that HAS served a 5xx, so the numerator vanishes as soon as no 5xx series is inside the
+        # window. Measured live 2026-10-31 22:38Z, `sum(increase(api_s3_error_counter{status_code=~"500|503"}[W]))`
+        # was `0` (defined) for W=30d and W=7d — but only because ONE stale series was still inside
+        # the window (api_s3_error_counter{api_endpoint="PutObject",status_code="500",pod="garage-2",
+        # instance="10.244.3.182:3903"} — a garage-2 replaced on 2026-10-17, last sample
+        # 2026-10-25 20:24Z). For W=6d, 5d and 4d the SAME numerator is EMPTY. So on ≈2026-11-24
+        # 20:24Z — when that last sample falls out of the 30-day window — this rule goes "No data"
+        # on its own, with no store event involved. Nothing tracked that date.
+        # The floors are taken from the REQUEST series, never a global `or vector(0)`: an
+        # unlabelled floor would put one series on the chart for a store that is not being scraped
+        # at all — the exact "broken scrape looks healthy" confusion this rule must not add.
+        #   numerator:   the 30d 5xx increase, or 0 when the request series IS scraped → a healthy
+        #                store reads 0, not "no data".
+        #   denominator: the 30d request increase, or the 5xx increase when there is no request
+        #                series → the ratio is 1 (every counted request errored).
+        #   clamp_min(…, 1e-9): an idle store's request increase is exactly 0, and 0/0 is NaN —
+        #                "no data" again by another route. The floor sits far below any measured
+        #                request increase, so no measured ratio moves.
+        # The both-present value is UNCHANGED: the floor only replaces an ABSENT numerator, and
+        # `sum(increase(...))` of a flat 5xx counter is a defined 0, which the `or` keeps.
         - record: garage:s3_server_error_ratio:30d
           expr: |
-            sum(increase(api_s3_error_counter{status_code=~"500|503"}[30d]))
-            / sum(increase(api_s3_request_duration_count[30d]))
+            (
+              sum(increase(api_s3_error_counter{status_code=~"500|503"}[30d]))
+              or
+              sum(increase(api_s3_request_duration_count[30d])) * 0
+            )
+            / clamp_min(
+              sum(increase(api_s3_request_duration_count[30d]))
+              or
+              sum(increase(api_s3_error_counter{status_code=~"500|503"}[30d])),
+              1e-9
+            )
     # ── BUCKET QUOTA — the 2026-09-09 registry class (FU-203) ─────────────────────────────────
     # A bucket-size quota refusal is invisible to every metric Garage exports: the disk is fine
     # (GarageDiskFillingUp cannot see it), api_s3_error_counter does not count the 403, and the
