@@ -607,7 +607,7 @@ gets its own chain**, not the app-coding chain. Mechanism: interim = per-repo ov
 claim (`repos[].fixer.workerModel/[Fallbacks]`, the `dockerRepos` pattern); proper home =
 FU-095(a), where **repo-type (app vs -iac) is the first task-class axis** (cheaper and sharper
 than budget×track, and the FU-057 ledger already keys per-repo). Rotation entrants earn devops
-evidence via a devops-shaped scout canary (render + patch a manifest against a schema) — coding
+evidence via a devops-shaped canary (render + patch a manifest against a schema) — coding
 canaries prove nothing here.
 
 ## Build order

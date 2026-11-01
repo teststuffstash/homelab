@@ -89,7 +89,7 @@ tests:
               triage: dig
             exp_annotations:
               summary: "3+ non-clean agent runs in 1h on oracle-fleet"
-              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) are excluded by design and cannot raise this."
       # 70m after the pushes: same series, same values, no alert — the freshness join is what
       # makes this alert a rate rather than a permanent statement about the past.
       - eval_time: 70m
@@ -120,34 +120,6 @@ tests:
         alertname: AgentRunInfraDeathBurst
         exp_alerts: []
       - eval_time: 180m
-        alertname: AgentRunInfraDeathBurst
-        exp_alerts: []
-
-  # ── AgentRunInfraDeathBurst — model-scout canaries stay out (homelab#235) ────────────────────
-  # A scout tick runs MAX_CANARIES=3 trivial probes against brand-new models and treats their
-  # deaths as expected. Three dead canaries plus one genuine failure is ONE real datum, not a
-  # burst — and the `issue!~"scout-.*"` matcher must count exactly the genuine one.
-  - interval: 1m
-    name: three dead canaries plus one real failure do not make a burst
-    input_series:
-      - series: 'agent_run_total{exit_status="harness-death",harness="goose",issue="scout-x-ai-grok-5",job="agent_run",model="x-ai/grok-5",node="wk-metal-04",project="openrouter-operator",role="worker",round="1"}'
-        values: "1+0x120"
-      - series: 'agent_run_total{exit_status="no-artifact",harness="goose",issue="scout-moonshot-kimi-k3",job="agent_run",model="moonshotai/kimi-k3",node="wk-metal-04",project="openrouter-operator",role="worker",round="1"}'
-        values: "1+0x120"
-      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="scout-deepseek-v4",job="agent_run",model="deepseek/deepseek-v4",node="wk-metal-04",project="openrouter-operator",role="worker",round="1"}'
-        values: "1+0x120"
-      - series: 'agent_run_total{exit_status="failed",harness="goose",issue="44",job="agent_run",model="qwen/qwen3-max",node="wk-metal-04",project="openrouter-operator",role="worker",round="1"}'
-        values: "1+0x120"
-      - series: 'push_time_seconds{issue="scout-x-ai-grok-5",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
-        values: "0+0x120"
-      - series: 'push_time_seconds{issue="scout-moonshot-kimi-k3",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
-        values: "0+0x120"
-      - series: 'push_time_seconds{issue="scout-deepseek-v4",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
-        values: "0+0x120"
-      - series: 'push_time_seconds{issue="44",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
-        values: "0+0x120"
-    alert_rule_test:
-      - eval_time: 10m
         alertname: AgentRunInfraDeathBurst
         exp_alerts: []
 
@@ -249,7 +221,7 @@ tests:
               triage: dig
             exp_annotations:
               summary: "3+ non-clean agent runs in 1h on sleep-iac"
-              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) are excluded by design and cannot raise this."
 
   # ── AgentRunBudgetCapHits — two cap hits in a week on one project (retro r8 F4) ─────────────
   # Three budget-403 series: issue 201 round 1 (worker AND reviewer — the same session key, so
@@ -280,7 +252,7 @@ tests:
               triage: dig
             exp_annotations:
               summary: "2 budget-403 rounds in 7d on oracle-fleet — session caps are undersized or the account is dry"
-              description: "Two or more distinct (issue, round) rides on oracle-fleet ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator's context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account. Model-scout canaries (issue=scout-*) are excluded by design."
+              description: "Two or more distinct (issue, round) rides on oracle-fleet ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator's context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account."
 
   # ── AgentRunBudgetCapHits — one hit is a long tail, not a signal ────────────────────────────
   # One budget-403 beside an auth-storm on the same project: the auth-storm is not a cap hit and
@@ -295,29 +267,6 @@ tests:
       - series: 'push_time_seconds{issue="301",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
         values: "0+0x20"
       - series: 'push_time_seconds{issue="302",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
-        values: "0+0x20"
-    alert_rule_test:
-      - eval_time: 10m
-        alertname: AgentRunBudgetCapHits
-        exp_alerts: []
-
-  # ── AgentRunBudgetCapHits — model-scout canaries stay out (the burst's homelab#235 rule) ─────
-  # Two dead canaries on budget-403 plus one genuine cap hit: the matcher must count exactly the
-  # genuine one, which is under the bar.
-  - interval: 1m
-    name: two scout canary budget-403s plus one real hit stay under the bar
-    input_series:
-      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="scout-acme-new-1",job="agent_run",model="acme/new-1",node="nx-01",project="openrouter-operator",role="worker",round="1"}'
-        values: "1+0x20"
-      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="scout-acme-new-2",job="agent_run",model="acme/new-2",node="nx-01",project="openrouter-operator",role="worker",round="1"}'
-        values: "1+0x20"
-      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="7",job="agent_run",model="deepseek/deepseek-v4.1-flash",node="nx-01",project="openrouter-operator",role="worker",round="1"}'
-        values: "1+0x20"
-      - series: 'push_time_seconds{issue="scout-acme-new-1",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
-        values: "0+0x20"
-      - series: 'push_time_seconds{issue="scout-acme-new-2",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
-        values: "0+0x20"
-      - series: 'push_time_seconds{issue="7",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
         values: "0+0x20"
     alert_rule_test:
       - eval_time: 10m
@@ -349,7 +298,7 @@ tests:
               triage: dig
             exp_annotations:
               summary: "2 budget-403 rounds in 7d on oracle-fleet — session caps are undersized or the account is dry"
-              description: "Two or more distinct (issue, round) rides on oracle-fleet ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator's context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account. Model-scout canaries (issue=scout-*) are excluded by design."
+              description: "Two or more distinct (issue, round) rides on oracle-fleet ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator's context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account."
       - eval_time: 15m
         alertname: AgentRunBudgetCapHits
         exp_alerts: []
