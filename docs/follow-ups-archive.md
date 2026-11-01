@@ -10,6 +10,9 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-161** *(archived 2026-11-01)* — **Scout v3.** The model scout is RETIRED (#3124 + the cron's seat-direct
+      removal): new-model discovery, canaries and tiers are the gateway's (GW-CATALOG-OR entry canary,
+      GW-MODEL-TIERS). Design history: [`model-routing-history.md`](spikes/model-routing-history.md) §M7.
 - **FU-316** *(archived 2026-10-31)* — **Cold-blob `blob-warmer` on the ghcr + docker-io mirrors.** PR #3049 (master
   `94e889e7`) added the mcr-style sidecar to `mirror-ghcr` + `mirror-docker-io`; ArgoCD rolled both 2026-10-31 12:45:30Z
   and the warmer logs show blobs warmed on each. Origin: mcr episode #2892, detector `RegistryMirrorColdBlobAbandoned` (#2888).

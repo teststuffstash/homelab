@@ -766,17 +766,6 @@ the block needs pruning, not more headings.
       **Next:** the accounting half = rail-aware TOTAL metering (FU-131 closed 10-24); the scheduler
       half is a design sitting before any Goal whose `Budget:` must be real. Relates FU-088.
 
-- [ ] **FU-161** — **Scout v3: POINTER.** Design + mechanism (variant filter, benchmark
-      cross-check, typed cell-keyed canary verdicts, the ⚖ filing gate's evidence-bearing partition):
-      [`model-routing-history.md`](spikes/model-routing-history.md) §M7. Legs 1–2 shipped 2026-08-11
-      (#282); legs 3–4 + the filing gate (operator 08-17: an all-unbenched, uncanaried digest posts
-      nowhere but the log) shipped via #469→PR#499 + #506's whole-set common-cause rule. **First fire
-      PROVEN** — weekly organic digests (#1647/#1821/#2053), #2053 with three typed `clean` canaries.
-      #778 released unbuilt 2026-09-02 (Go cells mooted by the 08-25 ruling; hygiene → FU-181). 10-19:
-      the OPENROUTER canary leg is superseded by the gateway's entry canary (GW-CATALOG-OR, #2745); the
-      digest stays. **Next:** rung-2/FU-095(c), pool depth, void the tainted 08-10..08-17 rotation rows
-      (no owner since #778).
-
 - [ ] **FU-186** — **Provider selection priced per successful job (ADR-115): POINTER.** Design +
       evidence + 4-step build order: [`docs/spikes/model-routing-history.md`](spikes/model-routing-history.md)
       §M14 (Exacto delegated for cheap coding; pin-v2 with the overhead-cost term for priced
