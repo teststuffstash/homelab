@@ -462,7 +462,8 @@ six OVERSIZE items pointer-ized into
       on an empty read after an inner gh failure — the NEEDSMETA arm mass-clears + re-emits
       (flapped 2026-08-23 ×2; the ALERT arm's twin quickfixed f703ec39). **Gate LIVE 2026-10-31:**
       `shellcheck-lint` (#3081, 145 findings baselined in `scripts/shellcheck-baseline.txt` — ~160 standing,
-      not ~8) + its `ci` step (seat-direct). **Next:** the `meta-needs-attention.sh` empty-read (still
+      not ~8) + its `ci` step (seat-direct); dataflow analysis OFF since #3102 (it peaked 4.3 GiB on
+      coordinator-scan.sh and OOMKilled every 4Gi worker running diff-ci, #3094). **Next:** the `meta-needs-attention.sh` empty-read (still
       `2>/dev/null | tail -1 | jq` per clause — fail loud on a gh error). Relates ADR-113, ADR-103, #854.
 
 ## Agents
