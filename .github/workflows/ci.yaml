@@ -524,6 +524,12 @@ jobs:
         if: steps.diff.outputs.governance-lint-test != 'false'
         run: devbox run governance-lint-test
 
+      # FU-185 / ADR-113: ShellCheck -S warning over the tracked shell, ratcheted against
+      # scripts/shellcheck-baseline.txt (#3081 shipped the lint + MAP row; this is its ci step).
+      - name: shellcheck-lint (devbox run shellcheck-lint)
+        if: steps.diff.outputs.shellcheck-lint != 'false'
+        run: devbox run shellcheck-lint
+
       # G17 (ADR-141 as amended 2026-10-06): the devbox-update lock-diff gate over #2260's recorded
       # lock diff — the major gate, the downgrade + line-move lists the second body section carries.
       - name: devbox-update self-test (devbox run devbox-update-test)

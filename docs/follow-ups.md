@@ -460,9 +460,10 @@ six OVERSIZE items pointer-ized into
       killed every scout tick for 6 days (#854). ADR-113 rules the split (bash = glue, logic =
       Python, no wholesale rewrite). Known live instance: `meta-needs-attention.sh` can exit 0
       on an empty read after an inner gh failure — the NEEDSMETA arm mass-clears + re-emits
-      (flapped 2026-08-23 ×2; the ALERT arm's twin quickfixed f703ec39). **Next:** shellcheck
-      in devbox.json + a required `ci` step (`.github` edit, operator lane) and the ~8
-      standing warnings burnt down in the same PR. Relates ADR-113, ADR-103, #854.
+      (flapped 2026-08-23 ×2; the ALERT arm's twin quickfixed f703ec39). **Gate LIVE 2026-10-31:**
+      `shellcheck-lint` (#3081, 145 findings baselined in `scripts/shellcheck-baseline.txt` — ~160 standing,
+      not ~8) + its `ci` step (seat-direct). **Next:** the `meta-needs-attention.sh` empty-read (still
+      `2>/dev/null | tail -1 | jq` per clause — fail loud on a gh error). Relates ADR-113, ADR-103, #854.
 
 ## Agents
 - [ ] **FU-314** — **The specs reviewer still reads the legacy `gateway-evidence` Actions artifact as a fallback.**
