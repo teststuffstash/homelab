@@ -1022,6 +1022,14 @@ Rule exactly one of:
   `gh pr create --base master --head goal/<n>-<slug>` **non-draft**, body = the coverage-map
   outcome (every id owned / deferred-to-named-issue / evidenced) + a line-anchored
   `Assembly-for: #<goal>` trailer, then ARM it (`gh pr merge --auto --squash`).
+  **When the assembly diff touches the repo's specs root** (`git diff --name-only master...goal/<n>-<slug>`
+  against the claim's `repos[].specs.root`), the body ALSO carries the children's `Spec changes:`
+  sections, concatenated verbatim under ONE `Spec changes:` heading — `gh pr view <child> --json body`
+  for every merged child whose diff touched that root, each child's section copied as written (its
+  ⚖ rows, glossary terms, removed/moved proofs with their carriers), nothing re-summarised and
+  nothing added. The specs reviewer (ADR-155) reads the assembly diff as ONE PR and judges the body
+  against the pinned author brief the children already followed (ADR-156); a coverage map without
+  that section is a round lost on the body, not on the work.
   > ⚠ **NOT `Fixes #<goal>`, and this is load-bearing.** A closing keyword would close the goal on
   > merge, and under ADR-102 assembly merge is a **MIDPOINT**: the goal enters `goal/post-launch`
   > and stays open, shipping to production against the same budget, until a human applies a verdict
