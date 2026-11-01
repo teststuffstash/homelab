@@ -49,6 +49,9 @@ done
 # OPENROUTER_API_KEY is also a credential. Any fixture that genuinely needs these must explicitly
 # pin them via `env:` in its fixture.yaml (homelab#1442, ADR-103 ratchet).
 # ANTHROPIC_* is the gateway ride's session env; its gws_ token leaks into gateway-sessions (homelab#3048).
+# OPENCODE_CONFIG_CONTENT is the opencode cell's session env — same gws_ leak, a different variable
+# (homelab#3048). The opencode rail pulls its own from the gateway's env_keys, so the ambient one is
+# never wanted in a fixture.
 unset PROJECT AGENT_RAIL AGENT_BASE_IMAGE AGENT_BUDGET_REFUSED AGENT_CREDIT_GATE \
       AGENT_CRED_INJECT AGENT_DEVBOX_SEARCH_HOST AGENT_DISPATCH_EPOCH AGENT_EGRESS_PROXY \
       AGENT_ERROR AGENT_INFEASIBLE AGENT_LOOP_WEBHOOK AGENT_MIRROR_DOCKER_IO \
@@ -60,7 +63,8 @@ unset PROJECT AGENT_RAIL AGENT_BASE_IMAGE AGENT_BUDGET_REFUSED AGENT_CREDIT_GATE
       AGENT_TS_ENDPOINT AGENT_TS_READER_ID AGENT_TS_READER_SECRET AGENT_TS_SECRET_ACCESS_KEY \
       AGENT_TS_WRITER_ID AGENT_TS_WRITER_SECRET AGENT_WIP_LIMIT GH_TOKEN OPENROUTER_API_KEY \
       AGENT_GATEWAY AGENT_GATEWAY_RAIL AGENT_GATEWAY_URL AGENT_GATEWAY_CALLER_SA AGENT_GATEWAY_CALLER_TOKEN_FILE \
-      ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL
+      ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL \
+      OPENCODE_CONFIG_CONTENT
 
 # ── fixture.yaml ────────────────────────────────────────────────────────────────────────────────
 # A deliberately tiny YAML subset — `key: value` and `key:` followed by `- item` lines, no nesting.
