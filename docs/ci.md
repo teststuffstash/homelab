@@ -85,8 +85,9 @@ same-sha runs serialize, different PRs still use both slots.
   AND big scratch, metal-only, 12Gi memory request == limit (nx-01 today) + `ephemeral-storage:
   16Gi` requested, max 2; oracle-fleet `ci` and the corpus release). Sizing evidence + the
   decision: [`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md) §2026-11-01
-  (FU-218). Docker/kind-heavy jobs stay on Tier B's runner VMs. + `github-runner-secrets.yaml` →
+  (FU-218)) + `github-runner-secrets.yaml` →
   `argocd/resources/github-runner/` (ns + the `arc-github-app` ESO `ExternalSecret`).
+  Docker/kind-heavy jobs stay on Tier B's runner VMs.
 - Auth: a **GitHub App** on the org (permissions: Organization → Self-hosted runners: R/W, +
   Metadata: Read); creds in Infisical (`GHARC_APP_ID`/`GHARC_INSTALL_ID`/`GHARC_PRIVATE_KEY`) → ESO →
   `arc-github-app` secret → chart `githubConfigSecret`. Bootstrap is scripted:
