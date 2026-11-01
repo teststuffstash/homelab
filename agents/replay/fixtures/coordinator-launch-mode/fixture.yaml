@@ -1,0 +1,20 @@
+# coordinator-session.sh --launch (homelab#1910): the item pod that carries the scan's noop-rerun
+# runs the WORKER LAUNCHER, not claude, and draws no LLM window.
+#
+# CONTRACT (from the --launch header in agents/coordinator-session.sh):
+#   1. RUNNER is `bash /work/homelab/agents/agent-session.sh <the --launch argv>` verbatim — the
+#      exact fix-round line the scan built (project, --task, --round, --work-branch, --recipe);
+#      no `claude -p`, no `--model`, no brief, no transcript upload.
+#   2. The pod carries the `homelab.teststuff.net/launch` label and NEITHER semaphore label
+#      (`subscription-session` / `rail`): the ride pod it spawns is what FU-088 counts.
+# MODEL is deliberately a Go-rail id here: without the launch arm it would select the `rail` label.
+pins:
+  - IL-T31
+name: coordinator-launch-mode
+mode: actions
+source: agents/coordinator-session.sh
+parts:
+  - file:bridge.sh
+  - block:coordinator-rail-label
+  - block:coordinator-launch-runner
+  - file:post.sh

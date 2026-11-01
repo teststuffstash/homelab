@@ -823,7 +823,9 @@ completion predicate, so (b) can fire in the same tick (#1315 held G-G's assembl
 the old predicate, which counted every open member).
 
 **FIRST, dispose the MEMBERS** (ADR-122 (4) — this is what retires trigger (c); an
-undispositioned member re-wakes this clause every tick until you rule it). Walk the goal's OPEN
+undispositioned member wakes this clause once per member SET — the `state-fp:goal-checkpoint-c`
+hold, homelab#2565: a ride that rules nothing buys no second ride until a member is ruled, added or
+removed, so an unruled member waits on the next set change, not the next tick). Walk the goal's OPEN
 descendants and rule each one that has no row yet — exactly one of:
 
 - **adopted** — it is in scope for this goal. Queue it under the goal's existing authorization
@@ -1153,16 +1155,24 @@ Read the diff + the whole review thread, then rule — exactly one of:
 Any ruling that returns the PR to the ordinary path — re-dispatch, follow-up-class after the dismissal, or nothing to do — **removes `agent/arbitrate`** so the reflex picks the PR normally; only `escalate` keeps the label.
 
 **A round that posts stats without moving HEAD is a no-op round, not a consumed logic round**
-(retro r3 win-2). The scan hands you these already labelled — `ARBITRATE (changes-requested no-op
-round, FU-147)`, and the FU-115b equivalent on the red path — a completed round whose stats comment
-has no commit behind it. Rule it for what it is: the loop did not fail to converge, it did not
+(retro r3 win-2). **The scan re-runs the first no-op — you see the second** (IL-T31, Goal #1906):
+when a no-op round is the FIRST completed round after an `ARBITRATE` directive (yours, on the PR or
+the issue), the scan's deterministic pass re-runs it at the launcher — same round, same branch, the
+directive already in the ride's prefetch bundle — with no session at all, and records a
+`kind=noop-rerun` line on the PR's summary comment. So a no-op reaches you only when there is no
+directive to re-run, when the re-run itself completed no round, or as the SECOND consecutive no-op.
+Those arrive already labelled — `ARBITRATE (changes-requested no-op round, FU-147)`, and the FU-115b
+equivalent on the red path, each with a report line naming which case it is. Rule it for what it is: the loop did not fail to converge, it did not
 *run*, so the default ruling is the first bullet (re-dispatch, with the suggested fix verbatim) and
 the round it never spent goes back to the bound. circles#57 measured both halves on one PR: round 3
 posted clean stats at $0.0291/625s and pushed nothing, round 4 carried the literal edit and flipped
 `CHANGES_REQUESTED` → `APPROVED` first try at $0.0476/798s — charging round 3 to the 3-round budget
 would have bought nothing and cost the round that worked. Confirm against the commits, never the
 stats comment (`gh pr view <n> --json commits`). A SECOND consecutive no-op is not a third
-re-dispatch: that is a terminal-ride finding (pod, launcher, budget), exactly as on the red path.
+re-dispatch: that is a terminal-ride finding (pod, launcher, budget), exactly as on the red path —
+and since the scan already spent the directive's one re-run, a no-op labelled after your directive
+IS that second one. A re-dispatch ruling must therefore carry what changes (a stronger model via the
+`agent-budget/*` re-grade, a narrower directive), never the same directive restated.
 
 > **You get ONE ride per state (homelab#198).** Two of those four rulings leave `agent/arbitrate`
 > on the PR on purpose, so the scan's label selector used to re-emit this unit every tick for as
@@ -1304,7 +1314,8 @@ red loop is now edge-woken by the exporter's `/coordinate` red-doorbell + attemp
 with the review loop). The scan only dispatches `ci-red` for LOOP-AUTHORED PRs (the WORKER_AUTHOR
 predicate, homelab#88 2026-08-03) — a human's armed+red PR is a report-only line, never yours.
 The scan already decided this is a dispatch (attempts < `RED_ROUNDS_MAX`), so
-your play: **re-dispatch a fix round** on the PR's branch with the failing check's log excerpt in
+your play (a no-op fix round on a red PR is NOT yours on its first occurrence after your directive:
+**the scan re-runs the first no-op — you see the second**, the IL-T31 rule in §arbitrate above): **re-dispatch a fix round** on the PR's branch with the failing check's log excerpt in
 context (the usual case — a worker's own Gate-A escape, a flaky base, a missing platform fact like
 sleep-tracking#67's kind mirror); **retry** when the red is ENVIRONMENTAL — a transient
 network/vendor blip or infra cold-start, the diff demonstrably not implicated:

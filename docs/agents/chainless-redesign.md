@@ -305,6 +305,12 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    future work — too risky blind before the model work, and on non-homelab stacks daily
    spend is capped by **CI runtime**, not tokens (homelab `ci` ≈2 min; stack gates far
    longer), so cheap-retry economics stay wall-clock-bound until stack CI times improve.
+   **(b) narrowly UN-BANKED (operator ruling on Goal #1906 pin 3, built by homelab#1910):** the
+   no-op-after-directive case ONLY — the first fix round that completes without a push after an
+   `ARBITRATE` directive is re-run once by the launcher at the same round with no coordination
+   session (issue-lifecycle IL-T31); the second consecutive no-op escalates as before. Not a
+   first-fix-round rung 0: the directive was already ruled by a session, the round is the clean-exit
+   sibling of the launcher's same-round strike retry (#1780), and every other dispatch stays banked.
 
 Build home: FU-180 (the #420 wave it was parked on closed at the stint pilot); the accounting
 half is FU-180's rail-aware TOTAL metering (#278 and FU-131 closed). Nothing here changes chunk A–F scope — the only-free interaction stays the
