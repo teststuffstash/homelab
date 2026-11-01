@@ -219,6 +219,7 @@ is stale, so it cannot drift the way the prose register did.
 | `ci-cause-grammar` | table | - | `-` | - |
 | `ci-failure-run-select/ci-failure-run-select` | table | base | `agents/agent-session.sh` | MP-T12 |
 | `ci-red-arbitrate-belt` | table | base | `agents/coordinator-scan.sh` | MP-T13 |
+| `ci-red-fleet-hold` | table | fleet | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-goal-head-excluded` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |
 | `ci-red-human-ruling-hold` | table | - | `agents/coordinator-scan.sh` | MP-T13 |
 | `ci-red-rounds-sibling-mention` | actions | - | `agents/coordinator-scan.sh` | MP-T12 |

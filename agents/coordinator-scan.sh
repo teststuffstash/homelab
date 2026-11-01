@@ -453,7 +453,7 @@ EOF
 #   riding, phantom, strike-held, parked-blocked, parked-infeasible,
 #   arbitrate-standing, queued-held, queued-held-by-ghost, queued-held-malformed-block, queued-ready,
 #   deferred-capacity, guarded-path, orphan-unarmed, container, backlog-aggregate,
-#   footprint-held, cap-held, blockpark
+#   footprint-held, cap-held, blockpark, ci-red-held
 # who ∈ operator | machine | none
 # >>>REPLAY:item-class>>>
 # Per-pass accumulator: newline-joined lines "repo|item|class|who|base" (ADR-125 lane label)
@@ -5973,6 +5973,123 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
           continue
         fi
         # <<<REPLAY:ci-red-goal-head-exclusion<<<
+        # >>>REPLAY:ci-red-fleet-hold>>>
+        # FLEET-CLASS HOLD (Goal #1906 acceptance 2, homelab#1909): a red the PR did not cause is
+        # ONE fleet fact, read BEFORE the attempt counter. Retro r5 opus F2 measured the cost of
+        # treating every armed red PR as its own fault: one master-origin red (#1565,
+        # `ci/OpenTofu formatting`) drew the identical `ARBITRATE (ci-red, FU-115) … cap 3`
+        # escalation on PR#1545/#1541/#1540 within 19 s, then a corrective ride each ("the red is
+        # not this PR's"), and the whole sequence repeated two days later — 11 arbitrate rides on
+        # 3 PRs from 2 reds, ~50 h × 3 PRs of held wall. The brief's "one fleet fault, not N
+        # parks" play was PROSE a session executed only if it happened to see both PRs; this makes
+        # it a deterministic HOLD.
+        #
+        # The identifier is the check-run's job + step name (`<job>/<step>` — the §ci-cause grammar
+        # and the fleet-fault rule's stable identifier), NEVER a log excerpt: shas, timestamps and
+        # paths make two instances of one fault look like two faults, and a false match freezes a
+        # PR human-first whose red really is its own code.
+        #
+        # Two arms, each independently fail-open (rule #6: a hold is a WRITE on the loop's
+        # throughput, so an unreadable probe HOLDS NOTHING and falls through to today's behaviour):
+        #   master-red  — master's newest `ci` run fails the SAME <job>/<step> as this PR's red.
+        #   fleet-class — a line-anchored `ci-cause: <job>/<step> class=infra|environment …` marker
+        #                 naming the SAME <job>/<step> was posted on ANOTHER open PR of this repo
+        #                 inside 24 h. Only `class=` is read; `basis=` is DATA and stays unread
+        #                 (#1280 — no basis-keyed branching anywhere).
+        # On a hit: NO unit, NO `state-fp:` marker, NO attempt counted — one report line naming the
+        # fault and the arm, plus a `who=machine` board row. Release is LEVEL-TRIGGERED: the next
+        # pass re-evaluates (master green / the 24 h window lapses → the ordinary ci-red flow
+        # resumes), so nothing has to be un-done.
+        #
+        # This REMOVES the per-PR re-diagnosis of a shared red (11 arbitrate rides → 0 for the r5
+        # instance) and the N-way `agent/blocked` park that the stale-label belt then inherits.
+        #
+        # The `<job>/<step>` reader: the first failed job's first failed step. BOTH halves are
+        # required — a job name alone is not the fleet-fault rule's stable identifier, and a
+        # job-only match would hold a PR whose red is a different step of the same job.
+        # The identifier is VERBATIM, spaces included — the §ci-cause grammar writes it that way
+        # (agents/coordinator/README.md §ci-cause; agents/ledger.py's CI_CAUSE_RE captures up to
+        # ` class=`, homelab#1775): a real step name carries spaces (`OpenTofu formatting
+        # (fmt -check, all roots)`), and a marker copies it straight from `gh run view --json jobs`.
+        # Both sides of every comparison collapse whitespace runs to ONE space (this reader and the
+        # marker capture below) — a marker differing from the run only in spacing names the same
+        # fault; any real name, which has no runs, reads back verbatim.
+        CI_FAILED_JOB_STEP_JQ='[ .jobs[]? | select((.conclusion // "") == "failure")
+          | . as $j
+          | ([ $j.steps[]? | select((.conclusion // "") == "failure") | .name ][0] // "") as $s
+          | select($s != "") | "\($j.name)/\($s)" | gsub("\\s+"; " ") ][0] // ""'
+        # The PR's own red identifier: the newest FAILED `ci` run on the PR head, its first failed
+        # job's first failed step. `--status failure` (not `--limit 1` alone) is the homelab#1440
+        # lesson — the newest run on a branch can be a skipped/success workflow while an older one
+        # is the red. No failed step → no identifier → no hold (fail-open).
+        ci_red_js=""
+        if ci_red_run="$(gh run list --repo "$slug" --branch "$u_head" --workflow ci --status failure --limit 1 --json databaseId 2>/dev/null)"; then
+          ci_red_run_id="$(printf '%s' "$ci_red_run" | jq -r '.[0].databaseId // ""' 2>/dev/null)" || ci_red_run_id=""
+          if [ -n "$ci_red_run_id" ] \
+             && ci_red_jobs="$(gh run view "$ci_red_run_id" --repo "$slug" --json jobs 2>/dev/null)"; then
+            ci_red_js="$(printf '%s' "$ci_red_jobs" | jq -r "$CI_FAILED_JOB_STEP_JQ" 2>/dev/null)" || ci_red_js=""
+          fi
+        fi
+        ci_hold_arm=""
+        if [ -n "$ci_red_js" ]; then
+          # master-red arm — ONE probe per repo per scan: the fault is repo-level, not per-PR.
+          # Keyed on `$slug`, not a bare flag: this clause sits inside the per-repo loop, so a
+          # flag would hand repo B the probe repo A took.
+          if [ "${ci_master_probed_for:-}" != "$slug" ]; then
+            ci_master_probed_for="$slug"; ci_master_js=""
+            if ci_master_run="$(gh run list --repo "$slug" --branch "${default_branch:-master}" --workflow ci --limit 1 --json databaseId,conclusion 2>/dev/null)"; then
+              if [ "$(printf '%s' "$ci_master_run" | jq -r '.[0].conclusion // ""' 2>/dev/null)" = "failure" ]; then
+                ci_master_run_id="$(printf '%s' "$ci_master_run" | jq -r '.[0].databaseId // ""' 2>/dev/null)" || ci_master_run_id=""
+                if [ -n "$ci_master_run_id" ] \
+                   && ci_master_jobs="$(gh run view "$ci_master_run_id" --repo "$slug" --json jobs 2>/dev/null)"; then
+                  ci_master_js="$(printf '%s' "$ci_master_jobs" | jq -r "$CI_FAILED_JOB_STEP_JQ" 2>/dev/null)" || ci_master_js=""
+                fi
+              fi
+            fi
+          fi
+          if [ -n "${ci_master_js:-}" ] && [ "$ci_master_js" = "$ci_red_js" ]; then
+            ci_hold_arm="master-red"
+          else
+            # fleet-class arm — a sibling open PR's ci-cause marker naming the same <job>/<step>.
+            # ONE read per repo per scan (the sibling set is repo-level); the match is per-PR
+            # because the identifier is.
+            if [ "${ci_fleet_probed_for:-}" != "$slug" ]; then
+              ci_fleet_probed_for="$slug"
+              ci_fleet_probe="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,comments 2>/dev/null)" || ci_fleet_probe=""
+            fi
+            if [ -n "${ci_fleet_probe:-}" ]; then
+              ci_hold_cutoff="${CI_HOLD_CUTOFF:-$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)}"
+              # `select(test(...))` BEFORE `capture`: a `ci-cause:` line that does not carry the
+              # full grammar (the arbitrate lane's `ci-cause: policy-ambiguity` shape is live in
+              # the tree) must be IGNORED, never allowed to abort the expression — one malformed
+              # sibling marker would otherwise silently disable the arm for every other sibling.
+              # The filter states that explicitly rather than resting on `capture`'s no-match
+              # behaviour, which is a jq-version detail (devbox pins jq `latest`).
+              # The shape is the ledger's reader (CI_CAUSE_RE, homelab#1775): `<job>/<step>` is
+              # captured non-greedy up to ` class=`, and a `basis=` field must follow — so a step
+              # name containing spaces parses, and one containing the text ` class=` cannot drag
+              # the capture to a later field.
+              ci_fleet_hit="$(printf '%s' "$ci_fleet_probe" | jq -r --arg js "$ci_red_js" --argjson self "$u" --arg cutoff "$ci_hold_cutoff" '
+                [ .[] | select(.number != $self)
+                  | (.comments // [])[]
+                  | select((.createdAt // "") > $cutoff)
+                  | [ (.body // "") | split("\n")[] | select(startswith("ci-cause:")) ][0] // empty
+                  | select(test("^ci-cause: .+? class=\\S+ basis=\\S+"))
+                  | capture("^ci-cause: (?<js>.+?) class=(?<cls>\\S+) basis=\\S+")
+                  | select(.cls == "infra" or .cls == "environment")
+                  | (.js | gsub("\\s+"; " ")) as $mjs
+                  | select($mjs == $js)
+                  | $mjs ][0] // ""' 2>/dev/null)" || ci_fleet_hit=""
+              [ -n "$ci_fleet_hit" ] && ci_hold_arm="fleet-class"
+            fi
+          fi
+        fi
+        if [ -n "$ci_hold_arm" ]; then
+          orphans="${orphans}[$repo] ⏳ ci-red HELD (${ci_hold_arm}) — PR #${u}: ${ci_red_js}\n"
+          item_class_push "$repo" "pr-${u}" "ci-red-held" "machine"
+          continue
+        fi
+        # <<<REPLAY:ci-red-fleet-hold<<<
         # attempts = durable count of completed fix rounds on THIS PR — the fast path under the
         # issue-keyed ceiling below, and still what the no-op detector needs. Restart-safe: it reads
         # GitHub, never launcher memory. Bounds the loop: a no-op round costs at most
@@ -6246,6 +6363,7 @@ EOF_BELT
             # The marker is stale; fall through to re-evaluate dispatch.
           fi
           # <<<REPLAY:ci-red-gate<<<
+          # >>>REPLAY:ci-red-dispatch>>>
           # DISPATCH a fix round (under the attempt cap — the ISSUE-keyed one, see above)
           if [ "$red_n" -lt 2 ]; then
             # FU-106 (c): a RED deploy/* bump PR in an -iac repo is the typed infra-delta — the
@@ -6260,6 +6378,7 @@ EOF_BELT
             item_class_push "$repo" "pr-${u}" "riding" "machine"
             red_n=$((red_n+1))
           fi
+          # <<<REPLAY:ci-red-dispatch<<<
         else
           # ARBITRATE: red rounds EXHAUSTED. Reuse the review path's MP-T11 machinery — label
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
