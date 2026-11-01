@@ -379,6 +379,25 @@ spec:
           annotations:
             summary: "specs-review: every tick for 1h ended in {{ $labels.kind }}. The second required approval on homelab is not progressing"
             description: "SYMPTOM ONLY. Every specs-review tick for the last hour reported at least one `{{ $labels.kind }}` (agents/specs-reviewer-session.sh: error = a failed PR list, files read, lens fetch, clone, /sessions call, claude run or submit; defer = the agent-gateway refused admission). The heartbeat is fine (SpecsReviewTickStale is quiet), but the PR the tick is stuck on keeps waiting for its second approval. Read the newest specs-review run logs in Loki (tenant agent-coordinator, `{pod=~\"specs-review.*\"}`); for defer, check the gateway's reason and retry_after_s there and the rail's capacity."
+        # ADR-155's third belt: the tick posted NO verdict because the model declared a PARTIAL READ
+        # (agents/lenses/specs.md §Verdict mechanics — a verdict claims the touched contract was read
+        # in full; agents/specs-reviewer-session.sh holds the content commit with a `PARTIAL READ:`
+        # comment instead of a review). The lever is the pack's size (a smaller PR, a narrower
+        # touched-rule scope, the read-map unit), a human's or the stack's call — never a worker
+        # round — so ONE hold is one actionable event: fires on any occurrence. kind=partial is a
+        # per-tick gauge (the next tick pushes 0); max_over_time keeps it visible for 30 m, then it
+        # resolves itself — the hold comment on the PR is the durable record.
+        - alert: SpecsReviewPartialRead
+          expr: max_over_time(specs_review_tick_verdicts{kind="partial"}[30m]) > 0
+          for: 1m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # triage: none — the PR's PARTIAL READ comment already names the unfinished files; nothing in-cluster changes the next step (shrink the pack)
+            triage: none
+          annotations:
+            summary: "specs-review: a PR is HELD on a PARTIAL READ — the context pack exceeds the reviewer's read; no second approval until the pack shrinks"
+            description: "A specs-review tick's model reported `Verdict: PARTIAL READ` (agents/lenses/specs.md): it could not read every touched section/table in full, so NO verdict was posted and the PR's content commit is held by a `PARTIAL READ:` comment from homelab-specs-reviewer naming what was not finished (the hold releases on a push). This is a fact about the PACK, not the rows: shrink it — split the PR, narrow the touched-rule scope (a page-preamble rewrite marks every rule on the page), or raise the read-map unit (oracle-fleet docs/process/read-map.yaml / allure-behavior-snippets). Find the PR: Loki tenant agent-coordinator, `{pod=~\"specs-review.*\"} |= \"PARTIAL READ\"`."
         # platform_machinery for the homelab#239 reason.
         # ADR-125: counted PER LANE. `agent_dispatch_cron_woken_timestamp` carries the lane base in
         # its pushgateway grouping key since the per-lane walk shipped, so a project's dispatches
