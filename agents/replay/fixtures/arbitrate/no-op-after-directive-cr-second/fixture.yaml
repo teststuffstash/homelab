@@ -1,0 +1,25 @@
+# arbitrate/no-op-after-directive (b) changes-requested, SECOND consecutive no-op → agent/arbitrate exactly as today (homelab#1910, Goal #1906 pin 3).
+#
+# The cr-first world one re-run later (kind=noop-rerun 12:05, stats 13:00, head unmoved): two
+# completed rounds since the 11:30 directive ⇒ the FU-147 label + event as today.
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cr-second
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cr-bridge.sh
+  - block:changes-requested-gate
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - MC_NOW=2026-09-09T13:10:00Z

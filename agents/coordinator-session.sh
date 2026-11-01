@@ -18,6 +18,11 @@
 #       → headless: `claude -p` runs one pass and the pod self-terminates.
 #   bash agents/coordinator-session.sh --run-tick
 #       → headless one tick with the canonical prompt — what the eventual reflex CronJob calls.
+#   bash agents/coordinator-session.sh --item "repo=<r> item=<k> clause=noop-rerun" --detach \
+#       --launch "<project> --task <k> --round <r> --work-branch <b> --recipe <path>"
+#       → NO claude: the item pod runs `agents/agent-session.sh <that argv>` and nothing else — the
+#         scan's deterministic re-run of a no-op round (homelab#1910). Same SA, gateway token, knob
+#         env, WIP limit and item-keyed atomic gate as an item session; no model, no rail, no latch.
 #
 # Bootstrap once (see agents/coordinator/README.md §Bootstrap):
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
@@ -42,7 +47,7 @@ KUBECTL="$(command -v kubectl || true)"
 # Level-triggered, covers BOTH lanes (agent-fix issues + the coordinator-owned `major` devbox PRs).
 TICK_PROMPT="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Do ONE reconcile pass as the coordinator, per your brief (agents/coordinator/README.md). Re-list the world level-triggered, holding no state: open agent-fix issues across the stack repos (actionable = labelled agent/queued) and open PRs labelled major that are not yet major/awaiting-human (the coordinator-owned devbox-bump lane). Pick the single highest-priority actionable item; CLAIM it first (relabel + a one-line plan comment) before investigating; then take exactly the next action its state calls for per the brief. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex armed PRs. If nothing is actionable, say so and stop."
 
-RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""; WIP_LIMIT="1"; JANITOR=""; DETACH=""
+RUN_CMD=""; LAUNCH=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""; WIP_LIMIT="1"; JANITOR=""; DETACH=""
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 ORG="${ORG:-teststuffstash}"   # org the stack repos live under (for `gh repo clone <org>/<repo>`)
 while [ $# -gt 0 ]; do
@@ -63,11 +68,24 @@ while [ $# -gt 0 ]; do
     --model)           MODEL="$2"; MODEL_SET_EXPLICIT=1; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Default opus (needs Max); --model sonnet to save.
     --permission-mode) PERM_MODE="$2"; shift 2;;   # default|acceptEdits|plan|auto|dontAsk|bypassPermissions
     --no-attach)       NO_ATTACH=1; shift;;
-    --detach)          DETACH=1; shift;;      # ADR-106 (5): headless only — exit at pod-Ready; the POD uploads, pushes its session row, and rings the completion doorbell itself (the caller's mutex must not span the ride)
+    --detach)          DETACH=1; shift;;
+    --launch)          LAUNCH="$2"; shift 2;;   # homelab#1910: run agent-session.sh with THIS argv instead of claude (item + detach only)      # ADR-106 (5): headless only — exit at pod-Ready; the POD uploads, pushes its session row, and rings the completion doorbell itself (the caller's mutex must not span the ride)
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
 
+# ── LAUNCH mode (homelab#1910): a deterministic launcher call riding an item pod ─────────────────
+# The scan's noop-rerun unit needs the loop pod's identity (SA, gateway token, knob env) for the
+# length of a ride follow, which its own Workflow pod cannot give; nothing about it needs a model.
+# The argv is scan-built from repo/branch/round/class only (ADR-094) and baked into the pod command
+# verbatim, so every token must be shell-inert — refuse anything else rather than quote it.
+if [ -n "$LAUNCH" ]; then
+  [ -n "$ITEM" ] && [ -n "$DETACH" ] || { echo "--launch requires --item and --detach" >&2; exit 2; }
+  [ -z "$RUN_CMD" ] && [ -z "$JANITOR" ] || { echo "--launch and --run/--run-tick/--janitor are mutually exclusive" >&2; exit 2; }
+  for _lt in $LAUNCH; do
+    case "$_lt" in *[!A-Za-z0-9._/=-]*) echo "PREFLIGHT REFUSED: --launch token '${_lt}' is not shell-inert — no pod" >&2; exit 2;; esac
+  done
+fi
 # ── resolve model via /route (G-A 8, issue #781) ──────────────────────────────────────────
 # The tick/janitor/item session resolves its model through the router. Item sessions pass
 # their clause so the router's class policy distinguishes goal-decompose (reasoning tier,
@@ -102,7 +120,9 @@ fi
 # For (a) → --fallback (route consulted, fail-OPEN to the scan default if routing unreachable).
 # For (b) → --model (route SKIPPED, the override wins unconditionally per ADR-096).
 # GOAL_MODEL is handled below, not via resolve-model's --model/AGENT_MODEL.
-if [ -n "${MODEL_SET_EXPLICIT:-}" ]; then
+if [ -n "$LAUNCH" ]; then
+  RESOLVED=""   # no LLM in a launch pod — the worker launcher routes its own ride
+elif [ -n "${MODEL_SET_EXPLICIT:-}" ]; then
   # Explicit operator --model: override wins over the route (ADR-096 override rule).
   # resolve-model.sh checks --model / AGENT_MODEL first and exits before calling /route.
   RESOLVED="$(bash "${HERE}/resolve-model.sh" --role coordinator --class "${RESOLVE_CLASS:-dispatch}" --model "$MODEL" --fallback "$MODEL" 2>/dev/null)" || RESOLVED=""
@@ -148,7 +168,9 @@ fi
 # launcher enforces the same invariant deterministically for anything it is handed
 # (agent-session.sh, homelab#158 leg 1); this sentence is what stops the session from never getting
 # there. Launcher-owned text, per ADR-094 — not something the session is expected to remember.
-if [ -n "$ITEM" ]; then
+if [ -n "$LAUNCH" ]; then
+  RUN_CMD="launch: agent-session.sh ${LAUNCH}"   # headless marker only — the pod runs the launcher, not this text
+elif [ -n "$ITEM" ]; then
   [ -n "$RUN_CMD" ] && { echo "--item and --run/--run-tick are mutually exclusive" >&2; exit 2; }
   RUN_CMD="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Reconcile EXACTLY ONE work unit as the coordinator, per your brief (agents/coordinator/README.md): ${ITEM} (format: repo, item, clause — the clause is WHY the deterministic scan dispatched you — and OPTIONALLY parent=<n>, meaning this item is one child of GOAL issue #<n>. When parent= is present, re-read that goal BEFORE acting and judge this item against the GOAL's acceptance, not only its own: the goal is what the work is finally measured against, and nothing else in the loop will reconnect the two. If finishing this child would leave the goal's acceptance unreachable, say so on the parent — do not silently widen this item.) FIRST re-read the item's live state (labels, PR/issue state, worker pods): dispatch is at-least-once and level-triggered, so if the unit is no longer actionable — already claimed with a live worker, already armed/approved/merged, labels moved on — say so and EXIT CLEAN having touched nothing. Otherwise CLAIM it (relabel + a one-line plan comment) and take exactly the next action its state calls for per the brief; the judgment calls (triage completeness, budget sizing, arbitration per the meta-4 doctrine) are yours, inside this one item. Do NOT go looking for other work — scheduling (which item, lanes, capacity) is the scan's job, not yours. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex's armed PRs. RAIL RULE (homelab#158, launcher-owned — it overrides any recollection of the brief's dispatch steps): if this repo's claim is claudeTier — its \`workerModel\` is a \`claude/*\` id — the OpenRouter key mint is that ride's FALLBACK rail, not its prerequisite. SKIP the estimate/mint steps entirely and dispatch on the subscription (no \`--openrouter-secret\`; agent-session.sh derives \`--harness claude\` from the model prefix). A failed, rate-limited or deferred key mint must NEVER defer a claude-tier dispatch: on 2026-08-08 four of them deferred on a mint they did not need while the subscription rail sat at 2 of 5 slots. The ONE capacity condition that defers a claude-tier ride is the FU-088 subscription latch, and the launcher probes that itself — so dispatch and let it decide. GATEWAY RULE (FU-270 (c), overrides the RAIL RULE): if AGENT_GATEWAY=sessions is in your env (the platform stack), SKIP the estimate/mint steps for EVERY ride and dispatch with NO \`--model\`, NO \`--harness\`, NO \`--openrouter-secret\` — the gateway admits, owns the model and resolves the credential; the launcher refuses \`--model\` there (brief step 5 §Gateway)."
 fi
@@ -394,10 +416,15 @@ SNIP
     # path's `coordinator-session` row measured Ready → log-stream-end, which INCLUDES the prep
     # (clone, gh auth). Capturing after ${PREP} silently redefined the metric for every detached
     # dispatch and broke its before/after baseline (bot review, PR#393).
+    # homelab#1910 LAUNCH mode: the ride's launcher in place of claude (no transcripts to upload).
+    # >>>REPLAY:coordinator-launch-runner>>>
+    RUNNER="${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts"
+    if [ -n "${LAUNCH:-}" ]; then RUNNER="bash /work/homelab/agents/agent-session.sh ${LAUNCH}; RC=\$?"; fi
+    # <<<REPLAY:coordinator-launch-runner<<<
     WRAPPED="CS_SESSION_START=\$(date -u +%s); ${PREP}
 ${UPLOAD_FN}
 ${DETACH_FN}
-set +e; ${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; detach_post; exit \$RC"
+set +e; ${RUNNER}; detach_post; exit \$RC"
   else
     WRAPPED="${PREP}
 ${UPLOAD_FN}
@@ -417,8 +444,11 @@ fi
 # (coordinator-scan.sh `coordinator_rail`) and handed it down as --model, so re-probing here would
 # only re-ask a question already answered. A manual/jail run with an explicit Go --model takes the
 # same branch, deliberately.
-case "${MODEL:-}" in
-  opencode-go/*)
+case "${LAUNCH:+launch}:${MODEL:-}" in
+  launch:*)
+    echo "→ launch pod (homelab#1910): no LLM session — the worker launcher probes its own FU-088 gates"
+    ;;
+  :opencode-go/*)
     echo "→ coordinator tick on the Go rail (${MODEL}) — the Anthropic FU-088 latch does not gate it"
     ;;
   *)
@@ -518,9 +548,12 @@ fi
 # inversion the reviewer's pod template shipped until 2026-09-17 (reviewer-rail-label): the
 # failover fires precisely BECAUSE the Anthropic window is latched, so a mislabelled ride
 # consumes the slot it was meant to free — and is invisible to the Go bound.
-case "${MODEL:-}" in
-  opencode-go/*) COORD_RAIL_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
-  *)             COORD_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
+# A LAUNCH pod (homelab#1910) runs no LLM at all: it draws neither window, so it carries neither
+# semaphore label — its ride's own pod is what the semaphores count.
+case "${LAUNCH:+launch}:${MODEL:-}" in
+  launch:*)        COORD_RAIL_LABEL=', "homelab.teststuff.net/launch": agent-session';;
+  :opencode-go/*)  COORD_RAIL_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
+  *)               COORD_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
 esac
 # <<<REPLAY:coordinator-rail-label<<<
 # >>>REPLAY:coordinator-pod-manifest>>>

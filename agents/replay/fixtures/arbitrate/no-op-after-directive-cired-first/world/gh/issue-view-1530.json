@@ -1,0 +1,8 @@
+{
+  "comments": [
+    {
+      "body": "ARBITRATE: the directive stands unchanged — re-run with the reviewer's suggested fix verbatim (the round truncated before pushing).\n\nci-cause: class=content step=ci/lint",
+      "createdAt": "2026-09-09T11:30:00Z"
+    }
+  ]
+}

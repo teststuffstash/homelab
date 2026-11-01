@@ -591,6 +591,61 @@ NOOP_ROUND_JQ="${STATS_TS_DEF}"'
   | ([ stats_ts[] | select($head == "" or . > $head) ] | max // "") as $newest_noop_ts
   | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
+# ── NO-OP AFTER A DIRECTIVE: RE-RUN, DON'T RE-RULE (Goal #1906 pin 3, homelab#1910) ─────────────
+# Read ONLY once NOOP_ROUND_JQ above said "the last completed round pushed nothing". Most no-op
+# rulings (14 of 20 in retro r5) were "the directive stands unchanged — re-dispatch": a session
+# spent to restate a directive already on the thread. So the FIRST no-op after an `ARBITRATE`
+# directive is re-run by the LAUNCHER at the same round (the prefetch bundle already hands the
+# directive to the ride, homelab#1205); only what the re-run cannot answer reaches arbitrate.
+#   directive = the newest top-level comment matching `^ARBITRATE\b` on the PR OR its issue — the
+#               launcher prefetch's own selector (the #1467 marker contract); the scan's escalation
+#               lines live inside the agent-summary comment and never match.
+#   rerun     ⇔ a directive exists ∧ exactly ONE completed round post-dates it (the no-op is the
+#               first after it) ∧ no `kind=noop-rerun` event post-dates it (one re-run per directive).
+#   otherwise → arbitrate, exactly as before: no directive (a ruling is genuinely needed), ≥2 rounds
+#               since it (the re-run's own stats marker is what makes the next no-op the second),
+#               or a re-run already spent that completed no round.
+# The round is the PR's completed-round count — the no-op round's own number under the brief's
+# dispatch numbering — so the re-run lands on the same pod-name key (agent-<project>-<task>-r<k>).
+# An unreadable issue read degrades to PR-side directives only (worst case: today's arbitrate).
+# >>>REPLAY:noop-rerun-predicate>>>
+NOOP_RERUN_JQ="${STATS_TS_DEF}"'
+  ([ (.comments[]?), ($ic[]?) | select((.body // "") | test("^ARBITRATE\\b")) | .createdAt ] | max // "") as $dir
+  | ([ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->"))
+       | (.body | [scan("kind=noop-rerun ts=([^ >]+)")][] | .[0]) ] | max // "") as $rr
+  | ([ stats_ts[] | select($dir != "" and . > $dir) ] | length) as $after
+  | if $dir == "" then "arbitrate|no ARBITRATE directive on the PR or its issue"
+    elif $after != 1 then "arbitrate|\($after) completed rounds since the directive at \($dir)"
+    elif $rr != "" and $rr > $dir then "arbitrate|the launcher re-run of the directive at \($dir) (\($rr)) completed no round"
+    else "rerun|\([ stats_ts[] ] | length)" end'
+noop_rerun_check() {   # <slug> <pr-probe-json> <issue-or-empty> → "rerun|<round>" | "arbitrate|<reason>"
+  local ic='[]' v
+  if [ -n "${3:-}" ]; then
+    ic="$(gh issue view "$3" --repo "$1" --json comments 2>/dev/null | jq -c '.comments' 2>/dev/null)" || ic=''
+    if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${ic:-null}"; then
+      echo "  WARN: noop-rerun: comments of ${1}#${3} unreadable — PR-side directives only (homelab#1910)" >&2
+      ic='[]'
+    fi
+  fi
+  v="$(printf '%s' "$2" | jq -r --argjson ic "$ic" "$NOOP_RERUN_JQ" 2>/dev/null)" || v=''
+  case "$v" in rerun\|[0-9]*|arbitrate\|*) printf '%s\n' "$v" ;; *) printf 'arbitrate|noop-rerun predicate unreadable\n' ;; esac
+}
+# The unit: `noop-rerun|<repo>|pr-<n>` + what the launcher call needs, nothing more (ADR-094 — the
+# scan supplies repo/PR/branch/round/class; model, rail, key and Base stay the launcher's). The
+# recipe is the brief's mapping: the issue's `task/<c>` label → `.agents/<c>.yaml`, none → fix.
+# Executed by the deterministic pass (the noop-rerun-exec block, before the unit walk), never by a coordinator session.
+noop_rerun_emit() {   # <repo> <slug> <pr> <issue-or-empty> <round> <branch>
+  local key="pr-$3" cls="fix"
+  if [ -n "${4:-}" ]; then
+    key="issue-$4"
+    cls="$(printf '%s' "${openall:-null}" | jq -r --argjson n "$4" '[.[]? | select(.number == $n) | .labels[]?.name | select(startswith("task/")) | ltrimstr("task/")] | first // "fix"' 2>/dev/null)" || cls="fix"
+    case "$cls" in ''|*[!a-z0-9-]*) cls="fix" ;; esac
+  fi
+  noop_units="${noop_units:-}noop-rerun|$1|pr-$3|$2|${key}|$5|$6|${cls}\n"
+  items="${items:-}[$1] PR #$3 — noop-rerun (first no-op after an ARBITRATE directive: the launcher re-runs round $5 on $6, no coordinator session — homelab#1910)\n"
+  item_class_push "$1" "pr-$3" "riding" "machine"
+}
+# <<<REPLAY:noop-rerun-predicate<<<
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
 # FU-199 / #1240 CAP SPLIT: codeowner-parked PRs (bot-approved ∧ REVIEW_REQUIRED) count
 # against their own larger bound so parked nits never freeze the dispatch lane.
@@ -1824,7 +1879,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""
+  items=""; orphans=""; units=""; punits=""; noop_units=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
@@ -4081,6 +4136,15 @@ EOF_GTHEMES_OPEN
         cr_noop="$(printf '%s' "$cr_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || cr_noop=""
       fi
       if [ -n "$cr_noop" ]; then
+        # homelab#1910: the first no-op after an ARBITRATE directive re-runs at the launcher; the
+        # second (or one with no directive to re-run) escalates below exactly as before.
+        cr_nr="$(noop_rerun_check "$slug" "$cr_probe" "$pr_issue")"
+        cr_head="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[] | select(.number == $n) | .headRefName // ""' 2>/dev/null)" || cr_head=""
+        if [ "${cr_nr%%|*}" = rerun ] && [ -n "$cr_head" ]; then
+          noop_rerun_emit "$repo" "$slug" "$u" "$pr_issue" "${cr_nr#rerun|}" "$cr_head"
+          continue
+        fi
+        orphans="${orphans}[$repo] changes-requested no-op on PR #${u} is not a re-run case — ${cr_nr#*|} (homelab#1910)\n"
         gh_label_add "$slug" "$u" agent/arbitrate \
           && mc_event "$slug" "$u" arbitrate "ARBITRATE (changes-requested no-op round, FU-147): the last completed fix round posted its run stats without pushing a commit, so the reviewer findings are untouched and another identical round cannot converge. The coordinator arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
           && orphans="${orphans}[$repo] ⚠ changes-requested NO-OP round → agent/arbitrate: PR #${u} (a completed round pushed nothing)\n" \
@@ -6188,7 +6252,17 @@ EOF_BELT
         # <<<REPLAY:ci-red-arbitrate-belt<<<
         # >>>REPLAY:ci-red-arbitrate>>>
         if [ -n "$noop_round" ]; then
+          # homelab#1910: inside every gate the escalation itself passes (stale-sha, human-ruling
+          # hold, footprint belt), the first no-op after an ARBITRATE directive re-runs at the
+          # launcher instead; the second — or one with no directive — escalates as before.
+          ci_nr=""
           if [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
+            ci_nr="$(noop_rerun_check "$slug" "$round_probe" "${red_issue:-${red_key:-}}")"
+          fi
+          if [ "${ci_nr%%|*}" = rerun ] && [ -n "$u_head" ]; then
+            noop_rerun_emit "$repo" "$slug" "$u" "${red_issue:-${red_key:-}}" "${ci_nr#rerun|}" "$u_head"
+          elif [ "$ci_red_should_arbitrate" = 1 ] && [ "${ci_red_belt_skip:-0}" = 0 ]; then
+            orphans="${orphans}[$repo] ci-red no-op on PR #${u} is not a re-run case — ${ci_nr#*|} (homelab#1910)\n"
             gh_label_add "$slug" "$u" agent/arbitrate \
               && mc_event "$slug" "$u" arbitrate "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
               && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
@@ -6436,6 +6510,47 @@ EOF_BELT
     echo "  coordinator.enabled=false for stack ${name} — NOT spawning (report-only; enable in the AgentStack claim)."
     continue
   fi
+  # >>>REPLAY:noop-rerun-exec>>>
+  # homelab#1910 (Goal #1906 pin 3): the DETERMINISTIC pass executes every `noop-rerun` unit itself
+  # — a launcher call, never a coordinator session, and outside the per-lane unit walk below (it is
+  # the re-run of a dispatch already ruled, not new work competing for a lane). The call is
+  # `agent-session.sh <project> --task --round --work-branch --recipe`, VERBATIM the brief's fix-round
+  # line; it rides a detached item-keyed pod (`coordinator-session.sh --launch`, which runs the
+  # launcher instead of claude) because the launcher follows its ride for up to 30 min and needs
+  # the loop pod's SA, gateway token and AGENT_GATEWAY knob — none of which this scan pod may hold
+  # for that long. Every gate stays the launcher's: the FU-088 latch / credit floor, AGENT_WIP_LIMIT
+  # (scan-computed, `--wip` as for every unit), the pre-flight (the open agent PR is this one — the
+  # fix-round exception; a running pod refuses), Base and arming. The pod name is the item key, so a
+  # live holder refuses a double emit (exit 3). A refusal is a report line, never a second unit.
+  # The `kind=noop-rerun` event is what spends the directive's one re-run (NOOP_RERUN_JQ).
+  if [ -n "${noop_units:-}" ]; then
+    while IFS='|' read -r _nr_u nr_repo nr_pr nr_slug nr_key nr_round nr_branch nr_class; do
+      [ "$_nr_u" = noop-rerun ] || continue
+      nr_n="${nr_pr#pr-}"
+      nr_launch="${nr_repo} --task ${nr_key} --round ${nr_round} --work-branch ${nr_branch} --recipe /work/${nr_repo}/.agents/${nr_class}.yaml"
+      if [ -z "$SPAWN" ]; then
+        echo "  [${nr_repo}] noop-rerun PR #${nr_n} (report-only, no --spawn): would launch agent-session.sh ${nr_launch}"
+        continue
+      fi
+      nr_wip="$(printf '%b' "$wipmap" | awk -v r="$nr_repo" '$1==r{print $2}' | sed -n 1p)"
+      echo "→ noop-rerun ${nr_repo} PR #${nr_n}: launcher-direct re-run (no coordinator session) — agent-session.sh ${nr_launch}"
+      scan_phase dispatch
+      nr_rc=0
+      bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
+        ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "${nr_wip:-1}" --detach \
+        --item "repo=${nr_repo} item=${nr_key} clause=noop-rerun" --launch "$nr_launch" || nr_rc=$?
+      scan_phase deterministic
+      if [ "$nr_rc" = 0 ]; then
+        mc_event "$nr_slug" "$nr_n" noop-rerun "**no-op re-run** (homelab#1910): round ${nr_round} completed without a push after an ARBITRATE directive, so the launcher re-runs it once at the same round on \`${nr_branch}\` with the directive in context — no coordinator session. A second consecutive no-op escalates to \`agent/arbitrate\`." >/dev/null 2>&1 \
+          || echo "  [${nr_repo}] ⚠ noop-rerun PR #${nr_n}: launched, but the kind=noop-rerun event write FAILED — the next no-op may re-run once more"
+      else
+        echo "  [${nr_repo}] ⏳ noop-rerun PR #${nr_n} REFUSED (launch rc ${nr_rc} — a live holder of ${nr_key}, or the launch pod failed); level-triggered, the next pass re-reads"
+      fi
+    done <<EOF_NOOP_RERUN
+$(printf '%b' "$noop_units")
+EOF_NOOP_RERUN
+  fi
+  # <<<REPLAY:noop-rerun-exec<<<
   if [ -n "$SPAWN" ]; then
     # ADR-094/FU-086 item dispatch: the scan SCHEDULES (one highest-priority unit — WIP=1; the
     # FU-088 gates are the belt), the session JUDGES one item. Priority finishes in-flight work

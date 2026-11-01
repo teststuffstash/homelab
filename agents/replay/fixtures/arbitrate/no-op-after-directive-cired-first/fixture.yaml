@@ -1,0 +1,34 @@
+# arbitrate/no-op-after-directive (a) ci-red, FIRST no-op after a directive → the launcher re-runs it (homelab#1910, Goal #1906 pin 3).
+#
+# Timeline (2026-09-09, oracle-fleet PR #1540 ⇐ issue #1530 `task/fix`): head commit 10:00;
+# stats 10:05 (r1 pushed it), 11:00 (r2, no push); the scan's own escalation event 11:05; the
+# arbitrate ruling — an `ARBITRATE:` directive — posted on the ISSUE at 11:30; stats 12:00 (r3,
+# no push again). Expected, from NOOP_RERUN_JQ's contract (homelab#1910 §deliverable 1):
+#   directive = 11:30 (issue side — read via `gh issue view 1530 --json comments`);
+#   completed rounds after it = {12:00} = 1; no kind=noop-rerun event ⇒ RE-RUN at round 3
+#   (= the PR's 3 stats markers), task issue-1530, branch fix/issue-1530-red-step, recipe
+#   `.agents/fix.yaml` (label task/fix). NO agent/arbitrate label, NO arbitrate event; the
+#   deterministic pass launches `agent-session.sh` and writes the `kind=noop-rerun` event.
+# RED ON BASE: master labels agent/arbitrate here (the FU-115b no-op leg had no re-run).
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cired-first
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cired-bridge.sh
+  - block:ci-red-rounds
+  - block:ci-red-arbitrate
+  - file:../no-op-after-directive/cired-close.sh
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+  - IN_PR=1540
+  - IN_ISSUE=1530
+  - IN_HEAD=fix/issue-1530-red-step
+  - MC_NOW=2026-09-09T12:10:00Z

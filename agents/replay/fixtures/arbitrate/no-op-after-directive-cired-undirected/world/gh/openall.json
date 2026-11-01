@@ -1,0 +1,16 @@
+[
+  {
+    "number": 1530,
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/review"
+      },
+      {
+        "name": "task/fix"
+      }
+    ]
+  }
+]

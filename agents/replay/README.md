@@ -175,6 +175,13 @@ is stale, so it cannot drift the way the prose register did.
 | `arbitrate/fu147-refire-blocked` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/goal-child` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate/landing-sequence` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `arbitrate/no-op-after-directive-cired-first` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cired-second` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cired-undirected` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-first` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-rerun-spent` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-second` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-stale-directive` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
 | `arbitrate/no-op-after-directive` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/ordinary-path-removal` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/probe-unreadable` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
@@ -241,6 +248,7 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
 | `context-repos-prelude` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
+| `coordinator-launch-mode` | actions | - | `agents/coordinator-session.sh` | IL-T31 |
 | `coordinator-pick-rail/anthropic` | actions | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-pick-rail/both` | actions | - | `agents/coordinator-scan.sh` | - |
 | `coordinator-pick-rail/go-goal-lane` | actions | - | `agents/coordinator-scan.sh` | - |
