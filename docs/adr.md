@@ -2917,6 +2917,14 @@ weigh (rows vs intent, evidence at head), on a deliberately small surface. **Con
 every homelab PR now waits ≤ one tick for a second bot approval; the goal/** twin stays at 1;
 a dead specs-review plane stalls homelab merges (the exit contract + a missing-approval alert
 are the belts); adoption by another island = install the App + `required_approvals = 2` there.
+**Amended 2026-11-01 (oracle handoff, goal oracle-fleet#950): the goal/** twin carries the SAME
+count as master.** At 1, every specs-touching child (#967/#968/#973) merged into `goal/950-…`
+1–2 min before its specs verdict — the code approval alone satisfied the twin and auto-merge
+fired — so the assembly PR (#977) absorbed the whole specs gate as one oversized pack (four
+rounds, a partial read). The "serialise the fan-out" reason was written for the human codeowner
+read the 2026-08-06 split kept off the children; this gate is a bot tick (edge-rung after the
+code approval, mechanical on a child with no specs path). `tofu/github/repo_rulesets.tf`
+(`required_approval_goal` reads `required_approvals`); the apply is the operator's (admin token).
 
 ### ADR-156 — One portable spec/evidence process, homed in allure-behavior-snippets; one reviewer runs two briefs (2026-10-16)
 **Status:** Accepted (operator, 2026-10-16: "every repo gets the same tests/evidence/requirements
