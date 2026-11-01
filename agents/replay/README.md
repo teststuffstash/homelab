@@ -186,6 +186,7 @@ is stale, so it cannot drift the way the prose register did.
 | `assembly-cr-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-emit` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-cr-merge-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-themed-emit` | actions | - | `agents/coordinator-scan.sh` | - |
 | `asvs` | suite | - | `-` | - |
