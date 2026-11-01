@@ -40,6 +40,16 @@ refuses (loud, rule #6) a bare member that is not the container's own-repo membe
 the qualified form to write instead. A QUALIFIED member (`repo#n`) is taken as the caller
 wrote it: the caller named the repo, so there is nothing to resolve (FIX #1451).
 
+THE RESOLUTION, AND WHY IT IS CHEAP. The tree is walked breadth-first (the budget walk's
+shape, `agents/goal-budget.sh`) and the walk STOPS at the first level that holds the wanted
+number: within that level the entries carrying it name the repos it lives in — one repo means
+the number resolves there, two means it is ambiguous and the bare form is refused. The cost of
+a ruling is therefore proportional to the DEPTH of its member, not to the size of the tree
+(Goal #1640's tree is 34 members; a member at depth 1 costs ONE GET). The tree, not the
+direct children: a minted child binds to its finding's ORIGIN issue (ADR-106 (2)), so members
+sit at depth 2, and #1640's cross-repo members sat at depths 1–4 — a direct-children read
+would call a legitimate member "not a member" and refuse a legitimate ruling.
+
 FAIL-CLOSED EVERYWHERE (rule #6: never fail INTO a write). The comments read has THREE
 outcomes, not two — found / confirmed-absent / UNREADABLE — and the split is load-bearing for
 exactly the reason `agents/goal-findings.sh` documents it: a writer that treats a blind read
@@ -294,22 +304,27 @@ def _member_repo(item: dict) -> str:
     return str(repo.get("full_name") or "")
 
 
-def _fetch_members(slug: str, issue: int, want: "int | None" = None) -> "set[tuple[str, int]]":
-    """→ the container's whole TREE as {(owner/repo, number)}.
+def _resolve_in_tree(slug: str, issue: int, want: int) -> "list[str]":
+    """→ the repos the container's TREE holds `want` in, at the FIRST level that holds it.
 
     Breadth-first over the container's NATIVE sub-issue edges — the same walk the budget gate
     does (agents/goal-budget.sh): the edges are repo-qualified, so a cross-repo member is a
     member exactly like an own-repo one and a bare number can never alias a foreign one.
     Cycle-safe by the seen-set, bounded at MEMBER_WALK_DEPTH.
 
-    `want` (a member number) makes the walk STOP as soon as it finds that number in a FOREIGN
-    repo: the cross-repo refusal is then already decided and the rest of the tree cannot change
-    it. Without `want` the walk is complete.
+    The walk STOPS at the first level that holds the wanted number, and within that level every
+    entry carrying it is reported: a number that names a member in ONE repo resolves to that
+    repo, and a number that names members in TWO repos is ambiguous — the caller refuses it.
+    Stopping there is also what keeps the read CHEAP: the cost of a ruling is proportional to
+    the depth of its member, not to the size of the tree (Goal #1640's tree is 34 members; a
+    member at depth 1 costs ONE GET, a member at depth 4 costs the four levels above it).
+
+    An EMPTY list means the tree does not hold the number at all — the container has no such
+    member, so a bare row for it would be a row nobody reads.
 
     Raises Unreadable on ANY doubt: a half-read tree cannot say which repo a bare number lives
     in, and guessing is the defect this read exists to prevent (rule #6).
     """
-    members: "set[tuple[str, int]]" = set()
     seen: "set[tuple[str, int]]" = set()
     frontier = [(slug, int(issue), 0)]
     while frontier:
@@ -317,6 +332,7 @@ def _fetch_members(slug: str, issue: int, want: "int | None" = None) -> "set[tup
         if (repo, num) in seen:
             continue
         seen.add((repo, num))
+        kids = []
         for child in _parse_paginated_list(_gh_subissues_raw(repo, num)):
             if not isinstance(child, dict):
                 raise Unreadable(f"sub-issue payload under {repo}#{num} holds a non-object item")
@@ -325,12 +341,14 @@ def _fetch_members(slug: str, issue: int, want: "int | None" = None) -> "set[tup
             if not isinstance(cnum, int) or not crepo:
                 raise Unreadable(
                     f"sub-issue payload under {repo}#{num} holds an item with no number/repo")
-            members.add((crepo, cnum))
-            if want is not None and cnum == want and crepo != slug:
-                return members          # decisive: a foreign member with this number exists
-            if depth < MEMBER_WALK_DEPTH:
+            kids.append((crepo, cnum))
+        hits = sorted({crepo for (crepo, cnum) in kids if cnum == want})
+        if hits:
+            return hits                 # the first level that holds it decides
+        if depth < MEMBER_WALK_DEPTH:
+            for (crepo, cnum) in kids:
                 frontier.append((crepo, cnum, depth + 1))
-    return members
+    return []
 
 
 # ── the importable API the CLI wraps ──────────────────────────────────────────────────────────
@@ -359,14 +377,21 @@ def resolve_member(slug: str, issue: int, member: str) -> str:
     if "#" in m:
         return m                                     # qualified — the caller named the repo
     n = int(m)
-    members = _fetch_members(slug, issue, want=n)   # Unreadable propagates → PROBE-FAIL, no write
-    foreign = sorted(r for (r, num) in members if num == n and r != slug)
+    hits = _resolve_in_tree(slug, issue, n)          # Unreadable propagates → PROBE-FAIL, no write
+    foreign = [r for r in hits if r != slug]
     if foreign:
+        if len(hits) > 1:
+            # The number names a member in MORE THAN ONE repo — a bare row would rule one of
+            # them by accident, so the bare form is refused and BOTH qualified forms are named.
+            quals = " or ".join(f"{r.rsplit('/', 1)[-1]}#{n}" for r in hits)
+            raise Refused(
+                f"member {n} names a member of {', '.join(hits)} — a bare number is ambiguous; "
+                f"write it qualified as {quals}")
         qual = f"{foreign[0].rsplit('/', 1)[-1]}#{n}"
         raise Refused(
             f"member {n} is a member of {foreign[0]}, not of {slug} — write it qualified as "
             f"{qual} (a bare number is the container's own repo only)")
-    if (slug, n) not in members:
+    if not hits:
         raise Refused(
             f"member {n} is not a member of {slug}#{issue} — a bare number is the container's "
             f"own repo only; write a cross-repo member qualified as repo#{n}")
@@ -599,6 +624,12 @@ def self_test() -> int:
              "repository_url": "https://api.github.com/repos/teststuffstash/homelab"},
             {"number": 134,
              "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"},
+            # #777 is the AMBIGUOUS number: the same number names a member in BOTH repos, so a
+            # bare row for it would rule one of them by accident.
+            {"number": 777,
+             "repository_url": "https://api.github.com/repos/teststuffstash/homelab"},
+            {"number": 777,
+             "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"},
         ],
         ("teststuffstash/homelab", 1768): [
             {"number": 136,
@@ -644,6 +675,17 @@ def self_test() -> int:
             check("…and names the QUALIFIED form", "agent-runtime#136" in str(e), True)
         else:
             raise AssertionError("set accepted a bare cross-repo member at depth 2")
+        check("…and still writes NOTHING", wrote, [])
+        # …and a number that names a member in BOTH repos is AMBIGUOUS — refused, naming the
+        # qualified form: a bare row would rule one of the two by accident.
+        try:
+            set_disposition("teststuffstash/homelab", 1640, "777", "adopted", "checkpoint")
+        except Refused as e:
+            n += 1
+            print("  ✓ set REFUSES a bare number that names a member in BOTH repos")
+            check("…and names the qualified form", "agent-runtime#777" in str(e), True)
+        else:
+            raise AssertionError("set accepted an ambiguous bare number")
         check("…and still writes NOTHING", wrote, [])
         # …and the QUALIFIED form writes the row the readers match.
         rows = set_disposition("teststuffstash/homelab", 1640, "agent-runtime#134",

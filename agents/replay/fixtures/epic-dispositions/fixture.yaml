@@ -20,10 +20,15 @@
 #                                           and NOTHING is written (exit 1, no row)
 #     cross-repo member written qualified ⇒ the row `agent-runtime#134` (what the readers match)
 #     own-repo member written bare        ⇒ the row `#1939` (today's behaviour, unchanged)
+#     a number that names a member in BOTH repos ⇒ REFUSED as AMBIGUOUS (a bare row would rule
+#                                           one of the two by accident)
+#     a number that is not a member at all ⇒ REFUSED (a bare row would be a row nobody reads)
 #     membership read unreadable          ⇒ REFUSED, loud (fail closed, rule #6) — never a
 #                                           silent write on a half-read tree
 #   The #1640 rows sat at DEPTHS 1–4, so the membership read walks the container's native
-#   sub-issue TREE (the budget walk's shape), not its direct children.
+#   sub-issue TREE (the budget walk's shape), not its direct children. The walk STOPS at the
+#   first level that holds the wanted number — the cost of a ruling is the DEPTH of its member,
+#   not the size of the tree (a depth-1 member costs one GET).
 #
 # hermeticity contract (homelab#329): needs `python3` (the module executes under it).
 name: epic-dispositions
