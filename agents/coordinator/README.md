@@ -785,7 +785,7 @@ it (§Authoring an issue body above — the gate is not optional):
 
 - **Each child is `adopted` at authoring** (ADR-122 (4)) — the authoring moment IS the ruling, so
   write the row in the same act:
-  `python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <child-n> adopted
+  `python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <child-n | repo#n> adopted
   --by checkpoint`. One line per child; the store is one machine comment on the GOAL. Skip it and
   the children read `undispositioned`, which wakes a checkpoint to re-rule what you just decided.
 
@@ -835,7 +835,7 @@ descendants and rule each one that has no row yet — exactly one of:
   later. `deferred` is not a close and not a rejection — it is "not this goal".
 
 Write each ruling with
-`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <member-n>
+`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <member-n | repo#n>
 adopted|deferred --by checkpoint`. The store is ONE machine comment on the GOAL
 (`<!-- epic-dispositions v1 -->`), edited in place — never a label on the member, never a
 comment per ruling. A member carrying an `agent/*` lifecycle label already reads as adopted, so
@@ -911,7 +911,7 @@ with the commands written out:
    /tmp/m.final.md` → `python3 /work/homelab/agents/issue_body.py json < /tmp/m.final.md` (the
    gate) → `gh issue edit <member-n> --repo <slug> --body-file /tmp/m.final.md`.
 6. **Write the disposition on the GOAL's store**: the theme is `adopted --by checkpoint`
-   (`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <theme-n>
+   (`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <theme-n | repo#n>
    adopted --by checkpoint`); the members keep their existing rows — re-parenting moves nothing
    in the store, and a member that had no row was ruled in the FIRST step above.
 7. **Queue the members that are not yet queued** (`agent-fix` + `agent/queued`) under the

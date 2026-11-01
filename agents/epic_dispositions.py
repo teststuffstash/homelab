@@ -7,7 +7,7 @@ THE ONE HOME of the store format. The scan's goal lane, `scripts/goal-lint.sh` a
 act and the scan's post-launch-bucket create write through it. Nothing else parses the shape.
 
     python3 agents/epic_dispositions.py read <owner/repo> <container-n>
-    python3 agents/epic_dispositions.py set  <owner/repo> <container-n> <member-n> \
+    python3 agents/epic_dispositions.py set  <owner/repo> <container-n> <member-n | repo#n> \
         adopted|deferred --by checkpoint|closeout|bucket
     python3 agents/epic_dispositions.py list <owner/repo> <container-n>
     python3 agents/epic_dispositions.py --self-test
@@ -26,20 +26,33 @@ carries a row saying so. Binding is dumb, disposition is the container's
 WHY PYTHON, WHY A MODULE. ADR-113: logic is Python from birth. Stdlib only (no `yaml`, no
 `requests` — the jail python3 has neither), `gh` reached through `subprocess` the way the
 repo's other Python does, so the replay harness's PATH-shim `gh` serves it unchanged. The
-comments GET is `--paginate --slurp`, never bare `--paginate` — see `_parse_comments_payload`
+comments GET is `--paginate --slurp`, never bare `--paginate` — see `_parse_paginated_list`
 for why the bare form breaks on exactly the containers that matter most.
+
+WHY A BARE MEMBER IS THE CONTAINER'S REPO ONLY (homelab#2589). A store row's key is read
+against the CONTAINER's repo: the scan matches `repo#number` for every member and the BARE
+number only for the container's own (the `$bk` clause, FIX #1451). So a bare row for a
+cross-repo member is a row NOBODY reads — the member keeps reading `undispositioned`, trigger
+(c) re-fires every tick, and the ADOPTED-OPEN completion predicate undercounts it. Measured
+on Goal #1640 (2026-09-16): rows `#134/#136/#138/#139` for agent-runtime members. So `set`
+RESOLVES a bare member against the container's native sub-issue TREE before it writes, and
+refuses (loud, rule #6) a bare member that is not the container's own-repo member — naming
+the qualified form to write instead. A QUALIFIED member (`repo#n`) is taken as the caller
+wrote it: the caller named the repo, so there is nothing to resolve (FIX #1451).
 
 FAIL-CLOSED EVERYWHERE (rule #6: never fail INTO a write). The comments read has THREE
 outcomes, not two — found / confirmed-absent / UNREADABLE — and the split is load-bearing for
 exactly the reason `agents/goal-findings.sh` documents it: a writer that treats a blind read
 as "absent" CREATES a second store comment on a transient API failure, breaking the
 one-machine-comment invariant this file exists to hold. `read` exits 2 with NOTHING on stdout
-on unreadable (callers hold); `set` refuses outright.
+on unreadable (callers hold); `set` refuses outright. The MEMBERSHIP read has the same
+three-way split: a bare member whose tree cannot be read is refused, never written.
 
 Exit codes:
     0  ok
-    1  refused — a bad disposition word, a bad `by` value, a malformed argument
-    2  PROBE-FAIL — the container's comments are unreadable (nothing on stdout)
+    1  refused — a bad disposition word, a bad `by` value, a malformed argument, or a bare
+       member that is not the container's own-repo member
+    2  PROBE-FAIL — the container's comments or its membership are unreadable (nothing on stdout)
 """
 
 from __future__ import annotations
@@ -63,8 +76,14 @@ DISPOSITIONS = ("adopted", "deferred")
 BY_VALUES = ("checkpoint", "closeout", "bucket")
 
 # FIX #1451: accept both bare issue numbers (#1234) and qualified cross-repo keys (#repo#1234)
+# The member's OWN shape — ONE regex, used by the row parser and by the writer's membership
+# test, so the two can never drift. The qualifier is a REPO NAME ("agent-runtime#134"): the
+# key grammar has no room for an owner, and every reader resolves the qualifier the same way
+# (the repo's short name — the scan's `.repo`).
+_MEMBER_RE = re.compile(r"(?:[a-z][a-z0-9-]*#)?[0-9]+")
 _ROW_RE = re.compile(
-    r"^#(?P<member>(?:[a-z][a-z0-9-]*#)?[0-9]+)[ \t]+(?P<disposition>[a-z]+)[ \t]+(?P<at>\S+)[ \t]+by=(?P<by>[a-z]+)[ \t]*$"
+    r"^#(?P<member>" + _MEMBER_RE.pattern + r")[ \t]+(?P<disposition>[a-z]+)"
+    r"[ \t]+(?P<at>\S+)[ \t]+by=(?P<by>[a-z]+)[ \t]*$"
 )
 
 
@@ -127,7 +146,7 @@ def upsert(body: str, member: str, disposition: str, at: str, by: str) -> str:
     if by not in BY_VALUES:
         raise Refused(f"by={by!r} is not one of {'/'.join(BY_VALUES)}")
     # FIX #1451: accept both bare issue numbers and qualified keys (repo#number)
-    if not re.fullmatch(r"(?:[a-z][a-z0-9-]*#)?[0-9]+", str(member)):
+    if not _MEMBER_RE.fullmatch(str(member)):
         raise Refused(f"member {member!r} is not a valid issue number or qualified key (repo#number)")
     rows = parse(body)
     rows[str(member)] = {"disposition": disposition, "at": at, "by": by}
@@ -140,8 +159,12 @@ def now_iso() -> str:
 
 # ── the seam: the comments fetch (monkeypatched by the self-test; PATH-shimmed by replay) ────
 
-def _parse_comments_payload(stdout: str) -> list:
-    """THE one parse of `gh api --paginate --slurp` output → a flat list of comments.
+def _parse_paginated_list(stdout: str) -> list:
+    """THE one parse of a `gh api --paginate --slurp` JSON LIST payload → a flat list.
+
+    Serves BOTH reads this module makes — the container's comments and its sub-issue tree —
+    because the two payloads have the same shape (a JSON array of objects), so one parser
+    keeps one contract.
 
     ⚠ `--paginate` ALONE is a trap and it bites exactly the containers this store exists for.
     Per `gh help api`, plain `--paginate` writes each page's JSON document back-to-back, so a
@@ -196,7 +219,7 @@ def _gh_comments_raw(slug: str, issue: int) -> str:
 
 def _fetch_comments(slug: str, issue: int) -> list:
     """One GET of the container's comments, flattened. Raises Unreadable on ANY doubt."""
-    return _parse_comments_payload(_gh_comments_raw(slug, issue))
+    return _parse_paginated_list(_gh_comments_raw(slug, issue))
 
 
 def find(slug: str, issue: int) -> "tuple[int | None, str]":
@@ -223,6 +246,93 @@ def _put(slug: str, issue: int, comment_id: "int | None", body: str) -> None:
         raise Unreadable(f"store write refused (gh exited {p.returncode}): {p.stderr.strip()[:200]}")
 
 
+# ── the seam: the MEMBERSHIP read (the container's native sub-issue TREE) ───────────────────────
+
+# WHY THE WRITER READS THE TREE. A store row's key is read against the CONTAINER's repo: the
+# scan matches `repo#number` for every member and the BARE number only for the container's own
+# (the `$bk` clause, FIX #1451). A bare row for a cross-repo member is therefore a row NOBODY
+# reads — the member keeps reading `undispositioned`, trigger (c) re-fires every tick, and the
+# ADOPTED-OPEN completion predicate undercounts it (Goal #1640, 2026-09-16: rows
+# `#134/#136/#138/#139` for agent-runtime members; homelab#2589).
+
+# The walk depth — the SAME bound as the budget walk (agents/goal-budget.sh): a member can sit
+# at depth 2 (a minted child is bound to its finding's ORIGIN issue, ADR-106 (2), not to the
+# goal), and Goal #1640's cross-repo members sat at depths 1–4. A direct-children read would
+# call a legitimate member "not a member" and refuse a legitimate ruling.
+MEMBER_WALK_DEPTH = 6
+
+
+def _gh_subissues_raw(slug: str, issue: int) -> str:
+    """The subprocess seam: one paginated GET of a node's native sub-issues.
+
+    `--paginate --slurp`, never bare `--paginate` — the same trap as the comments read, and
+    the same fix (see `_parse_paginated_list`).
+    """
+    try:
+        p = subprocess.run(
+            ["gh", "api", f"repos/{slug}/issues/{issue}/sub_issues?per_page=100",
+             "--paginate", "--slurp"],
+            capture_output=True, text=True)
+    except OSError as e:
+        raise Unreadable(f"gh could not be executed: {e}")
+    if p.returncode != 0:
+        raise Unreadable(f"gh api exited {p.returncode}: {p.stderr.strip()[:200]}")
+    return p.stdout
+
+
+def _member_repo(item: dict) -> str:
+    """The member's OWN repo ("owner/repo") — the field the cross-repo test turns on.
+
+    `repository_url` is the issue object's own field, read the same way `agents/goal-budget.sh`
+    reads it; the embedded `repository.full_name` is the fallback for a payload that carries
+    only one of the two.
+    """
+    url = str(item.get("repository_url") or "")
+    if "/repos/" in url:
+        return url.split("/repos/", 1)[1].strip("/")
+    repo = item.get("repository") or {}
+    return str(repo.get("full_name") or "")
+
+
+def _fetch_members(slug: str, issue: int, want: "int | None" = None) -> "set[tuple[str, int]]":
+    """→ the container's whole TREE as {(owner/repo, number)}.
+
+    Breadth-first over the container's NATIVE sub-issue edges — the same walk the budget gate
+    does (agents/goal-budget.sh): the edges are repo-qualified, so a cross-repo member is a
+    member exactly like an own-repo one and a bare number can never alias a foreign one.
+    Cycle-safe by the seen-set, bounded at MEMBER_WALK_DEPTH.
+
+    `want` (a member number) makes the walk STOP as soon as it finds that number in a FOREIGN
+    repo: the cross-repo refusal is then already decided and the rest of the tree cannot change
+    it. Without `want` the walk is complete.
+
+    Raises Unreadable on ANY doubt: a half-read tree cannot say which repo a bare number lives
+    in, and guessing is the defect this read exists to prevent (rule #6).
+    """
+    members: "set[tuple[str, int]]" = set()
+    seen: "set[tuple[str, int]]" = set()
+    frontier = [(slug, int(issue), 0)]
+    while frontier:
+        repo, num, depth = frontier.pop(0)
+        if (repo, num) in seen:
+            continue
+        seen.add((repo, num))
+        for child in _parse_paginated_list(_gh_subissues_raw(repo, num)):
+            if not isinstance(child, dict):
+                raise Unreadable(f"sub-issue payload under {repo}#{num} holds a non-object item")
+            cnum = child.get("number")
+            crepo = _member_repo(child)
+            if not isinstance(cnum, int) or not crepo:
+                raise Unreadable(
+                    f"sub-issue payload under {repo}#{num} holds an item with no number/repo")
+            members.add((crepo, cnum))
+            if want is not None and cnum == want and crepo != slug:
+                return members          # decisive: a foreign member with this number exists
+            if depth < MEMBER_WALK_DEPTH:
+                frontier.append((crepo, cnum, depth + 1))
+    return members
+
+
 # ── the importable API the CLI wraps ──────────────────────────────────────────────────────────
 
 def read_store(slug: str, issue: int) -> "dict[str, dict]":
@@ -230,12 +340,46 @@ def read_store(slug: str, issue: int) -> "dict[str, dict]":
     return parse(body) if body else {}
 
 
+def resolve_member(slug: str, issue: int, member: str) -> str:
+    """The key the store writes for `member` — a Refusal when a bare member is not the
+    CONTAINER's own-repo member.
+
+    A QUALIFIED member (`repo#n`) is taken as the caller wrote it: the caller named the repo,
+    so there is nothing to resolve, and today's behaviour is kept (FIX #1451).
+
+    A BARE member (`n`) is the container's own-repo member and nothing else, because that is
+    the only member a bare row can ever mean. The tree read is fail-closed in BOTH directions
+    (rule #6): a bare member that lives in another repo is refused with the qualified form to
+    write instead, a bare member that is not in the tree at all is refused the same way, and
+    an UNREADABLE tree is refused too — never a silent write on a half-read tree.
+    """
+    m = str(member)
+    if not _MEMBER_RE.fullmatch(m):
+        raise Refused(f"member {m!r} is not a valid issue number or qualified key (repo#number)")
+    if "#" in m:
+        return m                                     # qualified — the caller named the repo
+    n = int(m)
+    members = _fetch_members(slug, issue, want=n)   # Unreadable propagates → PROBE-FAIL, no write
+    foreign = sorted(r for (r, num) in members if num == n and r != slug)
+    if foreign:
+        qual = f"{foreign[0].rsplit('/', 1)[-1]}#{n}"
+        raise Refused(
+            f"member {n} is a member of {foreign[0]}, not of {slug} — write it qualified as "
+            f"{qual} (a bare number is the container's own repo only)")
+    if (slug, n) not in members:
+        raise Refused(
+            f"member {n} is not a member of {slug}#{issue} — a bare number is the container's "
+            f"own repo only; write a cross-repo member qualified as repo#{n}")
+    return m
+
+
 def set_disposition(slug: str, issue: int, member: str, disposition: str, by: str,
                     at: "str | None" = None) -> "dict[str, dict]":
     comment_id, body = find(slug, issue)          # Unreadable propagates — no blind create
+    key = resolve_member(slug, issue, member)     # Refused / Unreadable — no write either way
     if not body:
         body = MARK + "\n"
-    new = upsert(body, str(member), disposition, at or now_iso(), by)
+    new = upsert(body, key, disposition, at or now_iso(), by)
     _put(slug, issue, comment_id, new)
     return parse(new)
 
@@ -247,6 +391,7 @@ def self_test() -> int:
     unreadable path driven through the real seams. Every expectation below is derived IN A
     COMMENT from the shape in the module docstring — never from running the code, which would
     pin this file's bugs instead of its contract."""
+    global _gh_comments_raw, _gh_subissues_raw, _fetch_comments, _put
     n = 0
 
     def check(desc: str, got, want):
@@ -340,20 +485,20 @@ def self_test() -> int:
     # page order (page 1's both, then page 2's both).
     two_pages = json.dumps([[_c(1), _c(2)], [_c(3), _c(4)]])
     check("--slurp: two pages flatten to one ordered list",
-          [c["id"] for c in _parse_comments_payload(two_pages)], [1, 2, 3, 4])
+          [c["id"] for c in _parse_paginated_list(two_pages)], [1, 2, 3, 4])
     # ONE page, as gh returns it under --slurp: still wrapped, so [[…]] ⇒ 2 comments.
     check("--slurp: a single wrapped page flattens too",
-          [c["id"] for c in _parse_comments_payload(json.dumps([[_c(1), _c(2)]]))], [1, 2])
+          [c["id"] for c in _parse_paginated_list(json.dumps([[_c(1), _c(2)]]))], [1, 2])
     # The un-wrapped shape every committed replay world holds: elements are DICTS, not lists, so
     # the flatten must not fire and the list passes through untouched.
     check("un-wrapped single page (the recorded-world shape) passes through",
-          [c["id"] for c in _parse_comments_payload(json.dumps([_c(1), _c(2)]))], [1, 2])
+          [c["id"] for c in _parse_paginated_list(json.dumps([_c(1), _c(2)]))], [1, 2])
     check("--slurp: an empty payload is no comments, not a flatten error",
-          _parse_comments_payload("[]"), [])
+          _parse_paginated_list("[]"), [])
     # A 200 that is not JSON, and a JSON non-list, are both UNREADABLE — never "no comments".
     for desc, raw in (("non-JSON stdout", "upstream connect error"), ("a JSON object", '{"a":1}')):
         try:
-            _parse_comments_payload(raw)
+            _parse_paginated_list(raw)
         except Unreadable:
             n += 1
             print(f"  ✓ {desc} is UNREADABLE, not empty")
@@ -362,7 +507,6 @@ def self_test() -> int:
     # …and END-TO-END: the store sitting on page 2 must still be FOUND. This is the regression the
     # bare `--paginate` bug produced — a container with >100 comments could never read its own
     # store, so trigger (c) held forever and every `set` refused, on the largest trees only.
-    global _gh_comments_raw
     _real_raw = _gh_comments_raw
     try:
         _gh_comments_raw = lambda slug, issue: json.dumps(          # noqa: E731
@@ -394,7 +538,6 @@ def self_test() -> int:
     # ── the UNREADABLE path, through the real seam ── find() must RAISE, so that set_disposition
     # can never reach _put on a blind read (the second-store-comment failure mode). Driven by
     # replacing the fetch seam, not by re-implementing find().
-    global _fetch_comments
     _real = _fetch_comments
     try:
         def _boom(slug, issue):
@@ -408,7 +551,6 @@ def self_test() -> int:
         else:
             raise AssertionError("find swallowed an unreadable fetch — a blind create is now possible")
         wrote = []
-        global _put
         _real_put = _put
         try:
             _put = lambda *a, **k: wrote.append(a)          # noqa: E731 — a probe, not production
@@ -420,20 +562,158 @@ def self_test() -> int:
         finally:
             _put = _real_put
         # …and the CONFIRMED-ABSENT read is the other half: an empty comments list is `absent`,
-        # so the write goes ahead as a CREATE (comment_id None) carrying exactly one row.
+        # so the write goes ahead as a CREATE (comment_id None) carrying exactly one row. The
+        # membership read is stubbed the same way — #5 is an own-repo member of o/r#1, so the
+        # bare row keeps today's shape.
         _fetch_comments = lambda slug, issue: []
         created = []
         _real_put2 = _put
+        _real_subs = _gh_subissues_raw
         try:
             _put = lambda slug, issue, cid, b: created.append((cid, b))   # noqa: E731
+            _gh_subissues_raw = lambda repo, issue: json.dumps(           # noqa: E731
+                [{"number": 5, "repository_url": "https://api.github.com/repos/o/r"}])
             set_disposition("o/r", 1, "5", "adopted", "checkpoint", at="2026-09-05T12:00:00Z")
         finally:
             _put = _real_put2
+            _gh_subissues_raw = _real_subs
         check("a confirmed-absent store CREATES (comment id None) with one row",
               created,
               [(None, MARK + "\n#5 adopted 2026-09-05T12:00:00Z by=checkpoint\n")])
     finally:
         _fetch_comments = _real
+
+    # ── the #1640 world: a CROSS-REPO member written BARE (homelab#2589) ──
+    # The tree as the native sub-issue edges read it — the shape measured on Goal #1640 on
+    # 2026-09-16, when rows `#134/#136/#138/#139` were written BARE for agent-runtime members:
+    #   homelab#1640       → homelab#1939, homelab#1768, agent-runtime#134
+    #   homelab#1768       → agent-runtime#136        (depth 2 — a theme's member)
+    #   agent-runtime#136  → agent-runtime#138        (depth 3)
+    # `agent-runtime#134` is the cross-repo member the acceptance names; `homelab#1939` is the
+    # own-repo member whose bare row must keep today's shape.
+    _TREE = {
+        ("teststuffstash/homelab", 1640): [
+            {"number": 1939,
+             "repository_url": "https://api.github.com/repos/teststuffstash/homelab"},
+            {"number": 1768,
+             "repository_url": "https://api.github.com/repos/teststuffstash/homelab"},
+            {"number": 134,
+             "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"},
+        ],
+        ("teststuffstash/homelab", 1768): [
+            {"number": 136,
+             "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"},
+        ],
+        ("teststuffstash/agent-runtime", 136): [
+            {"number": 138,
+             "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"},
+        ],
+    }
+
+    def _fake_subs(repo, issue):
+        """The recorded world's membership read — one call per node; a leaf is an empty list."""
+        return json.dumps(_TREE.get((repo, issue), []))
+
+    _real_subs = _gh_subissues_raw
+    _real_fetch = _fetch_comments
+    _real_put3 = _put
+    try:
+        _gh_subissues_raw = _fake_subs
+        _fetch_comments = lambda slug, issue: []          # noqa: E731 — confirmed-absent store
+        wrote = []
+        _put = lambda *a, **k: wrote.append(a)            # noqa: E731 — a probe, not production
+        # …the bare cross-repo member is REFUSED, and the refusal names the qualified form.
+        try:
+            set_disposition("teststuffstash/homelab", 1640, "134", "adopted", "checkpoint")
+        except Refused as e:
+            n += 1
+            print("  ✓ set REFUSES a bare cross-repo member (the #1640 world)")
+            refusal = str(e)
+        else:
+            raise AssertionError("set accepted a bare cross-repo member — the #2589 defect is back")
+        check("…and the refusal names the QUALIFIED form", "agent-runtime#134" in refusal, True)
+        check("…and writes NOTHING", wrote, [])
+        # …a member at DEPTH 2 in another repo is refused the same way: three of the four
+        # #1640 rows (`#136/#138/#139`) sat deeper than the container's own children, so a
+        # direct-children read would not have found them either.
+        try:
+            set_disposition("teststuffstash/homelab", 1640, "136", "adopted", "checkpoint")
+        except Refused as e:
+            n += 1
+            print("  ✓ set REFUSES a bare cross-repo member at depth 2")
+            check("…and names the QUALIFIED form", "agent-runtime#136" in str(e), True)
+        else:
+            raise AssertionError("set accepted a bare cross-repo member at depth 2")
+        check("…and still writes NOTHING", wrote, [])
+        # …and the QUALIFIED form writes the row the readers match.
+        rows = set_disposition("teststuffstash/homelab", 1640, "agent-runtime#134",
+                               "adopted", "checkpoint", at="2026-09-16T00:00:00Z")
+        check("a qualified cross-repo member writes the row", list(rows), ["agent-runtime#134"])
+        check("…and the row carries the disposition",
+              rows["agent-runtime#134"]["disposition"], "adopted")
+        # …and an own-repo bare member keeps today's behaviour — the row is still `#1939`.
+        rows = set_disposition("teststuffstash/homelab", 1640, "1939", "deferred",
+                               "checkpoint", at="2026-09-16T00:00:00Z")
+        check("an own-repo bare member writes the bare row (today's behaviour)",
+              list(rows), ["1939"])
+        # …and a number that is not in the tree at all is refused, naming the qualified form.
+        try:
+            set_disposition("teststuffstash/homelab", 1640, "4242", "adopted", "checkpoint")
+        except Refused as e:
+            n += 1
+            print("  ✓ set REFUSES a bare number that is not a member of the container")
+            check("…and names the qualified form", "repo#4242" in str(e), True)
+        else:
+            raise AssertionError("set accepted a bare number that is not a member")
+        # …and an UNREADABLE membership read is a refusal too (fail loud, rule #6) — never a
+        # silent write on a half-read tree.
+        def _boom_subs(repo, issue):
+            raise Unreadable("injected membership failure")
+        _gh_subissues_raw = _boom_subs
+        wrote_before = len(wrote)
+        try:
+            set_disposition("teststuffstash/homelab", 1640, "1939", "adopted", "checkpoint")
+        except Unreadable:
+            n += 1
+            print("  ✓ set REFUSES on an unreadable membership read (fail loud, rule #6)")
+        else:
+            raise AssertionError("set wrote on an unreadable membership read")
+        check("…and writes NOTHING", len(wrote), wrote_before)
+    finally:
+        _gh_subissues_raw = _real_subs
+        _fetch_comments = _real_fetch
+        _put = _real_put3
+
+    # ── the CLI's exit code, end-to-end through a stubbed `gh` ──
+    # A refused `set` must be LOUD (non-zero) and must not have posted a row: a refusal that
+    # still wrote is the defect in its nastiest form. The stub answers the membership read with
+    # the #1640 world's cross-repo member and logs every write call it is asked to make.
+    import shutil
+    import tempfile
+    _td = tempfile.mkdtemp(prefix="epic-dispositions-cli-")
+    try:
+        _calls = os.path.join(_td, "calls.log")
+        _gh = os.path.join(_td, "gh")
+        with open(_gh, "w") as _f:
+            _f.write(
+                "#!/usr/bin/env bash\n"
+                'case "$*" in\n'
+                "  *sub_issues*) echo '[{\"number\": 134, \"repository_url\": "
+                "\"https://api.github.com/repos/teststuffstash/agent-runtime\"}]' ;;\n"
+                "  *\"-X POST\"*|*\"-X PATCH\"*) echo \"$*\" >> \"$GH_CALLS\" ;;\n"
+                "  *) echo '[]' ;;\n"
+                "esac\n")
+        os.chmod(_gh, 0o755)
+        _env = {**os.environ, "PATH": _td + os.pathsep + os.environ.get("PATH", ""),
+                "GH_CALLS": _calls}
+        _r = _sp.run([_sys.executable, __file__, "set", "teststuffstash/homelab", "1640",
+                      "134", "adopted", "--by", "checkpoint"],
+                     capture_output=True, text=True, env=_env)
+        check("the CLI REFUSES a bare cross-repo member (exit 1)", _r.returncode, 1)
+        check("…and names the qualified form", "agent-runtime#134" in _r.stderr, True)
+        check("…and posted NO row", os.path.exists(_calls), False)
+    finally:
+        shutil.rmtree(_td, ignore_errors=True)
 
     print(f"epic-dispositions self-test: OK ({n} assertions)")
     return 0

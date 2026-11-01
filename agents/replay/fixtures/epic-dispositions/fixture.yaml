@@ -12,6 +12,19 @@
 # _gf_find 0/1/2 split exists to prevent, one level up. The self-test drives it through the
 # real fetch seam rather than re-implementing find().
 #
+# THE ROWS (the suite's assertions live in the MODULE — `source:` below — and this file names
+# them; `mode: suite` has no rows.psv, the self-test IS the table):
+#   the #1640 world (homelab#2589) — a CROSS-REPO member, the shape Goal #1640 measured on
+#   2026-09-16 when rows `#134/#136/#138/#139` were written BARE for agent-runtime members:
+#     cross-repo member written bare     ⇒ REFUSED, the refusal names `agent-runtime#134`,
+#                                           and NOTHING is written (exit 1, no row)
+#     cross-repo member written qualified ⇒ the row `agent-runtime#134` (what the readers match)
+#     own-repo member written bare        ⇒ the row `#1939` (today's behaviour, unchanged)
+#     membership read unreadable          ⇒ REFUSED, loud (fail closed, rule #6) — never a
+#                                           silent write on a half-read tree
+#   The #1640 rows sat at DEPTHS 1–4, so the membership read walks the container's native
+#   sub-issue TREE (the budget walk's shape), not its direct children.
+#
 # hermeticity contract (homelab#329): needs `python3` (the module executes under it).
 name: epic-dispositions
 mode: suite
