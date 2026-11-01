@@ -120,7 +120,7 @@ case_ cp-talos-unreachable 2 cp 'CANNOT TELL'
 
 # ── arc: the label is eligibility, the history makes the type ──
 arc() { reset; node '{"homelab.io/ephemeral":"true"}'; echo 40 >"$F/p.archist"; echo 3 >"$F/p.npods"; }
-arc; echo '[{"metric":{"runner_name":"homelab-ephemeral-x-runner-a","repo":"homelab","job":"ci","run_id":"7"},"value":[0,"1790000900"]}]' >"$F/p.jobs"
+arc; echo '[{"metric":{"runner_name":"homelab-ephemeral-x-runner-a","repo":"homelab","ci_job":"ci","run_id":"7"},"value":[0,"1790000900"]}]' >"$F/p.jobs"
 case_ arc-job-succeeded 0 arc 'homelab/ci run 7 on homelab-ephemeral-x-runner-a'
 arc
 case_ arc-no-job 1 arc '3 runner pod'
