@@ -167,7 +167,17 @@ controller:
   limit (nx-01 today), 16Gi scratch request, max 2. oracle-fleet `ci` moves to it.
 - Self-sizing tools read `memory.max` (oracle's `ci.sh` already does).
 
-**Open:**
-- the nx-01 ride reserve: two large jobs reserve 24Gi of ~49Gi free, leaving less than one
-  `rideSize: large` ride;
-- whether option A is still worth building for nx-01's spare memory.
+**nx-01 ride reserve — ruled (operator, 2026-11-01): no reserve, no priority class.** Numbers
+at the ruling (nx-01 allocatable 61.5 GiB):
+- **Rides:** memory-request peak 32 GiB over both the 7-day and 20-day windows (p95 22 GiB / 16 GiB).
+- **Worst-case CI on the new classes:** about 36 GiB (2 large × 13 + ~4 normal × 2.5).
+- **System pods:** about 3 GiB.
+
+The coincidence of the two peaks over-asks by about 10 GiB, and the pod that does not fit stays
+Pending until capacity frees, with every request backed by memory. That is accepted as rare: big
+jobs overlap 0.9 % of the time, and rides sit at their peak only briefly. It is visible through
+`CiDispatchStalled` and a pending ride in the loop. The lever if pending rides show up is a
+PriorityClass that ranks rides above CI (CI is retryable). nx-01 is due more memory (12 of 16
+DIMM slots are free), which retires the question.
+
+**Open:** whether option A is still worth building for nx-01's spare memory.
