@@ -33,7 +33,6 @@ spec:
   # window accepted 2026-08-11, guards staged in tofu/github/variables.tf + repo CODEOWNERS.
   reviewer:
     enabled: true
-    goalModel: sonnet   # declared-not-defaulted (M10; the server default drifted the app 2026-08-12)
   loop:
     perStack: true
     graduated: true

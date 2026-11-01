@@ -5,6 +5,6 @@ OUT RUNNER coord_gw_claude; RC=$?; upload_transcripts
 OUT → coordinator tick deferred — subscription rate-limited (FU-088 latch)
 OUT rc=0 CS_DEFERRED='1' MODEL='fable' env file left: no
 OUT REACHED: end
-ERR → gateway(sessions): defer — [gateway-unreachable] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy).
+ERR → gateway(sessions): defer — [gateway-unreachable] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (rc 3 — the caller decides the next path).
 ERR gateway admission refused rc=3 — old-proxy fallback
 RC 0

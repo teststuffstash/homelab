@@ -888,10 +888,6 @@ spec:
                       env:
                         - { name: HOME, value: "/home/node" }
                         - { name: ORG, value: "teststuffstash" }
-                        # reviewer.goalModel → the ASSEMBLY review's model (head goal/**, the
-                        # goal→master shape) — review-reflex.sh routes on it; all other PRs
-                        # keep the reviewer default. Claim-owned; see model-routing-history.md §M10.
-                        - { name: REVIEW_GOAL_MODEL, value: {{ default "sonnet" (get (default dict (get $xr.spec "reviewer")) "goalModel") | quote }} }
                         {{- if eq $stack "platform" }}
                         # FU-270, the reviewer flip: the PLATFORM stack's reviews admit through the
                         # agent-gateway's POST /sessions (agents/reviewer-session.sh, the

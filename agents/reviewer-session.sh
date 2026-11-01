@@ -265,8 +265,9 @@ fi
 #   • Decorrelation from the author: the gateway has no family-exclusion input. Nothing regresses —
 #     the pin held /route at shadow, so decorrelate_from was computed and discarded (Goal #1769) —
 #     and the evidence stays: the author's served model is logged beside the admitted one.
-#   • An explicit --model (the assembly review's REVIEW_GOAL_MODEL) is a model pin the gateway cannot
-#     take: that review keeps the old-proxy path, loudly.
+#   • An explicit --model is a model pin the gateway cannot take: that review keeps the old-proxy
+#     path, loudly. No dispatcher passes one (the assembly review is unpinned, FU-270) — it is the
+#     hand-run override (`--model opus` for a high-stakes PR) only.
 # Transition safety (seat ruling 2026-11-01): defer (rc 1) defers as the FU-088 latch does today
 # (exit 0 — the level-triggered reflex re-picks); refused-before-request (rc 2) or fail-closed (rc 3)
 # falls back to the old-proxy path below with one loud line, so a gateway outage never stops review.

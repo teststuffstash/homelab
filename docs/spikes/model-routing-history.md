@@ -417,7 +417,9 @@ role to `/route` and the launcher case maps died with them; the era's narrative 
   for reviews and only the FU-188 pin's fallback kept the lane on sonnet. Escalate a specific hard goal with `GOAL_MODEL`
   (`coordinator-session.sh`); never raise a clause's floor.
 - **The assembly reviewer must DIFFER from the decomposing model** (issue-authoring leg (c));
-  decorrelation is consumed as the #516 `/route` primitive since PR#803.
+  decorrelation is consumed as the #516 `/route` primitive since PR#803. **Superseded
+  (operator ruling 2026-11-01, FU-270):** the assembly review pins no model — the gateway picks,
+  and no decorrelation from the decomposer is enforced (the gateway takes no exclusion input).
 - **`audit`/`research` classes are the wrong shape for coordination reuse** — both pin
   `rails: ["openrouter"]` with a fusion head; coordination stays on the subscription safety
   net (heeded: `goal-decompose` is its own subscription-rail class).
