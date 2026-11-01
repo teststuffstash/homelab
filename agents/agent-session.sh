@@ -2122,9 +2122,25 @@ $(printf '%s' "$PF_ARB_MD" | sed 's/^/    /')"
 $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
       fi
 
-      # Create the ConfigMap (best-effort — if it fails, fall back to argv delivery)
+      # Create the ConfigMap (best-effort — if it fails, fall back to argv delivery). stderr is kept
+      # (homelab#1941): the fallback line names the kubectl error, because AlreadyExists, Forbidden and
+      # too-large each call for a different response. AlreadyExists is the stale-bundle case: a struck
+      # or crashed earlier attempt at this (task, round) left its bundle behind, and nothing reaped it
+      # (the pod's ownerReference only GCs once the pod is deleted). Only the same-key pod can say whether
+      # a bundle is still mounted, so the delete is gated on that pod being absent or terminal.
+      pf_cm_create() { printf '%s' "$PF_CM_MANIFEST" | "$KUBECTL" $KUBE create -f - 2>&1 >/dev/null; }
       PF_CM_CREATED=""; PF_CM_MOUNT=""; PF_CM_VOLUME=""
-      if printf '%s' "$PF_CM_MANIFEST" | "$KUBECTL" $KUBE create -f - 2>/dev/null; then
+      PF_CM_OK=""; PF_CM_ERR="$(pf_cm_create)" && PF_CM_OK=1
+      if [ -z "$PF_CM_OK" ] && [ "${PF_CM_ERR#*AlreadyExists}" != "$PF_CM_ERR" ]; then
+        PF_CM_PHASE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" --ignore-not-found -o jsonpath='{.status.phase}' 2>/dev/null)" || PF_CM_PHASE="unreadable"
+        case "$PF_CM_PHASE" in
+          ""|Succeeded|Failed)
+            echo "→ context pre-fetch: ConfigMap ${PF_CM_NAME} already exists (same-key pod ${POD} ${PF_CM_PHASE:-absent}) — a stale bundle; deleting it and recreating once"
+            "$KUBECTL" $KUBE -n "$NS" delete configmap "${PF_CM_NAME}" --ignore-not-found >/dev/null 2>&1 || true
+            PF_CM_ERR="$(pf_cm_create)" && PF_CM_OK=1;;
+        esac
+      fi
+      if [ -n "$PF_CM_OK" ]; then
         PF_CM_CREATED="1"
         PF_POD_CREATED=""
         # homelab#1205: 10 exit sites sit between here and the pod create at :2244 — the Go-rail
@@ -2142,7 +2158,8 @@ $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
         # The prelude just creates the mount point (ConfigMap is mounted by the pod manifest)
         PF_CONTEXT_PRELUDE="mkdir -p /work/context; "
       else
-        echo "→ context pre-fetch: ConfigMap creation failed — falling back to argv delivery" >&2
+        PF_CM_ERR1="$(printf '%s\n' "$PF_CM_ERR" | head -n1)"
+        echo "→ context pre-fetch: ConfigMap creation failed — falling back to argv delivery${PF_CM_ERR1:+: $PF_CM_ERR1}" >&2
         PF_CM_CREATED=""
         # Fall back to argv delivery: TWO files (base64-encode each, prepend to RUN_CMD) — the
         # env card (render_env_card) tells the ride to read index.txt then issue.md FIRST, so the
