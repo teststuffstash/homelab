@@ -9,6 +9,7 @@ treat a skill edit like a doc edit (routing table, one home per fact).
 | [design-agents](design-agents/SKILL.md) | `/design` for the agent platform — full-corpus read; **operator-typed only** (2026-09-27), the `.claude/hooks/` gate denies self-invocation |
 | [board-sweep](board-sweep/SKILL.md) | Sweep the live board: what the loop did, and what escalated unseen |
 | [docs-cleanup](docs-cleanup/SKILL.md) | Fine-comb grooming: sync every doc with tracker truth |
+| [intake](intake/SKILL.md) | Admission pass: one island-intake sitting per island, so nothing that needs no operator input waits on the operator |
 | [fu-sweep](fu-sweep/SKILL.md) | Triage every open FU and act (pipeline: board-sweep → this → docs-cleanup) |
 | [meta-coordinate](meta-coordinate/SKILL.md) | Resume the meta-coordinator role in a fresh session |
 | [handoff](handoff/SKILL.md) | Process the stack-jail → mono-jail work queue |
