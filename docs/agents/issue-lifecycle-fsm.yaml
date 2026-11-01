@@ -34,6 +34,7 @@ diagram: |
       InProgress --> InProgress: fleet-strike attributed to a cell — provider latched in the router or model nominated, no label (IL-T30)
       InProgress --> Queued: phantom label, persisted → scan reconciles it (IL-T16)
       Review --> Queued: phantom label, persisted → scan reconciles it (IL-T27)
+      Review --> Review: first no-op round after an ARBITRATE directive → the launcher re-runs it, no session (IL-T31)
       InProgress --> Blocked: worker ruled it NOT IMPLEMENTABLE → AGENT_INFEASIBLE parks it (IL-T26)
       Blocked --> Queued: a human re-scopes it and strips agent/blocked (IL-T26)
       InProgress --> ClosedByMerge: PR merges into MASTER — keyword fires (IL-T07)
@@ -481,6 +482,44 @@ transitions:
     incidents:
       - "2026-09-01: FOUR goal-#326 r1 strikes with identical error_class=unknown were never correlated; the operator + seat did it by hand. Prose-warned classes recur; executable gates hold (ADR-103)."
 
+  - id: IL-T31
+    name: first no-op after an ARBITRATE directive → launcher-direct re-run at the same round (Goal #1906 pin 3)
+    owner: coordinator-scan, deterministically — no coordinator session in the path
+    when: "agent/review ∧ the PR's newest completed fix round pushed nothing (NOOP_ROUND_JQ, on the
+      ci-red AND the changes-requested path) ∧ every gate its escalation passes (holds, stale-sha,
+      human-ruling, footprint belt) ∧ an `^ARBITRATE` directive on the PR or its issue is newer than
+      the PREVIOUS round (exactly one completed round post-dates it) ∧ no `kind=noop-rerun` event
+      post-dates it ⇒ the scan emits `noop-rerun|<repo>|pr-<n>` and its deterministic pass runs the
+      brief's fix-round line `agent-session.sh <project> --task --round <same r> --work-branch
+      <head> --recipe <class>` in a detached item pod (`coordinator-session.sh --launch`), then
+      appends the `kind=noop-rerun` event. ADR-094 holds: repo/PR/branch/round/class only; model,
+      rail, key, Base and arming stay the launcher's, and so do its gates (FU-088, WIP, pre-flight).
+      Otherwise — no directive, ≥2 rounds since it (the re-run's own stats marker makes the next
+      no-op the second), or a re-run already spent — agent/arbitrate exactly as before (MP-T11)."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cired-first
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cired-second
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cired-undirected
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-first
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-second
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-stale-directive
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-rerun-spent
+      - agents/replay/fixtures/coordinator-launch-mode
+    guards:
+      - desc: "the directive is the launcher prefetch's own selector — a top-level comment matching `^ARBITRATE\\b` on the PR or its issue (the #1467 contract); the scan's escalation lines live in the agent-summary comment and never match"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "NOOP_RERUN_JQ=" }
+      - desc: "one re-run per directive — a `kind=noop-rerun` event newer than the directive, or a second completed round after it, falls to agent/arbitrate"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "kind=noop-rerun ts=" }
+      - desc: "both no-op legs route through the predicate before their label write (ci-red FU-115b inside the stale-sha/human-ruling/belt gates; changes-requested FU-147 after the holds)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "noop_rerun_check \"\\$slug\"" }
+      - desc: "the deterministic pass executes the unit — a launcher call riding a detached item pod, never a coordinator session; a refusal is a report line, never a second unit"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "launcher-direct re-run \\(no coordinator session\\)" }
+      - desc: "the launch pod runs agent-session.sh instead of claude and carries no FU-088 semaphore label"
+        anchor: { file: agents/coordinator-session.sh, pattern: "homelab.teststuff.net/launch" }
+    incidents:
+      - "retro r5 (PR#1819) opus F3: 20 arbitrate rulings on no-op rounds, 14 of them 'the directive stands unchanged — re-dispatch' (PR#1540 ×4, PR#1541 ×4, PR#1208 ×3); PR#1540 held 18.6 h on a ruling no pod ever ran."
+
   - id: IL-T07
     name: close by master merge
     owner: GitHub (closing keyword)
@@ -573,7 +612,8 @@ transitions:
       undispositioned store findings, the child-set completing pre-launch (the 2026-08-05
       deadlock backstop, carried from the retired per-closure clause), or (ADR-122 (4)) >= 1
       UNDISPOSITIONED tree MEMBER — a bound child the container has never ruled, which WAKES the
-      checkpoint and never blocks it (it is excluded from the completion predicate, so trigger
+      checkpoint ONCE per undispositioned set (the `state-fp:goal-checkpoint-c` hold, homelab#2565 —
+      never every tick) and never blocks it (it is excluded from the completion predicate, so trigger
       (b) fires in the same tick), or (e) (ADR-126 v1.3.1, homelab#1423) an open `theme:` container
       whose descendants are ALL closed and whose `goal/<goal-n>-<slug>` branch has NO PR yet
       (`theme-complete=<theme-n>` on the unit — the assembly PR is DUE). Theme NOMINATION is NOT a
