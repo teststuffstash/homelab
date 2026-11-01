@@ -15027,4 +15027,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   governance); oracle-fleet's own phase 3 → **oracle-fleet#994**; codex catalog leg → **#3145** (`tiers -- check` = derivation,
   terra in the 11-01 snapshot but no tier); the weekly AA pull's release-day gap → FU-270; the #3016 lesson (seat-only
   acceptance) → issue-authoring failure-signature row **#3146**.
+- **#3138 MERGED 19:51Z** (goal/** twin = master's count; the `tofu/github` apply is the operator's, from the workspace checkout).
+  #3142 #3143 #3146 MERGED. Oracle handoff 19:51Z: snippets **v0.6.9** released → pins PR **#3148** (reviewer + gateway evidence +
+  README links; the worker's process-image tag follows the gateway pin file; sha + ghcr manifest verified).
 
