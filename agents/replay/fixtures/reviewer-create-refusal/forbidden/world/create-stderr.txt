@@ -1,0 +1,1 @@
+Error from server (Forbidden): error when creating "STDIN": pods is forbidden: User "system:serviceaccount:sleep-agents:agentstack-loop" cannot create resource "pods" in API group "" in the namespace "agent-coordinator"
