@@ -342,9 +342,9 @@ def collect_workflow_runs(lines):
         "# TYPE github_workflow_run_queued_since_timestamp gauge",
         "# HELP github_workflow_run_queued_since_timestamp Creation epoch of a run still waiting for a runner (status=queued ONLY) — queued-age = time() - this. Absent once the run starts, so the alert self-resolves (FU-150).",
         "# TYPE github_ci_job_queue_seconds gauge",
-        "# HELP github_ci_job_queue_seconds Job-level queue time (created_at to started_at) per (repo, workflow, job, runner_pool). Delta-only: one /jobs call per new completed run.",
+        "# HELP github_ci_job_queue_seconds Job-level queue time (created_at to started_at) per (repo, workflow, ci_job, runner_pool). Delta-only: one /jobs call per new completed run.",
         "# TYPE github_ci_job_duration_seconds gauge",
-        "# HELP github_ci_job_duration_seconds Job-level execution time (started_at to completed_at) per (repo, workflow, job, runner_pool).",
+        "# HELP github_ci_job_duration_seconds Job-level execution time (started_at to completed_at) per (repo, workflow, ci_job, runner_pool).",
         "# TYPE github_ci_job_completed_timestamp gauge",
         "# HELP github_ci_job_completed_timestamp Completion epoch of each finished job, with the runner that ran it (runner_name = the ARC runner POD name) and the job's conclusion — the rollout's ARC exercise evidence joins it to kube_pod_info's node (mgmt/scripts/mgmt-rollout-evidence.sh, FU-273). Same series budget as the timings: one per job in the window.",
         "# TYPE github_ci_runner_busy_jobs gauge",
@@ -504,7 +504,10 @@ def collect_job_timings(repo, run):
                 "owner": ORG,
                 "repo": repo,
                 "workflow": run.get("name") or "",
-                "job": job_name,
+                # `ci_job`, never `job`: Prometheus owns the `job` label (the scrape job) and renames a
+                # target's own to `exported_job`, so a query on job="ci" silently read the scrape job
+                # (the box's rollout evidence grouped by it — second jail's harvest, 2026-11-01).
+                "ci_job": job_name,
                 "run_id": rid,
                 "runner_pool": _pool_of(job.get("labels")),
             }
