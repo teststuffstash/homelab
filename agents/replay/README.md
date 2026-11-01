@@ -414,6 +414,7 @@ is stale, so it cannot drift the way the prose register did.
 | `renovate-rebase-tick-no-checkbox` | actions | - | `agents/coordinator-scan.sh` | - |
 | `renovate-rebase-tick-unticked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `research-draw-roster/research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
+| `research-gateway-arms` | table | - | `agents/research-fanout.sh` | - |
 | `resolve-model` | table | - | `agents/resolve-model.sh` | - |
 | `responder-behaviour/responder-behaviour` | suite | - | `agents/coordinator/responder-argo.yaml` | - |
 | `responder-capture/no-key` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
@@ -469,6 +470,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-cell-report/multi-block` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/present` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-cell-report/skeleton` | actions | - | `agents/coordinator/retro-argo.yaml` | - |
+| `retro-gateway-cell` | table | - | `agents/retro-session.sh` | - |
 | `retro-gh-token-env/mount-set` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/mount-unset` | actions | - | `agents/agent-session.sh` | - |
 | `retro-gh-token-env/set` | actions | - | `agents/agent-session.sh` | - |
