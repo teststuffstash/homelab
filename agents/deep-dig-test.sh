@@ -479,7 +479,8 @@ yq -r "$CW | .spec.workflowSpec.templates[] | select(.name == \"dig\") | .contai
 DBIN="$TMP/dbin"; mkdir -p "$DBIN"
 cat > "$DBIN/git" <<EOF
 #!/bin/bash
-dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && tar --exclude=.git -cf - .) | (cd "\$dest" && tar -xf -)
+[ -n "\${STUB_GIT_ACTIVE:-}" ] && { echo "git stub re-entered" >&2; exit 97; }; export STUB_GIT_ACTIVE=1
+dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && $(command -v git) ls-files -z | tar --null -T - -cf -) | (cd "\$dest" && tar -xf -)
 printf '#!/bin/bash\necho anthropic\n' > "\$dest/agents/subscription-latch.sh"
 printf '#!/bin/bash\necho old-proxy-model\n' > "\$dest/agents/resolve-model.sh"
 cat > "\$dest/agents/deep-dig-select.sh" <<'SEL'

@@ -1,5 +1,5 @@
-CALL bash agents/agent-session.sh homelab --task research-210-arm1 --round 1 --recipe /workspace/homelab/.agents/research.yaml [AGENT_GATEWAY=sessions ROLE=researcher FALLBACK_EXIT=75 CALLER_SA=platform-agents/agentstack-loop WIP=2 RESEARCH_GATEWAY=]
-CALL bash agents/agent-session.sh homelab --task research-210-arm2 --round 1 --recipe /workspace/homelab/.agents/research.yaml [AGENT_GATEWAY=sessions ROLE=researcher FALLBACK_EXIT=75 CALLER_SA=platform-agents/agentstack-loop WIP=2 RESEARCH_GATEWAY=]
+CALL bash agents/agent-session.sh homelab --task research-210-arm1 --round 1 --recipe /fixture-recipes/homelab/.agents/research.yaml [AGENT_GATEWAY=sessions ROLE=researcher FALLBACK_EXIT=75 CALLER_SA=platform-agents/agentstack-loop WIP=2 RESEARCH_GATEWAY=]
+CALL bash agents/agent-session.sh homelab --task research-210-arm2 --round 1 --recipe /fixture-recipes/homelab/.agents/research.yaml [AGENT_GATEWAY=sessions ROLE=researcher FALLBACK_EXIT=75 CALLER_SA=platform-agents/agentstack-loop WIP=2 RESEARCH_GATEWAY=]
 OUT → FU-126 fan-out: homelab#210 → 2 arm(s), each admitted by the agent-gateway as role researcher (FU-270 — the gateway serves the model)
 OUT ── arm 1: task research-210-arm1 (log $TMP/research-gateway-arms.served.fx/armlogs/arm-1.log) ──
 OUT → gateway(sessions): dispatch claude/opus [rail=anthropic,harness=claude,session=s1,context_tokens=null] (task=research-210-arm1, round=1) — bound

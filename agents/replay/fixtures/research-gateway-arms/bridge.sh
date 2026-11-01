@@ -1,7 +1,7 @@
 # ── bridge ── the variables the block reads, named exactly as research-fanout.sh sets them above it.
 HERE="$REPLAY_ROOT/agents"
 PROJECT="homelab"; ISSUE="210"; CLASS="regular"; ARMS="2"; START_SLOT="1"
-RECIPE="/workspace/homelab/.agents/research.yaml"
+RECIPE="/fixture-recipes/homelab/.agents/research.yaml"
 STACK="${STACK:?fixture must pin STACK}"; DRY="${DRY:?fixture must pin DRY}"
 ARM_RC_1=0; ARM_RC_2=0; ARM_OUT_1=""; ARM_OUT_2=""; FALLBACK_DRAW="  slot 1: deepseek/deepseek-v4-pro"
 [ -f "$REPLAY_WORLD/vars.sh" ] && . "$REPLAY_WORLD/vars.sh"
