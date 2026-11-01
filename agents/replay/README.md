@@ -196,6 +196,8 @@ is stale, so it cannot drift the way the prose register did.
 | `assembly-cr-merge-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-no-trailer` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-themed-emit` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-review-dispatch/child-head` | actions | - | `agents/review-reflex.sh` | - |
+| `assembly-review-dispatch/goal-head` | actions | - | `agents/review-reflex.sh` | - |
 | `asvs` | suite | - | `-` | - |
 | `base-arm-authoring` | table | - | `agents/agent-session.sh` | - |
 | `base-arm-master` | actions | - | `agents/agent-session.sh` | - |
