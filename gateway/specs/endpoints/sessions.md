@@ -1061,7 +1061,10 @@ The deployed entries are today's in-cluster callers, named by the SA they run as
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
 is the one in-cluster caller of `agents/agent-session.sh`; the jail's `canary-entrants.sh` mints
 the same SA's token to ride the entry canary, which is why its entry grants `prober` beside
-`worker` (2026-10-20 — until then every canary admission was 403 `caller-role-denied`). It binds
+`worker` (2026-10-20 — until then every canary admission was 403 `caller-role-denied`). The same
+`prober` grant admits the `probe-platform` tick's outer session — ONE unbound session from the
+AgentStack Composition's prober pod (`prober.gateway: sessions`, the shared helper
+`agents/gateway-admit.sh`), no bind. It binds
 into the platform repo namespaces that hold an `agentstack-worker` SA. ⚖ `agent-coordinator` is a platform repo but holds
 no `agentstack-worker`, so a bind there could never be pulled and is not granted. ⚖ The same SA
 also holds `coordinator` and `reviewer`, bound into its OWN namespace `platform-agents` (operator

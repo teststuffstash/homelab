@@ -39,8 +39,10 @@ added 2026-10-16); a cell is what the launcher does, not what a doc says it shou
 
 **Role × caller.** Which CALLER may ask for which role is the policy's `callers` map, per
 ServiceAccount ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)): the platform loop's
-dispatcher SA (`platform-agents:agentstack-loop`) `worker` + `prober` — its graduated workers and the
-entry canary's rides — and `coordinator` + `reviewer` (bind namespace `platform-agents`) for the loop's coordinator and
+dispatcher SA (`platform-agents:agentstack-loop`) `worker` + `prober` — its graduated workers, the
+entry canary's rides and the `probe-platform` tick's outer session (the AgentStack prober template's
+`prober.gateway: sessions`, one unbound session through the shared helper) — and `coordinator` +
+`reviewer` (bind namespace `platform-agents`) for the loop's coordinator and
 reviewer pods — the coordinator session admits unbound from its own pod (operator ruling 2026-11-01: the platform lanes move onto the
 gateway; granted ahead of the launchers, which adopt the shared admission helper
 `agents/gateway-admit.sh` one PR at a time — until then the inventory rows above stay as they are; the coordinator row has),
