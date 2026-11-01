@@ -3586,9 +3586,17 @@ if [ -n "$RUN_CMD" ]; then
       # no log signature at all — the pod's status.reason is the only evidence, and it maps to the
       # `timeout` strike class.
       # >>>REPLAY:strike-quota-classifier>>>
-      POD_REASON="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.reason}' 2>/dev/null || true)"
+      # homelab#3094: ONE read carries both kubelet facts — the pod's status.reason and the agent
+      # container's terminated reason, `/`-separated. An OOMKilled container kills agent-finalize
+      # with it, so it lands here; the kill is the cgroup's verdict on the pod ENVELOPE, so it
+      # outranks every log signature (as DeadlineExceeded does) and is its own class, `oom`.
+      _pod_reasons="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.reason}/{.status.containerStatuses[?(@.name=="agent")].state.terminated.reason}' 2>/dev/null || true)"
+      POD_REASON="${_pod_reasons%%/*}"; AGENT_TERM_REASON=""
+      case "$_pod_reasons" in */*) AGENT_TERM_REASON="${_pod_reasons#*/}";; esac
       if [ "$POD_REASON" = "DeadlineExceeded" ]; then
         ERR_CLASS="timeout"
+      elif [ "$AGENT_TERM_REASON" = "OOMKilled" ]; then
+        ERR_CLASS="oom"
       # homelab#804: the opencode binary validates its config at startup and exits non-zero on
       # unknown/unsupported keys. A pod that dies before the LLM loop in under 15s at zero cost
       # with this signature is a harness-startup death — should never be classified "clean".
@@ -3657,7 +3665,7 @@ if [ -n "$RUN_CMD" ]; then
     EMIT_STRIKE=""
     EMIT_KEY_RETRY=""
     case "$ERR_CLASS" in
-      harness-death|harness-fault|auth-storm|timeout|quota|budget-403-account|http-403-other|turn-cap) EMIT_STRIKE=1;;
+      harness-death|harness-fault|auth-storm|timeout|quota|budget-403-account|http-403-other|turn-cap|oom) EMIT_STRIKE=1;;
       budget-403-key|budget-exhausted-key) EMIT_KEY_RETRY=1;;
       budget-403) ;;  # residual — estimator/cap problem → escalate (neither strike nor key-retry)
     esac
@@ -3699,7 +3707,7 @@ if [ -n "$RUN_CMD" ]; then
     #   • a TASKED ride (issue-*/pr-*) that struck → the strike's class when it is a vocabulary
     #     member (quota → harness-gave-up: the harness gave up on a limited upstream; harness-fault →
     #     itself, a harness-scoped strike: the walk moves to another harness, not another model;
-    #     anything else → unknown); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
+    #     anything else → unknown, its own class riding as `subclass` — `oom` → unknown/oom); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
     #     strike — rounds are the scan's);
     #   • an AD-HOC ride → clean when agent-finalize's stats line says `exit_status: clean` or its pod
     #     Succeeded, else NOTHING: its task key is shared by every ad-hoc ride, and a strike there would
@@ -3750,6 +3758,11 @@ if [ -n "$RUN_CMD" ]; then
          || [ "$(printf '%s' "${STATS:-}" | jq -r '.salvage_undetermined // false' 2>/dev/null || true)" = "true" ]; then
         _gw_salvage="resumable"
       fi
+      # homelab#3094: an OOMKilled container took agent-finalize with it, so its salvage verdict was
+      # never computed — `unknown`, not `none` (homelab#2588's ride A died with its fix committed
+      # locally). Riding the existing salvage gate, it gets no automatic re-admission: the next cell
+      # rides the same pod envelope, and a false "nothing to resume" loses work (#33's direction).
+      [ "${ERR_CLASS:-}" != "oom" ] || _gw_salvage="unknown"
       if [ -n "$GW_STRUCK" ] && [ -n "${STRIKE_APPLIES:-}" ] && [ "$_gw_salvage" = "none" ] \
          && [ "$_gw_attempt" -le "${AGENT_GATEWAY_AUTO_ATTEMPTS:-2}" ]; then
         echo "→ gateway(sessions): strike ${GW_STRUCK} — re-admitting round ${ROUND} at attempt $(( _gw_attempt + 1 )) (the gateway excludes the struck cell; no coordinator hop)"
