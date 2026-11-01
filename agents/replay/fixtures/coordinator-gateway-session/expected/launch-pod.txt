@@ -1,0 +1,5 @@
+OUT GW_COORD=''
+OUT RUNNER bash /work/homelab/agents/agent-session.sh homelab --task pr-3000 --round 2 --work-branch fix/x --recipe /work/homelab/.agents/fix.yaml; RC=$?
+OUT COORD_GW_FN: empty
+OUT REACHED: end
+RC 0

@@ -31,6 +31,8 @@
 #   # the image is built+pushed by CI in the teststuffstash/agent-coordinator repo — no manual build.
 #   # LLM auth = the ADR-087 ref rail (FU-066d): the pod holds ref:agent-coordinator/coordinator-claude,
 #   # the egress proxy injects the subscription token — no raw ~1y token in any pod.
+#   # PLATFORM stack, headless: the session admits through the agent-gateway instead (FU-270; the
+#   # coordinator-gateway-session block), the ref rail kept as its transition fallback.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # Jail (cockpit) uses tofu/kubeconfig; inside the reflex pod the file doesn't exist (gitignored,
@@ -288,7 +290,8 @@ BRIEF_PATH="/work/homelab/${BRIEF}"            # ABSOLUTE: the cwd is now the st
 # harness-run-cmd clause: replay clauses run self-contained).
 case "${MODEL:-}" in opencode-go/deepseek-v4-flash) GO_CTX_ENV="CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000 ";; *) GO_CTX_ENV="";; esac
 
-COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF_PATH} --permission-mode ${PERM_MODE}"
+REST_FLAGS="--append-system-prompt-file ${BRIEF_PATH} --permission-mode ${PERM_MODE}"   # everything but the model (a gateway session names its own)
+COMMON_FLAGS="--model ${MODEL} ${REST_FLAGS}"
 
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
 # The /work/session-start marker is the "what did THIS session write" baseline the exit-trap upload
@@ -366,6 +369,73 @@ upload_transcripts() {
 SNIP
 )
 
+# ── FU-270: the coordinator SESSION admits through the agent-gateway (platform stack only) ───────
+# The platform rollout's coordinator row: the claude session this pod runs moves off the old proxy's
+# /anthropic ref rail onto POST /sessions, through the ONE shared helper (agents/gateway-admit.sh,
+# whose header is the interface). ADMISSION IS IN-POD AND UNBOUND — the specs-reviewer shape, not
+# the worker's bound pull: the scan Workflow pod that runs this launcher mounts no gateway caller
+# token, while this pod does (the gateway-token volume, SA ${POD_SA}, a `callers` entry with role
+# coordinator) and is both the caller and the harness. Its projected token is pod-bound, so
+# GW-SESSIONS-LIVENESS reaps the session when the pod ends (a deadline kill included); the in-pod
+# release after claude is the fast path.
+# Gated like the worker's knob (GW_KNOB_ENV below — the same platform-only test): STACK=platform and
+# a HEADLESS claude session (an interactive exec has no pod command to admit in; a --launch pod runs
+# no LLM, unchanged). The model is the gateway's (role coordinator; a goal-decompose / -checkpoint
+# item asks for the heavy tier, the router's reasoning class); the scan's --model is the fallback's.
+# Verdicts: dispatch → claude on the dispatch env; defer (rc 1) → the tick defers as the FU-088
+# latch defers it today (no claude, exit 0, no doorbell); refused before any request (rc 2) or
+# fail closed (rc 3) → FU-270: transition fallback — one loud line, then TODAY's path: the FU-088
+# latch (asked in-pod now) and claude on the old proxy (the manifest's ANTHROPIC_* env). Deleted
+# when the old proxy retires; until then a gateway outage never stops the loop.
+# >>>REPLAY:coordinator-gateway-session>>>
+GW_COORD=""
+if [ "${STACK:-}" = "platform" ] && [ -n "${RUN_CMD:-}" ] && [ -z "${LAUNCH:-}" ]; then GW_COORD=1; fi
+COORD_GW_FN=""
+if [ -n "$GW_COORD" ]; then
+  _gw_tier=""
+  case "${RESOLVE_CLASS:-}" in goal-decompose) _gw_tier="heavy";; esac
+  # Launcher-expanded (shell-inert by construction: a DNS-1123 pod name, a tier word, the flags),
+  # then the in-pod functions as static text.
+  COORD_GW_FN="CS_GW_TASK='${POD}'; CS_GW_TIER='${_gw_tier}'; CS_REST_FLAGS='${REST_FLAGS}'
+coord_old_claude() { ${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; }
+$(cat <<'SNIP'
+coord_old_gate() {   # FU-270: transition fallback — the launcher's FU-088 rail gate, asked in-pod
+  case "${MODEL:-}" in opencode-go/*) return 0;; esac
+  SUBSCRIPTION_TIER=dispatch bash "${COORD_HOMELAB:-/work/homelab}/agents/subscription-latch.sh"
+}
+coord_gw_claude() {
+  local _rc=0 _envf="${TMPDIR:-/tmp}/coord-gw.env" _e=()
+  if ! . "${COORD_HOMELAB:-/work/homelab}/agents/gateway-admit.sh"; then _rc=2
+  elif ! gw_preflight_caller; then _rc=2
+  else
+    gw_admit --stack platform --role coordinator --task "$CS_GW_TASK" --tier "$CS_GW_TIER" \
+      --harness claude --harnesses claude --env-file "$_envf" || _rc=$?
+  fi
+  case "$_rc" in
+    0)
+      mapfile -t _e < "$_envf"; rm -f "$_envf"
+      MODEL="$GW_MODEL"   # the transcript manifest's provenance
+      env "${_e[@]}" ${GW_CONTEXT_TOKENS:+"CLAUDE_CODE_MAX_CONTEXT_TOKENS=${GW_CONTEXT_TOKENS}"} \
+        claude -p --model "$GW_WIRE_MODEL" $CS_REST_FLAGS "$(cat /work/coord-run)"
+      _rc=$?; gw_release; return "$_rc";;
+    1)
+      CS_DEFERRED=1
+      echo "→ coordinator tick deferred — gateway: ${GW_DEFER_REASON} (retry_after=${GW_RETRY_AFTER}s)"
+      return 0;;
+  esac
+  echo "gateway admission refused rc=${_rc} — old-proxy fallback" >&2   # FU-270: transition fallback
+  if ! coord_old_gate; then
+    CS_DEFERRED=1
+    echo "→ coordinator tick deferred — subscription rate-limited (FU-088 latch)"
+    return 0
+  fi
+  coord_old_claude
+}
+SNIP
+)"
+fi
+# <<<REPLAY:coordinator-gateway-session<<<
+
 if [ -n "$RUN_CMD" ]; then
   # Headless: claude runs to completion, then the pod itself uploads (no exec window afterwards).
   # ⚠ RUN_CMD rides the SAME base64-file transport as SEED — never inline it. The old
@@ -400,7 +470,11 @@ detach_post() {
   # below). ⚠ DO NOT ring while the subscription is latched — the doorbell feeds the constraint
   # it waits on (circles#31 spin, 2026-08-06). Fail-open: an unreachable latch rings as before.
   if [ -n "${CS_DOORBELL_JSON:-}" ]; then
-    if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh 2>/dev/null; then
+    if [ -n "${CS_DEFERRED:-}" ]; then
+      # FU-270: the session deferred IN-POD (the gateway's defer, or the fallback's FU-088 latch) —
+      # the same no-ring rule as a latched tick: ringing would re-dispatch work that defers again.
+      echo "→ coordinator doorbell SKIPPED — this session deferred; cron backstop owns it"
+    elif ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh 2>/dev/null; then
       echo "→ coordinator doorbell SKIPPED — subscription latched; cron backstop owns it"
     else
       curl -m 5 -s -X POST -H "Content-Type: application/json" -d "${CS_DOORBELL_JSON}" \
@@ -419,16 +493,21 @@ SNIP
     # homelab#1910 LAUNCH mode: the ride's launcher in place of claude (no transcripts to upload).
     # >>>REPLAY:coordinator-launch-runner>>>
     RUNNER="${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts"
+    [ -z "${GW_COORD:-}" ] || RUNNER="coord_gw_claude; RC=\$?; upload_transcripts"   # FU-270: the gateway session
     if [ -n "${LAUNCH:-}" ]; then RUNNER="bash /work/homelab/agents/agent-session.sh ${LAUNCH}; RC=\$?"; fi
     # <<<REPLAY:coordinator-launch-runner<<<
     WRAPPED="CS_SESSION_START=\$(date -u +%s); ${PREP}
 ${UPLOAD_FN}
 ${DETACH_FN}
+${COORD_GW_FN}
 set +e; ${RUNNER}; detach_post; exit \$RC"
   else
+    _claude="${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\""
+    [ -z "$GW_COORD" ] || _claude="coord_gw_claude"   # FU-270: the gateway session (block above)
     WRAPPED="${PREP}
 ${UPLOAD_FN}
-set +e; ${GO_CTX_ENV}claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; exit \$RC"
+${COORD_GW_FN}
+set +e; ${_claude}; RC=\$?; upload_transcripts; exit \$RC"
   fi
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
@@ -444,9 +523,15 @@ fi
 # (coordinator-scan.sh `coordinator_rail`) and handed it down as --model, so re-probing here would
 # only re-ask a question already answered. A manual/jail run with an explicit Go --model takes the
 # same branch, deliberately.
-case "${LAUNCH:+launch}:${MODEL:-}" in
+# FU-270: a GATEWAY session (the coordinator-gateway-session block) is not gated here either — the
+# gateway's admission walk IS its capacity answer (as for a worker ride under the knob), asked
+# in-pod; the FU-088 latch is consulted there only on the transition fallback.
+case "${LAUNCH:+launch}${GW_COORD:+gateway}:${MODEL:-}" in
   launch:*)
     echo "→ launch pod (homelab#1910): no LLM session — the worker launcher probes its own FU-088 gates"
+    ;;
+  gateway:*)
+    echo "→ coordinator session admits through the agent-gateway in-pod (FU-270) — the FU-088 latch gates only its old-proxy fallback"
     ;;
   :opencode-go/*)
     echo "→ coordinator tick on the Go rail (${MODEL}) — the Anthropic FU-088 latch does not gate it"
