@@ -1188,7 +1188,12 @@ harness-scoped strike is matched on it. ⚖ At most one per
 (session, class, source, provider): nine 502s on one ride are one `provider-5xx`, not nine — and a
 failed-over ride strikes each provider it tried, one per cell. ⚖ A 429 writes
 **no** strike: the cell cooldown is that fact's whole answer, and a rate limit says nothing about
-this task. ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
+this task. ⚖ A consumer's non-`clean` outcome after a session's LAST relayed upstream answer was a 429
+is stored (`GET` shows it) and counts **no** strike: the gateway owns that transport fact first-hand,
+and the 429 already latched or cooled the cell — a capacity death is no verdict on the model, cell or
+harness. A judge's outcome (`wrong-verdict`) is on the verdict, not the ride, and still counts; a canary
+ride keeps its task strike by [GW-CATALOG-OR §The entry canary](catalog.md#gw-catalog-or)'s ruling
+(2026-10-22: the 429 withholds the cell's verdict only). ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
 consumer's to say. **A clean outcome refutes** the task's counted strikes on the same cell
 (cell-scoped), the same model (model-scoped) and the same harness (harness-scoped): they stay as
 history, with `refuted_at` set.
@@ -1247,6 +1252,10 @@ World `policy-default`.
 | "the gateway writes its own transport class" | the session's request answered `upstream-401` || `{…, auth-storm, cell, gateway}` | `{class="auth-storm",source="gateway"}` 1 |
 | "one transport strike per session and class ⚖" | three `upstream-500` answers on one session || one `provider-5xx` | `{class="provider-5xx",source="gateway"}` 1 |
 | "a 429 is a cooldown, not a strike ⚖" | the session's request answered `upstream-429` || none | — |
+| "a consumer outcome after a relayed 429 strikes nothing ⚖" | the session's request answered `upstream-429`, then the consumer reports `unknown` || none; the outcome stored (`GET` → `outcome.class` = `unknown`) | — |
+| "a harness that gave up on a 429 strikes nothing ⚖" | `upstream-429`, then the consumer reports `harness-gave-up` || none | — |
+| "a 429 followed by a 2xx is no capacity death ⚖" | `upstream-429`, then `upstream-ok` on the same session, then the consumer reports `unknown` || `{…, unknown, model, outcome}` | `{class="unknown",source="outcome"}` 1 |
+| "a clean outcome after a 429 still refutes ⚖" | an earlier session's counted `no-verdict` on the task; this session `upstream-429`, then the consumer reports `clean` || the earlier strike refuted (`refuted: 1`) | — |
 | "a read timeout is a transport strike" | the session's request hit `upstream-slow` (504 `upstream-timeout`) || `{…, timeout, cell, gateway}` | `{class="timeout",source="gateway"}` 1 |
 | "an unreachable upstream is a transport strike" | the session's request hit `upstream-down` (502 `upstream-unreachable`) || `{…, provider-5xx, cell, gateway}` | `{class="provider-5xx",source="gateway"}` 1 |
 | "a policy refusal is a transport strike, not a rejected credential" | the session's request answered `upstream-403-refused` (403 `upstream-refused`) || `{…, refused, cell, gateway}` | `{class="refused",source="gateway"}` 1 |
