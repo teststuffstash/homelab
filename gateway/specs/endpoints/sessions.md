@@ -1055,7 +1055,7 @@ that stack).
 | "a caller entry missing a key refuses the load" | the platform loop without `bind_namespaces` || PolicyError |
 | "a policy without control_plane_auth refuses the load ⚖" | `control_plane_auth` absent || PolicyError |
 | "a policy without callers refuses the load ⚖" | `callers` absent || PolicyError |
-| "the deployed callers are today's four dispatchers and the judge, under enforce ⚖" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[coordinator, prober, reviewer, worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator, platform-agents]`, outcome `own`), `system:serviceaccount:oracle-agents:agentstack-loop` (`[oracle]`, `[prober]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:agent-coordinator` (`[platform]`, `[coordinator, responder]`, `[]`, `own`) and `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**) |
+| "the deployed callers are today's four dispatchers and the judge, under enforce ⚖" | `argocd/resources/agent-gateway/policy.json` || loads; `control_plane_auth` = `enforce`; `callers` = exactly `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles `[coordinator, prober, researcher, reviewer, worker]`, bind namespaces `[agent-runtime, homelab, openrouter-operator, platform-agents]`, outcome `own`), `system:serviceaccount:oracle-agents:agentstack-loop` (`[oracle]`, `[prober]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:specs-review` (`[platform]`, `[reviewer, worker]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:agent-coordinator` (`[platform]`, `[coordinator, responder, retro]`, `[openrouter-operator]`, `own`) and `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**) |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as. The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
@@ -1071,11 +1071,16 @@ also holds `coordinator` and `reviewer`, bound into its OWN namespace `platform-
 ruling 2026-11-01, the platform lanes' move onto the gateway, FU-270): the loop's coordinator and
 reviewer pods run there as `agentstack-loop` (`agents/coordinator-session.sh` /
 `agents/reviewer-session.sh --loop-ns`), launched by that same SA — granted ahead of the launchers
-that will use it; until they do, the grant admits nothing new. ⚖ **The coordinator namespace's
+that will use it; until they do, the grant admits nothing new. ⚖ It also holds `researcher`: the
+jail's `agents/research-fanout.sh` mints this SA's token (the entry canary's impersonation) and each
+platform arm is a worker-launcher ride bound into a platform repo namespace, as `researcher`. ⚖ **The coordinator namespace's
 shared SA** `agent-coordinator:agent-coordinator` holds `coordinator` + `responder`, no bind: the
 responder, the deep dig, island intake and the fix-debounce set-pass run as it
 (`agents/coordinator/{responder,deep-dig,island-intake,fix-debounce}-argo.yaml`) and will admit
-ONE unbound session each, the specs reviewer's shape. Being shared, the grant reaches every
+ONE unbound session each, the specs reviewer's shape. ⚖ It also holds `retro`, bound into
+`openrouter-operator`: the retro cron's cells (`agents/coordinator/retro-argo.yaml`) run as this SA
+and hand each cell to the worker launcher, whose ride pod lives in the platform retro's ride
+namespace (`agents/retro-project.sh`) — so the shared grant now reaches a bind there too. Being shared, the grant reaches every
 workflow on that SA; a per-workflow SA (the specs reviewer's #2685 split) is the narrower
 alternative, deferred until a lane needs to be told apart from the others at the gateway. ⚖ The **oracle
 loop** `oracle-agents:agentstack-loop` (operator ruling 2026-10-24, FU-270) is the `probe-oracle`

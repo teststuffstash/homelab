@@ -1,7 +1,8 @@
 CALL cp /tmp/report.md docs/agents/retros/2026-08-11-oracle-r4-opus.md
 OUT dag cell-a continueOn: failed=true error=true
 OUT dag cell-b continueOn: failed=true error=true
-OUT WARN: no report markers in $ROOT/agents/replay/fixtures/retro-harvest/logs/never-written (cell goose:deepseek/deepseek-v4-pro died or contract broken) — empty
+OUT served: cell A claude:opus, cell B goose:unserved
+OUT WARN: no report markers in $ROOT/agents/replay/fixtures/retro-harvest/logs/never-written (cell goose:unserved died or contract broken) — empty
 OUT DEAD_NOTE: names the cell that produced no report
 OUT DEAD_NOTE: warns the reader this is not the cross-checked pair
 RC 0
