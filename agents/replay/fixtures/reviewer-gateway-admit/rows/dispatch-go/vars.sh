@@ -1,0 +1,2 @@
+# row dispatch-go — subscription full: the walk keeps the claude dialect on the Go rail (an anthropic-dialect Go cell)
+GW_REPLY_BODY='{"decision":"dispatch","session":{"id":"4567efab","expires_at":"2026-11-01T16:00:00Z"},"rail":"opencode","harness":"claude","model":"opencode-go/claude-haiku-5-5","env_keys":["ANTHROPIC_BASE_URL","ANTHROPIC_AUTH_TOKEN","ANTHROPIC_MODEL"],"pull_url":"http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/4567efab/env","context_tokens":200000}'

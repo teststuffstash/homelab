@@ -1,0 +1,12 @@
+# reviewer-gateway-admit — the decision table (family contract in fixture.yaml). Row state (the
+# stack, argv flags, the gateway's reply) lives in rows/<id>/vars.sh.
+# id                     | world | patch | env                                   | expect                 | params
+off                      |       |       |                                       | off                    |
+other-stack              |       |       | AGENT_GATEWAY=sessions                | other-stack            |
+explicit-model           |       |       | AGENT_GATEWAY=sessions                | explicit-model         |
+dispatch-subscription    |       |       | AGENT_GATEWAY=sessions                | dispatch-subscription  |
+dispatch-go              |       |       | AGENT_GATEWAY=sessions                | dispatch-go            |
+defer                    |       |       | AGENT_GATEWAY=sessions                | defer                  |
+unreachable              |       |       | AGENT_GATEWAY=sessions                | unreachable            |
+no-caller-token          |       |       | AGENT_GATEWAY=sessions AGENT_GATEWAY_CALLER_TOKEN_FILE=/nonexistent/agent-gateway/token | no-caller-token |
+harness-unrunnable       |       |       | AGENT_GATEWAY=sessions                | harness-unrunnable     |

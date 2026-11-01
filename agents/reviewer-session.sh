@@ -250,6 +250,79 @@ else
 fi
 # <<<REPLAY:reviewer-currency-gate<<<
 
+# ── FU-270: admission through the agent-gateway's POST /sessions (PLATFORM stack only) ──────────
+# The worker's shape (agents/agent-session.sh, the gateway-sessions block) through the ONE shared
+# helper (agents/gateway-admit.sh): AGENT_GATEWAY=sessions is an env knob its dispatchers set for
+# the platform stack only (the review-<stack> cron in the agentstack Composition, the review-perstack
+# Sensor in review-argo.yaml), and this launcher guards on the same stack name. Under it the /route
+# consult, the FU-188 shadow pin, the FU-088 latch and the Go failover ladder are all SKIPPED — the
+# gateway's admission walk IS the capacity answer and owns the model (GW-SESSIONS-ADMIT).
+#   • The FU-188 pin's CONSTRAINT is the gateway's to hold: the reviewer pod runs `claude` only, so
+#     the request names `harness: claude` (the walk keeps only anthropic-dialect cells — never an
+#     openrouter-rail model this pod cannot ride, the 2026-08-26 class) and policy roles.reviewer.rails
+#     lists no openrouter. Lost: a codex-first reviewer rail order (the operator's weekly knob) is
+#     not followed by this claude-only pod — the gateway defers instead.
+#   • Decorrelation from the author: the gateway has no family-exclusion input. Nothing regresses —
+#     the pin held /route at shadow, so decorrelate_from was computed and discarded (Goal #1769) —
+#     and the evidence stays: the author's served model is logged beside the admitted one.
+#   • An explicit --model (the assembly review's REVIEW_GOAL_MODEL) is a model pin the gateway cannot
+#     take: that review keeps the old-proxy path, loudly.
+# Transition safety (seat ruling 2026-11-01): defer (rc 1) defers as the FU-088 latch does today
+# (exit 0 — the level-triggered reflex re-picks); refused-before-request (rc 2) or fail-closed (rc 3)
+# falls back to the old-proxy path below with one loud line, so a gateway outage never stops review.
+# >>>REPLAY:reviewer-gateway-admit>>>
+. "${HERE}/gateway-admit.sh"
+GW_SESSIONS=""; REVIEW_GW_LABEL=""; GW_TOKEN_MOUNT=""; GW_TOKEN_VOLUME=""
+REVIEW_LLM_ENV='        - name: ANTHROPIC_BASE_URL
+          value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+        - name: ANTHROPIC_AUTH_TOKEN
+          value: "ref:agent-coordinator/coordinator-claude"'
+if [ "${AGENT_GATEWAY:-}" = "sessions" ]; then
+  _gw_stack="$(jq -r --arg r "$PROJECT" \
+    '[.stacks[] | select([.repos[]? | if type=="object" then .name else . end] | index($r)) | .name][0] // ""' \
+    "$HERE/stacks.json" 2>/dev/null)" || _gw_stack=""
+  if [ "$_gw_stack" != "platform" ]; then
+    echo "WARN gateway(sessions): AGENT_GATEWAY=sessions IGNORED for stack '${_gw_stack:-unresolved}' — reviewer admission is platform-only (FU-270); this review takes the old-proxy path" >&2
+  elif [ -n "${MODEL_SET_EXPLICIT:-}" ]; then
+    echo "WARN gateway(sessions): explicit --model ${MODEL} — the gateway owns the model, so this review keeps the old-proxy path (FU-270: transition fallback)" >&2
+  else
+    _gw_rc=0
+    gw_preflight_caller || _gw_rc=$?
+    if [ "$_gw_rc" = 0 ]; then
+      gw_admit --stack platform --role reviewer --task "${TASK_KEY:-review-${PROJECT}-${PR}}" --round "$ROUND" \
+        --harness claude --harnesses claude --bind "${NS}/${POD_SA}/${POD}" || _gw_rc=$?
+    fi
+    case "$_gw_rc" in
+      0)
+        GW_SESSIONS=1; trap 'gw_release' EXIT
+        echo "→ gateway(sessions): reviewer served ${GW_MODEL}; author's served model ${DECORRELATE_FROM:-unknown} (evidence only — no family exclusion at the gateway; FU-188)"
+        # The pod's claude invocation model is the gateway's, rail prefix stripped (GW-MODEL-RESOLVE).
+        MODEL="$GW_WIRE_MODEL"; MODEL_RAIL="$GW_RAIL"; GO_SERVED=0
+        [ "$GW_RAIL" = "opencode" ] && GO_SERVED=1
+        # The skipped region: no /route consult (AGENT_ROUTER=off) and no FU-088 latch / Go ladder
+        # (the go-failover gate's adopted arm — the gateway decided the model and the capacity).
+        AGENT_ROUTER="off"; _router_adopted="gateway"
+        # The pod pulls its own LLM env (GW-SESSIONS-PULL): the URL + key NAMES as plain values, a
+        # projected token (audience agent-gateway) to authenticate the pull — no credential in the
+        # launcher or the manifest, the old /anthropic ref included.
+        REVIEW_LLM_ENV="        - name: AGENT_GATEWAY_PULL_URL
+          value: \"${GW_PULL_URL}\"
+        - name: AGENT_GATEWAY_ENV_KEYS
+          value: \"${GW_ENV_KEYS}\""
+        GW_TOKEN_MOUNT=$'\n        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }'
+        GW_TOKEN_VOLUME=$'\n    - name: gateway-token\n      projected:\n        sources:\n          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }'
+        REVIEW_GW_LABEL=", \"homelab.teststuff.net/gateway-session\": \"${GW_SESSION_ID}\"";;
+      1)
+        echo "→ review of ${PROJECT}#${PR} deferred — gateway ${GW_DEFER_REASON} (retry_after=${GW_RETRY_AFTER}s)"
+        exit 0;;
+      *)
+        # FU-270: transition fallback — deleted when the old proxy retires.
+        echo "WARN gateway admission refused rc=${_gw_rc} — old-proxy fallback" >&2;;
+    esac
+  fi
+fi
+# <<<REPLAY:reviewer-gateway-admit<<<
+
 # ── ADR-096: consult the router at the model-decision seam (POST /route) ──
 # role: reviewer → class review; the class policy orders the subscription rail first, so behaviour
 # is unchanged while capacity is ok — the routed pick replaces the literal, not the doctrine.
@@ -1079,7 +1152,9 @@ if ! printf '%s\n' "$_COMBINED" | bash -n /dev/stdin 2>/dev/null; then
   echo "FATAL: combined pod script has a syntax error — review dispatch aborted before pod creation (homelab#1113)" >&2
   exit 1
 fi
-ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
+# FU-270: a gateway-admitted review's FIRST step is the in-pod env pull (GW_PULL_PRELUDE, empty on
+# the old-proxy path) — ahead of the transcript trap: a failed pull exits 97 before claude starts.
+ARGS="[\"bash\",\"-lc\",$(printf '%s%s\n%s\n%s\n%s' "${GW_PULL_PRELUDE:-}" "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
 
 # >>>REPLAY:reviewer-go-failover-gate>>>
 # FU-088(a): defer while the subscription is 429-latched (covers the Sensor path too, which
@@ -1161,7 +1236,10 @@ esac
 # The inversion is what makes it worth a guard: failover fires precisely BECAUSE the Anthropic
 # window is latched, so the rides routing around it were consuming the slots they were meant to
 # free — five of them would have blocked subscription dispatch outright.
-case "${MODEL:-}" in
+# A gateway-admitted review (GW_SESSIONS): GW_MODEL keeps the rail prefix the stripped invocation
+# MODEL lost. Never GW_MODEL alone — a refused admission (the old-proxy fallback) leaves it set.
+_label_model="${MODEL:-}"; [ -z "${GW_SESSIONS:-}" ] || _label_model="${GW_MODEL:-}"
+case "$_label_model" in
   opencode-go/*) REVIEW_RAIL_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
   *)             REVIEW_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
 esac
@@ -1172,7 +1250,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}"${REVIEW_RAIL_LABEL} }
+  labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}"${REVIEW_RAIL_LABEL}${REVIEW_GW_LABEL:-} }
 spec:
   serviceAccountName: ${POD_SA}
   restartPolicy: Never
@@ -1242,10 +1320,9 @@ spec:
         # LLM-authored PR code, so it of all roles must not hold the raw ~1y token. The pod carries
         # only the opaque ref; the proxy resolves + injects (token + oauth beta). Do NOT also set
         # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN — they take auth precedence over this path.
-        - name: ANTHROPIC_BASE_URL
-          value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
-        - name: ANTHROPIC_AUTH_TOKEN
-          value: "ref:agent-coordinator/coordinator-claude"
+        # FU-270: a gateway-admitted review carries the pull URL + env key names instead (the
+        # reviewer-gateway-admit block) and pulls its LLM env in-pod — no ref, no token.
+${REVIEW_LLM_ENV}
         # gh clone / pr checkout / pr review: the REVIEW-BOT App token (distinct identity from the PR
         # author, or Approve self-rejects). Env is the frozen fallback; the image's gh-wrapper prefers
         # the LIVE token file (ESO re-mints it ~hourly).
@@ -1255,7 +1332,7 @@ spec:
         - name: GH_TOKEN_FILE
           value: "/var/run/reviewer-git/GH_TOKEN"
       volumeMounts:
-        - { name: reviewer-git, mountPath: /var/run/reviewer-git, readOnly: true }
+        - { name: reviewer-git, mountPath: /var/run/reviewer-git, readOnly: true }${GW_TOKEN_MOUNT:-}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -1268,7 +1345,7 @@ spec:
         limits:   { cpu: "2",    memory: "2Gi" }
   volumes:
     - name: reviewer-git
-      secret: { secretName: ${REVIEWER_GIT}, optional: true }
+      secret: { secretName: ${REVIEWER_GIT}, optional: true }${GW_TOKEN_VOLUME:-}
 EOF
 
 echo "→ waiting for ${POD} (clone + checkout + review)…"
