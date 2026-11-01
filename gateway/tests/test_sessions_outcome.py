@@ -48,6 +48,10 @@ The store (policy-default):
 | the gateway writes its own transport class | the session's request answered upstream-401 || [{…, auth-storm, cell, gateway}] | {class=auth-storm,source=gateway} 1 |
 | one transport strike per session and class | three upstream-500 answers on one session || one provider-5xx strike | {class=provider-5xx,source=gateway} 1 |
 | a 429 is a cooldown, not a strike | the session's request answered upstream-429 || [] | — |
+| a consumer outcome after a relayed 429 strikes nothing | upstream-429, then the consumer reports unknown || none; the outcome stored (GET → unknown) | — |
+| a harness that gave up on a 429 strikes nothing | upstream-429, then the consumer reports harness-gave-up || none | — |
+| a 429 followed by a 2xx is no capacity death | upstream-429, then upstream-ok on the same session, then the consumer reports unknown || {…, unknown, model, outcome} | {class="unknown",source="outcome"} 1 |
+| a clean outcome after a 429 still refutes | an earlier session's counted no-verdict on the task; this session upstream-429, then the consumer reports clean || the earlier strike refuted (refuted: 1) | — |
 | a read timeout is a transport strike | upstream-slow (504) on the session || [{…, timeout, cell, gateway}] | {class=timeout,source=gateway} 1 |
 | an unreachable upstream is a transport strike | upstream-down (502) on the session || [{…, provider-5xx, cell, gateway}] | {class=provider-5xx,source=gateway} 1 |
 | a policy refusal is a transport strike, not a rejected credential | upstream-403-refused on the session || [{…, refused, cell, gateway}] | {class=refused,source=gateway} 1 |
@@ -297,6 +301,11 @@ STORE_ROWS = [
     ("one transport strike per session and class", [("ride", "upstream-500"), ("ride", "upstream-500"), ("ride", "upstream-500")],
      [{**CELL, "class": "provider-5xx", "scope": "cell", "source": "gateway"}], ("provider-5xx", "gateway", 1)),
     ("a 429 is a cooldown, not a strike", [("ride", "upstream-429")], [], None),
+    ("a consumer outcome after a relayed 429 strikes nothing ⚖", [("ride", "upstream-429"), ("report", "unknown")], [], ("unknown", "outcome", 0)),
+    ("a harness that gave up on a 429 strikes nothing ⚖", [("ride", "upstream-429"), ("report", "harness-gave-up")], [],
+     ("harness-gave-up", "outcome", 0)),
+    ("a 429 followed by a 2xx is no capacity death ⚖", [("ride", "upstream-429"), ("ride", "upstream-ok"), ("report", "unknown")],
+     [{**CELL, "class": "unknown", "scope": "model", "source": "outcome"}], ("unknown", "outcome", 1)),
     ("a read timeout is a transport strike", [("ride", "upstream-slow")], [{**CELL, "class": "timeout", "scope": "cell", "source": "gateway"}],
      ("timeout", "gateway", 1)),
     ("an unreachable upstream is a transport strike", [("ride", "upstream-down")],
@@ -370,6 +379,29 @@ async def test_clean_refutes(gw, upstreams, store):
                                                                       "after (all, refuted kept)": after_all})
     with then("refuted = 1; no counted strike is left on the task (the strike is kept, refuted)"):
         assert r.json()["refuted"] == 1 and after_counted == [] and len(after_all) == 1, (r.json(), after_counted, after_all)
+
+
+async def test_clean_after_429_still_refutes(gw, upstreams, store):
+    """row: a clean outcome after a 429 still refutes ⚖"""
+    world(upstream="upstream-ok")
+    with given("two worker sessions on the task, both admitted on the same model (round 2 does not supersede round 1)"):
+        with quiet():
+            a1 = await open_session(gw, **WORKER)
+            a2 = await open_session(gw, **{**WORKER, "round": 2})
+    with given("the earlier session's no-verdict is counted (model-scoped, so it excludes that model for the task)"):
+        with quiet():
+            await _report(gw, a1["session"]["id"], {"class": "no-verdict"}, None)
+        before = _strikes(store, attach=False)
+    with given("this session's request answered upstream-429"):
+        with quiet():
+            await _act(gw, upstreams, a2, ("ride", "upstream-429"))
+    with when("POST /sessions/{id}/outcome {class: clean}"):
+        with quiet():
+            r = await _report(gw, a2["session"]["id"], {"class": "clean"}, None)
+        attach_json("the outcome answer", r.json())
+    then_eq("refuted", r.json()["refuted"], 1)
+    with then("the earlier no-verdict is no longer counted"):
+        check("strikes before / after", (len(before), _strikes(store)), (1, []))
 
 
 async def test_clean_elsewhere_refutes_nothing(gw, store):
