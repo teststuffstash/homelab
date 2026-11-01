@@ -463,9 +463,8 @@ six OVERSIZE items pointer-ized into
       (flapped 2026-08-23 ×2; the ALERT arm's twin quickfixed f703ec39). **Gate LIVE 2026-10-31:**
       `shellcheck-lint` (#3081, 145 findings baselined in `scripts/shellcheck-baseline.txt` — ~160 standing,
       not ~8) + its `ci` step (seat-direct); dataflow analysis OFF since #3102 (it peaked 4.3 GiB on
-      coordinator-scan.sh and OOMKilled every 4Gi worker running diff-ci, #3094; turning it back on now means the `large`
-      runner class (#3132) — it cannot fit the normal 3Gi limit). **Next:** the `meta-needs-attention.sh` empty-read (still
-      `2>/dev/null | tail -1 | jq` per clause — fail loud on a gh error). Relates ADR-113, ADR-103, #854.
+      coordinator-scan.sh, OOMKilled every 4Gi worker, #3094; re-enabling needs the `large` runner class, #3132). **Next:**
+      the `meta-needs-attention.sh` empty-read (still `2>/dev/null | tail -1 | jq` per clause — fail loud on a gh error). Relates ADR-113, ADR-103, #854.
 
 ## Agents
 - [ ] **FU-314** — **The specs reviewer still reads the legacy `gateway-evidence` Actions artifact as a fallback.**
@@ -504,17 +503,15 @@ the block needs pruning, not more headings.
       Now: the operator-direct `.github/renovate-global.json` regex manager. **Next** after both:
       the box wiring — `policy/mgmt/plan-input.yaml` maps a `ci_runner*` replace → the verb, one VM per tick.
 - [ ] **FU-305** — **A devbox toolchain bump wedged the management box's loops; the sentinel failed SILENT.**
-      10-07 #2362 → every box `devbox run` exit 1, no sentinel verdict. Class fix #2457 (no gate loop runs devbox;
-      iac-sentinel runs the BAKED lock) — docs/management-box.md §Two pins. Caveat: devbox logs `--option access-tokens
-      github.com=<mgmt PAT>` into the unit journal on an internal error (root-only) — redact before shipping box logs.
-      2026-10-31 resight: #2919 left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails w/o a TTY → the belt's
-      OPNsense leg (still `devbox run`) exit 1 → `MgmtBeltCheckFailing{check=ansible}` since 10-28 11:19Z; #2457 missed
-      it. Un-wedged 10-31 (venv moved aside); class fix #3052 (`5df5ea7f`: the belt resolves ansible from `devbox.lock`,
-      `OPN_ANSIBLE_BIN`; first box tick on it 14:17Z PASS, 0 devbox calls). 2026-11-01: a SECOND wedge shape — an un-timed
-      `kubectl exec` into a hung cilium agent froze every box loop, the sentinel starved 3 h+ and nothing alerted
-      (bounded in #3123). **Next:** (1) drop `pkgs.devbox` + its stale comment from the `mgmt-belt` unit `path` with the
-      next `mgmt/nixos` change; (2) the ORIGINAL deliverable, still unbuilt and now twice-evidenced:
-      `MgmtSentinelLoopStale` (+ replays 10-07 20:15–21:10Z and 11-01's 3 h starve); then archive.
+      10-07 #2362 → every box `devbox run` exit 1, no sentinel verdict. Class fix #2457 (no gate loop runs devbox; iac-sentinel
+      runs the BAKED lock) — management-box.md §Two pins. Caveat: devbox logs the mgmt PAT (`--option access-tokens`) into the
+      root-only unit journal on an internal error — redact before shipping box logs.
+      10-31 resight: #2919 left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails w/o a TTY → the belt's OPNsense
+      leg (still `devbox run`) exit 1 → `MgmtBeltCheckFailing{check=ansible}` since 10-28 11:19Z; #2457 missed it. Un-wedged
+      10-31; class fix #3052 (`5df5ea7f`: ansible from `devbox.lock`, `OPN_ANSIBLE_BIN`; first box tick 14:17Z PASS). 11-01, a
+      SECOND wedge: an un-timed `kubectl exec` into a hung cilium agent froze every loop, the sentinel starved 3 h+, nothing
+      alerted (bounded, #3123). **Next:** (1) drop `pkgs.devbox` + its stale comment from the `mgmt-belt` unit `path` with the next
+      `mgmt/nixos` change; (2) `MgmtSentinelLoopStale` (replays 10-07 20:15–21:10Z + 11-01) — the ORIGINAL deliverable; archive.
 - [ ] **FU-290** — **Scans + sessions + reflexes exhaust the shared homelab-agents installation pools (142724430)
       under PR churn.** First 09-25 (Renovate wave); detector blindness fixed (#1979 graphql, #2442 core). Drains
       since: 10-04/10-06/10-07 (sleep-tracking#121 storm, oracle-fleet#798 loop — fixed + belted #2204/#2366),
@@ -814,8 +811,9 @@ the block needs pruning, not more headings.
       rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270). Live: the PLATFORM session pod rides
       `AGENT_GATEWAY=sessions` (#2788); codex rail lit 10-22, subscriptions on every role (ruled 10-23, #2845), codex MCP
       (#2844), harness-scoped strikes (#2880); the harness-follows-the-cell ruling is #2870 (queued). **Next (seat):** a canary
-      window per 6 h refresh, re-cut when the lists move (last #2903, 10-24); read the first platform worker ride through
-      `/sessions` and the first non-prober codex ride; the jail's codex refresh reading ~10-26. **Operator-only:** FU-313;
+      window per 6 h refresh, re-cut when the lists move (last #2903; 11-01 check = derivation, terra in the snapshot, no tier);
+      the weekly AA pull misses release-day models (terra, 10-26) — `benchmarks-snapshot.sh`'s cadence knob; hand-passed codex
+      candidates → #3145; read the first platform worker ride through `/sessions` and the first non-prober codex ride. **Operator-only:** FU-313;
       ruling #2768; #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
       codex child (#2904/#2905 live) waits on oracle-fleet#933 → arm oracle-iac#1141 (TICK-LOG 10-24).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process

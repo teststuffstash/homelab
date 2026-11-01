@@ -15013,3 +15013,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Specs reviewer approved #977 round 4 with the pack partly unread** → **#3136** (armed): the lens makes `Verdict: PARTIAL READ — <unfinished>` its own line; the tick posts no review, holds the content commit with one `PARTIAL READ:` comment (`classify` → `partial-held`), `kind=partial` + `SpecsReviewPartialRead` (promtool pair); pass-1 prompt honours `pass1-prior.tsv` (snippets#46's final wording, per the 18:32Z addendum; inert until the v0.6.8 pin). The read-map-unit lever is oracle/snippets' (#48, #49).
 - **Stale inbox (11 files, 2026-09-05 → 10-21; a GAPS handoff-G3 resight)** triaged by a fork: 6 already resolved/superseded/owned (circles ADR-001, FU-316/#3049, #2169, FU-218, ADR-157 Gate A, `fixer.rideSize`); 3 filed as records **#3139** (`blocked-on: human` → `major/awaiting-human`), **#3140** (feedback-triage retro series + RO reach — loop component, operator's primitive), **#3141** (PublicRoute `clientMark`); dind `/work` closed for lack of a consumer; the minutark README line stays the operator's parked yes/no (09-22). Inbox + doing empty at 19:00Z.
 
+## 2026-11-01 ~19:00–20:30Z — seat: two second-jail handovers filed (CI harvest / kata trial; pr-open + codex rollout)
+
+- **Operator ruled YES on #3138** (goal/** approval twin = master's count) → readied + armed; apply is the operator's once merged.
+- **CI-harvest handover (second jail, wk-metal-03 kata trial):** verified #3123 #3131 #3132 #3133 #3134 + oracle-fleet#983 merged;
+  FU-218 (static limits live, reserve ruled, resize controller = the open question), FU-185 (dataflow needs `large`), FU-305
+  (second wedge shape, #3123; `MgmtSentinelLoopStale` twice-evidenced) extended. Candidates verified then fixed, not FU'd:
+  the runner-image auto-bump skipped `arc-runners-large.yaml` (pin 2026.9.7 vs 10.31) → sed list fixed direct (bde8b2fc,
+  governance) + catch-up bump **#3142**; `github_ci_job_*` emitted `job` → `exported_job` (the box's rollout evidence grouped
+  by the scrape job) → `ci_job` **#3143**; Prometheus holds ~18 d at 41.6 GB vs the 45 GB cap (31d configured) → SERVICES.md
+  row corrected, no FU (the cap is the knob). #3107 (node down) got the closing diagnosis; the reports were unreachable here.
+- **pr-open/codex handover:** phase-3 PRs all MERGED (8 repos). `ci.yaml` pr-open-self-test step added direct (87f08a4d,
+  governance); oracle-fleet's own phase 3 → **oracle-fleet#994**; codex catalog leg → **#3145** (`tiers -- check` = derivation,
+  terra in the 11-01 snapshot but no tier); the weekly AA pull's release-day gap → FU-270; the #3016 lesson (seat-only
+  acceptance) → issue-authoring failure-signature row **#3146**.
+

@@ -211,6 +211,12 @@ jobs:
         if: steps.diff.outputs.specs-review-self-test != 'false'
         run: devbox run specs-review-self-test
 
+      # pr-open (agents/pr-open.sh, ADR-157): the one way a worker opens a PR — its refusals, stamp
+      # and base against a throwaway repo with stubbed devbox/gh. Row in scripts/diff-ci.sh.
+      - name: pr-open self-test (devbox run pr-open-self-test)
+        if: steps.diff.outputs.pr-open-self-test != 'false'
+        run: devbox run pr-open-self-test
+
       # The ~250-line responder script EMBEDDED in responder-argo.yaml is the one thing
       # manifest-lint skips entirely (it validates the Sensor CR, not the shell inside it) — and
       # it shipped two bugs in two rounds on homelab#124 alone. The harness extracts the script
