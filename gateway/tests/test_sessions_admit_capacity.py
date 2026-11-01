@@ -30,7 +30,7 @@ Subscription window utilization (reviewer; arrange = one anthropic ride whose an
 | any 2xx on the rail clears the latch | reviewer ride on anthropic → 429, then the same session → 200 | — | reviewer, rail anthropic || dispatch | anthropic | — | — |
 | a Go 429 latches the rail for its retry-after | worker ride on opencode → 429 | — | worker, rail opencode || defer | — | rail-latched | 30 |
 | a Go 429 without retry-after latches for the rail's hold | worker ride on opencode → 429, no retry-after | — | worker, rail opencode || defer | — | rail-latched | 900 |
-| one Go model's 429 blocks every Go model: one shared allowance | worker ride on opencode → 429 | — | worker, rail opencode, tier heavy || defer | — | rail-latched | 30 |
+| one Go model's 429 blocks every Go model: one shared allowance ⚖ | worker ride on opencode → 429 | — | worker, rail opencode, tier heavy || defer | — | rail-latched | 30 |
 | a latched Go rail is skipped, the walk continues | worker ride on opencode → 429 | — | worker (policy walk) || dispatch | openrouter | — | — |
 | a rail whose policy declares no latch is not latched: its other model admits | worker ride on openrouter → 429 | — | worker, rail openrouter, tier heavy || dispatch | openrouter | — | — |
 | every rail blocked: the rail that frees first names the defer | worker ride on opencode → 429; openrouter at its 20 | — | worker (policy walk) || defer | — | rail-latched | 30 |
@@ -199,7 +199,7 @@ LATCH_ROWS = [
      {"rail": "opencode"}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 30}),
     ("a Go 429 without retry-after latches for the rail's hold", [("opencode", "worker", "upstream-429-no-header")], 0,
      {"rail": "opencode"}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 900}),
-    ("one Go model's 429 blocks every Go model: one shared allowance", [("opencode", "worker", "upstream-429")], 0,
+    ("one Go model's 429 blocks every Go model: one shared allowance ⚖", [("opencode", "worker", "upstream-429")], 0,
      {"rail": "opencode", "tier": "heavy"}, {"decision": "defer", "reason": "rail-latched", "retry_after_s": 30}),
     ("a latched Go rail is skipped, the walk continues", [("opencode", "worker", "upstream-429")], 0,
      {}, {"decision": "dispatch", "rail": "openrouter"}),
