@@ -15030,4 +15030,6 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **#3138 MERGED 19:51Z** (goal/** twin = master's count; the `tofu/github` apply is the operator's, from the workspace checkout).
   #3142 #3143 #3146 MERGED. Oracle handoff 19:51Z: snippets **v0.6.9** released → pins PR **#3148** (reviewer + gateway evidence +
   README links; the worker's process-image tag follows the gateway pin file; sha + ghcr manifest verified).
+- **Operator applied `tofu/github` ~20:00Z: 0 added, 2 changed** — `required-approval-goal` = 2 approvals on oracle-fleet (ruleset
+  20494590) and homelab, verified via the API. ADR-155's amendment is live.
 
