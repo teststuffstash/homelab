@@ -79,6 +79,11 @@ spec:
     entrypoint: dig-retry
     volumes:
       - { name: work, emptyDir: {} }
+      # GW-SESSIONS-AUTH: this pod's projected ServiceAccount token for the gateway's caller check.
+      - name: gateway-token
+        projected:
+          sources:
+            - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
     templates:
       # ── THE RETRY WRAPPER (FU-198 ruling, operator-approved design-agents sitting 2026-10-14) ──
       # The retry — the one that waits out the FU-088 latch, i.e. waits for CAPACITY — lives HERE,
@@ -113,6 +118,11 @@ spec:
           env:
             - { name: HOME, value: "/home/node" }
             - { name: ORG, value: "teststuffstash" }
+            # FU-270: the agent-gateway admits this session (POST /sessions, agents/gateway-admit.sh's
+            # unbound lane shape); the two ANTHROPIC_* below are the old-proxy path, which the
+            # gateway's dispatch env overrides on the claude call and which the transition fallback
+            # still uses. Caller = the projected `gateway-token` (agent-coordinator:agent-coordinator).
+            - { name: AGENT_GATEWAY, value: "sessions" }
             - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
             - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
             - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
@@ -143,6 +153,7 @@ spec:
             - { name: DIG_MAX_GROUPS, value: "4" }
           volumeMounts:
             - { name: work, mountPath: /work }
+            - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
           command: [bash, -lc]
           args:
             - |
@@ -193,10 +204,21 @@ spec:
                 echo "deep-dig: nothing unexplained is standing or recurring — no session today (digest → $TS_PREFIX)"; exit 0
               fi
 
-              # ── 2. one session, on whichever rail is clear (FU-088) ─────────────────────────
+              # ── 2. one session: admitted by the agent-gateway (FU-270), else on whichever rail is clear (FU-088)
+              # The dig acts for the platform (its findings land in the homelab bucket for the seat and
+              # the island intake), so it admits as stack platform. agents/gateway-admit.sh's UNBOUND
+              # lane shape: the dispatch env rides `env` onto the claude call below. rc 4 = the old path
+              # (knob off, or the FU-270 transition fallback, logged by the helper).
+              . agents/gateway-admit.sh
+              _gw=0; gw_admit_lane /tmp/gw-llm.env --stack platform --role responder --task "dig-$DAY" || _gw=$?
+              case "$_gw" in
+                0) trap gw_release EXIT; rail="gateway:$GW_RAIL"; TS_MODEL="$GW_WIRE_MODEL";;
+                1) _push 1 "$CAND" "$GROUPS" "$EXPL" 0 0; echo "deep-dig: the gateway deferred [$GW_DEFER_REASON] — exit 1, Argo retries with backoff"; exit 1;;
+                *)
               rail="$(SUBSCRIPTION_TIER=dispatch bash agents/subscription-latch.sh --pick-rail)" || rail=""
               if [ -z "$rail" ]; then _push 1 "$CAND" "$GROUPS" "$EXPL" 0 0; echo "deep-dig: both rails latched — exit 1, Argo retries with backoff"; exit 1; fi
-              TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)"
+              TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)";;
+              esac
 
               # The brief is composed into a FILE: the digest rides inside it, and an argument of
               # that size is how the retro's cell died (E2BIG at 146 KB) — DIG_MAX_GROUPS bounds it.
@@ -225,7 +247,7 @@ spec:
               _ts_put /tmp/brief.md brief.md
 
               : > /tmp/ts-mark; : > /tmp/dig.log
-              claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 80 </dev/null 2>&1 \
+              env "${GW_LLM_ENV[@]}" claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 80 </dev/null 2>&1 \
                 | tee /tmp/dig.log \
                 || echo "WARN: the dig session failed — whatever it printed is still harvested" | tee -a /tmp/dig.log
 

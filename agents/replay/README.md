@@ -294,6 +294,7 @@ is stale, so it cannot drift the way the prose register did.
 | `env-card-mcp-present` | actions | - | `agents/agent-session.sh` | - |
 | `env-card-mcp-present/opencode` | actions | - | `agents/agent-session.sh` | - |
 | `epic-dispositions` | suite | - | `agents/epic_dispositions.py` | IL-T12 |
+| `fix-debounce-setpass-admit` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `fleet-fault-unlatch-cause-closed-green` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fleet-fault-unlatch-cause-open` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -398,6 +399,7 @@ is stale, so it cannot drift the way the prose register did.
 | `pr-cap-per-base/counts` | actions | - | `agents/coordinator-scan.sh` | - |
 | `pr-cap-per-base/jq-extraction` | actions | - | `agents/coordinator-scan.sh` | - |
 | `preflight-malformed-block` | actions | - | `agents/agent-session.sh` | - |
+| `probe-parent-admit` | table | - | `argocd/resources/agentstack/composition.yaml` | - |
 | `python-profile-env/other` | actions | - | `agents/agent-session.sh` | - |
 | `python-profile-env/python` | actions | - | `agents/agent-session.sh` | - |
 | `queued-body-tsv` | table | - | `agents/coordinator-scan.sh` | - |
@@ -502,6 +504,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-depth-lane-split` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-epic-container` | actions | - | `agents/reviewer-session.sh` | IL-T15 |
 | `reviewer-exit-contract` | table | - | `agents/reviewer-session.sh` | MP-T03 |
+| `reviewer-gateway-admit` | table | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover/limited` | actions | - | `agents/reviewer-session.sh` | - |
@@ -510,6 +513,8 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-mcp-prep/absent` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-mcp-prep/present` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-optout/reviewer-optout` | suite | - | `-` | - |
+| `reviewer-rail-label/gateway-fallback` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-rail-label/gateway-go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-rail-label/go` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-rail-label/subscription` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-route-carrier/rail-not-go` | actions | - | `agents/reviewer-session.sh` | - |

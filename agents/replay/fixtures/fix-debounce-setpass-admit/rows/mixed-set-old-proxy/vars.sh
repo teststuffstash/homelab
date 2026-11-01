@@ -1,0 +1,2 @@
+# row mixed-set-old-proxy
+SET_REPOS="teststuffstash/homelab teststuffstash/oracle-fleet"; GW_REPLY_BODY='{"decision":"dispatch","session":{"id":"s-fd-1","token":"gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expires_at":"2026-11-01T16:00:00Z"},"rail":"anthropic","harness":"claude","model":"claude/sonnet","env":{"ANTHROPIC_BASE_URL":"http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic","ANTHROPIC_AUTH_TOKEN":"gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","ANTHROPIC_MODEL":"sonnet"},"context_tokens":200000}'
