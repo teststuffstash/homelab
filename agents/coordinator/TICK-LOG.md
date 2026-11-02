@@ -15052,3 +15052,26 @@ updates or reverts as much as possible — mechanical revert or a responder."
   env) is intake's to queue.
 - **FU-218: CLOSED on the static class pair** — ADR-159 written, item archived, spike header/Open line updated
   (option A's resize controller not built; nx-01's free DIMM slots retire the spare-memory question).
+
+## 2026-11-02 ~21:40–22:30Z — seat: #3140's homelab half built — named retro SERIES (PR #3161)
+- Operator: "Lets continue, read 3140." Read the full retro slice (§B2, retro-argo.yaml, retro-session.sh, retro-project.sh,
+  retro_pipeline.py, the retro fixtures, BRIEF.md) + the live facts: ONE retro CronWorkflow exists (platform); the oracle
+  stack series was never scheduled; no untriaged-feedback gauge in Prometheus; the ride pod clones the stack repo (a brief in
+  oracle-fleet's `.agents/` is readable in place); `pr-open` reached only RECIPE rides; the ride image has no psql.
+- **Design (worktree, PR #3161, auto-merge armed, pr-wait in background):** retro-argo.yaml = one WorkflowTemplate + a
+  CronWorkflow per (stack, series) — `retro-session` (platform, Mon) + `retro-feedback-triage` (oracle, Wed, BORN
+  SUSPENDED). Params `series` / `guardExpr` (PromQL guard, parsed by new `agents/retro_guard_expr.py`: 0 fire · 3 quiet ·
+  1 fail; absent gauge or dead Prometheus = FAIL, never quiet) / `cellPgSecret` (basic-auth Secret NAME → PGUSER/PGPASSWORD
+  secretKeyRefs, the RETRO_GH_SECRET shape) / empty `harnessB` = single-cell. `retro_pipeline.py prepare --no-ledger`;
+  `retro-session.sh --series` rides new `docs/agents/retros/SERIES-BRIEF.md` (pointer at the stack's `.agents/<series>.md`
+  + the report contract) and sets AGENT_PR_OPEN=1 (agent-session.sh now renders pr-open for a `--run` ride on that flag).
+  RetroReportOverdue → `max by (series)` with an `absent()*0` fallback — `or vector(0)` under `by (series)` adds a label-less
+  phantom beside every real series (the promtool test caught it); case (d) pins a stale named series firing alone.
+- Verification: replay 986/986 under devbox (new rows expr-{fires,quiet,absent,error,prom-down}, single-cell, retro-pg-env;
+  retro-pipeline-test adapted to the 3-document manifest + a --no-ledger test), promtool SUCCESS, rules-lint/manifest-lint/
+  shellcheck-lint/docs-graph-lint OK. Three first-run defects caught by the fixtures: a literal `\n` in the pg fragment after
+  the name splice, an inline YAML comment leaking into a fixture env value, the `or vector(0)` phantom.
+- Oracle's half asked via inbox `20261102-2130-…` + addendum: the `oracle_feedback_untriaged_oldest_age_seconds` gauge,
+  `.agents/feedback-triage.md` (python DB read, pr-open, no row text), the `ownServices` 5432 leg. Hand-fire + unsuspend once
+  their three PRs land. Two gotchas for the record: `gh issue comment --body "…\`x\`…"` through `devbox run` is eval'd by
+  dash — backticks execute; always `--body-file`. `devbox run diff-ci` on this diff exceeds 10 min — background it.
