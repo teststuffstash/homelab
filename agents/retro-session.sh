@@ -56,9 +56,20 @@ while [ $# -gt 0 ]; do case "$1" in
   --ledger)      LEDGER="$2"; shift 2;;
   --review)      REVIEW="$2"; shift 2;;
   --deep-dive-k) K="$2"; shift 2;;
+  --series)      SERIES="$2"; shift 2;;
   *) echo "unknown flag $1" >&2; exit 2;;
 esac; done
 [ -n "$CELL" ] || { echo "FATAL: --cell <harness>[:<model>] required (e.g. claude, goose; off-platform also claude:opus)" >&2; exit 2; }
+# The SERIES (homelab#3140): unset = the stack's own loop retro (series name == stack; BRIEF.md,
+# `<stack>-rN` numbering). A named series rides the stack repo's `.agents/<series>.md` through the
+# SERIES-BRIEF.md pointer and numbers its reports `<series>-rN`. Validated as the pipeline does
+# (retro_pipeline.py --series) — it becomes a filename, a branch and a pushgateway label.
+SERIES="${SERIES:-$STACK}"
+[[ "$SERIES" =~ ^[a-z0-9-]+$ ]] || { echo "FATAL: --series '${SERIES}' must match [a-z0-9-]+" >&2; exit 2; }
+SERIES_BRIEF=""; [ "$SERIES" = "$STACK" ] || SERIES_BRIEF=1
+# A series' brief ends in a PR on the stack repo, so its ride carries `pr-open` on PATH (ADR-157:
+# the one way a ride opens a PR; agent-session.sh renders it for a --run ride on this flag).
+[ -z "$SERIES_BRIEF" ] || export AGENT_PR_OPEN=1
 # >>>REPLAY:retro-cell-path>>>
 HARNESS="${CELL%%:*}"; MODEL=""
 case "$CELL" in *:*) MODEL="${CELL#*:}";; esac
@@ -91,9 +102,12 @@ fi
 # <<<REPLAY:retro-cell-path<<<
 retro_project "$STACK" || exit 2
 
-# Next run id from the harvested reports (rN numbering is per-stack).
-LAST=$(ls "$RETROS" 2>/dev/null | grep -oE "${STACK}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
+# Next run id from the harvested reports (rN numbering is per-SERIES; series == stack by default).
+LAST=$(ls "$RETROS" 2>/dev/null | grep -oE "${SERIES}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
 RUN_ID="r$(( ${LAST:-0} + 1 ))"
+# The transcript/task key: `retro-rN` for the stack's own retro (unchanged), `retro-<series>-rN`
+# for a named series, so two series on one stack never share a capture prefix (homelab#3140).
+TASK_KEY="retro-${SERIES_BRIEF:+${SERIES}-}${RUN_ID}"
 # >>>REPLAY:retro-window-run-id>>>
 # Published coverage advances independently of report-PR merge; the frozen run id wins.
 if [ -n "${LEDGER:-}" ]; then
@@ -142,6 +156,21 @@ t = t.replace("{{REPORT}}", open(report).read())
 open(out, "w").write(t)
 PY
   FIRST_MSG="Read /tmp/retro-brief.md and execute it exactly. Your final message must contain the complete review between the markers it specifies."
+elif [ -n "$SERIES_BRIEF" ]; then
+  # A named series (homelab#3140): the brief is the STACK repo's `.agents/<series>.md`, read by the
+  # ride in its own checkout; what travels is SERIES-BRIEF.md — the pointer plus the report
+  # contract the harvest reads. No ledger text, no harness excerpts: the series reads its own data.
+  [ -f "${LEDGER:-}" ] || { echo "FATAL: --ledger <frozen bundle> required (it freezes the run id; retro-argo.yaml's guard writes it)" >&2; exit 2; }
+  python3 - "$RETROS/SERIES-BRIEF.md" "$BRIEF" "$STACK" "$SERIES" "$RUN_ID" "$MAIN_REPO" <<'PY'
+import sys
+tpl, out, stack, series, run_id, repo = sys.argv[1:]
+t = open(tpl).read()
+t = t.split("-->", 1)[1].lstrip()  # strip the template header comment
+for a, b in [("{{STACK}}", stack), ("{{SERIES}}", series), ("{{RUN_ID}}", run_id), ("{{MAIN_REPO}}", repo)]:
+    t = t.replace(a, b)
+open(out, "w").write(t)
+PY
+  FIRST_MSG="Read /tmp/retro-brief.md and execute it exactly. Your final message must contain the complete report between the markers it specifies."
 else
   [ -f "${LEDGER:-}" ] || { echo "FATAL: --ledger <pain-ranked json> required for the retro leg (assemble from the FU-057 ledger)" >&2; exit 2; }
   python3 - "$RETROS/BRIEF.md" "$BRIEF" "$STACK" "$RUN_ID" "$MAIN_REPO" "$LEDGER" "$K" "$HARNESS_SRC" <<'PY'
@@ -198,12 +227,12 @@ fi
 # >>>REPLAY:retro-gateway-cell>>>
 if [ -n "$RETRO_GW" ]; then
   echo "→ ${STACK} ${RUN_ID} cell ${HARNESS} (role retro — the gateway serves the model) — brief $BRIEF ($(wc -c <"$BRIEF") bytes)"
-  echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${STACK}-${RUN_ID}-<served model>.md via PR"
+  echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${SERIES}-${RUN_ID}-<served model>.md via PR"
   _gw_rc=0
   AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=retro AGENT_GATEWAY_FALLBACK_EXIT=75 \
     bash "$HERE/agent-session.sh" "$PROJECT" \
       --harness "$HARNESS" \
-      --task "retro-${RUN_ID}${REVIEW:+-xrev}" \
+      --task "${TASK_KEY}${REVIEW:+-xrev}" \
       --run "$RUN" || _gw_rc=$?
   [ "$_gw_rc" -eq 75 ] || exit "$_gw_rc"
   MODEL="$(retro_fallback_model "$HARNESS")" \
@@ -220,7 +249,7 @@ fi
 # docs/spikes/model-routing-history.md §M10.
 MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "${HARNESS}:${MODEL}" --fallback "$MODEL" --model "$MODEL")"
 echo "→ ${STACK} ${RUN_ID} cell ${HARNESS}:${MODEL} — brief $BRIEF ($(wc -c <"$BRIEF") bytes)"
-echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${STACK}-${RUN_ID}-<model>.md via PR"
+echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${SERIES}-${RUN_ID}-<model>.md via PR"
 
 # ── The cell's OWN capped key (homelab#270, the second half of #248 finding 1) ──────────────────
 # A retro ride is not a fixer round and must not draw on the fixer's cap. The empty default used to
@@ -356,6 +385,6 @@ EXTRA=()
 [ -n "${RETRO_OPENROUTER_SECRET:-}" ] && EXTRA+=(--openrouter-secret "$RETRO_OPENROUTER_SECRET")
 exec bash "$HERE/agent-session.sh" "$PROJECT" \
   --harness "$HARNESS" --model "$MODEL" \
-  --task "retro-${RUN_ID}${REVIEW:+-xrev}" \
+  --task "${TASK_KEY}${REVIEW:+-xrev}" \
   "${EXTRA[@]}" \
   --run "$RUN"

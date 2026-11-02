@@ -43,6 +43,25 @@ class PipelineTests(unittest.TestCase):
         bundle = json.loads(first)
         self.assertEqual(bundle['window'], {'since':'2026-09-21T00:00:00Z','until':'2026-09-28T00:00:00Z'})
 
+    def test_no_ledger_prepare_freezes_coordinates_without_activity(self):
+        # A PromQL-guarded series (homelab#3140): no activity coverage is required, no ledger is
+        # read, no min-tasks floor applies — the bundle carries the run's coordinates and publishes
+        # through the same checkpoint path as a ledger bundle.
+        self.store.put('activity.json', {'invalid': True})
+        args = argparse.Namespace(series='feedback-triage', now=NOW, output=str(self.root / 'fb.json'),
+                                  min_tasks=8, no_ledger=True)
+        p.prepare(args, self.store, self.root)
+        bundle = json.loads(Path(args.output).read_text())
+        self.assertEqual((bundle['series'], bundle['guard'], bundle['run_id']), ('feedback-triage', 'external', 'r1'))
+        self.assertEqual(bundle['window'], {'since': '2026-09-21T00:00:00Z', 'until': '2026-09-28T00:00:00Z'})
+        self.assertEqual(bundle['ledger']['population']['task_count'], 0)
+        report = self.root / 'fb-report.md'
+        report.write_text(REPORT)
+        args.bundle = args.output; args.pr = 'https://github.com/o/r/pull/2'; args.report = ['opus=' + str(report)]
+        p.publish(args, self.store, self.root)
+        self.assertEqual(self.store.get('feedback-triage/checkpoint.json')['until'], '2026-09-28T00:00:00Z')
+        self.assertIsNone(self.store.get('platform/checkpoint.json'), 'series state is per series')
+
     def test_failed_or_missing_week_does_not_skip(self):
         self.store.put('platform/checkpoint.json', {'until':'2026-09-14T00:00:00Z','covered_at':'2026-09-14T05:00:00Z'})
         p.prepare(self.args, self.store, self.root)
@@ -194,10 +213,11 @@ class PipelineTests(unittest.TestCase):
         reports.mkdir(parents=True, exist_ok=True)
         report.write_text('retry report')
         source = (Path(__file__).parent / 'coordinator/retro-argo.yaml').read_text()
-        block = source.split('              mkdir -p /tmp/retro-reports', 1)[1].split('              git add docs/agents/retros/', 1)[0]
+        block = source.split('mkdir -p /tmp/retro-reports', 1)[1].split('git add docs/agents/retros/', 1)[0]
         block = 'mkdir -p /tmp/retro-reports' + block
         block = block.replace('/tmp/retro-reports', str(self.root / 'saved'))
-        prefix = 'DATE=2026-09-28; STACK=platform; RUN=r6; BR=retro/retry; gh() { echo https://github.com/o/r/pull/123; }; '
+        # SERIES names the report (homelab#3140); == the stack for its own retro.
+        prefix = 'DATE=2026-09-28; STACK=platform; SERIES=platform; RUN=r6; BR=retro/retry; gh() { echo https://github.com/o/r/pull/123; }; '
         p.run('bash', '-ec', prefix + block, cwd=repo, env=env)
         self.assertEqual(report.read_text(), 'retry report')
 
@@ -220,10 +240,10 @@ class PipelineTests(unittest.TestCase):
         git('update-ref', 'refs/remotes/origin/master', 'HEAD')
         report.write_text('report')
         source = (Path(__file__).parent / 'coordinator/retro-argo.yaml').read_text()
-        block = source.split('              mkdir -p /tmp/retro-reports', 1)[1].split('              REPORT_ARGS=()', 1)[0]
+        block = source.split('mkdir -p /tmp/retro-reports', 1)[1].split('REPORT_ARGS=()', 1)[0]
         block = ('mkdir -p /tmp/retro-reports' + block).replace('/tmp/retro-reports', str(self.root / 'saved'))
         log = self.root / 'calls'
-        prefix = ('DATE=2026-09-28; STACK=platform; RUN=r6; BR=retro/r6; N=1; DEAD_NOTE=; GH_TOKEN=t; '
+        prefix = ('DATE=2026-09-28; STACK=platform; SERIES=platform; RUN=r6; BR=retro/r6; N=1; DEAD_NOTE=; GH_TOKEN=t; '
                   'gh() { echo "gh $*" >> %s; case "$*" in *"pr create"*) echo https://new/pull/9;; '
                   '*"--state open"*) echo "%s";; *"--state merged"*) echo "%s";; esac; }; '
                   'git() { if [ "$1" = push ]; then echo "push" >> %s; else command git "$@"; fi; }; '
@@ -256,20 +276,32 @@ class PipelineTests(unittest.TestCase):
 
     def test_workflow_shares_guard_artifact(self):
         # Read shipped manifest via the pinned yq tool; do not copy its DAG into the test.
+        # One WorkflowTemplate + one CronWorkflow per series (homelab#3140): the run lives in the
+        # template, each cron only names it and sets the series' parameters.
         path = Path(__file__).parent / 'coordinator/retro-argo.yaml'
-        data = json.loads(p.run('yq','-o=json','.',str(path)))
-        spec = data['spec']
-        self.assertEqual(spec['schedules'], ['0 5 * * 1'])
-        self.assertEqual(spec['timezone'], 'UTC')
-        tasks = spec['workflowSpec']['templates'][0]['dag']['tasks']
+        template = json.loads(p.run('yq', '-o=json', 'select(.kind == "WorkflowTemplate")', str(path)))
+        cron = json.loads(p.run('yq', '-o=json', 'select(.kind == "CronWorkflow" and .metadata.name == "retro-session")', str(path)))
+        self.assertEqual(cron['spec']['schedules'], ['0 5 * * 1'])
+        self.assertEqual(cron['spec']['timezone'], 'UTC')
+        self.assertEqual(cron['spec']['workflowSpec']['workflowTemplateRef'], {'name': 'retro-session'})
+        spec = template['spec']
+        tasks = spec['templates'][0]['dag']['tasks']
         for name in ('cell-a','cell-b','harvest'):
             task = next(t for t in tasks if t['name'] == name)
             artifact = next(a for a in task['arguments']['artifacts'] if a['name']=='evidence')
             self.assertEqual(artifact['from'], '{{tasks.guard.outputs.artifacts.evidence}}')
         self.assertNotIn('retro-rank.py', path.read_text())
         self.assertNotIn('minNewTasks', path.read_text())
-        guard = next(t for t in spec['workflowSpec']['templates'] if t['name'] == 'guard')
+        guard = next(t for t in spec['templates'] if t['name'] == 'guard')
         self.assertIn('--min-tasks "{{workflow.parameters.minWindowTasks}}"', guard['container']['args'][0])
+        # The PromQL-guarded path (homelab#3140): the parser's verdict, then a ledger-less bundle.
+        self.assertIn('python3 agents/retro_guard_expr.py', guard['container']['args'][0])
+        self.assertIn('--no-ledger', guard['container']['args'][0])
+        feedback = json.loads(p.run('yq', '-o=json', 'select(.kind == "CronWorkflow" and .metadata.name == "retro-feedback-triage")', str(path)))
+        params = {q['name']: q['value'] for q in feedback['spec']['workflowSpec']['arguments']['parameters']}
+        self.assertEqual((params['stack'], params['series'], params['harnessB']), ('oracle', 'feedback-triage', ''))
+        self.assertTrue(params['guardExpr'] and params['cellPgSecret'])
+        self.assertTrue(feedback['spec']['suspend'], 'born suspended until a hand-fired run lands')
         # A quiet week skips the rides + harvest and pushes the overdue belt (exit 3 contract).
         for name in ('cell-a','cell-b','harvest'):
             task = next(t for t in tasks if t['name'] == name)

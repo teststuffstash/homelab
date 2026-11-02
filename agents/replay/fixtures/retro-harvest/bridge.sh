@@ -35,7 +35,11 @@ DATE="${DATE:?fixture must pin DATE}"
 STACK="${STACK:?fixture must pin STACK}"
 RUN="${RUN:?fixture must pin RUN}"
 HARNESS_A="${HARNESS_A:?fixture must pin HARNESS_A}"
-HARNESS_B="${HARNESS_B:?fixture must pin HARNESS_B}"
+# HARNESS_B may be pinned EMPTY (the `single-cell` row, homelab#3140): a one-cell series has no leg
+# B, and the block reads the empty parameter as "no second leg", never as a dead cell.
+HARNESS_B="${HARNESS_B?fixture must pin HARNESS_B}"
+# The series names the report (homelab#3140); unset = the stack, as every pre-series row reads.
+SERIES="${SERIES:-$STACK}"
 LOG_A="$REPLAY_ROOT/agents/replay/fixtures/retro-harvest/logs/${LOG_A_NAME:?fixture must pin LOG_A_NAME}"
 LOG_B="$REPLAY_ROOT/agents/replay/fixtures/retro-harvest/logs/${LOG_B_NAME:?fixture must pin LOG_B_NAME}"
 

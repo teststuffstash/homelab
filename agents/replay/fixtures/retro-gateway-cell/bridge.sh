@@ -3,6 +3,9 @@
 HERE="$REPLAY_ROOT/agents"
 STACK="${STACK:?fixture must pin STACK}"; CELL="${CELL:?fixture must pin CELL}"
 PROJECT="openrouter-operator"; RUN_ID="r10"; REVIEW="${REVIEW:-}"
+# The series knobs (homelab#3140), as the launcher derives them for the stack's own retro: the
+# series IS the stack and the task key is the plain `retro-rN`.
+SERIES="$STACK"; TASK_KEY="retro-${RUN_ID}"
 BRIEF="$REPLAY_ROOT/agents/replay/fixtures/retro-gateway-cell/brief.md"
 RUN="claude -p 'Read /tmp/retro-brief.md'"
 date() { echo 2026-11-02; }

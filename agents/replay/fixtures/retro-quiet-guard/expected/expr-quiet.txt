@@ -1,0 +1,7 @@
+CALL curl -sf --max-time 20 --get http://prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/query --data-urlencode query=max(g)>bool(604800)
+CALL python3 agents/retro_guard_expr.py
+CALL curl -s --max-time 10 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/feedback-triage/outcome/quiet
+OUT GUARD REFUSED: quiet week — guard query max 0 over 1 sample(s); the window rolls forward
+OUT QUIET: true
+OUT BUNDLE: {"quiet": true}
+RC 0

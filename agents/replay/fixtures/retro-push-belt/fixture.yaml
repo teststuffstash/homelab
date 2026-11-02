@@ -20,6 +20,8 @@ parts:
 env:
   - DATE=2026-08-11
   - STACK=oracle
+  # the belt's grouping key is the SERIES (homelab#3140); == the stack for its own retro
+  - SERIES=oracle
   - RUN=r3
   - BR=retro/2026-08-11-oracle-r3
   - GH_TOKEN=stub-token

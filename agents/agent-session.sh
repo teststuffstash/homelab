@@ -1619,12 +1619,16 @@ if [ -n "${RECIPE:-}" ]; then
     codex) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; ${MCP_CODEX_ENV}agent-codex --dangerously-bypass-approvals-and-sandbox 'Read /tmp/fix-recipe.yaml (goose-format recipe) and follow its instructions exactly. Issue: '${ISSUE_N}'.'";;
   esac
   # <<<REPLAY:harness-run-cmd<<<
-  # pr-open (docs/agents/workflow.md §Gate A): the ONE way a worker opens a PR, on every stack. It
-  # runs the repo's declared gate (`devbox run pr-gate`) and opens the PR only on green, so no
-  # recipe names a gate of its own. Written into the ride from THIS checkout (agents/pr-open.sh is
-  # its one home) and put on PATH; PR_OPEN_BASE carries the ride's base, so a stacked (`Base:`)
-  # ride's PR targets it by default. A missing file is a refusal, never a ride without the gate.
-  [ -s "$HERE/pr-open.sh" ] || { echo "PREFLIGHT REFUSED: $HERE/pr-open.sh missing — a recipe ride cannot open its PR without it" >&2; exit 3; }
+fi
+# pr-open (docs/agents/workflow.md §Gate A): the ONE way a worker opens a PR, on every stack. It
+# runs the repo's declared gate (`devbox run pr-gate`) and opens the PR only on green, so no
+# recipe names a gate of its own. Written into the ride from THIS checkout (agents/pr-open.sh is
+# its one home) and put on PATH; PR_OPEN_BASE carries the ride's base, so a stacked (`Base:`)
+# ride's PR targets it by default. A missing file is a refusal, never a ride without the gate.
+# Every RECIPE ride gets it; a `--run` ride gets it when its launcher asks (AGENT_PR_OPEN=1 —
+# a retro series whose brief ends in a PR, homelab#3140), so the gate is never named in a brief.
+if [ -n "${RECIPE:-}" ] || [ -n "${AGENT_PR_OPEN:-}" ]; then
+  [ -s "$HERE/pr-open.sh" ] || { echo "PREFLIGHT REFUSED: $HERE/pr-open.sh missing — a ride that opens a PR cannot do so without it" >&2; exit 3; }
   PR_OPEN_B64="$(base64 -w0 "$HERE/pr-open.sh")"
   RUN_CMD="mkdir -p /work/bin; printf '%s' '${PR_OPEN_B64}' | base64 -d > /work/bin/pr-open; chmod +x /work/bin/pr-open; export PATH=/work/bin:\$PATH PR_OPEN_BASE=${BASE_REF}; ${RUN_CMD}"
 fi
@@ -2123,6 +2127,19 @@ if [ -n "${RETRO_GH_SECRET:-}" ]; then
   RETRO_GH_TOKEN_ENV=$'        - name: RETRO_GH_TOKEN\n          valueFrom:\n            secretKeyRef: { name: "'"$RETRO_GH_SECRET"'", key: GH_TOKEN, optional: true }'
 fi
 # <<<REPLAY:retro-gh-token-env<<<
+# A retro SERIES cell's Postgres credential (homelab#3140): the launcher is handed a basic-auth
+# Secret NAME (RETRO_PG_SECRET — retro-argo.yaml's `cellPgSecret`, exported by its retro-cell step)
+# and renders PGUSER/PGPASSWORD secretKeyRefs the pod resolves IN-NAMESPACE — the RETRO_GH_TOKEN_ENV
+# shape above: no value ever appears in a manifest or a launcher env. optional: true — an absent
+# Secret leaves both unset, and the series brief reports its source unreachable rather than guess.
+# >>>REPLAY:retro-pg-env>>>
+RETRO_PG_ENV=""
+if [ -n "${RETRO_PG_SECRET:-}" ]; then
+  # Each `$'…'` segment interprets its own \n; the quoted name is spliced between them (a plain
+  # '…' tail after the splice would carry a LITERAL \n — the first replay run caught exactly that).
+  RETRO_PG_ENV=$'        - name: PGUSER\n          valueFrom:\n            secretKeyRef: { name: "'"$RETRO_PG_SECRET"$'", key: username, optional: true }\n        - name: PGPASSWORD\n          valueFrom:\n            secretKeyRef: { name: "'"$RETRO_PG_SECRET"$'", key: password, optional: true }'
+fi
+# <<<REPLAY:retro-pg-env<<<
 
 GOOSE_PROXY_ENV=""; PROXY_URL=""
 PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
@@ -3211,6 +3228,9 @@ ${ARM_ENV}
         # platform retro ride only (homelab#587 leg 2): fleet-wide READ-ONLY token, emitted only
         # when the launcher's own environment carries it. See RETRO_GH_TOKEN_ENV above.
 ${RETRO_GH_TOKEN_ENV}
+        # retro SERIES cell only (homelab#3140): the brief's read-only Postgres credential, an in-ns
+        # Secret named by the launcher's environment. See RETRO_PG_ENV above.
+${RETRO_PG_ENV}
         # docker mode only: the repo's own docker CLI (devbox.json) talks to the dind sidecar.
 ${DOCKER_ENV}
         # claude harness only (FU-066): proxy base URL + the opaque session ref — no real creds.

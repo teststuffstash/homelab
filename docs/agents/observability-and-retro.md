@@ -598,6 +598,27 @@ PLATFORM retro and per-stack retros — built in that order.**
    INTO a covering platform Goal per ADR-122 (4)). The platform series keeps the bundle's
    fleet-wide population counters and narrows its deep-dive set to the platform claim's repos.
    Build = FU-058's next; oracle first, hand-fired after platform r7.
+   **Named series (homelab#3140, operator ruling 2026-11-02).** A stack may run MORE than its
+   loop retro on this mechanism: `retro-argo.yaml` is one WorkflowTemplate and one CronWorkflow
+   per *(stack, series)* — the platform series (`retro-session`, Mondays) and the first named
+   series, oracle's `feedback-triage` (`retro-feedback-triage`, Wednesdays, born suspended): the
+   batched read of the `give_feedback` rows no FB-RULES rule decides, ending in one rules PR on
+   oracle-fleet. What a named series owns and what it reuses: its **brief** is the stack repo's
+   `.agents/<series>.md`, reached through the platform's pointer
+   [`retros/SERIES-BRIEF.md`](retros/SERIES-BRIEF.md) (which fixes the run's coordinates and the
+   report contract — markers, content floor, one `retro-findings-json` block, usually empty); its
+   **guard** is a PromQL instant query (`guardExpr`, parsed by `agents/retro_guard_expr.py`: > 0
+   fires, 0 is a quiet week, an EMPTY result or a dead Prometheus FAILS the run — an absent gauge
+   is a broken exporter, never a quiet week), with `retro_pipeline.py prepare --no-ledger`
+   freezing the run's coordinates and no ledger read; its **state** is `_retro/<series>/`, its
+   reports `docs/agents/retros/<date>-<series>-rN-<model>.md`, its belt group
+   `series=<series>` (RetroReportOverdue reads `max by (series)`, so a fresh platform push never
+   hides a stale sibling); its **cell** is ONE (`harnessB` empty — two cells would open two PRs),
+   carries `pr-open` on PATH (ADR-157; agent-session.sh's `AGENT_PR_OPEN`) and, when the brief
+   reads a database, the basic-auth Secret `cellPgSecret` as `PGUSER`/`PGPASSWORD` — a NAME
+   rendered to in-namespace secretKeyRefs, the RETRO_GH_SECRET shape; reach is the stack's
+   (`fixer.egress.ownServices`). Data a series reads is caller text: counts and rule predicates
+   travel, row text never does — not into the report, the PR or an issue.
    **⚖ PRIORITY FLIPPED (operator, 2026-09-01): stack retros are wanted MORE than further
    platform rounds** — stack goals carry the deeper business logic and kind-e2e testing
    complexity, and their dynamic differs from the platform's machinery-defect stream. The
