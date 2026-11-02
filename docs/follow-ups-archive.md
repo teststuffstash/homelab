@@ -10,6 +10,10 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-218** *(archived 2026-11-02)* — **ARC runner memory: a node-sized limit, not node removal.** Closed on the static
+      class pair (#3132, LIVE 2026-11-01: `normal` 3Gi + 1Gi dind, `large` 12Gi on nx-01 max 2, oracle-fleet `ci` on
+      large) — ADR-159; option A's resize controller (spiked PR#2185) is not built, nx-01's free DIMM slots retire the
+      spare-memory question. Record: [`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md).
 - **FU-161** *(archived 2026-11-01)* — **Scout v3.** The model scout is RETIRED (#3124 + the cron's seat-direct
       removal): new-model discovery, canaries and tiers are the gateway's (GW-CATALOG-OR entry canary,
       GW-MODEL-TIERS). Design history: [`model-routing-history.md`](spikes/model-routing-history.md) §M7.
@@ -150,12 +154,4 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   (mermaid-lint on Deno, zero permissions) + `lock-intake-lint` in `ci`; PROVEN live on Renovate's
   #2100 (red on the lodash-es intake, no reviewer). Ride drill PR#2101: Deno cannot use an IP registry
   → `npm-cache.teststuff.net`; kill-switch dropped. #2100 waits for mermaid-js/mermaid#8278 — no pin.
-- **FU-125** *(archived 2026-09-27)* — **Renovate's silent zero-PR regression: root cause fixed, the
-  homelab acceptance MET.** Cause: the App never held `statuses` (403 on read → `integration-unauthorized`,
-  on write → `repository-changed`); declared PR#1969, granted 2026-09-25 → 20 PRs on 10 repos in the first
-  run. Acceptance ("one `renovate/*` PR opened, gated, merged in homelab") met 2026-09-27 through the S9
-  lanes (homelab#1985): #2008/#2021 (Actions, grouped mechanical), #2012 (npm), #1983/#1996/#1997
-  (providers, human plan). Per-class proofs: `docs/dependency-upgrades.md` §"Last proven end to end".
-  Residue owned elsewhere: the liveness gauge + coverage table → #1992; `NIX_VERSION` manager hygiene →
-  that doc's §Next steps. `dependencyDashboard: false` stands (ruling 2026-08-18).
 

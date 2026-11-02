@@ -1,8 +1,9 @@
 # ARC runner memory budget — a node-sized limit, not node removal
 
-**Tracked by:** FU-218. **Status:** open — option A (below) chosen for a spike (operator,
-2026-10-02); **spiked the same day: the mechanism holds** (§Spike results); two sizing calls and
-the ADR remain. Pool measurements live in
+**Was tracked by** FU-218 (archived 2026-11-02). **Status:** CLOSED — ADR-159: static limits per
+runner class (§2026-11-01), option A's resize controller not built. Option A was chosen for a
+spike (operator, 2026-10-02) and **spiked the same day: the mechanism holds** (§Spike results),
+which is why the record stays. Pool measurements live in
 [`ride-latency-breakdown.md`](ride-latency-breakdown.md) §CI side; the kata side in
 [`kata-ci-gate.md`](kata-ci-gate.md).
 
@@ -180,4 +181,6 @@ jobs overlap 0.9 % of the time, and rides sit at their peak only briefly. It is 
 PriorityClass that ranks rides above CI (CI is retryable). nx-01 is due more memory (12 of 16
 DIMM slots are free), which retires the question.
 
-**Open:** whether option A is still worth building for nx-01's spare memory.
+**Ruled (operator, 2026-11-02): option A is not built.** The static class pair closes the question
+(ADR-159); nx-01's free DIMM slots are the cheaper answer to its spare memory, and a PriorityClass
+for rides is the lever if a pending ride is ever observed.

@@ -15037,3 +15037,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   cannot rebase a conflict — the auto-bump re-applies its sed on fresh master only at CREATION. Seat re-applied the sed on
   master (7 pins 2026.10.31 → 2026.11.1, pins only) and force-pushed the bot's branch; label dropped; re-review pending.
 
+
+## 2026-11-02 ~21:00–21:40Z — seat: the three OPERATOR items of the 11-01 handoff pickup ruled and landed
+- Operator: "pick up from meta-state, these were for me?" — yes; all three ruled in one sitting.
+- **minutark.ee README line (oracle handoff `20260911-1142`, parked 09-22): YES.** One bullet after the
+  `docs/agents/README.md` line, direct (bookkeeping class, operator-ordered). Result handed back to oracle as a
+  fresh inbox task so listings row 11 flips on their side.
+- **#3140 feedback-triage primitive: the SECOND RETRO SERIES** (not a reflex-dispatched research ride). Designed
+  against the retro slice (§B2 + retro-argo.yaml + retro-session.sh + retro-project.sh); ruling + slice on the
+  issue. Reach verified live: the oracle retro already rides in ns `oracle-fleet` = the pg's namespace, and ES
+  `oracle-pg-feedback-ro` is SecretSynced there — the only missing reach is an `ownServices` leg
+  (`app.kubernetes.io/instance: oracle-pg`, 5432) in oracle-iac's claim. Oracle asked for the brief + the leg via
+  inbox `20261102-2130-feedback-triage-series-ruled.md`; homelab's part (series knob, per-series guard, Secret→cell
+  env) is intake's to queue.
+- **FU-218: CLOSED on the static class pair** — ADR-159 written, item archived, spike header/Open line updated
+  (option A's resize controller not built; nx-01's free DIMM slots retire the spare-memory question).

@@ -2984,3 +2984,26 @@ upgrade cadence to any stack; one minor bounds how much untested-in-prod surface
 **Consequences:** sleep-tracking's equality comment is replaced by a pointer to the rule;
 oracle-fleet's e2e Grafana/Postgres pins (behind prod) are queued for the bump plus Renovate over
 its test manifests.
+
+### ADR-159 — ARC runner memory: a static limit per runner class, no resize controller (2026-11-02)
+**Status:** Accepted (operator, 2026-11-01 the static classes; 2026-11-02 the resize-controller
+question closed on them).
+**Decision:** every ARC runner pod carries a static memory limit set by its class — `normal`
+(runner 3Gi + dind 1Gi) and `large` (12Gi request == limit, nx-01, max 2); self-sizing tools read
+`memory.max` for their budget. No controller budgets nx-01's spare memory onto CI pods, and rides
+get no reserve or PriorityClass until a pending ride is observed. Mechanism, harvest and numbers:
+[`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md).
+**Considered:** option A, a controller patching `pods/resize` after binding (spiked PR#2185, the
+mechanism holds — rejected: the 20-day CI harvest shows every recurring job but oracle-fleet `ci`
+under 2.7 GiB, and that one grows to fill whatever host it lands on — a speed class, not a need;
+nx-01's 12 free DIMM slots retire the spare-memory question more cheaply than machinery); option
+B, kata runners sized by their limits (rejected: the job sees base + limits so `-n auto` still
+over-sizes, a memory kill reads `Error` not `OOMKilled`, an 8 GB laptop yields ~2.6 GiB); moving
+CI off the 8 GB nodes (the recurring pressure FU-218 existed to refute — the suite fits once
+workers are bounded, oracle-fleet#783).
+**Why:** an unlimited runner thrashed wk-metal-03 NotReady for ~4 h (#3107) without a single OOM
+kill; a limit the job can read is the budget, and overlapping big jobs happen 0.9 % of the time.
+**Consequences:** oracle-fleet `ci` rides `large`; a coincident ride + CI peak leaves a pod Pending
+until capacity frees (visible via `CiDispatchStalled`), accepted as rare; the lever if pending
+rides appear is a PriorityClass ranking rides above retryable CI. FU-218 archived; the spike is
+the record.

@@ -680,16 +680,6 @@ the block needs pruning, not more headings.
       second source; operator rulings in the spike §Open questions 2–5 (Goal ceiling, closing human-filed issues, rule 10
       grammar, the second island). Settle: bot-filing → `agent/queued` ≈ 0 days, two weeks, rides ≤ 2 rounds.
       Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
-- [ ] **FU-218** — **ARC runner memory: a node-sized limit, not node removal: POINTER.** The runner
-      requests 1536 Mi with no limit, so jobs size to the HOST (`pytest -n auto` = one worker per CPU)
-      and vanish on 8 GB nodes; the recurring "move off 8 GB" pressure. 2026-10-02 evidence: the same
-      suite fits an 8 GB node once workers are bounded (oracle-fleet #783: 3 workers, 3.1 GiB, pass).
-      Option A spike DONE (PR#2185: in-place `pods/resize` proven on nx-01). Static limits LIVE 2026-11-01
-      (#3132: normal 3Gi runner + 1Gi dind; large = big-memory + big-disk on nx-01, 12Gi, max 2; oracle's ci on
-      large, oracle-fleet#983 7.8 min / 7.59 GiB peak); the nx-01 ride reserve ruled "none for now" (#3134, in the
-      spike). **Next (operator):** is a resize controller still worth building for nx-01's spare memory, or does the
-      static class pair close this → ADR + archive. Design, history, options, acceptance:
-      [`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md). Relates FU-208, ADR-082.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
       pick has no green requirement on purpose — wrong for a gate a catch-up merge cannot move (PR#1468: 26 merges,
       never green, pool starved — FU-218). #1489 (ADR-103 addendum) shrank the class to all-vacuous PRs.

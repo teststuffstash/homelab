@@ -9,6 +9,10 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 - **[`ROADMAP.md`](ROADMAP.md)** — what / when.
 - **[`docs/agents/README.md`](docs/agents/README.md)** — the agent platform: the autonomous
   issue→PR delivery loop. **Start here if you came for the agentic-AI work.**
+- **Running on this platform:** [minutark.ee](https://minutark.ee/) — a Riigi Teataja MCP server
+  that puts the official text of Estonian law in front of any MCP client (endpoint
+  [`mcp.minutark.ee`](https://mcp.minutark.ee/), no account). Built and shipped by the agent loop
+  above; every answer carries its citation, validity window and source link.
 - **[`docs/runbook.md`](docs/runbook.md)** — operational recipes (start here to *do* things).
 - **[`docs/provisioning.md`](docs/provisioning.md)** — onboard a bare-metal node.
   **[`docs/cloudflare.md`](docs/cloudflare.md)** — remote-access design.
