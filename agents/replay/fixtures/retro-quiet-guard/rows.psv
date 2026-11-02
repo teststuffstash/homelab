@@ -5,3 +5,12 @@ quiet-push-ok       |       |       | PREP_RC=3 CURL_RC_1=0               | quie
 quiet-push-retry-ok |       |       | PREP_RC=3 CURL_RC_1=1 CURL_RC_2=0   | quiet-push-retry-ok |
 quiet-push-fails    |       |       | PREP_RC=3 CURL_RC_1=1 CURL_RC_2=1   | quiet-push-fails    |
 prepare-fails       |       |       | PREP_RC=1                           | prepare-fails       |
+# ── the PromQL guard (homelab#3140): a named series reads its OWN gauge, not the ledger ──
+# A result > 0 fires (prepare runs --no-ledger); == 0 is a quiet week (the quiet push, as above);
+# an EMPTY result, a Prometheus error or a dead Prometheus FAILS the run — an absent gauge is a
+# broken exporter, never a quiet week (the ledger guard's "0 tasks is a dead collector" rule).
+expr-fires          |       |       | SERIES=feedback-triage GUARD_EXPR=max(g)>bool(604800) PROM_VALUE=1 PREP_RC=0      | expr-fires          |
+expr-quiet          |       |       | SERIES=feedback-triage GUARD_EXPR=max(g)>bool(604800) PROM_VALUE=0 CURL_RC_1=0   | expr-quiet          |
+expr-absent         |       |       | SERIES=feedback-triage GUARD_EXPR=max(g)>bool(604800) PROM_VALUE=absent          | expr-absent         |
+expr-error          |       |       | SERIES=feedback-triage GUARD_EXPR=max(g)>bool(604800) PROM_VALUE=error           | expr-error          |
+expr-prom-down      |       |       | SERIES=feedback-triage GUARD_EXPR=max(g)>bool(604800) PROM_VALUE=down            | expr-prom-down      |

@@ -9,3 +9,6 @@ gateway-served               |       |       | LOG_A_NAME=gw-claude-opus-report 
 gateway-same-model           |       |       | LOG_A_NAME=gw-claude-kimi-report LOG_B_NAME=gw-goose-kimi-k3-report                       | delivered           | a_dest=claude-kimi-k3 b_dest=goose-kimi-k3 a_served=claude:moonshotai/kimi-k3 b_served=goose:moonshotai/kimi-k3
 gateway-fallback             |       |       | LOG_A_NAME=gw-claude-opus-report LOG_B_NAME=gw-fallback-deepseek-report                   | delivered           | a_dest=opus b_dest=deepseek-v4-pro a_served=claude:claude/opus b_served=goose:deepseek/deepseek-v4-pro
 gateway-report-quotes        |       |       | LOG_A_NAME=gw-quoting-report                                                              | delivered           | a_dest=unserved b_dest=deepseek-v4-pro a_served=claude:unserved b_served=goose:deepseek/deepseek-v4-pro
+# single-cell (homelab#3140): harnessB EMPTY = a one-cell series; no leg B is read, no dead cell is
+# declared, and the report is filed under the SERIES name, not the stack's.
+single-cell                  |       |       | HARNESS_B= SERIES=feedback-triage LOG_B_NAME=never-written                                | delivered-single    | a_dest=opus a_served=claude:opus

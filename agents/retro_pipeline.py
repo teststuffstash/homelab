@@ -216,7 +216,31 @@ def prepare(args, store, temp):
         raise ValueError('this weekly window is already published')
     key = args.series + '/runs/' + end.replace(':', '').replace('-', '')
     bundle = store.get(key + '/bundle.json')
-    if bundle is None:
+    if bundle is None and getattr(args, 'no_ledger', False):
+        # A PromQL-guarded series (homelab#3140, retro-argo.yaml `guardExpr`): the guard already
+        # ruled the week worth a ride from its own gauge, and the brief reads its own evidence
+        # (the cell's data source, never the task ledger) — so the frozen bundle carries the run's
+        # COORDINATES only: window, revision, run id, prior findings. Same shape as a ledger bundle
+        # with empty populations, so publish/findings/reconcile need no second code path.
+        bundle = {'schema_version': 1, 'window': {'since': start, 'until': end}, 'guard': 'external',
+                  'tasks': [], 'late_arrivals': [],
+                  'ledger': {'population': {'task_count': 0}, 'rows': []}}
+        bundle['source_revision'] = run('git', 'rev-parse', 'HEAD', cwd=ROOT.parent).strip()
+        bundle['prepared_at'] = args.now
+        runs = [int(m.group(1)) for p in (ROOT.parent / 'docs/agents/retros').glob('*.md')
+                if (m := re.search(re.escape(args.series) + r'-r(\d+)-', p.name))]
+        bundle['run_id'] = 'r' + str(max(runs + [int(checkpoint.get('run_id', 'r0')[1:])]) + 1)
+        previous_findings = store.get(args.series + '/findings.json', {}).get('findings', [])
+        bundle['previous_findings'] = [
+            {k: f[k] for k in ('id', 'mechanism', 'surface', 'summary', 'related_work') if k in f}
+            for f in previous_findings[-30:]]
+        bundle['previous_findings_total'] = len(previous_findings)
+        bundle['series'] = args.series
+        bundle['storage_key'] = key
+        bundle['selected_task_count'] = 0
+        bundle['bundle_id'] = hashlib.sha256(json.dumps(bundle, sort_keys=True).encode()).hexdigest()
+        store.put(key + '/bundle.json', bundle)
+    elif bundle is None:
         state = store.get('activity.json')
         if not state or utc(state['collected_until']) < utc(end):
             raise ValueError('activity coverage has not reached the cutoff; collect before preparing')
@@ -374,6 +398,8 @@ def main():
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--min-tasks', type=int, default=8,
                         help='prepare: refuse a window with fewer ledger tasks than this')
+    parser.add_argument('--no-ledger', action='store_true',
+                        help='prepare: a PromQL-guarded series (retro-argo.yaml guardExpr) — freeze the run coordinates only, read no ledger, apply no min-tasks floor')
     args = parser.parse_args()
     if not re.fullmatch('[a-z0-9-]+', args.series):
         parser.error('invalid series')

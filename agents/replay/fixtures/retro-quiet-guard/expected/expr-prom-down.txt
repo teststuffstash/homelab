@@ -1,0 +1,5 @@
+CALL curl -sf --max-time 20 --get http://prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/query --data-urlencode query=max(g)>bool(604800)
+OUT GUARD FAILED: the guard query did not reach Prometheus (curl rc 22) — a dead Prometheus is a failed run, never a quiet week
+OUT QUIET: <unset>
+OUT BUNDLE: <none>
+RC 1
