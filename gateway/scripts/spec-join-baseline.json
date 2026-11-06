@@ -7,15 +7,29 @@
   "row-unproven": 0
  },
  "GW-CATALOG-GO": {
-  "row-unkeyed": 10,
-  "header-unthreaded": 24,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
+  "case-unspecified": 0,
+  "row-unproven": 0
+ },
+ "GW-CATALOG-GO-PARSE": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-CATALOG-OR": {
-  "row-unkeyed": 31,
-  "header-unthreaded": 26,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
+  "case-unspecified": 0,
+  "row-unproven": 0
+ },
+ "GW-CATALOG-OR-CANARY": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
@@ -84,8 +98,8 @@
   "row-unproven": 0
  },
  "GW-MODEL-TIERS": {
-  "row-unkeyed": 47,
-  "header-unthreaded": 33,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
@@ -95,6 +109,13 @@
   "header-unthreaded": 10,
   "cell-mismatch": 0,
   "case-unspecified": 2,
+  "row-unproven": 0
+ },
+ "GW-RAIL-CHOICE": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
+  "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-RAIL-CODEX": {

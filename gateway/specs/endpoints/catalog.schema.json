@@ -46,7 +46,7 @@
       }
     },
     "score_axis": { "enum": ["intelligence", "coding", "agentic"], "description": "the three Artificial Analysis indices of a capability row" },
-    "cell_state": { "enum": ["candidate", "eligible", "excluded"], "description": "a (model, provider) cell's ENTRY state (GW-CATALOG-OR): new to the snapshot or back from exclusion → candidate; one canary ride completed clean on exactly that cell → eligible (the only state selection pins); a canary struck → excluded, with the class, for canary.cooldown_s" },
+    "cell_state": { "enum": ["candidate", "eligible", "excluded"], "description": "a (model, provider) cell's ENTRY state (GW-CATALOG-OR-CANARY): new to the snapshot or back from exclusion → candidate; one canary ride completed clean on exactly that cell → eligible (the only state selection pins); a canary struck → excluded, with the class, for canary.cooldown_s", "x-requirements": ["GW-CATALOG-OR-CANARY"] },
     "ranking_slice": { "enum": ["programming", "tool_calling"], "description": "the MCP list-daily-model-rankings slices the catalog may read (period week): a category and a modality" },
     "catalog_block": {
       "$comment": "the policy's `rails.openrouter.catalog` (GW-CATALOG-OR): the registry's SOURCES, never its candidates",
@@ -74,7 +74,7 @@
         "backoff_s": { "type": "number", "exclusiveMinimum": 0, "description": "a 429'd canary's first re-try horizon on its cell (operator 2026-10-22: no verdict — the cell stays candidate, the admission is not consumed, the walk moves on)" },
         "backoff_max_s": { "type": "number", "minimum": 0, "description": "the horizon doubles per consecutive 429'd canary up to this; a verdict resets it" }
       },
-      "x-requirements": ["GW-CATALOG-OR"]
+      "x-requirements": ["GW-CATALOG-OR-CANARY"]
     },
     "openrouter_snapshot": {
       "$comment": "the store's `catalog_snapshots.openrouter-endpoints` body as the catalog leg writes it (GW-CATALOG-OR) — openai-chat.schema.json $defs.endpoint_snapshot's `models` with the leg's provenance per model, plus `sources`",
@@ -104,7 +104,7 @@
           }
         }
       },
-      "x-requirements": ["GW-CATALOG-OR"]
+      "x-requirements": ["GW-CATALOG-OR", "GW-CATALOG-OR-CANARY"]
     },
     "band": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
     "tiers_block": {
@@ -141,7 +141,8 @@
       "properties": {
         "clean": { "type": "integer", "minimum": 0 }, "judged": { "type": "integer", "minimum": 0 },
         "prior": { "type": "number", "minimum": 0, "maximum": 1, "description": "the clean-rate prior while judged < tiers.cost.min_rides: the selected endpoint's uptime_1d / 100 on openrouter, 1.0 on the Go rail" }
-      }
+      },
+      "x-requirements": ["GW-MODEL-TIERS", "GW-RAIL-CHOICE"]
     },
     "candidate_row": {
       "type": "object",
@@ -230,7 +231,7 @@
           }
         }
       },
-      "x-requirements": ["GW-CATALOG-GO"]
+      "x-requirements": ["GW-CATALOG-GO", "GW-CATALOG-GO-PARSE"]
     },
     "docs_snapshot": {
       "type": "object",
@@ -263,7 +264,7 @@
           "properties": { "5h": { "type": "number" }, "7d": { "type": "number" }, "30d": { "type": "number" } }
         }
       },
-      "x-requirements": ["GW-CATALOG-GO"]
+      "x-requirements": ["GW-CATALOG-GO", "GW-CATALOG-GO-PARSE"]
     }
   },
   "openrouter_output": {
@@ -323,7 +324,7 @@
         }
       }
     },
-    "x-requirements": ["GW-CATALOG-OR"]
+    "x-requirements": ["GW-CATALOG-OR", "GW-CATALOG-OR-CANARY"]
   },
   "output": {
     "type": "object",
@@ -396,7 +397,7 @@
         }
       }
     },
-    "x-requirements": ["GW-CATALOG-GO"]
+    "x-requirements": ["GW-CATALOG-GO", "GW-CATALOG-GO-PARSE"]
   },
   "errors": {}
 }

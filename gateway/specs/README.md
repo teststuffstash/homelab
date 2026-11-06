@@ -115,7 +115,7 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 [endpoints/openai-chat.md](endpoints/openai-chat.md) +
 [endpoints/openai-responses.md](endpoints/openai-responses.md) (the data plane; the last is the codex rail, lit 2026-10-22) →
 [endpoints/metrics.md](endpoints/metrics.md) · [endpoints/health.md](endpoints/health.md) ·
-[endpoints/catalog.md](endpoints/catalog.md) (the Go rail's vendor facts; the tier evidence) ·
+[endpoints/catalog.md](endpoints/catalog.md) (the two rails' vendor facts; the entry canary; the tier evidence and the rail choice) ·
 [access.md](access.md) (the role × stack × service inventory) ·
 [glossary.md](glossary.md) · [worlds/](worlds/README.md).
 
@@ -141,9 +141,12 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth) | openai-responses | the OAuth lifecycle behind the persistence interface (gateway-local SQLite in production, a FAKE store in tests) |
 | [GW-METRICS](endpoints/metrics.md#gw-metrics) | metrics | the `gateway_*` families and their bounded labels |
 | [GW-HEALTH](endpoints/health.md#gw-health) | health | liveness and the store mode |
-| [GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go) | catalog | the Go rail's models, prices and per-model plan limits, read from the vendor on a schedule; the last good snapshot |
-| [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) | catalog | the OpenRouter rail's registry — the weekly ranking ∩ AA-benched, each candidate's endpoints, the persisted snapshot; a cell enters the order only after a clean, budget-capped entry canary |
-| [GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers) | catalog | the deployed per-(rail, tier) model lists are derived from benchmark evidence (AA intelligence bands of the rail's best, cheapest per CLEAN ride first, capped) — a committed snapshot, its staleness alert, an equality check; and the admission's rail choice between a model's twin cells on two rails |
+| [GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go) | catalog | the Go catalog's refresh: the two vendor sources read on a schedule, the strict parse, the last good snapshot kept across a restart, what a fetch sends, the families |
+| [GW-CATALOG-GO-PARSE](endpoints/catalog.md#gw-catalog-go-parse) | catalog | what the Go catalog's two reads say — the model's dialect, the page's limits, fees, peak hours and shares, the cost rows, the view's shape — and the policy's plan (no vendor fact in the policy) |
+| [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) | catalog | the OpenRouter rail's registry — the weekly ranking ∩ AA-benched, each candidate's endpoints, the persisted snapshot, the view's `pinnable` / `floor` verdict per harness |
+| [GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary) | catalog | the entry canary: a cell enters the order only after a clean, budget-capped canary ride pinned to it; a 429'd canary is no verdict (the cell backs off); the launcher's walk |
+| [GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers) | catalog | the deployed per-(rail, tier) model lists are derived from benchmark evidence (AA intelligence bands of the rail's best, cheapest per CLEAN ride first, capped) — a committed snapshot, its staleness alert, an equality check with undecided tiers; the Go price |
+| [GW-RAIL-CHOICE](endpoints/catalog.md#gw-rail-choice) | catalog | the twin rule and the admission's rail choice between a model's twin cells on two rails, by cost per clean ride |
 | [GW-ACCESS](access.md#gw-access) | access | role × rail: `dispatch` or `defer: role-rail-denied` per `roles.<role>.rails`; the inventory's other columns unenforced |
 | [GW-CODEX-REFRESH](endpoints/openai-responses.md#gw-codex-refresh) | openai-responses | native Codex OAuth HTTP refresh transport (injectable; production wires it beside the SQLite store) |
 | [GW-CODEX-CAPTURE](endpoints/openai-responses.md#gw-codex-capture) | openai-responses | the scoped four-boundary capture of a codex ride and its bundle, `GET /sessions/{id}/capture` |

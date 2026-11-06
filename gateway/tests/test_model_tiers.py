@@ -1,98 +1,34 @@
-"""GW-MODEL-TIERS — the deployed tier lists are derived from benchmark evidence (specs/endpoints/catalog.md).
+"""GW-MODEL-TIERS — the deployed tier lists are derived from benchmark evidence: cost per clean ride,
+the Go price, the bands, the id join, the tiers block, the rulings on the deployed files, the evidence
+age (specs/endpoints/catalog.md §The tier evidence).
 
-World: policy-default for the loader rows (the `tiers` block every world carries); the band and
-join rows run on hand-written snapshots named in each row (no gateway, no upstream); the deployed
-rows read argocd/resources/agent-gateway/{benchmarks,policy}.json (skipped when absent).
-
-Rail `fx` (priced, score intelligence, bands 0.9/0.75/0.5, cap 3): top = 50 → heavy ≥ 45,
-standard ≥ 37.5, light ≥ 25. Candidates (score · out / in $ per 1M): fx/top 50 · 2.0/0.5,
-fx/near 46 · 1.0/0.2, fx/mid 40 · 0.5/0.1, fx/low 26 · 0.1/0.05, fx/far 20 · 0.05/0.01,
-fx/none unbenched · 0/0.
-
-| description | candidates | light | standard | heavy |
-|---|---|---|---|---|
-| heavy = within 0.90 of the rail's top, cheapest first | fx | — | — | fx/near, fx/top |
-| standard = within 0.75 | fx | — | fx/mid, fx/near, fx/top | — |
-| light = within 0.50, the cap drops the 4th by price | fx | fx/low, fx/mid, fx/near | — | — |
-| a model sits in several tiers | fx | fx/near in all three | | |
-| an unbenched candidate never tiers, however cheap | fx | fx/none in none | | |
-| an unpriced candidate on a priced rail never tiers | fx + fx/nopx 49 · no price | fx/nopx in none; top stays 50 | | |
-| a price tie breaks by input price, then score, then id | fxt: a 40 · 0.5/0.2, b 44 · 0.5/0.1, c 44 · 0.5/0.2 | — | — | fxt/b, fxt/c, fxt/a |
-| the axis is the policy's: the same rail under score: coding | fx coding top 10, near 60, mid 55, low 50, far 5 | — | — | fx/mid, fx/near |
-| the subscription rail orders by score ascending | anthropic: fx-a 40, fx-b 55, fx-c 60, no prices | a, b, c | b, c | b, c |
-| no benched candidate: empty lists, which apply refuses to write | fx-empty: fx/none only | [] — apply_text raises naming fx-empty.light | | |
-| a measured clean rate reorders a list | fx + fx/mid rides 2 / 6 (rate 1/3: $0.5 / (1/3) = $1.5 per 1M past fx/near's $1.0) | — | fx/near, fx/mid, fx/top | — |
-| a tier with no priced candidate is undecided: check passes it, apply refuses it | fx-unpriced: fx/a 50 · no price | derive [] ×3; undecided names fx-unpriced light/standard/heavy; check = {} against a policy listing fx/a; apply_text raises naming fx-unpriced.light | | |
-
-| description | a | b | twins |
-|---|---|---|---|
-| a Go id and its openrouter spelling are twins | opencode-go/deepseek-v4.1-flash | deepseek/deepseek-v4.1-flash | yes |
-| the dotted and the dashed version are twins | opencode-go/claude-haiku-5-5 | anthropic/claude-haiku-5.5 | yes |
-| a variant twins its family | inclusionai/ling-3.0-flash:free | inclusionai/ling-3.0-flash | yes |
-| two vendors' spellings are not twins | deepseek/deepseek-v4.1-flash | other/deepseek-v4.1-flash | no |
-| a suffix is not a twin | opencode-go/glm-5.3 | z-ai/glm-5.3-flash | no |
-| an alias twins nothing | claude/haiku | opencode-go/claude-haiku-5-5 | no |
-| the same id is not a twin | deepseek/deepseek-v4.1-flash | deepseek/deepseek-v4.1-flash | no |
-
-| description | policy id | AA ids present | joins |
-|---|---|---|---|
-| a Go id joins the dotted AA id | opencode-go/claude-haiku-5-5 | anthropic/claude-haiku-5.5, anthropic/claude-haiku-4.5 | anthropic/claude-haiku-5.5 |
-| a dotted Go id joins as is | opencode-go/glm-5.3 | z-ai/glm-5.3, z-ai/glm-5.3-flash | z-ai/glm-5.3 |
-| a Go id the table lacks is unbenched | opencode-go/beam-free | (the two above) | none |
-| a suffix is not a match | opencode-go/hy3 | tencent/hy3-preview | none |
-| two vendors' rows for one bare id: unbenched | opencode-go/gpt-6-luna | openai/gpt-6-luna, other/gpt-6-luna | none |
-| an alias joins the newest row of its family by version | claude/opus | anthropic/claude-opus-5, -5.5, -4.1 | anthropic/claude-opus-5.5 |
-| an alias with no row of its family is unbenched | claude/haiku | (the three opus rows) | none |
-| an openrouter id keeps its vendor | deepseek/deepseek-v4-flash | deepseek/deepseek-v4-flash, other/deepseek-v4-flash | deepseek/deepseek-v4-flash |
-| a :free variant joins its family | inclusionai/ling-3.0-flash:free | inclusionai/ling-3.0-flash | inclusionai/ling-3.0-flash |
-
-| description | tiers in an otherwise policy-default document | the policy load |
-|---|---|---|
-| the block loads | the world's | loads; Policy.tiers = those values |
-| an unknown key refuses the load | + foo: 1 | refused, naming tiers |
-| an unknown score axis refuses the load | score: vibes | refused, naming tiers.score |
-| a band above 1 refuses the load | bands.heavy: 1.5 | refused, naming tiers.bands.heavy |
-| a zero band refuses the load | bands.light: 0 | refused, naming tiers.bands.light |
-| bands out of order refuse the load | bands.standard: 0.95 | refused, naming heavy >= standard >= light |
-| a missing tier band refuses the load | bands without light | refused, naming light |
-| a non-positive cap refuses the load | cap: 0 | refused, naming tiers.cap |
-| no block: the policy loads with no rules, and the check refuses to run | tiers absent | loads, Policy.tiers None; check() raises naming tiers |
-| no cost terms refuse the load | cost dropped | refused, naming tiers.cost |
-| a non-positive ride size refuses the load | cost.ride_tokens_out_m = 0 | refused, naming tiers.cost.ride_tokens_out_m |
-| a non-positive min_rides refuses the load | cost.min_rides = 0 | refused, naming tiers.cost.min_rides |
-
-| description | the ruling, checked on the deployed files |
-|---|---|
-| the score is the Artificial Analysis intelligence index | tiers.score intelligence; every benched row has it, some lack coding |
-| a tier is a band of the rail's best | bands 0.9/0.75/0.5; every listed id scores ≥ band × its rail's top |
-| each list is cheapest per clean ride first, capped at 3 | cap 3; priced-rail lists ≤ 3, cost per clean ride non-decreasing |
-| the subscription rail has no price: score ascending is its cost proxy | anthropic and codex rows unpriced; lists strictly score-ascending |
-| the candidates per rail | opencode keys opencode-go/<id>, none the twin of a subscription candidate's AA row, priced promise/measured/unlimited or unpriced; openrouter keys = the OpenRouter catalog's vendor/model ids, priced at the selected endpoint (basis endpoint with its provider) or unpriced; anthropic keys = the rail's claude/ aliases, unpriced; codex keys ⊇ the deployed codex rail's ids (a key on no list is unbenched or below every band), unpriced; source artificial-analysis |
-| the join to the AA row is a rule, not a table | every row's aa_id == join_aa_id over the snapshot's AA ids |
-| unbenched never tiers | no listed id has a null aa_id, nor a null out_price on a priced rail |
-
-| description | input | verdict |
-|---|---|---|
-| the deployed tier lists equal the derivation | the committed snapshot + the deployed tiers block | check() = {} |
-| a hand edit of a list fails the check | rails.opencode.models.heavy reversed | check() names opencode.heavy |
-| the snapshot is the schema's shape | the committed snapshot | exactly the required keys of $defs.benchmarks_snapshot |
-| the fixture worlds carry the block, not the derivation | policy-default + the committed snapshot | the world's tiers = the deployed block; check() on the world is NOT empty |
-| an undecided tier keeps its deployed list | the committed snapshot's undecided tiers | check() = {}; undecided() names them; each named tier's deployed list is non-empty |
+Worlds: hand-written cells, rails and AA id lists named in each row for the arithmetic (no gateway, no
+upstream); `policy-default · openrouter-endpoints` with the Go catalog (catalog-ok + docs-ok, plan go:
+fee $10/month; deepseek-v4.1-flash $80/month at list 0.15 in / 0.60 out) for the Go price; the
+committed argocd/resources/agent-gateway/{benchmarks,policy}.json for the rulings and the deployed
+policy (skipped when absent). The tables are the spec's, verbatim (the header is the parameter list).
 """
 
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
+import math
+import re
 from pathlib import Path
 
+import httpx
 import pytest
 
+from agent_gateway.app import create_app
 from agent_gateway.config import CostPolicy, Policy, PolicyError, TiersPolicy, tiers_policy
 from agent_gateway.tiers import (
     PRICELESS_RAILS,
     apply_text,
     check,
+    clean_rate,
+    cost_per_clean_ride,
     derive,
     join_aa_id,
     row_cost,
@@ -100,7 +36,20 @@ from agent_gateway.tiers import (
     undecided,
 )
 
-from .conftest import ISLAND, POLICY_FIXTURE, attach_json, given, rule, then, then_eq, when, world
+from ._catalog_rows import at_offset, joined, listed, num, verdict
+from .conftest import (
+    ISLAND,
+    POLICY_FIXTURE,
+    ObservedAsyncClient,
+    attach_json,
+    bearer,
+    given,
+    open_session,
+    quiet,
+    rule,
+    when,
+    world,
+)
 
 pytestmark = rule("GW-MODEL-TIERS")
 
@@ -108,9 +57,13 @@ DEPLOY = ISLAND.parent / "argocd" / "resources" / "agent-gateway"
 DEPLOYED_POLICY = DEPLOY / "policy.json"
 BENCHMARKS = DEPLOY / "benchmarks.json"
 SCHEMA = json.loads((Path(__file__).resolve().parents[1] / "specs" / "endpoints" / "catalog.schema.json").read_text(encoding="utf-8"))
+GO_WORLD = "openrouter-endpoints + the Go catalog"
+MESSAGES = "/anthropic/v1/messages"
 
 COST = CostPolicy(0.01, 0.0, 5)  # the worlds' tiers.cost: 10k output tokens a ride, no strike overhead, 5 judged rides
 RULES = TiersPolicy("intelligence", {"heavy": 0.9, "standard": 0.75, "light": 0.5}, 3, COST)
+BLOCK = {"score": "intelligence", "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5}, "cap": 3,
+         "cost": {"ride_tokens_out_m": 0.01, "strike_overhead_usd": 0, "min_rides": 5}}
 
 
 def _row(score=None, out=None, inp=None, coding=None, aa=True) -> dict:
@@ -127,126 +80,193 @@ FX = {
     "fx/far": _row(20, 0.05, 0.01, coding=5),
     "fx/none": _row(None, 0.0, 0.0, aa=False),
 }
-# rail fxt: every out price 0.5 → b first (in 0.1), then c over a (44 > 40 at in 0.2); top 44 → heavy ≥ 39.6 = all three.
 FXT = {"fxt/a": _row(40, 0.5, 0.2), "fxt/b": _row(44, 0.5, 0.1), "fxt/c": _row(44, 0.5, 0.2)}
-# rail anthropic (no prices): top 60 → heavy ≥ 54 {b, c}; standard ≥ 45 {b, c}; light ≥ 30 {a, b, c}; score ascending.
 SUB = {"claude/fx-a": _row(40), "claude/fx-b": _row(55), "claude/fx-c": _row(60)}
+RAILS = {
+    "fx": ("fx", FX),
+    "fxt": ("fxt", FXT),
+    "anthropic": ("anthropic", SUB),
+    "fx + fx/mid rides 2 / 6": ("fx", {**FX, "fx/mid": {**FX["fx/mid"], "rides": {"clean": 2, "judged": 6, "prior": 1.0}}}),
+    "fx + fx/nopx (49, no price)": ("fx", {**FX, "fx/nopx": _row(49, None, None)}),
+    "fx-empty": ("fx-empty", {"fx/none": FX["fx/none"]}),
+    "fx-unpriced": ("fx-unpriced", {"fx/a": _row(50, None, None)}),
+}
 
 
 def _bench(**rails) -> dict:
     return {"snapshot_at": "2027-01-15T08:00:00Z", "sources": {}, "rails": rails}
 
 
-RAILS = {"fx": FX, "fxt": FXT, "anthropic": SUB}
-BAND_ROWS = [
-    ("heavy = within 0.90 of the rail's top, cheapest first", "fx", "intelligence", "heavy", ["fx/near", "fx/top"]),
-    ("standard = within 0.75", "fx", "intelligence", "standard", ["fx/mid", "fx/near", "fx/top"]),
-    ("light = within 0.50, the cap drops the 4th by price", "fx", "intelligence", "light", ["fx/low", "fx/mid", "fx/near"]),
-    ("a price tie breaks by input price, then score, then id", "fxt", "intelligence", "heavy", ["fxt/b", "fxt/c", "fxt/a"]),
-    # coding axis: top 60 (near) → heavy ≥ 54 = {near 60, mid 55}; cheapest first = mid (0.5), near (1.0).
-    ("the axis is the policy's: the same rail under score: coding", "fx", "coding", "heavy", ["fx/mid", "fx/near"]),
+# ── Cost per clean ride ──────────────────────────────────────────────────────────────────────
+COST_ROWS = [
+    pytest.param("0.42", "0 / 0", "1", "0.01 · 0 · 5", "1", "prior", "0.0042", id="a clean cell costs its price for one ride's tokens ⚖"),
+    pytest.param("0.42", "2 / 4", "0.9", "0.01 · 0 · 5", "0.9", "prior", "0.004667", id="under min_rides the prior stands ⚖"),
+    pytest.param("0.42", "3 / 6", "1", "0.01 · 0 · 5", "0.5", "measured", "0.0084", id="a measured clean rate of one half doubles the cost ⚖"),
+    pytest.param("0.42", "3 / 6", "1", "0.01 · 0.1 · 5", "0.5", "measured", "0.1084", id="the strike overhead is paid once per failed ride ⚖"),
+    pytest.param("0.42", "0 / 5", "1", "0.01 · 0 · 5", "0", "measured", "inf", id="a cell with no clean ride yet is unaffordable ⚖"),
 ]
 
 
-@pytest.mark.parametrize(("rail", "axis", "tier", "expected"), [r[1:] for r in BAND_ROWS], ids=[r[0] for r in BAND_ROWS])
-def test_bands(rail, axis, tier, expected):
+@pytest.mark.parametrize(("out_price", "rides", "prior", "terms", "expected_rate", "expected_basis", "expected_cost"), COST_ROWS,
+                         ids=[p.id for p in COST_ROWS])
+def test_cost_per_clean_ride(out_price, rides, prior, terms, expected_rate, expected_basis, expected_cost):
+    world(note="a hand-written cell")
+    clean, judged = (int(x) for x in rides.split(" / "))
+    t, o, mr = terms.split(" · ")
+    pol = CostPolicy(float(t), float(o), int(mr))
+    with given(f"a cell: out_price = {out_price} $/M · rides = {rides} (clean / judged) · prior = {prior}; tiers.cost terms = {terms}"):
+        attach_json("cell", {"out_price": float(out_price), "rides": {"clean": clean, "judged": judged, "prior": float(prior)}, "cost": dataclasses.asdict(pol)})
+    with when("clean_rate(clean, judged, prior, min_rides), then cost_per_clean_ride(out_price, rate, cost)"):
+        r, basis = clean_rate(clean, judged, float(prior), pol.min_rides)
+        c = cost_per_clean_ride(float(out_price), r, pol)
+    verdict(f"rate = {expected_rate} · basis = {expected_basis} · cost = {expected_cost}",
+            expected_rate={"expected": expected_rate, "actual": num(round(r, 6))},
+            expected_basis={"expected": expected_basis, "actual": basis.split(" ")[0]},
+            expected_cost={"expected": expected_cost, "actual": num(round(c, 6)) if math.isfinite(c) else "inf"},
+            out_price={"actual": out_price}, rides={"actual": rides}, prior={"actual": prior}, terms={"actual": terms})
+
+
+# ── The Go price ─────────────────────────────────────────────────────────────────────────────
+NOTHING = "nothing"
+RIDE = "one ride at T0 + 2 h: in 1000M, out 100M"
+NO_FEES = "the docs snapshot without plan_fees"
+PRICE_ROWS = [
+    pytest.param(NOTHING, "deepseek-v4.1-flash", "0.125", "promise", "0.075", "0.01875", id="the plan's promise prices an idle rail ⚖"),
+    pytest.param(NOTHING, "claude-haiku-5-5", "0.666667", "promise", "0.333333", "0.066667", id="each model's own allowance is its promise ⚖"),
+    pytest.param(RIDE, "deepseek-v4.1-flash", "0.047619", "measured", "0.028571", "0.007143", id="a rail drawing past the allowance is priced on the meter ⚖"),
+    pytest.param(NOTHING, "longcat-2.5-preview-free", "0", "unlimited", "0", "0", id="an unlimited model prices at 0 ⚖"),
+    pytest.param(NO_FEES, "deepseek-v4.1-flash", "none", "none", "none", "none", id="no fee read: no price ⚖"),
+]
+
+
+async def _go_ride(gw, upstreams, usage: dict, tier: str = "light", task: str = "homelab-2743-draw") -> dict:
+    with quiet():
+        doc = await open_session(gw, role="worker", rail="opencode", tier=tier, task=task)
+        up = upstreams["opencode"]
+        up.usage = usage
+        r = await gw.post(MESSAGES, headers=bearer(doc), json={"max_tokens": 8, "messages": [{"role": "user", "content": "hi"}]})
+        up.usage = None
+    attach_json(f"arranged Go ride: {doc['model']} usage {usage} → {r.status_code}", {"session": doc["session"]["id"], "usage": usage, "status": r.status_code})
+    return doc
+
+
+def _pricing(app) -> dict:
+    return app.state.capacity.go_pricing("opencode", app.state.sessions.clock())
+
+
+def _r6(v) -> str:
+    return "none" if v is None else num(round(v, 6))
+
+
+@pytest.mark.parametrize(("ledger", "model", "expected_discount", "expected_basis", "expected_out", "expected_in"), PRICE_ROWS, ids=[p.id for p in PRICE_ROWS])
+async def test_go_price(gw, app, upstreams, clock, ledger, model, expected_discount, expected_basis, expected_out, expected_in):
+    world(upstream="upstream-ok" if ledger == RIDE else None, note=f"{GO_WORLD}; ledger {ledger}")
+    with given(f"ledger = {ledger}"):
+        if ledger == RIDE:
+            clock.advance(7200)
+            await _go_ride(gw, upstreams, {"input_tokens": 1_000_000_000, "output_tokens": 100_000_000})
+        elif ledger == NO_FEES:
+            del app.state.catalog.snapshots["docs"].body["plan_fees"]
+    with when(f"capacity.go_pricing(opencode) → models.{model}"):
+        p = _pricing(app)
+        attach_json("pricing", p)
+        row = p["models"][model]
+    verdict(f"discount = {expected_discount} · basis = {expected_basis} · out = {expected_out} · in = {expected_in}",
+            expected_discount={"expected": expected_discount, "actual": _r6(row["discount"])},
+            expected_basis={"expected": expected_basis, "actual": row["basis"] or "none"},
+            expected_out={"expected": expected_out, "actual": _r6(row["out"])},
+            expected_in={"expected": expected_in, "actual": _r6(row["in"])},
+            draw_30d_usd={"actual": p["draw_30d_usd"]}, ledger={"actual": ledger}, model={"actual": model})
+
+
+VIEW_ROWS = [pytest.param(NOTHING, "10", "0", "out 0.075, in 0.01875, discount 0.125, basis promise, rides 0 / 0", id="the price shows on GET /catalog/opencode ⚖")]
+
+
+@pytest.mark.parametrize(("ledger", "expected_fee", "expected_draw_30d", "expected_deepseek_v4_1_flash"), VIEW_ROWS, ids=[p.id for p in VIEW_ROWS])
+async def test_go_price_view(gw, ledger, expected_fee, expected_draw_30d, expected_deepseek_v4_1_flash):
+    world(note=f"{GO_WORLD}; ledger {ledger}")
+    with given(f"ledger = {ledger}"):
+        pass
+    with when("GET /catalog/opencode → pricing"):
+        p = (await gw.get("/catalog/opencode")).json()["pricing"]
+    m = p["models"]["deepseek-v4.1-flash"]
+    cell = f"out {num(m['out'])}, in {num(m['in'])}, discount {num(m['discount'])}, basis {m['basis']}, rides {m['rides']['clean']} / {m['rides']['judged']}"
+    verdict(f"fee = {expected_fee} · draw_30d = {expected_draw_30d} · deepseek_v4_1_flash = {expected_deepseek_v4_1_flash}",
+            expected_fee={"expected": expected_fee, "actual": num(p["fee_usd_month"])},
+            expected_draw_30d={"expected": expected_draw_30d, "actual": num(p["draw_30d_usd"])},
+            expected_deepseek_v4_1_flash={"expected": expected_deepseek_v4_1_flash, "actual": cell},
+            ledger={"actual": ledger})
+
+
+# ── The bands, on a hand-written rail ────────────────────────────────────────────────────────
+BAND_ROWS = [
+    pytest.param("fx", "intelligence", "heavy", "fx/near, fx/top", id="heavy = within 0.90 of the rail's top, cheapest first ⚖"),
+    pytest.param("fx", "intelligence", "standard", "fx/mid, fx/near, fx/top", id="standard = within 0.75 ⚖"),
+    pytest.param("fx", "intelligence", "light", "fx/low, fx/mid, fx/near", id="light = within 0.50, the cap drops the 4th by price ⚖"),
+    pytest.param("fxt", "intelligence", "heavy", "fxt/b, fxt/c, fxt/a", id="a price tie breaks by input price, then score, then id ⚖"),
+    pytest.param("fx", "coding", "heavy", "fx/mid, fx/near", id="the axis is the policy's: the same rail under `score: coding`"),
+    pytest.param("anthropic", "intelligence", "light · standard · heavy",
+                 "claude/fx-a, claude/fx-b, claude/fx-c · claude/fx-b, claude/fx-c · claude/fx-b, claude/fx-c",
+                 id="the subscription rail orders by score ascending ⚖"),
+    pytest.param("fx + fx/mid rides 2 / 6", "intelligence", "standard", "fx/near, fx/mid, fx/top", id="a measured clean rate reorders a list ⚖"),
+]
+
+
+@pytest.mark.parametrize(("rail", "score", "tier", "expected_list"), BAND_ROWS, ids=[p.id for p in BAND_ROWS])
+def test_bands(rail, score, tier, expected_list):
     world(note=f"a hand-written snapshot: rail {rail}")
-    rows, rules = RAILS[rail], TiersPolicy(axis, RULES.bands, RULES.cap, COST)
-    with given(f"rail {rail}: {len(rows)} candidates; score {axis}, bands {rules.bands}, cap {rules.cap}"):
-        attach_json(f"rail {rail}", rows)
-    with when(f"derive(snapshot, tiers) → {rail}.{tier}"):
-        lists = derive(_bench(**{rail: rows}), rules)
-    then_eq(f"{rail}.{tier}", lists[rail][tier], expected)
+    name, rows = RAILS[rail]
+    rules = TiersPolicy(score, RULES.bands, RULES.cap, COST)
+    with given(f"rail = {rail} ({len(rows)} candidates) · score = {score}; bands {rules.bands}, cap {rules.cap}, tiers.cost 0.01 · 0 · 5"):
+        attach_json(f"rail {name}", rows)
+        if "rides" in rail:
+            attach_json("cost per clean ride", {pid: row_cost(r, COST) for pid, r in rows.items() if r["aa_id"]})
+    with when(f"derive(snapshot, tiers) → {name}.{tier}"):
+        lists = derive(_bench(**{name: rows}), rules)
+    got = " · ".join(joined(lists[name][t]) for t in tier.split(" · "))
+    verdict(f"list = {expected_list}", expected_list={"expected": expected_list, "actual": got},
+            rail={"actual": rail}, score={"actual": score}, tier={"actual": tier})
 
 
-def test_several_tiers():
-    """row: a model sits in several tiers"""
-    world(note="a hand-written snapshot: rail fx")
-    with given("rail fx (fx/near 46 · 1.0: within every band of top 50)"):
-        attach_json("rail fx", FX)
+HOLD_ROWS = [
+    pytest.param("fx", "fx/near", "heavy, light, standard", "fx/near, fx/top", id="a model sits in several tiers"),
+    pytest.param("fx", "fx/none", "none", "fx/near, fx/top", id="an unbenched candidate never tiers, however cheap ⚖"),
+    pytest.param("fx + fx/nopx (49, no price)", "fx/nopx", "none", "fx/near, fx/top", id="an unpriced candidate on a priced rail never tiers ⚖"),
+]
+
+
+@pytest.mark.parametrize(("rail", "candidate", "expected_tiers", "expected_heavy"), HOLD_ROWS, ids=[p.id for p in HOLD_ROWS])
+def test_which_tiers_hold(rail, candidate, expected_tiers, expected_heavy):
+    world(note=f"a hand-written snapshot: rail {rail}")
+    name, rows = RAILS[rail]
+    with given(f"rail = {rail} · candidate = {candidate}: {rows[candidate]}"):
+        attach_json(f"rail {name}", rows)
     with when("derive(snapshot, tiers)"):
-        lists = derive(_bench(fx=FX), RULES)
-    then_eq("tiers holding fx/near", sorted(t for t, ids in lists["fx"].items() if "fx/near" in ids), ["heavy", "light", "standard"])
+        lists = derive(_bench(**{name: rows}), RULES)
+    verdict(f"tiers = {expected_tiers} · heavy = {expected_heavy}",
+            expected_tiers={"expected": expected_tiers, "actual": joined(sorted(t for t, ids in lists[name].items() if candidate in ids))},
+            expected_heavy={"expected": expected_heavy, "actual": joined(lists[name]["heavy"])},
+            rail={"actual": rail}, candidate={"actual": candidate})
 
 
-def test_unbenched_never_tiers():
-    """row: an unbenched candidate never tiers, however cheap"""
-    world(note="a hand-written snapshot: rail fx")
-    with given("rail fx (fx/none at 0/0 has no AA row)"):
-        attach_json("rail fx", FX)
-    with when("derive(snapshot, tiers)"):
-        lists = derive(_bench(fx=FX), RULES)
-    then_eq("tiers holding fx/none", [t for t, ids in lists["fx"].items() if "fx/none" in ids], [])
+EMPTY_ROWS = [
+    pytest.param("fx-empty", "[] · [] · []", "light, standard, heavy", "{}", "refuses, naming fx-empty.light",
+                 id="no benched candidate: empty lists, which apply refuses to write"),
+    pytest.param("fx-unpriced", "[] · [] · []", "light, standard, heavy", "{}", "refuses, naming fx-unpriced.light",
+                 id="a tier with no priced candidate is undecided: check passes it, apply refuses it ⚖"),
+]
 
 
-def test_unpriced_never_tiers():
-    """row: an unpriced candidate on a priced rail never tiers"""
-    world(note="a hand-written snapshot: rail fx + fx/nopx")
-    rows = {**FX, "fx/nopx": _row(49, None, None)}
-    with given("rail fx + fx/nopx 49 with no price"):
-        attach_json("rail fx", rows)
-    with when("derive(snapshot, tiers)"):
-        lists = derive(_bench(fx=rows), RULES)
-    then_eq("tiers holding fx/nopx", [t for t, ids in lists["fx"].items() if "fx/nopx" in ids], [])
-    # top stays 50 (fx/nopx is not in the pool): heavy is still {near, top}, as without it.
-    then_eq("fx.heavy (top stays 50)", lists["fx"]["heavy"], ["fx/near", "fx/top"])
-
-
-def test_subscription_score_ascending():
-    """row: the subscription rail orders by score ascending"""
-    world(note="a hand-written snapshot: rail anthropic")
-    with given("rail anthropic: fx-a 40, fx-b 55, fx-c 60, no prices (top 60 → heavy ≥ 54, standard ≥ 45, light ≥ 30)"):
-        attach_json("rail anthropic", SUB)
-    with when("derive(snapshot, tiers)"):
-        lists = derive(_bench(anthropic=SUB), RULES)
-    with then("light a, b, c · standard b, c · heavy b, c — score ascending",
-              lists={"expected": {"light": ["claude/fx-a", "claude/fx-b", "claude/fx-c"], "standard": ["claude/fx-b", "claude/fx-c"],
-                                  "heavy": ["claude/fx-b", "claude/fx-c"]}, "actual": lists["anthropic"]}):
-        assert lists["anthropic"] == {"light": ["claude/fx-a", "claude/fx-b", "claude/fx-c"],
-                                      "standard": ["claude/fx-b", "claude/fx-c"], "heavy": ["claude/fx-b", "claude/fx-c"]}
-
-
-def test_empty_rail_apply_refuses():
-    """row: no benched candidate: empty lists, which apply refuses to write"""
-    world(note="a hand-written snapshot: rail fx-empty")
-    rows = {"fx/none": FX["fx/none"]}
-    text = json.dumps({"rails": {"fx-empty": {"models": {"light": ["x"], "standard": ["x"], "heavy": ["x"]}}}}, indent=2)
-    with given("rail fx-empty: fx/none only (unbenched); a policy text naming the rail"):
-        attach_json("rail fx-empty", rows)
-    with when("derive(snapshot, tiers), then apply_text(policy text, the derivation)"):
-        lists = derive(_bench(**{"fx-empty": rows}), RULES)
-        try:
-            apply_text(text, lists)
-            error = None
-        except ValueError as e:
-            error = str(e)
-        attach_json("apply result", {"derived": lists, "error": error})
-    then_eq("derived lists", lists["fx-empty"], {"light": [], "standard": [], "heavy": []})
-    with then("apply_text raises naming fx-empty.light", error={"expected": "fx-empty.light", "actual": error}):
-        assert error is not None and "fx-empty.light" in error
-
-
-def test_clean_rate_reorders():
-    """row: a measured clean rate reorders a list"""
-    world(note="a hand-written snapshot: rail fx + fx/mid rides")
-    rows = {**FX, "fx/mid": {**FX["fx/mid"], "rides": {"clean": 2, "judged": 6, "prior": 1.0}}}
-    with given("rail fx with fx/mid at 2 clean of 6 judged rides (rate 1/3: $0.5 / (1/3) = $1.5 per 1M of output, past fx/near's $1.0)"):
-        attach_json("rail fx", rows)
-        attach_json("cost per clean ride", {pid: row_cost(r, RULES.cost) for pid, r in rows.items() if r["aa_id"]})
-    with when("derive(snapshot, tiers) → fx.standard"):
-        lists = derive(_bench(fx=rows), RULES)
-    then_eq("fx.standard", lists["fx"]["standard"], ["fx/near", "fx/mid", "fx/top"])
-
-
-def test_undecided_tier():
-    """row: a tier with no priced candidate is undecided: check passes it, apply refuses it"""
-    world(note="a hand-written snapshot: rail fx-unpriced")
-    rows = {"fx/a": _row(50, None, None)}
-    policy = {"rails": {"fx-unpriced": {"models": {"light": ["fx/a"], "standard": ["fx/a"], "heavy": ["fx/a"]}}}, "tiers": BLOCK}
-    with given("rail fx-unpriced: fx/a 50, benched, no price; a policy whose lists name fx/a"):
-        attach_json("rail fx-unpriced", rows)
+@pytest.mark.parametrize(("rail", "expected_derived", "expected_undecided", "expected_check", "expected_apply"), EMPTY_ROWS, ids=[p.id for p in EMPTY_ROWS])
+def test_empty_and_undecided(rail, expected_derived, expected_undecided, expected_check, expected_apply):
+    world(note=f"a hand-written snapshot: rail {rail}")
+    name, rows = RAILS[rail]
+    (only,) = rows
+    policy = {"rails": {name: {"models": {"light": [only], "standard": [only], "heavy": [only]}}}, "tiers": BLOCK}
+    with given(f"rail = {rail}: {rows}; a policy whose three lists name {only}"):
+        attach_json(f"rail {name}", rows)
     with when("derive, undecided, check(policy, snapshot), apply_text(policy text, the derivation)"):
-        bench = _bench(**{"fx-unpriced": rows})
+        bench = _bench(**{name: rows})
         lists = derive(bench, RULES)
         und = undecided(bench, RULES)
         mismatches = check(policy, bench)
@@ -256,64 +276,56 @@ def test_undecided_tier():
         except ValueError as e:
             error = str(e)
         attach_json("result", {"derived": lists, "undecided": und, "check": mismatches, "apply error": error})
-    then_eq("derived lists", lists["fx-unpriced"], {"light": [], "standard": [], "heavy": []})
-    then_eq("undecided", und, {"fx-unpriced": ["light", "standard", "heavy"]})
-    then_eq("check() mismatches", mismatches, {})
-    with then("apply_text raises naming fx-unpriced.light", error={"expected": "fx-unpriced.light", "actual": error}):
-        assert error is not None and "fx-unpriced.light" in error
+    verdict(f"derived = {expected_derived} · undecided = {expected_undecided} · check = {expected_check} · apply = {expected_apply}",
+            expected_derived={"expected": expected_derived, "actual": " · ".join(f"[{', '.join(lists[name][t])}]" for t in ("light", "standard", "heavy"))},
+            expected_undecided={"expected": expected_undecided, "actual": joined(und.get(name, []))},
+            expected_check={"expected": expected_check, "actual": json.dumps(mismatches)},
+            expected_apply={"expected": expected_apply, "actual": "writes" if error is None else (expected_apply if expected_apply.endswith(f"naming {name}.light") and f"{name}.light" in error else f"refuses: {error}")},
+            rail={"actual": rail})
 
 
-TWIN_ROWS = [
-    ("a Go id and its openrouter spelling are twins", "opencode-go/deepseek-v4.1-flash", "deepseek/deepseek-v4.1-flash", True),
-    ("the dotted and the dashed version are twins", "opencode-go/claude-haiku-5-5", "anthropic/claude-haiku-5.5", True),
-    ("a variant twins its family", "inclusionai/ling-3.0-flash:free", "inclusionai/ling-3.0-flash", True),
-    ("two vendors' spellings are not twins", "deepseek/deepseek-v4.1-flash", "other/deepseek-v4.1-flash", False),
-    ("a suffix is not a twin", "opencode-go/glm-5.3", "z-ai/glm-5.3-flash", False),
-    ("an alias twins nothing", "claude/haiku", "opencode-go/claude-haiku-5-5", False),
-    ("the same id is not a twin", "deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4.1-flash", False),
-]
-
-
-@pytest.mark.parametrize(("a", "b", "expected"), [r[1:] for r in TWIN_ROWS], ids=[r[0] for r in TWIN_ROWS])
-def test_twins(a, b, expected):
-    world(note="two hand-written policy ids")
-    with given(f"policy ids {a!r} and {b!r}; expected twins: {expected}"):
-        attach_json("ids", [a, b])
-    with when(f"same_model({a!r}, {b!r}) and the reverse"):
-        got = (same_model(a, b), same_model(b, a))
-    then_eq("twins (both directions)", got, (expected, expected), claim="twins" if expected else "not twins")
-
-
-# ── The id join ─────────────────────────────────────────────────────────────────────────────
-HAIKU = ["anthropic/claude-haiku-5.5", "anthropic/claude-haiku-4.5"]
-GLM = ["z-ai/glm-5.3", "z-ai/glm-5.3-flash"]
-OPUS = ["anthropic/claude-opus-5", "anthropic/claude-opus-5.5", "anthropic/claude-opus-4.1"]
+# ── The id join ──────────────────────────────────────────────────────────────────────────────
+HAIKU = "anthropic/claude-haiku-5.5, anthropic/claude-haiku-4.5"
+GLM = "z-ai/glm-5.3, z-ai/glm-5.3-flash"
+OPUS = "anthropic/claude-opus-5, anthropic/claude-opus-5.5, anthropic/claude-opus-4.1"
 JOIN_ROWS = [
-    ("a Go id joins the dotted AA id", "opencode-go/claude-haiku-5-5", HAIKU, "anthropic/claude-haiku-5.5"),
-    ("a dotted Go id joins as is", "opencode-go/glm-5.3", GLM, "z-ai/glm-5.3"),
-    ("a Go id the table lacks is unbenched", "opencode-go/beam-free", HAIKU + GLM, "none"),
-    ("a suffix is not a match", "opencode-go/hy3", ["tencent/hy3-preview"], "none"),
-    ("two vendors' rows for one bare id: unbenched", "opencode-go/gpt-6-luna", ["openai/gpt-6-luna", "other/gpt-6-luna"], "none"),
-    ("an alias joins the newest row of its family by version", "claude/opus", OPUS, "anthropic/claude-opus-5.5"),
-    ("an alias with no row of its family is unbenched", "claude/haiku", OPUS, "none"),
-    ("an openrouter id keeps its vendor", "deepseek/deepseek-v4-flash", ["deepseek/deepseek-v4-flash", "other/deepseek-v4-flash"], "deepseek/deepseek-v4-flash"),
-    ("a :free variant joins its family", "inclusionai/ling-3.0-flash:free", ["inclusionai/ling-3.0-flash"], "inclusionai/ling-3.0-flash"),
+    pytest.param("opencode-go/claude-haiku-5-5", HAIKU, "anthropic/claude-haiku-5.5", id="a Go id joins the dotted AA id ⚖"),
+    pytest.param("opencode-go/glm-5.3", GLM, "z-ai/glm-5.3", id="a dotted Go id joins as is"),
+    pytest.param("opencode-go/beam-free", f"{HAIKU}, {GLM}", "none", id="a Go id the table lacks is unbenched"),
+    pytest.param("opencode-go/hy3", "tencent/hy3-preview", "none", id="a suffix is not a match"),
+    pytest.param("opencode-go/gpt-6-luna", "openai/gpt-6-luna, other/gpt-6-luna", "none", id="two vendors' rows for one bare id: unbenched ⚖"),
+    pytest.param("claude/opus", OPUS, "anthropic/claude-opus-5.5", id="an alias joins the newest row of its family by version ⚖"),
+    pytest.param("claude/haiku", OPUS, "none", id="an alias with no row of its family is unbenched"),
+    pytest.param("deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash, other/deepseek-v4-flash", "deepseek/deepseek-v4-flash", id="an openrouter id keeps its vendor"),
+    pytest.param("inclusionai/ling-3.0-flash:free", "inclusionai/ling-3.0-flash", "inclusionai/ling-3.0-flash", id="a `:free` variant joins its family ⚖"),
 ]
 
 
-@pytest.mark.parametrize(("policy_id", "aa_ids", "expected"), [r[1:] for r in JOIN_ROWS], ids=[r[0] for r in JOIN_ROWS])
-def test_join(policy_id, aa_ids, expected):
+@pytest.mark.parametrize(("policy_id", "aa_ids", "expected_joins"), JOIN_ROWS, ids=[p.id for p in JOIN_ROWS])
+def test_join(policy_id, aa_ids, expected_joins):
     world(note="a hand-written AA id list")
-    with given(f"AA ids {aa_ids}"):
-        attach_json("aa ids", aa_ids)
+    with given(f"policy_id = {policy_id} · aa_ids = {aa_ids}"):
+        attach_json("aa ids", listed(aa_ids))
     with when(f"join_aa_id({policy_id!r}, aa_ids)"):
-        got = join_aa_id(policy_id, aa_ids) or "none"
-    then_eq("joins", got, expected, claim=f"joins {expected}")
+        got = join_aa_id(policy_id, listed(aa_ids)) or "none"
+    verdict(f"joins = {expected_joins}", expected_joins={"expected": expected_joins, "actual": got}, policy_id={"actual": policy_id}, aa_ids={"actual": aa_ids})
 
 
-# ── The tiers block ─────────────────────────────────────────────────────────────────────────
-BLOCK = {"score": "intelligence", "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5}, "cap": 3,
-         "cost": {"ride_tokens_out_m": 0.01, "strike_overhead_usd": 0, "min_rides": 5}}
+# ── The tiers block ──────────────────────────────────────────────────────────────────────────
+BLOCK_ROWS = [
+    pytest.param("the world's", "loads; Policy.tiers = the world's block", id="the block loads"),
+    pytest.param("foo = 1", "refused, naming tiers", id="an unknown key refuses the load"),
+    pytest.param('score = "vibes"', "refused, naming tiers.score", id="an unknown score axis refuses the load"),
+    pytest.param("bands.light dropped", "refused, naming light", id="a missing tier band refuses the load"),
+    pytest.param("cap = 0", "refused, naming tiers.cap", id="a non-positive cap refuses the load"),
+    pytest.param("bands.heavy = 1.5", "refused, naming tiers.bands.heavy", id="a band above 1 refuses the load"),
+    pytest.param("bands.light = 0", "refused, naming tiers.bands.light", id="a zero band refuses the load"),
+    pytest.param("bands.standard = 0.95", "refused, naming heavy >= standard >= light", id="bands out of order refuse the load"),
+    pytest.param("cost dropped", "refused, naming tiers.cost", id="no cost terms refuse the load ⚖"),
+    pytest.param("cost.ride_tokens_out_m = 0", "refused, naming tiers.cost.ride_tokens_out_m", id="a non-positive ride size refuses the load"),
+    pytest.param("cost.min_rides = 0", "refused, naming tiers.cost.min_rides", id="a non-positive min_rides refuses the load"),
+]
+DROP = object()
 
 
 def _apply_edit(doc: dict, edit: str) -> None:
@@ -333,315 +345,297 @@ def _apply_edit(doc: dict, edit: str) -> None:
         node[leaf] = value
 
 
-DROP = object()
-BLOCK_ROWS = [
-    ("the block loads", "the world's", "loads"),
-    ("an unknown key refuses the load", "foo = 1", "tiers"),
-    ("an unknown score axis refuses the load", 'score = "vibes"', "tiers.score"),
-    ("a band above 1 refuses the load", "bands.heavy = 1.5", "tiers.bands.heavy"),
-    ("a zero band refuses the load", "bands.light = 0", "tiers.bands.light"),
-    ("bands out of order refuse the load", "bands.standard = 0.95", "heavy >= standard >= light"),
-    ("a missing tier band refuses the load", "bands.light dropped", "light"),
-    ("a non-positive cap refuses the load", "cap = 0", "tiers.cap"),
-    ("no cost terms refuse the load", "cost dropped", "tiers.cost"),
-    ("a non-positive ride size refuses the load", "cost.ride_tokens_out_m = 0", "tiers.cost.ride_tokens_out_m"),
-    ("a non-positive min_rides refuses the load", "cost.min_rides = 0", "tiers.cost.min_rides"),
-]
+def _load(doc: dict) -> tuple[Policy | None, str | None]:
+    try:
+        return Policy.from_dict(doc), None
+    except PolicyError as e:
+        return None, str(e)
 
 
-@pytest.mark.parametrize(("edit", "refused"), [r[1:] for r in BLOCK_ROWS], ids=[r[0] for r in BLOCK_ROWS])
-def test_tiers_block(edit, refused):
+def _load_cell(error: str | None, expected: str, loads_text: str) -> str:
+    if error is None:
+        return loads_text
+    if expected.startswith("refused, naming ") and expected[len("refused, naming "):] in error:
+        return expected
+    return f"refused: {error}"
+
+
+@pytest.mark.parametrize(("tiers", "expected_load"), BLOCK_ROWS, ids=[p.id for p in BLOCK_ROWS])
+def test_tiers_block(tiers, expected_load):
     world()
     doc = json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
-    with given(f"policy-default with its tiers block: {edit}"):
-        if edit != "the world's":
-            _apply_edit(doc, edit)
+    with given(f"policy-default with tiers = {tiers}"):
+        if tiers != "the world's":
+            _apply_edit(doc, tiers)
         attach_json("tiers", doc["tiers"])
     with when("the policy loads"):
-        try:
-            loaded, error = Policy.from_dict(doc), None
-        except PolicyError as e:
-            loaded, error = None, str(e)
+        loaded, error = _load(doc)
         attach_json("load result", {"loaded": loaded is not None, "error": error})
-    if refused == "loads":
-        then_eq("Policy.tiers", loaded.tiers, TiersPolicy(BLOCK["score"], BLOCK["bands"], BLOCK["cap"], COST),
-                claim="loads; Policy.tiers = the world's block")
-    else:
-        with then(f"refused, naming {refused}", refused={"expected": refused, "actual": error}):
-            assert error is not None and refused in error, error
+    loads_text = "loads; Policy.tiers = the world's block" if loaded is not None and loaded.tiers == TiersPolicy(BLOCK["score"], BLOCK["bands"], BLOCK["cap"], COST) \
+        else f"loads; Policy.tiers = {loaded.tiers!r}" if loaded is not None else ""
+    verdict(f"load = {expected_load}", expected_load={"expected": expected_load, "actual": _load_cell(error, expected_load, loads_text)}, tiers={"actual": tiers})
 
 
-def test_no_block():
-    """row: no block: the policy loads with no rules, and the check refuses to run"""
+NO_BLOCK_ROWS = [pytest.param("absent", "loads; Policy.tiers None", "raises naming tiers", id="no block: the policy loads with no rules, and the check refuses to run ⚖")]
+
+
+@pytest.mark.parametrize(("tiers", "expected_load", "expected_check"), NO_BLOCK_ROWS, ids=[p.id for p in NO_BLOCK_ROWS])
+def test_no_block(tiers, expected_load, expected_check):
     world()
     doc = json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
-    with given("policy-default without its tiers block"):
+    with given(f"policy-default with tiers = {tiers}"):
         del doc["tiers"]
     with when("the policy loads, then check(policy, a snapshot)"):
-        loaded = Policy.from_dict(doc)
+        loaded, error = _load(doc)
         try:
             check(doc, _bench(fx=FX))
-            error = None
+            check_error = None
         except ValueError as e:
-            error = str(e)
-        attach_json("result", {"tiers": loaded.tiers, "check error": error})
-    then_eq("Policy.tiers", loaded.tiers, None)
-    with then("check() raises naming tiers", error={"expected": "tiers", "actual": error}):
-        assert error is not None and "tiers" in error
+            check_error = str(e)
+        attach_json("result", {"tiers": loaded.tiers if loaded else None, "load error": error, "check error": check_error})
+    verdict(f"load = {expected_load} · check = {expected_check}",
+            expected_load={"expected": expected_load, "actual": f"loads; Policy.tiers {loaded.tiers!r}" if loaded is not None else f"refused: {error}"},
+            expected_check={"expected": expected_check, "actual": "raises naming tiers" if check_error and "tiers" in check_error else f"check: {check_error!r}"},
+            tiers={"actual": tiers})
 
 
-# ── The deployed policy ─────────────────────────────────────────────────────────────────────
-deployed = pytest.mark.skipif(not (DEPLOYED_POLICY.exists() and BENCHMARKS.exists()),
-                              reason="deploy manifests absent (service-only checkout)")
+# ── The rulings, on the deployed files ────────────────────────────────────────────────────────
+deployed = pytest.mark.skipif(not (DEPLOYED_POLICY.exists() and BENCHMARKS.exists()), reason="deploy manifests absent (service-only checkout)")
 
 
 def _deployed() -> tuple[dict, dict]:
     return (json.loads(DEPLOYED_POLICY.read_text(encoding="utf-8")), json.loads(BENCHMARKS.read_text(encoding="utf-8")))
 
 
-@deployed
-def test_deployed_equals_derivation():
-    """row: the deployed tier lists equal the derivation"""
-    world(note="against the deployed policy + the committed snapshot")
-    policy, bench = _deployed()
-    with given(f"{BENCHMARKS.relative_to(ISLAND.parent)} (snapshot_at {bench['snapshot_at']}) + the deployed tiers block {policy['tiers']['score']}/{policy['tiers']['bands']}/{policy['tiers']['cap']}"):
-        attach_json("deployed lists", {r: v["models"] for r, v in policy["rails"].items()})
-    with when("check(policy, benchmarks)"):
-        mismatches = check(policy, bench)
-    then_eq("mismatches", mismatches, {}, claim="check() = {} — every list is the derived list, in order")
-
-
-@deployed
-def test_hand_edit_fails():
-    """row: a hand edit of a list fails the check"""
-    world(note="against the deployed policy + the committed snapshot")
-    policy, bench = _deployed()
-    # the first deployed list with two or more ids, in a fixed order: reversing a one-id list is no edit
-    rail, tier = next((r, t) for r in sorted(policy["rails"]) for t in ("light", "standard", "heavy")
-                      if isinstance(policy["rails"][r].get("models", {}).get(t), list) and len(policy["rails"][r]["models"][t]) >= 2)
-    with given(f"the deployed policy with rails.{rail}.models.{tier} reversed"):
-        policy = copy.deepcopy(policy)
-        policy["rails"][rail]["models"][tier] = list(reversed(policy["rails"][rail]["models"][tier]))
-        attach_json("edited list", policy["rails"][rail]["models"][tier])
-    with when("check(policy, benchmarks)"):
-        mismatches = check(policy, bench)
-    with then(f"check() names {rail}.{tier}, expecting the derived list", named={"expected": [f"{rail}.{tier}"], "actual": [f"{r}.{t}" for r, ts in mismatches.items() for t in ts]}):
-        assert list(mismatches) == [rail] and list(mismatches[rail]) == [tier]
-        assert mismatches[rail][tier]["expected"] == derive(bench, tiers_policy(policy["tiers"]))[rail][tier]
-
-
 def _pool(rows: dict, rail: str, axis: str) -> dict:
     """The tierable candidates of a rail as derive sees them: benched, and priced on a priced rail."""
-    return {pid: r for pid, r in rows.items() if r["aa_id"] and r[axis] is not None and (rail == "anthropic" or r["out_price"] is not None)}
+    return {pid: r for pid, r in rows.items() if r["aa_id"] and r[axis] is not None and (rail in PRICELESS_RAILS or r["out_price"] is not None)}
 
 
 def _listed(policy: dict, rail: str) -> dict[str, list[str]]:
     return {t: ([v] if isinstance(v, str) else list(v)) for t, v in policy["rails"][rail]["models"].items()}
 
 
-@deployed
-def test_ruling_score_axis():
-    """row: the score is the Artificial Analysis intelligence index"""
-    world(note="against the committed snapshot + the deployed policy")
-    policy, bench = _deployed()
-    with given("the deployed tiers block and every benched candidate row"):
-        benched = [r for rows in bench["rails"].values() for r in rows.values() if r["aa_id"]]
-        attach_json("coverage", {"benched": len(benched), "with intelligence": sum(r["intelligence"] is not None for r in benched),
-                                 "with coding": sum(r["coding"] is not None for r in benched)})
-    with when("the score axis and the rows' coverage are read"):
-        axis = policy["tiers"]["score"]
-    then_eq("tiers.score", axis, "intelligence")
-    then_eq("benched rows lacking intelligence", sum(r["intelligence"] is None for r in benched), 0)
-    with then("at least one benched row lacks coding (the axis without full coverage)", lacking={"expected": "> 0", "actual": sum(r["coding"] is None for r in benched)}):
-        assert any(r["coding"] is None for r in benched)
+def _ruling_score(policy, bench):
+    benched = [r for rows in bench["rails"].values() for r in rows.values() if r["aa_id"]]
+    knob = f"tiers.score: {policy['tiers']['score']}"
+    violations = [f"{len(benched)} benched rows, {sum(r['intelligence'] is None for r in benched)} without intelligence"] if any(r["intelligence"] is None for r in benched) else []
+    if not any(r["coding"] is None for r in benched):
+        violations.append("every benched row carries coding")
+    return knob, violations, {"benched": len(benched), "with coding": sum(r["coding"] is not None for r in benched)}
 
 
-@deployed
-def test_ruling_bands():
-    """row: a tier is a band of the rail's best"""
-    world(note="against the committed snapshot + the deployed policy")
-    policy, bench = _deployed()
+def _ruling_bands(policy, bench):
     axis, bands = policy["tiers"]["score"], policy["tiers"]["bands"]
     und = undecided(bench, tiers_policy(policy["tiers"]))
-    with given("the deployed tiers block; each decided rail's top score over its tierable candidates"):
-        tops = {rail: max(r[axis] for r in _pool(rows, rail, axis).values()) for rail, rows in bench["rails"].items()
-                if _pool(rows, rail, axis)}
-        attach_json("tops", tops)
-        attach_json("undecided (the deployed list stands, unchecked here)", und)
-    with when("every id of every decided deployed list is scored against its band"):
-        below = sorted(f"{rail}.{tier}:{pid}" for rail in tops for tier, ids in _listed(policy, rail).items() if tier not in und.get(rail, [])
-                       for pid in ids if bench["rails"][rail][pid][axis] < bands[tier] * tops[rail])
-    then_eq("tiers.bands", bands, {"heavy": 0.9, "standard": 0.75, "light": 0.5})
-    then_eq("listed ids below their band", below, [])
+    tops = {rail: max(r[axis] for r in _pool(rows, rail, axis).values()) for rail, rows in bench["rails"].items() if _pool(rows, rail, axis)}
+    below = sorted(f"{rail}.{tier}:{pid}" for rail in tops for tier, ids in _listed(policy, rail).items() if tier not in und.get(rail, [])
+                   for pid in ids if bench["rails"][rail][pid][axis] < bands[tier] * tops[rail])
+    return "tiers.bands: " + ", ".join(f"{t} {num(bands[t])}" for t in ("heavy", "standard", "light")), below, {"tops": tops, "undecided": und}
 
 
-@deployed
-def test_ruling_cheapest_first():
-    """row: each list is cheapest per clean ride first, capped at 3"""
-    world(note="against the committed snapshot + the deployed policy")
-    policy, bench = _deployed()
-    cost = tiers_policy(policy["tiers"]).cost
-    und = undecided(bench, tiers_policy(policy["tiers"]))
-    with given("the deployed priced-rail lists (the decided tiers) with each id's cost per clean ride"):
-        priced = {rail: {tier: [(pid, row_cost(bench["rails"][rail][pid], cost)) for pid in ids]
-                         for tier, ids in _listed(policy, rail).items() if tier not in und.get(rail, [])}
-                  for rail in bench["rails"] if rail not in PRICELESS_RAILS}
-        attach_json("lists with costs", priced)
-        attach_json("undecided (the deployed list stands, unchecked here)", und)
-    with when("each decided list's length and cost order are read"):
-        over = [f"{rail}.{tier}" for rail, ts in priced.items() for tier, ids in ts.items() if len(ids) > policy["tiers"]["cap"]]
-        unsorted = [f"{rail}.{tier}" for rail, ts in priced.items() for tier, ids in ts.items()
-                    if [c for _, c in ids] != sorted(c for _, c in ids)]
-    then_eq("tiers.cap", policy["tiers"]["cap"], 3)
-    then_eq("decided lists over the cap", over, [])
-    then_eq("decided lists not cost-ascending", unsorted, [])
+def _ruling_cheapest(policy, bench):
+    tp = tiers_policy(policy["tiers"])
+    und = undecided(bench, tp)
+    priced = {rail: {tier: [(pid, row_cost(bench["rails"][rail][pid], tp.cost)) for pid in ids]
+                     for tier, ids in _listed(policy, rail).items() if tier not in und.get(rail, [])}
+              for rail in bench["rails"] if rail not in PRICELESS_RAILS}
+    over = [f"{rail}.{tier} over the cap" for rail, ts in priced.items() for tier, ids in ts.items() if len(ids) > tp.cap]
+    unsorted = [f"{rail}.{tier} not cost-ascending" for rail, ts in priced.items() for tier, ids in ts.items() if [c for _, c in ids] != sorted(c for _, c in ids)]
+    return f"tiers.cap: {tp.cap}", over + unsorted, {"lists with costs": priced}
 
 
-@deployed
-def test_ruling_subscription_proxy():
-    """row: the subscription rail has no price: score ascending is its cost proxy"""
-    world(note="against the committed snapshot + the deployed policy")
-    policy, bench = _deployed()
+def _ruling_subscription(policy, bench):
     axis = policy["tiers"]["score"]
-    priced, not_ascending = {}, {}
-    with given("the anthropic and codex snapshot rows and the deployed anthropic and codex lists (the two subscription rails)"):
-        scored = {rail: {tier: [(pid, bench["rails"][rail][pid][axis]) for pid in ids] for tier, ids in _listed(policy, rail).items()}
-                  for rail in ("anthropic", "codex")}
-        attach_json("subscription lists with scores", scored)
-    with when("the rows' prices and each list's score order are read"):
-        for rail, lists in scored.items():
-            priced[rail] = [pid for pid, r in bench["rails"][rail].items() if r["out_price"] is not None or r["in_price"] is not None]
-            not_ascending[rail] = [tier for tier, ids in lists.items() if [s for _, s in ids] != sorted({s for _, s in ids})]
-    then_eq("subscription rows carrying a price", priced, {"anthropic": [], "codex": []})
-    then_eq("subscription lists not strictly score-ascending", not_ascending, {"anthropic": [], "codex": []})
+    violations = []
+    for rail in PRICELESS_RAILS:
+        violations += [f"{rail}:{pid} priced" for pid, r in bench["rails"][rail].items() if r["out_price"] is not None or r["in_price"] is not None]
+        for tier, ids in _listed(policy, rail).items():
+            scores = [bench["rails"][rail][pid][axis] for pid in ids]
+            if scores != sorted(set(scores)):
+                violations.append(f"{rail}.{tier} not strictly score-ascending")
+    return "PRICELESS_RAILS: " + ", ".join(PRICELESS_RAILS), violations, {"scored lists": {rail: {t: [(pid, bench["rails"][rail][pid][axis]) for pid in ids] for t, ids in _listed(policy, rail).items()} for rail in PRICELESS_RAILS}}
+
+
+def _ruling_candidates(policy, bench):
+    rails = bench["rails"]
+    anth = policy["rails"]["anthropic"]
+    aliases = sorted({x for lst in anth["models"].values() for x in ([lst] if isinstance(lst, str) else lst)} | set(anth.get("side_models", [])))
+    codex_ids = sorted({x for lst in policy["rails"]["codex"]["models"].values() for x in ([lst] if isinstance(lst, str) else lst)})
+    tp = tiers_policy(policy["tiers"])
+    sub_aa = [r["aa_id"] for rail_ in PRICELESS_RAILS for r in rails[rail_].values() if r.get("aa_id")]
+    benched = {k: float(r[tp.score]) for k, r in rails["codex"].items() if r.get("aa_id") and isinstance(r.get(tp.score), int | float)}
+    top = max(benched.values(), default=0.0)
+    v = []
+    v += [f"opencode key not opencode-go/<id>: {k}" for k in rails["opencode"] if not k.startswith("opencode-go/")]
+    v += [f"opencode key a subscription rail serves: {k}" for k in rails["opencode"] if any(same_model(k, aa) for aa in sub_aa)]
+    v += [f"opencode price_basis {b}" for b in sorted({r["price_basis"] for r in rails["opencode"].values()} - {"promise", "measured", "unlimited", None}, key=str)]
+    v += [f"openrouter key not vendor/model: {k}" for k in rails["openrouter"] if k.count("/") != 1 or k.startswith(("opencode-go/", "claude/"))]
+    v += [f"openrouter {k} priced off its selected endpoint: {r['price_basis']}/{r['provider']}" for k, r in rails["openrouter"].items()
+          if r["price_basis"] not in ("endpoint", None) or (r["price_basis"] == "endpoint") != (r["provider"] is not None)]
+    if sorted(rails["anthropic"]) != aliases:
+        v.append(f"anthropic keys {sorted(rails['anthropic'])} ≠ the deployed aliases {aliases}")
+    v += [f"anthropic {k} priced" for k, r in rails["anthropic"].items() if r["out_price"] is not None]
+    v += [f"deployed codex id missing from the snapshot: {i}" for i in codex_ids if i not in rails["codex"]]
+    v += [f"codex key on no list yet benched within a band: {k}" for k in rails["codex"] if k not in codex_ids and k in benched and benched[k] >= min(tp.bands.values()) * top]
+    v += [f"codex {k} priced" for k, r in rails["codex"].items() if r["out_price"] is not None]
+    if bench["sources"]["openrouter_catalog"].get("fetched_at") is None:
+        v.append("sources.openrouter_catalog.fetched_at absent")
+    return f"sources.capability.source: {bench['sources']['capability']['source']}", v, {"anthropic aliases": aliases, "codex ids": codex_ids}
+
+
+def _ruling_join(policy, bench):
+    aa_ids = sorted({r["aa_id"] for rows in bench["rails"].values() for r in rows.values() if r["aa_id"]})
+    differs = sorted(f"{rail}:{pid} aa_id {r['aa_id']} ≠ {join_aa_id(pid, aa_ids)}" for rail, rows in bench["rails"].items() for pid, r in rows.items()
+                     if join_aa_id(pid, aa_ids) != r["aa_id"])
+    return "the rule", differs, {"aa ids in the snapshot": aa_ids}
+
+
+def _ruling_unbenched(policy, bench):
+    und = undecided(bench, tiers_policy(policy["tiers"]))
+    listed_ = {f"{rail}.{tier}:{pid}": bench["rails"][rail][pid] for rail in bench["rails"] for tier, ids in _listed(policy, rail).items()
+               if tier not in und.get(rail, []) for pid in ids}
+    v = [f"{k} has no AA row" for k, r in listed_.items() if r["aa_id"] is None]
+    v += [f"{k} unpriced on a priced rail" for k, r in listed_.items() if not k.startswith(tuple(f"{p}." for p in PRICELESS_RAILS)) and r["out_price"] is None]
+    return "derive", v, {"listed": {k: {"aa_id": r["aa_id"], "out_price": r["out_price"]} for k, r in listed_.items()}}
+
+
+RULINGS = {
+    "every benched row carries `intelligence`; at least one lacks `coding` (the other axes are loadable, unused — the gap row)": _ruling_score,
+    "within a rail, every id of a decided deployed list scores ≥ its band × the rail's top score (a model can sit in several tiers)": _ruling_bands,
+    "every decided priced-rail list has ≤ cap ids with non-decreasing cost per clean ride (`row_cost` under the deployed `tiers.cost`; ties by input price, score descending, id)": _ruling_cheapest,
+    "every anthropic and codex row is unpriced (one flat subscription — the ChatGPT one since 2026-10-22, FU-270) and each of their deployed lists is strictly score-ascending": _ruling_subscription,
+    "per rail the snapshot's candidate keys and prices are the sources' (opencode = the Go catalog's listed models at the Go price, minus a subscription rail's twins; openrouter = the OpenRouter catalog's ids at the SELECTED endpoint's price or unpriced; anthropic = the deployed `claude/` aliases, unpriced; codex = the enrolled account's ids, unpriced, every deployed codex id among them)": _ruling_candidates,
+    "every snapshot row's `aa_id` is what `join_aa_id` returns over the snapshot's AA ids (no row is a hand-written pair)": _ruling_join,
+    "no id in a decided deployed list has a null `aa_id`, nor a null `out_price` on a priced rail (the free `beam-free` and `longcat-2.5-preview-free` stay out; every openrouter model until a cell passed the entry canary)": _ruling_unbenched,
+}
+RULING_ROWS = [
+    pytest.param(list(RULINGS)[0], "tiers.score: intelligence", "none", id="the score is the Artificial Analysis intelligence index ⚖"),
+    pytest.param(list(RULINGS)[1], "tiers.bands: heavy 0.9, standard 0.75, light 0.5", "none", id="a tier is a band of the rail's best ⚖"),
+    pytest.param(list(RULINGS)[2], "tiers.cap: 3", "none", id="each list is cheapest per clean ride first, capped at 3 ⚖"),
+    pytest.param(list(RULINGS)[3], "PRICELESS_RAILS: anthropic, codex", "none", id="the subscription rail has no price: score ascending is its cost proxy ⚖"),
+    pytest.param(list(RULINGS)[4], "sources.capability.source: artificial-analysis", "none", id="the candidates per rail ⚖"),
+    pytest.param(list(RULINGS)[5], "the rule", "none", id="the join to the AA row is a rule, not a table ⚖"),
+    pytest.param(list(RULINGS)[6], "derive", "none", id="unbenched never tiers ⚖"),
+]
 
 
 @deployed
-def test_ruling_join_is_a_rule():
-    """row: the join to the AA row is a rule, not a table"""
-    world(note="against the committed snapshot")
-    _, bench = _deployed()
-    with given("every snapshot row's policy id and aa_id; the snapshot's set of AA ids"):
-        aa_ids = sorted({r["aa_id"] for rows in bench["rails"].values() for r in rows.values() if r["aa_id"]})
-        attach_json("aa ids in the snapshot", aa_ids)
-    with when("join_aa_id(policy id, those AA ids) is recomputed for every row"):
-        differs = sorted(f"{rail}:{pid}" for rail, rows in bench["rails"].items() for pid, r in rows.items()
-                         if join_aa_id(pid, aa_ids) != r["aa_id"])
-    then_eq("rows whose aa_id is not the rule's answer", differs, [])
-
-
-@deployed
-def test_ruling_unbenched_never_tiers():
-    """row: unbenched never tiers"""
+@pytest.mark.parametrize(("invariant", "expected_knob", "expected_violations"), RULING_ROWS, ids=[p.id for p in RULING_ROWS])
+def test_rulings(invariant, expected_knob, expected_violations):
     world(note="against the committed snapshot + the deployed policy")
     policy, bench = _deployed()
-    und = undecided(bench, tiers_policy(policy["tiers"]))
-    with given("every id of every DECIDED deployed list with its row's aa_id and out_price (an undecided tier's list stands as last derived)"):
-        listed = {f"{rail}.{tier}:{pid}": {"aa_id": bench["rails"][rail][pid]["aa_id"], "out_price": bench["rails"][rail][pid]["out_price"]}
-                  for rail in bench["rails"] for tier, ids in _listed(policy, rail).items() if tier not in und.get(rail, []) for pid in ids}
-        attach_json("listed ids", listed)
-        attach_json("undecided (unchecked here)", und)
-    with when("the unbenched and the unpriced-on-a-priced-rail are counted"):
-        unbenched = sorted(k for k, v in listed.items() if v["aa_id"] is None)
-        unpriced = sorted(k for k, v in listed.items() if not k.startswith(("anthropic.", "codex.")) and v["out_price"] is None)
-    then_eq("listed ids with no AA row", unbenched, [])
-    then_eq("listed ids with no price on a priced rail", unpriced, [])
+    with given(f"{BENCHMARKS.relative_to(ISLAND.parent)} (snapshot_at {bench['snapshot_at']}) + the deployed policy; invariant = {invariant}"):
+        attach_json("the deployed tiers block", {k: v for k, v in policy["tiers"].items() if not k.startswith("_")})
+    with when("the invariant is evaluated over the deployed files"):
+        knob, violations, evidence = RULINGS[invariant](policy, bench)
+        attach_json("what was read", evidence)
+    verdict(f"knob = {expected_knob} · violations = {expected_violations}",
+            expected_knob={"expected": expected_knob, "actual": knob},
+            expected_violations={"expected": expected_violations, "actual": joined(violations)},
+            invariant={"actual": invariant})
+
+
+# ── The deployed policy ──────────────────────────────────────────────────────────────────────
+NULLED = "with every openrouter price nulled"
+DEPLOYED_ROWS = [
+    pytest.param("deployed", "committed", "none", "{}", "none", "none", id="the deployed tier lists equal the derivation ⚖"),
+    pytest.param("deployed", "committed", "rails.anthropic.models.heavy reversed", "anthropic.heavy", "none", "none", id="a hand edit of a list fails the check"),
+    pytest.param("policy-default", "committed", "none", "non-empty (its lists are fixture ids)", "none", "none",
+                 id="the fixture worlds carry the block, not the derivation ⚖"),
+    pytest.param("deployed", NULLED, "none", "{}", "openrouter: light, standard, heavy", "none", id="an undecided tier keeps its deployed list ⚖"),
+]
+
+
+def _bare(block: dict) -> dict:
+    return {k: (_bare(v) if isinstance(v, dict) else v) for k, v in block.items() if not k.startswith("_")}
 
 
 @deployed
-def test_snapshot_candidates():
-    """row: the candidates per rail"""
-    world(note="against the committed snapshot")
-    policy, bench = _deployed()
-    with given("the deployed anthropic rail's model + side-model ids, the deployed codex ids, the tiers block"):
-        rail = policy["rails"]["anthropic"]
-        aliases = sorted({x for lst in rail["models"].values() for x in ([lst] if isinstance(lst, str) else lst)} | set(rail.get("side_models", [])))
-        codex_ids = sorted({x for lst in policy["rails"]["codex"]["models"].values() for x in ([lst] if isinstance(lst, str) else lst)})
-        tp = tiers_policy(policy["tiers"])
-        attach_json("deployed ids", {"anthropic aliases": aliases, "codex ids": codex_ids})
-    with when("the snapshot's rails are read"):
-        rails = bench["rails"]
-        sub_aa = [r["aa_id"] for rail_ in PRICELESS_RAILS for r in rails[rail_].values() if r.get("aa_id")]
-        benched = {k: float(r[tp.score]) for k, r in rails["codex"].items() if r.get("aa_id") and isinstance(r.get(tp.score), (int, float))}
-        top = max(benched.values(), default=0.0)
+@pytest.mark.parametrize(("policy", "snapshot", "edit", "expected_mismatches", "expected_undecided", "expected_undecided_empty"), DEPLOYED_ROWS,
+                         ids=[p.id for p in DEPLOYED_ROWS])
+def test_deployed_policy(policy, snapshot, edit, expected_mismatches, expected_undecided, expected_undecided_empty):
+    world(note=f"{policy} against the committed snapshot {snapshot}")
+    deployed_policy, bench = _deployed()
+    doc = copy.deepcopy(deployed_policy) if policy == "deployed" else json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
+    with given(f"policy = {policy} · snapshot = {snapshot} · edit = {edit}"):
+        if snapshot == NULLED:
+            for r in bench["rails"]["openrouter"].values():
+                r["out_price"] = r["in_price"] = None
+                r["price_basis"], r["provider"] = None, None
+        if edit != "none":
+            m = re.match(r"rails\.(\S+)\.models\.(\S+) reversed", edit)
+            rail, tier = m.group(1), m.group(2)
+            assert len(doc["rails"][rail]["models"][tier]) >= 2, "reversing a one-id list is no edit"
+            doc["rails"][rail]["models"][tier] = list(reversed(doc["rails"][rail]["models"][tier]))
+        attach_json("the policy's lists", {r: v["models"] for r, v in doc["rails"].items()})
+        if policy == "policy-default":
+            assert _bare(doc["tiers"]) == _bare(deployed_policy["tiers"]), "the world's tiers block is the deployed block"
+    with when("check(policy, benchmarks), undecided(benchmarks, tiers)"):
+        mismatches = check(doc, bench)
+        und = undecided(bench, tiers_policy(doc["tiers"]))
+        attach_json("result", {"mismatches": mismatches, "undecided": und})
+    if edit != "none":
+        assert mismatches[rail][tier]["expected"] == derive(bench, tiers_policy(doc["tiers"]))[rail][tier]
+    got = "{}" if not mismatches else ("non-empty (its lists are fixture ids)" if policy == "policy-default" else ", ".join(f"{r}.{t}" for r, ts in mismatches.items() for t in ts))
+    verdict(f"mismatches = {expected_mismatches} · undecided = {expected_undecided} · undecided_empty = {expected_undecided_empty}",
+            expected_mismatches={"expected": expected_mismatches, "actual": got},
+            expected_undecided={"expected": expected_undecided, "actual": "; ".join(f"{r}: {', '.join(ts)}" for r, ts in und.items()) or "none"},
+            expected_undecided_empty={"expected": expected_undecided_empty, "actual": joined(sorted(f"{r}.{t}" for r, ts in und.items() for t in ts if not _listed(doc, r).get(t)))},
+            policy={"actual": policy}, snapshot={"actual": snapshot}, edit={"actual": edit})
 
-    def verdict(claim: str, **pairs) -> None:
-        # one Then per rail: every (key: expected, actual) of that rail compared under ONE step, attached once
-        with then(claim, **{k: {"expected": e, "actual": a} for k, (e, a) in pairs.items()}):
-            for k, (e, a) in pairs.items():
-                assert a == e, f"{k}: expected {e!r}, got {a!r}"
 
-    verdict("opencode: every key is opencode-go/<id>, none the twin of a subscription candidate's AA row, priced promise / measured / unlimited or unpriced",
-            **{"keys not opencode-go/<id>": ([], sorted(k for k in rails["opencode"] if not k.startswith("opencode-go/"))),
-               "keys a subscription rail already serves": ([], sorted(k for k in rails["opencode"] if any(same_model(k, aa) for aa in sub_aa))),
-               "price bases outside promise / measured / unlimited / null": ([], sorted({r["price_basis"] for r in rails["opencode"].values()} - {"promise", "measured", "unlimited", None}))})
-    verdict("openrouter: every key is a vendor/model id, priced at its selected endpoint (basis endpoint, with the provider) or unpriced",
-            **{"keys not vendor/model": ([], sorted(k for k in rails["openrouter"] if k.count("/") != 1 or k.startswith(("opencode-go/", "claude/")))),
-               "rows priced off their selected endpoint": ([], sorted(f"{k}: {r['price_basis']}/{r['provider']}" for k, r in rails["openrouter"].items()
-                                                              if r["price_basis"] not in ("endpoint", None) or (r["price_basis"] == "endpoint") != (r["provider"] is not None)))})
-    verdict("anthropic: the keys are the deployed rail's claude/ aliases, unpriced",
-            **{"keys": (aliases, sorted(rails["anthropic"])),
-               "rows priced": ([], [k for k, r in rails["anthropic"].items() if r["out_price"] is not None])})
-    verdict("codex: every deployed codex id is a snapshot key (the enrolled account's model evidence); a key on no list is unbenched or below every band; unpriced",
-            **{"deployed codex ids missing from the snapshot": ([], [i for i in codex_ids if i not in rails["codex"]]),
-               "keys on no list that are benched within a band": ([], sorted(k for k in rails["codex"] if k not in codex_ids and k in benched and benched[k] >= min(tp.bands.values()) * top)),
-               "rows priced": ([], [k for k, r in rails["codex"].items() if r["out_price"] is not None])})
-    verdict("sources: capability is artificial-analysis, the openrouter catalog's fetched_at is present",
-            **{"capability source": ("artificial-analysis", bench["sources"]["capability"]["source"]),
-               "openrouter catalog fetched_at present": (True, bench["sources"]["openrouter_catalog"]["fetched_at"] is not None)})
+SHAPE_ROWS = [pytest.param("committed", "exactly the schema's required keys", id="the snapshot is the schema's shape")]
 
 
 @deployed
-def test_snapshot_shape():
-    """row: the snapshot is the schema's shape"""
+@pytest.mark.parametrize(("snapshot", "expected_shape"), SHAPE_ROWS, ids=[p.id for p in SHAPE_ROWS])
+def test_snapshot_shape(snapshot, expected_shape):
     world(note="against the committed snapshot")
     _, bench = _deployed()
     defs = SCHEMA["$defs"]
-    with given("catalog.schema.json $defs.benchmarks_snapshot / its sources / $defs.candidate_row"):
+    with given(f"snapshot = {snapshot}; catalog.schema.json $defs.benchmarks_snapshot / its sources / $defs.candidate_row"):
         want = {"top": sorted(defs["benchmarks_snapshot"]["required"]), "sources": sorted(defs["benchmarks_snapshot"]["properties"]["sources"]["required"]),
                 "rails": sorted(defs["benchmarks_snapshot"]["properties"]["rails"]["required"]), "row": sorted(defs["candidate_row"]["required"])}
         attach_json("required keys", want)
     with when("the committed snapshot's keys are read"):
-        got = {"top": sorted(bench), "sources": sorted(bench["sources"]), "rails": sorted(bench["rails"]),
-               "row": sorted({tuple(sorted(r)) for rows in bench["rails"].values() for r in rows.values()}.pop())}
         row_shapes = {tuple(sorted(r)) for rows in bench["rails"].values() for r in rows.values()}
-    then_eq("keys", got, want, claim="exactly the schema's required keys at every level")
-    then_eq("row shapes", len(row_shapes), 1, claim="every candidate row has the same keys")
+        got = {"top": sorted(bench), "sources": sorted(bench["sources"]), "rails": sorted(bench["rails"]), "row": sorted(next(iter(row_shapes)))}
+    diff = {k: {"schema": want[k], "snapshot": got[k]} for k in want if want[k] != got[k]}
+    if len(row_shapes) != 1:
+        diff["row shapes"] = len(row_shapes)
+    verdict(f"shape = {expected_shape}", expected_shape={"expected": expected_shape, "actual": expected_shape if not diff else f"differs: {diff}"},
+            snapshot={"actual": snapshot}, keys={"actual": got})
 
 
-@deployed
-@deployed
-def test_undecided_keeps_deployed():
-    """row: an undecided tier keeps its deployed list"""
-    world(note="against the committed snapshot + the deployed policy")
-    policy, bench = _deployed()
-    tiers = tiers_policy(policy["tiers"])
-    with given("the committed snapshot's undecided tiers (no priced, benched candidate reaches the band)"):
-        und = undecided(bench, tiers)
-        attach_json("undecided", und)
-    with when("check(policy, benchmarks); each undecided tier's deployed list is read"):
-        mismatches = check(policy, bench)
-        deployed_lists = {f"{rail}.{tier}": _listed(policy, rail).get(tier) for rail, ts in und.items() for tier in ts}
-        attach_json("deployed lists of the undecided tiers", deployed_lists)
-    then_eq("check() mismatches", mismatches, {})
-    then_eq("undecided tiers with an empty deployed list", sorted(k for k, v in deployed_lists.items() if not v), [])
+# ── The evidence age ─────────────────────────────────────────────────────────────────────────
+AGE_ROWS = [
+    pytest.param("a file with snapshot_at T0 − 600 s", "600", id="age is seconds since snapshot_at ⚖"),
+    pytest.param("a missing file", "absent", id="no snapshot mounted, no series"),
+]
 
 
-def _bare(block: dict) -> dict:
-    """The block without its `_comment` keys, at every level."""
-    return {k: (_bare(v) if isinstance(v, dict) else v) for k, v in block.items() if not k.startswith("_")}
+@pytest.mark.parametrize(("mounted", "expected_age"), AGE_ROWS, ids=[p.id for p in AGE_ROWS])
+async def test_evidence_age(settings, policy, secrets, store, mcp_transport, clock, reviews, pods, tmp_path, mounted, expected_age):
+    world(note="policy-default; GATEWAY_BENCHMARKS = a scratch file")
+    path = tmp_path / "benchmarks.json"
+    with given(f"mounted = {mounted}: GATEWAY_BENCHMARKS names {path.name}"):
+        if mounted.startswith("a file with snapshot_at "):
+            from agent_gateway.tiers import _iso
+
+            path.write_text(json.dumps({"snapshot_at": _iso(clock() + at_offset(mounted[len("a file with snapshot_at "):])), "sources": {}, "rails": {}}), encoding="utf-8")
+        attach_json("file", {"path": str(path), "exists": path.exists()})
+    client = httpx.AsyncClient(transport=mcp_transport)
+    app = create_app(dataclasses.replace(settings, benchmarks_path=str(path)), policy=policy, source=secrets, store=store,
+                     client=client, clock=clock, reviewer=reviews, pods=pods)
+    try:
+        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as c:
+            with when("GET /metrics"):
+                text = (await c.get("/metrics")).text
+    finally:
+        await client.aclose()
+    m = re.search(r"^gateway_tier_evidence_age_seconds (\S+)$", text, re.M)
+    verdict(f"age = {expected_age}", expected_age={"expected": expected_age, "actual": num(float(m.group(1))) if m else "absent"},
+            declared={"expected": True, "actual": "# TYPE gateway_tier_evidence_age_seconds gauge" in text}, mounted={"actual": mounted})
 
 
-def test_fixture_worlds_exempt():
-    """row: the fixture worlds carry the block, not the derivation"""
-    world(note="policy-default against the committed snapshot")
-    policy, bench = _deployed()
-    doc = json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
-    with given("policy-default's tiers block and lists"):
-        attach_json("world lists", {r: v["models"] for r, v in doc["rails"].items()})
-    with when("check(policy-default, benchmarks)"):
-        mismatches = check(doc, bench)
-    then_eq("world tiers block", _bare(doc["tiers"]), _bare(policy["tiers"]), claim="the world's tiers = the deployed block")
-    with then("check() on the world is NOT empty — its lists are fixture ids, exempt from the derivation",
-              drifted={"expected": "non-empty", "actual": sorted(f"{r}.{t}" for r, ts in mismatches.items() for t in ts)}):
-        assert mismatches

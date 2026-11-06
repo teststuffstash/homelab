@@ -1,13 +1,10 @@
 [
- ["GW-CATALOG-GO", "policy-default · catalog-google · config-adds-gemini", "a dropped id is not re-listed by the console overlay ⚖", "ATTACH_BULK"],
- ["GW-CATALOG-OR", "policy-default · upstream-429-shared-pool", "a cell back from exclusion backs off the same way", "ATTACH_BULK"],
  ["GW-CODEX-HEADROOM", "policy-codex", "a non-JSON, wrong-type or oversize body is refused", "THREAD_BROKEN"],
  ["GW-CODEX-HEADROOM", "policy-codex", "a non-bool flag or a non-integer window field is refused", "THREAD_BROKEN"],
  ["GW-CODEX-HEADROOM", "policy-codex", "an unreachable endpoint and a timeout are told apart", "THREAD_BROKEN"],
  ["GW-CODEX-HEADROOM", "policy-codex", "the counter's label set is the poll's outcome set", "UNIT_ONLY_CANDIDATE"],
  ["GW-CODEX-HEADROOM", "policy-codex", "the counter's label set is the reader's outcome set", "UNIT_ONLY_CANDIDATE"],
  ["GW-CODEX-HEADROOM", "policy-codex", "the poll rides the lifecycle: one owner rotates once, the rotated bearer and the account header go out", "STEP_NOISE"],
- ["GW-MODEL-TIERS", "policy-default · upstream-ok", "the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell", "ATTACH_BULK"],
  ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "another session", "ATTACH_BULK"],
  ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "another session", "STEP_NOISE"],
  ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "delayed old turn response ⚖", "ATTACH_BULK"],
