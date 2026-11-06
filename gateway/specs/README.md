@@ -100,7 +100,7 @@ schema: <name>.schema.json
 
 ### GW-<REQ>
 <prose constraint — the system, never its tests (rule 11); unproven facts marked in place>
-**World: [<world>](../worlds/README.md#…)** — what the world fixes for every row below.
+**World: [<world>](worlds/README.md#<world>)** (from endpoints/: `../worlds/…`) — what the world fixes for every row below.
 #### <one question per table>
 Legend: `<col>` = …; `<col>?` = … (short literals decoded once, here).
 <decision table: description | world | inputs… | expected?… — header == the proving test's argnames>
