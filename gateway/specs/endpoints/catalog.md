@@ -39,9 +39,9 @@ answer 200 (no snapshot = empty rows, never an error) and carry no credential, l
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | `$defs.config_snapshot`, `$defs.docs_snapshot`, `output.sources`; metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); a liveness signal is `⚑ gap` (rows below); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread) |
+| [GW-CATALOG-GO](#gw-catalog-go) | `$defs.config_snapshot`, `$defs.docs_snapshot`, `output.sources`; metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread), and listed is not a liveness signal; `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time is unread (the "⚑ gap" rows below) |
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | `output` (the view, its model rows), `$defs.config_snapshot.models[].dialect`, `$defs.docs_snapshot` (`plans`, `plan_fees`, `peak_*`, `window_shares`); the policy's `rails.opencode.plan` and the vendor facts a policy may no longer hold | — (the loader refuses a policy without a plan, or carrying a vendor fact) | v0 — split from GW-CATALOG-GO 2026-11-06 ⚖: what the two reads SAY (the dialect, the limits, the fees, the cost rows, the view's shape) and the policy's plan declaration |
-| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert) |
+| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert); `⚑ gap (2026-11-06, PR #3187 → work #3191)`: the ranking's `other` bucket and a `:free` family have no fixture row (the "⚑ gap" row below) |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | `$defs.canary_block`, `$defs.cell_state`, `openrouter_output.canary`, `openrouter_output.models[].endpoints[].state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — split from GW-CATALOG-OR 2026-11-06 ⚖: the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed) |
 | [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); metrics `families.gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured (the "⚑ gap" rows below) |
 | [GW-RAIL-CHOICE](#gw-rail-choice) | sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`; `$defs.rides` (the cell's clean-ride evidence the choice reads) | — | v0 — split from GW-MODEL-TIERS 2026-11-06 ⚖: the admission's rail choice between a model's twin cells on two rails (homelab#2743); `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the Go cell's clean-rate prior (the "⚑ gap" row below) |
@@ -96,9 +96,9 @@ Every requirement of this page, in reading order; the section flowcharts below l
 
 | Requirement | Section | Status |
 |---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | the Go catalog | `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread); a liveness signal is `⚑ gap` (rows below) |
+| [GW-CATALOG-GO](#gw-catalog-go) | the Go catalog | `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread), and listed is not a liveness signal (the rail's own `/models` answer is the one source that could be); `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time — this leg reads no Go usage, the headroom Goal reads the account's windows |
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | the Go catalog | |
-| [GW-CATALOG-OR](#gw-catalog-or) | the OpenRouter catalog | |
+| [GW-CATALOG-OR](#gw-catalog-or) | the OpenRouter catalog | `⚑ gap (2026-11-06, PR #3187 → work #3191)`: the ranking's `other` bucket and a `:free` family have no fixture row |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | the OpenRouter catalog | `⚑ gap` rows below: no in-cluster canary trigger, the Go rail's canary |
 | [GW-MODEL-TIERS](#gw-model-tiers) | the tier evidence | `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail, the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured |
 | [GW-RAIL-CHOICE](#gw-rail-choice) | the tier evidence | `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the Go cell's clean-rate prior |
@@ -409,8 +409,8 @@ Legend: `refreshes` = the config source's refreshes before the read, in order; `
 | description | input | v0 answer | the gap |
 |---|---|---|---|
 | ⚑ gap: a rail-served id the catalog does not list | `/zen/go/v1/models` naming an id models.dev lacks (37 served against 29 listed, 2026-10-20) | not-in-catalog (ruling 4) | [#2768](https://github.com/teststuffstash/homelab/issues/2768): *listed* is the vendor's client view (models.dev minus deprecated, under the workspace's overrides), never the rail's model list — the rail's own `/models` answer is unread, and no price comes with it |
-| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are |
-| ⚑ gap: a vendor reset time | a Go 429 | — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed |
+| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are; the rail's own `/models` answer ([#2768](https://github.com/teststuffstash/homelab/issues/2768)) is the one source that could be |
+| ⚑ gap: a vendor reset time | a Go 429 | — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed; the account's windows and their reset are the headroom Goal's read ([#3118](https://github.com/teststuffstash/homelab/issues/3118)) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -763,7 +763,7 @@ Legend: `canaried` = the cells a clean canary made `eligible`; `selected?` / `or
 
 | description | input | v0 answer | the gap |
 |---|---|---|---|
-| ⚑ gap: the ranking's `other` bucket and a `:free` family | a `:free` id in the ranking | joins its family's AA row; `other` is dropped | no fixture row carries a `:free` candidate (the latest week had none in the top of either slice) |
+| ⚑ gap: the ranking's `other` bucket and a `:free` family | a `:free` id in the ranking | joins its family's AA row; `other` is dropped | no fixture row carries a `:free` candidate (the latest week had none in the top of either slice) — [#3191](https://github.com/teststuffstash/homelab/issues/3191) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -1306,9 +1306,12 @@ Legend: `mounted` = what `GATEWAY_BENCHMARKS` names; `age?` = `gateway_tier_evid
 fp8 vs fp8, tool-call support, uptime — then price per CLEAN ride, a failed provider relaunched
 transparently). Split from [GW-MODEL-TIERS](#gw-model-tiers) (the derivation) 2026-11-06 ⚖. When the
 admission's tier names ONE model on two of the role's allowed rails — a
-[twin](../glossary.md#twin): the same tail after the rail prefix, a `:variant` and the vendor are
-stripped, `-N-N` ↔ `-N.N` (`same_model`, one rule, no table; a `claude/` alias twins nothing) — the
-walk's rail order puts the rail whose twin cell costs less per
+[twin](../glossary.md#twin) (`same_model`, one rule, no table): two DIFFERENT policy ids whose tails
+agree once the rail prefix (`opencode-go/`, `codex/`, …) and a `:variant` are stripped and the tail
+after the vendor's `/` is read in the AA spelling (`-N-N` ↔ `-N.N`); a vendor is kept, never
+stripped — when BOTH ids carry one the vendors must agree, and a Go id carries none, so it twins any
+vendor's spelling of its tail; an id is not its own twin; a `claude/` alias names a family, never a
+model, and twins nothing — the walk's rail order puts the rail whose twin cell costs less per
 [clean ride](../glossary.md#cost-per-clean-ride) FIRST, with that twin at the head of its list;
 everything else about [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s walk stands (the other
 rail is still walked when the first yields nothing; the tier's lists decide which models exist —
