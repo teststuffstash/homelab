@@ -8,7 +8,7 @@
   ],
   "$defs": {
     "rail_choice": {
-      "$comment": "GW-MODEL-TIERS §The rail choice: when the tier named ONE model on two allowed rails, which rail's twin cell went first and why; null = no twin at this tier (the role's rail order alone)",
+      "$comment": "GW-RAIL-CHOICE: when the tier named ONE model on two allowed rails, which rail's twin cell went first and why; null = no twin at this tier (the role's rail order alone)",
       "oneOf": [
         { "type": "null" },
         {
@@ -16,11 +16,11 @@
           "properties": {
             "rail": { "$ref": "#/$defs/rail", "description": "the rail that walked first" },
             "over": { "$ref": "#/$defs/rail", "description": "the rail whose twin cell lost (still walked when the first yields nothing)" },
-            "reason": { "enum": ["price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint"], "description": "price = cheaper per clean ride and by price alone (a tie goes to the role's order); clean-rate = the measured clean rate flipped the price order; headroom = the Go twin's window (or its 429 cooldown) holds it; not-in-catalog = the Go catalog does not price the twin; no-eligible-endpoint = the openrouter twin has no eligible endpoint to price" }
+            "reason": { "enum": ["price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint", "order"], "description": "price = cheaper per clean ride and by price alone; clean-rate = the measured clean rate flipped the price order; headroom = the Go twin's window (or its 429 cooldown) holds it; not-in-catalog = the Go catalog does not price the twin; no-eligible-endpoint = the openrouter twin has no eligible endpoint to price; order = both twin cells cost the same per clean ride, the role's order decides (metrics.py RAIL_CHOICE_REASONS carries the same six)" }
           }
         }
       ],
-      "x-requirements": ["GW-MODEL-TIERS"]
+      "x-requirements": ["GW-RAIL-CHOICE"]
     },
     "stack": {
       "type": "string",

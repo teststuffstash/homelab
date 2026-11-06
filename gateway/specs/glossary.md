@@ -116,7 +116,7 @@ an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `c
 openrouter model's endpoint snapshot has no provider that clears the policy floors —
 [sessions.md §The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)), the
 [entry canary](#canary)'s `canary-not-due` and `canary-budget`
-([GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or)), `cells-exhausted` (no
+([GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary)), `cells-exhausted` (no
 `retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
@@ -214,17 +214,17 @@ rates (the same arithmetic as the window draw). Shown on `GET /catalog/opencode`
 
 ## twin
 
-Two policy ids that name ONE model on two rails — the same tail after the rail prefix, a
+Two policy ids that name ONE model on two rails — the same tail once the rail prefix, a
 `:variant` and the vendor are stripped, in the AA spelling (`opencode-go/<id>` ↔ `<vendor>/<id>`;
 `tiers.same_model`, one rule, no table). When a tier's lists name a twin on two of the role's
-allowed rails, admission runs the **rail choice** ([GW-MODEL-TIERS §The rail choice](endpoints/catalog.md#the-rail-choice)):
+allowed rails, admission runs the **rail choice** ([GW-RAIL-CHOICE](endpoints/catalog.md#gw-rail-choice)):
 the rail whose twin cell costs less per clean ride walks first, with that twin at its list's
 head; the role's rail order stands for everything else. A `claude/` alias names a family, never a
 model: it twins nothing.
 
 ## canary
 
-Narrowed here to the **entry canary** ([GW-CATALOG-OR §The entry canary](endpoints/catalog.md#the-entry-canary)):
+Narrowed here to the **entry canary** ([GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary)):
 one ride through this gateway on exactly one `(model, provider)` [cell](#cell) of the openrouter
 rail — a session admitted with `canary: {model, provider}` (the policy's `canary.role` and
 `canary.harness`), pinned with fallbacks off and no failover — whose outcome is the cell's verdict:

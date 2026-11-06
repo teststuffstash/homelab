@@ -8,7 +8,7 @@ schema: sessions.schema.json
 *May this unit run now, with which harness, and what goes in the pod's env.* The control-plane
 seam of the island ([UC-1](../use-cases/uc-1-worker-ride.md) steps ① and ④). The caller sends
 `(stack, role, task, round)` and optional `tier` / `harness` / `rail` — or, for the catalog's
-entry canary, `canary: {model, provider}` ([GW-CATALOG-OR](catalog.md#gw-catalog-or)); the gateway answers
+entry canary, `canary: {model, provider}` ([GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)); the gateway answers
 `dispatch` (a session, a rail, a harness, a model, the pod's complete LLM env) or `defer` (a
 typed reason and when to ask again). The caller authenticates with its projected ServiceAccount
 token and may ask only for what the policy's `callers` grant it ([GW-SESSIONS-AUTH](#gw-sessions-auth)).
@@ -26,7 +26,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 
 | Requirement | operation | Governs (schema) | Error codes | Status |
 |---|---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR](catalog.md#gw-catalog-or)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-MODEL-TIERS](catalog.md#gw-model-tiers)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0: the walk — rails in the role's order, the twin's cheaper rail first, the harness taken from the cell; `⚑ gap`: `/route` is not served (consumers move to this endpoint) and the ADR-096 ladder's labels / urgency / budget inputs are not read ([§Named gaps — admission](#named-gaps-admission)) |
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-RAIL-CHOICE](catalog.md#gw-rail-choice)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0: the walk — rails in the role's order, the twin's cheaper rail first, the harness taken from the cell; `⚑ gap`: `/route` is not served (consumers move to this endpoint) and the ADR-096 ladder's labels / urgency / budget inputs are not read ([§Named gaps — admission](#named-gaps-admission)) |
 | [GW-SESSIONS-RETRY](#gw-sessions-retry) | `POST /sessions` | `post.input.attempt`, `get.output.attempt`, `post.output.defer.reason` (`cells-exhausted`, the one defer with no `retry_after_s`) | `malformed-body` (`attempt` < 1) | v0 — the walk reads [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s counted strikes, tier lists are ordered, `attempt` makes a re-run detectable; `⚑ gap`: one model across rails is two ids ([§Named gaps — retry](#named-gaps-retry)) |
 | [GW-SESSIONS-CAPACITY](#gw-sessions-capacity) | `POST /sessions` | `post.output.defer.reason` (`rail-window`, `rail-latched`, `cell-cooled`, `credential-rejected`, `not-in-catalog`, `no-eligible-provider`), `post.output.defer.retry_after_s` | — | v0 + the ladder's capacity half (window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential and its recovery, the marks kept across a restart) + the openrouter provider axis (the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); `⚑ gap (2026-11-01, PR #3105 → work #3108)`: the Go account headroom is unread — the rail's one shared allowance is learnt from a ride's first 429; the other capacity gaps (FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402, the Go draw as a lower bound, the capacity doorbell) are rows under [§Named gaps — capacity](#named-gaps-capacity) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail lit 2026-10-22 — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: the codex env's native-CLI turn evidence is local-only; `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI, and opencode's provider-package fetch under enforced egress is unobserved ([§Evidence outside CI](#evidence-outside-ci)) |
@@ -179,8 +179,9 @@ A `POST /sessions` body is admitted by [walking](../glossary.md#walk) `roles.<ro
 order yields once: when the tier's lists name ONE model on two allowed rails (a
 [twin](../glossary.md#twin)), the rail whose twin cell costs less per clean ride walks first,
 with that twin at its list's head, and the answer's `rail_choice` says why
-([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice) owns those rows; `null` when no
-twin) — and, inside each rail, the [tier](../glossary.md#tier)'s ORDERED model list
+([GW-RAIL-CHOICE](catalog.md#gw-rail-choice) owns those rows; `null` when no twin; its `reason` is one of
+`price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`, `order` — the last when
+both twin cells cost the same per clean ride and the role's order decides: unverified — no row drives it) — and, inside each rail, the [tier](../glossary.md#tier)'s ORDERED model list
 ([GW-SESSIONS-RETRY](#gw-sessions-retry)) —
 and picking the **first rail** whose `active_sessions < rails.<rail>.max_sessions`, that is not
 capacity-blocked — the rail, or the [cell](../glossary.md#cell) its tier's model makes on it
@@ -194,7 +195,7 @@ upstream (⚖ the rejection outranks: it names the operator act, a rotation). An
 dialect; `opencode` / `goose` speak openai; `codex` speaks responses (rail `codex` only — gated by
 account headroom, [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom), whose admission rows
 live there). A cell's dialect is its rail's — except a Go cell, which is its model's
-([GW-CATALOG-GO §The model's dialect](catalog.md#gw-catalog-go)): a cell the harness cannot speak
+([GW-CATALOG-GO-PARSE §The model's dialect](catalog.md#the-models-dialect)): a cell the harness cannot speak
 is skipped, a rail none of whose tier cells speak it is passed over, and an explicit `harness` ×
 `rail` pair none of whose tier cells speak it is a 400 `harness-rail-mismatch`, never a silent
 skip. Without one, **the harness follows the cell**
@@ -254,7 +255,7 @@ boundary on its own: with no `harness` in the body every allowed rail is a candi
 walk's order is role + tier → rails in the role's order, with capacity and credentials → the first
 unstruck model on that rail's tier list → **the harness that speaks that cell's dialect**. A
 cell's dialect is its rail's — except a Go cell, which is its model's (the models.dev per-model
-`provider` override, [GW-CATALOG-GO §The model's dialect](catalog.md#gw-catalog-go)); the
+`provider` override, [GW-CATALOG-GO-PARSE §The model's dialect](catalog.md#the-models-dialect)); the
 `openrouter` rail's cells serve both dialects, as its upstream does. A cell that speaks
 `roles.<role>.harness` keeps the role's harness; a cell that does not names its own dialect's
 harness (⚖ one harness per dialect, the launcher's baked defaults — `config.DIALECT_HARNESS`).
@@ -1467,7 +1468,7 @@ during the rollout. It never waves through a known identity the policy does not 
 runs unchanged without a caller token; `policy-enforce` is the same document with `enforce`. Both hold three fixture callers.
 **The platform loop** = `system:serviceaccount:platform-agents:agentstack-loop` · stacks
 `[platform]` · roles `[worker, prober]` (the dispatcher's workers, and the entry canary's prober
-rides — [GW-CATALOG-OR §The entry canary](catalog.md#the-entry-canary) — which `canary-entrants.sh`
+rides — [GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary) — which `canary-entrants.sh`
 admits as this SA) · bind namespaces `[platform-agents]`. **The specs reviewer** =
 `system:serviceaccount:agent-coordinator:agent-coordinator` · stacks `[platform]` · roles
 `[reviewer, worker]` · bind namespaces `[]`. **The judge** =
