@@ -15075,3 +15075,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `.agents/feedback-triage.md` (python DB read, pr-open, no row text), the `ownServices` 5432 leg. Hand-fire + unsuspend once
   their three PRs land. Two gotchas for the record: `gh issue comment --body "…\`x\`…"` through `devbox run` is eval'd by
   dash — backticks execute; always `--body-file`. `devbox run diff-ci` on this diff exceeds 10 min — background it.
+
+## 2026-11-06 ~20:00–21:40Z — seat: gateway specs → the oracle #977/#998 shape (process layer, PR #3182)
+- Operator: "Look at where oracle-fleet got with their ingestion specs, latest 2 goal PRs that fixed the specs and allure
+  0.6.9 … Execute the same migration for gateway … And look at the worlds … and ADR-103 ratchet … Does the process now
+  have the same guards?" Read oracle-fleet#977 (goal #950: SNAPSHOT → SELECT/PROMOTE, pipeline overview + requirement
+  index + a flowchart per step with `click` nav, kind rows as cells), #998 (goal #986: CHANNEL → DETECT/FETCH/RESUME,
+  `?` columns, inputs as cells), #992 (hygiene ratchet as identities), #993 (snippets v0.6.9); the pinned RULES/CONVENTIONS
+  v0.6.9; oracle's worlds + wire READMEs; ADR-103 + workflow.md §Replay harness. Island read only (gateway/ + the touched
+  launcher), no corpus.
+- **Process layer = PR #3182, MERGED 21:17Z** (code reviewer + specs reviewer APPROVE, no findings): `spec-join-ratchet.py`
+  (five codes incl. `row-unproven` — specs-reviewer open question 5 resolved the oracle way, a repo gate — via the pinned
+  wheel's own join, `allure_snippets_python`), `spec-hygiene-ratchet.py` (36 identities), lychee in `devbox run ci`,
+  mermaid click rendering (`site-assets/mermaid-init.js`, pinned 11.12.0 sha-checked), `tests/test_specs_site_links.py` +
+  `scripts/e2e-specs-site.sh`; `spec_gate.py` keeps coupling/evidence/twin/split-candidates only. Baselines recorded from
+  a full run: join 241/370/124/32/0 across 26 rules (== the digest), hygiene 36. **Finding:** lychee's first run → 40 dead
+  in-page fragments on the published site (five `—` headings linked by their GitHub `--` slug; mkdocs drops the dash) —
+  fixed with `<a id>` aliases above the headings. One CI red: docs-graph-lint reads fenced links (the README template).
+- Direct to master (governance): ci.yaml step `gateway-specs-site-e2e` (dind is on the runner) + the coverage belt's task
+  regex gains digits (`gateway-specs-site-e2e` had read as `…-e`). Memory `gateway-specs-migration` written.
+- Page migrations dispatched as five parallel seat subagents (one PR each, shared brief in the session scratchpad):
+  sessions (ADMIT split ⚖ → walk / retry / capacity, keeping every inbound anchor), codex, catalog, data plane
+  (anthropic-messages + openai-chat), small pages (metrics/health/access). Each must lower its rules' ratchet lines to 0.
