@@ -34,30 +34,51 @@
   "case-unspecified": 0,
   "row-unproven": 0
  },
+ "GW-CODEX-ADMISSION": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
+  "case-unspecified": 0,
+  "row-unproven": 0
+ },
  "GW-CODEX-CAPTURE": {
-  "row-unkeyed": 5,
-  "header-unthreaded": 3,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-CODEX-HEADROOM": {
-  "row-unkeyed": 21,
-  "header-unthreaded": 19,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-CODEX-OAUTH": {
-  "row-unkeyed": 8,
-  "header-unthreaded": 9,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-CODEX-REFRESH": {
-  "row-unkeyed": 2,
-  "header-unthreaded": 7,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
+  "case-unspecified": 0,
+  "row-unproven": 0
+ },
+ "GW-CODEX-UPSTREAM-HEADERS": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
+  "case-unspecified": 0,
+  "row-unproven": 0
+ },
+ "GW-CODEX-USAGE-POLL": {
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
@@ -119,9 +140,9 @@
   "row-unproven": 0
  },
  "GW-RAIL-CODEX": {
-  "row-unkeyed": 16,
-  "header-unthreaded": 16,
-  "cell-mismatch": 2,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
  },

@@ -234,6 +234,37 @@ platform's unqualified **canary** ([`docs/glossary.md`](../../docs/glossary.md))
 model scout's rail probe of a (model, harness, class) cell; this one adds the provider axis, and since
 the scout's retirement (2026-11-01) it is the platform's only canary.
 
+## headroom report
+
+One observation of the codex account's capacity in the gateway's own schema
+(`openai-responses.schema.json` `headroom.report`): `observed_at`, `source`, `limited` and the
+profile's `windows` (`used_percent`, `resets_at`, `window_minutes`) — never a vendor payload. Two
+producers write one, both the gateway's own: the usage poll
+([GW-CODEX-USAGE-POLL](endpoints/openai-responses.md#gw-codex-usage-poll), `source: poll`) and the
+relayed answer's `x-codex-*` headers
+([GW-CODEX-UPSTREAM-HEADERS](endpoints/openai-responses.md#gw-codex-upstream-headers),
+`source: upstream`). A report replaces the [headroom](#headroom) snapshot only when it is valid and
+strictly newer; a refused report leaves the last accepted one standing.
+
+## turn state
+
+The value of the one routing header the codex rail round-trips, `x-codex-turn-state`: issued by
+the backend on a successful stream, recorded by the gateway bound to the authenticated session, the
+gateway-owned account and the pinned client's `client_metadata.turn_id`, and accepted back only as
+that exact value within that turn ([GW-RAIL-CODEX §Opaque turn state](endpoints/openai-responses.md#opaque-turn-state)).
+A new turn clears it; a replay of any other value is 400 `turn-state-invalid` before any inference
+call. Not durable, bounded (4096 bytes), never a credential.
+
+## capture bundle
+
+The sanitized record of one scoped codex session at its four boundaries — client request received,
+upstream request sent, upstream response received (status, headers, then every relayed SSE event),
+client response sent — read back as one document by `GET /sessions/{id}/capture`
+([GW-CODEX-CAPTURE](endpoints/openai-responses.md#gw-codex-capture)): header values withheld but for
+an allowlist, strings as lengths, identifiers as run-local aliases, `complete: false` when the byte
+bound cut a request. Pulled into restricted storage and reviewed before any excerpt becomes a spike
+paragraph or a fixture.
+
 ## persistence interface
 
 The `Store` seam the codex OAuth lifecycle runs behind — `lock()` / `load()` / `save()`, one
