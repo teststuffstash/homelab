@@ -142,6 +142,7 @@ spec:
                   - --registry-mirror=http://192.168.40.20
                   - --insecure-registry=192.168.40.20
                   - --insecure-registry=192.168.40.21
+                  - --insecure-registry=192.168.40.31  # the mcr mirror (SERVICES.md: HTTP) — the playwright image of the gateway specs-site e2e leg
                 env:
                   - name: DOCKER_GROUP_GID
                     value: "123"
