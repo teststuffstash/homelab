@@ -22,6 +22,9 @@ echo "== mkdocs: render README.md + specs/ =="
 rm -rf .site-src && mkdir .site-src
 cp -r specs README.md .site-src/
 rm -rf .site-src/specs/evidence   # the retired evidence_render.py fragment dir a stale tree may still carry
+# Spec pages link recorded fixtures as spec text (the codex capture bundle, the live catalog answers
+# — worlds are public and discussable); stage them so those links resolve on the site too.
+mkdir -p .site-src/tests && cp -r tests/fixtures .site-src/tests/fixtures
 
 # The joined render (allure-evidence --spec-page-out; pin in scripts/lib/snippets.sh): on a build
 # that carries a run's raw results, every spec page heading rules is rewritten in the STAGED copy —
@@ -48,6 +51,21 @@ if ls allure-results/*-result.json >/dev/null 2>&1; then
       --report allure-report-single/index.html --report-url "$REPORT_URL" >/dev/null
   done < <(grep -rlE '^#{2,6} GW-[A-Z0-9-]+\s*$' specs --include='*.md' --exclude-dir=evidence | sort)
 fi
+
+# The pinned flowchart renderer (javascripts/mermaid-init.js loads it; the oracle-fleet
+# scripts/specs-build.sh shape, oracle-fleet#955). Fetched through npm (a pod's $NPM_CONFIG_REGISTRY
+# cache applies automatically), then sha256-checked so a republished tarball cannot change the site
+# silently. Bump version + sha together.
+MERMAID_VERSION=11.12.0
+MERMAID_SHA256=07e37dfa97b337ccc85365d57eddf99b9706f09db3b59b260d0333b23b343c4b
+mm=$(mktemp -d)
+(cd "$mm" && npm pack "mermaid@$MERMAID_VERSION" --silent >/dev/null && tar -xzf ./*.tgz package/dist/mermaid.min.js)
+echo "$MERMAID_SHA256  $mm/package/dist/mermaid.min.js" | sha256sum -c --quiet - \
+  || { echo "specs-build: mermaid@$MERMAID_VERSION sha256 mismatch" >&2; exit 1; }
+mkdir -p .site-src/javascripts
+cp "$mm/package/dist/mermaid.min.js" .site-src/javascripts/mermaid.min.js
+cp site-assets/mermaid-init.js .site-src/javascripts/mermaid-init.js
+rm -rf "$mm"
 
 # mkdocs via uv --no-project, not the island's lock and not devbox: pymdownx/material must live
 # in the same python env as mkdocs, which the nix-packaged mkdocs can't host, and the island's

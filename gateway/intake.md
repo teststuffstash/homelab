@@ -151,7 +151,7 @@ Unverified: <what you did not read on the wire — "verify during implementation
   serialises two issues on the same requirement instead of letting their PRs collide.
 - The worker's PR body carries the `Spec changes:` heading (rule 1); its recipe
   (`.agents/fix.yaml` §Specs are the pinned process) already knows the ratchet
-  (`spec_gate.py`, the baseline). You do not restate the process; you state the rows.
+  (`spec-join-ratchet.py` + `spec-hygiene-ratchet.py`, their baselines). You do not restate the process; you state the rows.
 - `⚖` on any row with a plausible alternative (rule 4). A row you could not ground in the page or
   a merged PR is marked `verify during implementation` (rule 10), never asserted.
 - **A `⚑ gap` flag whose `→ work #M` is closed with the shortfall still real** has two honest

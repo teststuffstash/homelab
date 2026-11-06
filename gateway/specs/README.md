@@ -31,7 +31,29 @@ What this island adds, by rule:
   so `environment.properties` carries `git.commit` and `artifact=pr-head`, never `image.digest`.
   This is PR-head evidence; built-image evidence is an open question
   ([specs-reviewer.md §Open questions](../../docs/agents/specs-reviewer.md#open-questions) 2).
-- **Rule 7 (coupling):** enforced by `../scripts/spec_gate.py` inside `devbox run ci`.
+- **Rule 7 (coupling):** enforced by `../scripts/spec_gate.py` inside `devbox run ci` (orphans both
+  ways, error codes the page never mentions, a rule with no evidence and no `🚧`/`⚑` mark, a ghost
+  rule, a policy world ≠ its fixture twin).
+- **The lint gate (CONVENTIONS § The lint gate), this island's commands — all inside `devbox run ci`:**
+  the **join ratchet** `../scripts/spec-join-ratchet.py` (item 6 — per rule, `row-unkeyed`,
+  `header-unthreaded`, `cell-mismatch`, `case-unspecified` and `row-unproven` — ⚖ the half-join
+  hazard, a `∅` row inside a table that joins — held against `../scripts/spec-join-baseline.json`:
+  exceeding is red, equal passes, lower prints "lowered"; the fixing PR re-records with
+  `devbox run join-ratchet -- --write-baseline` from a FULL run; the join is the pinned tool's own,
+  through `allure_snippets_python` in `../scripts/lib/snippets.sh`); the **hygiene ratchet**
+  `../scripts/spec-hygiene-ratchet.py` (the digest's hygiene codes as the SET of
+  (rule · world · case · code) identities against `../scripts/spec-hygiene-baseline.json` — a new
+  identity is red with the case named, fix-one-break-one is red, a renamed case is a new identity;
+  `devbox run hygiene-ratchet -- --write-baseline` re-records; declaring it here is what lets the
+  evidence brief's repeat belt stop at the cases a PR added or changed, v0.6.9); **lychee** over the
+  built site (item 3 — every link and `#anchor` resolves, the joined rows' links into
+  `report/index.html` included); the **flowchart gates** — `../tests/test_specs_site_links.py`
+  (static: every Mermaid `click … href "#anchor" … _self` lands on an anchor of its page, every
+  flowchart on an endpoint page carries one) and `devbox run specs-site-e2e`
+  (`../scripts/e2e-specs-site.sh`: the rendered site in the pinned playwright image — every
+  diagram renders, every node link navigates to its heading; the repo-root diff-ci row
+  `gateway-specs-site-e2e`). Checks 1, 2, 4 and 5 of the gate are `rule()` (a label with no
+  heading fails collection), `spec_gate.py` and the `ids=` discipline of every row module.
 - **Rule 9 (external facts):** the wire facts this island rests on are read in
   `docs/agents/chainless-redesign.md §Proved on the wire` and OpenRouter's `openapi.json`.
 - **Rule 10 (incompleteness):** everything OUT of v0 is a `⚑ gap` row on the requirement it would
@@ -42,8 +64,20 @@ What this island adds, by rule:
 - **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a policy state
   plus a fake-upstream behaviour; tests carry it as the `world` label.
 - **Table shape:** the rows brief's checklist is a CANDIDATE under the operator's iteration and
-  advisory only; `spec_gate.py` reports split candidates and never fails on them. The `||`
-  divider separates input columns from expected columns.
+  advisory only; `spec_gate.py` reports split candidates and never fails on them. **Expected
+  columns end in `?`** (CONVENTIONS § The intent column, v0.6.3): `decision?` is the argname
+  `expected_decision`; inputs first, expected last, every input a cell (the world names what the
+  world already fixes; a prose "Inputs:" line is a cell that was not written). The older `||`
+  divider is still read by the pinned join and remains on the pages not yet migrated; a page that
+  migrates drops it — the join ratchet's lines are what mark the migration's progress per rule.
+- **Page shape (the oracle-fleet ingestion pages, 2026-11):** a contract page opens with a
+  **flow overview** (one Mermaid flowchart whose every node `click`s into the requirement that owns
+  it — the page's navigation, gated above), then a **requirement index** table (Requirement ·
+  section · Status — the `🚧 WIP` / `⚑ gap` marks of rule 10 live in its Status cell, where the
+  gates read them), then one section per step with its own flowchart, then the rules. A rule that
+  outgrows one question (the split candidates `spec_gate.py` prints) is split, the old anchor kept
+  as `<a id="…"></a>` on the line above the new heading (rule 3's alias — never an attribute on the
+  heading, which the gates read bare).
 
 ## Endpoint contract page template
 
@@ -56,12 +90,21 @@ schema: <name>.schema.json
 # <METHOD> <path> — one-line purpose
 
 ## Interface — the machine half
-<coupling table: requirement → schema paths → error codes → status>
+<coupling table: requirement → schema paths → error codes → status (🚧 WIP / ⚑ gap marks here)>
 
-## GW-<REQ>
-<prose constraint>
-<decision table: description | inputs || expected>
-<details markdown="1"><summary>Evidence</summary> --8<-- "GW-<REQ>.md" </details>
+## Flow overview
+<one mermaid flowchart; every node: click <node> href "#gw-<req>" "<tooltip>" _self>
+
+## <step> — one-line purpose (`GW-<STEP>-*`)
+<the step's own flowchart, nodes linking into its rules>
+
+### GW-<REQ>
+<prose constraint — the system, never its tests (rule 11); unproven facts marked in place>
+**World: [<world>](../worlds/README.md#…)** — what the world fixes for every row below.
+#### <one question per table>
+Legend: `<col>` = …; `<col>?` = … (short literals decoded once, here).
+<decision table: description | world | inputs… | expected?… — header == the proving test's argnames>
+<details markdown="1"><summary>Evidence — latest run</summary> --8<-- "GW-<REQ>.md" </details>
 ```
 
 ## Index

@@ -28,6 +28,12 @@ theme:
     - content.code.copy
 plugins:
   - search
+# Flowcharts: javascripts/mermaid-init.js renders the mermaid fences with node click links enabled.
+# mermaid.min.js is the pinned renderer, staged beside it by scripts/specs-build.sh (MERMAID_VERSION
+# there) — local, so the site needs no CDN at view time.
+extra_javascript:
+  - javascripts/mermaid.min.js
+  - javascripts/mermaid-init.js
 markdown_extensions:
   - tables
   - attr_list
@@ -42,8 +48,13 @@ markdown_extensions:
   - pymdownx.snippets:
       base_path: [.site-evidence]
       check_paths: false
+  # Fenced `mermaid` blocks render client-side by javascripts/mermaid-init.js (site-assets/, staged by
+  # scripts/specs-build.sh). The class is deliberately NOT `mermaid`: Material's native integration
+  # claims that one and runs Mermaid at securityLevel "strict", where a flowchart node's
+  # `click … href "#anchor"` is inert (oracle-fleet#955) — and the node links ARE the page's
+  # navigation (every flowchart node links into the requirement that owns it).
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
+          class: mermaid-src
+          format: !!python/name:pymdownx.superfences.fence_div_format

@@ -13,3 +13,5 @@ __pycache__/
 # the staged site-evidence fragments + the single-file Allure report (scripts/specs-build.sh, scripts/allure-report.sh)
 .site-evidence/
 allure-report-single/
+# the rendered-browser specs-site check's evidence (scripts/e2e-specs-site.sh)
+e2e-specs-site-evidence/

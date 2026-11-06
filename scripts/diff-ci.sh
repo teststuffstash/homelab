@@ -92,6 +92,11 @@ MAP=(
   # …and its upload to the gateway-specs bucket (gateway/scripts/evidence-publish.sh; ci.yaml keys it
   # off the gateway-evidence step's outcome). Soft-skips without creds; WAN/LAN-bound → PUSH_HEAVY.
   "gateway-evidence-publish:$GATEWAY_PATHS"
+  # The island's rendered-browser specs-site leg (gateway/scripts/e2e-specs-site.sh → playwright image
+  # via docker: every spec page's Mermaid diagrams render, every flowchart node link lands on its
+  # requirement heading — the oracle-fleet e2e-specs-site shape). Inputs: the site config, the
+  # staged renderer init, any spec page, the build and the leg itself. Docker pull + WAN → PUSH_HEAVY.
+  "gateway-specs-site-e2e:^gateway/(mkdocs\.yml$|site-assets/|specs/.*\.md$|scripts/(specs-build|e2e-specs-site)\.sh$|scripts/e2e/test_specs_site\.py$)"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
@@ -189,10 +194,12 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           anywhere" requirement outright.
 #   gateway-specs-publish   `uv run --no-project --with mkdocs…` resolves three pins from PyPI on a
 #                           cold cache — real WAN on the first run (measured 2026-10-16: ~40s cold).
+#   gateway-specs-site-e2e  the same mkdocs build, then a docker pull of the playwright image (LAN
+#                           mirror) and `pip install playwright` inside it — minutes, never on a hook.
 #   component-check         `helm template` pulls every third-party chart pin (ghcr.io, jetstack,
 #                           prometheus-community, cloudsmith, …) — real WAN on every run, ~2 min
 #                           wall measured 2026-10-25 in a jail clone (69 Applications, ~860 docs).
-PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish"
+PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish gateway-specs-site-e2e"
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
