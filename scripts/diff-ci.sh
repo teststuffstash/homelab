@@ -244,7 +244,7 @@ fi
 # new CI step cannot silently rot this map (the unexecuted-gate class, ADR-103's lesson).
 # Runs in CI too since #2072 (`devbox run diff-ci -- --coverage-only`), so the map cannot rot
 # past the PR that adds the step.
-ci_tasks=$(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run [a-z][a-z-]*' | awk '{print $3}' | sort -u)
+ci_tasks=$(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run [a-z][a-z0-9-]*' | awk '{print $3}' | sort -u)
 for t in $ci_tasks; do
   hit=false
   for entry in "${MAP[@]}"; do [ "${entry%%:*}" = "$t" ] || [ "${entry%% *}" = "$t" ] && { hit=true; break; }; done
