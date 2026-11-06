@@ -336,7 +336,7 @@ Legend: `families` = the families to find — `the schema's, less the codex rail
 |---|---|---|---|
 | every family renders HELP and TYPE, zeros included | `policy-default` | `the schema's, less the codex rail's` | `none` |
 
-> Tombstones (removed by PR #TBD; one cycle): ~~tokens are counted by class~~ → the four class rows
+> Tombstones (removed by PR #3184; one cycle): ~~tokens are counted by class~~ → the four class rows
 > of [Tokens and upstream time](#tokens-and-upstream-time-are-observed-per-rail); ~~the subscription
 > windows are read~~ → the four rows of [The subscription windows are read](#the-subscription-windows-are-read);
 > ~~an upstream auth rejection is counted apart~~ (two series) → "… is counted apart" + "… is

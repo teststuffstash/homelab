@@ -166,7 +166,7 @@ the role's default harness and tier. Legend: `decision?` = the answer's `decisio
 | the prober never rides OpenRouter | `prober` | `openrouter` | `defer` | `role-rail-denied` |
 | OpenRouter is the researcher's draw rail | `researcher` | `openrouter` | `dispatch` | `none` |
 
-> Tombstones (removed by PR #TBD; one cycle): ~~the seven "allowed rails (set, in order) / denied
+> Tombstones (removed by PR #3184; one cycle): ~~the seven "allowed rails (set, in order) / denied
 > rails (set)" rows~~ — carried now, one rail per row, by the three tables above (the order is
 > [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit)'s); ~~an explicit rail inside the
 > role's set~~ → "the Go rail is the reviewer's failover"; ~~an explicit rail outside the role's set~~

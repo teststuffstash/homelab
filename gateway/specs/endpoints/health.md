@@ -119,7 +119,7 @@ session token` = `Bearer gws_` + 32 characters no session owns); `status?` = the
 | no auth is required | `none` | `200` | `{"ok": true, "db": "pvc"}` |
 | a bearer changes nothing — the probe reads no credential | `an unknown session token` | `200` | `{"ok": true, "db": "pvc"}` |
 
-> Tombstone (removed by PR #TBD; one cycle): ~~no other field is served~~ — carried now by the
+> Tombstone (removed by PR #3184; one cycle): ~~no other field is served~~ — carried now by the
 > `body?` cell of both rows above (the whole body, exactly).
 
 #### Gaps
