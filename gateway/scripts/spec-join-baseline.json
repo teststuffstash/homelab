@@ -63,8 +63,8 @@
   "row-unproven": 0
  },
  "GW-CRED-BOUNDARY": {
-  "row-unkeyed": 4,
-  "header-unthreaded": 11,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
@@ -91,8 +91,8 @@
   "row-unproven": 0
  },
  "GW-MODEL-RESOLVE": {
-  "row-unkeyed": 5,
-  "header-unthreaded": 7,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
@@ -105,10 +105,10 @@
   "row-unproven": 0
  },
  "GW-RAIL-ANTHROPIC": {
-  "row-unkeyed": 1,
-  "header-unthreaded": 10,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
-  "case-unspecified": 2,
+  "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-RAIL-CHOICE": {
@@ -126,17 +126,17 @@
   "row-unproven": 0
  },
  "GW-RAIL-OPENCODE": {
-  "row-unkeyed": 4,
-  "header-unthreaded": 8,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
-  "case-unspecified": 1,
+  "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-RAIL-OPENROUTER": {
-  "row-unkeyed": 18,
-  "header-unthreaded": 25,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
-  "case-unspecified": 4,
+  "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-REDACT": {

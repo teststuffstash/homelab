@@ -293,3 +293,25 @@ the launcher does today. The gateway enforces only the rail columns, per `roles.
 ([GW-ACCESS](access.md#gw-access)); the control-plane caller is enforced per ServiceAccount
 ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)); every other column is documented
 reality, unenforced.
+
+## wire id
+
+The `model` the upstream receives: the [policy](#policy) id with its [rail](#rail) prefix
+removed — `opencode-go/x` → `x` on the Go rail; an openrouter id is already bare; on the
+anthropic rail the body's own spelling, untouched (the policy names a `claude/<alias>` family the
+claude CLI resolves itself) — [GW-MODEL-RESOLVE](endpoints/anthropic-messages.md#gw-model-resolve).
+An absent body `model` is filled with it. Not the policy id (what a [session](#session) pins and
+the dispatch answer names) and not a [twin](#twin) (two policy ids, one model).
+
+## pin
+
+The provider the gateway names for ONE attempt on the openrouter rail: `provider: {order: [slug],
+allow_fallbacks: false}` on the upstream body, the harness's other keys unchanged
+([GW-RAIL-OPENROUTER §Selection](endpoints/openai-chat.md#selection--the-gateways-own-evidence-never-exacto)).
+The slug is the first [cell](#cell) of the order the [endpoint snapshot](#endpoint-snapshot) and
+the clean-ride evidence give; a failed pinned attempt moves to the next before any byte is relayed
+([§Failover](endpoints/openai-chat.md#failover--before-the-first-byte-only)). A model the snapshot
+does not cover, or a session whose eligible cells are all struck or cooled mid-ride, rides
+**unpinned** — no `provider` block, the vendor's own routing. The answer's own provider name
+outranks the pin for attribution. Not the `:exacto` suffix (never ported) and not a session's
+model pin (a session pins a model for its life — [session](#session)).
