@@ -158,7 +158,7 @@ class WindowDraw:
 
 @dataclass(frozen=True)
 class AdmissionPolicy:
-    """`rails.<rail>.admission` — the ladder's capacity half (GW-SESSIONS-ADMIT). Every value is
+    """`rails.<rail>.admission` — the ladder's capacity half (GW-SESSIONS-CAPACITY). Every value is
     policy data with its ⚖ source in the spec row; an absent key = that check is off for the rail."""
     utilization_thresholds: dict[str, float] = field(default_factory=dict)  # subscription window -> fraction (0 = off)
     reading_stale_s: float | None = None  # a window reading older than this is no reading
@@ -667,7 +667,7 @@ class Policy:
                 raise PolicyError(f"policy: unknown rail {name!r} (known: {', '.join(RAILS)})")
             models: dict[str, tuple[str, ...]] = {}
             for tier, model in (r.get("models") or {}).items():
-                # GW-SESSIONS-ADMIT: a tier names an ORDERED list of models (the walk's fallback order);
+                # GW-SESSIONS-RETRY: a tier names an ORDERED list of models (the walk's fallback order);
                 # a bare string is the one-item list (backward compatible).
                 ids = [model] if isinstance(model, str) else model
                 if (tier not in TIERS or not isinstance(ids, list) or not ids

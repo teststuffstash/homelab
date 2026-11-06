@@ -1,89 +1,28 @@
-"""GW-SESSIONS-OUTCOME — the consumer's outcome and the strike store (specs/endpoints/sessions.md).
-
-Worlds `policy-enforce` (the caller rows: every call presents a caller token, reviewed by the fake
-TokenReview) and `policy-default` (the rest). Fixture callers: the platform loop (admits platform
-workers), the specs reviewer (another listed caller) and the judge (`outcome: any`, admits nothing).
-A "worker session" = the platform loop admitted `{platform, worker, task homelab-2700, round 1}` on
-the policy walk (opencode, `opencode-go/deepseek-v4.1-flash`).
-
-Who may report:
-
-| description | world | reporter | body || status | result |
-|---|---|---|---||---|---|
-| the admitting caller reports an outcome | policy-enforce | the platform loop | no-verdict || 200 | strike {no-verdict, model} |
-| another listed caller may not | policy-enforce | the specs reviewer | no-verdict || 403 | caller-not-owner |
-| a judge may report on a session it did not admit | policy-enforce | the judge | wrong-verdict || 200 | strike {wrong-verdict, model} |
-| wrong-verdict is a judge's call | policy-enforce | the platform loop | wrong-verdict || 403 | outcome-judge-only |
-| no bearer, under enforce | policy-enforce | no bearer | no-verdict || 401 | caller-unauthenticated; outcome/absent + 1 |
-| an unknown id after the caller check | policy-enforce | the platform loop | POST /sessions/nope/outcome || 404 | session-not-found |
-
-What an outcome may say (policy-default):
-
-| description | body || status | result |
-|---|---||---|---|
-| a logic failure is not an outcome class | class changes-requested || 400 | outcome-class-unknown |
-| a class outside the vocabulary | class flaky || 400 | outcome-class-unknown |
-| a missing class | {} || 400 | malformed-body |
-| an unknown key | class no-verdict, verdict APPROVE || 400 | malformed-body |
-| a credential-shaped evidence value is refused | class no-verdict, evidence {log: sk-or-v1-FAKE…} || 400 | outcome-evidence-refused |
-| evidence over 4096 bytes | class no-verdict, evidence {log: 5000 × x} || 400 | malformed-body |
-
-When (policy-default; the window = outcome_window_s 86400 after the session's end):
-
-| description | sequence || status | result |
-|---|---||---|---|
-| an outcome before release is accepted | report, then DELETE || 200 | outcome stored |
-| an outcome after release, inside the window | DELETE, +3600 s, report || 200 | outcome stored |
-| an outcome after the window | DELETE, +86401 s, report || 409 | outcome-window-closed |
-| the same outcome twice is a replay | report no-verdict twice || 200, 200 | one strike; replay = true |
-| a different outcome from the same reporter | report no-verdict, then repetition || 409 | outcome-conflict |
-
-The store (policy-default):
-
-| description | sequence || strikes on task homelab-2700 (counted) | gateway_strikes_total |
-|---|---||---|---|
-| a model-scoped class strikes the model | report no-verdict || [{opencode, opencode-go/deepseek-v4.1-flash, no-verdict, model, outcome}] | {class=no-verdict,source=outcome} 1 |
-| a serving-scoped class strikes the cell | report harness-gave-up || [{…, harness-gave-up, cell, outcome}] | {class=harness-gave-up,source=outcome} 1 |
-| a harness-scoped class strikes the harness | report harness-fault || [{…, harness-fault, harness, outcome}] with harness opencode | {class=harness-fault,source=outcome} 1 |
-| the gateway writes its own transport class | the session's request answered upstream-401 || [{…, auth-storm, cell, gateway}] | {class=auth-storm,source=gateway} 1 |
-| one transport strike per session and class | three upstream-500 answers on one session || one provider-5xx strike | {class=provider-5xx,source=gateway} 1 |
-| a 429 is a cooldown, not a strike | the session's request answered upstream-429 || [] | — |
-| a read timeout is a transport strike | upstream-slow (504) on the session || [{…, timeout, cell, gateway}] | {class=timeout,source=gateway} 1 |
-| an unreachable upstream is a transport strike | upstream-down (502) on the session || [{…, provider-5xx, cell, gateway}] | {class=provider-5xx,source=gateway} 1 |
-| a policy refusal is a transport strike, not a rejected credential | upstream-403-refused on the session || [{…, refused, cell, gateway}] | {class=refused,source=gateway} 1 |
-| a cut stream is a transport strike | upstream-stream-truncated on the session || [{…, stream-incomplete, cell, gateway}] | {class=stream-incomplete,source=gateway} 1 |
-| a clean outcome refutes the task's counted strikes | the session's request answered upstream-500 (a gateway provider-5xx), then the consumer reports clean || [] (refuted 1) | — |
-| a bare 2xx refutes nothing | upstream-500, then upstream-ok on the same session || [provider-5xx] | — |
-| a clean outcome on another model refutes nothing there | heavy-tier session struck no-verdict; standard-tier session clean || [no-verdict on the heavy model] | — |
-| GET shows the latest outcome | report no-verdict, GET || — | outcome {class no-verdict, reporter the loop} |
-
-The vocabulary:
-
-| description | input || result |
-|---|---||---|
-| the code's vocabulary is the schema's | OUTCOME_CLASSES vs sessions.schema.json outcome.class enum + x-scope || equal, class and scope |
-
-The provider axis (world policy-default · openrouter-endpoints — GW-RAIL-OPENROUTER; a worker session on
-rail openrouter, tier heavy, rides deepseek/deepseek-v4.1-flash pinned):
-
-| description | sequence || strikes on the task (class, provider, refuted) |
-|---|---||---|
-| a cell-scoped class lands on the provider the ride rode | the ride served by deepinfra; the consumer reports harness-gave-up || [(harness-gave-up, deepinfra, no)] |
-| a failed-over ride strikes each provider it tried, one per cell | deepinfra 500 → atlas-cloud 500 → morph 200 || [(provider-5xx, deepinfra, no), (provider-5xx, atlas-cloud, no)] |
-| a clean ride refutes only the cells it rode clean | the same, then the consumer reports clean || [(provider-5xx, deepinfra, no), (provider-5xx, atlas-cloud, no)] — morph served it, the two failed cells stay counted |
-"""
+"""GW-SESSIONS-OUTCOME — the consumer's outcome and the strike store (specs/endpoints/sessions.md
+§Cross-cutting → GW-SESSIONS-OUTCOME). Worlds `policy-enforce` (the caller rows: every call presents a
+caller token, reviewed by the fake TokenReview) and `policy-default` (the rest). Fixture callers: the
+platform loop (admits platform workers), the specs reviewer (another listed caller) and the judge
+(`outcome: any`, admits nothing). "the worker session" = the platform loop admitted `{platform, worker,
+task homelab-2700, round 1}` on the policy walk (opencode, `opencode-go/deepseek-v4.1-flash`).
+Header == argnames, description == id (tests/_rows.py)."""
 
 from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 
+from agent_gateway.app import create_app
+from agent_gateway.config import Policy
 from agent_gateway.outcomes import OUTCOME_CLASSES
 from agent_gateway.pull import Review
 
+from ._rows import DASH, enter_world, expect, inputs
 from .conftest import (
     ISLAND,
+    POLICY_FIXTURE,
+    ObservedAsyncClient,
     attach_json,
     bearer,
     check,
@@ -92,10 +31,9 @@ from .conftest import (
     open_session,
     quiet,
     rule,
+    seed_openrouter_endpoints,
     then,
-    then_eq,
     when,
-    world,
 )
 
 pytestmark = rule("GW-SESSIONS-OUTCOME")
@@ -107,6 +45,7 @@ TOKENS = {"the platform loop": "fake-caller-token-platform-loop", "the specs rev
           "the judge": "fake-caller-token-judge"}
 TASK = "homelab-2700"
 WORKER = {"stack": "platform", "role": "worker", "task": TASK, "round": 1}
+CELL = {"rail": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "harness": "opencode"}
 
 
 @pytest.fixture(autouse=True)
@@ -122,13 +61,6 @@ def as_(who: str | None) -> dict[str, str]:
 
 @pytest.fixture
 async def enforce_gw(settings, secrets, store, transport, clock, reviews):
-    import httpx
-
-    from agent_gateway.app import create_app
-    from agent_gateway.config import Policy
-
-    from .conftest import POLICY_FIXTURE, ObservedAsyncClient
-
     client = httpx.AsyncClient(transport=transport)
     a = create_app(settings, policy=Policy.load(POLICY_FIXTURE.parent / "policy-enforce.json"), source=secrets, store=store,
                    client=client, clock=clock, reviewer=reviews)
@@ -137,7 +69,7 @@ async def enforce_gw(settings, secrets, store, transport, clock, reviews):
     await client.aclose()
 
 
-async def _admit(gw, who: str = "the platform loop", **body) -> dict:
+async def _admit(gw, who: str | None = "the platform loop", **body) -> dict:
     with quiet():
         r = await gw.post("/sessions", json={**WORKER, **body}, headers=as_(who))
     assert r.status_code == 200 and r.json()["decision"] == "dispatch", r.text
@@ -146,19 +78,21 @@ async def _admit(gw, who: str = "the platform loop", **body) -> dict:
     return doc
 
 
-async def _report(gw, sid: str, body: dict, who: str = "the platform loop"):
+async def _report(gw, sid: str, body: dict, who: str | None = "the platform loop"):
     return await gw.post(f"/sessions/{sid}/outcome", json=body, headers=as_(who))
 
 
-def _strikes(store, counted: bool = True, attach: bool = True) -> list[dict]:
+def _strikes(store, counted: bool = True) -> list[dict]:
     rows = store.strikes_for("platform", TASK, counted_only=counted)
-    out = [{k: r[k] for k in ("rail", "model", "harness", "class", "scope", "source")} for r in rows]
-    if attach:
-        attach_json("strikes on task " + TASK + (" (counted)" if counted else " (all)"), out)
-    return out
+    return [{k: r[k] for k in ("rail", "model", "harness", "class", "scope", "source")} for r in rows]
 
 
-async def _strike_series(gw, klass: str, source: str) -> float:
+def _strike_cell(rows: list[dict]) -> str:
+    """The `strike?` / `strikes?` cell: `{rail, model, harness, class, scope, source}` per counted strike, `none` for none."""
+    return "; ".join("{" + ", ".join(str(r[k]) for k in ("rail", "model", "harness", "class", "scope", "source")) + "}" for r in rows) or "none"
+
+
+async def _series(gw, klass: str, source: str) -> float:
     with quiet():
         text = (await gw.get("/metrics")).text
     series = f'gateway_strikes_total{{class="{klass}",source="{source}"}}'
@@ -168,150 +102,103 @@ async def _strike_series(gw, klass: str, source: str) -> float:
     return 0.0
 
 
-# -- who may report --------------------------------------------------------------------------------
+# -- who may report --------------------------------------------------------------------------------------
 WHO_ROWS = [
-    ("the admitting caller reports an outcome", "the platform loop", {"class": "no-verdict"}, 200, {"class": "no-verdict", "scope": "model"}),
-    ("another listed caller may not", "the specs reviewer", {"class": "no-verdict"}, 403, "caller-not-owner"),
-    ("a judge may report on a session it did not admit", "the judge", {"class": "wrong-verdict"}, 200, {"class": "wrong-verdict", "scope": "model"}),
-    ("wrong-verdict is a judge's call", "the platform loop", {"class": "wrong-verdict"}, 403, "outcome-judge-only"),
-    ("no bearer, under enforce", "no bearer", {"class": "no-verdict"}, 401, "caller-unauthenticated"),
+    pytest.param("policy-enforce", "the platform loop", "the worker session", "no-verdict", 200, "strike {no-verdict, model}", id="the admitting caller reports an outcome"),
+    pytest.param("policy-enforce", "the specs reviewer", "the worker session", "no-verdict", 403, "caller-not-owner", id="another listed caller may not"),
+    pytest.param("policy-enforce", "the judge", "the worker session", "wrong-verdict", 200, "strike {wrong-verdict, model}", id="a judge may report on a session it did not admit ⚖"),
+    pytest.param("policy-enforce", "the platform loop", "the worker session", "wrong-verdict", 403, "outcome-judge-only", id="wrong-verdict is a judge's call ⚖"),
+    pytest.param("policy-enforce", "no bearer", "the worker session", "no-verdict", 401, "caller-unauthenticated", id="no bearer, under enforce"),
+    pytest.param("policy-enforce", "the platform loop", "nope", "no-verdict", 404, "session-not-found", id="an unknown id after the caller check"),
 ]
 
 
-@pytest.mark.parametrize(("who", "body", "status", "result"), [r[1:] for r in WHO_ROWS], ids=[r[0] for r in WHO_ROWS])
-async def test_who_may_report(enforce_gw, who, body, status, result):
-    world("policy-enforce")
-    with given("a worker session the platform loop admitted"):
+@pytest.mark.parametrize(("world", "reporter", "session", "class_", "expected_status", "expected_result"), WHO_ROWS)
+async def test_who_may_report(enforce_gw, world, reporter, session, class_, expected_status, expected_result):
+    enter_world(world)
+    inputs(reporter=reporter, session=session, **{"class": class_})
+    with given(f"session = {session}: the platform loop admitted a worker session"):
         doc = await _admit(enforce_gw)
-    with when(f"POST /sessions/{{id}}/outcome body = {body!r} presenting who = {who!r}"):
-        r = await _report(enforce_gw, doc["session"]["id"], body, who)
-    then_eq("status", r.status_code, status, claim=f"status = {status!r}")
-    if status == 200:
-        then_eq("result", r.json()["strike"], result, claim=f"result (the strike) = {result!r}")
-    else:
-        then_eq("result", err(r), result, claim=f"result (the error code) = {result!r}")
+    sid = doc["session"]["id"] if session == "the worker session" else session
+    with when(f"POST /sessions/{sid}/outcome {{class: {class_}}} presenting {reporter}"):
+        r = await _report(enforce_gw, sid, {"class": class_}, reporter)
+    result = f"strike {{{r.json()['strike']['class']}, {r.json()['strike']['scope']}}}" if r.status_code == 200 else err(r)
+    expect({"status": r.status_code, "result": result}, status=expected_status, result=expected_result)
 
 
-async def test_unknown_id_after_caller(enforce_gw):
-    """row: an unknown id after the caller check"""
-    world("policy-enforce")
-    with when("POST /sessions/nope/outcome {class: no-verdict} presenting the platform loop"):
-        r = await _report(enforce_gw, "nope", {"class": "no-verdict"})
-    then_eq("status", r.status_code, 404)
-    then_eq("code", err(r), "session-not-found", claim="error code = session-not-found")
-
-
-# -- what an outcome may say -----------------------------------------------------------------------
+# -- what an outcome may say ------------------------------------------------------------------------------
+BODIES = {
+    "class: changes-requested": {"class": "changes-requested"},
+    "class: flaky": {"class": "flaky"},
+    "{}": {},
+    "class: no-verdict, verdict: APPROVE": {"class": "no-verdict", "verdict": "APPROVE"},
+    "class: no-verdict, evidence: {log: auth sk-or-v1-FAKE0000}": {"class": "no-verdict", "evidence": {"log": "auth sk-or-v1-FAKE0000"}},
+    "class: no-verdict, evidence: {log: 5000 × x}": {"class": "no-verdict", "evidence": {"log": "x" * 5000}},
+}
 BODY_ROWS = [
-    ("a logic failure is not an outcome class", {"class": "changes-requested"}, "outcome-class-unknown"),
-    ("a class outside the vocabulary", {"class": "flaky"}, "outcome-class-unknown"),
-    ("a missing class", {}, "malformed-body"),
-    ("an unknown key", {"class": "no-verdict", "verdict": "APPROVE"}, "malformed-body"),
-    ("a credential-shaped evidence value is refused", {"class": "no-verdict", "evidence": {"log": "auth sk-or-v1-FAKE0000"}}, "outcome-evidence-refused"),
-    # the 5000-byte value is built in the case (EVIDENCE_5000): the row's parameter stays its short name
-    ("evidence over 4096 bytes", {"class": "no-verdict", "evidence": "EVIDENCE_5000"}, "malformed-body"),
+    pytest.param("policy-default", "class: changes-requested", 400, "outcome-class-unknown", id="a logic failure is not an outcome class"),
+    pytest.param("policy-default", "class: flaky", 400, "outcome-class-unknown", id="a class outside the vocabulary"),
+    pytest.param("policy-default", "{}", 400, "malformed-body", id="a missing class"),
+    pytest.param("policy-default", "class: no-verdict, verdict: APPROVE", 400, "malformed-body", id="an unknown key"),
+    pytest.param("policy-default", "class: no-verdict, evidence: {log: auth sk-or-v1-FAKE0000}", 400, "outcome-evidence-refused", id="a credential-shaped evidence value is refused ⚖"),
+    pytest.param("policy-default", "class: no-verdict, evidence: {log: 5000 × x}", 400, "malformed-body", id="evidence over 4096 bytes ⚖"),
 ]
-EVIDENCE_5000 = {"log": "x" * 5000}
 
 
-@pytest.mark.parametrize(("body", "code"), [r[1:] for r in BODY_ROWS], ids=[r[0] for r in BODY_ROWS])
-async def test_outcome_body(gw, store, body, code):
-    world()
+@pytest.mark.parametrize(("world", "body", "expected_status", "expected_code"), BODY_ROWS)
+async def test_what_an_outcome_may_say(gw, store, world, body, expected_status, expected_code):
+    enter_world(world)
+    inputs(body=body)
     with given("a worker session"):
         doc = await _admit(gw, who=None)
-    sent = {**body, "evidence": EVIDENCE_5000} if body.get("evidence") == "EVIDENCE_5000" else body
-    with when(f"POST /sessions/{{id}}/outcome body = {body!r}" + (" (EVIDENCE_5000 = {log: 5000 × 'x'})" if sent is not body else "")):
-        r = await _report(gw, doc["session"]["id"], sent, None)
-    then_eq("status", r.status_code, 400)
-    then_eq("code", err(r), code, claim=f"code = {code!r}")
+    with when(f"POST /sessions/{{id}}/outcome {body}"):
+        r = await _report(gw, doc["session"]["id"], BODIES[body], None)
+    expect({"status": r.status_code, "code": err(r)}, status=expected_status, code=expected_code)
     with then("nothing stored: no strike on the task"):
         check("strikes", _strikes(store), [])
 
 
-# -- when --------------------------------------------------------------------------------------------
+# -- when --------------------------------------------------------------------------------------------------
 WHEN_ROWS = [
-    ("an outcome before release is accepted", "before", 0, 200, None),
-    ("an outcome after release, inside the window", "after", 3600, 200, None),
-    ("an outcome after the window", "after", 86401, 409, "outcome-window-closed"),
+    pytest.param("policy-default", "report, the session active", 200, "stored", id="an outcome before release is accepted"),
+    pytest.param("policy-default", "DELETE, +3600 s, report", 200, "stored", id="an outcome after release, inside the window ⚖"),
+    pytest.param("policy-default", "DELETE, +86401 s, report", 409, "outcome-window-closed", id="an outcome after the window"),
+    pytest.param("policy-default", "report no-verdict twice", 200, "replay: true; one strike", id="the same outcome twice is a replay ⚖"),
+    pytest.param("policy-default", "report no-verdict, then repetition", 409, "outcome-conflict", id="a different outcome from the same reporter"),
 ]
 
 
-@pytest.mark.parametrize(("order", "advance", "status", "code"), [r[1:] for r in WHEN_ROWS], ids=[r[0] for r in WHEN_ROWS])
-async def test_outcome_window(gw, clock, order, advance, status, code):
-    world()
-    with given("a worker session"):
+@pytest.mark.parametrize(("world", "sequence", "expected_status", "expected_result"), WHEN_ROWS)
+async def test_when(gw, store, clock, world, sequence, expected_status, expected_result):
+    enter_world(world)
+    inputs(sequence=sequence)
+    with given(f"sequence = {sequence}: a worker session, and everything before the last report"):
         doc = await _admit(gw, who=None)
-    sid = doc["session"]["id"]
-    with given(f"order = {order!r}, advance = {advance!r}: " + ("the session stays active" if order == "before"
-                                                                 else f"it is released, then {advance} s pass")):
-        if order == "after":
-            with quiet():
+        sid = doc["session"]["id"]
+        with quiet():
+            if sequence.startswith("DELETE"):
                 await gw.delete(f"/sessions/{sid}")
-            clock.advance(advance)
-    with when("POST /sessions/{id}/outcome {class: no-verdict}"):
-        r = await _report(gw, sid, {"class": "no-verdict"}, None)
-    then_eq("status", r.status_code, status, claim=f"status = {status!r}")
-    then_eq("code", err(r) if r.status_code >= 400 else None, code, claim=f"code = {code!r}")
-
-
-async def test_same_outcome_twice_is_replay(gw, store):
-    """row: the same outcome twice is a replay"""
-    world()
-    with given("a worker session with no-verdict reported once"):
+                clock.advance(int(sequence.split("+")[1].split(" ")[0]))
+            elif sequence.startswith("report no-verdict"):
+                first = await _report(gw, sid, {"class": "no-verdict"}, None)
+                assert first.status_code == 200, first.text
+    last = "repetition" if sequence.endswith("repetition") else "no-verdict"
+    with when(f"POST /sessions/{sid}/outcome {{class: {last}}}"):
+        r = await _report(gw, sid, {"class": last}, None)
+    if r.status_code >= 400:
+        result = err(r)
+    elif sequence == "report no-verdict twice":
+        n = len(_strikes(store))
+        result = f"replay: {str(r.json().get('replay')).lower()}; {'one strike' if n == 1 else f'{n} strikes'}"
+    else:
         with quiet():
-            doc = await _admit(gw, who=None)
-            first = await _report(gw, doc["session"]["id"], {"class": "no-verdict"}, None)
-    with when("POST /sessions/{id}/outcome {class: no-verdict} again"):
-        with quiet():
-            r = await _report(gw, doc["session"]["id"], {"class": "no-verdict"}, None)
-        attach_json("the two replies", {"first": first.json(), "again": r.json()})
-    then_eq("statuses", (first.status_code, r.status_code), (200, 200))
-    then_eq("replay", r.json()["replay"], True)
-    with then("one strike"):
-        check("strikes", len(_strikes(store)), 1)
+            outcome = (await gw.get(f"/sessions/{sid}")).json()["outcome"]
+        result = "stored" if outcome and outcome.get("class") == "no-verdict" else f"not stored: {outcome}"
+    expect({"status": r.status_code, "result": result}, status=expected_status, result=expected_result)
 
 
-async def test_different_outcome_conflicts(gw):
-    """row: a different outcome from the same reporter"""
-    world()
-    with given("a worker session with no-verdict reported"):
-        doc = await _admit(gw, who=None)
-        await _report(gw, doc["session"]["id"], {"class": "no-verdict"}, None)
-    with when("POST /sessions/{id}/outcome {class: repetition}"):
-        r = await _report(gw, doc["session"]["id"], {"class": "repetition"}, None)
-    then_eq("status", r.status_code, 409)
-    then_eq("code", err(r), "outcome-conflict", claim="error code = outcome-conflict")
-
-
-# -- the store ---------------------------------------------------------------------------------------
-CELL = {"rail": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "harness": "opencode"}
-STORE_ROWS = [
-    ("a model-scoped class strikes the model", [("report", "no-verdict")], [{**CELL, "class": "no-verdict", "scope": "model", "source": "outcome"}],
-     ("no-verdict", "outcome", 1)),
-    ("a serving-scoped class strikes the cell", [("report", "harness-gave-up")],
-     [{**CELL, "class": "harness-gave-up", "scope": "cell", "source": "outcome"}], ("harness-gave-up", "outcome", 1)),
-    ("a harness-scoped class strikes the harness", [("report", "harness-fault")],
-     [{**CELL, "class": "harness-fault", "scope": "harness", "source": "outcome"}], ("harness-fault", "outcome", 1)),
-    ("the gateway writes its own transport class", [("ride", "upstream-401")], [{**CELL, "class": "auth-storm", "scope": "cell", "source": "gateway"}],
-     ("auth-storm", "gateway", 1)),
-    ("one transport strike per session and class", [("ride", "upstream-500"), ("ride", "upstream-500"), ("ride", "upstream-500")],
-     [{**CELL, "class": "provider-5xx", "scope": "cell", "source": "gateway"}], ("provider-5xx", "gateway", 1)),
-    ("a 429 is a cooldown, not a strike", [("ride", "upstream-429")], [], None),
-    ("a read timeout is a transport strike", [("ride", "upstream-slow")], [{**CELL, "class": "timeout", "scope": "cell", "source": "gateway"}],
-     ("timeout", "gateway", 1)),
-    ("an unreachable upstream is a transport strike", [("ride", "upstream-down")],
-     [{**CELL, "class": "provider-5xx", "scope": "cell", "source": "gateway"}], ("provider-5xx", "gateway", 1)),
-    ("a policy refusal is a transport strike, not a rejected credential", [("ride", "upstream-403-refused")],
-     [{**CELL, "class": "refused", "scope": "cell", "source": "gateway"}], ("refused", "gateway", 1)),
-    ("a cut stream is a transport strike", [("stream", "upstream-stream-truncated")],
-     [{**CELL, "class": "stream-incomplete", "scope": "cell", "source": "gateway"}], ("stream-incomplete", "gateway", 1)),
-    ("a bare 2xx refutes nothing", [("ride", "upstream-500"), ("ride", "upstream-ok")],
-     [{**CELL, "class": "provider-5xx", "scope": "cell", "source": "gateway"}], None),
-]
-
-
-async def _act(gw, upstreams, doc, step, transport=None):
-    kind, what = step
+# -- the store ---------------------------------------------------------------------------------------------
+async def _act(gw, upstreams, doc, kind: str, what: str, transport=None):
     if kind == "report":
         return await _report(gw, doc["session"]["id"], {"class": what}, None)
     if what in ("upstream-slow", "upstream-down"):  # the transport-level worlds (RailTransport)
@@ -329,23 +216,76 @@ async def _act(gw, upstreams, doc, step, transport=None):
     return r
 
 
-@pytest.mark.parametrize(("steps", "strikes", "series"), [r[1:] for r in STORE_ROWS], ids=[r[0] for r in STORE_ROWS])
-async def test_store(gw, upstreams, transport, store, steps, strikes, series):
-    world(upstream=next((w for k, w in steps if k != "report"), "upstream-ok"))
-    with given(f"steps = {steps!r}: a worker session (opencode, opencode-go/deepseek-v4.1-flash)"
-               + (f", arranged: {steps[:-1]!r}" if steps[:-1] else "")):
+def _series_cell(klass: str | None, source: str | None, n: float) -> str:
+    return f'{{class="{klass}",source="{source}"}} {n:g}'
+
+
+CONSUMER_ROWS = [
+    pytest.param("policy-default", "no-verdict", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, no-verdict, model, outcome}", '{class="no-verdict",source="outcome"} 1',
+                 id="a model-scoped class strikes the model"),
+    pytest.param("policy-default", "harness-gave-up", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, harness-gave-up, cell, outcome}", '{class="harness-gave-up",source="outcome"} 1',
+                 id="a serving-scoped class strikes the cell"),
+    pytest.param("policy-default", "harness-fault", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, harness-fault, harness, outcome}", '{class="harness-fault",source="outcome"} 1',
+                 id="a harness-scoped class strikes the harness"),
+]
+
+
+@pytest.mark.parametrize(("world", "report", "expected_strike", "expected_series"), CONSUMER_ROWS)
+async def test_the_consumers_strike(gw, upstreams, store, world, report, expected_strike, expected_series):
+    enter_world(world)
+    inputs(report=report)
+    with given("a worker session (opencode, opencode-go/deepseek-v4.1-flash)"):
+        doc = await open_session(gw, **WORKER)
+    with when(f"POST /sessions/{{id}}/outcome {{class: {report}}}"):
+        await _act(gw, upstreams, doc, "report", report)
+    rows = _strikes(store)
+    series = _series_cell(report, "outcome", await _series(gw, report, "outcome"))
+    expect({"strike": _strike_cell(rows), "series": series}, strike=expected_strike, series=expected_series)
+
+
+ANSWERED = {
+    "upstream-401": [("ride", "upstream-401")],
+    "upstream-500 × 3": [("ride", "upstream-500")] * 3,
+    "upstream-429": [("ride", "upstream-429")],
+    "upstream-slow (504 upstream-timeout)": [("ride", "upstream-slow")],
+    "upstream-down (502 upstream-unreachable)": [("ride", "upstream-down")],
+    "upstream-403-refused (403 upstream-refused)": [("ride", "upstream-403-refused")],
+    "upstream-stream-truncated (a stream)": [("stream", "upstream-stream-truncated")],
+}
+GATEWAY_ROWS = [
+    pytest.param("policy-default · upstream-401", "upstream-401", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, auth-storm, cell, gateway}", '{class="auth-storm",source="gateway"} 1',
+                 id="the gateway writes its own transport class"),
+    pytest.param("policy-default · upstream-500", "upstream-500 × 3", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, provider-5xx, cell, gateway}", '{class="provider-5xx",source="gateway"} 1',
+                 id="one transport strike per session and class ⚖"),
+    pytest.param("policy-default · upstream-429", "upstream-429", "none", DASH, id="a 429 is a cooldown, not a strike ⚖"),
+    pytest.param("policy-default · upstream-slow", "upstream-slow (504 upstream-timeout)", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, timeout, cell, gateway}", '{class="timeout",source="gateway"} 1',
+                 id="a read timeout is a transport strike"),
+    pytest.param("policy-default · upstream-down", "upstream-down (502 upstream-unreachable)", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, provider-5xx, cell, gateway}", '{class="provider-5xx",source="gateway"} 1',
+                 id="an unreachable upstream is a transport strike"),
+    pytest.param("policy-default · upstream-403-refused", "upstream-403-refused (403 upstream-refused)", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, refused, cell, gateway}", '{class="refused",source="gateway"} 1',
+                 id="a policy refusal is a transport strike, not a rejected credential"),
+    pytest.param("policy-default · upstream-stream-truncated", "upstream-stream-truncated (a stream)", "{opencode, opencode-go/deepseek-v4.1-flash, opencode, stream-incomplete, cell, gateway}", '{class="stream-incomplete",source="gateway"} 1',
+                 id="a cut stream is a transport strike"),
+]
+
+
+@pytest.mark.parametrize(("world", "answered", "expected_strike", "expected_series"), GATEWAY_ROWS)
+async def test_the_gateways_transport_strike(gw, upstreams, transport, store, world, answered, expected_strike, expected_series):
+    enter_world(world)
+    inputs(answered=answered)
+    steps = ANSWERED[answered]
+    with given("a worker session (opencode, opencode-go/deepseek-v4.1-flash)" + (f", its first {len(steps) - 1} request(s) answered {steps[0][1]}" if len(steps) > 1 else "")):
+        doc = await open_session(gw, **WORKER)
         with quiet():
-            doc = await open_session(gw, **WORKER)
-            statuses = [(await _act(gw, upstreams, doc, step, transport)).status_code for step in steps[:-1]]
-        attach_json("arranged", {"session": doc["session"]["id"], "model": doc["model"], "arranged statuses": statuses})
-    with when(f"{steps[-1][0]} {steps[-1][1]}"):
-        await _act(gw, upstreams, doc, steps[-1], transport)
-    with then(f"strikes = {strikes!r} (the counted strikes on task {TASK})"):
-        check("strikes", _strikes(store), strikes)
-    with then(f"series = {series!r} (gateway_strikes_total{{class, source}} = n)"):
-        if series:
-            check("series", await _strike_series(gw, series[0], series[1]), series[2])
-    if any(w == "upstream-403-refused" for _, w in steps):
+            for kind, what in steps[:-1]:
+                await _act(gw, upstreams, doc, kind, what, transport)
+    kind, what = steps[-1]
+    with when(f"the session's {'streaming ' if kind == 'stream' else ''}request is answered {what}"):
+        await _act(gw, upstreams, doc, kind, what, transport)
+    rows = _strikes(store)
+    series = _series_cell(rows[0]["class"], rows[0]["source"], await _series(gw, rows[0]["class"], rows[0]["source"])) if rows else DASH
+    expect({"strike": _strike_cell(rows), "series": series}, strike=expected_strike, series=expected_series)
+    if "403-refused" in answered:
         with then("the credential is not rejected: gateway_credentials_rejected{rail=opencode} = 0"):
             with quiet():
                 text = (await gw.get("/metrics")).text
@@ -353,120 +293,111 @@ async def test_store(gw, upstreams, transport, store, steps, strikes, series):
             check("gateway_credentials_rejected{rail=opencode}", float(line.split()[-1]), 0)
 
 
-async def test_clean_refutes(gw, upstreams, store):
-    """row: a clean outcome refutes the task's counted strikes"""
-    world(upstream="upstream-500")
-    with given("a worker session whose request answered upstream-500 (a gateway provider-5xx strike on its cell)"):
-        with quiet():
-            a1 = await open_session(gw, **WORKER)
-            await _act(gw, upstreams, a1, ("ride", "upstream-500"))
-        before = _strikes(store, attach=False)
-    with when("POST /sessions/{id}/outcome {class: clean} — the ride recovered and did its job"):
-        with quiet():
-            r = await _report(gw, a1["session"]["id"], {"class": "clean"}, None)
-        attach_json("the outcome answer", r.json())
-    after_counted, after_all = _strikes(store, attach=False), _strikes(store, counted=False, attach=False)
-    attach_json("strikes on task " + TASK + ": before / after clean", {"before (counted)": before, "after (counted)": after_counted,
-                                                                      "after (all, refuted kept)": after_all})
-    with then("refuted = 1; no counted strike is left on the task (the strike is kept, refuted)"):
-        assert r.json()["refuted"] == 1 and after_counted == [] and len(after_all) == 1, (r.json(), after_counted, after_all)
+REFUTE_ROWS = [
+    pytest.param("policy-default · upstream-500", "upstream-500, then upstream-ok on the same session",
+                 "{opencode, opencode-go/deepseek-v4.1-flash, opencode, provider-5xx, cell, gateway}", DASH, id="a bare 2xx refutes nothing"),
+    pytest.param("policy-default · upstream-500", "upstream-500, then the consumer reports clean", "none", 1, id="a clean outcome refutes the task's counted strikes"),
+    pytest.param("policy-default", "the heavy model struck no-verdict; a standard-tier session of the task reports clean",
+                 "{opencode, opencode-go/claude-haiku-5-5, claude, no-verdict, model, outcome}", 0, id="a clean outcome on another model refutes nothing there"),
+]
 
 
-async def test_clean_elsewhere_refutes_nothing(gw, store):
-    """row: a clean outcome on another model refutes nothing there"""
-    world()
-    with given("a heavy-tier session (opencode-go/claude-haiku-5-5) struck no-verdict; a standard-tier session (opencode-go/deepseek-v4.1-flash) of the same task"):
-        with quiet():
-            h = await open_session(gw, **WORKER, tier="heavy")
-            await _report(gw, h["session"]["id"], {"class": "no-verdict"}, None)
-            s = await open_session(gw, **WORKER)
-        attach_json("arranged sessions", {"heavy": h["model"], "standard": s["model"]})
-    with when("POST /sessions/{standard}/outcome {class: clean}"):
-        with quiet():
+@pytest.mark.parametrize(("world", "sequence", "expected_strikes", "expected_refuted"), REFUTE_ROWS)
+async def test_refutation(gw, upstreams, store, world, sequence, expected_strikes, expected_refuted):
+    enter_world(world)
+    inputs(sequence=sequence)
+    refuted = DASH
+    if sequence.startswith("upstream-500"):
+        with given("a worker session whose request answered upstream-500 (a gateway provider-5xx strike on its cell)"):
+            doc = await open_session(gw, **WORKER)
+            with quiet():
+                await _act(gw, upstreams, doc, "ride", "upstream-500")
+            attach_json("strikes before", _strikes(store))
+        if sequence.endswith("same session"):
+            with when("the same session's next request is answered upstream-ok"):
+                await _act(gw, upstreams, doc, "ride", "upstream-ok")
+        else:
+            with when("POST /sessions/{id}/outcome {class: clean} — the ride recovered and did its job"):
+                r = await _report(gw, doc["session"]["id"], {"class": "clean"}, None)
+            refuted = r.json()["refuted"]
+            attach_json("strikes after (all, refuted kept)", _strikes(store, counted=False))
+    else:
+        with given("a heavy-tier session (opencode-go/claude-haiku-5-5) struck no-verdict; a standard-tier session of the same task"):
+            with quiet():
+                h = await open_session(gw, **WORKER, tier="heavy")
+                await _report(gw, h["session"]["id"], {"class": "no-verdict"}, None)
+                s = await open_session(gw, **WORKER)
+            attach_json("arranged sessions", {"heavy": h["model"], "standard": s["model"]})
+        with when("POST /sessions/{standard}/outcome {class: clean}"):
             r = await _report(gw, s["session"]["id"], {"class": "clean"}, None)
-        attach_json("the outcome answer", r.json())
-    then_eq("refuted", r.json()["refuted"], 0)
-    with then("the heavy model's no-verdict still counts"):
-        check("strikes", _strikes(store), [{"rail": "opencode", "model": "opencode-go/claude-haiku-5-5", "harness": "claude",
-                                            "class": "no-verdict", "scope": "model", "source": "outcome"}])
+        refuted = r.json()["refuted"]
+    expect({"strikes": _strike_cell(_strikes(store)), "refuted": refuted}, strikes=expected_strikes, refuted=expected_refuted)
 
 
-async def test_get_shows_outcome(gw):
-    """row: GET shows the latest outcome"""
-    world()
-    with given("a worker session with no-verdict reported"):
-        doc = await _admit(gw, who=None)
-        await _report(gw, doc["session"]["id"], {"class": "no-verdict", "subclass": "rc=1"}, None)
-    with when("GET /sessions/{id}"):
-        r = await gw.get(f"/sessions/{doc['session']['id']}")
-    with then("outcome = {class no-verdict, subclass rc=1, reporter null (admitted under observe)}"):
-        got = r.json()["outcome"]
-        check("outcome", {k: got[k] for k in ("class", "subclass", "reporter")}, {"class": "no-verdict", "subclass": "rc=1", "reporter": None})
+VIEW_ROWS = [
+    pytest.param("policy-default", "report no-verdict (subclass rc=1), GET", "outcome {class no-verdict, subclass rc=1, reporter null}", id="GET shows the latest outcome"),
+    pytest.param("policy-default", "OUTCOME_CLASSES vs outcome.input.properties.class (enum, x-scope)", "equal, class and scope", id="the code's vocabulary is the schema's"),
+]
 
 
-async def test_vocabulary_is_the_schemas():
-    """row: the code's vocabulary is the schema's"""
-    world()
-    with when("read sessions.schema.json outcome.class (enum + x-scope)"):
-        schema = json.loads((ISLAND / "specs" / "endpoints" / "sessions.schema.json").read_text(encoding="utf-8"))
-        cls = schema["outcome"]["input"]["properties"]["class"]
-        attach_json("schema outcome.class", cls)
-    with then("equal, class and scope"):
-        check("classes", sorted(cls["enum"]), sorted(OUTCOME_CLASSES))
-        check("scopes", cls["x-scope"], OUTCOME_CLASSES)
+@pytest.mark.parametrize(("world", "sequence", "expected_result"), VIEW_ROWS)
+async def test_one_vocabulary_one_view(gw, world, sequence, expected_result):
+    enter_world(world)
+    inputs(sequence=sequence)
+    if sequence.startswith("report"):
+        with given("a worker session with no-verdict (subclass rc=1) reported"):
+            doc = await _admit(gw, who=None)
+            await _report(gw, doc["session"]["id"], {"class": "no-verdict", "subclass": "rc=1"}, None)
+        with when("GET /sessions/{id}"):
+            got = (await gw.get(f"/sessions/{doc['session']['id']}")).json()["outcome"]
+        result = f"outcome {{class {got['class']}, subclass {got['subclass']}, reporter {'null' if got['reporter'] is None else got['reporter']}}}"
+    else:
+        with when("read sessions.schema.json outcome.input.properties.class (enum + x-scope) and the code's OUTCOME_CLASSES"):
+            schema = json.loads((ISLAND / "specs" / "endpoints" / "sessions.schema.json").read_text(encoding="utf-8"))
+            cls = schema["outcome"]["input"]["properties"]["class"]
+            attach_json("schema outcome.class", cls)
+        result = "equal, class and scope" if sorted(cls["enum"]) == sorted(OUTCOME_CLASSES) and cls["x-scope"] == OUTCOME_CLASSES else f"schema {cls} vs code {OUTCOME_CLASSES}"
+    expect({"result": result}, result=expected_result)
 
 
-# -- the provider axis (GW-RAIL-OPENROUTER) -------------------------------------------------------
+# -- the provider axis (GW-RAIL-OPENROUTER) -------------------------------------------------------------------
 PROVIDER_PATH = "/openai/v1/chat/completions"
 PROVIDER_M = "deepseek/deepseek-v4.1-flash"
+FAILOVER = "deepinfra 500 → atlas-cloud 500 → morph 200"
+PROVIDER_ROWS = [
+    pytest.param("policy-default · openrouter-endpoints", "served by deepinfra", "harness-gave-up", "(harness-gave-up, deepinfra, no)",
+                 id="a cell-scoped class lands on the provider the ride rode ⚖"),
+    pytest.param("policy-default · openrouter-endpoints", FAILOVER, DASH, "(provider-5xx, deepinfra, no), (provider-5xx, atlas-cloud, no)",
+                 id="a failed-over ride strikes each provider it tried, one per cell ⚖"),
+    pytest.param("policy-default · openrouter-endpoints", FAILOVER, "clean", "(provider-5xx, deepinfra, no), (provider-5xx, atlas-cloud, no)",
+                 id="a clean ride refutes only the cells it rode clean ⚖"),
+]
 
 
-def _provider_strikes(store, task: str) -> list[tuple[str, str, str]]:
-    return [(s["class"], s["provider"], "yes" if s["refuted_at"] else "no") for s in store.strikes_for("platform", task, counted_only=False)]
+def _provider_strikes(store, task: str) -> str:
+    return ", ".join(f"({s['class']}, {s['provider']}, {'yes' if s['refuted_at'] else 'no'})" for s in store.strikes_for("platform", task, counted_only=False)) or "none"
 
 
-async def _provider_ride(gw, app, store, upstreams, task: str, behaviours: dict | None = None) -> dict:
-    from .conftest import seed_openrouter_endpoints
-
-    seed_openrouter_endpoints(store, upstreams["openrouter"])
-    app.state.providers.reload()
-    upstreams["openrouter"].provider_behaviours.update(behaviours or {})
-    with given(f"a worker session on rail openrouter, tier heavy ({PROVIDER_M}), task {task}; one ride (provider_behaviours {behaviours or {}})"):
-        with quiet():  # the session + ride exchanges fold into the one ride summary below (ATTACH_BULK: ≤ 8 per case)
-            doc = await open_session(gw, role="worker", harness="opencode", rail="openrouter", tier="heavy", task=task)
+@pytest.mark.parametrize(("world", "ride", "report", "expected_strikes"), PROVIDER_ROWS)
+async def test_strikes_on_the_provider_axis(gw, app, store, upstreams, world, ride, report, expected_strikes):
+    enter_world(world)
+    inputs(ride=ride, report=report)
+    task = "homelab-2741-oc-" + ("cell" if report == "harness-gave-up" else "failover" if report == DASH else "clean")
+    behaviours = {"deepinfra": "upstream-500", "atlas-cloud": "upstream-500"} if ride == FAILOVER else {}
+    with given(f"ride = {ride}: a worker session on rail openrouter, tier heavy ({PROVIDER_M}), task {task}, one ride (provider_behaviours {behaviours})"):
+        seed_openrouter_endpoints(store, upstreams["openrouter"])
+        app.state.providers.reload()
+        upstreams["openrouter"].provider_behaviours.update(behaviours)
+        with quiet():  # the session + ride exchanges fold into the one ride summary below
+            doc = await open_session(gw, role="worker", rail="openrouter", tier="heavy", task=task)
             r = await gw.post(PROVIDER_PATH, json={"model": PROVIDER_M, "messages": []}, headers=bearer(doc))
         attach_json("the ride", {"status": r.status_code, "served_by": r.json().get("provider") if r.status_code == 200 else None})
-    return doc
-
-
-async def test_cell_class_lands_on_provider(gw, app, store, upstreams):
-    """row: a cell-scoped class lands on the provider the ride rode"""
-    world(upstream="upstream-ok", note="openrouter-endpoints")
-    task = "homelab-2741-oc-cell"
-    doc = await _provider_ride(gw, app, store, upstreams, task)
-    with when("POST /sessions/{id}/outcome class harness-gave-up"):
-        r = await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "harness-gave-up"})
-    then_eq("status", r.status_code, 200)
-    then_eq("strikes (class, provider, refuted)", _provider_strikes(store, task), [("harness-gave-up", "deepinfra", "no")])
-
-
-async def test_failed_over_ride_strikes_each_cell(gw, app, store, upstreams):
-    """row: a failed-over ride strikes each provider it tried, one per cell"""
-    world(upstream="upstream-ok", note="openrouter-endpoints; deepinfra and atlas-cloud answer 500")
-    task = "homelab-2741-oc-failover"
-    with when("one ride: deepinfra 500 → atlas-cloud 500 → morph 200"):
-        await _provider_ride(gw, app, store, upstreams, task, {"deepinfra": "upstream-500", "atlas-cloud": "upstream-500"})
-    then_eq("strikes (class, provider, refuted)", _provider_strikes(store, task),
-            [("provider-5xx", "deepinfra", "no"), ("provider-5xx", "atlas-cloud", "no")])
-
-
-async def test_clean_refutes_only_ridden_cells(gw, app, store, upstreams):
-    """row: a clean ride refutes only the cells it rode clean"""
-    world(upstream="upstream-ok", note="openrouter-endpoints; deepinfra and atlas-cloud answer 500")
-    task = "homelab-2741-oc-clean"
-    doc = await _provider_ride(gw, app, store, upstreams, task, {"deepinfra": "upstream-500", "atlas-cloud": "upstream-500"})
-    with when("POST /sessions/{id}/outcome class clean"):
-        r = await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": "clean"})
-    then_eq("status · refuted", (r.status_code, r.json()["refuted"]), (200, 0))
-    then_eq("strikes (class, provider, refuted)", _provider_strikes(store, task),
-            [("provider-5xx", "deepinfra", "no"), ("provider-5xx", "atlas-cloud", "no")])
+    if report != DASH:
+        with when(f"POST /sessions/{{id}}/outcome {{class: {report}}}"):
+            r = await gw.post(f"/sessions/{doc['session']['id']}/outcome", json={"class": report})
+            assert r.status_code == 200, r.text
+            attach_json("the outcome answer", r.json())
+    else:
+        with when("no outcome is reported: the ride's own transport facts are the strikes"):
+            pass
+    expect({"strikes": _provider_strikes(store, task)}, strikes=expected_strikes)

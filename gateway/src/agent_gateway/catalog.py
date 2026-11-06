@@ -509,7 +509,7 @@ PARSERS: dict[str, Callable] = {"catalog": lambda r: parse_catalog(r.json()), "c
 
 @dataclass(frozen=True)
 class GoModel:
-    """What admission reads for one listed Go model (GW-SESSIONS-ADMIT §Capacity): its cost tiers
+    """What admission reads for one listed Go model (GW-SESSIONS-CAPACITY): its cost tiers
     `((above_tokens, row), …)` ascending, its peak row and the peak hours, its monthly limit under
     the policy's plan (None = unlimited) and the window shares."""
     cost: tuple[tuple[int, PriceRow], ...]
