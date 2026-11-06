@@ -139,6 +139,8 @@ at 20 % / 64 %.
 | "an explicit rail without a harness takes the rail's harness ⚖" | reviewer | `rail: codex` | 0 / 0 / 0 || dispatch | codex | codex | codex/fixture-model |
 | "the env is the picked harness's" | worker | (defaults) | 0 / 3 / 2 || dispatch | anthropic | claude | the env names `ANTHROPIC_MODEL`, never `CODEX_MODEL` / `OPENCODE_CONFIG_CONTENT` |
 
+<a id="the-retry-contract--model-lists-strikes-attempt"></a>
+
 ### The retry contract — model lists, strikes, `attempt`
 
 *A failed attempt costs a re-dispatch, never a round* ([model-routing.md §The design's three
@@ -253,6 +255,8 @@ the outcome endpoint on an earlier session of the SAME task. T = `specs-review h
 | "a release frees the slot" | opencode 1 → `DELETE` it || opencode 0 | opencode = 0 |
 | "an expiry frees the slot without a DELETE" | opencode 1, `expires_at` passed || opencode 0 | opencode = 0 |
 | "a defer counts nothing" | opencode 3 → worker deferred || opencode 3 | opencode = 3 |
+
+<a id="capacity--the-ladders-capacity-half"></a>
 
 ### Capacity — the ladder's capacity half
 

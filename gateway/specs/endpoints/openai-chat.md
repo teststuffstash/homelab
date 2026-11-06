@@ -94,6 +94,8 @@ Stream completeness on this dialect: the terminal event is `data: [DONE]`; the r
 | "the subscription has no models list" | anthropic | `GET /openai/v1/models` || 501 | `dialect-unsupported-on-rail` |
 | "the Go rail speaks openai" | opencode | `POST /openai/v1/chat/completions` || 200 | byte-identical ([GW-RAIL-OPENCODE](anthropic-messages.md#gw-rail-opencode)) |
 
+<a id="attribution--the-answer-names-the-cell"></a>
+
 ### Attribution — the answer names the cell
 
 *The gateway attributes every openrouter answer to the provider that served it, per request* (operator
@@ -127,6 +129,8 @@ tier) has no entry and rides unpinned. A worker with harness opencode, `rail: op
 | "an answer that names no provider is unattributed" | unpinned (M′), upstream-ok, no `provider` || `''` | — |
 | "the answer's name outranks the pin ⚖" | pinned deepinfra; the fake answers as AtlasCloud || atlas-cloud (logged) | — |
 | "a transport strike carries the provider" | unpinned (M′), upstream-stream-truncated, `provider: "Sail Research"` || sail-research | stream-incomplete @ sail-research |
+
+<a id="selection--the-gateways-own-evidence-never-exacto"></a>
 
 ### Selection — the gateway's own evidence, never `:exacto`
 
@@ -176,6 +180,8 @@ deepinfra fp8 ✓✓✓✓ 100 0.42 (its `/flex` 84.5 and `/priority` tiers besi
 | "a struck provider cell is left out for the task" | opencode | the task's earlier ride struck `harness-gave-up` on deepinfra || atlas-cloud first; another task still pins deepinfra |
 | "a cooled provider cell is left out" | opencode | deepinfra answered 429 (retry-after 30) on the previous request || atlas-cloud first; +30 s deepinfra again |
 | "no snapshot for the model: the request rides unpinned ⚖" | opencode (M′) | — || the upstream body carries no `provider` key |
+
+<a id="failover--before-the-first-byte-only"></a>
 
 ### Failover — before the first byte only
 

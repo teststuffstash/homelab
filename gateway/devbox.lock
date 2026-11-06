@@ -47,6 +47,93 @@
       "last_modified": "2026-10-14T08:20:44Z",
       "resolved": "github:NixOS/nixpkgs/319e4cebef10cbb636c6ea392137b52ad105336a?lastModified=1791966044&narHash=sha256-t1hT8UW97rFCWCJO7%2FpClvu0AhLN5V3uir2M0ic4w%2FQ%3D"
     },
+    "lychee@latest": {
+      "last_modified": "2026-10-02T22:55:44Z",
+      "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#lychee",
+      "source": "devbox-search",
+      "version": "0.24.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1wnjphvm60xch0r892p16hpmsavwc5wf-lychee-0.24.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1wnjphvm60xch0r892p16hpmsavwc5wf-lychee-0.24.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/cq1g1j8fwyb41l5xpkb107271p3qkyqh-lychee-0.24.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/cq1g1j8fwyb41l5xpkb107271p3qkyqh-lychee-0.24.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/wrkqg7j3wqg6hfrmx7cyvaiirwfxla5y-lychee-0.24.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/wrkqg7j3wqg6hfrmx7cyvaiirwfxla5y-lychee-0.24.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/zf1zpdxlgfccp0yfdaw8v9y2lga77bwd-lychee-0.24.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/zf1zpdxlgfccp0yfdaw8v9y2lga77bwd-lychee-0.24.2"
+        }
+      }
+    },
+    "nodejs@22": {
+      "last_modified": "2026-10-02T22:55:44Z",
+      "plugin_version": "0.0.5",
+      "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#nodejs_22",
+      "source": "devbox-search",
+      "version": "22.23.3",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/31a8g9hg40fh1gs7241pyszrq8a4bajb-nodejs-22.23.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/31a8g9hg40fh1gs7241pyszrq8a4bajb-nodejs-22.23.3"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1nzpiv2idya913acb1wd1ydxvd2dw0pz-nodejs-22.23.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1nzpiv2idya913acb1wd1ydxvd2dw0pz-nodejs-22.23.3"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qshvhyv92g772jjsm2zrgzxc4ai4iqfx-nodejs-22.23.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/qshvhyv92g772jjsm2zrgzxc4ai4iqfx-nodejs-22.23.3"
+        }
+      }
+    },
     "rclone@latest": {
       "last_modified": "2026-10-02T22:55:44Z",
       "resolved": "github:NixOS/nixpkgs/55ba7f49ef2962b42cbd126522b7df5f95037679#rclone",

@@ -388,3 +388,8 @@ CODEOWNERS; §Reach below).
    tool flag both repos get from the pin (`gateway/specs/README.md` §Rules) or a repo gate beside
    `spec_gate.py`'s join ratchet is the open fork; homelab#2860 (GW-REDACT rewritten to v0.6.1) is the
    rule where they would first apply. File them in the snippets repo when the pin moves.
+   **RESOLVED for the half-join guard (2026-11-06): a repo gate, the oracle-fleet shape** — oracle
+   answered it first (`scripts/spec-join-ratchet.py`, `row-unproven` as the fifth join code, run
+   through the pinned wheel's own join), and the gateway adopted the same script
+   (`gateway/scripts/spec-join-ratchet.py` + `spec-join-baseline.json`; the hand-rolled join in
+   `spec_gate.py` retired). Parametrize-from-spec stays open, a snippets-repo item.
