@@ -1,66 +1,25 @@
-"""GW-RAIL-OPENROUTER §Attribution / §Selection / §Failover — the provider axis (specs/endpoints/openai-chat.md;
-operator rulings 2026-10-19, homelab#2741: `:exacto` is not ported).
+"""GW-RAIL-OPENROUTER §Attribution / §Selection / §Failover — the provider axis
+(specs/endpoints/openai-chat.md; operator rulings 2026-10-19, homelab#2741: `:exacto` is not ported).
 
-World `policy-default · openrouter-endpoints` unless a row says `(no snapshot)`: the store holds the
-endpoint snapshot of `deepseek/deepseek-v4.1-flash` (tests/fixtures/openrouter-endpoints/, ten endpoints
-trimmed from the live answer of 2026-10-19), the fake openrouter upstream answers a PINNED request as
-`provider_behaviours[slug]` says and names the serving provider in every 200. A worker with harness
-opencode, `rail: openrouter`, `tier: heavy` rides v4.1-flash (covered); `tier: standard` rides
-`deepseek/deepseek-v4-flash` (no snapshot: unpinned). M = deepseek/deepseek-v4.1-flash.
-
-Attribution — the answer names the cell:
-
-| description | ride | the answer names || request row `provider` | strike `provider` |
-|---|---|---||---|---|
-| a chat completion's provider is the cell | pinned deepinfra, upstream-ok | `provider: "DeepInfra"` || deepinfra | — |
-| a stream's first chunk names the cell | pinned deepinfra, upstream-stream | the first chunk's `provider: "DeepInfra"` || deepinfra | — |
-| the snapshot joins the display name to the slug provider.order uses | pinned inference-net (deepinfra + atlas-cloud + morph struck) | `provider: "InferenceNet"` || inference-net | — |
-| a name the snapshot lacks is slugged by rule | unpinned (M' = v4-flash, no snapshot), upstream-ok | `provider: "Sail Research"` || sail-research (lower-case, non-alphanumerics → `-`) | — |
-| the rule is not the tag: a snapshot-less name may differ from its slug | unpinned (M'), upstream-ok | `provider: "OpenInference"` || openinference (the tag reads `open-inference`) | — |
-| an answer that names no provider is unattributed | unpinned (M'), upstream-ok, no `provider` || '' | — |
-| the answer's name outranks the pin | pinned deepinfra; the fake answers as AtlasCloud || atlas-cloud (logged) | — |
-| a transport strike carries the provider | unpinned (M'), upstream-stream-truncated, `provider: "Sail Research"` || sail-research | stream-incomplete @ sail-research |
-
-Selection — the gateway's own evidence, never `:exacto`:
-
-| description | harness | arrange || the order (`provider.order[0]` of successive attempts), or the pin |
-|---|---|---||---|
-| the floors: ≥ fp8, every tool-choice mode the harness uses, uptime_1d ≥ 95, status 0 | opencode | — || deepinfra, atlas-cloud, morph, inference-net, baidu (dropped: open-inference fp4, alibaba unknown, parasail uptime 77.4) |
-| an endpoint with no uptime figure is dropped, the model's other endpoints stand | opencode | the snapshot with atlas-cloud/fp8's uptime_last_1d null || deepinfra, morph, inference-net, baidu (dropped: atlas-cloud uptime_1d unknown, and the three above) |
-| a harness that needs required + function drops the providers without them | claude (anthropic dialect) | — || deepinfra, atlas-cloud, inference-net (morph, baidu dropped) |
-| the pin is one provider with fallbacks off | opencode | — || upstream body `provider = {order: [deepinfra], allow_fallbacks: false}`; model and messages unchanged |
-| a provider's service tiers are one order entry: the default tag represents | opencode | deepinfra/fp8, /flex (uptime 84.5), /priority in the snapshot || the deepinfra entry is `deepinfra/fp8` (out $0.42/M) |
-| the order is price ÷ the cell's clean-ride rate | opencode | 5 judged rides on deepinfra, 2 clean (rate 0.4: 0.42 ÷ 0.4 = 1.05) || atlas-cloud first (0.54), deepinfra 4th (before baidu's 1.2) |
-| under min_rides the uptime is the prior | opencode | 4 judged rides on deepinfra, 0 clean || deepinfra still first (prior: uptime 100) |
-| a struck provider cell is left out for the task | opencode | the task's earlier ride struck `harness-gave-up` on deepinfra || atlas-cloud first; another task still pins deepinfra |
-| a cooled provider cell is left out | opencode | deepinfra answered 429 (retry-after 30) on the previous request || atlas-cloud first; +30 s deepinfra again |
-| no snapshot for the model: the request rides unpinned | opencode (M') | — || the upstream body carries no `provider` key |
-
-Failover — before the first byte only, bounded, silent to the harness:
-
-| description | provider_behaviours || upstream calls (pins, in order) | status | the harness sees | strikes (class @ provider) | `gateway_provider_failovers_total{model=M,from,to}` |
-|---|---||---|---|---|---|---|
-| fails over once | deepinfra: upstream-500 || deepinfra, atlas-cloud | 200 | one JSON answer, served by AtlasCloud | provider-5xx @ deepinfra | deepinfra→atlas-cloud 1 |
-| fails over twice | deepinfra: upstream-500, atlas-cloud: upstream-html || deepinfra, atlas-cloud, morph | 200 | served by Morph | provider-5xx @ deepinfra, provider-5xx @ atlas-cloud | deepinfra→atlas-cloud 1, atlas-cloud→morph 1 |
-| exhausts the order: the last answer is the typed error, bounded by max_providers_per_request 3 | deepinfra, atlas-cloud, morph: upstream-500 || deepinfra, atlas-cloud, morph (inference-net never asked) | 500 | the last provider's 500 body | provider-5xx @ deepinfra, @ atlas-cloud, @ morph | 2 series, 1 each |
-| a 429 fails over and cools only that provider's cell | deepinfra: upstream-429 || deepinfra, atlas-cloud | 200 | served by AtlasCloud | none (a 429 is a cooldown) | deepinfra→atlas-cloud 1 |
-| the cooled provider's model still admits | deepinfra: upstream-429 || deepinfra, atlas-cloud | 200 | served by AtlasCloud | none | `gateway_cells_cooled{rail=openrouter}` 1; `POST /sessions` worker, rail openrouter, tier heavy → dispatch M |
-| a provider's own refusal (a 4xx naming it) fails over | deepinfra: upstream-provider-400 || deepinfra, atlas-cloud | 200 | served by AtlasCloud | refused @ deepinfra | deepinfra→atlas-cloud 1 |
-| a 2xx the dialect cannot read is a pre-byte failure | deepinfra: upstream-html || deepinfra, atlas-cloud | 200 | served by AtlasCloud | provider-5xx @ deepinfra | deepinfra→atlas-cloud 1 |
-| a post-byte failure never fails over | deepinfra: upstream-stream-truncated || deepinfra | 200, incomplete (no-terminal) | the cut stream | stream-incomplete @ deepinfra | none |
-| every provider cooled or struck mid-session: the request rides unpinned | the five eligible cells cooled by 429s || the next request carries no `provider` key | 200 | served (the lottery) | — | — |
+One parametrized case per table row: the argnames are the table's header cells (`name?` is
+`expected_name`), the ids its description cells, the literals the page's Legend lines. World
+`policy-default · openrouter-endpoints`: the store holds the endpoint snapshot of
+`deepseek/deepseek-v4.1-flash` (M — the heavy tier; tests/fixtures/openrouter-endpoints/, ten
+endpoints trimmed from the live answer of 2026-10-19), the fake openrouter upstream answers a PINNED
+request as the `providers` cell says and names the serving provider in every 200;
+`deepseek/deepseek-v4-flash` (M′ — the standard tier) has no snapshot entry and rides unpinned.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict
 
 import pytest
 
-from agent_gateway.providers import _row, eligible, parse_endpoints, representatives
+from agent_gateway.providers import SNAPSHOT_SOURCE, _row, eligible, parse_endpoints, representatives
 
+from ._rail_rows import NONE, inputs, parse_pairs
 from .conftest import (
     OPENROUTER_ENDPOINTS_FIXTURES,
     attach_json,
@@ -81,33 +40,64 @@ pytestmark = rule("GW-RAIL-OPENROUTER")
 RAIL = "openrouter"
 M = "deepseek/deepseek-v4.1-flash"  # covered by the snapshot (the heavy tier)
 M2 = "deepseek/deepseek-v4-flash"  # not covered (the standard tier): rides unpinned
+SYMBOL = {M: "M", M2: "M′"}
+TIER = {"M": "heavy", "M′": "standard"}
 WORLD = "openrouter-endpoints"
 PATH = "/openai/v1/chat/completions"
-H = 3600
+NO_BLOCK = "(no provider block)"
+EMPTY = "(empty)"
+ELIGIBLE = ("deepinfra", "atlas-cloud", "morph", "inference-net", "baidu")
 
 
-@pytest.fixture
-async def orworld(app, store, upstreams):
-    """The `openrouter-endpoints` world: the snapshot seeded, the fake taught the display names."""
-    body = seed_openrouter_endpoints(store, upstreams[RAIL])
-    app.state.providers.reload()
+def _world(upstream: str = "upstream-ok", note: str | None = None) -> None:
+    world(upstream=f"{WORLD} · {upstream}", note=note)
+
+
+def _seed(app, store, upstream, snapshot: str = "the ten endpoints") -> dict:
+    """The world's endpoint snapshot (specs/worlds/README.md §The openrouter-endpoints world), as the
+    `snapshot` cell spells it: `the ten endpoints` = the fixture as read; `<tag> at uptime_last_1d
+    null` = the same with that endpoint's `uptime_last_1d` set to null (the vendor's answer for a
+    fresh or idle endpoint)."""
+    with given(f"snapshot = {snapshot}: the store holds M's endpoint snapshot, every cell eligible; the fake knows the display names"):
+        if snapshot == "the ten endpoints":
+            body = seed_openrouter_endpoints(store, upstream)
+        else:
+            tag = snapshot.split(" at uptime_last_1d null")[0]
+            raw = json.loads((OPENROUTER_ENDPOINTS_FIXTURES / "deepseek-v4.1-flash.json").read_text(encoding="utf-8"))
+            for e in raw["data"]["endpoints"]:
+                if e["tag"] == tag:
+                    e["uptime_last_1d"] = None
+            parsed = parse_endpoints(raw)
+            body = {"models": {parsed["model"]: {"endpoints": parsed["endpoints"]}}}
+            upstream.provider_names.update({e["slug"]: e["provider_name"] for e in parsed["endpoints"]})
+            store.snapshot_save(SNAPSHOT_SOURCE, 1_800_000_000.0, body)
+            for e in parsed["endpoints"]:
+                store.cell_set(parsed["model"], e["slug"], "eligible", None, 1_800_000_000.0, None)
+        app.state.providers.reload()
+        attach_json("the snapshot's endpoints (tag · quantization · uptime_1d · out $/M)",
+                    [f"{e['tag']} · {e['quantization']} · {e['uptime_1d']} · {e['out_price']}" for e in body["models"][M]["endpoints"]])
     return body
 
 
 def _pins(upstream) -> list[str | None]:
     return [((c["body"] or {}).get("provider") or {}).get("order", [None])[0] if isinstance((c["body"] or {}).get("provider"), dict) else None
-            for c in upstream.calls]
+            for c in upstream.calls if c["path"] in ("/v1/chat/completions", "/v1/messages")]
 
 
-async def _session(gw, tier: str = "heavy", task: str = "homelab-2741-r1", harness: str = "opencode", **extra) -> dict:
-    with given(f"a session on rail openrouter: worker, harness {harness}, tier {tier} ({M if tier == 'heavy' else M2}), task {task}"):
+def _pin_cell(pin: str | None) -> str:
+    return pin or NONE
+
+
+async def _session(gw, model: str = "M", task: str = "homelab-2741-r1", harness: str = "opencode", **extra) -> dict:
+    tier = TIER[model]
+    with given(f"a session on rail openrouter: worker, harness {harness}, tier {tier} — model = {model} ({M if model == 'M' else M2}), task {task}"):
         return await open_session(gw, role="worker", harness=harness, rail=RAIL, tier=tier, task=task, **extra)
 
 
 async def _ride(gw, doc: dict, stream: bool = False, label: str = ""):
     model = doc["model"]
     body = {"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8, **({"stream": True} if stream else {})}
-    with when(f"POST {PATH} model {model}{' stream' if stream else ''}{label}"):
+    with when(f"POST {PATH} model {model}{' stream' if stream else ''} · {label}"):
         return await gw.post(PATH, json=body, headers=bearer(doc))
 
 
@@ -115,356 +105,336 @@ def _row_provider(store, doc: dict) -> list[str]:
     return [r["provider"] for r in store.requests_for(doc["session"]["id"])]
 
 
-def _strikes(store, task: str) -> list[tuple[str, str, str]]:
-    return [(s["class"], s["provider"], s["source"]) for s in store.strikes_for("platform", task)]
+def _strikes(store, task: str) -> str:
+    """`strikes?`: `class @ provider` per strike of the task, in store order; `(none)`."""
+    return ", ".join(f"{s['class']} @ {s['provider']}" for s in store.strikes_for("platform", task)) or NONE
 
 
-async def _series(gw, family: str, labels: dict[str, str]) -> float | None:
+async def _metrics(gw) -> str:
     with quiet():
-        text = (await gw.get("/metrics")).text
-    want = family + "{" + ",".join(f'{k}="{v}"' for k, v in labels.items()) + "}"
-    m = re.search("^" + re.escape(want) + r" (\S+)$", text, re.M)
-    attach_json(f"sample: {want}", {"line": m.group(0) if m else None})
-    return float(m.group(1)) if m else None
+        return (await gw.get("/metrics")).text
 
 
-# -- attribution -----------------------------------------------------------------------------------
-async def test_chat_provider_is_the_cell(gw, store, upstreams, orworld):
-    """row: a chat completion's provider is the cell"""
-    world(upstream="upstream-ok", note=WORLD)
-    doc = await _session(gw)
-    r = await _ride(gw, doc)
-    then_eq("status", r.status_code, 200)
-    then_eq("the answer's provider", r.json().get("provider"), "DeepInfra")
-    then_eq("the request row's provider", _row_provider(store, doc), ["deepinfra"])
+def _failovers(text: str, attempts: list[str | None]) -> str:
+    """`failovers?`: every `gateway_provider_failovers_total{model=M,from,to}` sample as `from→to n`,
+    in the order the attempts moved (the exposition sorts labels alphabetically); `(none)`."""
+    found = re.findall(rf'^gateway_provider_failovers_total\{{model="{re.escape(M)}",from="([^"]+)",to="([^"]+)"\}} (\S+)$', text, re.M)
+    order = [p for p in attempts if p]
+    found.sort(key=lambda x: order.index(x[0]) if x[0] in order else len(order))
+    return ", ".join(f"{f}→{t} {int(float(n))}" for f, t, n in found) or NONE
 
 
-async def test_stream_first_chunk_names_the_cell(gw, store, upstreams, orworld):
-    """row: a stream's first chunk names the cell"""
-    world(upstream="upstream-stream", note=WORLD)
-    upstreams[RAIL].behaviour = "upstream-stream"
-    doc = await _session(gw)
-    r = await _ride(gw, doc, stream=True)
-    then_eq("status", r.status_code, 200)
-    first = json.loads(r.text.split("\n")[0][5:])
-    then_eq("the first chunk's provider", first.get("provider"), "DeepInfra")
-    then_eq("the request row's provider", _row_provider(store, doc), ["deepinfra"])
+def _named_provider(r) -> str:
+    """`served_by?` / the answer's provider: a completion's `provider`, a stream's first chunk's,
+    an error envelope's `error.metadata.provider_name`; `(none)`."""
+    ctype = r.headers.get("content-type") or ""
+    if "event-stream" in ctype:
+        first = json.loads(r.text.split("\n")[0][5:])
+        return first.get("provider") or NONE
+    if "json" not in ctype:
+        return NONE
+    body = r.json()
+    if isinstance(body.get("error"), dict):
+        return (body["error"].get("metadata") or {}).get("provider_name") or NONE
+    return body.get("provider") or NONE
 
 
-async def test_snapshot_joins_display_to_slug(gw, store, upstreams, orworld):
-    """row: the snapshot joins the display name to the slug provider.order uses"""
-    world(upstream="upstream-ok", note=WORLD)
-    task = "homelab-2741-join"
-    with given("the task's earlier rides struck deepinfra, atlas-cloud and morph (harness-gave-up)"):
-        for _ in range(3):
-            with quiet():
-                d = await open_session(gw, role="worker", harness="opencode", rail=RAIL, tier="heavy", task=task)
-                await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(d))
-                await gw.post(f"/sessions/{d['session']['id']}/outcome", json={"class": "harness-gave-up"})
-        attach_json("struck", _strikes(store, task))
-    doc = await _session(gw, task=task)
-    r = await _ride(gw, doc)
-    then_eq("status", r.status_code, 200)
-    then_eq("the answer's provider (the display name)", r.json().get("provider"), "InferenceNet")
-    then_eq("the request row's provider (the tag's base slug)", _row_provider(store, doc), ["inference-net"])
+async def _strike_for(gw, task: str, slugs: list[str]) -> None:
+    """One ride per slug on `task`, each struck `harness-gave-up` — the first-ordered cell each time."""
+    for _ in slugs:
+        with quiet():
+            d = await open_session(gw, role="worker", harness="opencode", rail=RAIL, tier="heavy", task=task)
+            await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(d))
+            await gw.post(f"/sessions/{d['session']['id']}/outcome", json={"class": "harness-gave-up"})
 
 
-RULE_ROWS = [
-    ("a name the snapshot lacks is slugged by rule", "Sail Research", "sail-research"),
-    ("the rule is not the tag: a snapshot-less name may differ from its slug", "OpenInference", "openinference"),
-    ("an answer that names no provider is unattributed", None, ""),
+# -- Attribution: the answer names the cell -------------------------------------------------------
+PINNED_ROWS = [  # description | model | upstream | struck | answer_provider | pin? | row_provider?
+    ("a chat completion's provider is the cell", "M", "upstream-ok", NONE, "DeepInfra", "deepinfra", "deepinfra"),
+    ("a stream's first chunk names the cell", "M", "upstream-stream", NONE, "DeepInfra", "deepinfra", "deepinfra"),
+    ("the snapshot joins the display name to the slug provider.order uses", "M", "upstream-ok", "deepinfra, atlas-cloud, morph", "InferenceNet",
+     "inference-net", "inference-net"),
+    ("the answer's name outranks the pin ⚖", "M", "upstream-ok", NONE, "AtlasCloud", "deepinfra", "atlas-cloud"),
 ]
 
 
-@pytest.mark.parametrize(("display", "slug"), [r[1:] for r in RULE_ROWS], ids=[r[0] for r in RULE_ROWS])
-async def test_attribution_rule(gw, store, upstreams, orworld, display, slug):
-    world(upstream="upstream-ok", note=f"{WORLD}; {M2} has no snapshot entry")
-    upstreams[RAIL].provider_display = display
-    doc = await _session(gw, tier="standard")
-    r = await _ride(gw, doc, label=f" — the answer names display = {display!r}, expected slug = {slug!r}")
-    then_eq("status", r.status_code, 200)
-    then_eq("the upstream body carries no provider pin", "provider" in (upstreams[RAIL].calls[-1]["body"] or {}), False)
-    then_eq("the request row's provider", _row_provider(store, doc), [slug],
-            claim=f"the request row's provider = {slug!r} (the answer named {display!r})")
+@pytest.mark.parametrize(("model", "upstream", "struck", "answer_provider", "expected_pin", "expected_row_provider"),
+                         [r[1:] for r in PINNED_ROWS], ids=[r[0] for r in PINNED_ROWS])
+async def test_attribution_pinned(gw, app, store, upstreams, model, upstream, struck, answer_provider, expected_pin, expected_row_provider):
+    _world(upstream)
+    _seed(app, store, upstreams[RAIL])
+    upstreams[RAIL].behaviour = upstream
+    task = "homelab-2741-attr"
+    if struck != NONE:
+        with given(f"struck = {struck}: the task's earlier rides struck those cells (harness-gave-up)"):
+            await _strike_for(gw, task, [s.strip() for s in struck.split(",")])
+            attach_json("the task's strikes", _strikes(store, task))
+    with given(f"answer_provider = {answer_provider}: the display name the upstream's every answer carries"):
+        upstreams[RAIL].provider_names = {slug: answer_provider for slug in upstreams[RAIL].provider_names}
+    doc = await _session(gw, model, task=task)
+    r = await _ride(gw, doc, stream=upstream == "upstream-stream", label=inputs(model=model, upstream=upstream, struck=struck, answer_provider=answer_provider))
+    with then(f"status 200; pin? = {expected_pin}; the answer names {answer_provider}",
+              status={"expected": 200, "actual": r.status_code}, expected_pin={"expected": expected_pin, "actual": _pin_cell(_pins(upstreams[RAIL])[-1])},
+              answer_provider={"expected": answer_provider, "actual": _named_provider(r)}):
+        assert r.status_code == 200 and _pin_cell(_pins(upstreams[RAIL])[-1]) == expected_pin and _named_provider(r) == answer_provider
+    then_eq("expected_row_provider", _row_provider(store, doc)[-1], expected_row_provider, claim=f"row_provider? = {expected_row_provider} (requests.provider)")
 
 
-async def test_answer_outranks_pin(gw, store, upstreams, orworld):
-    """row: the answer's name outranks the pin"""
-    world(upstream="upstream-ok", note=f"{WORLD}; the fake answers a deepinfra pin as AtlasCloud")
-    upstreams[RAIL].provider_names["deepinfra"] = "AtlasCloud"
-    doc = await _session(gw)
-    r = await _ride(gw, doc)
-    then_eq("status", r.status_code, 200)
-    then_eq("the pin", _pins(upstreams[RAIL]), ["deepinfra"])
-    then_eq("the request row's provider (the answer's)", _row_provider(store, doc), ["atlas-cloud"])
+# -- Attribution: a name the snapshot lacks --------------------------------------------------------
+UNPINNED_ROWS = [  # description | model | upstream | answer_provider | pin? | row_provider? | strike?
+    ("a name the snapshot lacks is slugged by rule ⚖", "M′", "upstream-ok", "Sail Research", NONE, "sail-research", NONE),
+    ("the rule is not the tag: a snapshot-less name may differ from its slug ⚖", "M′", "upstream-ok", "OpenInference", NONE, "openinference", NONE),
+    ("an answer that names no provider is unattributed", "M′", "upstream-ok", NONE, NONE, EMPTY, NONE),
+    ("a transport strike carries the provider", "M′", "upstream-stream-truncated", "Sail Research", NONE, "sail-research", "stream-incomplete @ sail-research"),
+]
 
 
-async def test_transport_strike_carries_provider(gw, store, upstreams, orworld):
-    """row: a transport strike carries the provider"""
-    world(upstream="upstream-stream-truncated", note=f"{WORLD}; {M2} unpinned, the fake names Sail Research")
-    upstreams[RAIL].behaviour = "upstream-stream-truncated"
-    upstreams[RAIL].provider_display = "Sail Research"
-    task = "homelab-2741-cut"
-    doc = await _session(gw, tier="standard", task=task)
-    r = await _ride(gw, doc, stream=True)
-    then_eq("status", r.status_code, 200)
-    then_eq("the request row's provider", _row_provider(store, doc), ["sail-research"])
-    then_eq("the strike", _strikes(store, task), [("stream-incomplete", "sail-research", "gateway")])
+@pytest.mark.parametrize(("model", "upstream", "answer_provider", "expected_pin", "expected_row_provider", "expected_strike"),
+                         [r[1:] for r in UNPINNED_ROWS], ids=[r[0] for r in UNPINNED_ROWS])
+async def test_attribution_unpinned(gw, app, store, upstreams, model, upstream, answer_provider, expected_pin, expected_row_provider, expected_strike):
+    _world(upstream, note=f"{M2} has no snapshot entry")
+    _seed(app, store, upstreams[RAIL])
+    upstreams[RAIL].behaviour = upstream
+    upstreams[RAIL].provider_display = None if answer_provider == NONE else answer_provider
+    task = "homelab-2741-unpinned"
+    doc = await _session(gw, model, task=task)
+    r = await _ride(gw, doc, stream=upstream.startswith("upstream-stream"), label=inputs(model=model, upstream=upstream, answer_provider=answer_provider))
+    with then(f"status 200; pin? = {expected_pin} (the upstream body carries no provider block)",
+              status={"expected": 200, "actual": r.status_code}, expected_pin={"expected": expected_pin, "actual": _pin_cell(_pins(upstreams[RAIL])[-1])}):
+        assert r.status_code == 200 and _pin_cell(_pins(upstreams[RAIL])[-1]) == expected_pin
+    then_eq("expected_row_provider", _row_provider(store, doc)[-1] or EMPTY, expected_row_provider,
+            claim=f"row_provider? = {expected_row_provider} (the answer named {answer_provider})")
+    then_eq("expected_strike", _strikes(store, task), expected_strike, claim=f"strike? = {expected_strike}")
 
 
-# -- selection -------------------------------------------------------------------------------------
-async def _order_seen(gw, upstreams, harness: str, task: str, n: int) -> list[str]:
-    """The first n providers the gateway pins for `task`: n rides on one session, each striking the
-    provider it rode (harness-gave-up on a fresh session of the task) so the next pins the next."""
-    seen: list[str] = []
-    for _ in range(n):
-        with quiet():
-            d = await open_session(gw, role="worker", harness=harness, rail=RAIL, tier="heavy", task=task)
-            path = "/anthropic/v1/messages" if harness == "claude" else PATH
-            r = await gw.post(path, json={"model": M, "messages": [], "max_tokens": 8}, headers=bearer(d))
-            assert r.status_code == 200, r.text
-            seen.append(_pins(upstreams[RAIL])[-1])
-            await gw.post(f"/sessions/{d['session']['id']}/outcome", json={"class": "harness-gave-up"})
-    return seen
+# -- Selection: the order -------------------------------------------------------------------------
+ORDER_ROWS = [  # description | harness | snapshot | judged | order?
+    ("the floors: ≥ fp8, every tool-choice mode the harness uses, uptime_1d ≥ 95, status 0 ⚖", "opencode", "the ten endpoints", NONE,
+     "deepinfra, atlas-cloud, morph, inference-net, baidu"),
+    ("an endpoint with no uptime figure is dropped, the model's other endpoints stand ⚖", "opencode", "atlas-cloud/fp8 at uptime_last_1d null", NONE,
+     "deepinfra, morph, inference-net, baidu"),
+    ("a harness that needs required + function drops the providers without them ⚖", "claude", "the ten endpoints", NONE, "deepinfra, atlas-cloud, inference-net"),
+    ("the order is price ÷ the cell's clean-ride rate ⚖", "opencode", "the ten endpoints", "5 rides on deepinfra, 2 clean",
+     "atlas-cloud, morph, inference-net, deepinfra, baidu"),
+    ("under min_rides the uptime is the prior ⚖", "opencode", "the ten endpoints", "4 rides on deepinfra, 0 clean",
+     "deepinfra, atlas-cloud, morph, inference-net, baidu"),
+]
 
 
-async def test_floors(gw, upstreams, policy, orworld):
-    """row: the floors: ≥ fp8, every tool-choice mode the harness uses, uptime_1d ≥ 95, status 0"""
-    world(upstream="upstream-ok", note=WORLD)
-    with when("five rides on task T (opencode), each striking the provider it rode"):
-        seen = await _order_seen(gw, upstreams, "opencode", "homelab-2741-floors", 5)
-    then_eq("the order", seen, ["deepinfra", "atlas-cloud", "morph", "inference-net", "baidu"])
-    pol = policy.rails[RAIL].providers
-    with when("eligible() over the snapshot's rows for harness opencode"):
-        kept, dropped = eligible([_row(d) for d in orworld["models"][M]["endpoints"]], pol, "opencode")
-    then_eq("dropped, and why", dropped, {"open-inference": "quantization fp4 < fp8", "alibaba": "quantization unknown",
-                                         "parasail": "uptime_1d 77.4359 < 95"})
-    then_eq("kept", sorted(e.slug for e in kept), ["atlas-cloud", "baidu", "deepinfra", "inference-net", "morph"])
-
-
-async def test_floor_no_uptime(policy, orworld):
-    """row: an endpoint with no uptime figure is dropped, the model's other endpoints stand"""
-    world(note=f"{WORLD}; atlas-cloud/fp8's uptime_last_1d set to null (the vendor's answer for a fresh or idle endpoint)")
-    pol = policy.rails[RAIL].providers
-    with given("the snapshot's rows for M, atlas-cloud/fp8's `uptime_last_1d` null, re-parsed by parse_endpoints"):
-        raw = json.loads((OPENROUTER_ENDPOINTS_FIXTURES / "deepseek-v4.1-flash.json").read_text(encoding="utf-8"))
-        for e in raw["data"]["endpoints"]:
-            if e["tag"] == "atlas-cloud/fp8":
-                e["uptime_last_1d"] = None
-        rows = [_row(d) for d in parse_endpoints(raw)["endpoints"]]
-        attach_json("atlas-cloud/fp8 as parsed", next(asdict(r) for r in rows if r.tag == "atlas-cloud/fp8"))
-    with when("eligible() over those rows for harness opencode"):
-        kept, dropped = eligible(rows, pol, "opencode")
-    then_eq("dropped, and why", dropped, {"atlas-cloud": "uptime_1d unknown", "open-inference": "quantization fp4 < fp8",
-                                         "alibaba": "quantization unknown", "parasail": "uptime_1d 77.4359 < 95"})
-    then_eq("kept", sorted(e.slug for e in kept), ["baidu", "deepinfra", "inference-net", "morph"])
-
-
-async def test_floors_claude(gw, upstreams, orworld):
-    """row: a harness that needs required + function drops the providers without them"""
-    world(upstream="upstream-ok", note=f"{WORLD}; claude speaks the anthropic dialect on this rail")
-    with when("three rides on task T (claude), each striking the provider it rode"):
-        seen = await _order_seen(gw, upstreams, "claude", "homelab-2741-claude", 3)
-    then_eq("the order", seen, ["deepinfra", "atlas-cloud", "inference-net"])
-
-
-async def test_pin_shape(gw, upstreams, orworld):
-    """row: the pin is one provider with fallbacks off"""
-    world(upstream="upstream-ok", note=WORLD)
-    doc = await _session(gw)
-    r = await _ride(gw, doc)
-    then_eq("status", r.status_code, 200)
-    body = upstreams[RAIL].calls[-1]["body"]
-    then_eq("the upstream body's provider block", body.get("provider"), {"order": ["deepinfra"], "allow_fallbacks": False})
-    then_eq("the rest of the body is the harness's", {k: v for k, v in body.items() if k != "provider"},
-            {"model": M, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8})
-
-
-async def test_tiers_are_one_entry(orworld, policy):
-    """row: a provider's service tiers are one order entry: the default tag represents"""
-    world(note=f"{WORLD} (the snapshot read directly)")
-    eps = [_row(d) for d in orworld["models"][M]["endpoints"]]
-    with when("representatives() over the snapshot's deepinfra rows"):
-        reps = representatives(eps)
-    then_eq("the deepinfra tags in the snapshot", sorted(e.tag for e in eps if e.slug == "deepinfra"),
-            ["deepinfra/fp8", "deepinfra/fp8/flex", "deepinfra/fp8/priority"])
-    then_eq("the representative", (reps["deepinfra"].tag, reps["deepinfra"].out_price, reps["deepinfra"].service_tier),
-            ("deepinfra/fp8", 0.42, None))
-
-
-async def _judge(gw, upstreams, outcomes: list[str]) -> None:
-    """Arrange judged rides on the first-ordered provider: one session per outcome, each on its own task."""
+async def _judge(gw, judged: str) -> None:
+    """`judged` = `N rides on deepinfra, K clean`: N sessions on their own tasks, each one ride on the
+    first-ordered cell (deepinfra, fresh) and an outcome — K `clean`, the rest `harness-gave-up`."""
+    m = re.match(r"(\d+) rides on deepinfra, (\d+) clean", judged)
+    n, k = int(m.group(1)), int(m.group(2))
+    outcomes = ["clean"] * k + ["harness-gave-up"] * (n - k)
     for i, klass in enumerate(outcomes):
         with quiet():
             d = await open_session(gw, role="worker", harness="opencode", rail=RAIL, tier="heavy", task=f"homelab-2741-judge-{i}")
             await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(d))
             await gw.post(f"/sessions/{d['session']['id']}/outcome", json={"class": klass})
-    attach_json("judged rides on deepinfra", {"outcomes": outcomes, "pins": _pins(upstreams[RAIL])})
 
 
-async def test_order_is_price_over_clean_rate(gw, upstreams, store, orworld):
-    """row: the order is price ÷ the cell's clean-ride rate"""
-    world(upstream="upstream-ok", note=WORLD)
-    with given("5 judged rides on deepinfra: 2 clean, 3 harness-gave-up (rate 0.4)"):
-        await _judge(gw, upstreams, ["clean", "harness-gave-up", "clean", "harness-gave-up", "harness-gave-up"])
-    then_eq("the store's cell outcomes", store.cell_outcomes(RAIL, M), {"deepinfra": (2, 5)})
-    with when("five rides on a new task, each striking the provider it rode"):
-        seen = await _order_seen(gw, upstreams, "opencode", "homelab-2741-rate", 5)
-    then_eq("the order", seen, ["atlas-cloud", "morph", "inference-net", "deepinfra", "baidu"])
-
-
-async def test_prior_under_min_rides(gw, upstreams, store, orworld):
-    """row: under min_rides the uptime is the prior"""
-    world(upstream="upstream-ok", note=WORLD)
-    with given("4 judged rides on deepinfra, none clean (min_rides 5)"):
-        await _judge(gw, upstreams, ["harness-gave-up"] * 4)
-    then_eq("the store's cell outcomes", store.cell_outcomes(RAIL, M), {"deepinfra": (0, 4)})
-    doc = await _session(gw, task="homelab-2741-prior")
-    r = await _ride(gw, doc)
-    then_eq("status", r.status_code, 200)
-    then_eq("the pin", _pins(upstreams[RAIL])[-1], "deepinfra")
-
-
-async def test_struck_cell_left_out(gw, upstreams, store, orworld):
-    """row: a struck provider cell is left out for the task"""
-    world(upstream="upstream-ok", note=WORLD)
-    task = "homelab-2741-struck"
-    with given("the task's earlier ride struck harness-gave-up on deepinfra"):
+async def _walk(gw, upstreams, harness: str, task: str) -> tuple[list[str], dict]:
+    """The order: successive rides of one task, each striking the cell it rode (harness-gave-up) so
+    the next ride pins the next cell, until the task's admission defers (`cells-exhausted`: every
+    eligible cell struck). → (the pins in order, the closing admission answer)."""
+    seen: list[str] = []
+    answer: dict = {}
+    for _ in range(len(ELIGIBLE) + 1):
         with quiet():
-            d = await open_session(gw, role="worker", harness="opencode", rail=RAIL, tier="heavy", task=task)
-            await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(d))
-            await gw.post(f"/sessions/{d['session']['id']}/outcome", json={"class": "harness-gave-up"})
-        attach_json("the strike", _strikes(store, task))
-    doc = await _session(gw, task=task)
-    r = await _ride(gw, doc, label=" (the task)")
-    then_eq("status · the task's pin", (r.status_code, _pins(upstreams[RAIL])[-1]), (200, "atlas-cloud"))
-    with then("another task still pins deepinfra (the strike is per task)"):
-        with quiet():
-            other = await open_session(gw, role="worker", harness="opencode", rail=RAIL, tier="heavy", task="homelab-2741-other")
-            r2 = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(other))
-        check("status · another task's pin", (r2.status_code, _pins(upstreams[RAIL])[-1]), (200, "deepinfra"))
+            a = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "harness": harness, "rail": RAIL, "tier": "heavy", "task": task})
+            answer = a.json()
+            if answer.get("decision") != "dispatch":
+                break
+            path = "/anthropic/v1/messages" if harness == "claude" else PATH
+            r = await gw.post(path, json={"model": M, "messages": [], "max_tokens": 8}, headers=bearer(answer))
+            assert r.status_code == 200, r.text
+            pin = _pins(upstreams[RAIL])[-1]
+            await gw.post(f"/sessions/{answer['session']['id']}/outcome", json={"class": "harness-gave-up"})
+        if pin is None:
+            break
+        seen.append(pin)
+    return seen, answer
 
 
-async def test_cooled_cell_left_out(gw, upstreams, clock, orworld):
-    """row: a cooled provider cell is left out"""
-    world(upstream="upstream-429", note=f"{WORLD}; deepinfra answers 429 retry-after 30 once")
-    upstreams[RAIL].provider_behaviours["deepinfra"] = "upstream-429"
-    doc = await _session(gw)
-    with given("a ride whose deepinfra attempt answered 429 (failed over to atlas-cloud)"):
-        with quiet():
-            r = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))
-        attach_json("the ride", {"status": r.status_code, "pins": _pins(upstreams[RAIL])})
-        upstreams[RAIL].provider_behaviours.clear()
-    r = await _ride(gw, doc, label=" (the next request)")
-    then_eq("status", r.status_code, 200)
-    then_eq("the pin while deepinfra is cooled", _pins(upstreams[RAIL])[-1], "atlas-cloud")
-    clock.advance(30)
-    r = await _ride(gw, doc, label=" (+30 s)")
-    then_eq("the pin at the cooldown's reset", _pins(upstreams[RAIL])[-1], "deepinfra")
+@pytest.mark.parametrize(("harness", "snapshot", "judged", "expected_order"), [r[1:] for r in ORDER_ROWS], ids=[r[0] for r in ORDER_ROWS])
+async def test_order(gw, app, store, upstreams, policy, harness, snapshot, judged, expected_order):
+    _world("upstream-ok")
+    body = _seed(app, store, upstreams[RAIL], snapshot)
+    if judged != NONE:
+        with given(f"judged = {judged}"):
+            await _judge(gw, judged)
+            attach_json("the store's cell outcomes for M (clean, judged)", store.cell_outcomes(RAIL, M))
+    with when(f"rides of one task, each striking the cell it rode, until the task's admission defers · {inputs(harness=harness, snapshot=snapshot, judged=judged)}"):
+        seen, closing = await _walk(gw, upstreams, harness, "homelab-2741-order")
+        attach_json("the pins, ride by ride, and the closing admission answer", {"pins": seen, "closing": closing})
+    then_eq("expected_order", ", ".join(seen), expected_order, claim=f"order? = {expected_order}")
+    if judged == NONE:
+        kept, dropped = eligible([_row(d) for d in body["models"][M]["endpoints"]], policy.rails[RAIL].providers, harness)
+        with then(f"the floors' verdict on the snapshot for harness {harness}: dropped {sorted(dropped)}", dropped=dropped, kept=sorted(e.slug for e in kept)):
+            assert sorted(e.slug for e in kept) == sorted(expected_order.split(", "))
 
 
-async def test_no_snapshot_unpinned(gw, upstreams, orworld):
-    """row: no snapshot for the model: the request rides unpinned"""
-    world(upstream="upstream-ok", note=f"{WORLD}; {M2} has no snapshot entry")
-    doc = await _session(gw, tier="standard")
-    r = await _ride(gw, doc)
-    then_eq("status", r.status_code, 200)
-    then_eq("the upstream body's provider key", (upstreams[RAIL].calls[-1]["body"] or {}).get("provider"), None)
-
-
-# -- failover --------------------------------------------------------------------------------------
-FAILOVER_ROWS = [
-    ("fails over once", {"deepinfra": "upstream-500"}, ["deepinfra", "atlas-cloud"], 200, "AtlasCloud",
-     [("provider-5xx", "deepinfra", "gateway")], {("deepinfra", "atlas-cloud"): 1}),
-    ("fails over twice", {"deepinfra": "upstream-500", "atlas-cloud": "upstream-html"}, ["deepinfra", "atlas-cloud", "morph"], 200, "Morph",
-     [("provider-5xx", "deepinfra", "gateway"), ("provider-5xx", "atlas-cloud", "gateway")],
-     {("deepinfra", "atlas-cloud"): 1, ("atlas-cloud", "morph"): 1}),
-    ("exhausts the order: the last answer is the typed error, bounded by max_providers_per_request 3",
-     {"deepinfra": "upstream-500", "atlas-cloud": "upstream-500", "morph": "upstream-500"}, ["deepinfra", "atlas-cloud", "morph"], 500, None,
-     [("provider-5xx", "deepinfra", "gateway"), ("provider-5xx", "atlas-cloud", "gateway"), ("provider-5xx", "morph", "gateway")],
-     {("deepinfra", "atlas-cloud"): 1, ("atlas-cloud", "morph"): 1}),
-    ("a 429 fails over and cools only that provider's cell", {"deepinfra": "upstream-429"}, ["deepinfra", "atlas-cloud"], 200, "AtlasCloud",
-     [], {("deepinfra", "atlas-cloud"): 1}),
-    ("a provider's own refusal (a 4xx naming it) fails over", {"deepinfra": "upstream-provider-400"}, ["deepinfra", "atlas-cloud"], 200, "AtlasCloud",
-     [("refused", "deepinfra", "gateway")], {("deepinfra", "atlas-cloud"): 1}),
-    ("a 2xx the dialect cannot read is a pre-byte failure", {"deepinfra": "upstream-html"}, ["deepinfra", "atlas-cloud"], 200, "AtlasCloud",
-     [("provider-5xx", "deepinfra", "gateway")], {("deepinfra", "atlas-cloud"): 1}),
+# -- Selection: the pin ---------------------------------------------------------------------------
+PIN_ROWS = [  # description | model | cells | pin? | fallbacks?
+    ("the pin is one provider with fallbacks off ⚖", "M", "all eligible", "deepinfra", "off"),
+    ("a struck provider cell is left out for the task", "M", "deepinfra struck by this task", "atlas-cloud", "off"),
+    ("a strike is the task's own: another task still pins the cell", "M", "deepinfra struck by another task", "deepinfra", "off"),
+    ("a cooled provider cell is left out", "M", "deepinfra cooled (429, retry-after 30)", "atlas-cloud", "off"),
+    ("the cooldown over, the cell is pinned again", "M", "deepinfra cooled 30 s ago", "deepinfra", "off"),
+    ("no snapshot for the model: the request rides unpinned ⚖", "M′", "(no snapshot)", NONE, NO_BLOCK),
+    ("every provider cooled or struck mid-session: the request rides unpinned ⚖", "M", "every eligible cell cooled", NONE, NO_BLOCK),
 ]
 
 
-@pytest.mark.parametrize(("behaviours", "calls", "status", "served", "strikes", "failovers"), [r[1:] for r in FAILOVER_ROWS],
-                         ids=[r[0] for r in FAILOVER_ROWS])
-async def test_failover(gw, store, upstreams, orworld, behaviours, calls, status, served, strikes, failovers):
-    world(upstream="upstream-ok", note=f"{WORLD}; provider_behaviours {behaviours}")
-    upstreams[RAIL].provider_behaviours.update(behaviours)
+@pytest.mark.parametrize(("model", "cells", "expected_pin", "expected_fallbacks"), [r[1:] for r in PIN_ROWS], ids=[r[0] for r in PIN_ROWS])
+async def test_pin(gw, app, store, upstreams, clock, model, cells, expected_pin, expected_fallbacks):
+    _world("upstream-ok", note=None if model == "M" else f"{M2} has no snapshot entry")
+    _seed(app, store, upstreams[RAIL])
+    task = "homelab-2741-pin"
+    if "struck" in cells:
+        with given(f"cells = {cells}: an earlier ride of that task struck the cell (harness-gave-up)"):
+            await _strike_for(gw, task if "this task" in cells else "homelab-2741-other", ["deepinfra"])
+    doc = await _session(gw, model, task=task)
+    with given(f"cells = {cells}"):
+        with quiet():
+            if cells.startswith("deepinfra cooled"):
+                upstreams[RAIL].provider_behaviours["deepinfra"] = "upstream-429"
+                await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))  # 429 on deepinfra, failed over
+                upstreams[RAIL].provider_behaviours.clear()
+                if cells.endswith("30 s ago"):
+                    clock.advance(30)
+            elif cells == "every eligible cell cooled":
+                for slug in ELIGIBLE:
+                    upstreams[RAIL].provider_behaviours[slug] = "upstream-429"
+                await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))  # 3 cells cooled
+                await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))  # 2 more
+                upstreams[RAIL].provider_behaviours.clear()
+        attach_json("the arrangement's pins so far, and the strikes on this task and on the other",
+                    {"pins": _pins(upstreams[RAIL]), task: _strikes(store, task), "homelab-2741-other": _strikes(store, "homelab-2741-other")})
+    r = await _ride(gw, doc, label=inputs(model=model, cells=cells))
+    body = upstreams[RAIL].calls[-1]["body"]
+    block = body.get("provider")
+    then_eq("expected_pin", _pin_cell(_pins(upstreams[RAIL])[-1]), expected_pin, claim=f"status {r.status_code}; pin? = {expected_pin}")
+    fallbacks = NO_BLOCK if block is None else ("off" if block.get("allow_fallbacks") is False and len(block.get("order", [])) == 1 else f"{block}")
+    with then(f"fallbacks? = {expected_fallbacks}; the rest of the body is the harness's",
+              expected_fallbacks={"expected": expected_fallbacks, "actual": fallbacks},
+              body={"expected": {"model": doc["model"], "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8},
+                    "actual": {k: v for k, v in body.items() if k != "provider"}}):
+        assert r.status_code == 200
+        assert fallbacks == expected_fallbacks
+        assert {k: v for k, v in body.items() if k != "provider"} == {"model": doc["model"], "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8}
+
+
+# -- Selection: the representative endpoint -------------------------------------------------------
+REPRESENTATIVE_ROWS = [  # description | provider | tags | representative? | out_price?
+    ("a provider's service tiers are one order entry: the default tag represents ⚖", "deepinfra", "deepinfra/fp8, deepinfra/fp8/flex, deepinfra/fp8/priority",
+     "deepinfra/fp8", 0.42),
+]
+
+
+@pytest.mark.parametrize(("provider", "tags", "expected_representative", "expected_out_price"), [r[1:] for r in REPRESENTATIVE_ROWS],
+                         ids=[r[0] for r in REPRESENTATIVE_ROWS])
+async def test_representative(app, store, upstreams, provider, tags, expected_representative, expected_out_price):
+    _world("upstream-ok", note="the snapshot read directly")
+    body = _seed(app, store, upstreams[RAIL])
+    eps = [_row(d) for d in body["models"][M]["endpoints"]]
+    with when(f"representatives() over the snapshot's rows · {inputs(provider=provider, tags=tags)}"):
+        reps = representatives(eps)
+        check("the provider's tags in the snapshot", ", ".join(sorted(e.tag for e in eps if e.slug == provider)), tags)
+    then_eq("expected_representative", reps[provider].tag, expected_representative, claim=f"representative? = {expected_representative} (service_tier {reps[provider].service_tier})")
+    then_eq("expected_out_price", reps[provider].out_price, expected_out_price, claim=f"out_price? = {expected_out_price}")
+
+
+# -- Failover: before the first byte ---------------------------------------------------------------
+FAILOVER_ROWS = [  # description | providers | attempts? | status? | served_by? | strikes? | failovers?
+    ("fails over once", "deepinfra: upstream-500", "deepinfra, atlas-cloud", 200, "AtlasCloud", "provider-5xx @ deepinfra", "deepinfra→atlas-cloud 1"),
+    ("fails over twice", "deepinfra: upstream-500; atlas-cloud: upstream-html", "deepinfra, atlas-cloud, morph", 200, "Morph",
+     "provider-5xx @ deepinfra, provider-5xx @ atlas-cloud", "deepinfra→atlas-cloud 1, atlas-cloud→morph 1"),
+    ("exhausts the order: the last answer is the typed error, bounded by max_providers_per_request 3 ⚖",
+     "deepinfra: upstream-500; atlas-cloud: upstream-500; morph: upstream-500", "deepinfra, atlas-cloud, morph", 500, "Morph",
+     "provider-5xx @ deepinfra, provider-5xx @ atlas-cloud, provider-5xx @ morph", "deepinfra→atlas-cloud 1, atlas-cloud→morph 1"),
+    ("a 429 fails over and cools only that provider's cell ⚖", "deepinfra: upstream-429", "deepinfra, atlas-cloud", 200, "AtlasCloud", NONE, "deepinfra→atlas-cloud 1"),
+    ("a provider's own refusal (a 4xx naming it) fails over ⚖", "deepinfra: upstream-provider-400", "deepinfra, atlas-cloud", 200, "AtlasCloud",
+     "refused @ deepinfra", "deepinfra→atlas-cloud 1"),
+    ("a 2xx the dialect cannot read is a pre-byte failure ⚖", "deepinfra: upstream-html", "deepinfra, atlas-cloud", 200, "AtlasCloud",
+     "provider-5xx @ deepinfra", "deepinfra→atlas-cloud 1"),
+]
+
+
+def _behaviours(providers: str) -> dict[str, str]:
+    return dict(parse_pairs(providers))
+
+
+@pytest.mark.parametrize(("providers", "expected_attempts", "expected_status", "expected_served_by", "expected_strikes", "expected_failovers"),
+                         [r[1:] for r in FAILOVER_ROWS], ids=[r[0] for r in FAILOVER_ROWS])
+async def test_failover(gw, app, store, upstreams, providers, expected_attempts, expected_status, expected_served_by, expected_strikes, expected_failovers):
+    _world("upstream-ok", note=f"providers {providers}")
+    _seed(app, store, upstreams[RAIL])
+    upstreams[RAIL].provider_behaviours.update(_behaviours(providers))
     task = "homelab-2741-failover"
     doc = await _session(gw, task=task)
-    with when(f"POST {PATH} model {M} — the gateway tries the providers in order (the attempts folded into one attachment)"):
+    with when(f"POST {PATH} model {M} — the gateway tries the providers in order · {inputs(providers=providers)}"):
         with quiet():  # the per-attempt exchanges fold into ONE attachment (ATTACH_BULK: ≤ 8 per case)
             r = await gw.post(PATH, json={"model": M, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8}, headers=bearer(doc))
         attach_json("the attempts and the harness's answer", {
-            "attempts": [{"pin": (c["body"] or {}).get("provider"),
-                          "behaviour": behaviours.get(((c["body"] or {}).get("provider") or {}).get("order", [None])[0], "upstream-ok")}
-                         for c in upstreams[RAIL].calls if c["path"] == "/v1/chat/completions"],
+            "attempts": [{"pin": pin, "behaviour": _behaviours(providers).get(pin, "upstream-ok")} for pin in _pins(upstreams[RAIL])],
             "answer": {"status": r.status_code, "content_type": r.headers.get("content-type"),
                        "body": r.json() if "json" in (r.headers.get("content-type") or "") else r.text[:200]}})
-    observed = {"status": r.status_code, "calls": _pins(upstreams[RAIL]),
-                "served_by": r.json().get("provider") if "json" in (r.headers.get("content-type") or "") else None,
-                "request_rows": _row_provider(store, doc), "strikes": _strikes(store, task)}
-    with then(f"status {status}; calls {calls}; served by {served!r}; one request row per attempt; strikes {strikes}"):
-        check("the ride", observed, {"status": status, "calls": calls, "served_by": served, "request_rows": calls, "strikes": strikes})
-    with quiet():
-        text = (await gw.get("/metrics")).text
-    got = {}
-    for (frm, to) in failovers:
-        m = re.search("^" + re.escape(f'gateway_provider_failovers_total{{model="{M}",from="{frm}",to="{to}"}}') + r" (\S+)$", text, re.M)
-        got[f"{frm}→{to}"] = float(m.group(1)) if m else None
-    with then(f"gateway_provider_failovers_total{{model={M}}}: {', '.join(f'{f}→{t} {n}' for (f, t), n in failovers.items()) or 'no series'}"):
-        check("failovers", got, {f"{f}→{t}": n for (f, t), n in failovers.items()})
+    attempts = ", ".join(p or NONE for p in _pins(upstreams[RAIL]))
+    with then(f"attempts? = {expected_attempts}; status? = {expected_status}; served_by? = {expected_served_by}; one request row per attempt",
+              expected_attempts={"expected": expected_attempts, "actual": attempts}, expected_status={"expected": expected_status, "actual": r.status_code},
+              expected_served_by={"expected": expected_served_by, "actual": _named_provider(r)}, request_rows={"actual": _row_provider(store, doc)}):
+        assert attempts == expected_attempts and r.status_code == expected_status and _named_provider(r) == expected_served_by
+        assert ", ".join(_row_provider(store, doc)) == expected_attempts
+    then_eq("expected_strikes", _strikes(store, task), expected_strikes, claim=f"strikes? = {expected_strikes}")
+    then_eq("expected_failovers", _failovers(await _metrics(gw), _pins(upstreams[RAIL])), expected_failovers, claim=f"failovers? = {expected_failovers} (gateway_provider_failovers_total{{model=M}})")
 
 
-async def test_429_cools_only_the_provider(gw, store, upstreams, orworld):
-    """row: the cooled provider's model still admits"""
-    world(upstream="upstream-429", note=f"{WORLD}; deepinfra answers 429")
-    upstreams[RAIL].provider_behaviours["deepinfra"] = "upstream-429"
+# -- Failover: a cooled cell does not block the model ----------------------------------------------
+COOLED_ROWS = [  # description | providers | cells_cooled? | decision? | model?
+    ("the cooled provider's model still admits ⚖", "deepinfra: upstream-429", 1, "dispatch", "M"),
+]
+
+
+@pytest.mark.parametrize(("providers", "expected_cells_cooled", "expected_decision", "expected_model"), [r[1:] for r in COOLED_ROWS], ids=[r[0] for r in COOLED_ROWS])
+async def test_cooled_cell_still_admits(gw, app, store, upstreams, providers, expected_cells_cooled, expected_decision, expected_model):
+    _world("upstream-ok", note=f"providers {providers}")
+    _seed(app, store, upstreams[RAIL])
+    upstreams[RAIL].provider_behaviours.update(_behaviours(providers))
     doc = await _session(gw)
-    r = await _ride(gw, doc)
-    then_eq("status", r.status_code, 200)
-    with then("gateway_cells_cooled{rail=openrouter} = 1 (the deepinfra cell)"):
-        check("series", await _series(gw, "gateway_cells_cooled", {"rail": RAIL}), 1)
-    with when("POST /sessions worker, rail openrouter, tier heavy (the model whose deepinfra cell is cooled)"):
-        a = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "homelab-2741-admit", "rail": RAIL,
-                                             "tier": "heavy", "harness": "opencode"})
-    then_eq("the model still admits", (a.json()["decision"], a.json().get("model")), ("dispatch", M))
+    with given(f"a ride whose deepinfra attempt answered 429 and failed over (providers = {providers})"):
+        with quiet():
+            r = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))
+        attach_json("the ride", {"status": r.status_code, "pins": _pins(upstreams[RAIL])})
+    with when(f"POST /sessions worker, rail openrouter, tier heavy — the model whose deepinfra cell is cooled · {inputs(providers=providers)}"):
+        a = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": "homelab-2741-admit", "rail": RAIL, "tier": "heavy", "harness": "opencode"})
+    m = re.search(r'^gateway_cells_cooled\{rail="openrouter"\} (\S+)$', await _metrics(gw), re.M)
+    then_eq("expected_cells_cooled", int(float(m.group(1))) if m else 0, expected_cells_cooled, claim=f"cells_cooled? = {expected_cells_cooled} (gateway_cells_cooled{{rail=openrouter}})")
+    then_eq("expected_decision", a.json()["decision"], expected_decision, claim=f"decision? = {expected_decision}")
+    then_eq("expected_model", SYMBOL.get(a.json().get("model"), a.json().get("model")), expected_model, claim=f"model? = {expected_model}")
 
 
-async def test_post_byte_never_fails_over(gw, store, upstreams, orworld):
-    """row: a post-byte failure never fails over"""
-    world(upstream="upstream-stream-truncated", note=f"{WORLD}; deepinfra cuts the stream after its first chunk")
-    upstreams[RAIL].provider_behaviours["deepinfra"] = "upstream-stream-truncated"
+# -- Failover: after the first byte, never --------------------------------------------------------
+POSTBYTE_ROWS = [  # description | providers | attempts? | incomplete? | strikes? | failovers?
+    ("a post-byte failure never fails over", "deepinfra: upstream-stream-truncated", "deepinfra", "no-terminal", "stream-incomplete @ deepinfra", NONE),
+]
+
+
+@pytest.mark.parametrize(("providers", "expected_attempts", "expected_incomplete", "expected_strikes", "expected_failovers"), [r[1:] for r in POSTBYTE_ROWS],
+                         ids=[r[0] for r in POSTBYTE_ROWS])
+async def test_post_byte_never_fails_over(gw, app, store, upstreams, providers, expected_attempts, expected_incomplete, expected_strikes, expected_failovers):
+    _world("upstream-ok", note=f"providers {providers}")
+    _seed(app, store, upstreams[RAIL])
+    upstreams[RAIL].provider_behaviours.update(_behaviours(providers))
     task = "homelab-2741-postbyte"
     doc = await _session(gw, task=task)
-    r = await _ride(gw, doc, stream=True)
-    then_eq("status", r.status_code, 200)
-    then_eq("the upstream calls", _pins(upstreams[RAIL]), ["deepinfra"])
+    r = await _ride(gw, doc, stream=True, label=inputs(providers=providers))
     row = store.requests_for(doc["session"]["id"])[-1]
-    then_eq("the request row: (provider, incomplete)", (row["provider"], row["incomplete"]), ("deepinfra", "no-terminal"))
-    then_eq("strikes", _strikes(store, task), [("stream-incomplete", "deepinfra", "gateway")])
-    then_eq("no failover series", await _series(gw, "gateway_provider_failovers_total", {"model": M, "from": "deepinfra", "to": "atlas-cloud"}), None)
-
-
-async def test_all_cooled_rides_unpinned(gw, upstreams, orworld):
-    """row: every provider cooled or struck mid-session: the request rides unpinned"""
-    world(upstream="upstream-429", note=f"{WORLD}; every eligible provider answers 429")
-    for slug in ("deepinfra", "atlas-cloud", "morph", "inference-net", "baidu"):
-        upstreams[RAIL].provider_behaviours[slug] = "upstream-429"
-    doc = await _session(gw)
-    with given("two requests whose pinned attempts all answered 429 (3 + 2 providers cooled)"):
-        with quiet():
-            r1 = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))
-            r2 = await gw.post(PATH, json={"model": M, "messages": []}, headers=bearer(doc))
-        attach_json("the two requests", {"statuses": [r1.status_code, r2.status_code], "pins": _pins(upstreams[RAIL])})
-        upstreams[RAIL].provider_behaviours.clear()
-    r = await _ride(gw, doc, label=" (every provider cooled)")
-    then_eq("status", r.status_code, 200)
-    then_eq("the upstream body's provider key", (upstreams[RAIL].calls[-1]["body"] or {}).get("provider"), None)
+    attempts = ", ".join(p or NONE for p in _pins(upstreams[RAIL]))
+    with then(f"status 200; attempts? = {expected_attempts}; incomplete? = {expected_incomplete} (the request row's)",
+              status={"expected": 200, "actual": r.status_code}, expected_attempts={"expected": expected_attempts, "actual": attempts},
+              expected_incomplete={"expected": expected_incomplete, "actual": row["incomplete"] or NONE}):
+        assert r.status_code == 200 and attempts == expected_attempts and (row["incomplete"] or NONE) == expected_incomplete
+    then_eq("expected_strikes", _strikes(store, task), expected_strikes, claim=f"strikes? = {expected_strikes}")
+    then_eq("expected_failovers", _failovers(await _metrics(gw), _pins(upstreams[RAIL])), expected_failovers, claim=f"failovers? = {expected_failovers}")
