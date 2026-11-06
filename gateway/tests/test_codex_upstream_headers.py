@@ -46,7 +46,7 @@ HEADERS = {  # the `headers` cell → the response headers the backend issues
     "the primary set only": lambda c: windows(c, used=("30", None), minutes=("300", None)),
     "lots / 5h / soon": lambda c: {**windows(c), "x-codex-primary-used-percent": "lots", "x-codex-primary-window-minutes": "5h",
                                    "x-codex-secondary-reset-at": "soon"},
-    "30 % / 70 % at T; then a poll report at T, then one at T+1": lambda c: windows(c),
+    "30 % / 70 % at T; then poll reports 20 % / 64 % at T and at T+1": lambda c: windows(c),
     "30 % / 70 % + x-codex-rate-limit-reached-type: primary": lambda c: windows(c, **{"x-codex-rate-limit-reached-type": "primary"}),
     "96 % / 64 %, 5h resets T+1000": lambda c: windows(c, used=("96", "64"), resets=(1000, 8000)),
 }
@@ -87,7 +87,7 @@ def _outcome(text: str) -> str:
     pytest.param("the primary set only", "quota-invalid", "source poll; 0.2 / 0.64",
                  id="one window's headers alone are refused whole — unknown, never zero ⚖"),
     pytest.param("lots / 5h / soon", "quota-invalid", "source poll; 0.2 / 0.64", id="an unreadable value is refused and the ride is unaffected ⚖"),
-    pytest.param("30 % / 70 % at T; then a poll report at T, then one at T+1", "accepted; quota-out-of-order; accepted", "source poll; 0.2 / 0.64",
+    pytest.param("30 % / 70 % at T; then poll reports 20 % / 64 % at T and at T+1", "accepted; quota-out-of-order; accepted", "source poll; 0.2 / 0.64",
                  id="the two producers replace each other strictly by time ⚖"),
 ])
 async def test_headers_become_report(codex_app, codex_gw, codex_upstream, clock, headers, expected_outcome, expected_snapshot):
@@ -98,7 +98,7 @@ async def test_headers_become_report(codex_app, codex_gw, codex_upstream, clock,
     with quiet():
         text = (await codex_gw.get("/metrics")).text
     outcome = _outcome(text)
-    if headers.endswith("then one at T+1"):
+    if headers.endswith("at T and at T+1"):
         headroom = codex_app.state.codex.headroom
         with then("a poll report observed at the same instant T, then one at T+1 (observed at the seam)"):
             try:

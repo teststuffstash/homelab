@@ -74,7 +74,7 @@ LAST = "poll, T−10, 20 % / 64 %"
     pytest.param("none", LAST, "accepted", "0.2 / 0.64", "admit", id="a fresh two-window report admits and normalises"),
     pytest.param("none", "none", "—", "none", "quota-unknown", id="no report yet is unknown"),
     pytest.param(f"{LAST} (on the old instance)", "none", "—", "none", "quota-unknown", id="a gateway restart forgets"),
-    pytest.param(LAST, "T−10, T−11, T−110 — each limited", "quota-out-of-order", "0.2 / 0.64", "admit", id="an equal or older timestamp cannot overwrite"),
+    pytest.param(LAST, "poll, T−10 / T−11 / T−110, 20 % / 64 %, limited", "quota-out-of-order", "0.2 / 0.64", "admit", id="an equal or older timestamp cannot overwrite"),
     pytest.param(LAST, "jail, T−1, limited", "accepted", "0.2 / 0.64, limited", "quota-limited", id="a newer report from another source replaces"),
 ])
 def test_report_replaces(last_accepted, report, expected_accepted, expected_snapshot, expected_verdict):

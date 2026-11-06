@@ -118,13 +118,12 @@ async def test_delayed_old_turn(codex_app, codex_gw, codex_upstream, clock, sequ
     calls_before = len(codex_upstream.calls)
     r = await ride(codex_gw, doc, turn("new"), {HEADER: STATE}, label="replay the old turn's value in turn 'new'")
     got = _replay(codex_upstream, r, calls_before)
-    with then("the backend saw the turns in the order old, new"):
-        assert order == ["old", "new"]
     received = old_r.headers.get(HEADER) or new.headers.get(HEADER)
     expect("client_state", _client_state(received), expected_client_state, claim="client_state? = none (neither turn's answer carried state)")
     verdicts(
         replay=(got["outcome"], expected_replay),
         backend_calls=(got["backend_calls"], expected_backend_calls),
     )
-    with then("the refusal is 400 turn-state-invalid"):
+    with then("the backend saw the turns in the order old, new; the refusal is 400 turn-state-invalid"):
+        assert order == ["old", "new"]
         assert got["error"] == "turn-state-invalid"

@@ -122,7 +122,7 @@ def _rotation(case: str, lab: Lab) -> tuple[str, object]:
     pytest.param("ready, 1 s from expiry", "the rotation", "the rotation", "1 — it saw refreshing", "ready, rotated", id="the marker is durable before the exchange"),
     pytest.param("rotated once, 10 s from the rotation's expiry", "a third credential", "the third credential, exchanged from the rotated one", 2, "ready",
                  id="the next refresh uses the persisted rotation"),
-    pytest.param("any of the above", "—", "no DUMMY-SECRET in reprs, messages or tracebacks", "—", "—", id="no record or failure shows a credential"),
+    pytest.param("the stored credential, its record, a Failure", "—", "no DUMMY-SECRET in reprs, messages or tracebacks", "—", "—", id="no record or failure shows a credential"),
 ])
 def test_rotation(request, store, exchange, expected_result, expected_exchanges, expected_state):
     world("policy-codex")

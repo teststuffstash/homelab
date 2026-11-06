@@ -329,7 +329,7 @@ def _pulled(pulled: list[int], chunks: list) -> str:
 
 EVERY_SPLIT = "a heartbeat + one completed event in CRLF, split at every offset"
 GRAMMAR = {  # the `chunks` cell → (chunks, event bound)
-    "one completed event over two data: lines, one byte per chunk":
+    "one completed event with no usage over two data: lines, one byte per chunk":
         ([bytes([b]) for b in b'data: {"type":"response.completed",\ndata: "response":{"status":"completed"}}\n\n'], None),
     "100000 delta events, a terminal, a second terminal":
         ([b'data: {"type":"response.output_text.delta","delta":"hello"}\n\n'] * 100000 + [_event(), _event(usage={"input_tokens": 99})], None),
@@ -340,7 +340,7 @@ GRAMMAR = {  # the `chunks` cell → (chunks, event bound)
 
 @pytest.mark.parametrize(("chunks", "expected_outcome", "expected_tokens", "expected_bytes_out", "expected_closes"), [
     pytest.param(EVERY_SPLIT, "completed", "7 / 3", "identical", 1, id="every byte split of a CRLF stream parses"),
-    pytest.param("one completed event over two data: lines, one byte per chunk", "completed", "unknown", "identical", 1,
+    pytest.param("one completed event with no usage over two data: lines, one byte per chunk", "completed", "unknown", "identical", 1,
                  id="a multi-line data field is one event"),
     pytest.param("100000 delta events, a terminal, a second terminal", "completed", "7 / 3", "identical", 1,
                  id="terminal usage after 4 MiB of deltas is counted"),

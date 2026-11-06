@@ -170,7 +170,8 @@ observation (20 % / 64 %).
 #### The request boundary
 
 Legend: `body` = the accepted body `{stream: true, store: false, input: [...], model:
-fixture-model}` (`accepted`) or the one field that deviates from it; `upstream_calls?` = requests
+fixture-model}` (`accepted`), the one field that deviates from it, or the whole body when it is not
+an object (`[]`); `upstream_calls?` = requests
 the backend received; `upstream_model?` = the `model` the backend received (`—` = no call).
 
 | description | body | status? | code? | upstream_calls? | upstream_model? |
@@ -300,7 +301,7 @@ closes.
 | description | chunks | outcome? | tokens? | bytes_out? | closes? |
 |---|---|---|---|---|---|
 | every byte split of a CRLF stream parses | `a heartbeat + one completed event in CRLF, split at every offset` | `completed` | `7 / 3` | `identical` | 1 |
-| a multi-line data field is one event | `one completed event over two data: lines, one byte per chunk` | `completed` | `unknown` | `identical` | 1 |
+| a multi-line data field is one event | `one completed event with no usage over two data: lines, one byte per chunk` | `completed` | `unknown` | `identical` | 1 |
 | terminal usage after 4 MiB of deltas is counted | `100000 delta events, a terminal, a second terminal` | `completed` | `7 / 3` | `identical` | 1 |
 | malformed usage is unknown, not zero | `a terminal with input_tokens: true, output_tokens: -1` | `completed` | `unknown` | `identical` | 1 |
 | [DONE] alone is truncation | `data: [DONE]` | `truncated` | `unknown` | `identical` | 1 |
@@ -483,7 +484,10 @@ process. Freshness (`max_age_s`), the ceiling and the window profile are policy
 (`rails.codex.headroom`) ⚖ — never code literals. Verdicts: `admit`, `quota-unknown`,
 `quota-stale` (past freshness, a clock rollback, or a window's reset passed — a reset passing is
 not evidence capacity returned), `quota-limited` (a window at or above the ceiling, or the
-explicit `limited` flag).
+explicit `limited` flag). A report's `observed_at` is invalid (`quota-time-invalid`) when it is
+not a finite number, lies in the future, or is aged at or beyond `max_age_s` at the moment it is
+offered; validity is checked before ordering, so an invalid report is never `quota-out-of-order`
+and the snapshot never holds a report that would already be stale.
 
 **World: [policy-codex](../worlds/README.md#the-codex-rails-fakes-tests_codex_worldpy)** — the
 experiment's fixture profile: `max_age_s` 120, ceiling 0.95, the 300- and 10080-minute windows;
@@ -492,16 +496,18 @@ rows drive the `Headroom` seam with a clock at `T`.
 #### A report replaces the snapshot
 
 Legend: `last_accepted` = the report the snapshot holds when the row starts (`none` = a fresh
-instance); `report` = the report(s) offered, `source, observed_at, 5h % / 7d %`; `accepted?` =
-`accepted`, the refusal code, or `—` (nothing offered); `snapshot?` = the windows the snapshot
-holds after (`none`; `limited` = the explicit flag set).
+instance); `report` = the report(s) offered, `source, observed_at, 5h % / 7d %`
+(`/`-separated `observed_at`s = one report each, in that order); `accepted?` = `accepted`, the
+refusal code every offered report answers, or `—` (nothing offered); `snapshot?` = the windows the
+snapshot holds after (`none`; `limited` = the explicit flag set); `verdict?` = the headroom verdict
+after.
 
 | description | last_accepted | report | accepted? | snapshot? | verdict? |
 |---|---|---|---|---|---|
 | a fresh two-window report admits and normalises | `none` | `poll, T−10, 20 % / 64 %` | `accepted` | `0.2 / 0.64` | `admit` |
 | no report yet is unknown | `none` | `none` | — | `none` | `quota-unknown` |
 | a gateway restart forgets | `poll, T−10, 20 % / 64 % (on the old instance)` | `none` | — | `none` | `quota-unknown` |
-| an equal or older timestamp cannot overwrite | `poll, T−10, 20 % / 64 %` | `T−10, T−11, T−110 — each limited` | `quota-out-of-order` | `0.2 / 0.64` | `admit` |
+| an equal or older timestamp cannot overwrite | `poll, T−10, 20 % / 64 %` | `poll, T−10 / T−11 / T−110, 20 % / 64 %, limited` | `quota-out-of-order` | `0.2 / 0.64` | `admit` |
 | a newer report from another source replaces | `poll, T−10, 20 % / 64 %` | `jail, T−1, limited` | `accepted` | `0.2 / 0.64, limited` | `quota-limited` |
 
 #### A malformed report is refused
@@ -741,12 +747,15 @@ the over-secondary percent, the safety flags).
 **World: [policy-codex](../worlds/README.md#the-codex-rails-fakes-tests_codex_worldpy)** — every
 ride starts from a session admitted on a poll report 20 % / 64 % observed at `T−10`; the backend
 answers the ride's `upstream-ok` stream with the headers the row names, and the ride is 200 with
-the whole stream in every row.
+the whole stream in every row; `defer_retry_s` 60 (the loader's default).
 
 #### The headers become a report
 
-Legend: `headers` = the `x-codex-*` headers on the relayed answer (`none`); `outcome?` = the
-counted outcome(s); `snapshot?` = the snapshot's `source` and its `5h / 7d` windows after.
+Legend: `headers` = the `x-codex-*` headers on the relayed answer (`none`), then — on the
+two-producers row — the poll reports offered at the seam after it; `outcome?` = the header read's
+counted outcome, followed on that row by each poll report's fate at the snapshot (`accepted` /
+`quota-out-of-order`, the snapshot's answers, not the reader's counter); `snapshot?` = the
+snapshot's `source` and its `5h / 7d` windows after.
 
 | description | headers | outcome? | snapshot? |
 |---|---|---|---|
@@ -755,7 +764,7 @@ counted outcome(s); `snapshot?` = the snapshot's `source` and its `5h / 7d` wind
 | an answer without window headers is absent, the last report stands | `none` | `absent` | `source poll; 0.2 / 0.64` |
 | one window's headers alone are refused whole — unknown, never zero ⚖ | `the primary set only` | `quota-invalid` | `source poll; 0.2 / 0.64` |
 | an unreadable value is refused and the ride is unaffected ⚖ | `lots / 5h / soon` | `quota-invalid` | `source poll; 0.2 / 0.64` |
-| the two producers replace each other strictly by time ⚖ | `30 % / 70 % at T; then a poll report at T, then one at T+1` | `accepted; quota-out-of-order; accepted` | `source poll; 0.2 / 0.64` |
+| the two producers replace each other strictly by time ⚖ | `30 % / 70 % at T; then poll reports 20 % / 64 % at T and at T+1` | `accepted; quota-out-of-order; accepted` | `source poll; 0.2 / 0.64` |
 
 #### The report gates the next admission
 
@@ -877,7 +886,7 @@ a `ready` record holds (`rotated` = the exchange's; `unchanged` = the one it sta
 | a fresh credential is returned without refresh | `ready, 100 s from expiry` | — | `the stored credential` | 0 | `ready, unchanged` |
 | the marker is durable before the exchange | `ready, 1 s from expiry` | `the rotation` | `the rotation` | `1 — it saw refreshing` | `ready, rotated` |
 | the next refresh uses the persisted rotation | `rotated once, 10 s from the rotation's expiry` | `a third credential` | `the third credential, exchanged from the rotated one` | 2 | `ready` |
-| no record or failure shows a credential | `any of the above` | — | `no DUMMY-SECRET in reprs, messages or tracebacks` | — | — |
+| no record or failure shows a credential | `the stored credential, its record, a Failure` | — | `no DUMMY-SECRET in reprs, messages or tracebacks` | — | — |
 
 #### A store fault
 
@@ -1008,13 +1017,13 @@ two acquires.
 
 #### A successful exchange
 
-Legend: `response` = the 200 body; `saved?` = what the store holds before `acquire()` returns;
-`expiry?` = the returned credential's `expires_at` (the fabricated JWT's `exp`).
+Legend: `response` = the 200 body, the fabricated access JWT's `exp` claim named; `saved?` = what
+the store holds before `acquire()` returns; `expiry?` = the returned credential's `expires_at`.
 
 | description | response | saved? | expiry? |
 |---|---|---|---|
-| rotation is saved before use | `fresh access JWT and a replacement refresh token` | `both replacements, ready` | 4600 |
-| omitted refresh token retains the stored token | `fresh access JWT only` | `the replacement access token and the stored refresh token, ready` | 4600 |
+| rotation is saved before use | `fresh access JWT (exp 4600) and a replacement refresh token` | `both replacements, ready` | 4600 |
+| omitted refresh token retains the stored token | `fresh access JWT (exp 4600) only` | `the replacement access token and the stored refresh token, ready` | 4600 |
 
 Every row's request is one POST to `https://auth.openai.com/oauth/token` with `grant_type`,
 `client_id` and the stored `refresh_token`, JSON content type, no bearer or cookie, every timeout

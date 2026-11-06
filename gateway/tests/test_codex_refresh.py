@@ -37,14 +37,14 @@ def _fresh_jwt(account_id: str = "dummy-account") -> str:
 # -- a successful exchange ------------------------------------------------------------------------
 
 RESPONSES_OK = {  # the `response` cell → the 200 body
-    "fresh access JWT and a replacement refresh token": lambda: {"access_token": _fresh_jwt(), "refresh_token": "DUMMY-SECRET-rotated"},
-    "fresh access JWT only": lambda: {"access_token": _fresh_jwt()},
+    "fresh access JWT (exp 4600) and a replacement refresh token": lambda: {"access_token": _fresh_jwt(), "refresh_token": "DUMMY-SECRET-rotated"},
+    "fresh access JWT (exp 4600) only": lambda: {"access_token": _fresh_jwt()},
 }
 
 
 @pytest.mark.parametrize(("response", "expected_saved", "expected_expiry"), [
-    pytest.param("fresh access JWT and a replacement refresh token", "both replacements, ready", 4600, id="rotation is saved before use"),
-    pytest.param("fresh access JWT only", "the replacement access token and the stored refresh token, ready", 4600,
+    pytest.param("fresh access JWT (exp 4600) and a replacement refresh token", "both replacements, ready", 4600, id="rotation is saved before use"),
+    pytest.param("fresh access JWT (exp 4600) only", "the replacement access token and the stored refresh token, ready", 4600,
                  id="omitted refresh token retains the stored token"),
 ])
 def test_success(response, expected_saved, expected_expiry):
