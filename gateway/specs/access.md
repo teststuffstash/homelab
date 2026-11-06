@@ -4,9 +4,9 @@ use-cases: [UC-1]
 ---
 # Access — the role × stack × service inventory
 
-Operator ruling (2026-10-15): the role × stack × service access inventory is P2 scope. **One
-table**: rows are roles, columns are services, cells are `allowed` / `denied` / `🚧 WIP`. v0
-enforces **only the rail columns** (`roles.<role>.rails` in the policy —
+Operator ruling (2026-10-15): the role × stack × service [access inventory](glossary.md#access-inventory)
+is P2 scope. **One table**: rows are roles, columns are services, cells are `allowed` / `denied` /
+`🚧 WIP`. v0 enforces **only the rail columns** (`roles.<role>.rails` in the policy —
 [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit)), plus who may call the control plane
 for which stack and role ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth) — per caller
 ServiceAccount, not per role, so it is a row of the enforcement table below, not a column); every other column documents
@@ -15,6 +15,40 @@ today's reality as the launchers render it (`agents/agent-session.sh`, `agents/s
 `agents/retro-session.sh`, `agents/research-fanout.sh`, the AgentStack composition's prober,
 `agents/specs-reviewer-session.sh`) and is marked unenforced. Read 2026-10-15 (specs reviewer row
 added 2026-10-16); a cell is what the launcher does, not what a doc says it should.
+
+## Flow overview
+
+```mermaid
+flowchart LR
+  R["POST /sessions\nrole × stack"] --> S["rail anthropic\n(the subscription)"]
+  R --> G["rail opencode\n(Go)"]
+  R --> O["rail openrouter"]
+  S & G & O --> V{"rail in roles.&lt;role&gt;.rails?"}
+  V -->|yes| A["dispatch on that rail"]
+  V -->|no| D["defer: role-rail-denied"]
+  R -.-> C["the caller's ServiceAccount\n(policy callers)"]
+  R -.-> U["git identity · stack MCP · browser MCP\n(unenforced — the launchers' reality)"]
+  click R href "#gw-access" "GW-ACCESS — the enforced half" _self
+  click S href "#who-may-ride-the-subscription-rail" "Who may ride the subscription rail" _self
+  click G href "#who-may-ride-the-go-rail" "Who may ride the Go rail" _self
+  click O href "#who-may-ride-the-openrouter-rail" "Who may ride the OpenRouter rail" _self
+  click V href "#gw-access" "GW-ACCESS — the policy's roles map" _self
+  click A href "#gw-access" "GW-ACCESS — a listed rail dispatches" _self
+  click D href "#gw-access" "GW-ACCESS — an unlisted rail defers" _self
+  click C href "#role-and-caller" "Role and caller — the callers map" _self
+  click U href "#the-inventory-today-by-launcher" "The inventory, by launcher" _self
+```
+
+A role asks for a rail; the policy's `roles.<role>.rails` list answers
+([GW-ACCESS](#gw-access)). Who may ask at all, for which stack and role, is the policy's
+`callers` map ([Role and caller](#role-and-caller)); the columns no gateway code reads are the
+[inventory](#the-inventory-today-by-launcher).
+
+## Requirement index
+
+| Requirement | Section | Status |
+|---|---|---|
+| [GW-ACCESS](#gw-access) | the enforced half |  |
 
 ## The inventory (today, by launcher)
 
@@ -37,7 +71,9 @@ added 2026-10-16); a cell is what the launcher does, not what a doc says it shou
 | stack MCP | no | the launcher reads the claim knob and renders the harness config | the gateway's `env` carries the MCP config; the knob moves into the policy |
 | browser MCP | no (and not reachable) | the browser sidecar is a jail-host network (`jail-browser`); no cluster pod joins it | a decision, not a wiring — `🚧 WIP` until one exists |
 
-**Role × caller.** Which CALLER may ask for which role is the policy's `callers` map, per
+### Role and caller
+
+Which CALLER may ask for which role is the policy's `callers` map, per
 ServiceAccount ([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)): the platform loop's
 dispatcher SA (`platform-agents:agentstack-loop`) `worker` + `prober` — its graduated workers, the
 entry canary's rides and the `probe-platform` tick's outer session (the AgentStack prober template's
@@ -74,40 +110,71 @@ committed mirror of the cluster claims — the cluster wins at runtime).
 
 ## GW-ACCESS
 
-v0 enforces the rail columns and nothing else of this table (the caller check is GW-SESSIONS-AUTH's, per ServiceAccount): a role's allowed rails are exactly
-`roles.<role>.rails` in the policy, consulted in that order by
+v0 enforces the rail columns of the [access inventory](glossary.md#access-inventory) and nothing
+else of it (the caller check is GW-SESSIONS-AUTH's, per ServiceAccount): a role's allowed rails
+are exactly `roles.<role>.rails` in the policy, consulted in that order by
 [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit); a rail outside the list is never
-walked, even when explicitly requested (`defer: role-rail-denied`). The `policy-default` world
-encodes the inventory above with one deliberate difference, flagged ⚖: the **worker** loses the
-`anthropic` rail (the brief's example policy; the subscription's slots are the review and
-coordination lanes' safety net — `model-routing.md` M10) even though today's launcher lets a
-haiku-tier worker ride it. Every non-rail column is unenforced and documented only.
+walked, even when explicitly requested — the answer is `defer` with the reason
+`role-rail-denied`, whatever capacity and credential the rail has. A rail inside the list
+dispatches on it. The `policy-default` world encodes the inventory above with one deliberate
+difference, flagged ⚖: the **worker** loses the `anthropic` rail (the brief's example policy; the
+subscription's slots are the review and coordination lanes' safety net — `model-routing.md` M10)
+even though today's launcher lets a haiku-tier worker ride it.
 
-| description | role || allowed rails (set, in order) | denied rails (set) |
-|---|---||---|---|
-| "worker: Go first, then OpenRouter; the subscription is not a worker rail ⚖" | worker || opencode, openrouter | anthropic |
-| "reviewer: the subscription first, Go as failover" | reviewer || anthropic, opencode | openrouter |
-| "coordinator: the subscription first, Go second" | coordinator || anthropic, opencode | openrouter |
-| "responder: as the coordinator" | responder || anthropic, opencode | openrouter |
-| "retro: the subscription cell and the API cell" | retro || anthropic, openrouter | opencode |
-| "prober: the subscription only" | prober || anthropic | opencode, openrouter |
-| "researcher: OpenRouter draws, subscription draws" | researcher || openrouter, anthropic | opencode |
+The non-rail columns change nothing at this seam: the gateway mints no git token, its `env` carries
+no MCP configuration and no cluster pod reaches the browser sidecar (unverified — expected to hold;
+no row drives these columns, they are documented in the inventory only).
 
-| description | role | explicit `rail` || decision | reason |
-|---|---|---||---|---|
-| "an explicit rail inside the role's set" | reviewer | opencode || dispatch | — |
-| "an explicit rail outside the role's set" | prober | openrouter || defer | role-rail-denied |
-| "an explicit rail outside the set, even with capacity and a credential" | worker | anthropic || defer | role-rail-denied |
+**World: [policy-default](worlds/README.md#policy-worlds)** — every row is one `POST /sessions`
+for stack `platform` naming the `rail` explicitly, no caller token (`control_plane_auth: observe`),
+the role's default harness and tier. Legend: `decision?` = the answer's `decision`; `reason?` = its
+`reason` (`none` on a dispatch).
 
-| description | column || v0 effect of the inventory cell |
-|---|---||---|
-| "the git column changes nothing here" | git identity || none — the gateway mints no git token |
-| "the MCP column changes nothing here" | stack MCP || none — `env` carries no MCP var |
-| "the browser column changes nothing here" | browser MCP || none |
+#### Who may ride the subscription rail
 
-<details markdown="1"><summary>Evidence</summary>
+| description | role | rail | decision? | reason? |
+|---|---|---|---|---|
+| the worker never rides the subscription — its slots are the review and coordination lanes' ⚖ | `worker` | `anthropic` | `defer` | `role-rail-denied` |
+| the reviewer's review lane is the subscription | `reviewer` | `anthropic` | `dispatch` | `none` |
+| the coordinator's dispatch lane is the subscription | `coordinator` | `anthropic` | `dispatch` | `none` |
+| the responder's triage lane is the subscription | `responder` | `anthropic` | `dispatch` | `none` |
+| the retro's claude cell is the subscription | `retro` | `anthropic` | `dispatch` | `none` |
+| the prober's only rail is the subscription | `prober` | `anthropic` | `dispatch` | `none` |
+| the researcher's draws may ride the subscription | `researcher` | `anthropic` | `dispatch` | `none` |
 
-Rendered by `scripts/evidence_render.py` from CI.
+#### Who may ride the Go rail
+
+| description | role | rail | decision? | reason? |
+|---|---|---|---|---|
+| the Go rail is the worker's rail | `worker` | `opencode` | `dispatch` | `none` |
+| the Go rail is the reviewer's failover | `reviewer` | `opencode` | `dispatch` | `none` |
+| the Go rail is the coordinator's failover | `coordinator` | `opencode` | `dispatch` | `none` |
+| the Go rail is the responder's failover | `responder` | `opencode` | `dispatch` | `none` |
+| the retro has no Go cell | `retro` | `opencode` | `defer` | `role-rail-denied` |
+| the prober has no Go rail | `prober` | `opencode` | `defer` | `role-rail-denied` |
+| the researcher has no Go rail | `researcher` | `opencode` | `defer` | `role-rail-denied` |
+
+#### Who may ride the OpenRouter rail
+
+| description | role | rail | decision? | reason? |
+|---|---|---|---|---|
+| OpenRouter is the worker's pool rail | `worker` | `openrouter` | `dispatch` | `none` |
+| the reviewer never rides OpenRouter | `reviewer` | `openrouter` | `defer` | `role-rail-denied` |
+| the coordinator never rides OpenRouter | `coordinator` | `openrouter` | `defer` | `role-rail-denied` |
+| the responder never rides OpenRouter | `responder` | `openrouter` | `defer` | `role-rail-denied` |
+| the retro's API cell is OpenRouter | `retro` | `openrouter` | `dispatch` | `none` |
+| the prober never rides OpenRouter | `prober` | `openrouter` | `defer` | `role-rail-denied` |
+| OpenRouter is the researcher's draw rail | `researcher` | `openrouter` | `dispatch` | `none` |
+
+> Tombstones (removed by PR #3184; one cycle): ~~the seven "allowed rails (set, in order) / denied
+> rails (set)" rows~~ — carried now, one rail per row, by the three tables above (the order is
+> [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit)'s); ~~an explicit rail inside the
+> role's set~~ → "the Go rail is the reviewer's failover"; ~~an explicit rail outside the role's set~~
+> → "the prober never rides OpenRouter"; ~~an explicit rail outside the set, even with capacity and a
+> credential~~ → "the worker never rides the subscription — …"; ~~the git / MCP / browser column
+> changes nothing here~~ → the marked prose above.
+
+<details markdown="1"><summary>Evidence — latest run</summary>
 
 --8<-- "GW-ACCESS.md"
 

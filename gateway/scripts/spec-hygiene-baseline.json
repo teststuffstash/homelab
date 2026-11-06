@@ -7,7 +7,6 @@
  ["GW-CODEX-HEADROOM", "policy-codex", "the counter's label set is the poll's outcome set", "UNIT_ONLY_CANDIDATE"],
  ["GW-CODEX-HEADROOM", "policy-codex", "the counter's label set is the reader's outcome set", "UNIT_ONLY_CANDIDATE"],
  ["GW-CODEX-HEADROOM", "policy-codex", "the poll rides the lifecycle: one owner rotates once, the rotated bearer and the account header go out", "STEP_NOISE"],
- ["GW-METRICS", "policy-default · upstream-ok", "an attempt is counted on its cell by how it ended", "ATTACH_BULK"],
  ["GW-MODEL-TIERS", "policy-default · upstream-ok", "the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell", "ATTACH_BULK"],
  ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "another session", "ATTACH_BULK"],
  ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "another session", "STEP_NOISE"],

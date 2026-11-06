@@ -3,7 +3,7 @@
   "row-unkeyed": 0,
   "header-unthreaded": 0,
   "cell-mismatch": 0,
-  "case-unspecified": 21,
+  "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-CATALOG-GO": {
@@ -63,17 +63,17 @@
   "row-unproven": 0
  },
  "GW-HEALTH": {
-  "row-unkeyed": 3,
-  "header-unthreaded": 9,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
   "cell-mismatch": 0,
   "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-METRICS": {
-  "row-unkeyed": 8,
-  "header-unthreaded": 7,
-  "cell-mismatch": 1,
-  "case-unspecified": 1,
+  "row-unkeyed": 0,
+  "header-unthreaded": 0,
+  "cell-mismatch": 0,
+  "case-unspecified": 0,
   "row-unproven": 0
  },
  "GW-MODEL-RESOLVE": {

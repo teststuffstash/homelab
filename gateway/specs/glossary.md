@@ -266,3 +266,30 @@ the key is optional and `own` by default, so an absent key grants nothing extra.
 A named fixture state a row runs against: a policy document plus a fake-upstream behaviour
 ([worlds/README.md](worlds/README.md)). Row ids carry the world when a requirement's evidence
 spans more than one.
+
+## store mode
+
+Which store the gateway opened at start, reported as `db` by [`GET /healthz`](endpoints/health.md)
+([GW-HEALTH](endpoints/health.md#gw-health)): `pvc` = SQLite at `GATEWAY_DB` (`/data/gateway.db`
+on the Longhorn PVC) — sessions survive a restart; `memory` = the **fail-open** in-memory store the
+gateway falls back to when that path is missing, read-only or corrupt at start — it keeps admitting,
+logs one `ERROR` line, and forgets every session at the next restart. Chosen once per process; a
+metric for it is a gap (#3180).
+
+## bounded label
+
+A Prometheus label whose value set `metrics.schema.json` declares in full
+([GW-METRICS](endpoints/metrics.md#gw-metrics)): a value outside the set renders as `other`, so a
+task key, a session id, a token or a model the policy does not name can never create a series —
+cardinality is a property of the policy, not of traffic. `model` is bounded to the policy's
+openrouter ids and `provider` to the endpoint snapshot's slugs; `task`, `session`, `id` and `token`
+are no label on any family.
+
+## access inventory
+
+The role × stack × service table of [access.md](access.md) (operator ruling 2026-10-15): rows are
+roles, columns are services (the three rails, git identity, stack MCP, browser MCP), cells are what
+the launcher does today. The gateway enforces only the rail columns, per `roles.<role>.rails`
+([GW-ACCESS](access.md#gw-access)); the control-plane caller is enforced per ServiceAccount
+([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)); every other column is documented
+reality, unenforced.

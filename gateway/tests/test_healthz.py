@@ -1,26 +1,10 @@
-"""GW-HEALTH — liveness and the store mode (specs/endpoints/health.md).
-
-| description | store state at start | status | body | log |
-|---|---|---|---|---|
-| the PVC is mounted and writable | /data/gateway.db opens | 200 | {"ok": true, "db": "pvc"} | db: pvc <path> |
-| the PVC is missing — fail open | /data absent | 200 | {"ok": true, "db": "memory"} | db: memory — FAIL-OPEN, sessions do not survive a restart |
-| the PVC is read-only — fail open | /data mounted, open for write fails | 200 | {"ok": true, "db": "memory"} | the same loud line |
-| the DB file is corrupt — fail open | /data/gateway.db fails integrity on open | 200 | {"ok": true, "db": "memory"} | the same loud line, naming the file |
-
-| description | sequence | gateway_sessions_active after |
-|---|---|---|
-| a memory store forgets on restart | memory mode, dispatch, restart | 0 — the pod's token is now session-unknown |
-| a PVC store remembers | pvc mode, dispatch, restart | 1 — the pod's token still resolves |
-| a PVC store from before the cache columns is migrated | pvc mode, dispatch, cache columns dropped (the 2026-10-16 schema), restart, the old token rides once | 1 — the session survives; the ride is recorded (requests = 1); tokens_cache_read = tokens_cache_write = 0 |
-
-| description | request | status | body |
-|---|---|---|---|
-| no auth is required | GET /healthz, no headers | 200 | the shape above |
-| no other field is served | GET /healthz | 200 | exactly ok and db |
-"""
+"""GW-HEALTH — liveness and the store mode (specs/endpoints/health.md). Four tables, one question
+each; header == the parametrize argnames (`name?` ⇄ `expected_name`), description == the row id.
+World: policy-default (one world — declared here, not per row)."""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -39,12 +23,11 @@ from .conftest import (
     FakeUpstream,
     ObservedAsyncClient,
     RailTransport,
-    attach_json,
     bearer,
-    check,
     err,
     given,
     open_session,
+    quiet,
     rule,
     seed_go_catalog,
     then,
@@ -53,6 +36,10 @@ from .conftest import (
 )
 
 pytestmark = rule("GW-HEALTH")
+
+CHAT = "/openai/v1/chat/completions"
+ACTIVE_RE = re.compile(r'^gateway_sessions_active\{rail="opencode"\} (\d+)$', re.M)
+UNKNOWN_TOKEN = "gws_" + "x" * 32
 
 
 def _app(policy, secrets, path: str):
@@ -64,97 +51,64 @@ def _app(policy, secrets, path: str):
     return create_app(settings, policy=policy, source=secrets, store=seed_go_catalog(Store(path)), client=httpx.AsyncClient(transport=fakes))
 
 
-async def _get(app, path: str, **kw):
-    async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as c:
-        return await c.get(path, **kw)
+def _client(app) -> ObservedAsyncClient:
+    return ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw")
 
 
-ROWS = [
-    ("the PVC is mounted and writable", "file", "pvc"),
-    ("the PVC is missing — fail open", "missing-dir", "memory"),
-    ("the PVC is read-only — fail open", "read-only", "memory"),
-    ("the DB file is corrupt — fail open", "corrupt", "memory"),
+# -- Which store the gateway runs on ---------------------------------------------------------------
+FAIL_OPEN = "db: memory — FAIL-OPEN, sessions do not survive a restart"
+STATE_ROWS = [
+    pytest.param("file", "pvc", "db: pvc", id="the PVC is mounted and writable"),
+    pytest.param("missing-dir", "memory", FAIL_OPEN, id="the PVC is missing — fail open ⚖"),
+    pytest.param("read-only", "memory", FAIL_OPEN, id="the PVC is read-only — fail open ⚖"),
+    pytest.param("corrupt", "memory", FAIL_OPEN, id="the DB file is corrupt — fail open ⚖"),
 ]
 
 
-@pytest.mark.parametrize(("state", "mode"), [r[1:] for r in ROWS], ids=[r[0] for r in ROWS])
-async def test_store_state(tmp_path, policy, secrets, caplog, state, mode):
+@pytest.mark.parametrize(("store_state", "expected_db", "expected_log_prefix"), STATE_ROWS)
+async def test_which_store_the_gateway_runs_on(tmp_path, policy, secrets, caplog, store_state, expected_db, expected_log_prefix):
     world()
     caplog.set_level(logging.INFO, logger="gateway.store")
     path = str(tmp_path / "data" / "gateway.db")
-    with given(f"state: the DB path {state} (GATEWAY_DB=<tmp>/data/gateway.db)"):
-        if state == "file":
+    with given(f"store_state {store_state}: the DB path (GATEWAY_DB=<tmp>/data/gateway.db)"):
+        if store_state == "file":
             (tmp_path / "data").mkdir()
-        elif state == "read-only":
+        elif store_state == "read-only":
             (tmp_path / "data").mkdir()
             Store(path).close()
             os.chmod(path, 0o444)
             os.chmod(tmp_path / "data", 0o555)
-        elif state == "corrupt":
+        elif store_state == "corrupt":
             (tmp_path / "data").mkdir()
             (tmp_path / "data" / "gateway.db").write_bytes(b"SQLite format 3\x00" + b"\xff" * 4096)
-    with when(f"the gateway starts on the {state} store, then GET /healthz"):
+    caplog.clear()  # the arrange's own Store() logged too; the lines below are the gateway's
+    with when(f"the gateway starts on the {store_state} store, then GET /healthz"):
         try:
             app = _app(policy, secrets, path)
-            r = await _get(app, "/healthz")
+            async with _client(app) as c:
+                r = await c.get("/healthz")
         finally:
-            if state == "read-only":
+            if store_state == "read-only":
                 os.chmod(tmp_path / "data", 0o755)
-    with then(f"status 200, body {{ok: true, db: {mode}}} (mode = {mode})",
-              mode={"expected": {"ok": True, "db": mode}, "actual": r.json()}, status={"expected": 200, "actual": r.status_code}):
-        assert r.status_code == 200 and r.json() == {"ok": True, "db": mode}
     lines = [rec.getMessage() for rec in caplog.records]
-    if mode == "pvc":
-        with then("the store log line says db: pvc <path>", log={"actual": lines}):
-            assert any(line.startswith(f"db: pvc {path}") for line in lines), lines
-    else:
-        with then("the store log line says db: memory — FAIL-OPEN, naming the path", log={"actual": lines}):
-            assert any(line.startswith("db: memory — FAIL-OPEN, sessions do not survive a restart") and path in line for line in lines), lines
+    line = next((ln for ln in lines if ln.startswith("db: ")), "")
+    with then(f"200 {{ok: true, db: {expected_db}}}; the store log line starts {expected_log_prefix!r} and names the path",
+              expected_db={"expected": expected_db, "actual": r.json().get("db")},
+              expected_log_prefix={"expected": expected_log_prefix, "actual": line[: len(expected_log_prefix)], "line": line}):
+        assert r.status_code == 200 and r.json() == {"ok": True, "db": expected_db}, r.text
+        assert line.startswith(expected_log_prefix) and path in line, lines
 
 
-async def _restart_roundtrip(policy, secrets, path: str, store: str) -> tuple[int, int]:
-    with given(f"a gateway on the {store} store dispatched a worker session, then its store closed"):
+# -- What survives a restart -----------------------------------------------------------------------
+async def _restart(policy, secrets, path: str, store: str, migrate: bool = False) -> tuple[int, httpx.Response, dict]:
+    """Two gateways on one GATEWAY_DB in turn: the first dispatches a worker session and closes;
+    the second reads /metrics, lets the old token ride once, and (when asked) shows the session."""
+    with given(f"a gateway on the {store} store dispatched a worker session (opencode), then its store closed"):
         app1 = _app(policy, secrets, path)
-        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://gw") as c:
+        async with _client(app1) as c:
             doc = await open_session(c)
         app1.state.store.close()
-    with when(f"a second gateway starts on the same {store} store; GET /metrics, then the old token rides"):
-        app2 = _app(policy, secrets, path)
-        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app2), base_url="http://gw") as c:
-            text = (await c.get("/metrics")).text
-            active = int(re.search(r'^gateway_sessions_active\{rail="opencode"\} (\d+)$', text, re.M).group(1))
-            r = await c.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-        attach_json(f"after restart: active {active}, status {r.status_code}", {"gateway_sessions_active{rail=opencode}": active, "status": r.status_code})
-    return active, (r.status_code, err(r) if r.status_code != 200 else None)
-
-
-async def test_memory_forgets(policy, secrets):
-    """row: a memory store forgets on restart"""
-    world()
-    active, verdict = await _restart_roundtrip(policy, secrets, ":memory:", "memory")
-    with then("after restart: gateway_sessions_active{rail=opencode} = 0 and the token is 401 session-unknown"):
-        attach_json("verdict: forgotten", {"active": {"expected": 0, "actual": active}, "verdict": {"expected": [401, "session-unknown"], "actual": list(verdict)}})
-        assert active == 0 and verdict == (401, "session-unknown")
-
-
-async def test_pvc_remembers(tmp_path, policy, secrets, upstreams):
-    """row: a PVC store remembers"""
-    world()
-    active, verdict = await _restart_roundtrip(policy, secrets, str(tmp_path / "gateway.db"), "pvc")
-    with then("after restart: gateway_sessions_active{rail=opencode} = 1 and the token still resolves (200 from the fake Go upstream)"):
-        attach_json("verdict: remembered", {"active": {"expected": 1, "actual": active}, "status": {"expected": 200, "actual": verdict[0]}})
-        assert active == 1 and verdict[0] == 200
-
-
-async def test_pvc_pre_cache_schema_migrated(tmp_path, policy, secrets):
-    """row: a PVC store from before the cache columns is migrated"""
-    world()
-    path = str(tmp_path / "gateway.db")
-    with given("a gateway on the pvc store dispatched a worker session; then the cache columns were dropped (the 2026-10-16 schema)"):
-        app1 = _app(policy, secrets, path)
-        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://gw") as c:
-            doc = await open_session(c)
-        app1.state.store.close()
+    if migrate:
         db = sqlite3.connect(path)
         for table in ("sessions", "requests"):
             for col in ("tokens_cache_read", "tokens_cache_write"):
@@ -162,37 +116,78 @@ async def test_pvc_pre_cache_schema_migrated(tmp_path, policy, secrets):
         db.commit()
         cols = [r[1] for r in db.execute("PRAGMA table_info(sessions)")]
         db.close()
-        attach_json("sessions columns before restart", cols)
-    with when("a second gateway starts on the same pvc store; GET /metrics, the old token rides once, GET /sessions/{id}"):
+        with given(f"schema_at_restart 2026-10-16: tokens_cache_read / tokens_cache_write dropped from sessions and requests — sessions columns now {cols}"):
+            pass
+    with when(f"a second gateway starts on the same {store} store: GET /metrics, then the old token rides POST {CHAT}"):
         app2 = _app(policy, secrets, path)
-        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app2), base_url="http://gw") as c:
-            text = (await c.get("/metrics")).text
-            active = int(re.search(r'^gateway_sessions_active\{rail="opencode"\} (\d+)$', text, re.M).group(1))
-            # the write is the probe: an unmigrated table reads fine (defaults) and breaks on the UPDATE
-            await c.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-            row = (await c.get(f"/sessions/{doc['session']['id']}")).json()
-    with then("after restart: active = 1; the ride is recorded (requests = 1); tokens_cache_read = tokens_cache_write = 0"):
-        got = {"active": active, "requests": row.get("requests"),
-               "tokens_cache_read": row.get("tokens_cache_read"), "tokens_cache_write": row.get("tokens_cache_write")}
-        want = {"active": 1, "requests": 1, "tokens_cache_read": 0, "tokens_cache_write": 0}
-        attach_json("verdict: migrated", {"expected": want, "actual": got})
+        async with _client(app2) as c:
+            with quiet():  # the exposition is bulk; the verdict carries the one sample it judged
+                text = (await c.get("/metrics")).text
+            active = int(ACTIVE_RE.search(text).group(1))
+            r = await c.post(CHAT, json={"messages": []}, headers=bearer(doc))
+            row = (await c.get(f"/sessions/{doc['session']['id']}")).json() if migrate else {}
+    return active, r, row
+
+
+RESTART_ROWS = [
+    pytest.param("memory", 0, "401 session-unknown", id="a memory store forgets on restart"),
+    pytest.param("pvc", 1, "200", id="a PVC store remembers"),
+]
+
+
+@pytest.mark.parametrize(("store", "expected_active_after", "expected_ride_after"), RESTART_ROWS)
+async def test_what_survives_a_restart(tmp_path, policy, secrets, store, expected_active_after, expected_ride_after):
+    world()
+    path = ":memory:" if store == "memory" else str(tmp_path / "gateway.db")
+    active, r, _ = await _restart(policy, secrets, path, store)
+    ride = str(r.status_code) + (f" {err(r)}" if r.status_code != 200 else "")
+    with then(f"active_after = {expected_active_after}, ride_after = {expected_ride_after}",
+              expected_active_after={"expected": expected_active_after, "actual": active},
+              expected_ride_after={"expected": expected_ride_after, "actual": ride}):
+        assert active == expected_active_after and ride == expected_ride_after, (active, ride)
+
+
+# -- An older schema is migrated on open -----------------------------------------------------------
+MIGRATION_ROWS = [
+    pytest.param("pvc", "2026-10-16", 1, 1, 0, 0, id="a PVC store from before the cache columns is migrated"),
+]
+
+
+@pytest.mark.parametrize(("store", "schema_at_restart", "expected_active_after", "expected_requests", "expected_tokens_cache_read", "expected_tokens_cache_write"),
+                         MIGRATION_ROWS)
+async def test_an_older_schema_is_migrated_on_open(tmp_path, policy, secrets, store, schema_at_restart, expected_active_after, expected_requests,
+                                                   expected_tokens_cache_read, expected_tokens_cache_write):
+    world()
+    assert schema_at_restart == "2026-10-16"  # the one older schema this row knows how to build
+    active, r, row = await _restart(policy, secrets, str(tmp_path / "gateway.db"), store, migrate=True)
+    got = {"expected_active_after": active, "expected_requests": row.get("requests"),
+           "expected_tokens_cache_read": row.get("tokens_cache_read"), "expected_tokens_cache_write": row.get("tokens_cache_write")}
+    want = {"expected_active_after": expected_active_after, "expected_requests": expected_requests,
+            "expected_tokens_cache_read": expected_tokens_cache_read, "expected_tokens_cache_write": expected_tokens_cache_write}
+    with then(f"active_after = {expected_active_after}; the ride is recorded: requests = {expected_requests}, "
+              f"tokens_cache_read = {expected_tokens_cache_read}, tokens_cache_write = {expected_tokens_cache_write}",
+              **{k: {"expected": want[k], "actual": got[k]} for k in want}):
+        assert r.status_code == 200, r.text  # the write is the probe: an unmigrated table reads fine and breaks on the UPDATE
         assert got == want
 
 
-async def test_no_auth_required(gw):
-    """row: no auth is required"""
-    world()
-    with when("GET /healthz with no authorization header"):
-        r = await gw.get("/healthz")
-    with then("status 200 and ok = true", status={"expected": 200, "actual": r.status_code}, ok={"expected": True, "actual": r.json().get("ok")}):
-        assert r.status_code == 200 and r.json()["ok"] is True
+# -- The probe needs no credential -----------------------------------------------------------------
+BODY = '{"ok": true, "db": "pvc"}'
+PROBE_ROWS = [
+    pytest.param("none", 200, BODY, id="no auth is required"),
+    pytest.param("an unknown session token", 200, BODY, id="a bearer changes nothing — the probe reads no credential"),
+]
 
 
-async def test_no_other_field(gw):
-    """row: no other field is served"""
+@pytest.mark.parametrize(("authorization", "expected_status", "expected_body"), PROBE_ROWS)
+async def test_the_probe_needs_no_credential(gw, authorization, expected_status, expected_body):
     world()
-    with when("GET /healthz"):
-        r = await gw.get("/healthz")
-    with then("the body has exactly ok, db and db = pvc"):
-        check("fields", sorted(r.json()), ["db", "ok"])
-        check("db", r.json()["db"], "pvc")
+    headers = {} if authorization == "none" else {"authorization": f"Bearer {UNKNOWN_TOKEN}"}
+    with given(f"authorization {authorization}: headers {headers}"):
+        pass
+    with when(f"GET /healthz, authorization {authorization}"):
+        r = await gw.get("/healthz", headers=headers)
+    with then(f"status = {expected_status}, body = {expected_body}",
+              expected_status={"expected": expected_status, "actual": r.status_code},
+              expected_body={"expected": json.loads(expected_body), "actual": r.json()}):
+        assert r.status_code == expected_status and r.json() == json.loads(expected_body), r.text
