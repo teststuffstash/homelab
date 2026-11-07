@@ -15097,3 +15097,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Page migrations dispatched as five parallel seat subagents (one PR each, shared brief in the session scratchpad):
   sessions (ADMIT split ⚖ → walk / retry / capacity, keeping every inbound anchor), codex, catalog, data plane
   (anthropic-messages + openai-chat), small pages (metrics/health/access). Each must lower its rules' ratchet lines to 0.
+
+## 2026-11-06 ~21:40Z → 11-07 ~00:40Z — seat: the five gateway page migrations MERGED; one self-inflicted CI incident
+- **Pages (one PR each, all merged, both reviewers approving):** #3184 small pages (metrics/health/access), #3186 data plane
+  (anthropic-messages + openai-chat; GW-RAIL-OPENROUTER kept unsplit — its ID is a coordinate in six schemas + the deployed
+  policy), #3187 catalog (GW-CATALOG-GO → +GO-PARSE, GW-CATALOG-OR → +OR-CANARY, GW-MODEL-TIERS → +GW-RAIL-CHOICE; #3191
+  filed for the `:free`/`other` fixture rows), #3188 sessions (ADMIT split ⚖ → ADMIT / RETRY / CAPACITY, every inbound anchor
+  aliased), #3189 codex (GW-CODEX-HEADROOM → +CODEX-ADMISSION / USAGE-POLL / UPSTREAM-HEADERS). End state on master:
+  34 rules, the join baseline at ZERO on all five codes for every rule (from 241/370/124/32/0 over 26 rules), hygiene
+  baseline EMPTY (from 36 identities); 1141 tests. Every page: flow overview + requirement index + section flowcharts with
+  `click` nav, `?` expected columns, inputs as cells, `||` gone, glossary terms for the coined nouns.
+- **Incident (self-inflicted, ~21:41–22:20Z):** the direct ci.yaml step for the specs-site e2e leg redded master — the ARC dind
+  trusts only the .20/.21 mirror VIPs, so the playwright pull went to https://192.168.40.31:443 and timed out (found by #3184's
+  agent). Un-wedged direct (122d3787 pulls the step); PR #3185 adds `--insecure-registry=192.168.40.31` to both scale sets —
+  pin-only-guarded files, so `ci` is red by design: seat-review run (APPROVE, two style comments applied), admin merge handed
+  to the operator. The leg's diff-ci row + devbox scripts stay; the ci.yaml step returns after #3185 syncs.
+- Gotchas for the record: the coverage belt's task regex had no digits (`…-e2e` read as `…-e`; widened, same direct commit);
+  docs-graph-lint reads links inside ```markdown fences; parallel page agents must use page-unique scratch file names (two
+  wrote `pr-body.md`); the hygiene baseline conflicts on every sibling merge — take master's, re-record from a full run.
+- Residue (no FU — the next gateway PR's): comment citations of GW-SESSIONS-ADMIT for capacity/retry facts in
+  `agents/gateway-admit.sh`, `agents/agent-session.sh`, `agents/coordinator/README.md`; `metrics.schema.json`'s
+  `rail_choice.reason` enum lacks `order` and its x-requirements still name the pre-split codex/tiers rules (resolve via the
+  kept anchors); `spec_gate.py`'s constant-column advisory now flags single-world header tables' `upstream` column.
