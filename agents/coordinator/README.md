@@ -1239,6 +1239,11 @@ to prevent:
 2. **The loop reviewer's own verdict only** (`homelab-reviewer[bot]`). A human's
    changes-requested is a directive, not a stale status — dispatch the fix round it orders
    (step 7's human-CR bullet, ADR-127), or escalate when it asks a question rather than an edit.
+   The specs reviewer's verdict (`homelab-specs-reviewer[bot]`, ADR-155) is never follow-up-class
+   and never "out of scope": a finding on an UNCHANGED row that the pack put in scope (a
+   `page-preamble` touch puts the whole page in) still blocks under its pinned finding contract
+   (§Action disposition — "outside Touches" never downgrades). Order the round that fixes the row,
+   or escalate; a fix round told to leave the row alone re-earns the same verdict.
 3. **The message carries the ruling AND the filed follow-up id.** Say that the finding *stands
    as correct and is being acted on*, and that it is the merge-blocking **status** that is stale
    — not the review. A bare "superseded" reads as the coordinator overruling the reviewer, which

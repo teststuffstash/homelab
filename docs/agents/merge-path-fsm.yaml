@@ -367,6 +367,7 @@ transitions:
       - agents/replay/fixtures/changes-requested/dispatched
       - agents/replay/fixtures/changes-requested/reviewable-again-held
       - agents/replay/fixtures/changes-requested/body-edit-held
+      - agents/replay/fixtures/changes-requested/body-edit-specs-reviewer-dispatches
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
         anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }
@@ -384,6 +385,8 @@ transitions:
         anchor: { file: agents/coordinator/README.md, pattern: "arbitrate. clause" }
       - desc: "changes-requested clause holds when newest non-merge commit — or the PR body's lastEditedAt (GraphQL via agents/pr-last-edited.sh, homelab#2168) — post-dates the newest review: the answered round is the reviewer's, and the next bot verdict retires the clause (homelab#975)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "reviewable_again" }
+      - desc: "the body-edit leg skips a SPECS-reviewer CHANGES_REQUESTED: that identity re-reviews only a new content commit, so a body-only answer is still the worker's round (oracle-fleet#1013 sat held for good)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "newest_cr_by" }
     belts:
       - desc: "ordinary-path ruling removal (homelab#1507): when a PR armed + green wears agent/arbitrate but the newest coordinator ruling carries NO blocked-on marker (ordinary-path: re-dispatch, follow-up-class, or nothing-to-do), the belt removes the label so the reflex picks it normally (label-first-then-verify, IL-T16)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "arbitrate-ordinary-path-belt" }

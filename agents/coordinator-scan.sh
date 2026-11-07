@@ -4105,6 +4105,10 @@ EOF_GTHEMES_OPEN
       # reflex's ONE home, agents/pr-last-edited.sh — fetched lazily, once per repo per tick, for
       # every CHANGES_REQUESTED PR in prsjson, then merged into this PR's probe BY NUMBER. A failed
       # read degrades (WARN on stderr, no lastEditedAt) to the commit-time rule; it never aborts.
+      # SPECS-REVIEWER CR: the body leg does not hold. That identity re-reviews only a new content
+      # commit (agents/specs-reviewer-session.sh: a live own verdict at the content commit = skip),
+      # so a body-only answer to its verdict re-reads never, and holding on it wedged oracle-fleet
+      # PR#1013 for good — the round is the worker's, so the clause dispatches it.
       cr_reviews=""
       if [ -n "$cr_probe" ]; then
         [ -n "$cr_le_prs" ] || cr_le_prs="$(pr_last_edited_merge "$slug" "$prsjson")"
@@ -4119,8 +4123,11 @@ EOF_GTHEMES_OPEN
             (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
           def newest_commit_at:
             ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
+          def newest_cr_by:
+            ([ .reviews[]? | select(.state == "CHANGES_REQUESTED") ] | sort_by(.submittedAt) | last | .author.login) // "";
           if (newest_commit_at != "" and newest_commit_at > newest_review_at) then "held"
-          elif ((.lastEditedAt // "") > newest_review_at) then "held-body"
+          elif ((.lastEditedAt // "") > newest_review_at
+                and (newest_cr_by | test("specs-reviewer") | not)) then "held-body"
           else "" end
         ' 2>/dev/null)" || cr_reviews=""
       fi

@@ -223,6 +223,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `changes-requested/body-edit-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `changes-requested/body-edit-specs-reviewer-dispatches` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-cause-grammar` | table | - | `-` | - |
