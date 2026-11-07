@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agents/islands/launch/specs/pod.schema.json",
+  "$comment": "MACHINE half of the worker pod the launcher writes (pod.md is the human half) — the fields other islands read, not the whole manifest. The LLM env VALUES a gateway ride exports are the supplier's (gateway sessions.schema.json pull.output.env, GW-SESSIONS-ENV); this file pins only the slot that points at them.",
+  "x-interface": "pod",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^agent-[a-z0-9-]+-((issue|pr)-[0-9]+-r[0-9]+|[0-9]{6})$",
+          "description": "tasked: agent-<repo>-<task>-r<round> (the idempotency key and, on a gateway ride, the bind's pod); untasked: agent-<repo>-<HHMMSS>",
+          "x-requirements": ["LAUNCH-POD-IDENTITY"]
+        },
+        "labels": {
+          "type": "object",
+          "required": ["app", "project", "ride-size"],
+          "properties": {
+            "app": { "const": "agent-session" },
+            "project": { "type": "string" },
+            "ride-size": { "enum": ["standard", "large"] },
+            "homelab.teststuff.net/gateway-session": { "type": "string", "description": "the gateway session id; gateway rides only", "x-requirements": ["LAUNCH-POD-ENV-PULL"] },
+            "homelab.teststuff.net/rail": { "enum": ["opencode-go", "subscription-fallback"], "description": "old path only" },
+            "homelab.teststuff.net/subscription-session": { "const": "claude", "description": "old path only — the old proxy's semaphore counts these" }
+          },
+          "x-requirements": ["LAUNCH-POD-IDENTITY"]
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "serviceAccountName": { "const": "agentstack-worker", "x-requirements": ["LAUNCH-POD-IDENTITY"] },
+        "restartPolicy": { "const": "Never" },
+        "activeDeadlineSeconds": { "type": "integer", "default": 14400, "description": "AGENT_POD_DEADLINE_S; DeadlineExceeded → outcome class timeout", "x-requirements": ["LAUNCH-POD-IDENTITY"] }
+      }
+    },
+    "env": {
+      "type": "object",
+      "properties": {
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["AGENT_GATEWAY_PULL_URL", "AGENT_GATEWAY_ENV_KEYS"],
+          "properties": {
+            "AGENT_GATEWAY_PULL_URL": { "type": "string", "pattern": "/sessions/[A-Za-z0-9_-]{1,64}/env$" },
+            "AGENT_GATEWAY_ENV_KEYS": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$" }
+          },
+          "description": "the whole LLM env slot of a gateway ride — no credential, literal or by reference",
+          "x-requirements": ["LAUNCH-POD-ENV-PULL"]
+        },
+        "OPENROUTER_API_KEY": {
+          "description": "absent on a gateway or claude ride; ref:<ns>/<secret> on an old-path goose/opencode ride with a proxy; a secretKeyRef only without a proxy (break-glass)",
+          "oneOf": [ { "type": "null" }, { "type": "string", "pattern": "^ref:[^/]+/[^/]+$" }, { "type": "object", "required": ["secretKeyRef"] } ],
+          "x-requirements": ["LAUNCH-POD-CRED"]
+        },
+        "GIT_CRED_BROKER_URL": { "type": "string", "pattern": "/git-token\\?ns=", "x-requirements": ["LAUNCH-POD-CRED"] },
+        "AGENT_ARM_PR": { "const": "0", "description": "present only when derived.arm is false (dispatch.schema.json)" },
+        "PR_OPEN_BASE": { "type": "string", "description": "the ride's base, read by pr-open \u2014 exported by the command's pr-open prelude, not a manifest env entry" }
+      }
+    },
+    "volumes": {
+      "type": "object",
+      "properties": {
+        "gateway-token": {
+          "type": "object",
+          "properties": {
+            "audience": { "const": "agent-gateway" },
+            "expirationSeconds": { "const": 600 },
+            "mountPath": { "const": "/var/run/secrets/agent-gateway" }
+          },
+          "x-requirements": ["LAUNCH-POD-ENV-PULL"]
+        },
+        "context-bundle": { "type": "object", "properties": { "mountPath": { "const": "/work/context" } }, "description": "context.schema.json" }
+      }
+    },
+    "command": {
+      "type": "object",
+      "properties": {
+        "prelude": { "type": "string", "description": "gateway rides: the env pull first; exit 97 before the harness on failure", "x-requirements": ["LAUNCH-POD-ENV-PULL"] },
+        "harness": {
+          "type": "object",
+          "required": ["harness"],
+          "properties": {
+            "harness": { "enum": ["claude", "goose", "opencode", "codex"] },
+            "model": { "type": "string", "description": "GW_WIRE_MODEL (claude), gateway/<GW_WIRE_MODEL> (opencode) on a gateway ride" },
+            "max_turns": { "type": "integer", "default": 200 },
+            "context_tokens": { "type": ["integer", "null"], "description": "CLAUDE_CODE_MAX_CONTEXT_TOKENS from the dispatch's context_tokens; null = harness default" }
+          },
+          "x-requirements": ["LAUNCH-POD-HARNESS-CMD"]
+        }
+      }
+    }
+  }
+}
