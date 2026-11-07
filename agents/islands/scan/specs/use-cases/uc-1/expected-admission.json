@@ -1,0 +1,7 @@
+{
+  "note": "what gw_admit sends from inside coordinator-homelab-issue-4242 (agents/gateway-admit.sh → POST /sessions); the wire shape is gateway/specs/endpoints/sessions.schema.json's",
+  "stack": "platform",
+  "role": "coordinator",
+  "task": "coordinator-homelab-issue-4242",
+  "harness": "claude"
+}

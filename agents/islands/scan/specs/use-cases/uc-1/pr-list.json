@@ -1,0 +1,18 @@
+[
+  {
+    "number": 4250,
+    "createdAt": "2026-11-07T10:00:00Z",
+    "isDraft": false,
+    "mergeStateStatus": "BEHIND",
+    "reviewDecision": "",
+    "autoMergeRequest": {"mergeMethod": "SQUASH"},
+    "statusCheckRollup": [{"name": "ci", "conclusion": "SUCCESS"}],
+    "reviews": [],
+    "commits": [{"messageHeadline": "scan: name the lane in the WIP hold line", "committedDate": "2026-11-07T09:58:00Z"}],
+    "labels": [],
+    "author": {"login": "app/homelab-agents-1234"},
+    "headRefName": "fix/issue-4242-wip-lane",
+    "baseRefName": "master",
+    "body": "Fixes #4242"
+  }
+]
