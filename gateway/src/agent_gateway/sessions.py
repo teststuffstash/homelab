@@ -129,7 +129,7 @@ class Admission:
     caller: str | None = None  # GW-SESSIONS-AUTH: the reviewed caller identity, stored on the row
     caller_pod: str | None = None  # GW-SESSIONS-LIVENESS: the caller's pod (a pod-bound caller token)
     caller_pod_uid: str | None = None
-    attempt: int = 1  # GW-SESSIONS-ADMIT: the consumer's automatic re-admission counter at this round
+    attempt: int = 1  # GW-SESSIONS-RETRY: the consumer's automatic re-admission counter at this round
 
 
 def parse_admission(policy: Policy, body: object) -> Admission:

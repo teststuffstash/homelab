@@ -14,18 +14,5 @@
  ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "oversized state ⚖", "ATTACH_BULK"],
  ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "same session and turn", "ATTACH_BULK"],
  ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "same session and turn", "THREAD_BROKEN"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-wrong-type", "a refused answer is captured: content-type, header names, a bounded preview", "ATTACH_BULK"],
- ["GW-REDACT", "policy-default", "a bad inbound header is logged by shape", "THREAD_BROKEN"],
- ["GW-REDACT", "policy-default", "a dispatch line names the session id, never the token", "THREAD_BROKEN"],
- ["GW-REDACT", "policy-default", "a pull line names the session and the identity, never either token", "THREAD_BROKEN"],
- ["GW-REDACT", "policy-default", "a refused pull never logs the presented token", "THREAD_BROKEN"],
- ["GW-REDACT", "policy-default · upstream-401", "an upstream 401 body is summarised, not copied", "THREAD_BROKEN"],
- ["GW-SESSIONS-ADMIT", "policy-codex", "an explicit harness on the Go rail skips the openai cells and takes the Claude model", "ATTACH_BULK"],
- ["GW-SESSIONS-ADMIT", "policy-codex", "an explicit rail without a harness takes the rail's harness", "THREAD_BROKEN"],
- ["GW-SESSIONS-ADMIT", "policy-codex", "the Go cell's dialect is the model's: an openai cell rides the opencode harness", "ATTACH_BULK"],
- ["GW-SESSIONS-ADMIT", "policy-default · upstream-429-reset", "a mark cleared by a 2xx before the roll is gone after it", "THREAD_BROKEN"],
- ["GW-SESSIONS-ADMIT", "policy-default · upstream-429-reset", "the reload is logged", "UNIT_ONLY_CANDIDATE"],
- ["GW-SESSIONS-AUTH", "policy-enforce", "an unknown task is an empty list", "THREAD_BROKEN"],
- ["GW-SESSIONS-AUTH", "policy-enforce", "another listed caller sees an empty list, never a 403", "THREAD_BROKEN"],
- ["GW-SESSIONS-AUTH", "policy-enforce", "the judge lists a task of a stack outside its entry ⚖", "THREAD_BROKEN"]
+ ["GW-RAIL-CODEX", "policy-codex · upstream-wrong-type", "a refused answer is captured: content-type, header names, a bounded preview", "ATTACH_BULK"]
 ]

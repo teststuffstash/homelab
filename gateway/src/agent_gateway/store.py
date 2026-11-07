@@ -241,7 +241,7 @@ class Session:
     caller: str | None = None
     # GW-RAIL-*: the 2xx answers whose body stopped before its end (never counted as clean).
     requests_incomplete: int = 0
-    attempt: int = 1  # GW-SESSIONS-ADMIT: the consumer's re-admission counter at this round
+    attempt: int = 1  # GW-SESSIONS-RETRY: the consumer's re-admission counter at this round
     # GW-SESSIONS-LIVENESS: the pod this session lives in (the pulling pod, else the caller's), and why it ended
     live_namespace: str | None = None
     live_pod: str | None = None
@@ -479,7 +479,7 @@ class Store:
 
     def rail_usage_since(self, rail: str, since: float) -> list[tuple[float, str, int, int, int, int]]:
         """The rail's metered (2xx) requests since `since`, ascending: (ts, session model, tokens_in,
-        cache_read, cache_write, tokens_out) — the window-draw ledger (GW-SESSIONS-ADMIT)."""
+        cache_read, cache_write, tokens_out) — the window-draw ledger (GW-SESSIONS-CAPACITY)."""
         with self._lock:
             rows = self._db.execute(
                 "SELECT r.ts, s.model, r.tokens_in, r.tokens_cache_read, r.tokens_cache_write, r.tokens_out"
@@ -699,7 +699,7 @@ class Store:
         with self._lock:
             self._db.execute("INSERT INTO meta (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
-    # -- the capacity marks (GW-SESSIONS-ADMIT §Capacity, "Kept across a restart") --------------
+    # -- the capacity marks (GW-SESSIONS-CAPACITY §Kept across a restart) --------------
     # One row per mark the admission's capacity state holds (capacity.py writes through under its own
     # lock; a new gateway on the same DB reloads them at start): `kind` cooled (key `rail|model|provider`)
     # | latched (the rail) | rejected (`rail|<credential fingerprint>`, with the mark's stack, at = since,

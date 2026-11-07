@@ -1,4 +1,4 @@
-"""The ladder's capacity half as admission facts (GW-SESSIONS-ADMIT, sessions.md §Capacity).
+"""The ladder's capacity half as admission facts (GW-SESSIONS-CAPACITY, sessions.md §Capacity).
 
 Three per-rail checks the admission walk consults after the slot count, each driven only by
 `rails.<rail>.admission` in policy (no threshold, hold or price lives in this file):

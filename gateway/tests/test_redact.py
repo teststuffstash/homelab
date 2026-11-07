@@ -1,7 +1,8 @@
-"""Credential redaction in the gateway's log lines (specs/endpoints/sessions.md §GW-REDACT).
+"""Credential redaction in the gateway's log lines (specs/endpoints/sessions.md §Cross-cutting → GW-REDACT).
 
-The real-path log lines are the GW-REDACT rows; the formatter's own patterns, fed a bare string,
-are unlabelled chassis guards (conventions § Allure taxonomy: only system-level cases are evidence).
+The real-path log lines are the GW-REDACT rows (header == argnames, description == id — tests/_rows.py);
+the formatter's own patterns, fed a bare string, are unlabelled chassis guards (conventions § Allure
+taxonomy: only system-level cases are evidence).
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import pytest
 from agent_gateway.logging import REDACTED, RedactingFormatter, redact, register_literal
 from agent_gateway.pull import POD_NAME_EXTRA, Review
 
+from ._rows import enter_world, expect, inputs
 from .conftest import GO_KEY, attach_json, bearer, given, open_session, rule, then, when, world
 
 TOKEN = "gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -62,89 +64,64 @@ def test_arg_token_masked():
         assert out == "ride <redacted>" and "gws_" not in out
 
 
-@pytest.mark.parametrize(
-    ("path", "log_line_contains", "never_logged"),
-    [
-        pytest.param(
-            "upstream-401 on openrouter",
-            "upstream-auth openrouter 401",
-            "LEAK, sk-ant-oat, invalid x-api-key",
-            id="an upstream 401 body is summarised, not copied",
-        ),
-        pytest.param(
-            "Authorization: Bearer notatoken",
-            "session-unknown",
-            "notatoken",
-            id="a bad inbound header is logged by shape",
-        ),
-        pytest.param(
-            "POST /sessions",
-            "id=…",
-            "gws_",
-            id="a dispatch line names the session id, never the token",
-        ),
-        pytest.param(
-            "a bound dispatch, then its pull",
-            "env pulled id=… by system:serviceaccount:platform-agents:agentstack-worker",
-            "eyJ, gws_",
-            id="a pull line names the session and the identity, never either token",
-        ),
-        pytest.param(
-            "a pull whose token reviews as another ServiceAccount",
-            "pull-identity-refused",
-            "eyJ",
-            id="a refused pull never logs the presented token",
-        ),
-    ],
-)
+LOG_ROWS = [
+    pytest.param("policy-default · upstream-401", "upstream-401 on openrouter", "upstream-auth openrouter 401", "LEAK, sk-ant-oat, invalid x-api-key",
+                 id="an upstream 401 body is summarised, not copied"),
+    pytest.param("policy-default", "Authorization: Bearer notatoken", "session-unknown", "notatoken",
+                 id="a bad inbound header is logged by shape"),
+    pytest.param("policy-default", "POST /sessions", "id=…", "gws_",
+                 id="a dispatch line names the session id, never the token"),
+    pytest.param("policy-default", "a bound dispatch, then its pull", "env pulled id=… by system:serviceaccount:platform-agents:agentstack-worker", "eyJ, gws_",
+                 id="a pull line names the session and the identity, never either token"),
+    pytest.param("policy-default", "a pull whose token reviews as another ServiceAccount", "pull-identity-refused", "eyJ",
+                 id="a refused pull never logs the presented token"),
+]
+
+
+@pytest.mark.parametrize(("world", "path", "expected_log_line_contains", "expected_never_logged"), LOG_ROWS)
 @_system_row
-async def test_real_path_log_lines(path, log_line_contains, never_logged, gw, upstreams, reviews, caplog):
+async def test_what_the_log_holds_and_never_holds(world, path, expected_log_line_contains, expected_never_logged, gw, upstreams, reviews, caplog):
+    enter_world(world)
+    inputs(path=path)
     caplog.set_level(logging.INFO)
     session_id = ""
     if path == "upstream-401 on openrouter":
-        world(upstream="upstream-401")
         upstreams["openrouter"].behaviour = "upstream-401"
         with given("a session on rail openrouter (worker, harness goose)"):
             doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
-        with when("POST /openai/v1/chat/completions on the openrouter session (upstream answers 401)"):
+        with when(f"path = {path}: POST /openai/v1/chat/completions on the openrouter session (upstream answers 401)"):
             r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-        with then("status = 424", status={"expected": 424, "actual": r.status_code}):
-            assert r.status_code == 424
+        assert r.status_code == 424, r.text
     elif path == "Authorization: Bearer notatoken":
-        world()
-        with when("POST /openai/v1/chat/completions with authorization 'Bearer notatoken'"):
+        with when(f"path = {path}: POST /openai/v1/chat/completions with authorization 'Bearer notatoken'"):
             r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": "Bearer notatoken"})
-        with then("status = 401", status={"expected": 401, "actual": r.status_code}):
-            assert r.status_code == 401
+        assert r.status_code == 401, r.text
     elif path == "POST /sessions":
-        world()
-        with when("POST /sessions (platform worker) → dispatch"):
+        with when(f"path = {path} (platform worker) → dispatch"):
             doc = await open_session(gw)
         session_id = doc["session"]["id"]
     elif path == "a bound dispatch, then its pull":
-        world()
         user = "system:serviceaccount:platform-agents:agentstack-worker"
         with given("a session bound to platform-agents/agentstack-worker pod fixer-1; the fake TokenReview answers that identity"):
             reviews.tokens[JWT] = Review(True, user, ("agent-gateway",), {POD_NAME_EXTRA: ("fixer-1",)})
             doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker", "pod": "fixer-1"})
         session_id = doc["session"]["id"]
-        with when(f"POST /sessions/{session_id}/env with the pod's projected token"):
+        with when(f"path = {path}: POST /sessions/{session_id}/env with the pod's projected token"):
             await gw.post(f"/sessions/{session_id}/env", headers={"authorization": f"Bearer {JWT}"})
     elif path == "a pull whose token reviews as another ServiceAccount":
-        world()
         with given("a bound session; the presented token reviews as system:serviceaccount:platform-agents:default"):
             reviews.tokens[JWT] = Review(True, "system:serviceaccount:platform-agents:default", ("agent-gateway",), {})
             doc = await open_session(gw, bind={"namespace": "platform-agents", "serviceaccount": "agentstack-worker"})
         session_id = doc["session"]["id"]
-        with when(f"POST /sessions/{session_id}/env with that token"):
+        with when(f"path = {path}: POST /sessions/{session_id}/env with that token"):
             await gw.post(f"/sessions/{session_id}/env", headers={"authorization": f"Bearer {JWT}"})
     else:
         raise ValueError(f"no real path named {path!r}")
 
-    needle = log_line_contains.replace("…", session_id)
+    needle = expected_log_line_contains.replace("…", session_id)
     messages = [rec.getMessage() for rec in caplog.records]
-    with then(f"a log line holds {needle!r}", log_lines={"actual": messages}):
-        assert any(needle in m for m in messages), messages
-    with then(f"no log line holds any of {never_logged!r}", log_lines={"actual": messages}):
-        for fragment in never_logged.split(", "):
-            assert not any(fragment in m for m in messages), (fragment, messages)
+    attach_json("the log lines", messages)
+    held = expected_log_line_contains if any(needle in m for m in messages) else f"no line holds {needle!r}"
+    leaked = [f for f in expected_never_logged.split(", ") if any(f in m for m in messages)]
+    never = expected_never_logged if not leaked else f"logged: {', '.join(leaked)}"
+    expect({"log_line_contains": held, "never_logged": never}, log_line_contains=expected_log_line_contains, never_logged=expected_never_logged)

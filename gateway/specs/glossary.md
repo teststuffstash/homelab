@@ -116,7 +116,7 @@ an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `c
 openrouter model's endpoint snapshot has no provider that clears the policy floors —
 [sessions.md §The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)), the
 [entry canary](#canary)'s `canary-not-due` and `canary-budget`
-([GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or)), `cells-exhausted` (no
+([GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary)), `cells-exhausted` (no
 `retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
@@ -214,17 +214,17 @@ rates (the same arithmetic as the window draw). Shown on `GET /catalog/opencode`
 
 ## twin
 
-Two policy ids that name ONE model on two rails — the same tail after the rail prefix, a
+Two policy ids that name ONE model on two rails — the same tail once the rail prefix, a
 `:variant` and the vendor are stripped, in the AA spelling (`opencode-go/<id>` ↔ `<vendor>/<id>`;
 `tiers.same_model`, one rule, no table). When a tier's lists name a twin on two of the role's
-allowed rails, admission runs the **rail choice** ([GW-MODEL-TIERS §The rail choice](endpoints/catalog.md#the-rail-choice)):
+allowed rails, admission runs the **rail choice** ([GW-RAIL-CHOICE](endpoints/catalog.md#gw-rail-choice)):
 the rail whose twin cell costs less per clean ride walks first, with that twin at its list's
 head; the role's rail order stands for everything else. A `claude/` alias names a family, never a
 model: it twins nothing.
 
 ## canary
 
-Narrowed here to the **entry canary** ([GW-CATALOG-OR §The entry canary](endpoints/catalog.md#the-entry-canary)):
+Narrowed here to the **entry canary** ([GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary)):
 one ride through this gateway on exactly one `(model, provider)` [cell](#cell) of the openrouter
 rail — a session admitted with `canary: {model, provider}` (the policy's `canary.role` and
 `canary.harness`), pinned with fallbacks off and no failover — whose outcome is the cell's verdict:
@@ -315,3 +315,50 @@ does not cover, or a session whose eligible cells are all struck or cooled mid-r
 **unpinned** — no `provider` block, the vendor's own routing. The answer's own provider name
 outranks the pin for attribution. Not the `:exacto` suffix (never ported) and not a session's
 model pin (a session pins a model for its life — [session](#session)).
+## walk
+
+The admission's one pass over a role's rails, in the policy's order, cell by cell: for each rail
+not held by its [capacity](endpoints/sessions.md#gw-sessions-capacity) the [tier](#tier)'s ordered
+model list is read and the first [cell](#cell) the task has not [struck](#strike), that is not
+[cooled](#cooldown), and whose credential resolves is taken — its dialect names the harness
+([GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit)). The walk ends in a `dispatch` on
+that cell or a [`defer`](#defer) naming the rail that frees first; only when strikes alone hold every
+cell is the answer `cells-exhausted` ([GW-SESSIONS-RETRY](endpoints/sessions.md#gw-sessions-retry)).
+
+## strike
+
+A row of the outcome store keyed `(stack, task, rail, model, provider, harness)` with a class, a
+**scope** and a **source**: `outcome` when the consumer reported how its ride ended, `gateway` when
+the gateway saw the transport fact itself ([GW-SESSIONS-OUTCOME](endpoints/sessions.md#gw-sessions-outcome)).
+Scope says what the next [walk](#walk) excludes for the task: a cell-scoped strike the
+[cell](#cell), a model-scoped one the policy id on every rail, a harness-scoped one every cell the
+struck harness would ride. A strike is **counted** until a `clean` outcome on the same cell, model
+or harness refutes it (it stays as history with `refuted_at` set); a bare 2xx refutes nothing. Not a
+round: a logic failure is the consumer's round counter's, never a class here.
+
+## cooldown
+
+A [cell](#cell) held after an upstream 429 until the reset the wire named — `retry-after`, then
+`x-ratelimit-reset`, else the rail's `latch_429_hold_s`, else `defer_retry_s`; any 2xx on the cell
+clears it early. Admission skips a cooled cell (`cell-cooled`, `retry_after_s` = its reset) and
+takes the tier list's next model; a 429 writes no [strike](#strike)
+([GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity)).
+
+## latch
+
+A whole [rail](#rail) held after an upstream 429, because the policy declares the rail one account
+whose limits are account windows (`latch_scope: account` — the anthropic subscription, the Go rail
+since 2026-11-01): the 429 cools its cell AND latches the rail for the same reset, or the rail's
+`latch_429_hold_s` when none was named; any 2xx on the rail clears it. A rail that declares no latch
+(openrouter) is never latched — its 429s are per-model facts, a [cooldown](#cooldown) each
+([GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity)).
+
+## capacity mark
+
+What the gateway's capacity state remembers between admissions, one row of the store's
+`capacity_marks` table each: `cooled` (a cell's [cooldown](#cooldown) and its `until`), `latched` (a
+rail's [latch](#latch)), `rejected` (a credential's rail + sha256 fingerprint, its stack, the
+backoff and the next re-verification) and `hold` (the backoff a credential's next rejection doubles
+from) — never a credential value. A new gateway on the same DB reloads them at start, dropping only
+what the in-memory logic would already have let go
+([GW-SESSIONS-CAPACITY §Kept across a restart](endpoints/sessions.md#kept-across-a-restart)).
