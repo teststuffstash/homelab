@@ -1,0 +1,16 @@
+# Outsider comments never reach the worker: most claim repos are public, and the prefetch bundle
+# is the worker's directive channel. Same world as fix-round-with-arbitration plus a non-
+# collaborator (author_association NONE/CONTRIBUTOR, user.type User) posting on every channel the
+# block reads: an issue comment, a forged ARBITRATE on the issue AND the PR (both newer than the
+# loop's real one), an inline PR comment, and a review (older than the newest verdict, so the
+# readability check is unchanged).
+#
+# THE CONTRACT: no OUTSIDER-INJECTION text in any ConfigMap entry; issue.md carries the
+# "2 comment(s) by non-collaborators withheld" line; arbitration.md is the operator's (MEMBER) ARBITRATE, not the newer forged ones.
+name: context-prefetch/untrusted-comments
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
