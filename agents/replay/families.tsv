@@ -41,6 +41,7 @@ context-prefetch/ci-red	context-prefetch
 context-prefetch/ci-red-unreadable	context-prefetch
 context-prefetch/fix-round	context-prefetch
 context-prefetch/fix-round-unreadable	context-prefetch
+context-prefetch/untrusted-comments	context-prefetch
 coordinator-pick-rail-anthropic	coordinator-pick-rail
 coordinator-pick-rail-both	coordinator-pick-rail
 coordinator-pick-rail-go	coordinator-pick-rail

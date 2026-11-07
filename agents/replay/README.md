@@ -250,6 +250,7 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/fix-round-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-with-arbitration` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
+| `context-prefetch/untrusted-comments` | actions | - | `agents/agent-session.sh` | - |
 | `context-repos-prelude` | actions | - | `agents/agent-session.sh` | - |
 | `coordinator-adopt-model` | table | - | `agents/coordinator-session.sh` | - |
 | `coordinator-gateway-session` | table | - | `agents/coordinator-session.sh` | - |

@@ -2,15 +2,23 @@
   {
     "id": 1,
     "state": "COMMENTED",
-    "user": {"login": "reviewer1"},
+    "user": {
+      "login": "reviewer1",
+      "type": "Bot"
+    },
     "submitted_at": "2026-09-08T10:00:00Z",
-    "body": "First page, first review"
+    "body": "First page, first review",
+    "author_association": "NONE"
   },
   {
     "id": 2,
     "state": "COMMENTED",
-    "user": {"login": "reviewer2"},
+    "user": {
+      "login": "reviewer2",
+      "type": "Bot"
+    },
     "submitted_at": "2026-09-08T11:00:00Z",
-    "body": "First page, second review"
+    "body": "First page, second review",
+    "author_association": "NONE"
   }
 ]
