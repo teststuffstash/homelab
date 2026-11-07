@@ -671,8 +671,8 @@ spec:
 # week, and an ABSENT gauge fails the run rather than reading as quiet. The cell reads the sink
 # read-only as `feedback_ro` (the basic-auth Secret below, synced into ns oracle-fleet by
 # oracle-iac; the CNP leg to the Postgres pods is oracle-iac's `fixer.egress.ownServices`).
-# BORN SUSPENDED (first-runs doctrine, as the platform series was): unsuspend after a hand-fired run
-# lands its PR —   argo -n agent-coordinator submit --from cronworkflow/retro-feedback-triage
+# BORN SUSPENDED (first-runs doctrine, as the platform series was); UNSUSPENDED 2026-11-07 after the hand-fired run
+# retro-feedback-triage-5q28g landed clean (re-fire by hand: argo -n agent-coordinator submit --from cronworkflow/retro-feedback-triage).
 # The comment column is caller text under 365-day retention: the report carries counts and rule
 # proposals, never row text.
 apiVersion: argoproj.io/v1alpha1
@@ -684,7 +684,7 @@ spec:
   schedules:
     - "0 5 * * 3" # Wednesdays 05:00 UTC — its own slot, two days off the platform series' Monday
   timezone: UTC
-  suspend: true # born suspended — unsuspend after the first hand-fired run lands (homelab#3140)
+  suspend: false # unsuspended 2026-11-07: hand-fired run retro-feedback-triage-5q28g landed clean (homelab#3140)
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   workflowSpec:

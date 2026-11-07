@@ -13,6 +13,16 @@
 # Observation point: an EXIT trap, because every non-fall-through branch of the block `exit`s
 # before any post part could run. It prints the `quiet` output parameter and the bundle body.
 
+# DECLARATION (`expr-fires` ONLY, gated by `env: DECLARE_SCHEDULE=1`): the feedback-triage series'
+# weekly fire is Argo's `suspend` field on its CronWorkflow — no shell reads it, so the assertion is
+# the declaration read out of the shipped manifest (README §When the clause lives inside a
+# manifest). Born suspended; unsuspended once its hand-fired run landed clean (homelab#3140).
+if [ "${DECLARE_SCHEDULE:-0}" = "1" ]; then
+  awk '/^  name: retro-feedback-triage$/ { c = 1; next }
+       c && /^  suspend: / { printf "cron retro-feedback-triage suspend=%s\n", $2; exit }' \
+    "$REPLAY_ROOT/agents/coordinator/retro-argo.yaml"
+fi
+
 STACK="${STACK:?fixture must pin STACK}"
 WORK="$(mktemp -d)"
 # The series knobs the manifest sets just above the block (homelab#3140): SERIES defaults to the
