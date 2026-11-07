@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/guard.schema.json",
+  "$comment": "MACHINE half of the guard step (retro-argo.yaml templates[guard]); the HUMAN half is guard.md.",
+  "x-interface": "guard",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "properties": {
+    "params": {
+      "type": "object",
+      "description": "The workflow parameters the guard reads (retro-argo.yaml spec.arguments).",
+      "properties": {
+        "stack": { "enum": ["platform", "oracle", "sleep"], "x-requirements": ["RETRO-GUARD-BUSY"] },
+        "series": { "type": "string", "pattern": "^([a-z0-9-]+)?$", "description": "empty = the stack's own loop retro (series name == stack)" },
+        "minWindowTasks": { "type": "string", "pattern": "^[0-9]+$", "default": "8", "x-requirements": ["RETRO-GUARD-LEDGER"] },
+        "guardExpr": { "type": "string", "description": "empty = the ledger guard; set = one PromQL instant query", "x-requirements": ["RETRO-GUARD-EXPR"] }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "properties": {
+        "quiet": { "enum": ["true", "false"], "description": "/work/quiet — gates cell-a, cell-b and harvest", "x-requirements": ["RETRO-GUARD-LEDGER", "RETRO-GUARD-QUIET"] },
+        "evidence": {
+          "description": "/work/bundle.json — the frozen bundle (pipeline.schema.json#/$defs/bundle), or the quiet marker",
+          "oneOf": [
+            { "$ref": "pipeline.schema.json#/$defs/bundle" },
+            { "type": "object", "required": ["quiet"], "properties": { "quiet": { "const": true } }, "additionalProperties": false }
+          ],
+          "x-requirements": ["RETRO-GUARD-QUIET"]
+        }
+      }
+    },
+    "exit": {
+      "enum": [0, 1],
+      "description": "0 = continue (fire, or a quiet week handled); 1 = refused or failed (busy, unknown stack, zero tasks, absent gauge, dead Prometheus, quiet push failed)",
+      "x-requirements": ["RETRO-GUARD-BUSY", "RETRO-GUARD-LEDGER", "RETRO-GUARD-EXPR", "RETRO-GUARD-QUIET"]
+    }
+  },
+  "$defs": {
+    "verdict": {
+      "description": "the exit code of retro_pipeline.py prepare or retro_guard_expr.py, as the guard branches on it",
+      "oneOf": [
+        { "const": 0, "description": "FIRE" },
+        { "const": 3, "description": "QUIET" },
+        { "const": 1, "description": "FAIL" }
+      ],
+      "x-requirements": ["RETRO-GUARD-LEDGER", "RETRO-GUARD-EXPR"]
+    },
+    "prometheus_response": {
+      "description": "GET /api/v1/query answer; FIRE iff status=success and max(sample) > 0; QUIET iff all samples 0; FAIL otherwise (no sample, NaN, malformed)",
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "resultType": { "enum": ["vector", "scalar", "matrix", "string"] },
+            "result": {}
+          }
+        },
+        "error": { "type": "string" }
+      },
+      "x-requirements": ["RETRO-GUARD-EXPR"]
+    },
+    "quiet_push": {
+      "description": "the quiet-week belt push: one sample line, retried once after 3 s",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "pattern": "^http://prometheus-pushgateway\\.monitoring\\.svc\\.cluster\\.local:9091/metrics/job/platform-retro/series/[a-z0-9-]+/outcome/quiet$" },
+        "body": { "type": "string", "pattern": "^retro_report_last_success_timestamp [0-9]+\\n$" },
+        "attempts": { "type": "integer", "minimum": 1, "maximum": 2 }
+      },
+      "x-requirements": ["RETRO-GUARD-QUIET"]
+    }
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/findings.schema.json",
+  "$comment": "MACHINE half of retro_findings.py + retro_queue.py; the HUMAN half is findings.md.",
+  "x-interface": "findings",
+  "x-use-cases": ["UC-1"],
+  "$defs": {
+    "github_ref": { "type": "string", "pattern": "^https://github\\.com/[\\w.-]+/[\\w.-]+/(issues|pull)/[0-9]+$" },
+    "github_issue": { "type": "string", "pattern": "^https://github\\.com/[\\w.-]+/[\\w.-]+/issues/[0-9]+$" },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mechanism", "surface", "summary", "evidence"],
+      "properties": {
+        "mechanism": { "type": "string", "minLength": 1 },
+        "surface": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^https://" } },
+        "related_work": { "type": "array", "items": { "$ref": "#/$defs/github_ref" } }
+      },
+      "x-requirements": ["RETRO-FINDINGS-BLOCK"]
+    },
+    "envelope": {
+      "description": "the one ```retro-findings-json block of a report",
+      "type": "object",
+      "required": ["schema_version", "findings"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "findings": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/candidate" } }
+      },
+      "x-requirements": ["RETRO-FINDINGS-BLOCK"],
+      "x-errors": {
+        "report requires exactly one retro-findings-json block": "zero or several blocks",
+        "invalid finding envelope": "schema_version ≠ 1 or findings not a list",
+        "candidate contains unsupported fields (acceptance belongs in decisions)": "a field outside the five",
+        "finding requires occurrence evidence": "evidence empty",
+        "related_work requires canonical GitHub issue/PR URLs": "a non-canonical related ref"
+      }
+    },
+    "occurrence": {
+      "type": "object",
+      "required": ["model", "report", "summary", "evidence"],
+      "properties": { "model": { "type": "string" }, "report": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "summary": { "type": "string" }, "evidence": { "type": "array" } },
+      "x-requirements": ["RETRO-FINDINGS-IDENTITY"]
+    },
+    "disposition": {
+      "enum": ["insufficient_evidence", "covered_by_existing_work", "implemented_unverified", "new_work_needed", "verified", "disproved"],
+      "x-requirements": ["RETRO-FINDINGS-RECONCILE"]
+    },
+    "reconciliation": {
+      "type": "object",
+      "required": ["checked_at", "disposition", "reason", "accepted", "queue_prepared"],
+      "properties": {
+        "checked_at": { "type": "string" },
+        "disposition": { "$ref": "#/$defs/disposition" },
+        "reason": { "type": "string" },
+        "evidence": { "type": "array" },
+        "work": { "type": "object", "description": "url → {state, merged_at, updated_at, labels} | {error}" },
+        "accepted": { "type": "boolean" },
+        "canonical_issue": { "type": ["string", "null"] },
+        "queue_prepared": { "type": "boolean" },
+        "queue_action": { "type": ["string", "null"] }
+      },
+      "x-requirements": ["RETRO-FINDINGS-RECONCILE"],
+      "x-errors": {
+        "decision must be an object": "",
+        "decision evidence must be URLs": "",
+        "matched_work must contain canonical GitHub references": "",
+        "canonical_issue must be a GitHub issue URL": ""
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["id", "mechanism", "surface", "summary", "first_seen_at", "occurrences", "related_work"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^rf-[0-9a-f]{16}$", "x-requirements": ["RETRO-FINDINGS-IDENTITY"] },
+        "mechanism": { "type": "string" }, "surface": { "type": "string" }, "summary": { "type": "string" },
+        "first_seen_at": { "type": "string" },
+        "occurrences": { "type": "array", "items": { "$ref": "#/$defs/occurrence" } },
+        "related_work": { "type": "array", "items": { "type": "string" } },
+        "decision": { "$ref": "#/$defs/decision" },
+        "reconciliation": { "$ref": "#/$defs/reconciliation" }
+      },
+      "x-requirements": ["RETRO-FINDINGS-IDENTITY"]
+    },
+    "state": {
+      "description": "_retro/<series>/findings.json, and publication.findings",
+      "type": "object",
+      "required": ["schema_version", "findings"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "checked_at": { "type": "string" },
+        "report_defects": { "type": "array", "items": { "type": "object", "required": ["model", "report", "error"] } }
+      },
+      "x-requirements": ["RETRO-FINDINGS-IDENTITY", "RETRO-FINDINGS-RECONCILE"]
+    },
+    "decision": {
+      "description": "one entry of _retro/<series>/decisions.json — the seat's, never a report's",
+      "type": "object",
+      "properties": {
+        "disposition": { "$ref": "#/$defs/disposition" },
+        "evidence": { "type": "array", "items": { "type": "string", "pattern": "^https://" } },
+        "matched_work": { "type": "array", "items": { "$ref": "#/$defs/github_ref" } },
+        "canonical_issue": { "$ref": "#/$defs/github_issue" },
+        "issue": {
+          "type": "object",
+          "required": ["repo", "title", "body", "labels"],
+          "properties": {
+            "repo": { "type": "string", "pattern": "^[\\w.-]+/[\\w.-]+$" },
+            "title": { "type": "string" },
+            "body": { "type": "string", "description": "machine block with Touches and Base: master (agents/issue_body.py)" },
+            "labels": { "type": "array", "items": { "type": "string" }, "contains": { "pattern": "^task/" } }
+          }
+        },
+        "origin_issue": { "$ref": "#/$defs/github_issue" },
+        "accepted_by": { "type": "string" },
+        "accepted_at": { "type": "string" }
+      },
+      "x-requirements": ["RETRO-ACCEPT-QUEUE"],
+      "x-errors": {
+        "decision IDs must name existing findings": "",
+        "new findings require a --batch or origin_issue before filing": "",
+        "batch must be an open retro-batch container": "",
+        "accepted new work requires issue repo/title/body": "",
+        "new ordinary work requires machine-block Touches and Base: master": "",
+        "new work requires a task/* classification": "",
+        "acceptance cannot manufacture Goal or lifecycle labels": "",
+        "duplicate finding issues require disposition": "",
+        "cannot queue issue without Touches": ""
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["id", "action"],
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "enum": ["skip", "queue", "create-and-queue"] },
+        "reason": { "type": "string" }, "repo": { "type": "string" }, "number": { "type": "integer" },
+        "title": { "type": "string" }, "body": { "type": "string" }, "labels": { "type": "array" }
+      },
+      "x-queue-labels": ["agent-fix", "agent/queued"],
+      "x-body-marker": "<!-- retro-finding:<id> -->",
+      "x-requirements": ["RETRO-ACCEPT-QUEUE"]
+    },
+    "kpi": {
+      "description": "NOT BUILT — the intended deterministic bucket-A field of the bundle (findings.md RETRO-KPI-BUCKET-A)",
+      "type": "object",
+      "properties": { "bucket_a": { "type": "integer", "minimum": 0 }, "window": { "$ref": "pipeline.schema.json#/$defs/window" } },
+      "x-status": "gap",
+      "x-requirements": ["RETRO-KPI-BUCKET-A"]
+    }
+  }
+}

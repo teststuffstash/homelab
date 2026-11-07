@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/cell.schema.json",
+  "$comment": "MACHINE half of retro-session.sh + the retro-cell step; the HUMAN half is cell.md.",
+  "x-interface": "cell",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "properties": {
+    "cli": {
+      "description": "retro-session.sh <stack> --cell <harness>[:<model>] (--ledger <bundle.json> | --review <report.md>) [--series <name>] [--deep-dive-k N]",
+      "type": "object",
+      "required": ["stack", "cell"],
+      "properties": {
+        "stack": { "enum": ["platform", "oracle", "sleep"] },
+        "cell": {
+          "type": "string",
+          "pattern": "^(claude|goose)(:[^ ]+)?$|^[a-z]+:[^ ]+$",
+          "description": "platform: a bare harness only; off-platform: a bare harness with a transition model, or harness:model",
+          "x-requirements": ["RETRO-CELL-PATH"]
+        },
+        "ledger": { "type": "string", "description": "the frozen bundle (required for the retro and series legs)", "x-requirements": ["RETRO-CELL-RUNID"] },
+        "review": { "type": "string", "description": "a harvested report; must meet the report floor in report mode", "x-requirements": ["RETRO-REPORT-FLOOR"] },
+        "series": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "deep_dive_k": { "type": "integer", "default": 8 }
+      }
+    },
+    "exit": {
+      "enum": [0, 1, 2],
+      "description": "0 the hand-off's own status 0; 1 refused (argv ceiling, no key, missing/invalid bundle, review under floor) or a failed hand-off; 2 usage (model on platform, no transition model, unknown flag/stack). The hand-off's internal 75 never escapes: it selects the transition fallback.",
+      "x-requirements": ["RETRO-CELL-PATH", "RETRO-CELL-KEY", "RETRO-CELL-PAYLOAD", "RETRO-CELL-RUNID"]
+    }
+  },
+  "$defs": {
+    "run_id": { "type": "string", "pattern": "^r[1-9][0-9]*$", "x-requirements": ["RETRO-CELL-RUNID"] },
+    "task_key": { "type": "string", "pattern": "^retro-([a-z0-9-]+-)?r[1-9][0-9]*(-xrev)?$", "x-requirements": ["RETRO-CELL-RUNID"] },
+    "dispatch_line": {
+      "description": "the ride-log line agents/gateway-admit.sh prints on a dispatch — the served-model record",
+      "type": "string",
+      "pattern": "^→ gateway\\(sessions\\): dispatch [^ ]+ \\[",
+      "x-requirements": ["RETRO-CELL-PATH"]
+    },
+    "old_proxy_line": {
+      "description": "retro-session.sh's old-proxy announcement",
+      "type": "string",
+      "pattern": "^→ [^ ]+ r[0-9]+ cell [a-z0-9]+:[^ ]+ ",
+      "x-requirements": ["RETRO-CELL-PATH"]
+    },
+    "gateway_handoff": {
+      "description": "the environment the platform cell hands agent-session.sh",
+      "type": "object",
+      "required": ["AGENT_GATEWAY", "AGENT_GATEWAY_ROLE", "AGENT_GATEWAY_FALLBACK_EXIT"],
+      "properties": {
+        "AGENT_GATEWAY": { "const": "sessions" },
+        "AGENT_GATEWAY_ROLE": { "const": "retro" },
+        "AGENT_GATEWAY_FALLBACK_EXIT": { "const": "75" }
+      },
+      "x-requirements": ["RETRO-CELL-PATH"]
+    },
+    "key_cr": {
+      "description": "the OpenRouterKey a non-subscription old-proxy cell applies",
+      "type": "object",
+      "properties": {
+        "metadata": { "type": "object", "properties": { "name": { "type": "string" }, "labels": { "type": "object", "properties": { "budget-tier": { "const": "xs" } } } } },
+        "spec": {
+          "type": "object",
+          "required": ["budgetUSD", "ephemeral", "secretName"],
+          "properties": {
+            "budgetUSD": { "const": 0.5 },
+            "ephemeral": { "const": true },
+            "session": { "type": "string", "pattern": "^retro-r[0-9]+(-xrev)?-[a-z0-9.-]+$" },
+            "secretName": { "type": "string", "pattern": "-session-" }
+          }
+        }
+      },
+      "x-requirements": ["RETRO-CELL-KEY"]
+    },
+    "report_floor": {
+      "description": "retro-report-floor.sh <in> <out> <log|report>",
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["log", "report"] },
+        "min_content_lines": { "const": 20 },
+        "markers": { "const": ["BEGIN-RETRO-REPORT", "END-RETRO-REPORT"] },
+        "reason": { "type": "string", "pattern": "^(no-markers|empty|under-floor: [0-9]+ content lines < 20)$" },
+        "exit": { "enum": [0, 1, 2] }
+      },
+      "x-requirements": ["RETRO-REPORT-FLOOR"]
+    },
+    "cell_step": {
+      "description": "the retro-cell template's contract with the DAG",
+      "type": "object",
+      "properties": {
+        "inputs": { "type": "object", "properties": { "cell": { "type": "string", "description": "a harness, or empty (single-cell no-op)" }, "subscription": { "type": "string", "description": "declared, read by nothing" } } },
+        "outputs": { "type": "object", "properties": { "ride-log": { "const": "/work/ride.log" } } },
+        "phase": { "enum": ["Succeeded", "Failed", "Error"] }
+      },
+      "x-requirements": ["RETRO-CELL-SELFCHECK"]
+    }
+  }
+}
