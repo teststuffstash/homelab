@@ -88,7 +88,7 @@ per-session spend cap yet: the gateway answers `context_tokens` (a window, not a
 supplier's own catalog tracks cost per clean ride, not a per-session ceiling (unverified — expected:
 the cap moves to wherever the credential lives, i.e. the gateway, as an admission input). Until then
 the goal-budget gate keeps reserving `cap_usd` for gateway rides, which spend no OpenRouter key on
-the subscription and Go rails (the `subscription-ride-*` rows of
+the subscription and [Go](../../../../docs/glossary.md) rails (the `subscription-ride-*` rows of
 [LAUNCH-PREFLIGHT-GOAL-BUDGET](dispatch.md#launch-preflight-goal-budget) price those at $0).
 
 **World:** `launcher-vars`, `--issue-chars 400 --price-per-mtok 0.10 --project homelab --session

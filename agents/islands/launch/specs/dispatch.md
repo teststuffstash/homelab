@@ -308,7 +308,7 @@ Legend: `existing` = the goal's prior refusal comment; `action?` = what the laun
 The dispatcher passes the default recipe (`.agents/fix.yaml` in the repo's clone); an issue
 carrying a `task/<class>` label rides the sibling `.agents/<class>.yaml` when one exists, else the
 default with one line saying so (:1462 — deterministic, never model-picked;
-[../docs/fixer-context.md](../docs/fixer-context.md) §L3). The chosen recipe must parse as YAML
+[../docs/fixer-context.md](../docs/fixer-context.md), layer L3). The chosen recipe must parse as YAML
 before any pod exists (`agents/recipe-lint.sh`, exit 2 with the reproduce command, :1497); the card
 is spliced at its `{{PLATFORM_ENV_CARD}}` marker, else after its `instructions: |` key, else the
 ride goes without a card and says so; a splice that breaks the YAML falls back to the un-carded

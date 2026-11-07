@@ -79,7 +79,7 @@ or carries `author_association` `OWNER`, `MEMBER` or `COLLABORATOR`
 The per-ride text the launcher writes into the recipe at its `{{PLATFORM_ENV_CARD}}` marker: the
 ground rules verbatim, then the ride's own facts (docker, egress, web research, round, write
 scope, base, goal, bundle, spec process, image volumes, feedback tool), each computed from the
-knob that built the ride. Design: [../docs/fixer-context.md](../docs/fixer-context.md) §L1.
+knob that built the ride. Design: [../docs/fixer-context.md](../docs/fixer-context.md) (layer L1).
 
 ## salvage verdict
 
