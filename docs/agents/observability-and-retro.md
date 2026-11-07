@@ -585,7 +585,8 @@ PLATFORM retro and per-stack retros — built in that order.**
    **Stack series (ADR-146, accepted 2026-10-04).** The same workflow with `stack=<name>`:
    ride ns = the stack's fixer ns (`agents/retro-project.sh`), git identity = the stack's own
    worker token (its repos + the public platform repos — the platform series alone mounts
-   `retro-git`, #2215), bundle + ledger guard scoped to the claim's repos, its own weekly slot
+   `retro-git`, #2215; a NAMED series (#3140) holds only the stack repo's worker token, since it writes its
+   rules PR and issues there — `retro-session.sh` `retro-series-identity`), bundle + ledger guard scoped to the claim's repos, its own weekly slot
    (platform Mon 05:00Z; stacks on later days — the subscription semaphore and the ride-ns
    busy-probe serialize them); the guard's event floor gates every fire, which is what makes
    default-on safe. Context = `BRIEF.md` rendered for the stack + whatever the stack repo gives
