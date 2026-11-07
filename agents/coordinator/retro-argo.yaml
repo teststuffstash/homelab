@@ -427,8 +427,11 @@ spec:
       inputs:
         artifacts:
           - { name: evidence, path: /work/bundle.json, mode: 0444 }
-          - { name: log-a, path: /work/log-a }
-          - { name: log-b, path: /work/log-b }
+          # optional HERE too, not only on the DAG args: a single-cell series (harnessB empty)
+          # never writes log-b, and a required template input errors the harvest before it runs
+          # (the script already guards each log with [ -f ]).
+          - { name: log-a, path: /work/log-a, optional: true }
+          - { name: log-b, path: /work/log-b, optional: true }
       container:
         image: ghcr.io/teststuffstash/agent-coordinator
         # Argo's init container stages input artifacts root-owned; the image's non-root user
