@@ -6,7 +6,7 @@ schema: re-review.schema.json
 # The time-travel re-review — a Go-served review's exact input, re-judged later
 
 *Would the subscription reviewer have reached the same verdict on exactly what the Go-served
-reviewer saw?* When a code review is served from the Go rail instead of the subscription, the pod
+reviewer saw?* When a code review is served from the [Go rail](../../../../docs/glossary.md) instead of the subscription, the pod
 records the review's input state to S3. Later, after the Anthropic pool resets, a jail operator
 runs [`agents/re-review.sh`](../../../re-review.sh). It re-judges the recorded state with a chosen
 model (default `sonnet`) and compares the verdicts (homelab#424, ruled 2026-08-13). This is the

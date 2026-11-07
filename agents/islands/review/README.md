@@ -11,7 +11,7 @@ repo's second required approval. The **IaC sentinel** (IAC-G04,
 `iac-sentinel` commit status on every open head of the covered repos. The first two are meant to
 get their model and harness from the agent gateway (`POST /sessions`, `role: reviewer`), so the
 island names no model of its own. The specs reviewer already does this. The code reviewer does it
-only for the platform stack, and the old-proxy sites that remain are `⚑ gap` rows
+only for the [platform stack](../../../docs/glossary.md), and the old-proxy sites that remain are `⚑ gap` rows
 ([specs/dispatch.md](specs/dispatch.md#review-admit-legacy)). The contract is
 [`specs/`](specs/README.md). The design prose is [`docs/`](docs/specs-reviewer.md).
 
