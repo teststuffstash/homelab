@@ -310,7 +310,7 @@ never harder posture on quiet ones.
   `argocd/resources/agentstack/rbac.yaml`. **Shadow answers typed + scored (2026-10-09):** the
   session's `REMEDIATION-WOULD:` line (leg 1, homelab#1274) is harvested by the shell into
   `finding.json`'s `remediation_would` field (leg 2), and `/board-sweep` scores every entry
-  `right | wrong | unsafe` in [`remediation-would-scoreboard.md`](remediation-would-scoreboard.md)
+  `right | wrong | unsafe` in [`remediation-would-scoreboard.md`](../../agents/islands/intake/docs/remediation-would-scoreboard.md)
   — stack alerts only count (#818 clause 3); the graduation criterion lives on #818.
   **Three lane gaps, all evidenced by the 27-issue corpus (2026-08-04 audit, FU-133):** the lane
   files one issue per *fingerprint* and correlates nothing (~19 of 27 issues were 5 root causes;

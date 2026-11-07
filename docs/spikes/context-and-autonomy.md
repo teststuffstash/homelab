@@ -186,11 +186,52 @@ dependency-upgrades shaped; `agents/upgrade-lease*.sh` live under `agents/` but 
 mgmt-box island's ([`intake/mgmt-box.md`](../intake/mgmt-box.md)); "island" itself has no
 [`glossary.md`](../glossary.md) row (only "island intake" and "specs reviewer" use it).
 
+**Rendered (draft, same PR, 2026-11-07):** the five pieces written up as islands in
+[`agents/islands/`](../../agents/islands/README.md) — README + snippets-v0.6.9 `specs/` each
+(scan 35 · launch 31 · review 28 · intake 30 · retro 28 requirements), with the island-owned design prose
+moved out of `merge-path.md`, `observability-and-retro.md`, `specs-reviewer.md`,
+`spec-gate-tiering.md`, `remediation-would-scoreboard.md`, `fixer-context.md` and the launcher half of
+`model-routing.md` (pointers left). What the write-up
+found against the table above is under §C8a.
+
 **Not decided here:** whether the cut is scan / launch / review / dig + intake + responder /
 retro with replay as the shared harness and the pins moved out; what a spec root per piece is
 (a page per fixture family, `agents/replay/` as the tests root — P4/P5 of §The plan, #1224);
 whether the claim's `specs` field becomes a list. Gate changes batch into the
 [`iac-lane.md`](../agents/iac-lane.md) §The pile checkpoint, not per-event edits.
+
+### C8a. What writing the islands up found against §C8 (second jail, 2026-11-07)
+
+Facts from reading each island's code to write its specs ([`agents/islands/`](../../agents/islands/README.md)); not decided here.
+
+- **Membership the table missed.** `coordinator-session.sh` (the scan's dispatch arm) is in no row;
+  `fix-debounce-argo.yaml` is admission (intake), `deploy-revert-argo.yaml` the revert guard,
+  `corpus-dispatch-argo.yaml` oracle's doorbell — only `coordinate`, `reflexes` (minus the ledger) and
+  `update-pr` are scan's manifests. `goal-budget.sh` is launch's; `review-reflex.sh` and its belts are
+  scan's, not review's. Retro adds `retro-git.yaml`, three runtime-read briefs under
+  `docs/agents/retros/` and `RetroReportOverdue`. `seat-window.sh` is in no row.
+- **Shared libraries, not scan or launch code.** `footprint.sh` and `touches-check.sh` have five readers
+  outside the scan; `gateway-admit.sh` is sourced by four other launchers and five Argo manifests;
+  `resolve-model.sh` has zero callers in `agent-session.sh` (its callers are the coordinator, scan,
+  retro, dig, intake, responder and fix-debounce launchers); `subscription-latch.sh`,
+  `machine-comment.sh`, `goal-budget.sh` are shared helpers; `issue_body.py` + `footprint.sh` are what intake shares with scan — §Interfaces' seams.
+- **Cross-island seams inside one manifest.** `review-argo.yaml` carries the shared JetStream
+  EventBus and the `agent-loop` EventSource (also `/coordinate`, `/alert`, deploy-revert); the
+  sentinel's cron backstop sits in the scan's `reflexes-argo.yaml`; the per-stack `coordinate-<stack>`
+  CronWorkflows are rendered by the AgentStack Composition (claim ↔ scan is real coupling).
+- **Intake is shared machinery under `gateway/`.** `gateway/intake.md` and
+  `gateway/scripts/intake-select.sh` serve every island and are runtime-read where they stand.
+- **The single spec root is wider than `pack_roots`.** `evidence_bucket` (homelab → `gateway-specs`),
+  the `gateway-evidence` artifact name and `build_pack`'s one `--specs-root` assume it too; the island
+  pages written here are themselves ungated.
+- **Self-routing left on the old contract** (counted per island, all `⚑ gap` rows): the scan still
+  passes `--model`, reads `/router-status` and the reflex `/report/latest`; only the platform stack
+  admits through the gateway (other stacks' coordinators and reviewers go `resolve-model.sh` → `/route`);
+  the responder/dig/intake lanes fall back to `subscription-latch.sh` + `resolve-model.sh` on
+  `POST /sessions` rc 4; the retro keeps 13 such sites (2 model literals).
+- **Bucket-A did not stop at 38.** The retro cells kept scoring it in prose through r10 (2026-11-02),
+  no code computes it, and two cells of one run disagree (r7: 2 vs 13) — the series P1/P5 settle on is
+  not a measurement yet.
 
 ### D. Context the human pays (first draft, still true)
 
