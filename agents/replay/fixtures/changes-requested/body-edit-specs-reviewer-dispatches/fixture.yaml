@@ -1,0 +1,30 @@
+# changes-requested/body-edit-specs-reviewer-dispatches (oracle-fleet#1013) — the body-edit leg's
+# NEGATIVE twin: the same world as body-edit-held, but the CHANGES_REQUESTED is the SPECS
+# reviewer's.
+#
+# CONDITION UNDER REPLAY. PR #1097 carries homelab-specs-reviewer's CHANGES_REQUESTED (17:23);
+# the worker answered by EDITING THE BODY (17:30); the only later commit is an updater merge.
+# The specs reviewer re-reviews only a new content commit (a live own verdict at the content
+# commit = skip), so nothing will ever re-read that body edit — oracle-fleet PR#1013 sat held
+# for good on exactly this.
+#
+# THE CONTRACT:
+#   1. The same reads as body-edit-held (one `gh pr view`, one lazy `gh api graphql`).
+#   2. A UNIT: the round is the worker's, not a reviewer's. On base the body leg holds — red.
+pins:
+  - MP-T11
+name: changes-requested-body-edit-specs-reviewer-dispatches
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
