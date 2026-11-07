@@ -131,6 +131,8 @@ retro-key-minted-labels-first	retro-key
 retro-key-pinned	retro-key
 retro-key-subscription	retro-key
 retro-rank-snapshot-exclusion	retro-rank-snapshot-exclusion
+retro-series-identity/loop	retro-series-identity
+retro-series-identity/series	retro-series-identity
 review-flip-belt	review-flip-belt
 review-flip-belt-probe-fail	review-flip-belt
 review-phantom-belt	review-phantom-belt

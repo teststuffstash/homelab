@@ -69,7 +69,15 @@ SERIES="${SERIES:-$STACK}"
 SERIES_BRIEF=""; [ "$SERIES" = "$STACK" ] || SERIES_BRIEF=1
 # A series' brief ends in a PR on the stack repo, so its ride carries `pr-open` on PATH (ADR-157:
 # the one way a ride opens a PR; agent-session.sh renders it for a --run ride on this flag).
+# >>>REPLAY:retro-series-identity>>>
 [ -z "$SERIES_BRIEF" ] || export AGENT_PR_OPEN=1
+# ...and that PR, plus the issues its brief files, need WRITE on the stack repo. The fleet-wide
+# read-only retro token (RETRO_GH_SECRET, retro-git.yaml) exists for the loop retro's cross-stack
+# deep-dives. A series reads only its own stack repo, so it drops that mount and keeps the broker:
+# the stack repo's worker token (agent-git-<repo>: contents/pull_requests/issues write), the same
+# identity the namespace's fixer rides hold (operator ruling 2026-11-07, homelab#3140).
+[ -z "$SERIES_BRIEF" ] || unset RETRO_GH_SECRET
+# <<<REPLAY:retro-series-identity<<<
 # >>>REPLAY:retro-cell-path>>>
 HARNESS="${CELL%%:*}"; MODEL=""
 case "$CELL" in *:*) MODEL="${CELL#*:}";; esac

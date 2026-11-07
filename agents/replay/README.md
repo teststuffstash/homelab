@@ -494,6 +494,8 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-push-belt` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-quiet-guard` | table | - | `agents/coordinator/retro-argo.yaml` | - |
 | `retro-rank-snapshot-exclusion/retro-rank-snapshot-exclusion` | suite | - | `-` | - |
+| `retro-series-identity/loop` | actions | - | `agents/retro-session.sh` | - |
+| `retro-series-identity/series` | actions | - | `agents/retro-session.sh` | - |
 | `review-flip-belt/probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-only-label-combinations` | table | - | `agents/coordinator-scan.sh` | IL-T27 |
