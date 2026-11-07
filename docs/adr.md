@@ -3007,3 +3007,20 @@ kill; a limit the job can read is the budget, and overlapping big jobs happen 0.
 until capacity frees (visible via `CiDispatchStalled`), accepted as rare; the lever if pending
 rides appear is a PriorityClass ranking rides above retryable CI. FU-218 archived; the spike is
 the record.
+
+### ADR-160 — A stack island's intake facts live in the stack repo; the platform owns only the launch mechanics (2026-11-07)
+**Status:** Accepted (operator, 2026-11-07, on oracle's request to be the second intake island).
+**Decision:** island intake keeps ONE rules home (`gateway/intake.md`). A STACK island's facts, read
+set and unit split (oracle-fleet: its tracks and `docs/process/read-map.yaml`) live in the stack repo
+and are the stack seat's to maintain. Only the general mechanics are platform machinery: when an
+intake sitting launches, its selector source, the outcome grammar. Platform islands keep
+`docs/intake/<island>.md`. Mechanism and open questions:
+[`spikes/island-intake.md`](spikes/island-intake.md) §Open questions 5.
+**Considered:** a homelab `docs/intake/oracle.md` (rejected: oracle's tracks concept predates and
+outruns homelab's island split, so a homelab copy would be the stale one).
+**Why:** one home per fact. The stack owns the knowledge of its own units; the platform owns when a
+sitting starts.
+**Consequences:** the oracle seat writes its facts and read-unit rule in oracle-fleet. Homelab's
+selector and launcher gain a stack-island source when the first stack sitting is wired (FU-320). The
+island/track terms overlap and need rework; that rework is not this ADR.
+
