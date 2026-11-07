@@ -263,19 +263,7 @@ scope.
   — chain exhausted with the strike list, or the round cap reached.
   - anchor: `agents/coordinator-scan.sh`, `agents/review-reflex.sh`.
   - evidence: the `AGENT_STRIKE:` comment listing the chain; the issue's lifecycle labels.
-- **A key-class budget error is NOT a strike.** `budget-403-key` / `budget-exhausted-key` are a
-  mint defect → a `KEY-RETRY:` marker, same model, fresh session key.
-  - anchor: `agents/agent-session.sh` (the `KEY-RETRY` branch).
-  - evidence: the `KEY-RETRY:` comment; `devbox run clause-replay` over
-    `agents/replay/fixtures/strike-quota-classifier` (the classification it rides on).
-- **The raw-log fallback emits the finer subclasses** when no structured report exists
-  (`budget-403-key`, `budget-403-account`, `http-403-other`) — the residual `budget-403` is
-  neither a strike nor a key-retry and escalates. Goose's one-line 402 rendering (`add more
-  credits`) is key-class, not residual, by the 2026-10-15 operator ruling (retro r8 F3): the
-  credit-floor gate (FU-088b) already defers dispatch on a low account.
-  - anchor: `agents/agent-session.sh` (the classify block).
-  - evidence: replay `agents/replay/fixtures/strike-quota-classifier` (three branches); the
-    comment's `error_class=`.
+- **The launcher's strike rules** — the key-class `KEY-RETRY:` marker, the raw-log fallback's finer subclasses, the same-round retry at worker-terminal, and the strike comment as the store — moved to [launcher-routing.md#the-strike-comment-and-its-readers](../../agents/islands/launch/docs/launcher-routing.md#the-strike-comment-and-its-readers) (the launch island).
 - **A clean ride refutes a counted pair strike** (`outcome='pr'` on the same model +
   served provider) — never a bare 2xx: a provider serving badly behind HTTP 200 is exactly the
   failure the pair cooldown exists to route around.
@@ -312,13 +300,6 @@ scope.
   `/router-status` export and the scope split — is the anchored half above.
   - **`unenforced`** — Goal #1640 acceptance 1 (the finalizer/watchdog half; the router half
     landed in PR#1734). Not verifiable from this repo.
-- **The launcher retries at worker-terminal.** `AGENT_STRIKE` ∧ salvage verdict `none` ∧ class ∈
-  {serving-shaped, `turn-cap`} ∧ attempts < cap (one automatic retry per
-  `(model, provider, class)`, two per task) ⇒ `/route` again and re-run at the SAME round — no
-  scan re-queue, no coordinator session; cap reached ⇒ the strike list + doorbell as today.
-  - anchor: `agents/agent-session.sh` (the `REPLAY:strike-retry` block — Goal #1640 acceptance 4,
-    landed via PR#1934).
-  - evidence: replay `agents/replay/fixtures/strike-retry`.
 - **The FU-200 fleet reader re-keys on `(class, provider)` / `(class, model)` / neither** — a
   repeated serving strike latches the PROVIDER (or nominates the MODEL for the ledger) instead of
   labelling issues; `agent/error` on issues stays for the "us" case only, and a clean retry
@@ -334,13 +315,6 @@ scope.
     refutation, the unreadable router, the FU-202 key-class exclusion) +
     `agents/replay/fixtures/fleet-strike-reader` (the us-case ticks); the `fleet-strike:` /
     `model-nomination:` issue titles.
-- **The strike comment remains the store FOR NOW, with a named debt**: migrate the strike READERS
-  (the chain-walk, the ≥2-in-24h rule) to the router store's `strikes` table, then demote the
-  comment to one appended line on the `agent-summary` index.
-  - anchor: `agents/agent-session.sh` (the writer) + `agents/coordinator-scan.sh` (the reader).
-  - evidence: replay `agents/replay/fixtures/fleet-strike-reader`.
-  - **`unenforced`** for the migration — operator ruling 2026-08-19; blocked on the router's
-    storage-engine question settling. Proposed, no owner.
 
 ## The carriers
 
@@ -349,33 +323,7 @@ scope.
 and `subscription-fallback` (the §M12 degrade). The folded accounting view is in
 `agents/ledger.py:_model_rail()`.
 
-- **OpenRouter capacity-down ≠ budget-spent.** A project-key headroom exhaustion stops the
-  dispatch (a budget decision); an ACCOUNT-scope failure (credit floor, hard 402, cross-model 429s)
-  degrades it to `claude/haiku` on the subscription instead — an infra failure, the same class as
-  a 5xx.
-  - anchor: `openrouter-proxy.py` (the `_or_capacity_*` block) types it; `agents/agent-session.sh`
-    decides via three triggers (routed defer typed `or-capacity-down:*` in authoritative mode;
-    `/router-status` → `.openrouter_capacity.down` in all modes; the credit floor).
-  - evidence: `agents/rail-degrade-replay.sh` (CAP…CAP9, FAILOPEN…); replays
-    `agents/replay/fixtures/rail-degrade`, `agents/replay/fixtures/go-rail-latch`;
-    `router_openrouter_capacity_down`, `router_openrouter_account_credit_usd`.
-- **The degrade's bounds are the rule**: `class=fix` only, semaphore-bounded (the degraded ride IS
-  a claude ride, so FU-088 gates it unchanged), per-stack opt-out
-  (`subscriptionFallback: false` / `AGENT_SUBSCRIPTION_FALLBACK=0`, read `== false` never
-  `// false`), and the claim's `modelDeny` binds.
-  - anchor: `agents/agent-session.sh` (the degrade branch).
-  - evidence: `agents/replay/fixtures/rail-degrade` rows.
-- **A degrade is visible on three surfaces**: the pod label
-  `homelab.teststuff.net/rail`, the `AGENT_RAIL` pod env, and the launcher's `POST /report` field.
-  - anchor: `agents/agent-session.sh`; `router.py:record_report` (`run_reports.rail`).
-  - evidence: `router_run_reports_by_rail_total{rail="subscription-fallback"}`.
-- **Key-read discipline: read the boolean, never `reason`.** The proxy publishes
-  `openrouter_capacity.reason` unconditionally while `down` is the latched verdict — a
-  reason-keyed read would degrade the fleet forever from the first 429; an unavailable balance is
-  *no balance* (fail-open with one visible line), never a low one.
-  - anchor: `agents/agent-session.sh` (the `GET /router-status` read).
-  - evidence: replay `agents/replay/fixtures/rail-degrade` (CAP5 the stale-`reason` trap, CAP4 the
-    lost payload).
+- **The launcher's carrier rules** — the rail degrade (OpenRouter capacity-down ≠ budget-spent, its bounds, its three surfaces, the key-read discipline), the chainless guard and the platform stack's gateway exception — moved to [launcher-routing.md#the-rail-degrade-and-the-chainless-guard](../../agents/islands/launch/docs/launcher-routing.md#the-rail-degrade-and-the-chainless-guard) (the launch island; all old contract, retired by the gateway).
 - **The coordinator/reviewer/retro override rules (ADR-094, settled #810):** an explicit CLI
   `--model` is an override (route skipped); a scan-supplied default (`coordinatorModel`) is a
   constraint with a fail-OPEN fallback; a retro `--cell` model is an explicit override (cells are
@@ -393,16 +341,9 @@ and `subscription-fallback` (the §M12 degrade). The folded accounting view is i
   claim's per-stack ordering surviving as class policy, before the claim goes chainless).
   - anchor: `model-classes.json` → `classes`; `router.py:route`.
   - evidence: decision rows per role; `/router-status` → `decisions_24h`.
-  - **Except the platform stack's worker rides, flipped to the gateway (FU-270 (c), 2026-10-21):**
-    the coordinator session pod carries `AGENT_GATEWAY=sessions`, so
-    [`agents/agent-session.sh`](../../agents/agent-session.sh) admits them through the gateway's
-    `POST /sessions` ([UC-1](../../gateway/specs/use-cases/uc-1-worker-ride.md)) and never calls
-    `/route`; the knob is pod env, not a claim field.
-- **A platform claim is chainless when it has no chain** and refuses a chainless dispatch without
-  an authoritative verdict.
-  - anchor: `agents/agent-session.sh` `REPLAY:chainless-guard`; [the platform stack](agentstack.md) went chainless
-    at `routerMode: authoritative` 2026-09-19 (Goal #1640 acceptance 6 — homelab#1782/#1783/#1787), the fleet's
-    last static chain.
+  - **Except [the platform stack](agentstack.md)'s worker rides**, admitted by the gateway's `POST /sessions` —
+    moved with the launcher's rules to
+    [launcher-routing.md](../../agents/islands/launch/docs/launcher-routing.md#the-rail-degrade-and-the-chainless-guard).
 
 ### The OpenRouter API surface (probed — the one reference)
 
