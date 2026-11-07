@@ -19,6 +19,17 @@ if [ "${DECLARE_CONTINUEON:-0}" = "1" ]; then
   ' "$REPLAY_ROOT/agents/coordinator/retro-argo.yaml"
 fi
 
+# HALF 1b (declaration, `single-cell` ONLY, gated by `env: DECLARE_HARVEST_INPUTS=1`): Argo — not
+# the shell — refuses to start a template whose required input artifact is missing, so the harvest
+# TEMPLATE's own log inputs must be optional (the DAG args alone are not enough): a one-cell series
+# never writes log-b (homelab#3140's first run errored `inputs.artifacts.log-b was not supplied`).
+# Read out of the shipped manifest — the template input lines are the ones with a `path:`.
+if [ "${DECLARE_HARVEST_INPUTS:-0}" = "1" ]; then
+  grep -E 'name: log-[ab], path: ' "$REPLAY_ROOT/agents/coordinator/retro-argo.yaml" \
+    | sed -E 's/.*name: (log-[ab]),.*/\1 &/' \
+    | awk '{ printf "harvest input %s optional=%s\n", $1, ($0 ~ /optional: true/ ? "true" : "false") }'
+fi
+
 # HALF 2 (harvest world): the six variables retro-argo.yaml's harvest step sets above the block —
 # the run coordinates and the two harness→log pairs (the served model is the block's own read of
 # each log, FU-270) — now come off this row's `env:` column instead
