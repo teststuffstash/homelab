@@ -1,18 +1,3 @@
 [
- ["GW-CODEX-HEADROOM", "policy-codex", "a non-JSON, wrong-type or oversize body is refused", "THREAD_BROKEN"],
- ["GW-CODEX-HEADROOM", "policy-codex", "a non-bool flag or a non-integer window field is refused", "THREAD_BROKEN"],
- ["GW-CODEX-HEADROOM", "policy-codex", "an unreachable endpoint and a timeout are told apart", "THREAD_BROKEN"],
- ["GW-CODEX-HEADROOM", "policy-codex", "the counter's label set is the poll's outcome set", "UNIT_ONLY_CANDIDATE"],
- ["GW-CODEX-HEADROOM", "policy-codex", "the counter's label set is the reader's outcome set", "UNIT_ONLY_CANDIDATE"],
- ["GW-CODEX-HEADROOM", "policy-codex", "the poll rides the lifecycle: one owner rotates once, the rotated bearer and the account header go out", "STEP_NOISE"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "another session", "ATTACH_BULK"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "another session", "STEP_NOISE"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "delayed old turn response ⚖", "ATTACH_BULK"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "delayed old turn response ⚖", "STEP_NOISE"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "forged state", "ATTACH_BULK"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "new turn clears state", "ATTACH_BULK"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "oversized state ⚖", "ATTACH_BULK"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "same session and turn", "ATTACH_BULK"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-ok", "same session and turn", "THREAD_BROKEN"],
- ["GW-RAIL-CODEX", "policy-codex · upstream-wrong-type", "a refused answer is captured: content-type, header names, a bounded preview", "ATTACH_BULK"]
+
 ]

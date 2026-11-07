@@ -139,7 +139,10 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-CRED-BOUNDARY](endpoints/anthropic-messages.md#gw-cred-boundary) | anthropic-messages | inbound auth stops here; the upstream credential starts here |
 | [GW-RAIL-OPENROUTER](endpoints/openai-chat.md#gw-rail-openrouter) | openai-chat | the per-stack OpenRouter rail's wire; the provider axis — every answer attributed to its provider, the provider selected from the endpoint snapshot and the gateway's own clean-ride evidence, a failed provider relaunched before the first byte |
 | [GW-RAIL-CODEX](endpoints/openai-responses.md#gw-rail-codex) | openai-responses | the ChatGPT-subscription rail's Responses wire |
-| [GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom) | openai-responses | account headroom as the codex rail's admission |
+| [GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom) | openai-responses | the codex account's headroom snapshot — a strictly newer, valid report replaces it; its verdict; the subscription gauges |
+| [GW-CODEX-ADMISSION](endpoints/openai-responses.md#gw-codex-admission) | openai-responses | the headroom verdict in the POST /sessions walk: `admit` dispatches, the `quota-*` verdicts defer with `retry_after_s` |
+| [GW-CODEX-USAGE-POLL](endpoints/openai-responses.md#gw-codex-usage-poll) | openai-responses | the gateway's own account usage poll — the first headroom report producer, its outcomes counted |
+| [GW-CODEX-UPSTREAM-HEADERS](endpoints/openai-responses.md#gw-codex-upstream-headers) | openai-responses | a relayed 200's `x-codex-*` window headers — the second headroom report producer, read on the relayed 200 only |
 | [GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth) | openai-responses | the OAuth lifecycle behind the persistence interface (gateway-local SQLite in production, a FAKE store in tests) |
 | [GW-METRICS](endpoints/metrics.md#gw-metrics) | metrics | the `gateway_*` families and their bounded labels |
 | [GW-HEALTH](endpoints/health.md#gw-health) | health | liveness and the store mode |
