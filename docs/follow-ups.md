@@ -678,7 +678,8 @@ the block needs pruning, not more headings.
       `island-intake` CronWorkflow 05:00Z, receipts = the ruled-input ledger, `INTAKE_DAILY_MAX`); dry-run proven in-cluster.
       **Next:** proof of the first APPLY sitting filing + queueing a dig cause (meta-state pickup); the issue pile as a
       second source; operator rulings in the spike §Open questions 2–5 (Goal ceiling, closing human-filed issues, rule 10
-      grammar, the second island). Settle: bot-filing → `agent/queued` ≈ 0 days, two weeks, rides ≤ 2 rounds.
+      grammar, the second island — oracle-fleet ASKED 2026-11-07 (handoff: bot-filed feedback-triage lane-B/C issues need
+      admission; ruling = stack-island facts home + who runs its sitting). Settle: bot-filing → `agent/queued` ≈ 0 days, two weeks, rides ≤ 2 rounds.
       Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
       pick has no green requirement on purpose — wrong for a gate a catch-up merge cannot move (PR#1468: 26 merges,
