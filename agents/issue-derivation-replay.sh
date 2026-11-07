@@ -11,6 +11,8 @@
 #   A. Populated closingIssuesReferences → ISSUE from that source (unchanged path)
 #   B. Empty closingIssuesReferences + body "Fixes #N" → ISSUE from body fallback
 #   C. Neither source → ISSUE empty (clean degrade to undeclared)
+#   D. Only a `Refs #N` line → ISSUE from it (pr-open.sh's form for an unfinished issue)
+#   E. A closing keyword outranks a Refs line
 #
 # WHAT IT RUNS. The `>>>REPLAY:issue-derivation>>>` block extracted from reviewer-session.sh's
 # PREP heredoc. The block is verified in isolation with stub gh output.
@@ -153,6 +155,28 @@ JSON
 )
 _derive "$_PR_META_C2"
 want    "C2a: ISSUE empty (null refs, no body keyword)"         "ISSUE="
+
+# ── D ── only a Refs line (the pr-open.sh form for an unfinished issue) ─────────────────────────
+section "D — closingIssuesReferences empty, body has only Refs #N"
+
+_PR_META_D=$(cat <<'JSON'
+{"closingIssuesReferences":[],"baseRefName":"master","body":"Refs #1012 — remaining: the in-cluster closeout.\n\nSome description."}
+JSON
+)
+_derive "$_PR_META_D"
+want    "D1: ISSUE derived from the Refs line"                  "ISSUE=1012"
+want    "D2: Refs derivation logged"                            "ISSUE derived from PR body Refs line: #1012"
+
+# ── E ── a closing keyword outranks a Refs line ─────────────────────────────────────────────────
+section "E — body has Refs #N and Fixes #M: the closing keyword wins"
+
+_PR_META_E=$(cat <<'JSON'
+{"closingIssuesReferences":[],"baseRefName":"goal/1-scan","body":"Refs #900\n\nFixes #901"}
+JSON
+)
+_derive "$_PR_META_E"
+want    "E1: ISSUE from the closing keyword, not Refs"          "ISSUE=901"
+wantnot "E2: no Refs derivation"                                "Refs line"
 
 # ── result ──────────────────────────────────────────────────────────────────────────────────────
 section "result"

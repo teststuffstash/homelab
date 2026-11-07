@@ -648,7 +648,8 @@ ${MCP_PREP}
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
 # reference ("Fixes #N"); fall back to parsing the PR body for a closing keyword when
-# closingIssuesReferences is empty (e.g. PR base != default branch — #1189); then pr-<N>.
+# closingIssuesReferences is empty (e.g. PR base != default branch — #1189); then a "Refs #N"
+# line (the pr-open.sh form for an unfinished issue); then pr-<N>.
 _PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName,body 2>/dev/null || true)
 ISSUE=\$(printf '%s' "\$_PR_META" | jq -r '.closingIssuesReferences[0].number // empty' 2>/dev/null || true)
 PR_BASE=\$(printf '%s' "\$_PR_META" | jq -r '.baseRefName // empty' 2>/dev/null || true)
@@ -661,6 +662,15 @@ if [ -z "\$ISSUE" ] || [ "\$ISSUE" = "null" ]; then
   if [ -n "\$_BODY_ISSUE" ]; then
     ISSUE="\$_BODY_ISSUE"
     echo "→ ISSUE derived from PR body closing keyword: #\$_BODY_ISSUE"
+  else
+    # Last resort: "Refs #N" — the form agents/pr-open.sh prescribes for an issue the PR does not
+    # finish (or a non-master base). It names the issue the PR SERVES, which is all this derivation
+    # keys (context, footprint, transcript); finishing is the coordinator's strong-link question.
+    _REFS_ISSUE=\$(printf '%s' "\$_PR_BODY" | grep -ioE '\brefs\s+#([0-9]+)\b' | sed -n 1p | grep -oE '[0-9]+' || true)
+    if [ -n "\$_REFS_ISSUE" ]; then
+      ISSUE="\$_REFS_ISSUE"
+      echo "→ ISSUE derived from PR body Refs line: #\$_REFS_ISSUE (served, not closed)"
+    fi
   fi
 fi
 # <<<REPLAY:issue-derivation<<<
