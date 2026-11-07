@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/intake/specs/dig-digest.schema.json",
+  "$comment": "MACHINE half of agents/deep-dig-select.sh select + group-keys; the HUMAN half is dig-digest.md. Spike (2026-11-07): the script builds the digest with jq and checks only `.schema`; it does not import this file.",
+  "x-interface": "dig-digest",
+  "x-use-cases": [],
+  "$defs": {
+    "alert": {
+      "type": "object",
+      "required": ["alertname", "subject", "host", "triage", "severity", "firing", "standing_h", "days_present", "startsAt", "fingerprint", "labels", "annotations"],
+      "properties": {
+        "alertname": { "type": "string" },
+        "subject": { "type": "string", "description": "the responder's cascade (INTAKE-RESP-SUBJECT)" },
+        "host": { "type": "string", "description": "a node label, else an instance that names a host (port stripped), else `cluster` — never a reporter's own address" },
+        "triage": { "const": "dig" },
+        "severity": { "type": "string" },
+        "firing": { "type": "boolean" },
+        "standing_h": { "type": "integer", "minimum": 0 },
+        "days_present": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "startsAt": { "type": "string", "description": "empty for a quiet recurring candidate" },
+        "fingerprint": { "type": "string" },
+        "labels": { "type": "object" },
+        "annotations": { "type": "object" },
+        "onset": { "type": "string", "description": "the bucket start (ISO) or `recurring`" }
+      },
+      "x-requirements": ["INTAKE-DIG-CANDIDATE"]
+    },
+    "group_keys_line": {
+      "type": "string",
+      "description": "group-keys output: one per FIRING now-lane alert of the payload",
+      "pattern": "^[^\\t]+\\t([0-9T:Z-]+\\|[^\\t]+|solo:[^\\t]+)\\t[^\\t]+\\t[^\\t]+$",
+      "x-requirements": ["INTAKE-DIG-GROUP"]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ts", "params", "groups", "deferred", "explained", "windows", "counts"],
+  "properties": {
+    "schema": { "const": "deep-dig-digest/v1", "description": "checked before emit — never an empty or foreign digest on exit 0", "x-requirements": ["INTAKE-DIG-PROBE"] },
+    "ts": { "type": "string", "format": "date-time" },
+    "params": {
+      "type": "object",
+      "required": ["standing_h", "recur_days", "lookback_d", "onset_bucket_min", "max_groups", "redig_days"],
+      "properties": {
+        "standing_h": { "type": "integer", "default": 6 },
+        "recur_days": { "type": "integer", "default": 3 },
+        "lookback_d": { "type": "integer", "default": 7 },
+        "onset_bucket_min": { "type": "integer", "default": 60 },
+        "max_groups": { "type": "integer", "default": 4 },
+        "redig_days": { "type": "integer", "default": 7 }
+      },
+      "x-requirements": ["INTAKE-DIG-CANDIDATE", "INTAKE-DIG-GROUP", "INTAKE-DIG-EXPLAINED"]
+    },
+    "groups": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": ["key", "onset", "host", "alerts", "max_standing_h"],
+        "properties": {
+          "key": { "type": "string", "description": "<onset>|<host>" },
+          "onset": { "type": "string" },
+          "host": { "type": "string" },
+          "alerts": { "type": "array", "items": { "$ref": "#/$defs/alert" }, "description": "longest-standing first" },
+          "max_standing_h": { "type": "integer" }
+        }
+      },
+      "description": "≤ params.max_groups, ranked by size, then max_standing_h, then key",
+      "x-requirements": ["INTAKE-DIG-GROUP"]
+    },
+    "deferred": {
+      "type": "array",
+      "items": { "type": "object", "required": ["key", "alerts"], "properties": { "key": { "type": "string" }, "alerts": { "type": "array", "items": { "type": "string", "description": "<alertname> (<subject>)" } } } },
+      "x-requirements": ["INTAKE-DIG-GROUP"]
+    },
+    "explained": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["alertname", "subject", "firing", "standing_h", "days_present", "explained_by"],
+        "properties": {
+          "alertname": { "type": "string" },
+          "subject": { "type": "string" },
+          "firing": { "type": "boolean" },
+          "standing_h": { "type": "integer" },
+          "days_present": { "type": "integer" },
+          "explained_by": { "type": "string", "pattern": "^(window |dug |issue |follow-up FU-|meta-state: )", "description": "the first ledger entry that applied, cheapest first" }
+        }
+      },
+      "x-requirements": ["INTAKE-DIG-EXPLAINED"]
+    },
+    "windows": {
+      "type": "array",
+      "description": "declared-window HISTORY over the lookback — context, never an explanation by itself",
+      "items": { "type": "object", "properties": { "id": { "type": "string" }, "by": {}, "node": {}, "reason": {}, "alerts": {}, "opened_at": {}, "until": {}, "closed_at": {}, "tail_until": {} } },
+      "x-requirements": ["INTAKE-DIG-EXPLAINED"]
+    },
+    "counts": {
+      "type": "object",
+      "required": ["candidates", "unexplained", "explained", "groups", "selected"],
+      "properties": {
+        "candidates": { "type": "integer" },
+        "unexplained": { "type": "integer" },
+        "explained": { "type": "integer" },
+        "groups": { "type": "integer" },
+        "selected": { "type": "integer" }
+      },
+      "x-requirements": ["INTAKE-DIG-CANDIDATE", "INTAKE-DIG-GROUP"]
+    }
+  },
+  "exit": {
+    "0": { "description": "a valid digest written", "x-requirements": ["INTAKE-DIG-PROBE"] },
+    "1": { "description": "PROBE_FAILED: Alertmanager unreadable / no alert array, or the digest failed to build or validate — no digest", "x-requirements": ["INTAKE-DIG-PROBE"] },
+    "2": { "description": "a required tool missing, or the responder-subject block could not be extracted", "x-requirements": ["INTAKE-RESP-SUBJECT"] }
+  }
+}
