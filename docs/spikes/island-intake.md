@@ -138,6 +138,12 @@ territory, §Open questions 4).
    where the brief's generality is tested. **Facts + membership written for five platform islands**
    (agent-loop, substrate, dependency-upgrades, mgmt-box, router-pair): [`../intake/`](../intake/) +
    `intake-select.sh --island` (one table, first row wins); open until a sitting runs on one.
+   **Stack islands — ruled 2026-11-07 (ADR-160):** a stack island's facts, read set and unit split
+   live in the STACK repo (oracle-fleet's tracks / `docs/process/read-map.yaml` are already further
+   along than homelab's island split, and its terms are due rework there); the platform owns only
+   the general launch mechanics (when an intake sitting starts, its selector source, the outcome
+   grammar). oracle asked first (handoff 2026-11-07: admission for its bot-filed feedback-triage
+   issues).
 
 ## What would settle it
 
