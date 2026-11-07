@@ -760,6 +760,14 @@ jobs:
           GATEWAY_SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.GATEWAY_SPECS_S3_SECRET_ACCESS_KEY }}
           SITE_PREFIX: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || '' }}
         run: devbox run gateway-specs-publish
+      # The island's rendered-browser specs-site leg (gateway/scripts/e2e-specs-site.sh — the
+      # oracle-fleet e2e-specs-site shape): the built site in the pinned playwright image, every
+      # spec page's Mermaid diagrams render, every flowchart node link navigates to its requirement
+      # heading. Needs docker (containerMode=dind on this runner class). Scoped by the diff-ci row
+      # to mkdocs.yml, site-assets/, any spec page, the build and the leg itself.
+      - name: Gateway specs-site e2e (devbox run gateway-specs-site-e2e)
+        if: steps.diff.outputs.gateway-specs-site-e2e != 'false'
+        run: devbox run gateway-specs-site-e2e
       # FU-tracker conventions: dangling ids + broken pointers FAIL; oversize/done-marker WARN.
       # In CI because the 2026-07 tracker bloat (258→1000 lines) happened under convention-only
       # discipline — see docs/follow-ups.md "Conventions".
