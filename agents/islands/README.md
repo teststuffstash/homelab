@@ -15,7 +15,7 @@ old-contract site is a `⚑ gap` row, every unbuilt one `🚧 WIP`.
 | [scan](scan/README.md) | `SCAN-` | [specs/](scan/specs/README.md) | the coordinator scan's decision + dispatch, the GitHub grammar, the updater, the review reflex, the major handoff, liveness signals |
 | [launch](launch/README.md) | `LAUNCH-` | [specs/](launch/specs/README.md) | the ride: dispatch params × recipe × claim → gateway admission → context bundle → pod env → outcome |
 | [review](review/README.md) | `REVIEW-` | [specs/](review/specs/README.md) | the code reviewer, the specs reviewer, lenses, the IAC-G04 sentinel, re-review |
-| [intake](intake/README.md) | `INTAKE-` | [specs/](intake/specs/README.md) | island intake (select → ruling → receipt), the deep dig, the responder's gates + verdict |
+| [intake](intake/README.md) | `INTAKE-` | [specs/](intake/specs/README.md) | island intake (select → ruling → receipt), the [deep dig](../../docs/glossary.md), the responder's gates + verdict |
 | [retro](retro/README.md) | `RETRO-` | [specs/](retro/specs/README.md) | the weekly retro series: guard, pipeline, activity, cells, harvest, findings |
 
 ## What every island shares (and what this spike did not build)
