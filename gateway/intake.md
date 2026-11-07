@@ -2,7 +2,8 @@
 
 > **Brief, v0 (spike, 2026-10-27).** The gateway is the first island to run it. **The rules here
 > are island-agnostic and live only here;** the §Island facts block at the end is the gateway's,
-> and every other island's lives in [`docs/intake/<island>.md`](../docs/intake/) —
+> every other PLATFORM island's lives in [`docs/intake/<island>.md`](../docs/intake/), and a STACK
+> island's lives in its own repo (ADR-160) —
 > [agent-loop](../docs/intake/agent-loop.md), [substrate](../docs/intake/substrate.md),
 > [dependency-upgrades](../docs/intake/dependency-upgrades.md), [mgmt-box](../docs/intake/mgmt-box.md),
 > [router-pair](../docs/intake/router-pair.md). A sitting for another island reads this brief, then
