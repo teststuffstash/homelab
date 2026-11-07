@@ -364,6 +364,19 @@ self_test() {
   check "pinned verdict: head unchanged → rc 0" 0 "$rs"
   check "pinned verdict: POST carries commit_id=reviewed head + REQUEST_CHANGES" 1 "$(grep -c 'repos/teststuffstash/homelab/pulls/7/reviews.*commit_id=aaaa1111.*event=REQUEST_CHANGES' "$d/gh.calls")"
   unset -f gh current_head
+  # issue intent from a `Refs #N` line when the PR closes nothing (pr-open.sh's unfinished-issue
+  # form): the acceptance text still reaches the pack; no Refs line keeps the "none" note.
+  gh() {
+    case "$*" in
+      *closingIssuesReferences*) return 0 ;;
+      "pr view 5 "*body*) printf 'Refs #1012 remaining: the closeout\n' ;;
+      "pr view 6 "*body*) printf 'no link here\n' ;;
+      "issue view 1012 "*) printf '# T\n\n## Acceptance\n- a row\n' ;;
+    esac
+  }
+  check "issue intent: a Refs line names the issue" 1 "$(issue_intent teststuffstash/oracle-fleet 5 | grep -c '^## teststuffstash/oracle-fleet#1012$')"
+  check "issue intent: no link keeps the none note" 1 "$(issue_intent teststuffstash/oracle-fleet 6 | grep -c '^issue intent: none')"
+  unset -f gh
   # round inputs (ADR-156 step 2): the acceptance section is cut at the next `## ` heading and
   # keeps `###`; an issue with none is passed whole under a note; the prior review is the newest
   # OWN LLM review in ANY state (a dismissed one is the round memory), never a mechanical approval
@@ -611,12 +624,20 @@ token() {
 }
 
 # ── the pass's readers (the live tick and the shadow run share them) ────────────────────────────
-# issue_intent <slug> <pr> → markdown: each closing issue's acceptance text (never fails the pass)
+# issue_intent <slug> <pr> → markdown: each closing issue's acceptance text, else the first `Refs #N`
+# issue's (never fails the pass)
 issue_intent() {
   local slug="$1" num="$2" refs r n body
   if ! refs="$(gh pr view "$num" --repo "$slug" --json closingIssuesReferences \
                 --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name) \(.number)"' 2>/dev/null)"; then
     printf 'issue intent: the closing-issue lookup FAILED; pr-body.md names the reference, the acceptance text is not available\n'; return 0
+  fi
+  if [ -z "$refs" ]; then
+    # A `Refs #N` line (agents/pr-open.sh's form for an issue the PR does not finish) still names
+    # the intent the rows derive from — same repo only, the first one.
+    n="$(gh pr view "$num" --repo "$slug" --json body --jq '.body // ""' 2>/dev/null \
+          | grep -ioE '\brefs[[:space:]]+#[0-9]+\b' | sed -n 1p | grep -oE '[0-9]+')" || n=""
+    [ -n "$n" ] && refs="$slug $n"
   fi
   if [ -z "$refs" ]; then
     printf 'issue intent: none, this PR closes no issue (check 1 grounds rows in the page prose, a use case or Spec changes:)\n'; return 0
