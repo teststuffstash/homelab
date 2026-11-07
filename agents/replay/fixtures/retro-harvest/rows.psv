@@ -11,4 +11,4 @@ gateway-fallback             |       |       | LOG_A_NAME=gw-claude-opus-report 
 gateway-report-quotes        |       |       | LOG_A_NAME=gw-quoting-report                                                              | delivered           | a_dest=unserved b_dest=deepseek-v4-pro a_served=claude:unserved b_served=goose:deepseek/deepseek-v4-pro
 # single-cell (homelab#3140): harnessB EMPTY = a one-cell series; no leg B is read, no dead cell is
 # declared, and the report is filed under the SERIES name, not the stack's.
-single-cell                  |       |       | HARNESS_B= SERIES=feedback-triage LOG_B_NAME=never-written                                | delivered-single    | a_dest=opus a_served=claude:opus
+single-cell                  |       |       | HARNESS_B= SERIES=feedback-triage LOG_B_NAME=never-written DECLARE_HARVEST_INPUTS=1     | delivered-single    | a_dest=opus a_served=claude:opus

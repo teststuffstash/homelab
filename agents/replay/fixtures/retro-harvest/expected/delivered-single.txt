@@ -1,4 +1,6 @@
 CALL cp /tmp/report.md docs/agents/retros/2026-08-11-feedback-triage-r3-{{a_dest}}.md
+OUT harvest input log-a optional=true
+OUT harvest input log-b optional=true
 OUT served: cell A {{a_served}} (single-cell series)
 OUT DEAD_NOTE: empty — nothing appended to the PR body
 RC 0
