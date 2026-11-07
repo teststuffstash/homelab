@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/intake/specs/intake-ruling.schema.json",
+  "$comment": "MACHINE half of the intake ruling; the HUMAN half is intake-ruling.md, the rules gateway/intake.md (runtime-read). Spike (2026-11-07): no code imports this — the writer is an LLM sitting; the readers (the scan's blocked-on predicate, the selector's `intake:` test, issue_body.py) each hold their own copy of the grammar today (P3's one-parser move would import it).",
+  "x-interface": "intake-ruling",
+  "x-use-cases": ["UC-1"],
+  "$defs": {
+    "outcome": {
+      "enum": ["queue", "goal", "seat", "fold", "close", "standing", "split", "file"],
+      "description": "gateway/intake.md §Outcomes — exactly one per input",
+      "x-requirements": ["INTAKE-ADMIT-OUTCOME"]
+    },
+    "marker": {
+      "type": "object",
+      "required": ["first_line"],
+      "properties": {
+        "first_line": {
+          "type": "string",
+          "pattern": "^intake: (queue|goal|seat|close|standing) — .+$|^intake: (fold|split) → #[0-9]+(, #[0-9]+)*.*$",
+          "description": "the comment's FIRST line; the selector skips any issue carrying one (INTAKE-SELECT-CANDIDATE)"
+        },
+        "blocked_on": { "const": "blocked-on: human", "description": "its own line; required on seat (agents/coordinator/README.md §Blocked-on marker)" }
+      },
+      "x-requirements": ["INTAKE-ADMIT-MARKER"]
+    },
+    "writes": {
+      "type": "object",
+      "description": "the labels an outcome adds, by outcome",
+      "properties": {
+        "queue": { "const": ["agent-fix", "task/fix|task/build", "agent/queued"] },
+        "goal": { "const": ["children: agent/queued", "goal: none"] },
+        "seat": { "const": ["agent-fix", "agent/blocked"] },
+        "seat_comment_only": { "const": [] },
+        "close": { "const": [] },
+        "fold": { "const": [] },
+        "standing": { "const": [] },
+        "split": { "const": [] }
+      },
+      "x-requirements": ["INTAKE-ADMIT-OUTCOME"]
+    },
+    "ruling": {
+      "type": "object",
+      "description": "one ruling as read back from GitHub (UC-1 uc-1/writes.json)",
+      "required": ["input", "outcome", "comment_first_line", "labels_added"],
+      "properties": {
+        "input": { "type": "string", "pattern": "^[^/]+/[^#]+#[0-9]+$" },
+        "outcome": { "$ref": "#/$defs/outcome" },
+        "comment_first_line": { "type": "string" },
+        "labels_added": { "type": "array", "items": { "type": "string" } },
+        "body": { "type": "string", "description": "a path to the rewritten body, for queue" },
+        "at": { "type": "string", "format": "date-time" }
+      },
+      "x-requirements": ["INTAKE-ADMIT-OUTCOME", "INTAKE-ADMIT-MARKER"]
+    },
+    "queue_body": {
+      "type": "object",
+      "required": ["machine_block", "sections"],
+      "properties": {
+        "machine_block": {
+          "type": "object",
+          "description": "written by agents/issue_body.py set; gated by issue_body.py json (exit 2 = never post)",
+          "required": ["Touches", "Origin", "Class"],
+          "properties": {
+            "Touches": { "type": "string", "description": "≲ 5 exact paths; on the agent loop a clause edit names its replay fixture dir" },
+            "Origin": { "type": "string" },
+            "Class": { "enum": ["fix", "build"], "description": "mirrored by the task/* label" }
+          }
+        },
+        "sections": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "## Deliverable" },
+            { "const": "## Acceptance" },
+            { "enum": ["## Spec changes", "## Key rows"] },
+            { "const": "## Out of scope" }
+          ]
+        }
+      },
+      "x-requirements": ["INTAKE-ADMIT-QUEUE-BODY"]
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "queue_per_sitting": { "const": 3, "description": "children included; the excess is deferred (cap), unwritten" },
+        "goal_budget_usd_max": { "type": "number", "default": 10, "description": "INTAKE_GOAL_BUDGET_USD; above it the ruling is seat" },
+        "goal_queued": { "const": false, "description": "breaker #1 — the Goal is the human's" },
+        "close_human_filed": { "const": false }
+      },
+      "x-requirements": ["INTAKE-ADMIT-LIMITS"]
+    }
+  }
+}

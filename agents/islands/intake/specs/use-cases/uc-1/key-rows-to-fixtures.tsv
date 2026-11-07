@@ -1,0 +1,5 @@
+row	description	fixture	shipped_by
+1	PR-less strike latch, cause closed ⇒ un-latch ⚖	agents/replay/fixtures/fleet-fault-unlatch-issue-no-pr	#3096 (new)
+2	PR-less strike latch, cause still open ⇒ hold	agents/replay/fixtures/fleet-fault-unlatch-issue-no-pr-cause-open	#3096 (new)
+3	PR list unreadable ⇒ hold	agents/replay/fixtures/fleet-fault-unlatch-issue-no-pr-list-unreadable	#3096 (new)
+4	issue with a referencing PR ⇒ today's CI leg	agents/replay/fixtures/fleet-fault-unlatch-issue-cause-closed-green	existing, unchanged

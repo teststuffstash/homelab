@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/intake/specs/intake-select.schema.json",
+  "$comment": "MACHINE half of gateway/scripts/intake-select.sh; the HUMAN half is intake-select.md. Spike (2026-11-07): the script does not import this file yet — it emits these shapes with jq; a reader that validates against it is the first consumer.",
+  "x-interface": "intake-select",
+  "x-use-cases": ["UC-1"],
+  "$defs": {
+    "island": {
+      "enum": ["gateway", "router-pair", "mgmt-box", "dependency-upgrades", "substrate", "agent-loop"],
+      "description": "the ISLANDS precedence order — an item belongs to the first row that claims it",
+      "x-requirements": ["INTAKE-SELECT-MEMBERSHIP", "INTAKE-SELECT-DIG"]
+    },
+    "candidate": {
+      "type": "object",
+      "description": "issues mode, --json: one per selected issue",
+      "additionalProperties": false,
+      "required": ["number", "age_h", "author", "title", "kind"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "age_h": { "type": "integer", "minimum": 0, "description": "hours since createdAt", "x-requirements": ["INTAKE-SELECT-FIRE"] },
+        "author": { "type": "string", "description": "the author login; an app/ or [bot] login is a bot", "x-requirements": ["INTAKE-SELECT-ATTRIBUTION"] },
+        "title": { "type": "string" },
+        "kind": { "enum": ["member", "attribution"], "description": "member = the island table claims it; attribution = bot-filed, claimed by no island, --island agent-loop only", "x-requirements": ["INTAKE-SELECT-MEMBERSHIP", "INTAKE-SELECT-ATTRIBUTION"] }
+      },
+      "x-requirements": ["INTAKE-SELECT-CANDIDATE"]
+    },
+    "candidate_line": {
+      "type": "string",
+      "description": "issues mode, default output: `<number>\\t<age_h>h\\t<author>\\t<title>` and a fifth column `attribution` on an attribution input",
+      "pattern": "^[0-9]+\\t[0-9]+h\\t[^\\t]+\\t[^\\t]*(\\tattribution)?$",
+      "x-requirements": ["INTAKE-SELECT-ATTRIBUTION"]
+    },
+    "dig_input": {
+      "type": "object",
+      "required": ["id", "run", "verdict", "alerts", "members", "cause", "recommendation", "evidence", "related", "pr"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^dig-[0-9]{4}-[0-9]{2}-[0-9]{2}/[^/]+/finding-[0-9]+$", "description": "the finding's bucket key under homelab/ without .json — the receipt's ruled-key" },
+        "run": { "type": "string" },
+        "verdict": { "type": "string", "description": "one of INTAKE_DIG_VERDICTS (default cause-found)" },
+        "alerts": { "type": "array", "items": { "type": "string" } },
+        "members": { "type": "array" },
+        "cause": { "type": "string" },
+        "recommendation": { "type": "string" },
+        "evidence": { "type": "array" },
+        "related": { "type": "array" },
+        "pr": { "type": "string" }
+      },
+      "x-requirements": ["INTAKE-SELECT-DIG"]
+    },
+    "selection": {
+      "type": "object",
+      "description": "dig mode: --out file or stdout",
+      "additionalProperties": false,
+      "required": ["schema", "island", "source", "ts", "counts", "sittings_today", "daily_max", "inputs"],
+      "properties": {
+        "schema": { "const": "island-intake-select/v1" },
+        "island": { "$ref": "#/$defs/island" },
+        "source": { "const": "dig" },
+        "ts": { "type": "string", "format": "date-time" },
+        "counts": {
+          "type": "object",
+          "required": ["matched", "ruled", "inputs"],
+          "properties": {
+            "matched": { "type": "integer", "minimum": 0, "description": "findings naming this island, not an earlier island" },
+            "ruled": { "type": "integer", "minimum": 0, "description": "of those, ruled by an APPLY receipt (outcome != deferred)" },
+            "inputs": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "sittings_today": { "type": "integer", "minimum": 0, "description": "APPLY receipts with session_ran today (UTC)" },
+        "daily_max": { "type": "integer", "minimum": 0, "description": "INTAKE_DAILY_MAX" },
+        "inputs": { "type": "array", "items": { "$ref": "#/$defs/dig_input" } }
+      },
+      "x-requirements": ["INTAKE-SELECT-DIG"]
+    }
+  },
+  "exit": {
+    "0": { "description": "fire — the sitting should run", "x-requirements": ["INTAKE-SELECT-FIRE", "INTAKE-SELECT-DIG"] },
+    "1": { "description": "hold — below the thresholds, no unruled dig input, or the daily cap reached", "x-requirements": ["INTAKE-SELECT-FIRE", "INTAKE-SELECT-DIG"] },
+    "2": { "description": "a probe failed (unreadable issue list or bucket, no reader key, unknown --island, missing parser) — never an empty answer", "x-requirements": ["INTAKE-SELECT-FIRE", "INTAKE-SELECT-DIG", "INTAKE-SELECT-MEMBERSHIP"] }
+  }
+}

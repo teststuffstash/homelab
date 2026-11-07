@@ -1,0 +1,9 @@
+{
+  "$comment": "UC-1 stage ② — the writes the queue ruling made, read back from the issue's timeline (GET /repos/teststuffstash/homelab/issues/3048/timeline, 2026-11-07). Actor = the seat's identity: this sitting was seat-run (/intake), not the CronWorkflow. Shape: intake-ruling.schema.json#/$defs/ruling.",
+  "input": "teststuffstash/homelab#3048",
+  "outcome": "queue",
+  "comment_first_line": "intake: queue — one leg in an existing clause: a PR-less issue latch whose cause is CLOSED un-latches with the CI leg vacuous, pinned by a new `fleet-fault-unlatch-issue-no-pr` fixture.",
+  "labels_added": ["agent-fix", "agent/queued", "task/fix"],
+  "body": "queue-body.md",
+  "at": "2026-10-31T21:16:55Z"
+}
