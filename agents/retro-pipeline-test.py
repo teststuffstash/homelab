@@ -3,6 +3,7 @@
 import argparse
 import copy
 import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -52,7 +53,13 @@ class PipelineTests(unittest.TestCase):
                                   min_tasks=8, no_ledger=True)
         p.prepare(args, self.store, self.root)
         bundle = json.loads(Path(args.output).read_text())
-        self.assertEqual((bundle['series'], bundle['guard'], bundle['run_id']), ('feedback-triage', 'external', 'r1'))
+        # run_id counts the series' committed reports in docs/agents/retros (the live repo, not the
+        # temp store), so the exact number moves as reports land — the contract is "one past the
+        # newest", which a fixed literal cannot hold.
+        self.assertEqual((bundle['series'], bundle['guard']), ('feedback-triage', 'external'))
+        landed = [int(m.group(1)) for x in (p.ROOT.parent / 'docs/agents/retros').glob('*.md')
+                  if (m := re.search(r'feedback-triage-r(\d+)-', x.name))]
+        self.assertEqual(bundle['run_id'], 'r%d' % (max(landed + [0]) + 1))
         self.assertEqual(bundle['window'], {'since': '2026-09-21T00:00:00Z', 'until': '2026-09-28T00:00:00Z'})
         self.assertEqual(bundle['ledger']['population']['task_count'], 0)
         report = self.root / 'fb-report.md'
@@ -301,7 +308,7 @@ class PipelineTests(unittest.TestCase):
         params = {q['name']: q['value'] for q in feedback['spec']['workflowSpec']['arguments']['parameters']}
         self.assertEqual((params['stack'], params['series'], params['harnessB']), ('oracle', 'feedback-triage', ''))
         self.assertTrue(params['guardExpr'] and params['cellPgSecret'])
-        self.assertTrue(feedback['spec']['suspend'], 'born suspended until a hand-fired run lands')
+        self.assertFalse(feedback['spec'].get('suspend', False), 'unsuspended once a hand-fired run landed clean (#3140)')
         # A quiet week skips the rides + harvest and pushes the overdue belt (exit 3 contract).
         for name in ('cell-a','cell-b','harvest'):
             task = next(t for t in tasks if t['name'] == name)
