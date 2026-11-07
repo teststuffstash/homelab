@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/islands/review/specs/specs-gate.schema.json",
+  "$comment": "MACHINE half of the specs reviewer's tick; the HUMAN half is specs-gate.md. `claim_specs_list` is the 🚧 redrawn contract (REVIEW-SPECS-ROOTS) — not served by the XRD today.",
+  "x-interface": "specs-gate",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "$defs": {
+    "class": {
+      "enum": ["error-label", "own-anomaly", "own-at-head", "partial-held", "code-not-approved", "ci-not-green", "candidate"],
+      "description": "first match wins, in this order",
+      "x-requirements": ["REVIEW-SPECS-CLASSIFY"]
+    },
+    "trigger": {
+      "type": "string",
+      "description": "review_path_re <repo> = `(^|/)specs/|^<tests-root>/`; a candidate whose file list (REST, paginated) matches goes to the pass",
+      "x-requirements": ["REVIEW-SPECS-MECHANICAL", "REVIEW-SPECS-ROOTS"]
+    },
+    "mechanical_body": {
+      "type": "string",
+      "pattern": "^## Specs review\\nVerdict: APPROVE — mechanical: (no specs path and no rule-test path in this diff|touched-rules \\(allure-behavior-snippets [0-9.]+\\) found no rule this diff touches)",
+      "x-requirements": ["REVIEW-SPECS-MECHANICAL"]
+    },
+    "spec_root_pair": {
+      "type": "object",
+      "required": ["root", "tests"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$" },
+        "tests": { "type": "string", "minLength": 1 },
+        "pin": { "type": "string", "description": "the repo's snippets pin file; default <parent of root>/scripts/lib/snippets.sh" }
+      }
+    },
+    "claim_specs": {
+      "$ref": "#/$defs/spec_root_pair",
+      "description": "TODAY: the claim's repos[].specs — one pair per repo (argocd/resources/agentstack/xrd.yaml)",
+      "x-requirements": ["REVIEW-SPECS-ROOTS"]
+    },
+    "claim_specs_list": {
+      "description": "🚧 WIP — the redrawn contract: a list of root pairs; the legacy object reads as a one-item list",
+      "oneOf": [
+        { "$ref": "#/$defs/spec_root_pair" },
+        {
+          "type": "array", "minItems": 1,
+          "items": {
+            "allOf": [ { "$ref": "#/$defs/spec_root_pair" } ],
+            "properties": { "evidence": { "type": "string", "description": "⚖ the root's own evidence bucket, or the repo's" } }
+          }
+        }
+      ],
+      "x-requirements": ["REVIEW-SPECS-ROOTS"]
+    },
+    "roots": {
+      "type": "string",
+      "pattern": "^\\S+ \\S+$",
+      "description": "pack_roots <repo> stdout: \"<specs-root> <tests-root>\"; never a log line (stderr only)",
+      "x-requirements": ["REVIEW-SPECS-ROOTS"]
+    },
+    "pack": {
+      "type": "object",
+      "properties": {
+        "snippets_version": { "const": "0.6.9" },
+        "snippets_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "inputs": {
+          "type": "array",
+          "items": { "enum": ["touched-rules.txt", "spec-sections.md", "spec-sections-masked.md", "row-keys.tsv", "tree", "digest.md", "evidence", "pr-body.md", "issue-intent.md", "prior-review.md", "manifest.json", "process"] }
+        },
+        "staged": { "type": "boolean", "description": "true iff evidence-pack offers --mask-descriptions and SPECS_STAGED_READ=1" },
+        "confinement": {
+          "type": "object",
+          "properties": {
+            "env": { "const": "the gateway's dispatch env verbatim + OTEL + PATH + a throwaway HOME/TMPDIR" },
+            "tools": { "const": "Read(//<inputs>/**), Glob; --permission-mode default" },
+            "never": { "const": ["GH_TOKEN", "GH_TOKEN_FILE", "GATEWAY_URL", "PUSHGATEWAY", "settings.json"] }
+          }
+        }
+      },
+      "x-requirements": ["REVIEW-SPECS-PACK"]
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stack", "role", "task", "round", "attempt", "harness"],
+      "properties": {
+        "stack": { "const": "platform" },
+        "role": { "const": "reviewer" },
+        "task": { "type": "string", "pattern": "^specs-review [A-Za-z0-9._-]+#[0-9]+$" },
+        "round": { "const": 0 },
+        "attempt": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "harness": { "const": "claude" }
+      },
+      "$comment": "narrows the gateway's post.input; never a model",
+      "x-requirements": ["REVIEW-SPECS-ADMIT"]
+    },
+    "outcome_class": {
+      "enum": ["clean", "no-verdict", "timeout", "harness-death"],
+      "description": "the gateway's one vocabulary (gateway/specs/endpoints/sessions.schema.json outcome.class), the subset this pass reports",
+      "x-requirements": ["REVIEW-SPECS-ADMIT"]
+    },
+    "verdict_line": {
+      "type": "string",
+      "pattern": "^Verdict:[[:space:]]*(APPROVE|CHANGES_REQUESTED|PARTIAL READ)\\b",
+      "x-requirements": ["REVIEW-SPECS-VERDICT"]
+    },
+    "submit": {
+      "type": "object",
+      "properties": {
+        "commit_id": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "the reviewed head" },
+        "event": { "enum": ["APPROVE", "REQUEST_CHANGES"] },
+        "rc": { "enum": [0, 1, 3], "description": "0 submitted · 3 head moved, no verdict · 1 submit failed" }
+      },
+      "x-requirements": ["REVIEW-SPECS-VERDICT", "REVIEW-SPECS-MECHANICAL"]
+    },
+    "markers": {
+      "type": "object",
+      "properties": {
+        "partial_read": { "type": "string", "pattern": "^PARTIAL READ: .*<!-- specs-review partial-read head=[0-9a-f]{8}" },
+        "agent_error": { "type": "string", "pattern": "^AGENT_ERROR: .*<!-- specs-review agent-error head=[0-9a-f]{8} -->" }
+      },
+      "x-requirements": ["REVIEW-SPECS-VERDICT", "REVIEW-SPECS-CLASSIFY"]
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "specs_review_last_tick_timestamp_seconds": { "type": "number" },
+        "specs_review_shadow": { "enum": [0, 1] },
+        "specs_review_tick_verdicts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["mechanical", "approve", "request_changes", "defer", "error", "partial"],
+          "properties": {
+            "mechanical": { "type": "integer" }, "approve": { "type": "integer" }, "request_changes": { "type": "integer" },
+            "defer": { "type": "integer" }, "error": { "type": "integer" }, "partial": { "type": "integer" }
+          }
+        }
+      },
+      "x-requirements": ["REVIEW-SPECS-BELTS"]
+    }
+  }
+}

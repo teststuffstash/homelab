@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/islands/review/specs/verdict.schema.json",
+  "$comment": "MACHINE half of the code verdict; the HUMAN half is verdict.md. GitHub owns the review object's shape; this file pins only what the island writes into it and what it exits with.",
+  "x-interface": "verdict",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "$defs": {
+    "terminal": {
+      "enum": ["live-verdict", "silent-dedup", "standing-aside", "agent-error"],
+      "description": "tested in this order at the content commit (newest non-merge commit); any one → pod exit 0",
+      "x-requirements": ["REVIEW-VERDICT-TERMINAL"]
+    },
+    "pod_exit": {
+      "type": "integer",
+      "description": "0 = a terminal exists; the model's non-zero rc = none + the model crashed; 10 = none + the model returned 0, or the state re-read failed (fail closed)",
+      "x-requirements": ["REVIEW-VERDICT-TERMINAL"]
+    },
+    "review": {
+      "type": "object",
+      "required": ["event", "author"],
+      "properties": {
+        "event": { "enum": ["APPROVE", "REQUEST_CHANGES"] },
+        "author": { "const": "homelab-reviewer" },
+        "body": { "$ref": "#/$defs/body" }
+      },
+      "x-requirements": ["REVIEW-VERDICT-TERMINAL", "REVIEW-VERDICT-BODY"]
+    },
+    "aside": {
+      "type": "string",
+      "description": "the first line of a standing-aside comment",
+      "pattern": "^STANDING ASIDE: .+ at [0-9a-f]{8} — .*<!-- standing-aside head=[0-9a-f]{8} pre=(merge-state|checks-pending|own-verdict-at-head|issue-unreadable|checks-red-unattributed) -->",
+      "x-requirements": ["REVIEW-VERDICT-ASIDE", "REVIEW-VERDICT-TERMINAL"]
+    },
+    "silent_dedup_record": {
+      "type": "string",
+      "pattern": "^SILENT_DEDUP_ASIDE: .+ at [0-9a-f]{8}$",
+      "x-requirements": ["REVIEW-VERDICT-ASIDE", "REVIEW-VERDICT-TERMINAL"]
+    },
+    "agent_error": {
+      "type": "object",
+      "required": ["label", "comment"],
+      "properties": {
+        "label": { "const": "agent/error" },
+        "comment": { "type": "string", "pattern": "^AGENT_ERROR:" }
+      },
+      "x-requirements": ["REVIEW-VERDICT-ASIDE"]
+    },
+    "body": {
+      "type": "string",
+      "description": "the review body's machine-read markers (all line-anchored): `Follow-ups:` (only when a container absorbs them), `Operator-lane (no container):` (only when none does), `LENS(<lens>):` bullet prefixes, and on a dependency major the four headings Upstream / Known issues / Platform compatibility / Evidence",
+      "x-markers": {
+        "follow_ups": "^Follow-ups:",
+        "operator_lane": "^Operator-lane \\(no container\\):",
+        "lens_bullet": "^\\s*[-*] LENS\\((asvs|helm|k8s-prod|migration|gate-change)\\):",
+        "migration_headings": ["Upstream", "Known issues", "Platform compatibility", "Evidence"]
+      },
+      "x-requirements": ["REVIEW-VERDICT-BODY"]
+    },
+    "epic_container": {
+      "type": "string",
+      "pattern": "^(none|unknown|goal-lane|(goal|stint|theme|post-launch|retro-batch)#[0-9]+)$",
+      "description": "the prep line `→ epic container: <v>`; none → the NO CONTAINER rule is appended",
+      "x-requirements": ["REVIEW-VERDICT-BODY"]
+    },
+    "tool_gap": {
+      "type": "string",
+      "pattern": "^TOOL_GAP: \\S.* — .+",
+      "description": "one per tool per session, on a surface the janitor brief's TOOL_GAP_SURFACES: line declares",
+      "x-requirements": ["REVIEW-VERDICT-TOOLGAP"]
+    },
+    "doorbell": {
+      "type": "object",
+      "properties": {
+        "specs_review": {
+          "type": "object", "additionalProperties": false, "required": ["repo", "number"],
+          "properties": { "repo": { "type": "string" }, "number": { "type": "integer" } },
+          "description": "POST <agent-loop>/specs-review — on the live-verdict terminal only"
+        },
+        "coordinate": {
+          "type": "object", "additionalProperties": false, "required": ["repo"],
+          "properties": {
+            "repo": { "type": "string" },
+            "stack": { "type": "string" },
+            "loop_ns": { "type": "string" },
+            "unit": { "type": "string", "pattern": "^changes-requested\\|[A-Za-z0-9._-]+\\|pr-[0-9]+$" }
+          },
+          "description": "POST <agent-loop>/coordinate — by the launcher after a pod exit 0"
+        }
+      },
+      "x-requirements": ["REVIEW-VERDICT-DOORBELL"]
+    }
+  }
+}

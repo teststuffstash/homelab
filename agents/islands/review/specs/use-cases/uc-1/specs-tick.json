@@ -1,0 +1,10 @@
+{
+  "_comment": "UC-1 steps ④–⑤ the specs-review edge tick (Sensor specs-review-edge-*) over homelab#42.",
+  "classify": "candidate",
+  "files": ["agents/review-reflex.sh"],
+  "roots": "gateway/specs gateway/tests",
+  "trigger_matched": false,
+  "submit": { "endpoint": "POST repos/teststuffstash/homelab/pulls/42/reviews", "commit_id": "«the 40-hex head»", "event": "APPROVE" },
+  "body": "## Specs review\nVerdict: APPROVE — mechanical: no specs path and no rule-test path in this diff — nothing for the specs gate to read; approved mechanically (ADR-155, the repo-wide count). Head «sha12».\n",
+  "metrics": { "specs_review_tick_verdicts": { "mechanical": 1, "approve": 0, "request_changes": 0, "defer": 0, "error": 0, "partial": 0 } }
+}

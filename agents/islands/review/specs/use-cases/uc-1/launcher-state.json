@@ -1,0 +1,16 @@
+{
+  "_comment": "UC-1 step ① what the dispatch sets for the rest of the launcher (fixture reviewer-gateway-admit, dispatch-subscription). The pod's LLM env is the pull URL + key NAMES only.",
+  "GW_SESSIONS": "1",
+  "MODEL": "sonnet",
+  "MODEL_RAIL": "anthropic",
+  "GO_SERVED": 0,
+  "AGENT_ROUTER": "off",
+  "_router_adopted": "gateway",
+  "pod_label": { "homelab.teststuff.net/gateway-session": "0123abcd" },
+  "pod_llm_env": {
+    "AGENT_GATEWAY_PULL_URL": "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env",
+    "AGENT_GATEWAY_ENV_KEYS": "ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL"
+  },
+  "pod_mounts": ["gateway-token"],
+  "on_exit": "DELETE /sessions/0123abcd"
+}

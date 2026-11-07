@@ -1,0 +1,10 @@
+{
+  "_comment": "UC-1 step ② the code verdict: one native review at the content commit. The PR closes an issue under an open Goal, so the Follow-ups: channel exists (epic container goal#10).",
+  "pr": { "repo": "teststuffstash/homelab", "number": 42, "content_commit": "abc1234d", "files": ["agents/review-reflex.sh"] },
+  "prep": { "epic_container": "goal#10", "lenses": [], "touches_escapes": "none" },
+  "review": {
+    "author": "homelab-reviewer",
+    "event": "APPROVE",
+    "body": "Moves master forward: the reflex now skips a superseded head.\n\nFollow-ups:\n- review-reflex.sh: the skip line names the head but not the newer one — print both for the log reader."
+  }
+}

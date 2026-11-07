@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/islands/review/specs/lenses.schema.json",
+  "$comment": "MACHINE half of lens selection + posture; the HUMAN half is lenses.md. The lens files themselves (agents/lenses/*.md) are runtime-read prose, not schema.",
+  "x-interface": "lenses",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "$defs": {
+    "lens": {
+      "enum": ["migration", "gate-change", "helm", "k8s-prod", "asvs"],
+      "description": "the code reviewer's lenses; `specs` is the specs reviewer's wiring lens and is never selected here",
+      "x-requirements": ["REVIEW-LENS-SELECT", "REVIEW-LENS-POSTURE"]
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "migration": { "const": "label major|deps-review" },
+        "gate-change": { "const": "changed ^scripts/ AND origin/HEAD:scripts/gate-drift.sh exists" },
+        "helm": { "const": "changed ^charts?/" },
+        "k8s-prod": { "const": "changed ^charts?/templates/ or ^(argocd|k8s|manifests|deploy)/.*\\.ya?ml$, or diff adds kind: Deployment|StatefulSet|DaemonSet|CronJob" },
+        "asvs": { "const": "diff adds an auth/session/input/route signal (REPLAY:asvs-predicate)" }
+      },
+      "x-requirements": ["REVIEW-LENS-SELECT"]
+    },
+    "posture": {
+      "enum": ["advisory", "blocking"],
+      "x-requirements": ["REVIEW-LENS-POSTURE"]
+    },
+    "lens_map": {
+      "description": "the claim's spec.lenses as `reviewer-optout.sh --lens-map <repo>` prints it; {} on a failed read (exit 1); empty output for a repo in no claim",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/lens" },
+      "additionalProperties": { "$ref": "#/$defs/posture" },
+      "x-pinned": { "migration": "blocking", "gate-change": "blocking" },
+      "x-requirements": ["REVIEW-LENS-POSTURE"]
+    },
+    "attach_line": {
+      "type": "string",
+      "pattern": "^(→ lens attached: [a-z-]+ \\((advisory — FU-101|BLOCKING — blocking)\\)|WARN: lens [a-z-]+ fetch (FAILED — lens is BLOCKING|failed — review proceeds without it).*)$",
+      "x-requirements": ["REVIEW-LENS-POSTURE"]
+    },
+    "posture_line": {
+      "const": "**POSTURE: blocking** — findings from this lens MAY determine the verdict.",
+      "x-requirements": ["REVIEW-LENS-POSTURE"]
+    }
+  }
+}

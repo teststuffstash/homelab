@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/islands/review/specs/dispatch.schema.json",
+  "$comment": "MACHINE half of the code reviewer's entry point; the HUMAN half (why/when, decision tables) is dispatch.md. `x-requirements` couples shapes to requirement IDs (rule 7). No spec gate runs over this directory yet (specs/README.md, the root-pair gap).",
+  "x-interface": "dispatch",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "$defs": {
+    "argv": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "pr"],
+      "properties": {
+        "project": { "type": "string", "minLength": 1, "description": "repo name; the slug defaults to teststuffstash/<project>" },
+        "pr": { "type": "integer", "minimum": 1 },
+        "repo": { "type": "string", "description": "--repo owner/name" },
+        "model": { "type": "string", "description": "--model: the hand-run override; keeps the review off the gateway (REVIEW-ADMIT-GATEWAY)" },
+        "rubric": { "type": "string", "default": ".agents/review.md" },
+        "round": { "type": "integer", "minimum": 1, "default": 1 },
+        "loop_ns": { "type": "string", "description": "--loop-ns: the pod runs in this ns as agentstack-loop" },
+        "decorrelate_from": { "type": "string", "description": "the author's served model family — evidence only at the gateway" },
+        "permission_mode": { "type": "string", "default": "bypassPermissions" }
+      },
+      "x-requirements": ["REVIEW-DISPATCH-CLI"]
+    },
+    "exit": {
+      "type": "integer",
+      "description": "0 = a quiet refusal (opt-out, SLO teeth, currency, gateway defer) or the pod exited 0; 1 = FATAL before the pod (a part that does not parse, a brief without TOOL_GAP_SURFACES:) or an unreadable pod phase; 2 = unknown arg; 3 = pod create refused; any other = the pod's own exit (10 = no terminal, verdict.schema.json)",
+      "x-requirements": ["REVIEW-DISPATCH-CLI", "REVIEW-VERDICT-TERMINAL"]
+    },
+    "optout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["predicate", "filter", "lens-map", "mcp-knob"] },
+        "exit": { "enum": [0, 1, 2], "description": "predicate: 0 dispatch, 1 skip (opted out OR the claims read failed — fail closed); 2 usage" }
+      },
+      "x-requirements": ["REVIEW-DISPATCH-OPTOUT", "REVIEW-LENS-POSTURE"]
+    },
+    "currency": {
+      "type": "object",
+      "properties": {
+        "state": { "type": ["string", "null"] },
+        "mergeStateStatus": { "type": ["string", "null"] },
+        "proceeds": { "type": "boolean", "description": "false iff state is non-empty and != OPEN, or mergeStateStatus == DIRTY" },
+        "pod_name": { "type": "string", "pattern": "^reviewer-[A-Za-z0-9._-]+-[0-9]+-([0-9a-f]{8}|[0-9]{6})$" }
+      },
+      "x-requirements": ["REVIEW-DISPATCH-CURRENCY"]
+    },
+    "touches_escapes": {
+      "description": "the value interpolated as `TOUCHES-ESCAPES: <v>` into the model's prompt",
+      "oneOf": [
+        { "enum": ["none", "undeclared", "unavailable"] },
+        { "type": "string", "pattern": "^(\\[GOVERNANCE\\] )?\\S+(\\n(\\[GOVERNANCE\\] )?\\S+)*$", "description": "the escaped paths, one per line, sorted; governance paths prefixed" }
+      ],
+      "x-requirements": ["REVIEW-DISPATCH-TOUCHES"]
+    },
+    "argo": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "object", "required": ["repo", "number"],
+          "properties": { "repo": { "type": "string" }, "number": { "type": "integer" }, "loop_ns": { "type": "string" } }
+        },
+        "review": {
+          "type": "object", "additionalProperties": false, "required": ["repo", "number"],
+          "properties": { "repo": { "type": "string" }, "number": { "type": "string" } },
+          "description": "the `review` WorkflowTemplate's parameters (agent-coordinator ns)"
+        },
+        "review_perstack": {
+          "type": "object", "additionalProperties": false, "required": ["repo", "number", "loop_ns"],
+          "properties": { "repo": { "type": "string" }, "number": { "type": "string" }, "loop_ns": { "type": "string", "minLength": 1 } },
+          "description": "the `review-perstack` trigger's Workflow parameters; fires only when body.loop_ns matches `.+`"
+        }
+      },
+      "x-requirements": ["REVIEW-DISPATCH-EDGE"]
+    },
+    "admission": {
+      "type": "object",
+      "properties": {
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stack", "role", "task", "round", "harness", "bind"],
+          "properties": {
+            "stack": { "const": "platform" },
+            "role": { "const": "reviewer" },
+            "task": { "type": "string", "pattern": "^review-[A-Za-z0-9._-]+-[0-9]+$", "description": "TASK_KEY when the dispatcher sets one" },
+            "round": { "type": "integer", "minimum": 1 },
+            "harness": { "const": "claude" },
+            "bind": {
+              "type": "object", "additionalProperties": false, "required": ["namespace", "serviceaccount", "pod"],
+              "properties": { "namespace": { "type": "string" }, "serviceaccount": { "type": "string" }, "pod": { "type": "string" } }
+            }
+          },
+          "$comment": "the shape is the gateway's post.input (gateway/specs/endpoints/sessions.schema.json); this narrows it to what the code reviewer sends — never a model"
+        },
+        "outcome": {
+          "enum": ["off", "other-stack", "explicit-model", "dispatch", "defer", "refused-before-request", "fail-closed"],
+          "description": "dispatch → MODEL = the wire model, pull env, release on exit; defer → exit 0; refused-before-request (helper rc 2) / fail-closed (rc 3) → the old-proxy fallback with one WARN"
+        }
+      },
+      "x-requirements": ["REVIEW-ADMIT-GATEWAY"]
+    },
+    "legacy": {
+      "type": "object",
+      "description": "the old-proxy fallback's self-routing sites — each is a ⚑ gap until the old proxy retires",
+      "properties": {
+        "model_literals": { "const": 2 },
+        "routing_reads": { "const": 3 }
+      },
+      "x-requirements": ["REVIEW-ADMIT-LEGACY"]
+    }
+  }
+}

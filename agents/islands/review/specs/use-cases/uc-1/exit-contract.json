@@ -1,0 +1,8 @@
+{
+  "_comment": "UC-1 step ③ the pod's exit contract over the PR state after the model returned (fixture reviewer-exit-contract, row live-verdict-at-head) and the doorbells.",
+  "terminal": "live-verdict",
+  "pod_exit": 0,
+  "specs_review_ring": { "url": "«agent-loop»/specs-review", "body": { "repo": "homelab", "number": 42 } },
+  "coordinate_ring": { "url": "«agent-loop»/coordinate", "body": { "repo": "homelab", "stack": "platform", "loop_ns": "platform-agents" } },
+  "gateway": "DELETE /sessions/0123abcd"
+}

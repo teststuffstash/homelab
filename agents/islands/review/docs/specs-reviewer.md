@@ -311,7 +311,7 @@ report to record that digest (open question 2).
 **The worker reads the same text (operator rulings 2026-10-29).** A worker that touches a repo's
 specs gets the pinned process INJECTED into its ride — never a "please read X" instruction and
 never a rule restated in a recipe. The claim's `repos[].specs: {root, tests, pin?}` names the
-roots ([agentstack.md §The spec process rides with the worker](../../../../docs/agents/agentstack.md#the-spec-process-rides-with-the-worker-repos-specs-adr-156));
+roots ([agentstack.md §The spec process rides with the worker](../../../../docs/agents/agentstack.md#the-spec-process-rides-with-the-worker-reposspecs-adr-156));
 the launcher mounts `ghcr.io/teststuffstash/allure-behavior-snippets-process:v<the repo's pin>`
 (the release's FROM-scratch artifact: `/process/{RULES.md,CONVENTIONS.md,briefs/*.md,VERSION}`)
 read-only at `/mnt/snippets` through the ADR-135 image-volume path whenever the issue's declared
