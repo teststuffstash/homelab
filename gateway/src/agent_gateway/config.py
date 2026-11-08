@@ -60,12 +60,13 @@ UPSTREAM_DEFAULTS = {
 # read (models.dev's api.json — the vendor's own registry, public) overlaid by the `config` read
 # (the console's V2 config: the workspace's overrides, the Go key reads it — since 2026-10-20 it
 # carries ONLY the overrides); the `docs` source = the vendor's Go page source on its default
-# branch (unauthenticated; the path moved once, on 2026-10-12 — a move is a fetch failure, and
+# branch (unauthenticated; the path has moved twice — 2026-10-12, and 2026-11-06 when the vendor
+# moved the page to services/site (commit 9ced0469b); a move is a fetch failure, and
 # GoCatalogStale names it).
 GO_CATALOG_URLS = {
     "catalog": "https://models.dev/api.json",
     "config": "https://opencode.ai/console/api/v2/config",
-    "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx",
+    "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx",
 }
 GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start unless the store's snapshot is younger
 
