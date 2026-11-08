@@ -27,6 +27,12 @@ groups:
         labels:
           severity: critical
           triage: now
+      - alert: CiRunnerCacheCleanedRepeatedly
+        expr: |
+          changes(ci_runner_cache_cleanup_timestamp_seconds{job="ci-runner-node"}[14d]) >= 3
+        labels:
+          severity: warning
+          triage: dig
       - alert: CiRunnerNodeExporterDown
         expr: |
           up{job="ci-runner-node"} == 0 or absent(up{job="ci-runner-node"})
