@@ -746,7 +746,7 @@ build_pack() {
     SHADOW_BASE_COMMIT="$base_rev"
   fi
   # 2b) the pinned process: the wheel, verified by digest, extracted (never zip-imported)
-  curl -fsSL --max-time 60 "$SNIPPETS_WHEEL" -o "$WORK/snippets.whl" \
+  curl -fsSL --max-time 60 --retry 3 --retry-all-errors --retry-max-time 90 "$SNIPPETS_WHEEL" -o "$WORK/snippets.whl" \
     || { log "[$repo#$num] snippets wheel fetch FAILED — no review"; return 1; }
   [ "$(sha256sum "$WORK/snippets.whl" | cut -d' ' -f1)" = "$SNIPPETS_SHA256" ] \
     || { log "[$repo#$num] snippets wheel DIGEST MISMATCH (pinned ${SNIPPETS_SHA256:0:12}) — no review"; return 1; }
