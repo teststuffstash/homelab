@@ -1,0 +1,29 @@
+# The sizing signal for nix-cache (ADR-161). nginx evicts at max_size without a metric, so the proxy
+# is the volume itself: a week spent at the limit means the cache is evicting what it would reuse.
+# The 32 is configmap.yaml's max_size: a bump moves both.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nix-cache
+  namespace: nix-cache
+  labels:
+    app: nixcache
+spec:
+  groups:
+    - name: nix-cache
+      rules:
+        - alert: NixCacheAtEvictionLimit
+          expr: |
+            min_over_time(kubelet_volume_stats_used_bytes{namespace="nix-cache",persistentvolumeclaim="nixcache-data"}[7d])
+              > 0.95 * 32 * 1024^3
+          # triage dig: the volume curve is readable and the remedy is a PR
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "nix-cache has spent 7 days at its eviction limit"
+            description: >-
+              nix-cache has held at least 95 % of its nginx max_size for 7 days, so it is evicting
+              paths builds would reuse and those go back to the WAN. This is a SIZING signal
+              (ADR-161): raise max_size in configmap.yaml, the PVC in pvc.yaml, the checksum in
+              deployment.yaml and this rule's limit together. Never lower them. What to check:
+              `kubelet_volume_stats_used_bytes{persistentvolumeclaim="nixcache-data"}[14d]` and
+              Longhorn headroom on the `std` tier.

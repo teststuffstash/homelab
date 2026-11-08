@@ -21,7 +21,7 @@ data:
     http {
       # immutable content → big cache, long retention; LRU evicts at max_size.
       proxy_cache_path /var/cache/nginx/nixcache levels=1:2 keys_zone=nixcache:50m
-                       max_size=16g inactive=30d use_temp_path=off;
+                       max_size=32g inactive=30d use_temp_path=off;
       proxy_temp_path /tmp/proxy_temp;
       access_log off;
       # cache.nixos.org (Fastly) publishes AAAA records but the pod net is IPv4-only — a static
