@@ -18,6 +18,11 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-08 — oracle-fleet spec-process mount; operator ruling owed).** oracle-fleet#1026 made `scripts/lib/snippets.sh` set
+  `SNIPPETS_RELEASE=<url>` and `SNIPPETS_WHEEL="file://…"`, so `sp_pin_version` (`agents/agent-session.sh`) parses nothing from it (checked against master 11-08; the gateway's still
+  parses, #3228 kept the line). Oracle rides reaching `specs/` should be unmounted since 11-08 12:45Z; NOT confirmed in logs (the launcher's mount lines are not in the oracle Loki tenants).
+  Ruling: fix in the launcher (also read `SNIPPETS_RELEASE=`; the seat's recommendation) or add a parseable pin line in oracle-fleet. Delete this bullet when done.
+
 - **⚑ PICKUP (2026-11-08 — scan island specs vs replays, PR #3147 `spike/agent-loop-subcut`; operator reads it in another session).**
   Landed on the PR: `agents/islands/scan/pilot/updater/` (update-pr-branch.sh ported to Python against the replay family as oracle:
   43/43, bash family 43/43, 7/9 mutations caught, ~3× the bash in code lines, 12 bash findings incl. 3 arguable bugs — three reviewer

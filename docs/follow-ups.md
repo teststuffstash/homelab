@@ -690,7 +690,7 @@ the block needs pruning, not more headings.
 - [ ] **FU-220** — **Locked python rides no longer use the PyPI cache; recovering it needs a
       TRANSPARENT cache, which is a trust decision.** `UV_FROZEN=1` (2026-09-07, PR#1485) stops uv
       rewriting committed locks to the LAN index, at the price of `--frozen` installs fetching
-      files.pythonhosted.org over the WAN — all three python-profile repos commit a lock, so the
+      files.pythonhosted.org over the WAN — all four python-profile repos (homelab since #3225) commit a lock, so the
       `/packages/` zone is fed only by unlocked paths now. Mechanism, the measured uv behaviour
       and the two named costs of the transparent shape (forged certs for public hostnames in
       sandbox pods; hostAliases delete the upstream fallback) live in
