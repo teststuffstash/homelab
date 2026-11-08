@@ -179,6 +179,8 @@ is stale, so it cannot drift the way the prose register did.
 | `arbitrate/no-op-after-directive-cired-second` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
 | `arbitrate/no-op-after-directive-cired-undirected` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
 | `arbitrate/no-op-after-directive-cr-first` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-outsider-late` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
+| `arbitrate/no-op-after-directive-cr-outsider` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
 | `arbitrate/no-op-after-directive-cr-rerun-spent` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
 | `arbitrate/no-op-after-directive-cr-second` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |
 | `arbitrate/no-op-after-directive-cr-stale-directive` | actions | - | `agents/coordinator-scan.sh` | IL-T31 |

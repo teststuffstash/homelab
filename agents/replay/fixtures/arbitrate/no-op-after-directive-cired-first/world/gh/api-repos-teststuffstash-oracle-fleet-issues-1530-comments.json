@@ -1,0 +1,13 @@
+[
+  {
+    "id": 901530,
+    "node_id": "IC_kwDOdir1530",
+    "user": {
+      "login": "homelab-coordinator[bot]",
+      "type": "Bot"
+    },
+    "author_association": "NONE",
+    "body": "ARBITRATE: the directive stands unchanged — re-run with the reviewer's suggested fix verbatim (the round truncated before pushing).\n\nci-cause: class=content step=ci/lint",
+    "created_at": "2026-09-09T11:30:00Z"
+  }
+]
