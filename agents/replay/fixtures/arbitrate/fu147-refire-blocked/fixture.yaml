@@ -14,6 +14,10 @@
 # the "ARBITRATE" comment from the first FU-147 labeling at 12:08:45Z is the arbitration event
 # the predicate sees. Since it post-dates the newest stats marker (12:08:43Z), the no-op predicate
 # returns false and the re-label is blocked.
+#
+# The ARBITRATE event is the App's own comment (homelab#3203 trust gate): authorAssociation NONE,
+# with the REST `user.type: Bot` that arb_trust_enrich joins in — this fixture feeds NOOP_ROUND_JQ
+# the already-enriched probe.
 pins:
   - MP-T11
 name: arbitrate-fu147-refire-blocked

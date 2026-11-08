@@ -577,6 +577,31 @@ STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
     then [ $b | scan("<!-- agent-event kind=stats ts=([^ ]+) -->")[0] ]
     elif ($b | test("Agent run stats")) then [ .createdAt ]
     else [] end | .[] ];'
+# COMMENT TRUST (homelab#3203's predicate, applied to the ARBITRATE selects below). Most claim
+# repos are PUBLIC, so anyone can post a comment that starts `ARBITRATE`; counted, it moves the
+# arbitration fingerprint ($arb_ts) or the re-run directive ($dir) and buys an extra round. An
+# ARBITRATE comment counts only from a GitHub App (user.type Bot: our own loop identities, the only
+# Apps installed) or a repo OWNER/MEMBER/COLLABORATOR — the same predicate as the launcher's
+# prefetch (agent-session.sh `comment-trust` block). `gh pr/issue view --json comments` carries
+# `authorAssociation` but no author type, and our App identities read CONTRIBUTOR/NONE, so
+# arb_trust_enrich lazily joins the REST `user.type` (by node id) onto exactly the ARBITRATE comments
+# the association alone does not trust — no extra read on a PR without one. An unreadable REST read
+# fails CLOSED (only association-trusted ARBITRATE counts) with a WARN.
+TRUST_DEF='def trusted: ((.user.type // "") == "Bot") or ((.authorAssociation // .author_association // "") | IN("OWNER","MEMBER","COLLABORATOR"));'
+arb_trust_enrich() {   # <slug> <number> <json with .comments> → the same json, REST user.type joined in
+  local need raw m
+  need="$(printf '%s' "$3" | jq -r "${TRUST_DEF}"'any(.comments[]?; ((.body // "") | startswith("ARBITRATE")) and (trusted | not))' 2>/dev/null)" || need=''
+  [ "$need" = true ] || { printf '%s' "$3"; return 0; }
+  m=''
+  if raw="$(gh api "repos/$1/issues/$2/comments" --paginate 2>/dev/null)"; then
+    m="$(printf '%s' "$raw" | jq -cs '[ add // [] | .[] | select((.node_id // "") != "") | {key: .node_id, value: (.user.type // "")} ] | from_entries' 2>/dev/null)" || m=''
+  fi
+  if [ -z "$m" ]; then
+    echo "  WARN: comment trust: REST comments of ${1}#${2} unreadable — ARBITRATE from non-collaborators ignored this tick (homelab#3203)" >&2
+    m='{}'
+  fi
+  printf '%s' "$3" | jq -c --argjson m "$m" '.comments |= map((.id // "" | tostring) as $i | if ($m[$i] // "") != "" then .user.type = $m[$i] else . end)'
+}
 # FU-147 (homelab#868): the re-label must not fire over a NEWER arbitration ruling. The 12:18
 # re-fire on PR#862 re-read "stats without commits" minutes after the 12:15 arbitration had
 # already ruled that same round a strike — the predicate had no notion of an arbitration event
@@ -584,10 +609,10 @@ STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
 # newest no-op stats marker POST-DATES the newest arbitration event (an "ARBITRATE" comment or
 # machine event). An arbitration event newer than the stats marker means the ruling already covered
 # this round; re-labelling would re-dispatch the same escalation the ruling just resolved.
-NOOP_ROUND_JQ="${STATS_TS_DEF}"'
+NOOP_ROUND_JQ="${STATS_TS_DEF}${TRUST_DEF}"'
   ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
   | ([ stats_ts[] | select($head == "" or . > $head) ] | length) as $after
-  | ([ .comments[]? | select((.body // "") | startswith("ARBITRATE")) | .createdAt ] + [ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->")) | (.body | [scan("kind=arbitrate ts=([^ >]+)")][] | .[0] // empty) ] | map(select(. != "")) | max // "") as $arb_ts
+  | ([ .comments[]? | select((.body // "") | startswith("ARBITRATE")) | select(trusted) | .createdAt ] + [ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->")) | (.body | [scan("kind=arbitrate ts=([^ >]+)")][] | .[0] // empty) ] | map(select(. != "")) | max // "") as $arb_ts
   | ([ stats_ts[] | select($head == "" or . > $head) ] | max // "") as $newest_noop_ts
   | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
@@ -609,8 +634,8 @@ NOOP_ROUND_JQ="${STATS_TS_DEF}"'
 # dispatch numbering — so the re-run lands on the same pod-name key (agent-<project>-<task>-r<k>).
 # An unreadable issue read degrades to PR-side directives only (worst case: today's arbitrate).
 # >>>REPLAY:noop-rerun-predicate>>>
-NOOP_RERUN_JQ="${STATS_TS_DEF}"'
-  ([ (.comments[]?), ($ic[]?) | select((.body // "") | test("^ARBITRATE\\b")) | .createdAt ] | max // "") as $dir
+NOOP_RERUN_JQ="${STATS_TS_DEF}${TRUST_DEF}"'
+  ([ (.comments[]?), ($ic[]?) | select((.body // "") | test("^ARBITRATE\\b")) | select(trusted) | .createdAt ] | max // "") as $dir
   | ([ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->"))
        | (.body | [scan("kind=noop-rerun ts=([^ >]+)")][] | .[0]) ] | max // "") as $rr
   | ([ stats_ts[] | select($dir != "" and . > $dir) ] | length) as $after
@@ -626,6 +651,8 @@ noop_rerun_check() {   # <slug> <pr-probe-json> <issue-or-empty> → "rerun|<rou
       echo "  WARN: noop-rerun: comments of ${1}#${3} unreadable — PR-side directives only (homelab#1910)" >&2
       ic='[]'
     fi
+    ic="$(arb_trust_enrich "$1" "$3" "{\"comments\":${ic}}" | jq -c '.comments' 2>/dev/null)" || ic='[]'
+    [ -n "$ic" ] || ic='[]'
   fi
   v="$(printf '%s' "$2" | jq -r --argjson ic "$ic" "$NOOP_RERUN_JQ" 2>/dev/null)" || v=''
   case "$v" in rerun\|[0-9]*|arbitrate\|*) printf '%s\n' "$v" ;; *) printf 'arbitrate|noop-rerun predicate unreadable\n' ;; esac
@@ -4142,6 +4169,7 @@ EOF_GTHEMES_OPEN
       fi
       cr_noop=""
       if [ -n "$cr_probe" ]; then
+        cr_probe="$(arb_trust_enrich "$slug" "$u" "$cr_probe")"
         cr_noop="$(printf '%s' "$cr_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || cr_noop=""
       fi
       if [ -n "$cr_noop" ]; then
@@ -6204,6 +6232,7 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
         # nine-review-loop lesson). ISO-8601 strings compare correctly as strings.
         noop_round=""
         if [ "$attempts" -ge 1 ]; then
+          round_probe="$(arb_trust_enrich "$slug" "$u" "$round_probe")"
           noop_round="$(printf '%s' "$round_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || noop_round=""
         fi
         RED_MAX="${RED_ROUNDS_MAX:-5}"   # 3→5 with the logic-round cap (ADR-127, 2026-09-11)

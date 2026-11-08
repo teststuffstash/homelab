@@ -7,6 +7,8 @@
 #   task issue-1200, branch fix/issue-1200-review-findings, recipe `.agents/build.yaml` (the brief's
 #   task/<c> → .agents/<c>.yaml mapping). No unit for a coordinator session, no label.
 # RED ON BASE: master labels agent/arbitrate here (the FU-147 no-op leg had no re-run).
+# The directive is the coordinator App's: authorAssociation NONE, so the homelab#3203 trust gate
+# joins the REST comments read (user.type Bot) before it counts — that read is in the stream.
 pins:
   - IL-T31
 name: arbitrate-no-op-after-directive-cr-first
