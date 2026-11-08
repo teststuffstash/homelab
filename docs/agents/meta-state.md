@@ -18,6 +18,15 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-08 — scan island specs vs replays, PR #3147 `spike/agent-loop-subcut`; operator reads it in another session).**
+  Landed on the PR: `agents/islands/scan/pilot/updater/` (update-pr-branch.sh ported to Python against the replay family as oracle:
+  43/43, bash family 43/43, 7/9 mutations caught, ~3× the bash in code lines, 12 bash findings incl. 3 arguable bugs — three reviewer
+  identities, leg 2 null guards, leg 1 silent skip on a malformed probe) and `pilot/recorder/` (full-shape worlds: bash harness 43/43
+  and the strict port 43/43 on the full copy, 0/43 strict on the trimmed original; a missing `author` meant "not Renovate", a missing
+  `reviews` meant "unreviewed"). OPERATOR RULINGS OWED: (1) keep the sanitised oracle-fleet recording in the public tree? (2) replace
+  the real updater family's world with the full-shape copy? (3) the ADR-113 revisit — spec-driven strangler per island (updater → review
+  reflex) or keep bash; (4) fix bash findings 2/3/4 before any further port. Also in the session's scratchpad only (not on the PR):
+  the world-mining catalog (391 item-bearing worlds, most persona fields unknown) — re-mine with `pilot`-style recorder data if wanted.
 - **⚑ PICKUP (2026-11-07 — gateway specs in the oracle #977/#998 shape; TICK-LOG 11-06 ~20:00Z + the night entry).**
   DONE: process layer #3182 + five page PRs (#3184 #3186 #3187 #3188 #3189) merged; join baseline zero on all five codes for
   all 34 rules, hygiene baseline empty. (a) DONE 11-07: #3185 admin-merged (4e7101df), both AutoscalingRunnerSets carry `.31`, the ci.yaml step re-landed via #3199 (4cb8e5e6), first master run green with the step executed; NEXT: (b) #3191 (catalog `:free`/`other` fixture rows) rides the loop; (c) the residue list in TICK-LOG (agents/
