@@ -15139,3 +15139,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `--insecure-registry=192.168.40.31` after a hard refresh. **#3199** (revert of 122d3787) cannot exercise the step on a PR
   (pin-only-lint fails first, later steps skip); proven instead by a throwaway runner-shaped dind pod on nx-01 pulling
   `192.168.40.31/playwright/python:v1.62.0` (2 min, ok). Operator merged → master ci 42393462514 green, the e2e step ran.
+
+## 2026-11-07/08 — seat: outsider-comment trust, retro series identity, oracle handoffs
+
+- Outsiders can open/comment issues on the 8 public claim repos (interaction limits unreadable: PAT 403); labels are
+  collaborator-only, no auto-labelling templates. The hole was the worker prefetch: **#3203** withholds
+  non-bot/non-collaborator comments from the bundle + gates ARBITRATE lookups (replay block `comment-trust`).
+  Residual (scan's noop-rerun/arbitrate fingerprint still count any author's ARBITRATE) → background PR
+  `fix/scan-arbitrate-trust` dispatched at wind-down (FU mint refused by the gate — bounded change).
+- **#3202** (unsuspend retro-feedback-triage) fixed for the ADR-103 ratchet (run_id from the reports, suspend assertFalse), merged.
+- oracle handoffs (3) answered → done/: **#3208** named retro series keep the broker `agent-git-<repo>` token
+  (unset RETRO_GH_SECRET) → feedback-triage gets issues:write on oracle-fleet; mcp.minutark.ee egress already in the
+  oracle CNP. **#3209** ADR-160: a stack island's intake facts live in the stack repo (oracle tracks); platform owns
+  only launch mechanics. First write-capable run: Wed 2026-11-11 05:00Z.
