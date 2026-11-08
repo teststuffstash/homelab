@@ -3024,3 +3024,21 @@ sitting starts.
 selector and launcher gain a stack-island source when the first stack sitting is wired (FU-320). The
 island/track terms overlap and need rework; that rework is not this ADR.
 
+### ADR-161 — Every rebuildable cache gets oversized storage, an automatic limit, and a sizing signal (2026-11-08)
+**Status:** Accepted (operator, 2026-11-08, after #3216). **Decision:** a rebuildable cache (ADR-080)
+carries all three from the day it exists: **(1)** storage sized to a multiple of its measured working
+set, **(2)** an automatic limit that runs unattended and bounds the cache whatever the workload does,
+and **(3)** a signal when that limit fires regularly. Growing the storage is always the first response;
+a limit that fires regularly means grow again, never tighten it. Application per cache:
+[`storage-ledger.md`](storage-ledger.md) §Rebuildable caches.
+**Considered:** growing alone (rejected: headroom sets how rarely cleanup runs, it does not replace it;
+ci-runner-01's disk went from 33 to 17 GB free baseline in two weeks with nothing to stop it); a tight
+limit on undersized storage (rejected: each cleanup costs a day of slow builds while the cache
+re-warms, homelab#116); replacing long-lived hosts on a schedule instead (rejected: a replace is an
+attended CI-capacity window, FU-306, and it discards the whole warm cache).
+**Why:** the limits that exist were each added after a failure, one surface at a time, and the rule
+was only ever written down for the registry mirrors. Surfaces where the runtime offers no default
+limit (plain dockerd, single-user nix) were left with none.
+**Consequences:** a new cache's PR states all three or says why one does not apply. The `ci-runner`
+VMs and `nix-cache` are brought into line by their own PRs; the remaining gaps are listed in the
+ledger section.

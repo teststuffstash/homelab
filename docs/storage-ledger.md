@@ -314,6 +314,24 @@ replicas were deleted individually and allowed to rebuild inside the fence.
 invariant. Any fence introduced after volumes exist has to be backfilled onto the existing objects,
 and "the setting is in the chart" is not evidence that it applies to anything already running.
 
+## Rebuildable caches: storage, automatic limit, sizing signal (ADR-161)
+
+The rule is [ADR-161](adr.md): storage sized well above the working set, an automatic limit, and a
+signal when the limit fires regularly. Grow first; a limit that fires regularly means grow again,
+never tighten it. This table is the application, read 2026-11-08 (used = kubelet volume stats).
+
+| Cache | Storage / used | Automatic limit | Sizing signal | Gap |
+|---|---|---|---|---|
+| Registry mirrors (ghcr, docker-io, mcr) | 150 / 40 / 40 Gi, 23 / 2 / 1 GB | proxy TTL, weekly safe GC, full wipe at 90 % | `RegistryMirrorWipedRepeatedly` | none (§below) |
+| Kubelet image store, every node | node disk | image GC 60 % → 50 % | node disk belts | no per-firing signal |
+| Management box `/nix` | 120 GB disk | `nix.gc` weekly over 60 d, `min-free` 5 GiB | mgmt-probe store gate | none |
+| `pypi-cache`, `npm-cache`, `devbox-search` | 20 / 10 / 1 Gi, under 1 GB each | nginx `max_size` LRU | PVC belts only | none while far below the limit |
+| `nix-cache` | 20 Gi, 17.1–17.8 GB, flat for 18 d | nginx `max_size=16g` LRU | PVC belts only | sits at its limit, so it is evicting with no signal |
+| Forgejo runner DinD, agent ride Docker | pod lifetime | deleted with the pod | n/a | none |
+| `arc-uv-cache` | 20 Gi, 3.6 GB (+0.5 GB in 17 d) | **none** | `KubePersistentVolumeFillingUp` | no cleanup |
+| `ci-runner` VMs (docker images, build cache, `/nix`) | 80 Gi disk, 66–68 GB used | **none** (`kind-janitor` covers kind containers and anonymous volumes only) | `CiRunnerRootFs*` | no cleanup |
+| Jail host `pop-os` (`/nix`, Docker) | not read | none found in the jail tooling | no metrics | unmeasured |
+
 ## Why the registry mirrors are deliberately oversized (homelab#116)
 
 `--delete-untagged` was the bulk tier's largest single consumer of *reclamation*, and it had to go:
