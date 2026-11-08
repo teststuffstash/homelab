@@ -19,7 +19,7 @@ spec:
       # REQUIRES recomputing this hash in the same commit:
       #   sha256sum argocd/resources/nix-cache/configmap.yaml
       annotations:
-        checksum/config: 6f188e50342124de909b4904d5479093771b5b8ff6f01ae5eb5627d98b92448d
+        checksum/config: 8cf465bff15c699209641a46008e3c48f09282d9d4fe26efbeb88814aa89e9f9
     spec:
       securityContext:
         runAsNonRoot: true
