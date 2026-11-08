@@ -326,7 +326,7 @@ never tighten it. This table is the application, read 2026-11-08 (used = kubelet
 | Kubelet image store, every node | node disk | image GC 60 % → 50 % | node disk belts | no per-firing signal |
 | Management box `/nix` | 120 GB disk | `nix.gc` weekly over 60 d, `min-free` 5 GiB | mgmt-probe store gate | none |
 | `pypi-cache`, `npm-cache`, `devbox-search` | 20 / 10 / 1 Gi, under 1 GB each | nginx `max_size` LRU | PVC belts only | none while far below the limit |
-| `nix-cache` | 20 Gi, 17.1–17.8 GB, flat for 18 d | nginx `max_size=16g` LRU | PVC belts only | sits at its limit, so it is evicting with no signal |
+| `nix-cache` | 40 Gi, 17.1–17.8 GB when grown | nginx `max_size=32g` LRU | `NixCacheAtEvictionLimit` | none |
 | Forgejo runner DinD, agent ride Docker | pod lifetime | deleted with the pod | n/a | none |
 | `arc-uv-cache` | 20 Gi, 3.6 GB (+0.5 GB in 17 d) | **none** | `KubePersistentVolumeFillingUp` | no cleanup |
 | `ci-runner` VMs (docker images, build cache, `/nix`) | 80 Gi disk, 66–68 GB used | **none** (`kind-janitor` covers kind containers and anonymous volumes only) | `CiRunnerRootFs*` | no cleanup |
