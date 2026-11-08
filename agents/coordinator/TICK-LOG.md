@@ -15152,3 +15152,6 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (unset RETRO_GH_SECRET) → feedback-triage gets issues:write on oracle-fleet; mcp.minutark.ee egress already in the
   oracle CNP. **#3209** ADR-160: a stack island's intake facts live in the stack repo (oracle tracks); platform owns
   only launch mechanics. First write-capable run: Wed 2026-11-11 05:00Z.
+- 11-08: **#3212** (oracle workbench reads pods/logs/Jobs + Loki tenant in oracle-kargo; stale "no Secrets" rationale
+  rewritten) and **#3213** (scan ARBITRATE reads trust-gated) merged, live-verified. The remaining comment-trust surface
+  (blocked-on hold cleared by any comment, ~20 marker reads) left OPEN per operator → handed to #3147 as a PR comment.
