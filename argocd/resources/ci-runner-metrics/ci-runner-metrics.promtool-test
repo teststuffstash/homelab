@@ -144,3 +144,25 @@ tests:
         alertname: ArcRunnerPodOverstayed
         exp_alerts:
           - exp_labels: { severity: warning, triage: dig, namespace: arc-runners, pod: homelab-ephemeral-runner-krhxv }
+
+  # The sizing signal (ADR-161): the timestamp gauge changes once per cleanup. Two cleanups in the
+  # window stay quiet, the third fires. ci-runner-02 never cleaned and stays quiet beside it.
+  - interval: 1h
+    input_series:
+      - series: 'ci_runner_cache_cleanup_timestamp_seconds{job="ci-runner-node",instance="192.168.2.55:9100",host="ci-runner-01"}'
+        values: '1x48 2x48 3x48 4x48'
+      - series: 'ci_runner_cache_cleanup_timestamp_seconds{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02"}'
+        values: '1x196'
+    alert_rule_test:
+      - eval_time: 146h
+        alertname: CiRunnerCacheCleanedRepeatedly
+        exp_alerts: []
+      - eval_time: 147h
+        alertname: CiRunnerCacheCleanedRepeatedly
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              job: ci-runner-node
+              instance: 192.168.2.55:9100
+              host: ci-runner-01

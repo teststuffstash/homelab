@@ -329,7 +329,7 @@ never tighten it. This table is the application, read 2026-11-08 (used = kubelet
 | `nix-cache` | 40 Gi, 17.1–17.8 GB when grown | nginx `max_size=32g` LRU | `NixCacheAtEvictionLimit` | none |
 | Forgejo runner DinD, agent ride Docker | pod lifetime | deleted with the pod | n/a | none |
 | `arc-uv-cache` | 20 Gi, 3.6 GB (+0.5 GB in 17 d) | **none** | `KubePersistentVolumeFillingUp` | no cleanup |
-| `ci-runner` VMs (docker images, build cache, `/nix`) | 80 Gi disk, 66–68 GB used | **none** (`kind-janitor` covers kind containers and anonymous volumes only) | `CiRunnerRootFs*` | no cleanup |
+| `ci-runner` VMs (docker images, build cache, `/nix`) | 120 Gi disk, 66–68 GB used | `kind-janitor` at 70 % used, oldest first down to 60 %, only with no job running | `CiRunnerCacheCleanedRepeatedly` | none |
 | Jail host `pop-os` (`/nix`, Docker) | not read | none found in the jail tooling | no metrics | unmeasured |
 
 ## Why the registry mirrors are deliberately oversized (homelab#116)

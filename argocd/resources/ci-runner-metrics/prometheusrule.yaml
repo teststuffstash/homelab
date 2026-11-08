@@ -14,6 +14,8 @@
 #   AlmostFull  — under 10 % free, whatever the trend: one e2e (kind node + images) needs GBs, so
 #                 at this level the next runs on that VM fail at boot.
 #   ExporterDown — the belt's own liveness: a runner whose exporter is gone has no disk belt.
+#   CacheCleanedRepeatedly — the kind-janitor's automatic cache cleanup (ADR-161) ran 3+ times in
+#                 14 days: the disk is too small for the working set, so the fix is more disk.
 # Fixture: ci-runner-metrics.promtool-{rules,test} (replays the incident's slope).
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -64,6 +66,20 @@ spec:
               alert before reading them as a code or reviewer fault. What to check on the VM:
               `df -h /`, `docker system df -v`, `docker volume ls -qf dangling=true | wc -l`,
               `docker ps -a`, and the kind-janitor journal.
+        - alert: CiRunnerCacheCleanedRepeatedly
+          expr: |
+            changes(ci_runner_cache_cleanup_timestamp_seconds{job="ci-runner-node"}[14d]) >= 3
+          # triage dig: the cleanup timestamps and disk curve are readable; the remedy is a PR
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "{{ $labels.host }} cleaned its docker and nix caches {{ $value }} times in 14 days"
+            description: >-
+              The kind-janitor's automatic cache cleanup on {{ $labels.host }} is firing often enough
+              to cost re-pulls and slower builds. This is a SIZING signal (ADR-161): grow
+              `ci_runner_disk_gb` in tofu/ci-runner.tf after reading the hypervisor's thin pool. Do
+              not lower the janitor's HIGH threshold. What to check: the slope of
+              `node_filesystem_avail_bytes{host="{{ $labels.host }}",mountpoint="/"}[14d]`, then
+              `docker system df` on the VM.
         - alert: CiRunnerNodeExporterDown
           expr: |
             up{job="ci-runner-node"} == 0 or absent(up{job="ci-runner-node"})
