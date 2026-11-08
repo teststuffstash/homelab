@@ -15119,3 +15119,36 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `agents/gateway-admit.sh`, `agents/agent-session.sh`, `agents/coordinator/README.md`; `metrics.schema.json`'s
   `rail_choice.reason` enum lacks `order` and its x-requirements still name the pre-split codex/tiers rules (resolve via the
   kept anchors); `spec_gate.py`'s constant-column advisory now flags single-world header tables' `upstream` column.
+
+## 2026-11-07 ~15:00–17:00Z — seat: oracle handoff numbers, #1013 wedge, #3185 + e2e re-land
+
+- **oracle-iac#1161** (feedback-triage egress leg, `cnpg.io/cluster: oracle-pg` — verified live on both CNPG pods) was
+  unarmed → armed → MERGED. Handoff `20261106-2238-…-half-numbers.md` left in the inbox until the gauge reads in prod.
+- **oracle-fleet#1013 wedged ~16h** (specs-reviewer CR, armed): the scan's changes-requested body-edit leg held it as
+  "re-review pending" after the worker's round-2 body edit, but the specs reviewer re-reads only a new content commit.
+  Second fault: the round-2 ARBITRATE told the worker to leave the in-scope (page-preamble) DASHBOARD rows alone, which
+  the pinned finding contract does not allow (consistent with the 11-01 ruling — untouched-row blocking is the oracle
+  stack's process change to make, not the coordinator's to waive). Fix: **#3197** (body leg skips a specs-reviewer CR +
+  replay `body-edit-specs-reviewer-dispatches` + coordinator README rule + MP-T11 row) MERGED; seat ARBITRATE correction
+  comment on #1013 (merge r33.1/r33.2). The oracle seat added round-3 asks (pool-acquire timeout, error class only,
+  Fixes→Refs).
+- **#3198** MERGED (oracle seat's report): both reviewers now derive the issue from a `Refs #N` line when the PR closes
+  none (pr-open.sh's own prescribed form); the coordinator's strong-link predicate untouched. First push redded on
+  prompt-transport-lint — backticks in the PREP heredoc comments would have executed; fixed.
+- **#3185** seat-reviewed (sonnet, APPROVE) → admin-merged on the operator's word after #3197. Both scale sets carry
+  `--insecure-registry=192.168.40.31` after a hard refresh. **#3199** (revert of 122d3787) cannot exercise the step on a PR
+  (pin-only-lint fails first, later steps skip); proven instead by a throwaway runner-shaped dind pod on nx-01 pulling
+  `192.168.40.31/playwright/python:v1.62.0` (2 min, ok). Operator merged → master ci 42393462514 green, the e2e step ran.
+
+## 2026-11-07/08 — seat: outsider-comment trust, retro series identity, oracle handoffs
+
+- Outsiders can open/comment issues on the 8 public claim repos (interaction limits unreadable: PAT 403); labels are
+  collaborator-only, no auto-labelling templates. The hole was the worker prefetch: **#3203** withholds
+  non-bot/non-collaborator comments from the bundle + gates ARBITRATE lookups (replay block `comment-trust`).
+  Residual (scan's noop-rerun/arbitrate fingerprint still count any author's ARBITRATE) → background PR
+  `fix/scan-arbitrate-trust` dispatched at wind-down (FU mint refused by the gate — bounded change).
+- **#3202** (unsuspend retro-feedback-triage) fixed for the ADR-103 ratchet (run_id from the reports, suspend assertFalse), merged.
+- oracle handoffs (3) answered → done/: **#3208** named retro series keep the broker `agent-git-<repo>` token
+  (unset RETRO_GH_SECRET) → feedback-triage gets issues:write on oracle-fleet; mcp.minutark.ee egress already in the
+  oracle CNP. **#3209** ADR-160: a stack island's intake facts live in the stack repo (oracle tracks); platform owns
+  only launch mechanics. First write-capable run: Wed 2026-11-11 05:00Z.

@@ -84,3 +84,17 @@ metadata:
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: loki-tenant-reader }
 subjects:
   - { kind: ServiceAccount, name: oracle-workbench, namespace: oracle-fleet }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oracle-workbench-logs
+  namespace: oracle-kargo
+  annotations:
+    homelab.teststuff.net/rationale: >-
+      The Kargo Project namespace — the Jobs/pods the jail's own AnalysisRuns start (the jail
+      creates them, platform-analysisrun-author in kargo/rbac-namespaced.yaml). Their pods are
+      GC'd with the run, so the verdict's logs are only recoverable here.
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: loki-tenant-reader }
+subjects:
+  - { kind: ServiceAccount, name: oracle-workbench, namespace: oracle-fleet }
