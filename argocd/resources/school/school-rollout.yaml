@@ -1,0 +1,37 @@
+# The Forgejo CI's ONLY cluster power: restart deploy/school (patch its pod template) — nothing
+# else, no read of any other object. The token is minted out of band with the TokenRequest API
+# (no Secret in git — iac-no-raw-secrets) and stored only as the rasmus/school Forgejo secret
+# ROLLOUT_TOKEN:
+#   devbox run -- kubectl --kubeconfig tofu/kubeconfig -n school create token school-rollout --duration=8760h
+# Expiry = CI's "Publish + roll" step fails with 401 → mint again, replace the Forgejo secret.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: school-rollout
+  namespace: school
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: school-rollout
+  namespace: school
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [school]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: school-rollout
+  namespace: school
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: school-rollout
+subjects:
+  - kind: ServiceAccount
+    name: school-rollout
+    namespace: school
