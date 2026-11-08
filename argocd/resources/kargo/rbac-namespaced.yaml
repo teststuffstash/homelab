@@ -21,8 +21,16 @@
 #    write: create/delete on AnalysisRuns — so the jail can execute a Project AnalysisTemplate as a
 #    standalone AnalysisRun (the verdict object on real mirrored traffic, Kargo promoting nothing)
 #    and remove its own runs. Not read-only in effect (a run's job provider starts a pod in this
-#    namespace), granted because the namespace holds no Secrets and the workbench already owns
-#    pods in oracle-fleet; re-read this if a credential ever lands in oracle-kargo.
+#    namespace, and an AnalysisRun may carry an inline Job spec that mounts any Secret here).
+#    Accepted because every Secret in oracle-kargo is a copy of a credential the workbench can
+#    already read in oracle-fleet: the oracle-iac ESO Warehouse credential
+#    (`kargo-ghcr-oracle-fleet-ingester`) and `oracle-fleet-ingester-registry` are the same
+#    read:packages PAT as oracle-fleet's pull secret. Re-read this if a Secret lands here that
+#    oracle-fleet does not already hold.
+#    And read (get/list/watch) on pods, pods/log and Jobs, so the jail can observe the Jobs its
+#    own AnalysisRuns start (status, pod, logs) rather than inferring them from kube-state-metrics.
+#    A pod spec names Secrets, never their values. The Loki tenant read for oracle-kargo
+#    (loki-tenant-grants.yaml) covers the same pods after they are GC'd.
 #
 # Names carry `platform-` so they never collide with the RoleBindings Kargo itself creates in the
 # Project namespace (kargo-project-admin, kargo-*-read-secrets, kargo-admin/viewer/promoter).
@@ -211,6 +219,33 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: platform-analysisrun-author
+subjects:
+  - kind: ServiceAccount
+    name: oracle-workbench
+    namespace: oracle-fleet
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-workload-reader
+  namespace: oracle-kargo
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-workload-reader-oracle-workbench
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-workload-reader
 subjects:
   - kind: ServiceAccount
     name: oracle-workbench
