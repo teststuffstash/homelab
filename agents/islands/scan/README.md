@@ -108,5 +108,9 @@ P4's detector + drill for this island are not built (⚑ on
   its LLM admission is the launch island's helper.
 - **The footprint predicate is a seam, not scan code**: `footprint.sh` is read by the launcher,
   the reviewer, the responder, fix-debounce and `goal-lint.sh`.
+- **A Python port of the updater exists as a pilot** under
+  [pilot/updater/](pilot/updater/README.md): 43/43 against the replay family as oracle, one
+  subprocess site, ~3× the bash in code lines, 12 bash findings, and the open fixture-shape
+  question (sparse worlds vs full wire). Spike artifact for the ADR-113 revisit, not a member.
 - **The per-stack scan's runtime manifest lives in the claim's Composition** (a mirror of
   `coordinate-argo.yaml`'s template), so a scan runtime change is a claim-island change too.
