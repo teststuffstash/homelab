@@ -166,7 +166,7 @@ each with its own snapshot:
   outcome (the log line names the read: unverified — expected, no row), and the merged listing is
   the one snapshot admission reads.
 - **`docs`** — the vendor's Go page source, `go.mdx` on the vendor repo's default branch
-  (`raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx`),
+  (`raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx`),
   fetched with no credential. The leg reads each plan's **monthly fee** (the page's Plan table —
   `| **Go** | **$10/month** |`; the [Go price](../glossary.md#go-price) divides the policy plan's),
   each model's **monthly limit** under each plan tab (`go`, `go-plus`), a promotion's multiplier,
