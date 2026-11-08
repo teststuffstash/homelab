@@ -1,0 +1,36 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-08-19T10:00:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-08-19T10:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "fix: the other thing",
+      "oid": "789012ghi345"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_cad535d45628a96e",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-08-19T10:30:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "APPROVED",
+      "commit": {
+        "oid": "6b48dae72a35418b0ec6f9426fcbfda78da9962e"
+      }
+    }
+  ]
+}

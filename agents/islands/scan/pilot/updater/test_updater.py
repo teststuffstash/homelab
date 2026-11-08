@@ -33,7 +33,9 @@ from github import Recorded  # noqa: E402
 from updater import run  # noqa: E402
 
 ROOT = Path(os.environ.get("HOMELAB_ROOT") or HERE.parents[4])  # agents/islands/scan/pilot/updater → repo root
-FAMILY = ROOT / "agents/replay/fixtures/updater"
+# UPDATER_FAMILY points the suite at another copy of the family — e.g. the CONSTRUCTED full-shape
+# one (family/, built by ../recorder/fullshape.py), which the strict all-12 `from_wire` needs.
+FAMILY = Path(os.environ.get("UPDATER_FAMILY") or ROOT / "agents/replay/fixtures/updater")
 FIELDS_TSV = ROOT / "agents/replay/stubs/gh-json-fields.tsv"
 SPEC = HERE.parents[1] / "specs" / "updater.md"  # the island's contract page
 REPO = "teststuffstash/testrepo"  # bridge.sh pins the fixture universe

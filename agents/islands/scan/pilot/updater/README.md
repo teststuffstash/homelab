@@ -16,6 +16,7 @@ was rejected 2026-08-24). Nothing here runs in production; `update-pr-branch.sh`
 | [`test_updater.py`](test_updater.py) | one parametrized test over the family's `rows.psv`, `rule()`-labelled from [`../../specs/updater.md`](../../specs/updater.md), gateway-chassis conventions (markers degrade to no-ops without allure) |
 | [`count_lines.py`](count_lines.py) | the line counter behind the table below |
 | [`bash-family-run.txt`](bash-family-run.txt) | the real bash family's run in the same session, 43/43 |
+| [`family/`](family) | a CONSTRUCTED full-shape copy of the family (every PR 12 keys, live-shaped per-PR reads) — built by [`../recorder/`](../recorder/README.md); run with `UPDATER_FAMILY=<abs path>/family` |
 
 Run (from the repo root; the gateway's uv env supplies pytest + allure-pytest):
 
@@ -59,8 +60,10 @@ not carried over; the port cites bash line refs instead.
 
 ## The typed boundary — and the open question it raises
 
-See `gh_types.py` (`PullRequest`) and `github.py` (`GitHub` Protocol). Compromise taken in the
-pilot: only 4 of the 12 `--json` fields are REQUIRED (number, createdAt, mergeStateStatus, labels).
+See `gh_types.py` (`PullRequest`) and `github.py` (`GitHub` Protocol). **Superseded the same day by
+the [recorder pilot](../recorder/README.md):** `from_wire` now requires all 12 keys
+(`autoMergeRequest` nullable) and the suite passes 43/43 against `family/` — and 0/43 against the
+trimmed family, which it can no longer parse. The original compromise, kept for the record: only 4 of the 12 `--json` fields were REQUIRED (number, createdAt, mergeStateStatus, labels).
 The fixture worlds record a sparser wire than gh sends (base-world PRs carry 7 of 12 keys; live gh
 sends all 12), so 8 fields read "absent == null", as jq does, and the typed layer cannot catch
 fixture drift on those 8.

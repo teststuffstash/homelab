@@ -1,0 +1,10 @@
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName
+CALL gh pr view {{p1}} --repo teststuffstash/testrepo --json commits
+CALL gh pr view {{p2}} --repo teststuffstash/testrepo --json commits
+CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/{{n1}}/update-branch -f expected_head_sha={{oid1}}
+CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/{{n2}}/update-branch -f expected_head_sha={{oid2}}
+OUT updater[teststuffstash/testrepo]: updating #{{n1}} (oldest armed+BEHIND, FIFO)
+OUT updater[teststuffstash/testrepo]: update of #{{n1}} failed (422) — skipping; next pass retries
+OUT updater[teststuffstash/testrepo]: updating #{{n2}} (lane hop — the lane's older member did not clear)
+ERR gh: Not Found (HTTP 404)
+RC 0

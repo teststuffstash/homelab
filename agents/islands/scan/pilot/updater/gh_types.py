@@ -10,9 +10,10 @@ Exactly the fields `agents/update-pr-branch.sh` (+ `agents/renovate-currency.sh`
   gh api repos/R/commits/SHA/status     --jq '[… {context, state}]'     (renovate_probe)
 
 Rules: unknown wire keys are ignored; a REQUIRED key that is missing raises `WireError`; a key of
-the wrong JSON type raises `WireError`. "Optional" below means absent == null — jq's own reading of
-a missing key, kept because the replay worlds record a sparser wire than gh emits (the base world's
-PRs carry 7 of the 12 requested keys). Stdlib only.
+the wrong JSON type raises `WireError`. Since the full-shape family (../recorder/README.md) every
+one of the 12 `pr list` keys is REQUIRED — live gh always sends all 12 — and `nullable` says which
+may arrive as JSON null (only `autoMergeRequest`, null = un-armed). Nested objects (reviews, labels,
+commits) stay lenient: "optional" there still means absent == null, jq's reading. Stdlib only.
 """
 
 from __future__ import annotations
@@ -32,7 +33,8 @@ class WireError(ValueError):
 _MISSING = object()
 
 
-def _get(d: Any, where: str, key: str, typ: type | tuple[type, ...], *, required: bool) -> Any:
+def _get(d: Any, where: str, key: str, typ: type | tuple[type, ...], *, required: bool,
+         nullable: bool = False) -> Any:
     if not isinstance(d, dict):
         raise WireError(where, key, f"parent is {type(d).__name__}, not an object")
     v = d.get(key, _MISSING)
@@ -41,7 +43,7 @@ def _get(d: Any, where: str, key: str, typ: type | tuple[type, ...], *, required
             raise WireError(where, key, "missing (required)")
         return None
     if v is None:
-        if required:
+        if required and not nullable:
             raise WireError(where, key, "is null (required)")
         return None
     # bool is an int subclass in Python; JSON true is never a PR number
@@ -120,10 +122,10 @@ def _reviews(d: dict, where: str, key: str) -> tuple[Review, ...]:
 class PullRequest:
     """One element of the `gh pr list --json …` snapshot.
 
-    REQUIRED: number, createdAt (the FIFO key), mergeStateStatus, labels (leg 3 reads every PR's).
-    Optional (absent == null, jq's reading): the other eight. `reviewDecision` stays `str | None`
-    because the bash distinguishes them: `jq -r` prints a null as the TEXT "null", which is
-    neither "" (the no-approval arm) nor "CHANGES_REQUESTED".
+    ALL 12 keys REQUIRED (the full-shape family; live gh sends every one). Only `autoMergeRequest`
+    is nullable (null = un-armed). `reviewDecision` is a required string — gh sends "" (the Go zero
+    value) for a repo with no review policy, never null; the old `str | None` existed only because
+    a trimmed world could omit it and `jq -r` printed the absent key as the TEXT "null".
     """
 
     number: int
@@ -131,34 +133,33 @@ class PullRequest:
     merge_state_status: str
     labels: tuple[Label, ...]
     auto_merge_request: AutoMergeRequest | None
-    review_decision: str | None
-    head_ref_oid: str | None
-    base_ref_name: str | None
-    latest_reviews: tuple[Review, ...]  # null / absent / [] collapse: every reader does `// []` or `[]?`
+    review_decision: str
+    head_ref_oid: str
+    base_ref_name: str
+    latest_reviews: tuple[Review, ...]
     reviews: tuple[Review, ...]
-    author: Actor | None
-    head_ref_name: str | None
+    author: Actor
+    head_ref_name: str
 
     @classmethod
     def from_wire(cls, d: dict) -> PullRequest:
         w = "pr"
         n = _get(d, w, "number", int, required=True)
         w = f"pr #{n}"
-        amr = _get(d, w, "autoMergeRequest", dict, required=False)
-        auth = _get(d, w, "author", dict, required=False)
+        amr = _get(d, w, "autoMergeRequest", dict, required=True, nullable=True)
         return cls(
             number=n,
             created_at=_str(d, w, "createdAt", required=True),
             merge_state_status=_str(d, w, "mergeStateStatus", required=True),
             labels=tuple(Label.from_wire(x) for x in _list(d, w, "labels", required=True)),
             auto_merge_request=None if amr is None else AutoMergeRequest.from_wire(amr),
-            review_decision=_str(d, w, "reviewDecision"),
-            head_ref_oid=_str(d, w, "headRefOid"),
-            base_ref_name=_str(d, w, "baseRefName"),
-            latest_reviews=_reviews(d, w, "latestReviews"),
-            reviews=_reviews(d, w, "reviews"),
-            author=None if auth is None else Actor.from_wire(auth),
-            head_ref_name=_str(d, w, "headRefName"),
+            review_decision=_str(d, w, "reviewDecision", required=True),
+            head_ref_oid=_str(d, w, "headRefOid", required=True),
+            base_ref_name=_str(d, w, "baseRefName", required=True),
+            latest_reviews=tuple(Review.from_wire(r) for r in _list(d, w, "latestReviews", required=True)),
+            reviews=tuple(Review.from_wire(r) for r in _list(d, w, "reviews", required=True)),
+            author=Actor.from_wire(_get(d, w, "author", dict, required=True)),
+            head_ref_name=_str(d, w, "headRefName", required=True),
         )
 
     @property

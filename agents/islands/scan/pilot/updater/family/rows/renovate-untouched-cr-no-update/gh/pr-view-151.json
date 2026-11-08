@@ -1,0 +1,36 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-09-27T06:00:00Z",
+      "authors": [
+        {
+          "email": "homelab-renovate-1234[bot]@users.noreply.invalid",
+          "id": "BOT_1a5f52b8a1590c36",
+          "login": "homelab-renovate-1234[bot]",
+          "name": "homelab-renovate-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-09-27T06:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "chore(deps): update docker/login-action action to v4",
+      "oid": "ren151oid789"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_94367dabedbe4c70",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-09-27T05:00:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "CHANGES_REQUESTED",
+      "commit": {
+        "oid": "fef6f631023556d79083ff4c49b4509b978d9618"
+      }
+    }
+  ]
+}

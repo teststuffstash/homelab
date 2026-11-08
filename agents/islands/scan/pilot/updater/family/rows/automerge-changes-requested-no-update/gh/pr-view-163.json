@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-09-16T12:00:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-09-16T12:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "chore: the mechanical change",
+      "oid": "b147038d6c17cd0b475abdad5e0aaf1df6ca4c1d"
+    },
+    {
+      "authoredDate": "2026-09-16T12:30:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-09-16T12:30:00Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'master' into chore/x",
+      "oid": "cr163oid456"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_7210608642c5cafb",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-09-16T13:00:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "CHANGES_REQUESTED",
+      "commit": {
+        "oid": "3ef8c16a2f264af061bf1699fbe3af69799f5c55"
+      }
+    }
+  ]
+}

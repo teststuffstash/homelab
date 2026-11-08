@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-09-27T06:00:00Z",
+      "authors": [
+        {
+          "email": "homelab-renovate-1234[bot]@users.noreply.invalid",
+          "id": "BOT_1a5f52b8a1590c36",
+          "login": "homelab-renovate-1234[bot]",
+          "name": "homelab-renovate-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-09-27T06:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "chore(deps): update docker/login-action action to v4",
+      "oid": "09c1f9aefe6f1ef2aed8b6fd400d5f99f600aa9f"
+    },
+    {
+      "authoredDate": "2026-09-27T06:10:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-09-27T06:10:00Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'master' into renovate/docker-login-action-4.x",
+      "oid": "ren151oid789"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_c64ff5bad733b359",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-09-27T05:00:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "CHANGES_REQUESTED",
+      "commit": {
+        "oid": "78d29f3d01ad70c7f9ddf8b90c869471d6e6b3c4"
+      }
+    }
+  ]
+}

@@ -1,0 +1,384 @@
+[
+  {
+    "author": {
+      "is_bot": true,
+      "login": "app/homelab-agents-1234"
+    },
+    "autoMergeRequest": {
+      "authorEmail": null,
+      "commitBody": null,
+      "commitHeadline": null,
+      "mergeMethod": "SQUASH",
+      "enabledAt": "2026-11-08T17:48:24Z",
+      "enabledBy": {
+        "is_bot": true,
+        "login": "app/homelab-agents-1234"
+      }
+    },
+    "baseRefName": "master",
+    "createdAt": "2026-11-08T17:48:05Z",
+    "headRefName": "fix/142c3d",
+    "headRefOid": "012cc2a848ae1906c3d6ad1a7e454c51c40a9f42",
+    "labels": [],
+    "latestReviews": [
+      {
+        "id": "",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-11-08T18:48:50Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "APPROVED",
+        "commit": {
+          "oid": ""
+        }
+      },
+      {
+        "id": "",
+        "author": {
+          "login": "homelab-specs-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body\n<!-- specs-review head=d47467dcf53b session=324a0df9720f94c020b4864544957a33 -->",
+        "submittedAt": "2026-11-08T18:50:40Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "APPROVED",
+        "commit": {
+          "oid": ""
+        }
+      }
+    ],
+    "mergeStateStatus": "BLOCKED",
+    "number": 1032,
+    "reviewDecision": "APPROVED",
+    "reviews": [
+      {
+        "id": "PRR_cce10e492b2f8f58",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-11-08T18:01:41Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "DISMISSED",
+        "commit": {
+          "oid": "9eb1df78b99927ea44efffe049fff276dede5210"
+        }
+      },
+      {
+        "id": "PRR_fe926360fa32e723",
+        "author": {
+          "login": "homelab-specs-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body\n<!-- specs-review head=3a16e4a33ff3 session=054f16054fa328d78e8ea67859715ce7 -->",
+        "submittedAt": "2026-11-08T18:04:15Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "CHANGES_REQUESTED",
+        "commit": {
+          "oid": "9eb1df78b99927ea44efffe049fff276dede5210"
+        }
+      },
+      {
+        "id": "PRR_36d61d3e3a7db029",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-11-08T18:48:50Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "APPROVED",
+        "commit": {
+          "oid": "012cc2a848ae1906c3d6ad1a7e454c51c40a9f42"
+        }
+      },
+      {
+        "id": "PRR_24bc9b54dabe5f6f",
+        "author": {
+          "login": "homelab-specs-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body\n<!-- specs-review head=d47467dcf53b session=324a0df9720f94c020b4864544957a33 -->",
+        "submittedAt": "2026-11-08T18:50:40Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "APPROVED",
+        "commit": {
+          "oid": "012cc2a848ae1906c3d6ad1a7e454c51c40a9f42"
+        }
+      }
+    ]
+  },
+  {
+    "author": {
+      "id": "X_aeec9ebaf8912cf7",
+      "is_bot": false,
+      "login": "human-bc46ac",
+      "name": "Human 5e7c20"
+    },
+    "autoMergeRequest": null,
+    "baseRefName": "master",
+    "createdAt": "2026-11-08T16:04:26Z",
+    "headRefName": "docs/711d6d",
+    "headRefOid": "c1a95309f441c855d4fe2c36c24fa7cea490a536",
+    "labels": [],
+    "latestReviews": [],
+    "mergeStateStatus": "BEHIND",
+    "number": 1030,
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviews": []
+  },
+  {
+    "author": {
+      "is_bot": true,
+      "login": "app/homelab-renovate-1234"
+    },
+    "autoMergeRequest": {
+      "authorEmail": null,
+      "commitBody": null,
+      "commitHeadline": "sanitized commitHeadline",
+      "mergeMethod": "SQUASH",
+      "enabledAt": "2026-10-31T20:59:49Z",
+      "enabledBy": {
+        "is_bot": true,
+        "login": "app/homelab-renovate-1234"
+      }
+    },
+    "baseRefName": "master",
+    "createdAt": "2026-10-31T20:59:46Z",
+    "headRefName": "renovate/8e94fd",
+    "headRefOid": "ab4cde9b3acdf4f1eeb841e3b1f0a497388fd8d9",
+    "labels": [
+      {
+        "id": "LA_759bf2b91b038bca",
+        "name": "agent/blocked",
+        "description": "sanitized description",
+        "color": "b60205"
+      },
+      {
+        "id": "LA_71a3316b6ebf619b",
+        "name": "agent/error",
+        "description": "sanitized description",
+        "color": "b60205"
+      },
+      {
+        "id": "LA_64baa2f505b110ef",
+        "name": "dependencies",
+        "description": "sanitized description",
+        "color": "ededed"
+      },
+      {
+        "id": "LA_018603404d3661de",
+        "name": "deps-review",
+        "description": "sanitized description",
+        "color": "ededed"
+      }
+    ],
+    "latestReviews": [
+      {
+        "id": "",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-11-01T21:51:46Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "CHANGES_REQUESTED",
+        "commit": {
+          "oid": ""
+        }
+      }
+    ],
+    "mergeStateStatus": "BEHIND",
+    "number": 965,
+    "reviewDecision": "CHANGES_REQUESTED",
+    "reviews": [
+      {
+        "id": "PRR_1bd2c7144cc00bd5",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-10-31T21:15:45Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "CHANGES_REQUESTED",
+        "commit": {
+          "oid": "4abd5e9567678d6e237e988cbafe7cb7532a2511"
+        }
+      },
+      {
+        "id": "PRR_673365ec9509faa9",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-11-01T04:05:20Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "CHANGES_REQUESTED",
+        "commit": {
+          "oid": "dca4a020f1ad90e6f1a34ca7fc7d52d14114f19c"
+        }
+      },
+      {
+        "id": "PRR_01a0c7fbb82a97a4",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-11-01T12:49:48Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "CHANGES_REQUESTED",
+        "commit": {
+          "oid": "e28ec58f354ec133b39e3ef7de73f3e639656635"
+        }
+      },
+      {
+        "id": "PRR_41b5fece79f0a294",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-11-01T21:51:46Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "CHANGES_REQUESTED",
+        "commit": {
+          "oid": "f0d036816233ab5103f4a86900ddcb55d11241e6"
+        }
+      }
+    ]
+  },
+  {
+    "author": {
+      "id": "X_aeec9ebaf8912cf7",
+      "is_bot": false,
+      "login": "human-bc46ac",
+      "name": "Human 5e7c20"
+    },
+    "autoMergeRequest": {
+      "authorEmail": "ede036@users.noreply.invalid",
+      "commitBody": "sanitized commitBody",
+      "commitHeadline": "sanitized commitHeadline",
+      "mergeMethod": "SQUASH",
+      "enabledAt": "2026-10-29T20:40:58Z",
+      "enabledBy": {
+        "id": "X_aeec9ebaf8912cf7",
+        "is_bot": false,
+        "login": "human-bc46ac",
+        "name": "Human 5e7c20"
+      }
+    },
+    "baseRefName": "master",
+    "createdAt": "2026-10-28T21:17:05Z",
+    "headRefName": "seat/240fc5",
+    "headRefOid": "b4ecdc45aa09f5968e0cde3e59ab6613feeda4b9",
+    "labels": [
+      {
+        "id": "LA_df48edde5491cc50",
+        "name": "merge-conflict",
+        "description": "sanitized description",
+        "color": "e11d21"
+      }
+    ],
+    "latestReviews": [
+      {
+        "id": "",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-10-29T20:43:22Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "CHANGES_REQUESTED",
+        "commit": {
+          "oid": ""
+        }
+      }
+    ],
+    "mergeStateStatus": "DIRTY",
+    "number": 944,
+    "reviewDecision": "CHANGES_REQUESTED",
+    "reviews": [
+      {
+        "id": "PRR_fcd449fbc120e2f0",
+        "author": {
+          "login": "homelab-reviewer"
+        },
+        "authorAssociation": "NONE",
+        "body": "sanitized body",
+        "submittedAt": "2026-10-29T20:43:22Z",
+        "includesCreatedEdit": false,
+        "reactionGroups": [],
+        "state": "CHANGES_REQUESTED",
+        "commit": {
+          "oid": "b4ecdc45aa09f5968e0cde3e59ab6613feeda4b9"
+        }
+      }
+    ]
+  },
+  {
+    "author": {
+      "id": "X_aeec9ebaf8912cf7",
+      "is_bot": false,
+      "login": "human-bc46ac",
+      "name": "Human 5e7c20"
+    },
+    "autoMergeRequest": null,
+    "baseRefName": "master",
+    "createdAt": "2026-10-21T18:55:27Z",
+    "headRefName": "seat/f54a6c",
+    "headRefOid": "68dad35a7360dd2a50a15ce6ce3cf85e7ebba586",
+    "labels": [],
+    "latestReviews": [],
+    "mergeStateStatus": "BEHIND",
+    "number": 918,
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviews": []
+  },
+  {
+    "author": {
+      "id": "X_aeec9ebaf8912cf7",
+      "is_bot": false,
+      "login": "human-bc46ac",
+      "name": "Human 5e7c20"
+    },
+    "autoMergeRequest": null,
+    "baseRefName": "master",
+    "createdAt": "2026-10-20T16:41:49Z",
+    "headRefName": "seat/6710b9",
+    "headRefOid": "04134e242e2058a877c06ac2b852727116deb062",
+    "labels": [
+      {
+        "id": "LA_233fe599fdca8c2e",
+        "name": "whatif",
+        "description": "sanitized description",
+        "color": "5319e7"
+      }
+    ],
+    "latestReviews": [],
+    "mergeStateStatus": "BEHIND",
+    "number": 916,
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviews": []
+  }
+]

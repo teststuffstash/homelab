@@ -1,0 +1,36 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-08-19T10:00:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-08-19T10:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "feat: goal two",
+      "oid": "goal111oid012"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_8b5fc7f80ee15efb",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-08-19T10:30:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "APPROVED",
+      "commit": {
+        "oid": "57b8619eeedd0e6a3165694662b2285dace0113b"
+      }
+    }
+  ]
+}
