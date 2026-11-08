@@ -15155,3 +15155,9 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - 11-08: **#3212** (oracle workbench reads pods/logs/Jobs + Loki tenant in oracle-kargo; stale "no Secrets" rationale
   rewritten) and **#3213** (scan ARBITRATE reads trust-gated) merged, live-verified. The remaining comment-trust surface
   (blocked-on hold cleared by any comment, ~20 marker reads) left OPEN per operator → handed to #3147 as a PR comment.
+- 11-08: **#3216** (ci-runner-01 root fs) → cache audit → **ADR-161** (#3219): every rebuildable cache gets oversized storage, an
+  automatic limit and a sizing signal (`storage-ledger.md` §Rebuildable caches). **#3220** nix-cache 40Gi/32g + `NixCacheAtEvictionLimit`.
+  **#3221** runner disks 120 GB + janitor limit + `CiRunnerCacheCleanedRepeatedly`; applied by hand (box allowlist refuses), filesystems grown
+  live, janitor installed live on both, forced run on runner-01 removed 59 images / 3.9 GB. `CiRunnerRootFsAlmostFull` cleared 14:49Z.
+  The nix-cache pod's teardown on wk-02 printed a non-fatal kernel WARN (`memcg_reparent_list_lrus`, `KernelOopsCaptured`, first in 17 d of
+  history, node healthy); claimed in the window. uv-cache and jail-host gaps stay as ledger rows (FU mint refused by the gate).

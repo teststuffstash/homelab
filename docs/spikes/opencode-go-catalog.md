@@ -62,7 +62,8 @@ rows `created` is the server's clock (1792265566 = 2026-10-17T19:32:46Z), not a 
 
 The vendor's Go page is `https://opencode.ai/v2/docs/console/go/` (fetched 19:33:11Z). Its
 source is `anomalyco/opencode:services/www/src/docs/content/console/go.mdx` on `dev`, which
-moved there from `packages/web/…/go.mdx` in #54761 on 2026-10-12. The page says:
+moved there from `packages/web/…/go.mdx` in #54761 on 2026-10-12 (and on to `services/site/…`
+on 2026-11-06, vendor commit 9ced0469b — the gateway follows it since #3223). The page says:
 
 > Usage limits are defined as monthly dollar amounts … Each model has the following usage
 > limits: 5-hour — 20% of the monthly limit; weekly — 50%; and monthly — 100%.
