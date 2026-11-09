@@ -123,7 +123,7 @@ spec:
                     actions.github.com/scale-set-name: homelab-ephemeral
             initContainers:
               - name: init-dind-externals
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.11.5-gc00b322dab8a
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.11.9-g97e013092aa2
                 command: ["cp"]
                 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
                 volumeMounts:
@@ -165,7 +165,7 @@ spec:
                     mountPath: /home/runner/externals
             containers:
               - name: runner
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.11.5-gc00b322dab8a
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.11.9-g97e013092aa2
                 command: ["/home/runner/run.sh"]
                 resources:
                   requests:
