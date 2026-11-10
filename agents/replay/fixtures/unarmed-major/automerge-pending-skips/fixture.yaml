@@ -1,5 +1,6 @@
 # unarmed-major/automerge-pending-skips (2026-10-28, G12b): the armed `automerge` PR with `ci` still running and
-# nothing red — pending belongs to the auto-merge lane, not even a SETTLING line. Expected: NO unit, no report line.
+# nothing red — pending belongs to the auto-merge lane, not even a SETTLING line; armed two days, but the
+# check that started three minutes ago is activity, so it is not stale either (ADR-162). Expected: NO unit, no report line.
 name: unarmed-major-automerge-pending-skips
 mode: actions
 source: agents/coordinator-scan.sh
