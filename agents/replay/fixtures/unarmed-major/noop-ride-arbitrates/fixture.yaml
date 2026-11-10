@@ -1,0 +1,18 @@
+# unarmed-major/noop-ride-arbitrates (ADR-162; homelab#3233) — the `debounced` row's world, read a day
+# later: the ride's own dispatch marker is 25 h old and the fingerprint has not moved, so that ride
+# changed nothing. The debounce owes it no second ride and the rides-exhausted bound never reaches a
+# PR with one marker — expected: `agent/arbitrate` + one event line, instead of a DEBOUNCED report
+# line every tick that nobody reads. (`debounced` itself, 3 h after the marker, still only reports.)
+name: unarmed-major-noop-ride-arbitrates
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-09-29T10:10:00Z

@@ -1,0 +1,31 @@
+# provenance — the named world `homelab-dead-runs-3233-3237`
+#
+# WHAT THIS WORLD IS. The homelab board on 2026-11-10 with two armed mechanical PRs parked for a
+# day by workflow runs that DIED rather than failed (ADR-162): #3237 (deploy pin) — `ci` green,
+# all three `renovate-approve` runs `startup_failure` with zero jobs, so no approval ever came;
+# #3233 (weekly devbox-update) — the runner pod was killed mid-warm (exit 137), `ci` red with no
+# failed step, and one `unarmed-major` ride that touched nothing (its `state-fp:` marker is in
+# the comments). Three un-armed drafts ride along as the "not ours" rows. Full wire, as recorded.
+world: homelab-dead-runs-3233-3237
+class: recorded
+source: teststuffstash/homelab, live, 2026-11-10T19:14Z
+used_by: stale-armed-retry/* , unarmed-major/noop-ride-arbitrates   # regenerate the truth: run.sh --index
+recorded:
+  - path: gh/pr-list.json
+    cmd: gh pr list --repo teststuffstash/homelab --state open --limit 100 --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid
+    at: 2026-11-10T19:14:42Z
+  - path: gh/api-repos-teststuffstash-homelab-actions-runs-head-sha-4753b8dfe8268efcf516c4abcdb990adf6f03ea7-per-page-100.json
+    cmd: gh api 'repos/teststuffstash/homelab/actions/runs?head_sha=4753b8dfe8268efcf516c4abcdb990adf6f03ea7&per_page=100'
+    at: 2026-11-10T19:14:42Z
+  - path: gh/api-repos-teststuffstash-homelab-actions-runs-head-sha-8ac58a6a5a0832eada5b6e62e0999b53c5c71dc9-per-page-100.json
+    cmd: gh api 'repos/teststuffstash/homelab/actions/runs?head_sha=8ac58a6a5a0832eada5b6e62e0999b53c5c71dc9&per_page=100'
+    at: 2026-11-10T19:14:42Z
+  - path: gh/api-repos-teststuffstash-homelab-actions-runs-42604863565-jobs-per-page-100.json
+    cmd: gh api 'repos/teststuffstash/homelab/actions/runs/42604863565/jobs?per_page=100'
+    at: 2026-11-10T19:14:42Z
+  - path: gh/api-repos-teststuffstash-homelab-issues-3233-comments.json
+    cmd: gh api repos/teststuffstash/homelab/issues/3233/comments --paginate
+    at: 2026-11-10T19:14:42Z
+  - path: gh/api-repos-teststuffstash-homelab-issues-3237-comments.json
+    cmd: gh api repos/teststuffstash/homelab/issues/3237/comments --paginate
+    at: 2026-11-10T19:14:42Z

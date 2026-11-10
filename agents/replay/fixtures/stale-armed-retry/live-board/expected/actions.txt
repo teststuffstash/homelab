@@ -1,0 +1,16 @@
+CALL gh api repos/teststuffstash/homelab/actions/runs?head_sha=8ac58a6a5a0832eada5b6e62e0999b53c5c71dc9&per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/3237/comments --paginate
+CALL gh api -X POST repos/teststuffstash/homelab/issues/3237/labels -f labels[]=ci-retry
+CALL gh api -X DELETE repos/teststuffstash/homelab/issues/3237/labels/ci-retry
+CALL gh api repos/teststuffstash/homelab/issues/3237/comments --paginate
+CALL gh api --method POST repos/teststuffstash/homelab/issues/3237/comments -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-11-10T19:15:00Z` · CI-RETRY 1/3 at head `8ac58a6a5a08` — `renovate-approve` (startup_failure, run 42652588297 — `labeled` event re-fired): the run died with no failed step, which is not a verdict on this diff (ADR-162). <!-- agent-event kind=ci-retry ts=2026-11-10T19:15:00Z -->
+CALL gh api repos/teststuffstash/homelab/actions/runs?head_sha=4753b8dfe8268efcf516c4abcdb990adf6f03ea7&per_page=100
+CALL gh api repos/teststuffstash/homelab/actions/runs/42604863565/jobs?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/3233/comments --paginate
+CALL gh run rerun 42604863565 --repo teststuffstash/homelab --failed
+CALL gh api repos/teststuffstash/homelab/issues/3233/comments --paginate
+CALL gh api --method POST repos/teststuffstash/homelab/issues/3233/comments -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-11-10T19:15:00Z` · CI-RETRY 1/3 at head `4753b8dfe826` — `CI` (failure, run 42604863565 re-run): the run died with no failed step, which is not a verdict on this diff (ADR-162). <!-- agent-event kind=ci-retry ts=2026-11-10T19:15:00Z -->
+OUT ORPHAN [homelab] ↻ ci-retry 1/3 — PR #3237: `renovate-approve` (startup_failure, run 42652588297 — `labeled` event re-fired)
+OUT ORPHAN [homelab] ↻ ci-retry 1/3 — PR #3233: `CI` (failure, run 42604863565 re-run)
+OUT REACHED: end
+RC 0

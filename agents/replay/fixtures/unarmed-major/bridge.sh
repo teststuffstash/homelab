@@ -7,6 +7,7 @@ slug="$IN_SLUG"
 repo="$IN_REPO"
 prsjson="$(cat "$REPLAY_WORLD/gh/pr-list.json")"
 orphans=""
+um_lane_side=""
 units=""
 item_class_push() { :; }
 # blocked-on predicate: the family's world decides — a row with a `blocked-on: human` comment is held

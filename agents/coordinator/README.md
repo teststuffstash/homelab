@@ -1589,6 +1589,11 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    `agent/arbitrate` + an event line, and a human adapts by hand, re-proposes, or abandons it through
    the Renovate config. Removing the label buys five more: the count is the markers NEWER than the
    last arbitrate event line, so the ruling re-opens the budget. Every class shares that cap.
+   **The unit names its class: `bump-class=deps-review` or `bump-class=automerge` on the dispatch line (ADR-162).**
+   The clause is called `unarmed-major` for all three classes; with a `bump-class=` the PR is armed by
+   design and the launcher line's "already armed → exit clean" does not apply to it. A ride that
+   leaves the state untouched is read by the scan as "nothing to do here" and the PR goes to a human
+   (`agent/arbitrate`) a day later — so act, park with a `blocked-on:` marker, or close; never exit silent.
    **And an ARMED `automerge` (mechanical-lane) bump in its RED state only (G12b, operator ruling
    2026-10-28: "S9 needs a new rule" — #2919, the weekly devbox-update PR, sat red and armed two days
    with no actor).** Green and pending are the auto-merge lane's own (renovate-approve + GitHub
