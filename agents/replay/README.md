@@ -575,6 +575,13 @@ is stale, so it cannot drift the way the prose register did.
 | `specs-process/reached` | actions | - | `agents/agent-session.sh` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
+| `stale-armed-retry/failed-step-left` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |
+| `stale-armed-retry/fresh-death-held` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |
+| `stale-armed-retry/live-board` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |
+| `stale-armed-retry/parked-skipped` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |
+| `stale-armed-retry/rerun-refused` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |
+| `stale-armed-retry/retries-exhausted` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |
+| `stale-armed-retry/runs-unreadable` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |
 | `stale-stamp-repair-lens-verdict-untouched` | actions | - | `agents/coordinator-scan.sh` | - |
 | `stale-stamp-repair-stamp-and-label` | actions | - | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
@@ -603,6 +610,7 @@ is stale, so it cannot drift the way the prose register did.
 | `unarmed-major/automerge-pending-skips` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/automerge-red-emits` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/automerge-red-settling-held` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/automerge-stale-emits` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/blocked-on-human` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/content-push-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/cr-emits` | actions | - | `agents/coordinator-scan.sh` | - |
@@ -614,6 +622,8 @@ is stale, so it cannot drift the way the prose register did.
 | `unarmed-major/deps-review-rides-reset-after-arbitrate` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/files-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/heartbeat-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/lane-item` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/noop-ride-arbitrates` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/rebase-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/rejudge-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/settling-held` | actions | - | `agents/coordinator-scan.sh` | - |
