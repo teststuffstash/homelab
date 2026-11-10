@@ -15164,3 +15164,23 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - 11-08 (second jail, took over as primary): **#3214** (release-asset 504s from pods) closed with no platform change: probes from a pod 6/6 200, CNPs allow the hosts, a 504 over HTTPS is GitHub's; upstream per-asset fault 08:58–09:38Z (oracle-fleet#1025) + GitHub's unauthenticated-timeouts incident 10:36–12:32Z, the 10:20Z probe linked by timing only. oracle-fleet#1021 released, ride green, oracle-fleet#1031.
   **#3211** → **#3223** (`GoCatalogStale`: vendor moved go.mdx to `services/site`): path fix only, the fixture stays trimmed (full page fails 17/77 on pinned counts; parser handles it). **#3224** rolled 17:30Z, `docs refreshed — 32 models`, alert gone, Step 5 Preview limit $15. **#3226** alert text.
   **#3225** `profile: python` on the homelab repo (live 19:48Z): gateway rides could not pass the gate (`uv --frozen` → files.pythonhosted.org). Rides run in ns `<repo>`, the loop in `platform-agents`; no `homelab-agents` ns. Proved by **#3222** → **#3228** (gateway snippets wheel: fetch once, retries, API fallback, sha256), parked before #3225, merged after. **#3227** specs-reviewer wheel fetch retries.
+
+## 2026-11-10 — seat: #3233/#3237 stalled a day; ADR-162 (dead-run retry, no-op terminal, stale mechanical bump)
+
+- **#3237** (agent-base pin): all three `renovate-approve` runs `startup_failure`, zero jobs (16:13Z 11-09, cause on
+  GitHub's side unconfirmed). The ruleset needs TWO approvals; the specs reviewer waits for the code approval ("the code
+  gate goes first"), the updater parks `REVIEW_REQUIRED` — one lost event held the whole chain.
+- **#3233** (weekly devbox-update): runner pod exit 137 during "Warm the devbox closure" (WSS 3.22 GiB at the 3Gi
+  limit, OOM counter 0); `ci` red with no failed step. The G12b proof owed in meta-state FAILED: the scan dispatched the
+  `unarmed-major` ride 11:17Z, the session exited clean ("already armed", the launcher line's own exit rule), the
+  debounce reported DEBOUNCED every tick after. All 11 coordinator rides in 5 days were served `claude/haiku` by the
+  gateway while the scan logs `model opus` — not checked whether that is policy.
+- Specs on #3147: neither stall visible. `automerge-green-skips` names "the reflex" as owner while SCAN-REFLEX-PICK
+  excludes `automerge`; `renovate-approve` is in no spec page; the debounce spec has no row for a ride that changes nothing.
+- **#3241** (ADR-162): scan block `stale-armed-retry` (dead run → `gh run rerun --failed`; `startup_failure` → GitHub
+  refuses a re-run, so a transient `ci-retry` label re-fires `labeled`), no-op terminal (marker 24 h old, fingerprint
+  unchanged → `agent/arbitrate`), `bump-class=` on the unarmed-major item, armed `automerge` over a day = stale → same
+  unit. Proven live from the jail with the extracted block: #3233 CI attempt 2 got past the warm step (the death was not
+  deterministic); #3237 approve ran → reviewer 19:32Z → specs reviewer 19:35Z → APPROVED. World
+  `homelab-dead-runs-3233-3237` recorded 19:14Z. FU mint for the stale leg refused by the gate — built instead.
+

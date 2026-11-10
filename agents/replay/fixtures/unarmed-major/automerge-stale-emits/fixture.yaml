@@ -1,6 +1,6 @@
 # unarmed-major/automerge-stale-emits (ADR-162; homelab#3237) — the `automerge-green-skips` world with the
-# arming two days old: an ARMED `automerge` bump that is GREEN and still open after UM_STALE_S is not the
-# auto-merge lane working — something it waits on never came (#3237: a lost approve event). Expected: the unit
+# arming two days old and nothing since (no commit, comment, review or check activity inside UM_STALE_S):
+# an ARMED `automerge` bump that is GREEN, open and untouched for a day is not the auto-merge lane working — something it waits on never came (#3237: a lost approve event). Expected: the unit
 # is emitted, `bump-class=automerge`. (`automerge-green-skips`, armed four hours, still skips.)
 name: unarmed-major-automerge-stale-emits
 mode: actions

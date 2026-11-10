@@ -3051,8 +3051,8 @@ per-state lanes: **(1)** the deterministic scan re-runs a workflow run at an arm
 (which GitHub will not re-run), re-fires its `labeled` event; at most three times per head, one event line each (**CI infra-death retry**); **(2)** an
 `unarmed-major` ride whose dispatch marker is a day old over an unchanged state fingerprint is read
 as "changed nothing" and the PR gets `agent/arbitrate` (**no-op terminal**); **(3)** that unit names
-its class (`bump-class=`) to the session; **(4)** an armed `automerge` bump still open after a day is
-**stale** and gets that unit's ride, red or not. Mechanism: [`agents/merge-path.md`](agents/merge-path.md)
+its class (`bump-class=`) to the session; **(4)** an armed `automerge` bump with no activity for a
+day is **stale** and gets that unit's ride, red or not. Mechanism: [`agents/merge-path.md`](agents/merge-path.md)
 §Dead runs and no-op rides.
 **Considered:** one more state→owner row per stall (rejected: #1896, FU-046, G12b are that series,
 and each new flake shape is a state nobody listed); moving the mechanical approve into the review
