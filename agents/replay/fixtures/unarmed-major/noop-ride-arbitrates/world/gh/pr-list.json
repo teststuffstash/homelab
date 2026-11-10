@@ -1,0 +1,3 @@
+[
+  {"number": 30, "title": "Update dependency oxlorg.opnsense to v26", "labels": [{"name": "dependencies"}, {"name": "major"}, {"name": "agent/in-progress"}], "autoMergeRequest": null, "reviewDecision": "CHANGES_REQUESTED", "author": {"login": "app/homelab-renovate-1234"}, "mergeStateStatus": "BEHIND", "body": "Renovate bump", "headRefOid": "0b48984aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+]

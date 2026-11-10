@@ -1,0 +1,15 @@
+# stale-armed-retry/runs-unreadable (ADR-162) — the workflow-runs read for #3237 fails: an unreadable probe is
+# HELD with one report line and never read as "nothing dead" or re-run blind (rule #6). #3233 is unaffected.
+name: stale-armed-retry-runs-unreadable
+mode: actions
+source: agents/coordinator-scan.sh
+world: homelab-dead-runs-3233-3237
+parts:
+  - file:../bridge.sh
+  - block:stale-armed-retry
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-10T19:15:00Z
+  - STUB_GH_api_repos_teststuffstash_homelab_actions_runs_head_sha_8ac58a6a5a0832eada5b6e62e0999b53c5c71dc9_per_page_100=fail
