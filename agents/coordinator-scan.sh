@@ -4387,7 +4387,10 @@ EOF_GTHEMES_OPEN
     # (mechanical-lane) bump in ONE state, RED at a settled head. Green and pending are the auto-merge
     # lane's own (renovate-approve + GitHub auto-merge); CHANGES_REQUESTED is not its state (no LLM
     # reviewer reads it). #2919 (the weekly devbox-update PR) sat red and armed for two days, no actor.
+    # …and since ADR-162 in a second: STALE — armed over UM_STALE_S and not merged, red or not
+    # (#3237 sat green and armed a day behind a lost approve event).
     UM_MAX_RIDES="${UM_MAX_RIDES:-5}"
+    UM_STALE_S="${UM_STALE_S:-86400}"   # an armed `automerge` bump still open after this is stale, red or not (ADR-162)
     UM_NOOP_S="${UM_NOOP_S:-86400}"   # a ride older than this over an unchanged fingerprint changed nothing (the no-op terminal below)
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("merge-conflict"))|not) and (((($L|index("major"))) and (.autoMergeRequest==null)) or ((($L|index("deps-review")) or ($L|index("automerge"))) and (.autoMergeRequest!=null) and (($L|index("major"))|not))))|.number'); do
       um_lane="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name)) as $L|if ($L|index("major")) and (.autoMergeRequest==null) then "unarmed-major" elif ($L|index("deps-review")) then "deps-review" elif ($L|index("automerge")) then "automerge" else "unarmed-major" end' 2>/dev/null)" || um_lane="unarmed-major"
@@ -4416,7 +4419,14 @@ EOF_GTHEMES_OPEN
         # Unreadable = not red (fail-open to the auto-merge lane: a ride is the expensive side).
         um_red="$(printf '%s' "$pr_json_um" | jq -r '
           if ([ .statusCheckRollup[]? | ((.conclusion // .state) // "") | select(. == "FAILURE" or . == "TIMED_OUT" or . == "ERROR") ] | length > 0) then "yes" else "no" end' 2>/dev/null)" || um_red="no"
-        [ "$um_red" = "yes" ] || continue
+        # …or STALE (ADR-162): armed longer than UM_STALE_S and still open. The mechanical lane
+        # merges within the hour when it works, so a day is never its steady state, whatever the
+        # reason turns out to be — a lost approval, an update nobody made, a check that never
+        # reported. The ride finds out; the dead-run retry below has had its three tries by then.
+        # An unreadable arming time is not stale (a ride is the expensive side).
+        um_armed_s="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" --argjson now "$(um_now)" '.[]|select(.number==$n)|((.autoMergeRequest.enabledAt // "")|fromdateiso8601?) as $t|if $t == null then "" else ($now - $t) end' 2>/dev/null)" || um_armed_s=""
+        case "$um_armed_s" in ''|*[!0-9]*) um_armed_s=0 ;; esac
+        [ "$um_red" = "yes" ] || [ "$um_armed_s" -ge "$UM_STALE_S" ] || continue
       fi
       # Bounded rides (ADR-127's max-5 made deterministic, operator 2026-10-12): every dispatch leaves a
       # `state-fp:unarmed-major:` marker on the PR, so the marker count IS the ride count — the sixth is

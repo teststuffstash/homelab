@@ -610,6 +610,7 @@ is stale, so it cannot drift the way the prose register did.
 | `unarmed-major/automerge-pending-skips` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/automerge-red-emits` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/automerge-red-settling-held` | actions | - | `agents/coordinator-scan.sh` | - |
+| `unarmed-major/automerge-stale-emits` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/blocked-on-human` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/content-push-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unarmed-major/cr-emits` | actions | - | `agents/coordinator-scan.sh` | - |

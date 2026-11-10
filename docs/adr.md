@@ -3051,16 +3051,18 @@ per-state lanes: **(1)** the deterministic scan re-runs a workflow run at an arm
 (which GitHub will not re-run), re-fires its `labeled` event; at most three times per head, one event line each (**CI infra-death retry**); **(2)** an
 `unarmed-major` ride whose dispatch marker is a day old over an unchanged state fingerprint is read
 as "changed nothing" and the PR gets `agent/arbitrate` (**no-op terminal**); **(3)** that unit names
-its class (`bump-class=`) to the session. Mechanism: [`agents/merge-path.md`](agents/merge-path.md)
+its class (`bump-class=`) to the session; **(4)** an armed `automerge` bump still open after a day is
+**stale** and gets that unit's ride, red or not. Mechanism: [`agents/merge-path.md`](agents/merge-path.md)
 §Dead runs and no-op rides.
 **Considered:** one more state→owner row per stall (rejected: #1896, FU-046, G12b are that series,
 and each new flake shape is a state nobody listed); moving the mechanical approve into the review
 reflex (rejected for now: it fixes one event reader, the retry covers every lost event); blind
 re-runs of every red (rejected: a failed step is a verdict, and a re-run re-arms the `ci-red`
-fingerprint — it buys rides, not merges); a generic LLM ride over every stale armed PR (deferred: the
-next leg, once the retry's exhausted-count shows what is left for it).
+fingerprint — it buys rides, not merges); a stale ride over EVERY armed PR (rejected for now: a worker's or the seat's
+armed PR already has `ci-red` / `changes-requested` / the reflex / a codeowner park as its owner, and
+a second ride on it is a collision; the mechanical lane has no such owner and no legitimate slow state).
 **Why:** approval and checks are event-fired, so one lost GitHub event parks an armed PR for good,
 and every such park landed on the operator. A death is distinguishable from a red without a model.
 **Consequences:** a run that keeps dying is reported as EXHAUSTED — the runner or the workflow is the
-subject, never the diff. A real red, a flaky *step*, and a stale PR with no dead run are still their
-lanes' (or nobody's): the deferred ride is where those go.
+subject, never the diff. A flaky *step* on a mechanical bump reaches the stale ride after a day, not sooner. A
+stale armed `deps-review`, worker or seat PR is still its own lane's; widen (4) on evidence, per class.

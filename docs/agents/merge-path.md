@@ -522,7 +522,8 @@ the CronJob-era wake mechanics and the reusable-workflow era: git history + TICK
   review path (the migration lens); an UN-ARMED `major` is the coordinator's human lane. A `deps-review`
   bump that is RED or CHANGES_REQUESTED rides the coordinator's `unarmed-major` unit (2026-10-12: the
   reflex is green-only, so the worker adapts on the Renovate branch; five rides, then a human); so does an
-  ARMED `automerge` bump that is RED at a settled head (2026-10-28, G12b — #2919). The lane is
+  ARMED `automerge` bump that is RED at a settled head (2026-10-28, G12b — #2919) or armed over a day
+  (ADR-162, §Dead runs and no-op rides). The lane is
   the BLAST CLASS's, not semver's (ADR-141, amended 2026-09-27: GitHub Actions bumps of every type
   ride the grouped `automerge` lane until a dependency graduates on evidence; terraform providers
   are the human-plan lane). See [`../renovate.md`](../renovate.md).
@@ -559,8 +560,14 @@ holds a floor under each (`agents/coordinator-scan.sh`, replay families `stale-a
   PR carries `bump-class=<class>` on the launcher's `--item` string; the launcher prompt and the brief
   both say that such a PR is armed by design.
 
-What this floor does not cover: a flaky *step* (it has a failed step), and an armed PR that is
-stale with no dead run. Those still need a session; ADR-162 defers that ride.
+- **Stale mechanical bump** (inside block `unarmed-major`). An armed `automerge` PR still open
+  `UM_STALE_S` (24 h) after it was armed rides the `unarmed-major` unit whether or not it is red:
+  the lane merges within the hour when it works, so the ride's job is to find what never came. The
+  retry above has had its three tries by then, and its event lines are on the PR for the ride to read.
+
+What this floor does not cover: a stale armed `deps-review`, worker or seat PR. Each has a lane
+that owns it (the reflex, `ci-red`, `changes-requested`, a codeowner park), and a second ride there
+is a collision; ADR-162 widens the stale class per lane, on evidence.
 
 ## Post-merge-push hazard (homelab#1212)
 
