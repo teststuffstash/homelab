@@ -1589,6 +1589,11 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    `agent/arbitrate` + an event line, and a human adapts by hand, re-proposes, or abandons it through
    the Renovate config. Removing the label buys five more: the count is the markers NEWER than the
    last arbitrate event line, so the ruling re-opens the budget. Every class shares that cap.
+   **The unit names its class: `bump-class=deps-review` or `bump-class=automerge` on the dispatch line (ADR-162).**
+   The clause is called `unarmed-major` for all three classes; with a `bump-class=` the PR is armed by
+   design and the launcher line's "already armed → exit clean" does not apply to it. A ride that
+   leaves the state untouched is read by the scan as "nothing to do here" and the PR goes to a human
+   (`agent/arbitrate`) a day later — so act, park with a `blocked-on:` marker, or close; never exit silent.
    **And an ARMED `automerge` (mechanical-lane) bump in its RED state only (G12b, operator ruling
    2026-10-28: "S9 needs a new rule" — #2919, the weekly devbox-update PR, sat red and armed two days
    with no actor).** Green and pending are the auto-merge lane's own (renovate-approve + GitHub
@@ -1601,6 +1606,12 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    writes the PR, e.g. `scripts/devbox-update.sh`): close the PR with a one-line why, and file the gap
    as an issue on the owning repo naming the failing step and the closed PR — a mechanical bump comes
    back on Renovate's next run, so the closed PR is not the record; the issue is. Same five-ride bound.
+   **The same class also arrives STALE (ADR-162): armed over a day and still open, red or not.** The
+   mechanical lane merges within the hour when it works, so find what is missing — an approval that
+   never came (both reviewers' verdicts at the head), a branch nobody updated, a required check that
+   never reported, a run that keeps dying (the `ci-retry` event lines say so) — and take the smallest
+   act that supplies it: re-fire the event, tick Renovate's rebase box, dispatch the worker as above.
+   If nothing on the PR can move it, close it with an issue naming the cause, or park it `blocked-on:`.
 2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
    **reviewer directly** once the checks have **CONCLUDED — green or red**. Red is the subject: a major
    review is an *investigation* whose whole job is to explain the red (the reviewer's STEP 0 treats a

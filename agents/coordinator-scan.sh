@@ -1905,7 +1905,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; noop_units=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""
+  items=""; orphans=""; units=""; punits=""; noop_units=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""; um_lane_side=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
@@ -4387,7 +4387,11 @@ EOF_GTHEMES_OPEN
     # (mechanical-lane) bump in ONE state, RED at a settled head. Green and pending are the auto-merge
     # lane's own (renovate-approve + GitHub auto-merge); CHANGES_REQUESTED is not its state (no LLM
     # reviewer reads it). #2919 (the weekly devbox-update PR) sat red and armed for two days, no actor.
+    # …and since ADR-162 in a second: STALE — armed over UM_STALE_S and not merged, red or not
+    # (#3237 sat green and armed a day behind a lost approve event).
     UM_MAX_RIDES="${UM_MAX_RIDES:-5}"
+    UM_STALE_S="${UM_STALE_S:-86400}"   # an armed `automerge` bump still open after this is stale, red or not (ADR-162)
+    UM_NOOP_S="${UM_NOOP_S:-86400}"   # a ride older than this over an unchanged fingerprint changed nothing (the no-op terminal below)
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("merge-conflict"))|not) and (((($L|index("major"))) and (.autoMergeRequest==null)) or ((($L|index("deps-review")) or ($L|index("automerge"))) and (.autoMergeRequest!=null) and (($L|index("major"))|not))))|.number'); do
       um_lane="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name)) as $L|if ($L|index("major")) and (.autoMergeRequest==null) then "unarmed-major" elif ($L|index("deps-review")) then "deps-review" elif ($L|index("automerge")) then "automerge" else "unarmed-major" end' 2>/dev/null)" || um_lane="unarmed-major"
       pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
@@ -4415,7 +4419,14 @@ EOF_GTHEMES_OPEN
         # Unreadable = not red (fail-open to the auto-merge lane: a ride is the expensive side).
         um_red="$(printf '%s' "$pr_json_um" | jq -r '
           if ([ .statusCheckRollup[]? | ((.conclusion // .state) // "") | select(. == "FAILURE" or . == "TIMED_OUT" or . == "ERROR") ] | length > 0) then "yes" else "no" end' 2>/dev/null)" || um_red="no"
-        [ "$um_red" = "yes" ] || continue
+        # …or STALE (ADR-162): armed longer than UM_STALE_S and still open. The mechanical lane
+        # merges within the hour when it works, so a day is never its steady state, whatever the
+        # reason turns out to be — a lost approval, an update nobody made, a check that never
+        # reported. The ride finds out; the dead-run retry below has had its three tries by then.
+        # An unreadable arming time is not stale (a ride is the expensive side).
+        um_armed_s="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" --argjson now "$(um_now)" '.[]|select(.number==$n)|((.autoMergeRequest.enabledAt // "")|fromdateiso8601?) as $t|if $t == null then "" else ($now - $t) end' 2>/dev/null)" || um_armed_s=""
+        case "$um_armed_s" in ''|*[!0-9]*) um_armed_s=0 ;; esac
+        [ "$um_red" = "yes" ] || [ "$um_armed_s" -ge "$UM_STALE_S" ] || continue
       fi
       # Bounded rides (ADR-127's max-5 made deterministic, operator 2026-10-12): every dispatch leaves a
       # `state-fp:unarmed-major:` marker on the PR, so the marker count IS the ride count — the sixth is
@@ -4452,10 +4463,32 @@ EOF_GTHEMES_OPEN
       fi
       umfp="$(pr_state_fp_pair "$slug" "$u" "unarmed-major" "$pr_json_um")"; umfp_prev="${umfp#*|}"; umfp_cur="${umfp%%|*}"
       if [ -n "$umfp_cur" ] && [ "$umfp_cur" = "$umfp_prev" ]; then
+        # NO-OP TERMINAL (ADR-162): the debounce assumes the ride CHANGES the state it read. A ride
+        # that exits having touched nothing leaves the fingerprint where its own dispatch marker put
+        # it — no second ride, and never the rides-exhausted bound either (one marker, not five). A
+        # marker older than UM_NOOP_S over an unchanged fingerprint is that ride's verdict: it did
+        # not move the PR, so the PR is a human's, visibly (`agent/arbitrate`), not a report line
+        # nobody reads. An unreadable marker age holds (fail toward the debounce, not the label).
+        um_marker_age="$(printf '%s' "$pr_json_um" | jq -r --arg fp "$umfp_cur" --argjson now "$(um_now)" '
+            [ .comments[]? | select((.body // "") | contains("state-fp:unarmed-major:" + $fp)) | (.createdAt // "") | fromdateiso8601? ] | max
+            | if . == null then "" else ($now - .) end' 2>/dev/null)" || um_marker_age=""
+        case "$um_marker_age" in ''|*[!0-9]*) um_marker_age="" ;; esac
+        if [ -n "$um_marker_age" ] && [ "$um_marker_age" -ge "$UM_NOOP_S" ]; then
+          if gh_label_add "$slug" "$u" agent/arbitrate \
+             && mc_event "$slug" "$u" arbitrate "ARBITRATE (ride changed nothing, ADR-162): the \`unarmed-major\` ride dispatched on this ${um_lane} PR left its state exactly as it found it (\`state-fp:unarmed-major:${umfp_cur}\`, $(( um_marker_age / 3600 ))h ago), so no further ride is owed and nothing else owns it. A human decides; removing \`agent/arbitrate\` re-opens the rides."; then
+            orphans="${orphans}[$repo] ⚠ unarmed-major RIDE CHANGED NOTHING → agent/arbitrate: PR #${u} (${um_lane}, state unchanged $(( um_marker_age / 3600 ))h after its ride) — a human decides\n"
+          else
+            orphans="${orphans}[$repo] ⚠ unarmed-major ride changed nothing on PR #${u} but the agent/arbitrate write FAILED — human check\n"
+          fi
+          continue
+        fi
         orphans="${orphans}[$repo] ⏳ unarmed-major DEBOUNCED — PR #${u}: content, checks, reviewDecision and newest verdict are all unchanged since the last unarmed-major dispatch (\`state-fp:unarmed-major:${umfp_cur}\`, homelab#198). The ride that read this state already ruled; a verdict, a push that changes the diff, a check flip or a dismissal re-opens it (a rebase does not, #2100).\n"
         continue
       fi
       units="${units}unarmed-major|${repo}|pr-${u}\n"
+      # The ride is told WHICH class it holds (ADR-162): the unit's name says "un-armed major" for
+      # three classes, two of which are armed by design — a session reading the name exits clean.
+      [ "$um_lane" = "unarmed-major" ] || um_lane_side="${um_lane_side:-} ${repo}:pr-${u}:${um_lane}"
       item_class_push "$repo" "pr-${u}" "orphan-unarmed" "machine"
     done
     # <<<REPLAY:unarmed-major<<<
@@ -4491,6 +4524,91 @@ EOF_GTHEMES_OPEN
       orphans="${orphans}[$repo] ⚠ un-armed reviewable bump — its reflex never armed it, no lane sees it (FU-079 premise false; allure-behavior-snippets#11 class, 2026-10-12): PR #${bk_n} — ${bk_t}\n"
     done
     # <<<REPLAY:unowned-pr-backstop<<<
+    # CI INFRA-DEATH RETRY (ADR-162) — the floor under every per-state lane above. An armed PR was
+    # declared ready to merge; a workflow run at its head that DIED rather than failed (a
+    # `startup_failure`, a runner that lost its pod, a cancel nothing superseded — no step ever
+    # concluded `failure`) is not a verdict on the diff, and no lane reads it: the approve reflex
+    # and the checks are event-fired, so one lost event parks the PR for good (homelab#3237: three
+    # `startup_failure`s, zero jobs, green CI, no approval, no actor; homelab#3233: the runner pod
+    # killed mid-warm, red `ci` with no failed step). Deterministic, no session: re-run it (or, for
+    # a startup failure GitHub will not re-run, re-fire its event), at most
+    # SA_MAX_RETRIES times per head, one event line each. A run with a failed STEP is a real red
+    # and stays its lane's (ci-red, unarmed-major) — a blind re-run there buys rides, not merges.
+    # Per workflow at the head: any run still going = pending, any success/skipped/neutral =
+    # satisfied; otherwise the newest dead run, once it has been dead for SA_GRACE_S (GitHub's own
+    # retries and a superseding event get the first hour). Unreadable = held, never re-run.
+    sa_now() { date -u +%s; }   # replay seam: the wall clock (the grace below)
+    # >>>REPLAY:stale-armed-retry>>>
+    SA_GRACE_S="${SA_GRACE_S:-3600}"
+    SA_MAX_RETRIES="${SA_MAX_RETRIES:-3}"
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((.autoMergeRequest!=null)
+        and (([$L[]|select(.=="major/awaiting-human" or .=="agent/error" or .=="agent/arbitrate" or .=="merge-conflict")]|length)==0))|.number' 2>/dev/null || true); do
+      sa_head="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid // ""' 2>/dev/null)" || sa_head=''
+      [ -n "$sa_head" ] || continue
+      if ! sa_runs="$(gh api "repos/${slug}/actions/runs?head_sha=${sa_head}&per_page=100" 2>/dev/null)"; then
+        orphans="${orphans}[$repo] ⚠ ci-retry: workflow runs of PR #${u} unreadable — held this pass (ADR-162)\n"
+        continue
+      fi
+      sa_cands="$(printf '%s' "$sa_runs" | jq -r --argjson now "$(sa_now)" --argjson grace "$SA_GRACE_S" '
+          [ .workflow_runs[]? ] | group_by(.workflow_id)[]
+          | select(all(.[]; .status == "completed"))
+          | select(any(.[]; .conclusion == "success" or .conclusion == "skipped" or .conclusion == "neutral") | not)
+          | (sort_by(.created_at, .id) | last) as $r
+          | select($r.conclusion == "failure" or $r.conclusion == "startup_failure" or $r.conclusion == "timed_out" or $r.conclusion == "cancelled")
+          | select((($r.updated_at // "") | fromdateiso8601? // $now) < ($now - $grace))
+          | "\($r.id)\t\($r.conclusion)\t\($r.name)"' 2>/dev/null)" || sa_cands=''
+      [ -n "$sa_cands" ] || continue
+      sa_dead=""
+      while IFS=$'\t' read -r sa_id sa_concl sa_name; do
+        [ -n "$sa_id" ] || continue
+        if [ "$sa_concl" != "startup_failure" ]; then
+          # a failed STEP = the diff's red, not a death (unreadable jobs = not ours either: hold)
+          sa_failed_steps="$(gh api "repos/${slug}/actions/runs/${sa_id}/jobs?per_page=100" 2>/dev/null \
+            | jq -r '[ .jobs[]?.steps[]? | select(.conclusion == "failure") ] | length' 2>/dev/null)" || sa_failed_steps=''
+          case "$sa_failed_steps" in 0) : ;; *) continue ;; esac
+        fi
+        sa_dead="${sa_dead}${sa_id}"$'\t'"${sa_concl}"$'\t'"${sa_name}"$'\n'
+      done <<< "$sa_cands"
+      [ -n "$sa_dead" ] || continue
+      if ! sa_tries="$(gh api "repos/${slug}/issues/${u}/comments" --paginate 2>/dev/null \
+            | jq -rs --arg h "${sa_head:0:12}" '[ .[][]? | (.body // "") | scan("at head `" + $h + "`[^\n]*<!-- agent-event kind=ci-retry ") ] | length' 2>/dev/null)"; then
+        orphans="${orphans}[$repo] ⚠ ci-retry: comments of PR #${u} unreadable — the retry bound cannot be read, held this pass (ADR-162)\n"
+        continue
+      fi
+      case "$sa_tries" in ''|*[!0-9]*) orphans="${orphans}[$repo] ⚠ ci-retry: retry count of PR #${u} unreadable — held this pass (ADR-162)\n"; continue ;; esac
+      if [ "$sa_tries" -ge "$SA_MAX_RETRIES" ]; then
+        orphans="${orphans}[$repo] ⚠ ci-retry EXHAUSTED — PR #${u}: ${sa_tries} re-runs at head ${sa_head:0:12} and a workflow run still dies without a failed step — not a flake; the runner or the workflow is the subject (ADR-162)\n"
+        continue
+      fi
+      sa_done=""; sa_nudged=0; sa_nudge_rc=0
+      while IFS=$'\t' read -r sa_id sa_concl sa_name; do
+        [ -n "$sa_id" ] || continue
+        # A startup_failure has no jobs and GitHub refuses to re-run it ("This workflow run cannot
+        # be retried", proven on homelab#3237) — its EVENT is what was lost, so the event is what
+        # gets re-fired: a transient `ci-retry` label, added and removed, is one `labeled` event,
+        # which the merge-path reflexes subscribe to (renovate-approve) and `ci` does not. Once per
+        # PR per pass however many workflows died at startup. A workflow that does not listen to
+        # `labeled` stays dead and runs into the bound — the EXHAUSTED line is its report.
+        if [ "$sa_concl" = "startup_failure" ]; then
+          if [ "$sa_nudged" = 0 ]; then
+            sa_rc=0; { gh_label_add "$slug" "$u" ci-retry && gh_label_rm "$slug" "$u" ci-retry; } 2>/dev/null || sa_rc=$?
+            sa_nudged=1; sa_nudge_rc="$sa_rc"
+          fi
+          if [ "$sa_nudge_rc" = 0 ]; then sa_done="${sa_done}${sa_done:+, }\`${sa_name}\` (startup_failure, run ${sa_id} — \`labeled\` event re-fired)"
+          else orphans="${orphans}[$repo] ⚠ ci-retry: re-firing \`labeled\` for ${sa_name} run ${sa_id} on PR #${u} REFUSED (rc=${sa_nudge_rc}) — human check\n"; fi
+          continue
+        fi
+        # `--failed` re-runs the dead jobs only
+        sa_rc=0; gh run rerun "$sa_id" --repo "$slug" --failed >/dev/null 2>&1 || sa_rc=$?
+        if [ "$sa_rc" = 0 ]; then sa_done="${sa_done}${sa_done:+, }\`${sa_name}\` (${sa_concl}, run ${sa_id} re-run)"
+        else orphans="${orphans}[$repo] ⚠ ci-retry: re-run of ${sa_name} run ${sa_id} on PR #${u} REFUSED (rc=${sa_rc}) — human check\n"; fi
+      done <<< "$sa_dead"
+      [ -n "$sa_done" ] || continue
+      mc_event "$slug" "$u" ci-retry "CI-RETRY $(( sa_tries + 1 ))/${SA_MAX_RETRIES} at head \`${sa_head:0:12}\` — ${sa_done}: the run died with no failed step, which is not a verdict on this diff (ADR-162)." \
+        || echo "  WARN: ci-retry event line on ${repo} PR #${u} not written — the retry bound undercounts this pass" >&2
+      orphans="${orphans}[$repo] ↻ ci-retry $(( sa_tries + 1 ))/${SA_MAX_RETRIES} — PR #${u}: ${sa_done}\n"
+    done
+    # <<<REPLAY:stale-armed-retry<<<
     # v2 (FU-050, C4/C5): an `agent/in-progress` issue whose worker went TERMINAL is a silent stall
     # until someone re-ticks — this was meta-only work all through meta-session 2. actionable =
     # in-progress ∧ no Running worker pod in the project ns ∧ no OPEN PR referencing the issue (an
@@ -7289,10 +7407,20 @@ EOF
           case "$entry" in "${urepo}:${uitem}:"*) uthemes="${uthemes} ${entry#"${urepo}:${uitem}:"}" ;; esac
         done
       fi
+      # ADR-162: an `unarmed-major` unit names its class (`bump-class=automerge|deps-review`) from the
+      # `um_lane_side` map, the way `uthemes` rides above — same (repo, item) key, same site.
+      # >>>REPLAY:unarmed-major-lane-item>>>
+      ulane=""
+      if [ "$uclause" = "unarmed-major" ]; then
+        for entry in ${um_lane_side:-}; do
+          case "$entry" in "${urepo}:${uitem}:"*) ulane=" bump-class=${entry#"${urepo}:${uitem}:"}" ;; esac
+        done
+      fi
+      # <<<REPLAY:unarmed-major-lane-item<<<
       dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
         --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
-        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uworkbranch}${uharvest}${uthemes}" \
+        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uworkbranch}${uharvest}${uthemes}${ulane}" \
         || dispatch_rc=$?
       if [ $dispatch_rc -eq 3 ]; then
         echo "  FU-146: exit 3 — ${name}/${urepo}/${uitem} taken by racing dispatcher; trying next unit"

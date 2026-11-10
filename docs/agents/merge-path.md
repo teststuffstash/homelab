@@ -522,7 +522,8 @@ the CronJob-era wake mechanics and the reusable-workflow era: git history + TICK
   review path (the migration lens); an UN-ARMED `major` is the coordinator's human lane. A `deps-review`
   bump that is RED or CHANGES_REQUESTED rides the coordinator's `unarmed-major` unit (2026-10-12: the
   reflex is green-only, so the worker adapts on the Renovate branch; five rides, then a human); so does an
-  ARMED `automerge` bump that is RED at a settled head (2026-10-28, G12b — #2919). The lane is
+  ARMED `automerge` bump that is RED at a settled head (2026-10-28, G12b — #2919) or armed over a day
+  (ADR-162, §Dead runs and no-op rides). The lane is
   the BLAST CLASS's, not semver's (ADR-141, amended 2026-09-27: GitHub Actions bumps of every type
   ride the grouped `automerge` lane until a dependency graduates on evidence; terraform providers
   are the human-plan lane). See [`../renovate.md`](../renovate.md).
@@ -532,6 +533,41 @@ the CronJob-era wake mechanics and the reusable-workflow era: git history + TICK
 - **Staleness timer T**: red-beyond-T is owned by the ci-red clause (content-based attempts +
   arbitrate cap — MP-T12/T13, shipped 2026-07-28/08-02; **MP-G01** closed); the fix-round bound
   stays the single knob in [`workflow.md`](workflow.md) §Hazards.
+
+## Dead runs and no-op rides (ADR-162)
+
+Every lane above maps a PR *state* to an owner. Two things fall through any such map, and the scan
+holds a floor under each (`agents/coordinator-scan.sh`, replay families `stale-armed-retry` and
+`unarmed-major`):
+
+- **CI infra-death retry** (block `stale-armed-retry`). For every armed PR that is not parked
+  (`major/awaiting-human`, `agent/error`, `agent/arbitrate`, `merge-conflict`), the scan reads the
+  workflow runs at the head. Per workflow: a run still going is pending; a `success`, `skipped` or
+  `neutral` run satisfies it; otherwise the newest run is a candidate once it has been concluded for
+  `SA_GRACE_S` (1 h). A candidate is **dead** when it is a `startup_failure`, or when none of its
+  jobs has a step concluded `failure` (a runner that lost its pod, a cancel nothing superseded). Dead
+  runs with jobs are re-run (`gh run rerun --failed`). A `startup_failure` cannot be re-run (GitHub
+  refuses), so its lost event is re-fired instead: a transient `ci-retry` label, added and removed,
+  is one `labeled` event, which `renovate-approve` subscribes to and `ci` does not. One `ci-retry`
+  event line per pass, at most `SA_MAX_RETRIES` (3) per head; after that the scan reports `ci-retry EXHAUSTED` and
+  stops. A run with a failed step is never re-run here: it is a verdict on the diff and stays with
+  `ci-red` / `unarmed-major`. Every unreadable read holds.
+- **No-op terminal** (inside block `unarmed-major`). The state-fp debounce assumes a ride changes
+  the state it read. When the dispatch marker for the current fingerprint is older than `UM_NOOP_S`
+  (24 h), the ride changed nothing: the PR gets `agent/arbitrate` and one event line. Removing the
+  label re-opens the rides, as for rides-exhausted.
+- **The unit names its class.** An `unarmed-major` unit for an armed `deps-review` or `automerge`
+  PR carries `bump-class=<class>` on the launcher's `--item` string; the launcher prompt and the brief
+  both say that such a PR is armed by design.
+
+- **Stale mechanical bump** (inside block `unarmed-major`). An armed `automerge` PR still open
+  `UM_STALE_S` (24 h) after it was armed rides the `unarmed-major` unit whether or not it is red:
+  the lane merges within the hour when it works, so the ride's job is to find what never came. The
+  retry above has had its three tries by then, and its event lines are on the PR for the ride to read.
+
+What this floor does not cover: a stale armed `deps-review`, worker or seat PR. Each has a lane
+that owns it (the reflex, `ci-red`, `changes-requested`, a codeowner park), and a second ride there
+is a collision; ADR-162 widens the stale class per lane, on evidence.
 
 ## Post-merge-push hazard (homelab#1212)
 

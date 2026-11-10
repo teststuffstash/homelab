@@ -1,0 +1,6 @@
+OUT ITEM repo=homelab item=pr-3233 clause=unarmed-major bump-class=automerge
+OUT ITEM repo=sleep-tracking item=pr-191 clause=unarmed-major bump-class=deps-review
+OUT ITEM repo=homelab item=pr-30 clause=unarmed-major
+OUT ITEM repo=homelab item=pr-3233 clause=ci-red
+OUT REACHED: end
+RC 0
