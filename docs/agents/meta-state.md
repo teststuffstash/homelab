@@ -67,8 +67,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ PICKUP (2026-10-28 — minio-client → rclone; TICK-LOG 10-28).** Workers on oracle-fleet#939 + circles#135 (mc→rclone,
   scripts/tests only). When each merges: seat PR in that repo dropping `minio-client` from devbox.json/lock (codeowner-author
   per `classify_touches`) + oracle-fleet's ci.yaml `mc` comment — then the weekly devbox-update's stack legs go green.
-  circles#135 r1/r2 were the opencode 2.x stdin hang (#2998); confirm r3 actually progresses. Also owed: G12b proof (#2995 —
-  the next red ARMED automerge PR gets a ride) and the FU-187 detector (operator to pick).
+  circles#135 r1/r2 were the opencode 2.x stdin hang (#2998); confirm r3 actually progresses. G12b proof (#2995) FAILED on #3233 2026-11-10 (the ride exited
+  clean on an armed PR) — fix in #3241 / ADR-162; re-prove on the next red or stale ARMED automerge PR whose ride carries `bump-class=automerge` and the FU-187 detector (operator to pick).
 - **⚑ MORNING READS (2026-10-26, operator) — two HELD PRs + one direct push landed overnight (TICK-LOG 10-25):**
   (1) **homelab#2902** Kargo prod install — MERGED + live 2026-10-28, see the KARGO bullet below.
   (2) **homelab#2911** component checker @ 1b720e68 (CI in progress at wind-down) — `scripts/component-check.sh` renders every
