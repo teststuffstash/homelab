@@ -116,13 +116,15 @@ selector's `--source pile` and a dig match on the island's alerts and evidence p
 running both sources in one sitting (§Open questions 1).
 
 **The sittings (2026-11-11, two seat-run Fable subagents on the amended brief, apply; ~200k tokens,
-~9 min + ~2 min).** Ten inputs, then one more with a seat-supplied fact:
+~9 min + ~2 min).** Ten inputs — nine issues (three unruled, four waits, two standing) and one operator
+text — then #2650 again in a second sitting with a seat-supplied fact:
 
 | input | ruling | what decided it |
 |---|---|---|
 | #3108 (reread, blocked 10 d) | requeue | the ride record: work built, branch salvaged; the sibling ride #3119 passed the same gate 25 min later — the blocker was that ride's own |
 | #3180 (bot-filed) | queue | both gap rows live; every path `machine-merge` |
 | #3191 (operator login, 5 d) | queue, body extended | the deployed catalog carries `:free` candidates today; the body's claim about the fixtures was partly wrong and was corrected beside the original |
+| text (operator: "the seat re-cuts the snapshot today; the missing schedule stays open") | fold → #3231, nothing filed | the same change as #3231's residue |
 | #3231 (reread) | seat, rewritten | the one-off re-cut was the seat's; the residue is the missing schedule, whose runner and identity are a human fact |
 | #3145 (operator login) | seat | no recorded `/models` answer, no candidate rule |
 | #2650 (reread) | unchanged, then split | the first sitting did not connect the 10-22 live canary to done-when (b); told to verify it on the page, the second filed the codex half as #3258 (queue) and narrowed #2650 to goose/opencode |
