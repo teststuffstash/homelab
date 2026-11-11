@@ -41,7 +41,7 @@ answer 200 (no snapshot = empty rows, never an error) and carry no credential, l
 |---|---|---|---|
 | [GW-CATALOG-GO](#gw-catalog-go) | `$defs.config_snapshot`, `$defs.docs_snapshot`, `output.sources`; metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread), and listed is not a liveness signal; `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time is unread (the "⚑ gap" rows below) |
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | `output` (the view, its model rows), `$defs.config_snapshot.models[].dialect`, `$defs.docs_snapshot` (`plans`, `plan_fees`, `peak_*`, `window_shares`); the policy's `rails.opencode.plan` and the vendor facts a policy may no longer hold | — (the loader refuses a policy without a plan, or carrying a vendor fact) | v0 — split from GW-CATALOG-GO 2026-11-06 ⚖: what the two reads SAY (the dialect, the limits, the fees, the cost rows, the view's shape) and the policy's plan declaration |
-| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert); `⚑ gap (2026-11-06, PR #3187 → work #3191)`: the ranking's `other` bucket and a `:free` family have no fixture row (the "⚑ gap" row below) |
+| [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert) |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | `$defs.canary_block`, `$defs.cell_state`, `openrouter_output.canary`, `openrouter_output.models[].endpoints[].state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — split from GW-CATALOG-OR 2026-11-06 ⚖: the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed) |
 | [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.manual_benchmarks` (the committed `benchmarks-manual.json`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); metrics `families.gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list; `tiers snapshot` exits 2 on a malformed manual benchmark file) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured (the "⚑ gap" rows below) |
 | [GW-RAIL-CHOICE](#gw-rail-choice) | sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`; `$defs.rides` (the cell's clean-ride evidence the choice reads) | — | v0 — split from GW-MODEL-TIERS 2026-11-06 ⚖: the admission's rail choice between a model's twin cells on two rails (homelab#2743); `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the Go cell's clean-rate prior (the "⚑ gap" row below) |
@@ -98,7 +98,7 @@ Every requirement of this page, in reading order; the section flowcharts below l
 |---|---|---|
 | [GW-CATALOG-GO](#gw-catalog-go) | the Go catalog | `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread), and listed is not a liveness signal (the rail's own `/models` answer is the one source that could be); `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time — this leg reads no Go usage, the headroom Goal reads the account's windows |
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | the Go catalog | |
-| [GW-CATALOG-OR](#gw-catalog-or) | the OpenRouter catalog | `⚑ gap (2026-11-06, PR #3187 → work #3191)`: the ranking's `other` bucket and a `:free` family have no fixture row |
+| [GW-CATALOG-OR](#gw-catalog-or) | the OpenRouter catalog | — |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | the OpenRouter catalog | `⚑ gap` rows below: no in-cluster canary trigger, the Go rail's canary |
 | [GW-MODEL-TIERS](#gw-model-tiers) | the tier evidence | `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail, the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured |
 | [GW-RAIL-CHOICE](#gw-rail-choice) | the tier evidence | `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the Go cell's clean-rate prior |
@@ -639,12 +639,12 @@ counter — `increase()` absorbs it; it gates nothing.
 
 **World: [`policy-default` · `openrouter-catalog`](../worlds/README.md#the-openrouter-catalog-world)**:
 the fake MCP answers the two slices and the AA benchmarks from the live MCP answers of 2026-10-19,
-trimmed (13 ranked ids across the latest week, 7 benched, 7 candidates); the openrouter rail's fake
+trimmed (13 ranked ids across the latest week, 8 benched, 8 candidates); the openrouter rail's fake
 serves `/v1/models/<id>/endpoints` for `deepseek/deepseek-v4.1-flash` (**M**) and
-`z-ai/glm-5.3-flash` (**G**) and 404 for the other five. T0 = the test clock. The account key is
+`z-ai/glm-5.3-flash` (**G**) and 404 for the other six. T0 = the test clock. The account key is
 the fixture Secret `agent-egress/router-account-key`. Legend, every table below: `mcp_answer` = what the
 fake MCP answers (`ok`, `503`, `down` = a connect failure, `malformed` = a tool result that is not
-JSON, `rankings-undated`, `benchmarks-empty`); `endpoints` = the endpoints route's behaviour per
+JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`); `endpoints` = the endpoints route's behaviour per
 model (`ok`; `endpoints-503 for G`; `endpoints-null-uptime for G` = G's first endpoint's
 `uptime_last_1d` null); `last_good` = the models in the snapshot before the refresh (`none`, `2`);
 `models?` = the snapshot's models after it; `cells?` = its candidate cells.
@@ -657,9 +657,9 @@ snapshot whose `uptime_1d` is null.
 
 | description | mcp_answer | endpoints | outcome? | models? | candidates? | unreadable? | cells? | uptime_null? |
 |---|---|---|---|---|---|---|---|---|
-| a first refresh: ranked ∩ benched, then the endpoints per candidate | ok | ok | ok | M, G | 7 (13 ranked, 7 benched) | 5 | 15 | 0 |
-| a candidate whose endpoints read fails is absent; the refresh still lands ⚖ | ok | endpoints-503 for G | ok | M | 7 (13 ranked, 7 benched) | 6 | 8 | 0 |
-| an endpoint without an uptime figure does not fail its model's parse ⚖ | ok | endpoints-null-uptime for G | ok | M, G | 7 (13 ranked, 7 benched) | 5 | 15 | 1 |
+| a first refresh: ranked ∩ benched, then the endpoints per candidate | ok | ok | ok | M, G | 8 (13 ranked, 8 benched) | 6 | 15 | 0 |
+| a candidate whose endpoints read fails is absent; the refresh still lands ⚖ | ok | endpoints-503 for G | ok | M | 8 (13 ranked, 8 benched) | 7 | 8 | 0 |
+| an endpoint without an uptime figure does not fail its model's parse ⚖ | ok | endpoints-null-uptime for G | ok | M, G | 8 (13 ranked, 8 benched) | 6 | 15 | 1 |
 
 #### A dated permaslug joins its id
 
@@ -669,6 +669,32 @@ Legend: `rankings` = the stamps of M the latest week's rows carry; `programming_
 | description | rankings | models? | programming_tokens? | tool_calling_tokens? |
 |---|---|---|---|---|
 | a dated permaslug joins its id: two stamps of one model are one candidate ⚖ | M-20260910 and M-20261017, both slices | M, G | 9904923281600 | 36555899534763 |
+
+#### A `:free` id joins its family's AA row
+
+Legend: `rankings` = the ranking row the case carries: **the `:free` row** is
+`nvidia/nemotron-3-ultra-550b-a55b-20260604:free` in the latest week's `programming` slice (its
+stamp stripped, `:free` kept: it is a candidate under that id when its family benches); `benchmarks`
+= the AA answer (`ok`: the fixture, with the family's row; `benchmarks-no-family`: the fixture
+without it). `candidates?` = as in §A. `free_read?` = whether the refresh asked the rail for the
+`:free` id's endpoints (`requested`: the id is a candidate; `absent`: it is not). The rail answers
+404 for the `:free` id's endpoints in this world, so the id holds no snapshot row and the view
+carries none of the family row's indices.
+
+| description | rankings | benchmarks | candidates? | free_read? |
+|---|---|---|---|---|
+| a `:free` id joins its family's AA row and is a candidate under its own id ⚖ | the `:free` row in programming | ok | 8 (13 ranked, 8 benched) | requested |
+| a `:free` id whose family AA does not bench is no candidate | the `:free` row in programming | benchmarks-no-family | 7 (13 ranked, 7 benched) | absent |
+
+#### The `other` bucket is never ranked
+
+Legend: **the `other` row** is the rankings' `other` permaslug in both slices' latest week.
+`candidates?` = as in §A (`other` is not one of the 13 ranked).
+`other_read?` = whether the refresh asked the rail for an `other` id's endpoints.
+
+| description | rankings | benchmarks | candidates? | other_read? |
+|---|---|---|---|---|
+| the `other` bucket is never ranked and never a candidate ⚖ | the `other` row in both slices | ok | 8 (13 ranked, 8 benched) | absent |
 
 #### A failed read keeps the last good (OpenRouter)
 
@@ -761,9 +787,7 @@ Legend: `canaried` = the cells a clean canary made `eligible`; `selected?` / `or
 
 #### Named gaps — the registry
 
-| description | input | v0 answer | the gap |
-|---|---|---|---|
-| ⚑ gap: the ranking's `other` bucket and a `:free` family | a `:free` id in the ranking | joins its family's AA row; `other` is dropped | no fixture row carries a `:free` candidate (the latest week had none in the top of either slice) — [#3191](https://github.com/teststuffstash/homelab/issues/3191) |
+None.
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
