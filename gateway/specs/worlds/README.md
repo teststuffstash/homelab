@@ -169,10 +169,14 @@ snapshot trimmed to `open-inference/fp4`, `alibaba` and `parasail/fp8` (`seed_op
 **live MCP answers of 2026-10-19**: `rankings-programming.json` / `rankings-tool_calling.json`
 (`list-daily-model-rankings`, period week — the latest week's top rows of each slice, 14 and 12
 dated permaslugs plus `other`, and one older-week row), `benchmarks-aa.json` (`list-benchmarks`,
-source artificial-analysis — seven of the 350 rows: the models the two slices rank that AA
-benches), `deepseek-v4.1-flash.json` (the ten-endpoint fixture of the openrouter-endpoints world)
-and `glm-5.3-flash.json` (seven of `z-ai/glm-5.3-flash`'s 34 endpoints). Ranked ∩ benched = seven
-candidates; two have endpoint fixtures, the other five 404 (unreadable, absent from the refresh).
+source artificial-analysis — seven of the 350 rows of the 2026-10-19 answer, plus one row built by hand:
+the `nvidia/nemotron-3-ultra-550b-a55b` family, whose three indices are the wire's observed values of
+2026-11-11 (`display_name` and `pricing` are placeholders the leg does not read; the row is not
+checked against the MCP's own answer, which a worker pod cannot call — verify when a refresh next runs
+against it), `deepseek-v4.1-flash.json` (the ten-endpoint fixture of the openrouter-endpoints world)
+and `glm-5.3-flash.json` (seven of `z-ai/glm-5.3-flash`'s 34 endpoints). Ranked ∩ benched = eight
+candidates (the `:free` id joins the family row); two have endpoint fixtures, the other six 404
+(unreadable, absent from the refresh).
 Unlike the openrouter-endpoints world, nothing is seeded: a refresh (`app.state.orcatalog.refresh()`)
 builds the snapshot, and every cell enters as `candidate`.
 
@@ -183,6 +187,7 @@ builds the snapshot, and every cell enters as `candidate`.
 | `mcp` malformed | a tool result whose text is not JSON | parse-failed |
 | `rankings-undated` | ranking rows without `date` | parse-failed |
 | `benchmarks-empty` | an empty AA list | implausible (no candidate) |
+| `benchmarks-no-family` | the AA list without the `nvidia/nemotron-3-ultra-550b-a55b` family row | a `:free` id whose family does not bench is no candidate |
 | `endpoints_behaviour[model]` = `endpoints-503` / `endpoints-malformed` | 503 / a row without the fields the parser reads, for that model | the unreadable-candidate rows |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime` | the fixture with its first endpoint's `uptime_last_1d` set to `null` (what the vendor answers for a fresh or idle endpoint — read live 2026-10-20 under `anthropic/claude-opus-5`) | the no-uptime row |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime@<tag>` | the same, on the endpoint whose `tag` is named (`endpoints-null-uptime@inference-net/fp8`: the one M endpoint every harness could otherwise pin) | the floors-verdict rows (`pinnable` / `floor`) |
