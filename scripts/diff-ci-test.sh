@@ -70,7 +70,8 @@ check "no docker: exit 0"                                   0 "$rc"
 check "no docker: the docker gate was not run"              0 "$(ran "$E2E")"
 check "no docker: a requirement-free selected gate ran"     1 "$(ran gateway-ci)"
 check "no docker: the chart gate (WAN present) ran"         1 "$(ran "$CC")"
-check "no docker: a SKIPPED line names the gate, docker and CI" 1 "$(says "^ +SKIPPED \($E2E\).*docker.*CI runs it")"
+# its NEEDS_ENV row is `ci` (ci.yaml has a `devbox run gateway-specs-site-e2e` step) → the CI claim
+check "no docker: the SKIPPED line names the gate, docker, and that the PR's CI runs it" 1 "$(says "^ +SKIPPED \($E2E\).*needs docker.* — the PR's CI runs it\$")"
 check "no docker: the gate is not reported ok"              0 "$(says "^ +ok \($E2E,")"
 check "no docker: the final summary lists it as skipped"    1 "$(says "^diff-ci: SKIPPED for the environment.*: $E2E\$")"
 n_run="$(wc -l <"$T/devbox.calls" | tr -d ' ')"
@@ -82,7 +83,9 @@ check "no WAN: exit 0"                                      0 "$rc"
 check "no WAN: the chart gate was not run"                  0 "$(ran "$CC")"
 check "no WAN: the docker gate (daemon up) ran"             1 "$(ran "$E2E")"
 check "no WAN: the other argocd/ gates still ran"           1 "$(ran prometheus-rules-lint)"
-check "no WAN: a SKIPPED line names the gate, chart-wan and CI" 1 "$(says "^ +SKIPPED \($CC\).*chart-wan.*CI runs it")"
+# its NEEDS_ENV row is `report-only` (ci.yaml has NO component-check step) → no CI claim at all
+check "no WAN: the SKIPPED line says report-only, in no CI step, nothing runs it" 1 "$(says "^ +SKIPPED \($CC\).*needs chart-wan.* — report-only, in no CI step: nothing runs it for this PR, and it gates nothing\$")"
+check "no WAN: nothing in the output claims CI runs the chart gate" 0 "$(says "CI runs (it|them)")"
 check "no WAN: the gate is not reported ok"                 0 "$(says "^ +ok \($CC,")"
 check "no WAN: the final summary lists it as skipped"       1 "$(says "^diff-ci: SKIPPED for the environment.*: $CC\$")"
 check "no WAN: ONE probe, of the host component-check.sh names" "1 1" \
@@ -110,6 +113,20 @@ check "both present: both reported ok"                      2 "$(says "^ +ok \((
 check "both present: no skip line"                          0 "$(says 'SKIPPED')"
 world docker-up wan-up; echo "$CC" >"$T/red"; run DIFF_CI_REQUIRE_ENV=
 check "both present + the chart gate red: exit 1"           1 "$rc"
+
+# 6. the belt holds each row's cost field to ci.yaml (the fixture's is the real one): a row that
+# claims CI for a task ci.yaml has no step for, or report-only for one it runs, exits 2
+grep -q '^  "component-check:chart-wan:report-only"$' "$T/repo/scripts/diff-ci.sh" || { fail=$((fail+1)); echo "FAIL fixture: the component-check NEEDS_ENV row is not where the belt cases expect it"; }
+cp "$T/repo/scripts/diff-ci.sh" "$T/sut.orig"
+sed -i 's/^  "component-check:chart-wan:report-only"$/  "component-check:chart-wan:ci"/' "$T/repo/scripts/diff-ci.sh"
+world docker-up wan-up; run DIFF_CI_REQUIRE_ENV=
+check "a false CI claim (no ci.yaml step): exit 2"          2 "$rc"
+check "…and no gate ran"                                    0 "$(wc -l <"$T/devbox.calls" | tr -d ' ')"
+cp "$T/sut.orig" "$T/repo/scripts/diff-ci.sh"
+sed -i 's/^  "gateway-specs-site-e2e:docker:ci"$/  "gateway-specs-site-e2e:docker:report-only"/' "$T/repo/scripts/diff-ci.sh"
+world docker-up wan-up; run DIFF_CI_REQUIRE_ENV=
+check "report-only on a task ci.yaml runs: exit 2"          2 "$rc"
+cp "$T/sut.orig" "$T/repo/scripts/diff-ci.sh"
 
 echo "diff-ci-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

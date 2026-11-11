@@ -203,22 +203,29 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish gateway-specs-site-e2e"
 
 # Rows whose gate needs something of its ENVIRONMENT that a worker pod may lack, as
-# `<task first word>:<requirement>` (first word = the PUSH_HEAVY convention). The run path below
-# (the local pre-flight and pr-open's `pr-gate`) probes each requirement once (env_has) and SKIPS a
-# row whose requirement is absent, loudly — such a gate can only red there and would block every PR
-# that selects it, while the PR's own CI runs the leg anyway. DIFF_CI_REQUIRE_ENV=1 turns the skip
-# into a failure (for a caller that must not lose a leg). CI's skip map and the push gate do not
-# read this list. A row belongs here only when its script is shown to need the thing AND a pod is
-# shown to lack it — the WAN-bound rows of PUSH_HEAVY that pods do run (gateway-ci's uv sync, the
-# LAN-mirrored pulls, argocd-validate-pins' ghcr.io pull) stay out:
+# `<task first word>:<requirement>:<what the skip costs>` (first word = the PUSH_HEAVY convention).
+# The run path below (the local pre-flight and pr-open's `pr-gate`) probes each requirement once
+# (env_has) and SKIPS a row whose requirement is absent, loudly — such a gate can only red there
+# and would block every PR that selects it. DIFF_CI_REQUIRE_ENV=1 turns the skip into a failure
+# (for a caller that must not lose a leg). CI's skip map and the push gate do not read this list.
+# The third field says what a skip costs, and the belt below holds it to ci.yaml:
+#   ci           ci.yaml has a step for the task, so the PR's own CI still runs the leg.
+#   report-only  NO ci.yaml step runs it: the skip drops the PR's only run. Admissible only for a
+#                gate that refuses nothing — it exits 0 on every finding, and its one red is its own
+#                tool failing (the fetch the pod cannot make). When the gate gets a CI step, the
+#                belt reds until the row says `ci`.
+# A row belongs here only when its script is shown to need the thing AND a pod is shown to lack
+# it — the WAN-bound rows of PUSH_HEAVY that pods do run (gateway-ci's uv sync, the LAN-mirrored
+# pulls, argocd-validate-pins' ghcr.io pull) stay out:
 #   gateway-specs-site-e2e  docker     gateway/scripts/e2e-specs-site.sh: `docker pull` + `docker run`
 #                                      of the playwright image, `docker volume` for the site.
 #   component-check         chart-wan  scripts/component-check.sh step 0: `helm template --repo
 #                                      $KYVERNO_POLICIES_CHART_REPO`, exit 2 when the fetch fails —
-#                                      a third-party chart host a pod has no egress to.
+#                                      a third-party chart host a pod has no egress to. The MAP row
+#                                      runs it in --report mode (exit 0 whatever it finds).
 NEEDS_ENV=(
-  "gateway-specs-site-e2e:docker"
-  "component-check:chart-wan"
+  "gateway-specs-site-e2e:docker:ci"
+  "component-check:chart-wan:report-only"
 )
 # env_probe <requirement> — the ONE probe per requirement; exit 0 = present. Cheap by contract.
 #   docker     a binary AND a daemon that answers it.
@@ -239,6 +246,13 @@ env_why() {
   case "$1" in
     docker) echo "no usable docker daemon (\`docker info\` fails or no binary)" ;;
     chart-wan) echo "no egress to the third-party chart host (its repo index did not answer)" ;;
+  esac
+}
+# env_cost <ci|report-only> — the consequence a SKIPPED line states (the belt keeps it true).
+env_cost() {
+  case "$1" in
+    ci) echo "the PR's CI runs it" ;;
+    report-only) echo "report-only, in no CI step: nothing runs it for this PR, and it gates nothing" ;;
   esac
 }
 
@@ -332,19 +346,26 @@ EOF_INV
 done <<EOF_STEPS
 $(yq -o=json '.jobs.ci.steps' .github/workflows/ci.yaml | jq -r '.[] | [(.name // .uses // "?"), ((.if // "") + " "), ((.run // "") | gsub("\n"; " ; "))] | @tsv')
 EOF_STEPS
-# NEEDS_ENV belt: a name with no MAP row is a stale declaration (the row was renamed or removed).
-# (A requirement env_probe does not know exits 2 at the probe.)
+# NEEDS_ENV belt: a name with no MAP row is a stale declaration (the row was renamed or removed),
+# and the row's cost field must be what ci.yaml says — `ci` only with a step that runs the task,
+# `report-only` only without one. (A requirement env_probe does not know exits 2 at the probe.)
 for ne in "${NEEDS_ENV[@]}"; do
-  d="${ne%%:*}"; hit=false
+  d="${ne%%:*}"; cost="${ne##*:}"; hit=false
   for entry in "${MAP[@]}"; do t="${entry%%:*}"; [ "${t%% *}" = "$d" ] && { hit=true; break; }; done
   $hit || { echo "diff-ci: FAIL — NEEDS_ENV names '$d' but no MAP row runs it; fix the list (one home)" >&2; exit 2; }
+  in_ci=false; for t in $ci_tasks; do [ "$t" = "$d" ] && in_ci=true; done
+  case "$cost:$in_ci" in
+    ci:true|report-only:false) ;;
+    ci:false) echo "diff-ci: FAIL — NEEDS_ENV row '$ne' says the PR's CI runs it, but ci.yaml has no \`devbox run $d\` step" >&2; exit 2;;
+    report-only:true) echo "diff-ci: FAIL — NEEDS_ENV row '$ne' says report-only, but ci.yaml now runs \`devbox run $d\`; the row is \`ci\`" >&2; exit 2;;
+    *) echo "diff-ci: FAIL — NEEDS_ENV row '$ne': the third field is \`ci\` or \`report-only\`" >&2; exit 2;;
+  esac
 done
 belt_n=$(( $(printf '%s\n' $ci_tasks | grep -c .) + $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u | grep -c .) ))
 if $COVERAGE_ONLY; then
   echo "diff-ci: coverage belt ok (every ci.yaml devbox task — $belt_n distinct — has a MAP row or a PR_ONLY exemption, and every MAP step gates on its own skip key)"
   # the run path's own fixture test rides this invocation, so ci.yaml's belt step runs it too
-  if [ -f scripts/diff-ci-test.sh ]; then exec bash scripts/diff-ci-test.sh; fi
-  exit 0
+  exec bash scripts/diff-ci-test.sh
 fi
 
 BASE="${1:-origin/master}"
@@ -373,14 +394,16 @@ for entry in "${MAP[@]}"; do
     skipped=$((skipped+1)); continue
   fi
   echo "── devbox run $task"
-  need=""
-  for ne in "${NEEDS_ENV[@]}"; do [ "${ne%%:*}" = "${task%% *}" ] && need="${ne#*:}"; done
+  need=""; cost=""
+  for ne in "${NEEDS_ENV[@]}"; do
+    if [ "${ne%%:*}" = "${task%% *}" ]; then need="${ne#*:}"; need="${need%%:*}"; cost="${ne##*:}"; fi
+  done
   if [ -n "$need" ] && ! env_has "$need"; then
     if [ "${DIFF_CI_REQUIRE_ENV:-}" = 1 ]; then
       echo "   FAIL (${task%% *}) — needs $need: $(env_why "$need"), and DIFF_CI_REQUIRE_ENV=1"
       failed="$failed ${task%% *}"
     else
-      echo "   SKIPPED (${task%% *}) — needs $need: $(env_why "$need"); NOT run, NOT passed — the PR's CI runs it"
+      echo "   SKIPPED (${task%% *}) — needs $need: $(env_why "$need"); NOT run, NOT passed — $(env_cost "$cost")"
       env_skipped="$env_skipped ${task%% *}"
     fi
     continue
@@ -396,5 +419,5 @@ for entry in "${MAP[@]}"; do
   run=$((run+1))
 done
 echo "diff-ci: $run task(s) run, $skipped not selected by the diff (PR-context gates run only in CI)"
-[ -z "$env_skipped" ] || echo "diff-ci: SKIPPED for the environment (a requirement is absent here — NOT run, NOT passed; the PR's CI runs them):$env_skipped"
+[ -z "$env_skipped" ] || echo "diff-ci: SKIPPED for the environment (a requirement is absent here — NOT run, NOT passed; each SKIPPED line above says what that costs):$env_skipped"
 [ -z "$failed" ] || { echo "diff-ci: FAILED:$failed" >&2; exit 1; }
