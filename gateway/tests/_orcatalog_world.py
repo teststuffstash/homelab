@@ -26,9 +26,10 @@ MCP_URL = "https://mcp.openrouter.test/mcp"
 ACCOUNT_REF = "agent-egress/router-account-key"
 ACCOUNT_KEY = "sk-or-v1-test-account-key"
 ENDPOINT_FIXTURES = {"deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash.json", "z-ai/glm-5.3-flash": "glm-5.3-flash.json"}
-# ranked (the latest week, both slices) ∩ AA-benched, in the fixtures: the seven below — two with endpoint fixtures
+# ranked (the latest week, both slices) ∩ AA-benched, in the fixtures: the eight below — two with endpoint fixtures
 BENCHED_RANKED = ("anthropic/claude-opus-5.5", "deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k3",
-                  "xiaomi/mimo-v2.5", "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash")
+                  "xiaomi/mimo-v2.5", "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "nvidia/nemotron-3-ultra-550b-a55b:free")
+NEMOTRON_FREE_FAMILY = "nvidia/nemotron-3-ultra-550b-a55b-"  # the `:free` id's family row in benchmarks-aa.json (a hand-built row, see the world README)
 
 
 def fixture(name: str) -> dict:
@@ -37,7 +38,7 @@ def fixture(name: str) -> dict:
 
 class FakeMcp:
     """`mcp` = ok | 503 | down (the transport) | malformed (a tool result that is not JSON) |
-    rankings-undated (rows without `date`) | benchmarks-empty."""
+    rankings-undated (rows without `date`) | benchmarks-empty | benchmarks-no-family (the `:free` id's family row withheld)."""
 
     def __init__(self):
         self.mcp = "ok"
@@ -74,6 +75,8 @@ class FakeMcp:
             doc = fixture("benchmarks-aa.json")
             if self.mcp == "benchmarks-empty":
                 doc = {"data": [], "meta": doc["meta"]}
+            if self.mcp == "benchmarks-no-family":  # the nemotron:free family does not bench (GW-CATALOG-OR `:free` row)
+                doc = {"data": [r for r in doc["data"] if not r["model_permaslug"].startswith(NEMOTRON_FREE_FAMILY)], "meta": doc["meta"]}
             return _tool(body, json.dumps(doc))
         return JSONResponse({"jsonrpc": "2.0", "id": body.get("id"), "error": {"code": -32601, "message": f"unknown tool {tool}"}})
 
