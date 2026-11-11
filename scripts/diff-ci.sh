@@ -132,7 +132,8 @@ MAP=(
   # the belt's own CI invocation, covered by the belt: ci.yaml's `devbox run diff-ci -- --coverage-only`
   # is extracted below as task `diff-ci` and matches this row's first word. Locally this is one
   # level of recursion (a belt-only run, no git base) that exits in well under a second.
-  "diff-ci -- --coverage-only:^(scripts/diff-ci\.sh|\.github/workflows/ci\.yaml)$"
+  # --coverage-only also runs scripts/diff-ci-test.sh (the run path's own fixture test), so that file is an input.
+  "diff-ci -- --coverage-only:^(scripts/diff-ci(-test)?\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^(machines/|mgmt/nixos/hosts/mgmt/bmc\.json$)"
   "maint-self-test:^(scripts/(maintenance-window|node-maintenance\.sh$|host-maintenance\.sh$)|agents/seat-window\.sh$)"
   # the self-test drives the verb against stubs; mgmt-tf's `summary` line format is its plan-scope input.
@@ -200,6 +201,17 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           prometheus-community, cloudsmith, …) — real WAN on every run, ~2 min
 #                           wall measured 2026-10-25 in a jail clone (69 Applications, ~860 docs).
 PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish gateway-specs-site-e2e"
+
+# Rows whose gate cannot run without a usable docker daemon (`docker info` succeeds). The run path
+# below (the local pre-flight and pr-open's `pr-gate`) SKIPS such a row loudly where there is none —
+# a worker pod has no docker, and a gate that can only red there blocks every PR that selects it,
+# while the PR's own CI runs the leg anyway. DIFF_CI_REQUIRE_DOCKER=1 turns the skip into a failure
+# (for a caller that must not lose the leg). CI's skip map and the push gate do not read this list.
+# Keyed to the FIRST WORD of a MAP task, like PUSH_HEAVY. A row belongs here only when its script
+# is shown to call docker:
+#   gateway-specs-site-e2e  gateway/scripts/e2e-specs-site.sh — `docker pull` + `docker run` of the
+#                           playwright image, `docker volume` for the site.
+NEEDS_DOCKER="gateway-specs-site-e2e"
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
@@ -291,9 +303,17 @@ EOF_INV
 done <<EOF_STEPS
 $(yq -o=json '.jobs.ci.steps' .github/workflows/ci.yaml | jq -r '.[] | [(.name // .uses // "?"), ((.if // "") + " "), ((.run // "") | gsub("\n"; " ; "))] | @tsv')
 EOF_STEPS
+# NEEDS_DOCKER belt: a name with no MAP row is a stale declaration (the row was renamed or removed).
+for d in $NEEDS_DOCKER; do
+  hit=false
+  for entry in "${MAP[@]}"; do t="${entry%%:*}"; [ "${t%% *}" = "$d" ] && { hit=true; break; }; done
+  $hit || { echo "diff-ci: FAIL — NEEDS_DOCKER names '$d' but no MAP row runs it; fix the list (one home)" >&2; exit 2; }
+done
 belt_n=$(( $(printf '%s\n' $ci_tasks | grep -c .) + $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u | grep -c .) ))
 if $COVERAGE_ONLY; then
   echo "diff-ci: coverage belt ok (every ci.yaml devbox task — $belt_n distinct — has a MAP row or a PR_ONLY exemption, and every MAP step gates on its own skip key)"
+  # the run path's own fixture test rides this invocation, so ci.yaml's belt step runs it too
+  if [ -f scripts/diff-ci-test.sh ]; then exec bash scripts/diff-ci-test.sh; fi
   exit 0
 fi
 
@@ -303,7 +323,15 @@ changed=$( { git diff --name-only "$base"; git diff --name-only --cached; git st
 [ -n "$changed" ] || { echo "diff-ci: no changes vs $BASE — nothing to run"; exit 0; }
 echo "diff-ci: $(printf '%s\n' "$changed" | grep -c .) changed file(s) vs $BASE"
 
-run=0; skipped=0; failed=""
+run=0; skipped=0; failed=""; env_skipped=""
+# docker_usable — memoized: is there a docker binary AND a daemon that answers it?
+docker_state=""
+docker_usable() {
+  if [ -z "$docker_state" ]; then
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then docker_state=yes; else docker_state=no; fi
+  fi
+  [ "$docker_state" = yes ]
+}
 if grep -qE '^devbox\.(json|lock)$' <<< "$changed"; then
   echo "diff-ci: devbox pins changed — running EVERYTHING"
   match_all=true
@@ -316,6 +344,18 @@ for entry in "${MAP[@]}"; do
     skipped=$((skipped+1)); continue
   fi
   echo "── devbox run $task"
+  case " $NEEDS_DOCKER " in *" ${task%% *} "*)
+    if ! docker_usable; then
+      if [ "${DIFF_CI_REQUIRE_DOCKER:-}" = 1 ]; then
+        echo "   FAIL (${task%% *}) — needs docker, none usable here, and DIFF_CI_REQUIRE_DOCKER=1"
+        failed="$failed ${task%% *}"
+      else
+        echo "   SKIPPED (${task%% *}) — needs docker and no usable docker daemon is here (\`docker info\` fails or no binary); NOT run, NOT passed — the PR's CI runs it"
+        env_skipped="$env_skipped ${task%% *}"
+      fi
+      continue
+    fi ;;
+  esac
   t0=$SECONDS
   # shellcheck disable=SC2086  # task strings intentionally word-split (args ride along)
   if devbox run $task; then
@@ -326,5 +366,6 @@ for entry in "${MAP[@]}"; do
   fi
   run=$((run+1))
 done
-echo "diff-ci: $run task(s) run, $skipped skipped (PR-context gates run only in CI)"
+echo "diff-ci: $run task(s) run, $skipped not selected by the diff (PR-context gates run only in CI)"
+[ -z "$env_skipped" ] || echo "diff-ci: SKIPPED for the environment (no docker — NOT run here, the PR's CI runs them):$env_skipped"
 [ -z "$failed" ] || { echo "diff-ci: FAILED:$failed" >&2; exit 1; }
