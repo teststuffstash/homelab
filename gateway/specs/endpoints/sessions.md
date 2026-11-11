@@ -7,7 +7,7 @@ schema: sessions.schema.json
 
 *May this unit run now, with which harness, and what goes in the pod's env.* The control-plane
 seam of the island ([UC-1](../use-cases/uc-1-worker-ride.md) steps ① and ④). The caller sends
-`(stack, role, task, round)` and optional `tier` / `harness` / `rail` — or, for the catalog's
+`(stack, role, task, round)` and optional `tier` / `harness` / `rail` / `prefer` — or, for the catalog's
 entry canary, `canary: {model, provider}` ([GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)); the gateway answers
 `dispatch` (a session, a rail, a harness, a model, the pod's complete LLM env) or `defer` (a
 typed reason and when to ask again). The caller authenticates with its projected ServiceAccount
@@ -26,7 +26,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 
 | Requirement | operation | Governs (schema) | Error codes | Status |
 |---|---|---|---|---|
-| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `canary` — [GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-RAIL-CHOICE](catalog.md#gw-rail-choice)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0: the walk — rails in the role's order, the twin's cheaper rail first, the harness taken from the cell; `⚑ gap`: `/route` is not served (consumers move to this endpoint) and the ADR-096 ladder's labels / urgency / budget inputs are not read ([§Named gaps — admission](#named-gaps-admission)) |
+| [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `prefer` — [§The preferred end of the list](#the-preferred-end-of-the-list) — and `canary` — [GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-RAIL-CHOICE](catalog.md#gw-rail-choice)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0: the walk — rails in the role's order, the twin's cheaper rail first, the harness taken from the cell, each tier list from its head or (`prefer: strongest`) its end; `⚑ gap`: `/route` is not served (consumers move to this endpoint) and the ADR-096 ladder's labels / urgency / budget inputs are not read ([§Named gaps — admission](#named-gaps-admission)) |
 | [GW-SESSIONS-RETRY](#gw-sessions-retry) | `POST /sessions` | `post.input.attempt`, `get.output.attempt`, `post.output.defer.reason` (`cells-exhausted`, the one defer with no `retry_after_s`) | `malformed-body` (`attempt` < 1) | v0 — the walk reads [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s counted strikes, tier lists are ordered, `attempt` makes a re-run detectable; `⚑ gap`: one model across rails is two ids ([§Named gaps — retry](#named-gaps-retry)) |
 | [GW-SESSIONS-CAPACITY](#gw-sessions-capacity) | `POST /sessions` | `post.output.defer.reason` (`rail-window`, `rail-latched`, `cell-cooled`, `credential-rejected`, `not-in-catalog`, `no-eligible-provider`), `post.output.defer.retry_after_s` | — | v0 + the ladder's capacity half (window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential and its recovery, the marks kept across a restart) + the openrouter provider axis (the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); `⚑ gap (2026-11-01, PR #3105 → work #3108)`: the Go account headroom is unread — the rail's one shared allowance is learnt from a ride's first 429; the other capacity gaps (FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402, the Go draw as a lower bound, the capacity doorbell) are rows under [§Named gaps — capacity](#named-gaps-capacity) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail lit 2026-10-22 — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI, and opencode's provider-package fetch under enforced egress is unobserved ([§Evidence outside CI](#evidence-outside-ci)) |
@@ -137,14 +137,14 @@ harness, what is an HTTP error), RETRY what the task's [strikes](../glossary.md#
 
 ```mermaid
 flowchart TD
-  B["body: stack, role, task, round, attempt\n(tier, harness, rail optional)"] --> V{"well-formed?"}
+  B["body: stack, role, task, round, attempt\n(tier, harness, rail, prefer optional)"] --> V{"well-formed?"}
   V -->|no| E400["400 malformed-body /\nharness-rail-mismatch"]
   V -->|yes| ST{"stack known,\nthe rail allowed?"}
   ST -->|no| DR["defer stack-unknown /\nrole-rail-denied"]
   ST -->|yes| RL["the next rail in the role's order\n(a twin's cheaper rail first)"]
   RL --> CAP{"slots · window · latch\n· credential marks"}
   CAP -->|held| NX["skip the rail;\nremember what frees first"]
-  CAP -->|free| ML["the tier's ordered model list"]
+  CAP -->|free| ML["the tier's ordered model list\n(from its end under prefer: strongest)"]
   ML --> STR{"struck for the task?\ncooled? held?"}
   STR -->|yes| ML
   STR -->|no| CR{"the stack's credential\nresolves?"}
@@ -202,7 +202,9 @@ skip. Without one, **the harness follows the cell**
 ([§The harness follows the cell](#the-harness-follows-the-cell)): every allowed rail is walked in
 the role's order, the first cell its tier list admits is picked, and the dispatch names the harness
 that speaks that cell's dialect. An explicit `rail` the role is allowed is taken even when it is
-later in the list, as an override (logged as one: unverified — no row reads the line). `defer` is HTTP 200 — a normal answer the caller
+later in the list, as an override (logged as one: unverified — no row reads the line). An explicit
+`prefer: strongest` walks each rail's tier list from its end instead of its head
+([§The preferred end of the list](#the-preferred-end-of-the-list)). `defer` is HTTP 200 — a normal answer the caller
 polls after `retry_after_s`; only a malformed body or a transient credential fault is an HTTP
 error. ⚖ The gateway admits on count, capacity, strikes and credential: no labels, no urgency, no
 budget class — the rest of the ADR-096 ladder is a gap, rendered as rows, not omitted. The
@@ -290,6 +292,62 @@ Legend: `env_keys?` = the dispatch's `env` keys, in order.
 | description | world | role | active | harness? | env_keys? |
 |---|---|---|---|---|---|
 | the env is the picked harness's | policy-codex | worker | 0/3/2 | claude | ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_MODEL |
+
+#### The preferred end of the list
+
+A tier's list is ordered cheapest first ([GW-MODEL-TIERS](catalog.md#gw-model-tiers): by cost per
+clean ride on a priced rail, by score ascending on a subscription rail, which has no price), so the
+walk's first admissible model is the cheapest the tier names. A body may carry **`prefer`**:
+`cheapest` — the default, the walk as every table above has it — or `strongest`. ⚖ Under `strongest`
+every rail's tier list is walked from its END: the last model first, then the one before it, so a
+strongest model the task has struck gives way to the next-strongest, never to the list's head (a
+cooled or held strongest model: unverified — expected to behave like the struck row). The
+preference names an ORDER, never an id: no caller names a model, and "strongest" is whatever the
+policy's list ends with — ⚖ on a subscription rail the highest score of the tier's band, on a priced
+rail the band's most expensive model per clean ride, which the derivation does not promise is its
+highest score. ⚖ It reverses the list inside each rail and nothing else: the role's rail order, the
+slot count, capacity, the task's strikes, the credential and the harness rules stand, and the
+harness still follows the picked cell. ⚖ It makes no rail choice: the choice puts a twin's CHEAPER
+rail first, which is the other preference, so the role's order stands, the answer's `rail_choice` is
+`null` and nothing is counted ([GW-RAIL-CHOICE §A preference for the
+strongest](catalog.md#a-preference-for-the-strongest)). ⚖ Any role may ask: the policy carries no
+per-role grant. An admission under `strongest` is logged as one (unverified — no row reads the
+line); neither the answer nor a metric carries the preference — the answer's `model` says which end
+was taken.
+
+**World: [policy-codex](../worlds/README.md#policy-worlds)**, codex headroom fresh at 20 % / 64 % —
+`rails.anthropic.models.heavy` = `[claude/sonnet, claude/opus, claude/fable]`, its `standard` the
+one model `claude/sonnet`, the opencode `standard` list `[opencode-go/deepseek-v4.1-flash,
+opencode-go/claude-haiku-5-5]`; the reviewer task `specs-review homelab#2700`, round 0. Legend:
+`prefer` = the body's, `(policy)` when it carries none; `active` = the active sessions per rail as
+`anthropic/opencode/codex`; `strikes` = what the task's attempt 1 — admitted with the row's own
+preference — reported through the outcome endpoint, as `class on (rail, model)` (the row then asks
+as attempt 2; `—` = none, attempt 1).
+
+| description | world | role | tier | prefer | active | strikes | decision? | rail? | model? |
+|---|---|---|---|---|---|---|---|---|---|
+| no preference: the list is walked from its head | policy-codex | reviewer | heavy | (policy) | 0/0/0 | — | dispatch | anthropic | claude/sonnet |
+| cheapest is the default, spelled | policy-codex | reviewer | heavy | cheapest | 0/0/0 | — | dispatch | anthropic | claude/sonnet |
+| strongest takes the last model of the rail's list ⚖ | policy-codex | reviewer | heavy | strongest | 0/0/0 | — | dispatch | anthropic | claude/fable |
+| the strongest is struck: the next-strongest is taken, not the cheapest ⚖ | policy-codex | reviewer | heavy | strongest | 0/0/0 | harness-gave-up on (anthropic, claude/fable) | dispatch | anthropic | claude/opus |
+| the role's rail order stands: the next rail's list is walked from its end too ⚖ | policy-codex | reviewer | standard | strongest | 5/0/0 | — | dispatch | opencode | opencode-go/claude-haiku-5-5 |
+| a one-model list is the same from either end | policy-codex | reviewer | standard | strongest | 0/0/0 | — | dispatch | anthropic | claude/sonnet |
+
+A `prefer` outside the enum is a 400 `malformed-body`. ⚖ A `canary` body names its own cell
+([GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)) — there is no list to walk from either
+end — so `prefer` beside `canary` is a 400 `malformed-body` whatever its value, never a field
+silently dropped. **World: [policy-default](../worlds/README.md#policy-worlds)** (its canary role is
+`prober`; no catalog leg runs, so a well-formed canary defers `not-in-catalog`). Legend: `body` =
+the role and the keys a well-formed platform body carries besides `stack` and `task`; `code?` = the
+error envelope's code; `decision?` = the 200 answer's.
+
+| description | world | body | status? | code? | decision? |
+|---|---|---|---|---|---|
+| a preference outside the enum | policy-default | worker, prefer: fastest | 400 | malformed-body | — |
+| a preference that is not a string | policy-default | worker, prefer: 1 | 400 | malformed-body | — |
+| a canary without a preference is answered as a canary | policy-default | prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra} | 200 | — | defer |
+| a canary names its own cell: a preference with it is refused ⚖ | policy-default | prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra}, prefer: strongest | 400 | malformed-body | — |
+| the default spelled on a canary is refused too ⚖ | policy-default | prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra}, prefer: cheapest | 400 | malformed-body | — |
 
 #### A malformed body
 

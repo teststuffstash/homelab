@@ -105,7 +105,8 @@ A size label on a session — `light` | `standard` | `heavy` — that selects th
 chosen rail: `rails.<rail>.models.<tier>`, an ORDERED list the walk takes the first admissible
 model of (not struck by this task, not cooled; a bare string = a one-item list —
 [§The retry contract](endpoints/sessions.md#the-retry-contract--model-lists-strikes-attempt)). The role's default comes from the policy; the caller
-may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap. The
+may override it, and may ask for the list to be walked from its END (`prefer: strongest` —
+[§The preferred end of the list](endpoints/sessions.md#the-preferred-end-of-the-list)). Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap. The
 deployed policy's lists are derived from the [tier evidence](#tier-evidence).
 
 ## defer
@@ -187,6 +188,8 @@ a hand edit fails the suite. A tier with no priced candidate (the openrouter rai
 eligible cell) is **undecided**: its deployed list stands, `apply` refuses to write it.
 *Score band* here is the `tiers.bands` fraction, not the ADR-104 curation band of
 [`docs/glossary.md`](../../docs/glossary.md) (`regular` / `premium` / `ultra` / `instrument`).
+A **manual benchmark row** (`benchmarks-manual.json`) is a hand-entered score for an id the feed
+does not carry yet — it scores only until the feed has the id, then it is retired.
 Refreshed by hand (`scripts/benchmarks-snapshot.sh`), its age a gauge the `TierEvidenceStale`
 alert reads; the fixture worlds carry the block but keep their fixture lists.
 
