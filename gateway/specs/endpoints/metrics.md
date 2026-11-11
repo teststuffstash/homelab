@@ -5,7 +5,7 @@ schema: metrics.schema.json
 ---
 # GET /metrics — the `gateway_*` families, with bounded labels only
 
-The evidence surface the alert belts read. Thirty-seven families in the schema (the codex rail's
+The evidence surface the alert belts read. Thirty-eight families in the schema (the codex rail's
 two render only while the policy declares that rail), Prometheus text format, no auth (in-cluster,
 scraped by the ServiceMonitor). **Every label value is drawn from a bounded set** declared in the
 schema — a [bounded label](../glossary.md#bounded-label): never a task key, a session id, or a model
@@ -20,7 +20,7 @@ the process is down.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-METRICS](#gw-metrics) | `families.*` | — | v0 — the cost ledger / `/generation` USD harvest, the capacity-doorbell signal and the store mode are `⚑ gap` (rows below) |
+| [GW-METRICS](#gw-metrics) | `families.*` | — | v0 — the cost ledger / `/generation` USD harvest and the capacity-doorbell signal are `⚑ gap` (rows below) |
 | [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) (owned there) | `families.gateway_sessions_active` | — | linked — the gauge IS the admission counter |
 | [GW-CRED-RESOLVE](sessions.md#gw-cred-resolve) (owned there) | `families.gateway_credential_resolve_total` | — | linked — the `outcome` label is that requirement's verdict class |
 | [GW-SESSIONS-AUTH](sessions.md#gw-sessions-auth) (owned there) | `families.gateway_control_plane_unauthenticated_total` | — | linked — the rollout knob's soak signal; its increments are rows there |
@@ -71,7 +71,7 @@ label](#no-unbounded-label-ever)); the alert-read families render
 
 | Requirement | Section | Status |
 |---|---|---|
-| [GW-METRICS](#gw-metrics) | the families | v0 — the cost ledger / `/generation` USD harvest, the capacity-doorbell signal and the store mode are `⚑ gap` (rows below) |
+| [GW-METRICS](#gw-metrics) | the families | v0 — the cost ledger / `/generation` USD harvest and the capacity-doorbell signal are `⚑ gap` (rows below) |
 
 ## GW-METRICS
 
@@ -149,6 +149,7 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_canary_spend_usd` | gauge | — | metered canary spend over the trailing day at the cell's endpoint price |
 | `gateway_canary_budget_exhausted` | gauge | — | 1 while the canary cap (per refresh or per day) is spent and candidate cells wait — `GatewayCanaryBudgetExhausted` reads it |
 | `gateway_tier_evidence_age_seconds` | gauge | — | seconds since the mounted tier-evidence snapshot's `snapshot_at` (`GATEWAY_BENCHMARKS`) — absent when none is mounted; `TierEvidenceStale` reads it |
+| `gateway_db_mode` | gauge | `mode` | 1 for the [store mode](../glossary.md#store-mode) the gateway opened at start (`pvc`, `memory`), 0 for the other — set once, for the process's life; `GatewayStoreMemoryMode` reads it |
 
 #### Sessions and outcomes are counted
 
@@ -289,6 +290,7 @@ Legend (above); `the strike classes` = the keys of the one vocabulary
 | class is a strike class of the one vocabulary | `policy-default · upstream-ok` | `every family driven` | `gateway_strikes_total` | `class` | `the strike classes` |
 | source is the strike's writer | `policy-default · upstream-ok` | `every family driven` | `gateway_strikes_total` | `source` | `outcome, gateway` |
 | reason is why a 2xx body stopped before its end | `policy-default · upstream-ok` | `every family driven` | `gateway_requests_incomplete_total` | `reason` | `no-terminal, timeout, transport-error, client-closed` |
+| mode is the store mode the gateway opened at start | `policy-default · upstream-ok` | `every family driven` | `gateway_db_mode` | `mode` | `pvc, memory` |
 | source is the catalog source | `policy-default · upstream-ok` | `every family driven` | `gateway_go_catalog_refresh_total` | `source` | `config, docs` |
 | the catalog outcome is the refresh outcome | `policy-default · upstream-ok` | `every family driven` | `gateway_go_catalog_refresh_total` | `outcome` | `ok, fetch-failed, parse-failed, implausible` |
 
@@ -349,13 +351,32 @@ Legend: `families` = the families to find — `the schema's, less the codex rail
 > writer~~ → the `class` and `source` rows; ~~no task label, ever~~ (one row, two claims) → the two
 > rows above.
 
+#### The store mode is a gauge
+
+The store mode is decided once, at start, and it decides what a restart keeps: a gateway that fell
+open to `memory` admits as normal and forgets every session at the next restart. So the mode is a
+gauge for the process's life — both modes render on every gateway, the active one at 1. The alert
+that reads it is `GatewayStoreMemoryMode` (group `agent-gateway-db-mode`, `severity: warning`,
+`triage: now`): it fires when `gateway_db_mode{mode="memory"}` has been 1 for 5 minutes. A PVC store
+is silent, and so is an image that predates the family — the alert has no `absent()` leg ⚖.
+
+Legend: `store_state` = how the DB path looks when the gateway starts — `file` = the directory exists
+and the database opens writable; `missing-dir` = the directory is absent, so the store falls open.
+`pvc?` / `memory?` = the value of `gateway_db_mode{mode="pvc"}` / `{mode="memory"}` on `GET /metrics`
+after start.
+
+| description | store_state | pvc? | memory? |
+|---|---|---|---|
+| a mounted, writable PVC reads pvc | `file` | `1` | `0` |
+| a fail-open store reads memory | `missing-dir` | `0` | `1` |
+| both modes render on every gateway, the inactive one at 0 ⚖ | `file` | `1` | `0` (rendered, never absent) |
+
 #### Gaps
 
 | description | input | v0 answer | the gap |
 |---|---|---|---|
 | ⚑ gap: USD per request | upstream-ok on openrouter | tokens only | the `/generation` harvest, the cost ledger |
 | ⚑ gap: a slot freed is not announced | a release on a full rail | the gauge drops; nothing is pushed | the capacity doorbell |
-| ⚑ gap: the store mode is not a metric | the DB fell open to memory | only `/healthz` says so ([store mode](../glossary.md#store-mode)) | a `gateway_db_mode` family, and the alert on it (#3180) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 

@@ -304,8 +304,9 @@ Which store the gateway opened at start, reported as `db` by [`GET /healthz`](en
 ([GW-HEALTH](endpoints/health.md#gw-health)): `pvc` = SQLite at `GATEWAY_DB` (`/data/gateway.db`
 on the Longhorn PVC) — sessions survive a restart; `memory` = the **fail-open** in-memory store the
 gateway falls back to when that path is missing, read-only or corrupt at start — it keeps admitting,
-logs one `ERROR` line, and forgets every session at the next restart. Chosen once per process; a
-metric for it is a gap (#3180).
+logs one `ERROR` line, and forgets every session at the next restart. Chosen once per process; it is
+the `gateway_db_mode` gauge on `/metrics` ([GW-METRICS](endpoints/metrics.md#the-store-mode-is-a-gauge)),
+which `GatewayStoreMemoryMode` reads.
 
 ## bounded label
 

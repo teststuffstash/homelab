@@ -21,7 +21,7 @@ store into refusing `SELECT 1`; expected to hold).
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-HEALTH](#gw-health) | `output` | `db-unavailable` (503, unverified) | v0 — HA (FU-271) and an alert on `db: memory` are `⚑ gap` (rows below) |
+| [GW-HEALTH](#gw-health) | `output` | `db-unavailable` (503, unverified) | v0 — HA (FU-271) is `⚑ gap` (row below) |
 
 ## Flow overview
 
@@ -51,7 +51,7 @@ is visible at the next restart ([what survives](#what-survives-a-restart)).
 
 | Requirement | Section | Status |
 |---|---|---|
-| [GW-HEALTH](#gw-health) | liveness and the store mode | v0 — HA (FU-271) and an alert on `db: memory` are `⚑ gap` (rows below) |
+| [GW-HEALTH](#gw-health) | liveness and the store mode | v0 — HA (FU-271) is `⚑ gap` (row below) |
 
 ## GW-HEALTH
 
@@ -127,7 +127,6 @@ session token` = `Bearer gws_` + 32 characters no session owns); `status?` = the
 | description | input | v0 answer | the gap |
 |---|---|---|---|
 | ⚑ gap: a second replica | 2 replicas | both count sessions alone — every cap doubles | HA, FU-271 (a session store + a durable store after a per-request measurement) |
-| ⚑ gap: memory mode fires nothing | `db: memory` | the log line and this field | a `gateway_db_mode` metric and its alert (#3180) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
