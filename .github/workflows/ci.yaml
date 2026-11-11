@@ -55,6 +55,13 @@ jobs:
       # because EVERY `devbox run` rewrites .devbox/gen/scripts/ and a concurrent serial
       # `devbox run` then dies on "text file busy" (PR #1139's run 33410609342) — only the
       # serial steps may invoke devbox itself.
+      # homelab#3233: a locked store path no substituter carries makes devbox BUILD the package in
+      # the warm below — a compile the runner's memory limit kills with no step log. This names the
+      # package in seconds instead. Bare bash + jq + curl (the runner image's own tools): it must
+      # run BEFORE the first `devbox run`. Rule + the generator's hold: docs/renovate.md §devbox.
+      - name: Locked toolchain is downloadable — nothing compiles in the warm (scripts/lock-cache-check.sh)
+        run: bash scripts/lock-cache-check.sh devbox.lock
+
       - name: Warm the devbox closure (once, before anything runs ∥)
         run: |
           devbox run -- true
