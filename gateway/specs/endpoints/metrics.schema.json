@@ -724,6 +724,18 @@
         "GW-METRICS",
         "GW-MODEL-TIERS"
       ]
+    },
+    "gateway_db_mode": {
+      "type": "gauge",
+      "labels": {
+        "mode": {
+          "enum": ["pvc", "memory"]
+        }
+      },
+      "description": "1 for the store mode the gateway opened at start, 0 for the other — set once per process; GatewayStoreMemoryMode reads it (GW-METRICS)",
+      "x-requirements": [
+        "GW-METRICS"
+      ]
     }
   },
   "forbidden_labels": [

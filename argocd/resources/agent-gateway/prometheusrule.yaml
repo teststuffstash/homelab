@@ -136,6 +136,25 @@ spec:
           annotations:
             summary: 'The gateway''s tier evidence (benchmarks.json) is older than 7 days, or none is mounted'
             description: 'gateway_tier_evidence_age_seconds is past 7 d ({{ $value }}), or absent while the gateway serves: the deployed tier lists and the rail choice compare on stale prices. Re-cut it: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply, commit benchmarks.json + policy.json by PR (an undecided tier keeps its deployed list — check names it). Absent = argocd/resources/agent-gateway/kustomization.yaml no longer ships benchmarks.json in the policy ConfigMap, or GATEWAY_BENCHMARKS points elsewhere. The contract is gateway/specs/endpoints/catalog.md#gw-model-tiers.'
+    # ── The store mode (GW-METRICS §The store mode is a gauge, gateway/specs/endpoints/metrics.md) ──
+    # The gateway falls open to its in-memory store when the PVC is missing, read-only or corrupt at
+    # start: it keeps admitting rides, and forgets every session, capacity mark and rotated codex
+    # credential at its next restart. gateway_db_mode is 1 for the mode it opened in. Behaviour
+    # fixture: db-mode.promtool-{rules,test} beside this file.
+    #   GatewayStoreMemoryMode — the memory store has been the mode for 5 m. No absent() leg: an image
+    #                            older than the family is silent, a PVC store is silent.
+    - name: agent-gateway-db-mode
+      rules:
+        - alert: GatewayStoreMemoryMode
+          expr: |
+            max(gateway_db_mode{job="agent-gateway",mode="memory"}) == 1
+          for: 5m
+          labels:
+            severity: warning
+            triage: now
+          annotations:
+            summary: 'The gateway runs on its fail-open memory store — sessions, caps and rotated credentials do not survive its next restart'
+            description: 'gateway_db_mode{mode="memory"} is 1: the gateway did not open its PVC store at start, so it admits rides from memory and forgets them at the next restart. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "db: memory" names the path and the error (missing, read-only or corrupt); (2) GET /healthz on the gateway answers db: memory; (3) the agent-gateway Deployment mounts its /data PVC. The contract is gateway/specs/endpoints/health.md (GW-HEALTH) and gateway/specs/endpoints/metrics.md (GW-METRICS).'
     - name: agent-gateway-openrouter-catalog
       rules:
         - alert: OpenRouterCatalogStale

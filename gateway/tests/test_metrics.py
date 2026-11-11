@@ -14,12 +14,21 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 import pytest
 
+from agent_gateway.app import create_app
+from agent_gateway.config import Settings
 from agent_gateway.outcomes import OUTCOME_CLASSES
+from agent_gateway.store import Store
 
 from .conftest import (
+    POLICY_FIXTURE,
     SPECS,
+    UPSTREAM_BASES,
+    FakeUpstream,
+    ObservedAsyncClient,
+    RailTransport,
     attach_json,
     bearer,
     check,
@@ -27,6 +36,7 @@ from .conftest import (
     open_session,
     quiet,
     rule,
+    seed_go_catalog,
     seed_openrouter_endpoints,
     then,
     when,
@@ -466,6 +476,7 @@ CONTROL_LABEL_ROWS = [
     pytest.param(OK, DRIVEN, "gateway_strikes_total", "source", "outcome, gateway", id="source is the strike's writer"),
     pytest.param(OK, DRIVEN, "gateway_requests_incomplete_total", "reason", "no-terminal, timeout, transport-error, client-closed",
                  id="reason is why a 2xx body stopped before its end"),
+    pytest.param(OK, DRIVEN, "gateway_db_mode", "mode", "pvc, memory", id="mode is the store mode the gateway opened at start"),
     pytest.param(OK, DRIVEN, "gateway_go_catalog_refresh_total", "source", "config, docs", id="source is the catalog source"),
     pytest.param(OK, DRIVEN, "gateway_go_catalog_refresh_total", "outcome", "ok, fetch-failed, parse-failed, implausible",
                  id="the catalog outcome is the refresh outcome"),
@@ -543,3 +554,42 @@ async def test_every_family_is_declared(fx, world, families, expected_undeclared
     with then(f"undeclared = {expected_undeclared}"):
         undeclared = [f for f in wanted if f"# HELP {f} " not in text or f"# TYPE {f} " not in text]
         check("expected_undeclared", ", ".join(undeclared) if undeclared else "none", expected_undeclared)
+
+
+# -- The store mode is a gauge: description | store_state | pvc? | memory? ----------------------------
+# A gateway started on a missing DB directory falls open to memory (store.py Store); the mode is read
+# off the exposition, never off the store, so the row proves the family is what the probe reports.
+def _db_mode_app(policy, secrets, path: str):
+    """A gateway on `path` whose rails reach the in-process fakes (no live upstream, ever)."""
+    settings = Settings.from_env({"GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": path, "OPENCODE_GO_API_KEY": "go-key-for-tests-only",
+                                  "ANTHROPIC_UPSTREAM": UPSTREAM_BASES["anthropic"], "OPENROUTER_UPSTREAM": UPSTREAM_BASES["openrouter"],
+                                  "OPENCODE_GO_UPSTREAM": UPSTREAM_BASES["opencode"]})
+    fakes = RailTransport({rail: FakeUpstream(rail) for rail in UPSTREAM_BASES}, UPSTREAM_BASES)
+    return create_app(settings, policy=policy, source=secrets, store=seed_go_catalog(Store(path)), client=httpx.AsyncClient(transport=fakes))
+
+
+DB_MODE_ROWS = [
+    pytest.param("file", "1", "0", id="a mounted, writable PVC reads pvc"),
+    pytest.param("missing-dir", "0", "1", id="a fail-open store reads memory"),
+]
+
+
+@pytest.mark.parametrize(("store_state", "expected_pvc", "expected_memory"), DB_MODE_ROWS)
+async def test_the_store_mode_is_a_gauge(tmp_path, policy, secrets, store_state, expected_pvc, expected_memory):
+    name_world("policy-default", note=f"store_state: {store_state}")
+    path = str(tmp_path / "data" / "gateway.db")
+    with given(f"store_state {store_state}: the DB path (GATEWAY_DB=<tmp>/data/gateway.db)"):
+        if store_state == "file":
+            (tmp_path / "data").mkdir()
+    with when(f"the gateway starts on the {store_state} store, then GET /metrics"):
+        app = _db_mode_app(policy, secrets, path)
+        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as c:
+            with quiet():  # the exposition is bulk; the verdict carries the two samples it judged
+                text = (await c.get("/metrics")).text
+    pvc, memory = _value(text, 'gateway_db_mode{mode="pvc"}'), _value(text, 'gateway_db_mode{mode="memory"}')
+    attach_json("sample: gateway_db_mode lines", _lines(text, "gateway_db_mode{"))
+    with then(f"pvc = {expected_pvc} and memory = {expected_memory}, both rendered",
+              expected_pvc={"expected": float(expected_pvc), "actual": pvc},
+              expected_memory={"expected": float(expected_memory), "actual": memory}):
+        check("expected_pvc", pvc, float(expected_pvc))
+        check("expected_memory", memory, float(expected_memory))
