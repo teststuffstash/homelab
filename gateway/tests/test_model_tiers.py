@@ -37,6 +37,7 @@ from agent_gateway.tiers import (
     row_cost,
     same_model,
     undecided,
+    unscored,
 )
 
 from ._catalog_rows import at_offset, joined, listed, num, verdict
@@ -92,6 +93,7 @@ RAILS = {
     "anthropic": ("anthropic", SUB),
     "fx + fx/mid rides 2 / 6": ("fx", {**FX, "fx/mid": {**FX["fx/mid"], "rides": {"clean": 2, "judged": 6, "prior": 1.0}}}),
     "fx + fx/nopx (49, no price)": ("fx", {**FX, "fx/nopx": _row(49, None, None)}),
+    "fx + fx/noscore (no intelligence, coding 70)": ("fx", {**FX, "fx/noscore": _row(None, 0.01, 0.01, coding=70)}),
     "fx-empty": ("fx-empty", {"fx/none": FX["fx/none"]}),
     "fx-unpriced": ("fx-unpriced", {"fx/a": _row(50, None, None)}),
 }
@@ -236,6 +238,8 @@ HOLD_ROWS = [
     pytest.param("fx", "fx/near", "heavy, light, standard", "fx/near, fx/top", id="a model sits in several tiers"),
     pytest.param("fx", "fx/none", "none", "fx/near, fx/top", id="an unbenched candidate never tiers, however cheap ⚖"),
     pytest.param("fx + fx/nopx (49, no price)", "fx/nopx", "none", "fx/near, fx/top", id="an unpriced candidate on a priced rail never tiers ⚖"),
+    pytest.param("fx + fx/noscore (no intelligence, coding 70)", "fx/noscore", "none", "fx/near, fx/top",
+                 id="a benched candidate with no value on the score axis never tiers, however cheap ⚖"),
 ]
 
 
@@ -529,12 +533,23 @@ def _listed(policy: dict, rail: str) -> dict[str, list[str]]:
 
 
 def _ruling_score(policy, bench):
-    benched = [r for rows in bench["rails"].values() for r in rows.values() if r["aa_id"]]
-    knob = f"tiers.score: {policy['tiers']['score']}"
-    violations = [f"{len(benched)} benched rows, {sum(r['intelligence'] is None for r in benched)} without intelligence"] if any(r["intelligence"] is None for r in benched) else []
-    if not any(r["coding"] is None for r in benched):
+    """The axis is the knob; a benched row with no value on it is in no pool — and is named, by `unscored`, not dropped."""
+    tp = tiers_policy(policy["tiers"])
+    axis = tp.score
+    benched = {f"{rail}:{pid}": r for rail, rows in bench["rails"].items() for pid, r in rows.items() if r["aa_id"]}
+    without = sorted(k for k, r in benched.items() if r[axis] is None)  # the snapshot's own nulls, read here — not through tiers
+    named = sorted(f"{rail}:{pid}" for rail, ids in unscored(bench, tp).items() for pid in ids)
+    und = undecided(bench, tp)
+    violations = [f"{k} is benched with no {axis}, and `unscored` does not name it" for k in without if k not in named]
+    violations += [f"`unscored` names {k}, which carries {axis} or is unbenched" for k in named if k not in without]
+    violations += sorted(f"{rail}.{tier}:{pid} derived with no {axis}" for rail, lists in derive(bench, tp).items() for tier, ids in lists.items()
+                         for pid in ids if f"{rail}:{pid}" in without)
+    violations += sorted(f"{rail}.{tier}:{pid} deployed with no {axis}" for rail in bench["rails"] for tier, ids in _listed(policy, rail).items()
+                         if tier not in und.get(rail, []) for pid in ids if bench["rails"][rail][pid][axis] is None)
+    if not any(r["coding"] is None for r in benched.values()):
         violations.append("every benched row carries coding")
-    return knob, violations, {"benched": len(benched), "with coding": sum(r["coding"] is not None for r in benched)}
+    return f"tiers.score: {axis}", violations, {"benched": len(benched), f"with {axis}": len(benched) - len(without), f"without {axis} (in no pool)": without,
+                                               "with coding": sum(r["coding"] is not None for r in benched.values())}
 
 
 def _ruling_bands(policy, bench):
@@ -613,7 +628,7 @@ def _ruling_unbenched(policy, bench):
 
 
 RULINGS = {
-    "every benched row carries `intelligence`; at least one lacks `coding` (the other axes are loadable, unused — the gap row)": _ruling_score,
+    "every id of a derived or decided deployed list carries `intelligence`; a benched row without it is in no pool and is named by `unscored` (exactly those rows, never dropped unseen); at least one benched row lacks `coding` (the other axes are loadable, unused — the gap row)": _ruling_score,
     "within a rail, every id of a decided deployed list scores ≥ its band × the rail's top score (a model can sit in several tiers)": _ruling_bands,
     "every decided priced-rail list has ≤ cap ids with non-decreasing cost per clean ride (`row_cost` under the deployed `tiers.cost`; ties by input price, score descending, id)": _ruling_cheapest,
     "every anthropic and codex row is unpriced (one flat subscription — the ChatGPT one since 2026-10-22, FU-270) and each of their deployed lists is strictly score-ascending": _ruling_subscription,

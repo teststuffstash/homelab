@@ -43,8 +43,8 @@
       "side_models": ["claude/haiku"],
       "models": {
         "light":    ["claude/haiku", "claude/sonnet", "claude/opus"],
-        "standard": ["claude/haiku", "claude/sonnet", "claude/opus"],
-        "heavy":    ["claude/sonnet", "claude/opus"]
+        "standard": ["claude/sonnet", "claude/opus", "claude/fable"],
+        "heavy":    ["claude/opus", "claude/fable"]
       }
     },
     "opencode": {
@@ -65,8 +65,8 @@
       "plan": "go",
       "max_sessions": 3,
       "models": {
-        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/minimax-m3", "opencode-go/mimo-v2.6-pro"],
-        "standard": ["opencode-go/mimo-v2.6-pro", "opencode-go/minimax-m3.1-flash", "opencode-go/step-5-preview"],
+        "light":    ["opencode-go/deepseek-v4.1-flash", "opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
+        "standard": ["opencode-go/kimi-k3.1-pro"],
         "heavy":    ["opencode-go/kimi-k3.1-pro"]
       }
     },
@@ -100,9 +100,9 @@
       },
       "max_sessions": 20,
       "models": {
-        "light":    ["deepseek/deepseek-v4-flash", "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash"],
-        "standard": ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "moonshotai/kimi-k3"],
-        "heavy":    ["z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]
+        "light":    ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash"],
+        "standard": ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash"],
+        "heavy":    ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash"]
       }
     },
     "codex": {
@@ -111,14 +111,14 @@
       "headroom": {"max_age_s": 900, "ceiling": 0.95, "windows_minutes": [300, 10080], "poll_interval_s": 60},
       "oauth": {"refresh_margin_s": 300},
       "models": {
-        "light":    ["codex/gpt-6-luna", "codex/gpt-6.1-sol", "codex/gpt-6-astra"],
-        "standard": ["codex/gpt-6.1-sol", "codex/gpt-6-astra"],
-        "heavy":    ["codex/gpt-6.1-sol", "codex/gpt-6-astra"]
+        "light":    ["codex/gpt-6.1-terra", "codex/gpt-6.1-sol", "codex/gpt-6-astra"],
+        "standard": ["codex/gpt-6.1-terra", "codex/gpt-6.1-sol", "codex/gpt-6-astra"],
+        "heavy":    ["codex/gpt-6.1-terra", "codex/gpt-6.1-sol", "codex/gpt-6-astra"]
       }
     }
   },
   "tiers": {
-    "_comment": "GW-MODEL-TIERS (operator rulings 2026-10-18 + 2026-10-19): the four rails' tier LISTS above are DERIVED from benchmarks.json beside this file — `devbox run tiers -- apply` writes them, `-- check` (a test row) fails on a hand edit. score = the Artificial Analysis intelligence index (the one axis with full coverage); bands = a candidate is in a tier when its score >= the fraction x the rail's top score (a model can sit in several tiers); cap = each list's length, cheapest per CLEAN ride first (cost = price x a ride's output tokens / the cell's clean-ride rate + the strike overhead per failed ride; the subscription rails anthropic + codex: score ascending as the cost proxy). A tier with no priced candidate is UNDECIDED and keeps its list (every openrouter tier was, until the first entry-canary window of 2026-10-20 priced 4 of its 28 models at their selected endpoints; `gateway/scripts/canary-entrants.sh` is what admits a cell).",
+    "_comment": "GW-MODEL-TIERS (operator rulings 2026-10-18 + 2026-10-19): the four rails' tier LISTS above are DERIVED from benchmarks.json beside this file — `devbox run tiers -- apply` writes them, `-- check` (a test row) fails on a hand edit. score = the Artificial Analysis intelligence index (a benched row the feed gives no intelligence value is in no pool — `tiers check` names them); bands = a candidate is in a tier when its score >= the fraction x the rail's top score (a model can sit in several tiers); cap = each list's length, cheapest per CLEAN ride first (cost = price x a ride's output tokens / the cell's clean-ride rate + the strike overhead per failed ride; the subscription rails anthropic + codex: score ascending as the cost proxy). A tier with no priced candidate is UNDECIDED and keeps its list (every openrouter tier was, until the first entry-canary window of 2026-10-20 priced 4 of its 28 models at their selected endpoints; `gateway/scripts/canary-entrants.sh` is what admits a cell).",
     "score": "intelligence",
     "bands": {"heavy": 0.9, "standard": 0.75, "light": 0.5},
     "cap": 3,
