@@ -130,9 +130,13 @@ text — then #2650 again in a second sitting with a seat-supplied fact:
 | #2650 (reread) | unchanged, then split | the first sitting did not connect the 10-22 live canary to done-when (b); told to verify it on the page, the second filed the codex half as #3258 (queue) and narrowed #2650 to goose/opencode |
 | #2768, #2684, #2977 (rereads) | unchanged, no write | the ruling still pending; neither standing trigger fired |
 
-Graded against the seat's own dry-run over the same pile: the same ruling on 9 of 10; the miss
-(#2650) is the class "a done-when that already happened is recorded on the page under another
-name". All four queued issues closed by merge the same evening (#3260, #3261, #3263, #3264).
+Graded against the seat's own dry-run over the same nine issues (read-only, before the sitting):
+the same ruling on five (#3108, #3180, #2768, #2684, #2977). On three the sitting ruled otherwise
+and held up: #3191 (`queue`, where the dry-run said `standing` — the sitting read the deployed
+catalog and found the `:free` candidates the dry-run had not looked for), #3231 and #3145 (`seat`,
+where the dry-run would have queued a rewrite — each names a human fact the dry-run had assumed
+away). One was the sitting's miss: #2650, the class "a done-when that already happened is
+recorded on the page under another name". All four queued issues closed by merge the same evening (#3260, #3261, #3263, #3264).
 
 **What the rides showed that the sittings could not:** three of the four finished their work and
 could not open a PR — the worker's `pr-open` gate selects a docker leg
