@@ -85,6 +85,14 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > if `X` doesn't exist the add fails but the remove still lands, corrupting state (learned live on #18).
 > So: ensure the label exists first (`gh label create <name> --force`), and **add the new label before
 > removing the old** — verify the end-state labels after.
+> **An item whose purpose is gone is CLOSED — never left open with no lifecycle label.** When you
+> judge the issue you were dispatched for moot (its directive is stale, the PR it serves merged or
+> was superseded, the fault it names is gone), close it with the evidence:
+> `gh issue close <n> --reason "not planned" --comment "<what made it moot, with the PR/head/run>"`.
+> Removing `agent/queued` to stop the re-dispatch is not a terminal: an open issue with no `agent/*`
+> lifecycle label is read by no scan class, so it waits for a human to notice (ADR-162). The one
+> open-and-unlabelled state you may author is the INERT filing (§File INERT) — a new issue, never
+> the end of one that was already riding.
 
 > **Be visible; never stall silently.** Your state lives in **GitHub**, not your head. The moment you
 > pick up an issue, **claim it** (relabel + a one-line plan comment) — do this *before* investigating,
