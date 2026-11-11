@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # island-intake-test — behavioural harness for the WIRED island intake (FU-320): the selector's
-# `--source dig` mode (gateway/scripts/intake-select.sh) and the CronWorkflow that runs it
-# (agents/coordinator/island-intake-argo.yaml), plus the island table both selector modes read
-# (island_members / island_pattern — membership per island, one island per item).
+# `--source dig` and `--source pile` modes (gateway/scripts/intake-select.sh) and the CronWorkflow
+# that runs them (agents/coordinator/island-intake-argo.yaml), plus the island table every selector
+# mode reads (island_members / island_alert_rules / island_pattern — one island per item).
+# agents/island-intake-fixtures/ holds REAL dig findings (full wire, bucket-shaped).
 #
 #   bash agents/island-intake-test.sh        (run by `devbox run deep-dig-test` — the dig's gate,
 #                                              because intake is the dig's consumer)
@@ -46,14 +47,14 @@ section "selector --source dig"
 R1=dig-r1-20261025T033020Z; R2=dig-r1-20261026T033005Z
 finding 2026-10-25 $R1 1 cause-found "make gateway/src/agent_gateway/catalog.py skip an unknown dialect"
 finding 2026-10-25 $R1 2 cause-found "the docs leg of GW-CATALOG-GO"
-finding 2026-10-25 $R1 3 cause-found "snore-recorder owner: delete the venv"          # not the island
+finding 2026-10-25 $R1 3 cause-found "snore-recorder owner: delete the venv" '["SnoreVenvStale (alert:SnoreVenvStale)"]' # not the island's alert
 finding 2026-10-26 $R2 1 explained   "fires by design after the canary — gateway/specs" # wrong verdict
 finding 2026-10-26 $R2 2 cause-found "agent-gateway pod restarts on the parse"
 finding 2026-10-10 dig-r1-20261010T033000Z 1 cause-found "gateway/ — too old for the lookback"
 sel; rc=$?
 [ "$rc" = 0 ] && ok "fires on unruled island findings (exit 0)" || bad "fire" "rc=$rc $(cat "$TMP/sel.err")"
 [ "$(ids)" = "dig-2026-10-26/$R2/finding-2 dig-2026-10-25/$R1/finding-1 dig-2026-10-25/$R1/finding-2" ] \
-  && ok "selects cause-found ∧ names the island (path, agent-gateway, GW- id) ∧ inside the lookback" \
+  && ok "selects cause-found ∧ on one of the island's alerts ∧ inside the lookback" \
   || bad "membership" "got: $(ids)"
 jq -e '.inputs[0] | has("recommendation") and has("evidence") and has("alerts")' "$TMP/sel.json" >/dev/null \
   && ok "each input carries the finding's text for the sitting" || bad "input shape" "$(jq -c '.inputs[0]' "$TMP/sel.json")"
@@ -197,20 +198,129 @@ INTAKE_ISSUES_JSON="$TMP/nowhere.json" bash "$SEL" --island substrate 2>/dev/nul
 
 section "selector --source dig — island precedence"
 TS2="$TMP/ts2"; mkdir -p "$TS2/homelab/dig-2026-10-26/r"
-for spec in "1|MgmtOpnsenseDrillScoreRegressed: the drill's realism score fell" \
-            "2|agent-gateway pod restarts; agents/agent-session.sh retries" \
-            "3|MgmtLeaseExpiredUnreverted: mgmt-lease left the pin" \
-            "4|Longhorn volume degraded on wk-02"; do
-  jq -n --arg rec "${spec#*|}" '{schema:"dig-finding/v1", verdict:"cause-found", cause:"c", evidence:[], recommendation:$rec,
-    pr:"", related:[], alerts:[], members:[]}' > "$TS2/homelab/dig-2026-10-26/r/finding-${spec%%|*}.json"
-done
+# Owner per the selector's header contract: (1) the first ISLANDS row whose alert-rule file defines one
+# of the finding's alerts; (2) only when no row's rules do — a row WITH alert rules (the gateway) claims
+# by an evidence/related path under its Touches prefixes at a path boundary, a row without by its text.
+f2() { # <n> <alerts-json> <recommendation> [evidence-json]
+  jq -n --argjson al "$2" --arg rec "$3" --argjson ev "${4:-[]}" '{schema:"dig-finding/v1", verdict:"cause-found", cause:"c",
+    evidence:$ev, recommendation:$rec, pr:"", related:[], alerts:$al, members:[]}' > "$TS2/homelab/dig-2026-10-26/r/finding-$1.json"
+}
+f2 1 '[]' "MgmtOpnsenseDrillScoreRegressed: the drill's realism score fell"      # text: router-pair precedes mgmt-box
+f2 2 '["GoCatalogStale (alert:GoCatalogStale)"]' "agents/agent-session.sh retries"  # the gateway's ALERT beats agent-loop's text
+f2 3 '[]' "MgmtLeaseExpiredUnreverted: mgmt-lease left the pin"                   # text: mgmt-box
+f2 4 '[]' "Longhorn volume degraded on wk-02"                                    # text: substrate
+# the 2026-11-11 leak shape: prose names the gateway, a path merely CONTAINS "gateway/" — never the gateway's
+f2 5 '["AgentRunPhaseSlow (alert:AgentRunPhaseSlow)"]' "the agent-gateway seat decides; see gateway/ and GW-SESSIONS-ADMIT" \
+     '["argocd/resources/pushgateway/prometheusrule.yaml:288 (read) → for 30m", "agents/agent-session.sh:3266 (read) → the 600s wait"]'
+# no row's rules define the alert, the EVIDENCE cites a path under gateway/ → the gateway's
+f2 6 '["GithubWorkflowRunFailed (workflow:homelab/CI)"]' "fix the test" '["gateway/tests/test_catalog.py:12 (read) → the fixture is stale"]'
+# argocd/resources/agent-gateway/ is deliberately nobody's Touches prefix, and no text row matches → nobody's
+f2 7 '["GithubWorkflowRunFailed (workflow:homelab/CI)"]' "re-cut the snapshot" '["Repo: argocd/resources/agent-gateway/benchmarks.json → snapshot_at is old"]'
 digsel() { INTAKE_TS_DIR="$TS2" INTAKE_NOW="$NOW" bash "$SEL" --source dig --island "$1" --out "$TMP/sel2.json" 2>/dev/null
            jq -r '[.inputs[].id | sub(".*finding-"; "")] | sort | join(" ")' "$TMP/sel2.json"; }
-for row in "gateway:2" "router-pair:1" "mgmt-box:3" "substrate:4" "agent-loop:" "dependency-upgrades:"; do
+for row in "gateway:2 6" "router-pair:1" "mgmt-box:3" "substrate:4" "agent-loop:5" "dependency-upgrades:"; do
   isl="${row%%:*}"; want="${row#*:}"; got="$(digsel "$isl")"
   [ "$got" = "$want" ] && ok "dig --island $isl takes '${want:-nothing}' (an earlier row's finding is never re-ruled)" \
     || bad "dig precedence $isl" "want '$want' got '$got'"
 done
+
+# ── real findings (agents/island-intake-fixtures — the bucket's own objects, full wire) ─────────
+# 2026-11-11: the text match put homelab#3162 (dig-2026-11-03 finding-1, AgentRunPhaseSlow — kata node
+# memory) and homelab#3166 (dig-2026-11-04 finding-1, RetroReportOverdue) into the GATEWAY sitting: both
+# cite argocd/resources/pushgateway/prometheusrule.yaml, which contains "gateway/". Neither alert is
+# defined in the gateway's rule file and neither finding cites a gateway/ path, so by the header
+# contract they are not the gateway's; the three on GoCatalogParseFailed / GoCatalogStale /
+# TierEvidenceStale (all defined in argocd/resources/agent-gateway/prometheusrule.yaml) are.
+section "selector --source dig — real findings"
+FX="$REPO/agents/island-intake-fixtures"; FXNOW=1794286800   # 2026-11-10T05:00:00Z; lookback 14 d reaches 10-29
+realsel() { INTAKE_TS_DIR="$FX" INTAKE_NOW="$FXNOW" INTAKE_DIG_LOOKBACK_D=14 bash "$SEL" --source dig --island "$1" --out "$TMP/sel3.json" 2>/dev/null
+            jq -r '[.inputs[].id | sub("/dig-r1-[^/]*"; "")] | sort | join(" ")' "$TMP/sel3.json"; }
+[ "$(find "$FX" -name 'finding-*.json' | wc -l)" = 5 ] && ok "five real findings on disk (a missing fixture is not a pass)" || bad "fixtures" "expected 5 under $FX"
+got="$(realsel gateway)"
+[ "$got" = "dig-2026-10-29/finding-4 dig-2026-11-08/finding-1 dig-2026-11-09/finding-2" ] \
+  && ok "gateway takes the Go-catalog and tier-evidence findings (its own alerts)" || bad "real true positives" "got: $got"
+case " $got " in *"dig-2026-11-03/finding-1"*|*"dig-2026-11-04/finding-1"*) bad "real leaks" "got: $got";;
+  *) ok "…and neither leak: the kata-memory and retro-report findings are not the gateway's";; esac
+got="$(realsel agent-loop)"
+[ "$got" = "dig-2026-11-03/finding-1 dig-2026-11-04/finding-1" ] \
+  && ok "…they stay selectable — by the loop's own island (text fallback), once" || bad "real leaks' owner" "got: $got"
+
+# ── --source pile: the issue pile as ONE selection, waits included ──────────────────────────────
+# Expected values from the selector's header contract. member = unruled ∧ unlabelled (the default
+# selection); reread = OPEN island member ∧ (`agent/blocked` ∨ the LATEST intake ruling is `seat`) ∧ the
+# wait ≥ INTAKE_REREAD_AGE_D (3) days old — dated by the latest `intake:` / `blocked-on:` comment, else
+# updatedAt — ∧ not listed (outcome ≠ deferred) by an APPLY receipt of the last INTAKE_REREAD_EVERY_D
+# (7) days. Never a Goal/container; any OTHER agent/* label = the loop's. Clock: 2026-10-27T05:00Z.
+section "selector --source pile"
+PISS="$TMP/pile.json"; rm -f "$PISS.rows"; TSP="$TMP/tsp"; mkdir -p "$TSP/homelab"
+piss() { # <n> <title> <labels-json> <comments-json> [updatedAt] [author-json]
+  jq -nc --argjson n "$1" --arg t "$2" --argjson l "$3" --argjson c "$4" --arg u "${5:-2026-10-01T00:00:00Z}" \
+    --argjson au "${6:-{\"login\":\"rsoot\",\"is_bot\":false\}}" \
+    '{number:$n, title:$t, body:"free text", labels:($l|map({name:.})), createdAt:"2026-10-01T00:00:00Z", updatedAt:$u, author:$au, comments:$c}' >> "$PISS.rows"
+}
+cm() { jq -nc --arg b "$1" --arg d "$2" '{body:$b, createdAt:$d}'; }   # <body> <createdAt>
+SEAT=$'intake: seat — needs a ruling\nblocked-on: human'
+piss 101 "gateway: unruled"                     '[]' '[]'                                                    # member
+piss 102 "gateway: blocked 7 d"                 '["agent-fix","agent/blocked"]' "[$(cm "$SEAT" 2026-10-20T05:00:00Z)]"   # reread (7 d)
+piss 103 "gateway: seat, comment only, 5 d"     '[]' "[$(cm "$SEAT" 2026-10-22T04:00:00Z)]"                   # reread (5 d)
+piss 104 "gateway: seat, 1 d"                   '[]' "[$(cm "$SEAT" 2026-10-26T04:00:00Z)]"                   # 1 d < 3 → out
+piss 105 "gateway: standing"                    '[]' "[$(cm 'intake: standing — not now' 2026-10-02T00:00:00Z)]" # not a wait → out
+piss 106 "gateway: seat, then standing"         '[]' "[$(cm "$SEAT" 2026-10-02T00:00:00Z),$(cm 'intake: standing — ruled' 2026-10-10T00:00:00Z)]" # LATEST ruling is standing → out
+piss 107 "gateway: blocked by a worker"         '["agent/blocked"]' "[$(cm $'the ride stopped\nblocked-on: human' 2026-10-15T00:00:00Z)]" # reread, no intake ruling (12 d)
+piss 108 "gateway: blocked, touched yesterday"  '["agent/blocked"]' '[]' 2026-10-26T05:00:00Z                 # no marker comment → updatedAt, 1 d → out
+piss 109 "gateway: blocked, quiet 17 d"         '["agent/blocked"]' '[]' 2026-10-10T00:00:00Z                 # updatedAt, 17 d → reread
+piss 110 "gateway: a blocked Goal"              '["agent/blocked","task/goal"]' "[$(cm "$SEAT" 2026-10-02T00:00:00Z)]" # a Goal → out
+piss 111 "post-launch: gateway bucket"          '["agent/blocked"]' "[$(cm "$SEAT" 2026-10-02T00:00:00Z)]"     # a container → out
+piss 112 "gateway: queued after a seat ruling"  '["agent/queued"]' "[$(cm "$SEAT" 2026-10-02T00:00:00Z)]"      # another agent/* label → the loop's
+piss 113 "scan: blocked, another island"        '["agent/blocked"]' "[$(cm "$SEAT" 2026-10-02T00:00:00Z)]"     # agent-loop's wait, not the gateway's
+piss 114 "no title cue, bot-filed, blocked"     '["agent/blocked"]' "[$(cm "$SEAT" 2026-10-02T00:00:00Z)]" 2026-10-02T00:00:00Z '{"login":"app/homelab-agents-1234","is_bot":true}' # nobody's member → nobody's wait
+piss 115 "gateway: blocked and errored"         '["agent/blocked","agent/error"]' "[$(cm "$SEAT" 2026-10-12T00:00:00Z)]" # agent/blocked is the wait → reread (15 d)
+jq -s . "$PISS.rows" > "$PISS"
+pile() { INTAKE_ISSUES_JSON="$PISS" INTAKE_TS_DIR="$TSP" INTAKE_NOW="$NOW" bash "$SEL" --source pile --island "${1:-gateway}" --out "$TMP/pile-sel.json" 2>"$TMP/pile.err"; }
+pk() { jq -r --arg k "$1" '[.inputs[] | select(.kind == $k) | .number] | sort | join(" ")' "$TMP/pile-sel.json"; }
+preceipt() { # <day> <run> <mode> <ts> <ruled-json>
+  mkdir -p "$TSP/homelab/intake-gateway-$1/$2"
+  jq -n --arg m "$3" --arg ts "$4" --argjson r "$5" \
+    '{schema:"island-intake-receipt/v1", island:"gateway", mode:$m, ts:$ts, session_ran:true, inputs:[], ruled:$r}' \
+    > "$TSP/homelab/intake-gateway-$1/$2/receipt.json"
+}
+H=teststuffstash/homelab
+pile; rc=$?
+[ "$rc" = 0 ] && jq -e '.schema == "island-intake-select/v1" and .source == "pile" and .island == "gateway"' "$TMP/pile-sel.json" >/dev/null \
+  && ok "fires (exit 0) with ONE selection in the dig's shape" || bad "pile fire" "rc=$rc $(cat "$TMP/pile.err")"
+[ "$(pk member)" = 101 ] && ok "member = the default selection (unruled, unlabelled): #101" || bad "pile members" "got '$(pk member)'"
+[ "$(pk reread)" = "102 103 107 109 115" ] \
+  && ok "reread = agent/blocked ∨ latest ruling seat, ≥ 3 d old: #102 #103 #107 #109 #115 (not the 1-day waits, standing, Goal, container, queued, other islands')" \
+  || bad "pile rereads" "got '$(pk reread)'"
+[ "$(jq -c '[.inputs[] | select(.number == 102 or .number == 103 or .number == 109) | [.id, .wait, .wait_d]]' "$TMP/pile-sel.json")" = "[[\"$H#102\",\"agent/blocked\",7],[\"$H#103\",\"seat\",5],[\"$H#109\",\"agent/blocked\",17]]" ] \
+  && ok "each reread carries its id (<owner/repo>#<n>), the wait and its age in days" || bad "reread shape" "$(jq -c '.inputs[] | select(.kind == "reread") | [.id, .wait, .wait_d]' "$TMP/pile-sel.json" | tr '\n' ' ')"
+[ "$(jq -c .counts "$TMP/pile-sel.json")" = '{"members":1,"rereads":5,"reread_recent":0,"inputs":6}' ] && ok "counts: 1 member + 5 rereads = 6 inputs" || bad "pile counts" "$(jq -c .counts "$TMP/pile-sel.json")"
+pile agent-loop; [ "$(pk reread)" = 113 ] && ok "another island's wait is that island's (#113 → agent-loop); a bot-filed unclaimed wait (#114) is nobody's" \
+  || bad "pile agent-loop" "got '$(pk reread)'"
+got="$(INTAKE_ISSUES_JSON="$PISS" INTAKE_NOW="$NOW" bash "$SEL" --island gateway --json 2>/dev/null | jq -r '[.[].number] | join(" ")')"
+[ "$got" = 101 ] && ok "the default (issues) mode still selects only the unruled: #101" || bad "issues mode regressed" "got '$got'"
+
+preceipt 2026-10-24 a apply   2026-10-24T05:00:00Z "[{\"input\":\"$H#102\",\"outcome\":\"unchanged\",\"refs\":[]},{\"input\":\"$H#107\",\"outcome\":\"deferred\",\"refs\":[]}]"
+preceipt 2026-10-25 b dry-run 2026-10-25T05:00:00Z "[{\"input\":\"$H#103\",\"outcome\":\"unchanged\",\"refs\":[]}]"
+pile
+[ "$(pk reread)" = "103 107 109 115" ] && [ "$(jq '.counts.reread_recent' "$TMP/pile-sel.json")" = 1 ] \
+  && ok "an APPLY receipt 3 d ago that lists #102 (unchanged) keeps it out; \`deferred\` (#107) and a dry-run receipt (#103) do not" \
+  || bad "reread ledger" "got '$(pk reread)' $(jq -c .counts "$TMP/pile-sel.json")"
+INTAKE_REREAD_EVERY_D=2 pile
+[ "$(pk reread)" = "102 103 107 109 115" ] && ok "…for INTAKE_REREAD_EVERY_D days only (=2: the 3-day-old receipt has aged out)" || bad "reread every knob" "got '$(pk reread)'"
+INTAKE_REREAD_AGE_D=6 pile
+[ "$(pk reread)" = "107 109 115" ] && ok "INTAKE_REREAD_AGE_D is a knob (=6: the 5-day wait #103 is too young; #102 still ledgered)" || bad "reread age knob" "got '$(pk reread)'"
+preceipt 2026-10-27 c apply 2026-10-27T03:00:00Z "[]"; preceipt 2026-10-27 d apply 2026-10-27T04:00:00Z "[]"
+pile; rc=$?
+{ [ "$rc" = 1 ] && grep -q "daily cap" "$TMP/pile.err" && [ "$(jq '.counts.inputs' "$TMP/pile-sel.json")" = 5 ]; } \
+  && ok "the same INTAKE_DAILY_MAX cap: 2 apply sittings today → hold, the selection still written" || bad "pile cap" "rc=$rc $(cat "$TMP/pile.err")"
+rm -rf "$TSP/homelab/intake-gateway-2026-10-27"
+pile mgmt-box; rc=$?
+{ [ "$rc" = 1 ] && [ "$(jq '.counts.inputs' "$TMP/pile-sel.json")" = 0 ]; } && ok "an island with nothing to rule or re-read holds (exit 1, a valid empty selection)" || bad "pile hold" "rc=$rc"
+INTAKE_ISSUES_JSON="$PISS" INTAKE_TS_DIR="$TMP/nowhere" INTAKE_NOW="$NOW" bash "$SEL" --source pile --out "$TMP/x.json" 2>/dev/null; rc=$?
+[ "$rc" = 2 ] && ok "an unreadable receipt store is a probe failure (exit 2) — it could not see what was re-read" || bad "pile rule #6 (bucket)" "rc=$rc"
+INTAKE_ISSUES_JSON="$TMP/nowhere.json" INTAKE_TS_DIR="$TSP" INTAKE_NOW="$NOW" bash "$SEL" --source pile --out "$TMP/x.json" 2>/dev/null; rc=$?
+[ "$rc" = 2 ] && ok "…and so is an unreadable issue list" || bad "pile rule #6 (issues)" "rc=$rc"
 
 # ── the CronWorkflow, structurally (the dig's FU-198 pins) ──────────────────────────────────────
 section "island-intake-argo.yaml — shape"
@@ -257,9 +367,11 @@ cat > "$BIN/curl" <<'EOF'
 echo "curl $*" >> "$H/curl.calls"
 EOF
 chmod +x "$BIN"/*
+echo '[]' > "$TMP/pile-empty.json"   # the pile source's seam: an empty pile unless a row sets PILE_JSON
 run_script() { # <mode>
   rm -rf "$TMP/work" "$TMP/up"/* "$TMP/run"/*; : > "$TMP/claude.calls"; : > "$TMP/curl.calls"; mkdir -p "$TMP/work"
   ( cd "$TMP" && H="$TMP" PATH="$BIN:$PATH" HOME="$TMP/home" MODE="$1" ISLAND=gateway \
+      INTAKE_ISSUES_JSON="${PILE_JSON:-$TMP/pile-empty.json}" \
       INTAKE_TS_DIR="$TS" INTAKE_NOW="$NOW" GH_TOKEN=x AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
       AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s PUSHGATEWAY="" env ${RUN_ENV:-} bash "$TMP/script.sh" ) > "$TMP/run.log" 2>&1
 }
@@ -301,6 +413,54 @@ receipt 2026-10-26 intake-r1-e apply 2026-10-26T06:00:00Z \
   "[{\"input\":\"dig-2026-10-25/$R1/finding-2\",\"outcome\":\"close\",\"refs\":[]},{\"input\":\"dig-2026-10-26/$R2/finding-2\",\"outcome\":\"fold\",\"refs\":[]}]"
 run_script apply
 [ ! -s "$TMP/claude.calls" ] && grep -q "hold" "$TMP/run.log" && ok "hold: no session, exit 0" || bad "hold" "$(tail -3 "$TMP/run.log")"
+
+# ── the pile source in the same sitting ─────────────────────────────────────────────────────────
+# State here: the dig HOLDS (receipt intake-r1-e ruled both findings); the pile fixture above serves
+# 1 member + 5 rereads. Per the header's machinery inventory either source firing starts the ONE
+# sitting over both input sets, and the receipt's ruled lines carry issue ids with the brief's
+# outcomes, `requeue` and `unchanged` included (`requeue` queues work, so it rings).
+section "island-intake-argo.yaml — the pile source rides the same sitting"
+cat > "$TMP/claude.out" <<EOF
+INTAKE-RULED: $H#101 seat $H#101
+INTAKE-RULED: $H#102 requeue $H#102
+INTAKE-RULED: $H#103 unchanged -
+INTAKE-RULED: $H#107 split $H#7,$H#8
+INTAKE-RULED: $H#109 reopened -
+INTAKE-RULED: $H#999 requeue -
+EOF
+PILE_JSON="$PISS" run_script apply; rc=$?
+{ [ "$rc" = 0 ] && [ -s "$TMP/claude.calls" ] && [ "$(grep -c '^claude' "$TMP/claude.calls")" = 1 ]; } \
+  && ok "the dig holds, the pile fires → ONE sitting" || bad "pile sitting" "rc=$rc $(tail -4 "$TMP/run.log")"
+[ "$(jq -c '[.counts.dig, .counts.members, .counts.rereads, .counts.inputs]' "$TMP/up/inputs.json" 2>/dev/null)" = "[0,1,5,6]" ] \
+  && ok "inputs.json = both selections merged (0 dig + 1 member + 5 rereads)" || bad "merged inputs" "$(jq -c .counts "$TMP/up/inputs.json" 2>/dev/null)"
+{ grep -q '^issues:$' "$TMP/up/brief.md" && grep -q '^reread:$' "$TMP/up/brief.md" && grep -qF "\"id\": \"$H#102\"" "$TMP/up/brief.md" \
+    && grep -qF '"parked_by": "intake: seat — needs a ruling"' "$TMP/up/brief.md"; } \
+  && ok "the brief lists \`issues:\` and \`reread:\` (id, the parking line)" || bad "brief lists" "$(grep -n -e '^issues' -e '^reread' "$TMP/up/brief.md")"
+{ grep -qF 'http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query' "$TMP/up/brief.md" \
+    && grep -qF 'http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts' "$TMP/up/brief.md" \
+    && grep -qF 'http://agent-gateway.agent-egress.svc.cluster.local:8080/' "$TMP/up/brief.md" \
+    && grep -qF '/var/run/secrets/agent-gateway/token' "$TMP/up/brief.md"; } \
+  && ok "…and the in-cluster addresses of the live reads (Prometheus, Alertmanager, the gateway + its caller token)" || bad "brief live reads" "missing an address"
+grep -qF 'AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID"' "$TMP/up/brief.md" \
+  && ok "…the bucket read names the READER key by VARIABLE — no key value is rendered into the uploaded brief" || bad "brief reader key" "$(grep -n AWS_ACCESS "$TMP/up/brief.md")"
+[ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = "[[\"$H#101\",\"seat\"],[\"$H#102\",\"requeue\"],[\"$H#103\",\"unchanged\"],[\"$H#107\",\"split\"]]" ] \
+  && ok "receipt: issue ids with seat / requeue / unchanged / split; an unknown outcome and a forged id dropped" || bad "pile receipt" "$(jq -c .ruled "$TMP/up/receipt.json" 2>/dev/null)"
+grep -q '/coordinate' "$TMP/curl.calls" && ok "a \`requeue\` rings /coordinate (it queued work)" || bad "requeue ring" "$(cat "$TMP/curl.calls")"
+mkdir -p "$TSP/homelab/intake-gateway-2026-10-27/r"; cp "$TMP/up/receipt.json" "$TSP/homelab/intake-gateway-2026-10-27/r/"
+rm -rf "$TSP/homelab/intake-gateway-2026-10-24"
+pile
+[ "$(pk reread)" = "109 115" ] && ok "…and the next pile selection reads that receipt back: #102 #103 #107 are not re-read tomorrow, #109 #115 (no line) are" \
+  || bad "pile round trip" "got '$(pk reread)'"
+rm -rf "$TSP/homelab/intake-gateway-2026-10-27"
+cat > "$TMP/claude.out" <<EOF
+INTAKE-RULED: $H#103 unchanged -
+EOF
+PILE_JSON="$PISS" run_script apply
+grep -q '/coordinate' "$TMP/curl.calls" && bad "unchanged ring" "rang /coordinate" || ok "\`unchanged\` alone rings nothing"
+echo 'not json' > "$TMP/pile-bad.json"
+PILE_JSON="$TMP/pile-bad.json" run_script apply; rc=$?
+{ [ "$rc" = 1 ] && [ ! -s "$TMP/claude.calls" ] && grep -q "selection failed (source pile" "$TMP/run.log"; } \
+  && ok "a pile selection that fails is a failure for Argo to retry — the dig's hold does not mask it" || bad "pile fail-open" "rc=$rc $(tail -2 "$TMP/run.log")"
 
 # ── FU-270: the sitting is admitted by the agent-gateway (gateway rollout, #1640/#1769) ──────────
 section "island-intake-argo.yaml — the gateway admits the sitting (FU-270)"
@@ -345,6 +505,7 @@ gw_intake_run() { # <reply-kind> [knob]
     fallback) printf '{"error":"down"}' > "$TMP/gw-reply.json"; printf '503' > "$TMP/gw-http";;
   esac
   ( cd "$TMP" && H="$TMP" PATH="$GBIN:$BIN:$PATH" HOME="$TMP/home" MODE=apply ISLAND=gateway \
+      INTAKE_ISSUES_JSON="$TMP/pile-empty.json" \
       INTAKE_TS_DIR="$TS" INTAKE_NOW="$NOW" GH_TOKEN=x AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
       AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s PUSHGATEWAY="" \
       AGENT_GATEWAY="${2-sessions}" AGENT_GATEWAY_CALLER_TOKEN_FILE="$TMP/gw-caller-token" \
@@ -353,8 +514,8 @@ gw_intake_run() { # <reply-kind> [knob]
 }
 rm -rf "$TS/homelab/intake-gateway-2026-10-26/intake-r1-e"   # un-rule the hold row's inputs: these rows need a sitting
 gw_intake_run dispatch; rc=$?
-grep -qF '"stack":"platform","role":"coordinator","task":"intake-gateway-' "$TMP/curl.calls" && grep -qF '"tier":"heavy"' "$TMP/curl.calls" \
-  && ok "dispatch → POST /sessions as stack platform, role coordinator, tier heavy, task intake-<island>-<day>" \
+grep -qF '"stack":"platform","role":"coordinator","task":"intake-gateway-' "$TMP/curl.calls" && grep -qF '"tier":"heavy"' "$TMP/curl.calls" && grep -qF '"prefer":"strongest"' "$TMP/curl.calls" \
+  && ok "dispatch → POST /sessions as stack platform, role coordinator, tier heavy, prefer strongest, task intake-<island>-<day>" \
   || bad "gw admit body" "$(grep sessions "$TMP/curl.calls" | head -2) | $(tail -3 "$TMP/run.log")"
 grep -qx "model gw-intake-model" "$TMP/claude.calls" && ok "…the sitting runs on the GATEWAY's model (rail prefix stripped)" || bad "gw model" "$(cat "$TMP/claude.calls")"
 grep -qxF "env ANTHROPIC_BASE_URL=$I_GW_BASE ANTHROPIC_AUTH_TOKEN=gws_INTAKETOKEN" "$TMP/claude.calls" \

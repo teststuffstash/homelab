@@ -4,8 +4,8 @@ _Opened 2026-10-27 (operator ask: an overnight, unattended spike — "the main p
 adding the `agent/queued` label … right now I am the blocker in queueing issues"). Status:
 **a brief + a selector built and run twice against the live pile (dry-run, then apply); no
 decision taken here** — the wiring was RULED and BUILT 2026-10-28 (its own CronWorkflow, dig
-source first — §Open questions 1, #3004); the remaining rulings in §Open questions are the
-operator's; tracked by FU-320. Relates: [`context-and-autonomy.md`](context-and-autonomy.md) §The plan **P6**
+source first — §Open questions 1, #3004) and the issue pile joined it 2026-11-11 (§Run 3, ADR-163);
+the remaining rulings in §Open questions are the operator's; tracked by FU-320. Relates: [`context-and-autonomy.md`](context-and-autonomy.md) §The plan **P6**
 (machine admission for `agent-fix` filings — "safe once the lens is the gate") and §C7 (islands),
 ADR-139 (the island), ADR-155/156 (the specs reviewer — the lens that makes P6 safe here),
 ADR-122 (one parser, dispositions), ROADMAP §"Intake is the open front end", FU-270 (the island's
@@ -28,7 +28,8 @@ it lacks, or a close with evidence — well enough that the operator reads PRs i
   carries the KEY ROWS (pinned rule 2: "an issue carries a handful of key rows … the implementing
   agent adds boundary rows"), the bot-authored Goal's pins (budget ceiling, `agent/queued` on the
   children only — never on the Goal, so breaker #1 stays the human's and the assembly's codeowner
-  read stays the gate), the hard limits (no code, no PRs, never close a human-filed issue, ≤ 3
+  read stays the gate), the hard limits (no code, no PRs, never close a human-filed issue — by age
+  for the operator's own since ADR-163, §Run 3 — ≤ 3
   queued per sitting, one `intake:` comment per ruling), and the island facts.
 - **The selector** — [`gateway/scripts/intake-select.sh`](../../gateway/scripts/intake-select.sh):
   the deterministic half, in the scan's own shape. Island membership (title, else every `Touches`
@@ -96,6 +97,25 @@ holds an SA that must not ride (#2684's own trigger, `kubectl` forbidden by the 
 grammar for a requirement-level gap tracked by an FU id (`health.md`'s HA row — pinned-text
 territory, §Open questions 4).
 
+## Run 3 — 2026-11-11: the pile nobody re-read
+
+Measured by the seat on the live pile before a fresh sitting. 26 issues carried an intake ruling;
+9 of them sat open with `agent/blocked` and had never been read again, because the selector skips
+anything labelled or ruled. Of 4 rulings a fresh read changed, 3 were re-reads of earlier
+`seat`/blocked rulings whose blocking fact had moved: #3108 had been blocked 10 days on a blocker
+that was one ride's own, and #2650 waited on a done-when that had already happened. 18 of 28
+gateway issues were under the operator's login, nearly all written by jail sessions, so the "never
+close a human-filed issue" limit left most of the pile only `seat` to end in. The dig source's text
+match also put two findings that are not the gateway's into its sitting (homelab#3162, kata node
+memory; homelab#3166, a retro report): both cite `argocd/resources/pushgateway/…`, which contains
+`gateway/`.
+
+What changed: the age-aware ownership rule (ADR-163), the `reread:` input with procedure step R
+and the `requeue` outcome, a wider live read set (in the [brief](../../gateway/intake.md)); the
+selector's `--source pile` and a dig match on the island's alerts and evidence paths; the cron
+running both sources in one sitting (§Open questions 1). The sitting's own results are recorded in
+the PR that follows this one.
+
 ## Reading
 
 - **The lens-is-the-gate premise held for the ordinary class.** Two queue rulings, both one-line
@@ -123,13 +143,21 @@ territory, §Open questions 4).
    (`INTAKE_DAILY_MAX`, the responder's cap shape), not code. Why the dig first: its
    `cause-found` findings reached a worker only through the seat (the 10-25 Go-catalog cause was
    dispatched ~45 h later as #2933); intake folds same-cause findings before filing, so the dig
-   needs no issue author. The issue pile stays seat-run until wired as a second source; the
-   gateway's own dedup store is a later concern (operator, same ruling).
+   needs no issue author. The gateway's own dedup store is a later concern (operator, same
+   ruling). **The issue pile is the second source (operator, 2026-11-11):** after the dig
+   selection the same workflow runs `intake-select.sh --source pile` — the island's unruled issues
+   plus its waits (`agent/blocked`, or a latest `intake: seat`, ≥ 3 days old, re-read at most once
+   in 7 days — the receipt is that ledger too) — and ONE sitting rules both input sets, one receipt.
+   A dig finding is the island's when one of its alerts is defined in the island's alert-rule file,
+   or, for an alert no island's rules define, when its evidence cites a path under the island's
+   `Touches` prefixes; prose that mentions the island no longer selects. Other islands' piles stay
+   seat-run (question 5).
 2. **Budget ceiling for a bot-authored Goal** (`INTAKE_GOAL_BUDGET_USD`, default 10) — P6 said
    "Goals stay human"; the ask puts the human at the assembly read instead. The ceiling is the
    dial between the two.
-3. **Human-filed issues**: the brief never closes or folds one (`seat` instead). Whether the
-   operator wants the bot to close THEIR issues with evidence is a ruling, not a default.
+3. **Human-filed issues — RULED 2026-11-11 (ADR-163):** intake may close, fold and rewrite
+   issues under the operator's login, weighted by age; any other human's issue stays `seat`. The
+   rule is the brief's (§Hard limits).
 4. **The `⚑ gap` flag grammar for a closed work issue** (run 1's finding): rule 10 names a work
    issue; the island already uses `⚑ gap (date, homelab#N)` for residue. One form or the other
    belongs in the pinned text (allure-behavior-snippets), not here.

@@ -1,0 +1,41 @@
+{
+  "schema": "dig-finding/v1",
+  "group": "2026-11-02T21:00:00Z|cluster",
+  "alerts": [
+    "RetroReportOverdue (alert:RetroReportOverdue)"
+  ],
+  "verdict": "cause-found",
+  "cause": "The alert is firing on a real, long-dormant retro, not on the platform series. Since homelab#3161 (merged 2026-11-02 20:39Z) the rule takes max by (series). The only stale sample is the pre-series oracle stack retro (job retro-session, stack oracle, no series label), whose last success is 2026-08-17 around 10:17Z. With no series label it becomes its own group, and the annotation renders that group as '<none has ever pushed>', which is wrong wording because it pushed eleven weeks ago. Before #3161 the ungrouped max() let the fresh platform push mask it (the #3161 body says so: a fresh platform push must never hide a stale sibling). The platform r10 report landed 2026-11-02 05:35Z, and a platform quiet-week push on 2026-10-31 20:50Z also cleared the alert, which is why it was silent from about Oct 31 to Nov 2. The onset (pending 2026-11-02 20:41Z) therefore matches the rule change, not a new platform failure: the change exposed an oracle stack retro that has produced nothing since 2026-08-17 (last report PR homelab#246, oracle r3, 2026-08-11). Whether that retro should still run is a decision the repo does not answer.",
+  "evidence": [
+    "Prometheus query_range ALERTS{alertname=RetroReportOverdue}, 7d at 6h steps → firing Oct 28 to Oct 31, absent from about Oct 31 15:30Z to Nov 2 21:30Z, firing again from Nov 2 20:41Z",
+    "Prometheus ALERTS_FOR_STATE{alertname=RetroReportOverdue} → pending start 2026-11-02T20:41:17Z (30m for: gives the 21:11Z firing time in the digest)",
+    "Prometheus retro_report_last_success_timestamp (instant) → series=platform 1793597716 = 2026-11-02T05:35:16Z; stack=oracle with NO series label 1786961547 = 2026-08-17 ~10:17Z; platform outcome=quiet 1793479821 = 2026-10-31 ~20:50Z",
+    "argocd/resources/pushgateway/retro-report.promtool-rules and prometheusrule.yaml:51 → expr is max by (series) with an absent()*0 fallback; annotation renders a label-less group as '<none has ever pushed>'",
+    "gh pr view 3161 (homelab, merged 2026-11-02T20:39:32Z) → per-series change; body states the intent that a stale sibling must fire while the platform series stays fresh",
+    "gh issue view 3140 (homelab, closed) → oracle feedback-triage series ruling; the new series is born suspended",
+    "gh pr list (homelab, 'retro') → platform r10 #3153 merged 2026-11-02 05:35:15Z; last oracle report PR found is #246 (2026-08-11)",
+    "kubectl get pods -n agent-coordinator | grep retro → no retro pods listed (17 pods total); not conclusive, completed pods may be pruned",
+    "gh search issues ('retro stack oracle', open) → no record on the oracle retro's current status"
+  ],
+  "recommendation": "Seat decides one of two: (a) if oracle's stack-level retro is retired, delete the stale Pushgateway group job=retro-session,stack=oracle and the alert clears; (b) if it should run, re-fire it with argo -n agent-coordinator submit --from cronworkflow/<oracle retro>. Separately, correct the '<none has ever pushed>' fallback so a label-less stale group reads as a stale push (argocd/resources/pushgateway/prometheusrule.yaml plus the retro-report.promtool-rules copy, re-synced). No PR from me: clearing the alert depends on the retire-or-run decision.",
+  "pr": "",
+  "related": [
+    "homelab#3161",
+    "homelab#3140",
+    "homelab#3153",
+    "homelab#246",
+    "homelab#591",
+    "FU-058"
+  ],
+  "tool_gaps": [
+    "TOOL_GAP: argo cronworkflow/workflow read (CRDs, ns agent-coordinator) — to confirm whether oracle's stack retro CronWorkflow still exists and when it last ran; CRDs are RBAC-denied here by design"
+  ],
+  "ts": "2026-11-04T03:33:48Z",
+  "run": "dig-2026-11-04/dig-r1-20261104T033004Z",
+  "members": [
+    {
+      "alertname": "RetroReportOverdue",
+      "subject": "alert:RetroReportOverdue"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "schema": "dig-finding/v1",
+  "group": "2026-11-08T10:00:00Z|cluster",
+  "alerts": [
+    "TierEvidenceStale (alert:TierEvidenceStale)"
+  ],
+  "verdict": "cause-found",
+  "cause": "The tier-evidence snapshot is 7.7 days old. The committed benchmarks.json has snapshot_at 2026-11-01T09:49:26Z, and the gateway's gauge reads 668444 s. The rule fires past 7 d, with a 1 h for:. That puts the firing at 2026-11-08T10:49:26Z, which matches the alert's startsAt of 10:49:48Z. Nothing re-cuts the snapshot on a schedule. It is a hand-refreshed input: a jail verb plus a PR. The catalog names this as a gap, and FU-270 names the re-cut as the seat's next step. The source is a weekly AA pull, so the 7-day threshold leaves no slack, and one missed week fires the page. The re-cut did not happen in the week after 11-01. No declared window explains it: the only window in the lookback (seat-1794148605, ADR-161 nix-cache work) opened at 14:36Z, after the 10:49Z firing, and it concerned the nix cache, not the gateway.",
+  "evidence": [
+    "Digest annotation + argocd/resources/agent-gateway/prometheusrule.yaml:127-137 → expr (max gateway_tier_evidence_age_seconds > 604800) or absent(...), for: 1h; the annotation says to re-cut with gateway/scripts/benchmarks-snapshot.sh, then tiers apply and check, then a PR",
+    "Prometheus gateway_tier_evidence_age_seconds (query + query_range 6h steps, 7 d) → 668444 now on pod agent-gateway-78cc8cf4b7-xgnrb; the age series shows 7 d of growth with no reset, so no re-cut landed in the lookback",
+    "Prometheus ALERTS{alertname=TierEvidenceStale} range (1 h steps) → firing continuously from about 2026-11-08 10:49Z; ALERTS_FOR_STATE pending start 1794131388 (about 10:49Z)",
+    "Read argocd/resources/agent-gateway/benchmarks.json at HEAD → snapshot_at 2026-11-01T09:49:26Z (the only snapshot in the tree)",
+    "git log -- argocd/resources/agent-gateway/benchmarks.json → last touch cd87e81 (the 11-08 auto-bump); the snapshot_at did not move",
+    "gateway/specs/endpoints/catalog.md:1292 → '⚑ gap: the snapshot is hand-refreshed … no schedule runs benchmarks-snapshot.sh: the re-cut is a jail verb and a PR'",
+    "docs/follow-ups.md FU-270 (line 799) → 'Next (seat): … re-cut when the lists move … the weekly AA pull misses release-day models … benchmarks-snapshot.sh's cadence knob'",
+    "gh search issues 'TierEvidenceStale' and 'benchmarks' → no open issue; gh pr list open for the tier/re-cut terms → no open re-cut PR; the merged re-cuts are #2716, #2776, #2813, #2824, #2903 and #3023 (last 10-29), plus open issue #3145 on the hand-passed codex candidates",
+    "Lookback windows (digest) → seat-1794148605 at 14:36Z, after the onset, unrelated to the gateway"
+  ],
+  "recommendation": "The gateway seat or the operator runs the re-cut: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply and check, then a PR. That clears the alert. Dig cannot run it, since it needs pods/exec and pods/portforward. The second decision is whether to schedule the re-cut (the catalog's gap, and FU-270's cadence knob) or accept the manual cadence with a threshold that leaves slack. What would change this: if the re-cut does not clear the alert within the hour, the derivation is failing and the cause is no longer staleness alone.",
+  "pr": "",
+  "related": [
+    "FU-270",
+    "teststuffstash/homelab#3145",
+    "teststuffstash/homelab#3023",
+    "teststuffstash/homelab#2903"
+  ],
+  "tool_gaps": [],
+  "ts": "2026-11-09T03:32:51Z",
+  "run": "dig-2026-11-09/dig-r1-20261109T033006Z",
+  "members": [
+    {
+      "alertname": "TierEvidenceStale",
+      "subject": "alert:TierEvidenceStale"
+    }
+  ]
+}
