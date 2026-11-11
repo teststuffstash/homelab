@@ -1068,7 +1068,10 @@ parts, each a reviewable file in git:
   lists in the file's own layout. ⚖ A tier whose derivation is **empty** — no benched, priced
   candidate reaches its band (the openrouter rail before its first eligible cell) — is
   **undecided**: the deployed list stands, `check` names it apart and never as a mismatch,
-  `apply` refuses to write it.
+  `apply` refuses to write it. ⚖ A benched candidate with **no value on the score axis** — the feed
+  scores a row on some axes and not others — is in no pool, so in no tier and never a rail's top;
+  `unscored` names every such id per rail, and `check` and `derive` print them: out of the pool,
+  never out of sight.
 
 **Cost per clean ride** ⚖. For a cell with price `p` ($ per 1M output tokens), clean-ride rate `r`
 and the policy's `tiers.cost` (`T` M output tokens a ride spends, `o` $ a failed ride costs on top
@@ -1162,13 +1165,16 @@ derived list of `tier` (several tiers: their lists in that order, `·`-separated
 
 #### Which tiers hold a candidate
 
-Legend: `tiers?` = the tiers whose derived list holds `candidate`; `heavy?` = the rail's heavy list.
+Legend: `tiers?` = the tiers whose derived list holds `candidate`; `heavy?` = the rail's heavy list;
+`fx + fx/nopx` = fx plus a benched candidate at 49 with no price; `fx + fx/noscore` = fx plus a
+benched candidate with no `intelligence` (coding 70) · out 0.01 / in 0.01, the cheapest on the rail.
 
 | description | rail | candidate | tiers? | heavy? |
 |---|---|---|---|---|
 | a model sits in several tiers | fx | fx/near | heavy, light, standard | fx/near, fx/top |
 | an unbenched candidate never tiers, however cheap ⚖ | fx | fx/none | none | fx/near, fx/top |
 | an unpriced candidate on a priced rail never tiers ⚖ | fx + fx/nopx (49, no price) | fx/nopx | none | fx/near, fx/top |
+| a benched candidate with no value on the score axis never tiers, however cheap ⚖ | fx + fx/noscore (no intelligence, coding 70) | fx/noscore | none | fx/near, fx/top |
 
 #### Empty and undecided tiers
 
@@ -1291,13 +1297,24 @@ provider) or unpriced — never the headline, never the old proxy's table; anthr
 evidence: its catalog plus one completed turn per id, never a bundled catalog; 2026-10-29 the newest
 of each family, [the spike §Account model evidence](../../../docs/spikes/codex-subscription-rail.md#account-model-evidence--2026-10-29-homelab3016)),
 unpriced, joined to the AA row by tail (`codex/gpt-6-astra` ↔ `openai/gpt-6-astra`); a codex key on
-no list is unbenched or below every band. Legend: `invariant` = the
+no list is unbenched or below every band. **The score axis** ⚖ is `intelligence` (operator ruling
+2026-10-18) and stays the knob whatever the feed covers: the feed does not score every row on it.
+Read on the 2026-11-08 pull (the snapshot of 2026-11-11): 46 of the 54 benched candidate rows carry
+`intelligence`; 8 carry `coding` and `agentic` only — opencode `glm-5.2`, `kimi-k2.7-code`,
+`longcat-2.0`, `mimo-v2.5`, `mimo-v2.5-pro`, `qwen3.7-plus`, openrouter `deepseek/deepseek-v4-flash`,
+`z-ai/glm-5.2` — every one of them scored on `intelligence` in the 2026-10-25 pull, and each a
+model with a newer generation in the feed that kept its score (`glm-5.3`, `kimi-k3`, `mimo-v2.6`,
+`qwen3.8`, `deepseek-v4.1-flash`). Of the feed's 353 rows that pull refreshed 169: 118 came back
+with no `intelligence`, and every candidate row that kept one changed it (`z-ai/glm-5.3` 44.8 →
+31.7) while `coding` / `agentic` mostly stood — the shape of an index re-based on the newer models
+(unverified — nobody read the vendor's note). Those
+8 are in no pool until the feed scores them again. Legend: `invariant` = the
 predicate evaluated over the deployed files; `knob?` = the deployed value the ruling rests on;
 `violations?` = the ids, rows or lists that break the invariant (`none`).
 
 | description | invariant | knob? | violations? |
 |---|---|---|---|
-| the score is the Artificial Analysis intelligence index ⚖ | every benched row carries `intelligence`; at least one lacks `coding` (the other axes are loadable, unused — the gap row) | tiers.score: intelligence | none |
+| the score is the Artificial Analysis intelligence index ⚖ | every id of a derived or decided deployed list carries `intelligence`; a benched row without it is in no pool and is named by `unscored` (exactly those rows, never dropped unseen); at least one benched row lacks `coding` (the other axes are loadable, unused — the gap row) | tiers.score: intelligence | none |
 | a tier is a band of the rail's best ⚖ | within a rail, every id of a decided deployed list scores ≥ its band × the rail's top score (a model can sit in several tiers) | tiers.bands: heavy 0.9, standard 0.75, light 0.5 | none |
 | each list is cheapest per clean ride first, capped at 3 ⚖ | every decided priced-rail list has ≤ cap ids with non-decreasing cost per clean ride (`row_cost` under the deployed `tiers.cost`; ties by input price, score descending, id) | tiers.cap: 3 | none |
 | the subscription rail has no price: score ascending is its cost proxy ⚖ | every anthropic and codex row is unpriced (one flat subscription — the ChatGPT one since 2026-10-22, FU-270) and each of their deployed lists is strictly score-ascending | PRICELESS_RAILS: anthropic, codex | none |
@@ -1339,7 +1356,7 @@ Legend: `mounted` = what `GATEWAY_BENCHMARKS` names; `age?` = `gateway_tier_evid
 | description | input | v0 answer | the gap |
 |---|---|---|---|
 | ⚑ gap: no price for the subscription rail | the `anthropic` and `codex` rails | score ascending as the cost proxy | a subscription's marginal cost per model is not a per-token price and the subscription's fee buys no listed allowance to divide (the Go rail's derivation needs one); the gateway has no ledger for it (the cost ledger is a gap on [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)) |
-| ⚑ gap: coding / agentic unused | `tiers.score: coding` | loads and derives — but most new rows carry null there (the ruling) | AA's task indices have no coverage on the newest models; revisit when they do |
+| ⚑ gap: coding / agentic unused | `tiers.score: coding` | loads and derives — but most new rows carry null there (the ruling) | AA's task indices have no coverage on the newest models; revisit when they do. Since the 2026-11-08 pull the hole runs both ways: a previous-generation row carries `coding` / `agentic` and no `intelligence`, and so tiers nowhere (8 benched candidates, the ruling) — no single axis covers every benched row, and nothing combines them |
 | ⚑ gap: the snapshot is hand-refreshed | a stale `snapshot_at` | `TierEvidenceStale` names it; nothing re-cuts it | no schedule runs `benchmarks-snapshot.sh`: the re-cut is a jail verb and a PR (the alert is the belt, the operator the hands) |
 | ⚑ gap: a Go-only id spelling joins nothing | `gemini-4-argon-contributor`, `muse-spark-1.3-contributor`, `hy3`, `hy4-preview`, `qwen3.8-flash`, `space-bunny` | unbenched (9 of 29 listed Go models) | the vendor's `-contributor` / `-preview` suffixes and bare family ids have no AA spelling; a per-id alias would be a table, which the ruling forbids |
 | ⚑ gap: the strike overhead is unmeasured | a failed ride | `tiers.cost.strike_overhead_usd` 0: the order is price over clean rate | the reviewer round + the coordinator re-entry a failed ride costs ride the subscription (no per-token price) — the term has a home and no measurement |

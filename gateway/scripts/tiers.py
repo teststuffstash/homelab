@@ -2,7 +2,8 @@
 """The tier-evidence CLI (GW-MODEL-TIERS) — the thin shell over `agent_gateway.tiers`:
 
   devbox run tiers -- snapshot --capability C --go-catalog G --openrouter-catalog O --anthropic-aliases A [--codex-candidates X] [--manual M] [-o benchmarks.json]
-  devbox run tiers -- derive   [--benchmarks B] [--policy P]      print {rail: {tier: [ids]}} (+ the undecided tiers on stderr)
+  devbox run tiers -- derive   [--benchmarks B] [--policy P]      print {rail: {tier: [ids]}} (+ the undecided tiers and the
+                                                                  benched ids with no value on the score axis on stderr; `check` names them too)
   devbox run tiers -- check    [--benchmarks B] [--policy P]      exit 1 + the mismatches when a list is not the derivation;
                                                                   an UNDECIDED tier (no priced candidate) is named, never a mismatch
   devbox run tiers -- apply    [--benchmarks B] [--policy P]      rewrite the DECIDED rails' lists in place, nothing else
@@ -23,7 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agent_gateway.config import tiers_policy
-from agent_gateway.tiers import ManualError, apply_text, build_snapshot, check, derive, undecided
+from agent_gateway.tiers import ManualError, apply_text, build_snapshot, check, derive, undecided, unscored
 
 HERE = Path(__file__).resolve().parent
 DEPLOY = HERE.parent.parent / "argocd" / "resources" / "agent-gateway"
@@ -82,10 +83,15 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(derive(benchmarks, tiers), indent=2))
         if und := undecided(benchmarks, tiers):
             print(f"derive: undecided (no priced candidate — the deployed list stands): {json.dumps(und)}", file=sys.stderr)
+        if uns := unscored(benchmarks, tiers):
+            print(f"derive: benched with no `{tiers.score}` (in no pool): {json.dumps(uns)}", file=sys.stderr)
         return 0
     if a.cmd == "check":
         mismatches = check(policy, benchmarks)
-        und = undecided(benchmarks, tiers_policy(policy.get("tiers")))
+        tiers = tiers_policy(policy.get("tiers"))
+        und = undecided(benchmarks, tiers)
+        if uns := unscored(benchmarks, tiers):
+            print(f"check: benched with no `{tiers.score}` (in no pool): {json.dumps(uns)}", file=sys.stderr)
         if mismatches:
             print("check: the deployed tier lists are NOT the derivation:", file=sys.stderr)
             print(json.dumps(mismatches, indent=2), file=sys.stderr)
