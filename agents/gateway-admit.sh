@@ -21,7 +21,7 @@
 #   gw_preflight_request <round> [<attempt>]   rc 0 | 2 (refused: a non-integer round, attempt < 1)
 #   gw_preflight_caller                        rc 0 | 2 (refused: malformed SA / no token); sets
 #                                              GW_CALLER_DESC. Mints once (a jail canary).
-#   gw_admit --stack S --role R --task T [--round N] [--attempt N] [--tier T] [--harness H]
+#   gw_admit --stack S --role R --task T [--round N] [--attempt N] [--tier T] [--prefer P] [--harness H]
 #            [--rail R] [--canary <model>@<provider>]
 #            ( --bind <ns>/<sa>/<pod> | --env-file <path> ) [--harnesses claude,opencode,…]
 #       rc 0  dispatch. Sets GW_SESSION_ID GW_RAIL GW_HARNESS GW_MODEL GW_WIRE_MODEL
@@ -133,12 +133,12 @@ gw_preflight_caller() {
 _GW_PULL_PRELUDE_TEXT='_gw_t="$(cat /var/run/secrets/agent-gateway/token)" && _gw_env="$(curl -fsS --max-time 30 --retry 3 --retry-delay 2 --retry-connrefused -X POST -H "Authorization: Bearer ${_gw_t}" "$AGENT_GATEWAY_PULL_URL")" || { echo "→ gateway(sessions): env pull FAILED at ${AGENT_GATEWAY_PULL_URL} — the harness does not start (FU-270)" >&2; exit 97; }; unset _gw_t; for _gw_k in ${AGENT_GATEWAY_ENV_KEYS//,/ }; do _gw_v="$(printf "%s" "$_gw_env" | jq -er --arg k "$_gw_k" ".env[\$k] | strings")" || { echo "→ gateway(sessions): the env pull answer lacks ${_gw_k} — the harness does not start (FU-270)" >&2; exit 97; }; export "${_gw_k}=${_gw_v}"; done; unset _gw_env _gw_v _gw_k; echo "→ gateway(sessions): env pulled (${AGENT_GATEWAY_ENV_KEYS})"; '
 
 gw_admit() {
-  local stack="" role="" task="" round="0" attempt="1" tier="" harness="" rail="" canary="" bind="" envfile=""
+  local stack="" role="" task="" round="0" attempt="1" tier="" prefer="" harness="" rail="" canary="" bind="" envfile=""
   local harnesses="claude,opencode,goose,codex"
   while [ $# -gt 0 ]; do
     case "$1" in
       --stack) stack="${2-}";; --role) role="${2-}";; --task) task="${2-}";; --round) round="${2-}";;
-      --attempt) attempt="${2-}";; --tier) tier="${2-}";; --harness) harness="${2-}";; --rail) rail="${2-}";;
+      --attempt) attempt="${2-}";; --tier) tier="${2-}";; --prefer) prefer="${2-}";; --harness) harness="${2-}";; --rail) rail="${2-}";;
       --canary) canary="${2-}";; --bind) bind="${2-}";; --env-file) envfile="${2-}";; --harnesses) harnesses="${2-}";;
       *) echo "gw_admit: unknown argument '$1'" >&2; return 2;;
     esac
@@ -164,11 +164,12 @@ gw_admit() {
   # sessions.schema.json post.input — optional fields only when given.
   local req resp http decision
   req="$(jq -nc --arg stack "$stack" --arg role "$role" --arg task "$task" --argjson round "$round" \
-      --argjson attempt "$attempt" --arg tier "$tier" --arg harness "$harness" --arg rail "$rail" \
+      --argjson attempt "$attempt" --arg tier "$tier" --arg prefer "$prefer" --arg harness "$harness" --arg rail "$rail" \
       --arg canary "$canary" --arg ns "$b_ns" --arg sa "$b_sa" --arg pod "$b_pod" \
       '{stack: $stack, role: $role, task: $task, round: $round}
        + (if $attempt > 1 then {attempt: $attempt} else {} end)
        + (if $tier != "" then {tier: $tier} else {} end)
+       + (if $prefer != "" then {prefer: $prefer} else {} end)
        + (if $harness != "" then {harness: $harness} else {} end)
        + (if $rail != "" then {rail: $rail} else {} end)
        + (if $canary != "" then {canary: {model: ($canary | split("@")[0]), provider: ($canary | split("@")[1])}} else {} end)
