@@ -369,7 +369,7 @@ after start.
 |---|---|---|---|
 | a mounted, writable PVC reads pvc | `file` | `1` | `0` |
 | a fail-open store reads memory | `missing-dir` | `0` | `1` |
-| both modes render on every gateway, the inactive one at 0 ⚖ | `file` | `1` | `0` (rendered, never absent) |
+| both modes render on every gateway, the inactive one at 0 ⚖ | `file` | `1` | `0` |
 
 #### Gaps
 
