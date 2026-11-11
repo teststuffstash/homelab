@@ -513,8 +513,8 @@ the windows a cell does not name. `none` is no poll answered. The `policy` cell 
 
 | description | observable | expected |
 |---|---|---|
-| "the poll carries the Go key and no identity reaches a log" | poll authorization | Bearer <the Go key> |
-| "the poll carries the Go key and no identity reaches a log" | identity in log lines | none |
+| "the poll carries the Go key" | poll authorization | Bearer <the Go key> |
+| "no identity reaches a log" | identity in log lines | none |
 
 The poll's request carries `authorization: Bearer <the Go key>`. The answer's fields beyond `usage` are
 never read, stored or logged. Each outcome is logged as one line (`opencode usage poll: <outcome>`),

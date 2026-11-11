@@ -484,15 +484,17 @@ async def test_go_headroom(settings, secrets, store, clock, reviews, pods, go_us
     caplog.set_level(logging.INFO)
     world(policy=path.stem, upstream="upstream-ok", note=f"{policy}: the Go usage endpoint answers the row's readings; the rails answer upstream-ok")
     try:
-        for at, windows, outcome in GO_POLLS[polls]:
-            clock.t = T0 + at
-            go_usage.doc = _usage_doc(windows)
-            with given(f"a usage poll at T0{at:+d} s answers {windows}"):
-                got = await app.state.go_usage.poll()
-            then_eq("poll outcome", got, outcome)
-        clock.t = T0 + ask
-        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as gw:
-            doc = await _admit(gw, GO_BODIES[body])
+        outcomes = []
+        with given(f"the usage polls ({polls}) are answered, then the admit is asked at T0{ask:+d} s"):  # one grouped arrange step
+            for at, windows, _ in GO_POLLS[polls]:
+                clock.t = T0 + at
+                go_usage.doc = _usage_doc(windows)
+                outcomes.append(await app.state.go_usage.poll())
+            clock.t = T0 + ask
+        then_eq("poll outcomes", outcomes, [o for _, _, o in GO_POLLS[polls]])
+        with when("the worker's admit is asked"):
+            async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as gw:
+                doc = await _admit(gw, GO_BODIES[body])
         _verdict(doc, {"decision": decision, "rail": _cell(rail), "reason": _cell(reason), "retry_after_s": _cell(retry_after_s)})
         then_eq("usage requests sent", len(go_usage.calls), len(GO_POLLS[polls]))
     finally:
@@ -516,14 +518,14 @@ async def _go_poll_once(settings, secrets, store, clock, reviews, pods, go_usage
         await client.aclose()
 
 
-# the observable table's two rows share one description — one test per observable, both keyed by it
-@pytest.mark.parametrize(("observable", "expected"), [("poll authorization", "Bearer <the Go key>")], ids=[POLL_CASE])
+# one test per observable row, each keyed by its own description cell
+@pytest.mark.parametrize(("observable", "expected"), [("poll authorization", "Bearer <the Go key>")], ids=["the poll carries the Go key"])
 async def test_go_poll_authorization(settings, secrets, store, clock, reviews, pods, go_usage, caplog, observable, expected):
     await _go_poll_once(settings, secrets, store, clock, reviews, pods, go_usage, caplog)
     then_eq(observable, go_usage.calls[-1].headers["authorization"], expected.replace("<the Go key>", GO_KEY))
 
 
-@pytest.mark.parametrize(("observable", "expected"), [("identity in log lines", "none")], ids=[POLL_CASE])
+@pytest.mark.parametrize(("observable", "expected"), [("identity in log lines", "none")], ids=["no identity reaches a log"])
 async def test_go_poll_identity_not_logged(settings, secrets, store, clock, reviews, pods, go_usage, caplog, observable, expected):
     await _go_poll_once(settings, secrets, store, clock, reviews, pods, go_usage, caplog)
     leaked = [k for k, v in DUMMY_IDENTITY.items() if v in caplog.text]
