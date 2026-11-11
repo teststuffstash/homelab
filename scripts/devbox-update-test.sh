@@ -14,6 +14,8 @@
 #                warns, lists nothing, never aborts; no generator in the repo → nothing, silently
 #   lane (lock_lane, 2026-10-07): #2260 → arm (argo-workflows is a major, opentofu only a line move);
 #                an opentofu MAJOR → human; HUMAN_PACKAGES is the seam (empty set → always arm)
+#   cache hold (homelab#3233): scripts/lock-cache-check.sh's own offline self-test runs here (one ci
+#                step, one MAP row), and the body section names a held and an un-holdable package
 #   devbox run devbox-update-test
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -150,6 +152,15 @@ rm "$rg/repo/agents/replay/gh-json-fields.sh"
 out="$(cd "$rg/repo" && PATH="$rg/bin:$PATH" regen_generated 2>"$rg/err")"
 check "regen: a repo without the generator → nothing, silently" "|0" "$out|$(grep -c . "$rg/err")"
 rm -rf "$rg"
+
+# the cache hold (homelab#3233): the script's own offline self-test, then the body section
+st="$(bash "$HERE/lock-cache-check.sh" --self-test 2>&1)"; rc=$?
+check "cache hold: lock-cache-check self-test passes" 0 "$rc"
+[ "$rc" = 0 ] || printf '%s\n' "$st" | sed 's/^/  /'
+sec="$(cache_hold_section "$(printf 'held argocd@latest 3.5.6 /nix/store/x7lc-argocd-3.5.6\nunheld newtool@latest 1.0 /nix/store/abcd-newtool-1.0')")"
+check "cache hold: the section names the held package" 1 "$(grep -c -- '^- `argocd@latest` 3.5.6 — `/nix/store/x7lc-argocd-3.5.6`$' <<<"$sec")"
+check "cache hold: an un-holdable package is marked NOT held" 1 "$(grep -c -- '^- \*\*NOT held.*`newtool@latest` 1.0' <<<"$sec")"
+check "cache hold: nothing held → no section" "" "$(cache_hold_section "")"
 
 echo "devbox-update-test: $n check(s), $fails failure(s)"
 [ "$fails" -eq 0 ]
