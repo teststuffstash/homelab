@@ -3066,3 +3066,22 @@ and every such park landed on the operator. A death is distinguishable from a re
 **Consequences:** a run that keeps dying is reported as EXHAUSTED — the runner or the workflow is the
 subject, never the diff. A flaky *step* on a mechanical bump reaches the stale ride after a day, not sooner. A
 stale armed `deps-review`, worker or seat PR is still its own lane's; widen (4) on evidence, per class.
+
+### ADR-163 — Island intake may close and rewrite issues under the operator's login, weighted by age (2026-11-11)
+**Status:** Accepted (operator, 2026-11-11: "if I don't like it I can always push to master").
+**Decision:** an [island intake](glossary.md) sitting may close, fold and rewrite an issue filed
+under the operator's login, weighted by age: old and stale, a free hand on the evidence; recent,
+light editing only, and a would-be close is `seat`. Any other human's issue stays `seat`. Every such
+write is reversible from the comment and edit history. Re-reading the waits an earlier ruling left
+(`agent/blocked`, `intake: seat`) is part of the sitting. Mechanism:
+[`gateway/intake.md`](../gateway/intake.md) §Hard limits and procedure step R; evidence:
+[`spikes/island-intake.md`](spikes/island-intake.md) §Run 3.
+**Considered:** keeping "never close a human-filed issue" (rejected: 18 of 28 gateway issues are
+under the operator's login but nearly all were written by jail sessions, so most of the pile could
+only end as `seat`, and seat rulings then sat for weeks); a separate author marker for
+session-filed issues (rejected for now: a new reader).
+**Why:** the author field does not say who wrote the text, and age is the available signal for how
+much the operator still holds an issue's wording. A wait is a claim about one fact, and nothing
+re-tested it: 3 of 4 rulings a fresh read changed were re-reads of earlier waits.
+**Consequences:** the sitting's token closes and edits issues it previously only commented on. The
+daily cron reads the issue pile and its waits (FU-320). A wrong close is undone by reopening.
