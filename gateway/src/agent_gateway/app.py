@@ -114,6 +114,7 @@ def create_app(
                                   settings.cred_negative_cache_s, clock)
     m = Metrics(policy.stacks)
     m.bind_active_sessions(lambda: store.active_counts(clock()))
+    m.bind_db_mode(lambda: store.mode)
     client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(connect=settings.connect_timeout_s, read=settings.read_timeout_s, write=60, pool=10),
         follow_redirects=False,
