@@ -1,5 +1,5 @@
 """GW-MODEL-TIERS — the deployed tier lists are derived from benchmark evidence: cost per clean ride,
-the Go price, the bands, the id join, the tiers block, the rulings on the deployed files, the evidence
+the Go price, the bands, the id join, the manual benchmark rows, the tiers block, the rulings on the deployed files, the evidence
 age (specs/endpoints/catalog.md §The tier evidence).
 
 Worlds: hand-written cells, rails and AA id lists named in each row for the arithmetic (no gateway, no
@@ -25,12 +25,15 @@ from agent_gateway.app import create_app
 from agent_gateway.config import CostPolicy, Policy, PolicyError, TiersPolicy, tiers_policy
 from agent_gateway.tiers import (
     PRICELESS_RAILS,
+    ManualError,
     apply_text,
+    build_snapshot,
     check,
     clean_rate,
     cost_per_clean_ride,
     derive,
     join_aa_id,
+    parse_manual,
     row_cost,
     same_model,
     undecided,
@@ -56,6 +59,7 @@ pytestmark = rule("GW-MODEL-TIERS")
 DEPLOY = ISLAND.parent / "argocd" / "resources" / "agent-gateway"
 DEPLOYED_POLICY = DEPLOY / "policy.json"
 BENCHMARKS = DEPLOY / "benchmarks.json"
+MANUAL_BENCHMARKS = DEPLOY / "benchmarks-manual.json"
 SCHEMA = json.loads((Path(__file__).resolve().parents[1] / "specs" / "endpoints" / "catalog.schema.json").read_text(encoding="utf-8"))
 GO_WORLD = "openrouter-endpoints + the Go catalog"
 MESSAGES = "/anthropic/v1/messages"
@@ -309,6 +313,114 @@ def test_join(policy_id, aa_ids, expected_joins):
     with when(f"join_aa_id({policy_id!r}, aa_ids)"):
         got = join_aa_id(policy_id, listed(aa_ids)) or "none"
     verdict(f"joins = {expected_joins}", expected_joins={"expected": expected_joins, "actual": got}, policy_id={"actual": policy_id}, aa_ids={"actual": aa_ids})
+
+
+# ── The manual benchmark rows ────────────────────────────────────────────────────────────────
+MANUAL_URL, MANUAL_READ = "https://bench.example/fx", "2027-01-10"
+FEED_51 = "anthropic/claude-fx-5.1 = 50"
+MANUAL_ROWS = [
+    # the feed lacks 5.2 → the alias joins the newest id, the manual one, and takes ITS score (65), marked
+    pytest.param(FEED_51, "anthropic/claude-fx-5.2 = 65", "claude/fx", "anthropic/claude-fx-5.2", "65",
+                 f"manual · {MANUAL_URL} · {MANUAL_READ}", "none", id="a manual row scores an id the feed lacks ⚖"),
+    # the feed carries 5.2 at 63 → the feed's 63 stands (not the manual 65), unmarked; the manual id is retired
+    pytest.param(f"{FEED_51}, anthropic/claude-fx-5.2 = 63", "anthropic/claude-fx-5.2 = 65", "claude/fx", "anthropic/claude-fx-5.2", "63",
+                 "feed", "anthropic/claude-fx-5.2", id="the feed wins the moment it carries the id: the manual row is retired ⚖"),
+    pytest.param(FEED_51, "none", "claude/fx", "anthropic/claude-fx-5.1", "50", "feed", "none", id="no manual file: the feed alone scores"),
+    pytest.param(FEED_51, "anthropic/claude-fy-2.0 = 65", "claude/fx", "anthropic/claude-fx-5.1", "50", "feed", "none",
+                 id="a manual row for another family marks no row"),
+    # the join rule is untouched: newest by version is the FEED's 5.2, so the manual 5.1 scores nothing
+    pytest.param("anthropic/claude-fx-5.2 = 63", "anthropic/claude-fx-5.1 = 65", "claude/fx", "anthropic/claude-fx-5.2", "63", "feed", "none",
+                 id="a manual row older than the feed's newest does not score: the join is still newest-by-version"),
+]
+
+
+def _scored(cell: str) -> dict[str, float]:
+    """`id = score, id = score` → {id: score}; `none` → {}."""
+    return {} if cell == "none" else {k.strip(): float(v) for k, v in (pair.split(" = ") for pair in cell.split(", "))}
+
+
+def _manual_doc(cell: str) -> dict | None:
+    if cell == "none":
+        return None
+    return {"rows": [{"id": i, "intelligence": s, "coding": None, "agentic": None, "source_url": MANUAL_URL, "read_at": MANUAL_READ, "note": "fx"}
+                     for i, s in _scored(cell).items()]}
+
+
+@pytest.mark.parametrize(("feed", "manual", "policy_id", "expected_aa_id", "expected_intelligence", "expected_score_source", "expected_retired"),
+                         MANUAL_ROWS, ids=[p.id for p in MANUAL_ROWS])
+def test_manual_rows(feed, manual, policy_id, expected_aa_id, expected_intelligence, expected_score_source, expected_retired):
+    world(note="a hand-written feed and manual file; empty Go and OpenRouter catalogs")
+    capability = [[i, "artificial-analysis", s, None, None, 1_800_000_000.0] for i, s in _scored(feed).items()]
+    doc = _manual_doc(manual)
+    with given(f"feed = {feed} · manual = {manual} · policy_id = {policy_id}"):
+        attach_json("capability rows", capability)
+        attach_json("manual file", doc)
+    with when(f"build_snapshot(capability, …, anthropic_aliases=[{policy_id!r}], manual) → rails.anthropic.{policy_id}"):
+        snap = build_snapshot(capability=capability, go_catalog={"models": {}, "sources": {"config": {"fetched_at": None}}}, openrouter_catalog={},
+                              anthropic_aliases=[policy_id], snapshot_at="2027-01-15T08:00:00Z", manual=doc)
+        row = snap["rails"]["anthropic"][policy_id]
+        attach_json("snapshot row", row)
+        attach_json("sources.capability", snap["sources"]["capability"])
+    marks = [row.get(k) for k in ("score_source", "score_source_url", "score_read_at")]
+    source = "feed" if not any(k.startswith("score_") for k in row) else " · ".join(str(m) for m in marks)
+    hand = snap["sources"]["capability"].get("manual")
+    assert (hand is None) == (doc is None), "sources.capability.manual is present exactly when a manual file was read"
+    verdict(f"aa_id = {expected_aa_id} · intelligence = {expected_intelligence} · score_source = {expected_score_source} · retired = {expected_retired}",
+            expected_aa_id={"expected": expected_aa_id, "actual": row["aa_id"]},
+            expected_intelligence={"expected": expected_intelligence, "actual": num(row["intelligence"])},
+            expected_score_source={"expected": expected_score_source, "actual": source},
+            expected_retired={"expected": expected_retired, "actual": joined((hand or {}).get("retired", []))},
+            feed={"actual": feed}, manual={"actual": manual}, policy_id={"actual": policy_id})
+
+
+COMMITTED = "the committed file"
+MANUAL_SHAPE_ROWS = [
+    pytest.param(COMMITTED, "loads", id="the committed file loads"),
+    pytest.param("as is", "loads", id="a complete row loads"),
+    pytest.param("rows.0.source_url dropped", "refused, naming source_url", id="a score with no source is refused ⚖"),
+    pytest.param('rows.0.read_at = "last week"', "refused, naming rows[0].read_at", id="a score with no date read is refused ⚖"),
+    pytest.param("rows.0.intelligence = null", "refused, naming no score", id="a row with no score is refused"),
+    pytest.param('rows.0.intelligence = "65"', "refused, naming rows[0].intelligence", id="a score that is not a number is refused"),
+    pytest.param('rows.0.id = "fx"', "refused, naming rows[0].id", id="an id that is not vendor/model is refused"),
+    pytest.param("rows.0 twice", "refused, naming duplicate", id="one id twice is refused"),
+    pytest.param("rows.0.weight = 2", "refused, naming weight", id="an unknown key is refused"),
+    pytest.param("scores = []", "refused, naming scores", id="an unknown top-level key is refused"),
+]
+
+
+@pytest.mark.parametrize(("manual", "expected_load"), MANUAL_SHAPE_ROWS, ids=[p.id for p in MANUAL_SHAPE_ROWS])
+def test_manual_shape(manual, expected_load):
+    world(note="a hand-written manual file" if manual != COMMITTED else "against the committed manual file")
+    if manual == COMMITTED:
+        if not MANUAL_BENCHMARKS.exists():
+            pytest.skip("deploy manifests absent (service-only checkout)")
+        doc = json.loads(MANUAL_BENCHMARKS.read_text(encoding="utf-8"))
+    else:
+        doc = _manual_doc("anthropic/claude-fx-5.2 = 65")
+    with given(f"manual = {manual}"):
+        if manual == "rows.0 twice":
+            doc["rows"].append(dict(doc["rows"][0]))
+        elif manual not in (COMMITTED, "as is"):
+            dropped = manual.endswith(" dropped")
+            path, raw = (manual[: -len(" dropped")], None) if dropped else manual.split(" = ", 1)
+            node = doc
+            *parents, leaf = path.split(".")
+            for k in parents:
+                node = node[int(k)] if k.isdigit() else node[k]
+            if dropped:
+                del node[leaf]
+            else:
+                node[leaf] = json.loads(raw)
+        attach_json("manual file", doc)
+    with when("parse_manual(the document)"):
+        try:
+            rows, error = parse_manual(doc), None
+        except ManualError as e:
+            rows, error = None, str(e)
+        attach_json("result", {"rows": rows, "error": error})
+    if error is None:
+        assert rows and set(rows) == {r["id"] for r in doc["rows"]}, "a loaded file yields every row, keyed by id"
+    verdict(f"load = {expected_load}", expected_load={"expected": expected_load, "actual": _load_cell(error, expected_load, "loads")}, manual={"actual": manual})
 
 
 # ── The tiers block ──────────────────────────────────────────────────────────────────────────
@@ -585,7 +697,7 @@ def test_deployed_policy(policy, snapshot, edit, expected_mismatches, expected_u
             policy={"actual": policy}, snapshot={"actual": snapshot}, edit={"actual": edit})
 
 
-SHAPE_ROWS = [pytest.param("committed", "exactly the schema's required keys", id="the snapshot is the schema's shape")]
+SHAPE_ROWS = [pytest.param("committed", "the schema's required keys, plus only its optional ones", id="the snapshot is the schema's shape")]
 
 
 @deployed
@@ -599,11 +711,14 @@ def test_snapshot_shape(snapshot, expected_shape):
                 "rails": sorted(defs["benchmarks_snapshot"]["properties"]["rails"]["required"]), "row": sorted(defs["candidate_row"]["required"])}
         attach_json("required keys", want)
     with when("the committed snapshot's keys are read"):
-        row_shapes = {tuple(sorted(r)) for rows in bench["rails"].values() for r in rows.values()}
+        optional = set(defs["candidate_row"]["properties"]) - set(want["row"])  # the manual-score marks: on a hand-scored row only
+        row_shapes = {tuple(sorted(set(r) - optional)) for rows in bench["rails"].values() for r in rows.values()}
         got = {"top": sorted(bench), "sources": sorted(bench["sources"]), "rails": sorted(bench["rails"]), "row": sorted(next(iter(row_shapes)))}
     diff = {k: {"schema": want[k], "snapshot": got[k]} for k in want if want[k] != got[k]}
     if len(row_shapes) != 1:
         diff["row shapes"] = len(row_shapes)
+    if undeclared := sorted({k for rows in bench["rails"].values() for r in rows.values() for k in r} - set(defs["candidate_row"]["properties"])):
+        diff["undeclared row keys"] = undeclared
     verdict(f"shape = {expected_shape}", expected_shape={"expected": expected_shape, "actual": expected_shape if not diff else f"differs: {diff}"},
             snapshot={"actual": snapshot}, keys={"actual": got})
 
