@@ -508,9 +508,13 @@ the windows a cell does not name. `none` is no poll answered. The `policy` cell 
 | "a missing window refuses the whole report, the last accepted reading stands" | policy-go | fresh @ T0 − 20 → accepted; monthly absent @ T0 − 10 → quota-invalid | 0 | rail: opencode || dispatch | opencode | — | — |
 | "a passed resetsAt refuses the report, the last accepted reading stands" | policy-go | fresh @ T0 − 20 → accepted; rolling resets T0 − 15, others fresh @ T0 − 10 → quota-invalid | 0 | rail: opencode || dispatch | opencode | — | — |
 | "a limited Go rail is skipped, the walk continues" | policy-go | rolling 96 % resets T0 + 1000, others fresh @ T0 − 10 → accepted | 0 | (policy walk) || dispatch | openrouter | — | — |
-| "the poll carries the Go key and no identity reaches a log" | policy-go | fresh @ T0 − 10 → accepted | 0 | rail: opencode || dispatch | opencode | — | — |
 | "no headroom block keeps today's admission ⚖" | policy-default | none | 0 | rail: opencode || dispatch | opencode | — | — |
 | "a headroom block with no usage URL sends no poll: the Go rail answers quota-unknown ⚖" | policy-go, no usage URL | none | 0 | rail: opencode || defer | — | quota-unknown | 60 |
+
+| description | observable | expected |
+|---|---|---|
+| "the poll carries the Go key and no identity reaches a log" | poll authorization | Bearer <the Go key> |
+| "the poll carries the Go key and no identity reaches a log" | identity in log lines | none |
 
 The poll's request carries `authorization: Bearer <the Go key>`. The answer's fields beyond `usage` are
 never read, stored or logged. Each outcome is logged as one line (`opencode usage poll: <outcome>`),

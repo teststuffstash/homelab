@@ -469,7 +469,6 @@ GO_ROWS = [
      "fresh @ T0 − 20 → accepted; rolling resets T0 − 15, others fresh @ T0 − 10 → quota-invalid", 0, "rail: opencode", "dispatch", "opencode", "—", "—"),
     ("a limited Go rail is skipped, the walk continues", "policy-go",
      "rolling 96 % resets T0 + 1000, others fresh @ T0 − 10 → accepted", 0, "(policy walk)", "dispatch", "openrouter", "—", "—"),
-    ("the poll carries the Go key and no identity reaches a log", "policy-go", "fresh @ T0 − 10 → accepted", 0, "rail: opencode", "dispatch", "opencode", "—", "—"),
     ("no headroom block keeps today's admission ⚖", "policy-default", "none", 0, "rail: opencode", "dispatch", "opencode", "—", "—"),
     ("a headroom block with no usage URL sends no poll: the Go rail answers quota-unknown ⚖", "policy-go, no usage URL", "none", 0,
      "rail: opencode", "defer", "—", "quota-unknown", 60),
@@ -496,9 +495,36 @@ async def test_go_headroom(settings, secrets, store, clock, reviews, pods, go_us
             doc = await _admit(gw, GO_BODIES[body])
         _verdict(doc, {"decision": decision, "rail": _cell(rail), "reason": _cell(reason), "retry_after_s": _cell(retry_after_s)})
         then_eq("usage requests sent", len(go_usage.calls), len(GO_POLLS[polls]))
-        if go_usage.calls:
-            then_eq("poll authorization", go_usage.calls[-1].headers["authorization"], f"Bearer {GO_KEY}")
-        with then("no identity value reaches a log line"):
-            assert not any(v in caplog.text for v in DUMMY_IDENTITY.values()), "an identity value reached a log"
     finally:
         await client.aclose()
+
+
+POLL_CASE = "the poll carries the Go key and no identity reaches a log"
+
+
+async def _go_poll_once(settings, secrets, store, clock, reviews, pods, go_usage, caplog):
+    path, url = GO_POLICIES["policy-go"]
+    app, client = _go_app(settings, secrets, store, clock, reviews, pods, go_usage, path, url)
+    caplog.set_level(logging.INFO)
+    world(policy=path.stem, upstream="upstream-ok", note=f"{POLL_CASE}: one poll, the answer carries a dummy identity")
+    try:
+        clock.t = T0 - 10
+        go_usage.doc = _usage_doc(FRESH)
+        with given("one usage poll answers a fresh reading that carries a dummy identity"):
+            await app.state.go_usage.poll()
+    finally:
+        await client.aclose()
+
+
+# the observable table's two rows share one description — one test per observable, both keyed by it
+@pytest.mark.parametrize(("observable", "expected"), [("poll authorization", "Bearer <the Go key>")], ids=[POLL_CASE])
+async def test_go_poll_authorization(settings, secrets, store, clock, reviews, pods, go_usage, caplog, observable, expected):
+    await _go_poll_once(settings, secrets, store, clock, reviews, pods, go_usage, caplog)
+    then_eq(observable, go_usage.calls[-1].headers["authorization"], expected.replace("<the Go key>", GO_KEY))
+
+
+@pytest.mark.parametrize(("observable", "expected"), [("identity in log lines", "none")], ids=[POLL_CASE])
+async def test_go_poll_identity_not_logged(settings, secrets, store, clock, reviews, pods, go_usage, caplog, observable, expected):
+    await _go_poll_once(settings, secrets, store, clock, reviews, pods, go_usage, caplog)
+    leaked = [k for k, v in DUMMY_IDENTITY.items() if v in caplog.text]
+    then_eq(observable, ",".join(leaked) or "none", expected)
