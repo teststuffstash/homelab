@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The tier-evidence CLI (GW-MODEL-TIERS) — the thin shell over `agent_gateway.tiers`:
 
-  devbox run tiers -- snapshot --capability C --go-catalog G --openrouter-catalog O --anthropic-aliases A [--codex-candidates X] [-o benchmarks.json]
+  devbox run tiers -- snapshot --capability C --go-catalog G --openrouter-catalog O --anthropic-aliases A [--codex-candidates X] [--manual M] [-o benchmarks.json]
   devbox run tiers -- derive   [--benchmarks B] [--policy P]      print {rail: {tier: [ids]}} (+ the undecided tiers on stderr)
   devbox run tiers -- check    [--benchmarks B] [--policy P]      exit 1 + the mismatches when a list is not the derivation;
                                                                   an UNDECIDED tier (no priced candidate) is named, never a mismatch
@@ -9,7 +9,9 @@
 
 Defaults: the deployed files under argocd/resources/agent-gateway/ (this is the monorepo's gateway/).
 `snapshot`'s inputs are gathered by scripts/benchmarks-snapshot.sh; the subscription rail's
-candidate aliases are an argument (ruling 4) — no model id lives in code.
+candidate aliases are an argument (ruling 4) — no model id lives in code. `--manual` names the
+committed manual benchmark rows (benchmarks-manual.json): a row scores only an id the feed lacks; a
+row the feed has caught up with is reported RETIRED (delete it); a malformed file exits 2, nothing written.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agent_gateway.config import tiers_policy
-from agent_gateway.tiers import apply_text, build_snapshot, check, derive, undecided
+from agent_gateway.tiers import ManualError, apply_text, build_snapshot, check, derive, undecided
 
 HERE = Path(__file__).resolve().parent
 DEPLOY = HERE.parent.parent / "argocd" / "resources" / "agent-gateway"
@@ -41,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     snap.add_argument("--openrouter-catalog", required=True, help="the gateway's GET /catalog/openrouter answer (the selected endpoint prices)")
     snap.add_argument("--anthropic-aliases", required=True, help="comma-separated `claude/<alias>` policy ids (ruling 4)")
     snap.add_argument("--codex-candidates", default="", help="comma-separated `codex/<id>` policy ids — the enrolled account's model evidence (FU-270)")
+    snap.add_argument("--manual", default=None, help="the manual benchmark rows (benchmarks-manual.json): scores for ids the feed does not carry yet")
     snap.add_argument("-o", "--out", default=str(DEPLOY / "benchmarks.json"))
     for name in ("derive", "check", "apply"):
         p = sub.add_parser(name)
@@ -50,13 +53,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if a.cmd == "snapshot":
         now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-        doc = build_snapshot(capability=_load(a.capability), go_catalog=_load(a.go_catalog),
-                             openrouter_catalog=_load(a.openrouter_catalog),
-                             anthropic_aliases=[x for x in a.anthropic_aliases.split(",") if x], snapshot_at=now,
-                             codex_candidates=[x for x in a.codex_candidates.split(",") if x])
+        try:
+            doc = build_snapshot(capability=_load(a.capability), go_catalog=_load(a.go_catalog),
+                                 openrouter_catalog=_load(a.openrouter_catalog),
+                                 anthropic_aliases=[x for x in a.anthropic_aliases.split(",") if x], snapshot_at=now,
+                                 codex_candidates=[x for x in a.codex_candidates.split(",") if x],
+                                 manual=_load(a.manual) if a.manual else None)
+        except ManualError as e:
+            print(f"snapshot: {a.manual} refused — {e}; nothing written", file=sys.stderr)
+            return 2
         Path(a.out).write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
         counts = {rail: f"{sum(1 for r in rows.values() if r['aa_id'])}/{len(rows)} benched, {sum(1 for r in rows.values() if r['out_price'] is not None)} priced"
                   for rail, rows in doc["rails"].items()}
+        if hand := doc["sources"]["capability"].get("manual"):
+            print(f"snapshot: manual rows scoring a candidate (the feed lacks the id): {hand['used'] or 'none'}")
+            if hand["retired"]:
+                print(f"snapshot: manual rows RETIRED — the feed carries the id now, its scores stand; delete them from {a.manual}: {hand['retired']}", file=sys.stderr)
         print(f"snapshot: {a.out} — capability {doc['sources']['capability']['rows']} rows pulled {doc['sources']['capability']['pulled_at']}; {counts}")
         return 0
 

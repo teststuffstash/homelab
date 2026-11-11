@@ -187,6 +187,8 @@ a hand edit fails the suite. A tier with no priced candidate (the openrouter rai
 eligible cell) is **undecided**: its deployed list stands, `apply` refuses to write it.
 *Score band* here is the `tiers.bands` fraction, not the ADR-104 curation band of
 [`docs/glossary.md`](../../docs/glossary.md) (`regular` / `premium` / `ultra` / `instrument`).
+A **manual benchmark row** (`benchmarks-manual.json`) is a hand-entered score for an id the feed
+does not carry yet — it scores only until the feed has the id, then it is retired.
 Refreshed by hand (`scripts/benchmarks-snapshot.sh`), its age a gauge the `TierEvidenceStale`
 alert reads; the fixture worlds carry the block but keep their fixture lists.
 
