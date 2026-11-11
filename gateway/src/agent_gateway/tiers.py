@@ -22,7 +22,8 @@ fractions of the rail's top score, the cap — are the policy's `tiers` block (`
   the row's price × a ride's output tokens ÷ its clean-ride rate, plus the strike overhead per
   failed ride — the `tiers.cost` terms; then input price, score descending, id) and capped.
   The subscription rail has no price: score ascending is its cost proxy. An unbenched
-  candidate, or an unpriced one on a priced rail, never tiers. A row's price is the SELECTED
+  candidate, an unpriced one on a priced rail, or a benched one with no value on the score
+  axis (`unscored` names them — the feed scores a row on some axes and not others) never tiers. A row's price is the SELECTED
   endpoint's on the openrouter rail (null until a cell passed the entry canary) and the plan's
   discounted list price on the Go rail (`capacity.go_pricing`).
 - `check`: the deployed lists EQUAL the derivation, order included — a hand edit fails; a tier
@@ -217,6 +218,14 @@ def derive(benchmarks: dict, tiers: TiersPolicy) -> dict[str, dict[str, list[str
             lists[tier] = sorted(eligible, key=key)[:tiers.cap]
         out[rail] = lists
     return out
+
+
+def unscored(benchmarks: dict, tiers: TiersPolicy) -> dict[str, list[str]]:
+    """`{rail: [policy ids]}` that join an AA row carrying no value on the score axis: benched, yet
+    in no pool and so in no tier. Reported by `check` and `derive` — out of the pool, never out of sight."""
+    out = {rail: sorted(pid for pid, r in rows.items() if r.get("aa_id") and not isinstance(r.get(tiers.score), (int, float)))
+           for rail, rows in benchmarks["rails"].items()}
+    return {rail: ids for rail, ids in out.items() if ids}
 
 
 def _lists(models) -> dict[str, list[str]]:
