@@ -43,7 +43,7 @@ answer 200 (no snapshot = empty rows, never an error) and carry no credential, l
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | `output` (the view, its model rows), `$defs.config_snapshot.models[].dialect`, `$defs.docs_snapshot` (`plans`, `plan_fees`, `peak_*`, `window_shares`); the policy's `rails.opencode.plan` and the vendor facts a policy may no longer hold | — (the loader refuses a policy without a plan, or carrying a vendor fact) | v0 — split from GW-CATALOG-GO 2026-11-06 ⚖: what the two reads SAY (the dialect, the limits, the fees, the cost rows, the view's shape) and the policy's plan declaration |
 | [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert); `⚑ gap (2026-11-06, PR #3187 → work #3191)`: the ranking's `other` bucket and a `:free` family have no fixture row (the "⚑ gap" row below) |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | `$defs.canary_block`, `$defs.cell_state`, `openrouter_output.canary`, `openrouter_output.models[].endpoints[].state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — split from GW-CATALOG-OR 2026-11-06 ⚖: the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed) |
-| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); metrics `families.gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured (the "⚑ gap" rows below) |
+| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.manual_benchmarks` (the committed `benchmarks-manual.json`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); metrics `families.gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list; `tiers snapshot` exits 2 on a malformed manual benchmark file) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured (the "⚑ gap" rows below) |
 | [GW-RAIL-CHOICE](#gw-rail-choice) | sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`; `$defs.rides` (the cell's clean-ride evidence the choice reads) | — | v0 — split from GW-MODEL-TIERS 2026-11-06 ⚖: the admission's rail choice between a model's twin cells on two rails (homelab#2743); `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the Go cell's clean-rate prior (the "⚑ gap" row below) |
 
 ## Flow overview
@@ -984,6 +984,7 @@ admission chooses the rail by the same unit.
 ```mermaid
 flowchart LR
   AA["AA capability rows\n(the old proxy's weekly pull)"] --> BJ["benchmarks.json\n(benchmarks-snapshot.sh)"]
+  MB["manual benchmark rows\n(only ids the feed lacks)"] --> BJ
   GV["GET /catalog/opencode\n(the Go price)"] --> BJ
   OV["GET /catalog/openrouter\n(selected endpoint's price, rides)"] --> BJ
   BJ --> J["join_aa_id\n(a rule, never a table)"]
@@ -997,6 +998,7 @@ flowchart LR
   AD -->|yes| RC["rail choice: the cheaper twin\ncell per clean ride walks first"]
   AD -->|no| RO["the role's rail order"]
   click AA href "#the-rulings" "The rulings" _self
+  click MB href "#manual-benchmark-rows" "Manual benchmark rows" _self
   click GV href "#the-go-price" "The Go price" _self
   click OV href "#the-rulings" "The rulings — the candidates per rail" _self
   click BJ href "#the-snapshots-shape" "The snapshot's shape" _self
@@ -1041,6 +1043,18 @@ parts, each a reviewable file in git:
   face — the 10-18 snapshot read $0.144/M against a live $0.080/M a day later), or when no
   snapshot is mounted (`argocd/resources/agent-gateway/prometheusrule.yaml`, fixture
   `tier-evidence.promtool-test`).
+- **The manual benchmark rows** ⚖ — `argocd/resources/agent-gateway/benchmarks-manual.json`
+  (`$defs.manual_benchmarks`; operator ruling 2026-11-11): hand-entered Artificial Analysis scores
+  for a model the feed has not caught up with (the weekly pull lags a release). `tiers snapshot
+  --manual` reads it (`benchmarks-snapshot.sh` passes the committed file; the gateway never mounts
+  it). **A manual row scores ONLY an id the feed does not carry**: the moment the feed has the id
+  the feed's scores stand and the row is reported **retired** (`sources.capability.manual.retired`,
+  and the run says to delete it) — the file cannot shadow real evidence. A snapshot row scored
+  from one says so: `score_source: manual` with `score_source_url` and `score_read_at` (optional
+  row keys, absent on a feed-scored row). The join stays the rule below: a manual id is one more
+  AA id it runs over, never a policy-id → row pair. The file is strict — every row names its
+  source url and the day it was read, or the whole file is refused and nothing is written
+  ([§Manual benchmark rows](#manual-benchmark-rows)).
 - **The rules** — the policy's top-level `tiers` block (`$defs.tiers_block`), which the loader
   validates: `score` (one of `intelligence` | `coding` | `agentic`), `bands` (every tier, a
   fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer), and **`cost`** —
@@ -1172,7 +1186,7 @@ derived lists; `undecided?` = `undecided()`; `check?` = `check()`'s mismatches; 
 
 The join to the AA row is a rule, not a table ⚖: AA ids are `vendor/model` with dotted versions; Go
 ids are bare: join on the part after the vendor `/` with `-N-N` ↔ `-N.N` normalisation, a
-`:variant` suffix dropped, the vendor kept when the policy id names one; the three aliases join the
+`:variant` suffix dropped, the vendor kept when the policy id names one; a `claude/<alias>` joins the
 NEWEST `anthropic/claude-<alias>-<version>` row by version; no match, or more than one, =
 unbenched. Legend: `aa_ids` = the AA ids present; `joins?` = the row joined (`none` = unbenched).
 
@@ -1192,6 +1206,43 @@ unbenched. Legend: `aa_ids` = the AA ids present; `joins?` = the row joined (`no
 | an alias with no row of its family is unbenched | claude/haiku | anthropic/claude-opus-5, anthropic/claude-opus-5.5, anthropic/claude-opus-4.1 | none |
 | an openrouter id keeps its vendor | deepseek/deepseek-v4-flash | deepseek/deepseek-v4-flash, other/deepseek-v4-flash | deepseek/deepseek-v4-flash |
 | a `:free` variant joins its family ⚖ | inclusionai/ling-3.0-flash:free | inclusionai/ling-3.0-flash | inclusionai/ling-3.0-flash |
+
+#### Manual benchmark rows
+
+Legend: `feed` = the capability rows the snapshot is cut from (`id = intelligence`); `manual` = the
+manual file's rows (`id = intelligence`, each read at `https://bench.example/fx` on `2027-01-10`;
+`none` = no file); `policy_id` = the one anthropic candidate; `aa_id?` / `intelligence?` = its
+snapshot row; `score_source?` = `manual · <score_source_url> · <score_read_at>` when the row carries
+the three keys, `feed` when it carries none of them; `retired?` = `sources.capability.manual.retired`
+(`none` = empty, or no file).
+
+| description | feed | manual | policy_id | aa_id? | intelligence? | score_source? | retired? |
+|---|---|---|---|---|---|---|---|
+| a manual row scores an id the feed lacks ⚖ | anthropic/claude-fx-5.1 = 50 | anthropic/claude-fx-5.2 = 65 | claude/fx | anthropic/claude-fx-5.2 | 65 | manual · https://bench.example/fx · 2027-01-10 | none |
+| the feed wins the moment it carries the id: the manual row is retired ⚖ | anthropic/claude-fx-5.1 = 50, anthropic/claude-fx-5.2 = 63 | anthropic/claude-fx-5.2 = 65 | claude/fx | anthropic/claude-fx-5.2 | 63 | feed | anthropic/claude-fx-5.2 |
+| no manual file: the feed alone scores | anthropic/claude-fx-5.1 = 50 | none | claude/fx | anthropic/claude-fx-5.1 | 50 | feed | none |
+| a manual row for another family marks no row | anthropic/claude-fx-5.1 = 50 | anthropic/claude-fy-2.0 = 65 | claude/fx | anthropic/claude-fx-5.1 | 50 | feed | none |
+| a manual row older than the feed's newest does not score: the join is still newest-by-version | anthropic/claude-fx-5.2 = 63 | anthropic/claude-fx-5.1 = 65 | claude/fx | anthropic/claude-fx-5.2 | 63 | feed | none |
+
+#### The manual file's shape
+
+Legend: `manual` = the file — `the committed file` (`benchmarks-manual.json`), or an edit to a
+one-row document `{rows: [{id: anthropic/claude-fx-5.2, intelligence: 65, coding: null, agentic:
+null, source_url: https://bench.example/fx, read_at: 2027-01-10, note: fx}]}` (`as is` = unchanged;
+`x = v` sets, `x dropped` deletes, `rows.0 twice` repeats the row); `load?` = `parse_manual`'s answer.
+
+| description | manual | load? |
+|---|---|---|
+| the committed file loads | the committed file | loads |
+| a complete row loads | as is | loads |
+| a score with no source is refused ⚖ | rows.0.source_url dropped | refused, naming source_url |
+| a score with no date read is refused ⚖ | rows.0.read_at = "last week" | refused, naming rows[0].read_at |
+| a row with no score is refused | rows.0.intelligence = null | refused, naming no score |
+| a score that is not a number is refused | rows.0.intelligence = "65" | refused, naming rows[0].intelligence |
+| an id that is not vendor/model is refused | rows.0.id = "fx" | refused, naming rows[0].id |
+| one id twice is refused | rows.0 twice | refused, naming duplicate |
+| an unknown key is refused | rows.0.weight = 2 | refused, naming weight |
+| an unknown top-level key is refused | scores = [] | refused, naming scores |
 
 #### The tiers block's shape
 
@@ -1235,7 +1286,7 @@ subscription already pays for) — each at the Go price (`promise` / `measured` 
 unpriced before the fee is read); openrouter = the OpenRouter catalog's `vendor/model` ids
 ([GW-CATALOG-OR](#gw-catalog-or)) at the SELECTED endpoint's price (basis `endpoint`, with the
 provider) or unpriced — never the headline, never the old proxy's table; anthropic = the policy's
-three `claude/` aliases (an argument of the snapshot script, never code), unpriced; codex = the
+`claude/` aliases (an argument of the snapshot script, never code), unpriced; codex = the
 `codex/<id>` ids the snapshot script is handed (`CODEX_CANDIDATES` — the ENROLLED account's model
 evidence: its catalog plus one completed turn per id, never a bundled catalog; 2026-10-29 the newest
 of each family, [the spike §Account model evidence](../../../docs/spikes/codex-subscription-rail.md#account-model-evidence--2026-10-29-homelab3016)),
@@ -1272,7 +1323,7 @@ undecided); `edit` = a change to the policy before the check; `mismatches?` = `c
 
 | description | snapshot | shape? |
 |---|---|---|
-| the snapshot is the schema's shape | committed | exactly the schema's required keys |
+| the snapshot is the schema's shape | committed | the schema's required keys, plus only its optional ones |
 
 #### The evidence age
 
@@ -1386,6 +1437,21 @@ Legend: `request_rows?` = the session's request rows as `provider status`; `ride
 | description | arrange | decision? | rail? | rail_choice? | request_rows? | rides? |
 |---|---|---|---|---|---|---|
 | the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell ⚖ | the Go window near its share; the openrouter fake's deepinfra answers 500 | dispatch | openrouter | openrouter over opencode: headroom | deepinfra 500, atlas-cloud 200 | atlas-cloud 1 / 1, deepinfra 0 / 0 |
+
+#### A preference for the strongest
+
+⚖ An admission that carries `prefer: strongest`
+([GW-SESSIONS-ADMIT §The preferred end of the list](sessions.md#the-preferred-end-of-the-list))
+makes no rail choice: the choice puts the CHEAPER twin first, and that body asked for the other end
+of the list. The role's rail order stands, each rail's list is walked from its end, `rail_choice` is
+`null` and `gateway_rail_choice_total` counts nothing. Legend: as [§The rail choice](#the-rail-choice);
+`prefer` = the body's, `(policy)` when it carries none.
+
+| description | arrange | tier | prefer | decision? | rail? | model? | rail_choice? | counted? |
+|---|---|---|---|---|---|---|---|---|
+| no preference: the twin's cheaper rail is chosen | the Go window near its share | light | (policy) | dispatch | openrouter | M | openrouter over opencode: headroom | rail="openrouter",reason="headroom" 1 |
+| strongest makes no rail choice: the role's order, each list from its end ⚖ | the Go window near its share | light | strongest | dispatch | openrouter | M | null | none |
+| strongest with both twins free: the role's first rail, uncounted ⚖ | nothing | light | strongest | dispatch | opencode | MG | null | none |
 
 #### Named gaps — the rail choice
 
