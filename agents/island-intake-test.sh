@@ -514,8 +514,8 @@ gw_intake_run() { # <reply-kind> [knob]
 }
 rm -rf "$TS/homelab/intake-gateway-2026-10-26/intake-r1-e"   # un-rule the hold row's inputs: these rows need a sitting
 gw_intake_run dispatch; rc=$?
-grep -qF '"stack":"platform","role":"coordinator","task":"intake-gateway-' "$TMP/curl.calls" && grep -qF '"tier":"heavy"' "$TMP/curl.calls" \
-  && ok "dispatch → POST /sessions as stack platform, role coordinator, tier heavy, task intake-<island>-<day>" \
+grep -qF '"stack":"platform","role":"coordinator","task":"intake-gateway-' "$TMP/curl.calls" && grep -qF '"tier":"heavy"' "$TMP/curl.calls" && grep -qF '"prefer":"strongest"' "$TMP/curl.calls" \
+  && ok "dispatch → POST /sessions as stack platform, role coordinator, tier heavy, prefer strongest, task intake-<island>-<day>" \
   || bad "gw admit body" "$(grep sessions "$TMP/curl.calls" | head -2) | $(tail -3 "$TMP/run.log")"
 grep -qx "model gw-intake-model" "$TMP/claude.calls" && ok "…the sitting runs on the GATEWAY's model (rail prefix stripped)" || bad "gw model" "$(cat "$TMP/claude.calls")"
 grep -qxF "env ANTHROPIC_BASE_URL=$I_GW_BASE ANTHROPIC_AUTH_TOKEN=gws_INTAKETOKEN" "$TMP/claude.calls" \
