@@ -1,6 +1,6 @@
 """GW-SESSIONS-ADMIT — POST /sessions: may this unit run now, and on which cell (specs/endpoints/sessions.md
 §Admission → GW-SESSIONS-ADMIT). The tables there — the policy walk, the explicit overrides, the
-harness that follows the cell (world policy-codex), what is an HTTP error, counting — are this
+harness that follows the cell and the preferred end of the list (world policy-codex), what is an HTTP error, counting — are this
 module's parametrize lists: header == argnames, description == id (tests/_rows.py)."""
 
 from __future__ import annotations
@@ -201,6 +201,86 @@ async def test_the_env_follows_the_picked_harness(codex_app, codex_gw, clock, wo
     with when(f"POST /sessions {body} — no harness"):
         doc = await open_session(codex_gw, **body)
     expect({"harness": doc["harness"], "env_keys": ", ".join(doc["env"])}, harness=expected_harness, env_keys=expected_env_keys)
+
+
+# -- the preferred end of the list (world policy-codex: anthropic heavy = [sonnet, opus, fable]) ------
+REVIEW_TASK = "specs-review homelab#2700"
+FABLE_STRUCK = "harness-gave-up on (anthropic, claude/fable)"
+PREFER = [
+    pytest.param("policy-codex", "reviewer", "heavy", POLICY, "0/0/0", DASH, "dispatch", "anthropic", "claude/sonnet",
+                 id="no preference: the list is walked from its head"),
+    pytest.param("policy-codex", "reviewer", "heavy", "cheapest", "0/0/0", DASH, "dispatch", "anthropic", "claude/sonnet",
+                 id="cheapest is the default, spelled"),
+    pytest.param("policy-codex", "reviewer", "heavy", "strongest", "0/0/0", DASH, "dispatch", "anthropic", "claude/fable",
+                 id="strongest takes the last model of the rail's list ⚖"),
+    pytest.param("policy-codex", "reviewer", "heavy", "strongest", "0/0/0", FABLE_STRUCK, "dispatch", "anthropic", "claude/opus",
+                 id="the strongest is struck: the next-strongest is taken, not the cheapest ⚖"),
+    pytest.param("policy-codex", "reviewer", "standard", "strongest", "5/0/0", DASH, "dispatch", "opencode", "opencode-go/claude-haiku-5-5",
+                 id="the role's rail order stands: the next rail's list is walked from its end too ⚖"),
+    pytest.param("policy-codex", "reviewer", "standard", "strongest", "0/0/0", DASH, "dispatch", "anthropic", "claude/sonnet",
+                 id="a one-model list is the same from either end"),
+]
+
+
+@pytest.mark.parametrize(("world", "role", "tier", "prefer", "active", "strikes",
+                          "expected_decision", "expected_rail", "expected_model"), PREFER)
+async def test_the_preferred_end_of_the_list(codex_app, codex_gw, clock, world, role, tier, prefer, active, strikes,
+                                             expected_decision, expected_rail, expected_model):
+    enter_world(world)
+    inputs(role=role, tier=tier, prefer=prefer, active=active, strikes=strikes)
+    await codex_ready(codex_app, clock)
+    await fill_rails(codex_gw, active, CODEX_RAILS)
+    asked = {"stack": "platform", "task": REVIEW_TASK, **body_of(role=role, tier=tier, prefer=prefer)}
+    with given(f"strikes = {strikes}"):
+        if strikes == FABLE_STRUCK:  # the task's attempt 1, admitted with the same preference, ends harness-gave-up (cell scope)
+            with quiet():
+                first = await open_session(codex_gw, **asked)
+                o = await codex_gw.post(f"/sessions/{first['session']['id']}/outcome", json={"class": "harness-gave-up"})
+                await codex_gw.delete(f"/sessions/{first['session']['id']}")
+            attach_json(f"arranged strike: harness-gave-up on ({first['rail']}, {first['model']})", o.json())
+            assert (first["rail"], first["model"]) == ("anthropic", "claude/fable"), first
+            assert o.json()["strike"] == {"class": "harness-gave-up", "scope": "cell"}, o.text
+    body = {**asked, **({"attempt": 2} if strikes != DASH else {})}
+    with when(f"POST /sessions {body}"):
+        r = await codex_gw.post("/sessions", json=body)
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    expect(doc, decision=expected_decision, rail=expected_rail, model=expected_model)
+    shape(doc)
+
+
+# `body` cell → the request: a well-formed body with the named keys set.
+CANARY_CELL = {"model": "deepseek/deepseek-v4.1-flash", "provider": "deepinfra"}
+PREFER_BODIES = {
+    "worker, prefer: fastest": {"role": "worker", "prefer": "fastest"},
+    "worker, prefer: 1": {"role": "worker", "prefer": 1},
+    "prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra}": {"role": "prober", "canary": CANARY_CELL},
+    "prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra}, prefer: strongest": {"role": "prober", "canary": CANARY_CELL, "prefer": "strongest"},
+    "prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra}, prefer: cheapest": {"role": "prober", "canary": CANARY_CELL, "prefer": "cheapest"},
+}
+PREFER_REFUSED = [
+    pytest.param("policy-default", "worker, prefer: fastest", 400, "malformed-body", DASH,
+                 id="a preference outside the enum"),
+    pytest.param("policy-default", "worker, prefer: 1", 400, "malformed-body", DASH,
+                 id="a preference that is not a string"),
+    pytest.param("policy-default", "prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra}", 200, DASH, "defer",
+                 id="a canary without a preference is answered as a canary"),
+    pytest.param("policy-default", "prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra}, prefer: strongest", 400, "malformed-body", DASH,
+                 id="a canary names its own cell: a preference with it is refused ⚖"),
+    pytest.param("policy-default", "prober, canary: {deepseek/deepseek-v4.1-flash, deepinfra}, prefer: cheapest", 400, "malformed-body", DASH,
+                 id="the default spelled on a canary is refused too ⚖"),
+]
+
+
+@pytest.mark.parametrize(("world", "body", "expected_status", "expected_code", "expected_decision"), PREFER_REFUSED)
+async def test_a_preference_the_body_may_not_carry(gw, world, body, expected_status, expected_code, expected_decision):
+    enter_world(world)
+    inputs(body=body)
+    req = {"stack": "platform", "task": TASK, **PREFER_BODIES[body]}
+    with when(f"POST /sessions {req}"):
+        r = await gw.post("/sessions", json=req)
+    view = {"status": r.status_code, "code": err(r) if r.status_code >= 400 else None, "decision": r.json().get("decision")}
+    expect(view, status=expected_status, code=expected_code, decision=expected_decision)
 
 
 # -- what is an HTTP error, and what is not ---------------------------------------------------------
