@@ -166,6 +166,40 @@ async def test_rail_choice(gw, app, store, upstreams, arrange, tier, expected_de
             arrange={"actual": arrange}, tier={"actual": tier})
 
 
+# ── A preference for the strongest: no choice ───────────────────────────────────────────────
+PREFER_ROWS = [
+    pytest.param(NEAR_SHARE, "light", "(policy)", "dispatch", "openrouter", "M", "openrouter over opencode: headroom", 'rail="openrouter",reason="headroom" 1',
+                 id="no preference: the twin's cheaper rail is chosen"),
+    pytest.param(NEAR_SHARE, "light", "strongest", "dispatch", "openrouter", "M", "null", "none",
+                 id="strongest makes no rail choice: the role's order, each list from its end ⚖"),
+    pytest.param("nothing", "light", "strongest", "dispatch", "opencode", "MG", "null", "none",
+                 id="strongest with both twins free: the role's first rail, uncounted ⚖"),
+]
+
+
+@pytest.mark.parametrize(("arrange", "tier", "prefer", "expected_decision", "expected_rail", "expected_model", "expected_rail_choice", "expected_counted"),
+                         PREFER_ROWS, ids=[p.id for p in PREFER_ROWS])
+async def test_a_preference_for_the_strongest(gw, app, store, upstreams, arrange, tier, prefer, expected_decision, expected_rail, expected_model,
+                                              expected_rail_choice, expected_counted):
+    world(upstream="upstream-ok", note=f"{WORLD}; {arrange}")
+    task = "homelab-2743-choice"
+    with given(f"arrange = {arrange}; Go's promise $0.075/M vs deepinfra's $0.42/M at the prior rate"):
+        await _arrange(gw, app, store, upstreams, arrange, task)
+    body = {"stack": "platform", "role": "worker", "harness": "opencode", "task": task, "tier": tier, **({} if prefer == "(policy)" else {"prefer": prefer})}
+    with when(f"POST /sessions body {body} (tier = {tier} · prefer = {prefer})"):
+        r = await gw.post("/sessions", json=body)
+    doc = r.json()
+    short = {M: "M", MG: "MG"}
+    verdict(f"decision = {expected_decision} · rail = {expected_rail} · model = {expected_model} · rail_choice = {expected_rail_choice} · counted = {expected_counted}",
+            expected_decision={"expected": expected_decision, "actual": doc.get("decision")},
+            expected_rail={"expected": expected_rail, "actual": doc.get("rail") or "none"},
+            expected_model={"expected": expected_model, "actual": short.get(doc.get("model"), doc.get("model") or "none")},
+            expected_rail_choice={"expected": expected_rail_choice, "actual": _choice_cell(doc)},
+            expected_counted={"expected": expected_counted, "actual": await _choice_series(gw)},
+            status={"expected": 200, "actual": r.status_code},
+            arrange={"actual": arrange}, tier={"actual": tier}, prefer={"actual": prefer})
+
+
 FAILOVER_ROWS = [
     pytest.param(f"{NEAR_SHARE}; the openrouter fake's deepinfra answers 500", "dispatch", "openrouter", "openrouter over opencode: headroom",
                  "deepinfra 500, atlas-cloud 200", "atlas-cloud 1 / 1, deepinfra 0 / 0",
