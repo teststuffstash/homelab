@@ -191,6 +191,13 @@ closed and the gap filed (docs/dependency-upgrades.md G12b, #2919).
   that one package (`"<pkg>": {"version": "<x.y.z>"}`), dropped once nixpkgs moves on.
   Files GENERATED from a pinned tool's output (today: the replay `gh-json-fields` allowlist) are
   re-rendered from the new lock on the same PR, so a tool bump does not red its own weekly PR (G12b).
+  **A locked build must be downloadable** (`scripts/lock-cache-check.sh`, homelab#3233): devbox
+  installs a locked store path from the binary cache and BUILDS it from source when no substituter
+  has it, so one uncached package turns every CI warm step into a compile that the runner's memory
+  limit kills. The weekly job puts such a package back to its previous lock entry (named in its own
+  PR body section; it retries next week), and `ci`'s first step runs the same check before the first
+  `devbox run`, so a lock from any other source reds in seconds with the package named. The remedy
+  is always the lock entry, never the runner's limit.
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates
   `FROM …@sha256`; a `customManagers` regex on the same line just produces "could not determine new
   digest" warnings. Removed.
