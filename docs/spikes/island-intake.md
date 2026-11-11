@@ -113,8 +113,42 @@ memory; homelab#3166, a retro report): both cite `argocd/resources/pushgateway/�
 What changed: the age-aware ownership rule (ADR-163), the `reread:` input with procedure step R
 and the `requeue` outcome, a wider live read set (in the [brief](../../gateway/intake.md)); the
 selector's `--source pile` and a dig match on the island's alerts and evidence paths; the cron
-running both sources in one sitting (§Open questions 1). The sitting's own results are recorded in
-the PR that follows this one.
+running both sources in one sitting (§Open questions 1).
+
+**The sittings (2026-11-11, two seat-run Fable subagents on the amended brief, apply; ~200k tokens,
+~9 min + ~2 min).** Ten inputs, then one more with a seat-supplied fact:
+
+| input | ruling | what decided it |
+|---|---|---|
+| #3108 (reread, blocked 10 d) | requeue | the ride record: work built, branch salvaged; the sibling ride #3119 passed the same gate 25 min later — the blocker was that ride's own |
+| #3180 (bot-filed) | queue | both gap rows live; every path `machine-merge` |
+| #3191 (operator login, 5 d) | queue, body extended | the deployed catalog carries `:free` candidates today; the body's claim about the fixtures was partly wrong and was corrected beside the original |
+| #3231 (reread) | seat, rewritten | the one-off re-cut was the seat's; the residue is the missing schedule, whose runner and identity are a human fact |
+| #3145 (operator login) | seat | no recorded `/models` answer, no candidate rule |
+| #2650 (reread) | unchanged, then split | the first sitting did not connect the 10-22 live canary to done-when (b); told to verify it on the page, the second filed the codex half as #3258 (queue) and narrowed #2650 to goose/opencode |
+| #2768, #2684, #2977 (rereads) | unchanged, no write | the ruling still pending; neither standing trigger fired |
+
+Graded against the seat's own dry-run over the same pile: the same ruling on 9 of 10; the miss
+(#2650) is the class "a done-when that already happened is recorded on the page under another
+name". All four queued issues closed by merge the same evening (#3260, #3261, #3263, #3264).
+
+**What the rides showed that the sittings could not:** three of the four finished their work and
+could not open a PR — the worker's `pr-open` gate selects a docker leg
+(`gateway-specs-site-e2e`) and a chart-fetch leg (`component-check`) that no worker pod can run.
+The seat opened those PRs by hand; the class fix is homelab#3262 (a gate whose environment is
+absent is a loud skip). Until it lands, a queue ruling on a `gateway/specs/**.md` change ends
+`agent/blocked` with the work done.
+
+**The cron, in-cluster (dry-run, 22:40Z):** the gateway served the sitting `claude/fable` (the
+admission's `prefer: strongest`, homelab#3266/#3271, over a heavy list that reads `[opus, fable]`
+after the 11-11 re-cut); the pile source fired with one member and one re-read (#2768,
+unchanged); the receipt carried both.
+
+**Facts the sittings lacked** (the read-set evidence): the identity that may run a scheduled
+re-cut; the ServiceAccounts in the listed bind namespaces (#2684's trigger); whether worker-pod
+egress blocks npm (#2650); `GET /sessions?task=` answers a non-judge caller only its own
+sessions, so the ride record is the read that works; §Island facts' pinned-process version had
+drifted from `gateway/specs/README.md`.
 
 ## Reading
 
