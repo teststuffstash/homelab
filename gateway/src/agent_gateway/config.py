@@ -17,6 +17,9 @@ from pathlib import Path
 
 RAILS = ("anthropic", "openrouter", "opencode", "codex")
 TIERS = ("light", "standard", "heavy")
+# GW-SESSIONS-ADMIT §The preferred end of the list: which end of a rail's ordered tier list the walk
+# starts from — the schema's `$defs.prefer` enum; the first is the default.
+PREFERENCES = ("cheapest", "strongest")
 HARNESSES = ("claude", "opencode", "goose", "codex")
 ROLES = ("worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher")
 DIALECTS = ("anthropic", "openai", "responses")

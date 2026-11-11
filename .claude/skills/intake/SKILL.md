@@ -36,8 +36,10 @@ islands and feeds it the inputs the selector cannot see. Design + evidence:
   `queue` cap).
 - **Scope = the platform claim's repos** (seat triage scope). A stack repo's pile belongs to its
   stack loop/jail — report its counts, never rule it.
-- **Operator-filed is human-filed.** The brief's "never close or fold a human-filed issue" binds the
-  seat too — the jail identity is the operator's. A close candidate there is one operator line.
+- **Operator-filed is rulable by age (ADR-163).** An issue under the operator's login is usually a
+  jail session's text: the brief's §Hard limits lets a sitting close or rewrite an old, stale one
+  on the evidence and edit a recent one lightly (a would-be close there is `seat`). Any OTHER
+  human's issue is never closed, folded or rewritten — one operator line.
 - **A loop-component design is `seat`, never `queue`** (the design-agents stop-and-ask trigger;
   [`docs/intake/agent-loop.md`](../../../docs/intake/agent-loop.md)).
 - **Subagents write nothing into `/workspace/homelab`** — downloads, bodies and reports go to the
@@ -70,8 +72,8 @@ islands and feeds it the inputs the selector cannot see. Design + evidence:
    one more sitting. A lacked fact that recurs across sittings is a facts-file edit (PR); a rule
    gap is a GAPS entry here.
 6. **Report** — to the operator only: the `seat` rulings grouped by the ONE ruling that unblocks
-   them (one ruling often clears several), the Goal verdicts owed, the human-filed close
-   candidates. Counts for the rest. A TICK-LOG entry (condition → command) is the next pass's
+   them (one ruling often clears several), the Goal verdicts owed, the close candidates on other
+   humans' and on recent operator-login issues. Counts for the rest. A TICK-LOG entry (condition → command) is the next pass's
    watermark.
 
 ## Pipeline
@@ -84,7 +86,9 @@ its own PR; the tracker/ADR corrections they find come back to the seat.
 ## Graduation
 
 The daily [`island-intake`](../../../agents/coordinator/island-intake-argo.yaml) CronWorkflow runs
-the gateway on the dig source. Wiring the issue pile and the other islands into it is the
-operator's ruling (spike §Open questions 1, 5); this skill is the hand-run until then, and its
-reports are the evidence (days from filing to `agent/queued`; `seat` rulings the operator answers
+the gateway on the dig source AND its issue pile, waits included (`intake-select.sh --source pile`:
+unruled issues + `agent/blocked` / `intake: seat` items re-read once their wait is days old). So
+this skill no longer hand-runs the gateway's pile; a gateway sitting here is for text inputs and
+for a pass the operator asks for. Wiring the other islands is the operator's ruling (spike §Open
+questions 5); this skill is their hand-run until then, and its reports are the evidence (days from filing to `agent/queued`; `seat` rulings the operator answers
 with "decidable from the island's text").

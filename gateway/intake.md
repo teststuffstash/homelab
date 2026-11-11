@@ -41,10 +41,17 @@ The dispatch prompt names them:
 - `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`,
   `dig`) — prose someone wrote instead of an issue. **`dig` is the wired source:**
   [`agents/coordinator/island-intake-argo.yaml`](../agents/coordinator/island-intake-argo.yaml)
-  runs this sitting unattended each morning over the [deep dig](../docs/agents/roles.md)'s `cause-found` findings that name
-  the island (`scripts/intake-select.sh --source dig`); its prompt adds the receipt protocol. A text input becomes an issue (`file`) only when its
+  runs this sitting unattended each morning over the [deep dig](../docs/agents/roles.md)'s `cause-found` findings on
+  the island's alerts (`scripts/intake-select.sh --source dig`); its prompt adds the receipt protocol. A text input becomes an issue (`file`) only when its
   ruling would be `queue`, `goal` or `seat`; a `standing` or `close` ruling on text is
   report-only — the source record keeps it (one home per fact), the report says why.
+- `reread:` `<owner/repo>#<n>` … — island issues that an earlier ruling left waiting on a human
+  (`agent/blocked`, or a standing `intake: seat`) for `INTAKE_REREAD_AGE_D` days or more
+  (`scripts/intake-select.sh --source pile`). A wait is a claim about ONE fact; facts move. You
+  re-verify that fact (§The procedure, step R) and either change the ruling or leave the item
+  untouched — a re-read that changes nothing writes nothing. The morning sitting gets these
+  together with its `dig` inputs and the island's unruled `issues:`; there an unchanged wait is
+  the receipt line `unchanged`, which keeps it from being re-read for `INTAKE_REREAD_EVERY_D` days.
 - `mode: dry-run | apply`. Dry-run writes NOTHING to GitHub; the report carries every body and
   label you WOULD write, verbatim, so a reader can grade the ruling before it is live.
 
@@ -59,10 +66,14 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 | The spec page(s) the item names — the requirement section + the page's index row, nothing more | live-verify the claim (is the flag still there? does the row still say that?) |
 | Open issues of the repo whose title or `Touches` name the same requirement/page; PRs merged since the item was filed that touch the same page | dedup, supersession |
 | Open `task/goal` issues whose `## Acceptance` names the item's surface | a covering Goal (ADR-122 (4): a sprout binds INTO its container) |
-| For a `dig` input: the alert's live state (Alertmanager) and the log lines its annotation names | is the condition still there, and is it still THIS cause (a re-fire on a new cause is the next dig's, not this ruling's) |
+| The alert's live state (Alertmanager `/api/v2/alerts`) and the gauge it reads (Prometheus `/api/v1/query`), for any input that names an alert or a metric; for a `dig` input also the log lines its annotation names | is the condition still there, since when, and is it still THIS cause (a re-fire on a new cause is the next dig's, not this ruling's) |
+| The ride record of an issue a worker touched: `s3://agent-transcripts/homelab/issue-<n>/<run>/run.log` + `manifest.json` (the run log's tail carries the worker's structured report). The session `.jsonl` only when the run log does not answer the question | what the ride built, what stopped it, which branch holds the work |
+| Loop-worker PRs on the island merged since a block was written (author `app/homelab-agents-1234`, bodies only) | is the blocker a fact about the island, or about that one ride |
+| The gateway's own read-only views: `GET /healthz`, `/catalog/opencode`, `/catalog/openrouter`, `/sessions?task=<task>` on `agent-gateway.agent-egress.svc:8080`; the deployed `policy.json` and `benchmarks.json` under `argocd/resources/agent-gateway/` | live-verify a claim about the catalog, the store, a session's outcome; test a `standing` ruling's own trigger |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
 
-Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islands, the gateway's
+Every live read is a GET. A probe that errors is not an empty answer: say which read failed and
+rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islands, the gateway's
 `src/` (you judge the contract, not the code). **A fact you need and cannot find in that set is a
 `seat` outcome, never a guess** — write the missing fact into the comment; it is the finding.
 
@@ -72,11 +83,12 @@ Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islan
 |---|---|---|
 | **queue** | one ride finishes it: ONE deliverable, one PR, a bounded `Touches` (≲ 5 paths), key rows on ≤ 2 requirements, every path `machine-merge` | body rewritten to the shape below (§A queue-ready body), labels `agent-fix` + `task/fix` or `task/build` + `agent/queued`; one `intake: queue — <reason>` comment |
 | **goal** | real work the island wants that no single ride finishes (≥ 2 deliverables, or a design pin children elaborate), and the whole fits the Goal ceiling (§A bot-authored Goal) | the Goal + its branch + 2–5 bound children (each queue-shaped) + dispositions + `goal-lint` PASS; `agent/queued` on the CHILDREN only; one `intake: goal — <reason>` comment on each absorbed input |
-| **seat** | a human fact is missing: a ruling the body says is pending, a credential, a maintenance window, an operator-only path (`classify_touches` → `codeowner-author`), a scope you cannot pin, a Goal above the ceiling, or a human-filed issue you would otherwise close | labels `agent-fix` + `agent/blocked`; ONE comment: `intake: seat — <what is needed, one line>` and, on its own line, `blocked-on: human` (the scan's suppression grammar, README §Blocked-on marker). **Comment only, no labels, when the body itself keeps the item out of the loop** ("not an agent-loop item", "the seat sequences it") — a human's lineage line outranks your label set |
-| **fold** | two or more inputs are one change (same requirement, same fix) | the SURVIVOR takes the merged body and its outcome; the others get `intake: fold → #<survivor>` and close as duplicate — bot-filed only (§Hard limits) |
-| **close** | the claim no longer holds (live-verified), the work merged since filing, or the honest answer is "leave the `⚑ gap` standing" and nothing live depends on it | `intake: close — <evidence: the line, the PR, the date>` and close (`not planned` for standing gaps; bot-filed only — a human-filed one is `seat` with the same recommendation) |
+| **seat** | a human fact is missing: a ruling the body says is pending, a credential, a maintenance window, an operator-only path (`classify_touches` → `codeowner-author`), a scope you cannot pin, or a Goal above the ceiling | labels `agent-fix` + `agent/blocked`; ONE comment: `intake: seat — <what is needed, one line>` and, on its own line, `blocked-on: human` (the scan's suppression grammar, README §Blocked-on marker). **Comment only, no labels, when the body itself keeps the item out of the loop** ("not an agent-loop item", "the seat sequences it") — a human's lineage line outranks your label set |
+| **fold** | two or more inputs are one change (same requirement, same fix) | the SURVIVOR takes the merged body and its outcome; the others get `intake: fold → #<survivor>` and close as duplicate (§Hard limits — whose issue it is) |
+| **close** | the claim no longer holds (live-verified), the work merged since filing, or the honest answer is "leave the `⚑ gap` standing" and nothing live depends on it | `intake: close — <evidence: the line, the PR, the date>` and close (`not planned` for standing gaps; §Hard limits — whose issue it is) |
+| **requeue** | a `reread:` input whose blocker no longer holds and whose work is one ride from done (a salvaged branch, a blocker that was that ride's own) | labels: remove `agent/blocked`, add `agent/queued`; `intake: requeue — <the fact that changed, with its evidence>`, naming the resumable branch when the ride record has one (the next round resumes it) |
 | **standing** | a valid gap the island records honestly and nobody should spend a ride on now | `intake: standing — <why not now>` (the selector skips it from then on); no labels |
-| **split** | one input carries deliverables owned by two or more islands (typically an attribution input) | `file` one issue per island-owned part — its body names the island, narrows `Touches` to that island's paths, `Origin=<the input>`; one `intake: split → #a, #b` comment on the input, then close it — bot-filed only; a human-filed input stays open as `seat` with the split done. A part owned by ANOTHER island is filed and left for that island's sitting (no labels, no ruling); a part owned by yours is ruled in this sitting like any other input |
+| **split** | one input carries deliverables owned by two or more islands (typically an attribution input) | `file` one issue per island-owned part — its body names the island, narrows `Touches` to that island's paths, `Origin=<the input>`; one `intake: split → #a, #b` comment on the input, then close it (§Hard limits — whose issue it is). A part owned by ANOTHER island is filed and left for that island's sitting (no labels, no ruling); a part owned by yours is ruled in this sitting like any other input |
 | **file** | a `text:` input worth an issue | create the issue (machine block through the writer, `Origin=<source>` as prose when the source is not an issue), then rule it like any other input in the same sitting |
 
 ## The procedure, per input, in this order
@@ -106,7 +118,15 @@ Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islan
    "Worth it" is the island's contract gaining a row it relies on or losing a gap a consumer hits;
    it is not "the issue exists".
 
-Cap: **at most 3 `queue` outcomes (children included) per sitting.** The cap limits `queue`, not
+**R. A `reread:` input — is the wait still true?** Read the comment that parked it and name the
+ONE fact it waits on. Then test that fact, not the comment: the ride record (did the work finish?
+what stopped it?), the loop-worker PRs merged since (was the blocker that ride's own?), the alert
+or gauge, the spec line, the ruling the tracker called pending, the done-when the body offers
+(has one of them already happened?). Changed → rule the item afresh through steps 1–5 (`requeue`,
+`queue` after a rewrite, `close`, `standing`). Unchanged → no write; the report says which fact
+you tested and where. Never restate a wait in a second comment.
+
+Cap: **at most 3 `queue` outcomes (children and `requeue` included) per sitting.** The cap limits `queue`, not
 ruling: rule EVERY input. Only an input whose ruling would be `queue` and arrives over the cap is
 left for the next sitting with no write at all (the selector re-offers it) — the report lists it as
 `deferred (cap)`.
@@ -190,11 +210,19 @@ Follow the consumer card's three acts exactly, with these pins:
 
 - **No code, no PRs, no edits to the island's files.** Your writes are issues, labels, comments,
   sub-issue and `blockedBy` edges, one branch ref per Goal.
-- **Never close or fold a human-filed issue** (author type `User`). Rule it `seat` with the
-  recommendation in the comment. Bot-filed (`app/homelab-agents-1234`, any `[bot]`) may be closed
-  or folded with the evidence.
+- **Whose issue it is, and how old (ADR-163).** A bot-filed issue (`app/homelab-agents-1234`, any
+  `[bot]`) may be closed, folded, split or rewritten with the evidence. An issue under the
+  OPERATOR's login is almost always a jail session's text and is rulable the same way, weighted
+  by age: the older and staler it is (the claim moved, the work merged, the done-when happened),
+  the freer your hand — close it or rewrite it on the evidence; a recent one gets light editing
+  only (the machine block, the key rows, a narrowed `Touches`) — its intent stays as written, and
+  when you would close a recent one, rule it `seat` with the recommendation instead. Every close
+  or rewrite of an operator-login issue keeps the original body recoverable (the comment quotes
+  what was removed or says "rewritten; the original is in the edit history") so one push undoes
+  it. Any other human's issue is never closed, folded or rewritten: `seat`.
 - **Idempotent writes.** Re-read labels and the last `intake:` comment immediately before writing;
-  an item carrying any `agent/*` label or a standing ruling is not yours this sitting.
+  an item carrying any `agent/*` label or a standing ruling is not yours this sitting — unless it
+  came as a `reread:` input, where `agent/blocked` or the `seat` ruling is exactly what you test.
 - **One comment per ruling**, first line `intake: <outcome> — <reason, one line>`; a `seat` adds
   `blocked-on: human` on its own line. No second comment to "clarify".
 - **Rate.** REST reads only, each item once; never poll. The sitting is one pass.

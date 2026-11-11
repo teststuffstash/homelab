@@ -29,6 +29,7 @@ from .capacity import Capacity
 from .config import (
     HARNESS_DIALECT,
     HARNESSES,
+    PREFERENCES,
     RAIL_DIALECTS,
     RAILS,
     TIERS,
@@ -130,6 +131,7 @@ class Admission:
     caller_pod: str | None = None  # GW-SESSIONS-LIVENESS: the caller's pod (a pod-bound caller token)
     caller_pod_uid: str | None = None
     attempt: int = 1  # GW-SESSIONS-RETRY: the consumer's automatic re-admission counter at this round
+    prefer: str = "cheapest"  # GW-SESSIONS-ADMIT §The preferred end of the list: `strongest` walks each list from its end
 
 
 def parse_admission(policy: Policy, body: object) -> Admission:
@@ -156,6 +158,9 @@ def parse_admission(policy: Policy, body: object) -> Admission:
     tier = body.get("tier", role.tier)
     if tier not in TIERS:
         raise BadRequest("malformed-body", f"tier {tier!r} is not one of {', '.join(TIERS)}")
+    prefer = body.get("prefer", PREFERENCES[0])
+    if not isinstance(prefer, str) or prefer not in PREFERENCES:
+        raise BadRequest("malformed-body", f"prefer {prefer!r} is not one of {', '.join(PREFERENCES)}")
     harness = body.get("harness", role.harness)
     harness_explicit = "harness" in body  # absent: the harness follows the cell the walk picks (§The harness follows the cell)
     if harness not in HARNESSES:
@@ -183,11 +188,13 @@ def parse_admission(policy: Policy, body: object) -> Admission:
             raise BadRequest("harness-rail-mismatch", f"canary: harness {harness} does not speak a dialect the openrouter rail serves")
         if rail not in (None, "openrouter"):
             raise BadRequest("malformed-body", "canary: the rail is openrouter")
+        if "prefer" in body:  # ⚖ a canary names its own cell: there is no list to walk from either end
+            raise BadRequest("malformed-body", "canary: a canary names its own cell — prefer does not apply")
         rail = "openrouter"
         canary = (c["model"], c["provider"])
     stack = policy.stacks.get(body["stack"]) or StackPolicy(body["stack"], "", None, None)
     return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind, canary=canary, attempt=attempt,
-                     harness_explicit=harness_explicit)
+                     harness_explicit=harness_explicit, prefer=prefer)
 
 
 def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str, str]:
@@ -383,10 +390,18 @@ class SessionService:
         # GW-MODEL-TIERS §The rail choice: when the tier names ONE model on two allowed rails, the rail
         # whose twin cell costs less per clean ride walks first, with that twin at its list's head; the
         # role's order stands for everything else (the other rail is still walked when the first yields nothing).
-        choice = self.rail_choice(adm, [r for r in candidates
-                                        if any(self._for_cell(adm, r, m).harness not in struck_harnesses
-                                               for m in (self.policy.rails[r].models.get(adm.tier) or ()))],
-                                  struck_models, struck_cells, now)
+        # ⚖ GW-SESSIONS-ADMIT §The preferred end of the list: `prefer: strongest` walks every rail's tier
+        # list from its END (the lists are ordered cheapest first) and makes NO rail choice — the choice
+        # is the cheaper twin first, which is the other preference; the role's rail order stands.
+        strongest = adm.prefer == "strongest"
+        if strongest:
+            log.info("session: prefer strongest for %s/%s — each rail's tier %s list is walked from its strongest end, no rail choice",
+                     adm.stack.name, adm.task, adm.tier)
+        choice = None if strongest else self.rail_choice(
+            adm, [r for r in candidates
+                  if any(self._for_cell(adm, r, m).harness not in struck_harnesses
+                         for m in (self.policy.rails[r].models.get(adm.tier) or ()))],
+            struck_models, struck_cells, now)
         promoted: dict[str, str] = {}
         answer_choice: dict | None = None
         if choice is not None:
@@ -402,6 +417,8 @@ class SessionService:
             if not models:
                 log.info("session: rail %s has no model for tier %s — skipped", rail, adm.tier)
                 continue
+            if strongest:
+                models = tuple(reversed(models))
             if rail in promoted:
                 models = [promoted[rail]] + [m for m in models if m != promoted[rail]]
             if self.store.active_count(rail, now) >= rp.max_sessions:
@@ -412,7 +429,7 @@ class SessionService:
                 log.info("session: rail %s capacity-blocked (%s) until %s — skipped", rail, block.detail, iso(block.free_at))
                 capacity_blocked.append((rail, block.reason, block.free_at, block.detail))
                 continue
-            # The tier's ordered list: the first model this task has not struck, whose cell is not
+            # The tier's ordered list (reversed under `prefer: strongest`): the first model this task has not struck, whose cell is not
             # cooled, that an explicit harness (when the body named one) can speak, and that the
             # model's own capacity admits (the Go rail: listed in the Go catalog, its own windows
             # under threshold — GW-CATALOG-GO; one model's block never holds another).
