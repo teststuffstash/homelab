@@ -571,7 +571,6 @@ def _db_mode_app(policy, secrets, path: str):
 DB_MODE_ROWS = [
     pytest.param("file", "1", "0", id="a mounted, writable PVC reads pvc"),
     pytest.param("missing-dir", "0", "1", id="a fail-open store reads memory"),
-    pytest.param("file", "1", "0", id="both modes render on every gateway, the inactive one at 0 ⚖"),
 ]
 
 

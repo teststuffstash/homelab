@@ -359,6 +359,8 @@ gauge for the process's life — both modes render on every gateway, the active 
 that reads it is `GatewayStoreMemoryMode` (group `agent-gateway-db-mode`, `severity: warning`,
 `triage: now`): it fires when `gateway_db_mode{mode="memory"}` has been 1 for 5 minutes. A PVC store
 is silent, and so is an image that predates the family — the alert has no `absent()` leg ⚖.
+The alert's three behaviours are unverified here — proven by scenarios S1–S3 of the promtool fixture
+`db-mode.promtool-test` beside the rule (`argocd/resources/agent-gateway/prometheusrule.yaml`).
 
 Legend: `store_state` = how the DB path looks when the gateway starts — `file` = the directory exists
 and the database opens writable; `missing-dir` = the directory is absent, so the store falls open.
@@ -369,7 +371,9 @@ after start.
 |---|---|---|---|
 | a mounted, writable PVC reads pvc | `file` | `1` | `0` |
 | a fail-open store reads memory | `missing-dir` | `0` | `1` |
-| both modes render on every gateway, the inactive one at 0 ⚖ | `file` | `1` | `0` |
+
+> Tombstone (removed by PR #3264; one cycle): ~~both modes render on every gateway, the inactive one
+> at 0~~ ⚖ → the two rows above: each reads both series, the inactive one at `0`.
 
 #### Gaps
 
