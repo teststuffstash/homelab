@@ -68,11 +68,11 @@ def _verdicts(v: dict, model: str, slug: str) -> dict[str, dict]:
 
 # ── A refresh builds the snapshot ─────────────────────────────────────────────────────────────
 BUILD_ROWS = [
-    pytest.param("ok", "ok", "ok", "M, G", "7 (13 ranked, 7 benched)", 5, 15, 0,
+    pytest.param("ok", "ok", "ok", "M, G", "8 (13 ranked, 8 benched)", 6, 15, 0,
                  id="a first refresh: ranked ∩ benched, then the endpoints per candidate"),
-    pytest.param("ok", "endpoints-503 for G", "ok", "M", "7 (13 ranked, 7 benched)", 6, 8, 0,
+    pytest.param("ok", "endpoints-503 for G", "ok", "M", "8 (13 ranked, 8 benched)", 7, 8, 0,
                  id="a candidate whose endpoints read fails is absent; the refresh still lands ⚖"),
-    pytest.param("ok", "endpoints-null-uptime for G", "ok", "M, G", "7 (13 ranked, 7 benched)", 5, 15, 1,
+    pytest.param("ok", "endpoints-null-uptime for G", "ok", "M, G", "8 (13 ranked, 8 benched)", 6, 15, 1,
                  id="an endpoint without an uptime figure does not fail its model's parse ⚖"),
 ]
 
@@ -123,6 +123,53 @@ async def test_permaslug_joins_id(gw, app, rankings, expected_models, expected_p
             expected_programming_tokens={"expected": expected_programming_tokens, "actual": v["models"][M]["ranking"]["programming"]},
             expected_tool_calling_tokens={"expected": expected_tool_calling_tokens, "actual": v["models"][M]["ranking"]["tool_calling"]},
             rankings={"actual": rankings})
+
+
+# ── A `:free` id joins its family's AA row; the `other` bucket is never ranked (GW-CATALOG-OR §A `:free` and `other`) ──
+FREE_ROWS = [
+    pytest.param("the `:free` row in programming", "ok", "8 (13 ranked, 8 benched)", "requested",
+                 id="a `:free` id joins its family's AA row and is a candidate under its own id ⚖"),
+    pytest.param("the `:free` row in programming", "benchmarks-no-family", "7 (13 ranked, 7 benched)", "absent",
+                 id="a `:free` id whose family AA does not bench is no candidate"),
+]
+
+
+@pytest.mark.parametrize(("rankings", "benchmarks", "expected_candidates", "expected_free_read"), FREE_ROWS, ids=[p.id for p in FREE_ROWS])
+async def test_free_id_joins_family(gw, app, mcp, upstreams, rankings, benchmarks, expected_candidates, expected_free_read):
+    world(note=WORLD)
+    with given(f"rankings = {rankings}; benchmarks = {benchmarks}"):
+        mcp.mcp = benchmarks
+    await or_refresh(app)
+    v = await or_view(gw)
+    src = v["sources"]
+    candidates = f"{src['candidates']} ({src['ranking']['ranked']} ranked, {src['benchmarks']['rows']} benched)"
+    reads = [c["path"] for c in upstreams[OR_RAIL].calls if c["path"] == "/v1/models/nvidia/nemotron-3-ultra-550b-a55b:free/endpoints"]
+    verdict(f"candidates = {expected_candidates} · the `:free` id's endpoints read = {expected_free_read}",
+            expected_candidates={"expected": expected_candidates, "actual": candidates},
+            expected_free_read={"expected": expected_free_read, "actual": "requested" if reads else "absent"},
+            rankings={"actual": rankings}, benchmarks={"actual": benchmarks})
+
+
+OTHER_ROWS = [
+    pytest.param("the `other` row in both slices", "ok", "8 (13 ranked, 8 benched)", "absent",
+                 id="the `other` bucket is never ranked and never a candidate ⚖"),
+]
+
+
+@pytest.mark.parametrize(("rankings", "benchmarks", "expected_candidates", "expected_other_read"), OTHER_ROWS, ids=[p.id for p in OTHER_ROWS])
+async def test_other_bucket_never_ranked(gw, app, mcp, upstreams, rankings, benchmarks, expected_candidates, expected_other_read):
+    world(note=WORLD)
+    with given(f"rankings = {rankings}; benchmarks = {benchmarks}"):
+        mcp.mcp = benchmarks
+    await or_refresh(app)
+    v = await or_view(gw)
+    src = v["sources"]
+    candidates = f"{src['candidates']} ({src['ranking']['ranked']} ranked, {src['benchmarks']['rows']} benched)"
+    reads = [c["path"] for c in upstreams[OR_RAIL].calls if c["path"].startswith("/v1/models/other/")]
+    verdict(f"candidates = {expected_candidates} · the `other` bucket's endpoints read = {expected_other_read}",
+            expected_candidates={"expected": expected_candidates, "actual": candidates},
+            expected_other_read={"expected": expected_other_read, "actual": "requested" if reads else "absent"},
+            rankings={"actual": rankings}, benchmarks={"actual": benchmarks})
 
 
 # ── A failed read keeps the last good ─────────────────────────────────────────────────────────
