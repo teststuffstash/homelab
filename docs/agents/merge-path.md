@@ -567,6 +567,15 @@ holds a floor under each (`agents/coordinator-scan.sh`, replay families `stale-a
   stale. The lane merges within the hour when it works, so the ride's job is to find what never came. The
   retry above has had its three tries by then, and its event lines are on the PR for the ride to read.
 
+- **A moot item is closed, by the ride.** A ride that judges its issue's purpose gone closes the
+  issue with the evidence; it never ends by stripping the lifecycle label, because an open issue
+  with no `agent/*` label is read by no scan class. The rule lives in the brief
+  (`agents/coordinator/README.md`, the label-discipline callouts). Seen on homelab#3247: a
+  fix-round issue for #3246 lost its `Fixes` link when the deploy job rewrote the PR body, the
+  phantom-review belt re-queued it, and the ride that found it stale left it open and unlabelled.
+  There is deliberately no scan closer keyed on `Origin:`: inert follow-up issues are open,
+  unlabelled and name a merged PR as their origin by design.
+
 What this floor does not cover: a stale armed `deps-review`, worker or seat PR. Each has a lane
 that owns it (the reflex, `ci-red`, `changes-requested`, a codeowner park), and a second ride there
 is a collision; ADR-162 widens the stale class per lane, on evidence.
