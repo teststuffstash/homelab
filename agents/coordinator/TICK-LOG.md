@@ -15225,7 +15225,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Three of four worker rides finished their work and could not open a PR**: `pr-open`'s gate selects
   `gateway-specs-site-e2e` (docker) and `component-check` (chart WAN) — neither exists in a worker pod. Seat opened
   the PRs by hand (instance); class fix **#3262** (`NEEDS_ENV` in `scripts/diff-ci.sh`: a gate whose environment is
-  absent is a loud skip) — OPEN at wind-down, one finding fixed, re-review pending. Prior art found late: #3088.
+  absent is a loud skip) — CLOSED UNMERGED 23:40Z under the operator's login (not by this session; no comment), one
+  finding fixed, never re-reviewed (CI churn). Left closed; the class is still open. Prior art found late: #3088.
 - Merged: #3257 manual benchmark rows (`benchmarks-manual.json`, self-retiring), #3259 `--source pile` + rereads +
   dig match on the island's alert rules + ADR-163, #3266 admission `prefer: strongest`, #3271 the cron asks for it,
   #3265 the re-cut. Window `seat-1794429833-1221` 20:43–22:40Z for the gateway roll; rolled clean on
@@ -15241,4 +15242,5 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `gh pr update-branch` got fresh runs. Reviewer starvation earlier: anthropic `max_sessions: 5` filled by three
   queued rides + coordinators → `defer rail-capacity` for the reviewer.
 - Left for the operator: #3270 (Goal #3118 assembly read), #2768 ruling, #3145 (candidate rule + a `/models`
-  fixture), #3231 (where the scheduled re-cut runs, as which identity), #2650 enforced-egress run, #3262's merge.
+  fixture), #3231 (where the scheduled re-cut runs, as which identity), #2650 enforced-egress run, the pr-gate class
+  (#3262 closed / #3088). Results write-up merged as #3277.
