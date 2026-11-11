@@ -38,7 +38,7 @@ admission reasons and the error envelope.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `turn-state-invalid`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, lit 2026-10-22 — the upstream profile, vendor header compatibility and the live canary are `⚑ gap` (rows below); the `upstream-timeout` row `🚧 WIP` (clock-faked only); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only (the "⚖ local evidence" row) |
+| [GW-RAIL-CODEX](#gw-rail-codex) | `input.body` (`model`, `stream`, `store`, `input`), `upstream.codex`, `output` | `malformed-body`, `responses-mode-unsupported`, `responses-input-invalid`, `model-not-session`, `dialect-unsupported-on-rail`, `turn-state-invalid`, `upstream-auth`, `upstream-http-error`, `upstream-content-type`, `upstream-unreachable`, `upstream-timeout` | v0, lit 2026-10-22 — the upstream profile is `⚑ gap` (rows below); the `upstream-timeout` row `🚧 WIP` (clock-faked only) |
 | [GW-CODEX-CAPTURE](#gw-codex-capture) | `capture` (the bundle `GET /sessions/{id}/capture` answers; its records, sanitization rules and bounds) | `capture-not-found` | v0 — the scoped observer (FU-270, the spike §Recorded live protocol experiment): off unless `CODEX_CAPTURE_TASK_PREFIX` names a task prefix; the live bundle and the rows derived from it are the spike's |
 | [GW-CODEX-HEADROOM](#gw-codex-headroom) | `headroom.report`, `headroom.verdicts` | — | v0 — the snapshot and its verdict; two report producers exist, both the gateway's own ([GW-CODEX-USAGE-POLL](#gw-codex-usage-poll), [GW-CODEX-UPSTREAM-HEADERS](#gw-codex-upstream-headers)); the jail's own report ingress stays `⚑ gap` |
 | [GW-CODEX-ADMISSION](#gw-codex-admission) | `admission.reasons` | — | v0 — the verdict composed into the [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) walk; reservation is `⚑ gap` |
@@ -99,7 +99,7 @@ Every requirement of this page, in reading order; the section flowcharts below l
 
 | Requirement | Section | Status |
 |---|---|---|
-| [GW-RAIL-CODEX](#gw-rail-codex) | the ride | v0, lit 2026-10-22 — the upstream profile, vendor header compatibility and the live canary are `⚑ gap`; the `upstream-timeout` row `🚧 WIP` (clock-faked only); `⚑ gap (2026-10-16, PR #2646 → work #2650)`: native-CLI turn evidence is local-only |
+| [GW-RAIL-CODEX](#gw-rail-codex) | the ride | v0, lit 2026-10-22 — the upstream profile is `⚑ gap`; the `upstream-timeout` row `🚧 WIP` (clock-faked only) |
 | [GW-CODEX-CAPTURE](#gw-codex-capture) | the ride | v0 — the scoped observer; off unless `CODEX_CAPTURE_TASK_PREFIX` names a task prefix |
 | [GW-CODEX-HEADROOM](#gw-codex-headroom) | the account | v0 — the snapshot and its verdict; the jail's own report ingress stays `⚑ gap` |
 | [GW-CODEX-ADMISSION](#gw-codex-admission) | the account | v0 — reservation is `⚑ gap` |
@@ -348,9 +348,7 @@ Legend: `fixture` = the slice of the bundle the row replays; `result?` = what th
 | description | input | v0 answer | the gap |
 |---|---|---|---|
 | "⚑ gap: SIWC profile (unselected)" | SIWC credentials | unsupported | separate grant and tool-shape contract required |
-| "⚑ gap: live vendor header compatibility" | real native backend | offline round trip only | live canary must establish whether other headers are required |
-| "⚑ gap: the live canary" | a real account | never run | spike step 4 — a separately authorized maintenance window |
-| "⚖ local evidence: the pinned Codex CLI completes a turn through this gateway" | `experiments/codex-rail/compat.py` (codex-cli 0.161.0, the agent-runtime lock) | a completed `codex exec --json` turn, one rotation, one upstream close | not CI: the CLI is not in the CI toolchain — dated local evidence in `experiments/codex-rail/evidence.json` |
+| "⚖ live evidence: the pinned Codex CLI completes a tool-call turn through this gateway on the live backend" | the canary rides of 2026-10-22 (window `seat-1792705075-7945`; the third ride, PR #2840) and the capture ride of 2026-10-23 (task `capture-codex-20261023T100750Z`) | a completed `codex exec --json` turn with a real tool call, outcome `clean`, released | not CI: the CLI is not in the CI toolchain — dated live evidence; its structure replays in CI as [§Live grammar](#live-grammar-captured-2026-10-23) |
 
 The pinned CLI's direct backend calls beside the relay (the 2026-10-23 capture ride: 14.2 POLICY_DENIED SYNs each to `chatgpt.com` / `ab.chatgpt.com`) are gone since the gateway-render opt-outs (agent-runtime#181, agent-base `2026.10.23-g79d146c8caac`): 0 by the same query on the 20:09Z ride, both turns completed — live evidence from one dated ride, not a row ([the spike §The opt-out ride](../../../docs/spikes/codex-subscription-rail.md#the-opt-out-ride--2026-10-23-2009z-fu-270)); a CLI bump that adds a call is caught by `AgentWorkerEgressDropped`.
 
