@@ -156,8 +156,38 @@
         "monthly_limit_usd": { "$ref": "#/$defs/limit", "description": "the Go plan's monthly limit; null on the other rails" },
         "provider": { "type": ["string", "null"], "description": "the openrouter model's selected provider slug (the cell the price and the rides belong to); null elsewhere" },
         "price_basis": { "$ref": "#/$defs/price_basis" },
-        "rides": { "$ref": "#/$defs/rides", "description": "the cell's clean-ride evidence from the gateway's outcome store at snapshot time" }
+        "rides": { "$ref": "#/$defs/rides", "description": "the cell's clean-ride evidence from the gateway's outcome store at snapshot time" },
+        "score_source": { "const": "manual", "description": "OPTIONAL — present only on a row a manual benchmark row scored (the feed does not carry `aa_id`); absent = the scores are the feed's" },
+        "score_source_url": { "type": "string", "description": "OPTIONAL, with score_source: where the hand-entered score was read" },
+        "score_read_at": { "type": "string", "format": "date", "description": "OPTIONAL, with score_source: the day it was read" }
       }
+    },
+    "manual_benchmarks": {
+      "description": "the committed manual benchmark rows (argocd/resources/agent-gateway/benchmarks-manual.json): hand-entered scores for ids the feed does not carry yet — read by `tiers snapshot --manual` only, never mounted. A `_`-prefixed top-level key is a comment.",
+      "type": "object",
+      "required": ["rows"],
+      "patternProperties": { "^_": {} },
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "intelligence", "coding", "agentic", "source_url", "read_at", "note"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$", "description": "the Artificial Analysis id, `vendor/model` — unique in the file" },
+              "intelligence": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+              "coding": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+              "agentic": { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "at least one of the three scores is a number" },
+              "source_url": { "type": "string", "pattern": "^https://" },
+              "read_at": { "type": "string", "format": "date" },
+              "note": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      },
+      "x-requirements": ["GW-MODEL-TIERS"]
     },
     "benchmarks_snapshot": {
       "type": "object",
@@ -175,7 +205,15 @@
               "properties": {
                 "source": { "const": "artificial-analysis" },
                 "pulled_at": { "$ref": "#/$defs/timestamp", "description": "the newest updated_ts of the old proxy's capability table" },
-                "rows": { "type": "integer", "minimum": 0, "description": "the capability table's row count (the snapshot keeps only the candidates)" }
+                "rows": { "type": "integer", "minimum": 0, "description": "the capability table's row count (the snapshot keeps only the candidates)" },
+                "manual": {
+                  "type": "object", "additionalProperties": false, "required": ["used", "retired"],
+                  "description": "OPTIONAL — present when the snapshot was cut with a manual benchmark file",
+                  "properties": {
+                    "used": { "type": "array", "items": { "type": "string" }, "description": "the manual ids that scored a candidate (the feed lacks them)" },
+                    "retired": { "type": "array", "items": { "type": "string" }, "description": "the manual ids the feed carries now — the feed's scores stand, the rows are to be deleted" }
+                  }
+                }
               }
             },
             "go_catalog": {

@@ -6,7 +6,10 @@
 #
 #   kubectl on PATH (from the repo root: `devbox run -- bash gateway/scripts/benchmarks-snapshot.sh`)
 #   KUBECONFIG      the cluster (default: tofu/kubeconfig at the repo root)
-#   ANTHROPIC_ALIASES  the subscription rail's candidate aliases (ruling 4: the policy's three)
+#   ANTHROPIC_ALIASES  the subscription rail's candidate aliases (ruling 4: the policy's `claude/` aliases)
+#   MANUAL_BENCHMARKS  the manual benchmark rows (default: benchmarks-manual.json beside the snapshot) —
+#                      hand-entered scores for ids the feed has not caught up with; a row the feed
+#                      carries is reported RETIRED (delete it in the re-cut's commit)
 #   CODEX_CANDIDATES   the codex rail's candidates (`codex/<id>`, COMMA-separated): the ENROLLED account's
 #                      model evidence — the account catalog + one completed turn per id
 #                      (docs/spikes/codex-subscription-rail.md §Account model evidence, 2026-10-29: the
@@ -27,7 +30,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$(cd .. && pwd)
 export KUBECONFIG="${KUBECONFIG:-$ROOT/tofu/kubeconfig}"
-ALIASES="${ANTHROPIC_ALIASES:-claude/haiku,claude/sonnet,claude/opus}"
+ALIASES="${ANTHROPIC_ALIASES:-claude/haiku,claude/sonnet,claude/opus,claude/fable}"
+MANUAL="${MANUAL_BENCHMARKS:-$ROOT/argocd/resources/agent-gateway/benchmarks-manual.json}"
 CODEX="${CODEX_CANDIDATES:-codex/gpt-6-luna,codex/gpt-6.1-terra,codex/gpt-6.1-sol,codex/gpt-6-astra}"
 OUT="${1:-$ROOT/argocd/resources/agent-gateway/benchmarks.json}"
 scratch=$(mktemp -d /tmp/benchmarks-snapshot.XXXXXX)
@@ -71,7 +75,7 @@ echo "== snapshot → $OUT"
 devbox run tiers -- snapshot \
   --capability "$scratch/capability.json" --go-catalog "$scratch/go-catalog.json" \
   --openrouter-catalog "$scratch/openrouter-catalog.json" \
-  --anthropic-aliases "$ALIASES" --codex-candidates "$CODEX" -o "$OUT"
+  --anthropic-aliases "$ALIASES" --codex-candidates "$CODEX" --manual "$MANUAL" -o "$OUT"
 echo "== inputs kept under $scratch"
 echo "== derivation vs the deployed policy (apply with: devbox run tiers -- apply)"
 devbox run tiers -- check --benchmarks "$OUT" || true
