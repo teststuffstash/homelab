@@ -43,8 +43,8 @@
       "side_models": ["claude/haiku"],
       "models": {
         "light":    ["claude/haiku", "claude/sonnet", "claude/opus"],
-        "standard": ["claude/haiku", "claude/sonnet", "claude/opus"],
-        "heavy":    ["claude/sonnet", "claude/opus"]
+        "standard": ["claude/sonnet", "claude/opus", "claude/fable"],
+        "heavy":    ["claude/opus", "claude/fable"]
       }
     },
     "opencode": {
@@ -65,8 +65,8 @@
       "plan": "go",
       "max_sessions": 3,
       "models": {
-        "light":    ["opencode-go/mimo-v2.6-flash", "opencode-go/minimax-m3", "opencode-go/mimo-v2.6-pro"],
-        "standard": ["opencode-go/mimo-v2.6-pro", "opencode-go/minimax-m3.1-flash", "opencode-go/step-5-preview"],
+        "light":    ["opencode-go/deepseek-v4.1-flash", "opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
+        "standard": ["opencode-go/kimi-k3.1-pro"],
         "heavy":    ["opencode-go/kimi-k3.1-pro"]
       }
     },
@@ -100,9 +100,9 @@
       },
       "max_sessions": 20,
       "models": {
-        "light":    ["deepseek/deepseek-v4-flash", "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash"],
-        "standard": ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "moonshotai/kimi-k3"],
-        "heavy":    ["z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]
+        "light":    ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash"],
+        "standard": ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash"],
+        "heavy":    ["xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash"]
       }
     },
     "codex": {
@@ -111,9 +111,9 @@
       "headroom": {"max_age_s": 900, "ceiling": 0.95, "windows_minutes": [300, 10080], "poll_interval_s": 60},
       "oauth": {"refresh_margin_s": 300},
       "models": {
-        "light":    ["codex/gpt-6-luna", "codex/gpt-6.1-sol", "codex/gpt-6-astra"],
-        "standard": ["codex/gpt-6.1-sol", "codex/gpt-6-astra"],
-        "heavy":    ["codex/gpt-6.1-sol", "codex/gpt-6-astra"]
+        "light":    ["codex/gpt-6.1-terra", "codex/gpt-6.1-sol", "codex/gpt-6-astra"],
+        "standard": ["codex/gpt-6.1-terra", "codex/gpt-6.1-sol", "codex/gpt-6-astra"],
+        "heavy":    ["codex/gpt-6.1-terra", "codex/gpt-6.1-sol", "codex/gpt-6-astra"]
       }
     }
   },
