@@ -1,0 +1,49 @@
+Info: Running script "bash" on /workspace/homelab
+clause-replay — 1 fixture(s) under agents/replay/fixtures
+  ✓ updater/armed-only-noop (actions) — 3 actions match
+  ✓ updater/fifo-pick (actions) — 6 actions match
+  ✓ updater/lane-hop-wedged-oldest (actions) — 10 actions match
+  ✓ updater/unstrand-yes (actions) — 6 actions match
+  ✓ updater/unstrand-no (actions) — 5 actions match
+  ✓ updater/unstrand-unreadable (actions) — 5 actions match
+  ✓ updater/conflict-dirty (actions) — 5 actions match
+  ✓ updater/conflict-clear (actions) — 4 actions match
+  ✓ updater/conflict-dirty-graphql-drained (actions) — 5 actions match
+  ✓ updater/conflict-clear-graphql-drained (actions) — 4 actions match
+  ✓ updater/update-fail (actions) — 7 actions match
+  ✓ updater/park-skip (actions) — 3 actions match
+  ✓ updater/human-approved-pick (actions) — 4 actions match
+  ✓ updater/null-author-no-crash (actions) — 3 actions match
+  ✓ updater/two-lanes-two-updates (actions) — 8 actions match
+  ✓ updater/same-lane-one-update (actions) — 6 actions match
+  ✓ updater/unreviewed-behind-no-update (actions) — 3 actions match
+  ✓ updater/bot-approved-head-update (actions) — 5 actions match
+  ✓ updater/stale-approval-no-update (actions) — 4 actions match
+  ✓ updater/probe-unreadable (actions) — 5 actions match
+  ✓ updater/merge-ready-only-off-legacy-pick (actions) — 4 actions match
+  ✓ updater/parked-approved-head-no-update (actions) — 3 actions match
+  ✓ updater/automerge-no-approval-update (actions) — 4 actions match
+  ✓ updater/non-automerge-unreviewed-no-update (actions) — 3 actions match
+  ✓ updater/automerge-approval-required-no-update (actions) — 3 actions match
+  ✓ updater/automerge-changes-requested-no-update (actions) — 5 actions match
+  ✓ updater/renovate-untouched-no-update (actions) — 7 actions match
+  ✓ updater/renovate-worker-pushed-update (actions) — 7 actions match
+  ✓ updater/renovate-untouched-cr-no-update (actions) — 5 actions match
+  ✓ updater/renovate-other-class-no-update (actions) — 7 actions match
+  ✓ updater/renovate-untouched-green-update (actions) — 7 actions match
+  ✓ updater/renovate-untouched-red-no-update (actions) — 7 actions match
+  ✓ updater/renovate-updater-merged-red-handback (actions) — 9 actions match
+  ✓ updater/renovate-updater-merged-ticked-noop (actions) — 8 actions match
+  ✓ updater/renovate-updater-merged-cr-handback (actions) — 7 actions match
+  ✓ updater/renovate-superseded-cancel-green-update (actions) — 7 actions match
+  ✓ updater/renovate-checks-unreadable-hold (actions) — 6 actions match
+  ✓ updater/renovate-merged-current-red-handback (actions) — 9 actions match
+  ✓ updater/renovate-merged-current-green-noop (actions) — 6 actions match
+  ✓ updater/renovate-untouched-current-red-noop (actions) — 6 actions match
+  ✓ updater/renovate-merged-park-red-handback (actions) — 9 actions match
+  ✓ updater/renovate-merged-current-pending-noop (actions) — 6 actions match
+  ✓ updater/renovate-merged-current-nochecks-noop (actions) — 6 actions match
+
+  43 passed, 0 failed
+
+Every clause fixture holds.

@@ -85,12 +85,13 @@ growing without bound.
 | [`../spikes/codex-subscription-rail.md`](../spikes/codex-subscription-rail.md) | Investigation: native Codex harness, ChatGPT OAuth/proxy boundary, subscription headroom, and staged build order |
 | [`chainless-redesign.md`](chainless-redesign.md) | The ADR-107 charter — a harness matrix, N subscription rails, every role routed; claim-knob ledger, Go-rail evidence, build order |
 | [`observability-and-retro.md`](observability-and-retro.md) | Session capture, the ledger, the retro loop |
-| [`remediation-would-scoreboard.md`](remediation-would-scoreboard.md) | The responder dial's evidence — every typed `REMEDIATION-WOULD` shadow answer scored `right \| wrong \| unsafe` by `/board-sweep` (goal#818) |
-| [`fixer-context.md`](fixer-context.md) | The three context layers a worker actually receives |
+| [`remediation-would-scoreboard.md`](../../agents/islands/intake/docs/remediation-would-scoreboard.md) (intake island; [old path](remediation-would-scoreboard.md) is a pointer) | The responder dial's evidence — every typed `REMEDIATION-WOULD` shadow answer scored `right \| wrong \| unsafe` by `/board-sweep` (goal#818) |
+| [`fixer-context.md`](../../agents/islands/launch/docs/fixer-context.md) (launch island; [old path](fixer-context.md) is a pointer) | The three context layers a worker actually receives |
 | [`issue-authoring.md`](issue-authoring.md) + [`issue-lifecycle-fsm.md`](issue-lifecycle-fsm.md) | Coordinator-authored issues, harvest, the sprout index; the lint-checked issue/goal state machine |
 | [`research-and-specs.md`](research-and-specs.md) | The research→specs process — fan-out arms, judges, downstream proxy, weave, harvest |
-| [`spec-gate-tiering.md`](spec-gate-tiering.md) | Proposal only — do not implement before the operator re-opens it |
-| [`specs-reviewer.md`](specs-reviewer.md) | The specs reviewer — the SECOND review identity (ADR-155) gating spec ROWS + their evidence (reviewer-gated, §Direction 2); the lens is `agents/lenses/specs.md`, the tick `agents/specs-reviewer-session.sh`; wiring, cutover order, open questions |
+| [`spec-gate-tiering.md`](../../agents/islands/review/docs/spec-gate-tiering.md) (review island; [old path](spec-gate-tiering.md) is a pointer) | Proposal only — do not implement before the operator re-opens it |
+| [`specs-reviewer.md`](../../agents/islands/review/docs/specs-reviewer.md) (review island; [old path](specs-reviewer.md) is a pointer) | The specs reviewer — the SECOND review identity (ADR-155) gating spec ROWS + their evidence (reviewer-gated, §Direction 2); the lens is `agents/lenses/specs.md`, the tick `agents/specs-reviewer-session.sh`; wiring, cutover order, open questions |
+| [`../../agents/islands/README.md`](../../agents/islands/README.md) | **Spike (PR #3147)** — the agent loop drawn as five islands (scan · launch · review · intake · retro), each with a README + a snippets-v0.6.9 `specs/` root |
 | [`meta-state.md`](meta-state.md) | Transient: what a fresh meta session must pick up |
 | [`../glossary.md`](../glossary.md) | The term→home index ruling this corpus's vocabulary (Goal/mission, canary/contract probe, the platform stack) |
 

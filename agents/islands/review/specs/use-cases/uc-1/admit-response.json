@@ -1,0 +1,11 @@
+{
+  "_comment": "UC-1 step ① expected: a BOUND dispatch (gateway GW-SESSIONS-PULL) — no token, no env values. The model is the gateway policy's for role reviewer; the launcher strips the rail prefix for claude's --model. Guillemet values are produced by the run.",
+  "decision": "dispatch",
+  "session": { "id": "0123abcd", "expires_at": "«created_at + 14400 s»" },
+  "rail": "anthropic",
+  "harness": "claude",
+  "model": "claude/sonnet",
+  "env_keys": ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL"],
+  "pull_url": "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/env",
+  "context_tokens": null
+}

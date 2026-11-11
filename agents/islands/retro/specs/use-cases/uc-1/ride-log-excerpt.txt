@@ -1,0 +1,6 @@
+→ platform r11 cell claude (role retro — the gateway serves the model) — brief /tmp/retro-brief-AbCd.md (31337 bytes)
+→ gateway(sessions): dispatch claude/sonnet [rail=anthropic,harness=claude,session=s-0001,context_tokens=200000] (task=retro-r11, round=1) — bound to openrouter-operator/agent-session pod agent-session-retro-r11; the pod pulls env ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN; caller agent-coordinator:agent-coordinator
+BEGIN-RETRO-REPORT
+# platform loop retro r11
+… (≥ 20 content lines) …
+END-RETRO-REPORT

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/review-reflex.schema.json",
+  "title": "review-reflex.sh — the tick gate, the per-lane pick line, the reviewer dispatch, the breakers, the C9 arm",
+  "type": "object",
+  "x-requirements": {
+    "/properties/tick": ["SCAN-REFLEX-GATE"],
+    "/properties/pick": ["SCAN-REFLEX-PICK", "SCAN-REFLEX-BREAKER"],
+    "/properties/dispatch": ["SCAN-REFLEX-PICK"],
+    "/properties/dispatch/properties/decorrelate_from": ["SCAN-REFLEX-DECORRELATE"],
+    "/properties/breaker": ["SCAN-REFLEX-BREAKER"],
+    "/properties/rearm": ["SCAN-REFLEX-REARM"]
+  },
+  "properties": {
+    "tick": {
+      "type": "object",
+      "properties": {
+        "AGENT_REPOS": {"type": "string"},
+        "SCAN_STACK": {"type": "string", "description": "set = the per-stack instance (graduated stack, --loop-ns <stack>-agents); unset = global, skips graduated stacks"},
+        "REVIEW_CONCURRENCY": {"type": "integer", "default": 2},
+        "REVIEW_ROUNDS_MAX": {"type": "integer", "default": 12},
+        "REVIEWER_LOGIN": {"type": "string", "default": "homelab-reviewer"},
+        "DEFAULT_BRANCH": {"type": "string", "default": "master"},
+        "verdict": {"enum": ["proceed", "skip"], "description": "⚑ gap — skip when subscription-latch.sh --pick-rail finds no rail (self-routing)"}
+      }
+    },
+    "pick": {
+      "description": "One line per lane from the review-pick jq: `<pr> <verdicts-total> <verdicts-at-head> <approved-at-head> <headRef> <issue-key|-> <base>`.",
+      "type": "string",
+      "pattern": "^[0-9]+ [0-9]+ [0-9]+ [0-9]+ \\S+ ([0-9]+|-) \\S+$"
+    },
+    "dispatch": {
+      "description": "The reviewer invocation — the review island's entry point.",
+      "type": "object",
+      "required": ["repo", "pr"],
+      "properties": {
+        "repo": {"type": "string"},
+        "pr": {"type": "integer"},
+        "rubric": {"const": ".agents/review-goal.md", "description": "assembly PRs (head goal/**) only"},
+        "decorrelate_from": {"type": "string", "description": "⚑ gap — the served model of the issue's last ride, read from the old proxy's /report/latest"},
+        "loop_ns": {"type": "string"},
+        "model": {"not": {}, "description": "never sent — reviews take the gateway's pick"}
+      }
+    },
+    "breaker": {
+      "oneOf": [
+        {"type": "object", "properties": {"label": {"const": "agent/error"}, "comment_prefix": {"const": "AGENT_ERROR: "}, "when": {"const": "approved-at-head >= 1 or verdicts-at-head >= 2"}}},
+        {"type": "object", "properties": {"label": {"const": "agent/arbitrate"}, "event_kind": {"const": "arbitrate"}, "when": {"const": "issue-keyed bot verdicts >= REVIEW_ROUNDS_MAX"}}}
+      ]
+    },
+    "rearm": {
+      "type": "object",
+      "properties": {
+        "command": {"const": "gh pr merge <n> --auto --squash"},
+        "excluded_labels": {"const": ["agent/error", "major/awaiting-human", "major"]},
+        "excluded_heads": {"const": ["research/"]},
+        "allowed_bases": {"const": ["<default branch>", "goal/**"]}
+      }
+    }
+  }
+}

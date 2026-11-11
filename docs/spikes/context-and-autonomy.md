@@ -134,6 +134,105 @@ context. The sweep skills carry that rule in this PR, plus `meta-state.md` as th
 the seat's declared parks (CORRECTLY-WAITING's named gate), which they named only as a
 staleness risk.
 
+### C8. The agent-loop island re-measured on the October window (second jail, 2026-11-01)
+
+§C measured July→October and found "one thing with the scan at its centre". Re-run with §C's
+method on master commits since 2026-10-01 — after the gateway island (P2), the shared helpers
+and the per-island intake landed — with bookkeeping (TICK-LOG, meta-state, the tracker, GAPS),
+`agents/replay/**` and the retros excluded; 440 commits touched at least one component:
+
+| Component (files) | commits | cross-component | top partner |
+|---|---|---|---|
+| scan (`coordinator-scan.sh`, footprint, updater, reflex, major-handoff, the brief, its Argo manifests) | 83 | 47 % | review 15 |
+| launch (`agent-session.sh`, `gateway-admit.sh`, recipes, ground rules, model id) | 37 | 51 % | gateway island 10 |
+| review (`reviewer-session.sh`, `specs-reviewer-session.sh`, lenses, `review.md`, review/sentinel manifests) | 63 | 71 % | image pins 17 |
+| dig + intake + responder (`deep-dig-*`, `intake.md`, `intake-select.sh`, `docs/intake/`, responder) | 25 | 28 % | scan 6 |
+| retro (`retro_*.py`, their tests, retro manifests) | 11 | 36 % | scan 3 |
+| gates (`tofu/github/`, CODEOWNERS, governance-lint) | 12 | 33 % | scan 3 |
+| claim (`argocd/resources/agentstack/`, `stacks.json`, `agents/fixer/`) | 29 | 76 % | image pins 15 |
+| image pins (`images.env`, `arc-runners*.yaml`, `runner-image-prepull/`) | 67 | 57 % | review 17 |
+| gateway island (`gateway/`, `argocd/resources/agent-gateway/`) | 230 | 11 % | review 12 |
+
+Sizes (source KB, tokens ≈ KB/4): scan 894, launch 582, review (in launch's count above) —
+measured together as "ride launch + admission" 582; dig + intake + responder 267; retro 358;
+replay harness 134 (+ 5.4 MB of fixtures in 257 dirs); gates 73; claim 216; `docs/agents/`
+without retros 810.
+
+**Reading.** The centre has loosened: scan's cross share fell from 63 % to 47 %, launch's
+from 66 % to 51 %; dig + intake + responder (28 %), retro (36 %) and gates (33 %) each change
+mostly alone. Review and claim still read as coupled, but the top partner of BOTH is the
+image-pin stream: `agents/coordinator/sentinel-argo.yaml` carries the arc-runner pin (17
+auto-bumps) and the Composition carries image refs — the coupling is a pin line, not logic.
+The remaining genuine cross-changes are three helper rewrites that touched 8–19 scripts at
+once (`e2e6bfaa`, `c77331a9`, `3df8a946`: footprint, `kube.sh`, the ledger emitter, the gh
+wrapper) — the seams §Interfaces says become shared libraries.
+
+**The open PRs on 2026-11-01 touched four pieces, none shared:** #3096 scan (one clause + three
+fixture dirs), #3093 review (one launcher function + two brief call sites), #3138 gates, #3144
+image pins; #2798 (Kargo manifests) reached the island only through `.github/workflows/`. An
+island-scoped ADR-110 read of #3096 and #3093 needed one clause, one function and one README
+paragraph each, no corpus; the one finding (the brief's `agent/error` row still described only
+the green-CI leg) is doc currency. Both PRs' specs-reviewer approvals read verbatim
+"mechanical: no specs path and no rule-test path in this diff": on this island the second gate
+reads nothing, because the claim's `specs` field (`repos[].specs {root, tests}`,
+[`specs-reviewer-session.sh`](../../agents/specs-reviewer-session.sh) `pack_roots`) admits one
+root pair per repo and homelab's names the gateway's. The intake-written key rows (#3048) and the
+fixture dirs the PR shipped map one to one — the island already has rows, no page holds them and
+no reader reads them.
+
+**Membership loose ends (facts, for the primary to route):** the image-pin stream is the
+busiest thing inside the island (43 commits to `images.env`, 17 per runner manifest) and is
+dependency-upgrades shaped; `agents/upgrade-lease*.sh` live under `agents/` but are the
+mgmt-box island's ([`intake/mgmt-box.md`](../intake/mgmt-box.md)); "island" itself has no
+[`glossary.md`](../glossary.md) row (only "island intake" and "specs reviewer" use it).
+
+**Rendered (draft, same PR, 2026-11-07):** the five pieces written up as islands in
+[`agents/islands/`](../../agents/islands/README.md) — README + snippets-v0.6.9 `specs/` each
+(scan 35 · launch 31 · review 28 · intake 30 · retro 28 requirements), with the island-owned design prose
+moved out of `merge-path.md`, `observability-and-retro.md`, `specs-reviewer.md`,
+`spec-gate-tiering.md`, `remediation-would-scoreboard.md`, `fixer-context.md` and the launcher half of
+`model-routing.md` (pointers left). What the write-up
+found against the table above is under §C8a.
+
+**Not decided here:** whether the cut is scan / launch / review / dig + intake + responder /
+retro with replay as the shared harness and the pins moved out; what a spec root per piece is
+(a page per fixture family, `agents/replay/` as the tests root — P4/P5 of §The plan, #1224);
+whether the claim's `specs` field becomes a list. Gate changes batch into the
+[`iac-lane.md`](../agents/iac-lane.md) §The pile checkpoint, not per-event edits.
+
+### C8a. What writing the islands up found against §C8 (second jail, 2026-11-07)
+
+Facts from reading each island's code to write its specs ([`agents/islands/`](../../agents/islands/README.md)); not decided here.
+
+- **Membership the table missed.** `coordinator-session.sh` (the scan's dispatch arm) is in no row;
+  `fix-debounce-argo.yaml` is admission (intake), `deploy-revert-argo.yaml` the revert guard,
+  `corpus-dispatch-argo.yaml` oracle's doorbell — only `coordinate`, `reflexes` (minus the ledger) and
+  `update-pr` are scan's manifests. `goal-budget.sh` is launch's; `review-reflex.sh` and its belts are
+  scan's, not review's. Retro adds `retro-git.yaml`, three runtime-read briefs under
+  `docs/agents/retros/` and `RetroReportOverdue`. `seat-window.sh` is in no row.
+- **Shared libraries, not scan or launch code.** `footprint.sh` and `touches-check.sh` have five readers
+  outside the scan; `gateway-admit.sh` is sourced by four other launchers and five Argo manifests;
+  `resolve-model.sh` has zero callers in `agent-session.sh` (its callers are the coordinator, scan,
+  retro, dig, intake, responder and fix-debounce launchers); `subscription-latch.sh`,
+  `machine-comment.sh`, `goal-budget.sh` are shared helpers; `issue_body.py` + `footprint.sh` are what intake shares with scan — §Interfaces' seams.
+- **Cross-island seams inside one manifest.** `review-argo.yaml` carries the shared JetStream
+  EventBus and the `agent-loop` EventSource (also `/coordinate`, `/alert`, deploy-revert); the
+  sentinel's cron backstop sits in the scan's `reflexes-argo.yaml`; the per-stack `coordinate-<stack>`
+  CronWorkflows are rendered by the AgentStack Composition (claim ↔ scan is real coupling).
+- **Intake is shared machinery under `gateway/`.** `gateway/intake.md` and
+  `gateway/scripts/intake-select.sh` serve every island and are runtime-read where they stand.
+- **The single spec root is wider than `pack_roots`.** `evidence_bucket` (homelab → `gateway-specs`),
+  the `gateway-evidence` artifact name and `build_pack`'s one `--specs-root` assume it too; the island
+  pages written here are themselves ungated.
+- **Self-routing left on the old contract** (counted per island, all `⚑ gap` rows): the scan still
+  passes `--model`, reads `/router-status` and the reflex `/report/latest`; only the platform stack
+  admits through the gateway (other stacks' coordinators and reviewers go `resolve-model.sh` → `/route`);
+  the responder/dig/intake lanes fall back to `subscription-latch.sh` + `resolve-model.sh` on
+  `POST /sessions` rc 4; the retro keeps 13 such sites (2 model literals).
+- **Bucket-A did not stop at 38.** The retro cells kept scoring it in prose through r10 (2026-11-02),
+  no code computes it, and two cells of one run disagree (r7: 2 vs 13) — the series P1/P5 settle on is
+  not a measurement yet.
+
 ### D. Context the human pays (first draft, still true)
 
 | What | Size |

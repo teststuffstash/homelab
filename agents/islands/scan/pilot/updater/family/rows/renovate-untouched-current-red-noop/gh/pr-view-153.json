@@ -1,0 +1,20 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-10-20T10:51:00Z",
+      "authors": [
+        {
+          "email": "app/homelab-renovate-1234@users.noreply.invalid",
+          "id": "U_0a7e2b0a389851f3",
+          "login": "app/homelab-renovate-1234",
+          "name": "app/homelab-renovate-1234"
+        }
+      ],
+      "committedDate": "2026-10-20T10:51:00Z",
+      "messageBody": "",
+      "messageHeadline": "chore(deps): update ghcr.io/astral-sh/uv docker tag to v0.13.3",
+      "oid": "ren153oid789"
+    }
+  ],
+  "reviews": []
+}

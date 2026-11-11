@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/updater.schema.json",
+  "title": "update-pr-branch.sh — the PR fields one pass reads, the actions it emits",
+  "type": "object",
+  "x-requirements": {
+    "/properties/invocation": ["SCAN-UPDATER-PICK"],
+    "/properties/pr": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND", "SCAN-UPDATER-CONFLICT", "SCAN-UPDATER-RENOVATE"],
+    "/properties/action/oneOf/0": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND"],
+    "/properties/action/oneOf/1": ["SCAN-UPDATER-CONFLICT"],
+    "/properties/action/oneOf/2": ["SCAN-UPDATER-RENOVATE"]
+  },
+  "properties": {
+    "invocation": {
+      "type": "object",
+      "required": ["repo"],
+      "properties": {
+        "repo": {"type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"},
+        "GH_TOKEN": {"description": "the homelab-merge App installation token (never a workflow GITHUB_TOKEN)"},
+        "UPDATER_LABEL_TOKEN": {"description": "coordinator-git — issues:write for leg 3"},
+        "UPDATER_MERGE_READY_ONLY": {"enum": ["0", "1"], "default": "1"},
+        "doorbell": {"type": "object", "properties": {"repo": {"type": "string"}}, "description": "POST /update-pr — scopes one repo; the */15 sweep covers stacks.json"}
+      }
+    },
+    "pr": {
+      "description": "The `gh pr list --json` fields one pass reads (no `commits` — the 500k-node cap); commits come from the per-candidate probe.",
+      "type": "object",
+      "required": ["number", "createdAt", "mergeStateStatus", "autoMergeRequest", "reviewDecision", "baseRefName"],
+      "properties": {
+        "number": {"type": "integer"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "mergeStateStatus": {"enum": ["BEHIND", "BLOCKED", "CLEAN", "DIRTY", "DRAFT", "HAS_HOOKS", "UNKNOWN", "UNSTABLE"]},
+        "autoMergeRequest": {"type": ["object", "null"], "description": "null = un-armed = not the updater's"},
+        "reviewDecision": {"enum": ["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", ""]},
+        "labels": {"type": "array"},
+        "headRefOid": {"type": "string"},
+        "latestReviews": {"type": "array"},
+        "reviews": {"type": "array"},
+        "author": {"type": ["object", "null"]},
+        "headRefName": {"type": "string"},
+        "baseRefName": {"type": "string"}
+      }
+    },
+    "action": {
+      "oneOf": [
+        {"type": "object", "required": ["update"], "properties": {"update": {"type": "object", "required": ["number", "expected_head_sha"], "properties": {"number": {"type": "integer"}, "expected_head_sha": {"type": "string"}, "leg": {"enum": ["1", "2"]}}}}},
+        {"type": "object", "required": ["label"], "properties": {"label": {"type": "object", "required": ["number", "op"], "properties": {"number": {"type": "integer"}, "name": {"const": "merge-conflict"}, "op": {"enum": ["add", "remove"]}}}}},
+        {"type": "object", "required": ["handback"], "properties": {"handback": {"type": "object", "required": ["number"], "properties": {"number": {"type": "integer"}, "how": {"const": "tick Renovate's rebase/retry checkbox"}}}}}
+      ]
+    }
+  }
+}

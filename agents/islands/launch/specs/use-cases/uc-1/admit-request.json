@@ -1,0 +1,8 @@
+{
+  "_comment": "UC-1 step 3 — the POST /sessions body the launcher sends (LAUNCH-ADMIT-LAUNCHER). Shape: gateway sessions.schema.json #/post/input. No model, no chain, no deny list, no key ref (LAUNCH-ADMIT-NO-MODEL). The bind names the pod step 5 creates: namespace = the repo, the worker ServiceAccount, the (task, round) pod name. Note the supplier's own UC-1 bind-request.json uses task `homelab-2588-r1` and namespace `platform-agents` — values this launcher never sends.",
+  "stack": "platform",
+  "role": "worker",
+  "task": "issue-2588",
+  "round": 1,
+  "bind": { "namespace": "homelab", "serviceaccount": "agentstack-worker", "pod": "agent-homelab-issue-2588-r1" }
+}

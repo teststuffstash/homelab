@@ -1,0 +1,9 @@
+{
+  "_comment": "UC-1 step ① the launcher's POST /sessions body — verbatim the reviewer-gateway-admit fixture's dispatch-subscription row (expected/dispatch-subscription.txt). No model; harness narrowed to claude.",
+  "stack": "platform",
+  "role": "reviewer",
+  "task": "review-homelab-42",
+  "round": 1,
+  "harness": "claude",
+  "bind": { "namespace": "platform-agents", "serviceaccount": "agentstack-loop", "pod": "reviewer-homelab-42-0a1b2c3d" }
+}

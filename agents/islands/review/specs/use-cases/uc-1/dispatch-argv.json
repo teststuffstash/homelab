@@ -1,0 +1,5 @@
+{
+  "_comment": "UC-1 step ① input: what review-reflex.sh / the review-perstack Sensor execs. A graduated platform repo, so --loop-ns.",
+  "argv": ["homelab", "42", "--round", "1", "--loop-ns", "platform-agents", "--decorrelate-from", "opencode-go/mimo-v2.6-pro"],
+  "env": { "AGENT_GATEWAY": "sessions", "AGENT_GATEWAY_CALLER_TOKEN_FILE": "«the dispatcher pod's projected token, audience agent-gateway»" }
+}

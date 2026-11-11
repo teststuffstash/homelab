@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agents/islands/launch/specs/admission.schema.json",
+  "$comment": "MACHINE half of the admission helper (admission.md is the human half). The WIRE shapes are the supplier's: `request` and `answer` reference gateway/specs/endpoints/sessions.schema.json and are never re-declared here. This file declares only the helper's own surface: its argv, return codes and output variables, and the worker launcher's knobs. ⚑ gap: nothing validates a seam request against the supplier schema (a fixture sends tier `strong`).",
+  "x-interface": "admission",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "properties": {
+    "gw_admit": {
+      "type": "object",
+      "properties": {
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stack", "role", "task"],
+          "properties": {
+            "stack": { "type": "string", "minLength": 1 },
+            "role": { "type": "string", "minLength": 1 },
+            "task": { "type": "string", "minLength": 1 },
+            "round": { "type": "integer", "minimum": 0, "default": 0 },
+            "attempt": { "type": "integer", "minimum": 1, "default": 1, "description": "sent only when > 1" },
+            "tier": { "type": "string" },
+            "harness": { "type": "string" },
+            "rail": { "type": "string" },
+            "canary": { "type": "string", "pattern": "^[^@]+@[^@]+$", "description": "<model>@<provider> → request.canary {model, provider}" },
+            "bind": { "type": "string", "pattern": "^[^/]+/[^/]+/[^/]+$", "description": "<ns>/<sa>/<pod>; exactly one of bind / env_file" },
+            "env_file": { "type": "string", "description": "unbound: the dispatch env lands here, 0600, KEY=VALUE lines" },
+            "harnesses": { "type": "string", "default": "claude,opencode,goose,codex" }
+          },
+          "oneOf": [ { "required": ["bind"] }, { "required": ["env_file"] } ],
+          "x-requirements": ["LAUNCH-ADMIT-HELPER"]
+        },
+        "request": {
+          "$ref": "../../../../gateway/specs/endpoints/sessions.schema.json#/post/input",
+          "$comment": "the supplier's shape (GW-SESSIONS-ADMIT); the helper adds optional fields only when given",
+          "x-requirements": ["LAUNCH-ADMIT-HELPER", "LAUNCH-ADMIT-NO-MODEL"]
+        },
+        "rc": {
+          "enum": [0, 1, 2, 3],
+          "x-meaning": { "0": "dispatch — caller owns the release", "1": "defer — the gateway's", "2": "refused before any request", "3": "fail closed (unreachable, non-200, unknown decision, unusable dispatch — released before return)" },
+          "x-requirements": ["LAUNCH-ADMIT-HELPER", "LAUNCH-ADMIT-BOUND"]
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "GW_SESSION_ID": { "type": "string", "pattern": "^([A-Za-z0-9_-]{1,64})?$" },
+            "GW_RAIL": { "type": "string" },
+            "GW_HARNESS": { "enum": ["", "claude", "opencode", "goose", "codex"] },
+            "GW_MODEL": { "type": "string" },
+            "GW_WIRE_MODEL": { "type": "string", "description": "GW_MODEL without claude/ | opencode-go/ | codex/ for those rails" },
+            "GW_CONTEXT_TOKENS": { "type": "string", "description": "the answer's context_tokens; empty = not declared" },
+            "GW_EXPIRES_AT": { "type": "string" },
+            "GW_ENV_KEYS": { "type": "string", "pattern": "^([A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*)?$" },
+            "GW_PULL_URL": { "type": "string" },
+            "GW_PULL_PRELUDE": { "type": "string", "description": "bound only: the in-pod pull, first in the pod command; exits 97 before the harness on any failure" },
+            "GW_DEFER_REASON": {
+              "type": "string",
+              "anyOf": [
+                { "description": "the gateway's defer reason (rc 1)" },
+                { "pattern": "^gateway-(unreachable|http [0-9]{3}.*)$", "description": "rc 3, transport" },
+                { "pattern": "^dispatch-unusable: ", "x-requirements": ["LAUNCH-ADMIT-BOUND"] }
+              ]
+            },
+            "GW_RETRY_AFTER": { "type": "string", "description": "seconds, or ? when the launcher made the call" }
+          },
+          "x-requirements": ["LAUNCH-ADMIT-HELPER"]
+        }
+      }
+    },
+    "gw_admit_lane": {
+      "type": "object",
+      "properties": {
+        "rc": {
+          "enum": [0, 1, 4],
+          "x-meaning": { "0": "dispatch — GW_LLM_ENV set, file removed", "1": "defer", "4": "take the old proxy (knob off, stack not platform, or the FU-270 transition fallback)" },
+          "x-requirements": ["LAUNCH-ADMIT-HELPER"]
+        },
+        "GW_LLM_ENV": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*=" } }
+      }
+    },
+    "launcher": {
+      "type": "object",
+      "properties": {
+        "knobs": {
+          "type": "object",
+          "properties": {
+            "AGENT_GATEWAY": { "const": "sessions" },
+            "AGENT_GATEWAY_ROLE": { "type": "string", "default": "worker" },
+            "AGENT_GATEWAY_RAIL": { "type": "string" },
+            "AGENT_GATEWAY_CANARY": { "type": "string" },
+            "AGENT_GATEWAY_ATTEMPT": { "type": "integer", "minimum": 1 },
+            "AGENT_GATEWAY_FALLBACK_EXIT": { "type": "integer" },
+            "AGENT_GATEWAY_URL": { "type": "string" },
+            "AGENT_GATEWAY_CALLER_TOKEN_FILE": { "type": "string", "default": "/var/run/secrets/agent-gateway/token" },
+            "AGENT_GATEWAY_CALLER_SA": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" }
+          },
+          "x-requirements": ["LAUNCH-ADMIT-LAUNCHER"]
+        },
+        "bind": {
+          "type": "string",
+          "pattern": "^[^/]+/agentstack-worker/agent-[^/]+$",
+          "description": "<repo>/agentstack-worker/agent-<repo>-<task>-r<round>",
+          "x-requirements": ["LAUNCH-ADMIT-LAUNCHER", "LAUNCH-POD-IDENTITY"]
+        },
+        "request": {
+          "type": "object",
+          "not": { "anyOf": [ { "required": ["model"] }, { "required": ["chain"] }, { "required": ["deny"] }, { "required": ["key_ref"] } ] },
+          "description": "the redrawn request names no model, chain, deny list or key reference",
+          "x-requirements": ["LAUNCH-ADMIT-NO-MODEL"]
+        }
+      }
+    }
+  }
+}

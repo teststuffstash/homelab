@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/intake/specs/intake-receipt.schema.json",
+  "$comment": "MACHINE half of the island-intake CronWorkflow (agents/coordinator/island-intake-argo.yaml) and of the island's admission requests; the HUMAN half is intake-receipt.md. Spike (2026-11-07): the workflow writes these with jq and does not import this file.",
+  "x-interface": "island-intake",
+  "x-use-cases": [],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "mode": { "enum": ["apply", "dry-run"], "default": "apply", "description": "dry-run writes nothing to GitHub and its receipt rules nothing", "x-requirements": ["INTAKE-RUN-HOLD", "INTAKE-RUN-RECEIPT"] },
+      "island": { "type": "string", "default": "gateway", "description": "the one island this run sits for (⚑ gap: one island per CronWorkflow)", "x-requirements": ["INTAKE-RUN-HOLD"] }
+    }
+  },
+  "$defs": {
+    "ruled_line": {
+      "type": "string",
+      "description": "printed by the session, one per input, outside any code fence; the shell greps `^ *INTAKE-RULED: `",
+      "pattern": "^ *INTAKE-RULED: [^ ]+ [a-z-]+( [^ ]+)?$",
+      "x-requirements": ["INTAKE-RUN-RECEIPT"]
+    },
+    "ruled_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "outcome", "refs"],
+      "properties": {
+        "input": { "type": "string", "description": "an id of THIS run's selection inputs — any other id is dropped" },
+        "outcome": { "enum": ["queue", "goal", "seat", "fold", "close", "standing", "file", "deferred"], "description": "unknown outcomes are dropped; deferred = not ruled, re-presents" },
+        "refs": { "type": "array", "items": { "type": "string", "pattern": "^[^/]+/[^#]+#[0-9]+$" } }
+      },
+      "x-requirements": ["INTAKE-RUN-RECEIPT"]
+    },
+    "receipt": {
+      "type": "object",
+      "description": "homelab/intake-<island>-<date>/intake-r1-<ts>/receipt.json",
+      "additionalProperties": false,
+      "required": ["schema", "island", "mode", "ts", "run", "session_ran", "model", "rail", "inputs", "ruled"],
+      "properties": {
+        "schema": { "const": "island-intake-receipt/v1" },
+        "island": { "type": "string" },
+        "mode": { "enum": ["apply", "dry-run"] },
+        "ts": { "type": "string", "format": "date-time" },
+        "run": { "type": "string", "pattern": "^intake-[^/]+-[0-9]{4}-[0-9]{2}-[0-9]{2}/intake-r1-[0-9]{8}T[0-9]{6}Z$" },
+        "session_ran": { "const": true, "description": "a receipt exists only for a run that sat; the selector's daily cap counts these" },
+        "model": { "type": "string", "x-requirements": ["INTAKE-LANE-ADMISSION"] },
+        "rail": { "type": "string", "description": "gateway:<rail> when admitted, else the latch's pick (⚑ gap)", "x-requirements": ["INTAKE-LANE-ADMISSION"] },
+        "inputs": { "type": "array", "items": { "type": "string" } },
+        "ruled": { "type": "array", "items": { "$ref": "#/$defs/ruled_entry" }, "description": "unique by input, the first line per id" }
+      },
+      "x-requirements": ["INTAKE-RUN-RECEIPT", "INTAKE-SELECT-DIG"]
+    },
+    "admission": {
+      "type": "object",
+      "description": "what each lane sends to POST /sessions through gw_admit_lane (gateway/specs/endpoints/sessions.schema.json owns the full shape) — the lane names who it is, never a model",
+      "oneOf": [
+        { "title": "intake", "properties": { "stack": { "const": "platform" }, "role": { "const": "coordinator" }, "tier": { "const": "heavy" }, "task": { "type": "string", "pattern": "^intake-[a-z-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}$" } }, "required": ["stack", "role", "tier", "task"] },
+        { "title": "dig", "properties": { "stack": { "const": "platform" }, "role": { "const": "responder" }, "task": { "type": "string", "pattern": "^dig-[0-9]{4}-[0-9]{2}-[0-9]{2}$" } }, "required": ["stack", "role", "task"] },
+        { "title": "responder", "properties": { "stack": { "type": "string" }, "role": { "const": "responder" }, "task": { "type": "string", "pattern": "^alert-[0-9a-f]+$" } }, "required": ["stack", "role", "task"] }
+      ],
+      "x-requirements": ["INTAKE-LANE-ADMISSION"]
+    },
+    "gauges": {
+      "type": "object",
+      "description": "pushgateway job island_intake, label island — pushed on every exit path",
+      "properties": {
+        "island_intake_last_run_timestamp_seconds": { "type": "number" },
+        "island_intake_probe_ok": { "enum": [0, 1] },
+        "island_intake_inputs": { "type": "integer" },
+        "island_intake_session_ran": { "enum": [0, 1] },
+        "island_intake_ruled": { "type": "integer" },
+        "island_intake_queued": { "type": "integer", "description": "queue + goal lines; > 0 in apply mode rings /coordinate once" }
+      },
+      "x-alerts": ["IslandIntakeStale", "DeepDigStale"],
+      "x-requirements": ["INTAKE-RUN-BELT"]
+    }
+  },
+  "exit": {
+    "0": { "description": "a hold the selector wrote, or a sitting done", "x-requirements": ["INTAKE-RUN-HOLD"] },
+    "1": { "description": "selection failed / no valid selection, a gateway defer, or no clear rail — the retry wrapper re-runs", "x-requirements": ["INTAKE-RUN-HOLD", "INTAKE-LANE-ADMISSION"] }
+  }
+}

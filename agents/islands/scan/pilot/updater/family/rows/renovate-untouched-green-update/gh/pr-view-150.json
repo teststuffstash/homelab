@@ -1,0 +1,36 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-09-27T06:00:00Z",
+      "authors": [
+        {
+          "email": "app/homelab-renovate-1234@users.noreply.invalid",
+          "id": "U_0a7e2b0a389851f3",
+          "login": "app/homelab-renovate-1234",
+          "name": "app/homelab-renovate-1234"
+        }
+      ],
+      "committedDate": "2026-09-27T06:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "chore(deps): update actions/checkout action to v7",
+      "oid": "ren150oid789"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_6b26b1efde05c8d9",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-09-27T06:30:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "APPROVED",
+      "commit": {
+        "oid": "172a5060c0ed63e5af99bad9cc548578febf33d4"
+      }
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "$comment": "UC-1 stage ① — the agent-loop sitting's candidate, as `intake-select.sh --island agent-loop --json` emits it (shape: intake-select.schema.json#/$defs/candidate). Reconstructed from the issue's createdAt (2026-10-31T05:53:07Z) and the sitting's time (2026-10-31T21:16Z); the island comes from the TITLE row (`^scan\\b`), so the Touches walk is not reached.",
+  "number": 3048,
+  "age_h": 15,
+  "author": "app/homelab-agents-1234",
+  "title": "scan: the fleet-fault un-latch HOLDs a PR-less issue latch forever — STRIKE-channel latches have no route out",
+  "kind": "member"
+}

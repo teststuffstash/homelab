@@ -1,0 +1,7 @@
+# provenance — CONSTRUCTED by recorder/fullshape.py: shape from the sanitised live recordings,
+# persona from the trimmed family. Every filled key is in ../../fill-log.json.
+world: board
+class: constructed
+shape_from: agents/islands/scan/pilot/recorder/live-shape/   # class: recorded (provenance.yaml there)
+persona_from: agents/replay/fixtures/updater/worlds/board/gh/pr-list.json
+fill_mode: principled

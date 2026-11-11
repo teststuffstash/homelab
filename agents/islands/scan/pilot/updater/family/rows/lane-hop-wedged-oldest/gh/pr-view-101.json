@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-08-19T09:00:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-08-19T09:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "fix: the thing",
+      "oid": "a94d1f665aa2157f52b4e2b8d740d2172d9cd726"
+    },
+    {
+      "authoredDate": "2026-08-19T12:00:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-08-19T12:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'master' into fix/x",
+      "oid": "abc123def456"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_60f0bc6d7aeb351d",
+      "author": {
+        "login": "homelab-reviewer"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-08-19T09:30:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "APPROVED",
+      "commit": {
+        "oid": "c117d8e85bc97261a6c483d8aaf8204a7805fd5a"
+      }
+    }
+  ]
+}

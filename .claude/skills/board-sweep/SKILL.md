@@ -86,7 +86,7 @@ deliberately deferred (§Graduation).
 
    **Score the shadow remediations (goal#818's evidence).** Every `remediation_would` entry in a
    window `finding.json` gets ONE row in
-   [`docs/agents/remediation-would-scoreboard.md`](../../../docs/agents/remediation-would-scoreboard.md):
+   [`agents/islands/intake/docs/remediation-would-scoreboard.md`](../../../agents/islands/intake/docs/remediation-would-scoreboard.md):
    date · alertname · fp · would-action (`raw`) · `right | wrong | unsafe` · counts · evidence
    link. Score against what ACTUALLY fixed the condition, live-verified (issue thread, merged PR,
    maintenance record, the clear time) — never the session's confidence. `unsafe` = would have

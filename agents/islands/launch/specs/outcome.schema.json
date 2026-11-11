@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agents/islands/launch/specs/outcome.schema.json",
+  "$comment": "MACHINE half of the ride's end (outcome.md is the human half). The gateway outcome's wire shape and its class vocabulary are the supplier's (gateway sessions.schema.json #/outcome/input, GW-SESSIONS-OUTCOME) and are referenced, not re-declared; `err_class` is the launcher's own finer vocabulary and `gateway_class_map` is the projection between them.",
+  "x-interface": "outcome",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "properties": {
+    "err_class": {
+      "enum": ["", "harness-death", "harness-fault", "auth-storm", "timeout", "quota", "oom", "turn-cap", "no-pr", "unknown", "budget-403", "budget-403-key", "budget-403-account", "http-403-other", "budget-exhausted-key", "provider-5xx", "tool-loop"],
+      "x-kind": {
+        "strike": ["harness-death", "harness-fault", "auth-storm", "timeout", "quota", "budget-403-account", "http-403-other", "turn-cap", "oom"],
+        "key-retry": ["budget-403-key", "budget-exhausted-key"],
+        "neither": ["budget-403"]
+      },
+      "$comment": "any class on a ride that opened no PR is a strike, except a key retry and the residual budget-403",
+      "x-requirements": ["LAUNCH-OUTCOME-CLASSIFY"]
+    },
+    "gateway_outcome": {
+      "type": "object",
+      "properties": {
+        "body": { "$ref": "../../../../gateway/specs/endpoints/sessions.schema.json#/outcome/input" },
+        "class_map": {
+          "type": "object",
+          "description": "err_class → the supplier class sent; the finer err_class rides as subclass when it differs",
+          "const": {
+            "harness-death": "harness-death", "harness-fault": "harness-fault", "auth-storm": "auth-storm", "timeout": "timeout",
+            "provider-5xx": "provider-5xx", "no-pr": "no-pr", "unknown": "unknown", "turn-cap": "turn-cap", "tool-loop": "tool-loop",
+            "quota": "harness-gave-up", "*": "unknown", "(tasked, no strike, no key retry)": "clean", "(untasked, stats clean or pod Succeeded)": "clean"
+          }
+        },
+        "readmit": {
+          "type": "object",
+          "properties": {
+            "when": { "const": "strike counted ∧ tasked ∧ salvage none ∧ attempt ≤ AGENT_GATEWAY_AUTO_ATTEMPTS" },
+            "auto_attempts_default": { "const": 2 },
+            "salvage": { "enum": ["none", "resumable", "unknown"] }
+          }
+        }
+      },
+      "x-requirements": ["LAUNCH-OUTCOME-GATEWAY"]
+    },
+    "strike_line": {
+      "type": "string",
+      "pattern": "^AGENT_STRIKE: model=\\S+ error_class=\\S+ round=[0-9]+ session=\\S+( match=.*?)?( provider=\\S+)?$",
+      "x-requirements": ["LAUNCH-OUTCOME-STRIKE-COMMENT"]
+    },
+    "key_retry_line": {
+      "type": "string",
+      "pattern": "^KEY-RETRY: model=\\S+ error_class=\\S+ round=[0-9]+ session=\\S+( match=.*?)?( provider=\\S+)?$",
+      "x-requirements": ["LAUNCH-OUTCOME-STRIKE-COMMENT"]
+    },
+    "router_report": {
+      "type": "object",
+      "required": ["session", "task", "stack", "role", "round", "model", "rail", "cost_usd", "error_class", "outcome"],
+      "properties": {
+        "session": { "type": "string" }, "task": { "type": "string" }, "stack": { "type": "string" },
+        "role": { "const": "worker" }, "round": { "type": "integer" }, "model": { "type": "string" },
+        "rail": { "type": "string" }, "cost_usd": { "type": "number" }, "error_class": { "type": "string" },
+        "outcome": { "type": "string", "description": "pr, else stats.exit_status, else no-pr" }
+      },
+      "x-requirements": ["LAUNCH-OUTCOME-STRIKE-COMMENT"]
+    },
+    "route_retry": {
+      "type": "object",
+      "properties": {
+        "cell": { "type": "string", "pattern": "^[^|]+\\|[^|]*\\|[^|]*$", "description": "<model>|<provider>|<class>" },
+        "task_cap": { "const": 2 }
+      },
+      "x-requirements": ["LAUNCH-OUTCOME-ROUTE-RETRY"]
+    },
+    "doorbell": {
+      "type": "object",
+      "required": ["repo", "unit"],
+      "properties": {
+        "repo": { "type": "string" }, "unit": { "const": "-" },
+        "stack": { "type": "string" }, "loop_ns": { "type": "string", "pattern": "-agents$" }
+      },
+      "x-requirements": ["LAUNCH-OUTCOME-DOORBELL"]
+    },
+    "run_phase": {
+      "type": "object",
+      "properties": {
+        "family": { "const": "agent_run_phase_seconds" },
+        "phase": { "enum": ["dispatch-gates", "pod-spinup"] },
+        "grouping": { "type": "string", "pattern": "^/metrics/job/agent_run_phase/project/[^/]+/issue/[^/]+/round/[0-9]+/role/worker$" }
+      },
+      "x-requirements": ["LAUNCH-OUTCOME-PHASES"]
+    }
+  }
+}

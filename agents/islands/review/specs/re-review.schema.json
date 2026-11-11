@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/islands/review/specs/re-review.schema.json",
+  "$comment": "MACHINE half of the review-state snapshot and the time-travel re-review; the HUMAN half is re-review.md.",
+  "x-interface": "re-review",
+  "x-use-cases": [],
+  "type": "object",
+  "$defs": {
+    "snapshot": {
+      "type": "object",
+      "properties": {
+        "prefix": { "type": "string", "pattern": "^s3://[^/]+/[A-Za-z0-9._-]+/[^/]+/review-state-([0-9a-f]{8}|unknown)-[0-9]{8}T[0-9]{6}Z/$" },
+        "files": { "const": ["pr.json", "diff.patch", "head-sha.txt", "rubric.sha.txt", "snapshot-manifest.json"] },
+        "manifest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["project", "task", "pr", "round", "model", "headsha8", "timestamp", "files"],
+          "properties": {
+            "project": { "type": "string" }, "task": { "type": "string" }, "pr": { "type": "string" },
+            "round": { "type": "integer" }, "model": { "type": "string" }, "headsha8": { "type": "string" },
+            "timestamp": { "type": "string" }, "files": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "x-requirements": ["REVIEW-REREVIEW-SNAPSHOT"]
+    },
+    "argv": {
+      "type": "object",
+      "properties": {
+        "project": { "type": "string" }, "pr": { "type": "integer" }, "since": { "type": "string", "pattern": "^[0-9]{8}$" },
+        "model": { "type": "string", "default": "sonnet" }, "shadow": { "type": "boolean" }, "dry_run": { "type": "boolean" }
+      },
+      "dependentRequired": { "pr": ["project"] },
+      "x-requirements": ["REVIEW-REREVIEW-SHADOW"]
+    },
+    "invocation": {
+      "enum": ["claude -p", "opencode run"],
+      "description": "opencode run iff the model id starts with `opencode/` (Zen)",
+      "x-requirements": ["REVIEW-REREVIEW-SHADOW"]
+    },
+    "verdict": {
+      "enum": ["APPROVE", "CHANGES_REQUESTED", "UNKNOWN"],
+      "x-requirements": ["REVIEW-REREVIEW-SHADOW"]
+    },
+    "comparison_tag": {
+      "type": "string",
+      "pattern": "^<!-- re-review:([0-9a-f]{8}|unknown)-[0-9]{8}T[0-9]{6}Z -->$",
+      "x-requirements": ["REVIEW-REREVIEW-IDEMPOTENT"]
+    }
+  }
+}

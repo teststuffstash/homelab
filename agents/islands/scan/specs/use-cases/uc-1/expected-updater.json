@@ -1,0 +1,4 @@
+{
+  "before_approval": {"action": "none", "why": "BEHIND but not merge-ready (no approval yet) — leg 1 skips it"},
+  "after_approval": {"update": {"number": 4250, "expected_head_sha": "«headRefOid»", "leg": "1"}}
+}

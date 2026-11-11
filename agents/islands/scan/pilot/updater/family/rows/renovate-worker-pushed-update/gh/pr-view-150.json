@@ -1,0 +1,66 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-09-27T06:00:00Z",
+      "authors": [
+        {
+          "email": "app/homelab-renovate-1234@users.noreply.invalid",
+          "id": "U_0a7e2b0a389851f3",
+          "login": "app/homelab-renovate-1234",
+          "name": "app/homelab-renovate-1234"
+        }
+      ],
+      "committedDate": "2026-09-27T06:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "chore(deps): update actions/checkout action to v7",
+      "oid": "e8501ef6a7bd1d12db712d76be916f3402789a40"
+    },
+    {
+      "authoredDate": "2026-09-27T06:20:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents[bot]@users.noreply.invalid",
+          "id": "BOT_b2eedd5cb8564456",
+          "login": "homelab-agents[bot]",
+          "name": "homelab-agents[bot]"
+        }
+      ],
+      "committedDate": "2026-09-27T06:20:00Z",
+      "messageBody": "",
+      "messageHeadline": "fix: adapt the workflow to v7",
+      "oid": "fb1a6c4529117b976a8ba4d891ed9aa106cc348a"
+    },
+    {
+      "authoredDate": "2026-09-27T06:25:00Z",
+      "authors": [
+        {
+          "email": "homelab-merge[bot]@users.noreply.invalid",
+          "id": "BOT_3ca717c820ad5ccc",
+          "login": "homelab-merge[bot]",
+          "name": "homelab-merge[bot]"
+        }
+      ],
+      "committedDate": "2026-09-27T06:25:00Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'master' into renovate/actions-checkout-7.x",
+      "oid": "ren150oid789"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_6b26b1efde05c8d9",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-09-27T06:30:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "APPROVED",
+      "commit": {
+        "oid": "172a5060c0ed63e5af99bad9cc548578febf33d4"
+      }
+    }
+  ]
+}

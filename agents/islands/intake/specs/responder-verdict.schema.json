@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/intake/specs/responder-verdict.schema.json",
+  "$comment": "MACHINE half of what the responder leaves for the rest of the platform (agents/coordinator/responder-argo.yaml respond, post-session); the HUMAN half is responder-verdict.md. The machine block's own shape is agents/issue_body.py's; this file names the keys the responder writes into it. Spike (2026-11-07): nothing imports this file.",
+  "x-interface": "responder-verdict",
+  "x-use-cases": [],
+  "$defs": {
+    "issue_lines": {
+      "type": "object",
+      "description": "the lines a triage session writes into the ONE issue it may file (title `🚨 <alertname>: <summary>`); the shell upserts alert-fp, self-referential, fix-verdict and Touches into the machine block, legacy lines kept",
+      "required": ["alert_fp", "fix_verdict"],
+      "properties": {
+        "alert_fp": { "type": "string", "pattern": "^alert-fp:[0-9a-f]+$", "description": "the read-back key across every claimed repo", "x-requirements": ["INTAKE-RESP-FIX-VERDICT"] },
+        "subject": { "type": "string", "pattern": "^subject:.+$", "description": "ONE per thread — the thread's identity (a related-but-different subject files fresh and links)" },
+        "touches": { "type": "string", "pattern": "^Touches: .+$", "description": "the narrowest write surface (ADR-097); omitted when unknown; a codeowner-author verdict is ONE sentence in the body, never a line", "x-requirements": ["INTAKE-RESP-TOUCHES-CLASSIFY"] },
+        "fix_verdict": { "enum": ["fix-verdict: fix", "fix-verdict: report-only"], "x-requirements": ["INTAKE-RESP-FIX-VERDICT", "INTAKE-RESP-RESOLVE", "INTAKE-RESP-DECIDED-ONCE"] },
+        "cause": { "type": "string", "pattern": "^Cause: #[0-9]+", "description": "same repo only; anything else is not bound", "x-requirements": ["INTAKE-RESP-CAUSE-LINE"] }
+      }
+    },
+    "fix_verdict_ring": {
+      "type": "object",
+      "description": "POST <agent-loop eventsource>/fix-verdict — rung after agent-fix on a `fix` verdict, not inside an observation window; fix-debounce decides the set",
+      "additionalProperties": false,
+      "required": ["repo", "number"],
+      "properties": { "repo": { "type": "string", "pattern": "^teststuffstash/[^/]+$" }, "number": { "type": "integer" } },
+      "x-requirements": ["INTAKE-RESP-FIX-VERDICT"]
+    },
+    "last_cleared_line": {
+      "type": "string",
+      "pattern": "^last-cleared: .+ — .+ stopped firing \\(alert-fp:[0-9a-f]+\\)\\..*$",
+      "description": "the ONE line a clear rewrites on a thread that stays open",
+      "x-requirements": ["INTAKE-RESP-RESOLVE"]
+    },
+    "remediation_would_line": {
+      "type": "string",
+      "pattern": "^[[:space:]>*`-]*REMEDIATION-WOULD:",
+      "description": "REMEDIATION-WOULD: <verb> <namespace>/<kind>/<name> — <reason>; line-anchored, independent of the fix verdict (POSIX class syntax as the shell's jq test uses it)",
+      "x-requirements": ["INTAKE-RESP-FINDING"]
+    },
+    "finding": {
+      "type": "object",
+      "description": "homelab/alert-<fp>/responder-r1-<ts>/finding.json",
+      "required": ["schema", "ts", "alertname", "fingerprint", "subject", "verdict", "issue", "route_repo", "route_stack", "self_referential", "observation_window", "model", "rail", "pod", "remediation_would"],
+      "properties": {
+        "schema": { "const": "responder-finding/v1" },
+        "ts": { "type": "string", "format": "date-time" },
+        "alertname": { "type": "string" },
+        "fingerprint": { "type": "string" },
+        "subject": { "type": "string" },
+        "verdict": { "type": "string", "description": "the recorded verdict, `none` when the session filed nothing" },
+        "issue": { "type": "string", "description": "<repo>#<n> or empty" },
+        "route_repo": { "type": "string" },
+        "route_stack": { "type": "string" },
+        "self_referential": { "type": "boolean", "x-requirements": ["INTAKE-RESP-SELFREF"] },
+        "observation_window": { "type": "string" },
+        "model": { "type": "string", "x-requirements": ["INTAKE-LANE-ADMISSION"] },
+        "rail": { "type": "string", "x-requirements": ["INTAKE-LANE-ADMISSION"] },
+        "pod": { "type": "string" },
+        "remediation_would": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["verb", "target", "reason", "raw"],
+            "properties": {
+              "verb": { "type": ["string", "null"] },
+              "target": { "type": ["string", "null"], "description": "<namespace>/<kind>/<name>" },
+              "reason": { "type": ["string", "null"] },
+              "raw": { "type": "string", "description": "kept even when the line does not parse — still scored" }
+            }
+          },
+          "description": "one per DISTINCT marker line, in order; declared non-actions dropped; [] when none — scored into ../docs/remediation-would-scoreboard.md"
+        }
+      },
+      "x-requirements": ["INTAKE-RESP-FINDING"]
+    },
+    "claim_responder": {
+      "type": "object",
+      "description": "the AgentStack claim's spec.responder (the claim island's XRD); rendered by the Composition into Role/RoleBinding agentstack-responder",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "verbs": { "type": "array", "items": { "type": "object", "description": "a declared verb/resource pair" } }
+      },
+      "x-requirements": ["INTAKE-RESP-GRADUATION"]
+    }
+  }
+}

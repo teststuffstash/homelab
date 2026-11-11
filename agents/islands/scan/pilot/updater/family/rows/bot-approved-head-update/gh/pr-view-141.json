@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-09-05T09:10:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-09-05T09:10:00Z",
+      "messageBody": "",
+      "messageHeadline": "feat: content",
+      "oid": "27f3c64852add6c833be9a11986561361566234b"
+    },
+    {
+      "authoredDate": "2026-09-05T11:00:00Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-09-05T11:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'master' into fix/ready",
+      "oid": "ready141oid123"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_8ce285bc1b8be7fa",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-09-05T09:30:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "APPROVED",
+      "commit": {
+        "oid": "d250599fbfa688520bbbaec26ba48a52bf8b2cef"
+      }
+    }
+  ]
+}

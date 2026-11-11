@@ -1,0 +1,46 @@
+[
+  {
+    "author": {
+      "is_bot": true,
+      "login": "app/homelab-agents-1234"
+    },
+    "autoMergeRequest": {
+      "authorEmail": null,
+      "commitBody": null,
+      "commitHeadline": "sanitized commitHeadline",
+      "mergeMethod": "SQUASH",
+      "enabledAt": "2026-08-20T10:01:00Z",
+      "enabledBy": {
+        "is_bot": true,
+        "login": "app/homelab-agents-1234"
+      }
+    },
+    "baseRefName": "master",
+    "createdAt": "2026-08-20T10:00:00Z",
+    "headRefName": "fix/pr-90",
+    "headRefOid": "485c229c51eb2c047b5babe6100d7f2beec7791d",
+    "labels": [],
+    "latestReviews": [],
+    "mergeStateStatus": "CLEAN",
+    "number": 90,
+    "reviewDecision": "",
+    "reviews": []
+  },
+  {
+    "author": {
+      "is_bot": true,
+      "login": "app/homelab-agents-1234"
+    },
+    "autoMergeRequest": null,
+    "baseRefName": "master",
+    "createdAt": "2026-08-20T11:00:00Z",
+    "headRefName": "fix/pr-91",
+    "headRefOid": "38c4822d6893306331964dadaa1a175bc59fb500",
+    "labels": [],
+    "latestReviews": [],
+    "mergeStateStatus": "BEHIND",
+    "number": 91,
+    "reviewDecision": "",
+    "reviews": []
+  }
+]

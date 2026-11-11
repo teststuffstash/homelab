@@ -1,0 +1,36 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-09-27T06:00:00Z",
+      "authors": [
+        {
+          "email": "app/homelab-renovate-1234@users.noreply.invalid",
+          "id": "U_0a7e2b0a389851f3",
+          "login": "app/homelab-renovate-1234",
+          "name": "app/homelab-renovate-1234"
+        }
+      ],
+      "committedDate": "2026-09-27T06:00:00Z",
+      "messageBody": "",
+      "messageHeadline": "fix(deps): update dependency boto3 to v1.42.0",
+      "oid": "ren152oid789"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_dac6e2af1a366151",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-09-27T06:30:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "APPROVED",
+      "commit": {
+        "oid": "291e3d4a19e20fabefc1722304ee6ab6494b9c10"
+      }
+    }
+  ]
+}

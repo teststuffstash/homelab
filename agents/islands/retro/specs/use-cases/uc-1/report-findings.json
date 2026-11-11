@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "findings": [
+    {
+      "mechanism": "ci-red-retried-same-model",
+      "surface": "agents/agent-session.sh",
+      "summary": "A CI-red round re-rode the same model with no new fact; the second round repeated the first failure.",
+      "evidence": [
+        "https://github.com/teststuffstash/homelab/pull/9002"
+      ],
+      "related_work": []
+    }
+  ]
+}

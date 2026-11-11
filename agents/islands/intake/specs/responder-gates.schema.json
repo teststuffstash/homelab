@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/intake/specs/responder-gates.schema.json",
+  "$comment": "MACHINE half of the responder's pre-session gates (agents/coordinator/responder-argo.yaml respond; agents/responder-budget.sh); the HUMAN half is responder-gates.md. Spike (2026-11-07): the shell reads these shapes with jq/grep; nothing imports this file.",
+  "x-interface": "responder-gates",
+  "x-use-cases": [],
+  "$defs": {
+    "payload_alert": {
+      "type": "object",
+      "description": "one member of the Alertmanager webhook payload's `alerts` (the Sensor passes the body verbatim as the `payload` parameter)",
+      "required": ["status", "labels", "fingerprint"],
+      "properties": {
+        "status": { "enum": ["firing", "resolved"] },
+        "fingerprint": { "type": "string" },
+        "startsAt": { "type": "string" },
+        "labels": {
+          "type": "object",
+          "required": ["alertname"],
+          "properties": {
+            "alertname": { "type": "string" },
+            "triage": { "enum": ["now", "dig", "none"], "description": "the route sends only `now`; the in-pod belt re-checks" },
+            "platform_machinery": { "const": "true", "x-requirements": ["INTAKE-RESP-SELFREF"] }
+          }
+        },
+        "annotations": { "type": "object" }
+      }
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(pvc:[^/]+/.+|workflow:[^/]+/.+|workload:[^/]+/.+|node:.+|repo:.+|instance:.+|ns:.+|alert:.+)$",
+      "description": "the failing object — the cascade in the >>>REPLAY:responder-subject>>> block, first match wins, shared with the dig",
+      "x-requirements": ["INTAKE-RESP-SUBJECT", "INTAKE-DIG-CANDIDATE"]
+    },
+    "ledger": {
+      "type": "object",
+      "description": "the responder-seen ConfigMap .data (ns agent-coordinator)",
+      "$comment": "keys: fp-<fp> (per fingerprint), subj-<sha256(alertname|subject)[:16]> (per subject), spawn-<date>-<fp> (write-once); values as below",
+      "patternProperties": {
+        "^spawn-[0-9]{4}-[0-9]{2}-[0-9]{2}-": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\|.+$", "description": "WRITE-ONCE, one per spawned session — the budget's count; earlier days pruned" },
+        "^fp-": { "type": "string", "pattern": "^([0-9]{4}-[0-9]{2}-[0-9]{2}\\|.+|deferred-.+|budget-.+|subjdup-.+|window-.+|claimed-.+)$", "description": "`<date>|<incident>` (or `<date>|grouped:<leader fp>`) = triaged today; the prefixed values are markers that satisfy no dedup and consume no budget" }
+      },
+      "x-requirements": ["INTAKE-RESP-BUDGET"]
+    },
+    "budget_gauges": {
+      "type": "object",
+      "description": "pushgateway job responder_budget — pushed on both paths",
+      "properties": {
+        "responder_triage_sessions_today": { "type": "integer" },
+        "responder_triage_budget_max": { "type": "integer", "default": 12 },
+        "responder_triage_budget_remaining": { "type": "integer" },
+        "responder_triage_blocked": { "enum": [0, 1] },
+        "responder_triage_probe_ok": { "enum": [0, 1], "description": "0 = the ledger exists but could not be read — blocked fail-closed" },
+        "responder_triage_day_start": { "type": "integer", "description": "00:00Z of the day the numbers describe" }
+      },
+      "x-alerts": ["ResponderTriageBudgetExhausted"],
+      "x-requirements": ["INTAKE-RESP-BUDGET"]
+    },
+    "still_firing_line": {
+      "type": "string",
+      "pattern": "^still-firing: .+ — .+ is still firing on this subject \\(alert-fp:[0-9a-f]+\\)\\. Already triaged; the verdict above stands until this issue closes\\.$",
+      "description": "the ONE line a decided re-fire rewrites in the existing issue body",
+      "x-requirements": ["INTAKE-RESP-DECIDED-ONCE"]
+    },
+    "declared_window": {
+      "type": "object",
+      "description": "one value of the responder-window ConfigMap (written by agents/seat-window.sh)",
+      "required": ["id", "reason", "alerts", "until"],
+      "properties": {
+        "id": { "type": "string" },
+        "by": { "type": "string" },
+        "node": { "type": "string" },
+        "reason": { "type": "string", "description": "free text, read back verbatim" },
+        "alerts": { "type": "array", "items": { "type": "string" }, "description": "alert NAMES — matched by name alone, never namespace" },
+        "opened_at": { "type": "string" },
+        "until": { "type": "string" },
+        "closed_at": { "type": "string" },
+        "tail_until": { "type": "string", "description": "a closed window still owns what it named until here" }
+      },
+      "x-requirements": ["INTAKE-RESP-WINDOW", "INTAKE-DIG-EXPLAINED"]
+    }
+  }
+}

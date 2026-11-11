@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/harvest.schema.json",
+  "$comment": "MACHINE half of the harvest step (retro-argo.yaml templates[harvest]) and the overdue belt; the HUMAN half is harvest.md.",
+  "x-interface": "harvest",
+  "x-use-cases": ["UC-1"],
+  "$defs": {
+    "served": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:([^ ]+|unserved)$",
+      "description": "<harness>:<served model id> per leg",
+      "x-requirements": ["RETRO-HARVEST-NAME"]
+    },
+    "report_path": {
+      "type": "string",
+      "pattern": "^docs/agents/retros/\\d{4}-\\d{2}-\\d{2}-[a-z0-9-]+-r[1-9][0-9]*-[a-zA-Z0-9.-]+\\.md$",
+      "description": "<prepared_at day>-<series>-<run_id>-<slug>.md",
+      "x-requirements": ["RETRO-HARVEST-NAME"]
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^retro/\\d{4}-\\d{2}-\\d{2}-[a-z0-9-]+-r[1-9][0-9]*$",
+      "x-requirements": ["RETRO-HARVEST-PR"]
+    },
+    "pr": {
+      "type": "object",
+      "required": ["repo", "base", "title", "body"],
+      "properties": {
+        "repo": { "const": "teststuffstash/homelab" },
+        "base": { "const": "master" },
+        "title": { "type": "string", "pattern": "^retros: [a-z0-9-]+ r[1-9][0-9]* \\([0-9]+ report\\(s\\), scheduled retro\\)$" },
+        "body": {
+          "type": "string",
+          "description": "the ruling line; optional ⚠ PARTIAL RUN naming dead cells (RETRO-HARVEST-PARTIAL); optional ⚠ PUSHGATEWAY PUSH FAILED (RETRO-BELT)",
+          "x-requirements": ["RETRO-HARVEST-PARTIAL", "RETRO-BELT"]
+        }
+      },
+      "x-requirements": ["RETRO-HARVEST-PR"]
+    },
+    "belt_push": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "pattern": "^http://prometheus-pushgateway\\.monitoring\\.svc\\.cluster\\.local:9091/metrics/job/platform-retro/series/[a-z0-9-]+$" },
+        "body": { "type": "string", "pattern": "^retro_report_last_success_timestamp [0-9]+\\n$" },
+        "attempts": { "type": "integer", "minimum": 1, "maximum": 2 }
+      },
+      "x-requirements": ["RETRO-BELT"]
+    },
+    "alert": {
+      "type": "object",
+      "properties": {
+        "name": { "const": "RetroReportOverdue" },
+        "expr": { "const": "(time() - (max by (series) (max_over_time(retro_report_last_success_timestamp[8d])) or (absent(max_over_time(retro_report_last_success_timestamp[8d])) * 0))) > 7 * 86400 + 3 * 3600" },
+        "for": { "const": "30m" }
+      },
+      "x-requirements": ["RETRO-BELT"]
+    }
+  }
+}

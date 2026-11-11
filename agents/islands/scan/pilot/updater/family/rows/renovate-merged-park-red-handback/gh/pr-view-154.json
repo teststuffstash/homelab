@@ -1,0 +1,51 @@
+{
+  "commits": [
+    {
+      "authoredDate": "2026-10-20T10:51:00Z",
+      "authors": [
+        {
+          "email": "app/homelab-renovate-1234@users.noreply.invalid",
+          "id": "U_0a7e2b0a389851f3",
+          "login": "app/homelab-renovate-1234",
+          "name": "app/homelab-renovate-1234"
+        }
+      ],
+      "committedDate": "2026-10-20T10:51:00Z",
+      "messageBody": "",
+      "messageHeadline": "chore(deps): update ghcr.io/astral-sh/uv docker tag to v0.13.3",
+      "oid": "9b3558a2add8864584e4c3edd320da24a27a2a29"
+    },
+    {
+      "authoredDate": "2026-10-20T10:58:59Z",
+      "authors": [
+        {
+          "email": "homelab-agents-1234[bot]@users.noreply.invalid",
+          "id": "BOT_863611fa661a4be4",
+          "login": "homelab-agents-1234[bot]",
+          "name": "homelab-agents-1234[bot]"
+        }
+      ],
+      "committedDate": "2026-10-20T10:58:59Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'master' into renovate/ghcr.io-astral-sh-uv-0.13.x",
+      "oid": "ren154oid789"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "PRR_aed0b36ab10b75df",
+      "author": {
+        "login": "homelab-reviewer[bot]"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "submittedAt": "2026-10-20T06:30:00Z",
+      "includesCreatedEdit": false,
+      "reactionGroups": [],
+      "state": "APPROVED",
+      "commit": {
+        "oid": "0acf507a9464f841cc219278c8ff60a3b8abecd5"
+      }
+    }
+  ]
+}
