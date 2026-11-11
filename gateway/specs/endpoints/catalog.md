@@ -641,7 +641,7 @@ counter — `increase()` absorbs it; it gates nothing.
 the fake MCP answers the two slices and the AA benchmarks from the live MCP answers of 2026-10-19,
 trimmed (13 ranked ids across the latest week, 8 benched, 8 candidates); the openrouter rail's fake
 serves `/v1/models/<id>/endpoints` for `deepseek/deepseek-v4.1-flash` (**M**) and
-`z-ai/glm-5.3-flash` (**G**) and 404 for the other five. T0 = the test clock. The account key is
+`z-ai/glm-5.3-flash` (**G**) and 404 for the other six. T0 = the test clock. The account key is
 the fixture Secret `agent-egress/router-account-key`. Legend, every table below: `mcp_answer` = what the
 fake MCP answers (`ok`, `503`, `down` = a connect failure, `malformed` = a tool result that is not
 JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`); `endpoints` = the endpoints route's behaviour per
@@ -677,9 +677,9 @@ Legend: `rankings` = the ranking row the case carries: **the `:free` row** is
 stamp stripped, `:free` kept: it is a candidate under that id when its family benches); `benchmarks`
 = the AA answer (`ok`: the fixture, with the family's row; `benchmarks-no-family`: the fixture
 without it). `candidates?` = as in §A. `free_read?` = whether the refresh asked the rail for the
-`:free` id's endpoints (`requested`: the id is a candidate; `absent`: it is not). The family row's
-indices are not in the view: the `:free` id's endpoints are unread in this world, so its `aa` joins
-no snapshot row, and the join shows in the candidate count and the read.
+`:free` id's endpoints (`requested`: the id is a candidate; `absent`: it is not). The rail answers
+404 for the `:free` id's endpoints in this world, so the id holds no snapshot row and the view
+carries none of the family row's indices.
 
 | description | rankings | benchmarks | candidates? | free_read? |
 |---|---|---|---|---|
@@ -689,7 +689,7 @@ no snapshot row, and the join shows in the candidate count and the read.
 #### The `other` bucket is never ranked
 
 Legend: **the `other` row** is the rankings' `other` permaslug in both slices' latest week.
-`candidates?` = as in §A (the ranked count is the proof: `other` is not one of the 13).
+`candidates?` = as in §A (`other` is not one of the 13 ranked).
 `other_read?` = whether the refresh asked the rail for an `other` id's endpoints.
 
 | description | rankings | benchmarks | candidates? | other_read? |
@@ -787,7 +787,7 @@ Legend: `canaried` = the cells a clean canary made `eligible`; `selected?` / `or
 
 #### Named gaps — the registry
 
-None: the `:free` family and the `other` bucket are proven by the rows above.
+None.
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
