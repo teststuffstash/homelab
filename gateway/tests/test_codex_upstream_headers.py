@@ -82,7 +82,7 @@ async def _next_admission(gw) -> dict:
 async def _snapshot(app) -> dict:
     s = app.state.codex.headroom.snapshot
     return {"source": s.source, "limited": s.limited,
-            "windows": [{"minutes": w.minutes, "used": w.used, "resets_at": w.resets_at} for w in s.windows]}
+            "windows": [{"minutes": w.key, "used": w.used, "resets_at": w.resets_at} for w in s.windows]}
 
 
 async def test_second_observation(codex_app, codex_gw, codex_upstream, clock):

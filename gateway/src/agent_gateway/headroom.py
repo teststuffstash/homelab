@@ -10,9 +10,11 @@ normalised schema, not a vendor payload:
 `observe()` is the seam: who may call it (an authenticated, account-bound producer) is a `⚑ gap`
 (no poll, no upstream-header reading, no jail ingress yet), so a fresh gateway answers
 `quota-unknown` and the rail defers — fail closed. Freshness, the ceiling and the window profile
-are policy (`rails.codex.headroom`), never code literals. An ACCEPTED snapshot is handed to
-`on_accept` (§Gauges: `app.py` binds the metrics' two subscription gauges there); a refused report
-reaches no listener. No rendering lives here.
+are policy (`rails.codex.headroom`, `rails.opencode.headroom`), never code literals. The Go rail
+(GW-SESSIONS-ADMIT §Capacity) is the same engine with named windows: its report's windows carry
+`window` (a name) where codex carries `window_minutes`, and the policy's `window_key` says which.
+An ACCEPTED snapshot is handed to `on_accept` (§Gauges: `app.py` binds the metrics' two subscription
+gauges there); a refused report reaches no listener. No rendering lives here.
 """
 
 from __future__ import annotations
@@ -44,7 +46,7 @@ class ReportError(Exception):
 class Window:
     used: float  # 0–1
     resets_at: float
-    minutes: int
+    key: int | str  # the policy's profile entry: a span in minutes (codex) or a window name (opencode)
 
 
 @dataclass(frozen=True)
@@ -56,9 +58,9 @@ class Snapshot:
 
 
 def normalize(report, now: float, policy: HeadroomPolicy) -> Snapshot:
-    """Validate one report against the policy's window profile. A report missing a window, naming
-    one outside the profile, or carrying a non-finite / bool-as-number / expired value is refused
-    whole — zero usage alone is not capacity."""
+    """Validate one report against the policy's window profile, read under `policy.window_key`. A report
+    missing a window, naming one outside the profile, or carrying a non-finite / bool-as-number /
+    expired value is refused whole — zero usage alone is not capacity."""
     if not isinstance(report, dict):
         raise ReportError("quota-invalid")
     at = report.get("observed_at")
@@ -68,20 +70,20 @@ def normalize(report, now: float, policy: HeadroomPolicy) -> Snapshot:
     if source not in SOURCES or type(report.get("limited")) is not bool:
         raise ReportError("quota-invalid")
     raw = report.get("windows")
-    if not isinstance(raw, list) or len(raw) != len(policy.windows_minutes):
+    if not isinstance(raw, list) or len(raw) != len(policy.windows):
         raise ReportError("quota-invalid")
     windows = []
     for item in raw:
         if not isinstance(item, dict):
             raise ReportError("quota-invalid")
-        used, reset, minutes = item.get("used_percent"), item.get("resets_at"), item.get("window_minutes")
+        used, reset, key = item.get("used_percent"), item.get("resets_at"), item.get(policy.window_key)
         if (not finite(used) or not 0 <= used <= 100 or not finite(reset) or reset <= now
-                or type(minutes) is not int or minutes not in policy.windows_minutes):
+                or type(key) not in (int, str) or key not in policy.windows):
             raise ReportError("quota-invalid")
-        windows.append(Window(used / 100, reset, minutes))
-    if {w.minutes for w in windows} != set(policy.windows_minutes):
+        windows.append(Window(used / 100, reset, key))
+    if {w.key for w in windows} != set(policy.windows):
         raise ReportError("quota-invalid")
-    return Snapshot(at, source, report["limited"], tuple(sorted(windows, key=lambda w: w.minutes)))
+    return Snapshot(at, source, report["limited"], tuple(sorted(windows, key=lambda w: w.key)))
 
 
 class Headroom:
