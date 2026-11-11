@@ -1438,6 +1438,21 @@ Legend: `request_rows?` = the session's request rows as `provider status`; `ride
 |---|---|---|---|---|---|---|
 | the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell ⚖ | the Go window near its share; the openrouter fake's deepinfra answers 500 | dispatch | openrouter | openrouter over opencode: headroom | deepinfra 500, atlas-cloud 200 | atlas-cloud 1 / 1, deepinfra 0 / 0 |
 
+#### A preference for the strongest
+
+⚖ An admission that carries `prefer: strongest`
+([GW-SESSIONS-ADMIT §The preferred end of the list](sessions.md#the-preferred-end-of-the-list))
+makes no rail choice: the choice puts the CHEAPER twin first, and that body asked for the other end
+of the list. The role's rail order stands, each rail's list is walked from its end, `rail_choice` is
+`null` and `gateway_rail_choice_total` counts nothing. Legend: as [§The rail choice](#the-rail-choice);
+`prefer` = the body's, `(policy)` when it carries none.
+
+| description | arrange | tier | prefer | decision? | rail? | model? | rail_choice? | counted? |
+|---|---|---|---|---|---|---|---|---|
+| no preference: the twin's cheaper rail is chosen | the Go window near its share | light | (policy) | dispatch | openrouter | M | openrouter over opencode: headroom | rail="openrouter",reason="headroom" 1 |
+| strongest makes no rail choice: the role's order, each list from its end ⚖ | the Go window near its share | light | strongest | dispatch | openrouter | M | null | none |
+| strongest with both twins free: the role's first rail, uncounted ⚖ | nothing | light | strongest | dispatch | opencode | MG | null | none |
+
 #### Named gaps — the rail choice
 
 | description | input | v0 answer | the gap |
