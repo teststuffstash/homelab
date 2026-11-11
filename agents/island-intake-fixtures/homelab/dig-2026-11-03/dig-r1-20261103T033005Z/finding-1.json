@@ -1,0 +1,39 @@
+{
+  "schema": "dig-finding/v1",
+  "group": "recurring|cluster",
+  "alerts": [
+    "AgentRunPhaseSlow (alert:AgentRunPhaseSlow)"
+  ],
+  "verdict": "cause-found",
+  "cause": "The 2026-11-02 pod-spinup firing (pending 20:46Z, firing 21:31Z, cleared by about 21:50Z) is a capacity wait, not an image pull. The launcher times pod-spinup from launch to kubectl wait --for=condition=Ready with a 600s timeout, so a value of 601 means the ride pod never became Ready in 10 minutes. The coordinator for oracle-fleet issue 976 logged at 20:40:12Z that the scheduler reported insufficient memory: the ride is sized large (8 CPU / 10Gi plus a docker sidecar) and only one kata node matches, and rides for issue 974 were holding that capacity. Issue 974's worker (agent-oracle-fleet-issue-974-r1) was 19 minutes old at 20:47Z, consistent with its own pod-spinup of about 360s pushed at 20:35Z. So oracle-fleet's large kata rides queue behind one kata node's memory, and the queue time is counted as pod-spinup. The scheduler's FailedScheduling events have aged out (events TTL is about an hour), so the message is only in the coordinator log, not re-read from the scheduler. The 10-31 llm-loop episode is model time, which the rule's own annotation says is not a platform fault. The 11-01 devbox-install episodes are a separate phase: nix-cache PVC nixcache-data is now 82% used, a plausible but unverified contributor (#500 was the same phase in September).",
+  "evidence": [
+    "Prometheus ALERTS and ALERTS_FOR_STATE query_range over 7d (step 900) → AgentRunPhaseSlow pending llm-loop 10-31 23:30Z; firing devbox-install 11-01 00:30–01:30Z and 14:30Z; pending pod-spinup 11-02 20:46Z, firing 21:31Z; no series now.",
+    "argocd/resources/pushgateway/prometheusrule.yaml:288–322 (read) → for 30m, p50 over 60s and more than 2x the baseline of pushes at least 1h old, with at least 3 rides; annotation says pod-spinup is schedule + image pull + start, and that the first check is the node image cache; the rule is symptom-only.",
+    "agents/agent-session.sh:3266–3271 (read) → pod-spinup is closed after kubectl wait --for=Ready --timeout=600s || true, so a 601 value is the timeout expiring.",
+    "Prometheus agent_run_phase_seconds{phase=pod-spinup} query_range 11-02 19:30–22:30Z → most of the 105 series are stale pushgateway values (retained from earlier pushes); new fresh pushes at 20:20Z (oracle 1001, 18s), 20:35Z (oracle issue 974 round 1, 360s), 20:45Z (oracle issue 976 round 1, 601s).",
+    "Loki tenant oracle-agents 20:20–22:00Z → coordinator-oracle-fleet-issue-976 at 20:40:12Z: 'the scheduler reports insufficient memory… sized large (8 CPU / 10Gi plus a docker sidecar), and only the one kata node matches'; coordinator-oracle-fleet-issue-974 at 20:37Z and 20:47Z: its launcher hit the 10-minute timeout, and the worker agent-oracle-fleet-issue-974-r1 in oracle-fleet was still running, 19 minutes old.",
+    "kubectl get pods -A and -n oracle-agents → coordinator pods for 974 and 976 on wk-04; the 976 coordinator was re-created 11-03 01:01Z (a later run); no worker pod for 974 or 976 remains.",
+    "kubectl get events -n oracle-fleet and -A (FailedScheduling) → nothing in the window; events aged out before this dig ran (not an RBAC denial).",
+    "kubectl get pvc -A and Prometheus kubelet_volume_stats max_over_time over 3d → nix-cache/nixcache-data 20Gi at 82% used now.",
+    "gh search issues (pod-spinup open; 'oracle-fleet insufficient memory'; kata large-ride capacity; devbox-install nix-cache open) → no open match; gh issue view 500 → CLOSED 2026-09-14 (nix-cache PVC at eviction ceiling).",
+    "docs/spikes/ride-latency-breakdown.md:100–125 (read) → pod-spinup makes a cold pull visible as a number but attributing it needs pod events, which is consistent with the capacity reading."
+  ],
+  "recommendation": "Seat decision (not a PR, because ride sizing and kata capacity are decisions): either size oracle-fleet's large ride so it fits a non-kata node, or add kata/memory capacity, or stagger the oracle rides so the kata node is not contended. Re-check the nix-cache PVC headroom (82%) against the devbox-install episodes on 11-01 before attributing them to the cache. No change to the rule: it is working as documented.",
+  "pr": "",
+  "related": [
+    "teststuffstash/homelab#500",
+    "teststuffstash/homelab#324",
+    "teststuffstash/homelab#724"
+  ],
+  "tool_gaps": [
+    "TOOL_GAP: nodes get/list — to confirm which nodes carry the kata runtime and how much memory is free on them, which decides whether 'only one kata node matches' is the real ceiling"
+  ],
+  "ts": "2026-11-03T03:34:13Z",
+  "run": "dig-2026-11-03/dig-r1-20261103T033005Z",
+  "members": [
+    {
+      "alertname": "AgentRunPhaseSlow",
+      "subject": "alert:AgentRunPhaseSlow"
+    }
+  ]
+}
