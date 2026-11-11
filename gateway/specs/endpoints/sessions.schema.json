@@ -47,6 +47,13 @@
         "heavy"
       ]
     },
+    "prefer": {
+      "type": "string",
+      "enum": [
+        "cheapest",
+        "strongest"
+      ]
+    },
     "harness": {
       "type": "string",
       "enum": [
@@ -166,6 +173,14 @@
           "x-requirements": [
             "GW-SESSIONS-ADMIT",
             "GW-SESSIONS-RETRY"
+          ]
+        },
+        "prefer": {
+          "$ref": "#/$defs/prefer",
+          "default": "cheapest",
+          "description": "which end of each rail's ordered tier list the walk starts from (sessions.md \u00a7The preferred end of the list): cheapest = the list's head (the default); strongest = its end, and no rail choice; refused with canary",
+          "x-requirements": [
+            "GW-SESSIONS-ADMIT"
           ]
         },
         "harness": {
