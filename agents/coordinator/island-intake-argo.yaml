@@ -220,13 +220,15 @@ spec:
               if [ "$rc_dig" -ne 0 ] && [ "$rc_pile" -ne 0 ]; then _push 1 "$NIN" 0 0 0; echo "island-intake: hold — no sitting today"; exit 0; fi
 
               # ── 2. one sitting: admitted by the agent-gateway (FU-270) as the platform's coordinator
-              # (the islands are platform islands; the bell below rings platform), tier heavy — the
+              # (the islands are platform islands; the bell below rings platform), tier heavy, the
+              # STRONGEST model of that tier (`prefer`, GW-SESSIONS-ADMIT: an authoring sitting rules
+              # a whole pile once a day — a wrong ruling costs rides) — the
               # goal-decompose sitting the old path runs on opus. agents/gateway-admit.sh's UNBOUND
               # lane shape: the dispatch env rides `env` onto the claude call below. rc 4 = the old
               # path (knob off, or the FU-270 transition fallback, logged by the helper): the
               # subscription rail (the goal-decompose class is not on Go).
               . agents/gateway-admit.sh
-              _gw=0; gw_admit_lane /tmp/gw-llm.env --stack platform --role coordinator --task "intake-${ISLAND}-$DAY" --tier heavy || _gw=$?
+              _gw=0; gw_admit_lane /tmp/gw-llm.env --stack platform --role coordinator --task "intake-${ISLAND}-$DAY" --tier heavy --prefer strongest || _gw=$?
               case "$_gw" in
                 0) trap gw_release EXIT; rail="gateway:$GW_RAIL"; TS_MODEL="$GW_WIRE_MODEL";;
                 1) _push 1 "$NIN" 0 0 0; echo "island-intake: the gateway deferred [$GW_DEFER_REASON] — exit 1, Argo retries with backoff"; exit 1;;
