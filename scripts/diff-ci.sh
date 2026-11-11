@@ -202,16 +202,45 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           wall measured 2026-10-25 in a jail clone (69 Applications, ~860 docs).
 PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish gateway-specs-site-e2e"
 
-# Rows whose gate cannot run without a usable docker daemon (`docker info` succeeds). The run path
-# below (the local pre-flight and pr-open's `pr-gate`) SKIPS such a row loudly where there is none —
-# a worker pod has no docker, and a gate that can only red there blocks every PR that selects it,
-# while the PR's own CI runs the leg anyway. DIFF_CI_REQUIRE_DOCKER=1 turns the skip into a failure
-# (for a caller that must not lose the leg). CI's skip map and the push gate do not read this list.
-# Keyed to the FIRST WORD of a MAP task, like PUSH_HEAVY. A row belongs here only when its script
-# is shown to call docker:
-#   gateway-specs-site-e2e  gateway/scripts/e2e-specs-site.sh — `docker pull` + `docker run` of the
-#                           playwright image, `docker volume` for the site.
-NEEDS_DOCKER="gateway-specs-site-e2e"
+# Rows whose gate needs something of its ENVIRONMENT that a worker pod may lack, as
+# `<task first word>:<requirement>` (first word = the PUSH_HEAVY convention). The run path below
+# (the local pre-flight and pr-open's `pr-gate`) probes each requirement once (env_has) and SKIPS a
+# row whose requirement is absent, loudly — such a gate can only red there and would block every PR
+# that selects it, while the PR's own CI runs the leg anyway. DIFF_CI_REQUIRE_ENV=1 turns the skip
+# into a failure (for a caller that must not lose a leg). CI's skip map and the push gate do not
+# read this list. A row belongs here only when its script is shown to need the thing AND a pod is
+# shown to lack it — the WAN-bound rows of PUSH_HEAVY that pods do run (gateway-ci's uv sync, the
+# LAN-mirrored pulls, argocd-validate-pins' ghcr.io pull) stay out:
+#   gateway-specs-site-e2e  docker     gateway/scripts/e2e-specs-site.sh: `docker pull` + `docker run`
+#                                      of the playwright image, `docker volume` for the site.
+#   component-check         chart-wan  scripts/component-check.sh step 0: `helm template --repo
+#                                      $KYVERNO_POLICIES_CHART_REPO`, exit 2 when the fetch fails —
+#                                      a third-party chart host a pod has no egress to.
+NEEDS_ENV=(
+  "gateway-specs-site-e2e:docker"
+  "component-check:chart-wan"
+)
+# env_probe <requirement> — the ONE probe per requirement; exit 0 = present. Cheap by contract.
+#   docker     a binary AND a daemon that answers it.
+#   chart-wan  the index of the chart repo component-check fetches first — the URL is read from
+#              that script (its one home; Renovate keeps it there), never restated here.
+env_probe() {
+  case "$1" in
+    docker) command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 ;;
+    chart-wan)
+      local KYVERNO_POLICIES_CHART_REPO=""
+      eval "$(grep -m1 '^KYVERNO_POLICIES_CHART_REPO=' scripts/component-check.sh 2>/dev/null || true)"
+      [ -n "$KYVERNO_POLICIES_CHART_REPO" ] || { echo "diff-ci: FAIL — cannot read KYVERNO_POLICIES_CHART_REPO from scripts/component-check.sh (the chart-wan probe's one home)" >&2; exit 2; }
+      curl -fsSL -o /dev/null --connect-timeout 5 -m 10 "${KYVERNO_POLICIES_CHART_REPO%/}/index.yaml" 2>/dev/null ;;
+    *) echo "diff-ci: FAIL — NEEDS_ENV names requirement '$1' but env_probe has no probe for it" >&2; exit 2 ;;
+  esac
+}
+env_why() {
+  case "$1" in
+    docker) echo "no usable docker daemon (\`docker info\` fails or no binary)" ;;
+    chart-wan) echo "no egress to the third-party chart host (its repo index did not answer)" ;;
+  esac
+}
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
@@ -303,11 +332,12 @@ EOF_INV
 done <<EOF_STEPS
 $(yq -o=json '.jobs.ci.steps' .github/workflows/ci.yaml | jq -r '.[] | [(.name // .uses // "?"), ((.if // "") + " "), ((.run // "") | gsub("\n"; " ; "))] | @tsv')
 EOF_STEPS
-# NEEDS_DOCKER belt: a name with no MAP row is a stale declaration (the row was renamed or removed).
-for d in $NEEDS_DOCKER; do
-  hit=false
+# NEEDS_ENV belt: a name with no MAP row is a stale declaration (the row was renamed or removed).
+# (A requirement env_probe does not know exits 2 at the probe.)
+for ne in "${NEEDS_ENV[@]}"; do
+  d="${ne%%:*}"; hit=false
   for entry in "${MAP[@]}"; do t="${entry%%:*}"; [ "${t%% *}" = "$d" ] && { hit=true; break; }; done
-  $hit || { echo "diff-ci: FAIL — NEEDS_DOCKER names '$d' but no MAP row runs it; fix the list (one home)" >&2; exit 2; }
+  $hit || { echo "diff-ci: FAIL — NEEDS_ENV names '$d' but no MAP row runs it; fix the list (one home)" >&2; exit 2; }
 done
 belt_n=$(( $(printf '%s\n' $ci_tasks | grep -c .) + $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u | grep -c .) ))
 if $COVERAGE_ONLY; then
@@ -324,13 +354,12 @@ changed=$( { git diff --name-only "$base"; git diff --name-only --cached; git st
 echo "diff-ci: $(printf '%s\n' "$changed" | grep -c .) changed file(s) vs $BASE"
 
 run=0; skipped=0; failed=""; env_skipped=""
-# docker_usable — memoized: is there a docker binary AND a daemon that answers it?
-docker_state=""
-docker_usable() {
-  if [ -z "$docker_state" ]; then
-    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then docker_state=yes; else docker_state=no; fi
-  fi
-  [ "$docker_state" = yes ]
+# env_has <requirement> — env_probe, memoized: one probe per requirement per run.
+env_present=" "; env_absent=" "
+env_has() {
+  case "$env_present" in *" $1 "*) return 0;; esac
+  case "$env_absent" in *" $1 "*) return 1;; esac
+  if env_probe "$1"; then env_present="$env_present$1 "; return 0; else env_absent="$env_absent$1 "; return 1; fi
 }
 if grep -qE '^devbox\.(json|lock)$' <<< "$changed"; then
   echo "diff-ci: devbox pins changed — running EVERYTHING"
@@ -344,18 +373,18 @@ for entry in "${MAP[@]}"; do
     skipped=$((skipped+1)); continue
   fi
   echo "── devbox run $task"
-  case " $NEEDS_DOCKER " in *" ${task%% *} "*)
-    if ! docker_usable; then
-      if [ "${DIFF_CI_REQUIRE_DOCKER:-}" = 1 ]; then
-        echo "   FAIL (${task%% *}) — needs docker, none usable here, and DIFF_CI_REQUIRE_DOCKER=1"
-        failed="$failed ${task%% *}"
-      else
-        echo "   SKIPPED (${task%% *}) — needs docker and no usable docker daemon is here (\`docker info\` fails or no binary); NOT run, NOT passed — the PR's CI runs it"
-        env_skipped="$env_skipped ${task%% *}"
-      fi
-      continue
-    fi ;;
-  esac
+  need=""
+  for ne in "${NEEDS_ENV[@]}"; do [ "${ne%%:*}" = "${task%% *}" ] && need="${ne#*:}"; done
+  if [ -n "$need" ] && ! env_has "$need"; then
+    if [ "${DIFF_CI_REQUIRE_ENV:-}" = 1 ]; then
+      echo "   FAIL (${task%% *}) — needs $need: $(env_why "$need"), and DIFF_CI_REQUIRE_ENV=1"
+      failed="$failed ${task%% *}"
+    else
+      echo "   SKIPPED (${task%% *}) — needs $need: $(env_why "$need"); NOT run, NOT passed — the PR's CI runs it"
+      env_skipped="$env_skipped ${task%% *}"
+    fi
+    continue
+  fi
   t0=$SECONDS
   # shellcheck disable=SC2086  # task strings intentionally word-split (args ride along)
   if devbox run $task; then
@@ -367,5 +396,5 @@ for entry in "${MAP[@]}"; do
   run=$((run+1))
 done
 echo "diff-ci: $run task(s) run, $skipped not selected by the diff (PR-context gates run only in CI)"
-[ -z "$env_skipped" ] || echo "diff-ci: SKIPPED for the environment (no docker — NOT run here, the PR's CI runs them):$env_skipped"
+[ -z "$env_skipped" ] || echo "diff-ci: SKIPPED for the environment (a requirement is absent here — NOT run, NOT passed; the PR's CI runs them):$env_skipped"
 [ -z "$failed" ] || { echo "diff-ci: FAILED:$failed" >&2; exit 1; }
