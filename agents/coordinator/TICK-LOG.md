@@ -15184,3 +15184,27 @@ updates or reverts as much as possible — mechanical revert or a responder."
   deterministic); #3237 approve ran → reviewer 19:32Z → specs reviewer 19:35Z → APPROVED. World
   `homelab-dead-runs-3233-3237` recorded 19:14Z. FU mint for the stale leg refused by the gate — built instead.
 
+
+## 2026-11-11 — seat: #3233's runner deaths were an uncached argocd build; cache check + generator hold (#3251)
+
+- #3242 (11-10 21:04Z): the stale `automerge` state keys on last activity (commits, comments, reviews, check times,
+  arming), not arming age — operator: "it has to make sense; abandoned things get picked up by the cleaners".
+- The 3Gi runner limit (ADR-159, #3132, 11-01): 817 normal-class pods since, four exit-137 deaths, all the same cause.
+  Kernel log (Loki tenant `loki`, `kmsg-reader`): memcg OOM, `compile invoked oom-killer`, killed `nix`. cadvisor's
+  `container_oom_events_total` read 0 for both — only kmsg shows it.
+- Cause: #3233's lock moved `argocd@latest` (3.5.6, version unchanged) to nixpkgs `4fe25e12`, store path
+  `x7lcmc6y…`, which cache.nixos.org and the in-cluster mirror both answer 404. devbox built it from source in the
+  warm step (5 min Go compile in the one surviving run). Two kills on the PR (11-09, 11-10), two on master after the
+  21:32Z merge → lock revert #3245 at 22:31Z, whose `reverted-locks:` named five innocent packages (argocd's version
+  never moved). Seat appended `exonerated-locks:` to #3245's body.
+- **#3251** (merged 06:28Z): `scripts/lock-cache-check.sh` (check / `--hold`), the hold in `devbox-update.sh` right
+  after `devbox update`. Proven on the real locks: master passes, 6b0ba075's lock names only argocd, the hold restores
+  only that entry. `ci.yaml` pre-warm step pushed operator-direct (`63e85861`).
+- Not built, by ruling: the loop raising the limit, or re-routing an OOM-killed job to `homelab-ephemeral-large`.
+- #3247 (fix-round issue for #3246) sat open with no label. Sequence: worker finalize wrote `Fixes #3247` into
+  #3246's body 22:37Z → the agent-runtime deploy job force-pushed and replaced the body 23:06Z → `review-phantom-belt`
+  re-queued 23:09Z → the coordinator ride (haiku) judged it stale and only dropped `agent/queued` 23:14Z → merge 23:23Z
+  closed nothing. Seat closed it. Fixes: **#3254** brief rule (a moot item is closed, never left unlabelled); deploy
+  jobs in agent-runtime `b111711` + agent-coordinator `0ba770d` carry the body's issue-link lines across the rewrite
+  (operator-direct, workflow files). NOT built: a scan closer keyed on `Origin:` — inert follow-ups (#2605, #1517) are
+  open, unlabelled and name a merged origin PR by design.
