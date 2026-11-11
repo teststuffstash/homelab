@@ -15208,3 +15208,37 @@ updates or reverts as much as possible — mechanical revert or a responder."
   jobs in agent-runtime `b111711` + agent-coordinator `0ba770d` carry the body's issue-link lines across the rewrite
   (operator-direct, workflow files). NOT built: a scan closer keyed on `Origin:` — inert follow-ups (#2605, #1517) are
   open, unlabelled and name a merged origin PR by design.
+
+
+## 2026-11-11 (evening) — seat: island intake reads the pile and re-reads its waits; Fable for the sitting; gateway pile run to ground
+
+- Started as a second jail (read-only dry-run over the 12 open gateway issues with live data), took over as primary
+  on the operator's word. Rulings: intake MAY close/rewrite operator-login issues, age-aware (**ADR-163**); a manual
+  benchmark entry is fine when the feed lags a released model; "configure Fable" for the sitting.
+- Measured first: 26 issues carried an intake ruling, 9 sat `agent/blocked` unread (the selector skips ruled/labelled);
+  the cron had run on sonnet since 11-03 (heavy list was cheapest-first `[sonnet, opus]`); the dig text match leaked
+  two non-gateway findings (#3162, #3166) into the gateway sitting.
+- Seat-run sittings (Fable subagents, the amended brief, apply): #3108 `requeue` (blocker was one ride's own), #3180 +
+  #3191 `queue`, #3258 filed + queued (codex half of #2650 — done-when (b) had happened 10-22/23), #3231 rewritten to
+  "schedule the re-cut" (`seat`), #3145 `seat`, #2650 narrowed to goose/opencode, #2768/#2684/#2977 unchanged.
+  Seat closed #2307. All four queued issues CLOSED by merge the same evening: #3260 (→ Goal branch), #3261, #3263, #3264.
+- **Three of four worker rides finished their work and could not open a PR**: `pr-open`'s gate selects
+  `gateway-specs-site-e2e` (docker) and `component-check` (chart WAN) — neither exists in a worker pod. Seat opened
+  the PRs by hand (instance); class fix **#3262** (`NEEDS_ENV` in `scripts/diff-ci.sh`: a gate whose environment is
+  absent is a loud skip) — OPEN at wind-down, one finding fixed, re-review pending. Prior art found late: #3088.
+- Merged: #3257 manual benchmark rows (`benchmarks-manual.json`, self-retiring), #3259 `--source pile` + rereads +
+  dig match on the island's alert rules + ADR-163, #3266 admission `prefer: strongest`, #3271 the cron asks for it,
+  #3265 the re-cut. Window `seat-1794429833-1221` 20:43–22:40Z for the gateway roll; rolled clean on
+  `2026.11.11-g8544b94e9fc6`; `TierEvidenceStale` cleared. Closed `--force` with three alerts handed to the responder
+  (`CiDispatchStalled` = Actions-outage zombies, `NodeDiskIOSaturation`, longhorn-manager `ContainerMemoryNearLimit`).
+- Re-cut finding: the 11-08 AA pull re-based the intelligence index — 118 of 169 refreshed rows came back with no
+  `intelligence`, the survivors moved (kimi-k3 43.6 → 17.4). The ruling row now asserts what the derivation relies on
+  (#3265). Lists moved: anthropic standard `[sonnet, opus, fable]` (haiku out), heavy `[opus, fable]`, opencode
+  standard one model. 184 un-refreshed feed rows still hold old-scale scores.
+- Live proof: `argo submit --from cronworkflow/island-intake -p mode=dry-run` (island-intake-8mr97, 22:40Z) →
+  `dispatch claude/fable`, pile fired (1 member #3269, 1 reread #2768 → unchanged), receipt written.
+- GitHub Actions major outage ~20:26–21:07Z: every run queued in it stayed a zombie (cancel → "not queued yet");
+  `gh pr update-branch` got fresh runs. Reviewer starvation earlier: anthropic `max_sessions: 5` filled by three
+  queued rides + coordinators → `defer rail-capacity` for the reviewer.
+- Left for the operator: #3270 (Goal #3118 assembly read), #2768 ruling, #3145 (candidate rule + a `/models`
+  fixture), #3231 (where the scheduled re-cut runs, as which identity), #2650 enforced-egress run, #3262's merge.
