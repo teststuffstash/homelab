@@ -66,15 +66,21 @@ async def test_the_door(cworld, vendor, clock, recorded, call, expected_status, 
                  and src["sha256"] == digest and src["bytes"] == len(stored) and src["fetched_at"] == iso(T0) and src["age_s"] == 90
                  and src["complete"] is True and src["last_error"] is None and all("body" not in s for s in doc["sources"]))
         attach_json("compared", {"sources": names, "keys_per_source": keysets, "required": sorted(REQUIRED), "body_absent": True})
-        answer, want = shape, True
+        bodyless = all("body" not in s for s in doc["sources"])
+        got_keys = sorted({k for ks in keysets for k in ks}) if shape else f"MISMATCH shape=False keys={keysets}"
+        answer = f"keys {got_keys} · body_absent {bodyless}"
+        want = f"keys {sorted(REQUIRED)} · body_absent True"
     elif r.status_code == 404:
         answer, want = r.json()["error"]["code"], "wire-not-recorded"
     else:
         got_headers = [h for h in HEADERS if h in r.headers]
-        attach_json("compared", {"headers": got_headers, "body_sha256": hashlib.sha256(r.content).hexdigest(), "stored_sha256": digest})
-        answer = (r.content == stored and got_headers == HEADERS and r.headers["x-wire-source"] == "go-models-dev"
+        attach_json("compared", {"headers": got_headers, "body_sha256": hashlib.sha256(r.content).hexdigest(), "stored_sha256": digest,
+                                   "x-wire-class": r.headers.get("x-wire-class")})
+        ok = (r.content == stored and got_headers == HEADERS and r.headers["x-wire-source"] == "go-models-dev"
                   and r.headers["x-wire-class"] == "public" and r.headers["x-wire-sha256"] == digest
                   and r.headers["x-wire-fetched-at"] == iso(T0) and r.headers["x-wire-complete"] == "true")
-        want = True
+        answer = (f"x-wire-class {r.headers['x-wire-class']} · body_sha256 {hashlib.sha256(r.content).hexdigest()[:8]}… = stored_sha256 {digest[:8]}…"
+                  if ok else f"MISMATCH ok=False headers={got_headers}")
+        want = f"x-wire-class public · body_sha256 {digest[:8]}… = stored_sha256 {digest[:8]}…"
     verdicts(status=(r.status_code, expected_status), answer=(answer, want))
     assert expected_answer
