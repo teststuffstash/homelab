@@ -68,25 +68,39 @@ def _strings_only_as_len(doc) -> bool:
     return not isinstance(doc, str)
 
 
+def _leaves(doc, path="", raw_strings=False) -> dict:
+    """Key path -> leaf: numbers/booleans/null as themselves, a string as its length (`{"len": n}` stored, or the raw string's length)."""
+    if isinstance(doc, dict) and set(doc) == {"len"} and not raw_strings:
+        return {path: f"len={doc['len']}"}
+    if isinstance(doc, dict):
+        return {k: v for key, val in doc.items() for k, v in _leaves(val, f"{path}/{key}", raw_strings).items()}
+    if isinstance(doc, list):
+        return {k: v for i, val in enumerate(doc) for k, v in _leaves(val, f"{path}[{i}]", raw_strings).items()}
+    if isinstance(doc, str):
+        return {path: f"len={len(doc)}"}
+    return {path: doc}
+
+
 # ── A read's answer is kept ──────────────────────────────────────────────────────────────────
+NOCRED = "none (no credential, no account header)"
 KEPT_ROWS = [
-    pytest.param("go-models-dev", "catalog-ok at T0", "public", "the fake's bytes, byte-identical", "the bytes' sha256", "T0",
+    pytest.param("go-models-dev", "catalog-ok at T0", NOCRED, "public", "the fake's bytes, byte-identical", "the bytes' sha256", "T0",
                  id="a public read's bytes are kept verbatim"),
-    pytest.param("go-models-dev", "catalog-ok at T0, then catalog-trimmed at T0 + 21600 s", "public", "the later bytes", "the later bytes' sha256",
+    pytest.param("go-models-dev", "catalog-ok at T0, then catalog-trimmed at T0 + 21600 s", NOCRED, "public", "the later bytes", "the later bytes' sha256",
                  "T0 + 21600 s", id="a later answer replaces it"),
-    pytest.param("go-models-dev", "catalog-malformed at T0", "public", "the malformed bytes", "their sha256", "T0",
+    pytest.param("go-models-dev", "catalog-malformed at T0", NOCRED, "public", "the malformed bytes", "their sha256", "T0",
                  id="a shape the parser refuses is still recorded ⚖"),
-    pytest.param("codex-usage", "the observed usage shape at T0", "account", "every key, number and boolean; every string `{\"len\": n}`",
+    pytest.param("codex-usage", "the observed usage shape at T0", "the codex bearer and account header", "account", "every key, number and boolean; every string `{\"len\": n}`",
                  "the raw bytes' sha256", "T0", id="an account read keeps its structure and no string value ⚖"),
 ]
 
 
-@pytest.mark.parametrize(("source", "read", "source_class", "expected_stored", "expected_sha256", "expected_fetched_at"), KEPT_ROWS,
+@pytest.mark.parametrize(("source", "read", "credential_sent", "expected_source_class", "expected_stored", "expected_sha256", "expected_fetched_at"), KEPT_ROWS,
                          ids=[p.id for p in KEPT_ROWS])
-async def test_a_reads_answer_is_kept(cworld, vendor, vendor_transport, clock, codex_store, exchange, source, read, source_class, expected_stored,
+async def test_a_reads_answer_is_kept(cworld, vendor, vendor_transport, clock, codex_store, exchange, source, read, credential_sent, expected_source_class, expected_stored,
                                       expected_sha256, expected_fetched_at):
     world("policy-codex", upstream=read)
-    row(source=source, read=read, source_class=source_class)
+    row(source=source, read=read, credential_sent=credential_sent)
     if source == "codex-usage":
         app = cworld.build()
         raw = json.dumps(usage_doc(clock)).encode()
@@ -105,17 +119,19 @@ async def test_a_reads_answer_is_kept(cworld, vendor, vendor_transport, clock, c
         want_bytes = _bytes_of(last.strip())
     rec = _stored(app, source)
     if want_bytes is not None:
-        got_stored = rec["body"] == want_bytes
+        got_view = {"body_sha256": hashlib.sha256(rec["body"]).hexdigest(), "bytes": len(rec["body"])}
+        want_view = {"body_sha256": hashlib.sha256(want_bytes).hexdigest(), "bytes": len(want_bytes)}
         want_sha = hashlib.sha256(want_bytes).hexdigest()
     else:
         doc = json.loads(rec["body"])
-        got_stored = (_strings_only_as_len(doc) and doc["rate_limit"]["primary_window"]["used_percent"] == 20
-                      and doc["rate_limit"]["allowed"] is True and doc["email"] == {"len": len("DUMMY-SECRET-email@example.test")}
-                      and doc["promo"] is None and b"DUMMY-SECRET" not in rec["body"])
+        assert _strings_only_as_len(doc) and b"DUMMY-SECRET" not in rec["body"]
+        got_view = _leaves(doc)
+        want_view = _leaves(usage_doc(clock), raw_strings=True)
         want_sha = hashlib.sha256(raw).hexdigest()
     attach_json("the stored record", {k: v for k, v in rec.items() if k != "body"})
-    verdicts(stored=(got_stored, True), sha256=(rec["sha256"], want_sha), fetched_at=(rec["fetched_at"], T0 + at_offset(expected_fetched_at)))
-    assert rec["class"] == source_class
+    attach_json("compared: stored key paths and leaves", {"stored": got_view, "expected": want_view})
+    verdicts(source_class=(rec["class"], expected_source_class), stored=(got_view, want_view), sha256=(rec["sha256"], want_sha),
+             fetched_at=(rec["fetched_at"], T0 + at_offset(expected_fetched_at)))
 
 
 # ── A failed read, a bound, a restart ────────────────────────────────────────────────────────

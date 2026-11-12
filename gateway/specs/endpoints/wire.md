@@ -76,16 +76,16 @@ catalog's fakes; the codex usage fake answers the observed shape (synthetic valu
 
 #### A read's answer is kept
 
-Legend: `read` = the answer the fake gives at the stated time; `source_class` = the class the source
-is recorded under; `stored?` = the record's bytes; `sha256?` = the record's digest; `fetched_at?` =
+Legend: `read` = the answer the fake gives at the stated time; `credential_sent` = the credential the
+read carries; `source_class?` = the class the source is recorded under; `stored?` = the record's bytes; `sha256?` = the record's digest; `fetched_at?` =
 the record's time.
 
-| description | source | read | source_class | stored? | sha256? | fetched_at? |
-|---|---|---|---|---|---|---|
-| a public read's bytes are kept verbatim | `go-models-dev` | `catalog-ok at T0` | `public` | the fake's bytes, byte-identical | the bytes' sha256 | `T0` |
-| a later answer replaces it | `go-models-dev` | `catalog-ok at T0, then catalog-trimmed at T0 + 21600 s` | `public` | the later bytes | the later bytes' sha256 | `T0 + 21600 s` |
-| a shape the parser refuses is still recorded ⚖ | `go-models-dev` | `catalog-malformed at T0` | `public` | the malformed bytes | their sha256 | `T0` |
-| an account read keeps its structure and no string value ⚖ | `codex-usage` | `the observed usage shape at T0` | `account` | every key, number and boolean; every string `{"len": n}` | the raw bytes' sha256 | `T0` |
+| description | source | read | credential_sent | source_class? | stored? | sha256? | fetched_at? |
+|---|---|---|---|---|---|---|---|
+| a public read's bytes are kept verbatim | `go-models-dev` | `catalog-ok at T0` | none (no credential, no account header) | `public` | the fake's bytes, byte-identical | the bytes' sha256 | `T0` |
+| a later answer replaces it | `go-models-dev` | `catalog-ok at T0, then catalog-trimmed at T0 + 21600 s` | none (no credential, no account header) | `public` | the later bytes | the later bytes' sha256 | `T0 + 21600 s` |
+| a shape the parser refuses is still recorded ⚖ | `go-models-dev` | `catalog-malformed at T0` | none (no credential, no account header) | `public` | the malformed bytes | their sha256 | `T0` |
+| an account read keeps its structure and no string value ⚖ | `codex-usage` | `the observed usage shape at T0` | the codex bearer and account header | `account` | every key, number and boolean; every string `{"len": n}` | the raw bytes' sha256 | `T0` |
 
 #### A failed read, a bound, a restart
 
