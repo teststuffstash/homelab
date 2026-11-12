@@ -1100,15 +1100,16 @@ parts, each a reviewable file in git:
   from one says so: `score_source: manual` with `score_source_url` and `score_read_at` (optional
   row keys, absent on a feed-scored row). The join stays the rule below: a manual id is one more
   AA id it runs over, never a policy-id → row pair. The file is strict — every row carries exactly
-  the row keys: a `vendor/model` id no other row repeats, at least one score (each a number or
-  null), its https source url and the day it was read (`YYYY-MM-DD`); an unknown key at either
+  the row keys: a `vendor/model` id no other row repeats, at least one score (each a number in
+  [0, 100] or null), its https source url, the day it was read (`YYYY-MM-DD`) and a non-empty
+  note; an unknown key at either
   level, or a row short of that, and the whole file is refused and nothing is written
   ([§Manual benchmark rows](#manual-benchmark-rows)).
 - **The rules** — the policy's top-level `tiers` block (`$defs.tiers_block`), which the loader
   validates: `score` (one of `intelligence` | `coding` | `agentic`), `bands` (every tier, a
   fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer), and **`cost`** —
   the cost-per-clean-ride terms (`ride_tokens_out_m`, `strike_overhead_usd`, `min_rides`;
-  [§Cost per clean ride](#cost-per-clean-ride)); the block is required, `ride_tokens_out_m` a
+  [§Cost per clean ride](#cost-per-clean-ride)); the `cost` block is required, `ride_tokens_out_m` a
   positive number, `min_rides` a positive integer. Unknown keys refuse the load like every other
   policy block. The fixture worlds carry the same block so one loader shape holds everywhere.
 - **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `same_model`,
