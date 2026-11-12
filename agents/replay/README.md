@@ -156,6 +156,7 @@ is stale, so it cannot drift the way the prose register did.
 | `_selftest/unrecorded-read` | actions | - | `-` | - |
 | `_selftest/wrong-expectation` | actions | - | `-` | - |
 | `adopted-not-queued-surfaces/adopted-not-queued-surfaces` | actions | - | `agents/coordinator-scan.sh` | - |
+| `agent-images-not-public` | suite | - | `agents/images.env` | - |
 | `agent-session-paginated-reviews` | actions | - | `agents/agent-session.sh` | - |
 | `arbitrate/belt-probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate/blocked-on-human-bot-comment-after` | actions | - | `agents/coordinator-scan.sh` | - |
