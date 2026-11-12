@@ -19,8 +19,20 @@ if [ "${DECLARE_CONTINUEON:-0}" = "1" ]; then
   ' "$REPLAY_ROOT/agents/coordinator/retro-argo.yaml"
 fi
 
+# HALF 1b (declaration, `single-cell` ONLY, gated by `env: DECLARE_HARVEST_INPUTS=1`): Argo — not
+# the shell — refuses to start a template whose required input artifact is missing, so the harvest
+# TEMPLATE's own log inputs must be optional (the DAG args alone are not enough): a one-cell series
+# never writes log-b (homelab#3140's first run errored `inputs.artifacts.log-b was not supplied`).
+# Read out of the shipped manifest — the template input lines are the ones with a `path:`.
+if [ "${DECLARE_HARVEST_INPUTS:-0}" = "1" ]; then
+  grep -E 'name: log-[ab], path: ' "$REPLAY_ROOT/agents/coordinator/retro-argo.yaml" \
+    | sed -E 's/.*name: (log-[ab]),.*/\1 &/' \
+    | awk '{ printf "harvest input %s optional=%s\n", $1, ($0 ~ /optional: true/ ? "true" : "false") }'
+fi
+
 # HALF 2 (harvest world): the six variables retro-argo.yaml's harvest step sets above the block —
-# the run coordinates and the two cell→log pairs — now come off this row's `env:` column instead
+# the run coordinates and the two harness→log pairs (the served model is the block's own read of
+# each log, FU-270) — now come off this row's `env:` column instead
 # of being hardcoded per copied directory (family defaults in fixture.yaml cover the ordinary
 # case; a row overrides only its delta). LOG_A/LOG_B resolve under the family's shared,
 # COMMITTED `logs/` directory via $REPLAY_ROOT — deliberately NOT the table harness's per-row
@@ -33,8 +45,12 @@ fi
 DATE="${DATE:?fixture must pin DATE}"
 STACK="${STACK:?fixture must pin STACK}"
 RUN="${RUN:?fixture must pin RUN}"
-CELL_A="${CELL_A:?fixture must pin CELL_A}"
-CELL_B="${CELL_B:?fixture must pin CELL_B}"
+HARNESS_A="${HARNESS_A:?fixture must pin HARNESS_A}"
+# HARNESS_B may be pinned EMPTY (the `single-cell` row, homelab#3140): a one-cell series has no leg
+# B, and the block reads the empty parameter as "no second leg", never as a dead cell.
+HARNESS_B="${HARNESS_B?fixture must pin HARNESS_B}"
+# The series names the report (homelab#3140); unset = the stack, as every pre-series row reads.
+SERIES="${SERIES:-$STACK}"
 LOG_A="$REPLAY_ROOT/agents/replay/fixtures/retro-harvest/logs/${LOG_A_NAME:?fixture must pin LOG_A_NAME}"
 LOG_B="$REPLAY_ROOT/agents/replay/fixtures/retro-harvest/logs/${LOG_B_NAME:?fixture must pin LOG_B_NAME}"
 

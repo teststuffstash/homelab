@@ -1,30 +1,12 @@
-"""GW-CODEX-HEADROOM §Poll — the gateway's own usage poll (specs/endpoints/openai-responses.md).
+"""GW-CODEX-USAGE-POLL — the gateway's own usage poll (specs/endpoints/openai-responses.md
+§GW-CODEX-USAGE-POLL: the answer becomes a report, a failed poll leaves the last report standing, the
+poll's owner and schedule, the poll counter).
 
 World `policy-codex`: rails.codex.headroom = max_age_s 120, ceiling 0.95, windows_minutes [300, 10080],
 poll_interval_s 30. The fake usage endpoint answers the shape observed on 2026-10-22 (the spike §Live
-usage payload shape) with synthetic values and DUMMY identity fields; the credential is the FAKE store's.
-
-Poll (now T = the world clock; the stored credential expires at T+1, so the first acquire rotates it):
-
-| description | the endpoint answers | outcome | verdict after |
-|---|---|---|---|
-| the observed shape is accepted, admits and renders the gauges | 200, 20 % / 64 % (5h / 7d), allowed | accepted | admit |
-| the poll rides the lifecycle: one owner rotates once, the rotated bearer and the account header go out | 200 | accepted | admit |
-| a missing window is refused whole — unknown, never zero | 200, secondary_window null | quota-invalid | quota-unknown |
-| a window outside the profile is refused | 200, limit_window_seconds 86400 | quota-invalid | quota-unknown |
-| the vendor's limit flags limit | 200, limit_reached true / allowed false | accepted | quota-limited |
-| a non-bool flag or a non-integer window field is refused | 200, allowed 1 / used_percent 20.5 | quota-invalid | quota-unknown |
-| an upstream 401 is counted and changes nothing | 401 after one accepted | upstream-auth | admit (unchanged) |
-| a 429 or 500 is an http error, nothing accepted | 429 / 500 | upstream-http-error | quota-unknown |
-| an unreachable endpoint and a timeout are told apart | connect error / read timeout | upstream-unreachable / upstream-timeout | quota-unknown |
-| a non-JSON, wrong-type or oversize body is refused | text/html; application/json but not JSON; 70 KiB | upstream-content-type | quota-unknown |
-| a store that does not answer is transient; a recovery marker is unresolved | (the store) | credential-transient / credential-unresolved | quota-unknown |
-| identity never leaves the poll | 200 with DUMMY account/email/user ids | accepted | the report carries the schema's four keys; no log line carries an identity value |
-| a dark rail has no poll | no CODEX_USAGE_URL, or no credential backend | — (not enabled) | quota-unknown |
-| the schedule polls at start, before the first interval | run() | one poll before any sleep | admit |
-| poll_interval_s is required and sits below max_age_s | policy 120 / absent | PolicyError | — |
-| the counter's label set is the poll's outcome set | — | — | — |
-| an undeclared rail renders no poll family; a declared one renders every outcome from 0 | policy-default vs policy-codex /metrics | — | the family absent / 11 series at 0 |
+usage payload shape) with synthetic values and DUMMY identity fields; the credential is the FAKE store's,
+expiring at T+1 so the first acquire rotates it. Argnames = each table's header, ids = its description
+cells.
 """
 
 from __future__ import annotations
@@ -41,14 +23,14 @@ import pytest
 from agent_gateway.codex import CodexBackend, CodexRail
 from agent_gateway.codex_usage import OUTCOMES, UsagePoll, translate
 from agent_gateway.config import Policy, PolicyError
-from agent_gateway.headroom import Verdict
 from agent_gateway.metrics import POLL_OUTCOMES, Metrics
 from agent_gateway.oauth import Record
 
+from ._codex_rows import expect, joined, row, verdicts
 from ._codex_world import ACCOUNT, CODEX_BASE, CODEX_POLICY, MemoryStore, creds
 from .conftest import HERE, attach_json, given, rule, then, then_eq, when, world
 
-pytestmark = rule("GW-CODEX-HEADROOM")
+pytestmark = rule("GW-CODEX-USAGE-POLL")
 
 USAGE_URL = "https://codex.test/backend-api/wham/usage"
 OBSERVED = HERE / "fixtures" / "codex-usage-observed.json"
@@ -106,252 +88,245 @@ async def poll(clock, codex_store, exchange, usage):
     await client.aclose()
 
 
-async def test_observed_shape(poll, usage):
-    """row: the observed shape is accepted, admits and renders the gauges"""
-    world("policy-codex")
-    with when("one poll of the fixture shaped like the 2026-10-22 observation"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "accepted")
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.ADMIT)
-    with then("the gauges and the poll counter render"):
-        text = poll.metrics.render()
-        assert 'gateway_subscription_utilization{rail="codex",window="5h"} 0.2' in text
-        assert 'gateway_subscription_utilization{rail="codex",window="7d"} 0.64' in text
-        assert 'gateway_codex_usage_poll_total{outcome="accepted"} 1' in text
+def _verdict(p: UsagePoll) -> str:
+    return str(p.rail.headroom.verdict())
 
 
-async def test_lifecycle_owner(poll, usage, exchange, codex_store):
-    """row: the poll rides the lifecycle: one owner rotates once, the rotated bearer and the account header go out"""
-    world("policy-codex")
-    with given("the stored credential is inside the refresh margin (expires at T+1)"):
-        rotated = creds(poll.clock)[1]
-    with when("one poll"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "accepted")
-    then_eq("exchanges", exchange.calls, 1)
-    sent = usage.calls[0].headers
-    then_eq("bearer", sent["authorization"], "Bearer " + rotated.access_token)
-    then_eq("account header", sent["chatgpt-account-id"], ACCOUNT)
-    then_eq("accept", sent["accept"], "application/json")
-    then_eq("stored record state", codex_store.record.state, "ready")
+# -- the answer becomes a report ------------------------------------------------------------------
+
+def _mutations(clock) -> list[callable]:
+    def allowed_int(d):
+        d["rate_limit"]["allowed"] = 1
+
+    def used_float(d):
+        d["rate_limit"]["primary_window"]["used_percent"] = 20.5
+
+    def reset_str(d):
+        d["rate_limit"]["primary_window"]["reset_at"] = "soon"
+
+    def rl_list(d):
+        d["rate_limit"] = []
+    return [allowed_int, used_float, reset_str, rl_list]
 
 
-async def test_missing_window(poll, usage, clock):
-    """row: a missing window is refused whole — unknown, never zero"""
-    world("policy-codex")
-    doc = usage_doc(clock)
-    doc["rate_limit"]["secondary_window"] = None
-    usage.body = json.dumps(doc).encode()
-    with when("one poll answered with a null secondary window"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "quota-invalid")
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.UNKNOWN)
+ANSWERS = {  # the `answer` cell → the usage documents the endpoint answers, in turn
+    "200, 20 % / 64 % (5h / 7d), allowed": lambda c: [usage_doc(c)],
+    "200, limit_reached: true": lambda c: [usage_doc(c, reached=True)],
+    "200, allowed: false": lambda c: [usage_doc(c, allowed=False)],
+    "200, secondary_window: null": lambda c: [dict(usage_doc(c), rate_limit={**usage_doc(c)["rate_limit"], "secondary_window": None})],
+    "200, limit_window_seconds: 86400": lambda c: [_with(usage_doc(c), lambda d: d["rate_limit"]["secondary_window"].__setitem__("limit_window_seconds", 86400))],
+    '200, allowed: 1 / used_percent: 20.5 / reset_at: "soon" / rate_limit: []': lambda c: [_with(usage_doc(c), m) for m in _mutations(c)],
+    "200 with DUMMY account / email / user ids": lambda c: [usage_doc(c)],
+}
 
 
-async def test_window_outside_profile(poll, usage, clock):
-    """row: a window outside the profile is refused"""
-    world("policy-codex")
-    doc = usage_doc(clock)
-    doc["rate_limit"]["secondary_window"]["limit_window_seconds"] = 86400
-    usage.body = json.dumps(doc).encode()
-    with when("one poll answered with a 1-day secondary window"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "quota-invalid")
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.UNKNOWN)
-
-
-@pytest.mark.parametrize("flags", [{"reached": True}, {"allowed": False}])
-async def test_limit_flags(poll, usage, clock, flags):
-    """row: the vendor's limit flags limit"""
-    world("policy-codex")
-    usage.body = json.dumps(usage_doc(clock, **flags)).encode()
-    with when(f"one poll answered with {flags}"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "accepted")
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.LIMITED)
-
-
-@pytest.mark.parametrize("mutate", [
-    lambda d: d["rate_limit"].__setitem__("allowed", 1),
-    lambda d: d["rate_limit"]["primary_window"].__setitem__("used_percent", 20.5),
-    lambda d: d["rate_limit"]["primary_window"].__setitem__("reset_at", "soon"),
-    lambda d: d.__setitem__("rate_limit", []),
-])
-async def test_malformed_fields(poll, usage, clock, mutate):
-    """row: a non-bool flag or a non-integer window field is refused"""
-    world("policy-codex")
-    doc = usage_doc(clock)
+def _with(doc: dict, mutate) -> dict:
     mutate(doc)
-    usage.body = json.dumps(doc).encode()
-    with when("one poll answered with a malformed field"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "quota-invalid")
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.UNKNOWN)
+    return doc
 
 
-async def test_upstream_auth_unchanged(poll, usage):
-    """row: an upstream 401 is counted and changes nothing"""
+@pytest.mark.parametrize(("answer", "expected_outcome", "expected_verdict"), [
+    pytest.param("200, 20 % / 64 % (5h / 7d), allowed", "accepted", "admit", id="the observed shape is accepted, admits and renders the gauges"),
+    pytest.param("200, limit_reached: true", "accepted", "quota-limited", id="the vendor's limit_reached flag limits"),
+    pytest.param("200, allowed: false", "accepted", "quota-limited", id="a not-allowed answer limits"),
+    pytest.param("200, secondary_window: null", "quota-invalid", "quota-unknown", id="a missing window is refused whole — unknown, never zero ⚖"),
+    pytest.param("200, limit_window_seconds: 86400", "quota-invalid", "quota-unknown", id="a window outside the profile is refused"),
+    pytest.param('200, allowed: 1 / used_percent: 20.5 / reset_at: "soon" / rate_limit: []', "quota-invalid", "quota-unknown",
+                 id="a non-bool flag or a non-integer window field is refused"),
+    pytest.param("200 with DUMMY account / email / user ids", "accepted", "admit", id="identity never leaves the poll"),
+])
+async def test_answer_becomes_report(poll, usage, clock, caplog, answer, expected_outcome, expected_verdict):
     world("policy-codex")
-    with given("one accepted poll"):
-        assert await poll.poll() == "accepted"
-        poll.clock.t += 5
-    usage.status = 401
-    usage.body = b'{"detail":"DUMMY-SECRET-LEAK"}'
-    with when("the next poll is answered 401"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "upstream-auth")
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.ADMIT, "the last accepted report stands")
-    with then("the counter saw both"):
-        text = poll.metrics.render()
-        assert 'gateway_codex_usage_poll_total{outcome="accepted"} 1' in text
-        assert 'gateway_codex_usage_poll_total{outcome="upstream-auth"} 1' in text
+    row(answer=answer, expected_outcome=expected_outcome, expected_verdict=expected_verdict)
+    docs = ANSWERS[answer](clock)
+    identity = {docs[0]["account_id"], docs[0]["email"], docs[0]["user_id"]}
+    assert all(v.startswith("DUMMY") for v in identity)
+    outcomes = []
+    with when(f"the endpoint answers {answer} ({len(docs)} variant{'s' if len(docs) > 1 else ''}), one poll each"), \
+         caplog.at_level(logging.DEBUG, logger="gateway"):
+        for doc in docs:
+            usage.body = json.dumps(doc).encode()
+            outcomes.append(await poll.poll())
+    verdicts(
+        outcome=(joined(outcomes), expected_outcome),
+        verdict=(_verdict(poll), expected_verdict),
+    )
+    text = poll.metrics.render()
+    if answer.startswith("200, 20 %"):
+        with then("the gauges and the poll counter render: utilization 5h 0.2, 7d 0.64; accepted 1"):
+            assert 'gateway_subscription_utilization{rail="codex",window="5h"} 0.2' in text
+            assert 'gateway_subscription_utilization{rail="codex",window="7d"} 0.64' in text
+            assert 'gateway_codex_usage_poll_total{outcome="accepted"} 1' in text
+    if answer.startswith("200 with DUMMY"):
+        then_eq("report keys", sorted(translate(copy.deepcopy(docs[0]), clock.t)), ["limited", "observed_at", "source", "windows"])
+        with then("no log line at DEBUG carries an identity value"):
+            for record in caplog.records:
+                assert not any(v in record.getMessage() for v in identity), record.getMessage()
 
 
-@pytest.mark.parametrize("status", [429, 500])
-async def test_http_error(poll, usage, status):
-    """row: a 429 or 500 is an http error, nothing accepted"""
-    world("policy-codex")
-    usage.status, usage.body = status, b'{"error":"DUMMY"}'
-    with when(f"one poll answered {status}"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "upstream-http-error")
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.UNKNOWN)
-
-
-@pytest.mark.parametrize("fault,expected", [(httpx.ConnectError("refused"), "upstream-unreachable"),
-                                            (httpx.ReadTimeout("slow"), "upstream-timeout")])
-async def test_transport(poll, usage, fault, expected):
-    """row: an unreachable endpoint and a timeout are told apart"""
-    world("policy-codex")
-    usage.raise_ = fault
-    with when(f"one poll meets {type(fault).__name__}"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, expected)
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.UNKNOWN)
-
-
-@pytest.mark.parametrize("ctype,body", [("text/html", b"<html>DUMMY</html>"), ("application/json", b"{not json"),
-                                        ("application/json", b"[" + b"1," * 40000 + b"1]")],
-                         ids=["html body", "not json", "oversize json"])
-async def test_body_refused(poll, usage, ctype, body):
-    """row: a non-JSON, wrong-type or oversize body is refused"""
-    world("policy-codex")
-    usage.ctype, usage.body = ctype, body
-    with when(f"one poll answered {ctype}, {len(body)} bytes"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "upstream-content-type")
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.UNKNOWN)
-
+# -- a failed poll leaves the last report standing ------------------------------------------------
 
 class _DeadStore(MemoryStore):
     def lock(self):
         raise RuntimeError("DUMMY-SECRET storage detail")
 
 
-async def test_credential_failures(clock, usage, exchange):
-    """row: a store that does not answer is transient; a recovery marker is unresolved"""
+@pytest.mark.parametrize(("last_report", "answer", "expected_outcome", "expected_verdict"), [
+    pytest.param("accepted", "401", "upstream-auth", "admit", id="an upstream 401 is counted and changes nothing ⚖"),
+    pytest.param("none", "429 / 500", "upstream-http-error", "quota-unknown", id="a 429 or 500 is an http error, nothing accepted"),
+    pytest.param("none", "connect error / read timeout", "upstream-unreachable / upstream-timeout", "quota-unknown",
+                 id="an unreachable endpoint and a timeout are told apart"),
+    pytest.param("none", "text/html / application/json that is not JSON / 70 KiB (bound 64 KiB)", "upstream-content-type", "quota-unknown",
+                 id="a non-JSON, wrong-type or oversize body is refused ⚖"),
+    pytest.param("none", "(the store)", "credential-transient / credential-unresolved", "quota-unknown",
+                 id="a store that does not answer is transient; a recovery marker is unresolved"),
+])
+async def test_failed_poll(poll, usage, clock, exchange, last_report, answer, expected_outcome, expected_verdict):
     world("policy-codex")
-    client = httpx.AsyncClient(transport=httpx.MockTransport(usage.handler))
-    try:
-        dead = UsagePoll(_rail(clock, _DeadStore(creds(clock)[0]), exchange), client, USAGE_URL, Metrics(["platform"]), clock)
-        marked = MemoryStore(creds(clock)[0])
-        marked.record = Record(marked.record.credential, "refreshing")
-        stuck = UsagePoll(_rail(clock, marked, exchange), client, USAGE_URL, Metrics(["platform"]), clock)
-        with when("a poll on a store that does not answer, and one on a persisted refreshing marker"):
-            a, b = await dead.poll(), await stuck.poll()
-    finally:
-        await client.aclose()
-    then_eq("dead store", a, "credential-transient")
-    then_eq("recovery marker", b, "credential-unresolved")
-    then_eq("upstream contacted", len(usage.calls), 0)
-    then_eq("verdict", stuck.rail.headroom.verdict(), Verdict.UNKNOWN)
-
-
-async def test_identity_never_leaves(poll, usage, clock, caplog):
-    """row: identity never leaves the poll"""
-    world("policy-codex")
-    doc = usage_doc(clock)
-    identity = {doc["account_id"], doc["email"], doc["user_id"]}
-    assert all(v.startswith("DUMMY") for v in identity)
-    usage.body = json.dumps(doc).encode()
-    with when("one poll, at DEBUG logging"), caplog.at_level(logging.DEBUG, logger="gateway"):
-        outcome = await poll.poll()
-    then_eq("outcome", outcome, "accepted")
-    then_eq("report keys", sorted(translate(copy.deepcopy(doc), clock.t)), ["limited", "observed_at", "source", "windows"])
-    with then("no log line carries an identity value"):
-        for record in caplog.records:
-            assert not any(v in record.getMessage() for v in identity), record.getMessage()
-
-
-async def test_dark(clock, codex_store, exchange, usage):
-    """row: a dark rail has no poll"""
-    world("policy-codex")
-    client = httpx.AsyncClient(transport=httpx.MockTransport(usage.handler))
-    try:
-        no_url = UsagePoll(_rail(clock, codex_store, exchange), client, "", Metrics(["platform"]), clock)
-        no_backend = UsagePoll(_rail(clock), client, USAGE_URL, Metrics(["platform"]), clock)
-        with when("neither has what a poll needs"):
-            enabled = (no_url.enabled, no_backend.enabled)
-        then_eq("enabled", enabled, (False, False))
-        with then("a forced poll contacts nothing"):
-            for p in (no_url, no_backend):
-                with pytest.raises(RuntimeError):
-                    await p.poll()
-            assert usage.calls == []
-        then_eq("verdict", no_backend.rail.headroom.verdict(), Verdict.UNKNOWN)
-    finally:
-        await client.aclose()
-
-
-async def test_schedule_polls_at_start(poll, usage):
-    """row: the schedule polls at start, before the first interval"""
-    world("policy-codex")
-    with when("run() is started"):
-        task = asyncio.create_task(poll.run())
-        for _ in range(100):
-            if poll.polls:
-                break
-            await asyncio.sleep(0.01)
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-    then_eq("polls before the first interval elapsed", poll.polls, 1)
-    then_eq("verdict", poll.rail.headroom.verdict(), Verdict.ADMIT)
-
-
-@pytest.mark.parametrize("interval", [120, 0, None, True])
-def test_policy_interval(interval):
-    """row: poll_interval_s is required and sits below max_age_s"""
-    world("policy-codex")
-    with open(CODEX_POLICY, encoding="utf-8") as fh:
-        doc = json.load(fh)
-    h = doc["rails"]["codex"]["headroom"]
-    if interval is None:
-        del h["poll_interval_s"]
+    row(last_report=last_report, answer=answer, expected_outcome=expected_outcome, expected_verdict=expected_verdict)
+    with given(f"last_report {last_report}"):
+        if last_report == "accepted":
+            assert await poll.poll() == "accepted"
+            clock.t += 5
+    outcomes: list[str] = []
+    if answer == "(the store)":
+        client = httpx.AsyncClient(transport=httpx.MockTransport(usage.handler))
+        try:
+            dead = UsagePoll(_rail(clock, _DeadStore(creds(clock)[0]), exchange), client, USAGE_URL, Metrics(["platform"]), clock)
+            marked = MemoryStore(creds(clock)[0])
+            marked.record = Record(marked.record.credential, "refreshing")
+            stuck = UsagePoll(_rail(clock, marked, exchange), client, USAGE_URL, Metrics(["platform"]), clock)
+            with when(f"the endpoint answers {answer}: a poll on a store that does not answer, one on a persisted refreshing marker"):
+                outcomes = [await dead.poll(), await stuck.poll()]
+        finally:
+            await client.aclose()
+        then_eq("upstream contacted", len(usage.calls), 0, claim="the endpoint is never contacted")
+        poll = stuck
     else:
-        h["poll_interval_s"] = interval
-    with when(f"the policy loads with poll_interval_s = {interval!r} (max_age_s 120)"), pytest.raises(PolicyError) as e:
-        Policy.from_dict(doc)
-    then_eq("error", "poll_interval_s" in str(e.value), True)
+        variants: list[tuple] = []
+        if answer == "401":
+            variants = [(401, "application/json", b'{"detail":"DUMMY-SECRET-LEAK"}', None)]
+        elif answer == "429 / 500":
+            variants = [(429, "application/json", b'{"error":"DUMMY"}', None), (500, "application/json", b'{"error":"DUMMY"}', None)]
+        elif answer.startswith("connect error"):
+            variants = [(200, "application/json", None, httpx.ConnectError("refused")), (200, "application/json", None, httpx.ReadTimeout("slow"))]
+        else:
+            variants = [(200, "text/html", b"<html>DUMMY</html>", None), (200, "application/json", b"{not json", None),
+                        (200, "application/json", b"[" + b"1," * 40000 + b"1]", None)]
+        with when(f"the endpoint answers {answer} ({len(variants)} variant{'s' if len(variants) > 1 else ''}), one poll each"):
+            for status, ctype, body, fault in variants:
+                usage.status, usage.ctype, usage.body, usage.raise_ = status, ctype, body, fault
+                outcomes.append(await poll.poll())
+    verdicts(
+        outcome=(joined(outcomes), expected_outcome),
+        verdict=(_verdict(poll), expected_verdict),
+    )
+    if answer == "401":
+        with then("the counter saw both: accepted 1, upstream-auth 1"):
+            text = poll.metrics.render()
+            assert 'gateway_codex_usage_poll_total{outcome="accepted"} 1' in text
+            assert 'gateway_codex_usage_poll_total{outcome="upstream-auth"} 1' in text
 
 
-async def test_family_only_when_declared(settings, policy, codex_policy, secrets, store, clock, codex_store, exchange):
-    """row: an undeclared rail renders no poll family; a declared one renders every outcome from 0"""
-    world("policy-default")
+# -- the poll's owner and schedule ----------------------------------------------------------------
+
+LIFECYCLE_CELL = "accepted; one exchange; the rotated bearer, chatgpt-account-id and accept: application/json sent; the store ready"
+
+
+@pytest.mark.parametrize(("arranged", "expected_result"), [
+    pytest.param("the stored credential 1 s from expiry", LIFECYCLE_CELL,
+                 id="the poll rides the lifecycle: one owner rotates once, the rotated bearer and the account header go out ⚖"),
+    pytest.param("no CODEX_USAGE_URL, or no credential backend", "not enabled; a forced poll contacts nothing; quota-unknown", id="a dark rail has no poll"),
+    pytest.param("run() started", "one poll before any sleep; admit", id="the schedule polls at start, before the first interval ⚖"),
+    pytest.param("poll_interval_s 120 / 0 / absent / true, max_age_s 120", "PolicyError naming poll_interval_s",
+                 id="poll_interval_s is required and sits below max_age_s"),
+])
+async def test_owner_and_schedule(poll, usage, exchange, codex_store, clock, arranged, expected_result):
+    world("policy-codex")
+    row(arranged=arranged, expected_result=expected_result)
+    if arranged.startswith("the stored credential"):
+        with given(f"arranged {arranged} (inside the refresh margin)"):
+            rotated = creds(clock)[1]
+        with when("one poll"):
+            outcome = await poll.poll()
+        sent = usage.calls[0].headers
+        headers_ok = (sent["authorization"] == "Bearer " + rotated.access_token and sent["chatgpt-account-id"] == ACCOUNT
+                      and sent["accept"] == "application/json")
+        result = (f"{outcome}; {'one exchange' if exchange.calls == 1 else f'{exchange.calls} exchanges'}; "
+                  + ("the rotated bearer, chatgpt-account-id and accept: application/json sent" if headers_ok else f"sent {dict(sent)}")
+                  + f"; the store {codex_store.record.state}")
+    elif arranged.startswith("no CODEX_USAGE_URL"):
+        client = httpx.AsyncClient(transport=httpx.MockTransport(usage.handler))
+        try:
+            no_url = UsagePoll(_rail(clock, codex_store, exchange), client, "", Metrics(["platform"]), clock)
+            no_backend = UsagePoll(_rail(clock), client, USAGE_URL, Metrics(["platform"]), clock)
+            with when(f"arranged {arranged}: a forced poll on each"):
+                enabled = (no_url.enabled, no_backend.enabled)
+                refused = 0
+                for p in (no_url, no_backend):
+                    try:
+                        await p.poll()
+                    except RuntimeError:
+                        refused += 1
+            result = (f"{'not enabled' if enabled == (False, False) else f'enabled {enabled}'}; a forced poll contacts "
+                      f"{'nothing' if not usage.calls and refused == 2 else f'{len(usage.calls)} time(s)'}; {_verdict(no_backend)}")
+        finally:
+            await client.aclose()
+    elif arranged.startswith("run()"):
+        with when(f"arranged {arranged}"):
+            task = asyncio.create_task(poll.run())
+            for _ in range(100):
+                if poll.polls:
+                    break
+                await asyncio.sleep(0.01)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        result = f"{'one poll' if poll.polls == 1 else f'{poll.polls} polls'} before any sleep; {_verdict(poll)}"
+    else:
+        with open(CODEX_POLICY, encoding="utf-8") as fh:
+            base = json.load(fh)
+        errors = []
+        with when(f"the policy loads with {arranged}"):
+            for interval in (120, 0, None, True):
+                doc = copy.deepcopy(base)
+                h = doc["rails"]["codex"]["headroom"]
+                if interval is None:
+                    del h["poll_interval_s"]
+                else:
+                    h["poll_interval_s"] = interval
+                try:
+                    Policy.from_dict(doc)
+                    errors.append("loaded")
+                except PolicyError as e:
+                    errors.append("PolicyError naming poll_interval_s" if "poll_interval_s" in str(e) else f"PolicyError: {e}")
+        result = joined(errors, " / ")
+    expect("result", result, expected_result)
+
+
+# -- the poll counter -----------------------------------------------------------------------------
+
+@pytest.mark.parametrize(("policies", "expected_series"), [
+    pytest.param("policy-default / policy-codex", "none / the 11 outcomes, each 0",
+                 id="an undeclared rail renders no poll family; a declared one renders every outcome from 0 ⚖"),
+    pytest.param("—", "outcome values = the poll's outcomes", id="the counter's label set is the poll's outcome set"),
+])
+async def test_poll_counter(settings, policy, codex_policy, secrets, store, clock, codex_store, exchange, policies, expected_series):
+    world("policy-default" if policies.startswith("policy-default") else "policy-codex")
+    row(policies=policies, expected_series=expected_series)
+    if policies == "—":
+        with when("compare metrics.POLL_OUTCOMES with codex_usage.OUTCOMES"):
+            same = tuple(POLL_OUTCOMES) == tuple(OUTCOMES)
+        expect("series", "outcome values = the poll's outcomes" if same else f"{POLL_OUTCOMES} ≠ {OUTCOMES}", expected_series)
+        return
     from agent_gateway.app import create_app
-    with when("GET /metrics on an app under policy-default (no codex rail) and one under policy-codex (declared, nothing polled)"):
+    with when(f"GET /metrics on an app under each of policies {policies} (declared, nothing polled)"):
         texts = {}
         for name, pol, backend in (("policy-default", policy, None), ("policy-codex", codex_policy, CodexBackend(codex_store, exchange))):
             app = create_app(settings, policy=pol, source=secrets, store=store, clock=clock, codex_backend=backend)
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as c:
                 texts[name] = (await c.get("/metrics")).text
-    then_eq("series under policy-default", texts["policy-default"].count("gateway_codex_usage_poll_total{"), 0,
-            claim="an undeclared rail renders no gateway_codex_usage_poll_total series — CodexUsagePollSilent cannot fire on it")
-    then_eq("series under policy-codex", sorted(re.findall(r'gateway_codex_usage_poll_total\{outcome="([^"]+)"\} 0', texts["policy-codex"])),
-            sorted(OUTCOMES), claim="a declared rail renders every outcome from 0")
-
-
-def test_outcome_sets_agree():
-    """row: the counter's label set is the poll's outcome set"""
-    world("policy-codex")
-    then_eq("outcomes", tuple(POLL_OUTCOMES), tuple(OUTCOMES))
+    default = texts["policy-default"].count("gateway_codex_usage_poll_total{")
+    zeros = sorted(re.findall(r'gateway_codex_usage_poll_total\{outcome="([^"]+)"\} 0', texts["policy-codex"]))
+    expect("series", ("none" if default == 0 else f"{default} series") + " / "
+           + (f"the {len(OUTCOMES)} outcomes, each 0" if zeros == sorted(OUTCOMES) else f"{zeros}"), expected_series)

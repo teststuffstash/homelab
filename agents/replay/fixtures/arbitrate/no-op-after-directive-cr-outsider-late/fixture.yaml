@@ -1,0 +1,29 @@
+# arbitrate/no-op-after-directive (f) an OUTSIDER's ARBITRATE after the newest no-op round moves neither the fingerprint nor the directive (homelab#3203 trust gate).
+#
+# The cr-first world (the App's 11:30 directive, joined to REST user.type Bot) plus a 12:05
+# `ARBITRATE:` by a GitHub User with authorAssociation NONE. Counted, it would post-date the 12:00
+# no-op stats and silence NOOP_ROUND_JQ ($arb_ts → an ordinary changes-requested dispatch), or
+# become the newest directive ($dir → 0 rounds since → arbitrate). Gated, the outcome is cr-first's:
+# RE-RUN at round 3 on the App's directive.
+# RED ON BASE: master dispatched a fresh changes-requested round off the outsider's comment.
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cr-outsider-late
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cr-bridge.sh
+  - block:changes-requested-gate
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - MC_NOW=2026-09-09T12:10:00Z

@@ -11,12 +11,19 @@ fractions of the rail's top score, the cap — are the policy's `tiers` block (`
   `-N.N` version normalisation, a `:variant` suffix dropped, the vendor kept when the id carries
   one; a `claude/<alias>` joins the NEWEST `anthropic/claude-<alias>-<version>` row. No match, or
   more than one, = unbenched.
+- `parse_manual` / `build_snapshot(manual=…)`: the MANUAL benchmark rows (operator ruling
+  2026-11-11) — a committed, hand-entered file (`benchmarks-manual.json` beside the snapshot) for
+  a model the feed has not caught up with. A manual row scores ONLY an id the feed does not carry:
+  the moment the feed has the id the feed wins and the row is reported `retired`. A snapshot row
+  scored from one says so (`score_source: "manual"` + the url and the date read). The join rule
+  is unchanged — a manual id is one more AA id it runs over.
 - `derive`: per rail, a benched candidate is in a tier when its score ≥ band × the rail's top
   score; each list is ordered cheapest-first by COST PER CLEAN RIDE (`cost_per_clean_ride`:
   the row's price × a ride's output tokens ÷ its clean-ride rate, plus the strike overhead per
   failed ride — the `tiers.cost` terms; then input price, score descending, id) and capped.
   The subscription rail has no price: score ascending is its cost proxy. An unbenched
-  candidate, or an unpriced one on a priced rail, never tiers. A row's price is the SELECTED
+  candidate, an unpriced one on a priced rail, or a benched one with no value on the score
+  axis (`unscored` names them — the feed scores a row on some axes and not others) never tiers. A row's price is the SELECTED
   endpoint's on the openrouter rail (null until a cell passed the entry canary) and the plan's
   discounted list price on the Go rail (`capacity.go_pricing`).
 - `check`: the deployed lists EQUAL the derivation, order included — a hand edit fails; a tier
@@ -35,7 +42,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from .config import RAIL_PREFIX, TIERS, CostPolicy, TiersPolicy, tiers_policy
@@ -49,6 +56,61 @@ PRICELESS_RAILS = ("anthropic", "codex")
 _VERSION_PAIR = re.compile(r"-(\d+)-(\d+)(?=-|$)")  # the Go spelling `-5-5` → the AA spelling `-5.5`
 _VARIANT = re.compile(r":[a-z0-9-]+$")  # `:free` / `:exacto` — a variant of its family (model-classes.json)
 _VERSION = re.compile(r"\d+(?:\.\d+)*")
+SCORES = ("intelligence", "coding", "agentic")  # the capability row's three indices, in its column order
+MANUAL_ROW_KEYS = ("id", *SCORES, "source_url", "read_at", "note")
+MANUAL_SOURCE = "manual"  # a snapshot row's `score_source` when a manual row scored it
+_AA_ID = re.compile(r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*")  # `vendor/model`, the feed's spelling
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+class ManualError(ValueError):
+    """The manual benchmark file is not the shape `$defs.manual_benchmarks` — nothing is read from it."""
+
+
+def parse_manual(doc) -> dict[str, dict]:
+    """The manual benchmark file as `{aa id: row}`, STRICT (`$defs.manual_benchmarks`): an object
+    with `rows` (a `_`-prefixed key is a comment), every row exactly `MANUAL_ROW_KEYS` — a
+    `vendor/model` id (no duplicate), each score a number in [0, 100] or null with at least one
+    present, an https `source_url`, a `read_at` calendar date, a non-empty `note`. A hand-entered
+    score with no source and date is not evidence: any miss refuses the whole file."""
+    if not isinstance(doc, dict):
+        raise ManualError("manual benchmarks: the document is not an object")
+    if unknown := sorted(k for k in doc if k != "rows" and not k.startswith("_")):
+        raise ManualError(f"manual benchmarks: unknown key(s) {unknown}")
+    rows = doc.get("rows")
+    if not isinstance(rows, list):
+        raise ManualError("manual benchmarks: `rows` must be a list")
+    out: dict[str, dict] = {}
+    for i, r in enumerate(rows):
+        at = f"manual benchmarks: rows[{i}]"
+        if not isinstance(r, dict):
+            raise ManualError(f"{at} is not an object")
+        if sorted(r) != sorted(MANUAL_ROW_KEYS):
+            odd = sorted(set(r) ^ set(MANUAL_ROW_KEYS))
+            raise ManualError(f"{at}: keys must be exactly {list(MANUAL_ROW_KEYS)} — missing or unknown: {odd}")
+        rid = r["id"]
+        if not isinstance(rid, str) or not _AA_ID.fullmatch(rid):
+            raise ManualError(f"{at}.id {rid!r} is not a `vendor/model` id")
+        if rid in out:
+            raise ManualError(f"{at}.id {rid!r} is a duplicate")
+        for axis in SCORES:
+            v = r[axis]
+            if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 100):
+                raise ManualError(f"{at}.{axis} {v!r} is not a number in [0, 100] or null")
+        if all(r[axis] is None for axis in SCORES):
+            raise ManualError(f"{at}: no score — one of {list(SCORES)} must be a number")
+        if not isinstance(r["source_url"], str) or not r["source_url"].startswith("https://"):
+            raise ManualError(f"{at}.source_url {r['source_url']!r} is not an https url")
+        try:
+            if not isinstance(r["read_at"], str) or not _DATE.fullmatch(r["read_at"]):
+                raise ValueError
+            date.fromisoformat(r["read_at"])
+        except ValueError:
+            raise ManualError(f"{at}.read_at {r['read_at']!r} is not a YYYY-MM-DD date") from None
+        if not isinstance(r["note"], str) or not r["note"].strip():
+            raise ManualError(f"{at}.note must be a non-empty string")
+        out[rid] = dict(r)
+    return out
 
 
 def normalise(tail: str) -> str:
@@ -158,6 +220,14 @@ def derive(benchmarks: dict, tiers: TiersPolicy) -> dict[str, dict[str, list[str
     return out
 
 
+def unscored(benchmarks: dict, tiers: TiersPolicy) -> dict[str, list[str]]:
+    """`{rail: [policy ids]}` that join an AA row carrying no value on the score axis: benched, yet
+    in no pool and so in no tier. Reported by `check` and `derive` — out of the pool, never out of sight."""
+    out = {rail: sorted(pid for pid, r in rows.items() if r.get("aa_id") and not isinstance(r.get(tiers.score), (int, float)))
+           for rail, rows in benchmarks["rails"].items()}
+    return {rail: ids for rail, ids in out.items() if ids}
+
+
 def _lists(models) -> dict[str, list[str]]:
     out = {}
     for tier, ids in (models or {}).items():
@@ -247,7 +317,7 @@ def _iso(ts: float) -> str:
 
 
 def build_snapshot(*, capability: list, go_catalog: dict, openrouter_catalog: dict, anthropic_aliases: list[str],
-                   snapshot_at: str, codex_candidates: list[str] = ()) -> dict:
+                   snapshot_at: str, codex_candidates: list[str] = (), manual: dict | None = None) -> dict:
     """The benchmarks snapshot from its three inputs (the shape: catalog.schema.json
     `$defs.benchmarks_snapshot`). Candidates: the Go catalog's listed models with a monthly limit
     under the deployed plan (`opencode-go/<id>`) minus any model a subscription rail already serves
@@ -259,17 +329,31 @@ def build_snapshot(*, capability: list, go_catalog: dict, openrouter_catalog: di
     headline); the subscription rails' candidates as given, unpriced — the anthropic aliases, and the
     codex ids (`codex/<id>`: the ENROLLED account's model evidence, never a catalog — the spike
     §Live usage payload shape; they join the AA row by tail, `codex/gpt-6-astra` ↔ `openai/gpt-6-astra`).
-    Prices are $ per 1M tokens."""
+    Prices are $ per 1M tokens.
+
+    `manual` is the manual benchmark file's document (`parse_manual`; None = no file): its rows
+    whose id the feed does NOT carry join like any AA row and score the candidate — the snapshot
+    row then carries `score_source`, `score_source_url`, `score_read_at`; a row whose id the feed
+    carries is `retired` (the feed's scores stand). `sources.capability.manual` names both sets."""
     aa = {row[0]: row for row in capability if row[1] == AA_SOURCE}
+    by_hand = parse_manual(manual) if manual is not None else {}
+    retired = sorted(i for i in by_hand if i in aa)
+    hand = {i: m for i, m in by_hand.items() if i not in aa}  # the feed wins the moment it carries the id
+    used: set[str] = set()
     rails: dict[str, dict[str, dict]] = {"anthropic": {}, "opencode": {}, "openrouter": {}, "codex": {}}
 
     def row(pid: str, *, out_price=None, in_price=None, limit=None, provider=None, basis=None, rides=None) -> dict:
-        aa_id = join_aa_id(pid, aa)
+        aa_id = join_aa_id(pid, [*aa, *hand])
         bench = aa.get(aa_id) if aa_id else None
-        return {"aa_id": aa_id, "intelligence": bench[2] if bench else None, "coding": bench[3] if bench else None,
-                "agentic": bench[4] if bench else None, "out_price": out_price, "in_price": in_price,
-                "monthly_limit_usd": limit, "provider": provider, "price_basis": basis,
-                "rides": rides or {"clean": 0, "judged": 0, "prior": 1.0}}
+        by = hand.get(aa_id) if aa_id else None
+        scores = [by[axis] for axis in SCORES] if by else list(bench[2:5]) if bench else [None, None, None]
+        out = {"aa_id": aa_id, **dict(zip(SCORES, scores, strict=True)), "out_price": out_price, "in_price": in_price,
+               "monthly_limit_usd": limit, "provider": provider, "price_basis": basis,
+               "rides": rides or {"clean": 0, "judged": 0, "prior": 1.0}}
+        if by:
+            used.add(aa_id)
+            out |= {"score_source": MANUAL_SOURCE, "score_source_url": by["source_url"], "score_read_at": by["read_at"]}
+        return out
 
     for alias in anthropic_aliases:
         rails["anthropic"][alias] = row(alias)
@@ -299,10 +383,11 @@ def build_snapshot(*, capability: list, go_catalog: dict, openrouter_catalog: di
                                        provider=sel, basis="endpoint" if ep else None,
                                        rides={"clean": rides.get("clean", 0), "judged": rides.get("judged", 0), "prior": round(prior, 6)})
     pulled = max((float(r[5]) for r in aa.values() if r[5] is not None), default=None)
+    hand_entered = {"manual": {"used": sorted(used), "retired": retired}} if manual is not None else {}
     return {
         "snapshot_at": snapshot_at,
         "sources": {
-            "capability": {"source": AA_SOURCE, "pulled_at": _iso(pulled) if pulled else None, "rows": len(aa)},
+            "capability": {"source": AA_SOURCE, "pulled_at": _iso(pulled) if pulled else None, "rows": len(aa), **hand_entered},
             "go_catalog": {"fetched_at": go_catalog["sources"]["config"]["fetched_at"],
                            "fee_usd_month": (go_catalog.get("pricing") or {}).get("fee_usd_month"),
                            "draw_30d_usd": (go_catalog.get("pricing") or {}).get("draw_30d_usd")},

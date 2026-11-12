@@ -1,0 +1,31 @@
+# fix-debounce-setpass-admit — the set-pass session's ADMISSION (FU-270 gateway rollout, #1640/#1769):
+# fix-debounce-argo.yaml's `decide` step, the block between the ≥2-pending guard and the old-proxy
+# latch. The set-pass is the first in-cluster LANE to go through agents/gateway-admit.sh's
+# `gw_admit_lane` (the unbound lane shape — the pod runs its own claude), so this family is also the
+# helper's lane-function table; the launcher-shaped bound path stays gateway-admit / gateway-sessions.
+#
+# THE CONTRACT (operator rulings 2026-11-01, carried by the rollout brief):
+#   · PLATFORM ONLY. The set spans every claimed repo; the session is admitted as stack platform only
+#     when EVERY issue lives in a platform repo (homelab, or a repo the claims' stackmap maps to
+#     `platform`). One other-stack issue = the WHOLE set stays on the old proxy, and the line names
+#     that stack (never a POST). The knob off (AGENT_GATEWAY unset) = the old path, silently.
+#   · DISPATCH → the gateway's model and env: SP_MODEL = the wire model (rail prefix stripped),
+#     GW_LLM_ENV = the dispatch env (the env file is read and removed), the release is the caller's
+#     EXIT trap. Role `coordinator` (dispatch-unit has no gateway role); the task key is the set's
+#     refs, deterministic.
+#   · DEFER (rc 1) defers exactly as the latch defers below the block: exit 0, set stays pending.
+#   · TRANSITION FALLBACK (FU-270, deleted with the old proxy): a refusal before any request (rc 2 —
+#     no caller token) or a fail-closed (rc 3 — non-200) prints ONE loud line `gateway admission
+#     refused rc=N — old-proxy fallback` and leaves SP_MODEL empty, so the latch path below runs.
+#
+# Seams: `curl` is the gateway (gateway-admit's bridge shape — the POST body IS the asserted request,
+# the DELETE the release); /tmp/set.jsonl + /tmp/stackmap.tsv are the two files the manifest writes
+# above the block (row state in rows/<id>/vars.sh). post.sh fires the EXIT trap's release by hand.
+name: fix-debounce-setpass-admit
+mode: table
+source: agents/coordinator/fix-debounce-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:fix-debounce-setpass-admit
+  - file:post.sh
+rows: rows.psv

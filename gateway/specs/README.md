@@ -15,8 +15,8 @@ and stamp the commit they ran at (rule 5 below). What the gateway *is* lives one
 The numbered rules 1–11, the test & evidence conventions and the reviewer briefs are NOT kept here:
 they live ONCE in [allure-behavior-snippets](https://github.com/teststuffstash/allure-behavior-snippets)
 ([ADR-156](../../docs/adr.md#adr-156--one-portable-specevidence-process-homed-in-allure-behavior-snippets-one-reviewer-runs-two-briefs-2026-10-16)),
-pinned by version: **[RULES.md @ v0.6.7](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.7/allure_behavior_snippets/process/RULES.md)**,
-**[CONVENTIONS.md @ v0.6.7](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.7/allure_behavior_snippets/process/CONVENTIONS.md)**.
+pinned by version: **[RULES.md @ v0.6.9](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.9/allure_behavior_snippets/process/RULES.md)**,
+**[CONVENTIONS.md @ v0.6.9](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.9/allure_behavior_snippets/process/CONVENTIONS.md)**.
 "Rule N" anywhere in this island means rule N there. The pins: `../scripts/lib/snippets.sh` (CI
 evidence) and `agents/specs-reviewer-session.sh` (the reviewer's context pack); bump them together.
 
@@ -31,7 +31,29 @@ What this island adds, by rule:
   so `environment.properties` carries `git.commit` and `artifact=pr-head`, never `image.digest`.
   This is PR-head evidence; built-image evidence is an open question
   ([specs-reviewer.md §Open questions](../../docs/agents/specs-reviewer.md#open-questions) 2).
-- **Rule 7 (coupling):** enforced by `../scripts/spec_gate.py` inside `devbox run ci`.
+- **Rule 7 (coupling):** enforced by `../scripts/spec_gate.py` inside `devbox run ci` (orphans both
+  ways, error codes the page never mentions, a rule with no evidence and no `🚧`/`⚑` mark, a ghost
+  rule, a policy world ≠ its fixture twin).
+- **The lint gate (CONVENTIONS § The lint gate), this island's commands — all inside `devbox run ci`:**
+  the **join ratchet** `../scripts/spec-join-ratchet.py` (item 6 — per rule, `row-unkeyed`,
+  `header-unthreaded`, `cell-mismatch`, `case-unspecified` and `row-unproven` — ⚖ the half-join
+  hazard, a `∅` row inside a table that joins — held against `../scripts/spec-join-baseline.json`:
+  exceeding is red, equal passes, lower prints "lowered"; the fixing PR re-records with
+  `devbox run join-ratchet -- --write-baseline` from a FULL run; the join is the pinned tool's own,
+  through `allure_snippets_python` in `../scripts/lib/snippets.sh`); the **hygiene ratchet**
+  `../scripts/spec-hygiene-ratchet.py` (the digest's hygiene codes as the SET of
+  (rule · world · case · code) identities against `../scripts/spec-hygiene-baseline.json` — a new
+  identity is red with the case named, fix-one-break-one is red, a renamed case is a new identity;
+  `devbox run hygiene-ratchet -- --write-baseline` re-records; declaring it here is what lets the
+  evidence brief's repeat belt stop at the cases a PR added or changed, v0.6.9); **lychee** over the
+  built site (item 3 — every link and `#anchor` resolves, the joined rows' links into
+  `report/index.html` included); the **flowchart gates** — `../tests/test_specs_site_links.py`
+  (static: every Mermaid `click … href "#anchor" … _self` lands on an anchor of its page, every
+  flowchart on an endpoint page carries one) and `devbox run specs-site-e2e`
+  (`../scripts/e2e-specs-site.sh`: the rendered site in the pinned playwright image — every
+  diagram renders, every node link navigates to its heading; the repo-root diff-ci row
+  `gateway-specs-site-e2e`). Checks 1, 2, 4 and 5 of the gate are `rule()` (a label with no
+  heading fails collection), `spec_gate.py` and the `ids=` discipline of every row module.
 - **Rule 9 (external facts):** the wire facts this island rests on are read in
   `docs/agents/chainless-redesign.md §Proved on the wire` and OpenRouter's `openapi.json`.
 - **Rule 10 (incompleteness):** everything OUT of v0 is a `⚑ gap` row on the requirement it would
@@ -42,8 +64,20 @@ What this island adds, by rule:
 - **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a policy state
   plus a fake-upstream behaviour; tests carry it as the `world` label.
 - **Table shape:** the rows brief's checklist is a CANDIDATE under the operator's iteration and
-  advisory only; `spec_gate.py` reports split candidates and never fails on them. The `||`
-  divider separates input columns from expected columns.
+  advisory only; `spec_gate.py` reports split candidates and never fails on them. **Expected
+  columns end in `?`** (CONVENTIONS § The intent column, v0.6.3): `decision?` is the argname
+  `expected_decision`; inputs first, expected last, every input a cell (the world names what the
+  world already fixes; a prose "Inputs:" line is a cell that was not written). The older `||`
+  divider is still read by the pinned join and remains on the pages not yet migrated; a page that
+  migrates drops it — the join ratchet's lines are what mark the migration's progress per rule.
+- **Page shape (the oracle-fleet ingestion pages, 2026-11):** a contract page opens with a
+  **flow overview** (one Mermaid flowchart whose every node `click`s into the requirement that owns
+  it — the page's navigation, gated above), then a **requirement index** table (Requirement ·
+  section · Status — the `🚧 WIP` / `⚑ gap` marks of rule 10 live in its Status cell, where the
+  gates read them), then one section per step with its own flowchart, then the rules. A rule that
+  outgrows one question (the split candidates `spec_gate.py` prints) is split, the old anchor kept
+  as `<a id="…"></a>` on the line above the new heading (rule 3's alias — never an attribute on the
+  heading, which the gates read bare).
 
 ## Endpoint contract page template
 
@@ -56,12 +90,21 @@ schema: <name>.schema.json
 # <METHOD> <path> — one-line purpose
 
 ## Interface — the machine half
-<coupling table: requirement → schema paths → error codes → status>
+<coupling table: requirement → schema paths → error codes → status (🚧 WIP / ⚑ gap marks here)>
 
-## GW-<REQ>
-<prose constraint>
-<decision table: description | inputs || expected>
-<details markdown="1"><summary>Evidence</summary> --8<-- "GW-<REQ>.md" </details>
+## Flow overview
+<one mermaid flowchart; every node: click <node> href "#gw-<req>" "<tooltip>" _self>
+
+## <step> — one-line purpose (`GW-<STEP>-*`)
+<the step's own flowchart, nodes linking into its rules>
+
+### GW-<REQ>
+<prose constraint — the system, never its tests (rule 11); unproven facts marked in place>
+**World: [<world>](worlds/README.md#<world>)** (from endpoints/: `../worlds/…`) — what the world fixes for every row below.
+#### <one question per table>
+Legend: `<col>` = …; `<col>?` = … (short literals decoded once, here).
+<decision table: description | world | inputs… | expected?… — header == the proving test's argnames>
+<details markdown="1"><summary>Evidence — latest run</summary> --8<-- "GW-<REQ>.md" </details>
 ```
 
 ## Index
@@ -72,13 +115,15 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 [endpoints/openai-chat.md](endpoints/openai-chat.md) +
 [endpoints/openai-responses.md](endpoints/openai-responses.md) (the data plane; the last is the codex rail, lit 2026-10-22) →
 [endpoints/metrics.md](endpoints/metrics.md) · [endpoints/health.md](endpoints/health.md) ·
-[endpoints/catalog.md](endpoints/catalog.md) (the Go rail's vendor facts; the tier evidence) ·
+[endpoints/catalog.md](endpoints/catalog.md) (the two rails' vendor facts; the entry canary; the tier evidence and the rail choice) ·
 [access.md](access.md) (the role × stack × service inventory) ·
 [glossary.md](glossary.md) · [worlds/](worlds/README.md).
 
 | Requirement | Page | What it pins |
 |---|---|---|
-| [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit) | sessions | may this unit run now, on which rail |
+| [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit) | sessions | may this unit run now, on which cell — the walk's order, the explicit overrides, the harness taken from the cell, the preferred end of a tier's list (`prefer`) · `⚑ gap`: `/route` not served, the ladder's labels / urgency / budget unread |
+| [GW-SESSIONS-RETRY](endpoints/sessions.md#gw-sessions-retry) | sessions | the retry contract — ordered tier lists, the task's strikes (cell / model / harness scope), `cells-exhausted`, `attempt` and the superseded re-run · `⚑ gap`: one model across rails is two ids |
+| [GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity) | sessions | the ladder's capacity half — window utilization, the 429 latch, the cell cooldown, the rejected credential and its recovery, the Go window draw and catalog, the Go account headroom, the marks kept across a restart, the openrouter provider axis · `⚑ gap`: FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402, the capacity doorbell |
 | [GW-SESSIONS-ENV](endpoints/sessions.md#gw-sessions-env) | sessions | the pod's complete LLM env per harness |
 | [GW-SESSIONS-TOKEN](endpoints/sessions.md#gw-sessions-token) | sessions | the session token's shape, storage, lifetime |
 | [GW-SESSIONS-RELEASE](endpoints/sessions.md#gw-sessions-release) | sessions | release and expiry refuse the token |
@@ -94,13 +139,19 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-CRED-BOUNDARY](endpoints/anthropic-messages.md#gw-cred-boundary) | anthropic-messages | inbound auth stops here; the upstream credential starts here |
 | [GW-RAIL-OPENROUTER](endpoints/openai-chat.md#gw-rail-openrouter) | openai-chat | the per-stack OpenRouter rail's wire; the provider axis — every answer attributed to its provider, the provider selected from the endpoint snapshot and the gateway's own clean-ride evidence, a failed provider relaunched before the first byte |
 | [GW-RAIL-CODEX](endpoints/openai-responses.md#gw-rail-codex) | openai-responses | the ChatGPT-subscription rail's Responses wire |
-| [GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom) | openai-responses | account headroom as the codex rail's admission |
+| [GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom) | openai-responses | the codex account's headroom snapshot — a strictly newer, valid report replaces it; its verdict; the subscription gauges |
+| [GW-CODEX-ADMISSION](endpoints/openai-responses.md#gw-codex-admission) | openai-responses | the headroom verdict in the POST /sessions walk: `admit` dispatches, the `quota-*` verdicts defer with `retry_after_s` |
+| [GW-CODEX-USAGE-POLL](endpoints/openai-responses.md#gw-codex-usage-poll) | openai-responses | the gateway's own account usage poll — the first headroom report producer, its outcomes counted |
+| [GW-CODEX-UPSTREAM-HEADERS](endpoints/openai-responses.md#gw-codex-upstream-headers) | openai-responses | a relayed 200's `x-codex-*` window headers — the second headroom report producer, read on the relayed 200 only |
 | [GW-CODEX-OAUTH](endpoints/openai-responses.md#gw-codex-oauth) | openai-responses | the OAuth lifecycle behind the persistence interface (gateway-local SQLite in production, a FAKE store in tests) |
 | [GW-METRICS](endpoints/metrics.md#gw-metrics) | metrics | the `gateway_*` families and their bounded labels |
 | [GW-HEALTH](endpoints/health.md#gw-health) | health | liveness and the store mode |
-| [GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go) | catalog | the Go rail's models, prices and per-model plan limits, read from the vendor on a schedule; the last good snapshot |
-| [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) | catalog | the OpenRouter rail's registry — the weekly ranking ∩ AA-benched, each candidate's endpoints, the persisted snapshot; a cell enters the order only after a clean, budget-capped entry canary |
-| [GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers) | catalog | the deployed per-(rail, tier) model lists are derived from benchmark evidence (AA intelligence bands of the rail's best, cheapest per CLEAN ride first, capped) — a committed snapshot, its staleness alert, an equality check; and the admission's rail choice between a model's twin cells on two rails |
-| [GW-ACCESS](access.md#gw-access) | access | role × service: allowed / denied / unenforced |
+| [GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go) | catalog | the Go catalog's refresh: the two vendor sources read on a schedule, the strict parse, the last good snapshot kept across a restart, what a fetch sends, the families |
+| [GW-CATALOG-GO-PARSE](endpoints/catalog.md#gw-catalog-go-parse) | catalog | what the Go catalog's two reads say — the model's dialect, the page's limits, fees, peak hours and shares, the cost rows, the view's shape — and the policy's plan (no vendor fact in the policy) |
+| [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) | catalog | the OpenRouter rail's registry — the weekly ranking ∩ AA-benched, each candidate's endpoints, the persisted snapshot, the view's `pinnable` / `floor` verdict per harness |
+| [GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary) | catalog | the entry canary: a cell enters the order only after a clean, budget-capped canary ride pinned to it; a 429'd canary is no verdict (the cell backs off); the launcher's walk |
+| [GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers) | catalog | the deployed per-(rail, tier) model lists are derived from benchmark evidence (AA intelligence bands of the rail's best, cheapest per CLEAN ride first, capped) — a committed snapshot, its staleness alert, an equality check with undecided tiers; the Go price |
+| [GW-RAIL-CHOICE](endpoints/catalog.md#gw-rail-choice) | catalog | the twin rule and the admission's rail choice between a model's twin cells on two rails, by cost per clean ride |
+| [GW-ACCESS](access.md#gw-access) | access | role × rail: `dispatch` or `defer: role-rail-denied` per `roles.<role>.rails`; the inventory's other columns unenforced |
 | [GW-CODEX-REFRESH](endpoints/openai-responses.md#gw-codex-refresh) | openai-responses | native Codex OAuth HTTP refresh transport (injectable; production wires it beside the SQLite store) |
 | [GW-CODEX-CAPTURE](endpoints/openai-responses.md#gw-codex-capture) | openai-responses | the scoped four-boundary capture of a codex ride and its bundle, `GET /sessions/{id}/capture` |

@@ -32,6 +32,11 @@
 #   mechanical — no specs path and no rule-test path (`review_path_re`) in the PR's files, or the
 #              pass's touched-rules finds no rule: an approval with a fixed body, no LLM. Many per
 #              tick, cheap — the price of GitHub's repo-wide count.
+#   partial  — the model's `Verdict: PARTIAL READ — <files>` (the lens: a verdict claims the touched
+#              contract was read in full): NO review is posted; ONE comment starting `PARTIAL READ:`
+#              carrying a machine marker holds the content commit (classify → partial-held until a
+#              push), metric kind=partial (the SpecsReviewPartialRead belt). The lever is the pack's
+#              size, never a worker round — a worker cannot fix the reviewer's read.
 #   LLM pass — ONE per tick (the oldest candidate): admitted through the agent-gateway
 #              `POST /sessions` seam (role `reviewer`, stack `platform`, harness `claude` — the
 #              first real consumer, FU-270 dogfood), authenticated as this pod's ServiceAccount
@@ -146,9 +151,9 @@ SPECS_PATH_RE='(^|/)specs/'
 # ship in ONE wheel, verified by digest and run with the image's stdlib python3 (pack, evidence and
 # touched_rules import nothing outside the stdlib; the wheel is extracted, not zip-imported, because
 # the pack copies process/ from package files).
-SNIPPETS_VERSION="0.6.7"   # bump TOGETHER with gateway/scripts/lib/snippets.sh (CI evidence)
+SNIPPETS_VERSION="0.6.9"   # bump TOGETHER with gateway/scripts/lib/snippets.sh (CI evidence)
 SNIPPETS_WHEEL="https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v${SNIPPETS_VERSION}/allure_behavior_snippets-${SNIPPETS_VERSION}-py3-none-any.whl"
-SNIPPETS_SHA256="b0e5e06542835ecffb38a765a7a8a1b2f9fc38b6d32062a3a923bc7e2dac6b25"
+SNIPPETS_SHA256="4ca24515835b0969a6b225eef6e48a2d6337ec984367e74b0b4a1dc9def6ef16"
 EVIDENCE_ARTIFACT="${EVIDENCE_ARTIFACT:-gateway-evidence}"   # the LEGACY ci run artifact (fallback only, see evidence_fetch)
 # The evidence packs live in OUR storage since 2026-10-21 (the Actions artifact held ~2.1 GB of the
 # org's 2 GB included storage — GithubStorageHeldHigh): CI writes evidence/<pr-N|branch>/<sha>.tar.gz
@@ -220,12 +225,13 @@ JQ_PRELUDE='
   def has_label($l): ([ .labels[]?.name ] | index($l)) != null;
 '
 
-# classify <pr-json> → one word: error-label | own-anomaly | own-at-head | code-not-approved | ci-not-green | candidate
+# classify <pr-json> → one word: error-label | own-anomaly | own-at-head | partial-held | code-not-approved | ci-not-green | candidate
 classify() {
   jq -r --arg me "$SPECS_REVIEWER_LOGIN" --arg code "$CODE_REVIEWER_LOGIN" "$JQ_PRELUDE"'
     if has_label("agent/error") then "error-label"
     elif (live_verdicts($me) | length) > 1 then "own-anomaly"
     elif (live_verdicts($me) | length) == 1 then "own-at-head"
+    elif (content_sha | .[0:8]) as $h | ([ .comments[]? | select(login_of == $me) | select(.body | contains("<!-- specs-review partial-read head=" + $h)) ] | length) > 0 then "partial-held"
     elif ([ live_verdicts($code)[] | select(.state == "APPROVED") ] | length) == 0 then "code-not-approved"
     elif (green | not) then "ci-not-green"
     else "candidate" end' <<< "$1"
@@ -257,6 +263,8 @@ self_test() {
   j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r' <<< "$base");               check "own live verdict at head → own-at-head" own-at-head "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok,$own_dismissed]" '.reviews=$r' <<< "$base");        check "own DISMISSED is not a verdict → candidate" candidate "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok,$own_ok,$own_rc]" '.reviews=$r' <<< "$base");       check "two own live verdicts → own-anomaly" own-anomaly "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .comments=[{"author":{"login":"homelab-specs-reviewer[bot]"},"body":"PARTIAL READ: … <!-- specs-review partial-read head=aaaa1111 -->"}]' <<< "$base"); check "partial-read marker at the content commit → partial-held" partial-held "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .comments=[{"author":{"login":"homelab-specs-reviewer[bot]"},"body":"PARTIAL READ: … <!-- specs-review partial-read head=00000000 -->"}]' <<< "$base"); check "partial-read marker at an OLDER content commit → candidate (a push released the hold)" candidate "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[{"name":"ci","conclusion":"FAILURE"},{"name":"x","conclusion":"SUCCESS"}]' <<< "$base"); check "one FAILURE → ci-not-green" ci-not-green "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[]' <<< "$base"); check "empty rollup → ci-not-green" ci-not-green "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[{"name":"approve","conclusion":"CANCELLED"},{"name":"approve","conclusion":"SUCCESS"},{"name":"ci","conclusion":"SUCCESS"}]' <<< "$base"); check "superseded CANCELLED beside its SUCCESS → candidate (#2636)" candidate "$(classify "$j")"
@@ -290,6 +298,10 @@ self_test() {
   check "verdict parse: APPROVE" APPROVE "$(parse_verdict "$(printf '## Specs review\nVerdict: APPROVE — no blocking check failed\nRows: …\n')")"
   check "verdict parse: CHANGES_REQUESTED" CHANGES_REQUESTED "$(parse_verdict "$(printf '## Specs review\nVerdict: CHANGES_REQUESTED — 1, 6\n')")"
   check "verdict parse: missing → empty" "" "$(parse_verdict "$(printf 'no verdict here\n')")"
+  check "verdict parse: PARTIAL READ" PARTIAL "$(parse_verdict "$(printf '## Specs review\nVerdict: PARTIAL READ — spec-sections.md, digest.md\n')")"
+  check "partial unread: the line's tail" "spec-sections.md, digest.md" "$(partial_unread "$(printf '## Specs review\nVerdict: PARTIAL READ — spec-sections.md, digest.md\n')")"
+  check "outcome: a PARTIAL READ is clean (the model did its job; no strike)" clean "$(outcome_class 0 1 PARTIAL)"
+  check "prompt: pass 1 honours pass1-prior.tsv when present (snippets#46 wording: re-list EVERY prior key)" 1 "$(pass1_prompt o/r 1 abc | grep -c 'pass1-prior.tsv, when present.*re-list EVERY one of them')"
   check "outcome: a verdict is clean (APPROVE)" clean "$(outcome_class 0 1 APPROVE)"
   check "outcome: a verdict is clean (CHANGES_REQUESTED — a round, not a strike)" clean "$(outcome_class 0 1 CHANGES_REQUESTED)"
   check "outcome: no parsable verdict → no-verdict" no-verdict "$(outcome_class 0 1 '')"
@@ -352,6 +364,19 @@ self_test() {
   check "pinned verdict: head unchanged → rc 0" 0 "$rs"
   check "pinned verdict: POST carries commit_id=reviewed head + REQUEST_CHANGES" 1 "$(grep -c 'repos/teststuffstash/homelab/pulls/7/reviews.*commit_id=aaaa1111.*event=REQUEST_CHANGES' "$d/gh.calls")"
   unset -f gh current_head
+  # issue intent from a `Refs #N` line when the PR closes nothing (pr-open.sh's unfinished-issue
+  # form): the acceptance text still reaches the pack; no Refs line keeps the "none" note.
+  gh() {
+    case "$*" in
+      *closingIssuesReferences*) return 0 ;;
+      "pr view 5 "*body*) printf 'Refs #1012 remaining: the closeout\n' ;;
+      "pr view 6 "*body*) printf 'no link here\n' ;;
+      "issue view 1012 "*) printf '# T\n\n## Acceptance\n- a row\n' ;;
+    esac
+  }
+  check "issue intent: a Refs line names the issue" 1 "$(issue_intent teststuffstash/oracle-fleet 5 | grep -c '^## teststuffstash/oracle-fleet#1012$')"
+  check "issue intent: no link keeps the none note" 1 "$(issue_intent teststuffstash/oracle-fleet 6 | grep -c '^issue intent: none')"
+  unset -f gh
   # round inputs (ADR-156 step 2): the acceptance section is cut at the next `## ` heading and
   # keeps `###`; an issue with none is passed whole under a note; the prior review is the newest
   # OWN LLM review in ANY state (a dismissed one is the round memory), never a mechanical approval
@@ -505,15 +530,20 @@ ROWS
   echo "self-test: $fails FAILED"; return 1
 }
 
-# parse_verdict <review-body> → APPROVE | CHANGES_REQUESTED | "" — the lens's `Verdict:` line, first match.
+# parse_verdict <review-body> → APPROVE | CHANGES_REQUESTED | PARTIAL | "" — the lens's `Verdict:` line, first match.
 parse_verdict() {
   local line
-  line="$(grep -m1 -E '^Verdict:[[:space:]]*(APPROVE|CHANGES_REQUESTED)\b' <<< "$1" || true)"
+  line="$(grep -m1 -E '^Verdict:[[:space:]]*(APPROVE|CHANGES_REQUESTED|PARTIAL READ)\b' <<< "$1" || true)"
   case "$line" in
+    *"PARTIAL READ"*) printf 'PARTIAL';;
     *CHANGES_REQUESTED*) printf 'CHANGES_REQUESTED';;
     *APPROVE*) printf 'APPROVE';;
     *) printf '';;
   esac
+}
+# partial_unread <review-body> → what the PARTIAL READ line says was not finished (its tail), or ""
+partial_unread() {
+  grep -m1 -E '^Verdict:[[:space:]]*PARTIAL READ' <<< "$1" | sed -E 's/^Verdict:[[:space:]]*PARTIAL READ[[:space:]]*[—-]*[[:space:]]*//' || true
 }
 valid_env_key() { [[ "$1" =~ ^[A-Z][A-Z0-9_]*$ ]]; }
 
@@ -594,12 +624,20 @@ token() {
 }
 
 # ── the pass's readers (the live tick and the shadow run share them) ────────────────────────────
-# issue_intent <slug> <pr> → markdown: each closing issue's acceptance text (never fails the pass)
+# issue_intent <slug> <pr> → markdown: each closing issue's acceptance text, else the first `Refs #N`
+# issue's (never fails the pass)
 issue_intent() {
   local slug="$1" num="$2" refs r n body
   if ! refs="$(gh pr view "$num" --repo "$slug" --json closingIssuesReferences \
                 --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name) \(.number)"' 2>/dev/null)"; then
     printf 'issue intent: the closing-issue lookup FAILED; pr-body.md names the reference, the acceptance text is not available\n'; return 0
+  fi
+  if [ -z "$refs" ]; then
+    # A `Refs #N` line (agents/pr-open.sh's form for an issue the PR does not finish) still names
+    # the intent the rows derive from — same repo only, the first one.
+    n="$(gh pr view "$num" --repo "$slug" --json body --jq '.body // ""' 2>/dev/null \
+          | grep -ioE '\brefs[[:space:]]+#[0-9]+\b' | sed -n 1p | grep -oE '[0-9]+')" || n=""
+    [ -n "$n" ] && refs="$slug $n"
   fi
   if [ -z "$refs" ]; then
     printf 'issue intent: none, this PR closes no issue (check 1 grounds rows in the page prose, a use case or Spec changes:)\n'; return 0
@@ -708,7 +746,7 @@ build_pack() {
     SHADOW_BASE_COMMIT="$base_rev"
   fi
   # 2b) the pinned process: the wheel, verified by digest, extracted (never zip-imported)
-  curl -fsSL --max-time 60 "$SNIPPETS_WHEEL" -o "$WORK/snippets.whl" \
+  curl -fsSL --max-time 60 --retry 3 --retry-all-errors --retry-max-time 90 "$SNIPPETS_WHEEL" -o "$WORK/snippets.whl" \
     || { log "[$repo#$num] snippets wheel fetch FAILED — no review"; return 1; }
   [ "$(sha256sum "$WORK/snippets.whl" | cut -d' ' -f1)" = "$SNIPPETS_SHA256" ] \
     || { log "[$repo#$num] snippets wheel DIGEST MISMATCH (pinned ${SNIPPETS_SHA256:0:12}) — no review"; return 1; }
@@ -801,7 +839,7 @@ pass1_inputs() {
 }
 # pass1_prompt <slug> <num> <head> → pass 1 of the staged read: the rows brief's check 10, first half
 pass1_prompt() {
-  printf '%s' "You are the specs reviewer for pull request ${1}#${2} (head ${3}), on PASS 1 of a staged read. Your working directory holds the MASKED surface only (manifest.json, masked.files): every decision table's description cell is replaced by its row key r<table>.<row>; prose, headers, inputs, expected cells and worlds are in view. process/RULES.md, process/CONVENTIONS.md and process/briefs/rows.md are the pinned process. Do the first half of the rows brief's check 10: read every touched table's rows from their cells alone and record each row whose conditions or outcome cannot be placed without the hidden description, plus any other rows-brief finding the masked tables show. Never guess a description. Write ONLY a findings list, one line per finding: '- <row key or page anchor> — <rule or check> — <what the cells alone do not settle>', or the single line '- none'. No Verdict line: this list is frozen and handed to pass 2. Do not run commands, do not fetch anything."
+  printf '%s' "You are the specs reviewer for pull request ${1}#${2} (head ${3}), on PASS 1 of a staged read. Your working directory holds the MASKED surface only (manifest.json, masked.files): every decision table's description cell is replaced by its row key r<table>.<row>; prose, headers, inputs, expected cells and worlds are in view. process/RULES.md, process/CONVENTIONS.md and process/briefs/rows.md are the pinned process. Do the first half of the rows brief's check 10: read every touched table's rows from their cells alone and record each row whose conditions or outcome cannot be placed without the hidden description, plus any other rows-brief finding the masked tables show. Never guess a description. Write ONLY a findings list, one line per finding: '- <row key or page anchor> — <rule or check> — <what the cells alone do not settle>', or the single line '- none'. No Verdict line: this list is frozen and handed to pass 2. pass1-prior.tsv, when present, lists row keys a prior round's pass 2 already ruled on (key, ruling, round, rule): re-list EVERY one of them, one line each, as '- <key> — prior: ruled <ruling> round <N>' without re-arguing it — a survives/noted key is not raised as new, a withdrawn/contradicted key is not raised again on the same grounds. Do not run commands, do not fetch anything."
 }
 # review_prompt <slug> <num> <head> → the user prompt every harness gets (the brief's entry point);
 # on a staged read ($STAGED=1) it is pass 2 and adds the frozen pass 1's adjudication
@@ -1109,7 +1147,7 @@ if [ "${1:-}" = "--shadow" ]; then shift; shadow_main "$@"; exit $?; fi
 # ── metrics ──────────────────────────────────────────────────────────────────────────────────────
 METRICS=""
 metric() { METRICS="${METRICS}$1"$'\n'; }
-N_MECH=0; N_APPROVE=0; N_RC=0; N_DEFER=0; N_ERR=0
+N_MECH=0; N_APPROVE=0; N_RC=0; N_DEFER=0; N_ERR=0; N_PARTIAL=0
 push_metrics() { # <shadow 0|1>
   metric "specs_review_last_tick_timestamp_seconds $(date +%s)"
   metric "specs_review_shadow $1"
@@ -1119,6 +1157,7 @@ push_metrics() { # <shadow 0|1>
   metric "specs_review_tick_verdicts{kind=\"request_changes\"} $N_RC"
   metric "specs_review_tick_verdicts{kind=\"defer\"} $N_DEFER"
   metric "specs_review_tick_verdicts{kind=\"error\"} $N_ERR"
+  metric "specs_review_tick_verdicts{kind=\"partial\"} $N_PARTIAL"
   [ -n "$PUSHGATEWAY" ] || { log "metrics (no PUSHGATEWAY, log-only):"; printf '%s' "$METRICS"; return 0; }
   printf '%s' "$METRICS" | curl -fsS --max-time 10 --data-binary @- "${PUSHGATEWAY}/metrics/job/specs-review" >/dev/null 2>&1 \
     || log "pushgateway push failed (metrics stay in logs)"
@@ -1147,7 +1186,7 @@ cleanup() {
 trap cleanup EXIT
 
 POSTED=""          # "repo#N repo#M …" — the exit contract re-reads these
-LLM_CANDIDATES=""  # "createdAt repo N base headSha" lines, oldest first after sort
+LLM_CANDIDATES=""  # "createdAt repo N base headSha contentSha" lines, oldest first after sort
 
 # ── the per-PR walk ─────────────────────────────────────────────────────────────────────────────
 for repo in $SPECS_REVIEW_REPOS; do
@@ -1168,6 +1207,7 @@ for repo in $SPECS_REVIEW_REPOS; do
     case "$cls" in
       error-label)       log "[$repo#$num] agent/error present — touching nothing"; continue;;
       own-at-head)       log "[$repo#$num] own live verdict at ${content_sha:0:8} — nothing to do"; continue;;
+      partial-held)      log "[$repo#$num] PARTIAL READ held at ${content_sha:0:8} — no verdict until a push moves the content commit"; continue;;
       code-not-approved) log "[$repo#$num] no live ${CODE_REVIEWER_LOGIN} APPROVED at ${content_sha:0:8} — the code gate goes first"; continue;;
       ci-not-green)      log "[$repo#$num] CI not green at ${head:0:8} — waiting"; continue;;
       own-anomaly)
@@ -1198,7 +1238,7 @@ for repo in $SPECS_REVIEW_REPOS; do
       esac
       continue
     fi
-    LLM_CANDIDATES="${LLM_CANDIDATES}${created} ${repo} ${num} ${base} ${head}"$'\n'
+    LLM_CANDIDATES="${LLM_CANDIDATES}${created} ${repo} ${num} ${base} ${head} ${content_sha}"$'\n'
   done < <(jq -c '.[] | select(.isDraft | not)' <<< "$prs")
 done
 
@@ -1208,7 +1248,7 @@ LLM_RC=0
 if [ -z "$pick" ]; then
   log "no specs PR awaiting the LLM pass this tick"
 else
-  read -r _created repo num base head <<< "$pick"
+  read -r _created repo num base head content_sha <<< "$pick"
   n_cand="$(printf '%s' "$LLM_CANDIDATES" | grep -c . || true)"
   log "[$repo#$num] LLM pass (${n_cand} candidate(s); the rest wait for the next tick)"
   run_llm_pass() {
@@ -1289,6 +1329,18 @@ else
     log "[$repo#$num] claude exited ${rc} / ${cls} — no verdict (attempt ${attempt}; ${struck:+the strike is counted; }the next tick retries)"
     return 1
     done
+    if [ "$verdict" = PARTIAL ]; then
+      # the lens's third line: no review, ONE hold comment keyed by the content commit (classify →
+      # partial-held until a push). Not an error (the model did its job) and not a round (a worker
+      # cannot fix the reviewer's read) — the lever is the pack's size.
+      local unread; unread="$(partial_unread "$review")"
+      printf 'PARTIAL READ: %s could not read the context pack in full at content commit %s — unfinished: %s. No verdict is posted on this head: an approval that did not read the touched contract is not a gate (agents/lenses/specs.md §Verdict mechanics). The hold releases when a push moves the content commit; the lever is the pack — a smaller PR, a narrower touched-rule scope, or the read-map unit — never a worker round. <!-- specs-review partial-read head=%s -->\n' \
+        "$SPECS_REVIEWER_LOGIN" "${content_sha:0:8}" "${unread:-unstated}" "${content_sha:0:8}" > "$WORK/partial-$num.md"
+      if gh pr comment "$num" --repo "${ORG}/${repo}" --body-file "$WORK/partial-$num.md" >/dev/null; then
+        log "[$repo#$num] PARTIAL READ at ${content_sha:0:8} — held, no verdict (unfinished: ${unread:-unstated})"; N_PARTIAL=$((N_PARTIAL+1)); return 0
+      fi
+      log "[$repo#$num] PARTIAL READ at ${content_sha:0:8} but the hold comment FAILED — the next tick re-runs the pass"; return 1
+    fi
     printf '%s\n\n<!-- specs-review head=%s session=%s -->\n' "$review" "${head:0:12}" "$SESSION_ID" > "$WORK/review-$num.md"
     local kind
     case "$verdict" in
@@ -1322,6 +1374,6 @@ for ref in $POSTED; do
 done
 
 push_metrics 0
-log "tick done: mechanical=$N_MECH approve=$N_APPROVE request_changes=$N_RC defer=$N_DEFER error=$N_ERR"
+log "tick done: mechanical=$N_MECH approve=$N_APPROVE request_changes=$N_RC defer=$N_DEFER error=$N_ERR partial=$N_PARTIAL"
 if [ "$TERMINAL_OK" -ne 1 ]; then exit 10; fi
 exit "$LLM_RC"

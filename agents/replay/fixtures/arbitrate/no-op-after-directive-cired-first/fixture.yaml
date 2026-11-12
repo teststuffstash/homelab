@@ -10,6 +10,8 @@
 #   `.agents/fix.yaml` (label task/fix). NO agent/arbitrate label, NO arbitrate event; the
 #   deterministic pass launches `agent-session.sh` and writes the `kind=noop-rerun` event.
 # RED ON BASE: master labels agent/arbitrate here (the FU-115b no-op leg had no re-run).
+# The directive is the coordinator App's: authorAssociation NONE, so the homelab#3203 trust gate
+# joins the REST comments read (user.type Bot) before it counts — that read is in the stream.
 pins:
   - IL-T31
 name: arbitrate-no-op-after-directive-cired-first

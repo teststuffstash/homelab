@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-321** (2026-10-31: FU-319 minted for the class-6 substrate bump queue. FU-320 was minted 2026-10-29 out of order by the island-intake session. 2026-10-24: FU-317 minted for apiserver audit logs to Loki, FU-318 for the Kargo install residuals (homelab#2798). 2026-10-24: FU-316 minted for the ghcr/docker-io cold-blob warmer, blocked on the mcr warmer's soak (S9 sweep). 2026-10-22: FU-314 minted for the specs reviewer's legacy-artifact read fallback (#2796), FU-315 for wk-metal-02's apiserver re-converging on the 3200MiB GOMEMLIMIT. 2026-10-17: FU-313 minted for the 30-day OpenCode Go key (expires 2026-11-16) + the service-account move. 2026-10-13: FU-312 minted for in-cluster pulls of registry.teststuff.net stalling mid-stream on the router hairpin (oracle handoff, the ert-corpus roll). 2026-10-10: FU-311 minted for the jails' shared user-PAT rate pool (#2442, claude-jail#4). 2026-10-09: FU-310 minted for dind's HTTPS-first probe of the HTTP-only registry mirrors (a drop + dial timeout per pull, `AgentWorkerEgressDropped`) — operator weighing hosts.toml vs mirror TLS. FU-309 minted for the descheduler — displaced pods never move back after a window, operator-deferred. FU-307 minted for the "MASTER with WAN down" belt the pair lacks — blocked on an attended gate restart; FU-308 for a dead-man `leave` on unattended router proofs — both from the 2026-10-08 incident. 2026-10-08: FU-306 minted for the ci-runner VM replace the box cannot yet run itself — the attended verb is proven. 2026-10-07: FU-305 minted for the box loops a devbox bump wedged — sentinel silent). (2026-10-05: FU-304 minted for the laptop CP that cannot hold the apiserver — the sizing lever is the operator's, the detector shipped first (PR#2264). 2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-322** (2026-11-12: FU-321 minted for deploying in-repo images without a pin commit on master. 2026-10-31: FU-319 minted for the class-6 substrate bump queue. FU-320 was minted 2026-10-29 out of order by the island-intake session. 2026-10-24: FU-317 minted for apiserver audit logs to Loki, FU-318 for the Kargo install residuals (homelab#2798). 2026-10-24: FU-316 minted for the ghcr/docker-io cold-blob warmer, blocked on the mcr warmer's soak (S9 sweep). 2026-10-22: FU-314 minted for the specs reviewer's legacy-artifact read fallback (#2796), FU-315 for wk-metal-02's apiserver re-converging on the 3200MiB GOMEMLIMIT. 2026-10-17: FU-313 minted for the 30-day OpenCode Go key (expires 2026-11-16) + the service-account move. 2026-10-13: FU-312 minted for in-cluster pulls of registry.teststuff.net stalling mid-stream on the router hairpin (oracle handoff, the ert-corpus roll). 2026-10-10: FU-311 minted for the jails' shared user-PAT rate pool (#2442, claude-jail#4). 2026-10-09: FU-310 minted for dind's HTTPS-first probe of the HTTP-only registry mirrors (a drop + dial timeout per pull, `AgentWorkerEgressDropped`) — operator weighing hosts.toml vs mirror TLS. FU-309 minted for the descheduler — displaced pods never move back after a window, operator-deferred. FU-307 minted for the "MASTER with WAN down" belt the pair lacks — blocked on an attended gate restart; FU-308 for a dead-man `leave` on unattended router proofs — both from the 2026-10-08 incident. 2026-10-08: FU-306 minted for the ci-runner VM replace the box cannot yet run itself — the attended verb is proven. 2026-10-07: FU-305 minted for the box loops a devbox bump wedged — sentinel silent). (2026-10-05: FU-304 minted for the laptop CP that cannot hold the apiserver — the sizing lever is the operator's, the detector shipped first (PR#2264). 2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -161,9 +161,8 @@ six OVERSIZE items pointer-ized into
       file into its own Loki tenant, retention bounded (the log is large); then a Kargo-identity query panel.
 - [ ] **FU-318** — **Kargo install residuals + the platform-component kind gate (homelab#2798).** (a) Upstream:
       ask Kargo to make the management controller's startup cluster-wide Secret list (finalizer cleanup)
-      optional — the last cluster-wide Secret read in the hardened install. (b) When the kind e2e workflow
-      lands (operator-direct path), add `homelab-kargo-e2e-` to the kind-janitor prefix list
-      (`tofu/templates/ci-runner-cloud-init.yaml.tftpl:109`, takes effect at the next runner replace).
+      optional — the last cluster-wide Secret read in the hardened install. (b) DONE 2026-11-08 (#3221,
+      installed live on both runners).
       (c) `tests/kind-kargo/` is the first platform-component gate on the VM runner (ROADMAP P1 / ADR-082 cover
       stack gates only) — generalise when a second component needs one. Prod install: the PR after #2798.
 - [ ] **FU-299** — **Backups: Longhorn target LIVE + drilled; every CNPG Cluster backed up by default (ADR-147) + drilled.**
@@ -189,10 +188,10 @@ six OVERSIZE items pointer-ized into
       VM 9110, box-posted `opnsense-test-vm` on every head since 2026-10-26 (#2930, ADR-152 step 1); a weekly from-nothing rebuild drill on the box scores prod's
       click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score). The pair is COMPLETE
       (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (56; 57 on 10-18 →
-      `MgmtOpnsenseDrillScoreRegressed`). 2026-10-26: the pair had never renewed a cert (no AcmeClient cron) — FIXED
-      end to end the same day: `LanCertExpiringSoon` #2927, cron #2934, `opnsense-cert-carry.sh` #2939 (run live, pve's
-      copies current), BACKUP sign guard, HAProxy rebind on cert drift #2940 (pve's `homelab-gw-frontend` bound).
-      **Next:** (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
+      `MgmtOpnsenseDrillScoreRegressed`). Cert renewal on the pair fixed 2026-10-26 (#2927, #2934, #2939, #2940).
+      **The box's BACKUP converge has REFUSED since 2026-10-31** (`management-apply` failure on f50222b1 and 5f5f8916:
+      `ansible-live-drift … opnsense/kea-dhcp.py:192.168.2.71=2`; read 2026-11-12) — router merges are not reaching the BACKUP.
+      **Next:** (0) read the Kea drift on `opnsense-pve` and converge it by hand so the box resumes, then ask why no alert fired; (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
       nx02 pve`, idempotent) so the BACKUP follows the MASTER's renewals without a session; (2) the 56 click-ops rows
       (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
@@ -462,8 +461,17 @@ six OVERSIZE items pointer-ized into
       on an empty read after an inner gh failure — the NEEDSMETA arm mass-clears + re-emits
       (flapped 2026-08-23 ×2; the ALERT arm's twin quickfixed f703ec39). **Gate LIVE 2026-10-31:**
       `shellcheck-lint` (#3081, 145 findings baselined in `scripts/shellcheck-baseline.txt` — ~160 standing,
-      not ~8) + its `ci` step (seat-direct). **Next:** the `meta-needs-attention.sh` empty-read (still
-      `2>/dev/null | tail -1 | jq` per clause — fail loud on a gh error). Relates ADR-113, ADR-103, #854.
+      not ~8) + its `ci` step (seat-direct); dataflow analysis OFF since #3102 (it peaked 4.3 GiB on
+      coordinator-scan.sh, OOMKilled every 4Gi worker, #3094; re-enabling needs the `large` runner class, #3132). **Next:**
+      the `meta-needs-attention.sh` empty-read (still `2>/dev/null | tail -1 | jq` per clause — fail loud on a gh error). Relates ADR-113, ADR-103, #854.
+
+- [ ] **FU-321** — **Deploying an in-repo image costs a second master commit (the auto-bump pin PR).**
+      141 of 949 master commits in 30 days were image bumps (127 `agent-gateway`, 14 ARC runner; measured
+      2026-11-12). Options — Kargo patching the Application, a pins repo, a content-addressed tag — in
+      [`spikes/deploy-pin-without-git-commits.md`](spikes/deploy-pin-without-git-commits.md). **Deferred
+      (operator, 2026-11-12):** Kargo rolls out in the oracle stack first. **Next:** once that rollout has
+      run unattended, the operator picks an option; then move one homelab image and measure a week.
+      Relates FU-318, #3088.
 
 ## Agents
 - [ ] **FU-314** — **The specs reviewer still reads the legacy `gateway-evidence` Actions artifact as a fallback.**
@@ -502,15 +510,15 @@ the block needs pruning, not more headings.
       Now: the operator-direct `.github/renovate-global.json` regex manager. **Next** after both:
       the box wiring — `policy/mgmt/plan-input.yaml` maps a `ci_runner*` replace → the verb, one VM per tick.
 - [ ] **FU-305** — **A devbox toolchain bump wedged the management box's loops; the sentinel failed SILENT.**
-      10-07 #2362 → every box `devbox run` exit 1, no sentinel verdict. Class fix #2457 (no gate loop runs devbox;
-      iac-sentinel runs the BAKED lock) — docs/management-box.md §Two pins. Caveat: devbox logs `--option access-tokens
-      github.com=<mgmt PAT>` into the unit journal on an internal error (root-only) — redact before shipping box logs.
-      2026-10-31 resight: #2919 left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails w/o a TTY → the belt's
-      OPNsense leg (still `devbox run`) exit 1 → `MgmtBeltCheckFailing{check=ansible}` since 10-28 11:19Z; #2457 missed
-      it. Un-wedged 10-31 (venv moved aside); class fix #3052 (`5df5ea7f`: the belt resolves ansible from `devbox.lock`,
-      `OPN_ANSIBLE_BIN`; first box tick on it 14:17Z PASS, 0 devbox calls). **Next:** (1) drop `pkgs.devbox` + its stale
-      comment from the `mgmt-belt` unit `path` with the next `mgmt/nixos` change; (2) the ORIGINAL deliverable, still
-      unbuilt: `MgmtSentinelLoopStale` (+ replay 10-07 20:15–21:10Z); then archive.
+      10-07 #2362 → every box `devbox run` exit 1, no sentinel verdict. Class fix #2457 (no gate loop runs devbox; iac-sentinel
+      runs the BAKED lock) — management-box.md §Two pins. Caveat: devbox logs the mgmt PAT (`--option access-tokens`) into the
+      root-only unit journal on an internal error — redact before shipping box logs.
+      10-31 resight: #2919 left the box venv stale → devbox's 'overwrite? (y/n)' prompt fails w/o a TTY → the belt's OPNsense
+      leg (still `devbox run`) exit 1 → `MgmtBeltCheckFailing{check=ansible}` since 10-28 11:19Z; #2457 missed it. Un-wedged
+      10-31; class fix #3052 (`5df5ea7f`: ansible from `devbox.lock`, `OPN_ANSIBLE_BIN`; first box tick 14:17Z PASS). 11-01, a
+      SECOND wedge: an un-timed `kubectl exec` into a hung cilium agent froze every loop, the sentinel starved 3 h+, nothing
+      alerted (bounded, #3123). **Next:** (1) drop `pkgs.devbox` + its stale comment from the `mgmt-belt` unit `path` with the next
+      `mgmt/nixos` change; (2) `MgmtSentinelLoopStale` (replays 10-07 20:15–21:10Z + 11-01) — the ORIGINAL deliverable; archive.
 - [ ] **FU-290** — **Scans + sessions + reflexes exhaust the shared homelab-agents installation pools (142724430)
       under PR churn.** First 09-25 (Renovate wave); detector blindness fixed (#1979 graphql, #2442 core). Drains
       since: 10-04/10-06/10-07 (sleep-tracking#121 storm, oracle-fleet#798 loop — fixed + belted #2204/#2366),
@@ -601,7 +609,8 @@ the block needs pruning, not more headings.
       carrier is the EXISTING size label. **Next:** (a) `agent-budget/*` RE-GRADE by arbitrate/breaker plays
       (label_map md/lg rows); (b) a brief section naming the label vocabulary per play; (c) strikes gain the
       served-provider column, serving-shaped strikes exclude the (model, provider) pair on re-pick — BUILT but
-      dead in production 3× (#1268; 09-13 `no-output`; 09-23 `repetition-loop`) → homelab#1640 acceptances 1+3.
+      dead in production 3× (#1268; 09-13 `no-output`; 09-23 `repetition-loop`) → now the gateway's per-cell strikes
+      (GW-SESSIONS-OUTCOME; Goal #1640 closed superseded 2026-11-01).
       Rejected options + history: [`chainless-redesign.md`](agents/chainless-redesign.md) §cost rethink; identity:
       [`model-identity-free-vs-paid.md`](spikes/model-identity-free-vs-paid.md). Relates FU-174, FU-186, ADR-094/096/115.
 
@@ -667,24 +676,18 @@ the block needs pruning, not more headings.
 - [ ] **FU-200** — **The brief's fleet-strike rule: reader BUILT, re-key open.** "Same `error_class=` on ≥2 issues
       in 24 h ⇒ one `AGENT_ERROR` + one platform issue" (retro r4 F2) was prose; 09-01's four `unknown` strikes went
       uncorrelated. Reader BUILT (#1235; IL-T30 in [`issue-lifecycle-fsm.md`](agents/issue-lifecycle-fsm.md));
-      09-13 it latched five ISSUES for one PROVIDER fault. **Next:** re-key provider/model/neither = homelab#1640
-      acceptance 5 (open). Relates FU-199, agent-runtime#85, model-routing §M1a.
+      09-13 it latched five ISSUES for one PROVIDER fault. **Next:** re-key provider/model/neither against the gateway's
+      strike store (GW-SESSIONS-OUTCOME; Goal #1640 closed superseded 2026-11-01). Relates FU-199, agent-runtime#85, model-routing §M1a.
 
 - [ ] **FU-320** — **Island intake: the gateway admits its own ordinary work (P6 first leg).** Brief
       [`gateway/intake.md`](../gateway/intake.md), selector `gateway/scripts/intake-select.sh`, design + evidence
       [`spikes/island-intake.md`](spikes/island-intake.md) (#2978). **WIRED for the dig source 2026-10-28** (#3004 + #3008:
-      `island-intake` CronWorkflow 05:00Z, receipts = the ruled-input ledger, `INTAKE_DAILY_MAX`); dry-run proven in-cluster.
-      **Next:** proof of the first APPLY sitting filing + queueing a dig cause (meta-state pickup); the issue pile as a
-      second source; operator rulings in the spike §Open questions 2–5 (Goal ceiling, closing human-filed issues, rule 10
-      grammar, the second island). Settle: bot-filing → `agent/queued` ≈ 0 days, two weeks, rides ≤ 2 rounds.
+      `island-intake` CronWorkflow 05:00Z, receipts = the ruled-input ledger, `INTAKE_DAILY_MAX`); dry-run proven in-cluster. **Issue pile + re-reads wired 2026-11-11** (#3259, ADR-163; the sitting asks `prefer: strongest` → Fable, #3266/#3271; in-cluster dry-run proven).
+      **Next:** the first unattended cron sitting over the pile (05:00Z) read against the seat-run results in the spike
+      §Run 3; operator rulings in the spike §Open questions 2, 4, 5 (Goal ceiling, rule 10
+      grammar, the second island — oracle-fleet ASKED 2026-11-07 (handoff: bot-filed feedback-triage lane-B/C issues need
+      admission; RULED: facts stay in the stack repo, platform owns launch mechanics only — ADR-160, #3209). Settle: bot-filing → `agent/queued` ≈ 0 days, two weeks, rides ≤ 2 rounds.
       Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
-- [ ] **FU-218** — **ARC runner memory: a node-sized limit, not node removal: POINTER.** The runner
-      requests 1536 Mi with no limit, so jobs size to the HOST (`pytest -n auto` = one worker per CPU)
-      and vanish on 8 GB nodes; the recurring "move off 8 GB" pressure. 2026-10-02 evidence: the same
-      suite fits an 8 GB node once workers are bounded (oracle-fleet #783: 3 workers, 3.1 GiB, pass).
-      Option A spike DONE (PR#2185: in-place `pods/resize` proven on nx-01). **Next (operator):** the
-      spike's sizing calls (8 GB acceptance line, dind inside/outside the budget, per-runner cap) → ADR. Design, history, options, acceptance:
-      [`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md). Relates FU-208, ADR-082.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
       pick has no green requirement on purpose — wrong for a gate a catch-up merge cannot move (PR#1468: 26 merges,
       never green, pool starved — FU-218). #1489 (ADR-103 addendum) shrank the class to all-vacuous PRs.
@@ -695,7 +698,7 @@ the block needs pruning, not more headings.
 - [ ] **FU-220** — **Locked python rides no longer use the PyPI cache; recovering it needs a
       TRANSPARENT cache, which is a trust decision.** `UV_FROZEN=1` (2026-09-07, PR#1485) stops uv
       rewriting committed locks to the LAN index, at the price of `--frozen` installs fetching
-      files.pythonhosted.org over the WAN — all three python-profile repos commit a lock, so the
+      files.pythonhosted.org over the WAN — all four python-profile repos (homelab since #3225) commit a lock, so the
       `/packages/` zone is fed only by unlocked paths now. Mechanism, the measured uv behaviour
       and the two named costs of the transparent shape (forged certs for public hostnames in
       sandbox pods; hostAliases delete the upstream fallback) live in
@@ -765,25 +768,14 @@ the block needs pruning, not more headings.
       **Next:** the accounting half = rail-aware TOTAL metering (FU-131 closed 10-24); the scheduler
       half is a design sitting before any Goal whose `Budget:` must be real. Relates FU-088.
 
-- [ ] **FU-161** — **Scout v3: POINTER.** Design + mechanism (variant filter, benchmark
-      cross-check, typed cell-keyed canary verdicts, the ⚖ filing gate's evidence-bearing partition):
-      [`model-routing-history.md`](spikes/model-routing-history.md) §M7. Legs 1–2 shipped 2026-08-11
-      (#282); legs 3–4 + the filing gate (operator 08-17: an all-unbenched, uncanaried digest posts
-      nowhere but the log) shipped via #469→PR#499 + #506's whole-set common-cause rule. **First fire
-      PROVEN** — weekly organic digests (#1647/#1821/#2053), #2053 with three typed `clean` canaries.
-      #778 released unbuilt 2026-09-02 (Go cells mooted by the 08-25 ruling; hygiene → FU-181). 10-19:
-      the OPENROUTER canary leg is superseded by the gateway's entry canary (GW-CATALOG-OR, #2745); the
-      digest stays. **Next:** rung-2/FU-095(c), pool depth, void the tainted 08-10..08-17 rotation rows
-      (no owner since #778).
-
 - [ ] **FU-186** — **Provider selection priced per successful job (ADR-115): POINTER.** Design +
       evidence + 4-step build order: [`docs/spikes/model-routing-history.md`](spikes/model-routing-history.md)
       §M14 (Exacto delegated for cheap coding; pin-v2 with the overhead-cost term for priced
       classes; the scout rides its class's provider policy; `@` arms = the experiment
       instrument, shipped PR#963). **Step 1 FLIPPED 2026-09-13 (PR#1639; operator: the five
       open-inference tool-loops ARE the trial) — the suffix rides paid OpenRouter picks only.
-      Step 1 CONFIRMED STANDING 2026-10-14** (homelab#1669 strike read, thin traffic). **Next:** the 0731 matrix run (step 2,
-      #1238 — open; parent Goal #1231 closed 2026-09-14, so unparented). Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
+      Step 1 CONFIRMED STANDING 2026-10-14** (homelab#1669 strike read, thin traffic). **Next:** none on the old router — #1238 closed superseded
+      2026-11-01; per-job provider pricing is the gateway's tier evidence (GW-MODEL-TIERS). Archive candidate. Relates ADR-115, ADR-096 §M4/M8, FU-095, homelab#966 (intake digest),
       the #783 provider-attribution legs.
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design,
@@ -817,8 +809,9 @@ the block needs pruning, not more headings.
       rail](spikes/codex-subscription-rail.md#lighting-the-rail--2026-10-19-fu-270). Live: the PLATFORM session pod rides
       `AGENT_GATEWAY=sessions` (#2788); codex rail lit 10-22, subscriptions on every role (ruled 10-23, #2845), codex MCP
       (#2844), harness-scoped strikes (#2880); the harness-follows-the-cell ruling is #2870 (queued). **Next (seat):** a canary
-      window per 6 h refresh, re-cut when the lists move (last #2903, 10-24); read the first platform worker ride through
-      `/sessions` and the first non-prober codex ride; the jail's codex refresh reading ~10-26. **Operator-only:** FU-313;
+      window per 6 h refresh, re-cut when the lists move (last #2903; 11-01 check = derivation, terra in the snapshot, no tier);
+      the weekly AA pull misses release-day models (terra, 10-26) — `benchmarks-snapshot.sh`'s cadence knob; hand-passed codex
+      candidates → #3145; read the first platform worker ride through `/sessions` and the first non-prober codex ride. **Operator-only:** FU-313;
       ruling #2768; #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
       codex child (#2904/#2905 live) waits on oracle-fleet#933 → arm oracle-iac#1141 (TICK-LOG 10-24).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
@@ -876,7 +869,7 @@ the block needs pruning, not more headings.
       ruling, legs: [`incidents/2026-08-26-reviewer-404-loop.md`](incidents/2026-08-26-reviewer-404-loop.md) §Residual
       work. Build = the dated role×harness×rail×model table in git; router filters on it, launcher derives from it.
       (b) router half SHIPPED (PR#1929); (d) failure half SHIPPED (`ArgoWorkflowsFailing`), verdict-throughput half
-      open. Reviewer pin LIVE; its deletion = #1769 acceptance 4 (Goal open). **Next:** schema design pass, then
+      open. Reviewer pin: on the gateway for the platform (#3116, policy rails + `harness: claude`), old-proxy path for other stacks; Goal #1769 closed superseded 2026-11-01. **Next:** schema design pass, then
       the issue tree.
 
 - [ ] **FU-164** — **doc-heat — POINTER.** Doctrine, v0 (`devbox run doc-heat`), settle runs 1–3, serving plan:

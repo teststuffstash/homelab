@@ -1,0 +1,4 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"reviewer","task":"review-homelab-42","round":1,"harness":"claude","bind":{"namespace":"platform-agents","serviceaccount":"agentstack-loop","pod":"reviewer-homelab-42-0a1b2c3d"}}
+OUT → review of homelab#42 deferred — gateway rail-capacity (retry_after=60s)
+ERR → gateway(sessions): defer — [rail-capacity] retry_after=60s — not dispatching (task=review-homelab-42, round=1).
+RC 0

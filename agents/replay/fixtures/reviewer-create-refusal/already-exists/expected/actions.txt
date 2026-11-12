@@ -1,0 +1,3 @@
+ERR Error from server (AlreadyExists): error when creating "STDIN": pods "reviewer-snore-recorder-37-d19389f4" already exists
+ERR REVIEW REFUSED (atomic): create of reviewer-snore-recorder-37-d19389f4 failed — a racing dispatcher won the (pr, head) key, or the manifest is invalid (see kubectl error above).
+RC 3

@@ -11,7 +11,7 @@ normalised schema, not a vendor payload:
 (no poll, no upstream-header reading, no jail ingress yet), so a fresh gateway answers
 `quota-unknown` and the rail defers — fail closed. Freshness, the ceiling and the window profile
 are policy (`rails.codex.headroom`, `rails.opencode.headroom`), never code literals. The Go rail
-(GW-SESSIONS-ADMIT §Capacity) is the same engine with named windows: its report's windows carry
+(GW-SESSIONS-CAPACITY §Go account headroom) is the same engine with named windows: its report's windows carry
 `window` (a name) where codex carries `window_minutes`, and the policy's `window_key` says which.
 An ACCEPTED snapshot is handed to `on_accept` (§Gauges: `app.py` binds the metrics' two subscription
 gauges there); a refused report reaches no listener. No rendering lives here.

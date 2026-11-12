@@ -46,7 +46,7 @@
       }
     },
     "score_axis": { "enum": ["intelligence", "coding", "agentic"], "description": "the three Artificial Analysis indices of a capability row" },
-    "cell_state": { "enum": ["candidate", "eligible", "excluded"], "description": "a (model, provider) cell's ENTRY state (GW-CATALOG-OR): new to the snapshot or back from exclusion → candidate; one canary ride completed clean on exactly that cell → eligible (the only state selection pins); a canary struck → excluded, with the class, for canary.cooldown_s" },
+    "cell_state": { "enum": ["candidate", "eligible", "excluded"], "description": "a (model, provider) cell's ENTRY state (GW-CATALOG-OR-CANARY): new to the snapshot or back from exclusion → candidate; one canary ride completed clean on exactly that cell → eligible (the only state selection pins); a canary struck → excluded, with the class, for canary.cooldown_s", "x-requirements": ["GW-CATALOG-OR-CANARY"] },
     "ranking_slice": { "enum": ["programming", "tool_calling"], "description": "the MCP list-daily-model-rankings slices the catalog may read (period week): a category and a modality" },
     "catalog_block": {
       "$comment": "the policy's `rails.openrouter.catalog` (GW-CATALOG-OR): the registry's SOURCES, never its candidates",
@@ -74,7 +74,7 @@
         "backoff_s": { "type": "number", "exclusiveMinimum": 0, "description": "a 429'd canary's first re-try horizon on its cell (operator 2026-10-22: no verdict — the cell stays candidate, the admission is not consumed, the walk moves on)" },
         "backoff_max_s": { "type": "number", "minimum": 0, "description": "the horizon doubles per consecutive 429'd canary up to this; a verdict resets it" }
       },
-      "x-requirements": ["GW-CATALOG-OR"]
+      "x-requirements": ["GW-CATALOG-OR-CANARY"]
     },
     "openrouter_snapshot": {
       "$comment": "the store's `catalog_snapshots.openrouter-endpoints` body as the catalog leg writes it (GW-CATALOG-OR) — openai-chat.schema.json $defs.endpoint_snapshot's `models` with the leg's provenance per model, plus `sources`",
@@ -104,7 +104,7 @@
           }
         }
       },
-      "x-requirements": ["GW-CATALOG-OR"]
+      "x-requirements": ["GW-CATALOG-OR", "GW-CATALOG-OR-CANARY"]
     },
     "band": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
     "tiers_block": {
@@ -141,7 +141,8 @@
       "properties": {
         "clean": { "type": "integer", "minimum": 0 }, "judged": { "type": "integer", "minimum": 0 },
         "prior": { "type": "number", "minimum": 0, "maximum": 1, "description": "the clean-rate prior while judged < tiers.cost.min_rides: the selected endpoint's uptime_1d / 100 on openrouter, 1.0 on the Go rail" }
-      }
+      },
+      "x-requirements": ["GW-MODEL-TIERS", "GW-RAIL-CHOICE"]
     },
     "candidate_row": {
       "type": "object",
@@ -155,8 +156,38 @@
         "monthly_limit_usd": { "$ref": "#/$defs/limit", "description": "the Go plan's monthly limit; null on the other rails" },
         "provider": { "type": ["string", "null"], "description": "the openrouter model's selected provider slug (the cell the price and the rides belong to); null elsewhere" },
         "price_basis": { "$ref": "#/$defs/price_basis" },
-        "rides": { "$ref": "#/$defs/rides", "description": "the cell's clean-ride evidence from the gateway's outcome store at snapshot time" }
+        "rides": { "$ref": "#/$defs/rides", "description": "the cell's clean-ride evidence from the gateway's outcome store at snapshot time" },
+        "score_source": { "const": "manual", "description": "OPTIONAL — present only on a row a manual benchmark row scored (the feed does not carry `aa_id`); absent = the scores are the feed's" },
+        "score_source_url": { "type": "string", "description": "OPTIONAL, with score_source: where the hand-entered score was read" },
+        "score_read_at": { "type": "string", "format": "date", "description": "OPTIONAL, with score_source: the day it was read" }
       }
+    },
+    "manual_benchmarks": {
+      "description": "the committed manual benchmark rows (argocd/resources/agent-gateway/benchmarks-manual.json): hand-entered scores for ids the feed does not carry yet — read by `tiers snapshot --manual` only, never mounted. A `_`-prefixed top-level key is a comment.",
+      "type": "object",
+      "required": ["rows"],
+      "patternProperties": { "^_": {} },
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "intelligence", "coding", "agentic", "source_url", "read_at", "note"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$", "description": "the Artificial Analysis id, `vendor/model` — unique in the file" },
+              "intelligence": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+              "coding": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+              "agentic": { "type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "at least one of the three scores is a number" },
+              "source_url": { "type": "string", "pattern": "^https://" },
+              "read_at": { "type": "string", "format": "date" },
+              "note": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      },
+      "x-requirements": ["GW-MODEL-TIERS"]
     },
     "benchmarks_snapshot": {
       "type": "object",
@@ -174,7 +205,15 @@
               "properties": {
                 "source": { "const": "artificial-analysis" },
                 "pulled_at": { "$ref": "#/$defs/timestamp", "description": "the newest updated_ts of the old proxy's capability table" },
-                "rows": { "type": "integer", "minimum": 0, "description": "the capability table's row count (the snapshot keeps only the candidates)" }
+                "rows": { "type": "integer", "minimum": 0, "description": "the capability table's row count (the snapshot keeps only the candidates)" },
+                "manual": {
+                  "type": "object", "additionalProperties": false, "required": ["used", "retired"],
+                  "description": "OPTIONAL — present when the snapshot was cut with a manual benchmark file",
+                  "properties": {
+                    "used": { "type": "array", "items": { "type": "string" }, "description": "the manual ids that scored a candidate (the feed lacks them)" },
+                    "retired": { "type": "array", "items": { "type": "string" }, "description": "the manual ids the feed carries now — the feed's scores stand, the rows are to be deleted" }
+                  }
+                }
               }
             },
             "go_catalog": {
@@ -230,7 +269,7 @@
           }
         }
       },
-      "x-requirements": ["GW-CATALOG-GO"]
+      "x-requirements": ["GW-CATALOG-GO", "GW-CATALOG-GO-PARSE"]
     },
     "docs_snapshot": {
       "type": "object",
@@ -263,7 +302,7 @@
           "properties": { "5h": { "type": "number" }, "7d": { "type": "number" }, "30d": { "type": "number" } }
         }
       },
-      "x-requirements": ["GW-CATALOG-GO"]
+      "x-requirements": ["GW-CATALOG-GO", "GW-CATALOG-GO-PARSE"]
     }
   },
   "openrouter_output": {
@@ -323,7 +362,7 @@
         }
       }
     },
-    "x-requirements": ["GW-CATALOG-OR"]
+    "x-requirements": ["GW-CATALOG-OR", "GW-CATALOG-OR-CANARY"]
   },
   "output": {
     "type": "object",
@@ -396,7 +435,7 @@
         }
       }
     },
-    "x-requirements": ["GW-CATALOG-GO"]
+    "x-requirements": ["GW-CATALOG-GO", "GW-CATALOG-GO-PARSE"]
   },
   "errors": {}
 }

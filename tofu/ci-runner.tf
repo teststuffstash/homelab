@@ -81,8 +81,11 @@ variable "ci_runner_02_ip_cidr" {
 }
 
 variable "ci_runner_disk_gb" {
-  type    = number
-  default = 80
+  type = number
+  # 80 → 120 (ADR-161, #3216): two concurrent e2e runs take ~15 GB on top of the cached images. Both
+  # thin pools were read first (pve 58 %, nx-02 69 %). Tofu grows the volume only; the guest needs
+  # `growpart /dev/sda 1 && resize2fs /dev/sda1` (or a reboot, cloud-init does the same).
+  default = 120
 }
 
 variable "ci_runner_debian_image_url" {

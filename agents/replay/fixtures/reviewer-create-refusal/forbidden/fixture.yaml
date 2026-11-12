@@ -1,0 +1,15 @@
+# 2026-11-01 — homelab#1973: a pod-create Forbidden is reported as RBAC, not as a lost race.
+#
+# CONDITION UNDER REPLAY. A per-stack coordinator dispatched the reviewer WITHOUT --loop-ns, so
+# the pod went to the legacy default ns agent-coordinator, and its SA (sleep-agents:agentstack-loop)
+# cannot create pods there. The stderr is verbatim from the snore-recorder#37 reproduction on #1973.
+#
+# THE CONTRACT: the kubectl error is passed through, then the refusal names the namespace and the
+# fix (--loop-ns <stack>-agents). It does not blame a racing dispatcher or an invalid manifest. Exit 3.
+name: reviewer-create-refusal-forbidden
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-create-refusal
+  - file:post.sh

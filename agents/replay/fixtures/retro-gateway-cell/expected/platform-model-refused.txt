@@ -1,0 +1,2 @@
+ERR FATAL: --cell claude:opus names a model on the platform stack — the gateway serves the model for role retro (FU-270); pass the harness only (--cell claude)
+RC 2

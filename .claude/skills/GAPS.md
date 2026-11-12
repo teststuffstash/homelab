@@ -46,7 +46,10 @@ bounded build); handoff-G4 waits on claude-jail#11.
       **promoted→** the description gains those cue phrases (2026-10-26).
 - [x] handoff-G3 — an inbox file judged "already resolved" was left in `inbox/` unverified
       (2026-10-16). **promoted→** step 2's already-resolved exit: same verify, `## Result: already
-      resolved — <evidence>`, move to `done/` (2026-10-26).
+      resolved — <evidence>`, move to `done/` (2026-10-26). Resight 2026-11-01: 11 files from
+      2026-09-05 → 10-21 still sat in `inbox/` (6 of them long resolved) — the promoted step holds
+      only when the skill is invoked on EVERY inbox file, not the ones the operator named; done by
+      a fork that day.
 - [ ] handoff-G4 — two shapes the protocol lacked, improvised the same way three times (2026-10-16,
       10-19, ~10-22): OUTBOUND mono→stack notices written to `<stack>/done/`, and a second jail's
       durable record (step 6 collides with second-jail rule 2). Operator 2026-10-26: expand the

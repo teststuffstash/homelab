@@ -1,0 +1,11 @@
+# retro-gateway-cell — the decision table (family contract in fixture.yaml).
+# id                       | world | patch | env                                        | expect                | params
+gateway-claude             |       |       |                                            | gateway-dispatched    | h=claude task=retro-r10 rc=0
+gateway-goose-review       |       |       | CELL=goose REVIEW=docs/agents/retros/x.md  | gateway-dispatched    | h=goose task=retro-r10-xrev rc=0
+gateway-defer              |       |       | HANDOFF_RC=1                               | gateway-dispatched    | h=claude task=retro-r10 rc=1
+gateway-fallback-claude    |       |       | HANDOFF_RC=75                              | gateway-fallback      | h=claude m=opus
+gateway-fallback-goose     |       |       | CELL=goose HANDOFF_RC=75                   | gateway-fallback      | h=goose m=deepseek/deepseek-v4-pro
+platform-model-refused     |       |       | CELL=claude:opus                           | platform-model-refused |
+oracle-bare-harness        |       |       | STACK=oracle CELL=goose                    | old-proxy             | h=goose m=deepseek/deepseek-v4-pro
+oracle-pinned              |       |       | STACK=oracle CELL=claude:sonnet            | old-proxy             | h=claude m=sonnet
+oracle-unknown-harness     |       |       | STACK=oracle CELL=opencode                 | no-transition-model   |

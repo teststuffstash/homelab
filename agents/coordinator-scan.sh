@@ -577,6 +577,31 @@ STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
     then [ $b | scan("<!-- agent-event kind=stats ts=([^ ]+) -->")[0] ]
     elif ($b | test("Agent run stats")) then [ .createdAt ]
     else [] end | .[] ];'
+# COMMENT TRUST (homelab#3203's predicate, applied to the ARBITRATE selects below). Most claim
+# repos are PUBLIC, so anyone can post a comment that starts `ARBITRATE`; counted, it moves the
+# arbitration fingerprint ($arb_ts) or the re-run directive ($dir) and buys an extra round. An
+# ARBITRATE comment counts only from a GitHub App (user.type Bot: our own loop identities, the only
+# Apps installed) or a repo OWNER/MEMBER/COLLABORATOR — the same predicate as the launcher's
+# prefetch (agent-session.sh `comment-trust` block). `gh pr/issue view --json comments` carries
+# `authorAssociation` but no author type, and our App identities read CONTRIBUTOR/NONE, so
+# arb_trust_enrich lazily joins the REST `user.type` (by node id) onto exactly the ARBITRATE comments
+# the association alone does not trust — no extra read on a PR without one. An unreadable REST read
+# fails CLOSED (only association-trusted ARBITRATE counts) with a WARN.
+TRUST_DEF='def trusted: ((.user.type // "") == "Bot") or ((.authorAssociation // .author_association // "") | IN("OWNER","MEMBER","COLLABORATOR"));'
+arb_trust_enrich() {   # <slug> <number> <json with .comments> → the same json, REST user.type joined in
+  local need raw m
+  need="$(printf '%s' "$3" | jq -r "${TRUST_DEF}"'any(.comments[]?; ((.body // "") | startswith("ARBITRATE")) and (trusted | not))' 2>/dev/null)" || need=''
+  [ "$need" = true ] || { printf '%s' "$3"; return 0; }
+  m=''
+  if raw="$(gh api "repos/$1/issues/$2/comments" --paginate 2>/dev/null)"; then
+    m="$(printf '%s' "$raw" | jq -cs '[ add // [] | .[] | select((.node_id // "") != "") | {key: .node_id, value: (.user.type // "")} ] | from_entries' 2>/dev/null)" || m=''
+  fi
+  if [ -z "$m" ]; then
+    echo "  WARN: comment trust: REST comments of ${1}#${2} unreadable — ARBITRATE from non-collaborators ignored this tick (homelab#3203)" >&2
+    m='{}'
+  fi
+  printf '%s' "$3" | jq -c --argjson m "$m" '.comments |= map((.id // "" | tostring) as $i | if ($m[$i] // "") != "" then .user.type = $m[$i] else . end)'
+}
 # FU-147 (homelab#868): the re-label must not fire over a NEWER arbitration ruling. The 12:18
 # re-fire on PR#862 re-read "stats without commits" minutes after the 12:15 arbitration had
 # already ruled that same round a strike — the predicate had no notion of an arbitration event
@@ -584,10 +609,10 @@ STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
 # newest no-op stats marker POST-DATES the newest arbitration event (an "ARBITRATE" comment or
 # machine event). An arbitration event newer than the stats marker means the ruling already covered
 # this round; re-labelling would re-dispatch the same escalation the ruling just resolved.
-NOOP_ROUND_JQ="${STATS_TS_DEF}"'
+NOOP_ROUND_JQ="${STATS_TS_DEF}${TRUST_DEF}"'
   ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
   | ([ stats_ts[] | select($head == "" or . > $head) ] | length) as $after
-  | ([ .comments[]? | select((.body // "") | startswith("ARBITRATE")) | .createdAt ] + [ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->")) | (.body | [scan("kind=arbitrate ts=([^ >]+)")][] | .[0] // empty) ] | map(select(. != "")) | max // "") as $arb_ts
+  | ([ .comments[]? | select((.body // "") | startswith("ARBITRATE")) | select(trusted) | .createdAt ] + [ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->")) | (.body | [scan("kind=arbitrate ts=([^ >]+)")][] | .[0] // empty) ] | map(select(. != "")) | max // "") as $arb_ts
   | ([ stats_ts[] | select($head == "" or . > $head) ] | max // "") as $newest_noop_ts
   | if $after >= 2 and ($arb_ts == "" or $newest_noop_ts > $arb_ts) then "1" else "" end'
 # <<<REPLAY:round-evidence<<<
@@ -609,8 +634,8 @@ NOOP_ROUND_JQ="${STATS_TS_DEF}"'
 # dispatch numbering — so the re-run lands on the same pod-name key (agent-<project>-<task>-r<k>).
 # An unreadable issue read degrades to PR-side directives only (worst case: today's arbitrate).
 # >>>REPLAY:noop-rerun-predicate>>>
-NOOP_RERUN_JQ="${STATS_TS_DEF}"'
-  ([ (.comments[]?), ($ic[]?) | select((.body // "") | test("^ARBITRATE\\b")) | .createdAt ] | max // "") as $dir
+NOOP_RERUN_JQ="${STATS_TS_DEF}${TRUST_DEF}"'
+  ([ (.comments[]?), ($ic[]?) | select((.body // "") | test("^ARBITRATE\\b")) | select(trusted) | .createdAt ] | max // "") as $dir
   | ([ .comments[]? | select((.body // "") | startswith("<!-- agent-summary -->"))
        | (.body | [scan("kind=noop-rerun ts=([^ >]+)")][] | .[0]) ] | max // "") as $rr
   | ([ stats_ts[] | select($dir != "" and . > $dir) ] | length) as $after
@@ -626,6 +651,8 @@ noop_rerun_check() {   # <slug> <pr-probe-json> <issue-or-empty> → "rerun|<rou
       echo "  WARN: noop-rerun: comments of ${1}#${3} unreadable — PR-side directives only (homelab#1910)" >&2
       ic='[]'
     fi
+    ic="$(arb_trust_enrich "$1" "$3" "{\"comments\":${ic}}" | jq -c '.comments' 2>/dev/null)" || ic='[]'
+    [ -n "$ic" ] || ic='[]'
   fi
   v="$(printf '%s' "$2" | jq -r --argjson ic "$ic" "$NOOP_RERUN_JQ" 2>/dev/null)" || v=''
   case "$v" in rerun\|[0-9]*|arbitrate\|*) printf '%s\n' "$v" ;; *) printf 'arbitrate|noop-rerun predicate unreadable\n' ;; esac
@@ -1796,8 +1823,7 @@ resumable_branches=""   # FU-199: space-separated repo#N=branch pairs for goal c
 # ── Ratchet clause files (homelab#825, #853) ─────────────────────────────
 # CANONICAL LIST IN .github/workflows/ci.yaml:118, ONE HOME.
 # Parity assertion below verifies this list matches the regex at runtime.
-clause_files="agents/model-scout.sh
-agents/coordinator-scan.sh
+clause_files="agents/coordinator-scan.sh
 agents/review-reflex.sh
 agents/reviewer-session.sh
 agents/reviewer-optout.sh
@@ -1879,7 +1905,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; noop_units=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""
+  items=""; orphans=""; units=""; punits=""; noop_units=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""; um_lane_side=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
@@ -2254,8 +2280,11 @@ EOF_DBCAND
     # `body` is fetched for the FU-146 per-item hold: it carries the `Implements #<n>` line that
     # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
     # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
-    prsjson="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid 2>/dev/null)" || prsjson='[]'
-    jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || prsjson='[]'
+    # prsjson_fetch_rc (homelab#3048): 0 only when the list was read AND parsed. A failed read falls
+    # back to '[]', which the fleet-fault un-latch would otherwise read as "no open PR" (a vacuous CI leg).
+    prsjson_fetch_rc=0
+    prsjson="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid 2>/dev/null)" || { prsjson_fetch_rc=1; prsjson='[]'; }
+    jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || { prsjson_fetch_rc=1; prsjson='[]'; }
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
     # autoMergeRequest != null; un-armed PRs are "invisible to the merge path", FU-079). Counting
@@ -4103,6 +4132,10 @@ EOF_GTHEMES_OPEN
       # reflex's ONE home, agents/pr-last-edited.sh — fetched lazily, once per repo per tick, for
       # every CHANGES_REQUESTED PR in prsjson, then merged into this PR's probe BY NUMBER. A failed
       # read degrades (WARN on stderr, no lastEditedAt) to the commit-time rule; it never aborts.
+      # SPECS-REVIEWER CR: the body leg does not hold. That identity re-reviews only a new content
+      # commit (agents/specs-reviewer-session.sh: a live own verdict at the content commit = skip),
+      # so a body-only answer to its verdict re-reads never, and holding on it wedged oracle-fleet
+      # PR#1013 for good — the round is the worker's, so the clause dispatches it.
       cr_reviews=""
       if [ -n "$cr_probe" ]; then
         [ -n "$cr_le_prs" ] || cr_le_prs="$(pr_last_edited_merge "$slug" "$prsjson")"
@@ -4117,8 +4150,11 @@ EOF_GTHEMES_OPEN
             (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
           def newest_commit_at:
             ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
+          def newest_cr_by:
+            ([ .reviews[]? | select(.state == "CHANGES_REQUESTED") ] | sort_by(.submittedAt) | last | .author.login) // "";
           if (newest_commit_at != "" and newest_commit_at > newest_review_at) then "held"
-          elif ((.lastEditedAt // "") > newest_review_at) then "held-body"
+          elif ((.lastEditedAt // "") > newest_review_at
+                and (newest_cr_by | test("specs-reviewer") | not)) then "held-body"
           else "" end
         ' 2>/dev/null)" || cr_reviews=""
       fi
@@ -4133,6 +4169,7 @@ EOF_GTHEMES_OPEN
       fi
       cr_noop=""
       if [ -n "$cr_probe" ]; then
+        cr_probe="$(arb_trust_enrich "$slug" "$u" "$cr_probe")"
         cr_noop="$(printf '%s' "$cr_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || cr_noop=""
       fi
       if [ -n "$cr_noop" ]; then
@@ -4350,7 +4387,11 @@ EOF_GTHEMES_OPEN
     # (mechanical-lane) bump in ONE state, RED at a settled head. Green and pending are the auto-merge
     # lane's own (renovate-approve + GitHub auto-merge); CHANGES_REQUESTED is not its state (no LLM
     # reviewer reads it). #2919 (the weekly devbox-update PR) sat red and armed for two days, no actor.
+    # …and since ADR-162 in a second: STALE — armed, open, and nothing has happened on it for
+    # UM_STALE_S, red or not (#3237 sat green and armed a day behind a lost approve event).
     UM_MAX_RIDES="${UM_MAX_RIDES:-5}"
+    UM_STALE_S="${UM_STALE_S:-86400}"   # an armed `automerge` bump with no activity for this long is stale, red or not (ADR-162)
+    UM_NOOP_S="${UM_NOOP_S:-86400}"   # a ride older than this over an unchanged fingerprint changed nothing (the no-op terminal below)
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (($L|index("merge-conflict"))|not) and (((($L|index("major"))) and (.autoMergeRequest==null)) or ((($L|index("deps-review")) or ($L|index("automerge"))) and (.autoMergeRequest!=null) and (($L|index("major"))|not))))|.number'); do
       um_lane="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.labels|map(.name)) as $L|if ($L|index("major")) and (.autoMergeRequest==null) then "unarmed-major" elif ($L|index("deps-review")) then "deps-review" elif ($L|index("automerge")) then "automerge" else "unarmed-major" end' 2>/dev/null)" || um_lane="unarmed-major"
       pr_json_um="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || pr_json_um=''
@@ -4378,7 +4419,23 @@ EOF_GTHEMES_OPEN
         # Unreadable = not red (fail-open to the auto-merge lane: a ride is the expensive side).
         um_red="$(printf '%s' "$pr_json_um" | jq -r '
           if ([ .statusCheckRollup[]? | ((.conclusion // .state) // "") | select(. == "FAILURE" or . == "TIMED_OUT" or . == "ERROR") ] | length > 0) then "yes" else "no" end' 2>/dev/null)" || um_red="no"
-        [ "$um_red" = "yes" ] || continue
+        # …or STALE (ADR-162): nothing has happened on it for UM_STALE_S and it is still open. The
+        # mechanical lane merges within the hour when it works, so an armed bump nobody has touched
+        # for a day looks abandoned, whatever the reason turns out to be — a lost approval, an
+        # update nobody made, a check that never reported. "Touched" is the newest of what the two
+        # reads already in hand carry: the arming, a commit, a comment, a review, a check starting
+        # or finishing. A PR that is moving (an updater merge, a re-run, a ride's own note) is not
+        # stale however long ago it was armed — #3233 bought two rides in minutes on arming age
+        # alone. No readable timestamp at all is not stale (a ride is the expensive side).
+        # (both documents go through pipes, never argv: a board's PR list outgrows one argument)
+        um_armed_at="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.autoMergeRequest.enabledAt // ""' 2>/dev/null)" || um_armed_at=""
+        um_idle_s="$(printf '%s' "${pr_json_um:-null}" | jq -r --argjson now "$(um_now)" --arg armed "$um_armed_at" '
+            [ $armed, (.commits[]?.committedDate), (.comments[]?.createdAt), (.reviews[]?.submittedAt),
+              (.statusCheckRollup[]? | .startedAt, .completedAt) ]
+            | map(select(type == "string" and . != "" and (startswith("0001-") | not)) | fromdateiso8601?) | max
+            | if . == null then "" else ($now - .) end' 2>/dev/null)" || um_idle_s=""
+        case "$um_idle_s" in ''|*[!0-9]*) um_idle_s=0 ;; esac
+        [ "$um_red" = "yes" ] || [ "$um_idle_s" -ge "$UM_STALE_S" ] || continue
       fi
       # Bounded rides (ADR-127's max-5 made deterministic, operator 2026-10-12): every dispatch leaves a
       # `state-fp:unarmed-major:` marker on the PR, so the marker count IS the ride count — the sixth is
@@ -4415,10 +4472,32 @@ EOF_GTHEMES_OPEN
       fi
       umfp="$(pr_state_fp_pair "$slug" "$u" "unarmed-major" "$pr_json_um")"; umfp_prev="${umfp#*|}"; umfp_cur="${umfp%%|*}"
       if [ -n "$umfp_cur" ] && [ "$umfp_cur" = "$umfp_prev" ]; then
+        # NO-OP TERMINAL (ADR-162): the debounce assumes the ride CHANGES the state it read. A ride
+        # that exits having touched nothing leaves the fingerprint where its own dispatch marker put
+        # it — no second ride, and never the rides-exhausted bound either (one marker, not five). A
+        # marker older than UM_NOOP_S over an unchanged fingerprint is that ride's verdict: it did
+        # not move the PR, so the PR is a human's, visibly (`agent/arbitrate`), not a report line
+        # nobody reads. An unreadable marker age holds (fail toward the debounce, not the label).
+        um_marker_age="$(printf '%s' "$pr_json_um" | jq -r --arg fp "$umfp_cur" --argjson now "$(um_now)" '
+            [ .comments[]? | select((.body // "") | contains("state-fp:unarmed-major:" + $fp)) | (.createdAt // "") | fromdateiso8601? ] | max
+            | if . == null then "" else ($now - .) end' 2>/dev/null)" || um_marker_age=""
+        case "$um_marker_age" in ''|*[!0-9]*) um_marker_age="" ;; esac
+        if [ -n "$um_marker_age" ] && [ "$um_marker_age" -ge "$UM_NOOP_S" ]; then
+          if gh_label_add "$slug" "$u" agent/arbitrate \
+             && mc_event "$slug" "$u" arbitrate "ARBITRATE (ride changed nothing, ADR-162): the \`unarmed-major\` ride dispatched on this ${um_lane} PR left its state exactly as it found it (\`state-fp:unarmed-major:${umfp_cur}\`, $(( um_marker_age / 3600 ))h ago), so no further ride is owed and nothing else owns it. A human decides; removing \`agent/arbitrate\` re-opens the rides."; then
+            orphans="${orphans}[$repo] ⚠ unarmed-major RIDE CHANGED NOTHING → agent/arbitrate: PR #${u} (${um_lane}, state unchanged $(( um_marker_age / 3600 ))h after its ride) — a human decides\n"
+          else
+            orphans="${orphans}[$repo] ⚠ unarmed-major ride changed nothing on PR #${u} but the agent/arbitrate write FAILED — human check\n"
+          fi
+          continue
+        fi
         orphans="${orphans}[$repo] ⏳ unarmed-major DEBOUNCED — PR #${u}: content, checks, reviewDecision and newest verdict are all unchanged since the last unarmed-major dispatch (\`state-fp:unarmed-major:${umfp_cur}\`, homelab#198). The ride that read this state already ruled; a verdict, a push that changes the diff, a check flip or a dismissal re-opens it (a rebase does not, #2100).\n"
         continue
       fi
       units="${units}unarmed-major|${repo}|pr-${u}\n"
+      # The ride is told WHICH class it holds (ADR-162): the unit's name says "un-armed major" for
+      # three classes, two of which are armed by design — a session reading the name exits clean.
+      [ "$um_lane" = "unarmed-major" ] || um_lane_side="${um_lane_side:-} ${repo}:pr-${u}:${um_lane}"
       item_class_push "$repo" "pr-${u}" "orphan-unarmed" "machine"
     done
     # <<<REPLAY:unarmed-major<<<
@@ -4454,6 +4533,91 @@ EOF_GTHEMES_OPEN
       orphans="${orphans}[$repo] ⚠ un-armed reviewable bump — its reflex never armed it, no lane sees it (FU-079 premise false; allure-behavior-snippets#11 class, 2026-10-12): PR #${bk_n} — ${bk_t}\n"
     done
     # <<<REPLAY:unowned-pr-backstop<<<
+    # CI INFRA-DEATH RETRY (ADR-162) — the floor under every per-state lane above. An armed PR was
+    # declared ready to merge; a workflow run at its head that DIED rather than failed (a
+    # `startup_failure`, a runner that lost its pod, a cancel nothing superseded — no step ever
+    # concluded `failure`) is not a verdict on the diff, and no lane reads it: the approve reflex
+    # and the checks are event-fired, so one lost event parks the PR for good (homelab#3237: three
+    # `startup_failure`s, zero jobs, green CI, no approval, no actor; homelab#3233: the runner pod
+    # killed mid-warm, red `ci` with no failed step). Deterministic, no session: re-run it (or, for
+    # a startup failure GitHub will not re-run, re-fire its event), at most
+    # SA_MAX_RETRIES times per head, one event line each. A run with a failed STEP is a real red
+    # and stays its lane's (ci-red, unarmed-major) — a blind re-run there buys rides, not merges.
+    # Per workflow at the head: any run still going = pending, any success/skipped/neutral =
+    # satisfied; otherwise the newest dead run, once it has been dead for SA_GRACE_S (GitHub's own
+    # retries and a superseding event get the first hour). Unreadable = held, never re-run.
+    sa_now() { date -u +%s; }   # replay seam: the wall clock (the grace below)
+    # >>>REPLAY:stale-armed-retry>>>
+    SA_GRACE_S="${SA_GRACE_S:-3600}"
+    SA_MAX_RETRIES="${SA_MAX_RETRIES:-3}"
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((.autoMergeRequest!=null)
+        and (([$L[]|select(.=="major/awaiting-human" or .=="agent/error" or .=="agent/arbitrate" or .=="merge-conflict")]|length)==0))|.number' 2>/dev/null || true); do
+      sa_head="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid // ""' 2>/dev/null)" || sa_head=''
+      [ -n "$sa_head" ] || continue
+      if ! sa_runs="$(gh api "repos/${slug}/actions/runs?head_sha=${sa_head}&per_page=100" 2>/dev/null)"; then
+        orphans="${orphans}[$repo] ⚠ ci-retry: workflow runs of PR #${u} unreadable — held this pass (ADR-162)\n"
+        continue
+      fi
+      sa_cands="$(printf '%s' "$sa_runs" | jq -r --argjson now "$(sa_now)" --argjson grace "$SA_GRACE_S" '
+          [ .workflow_runs[]? ] | group_by(.workflow_id)[]
+          | select(all(.[]; .status == "completed"))
+          | select(any(.[]; .conclusion == "success" or .conclusion == "skipped" or .conclusion == "neutral") | not)
+          | (sort_by(.created_at, .id) | last) as $r
+          | select($r.conclusion == "failure" or $r.conclusion == "startup_failure" or $r.conclusion == "timed_out" or $r.conclusion == "cancelled")
+          | select((($r.updated_at // "") | fromdateiso8601? // $now) < ($now - $grace))
+          | "\($r.id)\t\($r.conclusion)\t\($r.name)"' 2>/dev/null)" || sa_cands=''
+      [ -n "$sa_cands" ] || continue
+      sa_dead=""
+      while IFS=$'\t' read -r sa_id sa_concl sa_name; do
+        [ -n "$sa_id" ] || continue
+        if [ "$sa_concl" != "startup_failure" ]; then
+          # a failed STEP = the diff's red, not a death (unreadable jobs = not ours either: hold)
+          sa_failed_steps="$(gh api "repos/${slug}/actions/runs/${sa_id}/jobs?per_page=100" 2>/dev/null \
+            | jq -r '[ .jobs[]?.steps[]? | select(.conclusion == "failure") ] | length' 2>/dev/null)" || sa_failed_steps=''
+          case "$sa_failed_steps" in 0) : ;; *) continue ;; esac
+        fi
+        sa_dead="${sa_dead}${sa_id}"$'\t'"${sa_concl}"$'\t'"${sa_name}"$'\n'
+      done <<< "$sa_cands"
+      [ -n "$sa_dead" ] || continue
+      if ! sa_tries="$(gh api "repos/${slug}/issues/${u}/comments" --paginate 2>/dev/null \
+            | jq -rs --arg h "${sa_head:0:12}" '[ .[][]? | (.body // "") | scan("at head `" + $h + "`[^\n]*<!-- agent-event kind=ci-retry ") ] | length' 2>/dev/null)"; then
+        orphans="${orphans}[$repo] ⚠ ci-retry: comments of PR #${u} unreadable — the retry bound cannot be read, held this pass (ADR-162)\n"
+        continue
+      fi
+      case "$sa_tries" in ''|*[!0-9]*) orphans="${orphans}[$repo] ⚠ ci-retry: retry count of PR #${u} unreadable — held this pass (ADR-162)\n"; continue ;; esac
+      if [ "$sa_tries" -ge "$SA_MAX_RETRIES" ]; then
+        orphans="${orphans}[$repo] ⚠ ci-retry EXHAUSTED — PR #${u}: ${sa_tries} re-runs at head ${sa_head:0:12} and a workflow run still dies without a failed step — not a flake; the runner or the workflow is the subject (ADR-162)\n"
+        continue
+      fi
+      sa_done=""; sa_nudged=0; sa_nudge_rc=0
+      while IFS=$'\t' read -r sa_id sa_concl sa_name; do
+        [ -n "$sa_id" ] || continue
+        # A startup_failure has no jobs and GitHub refuses to re-run it ("This workflow run cannot
+        # be retried", proven on homelab#3237) — its EVENT is what was lost, so the event is what
+        # gets re-fired: a transient `ci-retry` label, added and removed, is one `labeled` event,
+        # which the merge-path reflexes subscribe to (renovate-approve) and `ci` does not. Once per
+        # PR per pass however many workflows died at startup. A workflow that does not listen to
+        # `labeled` stays dead and runs into the bound — the EXHAUSTED line is its report.
+        if [ "$sa_concl" = "startup_failure" ]; then
+          if [ "$sa_nudged" = 0 ]; then
+            sa_rc=0; { gh_label_add "$slug" "$u" ci-retry && gh_label_rm "$slug" "$u" ci-retry; } 2>/dev/null || sa_rc=$?
+            sa_nudged=1; sa_nudge_rc="$sa_rc"
+          fi
+          if [ "$sa_nudge_rc" = 0 ]; then sa_done="${sa_done}${sa_done:+, }\`${sa_name}\` (startup_failure, run ${sa_id} — \`labeled\` event re-fired)"
+          else orphans="${orphans}[$repo] ⚠ ci-retry: re-firing \`labeled\` for ${sa_name} run ${sa_id} on PR #${u} REFUSED (rc=${sa_nudge_rc}) — human check\n"; fi
+          continue
+        fi
+        # `--failed` re-runs the dead jobs only
+        sa_rc=0; gh run rerun "$sa_id" --repo "$slug" --failed >/dev/null 2>&1 || sa_rc=$?
+        if [ "$sa_rc" = 0 ]; then sa_done="${sa_done}${sa_done:+, }\`${sa_name}\` (${sa_concl}, run ${sa_id} re-run)"
+        else orphans="${orphans}[$repo] ⚠ ci-retry: re-run of ${sa_name} run ${sa_id} on PR #${u} REFUSED (rc=${sa_rc}) — human check\n"; fi
+      done <<< "$sa_dead"
+      [ -n "$sa_done" ] || continue
+      mc_event "$slug" "$u" ci-retry "CI-RETRY $(( sa_tries + 1 ))/${SA_MAX_RETRIES} at head \`${sa_head:0:12}\` — ${sa_done}: the run died with no failed step, which is not a verdict on this diff (ADR-162)." \
+        || echo "  WARN: ci-retry event line on ${repo} PR #${u} not written — the retry bound undercounts this pass" >&2
+      orphans="${orphans}[$repo] ↻ ci-retry $(( sa_tries + 1 ))/${SA_MAX_RETRIES} — PR #${u}: ${sa_done}\n"
+    done
+    # <<<REPLAY:stale-armed-retry<<<
     # v2 (FU-050, C4/C5): an `agent/in-progress` issue whose worker went TERMINAL is a silent stall
     # until someone re-ticks — this was meta-only work all through meta-session 2. actionable =
     # in-progress ∧ no Running worker pod in the project ns ∧ no OPEN PR referencing the issue (an
@@ -5855,11 +6019,13 @@ EOF_GTHEMES_OPEN
     done
     # <<<REPLAY:arbitrate-ordinary-path-belt<<<
 
-    # fleet-fault un-latch (FU-069, homelab#1539; ISSUE side homelab#1714): when an item carries
-    # `agent/error` from a fleet fault and the cited cause issue is CLOSED with green CI, remove the
-    # label and post one line. Rule #6 holds all unreadable probes. Human-applied latches (no
-    # marker) and anomaly latches (STEP-0, verdict-count) are untouched — those are human-first
-    # cases that stay human-first.
+    # fleet-fault un-latch (FU-069, homelab#1539; ISSUE side homelab#1714; vacuous CI leg
+    # homelab#3048): when an item carries `agent/error` from a fleet fault, the cited cause issue is
+    # CLOSED, and the item's CI leg is satisfied, remove the label and post one line. The CI leg is
+    # satisfied either by GREEN CI at the item's PR head or by being VACUOUS — an item with no PR at
+    # all has nothing that could be red (see the CI leg below). Rule #6 holds all unreadable
+    # probes. Human-applied latches (no marker) and anomaly latches (STEP-0, verdict-count) are
+    # untouched — those are human-first cases that stay human-first.
     #
     # ITEM-KIND-AGNOSTIC (homelab#1714). The latch is per-item, so its route out is per-item: a PR
     # and an ISSUE carrying `agent/error` are both latched items, and both carry the SAME marker —
@@ -5870,8 +6036,11 @@ EOF_GTHEMES_OPEN
     #
     # The CI leg reads the item's PR head: the PR itself for a PR, and for an issue the OPEN PR that
     # references it (the sibling-match rule the ci-red clause already uses — branch `issue-<n>-`,
-    # else a body closing keyword, both boundary-anchored). An issue with no referencing PR has no
-    # CI to read: HOLD (rule #6), never fail INTO a write.
+    # else a body closing keyword, both boundary-anchored). An issue the open-PR list does NOT
+    # reference has no CI to be red, so its CI leg is VACUOUS and the latch clears once the cause is
+    # CLOSED (homelab#3048) — the un-latch comment says the leg was vacuous, never "CI is green".
+    # "No referencing PR" is only a fact when the open-PR list was READ: an UNREADABLE list yields no
+    # PR either, so it HOLDs (rule #6), as does an unreadable cause — never fail INTO a write.
     # The marker format: `<!-- fleet-fault cause=<owner/repo>#<n> prs=520,521,522,524 -->`
     # >>>REPLAY:fleet-fault-unlatch>>>
     ff_items="$(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"pr \(.number)"' 2>/dev/null || true)"
@@ -5912,16 +6081,24 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
         continue
       fi
       # Check if CI is green at the item's PR head
+      ff_vacuous=0
       if [ "$ff_kind" = "pr" ]; then
         ff_ci="$(printf '%s' "$pr_json_ff" | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
       else
         # The issue's PR head: the open PR that references it (sibling-match, boundary-anchored).
         ff_pr="$(printf '%s' "$prsjson" | jq -r --arg n "$ff_n" '[.[] | select((((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)")) or ((.body // "") | test("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#" + $n + "([^0-9]|$)"))))] | first | .number // ""' 2>/dev/null)" || ff_pr=''
         if [ -z "$ff_pr" ]; then
-          orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — issue #${ff_n}: no open PR references it, CI leg unverifiable (rule #6). No label write; next tick.\n"
-          continue
+          # No referencing PR. An UNREADABLE open-PR list also gives no PR (the '[]' fallback above), so
+          # only a READ list may vouch for "no PR": then there is no CI to be red and the leg is vacuous.
+          if [ "${prsjson_fetch_rc:-1}" != 0 ]; then
+            orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — issue #${ff_n}: open-PR list unreadable, CI leg unverifiable (rule #6). No label write; next tick.\n"
+            continue
+          fi
+          ff_vacuous=1
+          ff_ci=0
+        else
+          ff_ci="$(gh pr view "$ff_pr" --repo "$slug" --json statusCheckRollup 2>/dev/null | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
         fi
-        ff_ci="$(gh pr view "$ff_pr" --repo "$slug" --json statusCheckRollup 2>/dev/null | jq -r '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length' 2>/dev/null)" || ff_ci=''
       fi
       case "$ff_ci" in ''|*[!0-9]*)
         orphans="${orphans}[$repo] ⏳ fleet-fault un-latch probe HOLD — ${ff_kind} #${ff_n}: could not read CI state (rule #6). No label write; next tick.\n"
@@ -5938,9 +6115,16 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
           && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: PR #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
           || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on PR #${ff_n} — human check\n"
       else
+        if [ "$ff_vacuous" = 1 ]; then
+          ff_leg="no open PR references this issue, so the CI leg is vacuous"
+          ff_tag="no PR, CI leg vacuous"
+        else
+          ff_leg="CI is green"
+          ff_tag="ci green"
+        fi
         gh_label_rm "$slug" "$ff_n" agent/error \
-          && gh issue comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and CI is green — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
-          && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: issue #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ci green)\n" \
+          && gh issue comment "$ff_n" --repo "$slug" --body "un-latch (fleet-fault resolved, #1539): the cited fleet-fault cause (${cause_repo}#${cause_issue}) is now CLOSED and ${ff_leg} — \`agent/error\` cleared, dispatch re-enabled." >/dev/null 2>&1 \
+          && orphans="${orphans}[$repo] ✓ fleet-fault un-latch: issue #${ff_n} — removed agent/error (cause ${cause_repo}#${cause_issue} resolved, ${ff_tag})\n" \
           || orphans="${orphans}[$repo] ⚠ fleet-fault un-latch FAILED on issue #${ff_n} — human check\n"
       fi
     done <<< "$ff_items"
@@ -6175,6 +6359,7 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
         # nine-review-loop lesson). ISO-8601 strings compare correctly as strings.
         noop_round=""
         if [ "$attempts" -ge 1 ]; then
+          round_probe="$(arb_trust_enrich "$slug" "$u" "$round_probe")"
           noop_round="$(printf '%s' "$round_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || noop_round=""
         fi
         RED_MAX="${RED_ROUNDS_MAX:-5}"   # 3→5 with the logic-round cap (ADR-127, 2026-09-11)
@@ -7231,10 +7416,20 @@ EOF
           case "$entry" in "${urepo}:${uitem}:"*) uthemes="${uthemes} ${entry#"${urepo}:${uitem}:"}" ;; esac
         done
       fi
+      # ADR-162: an `unarmed-major` unit names its class (`bump-class=automerge|deps-review`) from the
+      # `um_lane_side` map, the way `uthemes` rides above — same (repo, item) key, same site.
+      # >>>REPLAY:unarmed-major-lane-item>>>
+      ulane=""
+      if [ "$uclause" = "unarmed-major" ]; then
+        for entry in ${um_lane_side:-}; do
+          case "$entry" in "${urepo}:${uitem}:"*) ulane=" bump-class=${entry#"${urepo}:${uitem}:"}" ;; esac
+        done
+      fi
+      # <<<REPLAY:unarmed-major-lane-item<<<
       dispatch_rc=0
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
         --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
-        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uworkbranch}${uharvest}${uthemes}" \
+        --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uworkbranch}${uharvest}${uthemes}${ulane}" \
         || dispatch_rc=$?
       if [ $dispatch_rc -eq 3 ]; then
         echo "  FU-146: exit 3 — ${name}/${urepo}/${uitem} taken by racing dispatcher; trying next unit"

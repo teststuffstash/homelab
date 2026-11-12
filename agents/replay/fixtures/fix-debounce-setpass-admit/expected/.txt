@@ -1,0 +1,40 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"coordinator","task":"fix-debounce-set:homelab#11,agent-runtime#12","round":0}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-fd-1 [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): dispatch claude/sonnet [rail=anthropic,harness=claude,session=s-fd-1,context_tokens=200000] (task=fix-debounce-set:homelab#11,agent-runtime#12, round=0) — unbound; env ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL written to /tmp/gw-llm.env; caller the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)
+OUT → set-pass admitted by the gateway (rail anthropic, model claude/sonnet)
+OUT SP_STACK='platform' SP_MODEL='sonnet' rail='gateway:anthropic' _gw=0
+OUT GW_LLM_ENV keys: ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL · env file left: no
+OUT path after the block: gateway
+OUT → gateway(sessions): released s-fd-1
+RC 0
+OUT SP_STACK='oracle' SP_MODEL='' rail='' _gw=4
+OUT GW_LLM_ENV keys:  · env file left: no
+OUT path after the block: old-proxy-latch
+ERR → gateway(sessions): stack 'oracle' stays on the old proxy — the /sessions flip is platform-only (FU-270)
+RC 0
+OUT SP_STACK='unclaimed:teststuffstash/somewhere-else' SP_MODEL='' rail='' _gw=4
+OUT GW_LLM_ENV keys:  · env file left: no
+OUT path after the block: old-proxy-latch
+ERR → gateway(sessions): stack 'unclaimed:teststuffstash/somewhere-else' stays on the old proxy — the /sessions flip is platform-only (FU-270)
+RC 0
+OUT SP_STACK='platform' SP_MODEL='' rail='' _gw=4
+OUT GW_LLM_ENV keys:  · env file left: no
+OUT path after the block: old-proxy-latch
+RC 0
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"coordinator","task":"fix-debounce-set:homelab#11,agent-runtime#12","round":0}
+OUT set-pass DEFERRED — the gateway deferred [subscription-sessions-full]; pending set stays, backstop/next bell retries
+ERR → gateway(sessions): defer — [subscription-sessions-full] retry_after=120s — not dispatching (task=fix-debounce-set:homelab#11,agent-runtime#12, round=0).
+RC 0
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"coordinator","task":"fix-debounce-set:homelab#11,agent-runtime#12","round":0}
+OUT SP_STACK='platform' SP_MODEL='' rail='' _gw=4
+OUT GW_LLM_ENV keys:  · env file left: no
+OUT path after the block: old-proxy-latch
+ERR → gateway(sessions): defer — [gateway-http 503: {"error":"tokenreview-transient"}] retry_after=?s — FAIL CLOSED at http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions, not dispatching (rc 3 — the caller decides the next path).
+ERR gateway admission refused rc=3 — old-proxy fallback
+RC 0
+OUT SP_STACK='platform' SP_MODEL='' rail='' _gw=4
+OUT GW_LLM_ENV keys:  · env file left: no
+OUT path after the block: old-proxy-latch
+ERR PREFLIGHT REFUSED: no gateway caller token — /nonexistent/token is not mounted, and AGENT_GATEWAY_CALLER_SA (jail canary: <ns>/<sa> of the dispatcher, e.g. platform-agents/agentstack-loop) is unset. /sessions authenticates its caller (GW-SESSIONS-AUTH). No session, no pod.
+ERR gateway admission refused rc=2 — old-proxy fallback
+RC 0

@@ -585,7 +585,8 @@ PLATFORM retro and per-stack retros — built in that order.**
    **Stack series (ADR-146, accepted 2026-10-04).** The same workflow with `stack=<name>`:
    ride ns = the stack's fixer ns (`agents/retro-project.sh`), git identity = the stack's own
    worker token (its repos + the public platform repos — the platform series alone mounts
-   `retro-git`, #2215), bundle + ledger guard scoped to the claim's repos, its own weekly slot
+   `retro-git`, #2215; a NAMED series (#3140) holds only the stack repo's worker token, since it writes its
+   rules PR and issues there — `retro-session.sh` `retro-series-identity`), bundle + ledger guard scoped to the claim's repos, its own weekly slot
    (platform Mon 05:00Z; stacks on later days — the subscription semaphore and the ride-ns
    busy-probe serialize them); the guard's event floor gates every fire, which is what makes
    default-on safe. Context = `BRIEF.md` rendered for the stack + whatever the stack repo gives
@@ -598,6 +599,27 @@ PLATFORM retro and per-stack retros — built in that order.**
    INTO a covering platform Goal per ADR-122 (4)). The platform series keeps the bundle's
    fleet-wide population counters and narrows its deep-dive set to the platform claim's repos.
    Build = FU-058's next; oracle first, hand-fired after platform r7.
+   **Named series (homelab#3140, operator ruling 2026-11-02).** A stack may run MORE than its
+   loop retro on this mechanism: `retro-argo.yaml` is one WorkflowTemplate and one CronWorkflow
+   per *(stack, series)* — the platform series (`retro-session`, Mondays) and the first named
+   series, oracle's `feedback-triage` (`retro-feedback-triage`, Wednesdays, born suspended): the
+   batched read of the `give_feedback` rows no FB-RULES rule decides, ending in one rules PR on
+   oracle-fleet. What a named series owns and what it reuses: its **brief** is the stack repo's
+   `.agents/<series>.md`, reached through the platform's pointer
+   [`retros/SERIES-BRIEF.md`](retros/SERIES-BRIEF.md) (which fixes the run's coordinates and the
+   report contract — markers, content floor, one `retro-findings-json` block, usually empty); its
+   **guard** is a PromQL instant query (`guardExpr`, parsed by `agents/retro_guard_expr.py`: > 0
+   fires, 0 is a quiet week, an EMPTY result or a dead Prometheus FAILS the run — an absent gauge
+   is a broken exporter, never a quiet week), with `retro_pipeline.py prepare --no-ledger`
+   freezing the run's coordinates and no ledger read; its **state** is `_retro/<series>/`, its
+   reports `docs/agents/retros/<date>-<series>-rN-<model>.md`, its belt group
+   `series=<series>` (RetroReportOverdue reads `max by (series)`, so a fresh platform push never
+   hides a stale sibling); its **cell** is ONE (`harnessB` empty — two cells would open two PRs),
+   carries `pr-open` on PATH (ADR-157; agent-session.sh's `AGENT_PR_OPEN`) and, when the brief
+   reads a database, the basic-auth Secret `cellPgSecret` as `PGUSER`/`PGPASSWORD` — a NAME
+   rendered to in-namespace secretKeyRefs, the RETRO_GH_SECRET shape; reach is the stack's
+   (`fixer.egress.ownServices`). Data a series reads is caller text: counts and rule predicates
+   travel, row text never does — not into the report, the PR or an issue.
    **⚖ PRIORITY FLIPPED (operator, 2026-09-01): stack retros are wanted MORE than further
    platform rounds** — stack goals carry the deeper business logic and kind-e2e testing
    complexity, and their dynamic differs from the platform's machinery-defect stream. The
@@ -705,6 +727,19 @@ estimator's ×2.0 buffer, NOT `estimate_budget.py`'s band — that band models a
 cap nothing at ~$0.54. Before #270 the key was an operator step with a warning behind it, and the
 ride fell back to the stack FIXER's standing budget key — which is what run 3's dead cell-b spent
 a provider retry against.
+
+**On the gateway (FU-270, operator ruling 2026-11-01): the cells stop naming models.** A cell is a
+harness (`retro-argo.yaml` `harnessA=claude`, `harnessB=goose` — the ride command is
+harness-literal, so the harness narrows each admission to its dialect); on the platform stack each
+is ONE `POST /sessions` admission for role `retro` (caller `agent-coordinator:agent-coordinator`,
+bound into the ride namespace), and the gateway picks the model per role/tier. The harvest names
+each report after the model its session was SERVED — read off the cell's ride log, from the
+admission's dispatch line — so the report filename and the published ledger key carry it. The
+controlled two-model comparison above is given up: two admissions may be served one model, and the
+report names record that instead of forcing them apart. Off-platform stacks, and a platform
+admission refused before any request or failed closed (FU-270: transition fallback), ride the old
+proxy on the harness's transition model (claude → opus, goose → deepseek-v4-pro;
+`agents/retro-session.sh`).
 
 ## Part C — the attention layer v1: derived-class export, board --machine, standing belt (#892)
 

@@ -105,7 +105,8 @@ A size label on a session — `light` | `standard` | `heavy` — that selects th
 chosen rail: `rails.<rail>.models.<tier>`, an ORDERED list the walk takes the first admissible
 model of (not struck by this task, not cooled; a bare string = a one-item list —
 [§The retry contract](endpoints/sessions.md#the-retry-contract--model-lists-strikes-attempt)). The role's default comes from the policy; the caller
-may override it. Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap. The
+may override it, and may ask for the list to be walked from its END (`prefer: strongest` —
+[§The preferred end of the list](endpoints/sessions.md#the-preferred-end-of-the-list)). Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap. The
 deployed policy's lists are derived from the [tier evidence](#tier-evidence).
 
 ## defer
@@ -116,7 +117,7 @@ an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `c
 openrouter model's endpoint snapshot has no provider that clears the policy floors —
 [sessions.md §The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)), the
 [entry canary](#canary)'s `canary-not-due` and `canary-budget`
-([GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or)), `cells-exhausted` (no
+([GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary)), `cells-exhausted` (no
 `retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
@@ -187,6 +188,8 @@ a hand edit fails the suite. A tier with no priced candidate (the openrouter rai
 eligible cell) is **undecided**: its deployed list stands, `apply` refuses to write it.
 *Score band* here is the `tiers.bands` fraction, not the ADR-104 curation band of
 [`docs/glossary.md`](../../docs/glossary.md) (`regular` / `premium` / `ultra` / `instrument`).
+A **manual benchmark row** (`benchmarks-manual.json`) is a hand-entered score for an id the feed
+does not carry yet — it scores only until the feed has the id, then it is retired.
 Refreshed by hand (`scripts/benchmarks-snapshot.sh`), its age a gauge the `TierEvidenceStale`
 alert reads; the fixture worlds carry the block but keep their fixture lists.
 
@@ -214,25 +217,56 @@ rates (the same arithmetic as the window draw). Shown on `GET /catalog/opencode`
 
 ## twin
 
-Two policy ids that name ONE model on two rails — the same tail after the rail prefix, a
+Two policy ids that name ONE model on two rails — the same tail once the rail prefix, a
 `:variant` and the vendor are stripped, in the AA spelling (`opencode-go/<id>` ↔ `<vendor>/<id>`;
 `tiers.same_model`, one rule, no table). When a tier's lists name a twin on two of the role's
-allowed rails, admission runs the **rail choice** ([GW-MODEL-TIERS §The rail choice](endpoints/catalog.md#the-rail-choice)):
+allowed rails, admission runs the **rail choice** ([GW-RAIL-CHOICE](endpoints/catalog.md#gw-rail-choice)):
 the rail whose twin cell costs less per clean ride walks first, with that twin at its list's
 head; the role's rail order stands for everything else. A `claude/` alias names a family, never a
 model: it twins nothing.
 
 ## canary
 
-Narrowed here to the **entry canary** ([GW-CATALOG-OR §The entry canary](endpoints/catalog.md#the-entry-canary)):
+Narrowed here to the **entry canary** ([GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary)):
 one ride through this gateway on exactly one `(model, provider)` [cell](#cell) of the openrouter
 rail — a session admitted with `canary: {model, provider}` (the policy's `canary.role` and
 `canary.harness`), pinned with fallbacks off and no failover — whose outcome is the cell's verdict:
 `clean` → `eligible`, a strike → `excluded`. It is the catalog's own gate, on demand (as the
 catalog refreshes) and budget-capped (`canary.max_per_refresh`, `canary.usd_per_day`). The
-platform's unqualified **canary** ([`docs/glossary.md`](../../docs/glossary.md)) is the scout's
-rail probe of a (model, harness, class) cell; this one adds the provider axis and supersedes the
-scout's canary leg for OpenRouter entrants.
+platform's unqualified **canary** ([`docs/glossary.md`](../../docs/glossary.md)) was first the
+model scout's rail probe of a (model, harness, class) cell; this one adds the provider axis, and since
+the scout's retirement (2026-11-01) it is the platform's only canary.
+
+## headroom report
+
+One observation of the codex account's capacity in the gateway's own schema
+(`openai-responses.schema.json` `headroom.report`): `observed_at`, `source`, `limited` and the
+profile's `windows` (`used_percent`, `resets_at`, `window_minutes`) — never a vendor payload. Two
+producers write one, both the gateway's own: the usage poll
+([GW-CODEX-USAGE-POLL](endpoints/openai-responses.md#gw-codex-usage-poll), `source: poll`) and the
+relayed answer's `x-codex-*` headers
+([GW-CODEX-UPSTREAM-HEADERS](endpoints/openai-responses.md#gw-codex-upstream-headers),
+`source: upstream`). A report replaces the [headroom](#headroom) snapshot only when it is valid and
+strictly newer; a refused report leaves the last accepted one standing.
+
+## turn state
+
+The value of the one routing header the codex rail round-trips, `x-codex-turn-state`: issued by
+the backend on a successful stream, recorded by the gateway bound to the authenticated session, the
+gateway-owned account and the pinned client's `client_metadata.turn_id`, and accepted back only as
+that exact value within that turn ([GW-RAIL-CODEX §Opaque turn state](endpoints/openai-responses.md#opaque-turn-state)).
+A new turn clears it; a replay of any other value is 400 `turn-state-invalid` before any inference
+call. Not durable, bounded (4096 bytes), never a credential.
+
+## capture bundle
+
+The sanitized record of one scoped codex session at its four boundaries — client request received,
+upstream request sent, upstream response received (status, headers, then every relayed SSE event),
+client response sent — read back as one document by `GET /sessions/{id}/capture`
+([GW-CODEX-CAPTURE](endpoints/openai-responses.md#gw-codex-capture)): header values withheld but for
+an allowlist, strings as lengths, identifiers as run-local aliases, `complete: false` when the byte
+bound cut a request. Pulled into restricted storage and reviewed before any excerpt becomes a spike
+paragraph or a fixture.
 
 ## persistence interface
 
@@ -266,3 +300,100 @@ the key is optional and `own` by default, so an absent key grants nothing extra.
 A named fixture state a row runs against: a policy document plus a fake-upstream behaviour
 ([worlds/README.md](worlds/README.md)). Row ids carry the world when a requirement's evidence
 spans more than one.
+
+## store mode
+
+Which store the gateway opened at start, reported as `db` by [`GET /healthz`](endpoints/health.md)
+([GW-HEALTH](endpoints/health.md#gw-health)): `pvc` = SQLite at `GATEWAY_DB` (`/data/gateway.db`
+on the Longhorn PVC) — sessions survive a restart; `memory` = the **fail-open** in-memory store the
+gateway falls back to when that path is missing, read-only or corrupt at start — it keeps admitting,
+logs one `ERROR` line, and forgets every session at the next restart. Chosen once per process; it is
+the `gateway_db_mode` gauge on `/metrics` ([GW-METRICS](endpoints/metrics.md#the-store-mode-is-a-gauge)),
+which `GatewayStoreMemoryMode` reads.
+
+## bounded label
+
+A Prometheus label whose value set `metrics.schema.json` declares in full
+([GW-METRICS](endpoints/metrics.md#gw-metrics)): a value outside the set renders as `other`, so a
+task key, a session id, a token or a model the policy does not name can never create a series —
+cardinality is a property of the policy, not of traffic. `model` is bounded to the policy's
+openrouter ids and `provider` to the endpoint snapshot's slugs; `task`, `session`, `id` and `token`
+are no label on any family.
+
+## access inventory
+
+The role × stack × service table of [access.md](access.md) (operator ruling 2026-10-15): rows are
+roles, columns are services (the three rails, git identity, stack MCP, browser MCP), cells are what
+the launcher does today. The gateway enforces only the rail columns, per `roles.<role>.rails`
+([GW-ACCESS](access.md#gw-access)); the control-plane caller is enforced per ServiceAccount
+([GW-SESSIONS-AUTH](endpoints/sessions.md#gw-sessions-auth)); every other column is documented
+reality, unenforced.
+
+## wire id
+
+The `model` the upstream receives: the [policy](#policy) id with its [rail](#rail) prefix
+removed — `opencode-go/x` → `x` on the Go rail; an openrouter id is already bare; on the
+anthropic rail the body's own spelling, untouched (the policy names a `claude/<alias>` family the
+claude CLI resolves itself) — [GW-MODEL-RESOLVE](endpoints/anthropic-messages.md#gw-model-resolve).
+An absent body `model` is filled with it. Not the policy id (what a [session](#session) pins and
+the dispatch answer names) and not a [twin](#twin) (two policy ids, one model).
+
+## pin
+
+The provider the gateway names for ONE attempt on the openrouter rail: `provider: {order: [slug],
+allow_fallbacks: false}` on the upstream body, the harness's other keys unchanged
+([GW-RAIL-OPENROUTER §Selection](endpoints/openai-chat.md#selection--the-gateways-own-evidence-never-exacto)).
+The slug is the first [cell](#cell) of the order the [endpoint snapshot](#endpoint-snapshot) and
+the clean-ride evidence give; a failed pinned attempt moves to the next before any byte is relayed
+([§Failover](endpoints/openai-chat.md#failover--before-the-first-byte-only)). A model the snapshot
+does not cover, or a session whose eligible cells are all struck or cooled mid-ride, rides
+**unpinned** — no `provider` block, the vendor's own routing. The answer's own provider name
+outranks the pin for attribution. Not the `:exacto` suffix (never ported) and not a session's
+model pin (a session pins a model for its life — [session](#session)).
+## walk
+
+The admission's one pass over a role's rails, in the policy's order, cell by cell: for each rail
+not held by its [capacity](endpoints/sessions.md#gw-sessions-capacity) the [tier](#tier)'s ordered
+model list is read and the first [cell](#cell) the task has not [struck](#strike), that is not
+[cooled](#cooldown), and whose credential resolves is taken — its dialect names the harness
+([GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit)). The walk ends in a `dispatch` on
+that cell or a [`defer`](#defer) naming the rail that frees first; only when strikes alone hold every
+cell is the answer `cells-exhausted` ([GW-SESSIONS-RETRY](endpoints/sessions.md#gw-sessions-retry)).
+
+## strike
+
+A row of the outcome store keyed `(stack, task, rail, model, provider, harness)` with a class, a
+**scope** and a **source**: `outcome` when the consumer reported how its ride ended, `gateway` when
+the gateway saw the transport fact itself ([GW-SESSIONS-OUTCOME](endpoints/sessions.md#gw-sessions-outcome)).
+Scope says what the next [walk](#walk) excludes for the task: a cell-scoped strike the
+[cell](#cell), a model-scoped one the policy id on every rail, a harness-scoped one every cell the
+struck harness would ride. A strike is **counted** until a `clean` outcome on the same cell, model
+or harness refutes it (it stays as history with `refuted_at` set); a bare 2xx refutes nothing. Not a
+round: a logic failure is the consumer's round counter's, never a class here.
+
+## cooldown
+
+A [cell](#cell) held after an upstream 429 until the reset the wire named — `retry-after`, then
+`x-ratelimit-reset`, else the rail's `latch_429_hold_s`, else `defer_retry_s`; any 2xx on the cell
+clears it early. Admission skips a cooled cell (`cell-cooled`, `retry_after_s` = its reset) and
+takes the tier list's next model; a 429 writes no [strike](#strike)
+([GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity)).
+
+## latch
+
+A whole [rail](#rail) held after an upstream 429, because the policy declares the rail one account
+whose limits are account windows (`latch_scope: account` — the anthropic subscription, the Go rail
+since 2026-11-01): the 429 cools its cell AND latches the rail for the same reset, or the rail's
+`latch_429_hold_s` when none was named; any 2xx on the rail clears it. A rail that declares no latch
+(openrouter) is never latched — its 429s are per-model facts, a [cooldown](#cooldown) each
+([GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity)).
+
+## capacity mark
+
+What the gateway's capacity state remembers between admissions, one row of the store's
+`capacity_marks` table each: `cooled` (a cell's [cooldown](#cooldown) and its `until`), `latched` (a
+rail's [latch](#latch)), `rejected` (a credential's rail + sha256 fingerprint, its stack, the
+backoff and the next re-verification) and `hold` (the backoff a credential's next rejection doubles
+from) — never a credential value. A new gateway on the same DB reloads them at start, dropping only
+what the in-memory logic would already have let go
+([GW-SESSIONS-CAPACITY §Kept across a restart](endpoints/sessions.md#kept-across-a-restart)).

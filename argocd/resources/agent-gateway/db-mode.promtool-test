@@ -1,0 +1,64 @@
+# Behaviour fixture for the `agent-gateway-db-mode` alert (prometheusrule.yaml beside this file) —
+# GW-METRICS §The store mode is a gauge, gateway/specs/endpoints/metrics.md.
+#
+#   devbox run prometheus-rules-lint      # runs this, and every other *.promtool-test under argocd/
+#
+# LABELS are the real scraped set of gateway_* (container, endpoint, instance, job, namespace, pod,
+# service — read off the live gateway_sessions_active series), plus `mode` on the gauge itself. The
+# gauge is the gateway's own: 1 for the store mode it opened in, 0 for the other, set at start.
+rule_files:
+  - db-mode.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ S1 — MEMORY: the gateway opened on memory at start and stays there; the alert holds 5 m, then fires ═
+  # The gauge is 1 from minute 0; with for: 5m the alert is pending until minute 5 and firing from it.
+  - interval: 1m
+    name: S1 memory — a fail-open gateway fires after 5 m
+    input_series:
+      - series: 'gateway_db_mode{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",mode="memory",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "1x30"
+      - series: 'gateway_db_mode{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",mode="pvc",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "0x30"
+      - series: 'gateway_sessions_active{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="opencode"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: GatewayStoreMemoryMode
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: GatewayStoreMemoryMode
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: 'The gateway runs on its fail-open memory store — sessions, caps and rotated credentials do not survive its next restart'
+              description: 'gateway_db_mode{mode="memory"} is 1: the gateway did not open its PVC store at start, so it admits rides from memory and forgets them at the next restart. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "db: memory" names the path and the error (missing, read-only or corrupt); (2) GET /healthz on the gateway answers db: memory; (3) the agent-gateway Deployment mounts its /data PVC. The contract is gateway/specs/endpoints/health.md (GW-HEALTH) and gateway/specs/endpoints/metrics.md (GW-METRICS).'
+
+  # ══ S2 — PVC: the gateway opened on its PVC; memory renders at 0 and the alert stays silent ═════
+  - interval: 1m
+    name: S2 pvc — a PVC store is silent, the inactive memory series reads 0
+    input_series:
+      - series: 'gateway_db_mode{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",mode="memory",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "0x30"
+      - series: 'gateway_db_mode{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",mode="pvc",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "1x30"
+      - series: 'gateway_sessions_active{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="opencode"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GatewayStoreMemoryMode
+        exp_alerts: []
+
+  # ══ S3 — OLDER IMAGE: no db_mode series at all (the family predates the image), sessions present — silent ═
+  - interval: 1m
+    name: S3 older image — no gateway_db_mode series, the alert stays silent (no absent() leg)
+    input_series:
+      - series: 'gateway_sessions_active{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="opencode"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GatewayStoreMemoryMode
+        exp_alerts: []

@@ -1,0 +1,19 @@
+# kindergarten.homelab.teststuff.net → the kindergarten site (argocd/resources/kindergarten/, Service kindergarten in ns kindergarten,
+# permitted by the ReferenceGrant shipped beside it). LAN/VPN-only, like every *.homelab name.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kindergarten
+  namespace: homelab-gateway
+spec:
+  parentRefs:
+    - name: homelab-gateway
+  hostnames:
+    - kindergarten.homelab.teststuff.net
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: kindergarten
+          namespace: kindergarten
+          port: 80

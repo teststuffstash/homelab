@@ -1,2 +1,0 @@
-CALL kubectl -n teststuffstash delete openrouterkey teststuffstash-scout-test-model-opencode --ignore-not-found
-RC 0

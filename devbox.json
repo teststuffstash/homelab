@@ -504,6 +504,9 @@
       "gateway-evidence": [
         "sh -c '[ -d gateway ] || { echo \"gateway-evidence: no gateway/ on this ref\"; exit 0; }; cd gateway && exec devbox run evidence'"
       ],
+      "gateway-specs-site-e2e": [
+        "sh -c '[ -d gateway ] || { echo \"gateway-specs-site-e2e: no gateway/ on this ref\"; exit 0; }; cd gateway && exec devbox run specs-site-e2e'"
+      ],
       "gateway-evidence-publish": [
         "sh -c 'cd gateway && exec devbox run evidence-publish'"
       ],

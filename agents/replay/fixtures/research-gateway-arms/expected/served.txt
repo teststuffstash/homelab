@@ -1,0 +1,12 @@
+CALL bash agents/agent-session.sh homelab --task research-210-arm1 --round 1 --recipe /fixture-recipes/homelab/.agents/research.yaml [AGENT_GATEWAY=sessions ROLE=researcher FALLBACK_EXIT=75 CALLER_SA=platform-agents/agentstack-loop WIP=2 RESEARCH_GATEWAY=]
+CALL bash agents/agent-session.sh homelab --task research-210-arm2 --round 1 --recipe /fixture-recipes/homelab/.agents/research.yaml [AGENT_GATEWAY=sessions ROLE=researcher FALLBACK_EXIT=75 CALLER_SA=platform-agents/agentstack-loop WIP=2 RESEARCH_GATEWAY=]
+OUT → FU-126 fan-out: homelab#210 → 2 arm(s), each admitted by the agent-gateway as role researcher (FU-270 — the gateway serves the model)
+OUT ── arm 1: task research-210-arm1 (log $TMP/research-gateway-arms.served.fx/armlogs/arm-1.log) ──
+OUT → gateway(sessions): dispatch claude/opus [rail=anthropic,harness=claude,session=s1,context_tokens=null] (task=research-210-arm1, round=1) — bound
+OUT ── arm 2: task research-210-arm2 (log $TMP/research-gateway-arms.served.fx/armlogs/arm-2.log) ──
+OUT → gateway(sessions): dispatch opencode-go/kimi-k3.1-pro [rail=opencode,harness=opencode,session=s2,context_tokens=null] (task=research-210-arm2, round=1) — bound
+OUT → arm table (the model each admission SERVED):
+OUT   arm 1: served claude/opus
+OUT   arm 2: served opencode-go/kimi-k3.1-pro
+OUT → branches arrive as research/issue-210-<model-slug> (two arms served one model share a slug — the recipe's branch rule); arm logs in $TMP/research-gateway-arms.served.fx/armlogs
+RC 0

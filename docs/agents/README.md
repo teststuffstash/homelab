@@ -35,7 +35,7 @@ Two places where agents run, with one boundary between them:
 The boundary between them is the interesting part: **the jail has the context and the authority;
 the cluster has the blast-radius containment.** On the **fixer lane**, work crosses that boundary
 as an *issue* and comes back as a *PR* — but that is one lane's edge, not the loop's whole surface:
-the other roles enter on their own edges (alerts → responder, schedules → retro/scout, typed
+the other roles enter on their own edges (alerts → responder, schedules → retro/prober, typed
 schema deltas → infra-fixer; the roles table below is the inventory).
 
 Inside the cluster, the intelligence sits at a small number of judgment points and everything
@@ -59,7 +59,7 @@ every key — is [`roles.md`](roles.md); this is the map.
 | **reviewer** | `<stack>-agents` | reviewable transition (exporter edge) | live |
 | **responder** | `agent-coordinator` | an Alertmanager fingerprint with `triage: now` | live — v2, triage-first; the ACUTE half since 2026-10-04 (ADR-148) |
 | **deep dig** | `agent-coordinator` | a schedule (daily) over the standing/recurring `triage: dig` set | live — built 2026-10-04 (ADR-148, FU-249 step 4) — grouped by onset and host, one session per run |
-| **scout** (model-scout) | cluster cron | weekly schedule | live |
+| **scout** (model-scout) | cluster cron | weekly schedule | retired 2026-11-01, superseded by the agent-gateway's entry canary + tier evidence (`GW-CATALOG-OR` / `GW-MODEL-TIERS`, [`gateway/README.md`](../../gateway/README.md)) |
 | **researcher/planner** | fixer ns | a human-queued MISSION issue (not an ADR-102 Goal; operator-dispatched — FU-163) | first mode proven |
 | **infra-fixer** | `-iac` lane | a typed `values.schema.json` delta | live (both -iac repos; first rides merged) |
 | **retro** | cluster cron | ledger level-trigger | first end-to-end run 2026-08-11 (hand-fired, 5 latent bugs fixed); first unattended 2026-08-17 |

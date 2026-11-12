@@ -21,7 +21,7 @@
 #   gw_preflight_request <round> [<attempt>]   rc 0 | 2 (refused: a non-integer round, attempt < 1)
 #   gw_preflight_caller                        rc 0 | 2 (refused: malformed SA / no token); sets
 #                                              GW_CALLER_DESC. Mints once (a jail canary).
-#   gw_admit --stack S --role R --task T [--round N] [--attempt N] [--tier T] [--harness H]
+#   gw_admit --stack S --role R --task T [--round N] [--attempt N] [--tier T] [--prefer P] [--harness H]
 #            [--rail R] [--canary <model>@<provider>]
 #            ( --bind <ns>/<sa>/<pod> | --env-file <path> ) [--harnesses claude,opencode,…]
 #       rc 0  dispatch. Sets GW_SESSION_ID GW_RAIL GW_HARNESS GW_MODEL GW_WIRE_MODEL
@@ -35,10 +35,22 @@
 #             The caller owns the release from here: `trap gw_release EXIT` (or chain it).
 #       rc 1  defer — the gateway said so. GW_DEFER_REASON / GW_RETRY_AFTER set; no session.
 #       rc 3  fail closed — unreachable, non-200, unknown decision, or an unusable dispatch
-#             (released here before returning). GW_DEFER_REASON names it. Never falls back.
+#             (released here before returning). GW_DEFER_REASON names it. gw_admit picks no
+#             other path itself — the CALLER decides (gw_admit_lane maps it to rc 4).
 #       rc 2  refused before any request (a bad round/attempt).
 #   gw_release        DELETE /sessions/{id}; idempotent, non-fatal (the TTL is the backstop).
 #   gw_auth_header    the caller header for `curl -H @<(gw_auth_header)` — the token never rides argv.
+#   gw_admit_lane <env-file> --stack S --role R --task T [gw_admit options]
+#       The UNBOUND LANE shape: a workflow pod that runs its OWN claude (the coordinator namespace's
+#       responder, deep dig, island intake, fix-debounce set-pass). Knob, platform gate, caller
+#       preflight and gw_admit in one call; the dispatch env lands in the array GW_LLM_ENV (KEY=VALUE
+#       items for `env "${GW_LLM_ENV[@]}" claude …`, which overrides the pod's old-proxy ANTHROPIC_*;
+#       the file is read and removed). --harnesses defaults to claude (later options override).
+#       rc 0 dispatch — GW_LLM_ENV + gw_admit's outputs set; the caller owns `trap gw_release EXIT`.
+#       rc 1 defer — the caller defers exactly as it defers today.
+#       rc 4 the old-proxy path — AGENT_GATEWAY is not `sessions` (silent), the stack is not platform
+#            (one line: the flip is platform-only), or the TRANSITION FALLBACK (FU-270): a refusal
+#            before any request (2) or a fail-closed (3), logged as one loud line.
 #
 # The model is the GATEWAY's: no argument names one. --harness only narrows the walk to a dialect.
 # A bound answer that carries a credential (a token or an env map) is refused: the launcher never
@@ -49,7 +61,7 @@ GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local
 GW_CALLER_TOKEN_FILE="${AGENT_GATEWAY_CALLER_TOKEN_FILE:-/var/run/secrets/agent-gateway/token}"
 GW_SESSION_ID=""; GW_ENV_KEYS=""; GW_PULL_URL=""; GW_RAIL=""; GW_CONTEXT_TOKENS=""; GW_EXPIRES_AT=""
 GW_HARNESS=""; GW_MODEL=""; GW_WIRE_MODEL=""; GW_PULL_PRELUDE=""; GW_CALLER_DESC=""
-GW_DEFER_REASON=""; GW_RETRY_AFTER=""
+GW_DEFER_REASON=""; GW_RETRY_AFTER=""; GW_LLM_ENV=()
 
 # gw_caller_token — a FRESH caller token on stdout (GW-SESSIONS-AUTH), fetched per call and never
 # kept in a variable: the release may run hours after admission, past a 10-minute mint and past a
@@ -121,12 +133,12 @@ gw_preflight_caller() {
 _GW_PULL_PRELUDE_TEXT='_gw_t="$(cat /var/run/secrets/agent-gateway/token)" && _gw_env="$(curl -fsS --max-time 30 --retry 3 --retry-delay 2 --retry-connrefused -X POST -H "Authorization: Bearer ${_gw_t}" "$AGENT_GATEWAY_PULL_URL")" || { echo "→ gateway(sessions): env pull FAILED at ${AGENT_GATEWAY_PULL_URL} — the harness does not start (FU-270)" >&2; exit 97; }; unset _gw_t; for _gw_k in ${AGENT_GATEWAY_ENV_KEYS//,/ }; do _gw_v="$(printf "%s" "$_gw_env" | jq -er --arg k "$_gw_k" ".env[\$k] | strings")" || { echo "→ gateway(sessions): the env pull answer lacks ${_gw_k} — the harness does not start (FU-270)" >&2; exit 97; }; export "${_gw_k}=${_gw_v}"; done; unset _gw_env _gw_v _gw_k; echo "→ gateway(sessions): env pulled (${AGENT_GATEWAY_ENV_KEYS})"; '
 
 gw_admit() {
-  local stack="" role="" task="" round="0" attempt="1" tier="" harness="" rail="" canary="" bind="" envfile=""
+  local stack="" role="" task="" round="0" attempt="1" tier="" prefer="" harness="" rail="" canary="" bind="" envfile=""
   local harnesses="claude,opencode,goose,codex"
   while [ $# -gt 0 ]; do
     case "$1" in
       --stack) stack="${2-}";; --role) role="${2-}";; --task) task="${2-}";; --round) round="${2-}";;
-      --attempt) attempt="${2-}";; --tier) tier="${2-}";; --harness) harness="${2-}";; --rail) rail="${2-}";;
+      --attempt) attempt="${2-}";; --tier) tier="${2-}";; --prefer) prefer="${2-}";; --harness) harness="${2-}";; --rail) rail="${2-}";;
       --canary) canary="${2-}";; --bind) bind="${2-}";; --env-file) envfile="${2-}";; --harnesses) harnesses="${2-}";;
       *) echo "gw_admit: unknown argument '$1'" >&2; return 2;;
     esac
@@ -152,11 +164,12 @@ gw_admit() {
   # sessions.schema.json post.input — optional fields only when given.
   local req resp http decision
   req="$(jq -nc --arg stack "$stack" --arg role "$role" --arg task "$task" --argjson round "$round" \
-      --argjson attempt "$attempt" --arg tier "$tier" --arg harness "$harness" --arg rail "$rail" \
+      --argjson attempt "$attempt" --arg tier "$tier" --arg prefer "$prefer" --arg harness "$harness" --arg rail "$rail" \
       --arg canary "$canary" --arg ns "$b_ns" --arg sa "$b_sa" --arg pod "$b_pod" \
       '{stack: $stack, role: $role, task: $task, round: $round}
        + (if $attempt > 1 then {attempt: $attempt} else {} end)
        + (if $tier != "" then {tier: $tier} else {} end)
+       + (if $prefer != "" then {prefer: $prefer} else {} end)
        + (if $harness != "" then {harness: $harness} else {} end)
        + (if $rail != "" then {rail: $rail} else {} end)
        + (if $canary != "" then {canary: {model: ($canary | split("@")[0]), provider: ($canary | split("@")[1])}} else {} end)
@@ -179,7 +192,7 @@ gw_admit() {
       [ "$http" = "200" ] && why="http 200, unknown decision '${decision}'" \
         || why="${why}$(head -c 200 "$resp" 2>/dev/null | tr '\n' ' ' | sed 's/^./: &/')"
       GW_DEFER_REASON="gateway-${why}"; GW_RETRY_AFTER="?"
-      echo "→ gateway(sessions): defer — [${GW_DEFER_REASON}] retry_after=?s — FAIL CLOSED at ${GW_URL}/sessions, not dispatching (AGENT_GATEWAY=sessions never falls back to the old proxy)." >&2
+      echo "→ gateway(sessions): defer — [${GW_DEFER_REASON}] retry_after=?s — FAIL CLOSED at ${GW_URL}/sessions, not dispatching (rc 3 — the caller decides the next path)." >&2
       rm -f "$resp"; return 3;;
   esac
 
@@ -251,4 +264,30 @@ gw_admit() {
     echo "→ gateway(sessions): dispatch ${GW_MODEL} [rail=${GW_RAIL},harness=${GW_HARNESS},session=${GW_SESSION_ID},context_tokens=${GW_CONTEXT_TOKENS:-null}] (task=${task}, round=${round}) — unbound; env ${GW_ENV_KEYS} written to ${envfile}; caller ${GW_CALLER_DESC:-?}"
   fi
   return 0
+}
+
+# gw_admit_lane — the interface is in the header. The platform-only gate lives HERE, once, for every
+# lane (operator ruling 2026-11-01: other stacks stay on the old proxy), so a lane that serves several
+# stacks passes the item's stack and never re-states the rule.
+gw_admit_lane() {
+  local envfile="${1-}" stack="" prev="" a rc=0
+  [ $# -gt 0 ] && shift
+  GW_LLM_ENV=()
+  [ "${AGENT_GATEWAY:-}" = "sessions" ] || return 4
+  for a in "$@"; do [ "$prev" = "--stack" ] && stack="$a"; prev="$a"; done
+  if [ "$stack" != "platform" ]; then
+    echo "→ gateway(sessions): stack '${stack:-unresolved}' stays on the old proxy — the /sessions flip is platform-only (FU-270)" >&2
+    return 4
+  fi
+  [ -n "$envfile" ] || { echo "gw_admit_lane: an env-file path is required" >&2; rc=2; }
+  [ "$rc" -ne 0 ] || gw_preflight_caller || rc=$?
+  [ "$rc" -ne 0 ] || gw_admit --harnesses claude "$@" --env-file "$envfile" || rc=$?
+  case "$rc" in
+    0) mapfile -t GW_LLM_ENV < "$envfile"; rm -f "$envfile"; return 0;;
+    1) return 1;;
+  esac
+  # FU-270: transition fallback — deleted when the old proxy retires. A gateway outage must never
+  # stop a lane while the old proxy still serves it.
+  echo "gateway admission refused rc=${rc} — old-proxy fallback" >&2
+  return 4
 }

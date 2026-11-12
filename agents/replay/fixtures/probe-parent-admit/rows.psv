@@ -1,0 +1,9 @@
+# probe-parent-admit — the decision table (family contract in fixture.yaml). Row state (the knob,
+# the gateway's reply, a codex child) lives in rows/<id>/vars.sh.
+# id                 | world | patch | env | expect             | params
+knob-off             |       |       |     | knob-off           |
+dispatch             |       |       |     | dispatch           |
+dispatch-codex-child |       |       |     | dispatch-codex-child |
+defer                |       |       |     | defer              |
+fail-closed          |       |       |     | fail-closed        |
+no-caller-token      |       |       |     | no-caller-token    |

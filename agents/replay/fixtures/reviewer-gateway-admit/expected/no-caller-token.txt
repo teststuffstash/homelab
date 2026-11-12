@@ -1,0 +1,12 @@
+OUT GW_SESSIONS='' MODEL='sonnet' MODEL_RAIL='' GO_SERVED=0
+OUT AGENT_ROUTER='' _router_adopted='' GW_PULL_PRELUDE set: no
+OUT LABEL:
+OUT POD LLM ENV:
+OUT         - name: ANTHROPIC_BASE_URL
+OUT           value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+OUT         - name: ANTHROPIC_AUTH_TOKEN
+OUT           value: "ref:agent-coordinator/coordinator-claude"
+OUT MOUNT:none VOLUME:none
+ERR PREFLIGHT REFUSED: no gateway caller token — /nonexistent/agent-gateway/token is not mounted, and AGENT_GATEWAY_CALLER_SA (jail canary: <ns>/<sa> of the dispatcher, e.g. platform-agents/agentstack-loop) is unset. /sessions authenticates its caller (GW-SESSIONS-AUTH). No session, no pod.
+ERR WARN gateway admission refused rc=2 — old-proxy fallback
+RC 0

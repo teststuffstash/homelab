@@ -9,7 +9,6 @@ agents/goal-budget.sh SC2034 5
 agents/goal-budget.sh SC2148 1
 agents/kube.sh SC2034 1
 agents/machine-comment.sh SC2148 1
-agents/model-scout.sh SC2155 2
 agents/rail-degrade-replay.sh SC2034 1
 agents/re-review.sh SC2034 2
 agents/research-fanout.sh SC2221 1

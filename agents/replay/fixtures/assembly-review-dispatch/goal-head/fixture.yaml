@@ -1,0 +1,14 @@
+# assembly-review-dispatch-goal-head — a pick whose HEAD is goal/** (the ASSEMBLY PR) dispatches
+# the reviewer with the assembly RUBRIC and NO --model: the review takes the gateway's pick like
+# every other review (FU-270). REVIEW_GOAL_MODEL is set in the env on purpose — a stale render
+# of the retired claim knob must not re-pin the model.
+name: assembly-review-dispatch-goal-head
+mode: actions
+source: agents/review-reflex.sh
+env:
+  - phead=goal/oracle-v2
+  - REVIEW_GOAL_MODEL=opus
+parts:
+  - file:bridge.sh
+  - block:assembly-review-dispatch
+  - file:post.sh

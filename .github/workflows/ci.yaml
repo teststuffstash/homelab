@@ -55,6 +55,13 @@ jobs:
       # because EVERY `devbox run` rewrites .devbox/gen/scripts/ and a concurrent serial
       # `devbox run` then dies on "text file busy" (PR #1139's run 33410609342) — only the
       # serial steps may invoke devbox itself.
+      # homelab#3233: a locked store path no substituter carries makes devbox BUILD the package in
+      # the warm below — a compile the runner's memory limit kills with no step log. This names the
+      # package in seconds instead. Bare bash + jq + curl (the runner image's own tools): it must
+      # run BEFORE the first `devbox run`. Rule + the generator's hold: docs/renovate.md §devbox.
+      - name: Locked toolchain is downloadable — nothing compiles in the warm (scripts/lock-cache-check.sh)
+        run: bash scripts/lock-cache-check.sh devbox.lock
+
       - name: Warm the devbox closure (once, before anything runs ∥)
         run: |
           devbox run -- true
@@ -211,6 +218,12 @@ jobs:
         if: steps.diff.outputs.specs-review-self-test != 'false'
         run: devbox run specs-review-self-test
 
+      # pr-open (agents/pr-open.sh, ADR-157): the one way a worker opens a PR — its refusals, stamp
+      # and base against a throwaway repo with stubbed devbox/gh. Row in scripts/diff-ci.sh.
+      - name: pr-open self-test (devbox run pr-open-self-test)
+        if: steps.diff.outputs.pr-open-self-test != 'false'
+        run: devbox run pr-open-self-test
+
       # The ~250-line responder script EMBEDDED in responder-argo.yaml is the one thing
       # manifest-lint skips entirely (it validates the Sensor CR, not the shell inside it) — and
       # it shipped two bugs in two rounds on homelab#124 alone. The harness extracts the script
@@ -328,7 +341,7 @@ jobs:
           # pull_request branch had never run — the exact unexecuted-gate class ADR-103 exists
           # to kill, in the gate itself). gh comes from devbox (slim runner has no gh).
           changed=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq '.[].filename')
-          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(model-scout\.sh|coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo|corpus-dispatch-argo)\.ya?ml)$' || true)
+          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo|corpus-dispatch-argo)\.ya?ml)$' || true)
           replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
           # homelab#1028: `mode: suite` fixtures name an ENTRYPOINT outside agents/replay/
           # (agents/asvs-replay.sh, agents/slo-teeth-replay.sh, …). Growing one IS the replay
@@ -754,6 +767,14 @@ jobs:
           GATEWAY_SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.GATEWAY_SPECS_S3_SECRET_ACCESS_KEY }}
           SITE_PREFIX: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || '' }}
         run: devbox run gateway-specs-publish
+      # The island's rendered-browser specs-site leg (gateway/scripts/e2e-specs-site.sh — the
+      # oracle-fleet e2e-specs-site shape): the built site in the pinned playwright image, every
+      # spec page's Mermaid diagrams render, every flowchart node link navigates to its requirement
+      # heading. Needs docker (containerMode=dind on this runner class). Scoped by the diff-ci row
+      # to mkdocs.yml, site-assets/, any spec page, the build and the leg itself.
+      - name: Gateway specs-site e2e (devbox run gateway-specs-site-e2e)
+        if: steps.diff.outputs.gateway-specs-site-e2e != 'false'
+        run: devbox run gateway-specs-site-e2e
       # FU-tracker conventions: dangling ids + broken pointers FAIL; oversize/done-marker WARN.
       # In CI because the 2026-07 tracker bloat (258→1000 lines) happened under convention-only
       # discipline — see docs/follow-ups.md "Conventions".

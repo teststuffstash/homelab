@@ -1,0 +1,2 @@
+OUT OLD-PROXY PATH: --harness {{h}} --model {{m}} (gateway attempted: no)
+RC 0

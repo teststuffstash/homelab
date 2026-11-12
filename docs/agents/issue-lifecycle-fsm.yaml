@@ -505,12 +505,16 @@ transitions:
       - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-second
       - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-stale-directive
       - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-rerun-spent
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-outsider
+      - agents/replay/fixtures/arbitrate/no-op-after-directive-cr-outsider-late
       - agents/replay/fixtures/coordinator-launch-mode
     guards:
       - desc: "the directive is the launcher prefetch's own selector — a top-level comment matching `^ARBITRATE\\b` on the PR or its issue (the #1467 contract); the scan's escalation lines live in the agent-summary comment and never match"
         anchor: { file: agents/coordinator-scan.sh, pattern: "NOOP_RERUN_JQ=" }
       - desc: "one re-run per directive — a `kind=noop-rerun` event newer than the directive, or a second completed round after it, falls to agent/arbitrate"
         anchor: { file: agents/coordinator-scan.sh, pattern: "kind=noop-rerun ts=" }
+      - desc: "an ARBITRATE comment counts (directive and arbitration fingerprint) only from a GitHub App or an OWNER/MEMBER/COLLABORATOR — the launcher prefetch's trust predicate; an outsider's comment on a public repo buys no round"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "select\\(trusted\\)" }
       - desc: "both no-op legs route through the predicate before their label write (ci-red FU-115b inside the stale-sha/human-ruling/belt gates; changes-requested FU-147 after the holds)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "noop_rerun_check \"\\$slug\"" }
       - desc: "the deterministic pass executes the unit — a launcher call riding a detached item pod, never a coordinator session; a refusal is a report line, never a second unit"
@@ -672,8 +676,8 @@ transitions:
         anchor: { file: agents/coordinator/README.md, pattern: "open the ASSEMBLY PR" }
       - desc: "the verdict is named assembly-complete — 'built as specified', never 'idea validated' (the #17 lesson)"
         anchor: { file: agents/coordinator/README.md, pattern: "Assembly-complete.*ADR-102" }
-      - desc: "the reflex reviews it on the assembly rubric, model = claim reviewer.goalModel"
-        anchor: { file: agents/review-reflex.sh, pattern: "REVIEW_GOAL_MODEL" }
+      - desc: "the reflex reviews it on the assembly rubric, no model pin (the gateway picks; no decorrelation from the decomposer)"
+        anchor: { file: agents/review-reflex.sh, pattern: 'goal/\*\) extra="--rubric \.agents/review-goal\.md"' }
       - desc: "the scan never dispatches a fix round at a goal/** HEAD (protected base — push would be refused)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ASSEMBLY PR #" }
 

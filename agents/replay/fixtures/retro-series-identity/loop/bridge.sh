@@ -1,0 +1,2 @@
+RETRO_GH_SECRET=retro-git
+SERIES_BRIEF=

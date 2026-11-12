@@ -3,8 +3,11 @@
 #
 # THE CONTRACT (consolidated from the five fixture essays; the per-row intent is the rows file):
 # retro-argo.yaml's harvest step extracts each cell's report through agents/retro-report-floor.sh
-# (homelab#590's content floor) and derives its filename from the workflow's OWN dispatch
-# parameters — never sniffed off the report's own prose heading (homelab#248) — through a
+# (homelab#590's content floor) and derives its filename from DISPATCH FACTS — the workflow's own
+# harness parameter plus the model the cell's session was SERVED, read off its ride log's launcher
+# lines (FU-270: the gateway admission's `→ gateway(sessions): dispatch <model> [` line, else the
+# old-proxy `cell <harness>:<model>` line; the scan stops at the report's BEGIN marker; no line =
+# `<harness>:unserved`) — never sniffed off the report's own prose heading (homelab#248) — through a
 # THREE-PASS collision guard: bare model (`${CELL#*:}` → `${CELL##*/}`), then harness-joined on a
 # same-model collision (homelab#269), then cell-index-suffixed on a same-harness-AND-model repeat
 # (homelab#292). A cell that produced no usable report (the floor rejects a markerless log, or the
@@ -20,10 +23,13 @@
 # reason `empty`, homelab#268's OTHER door into the silent loss #248 closed, and the ONLY row
 # whose bridge also reads the `continueOn` DECLARATION out of the shipped manifest: Argo's own
 # field, no shell clause reads it, never transcribed — README §When the clause lives inside a
-# manifest).
+# manifest). FU-270 rows: `gateway-served` (two admissions, two served models → their slugs) ·
+# `gateway-same-model` (the policy served ONE model to both cells — recorded, harness-joined, never
+# forced apart) · `gateway-fallback` (cell-b's admission refused → its old-proxy line names it) ·
+# `gateway-report-quotes` (a dispatch line QUOTED inside the report body never renames the cell).
 #
 # LOGS. `logs/*` are the report bodies these rows extract from — committed once, shared by
-# reference (one is genuinely shared byte-for-byte across four rows: `opus-report`, CELL_A's
+# reference (one is genuinely shared byte-for-byte across four rows: `opus-report`, cell A's
 # report on every row but `cell-errored`). They are read via $REPLAY_ROOT, NOT the table harness's
 # per-row world materialization — see bridge.sh for why (the WARN line embeds the log's own PATH
 # literally in its text, so it must be a fixed, deterministic location).
@@ -38,8 +44,8 @@ env:
   - DATE=2026-08-11
   - STACK=oracle
   - RUN=r3
-  - CELL_A=claude:opus
-  - CELL_B=goose:deepseek/deepseek-v4-pro
+  - HARNESS_A=claude
+  - HARNESS_B=goose
   - LOG_A_NAME=opus-report
   - LOG_B_NAME=deepseek-report
 rows: rows.psv

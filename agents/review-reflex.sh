@@ -537,18 +537,19 @@ for pair in "${dispatch[@]}"; do
   if [ "$#" -gt 3 ]; then dcorr="${*:4}"; fi
   # A pick whose HEAD is goal/** is the ASSEMBLY PR (goal -> master, the review-goal.md shape) —
   # the one review the whole goal rests on, cumulative over several separately-reviewed slices.
-  # Model is configurable via REVIEW_GOAL_MODEL (default sonnet; mirrors GOAL_MODEL in
-  # coordinator-scan.sh and dies the same M10 death when this lane is wired to /route). NB the
-  # assembly reviewer must DIFFER from the decomposing model (issue-authoring leg (c)) — with
-  # goal-decompose on opus, setting REVIEW_GOAL_MODEL=opus would collide; escalate GOAL_MODEL
-  # or this, not both. Rubric routes to .agents/review-goal.md; reviewer-session falls back to
-  # the generic prompt when a repo does not ship that file (per-repo opt-in by shipping it).
-  # Child PRs (fix/* heads INTO goal/**) deliberately stay on the default rubric+model path.
+  # It differs from any other review only in its RUBRIC (.agents/review-goal.md; reviewer-session
+  # falls back to the generic prompt when a repo does not ship that file — per-repo opt-in). It
+  # pins NO model: it takes what every review takes — the gateway's pick where reviews admit
+  # through it (FU-270) — and no decorrelation from the decomposing session is enforced (the
+  # gateway takes no exclusion input).
+  # Child PRs (fix/* heads INTO goal/**) deliberately stay on the default rubric.
+  # >>>REPLAY:assembly-review-dispatch>>>
   extra=""
   case "$phead" in
-    goal/*) extra="--model ${REVIEW_GOAL_MODEL:-sonnet} --rubric .agents/review-goal.md"
-            log "→ assembly PR (head ${phead}): model ${REVIEW_GOAL_MODEL:-sonnet}, rubric review-goal.md";;
+    goal/*) extra="--rubric .agents/review-goal.md"
+            log "→ assembly PR (head ${phead}): rubric review-goal.md, no model pin";;
   esac
+  # <<<REPLAY:assembly-review-dispatch<<<
   log "→ dispatch reviewer: ${repo} #${pr}${LOOP_NS_ARG:+ (loop-ns ${LOOP_NS_ARG})}${dcorr:+ (decorrelate-from ${dcorr#--decorrelate-from })}"
   # shellcheck disable=SC2086
   bash "$HERE/reviewer-session.sh" "$repo" "$pr" $extra $dcorr ${LOOP_NS_ARG:+--loop-ns "$LOOP_NS_ARG"} &

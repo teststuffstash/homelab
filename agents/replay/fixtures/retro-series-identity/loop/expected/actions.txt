@@ -1,0 +1,3 @@
+OUT AGENT_PR_OPEN=<unset>
+OUT RETRO_GH_SECRET=retro-git
+RC 0

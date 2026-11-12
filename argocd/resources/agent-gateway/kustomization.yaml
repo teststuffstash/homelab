@@ -53,7 +53,7 @@ resources:
 # list x fee / max(the rail's 30-day draw, the model's limit)); openrouter = the OpenRouter
 # catalog's models (GW-CATALOG-OR), each at its SELECTED endpoint's price — null until a cell
 # passed the entry canary (2026-10-20: all of them, so the openrouter lists stand as last derived);
-# anthropic = the three `claude/` aliases; codex = the ENROLLED account's model evidence (CODEX_CANDIDATES
+# anthropic = the `claude/` aliases (ANTHROPIC_ALIASES); codex = the ENROLLED account's model evidence (CODEX_CANDIDATES
 # of benchmarks-snapshot.sh: 2026-10-22 one id, gpt-6-astra, from the leg-E usage probe — FU-270). History: opencode heavy first left model-classes.json's
 # opencode-go claude-sonnet id (#2663 — 400 "Model is unavailable" upstream, kimi-k3 rejected as
 # too expensive for review), then every tier sat on deepseek-v4.1-flash by hand (2026-10-17) once
@@ -103,10 +103,13 @@ resources:
 # eligible; `prober` binds nothing (the canary pod is unbound). It also holds `coordinator` +
 # `reviewer`, bound into its own `platform-agents` (2026-11-01, FU-270: the platform loop's
 # coordinator and reviewer pods run there as this SA — granted ahead of the launchers that will use
-# it). `agent-coordinator:agent-coordinator` = the coordinator namespace's SHARED SA — the responder,
-# deep dig, island intake and fix-debounce workflows: `coordinator` + `responder`, unbound, no bind
-# (shared, so the grant reaches every workflow on it — the #2685 per-SA split is the narrower
-# alternative). `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
+# it) — and `researcher` (the jail's agents/research-fanout.sh mints this SA's token; each platform
+# arm is a worker-launcher ride, FU-270). `agent-coordinator:agent-coordinator` = the coordinator
+# namespace's SHARED SA — the responder, deep dig, island intake and fix-debounce workflows:
+# `coordinator` + `responder`, unbound; and `retro`, bound into `openrouter-operator` (the retro
+# cron's cells hand off to the worker launcher, whose ride pod lives in the platform retro's ride
+# namespace — agents/retro-project.sh) (shared, so the grant reaches every workflow on it — the
+# #2685 per-SA split is the narrower alternative). `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
 # (agents/coordinator/specs-review-argo.yaml), their OWN ServiceAccount since #2685 (callers are
 # per SA; as `agent-coordinator` the key covered every workflow in that namespace): `reviewer`, and
 # `worker` for the goose@openrouter shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it
@@ -143,4 +146,4 @@ configMapGenerator:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.11.1-g58a0031164b0
+    newTag: 2026.11.12-ga225e011070e

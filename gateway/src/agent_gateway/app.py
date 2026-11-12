@@ -116,6 +116,7 @@ def create_app(
                                   settings.cred_negative_cache_s, clock)
     m = Metrics(policy.stacks)
     m.bind_active_sessions(lambda: store.active_counts(clock()))
+    m.bind_db_mode(lambda: store.mode)
     client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(connect=settings.connect_timeout_s, read=settings.read_timeout_s, write=60, pool=10),
         follow_redirects=False,
@@ -172,7 +173,7 @@ def create_app(
     if codex is not None and not (codex_poll and codex_poll.enabled):
         log.warning("codex usage poll dark: %s — the rail answers quota-unknown",
                     "CODEX_USAGE_URL unset" if not settings.codex_usage_url else "no credential backend")
-    # GW-SESSIONS-ADMIT §Capacity (the Go account headroom): gated by `rails.opencode.headroom` — a policy without the
+    # GW-SESSIONS-CAPACITY §Go account headroom: gated by `rails.opencode.headroom` — a policy without the
     # block admits the Go rail exactly as before, with no poll. The poll uses the gateway's own Go key.
     go_headroom = (Headroom(clock, policy.rails["opencode"].headroom)
                    if "opencode" in policy.rails and policy.rails["opencode"].headroom is not None else None)
@@ -202,7 +203,7 @@ def create_app(
         # report — the headroom is forgotten with the process), then every poll_interval_s.
         poller = (asyncio.create_task(codex_poll.run(), name="codex-usage-poll")
                   if codex_poll is not None and codex_poll.enabled else None)
-        # The Go usage poll's schedule (GW-SESSIONS-ADMIT §Capacity): the same rule — a poll at start, then every poll_interval_s.
+        # The Go usage poll's schedule (GW-SESSIONS-CAPACITY §Go account headroom): the same rule — a poll at start, then every poll_interval_s.
         go_poller = (asyncio.create_task(go_poll.run(), name="go-usage-poll")
                      if go_poll is not None and go_poll.enabled else None)
         try:

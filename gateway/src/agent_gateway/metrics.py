@@ -10,6 +10,7 @@ request without a valid caller token, admitted under `observe` or refused under 
 `gateway_subscription_utilization{rail,window}` + `gateway_subscription_reset_seconds{rail,window}`
 (gauges, last seen on the subscription rail's `anthropic-ratelimit-unified-*` response headers; on the
 codex rail the last ACCEPTED headroom report's windows — GW-CODEX-HEADROOM §Gauges).
+`gateway_db_mode{mode}` (gauge — 1 for the store mode the gateway opened at start, 0 for the other; GW-METRICS).
 `gateway_cells_cooled{rail}` + `gateway_credentials_rejected{rail}` (gauges — the admission's transport
 facts, sessions.md §Capacity) and `gateway_requests_incomplete_total{rail,dialect,reason}` (a 2xx whose
 body stopped before its end, GW-RAIL-*).
@@ -35,6 +36,7 @@ CP_REASONS = ("absent", "invalid", "review-transient")
 INCOMPLETE_REASONS = ("no-terminal", "timeout", "transport-error", "client-closed")
 STRIKE_SOURCES = ("outcome", "gateway")
 PROBE_OUTCOMES = ("cleared", "rejected", "inconclusive")
+DB_MODES = ("pvc", "memory")  # GW-METRICS §gateway_db_mode — the store modes (store.py Store.mode, glossary §store mode)
 # GW-CODEX-HEADROOM §Poll — codex_usage.OUTCOMES (not imported: codex_usage imports nothing from here, but the
 # label set is the schema's, spelled once per side like the others)
 POLL_OUTCOMES = ("accepted", "quota-invalid", "quota-time-invalid", "quota-out-of-order", "credential-unresolved",
@@ -118,6 +120,11 @@ class Metrics:
         # mounted tier-evidence snapshot's age (None = none mounted — no series).
         self._rail_choices: dict[tuple[str, str, str], int] = {}
         self._tier_evidence_age: Callable[[], float | None] = lambda: None
+        self._db_mode: Callable[[], str] = lambda: ""  # GW-METRICS §gateway_db_mode: the store mode the process opened at start
+
+    def bind_db_mode(self, mode: Callable[[], str]) -> None:
+        """GW-METRICS §gateway_db_mode: the store mode (`pvc` or `memory`) the gateway opened at start."""
+        self._db_mode = mode
 
     def bind_active_sessions(self, source: Callable[[], dict[str, int]]) -> None:
         self._gauge_source = source
@@ -344,6 +351,12 @@ class Metrics:
             age = self._tier_evidence_age()
             if age is not None:
                 lines.append(f"gateway_tier_evidence_age_seconds {age:.0f}")
+            # Both modes render on every gateway, the inactive one at 0 — a series born at 1 on a fail-open pod
+            # would be indistinguishable from one never scraped (GW-METRICS §gateway_db_mode).
+            db_mode = self._db_mode()
+            lines += ["# HELP gateway_db_mode The store mode the gateway opened at start: 1 for the active mode, 0 for the other (GW-METRICS).",
+                      "# TYPE gateway_db_mode gauge"]
+            lines += [f"gateway_db_mode{_fmt_labels({'mode': mode})} {1 if db_mode == mode else 0}" for mode in DB_MODES]
             lines += ["# HELP gateway_sessions_reaped_total Sessions released because their pod was gone (GW-SESSIONS-LIVENESS).",
                       "# TYPE gateway_sessions_reaped_total counter"]
             lines += [f"gateway_sessions_reaped_total{_fmt_labels({'rail': rail})} {self.reaped_total.get(rail, 0)}" for rail in RAILS]

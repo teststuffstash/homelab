@@ -117,9 +117,11 @@ tests:
               severity: warning
               platform_machinery: "true"
               triage: dig
+              # PER SERIES (homelab#3140): the alert carries the series it is about.
+              series: platform
             exp_annotations:
-              summary: "No retro report landed after Monday's scheduled fire (>7d+3h since the last) — ADR-103 weekly KPI scoring is not producing data"
-              description: "The Monday 05:00Z retro-session CronWorkflow (the platform series, stack=platform since homelab#588) has not landed a report PR in over 7d+3h — every successful fire lands by the workflow's 07:00Z deadline, so the last Monday fire produced nothing (or has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
+              summary: "No retro report landed for series platform after its scheduled fire (>7d+3h since the last) — ADR-103 weekly KPI scoring is not producing data"
+              description: "The retro series platform (a retro-session CronWorkflow in ns agent-coordinator: the platform series on Mondays 05:00Z, a named series such as feedback-triage on its own slot — homelab#3140) has not landed a report PR in over 7d+3h — every successful fire lands within the workflow's 2h deadline, so the last fire produced nothing (or the series has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest workflow of that series in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/<retro-session|retro-feedback-triage>. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
       # and it does not self-resolve while the belt stays silent
       - eval_time: 210h
         alertname: RetroReportOverdue
@@ -127,7 +129,9 @@ tests:
 
   # ── BONUS (ported from agent-runs.promtool-test, unchanged behaviour) — never pushed at all ──
   # `max_over_time` over a series with ZERO samples anywhere is exactly as empty as bare `max()`
-  # over one — the `or vector(0)` fallback path itself is untouched by the harden.
+  # over one — the `or vector(0)` fallback path itself is untouched by the harden. Since the
+  # per-series split (homelab#3140) this is the ONE path with no `series` label: `vector(0)` has
+  # an empty label set, so the alert fires label-less and the annotation names that state.
   - interval: 1h
     name: "no retro report has EVER landed — fires at 7d+3h+30m, not before"
     input_series:
@@ -142,10 +146,44 @@ tests:
         exp_alerts: []
       - eval_time: 172h
         alertname: RetroReportOverdue
-        exp_alerts: *retro_overdue_alert
+        exp_alerts: &retro_overdue_never_pushed
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: dig
+            exp_annotations:
+              summary: "No retro report landed for series <none has ever pushed> after its scheduled fire (>7d+3h since the last) — ADR-103 weekly KPI scoring is not producing data"
+              description: "The retro series <none has ever pushed> (a retro-session CronWorkflow in ns agent-coordinator: the platform series on Mondays 05:00Z, a named series such as feedback-triage on its own slot — homelab#3140) has not landed a report PR in over 7d+3h — every successful fire lands within the workflow's 2h deadline, so the last fire produced nothing (or the series has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest workflow of that series in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/<retro-session|retro-feedback-triage>. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
       - eval_time: 210h
         alertname: RetroReportOverdue
-        exp_alerts: *retro_overdue_alert
+        exp_alerts: *retro_overdue_never_pushed
+
+  # ── (d) TWO series, one stale (homelab#3140): a fresh platform push must not hide it ─────────
+  # Before the per-series split a bare `max()` across both would have read the fresh platform
+  # push and stayed silent about a feedback-triage series that stopped landing. Now each series
+  # is judged on its own: the stale one fires with its label, the fresh one does not.
+  - interval: 1h
+    name: "(d) a stale named series fires on its own while the platform series stays fresh"
+    input_series:
+      - series: 'retro_report_last_success_timestamp{job="platform-retro",series="platform"}'
+        values: "0+3600x210"
+      - series: 'retro_report_last_success_timestamp{job="platform-retro",series="feedback-triage"}'
+        values: "0+0x210"
+    alert_rule_test:
+      - eval_time: 170h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      - eval_time: 172h
+        alertname: RetroReportOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: dig
+              series: feedback-triage
+            exp_annotations:
+              summary: "No retro report landed for series feedback-triage after its scheduled fire (>7d+3h since the last) — ADR-103 weekly KPI scoring is not producing data"
+              description: "The retro series feedback-triage (a retro-session CronWorkflow in ns agent-coordinator: the platform series on Mondays 05:00Z, a named series such as feedback-triage on its own slot — homelab#3140) has not landed a report PR in over 7d+3h — every successful fire lands within the workflow's 2h deadline, so the last fire produced nothing (or the series has never landed one since the belt shipped 2026-08-10). This can mean the cron is firing and guard-refusing, OR that a genuinely recent success just cannot be SEEN — as of homelab#591 the expr bridges a pushgateway wipe via Prometheus's own 8d retention, so if this fires the last landed report really is stale. Check the newest workflow of that series in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/<retro-session|retro-feedback-triage>. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
 
   # ── BONUS (ported from agent-runs.promtool-test, unchanged behaviour) — ages out, then clears ─
   # No gap here either (constant value 0 held every hour, then updated) — `max_over_time` and

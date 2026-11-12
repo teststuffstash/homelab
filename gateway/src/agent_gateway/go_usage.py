@@ -1,4 +1,4 @@
-"""The OpenCode Go rail's usage poll (GW-SESSIONS-ADMIT §Capacity — the Go twin of GW-CODEX-HEADROOM §Poll).
+"""The OpenCode Go rail's usage poll (GW-SESSIONS-CAPACITY §Go account headroom — the Go twin of GW-CODEX-HEADROOM §Poll).
 
 One GET of the Go account usage endpoint per `poll_interval_s`, authenticated with the gateway's OWN Go
 key (`OPENCODE_GO_API_KEY` — the credential owner observes its own account), translated into the

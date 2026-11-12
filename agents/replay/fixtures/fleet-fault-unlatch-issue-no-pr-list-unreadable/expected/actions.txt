@@ -1,0 +1,6 @@
+CALL gh issue view 100 --repo teststuffstash/homelab --json comments
+CALL gh issue view 1000 --repo teststuffstash/homelab --json state
+OUT REACHED: issue case — fleet-fault marker + cause closed + PR list unreadable ⇒ HOLD, no write
+OUT Case: issue-side — PR list unreadable ⇒ HOLD line only, agent/error stays on issue #100
+OUT [homelab] ⏳ fleet-fault un-latch probe HOLD — issue #100: open-PR list unreadable, CI leg unverifiable (rule #6). No label write; next tick.
+RC 0

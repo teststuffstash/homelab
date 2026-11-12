@@ -44,7 +44,12 @@
 #   bash gateway/scripts/intake-select.sh --source dig [--island gateway] [--out sel.json]
 #
 #   inputs    = homelab/dig-<date>/<run>/finding-N.json over INTAKE_DIG_LOOKBACK_D days, verdict in
-#               INTAKE_DIG_VERDICTS, text matching the island's pattern (island_pattern below)
+#               INTAKE_DIG_VERDICTS, OWNED by the island (finding_owner below): one of its ALERTS is
+#               defined in the island's alert-rule file (island_alert_rules), or — when no island's
+#               rules define any of its alerts — an evidence/related entry cites a path under the
+#               island's `Touches` prefixes. Free prose never decides: "…/pushgateway/…" and "the
+#               gateway seat" selected homelab#3162 and #3166 into the gateway sitting (2026-11-11).
+#               An island with no alert-rule row yet keeps its text pattern (island_pattern).
 #   ruled     = every input id an earlier APPLY receipt lists with an outcome other than `deferred`
 #               (homelab/intake-<island>-<date>/<run>/receipt.json — the receipt is the ledger, the
 #               way the dig's own findings are its re-dig key; the bucket is read with the READER key)
@@ -54,7 +59,26 @@
 # Exit 0 = fire, 1 = hold, 2 = a probe failed: an unreadable bucket is NEVER "no inputs" (it would
 # also be "nothing ruled", i.e. the same findings fed again every day). Seam: INTAKE_TS_DIR = a local
 # directory laid out like the bucket (<dir>/homelab/dig-…, <dir>/homelab/intake-…) served instead
-# of S3 — gateway/scripts/intake-select-test.sh and a jail run use it.
+# of S3 — agents/island-intake-test.sh and a jail run use it.
+#
+# --source pile (FU-320, the second wired source — the same CronWorkflow runs it after the dig):
+# the island's issue pile, as ONE selection in the dig's shape (`island-intake-select/v1`).
+#
+#   bash gateway/scripts/intake-select.sh --source pile [--island gateway] [--out sel.json]
+#
+#   member    = the default selection above (unruled, unlabelled) — `kind: member|attribution`
+#   reread    = `kind: reread`: the island's OPEN issues an earlier ruling left waiting on a human —
+#               label `agent/blocked`, or the LATEST `intake:` ruling is `seat` — whose wait is
+#               ≥ INTAKE_REREAD_AGE_D days old (default 3; the wait's date = the latest `intake:` /
+#               `blocked-on:` comment, else the issue's last update), MINUS every one an APPLY
+#               receipt of the last INTAKE_REREAD_EVERY_D days (default 7) lists with an outcome
+#               other than `deferred`: an unchanged wait is not re-read daily, and the receipt is
+#               the ledger of that (the dig source's pattern). Never a Goal or a container; an
+#               issue carrying any OTHER `agent/*` label is the loop's, not a wait.
+#   id        = `<owner/repo>#<n>` — what the receipt's `ruled` lines carry
+#   cap, fire = the dig's: ≥ 1 input and fewer than INTAKE_DAILY_MAX apply sittings today
+# Exit codes as above (2 = the issue list or the bucket could not be read). Seams: INTAKE_ISSUES_JSON
+# + INTAKE_TS_DIR + INTAKE_NOW.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
@@ -68,14 +92,14 @@ while [ $# -gt 0 ]; do
     --min)   MIN="$2"; shift 2;;
     --age-h) AGE_H="$2"; shift 2;;
     --json)  JSON=1; shift;;
-    -h|--help) sed -n '2,57p' "$0"; exit 0;;
+    -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 0;;
     *) echo "intake-select: unknown arg $1" >&2; exit 2;;
   esac
 done
 
 # ── the island table ─────────────────────────────────────────────────────────────────────────────
-# One row per island in island_pattern (dig text) AND island_members (issues); a new island adds
-# both rows plus its §Island facts file (gateway/intake.md names where those live). ISLANDS is the
+# One row per island in island_pattern / island_alert_rules (dig findings) AND island_members
+# (issues); a new island adds its rows plus its §Island facts file (gateway/intake.md names where those live). ISLANDS is the
 # PRECEDENCE order — most specific first, gateway first so its selection never moves: an item
 # belongs to the first island that claims it, so it is never ruled by two sittings.
 ISLANDS="gateway router-pair mgmt-box dependency-upgrades substrate agent-loop"
@@ -83,10 +107,22 @@ ISLANDS="gateway router-pair mgmt-box dependency-upgrades substrate agent-loop"
 # inputs) — the loop's own filings, so the loop's island owns their first ruling.
 ATTRIBUTION_ISLAND=agent-loop
 
-# island_pattern <island> → the ERE (jq test) a dig finding's text must match to be this island's.
+# island_alert_rules <island> → the rule file(s), repo-relative, whose `alert:` names are the
+# island's: a dig finding on one of them is the island's finding. Read from the checkout, so a new
+# alert in the file needs no edit here. An island with no row falls back to island_pattern.
+island_alert_rules() {
+  case "$1" in
+    gateway) printf '%s' 'argocd/resources/agent-gateway/prometheusrule.yaml';;
+    *) ;;
+  esac
+}
+
+# island_pattern <island> → the ERE (jq test) a dig finding's TEXT must match to be this island's —
+# the fallback for an island with no island_alert_rules row (none of these has a wired sitting yet).
+# The gateway has that row, so its findings are matched on alerts and evidence paths, never on text.
 island_pattern() {
   case "$1" in
-    gateway)             printf '%s' 'gateway/|agent-gateway|GW-[A-Z]';;
+    gateway)             printf '%s' '(?!)';;
     router-pair)         printf '%s' '[Oo][Pp][Nn][Ss]ense|CARP|RouterPair|RouterWan|Unbound|router-move|ansible/opnsense';;
     mgmt-box)            printf '%s' 'mgmt/|Mgmt[A-Z]|UpgradeLease|management box|mgmt-(tf|lease|reconcile|apply)';;
     dependency-upgrades) printf '%s' '[Rr]enovate|VersionSet|version-sets/|DependencyClass|lock-intake';;
@@ -215,16 +251,8 @@ ts_read_objects() {
           || echo "intake-select: unreadable $prefix/$rel — skipped" >&2
       done
 }
-cmd_dig() {
-  local pat now lookback verdicts dmax d k findings receipts sel n today sittings
-  pat="$(island_pattern "$ISLAND")" || { echo "intake-select: no dig pattern for island '$ISLAND'" >&2; exit 2; }
-  # Precedence (ISLANDS order): a finding an EARLIER island's pattern claims is that island's, never
-  # this one's too — one finding, one sitting. `(?!)` (matches nothing) when this is the first row.
-  local isl earlier='(?!)'
-  for isl in $ISLANDS; do [ "$isl" = "$ISLAND" ] && break; earlier="$earlier|$(island_pattern "$isl")"; done
-  now="${INTAKE_NOW:-$(date -u +%s)}"; lookback="${INTAKE_DIG_LOOKBACK_D:-7}"
-  verdicts="${INTAKE_DIG_VERDICTS:-cause-found}"; dmax="${INTAKE_DAILY_MAX:-2}"
-  # Positive control first (rule #6): a listing of the prefix that FAILS is not an empty prefix.
+# Positive control (rule #6): a listing of the bucket that FAILS is not an empty bucket.
+ts_probe() {
   if [ -n "${INTAKE_TS_DIR:-}" ]; then
     [ -d "$INTAKE_TS_DIR/homelab" ] || { echo "intake-select: INTAKE_TS_DIR has no homelab/ — probe failed" >&2; exit 2; }
   else
@@ -232,27 +260,89 @@ cmd_dig() {
     command -v s5cmd >/dev/null 2>&1 || { echo "intake-select: s5cmd missing" >&2; exit 2; }
     _s5 ls "s3://$TS_BUCKET/homelab/" >/dev/null 2>&1 || { echo "intake-select: bucket listing failed ($TS_ENDPOINT) — probe failed" >&2; exit 2; }
   fi
-  findings=""; receipts=""
+}
+# <now> <days> → the island's receipts of today and the <days> days before it, one JSON per line.
+read_receipts() {
+  local k d
+  for k in $(seq 0 "$2"); do
+    d="$(date -u -d "@$(( $1 - k * 86400 ))" +%Y-%m-%d)"
+    ts_read_objects "intake-$ISLAND-$d" 'receipt.json'
+  done
+}
+# The jq both receipt-reading sources share: today's APPLY sittings (the daily cap's count).
+# shellcheck disable=SC2016  # a jq program, not a shell expansion
+JQ_SITTINGS='def sittings($r; $today): [ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply"
+    and .session_ran == true and ((.ts // "") | startswith($today))) ] | length;'
+
+# owner_table → a JSON array, one row per island in ISLANDS order, that finding_owner (jq, in
+# cmd_dig) walks: {island, alerts: [the names its rule files define], paths: [its Touches prefixes]
+# | null, pat: its text fallback}. `paths` is set exactly when the island has an alert-rule row.
+owner_table() {
+  local isl files f alerts paths tbl='[]'
+  for isl in $ISLANDS; do
+    files="$(island_alert_rules "$isl")"; alerts='[]'; paths=null
+    if [ -n "$files" ]; then
+      for f in $files; do
+        [ -r "$ROOT/$f" ] || { echo "intake-select: alert-rule file $f unreadable — cannot tell whose finding is whose" >&2; return 1; }
+      done
+      # shellcheck disable=SC2086  # $files is a space-separated list of repo paths
+      alerts="$(cd "$ROOT" && grep -hoE '^[[:space:]]*- alert:[[:space:]]*[A-Za-z0-9_]+' $files | awk '{print $NF}' | sort -u | jq -R . | jq -sc .)"
+      [ "$(printf '%s' "$alerts" | jq 'length')" -gt 0 ] || { echo "intake-select: no alert: names in $files — probe failed" >&2; return 1; }
+      paths="$(island_members "$isl" | sed 1d | jq -R 'select(length > 0)' | jq -sc .)"
+    fi
+    tbl="$(printf '%s' "$tbl" | jq -c --arg i "$isl" --argjson a "$alerts" --argjson p "$paths" --arg pat "$(island_pattern "$isl")" \
+      '. + [{island: $i, alerts: $a, paths: $p, pat: $pat}]')"
+  done
+  printf '%s' "$tbl"
+}
+
+cmd_dig() {
+  local now lookback verdicts dmax d k findings receipts sel n today sittings tbl
+  case " $ISLANDS " in *" $ISLAND "*) ;; *) echo "intake-select: no dig row for island '$ISLAND'" >&2; exit 2;; esac
+  tbl="$(owner_table)" || exit 2
+  now="${INTAKE_NOW:-$(date -u +%s)}"; lookback="${INTAKE_DIG_LOOKBACK_D:-7}"
+  verdicts="${INTAKE_DIG_VERDICTS:-cause-found}"; dmax="${INTAKE_DAILY_MAX:-2}"
+  ts_probe
+  findings=""
   for k in $(seq 0 "$lookback"); do
     d="$(date -u -d "@$(( now - k * 86400 ))" +%Y-%m-%d)"
     findings="${findings}$(ts_read_objects "dig-$d" 'finding-*.json')"$'\n'
-    receipts="${receipts}$(ts_read_objects "intake-$ISLAND-$d" 'receipt.json')"$'\n'
   done
+  receipts="$(read_receipts "$now" "$lookback")"
   today="$(date -u -d "@$now" +%Y-%m-%d)"
-  sel="$(jq -n --arg pat "$pat" --arg earlier "$earlier" --arg verdicts "$verdicts" --arg island "$ISLAND" --arg today "$today" \
+  sel="$(jq -n --argjson tbl "$tbl" --arg verdicts "$verdicts" --arg island "$ISLAND" --arg today "$today" \
       --argjson dmax "$dmax" --arg ts "$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)" \
       --slurpfile f <(printf '%s' "$findings" | grep -v '^$' || true) \
-      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) '
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_SITTINGS"'
     def fid: (._key | sub("\\.json$"; ""));
+    def esc: gsub("(?<c>[.\\[\\](){}*+?^$|\\\\])"; "\\\(.c)");
+    # finding_owner: ONE island per finding, so no finding is ruled by two sittings.
+    #  1. the first ISLANDS row whose alert rules define one of the alerts of the finding (members[].alertname,
+    #     else the leading token of an alerts[] line);
+    #  2. only when the rules of NO island define any of them: the first row that claims it by its evidence —
+    #     a path under that row Touches prefixes at a path boundary in evidence[] / related[]
+    #     ("pushgateway/" is not "gateway/"), or, for a row with no alert rules yet, its text pattern.
+    def finding_owner:
+      . as $f
+      | ([($f.members // [])[] | .alertname?] + [($f.alerts // [])[] | tostring | split(" ")[0]]
+         | map(select(. != null and . != "")) | unique) as $names
+      | ([ $tbl[] | select(.alerts as $a | any($names[]; . as $x | $a | index($x))) | .island ] | first)
+        // ([ $tbl[] | select(
+                if .paths != null then
+                  ("(^|[^A-Za-z0-9_./-])(" + (.paths | map(esc) | join("|")) + ")") as $re
+                  | any((($f.evidence // []) + ($f.related // []))[]; tostring | test($re))
+                else
+                  .pat as $pat
+                  | ([$f.cause, $f.recommendation, ($f.evidence // []), ($f.related // []), $f.pr] | tostring | test($pat))
+                end) | .island ] | first)
+        // "";
     ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply")
             | .ruled[]? | select(.outcome != "deferred") | .input ] | unique) as $ruled
-    | ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply" and .session_ran == true
-                       and ((.ts // "") | startswith($today))) ] | length) as $sittings
+    | sittings($r; $today) as $sittings
     | [ $f[] | select(.schema == "dig-finding/v1")
              | select(.verdict as $v | ($verdicts | split(",")) | index($v))
-             | select(([.cause, .recommendation, (.evidence // []), (.related // []), .pr] | tostring)
-                      | test($pat) and (test($earlier) | not))
-             | {id: fid, run: (.run // ""), verdict, alerts: (.alerts // []), members: (.members // []),
+             | select(finding_owner == $island)
+             | {id: fid, kind: "dig", run: (.run // ""), verdict, alerts: (.alerts // []), members: (.members // []),
                 cause, recommendation, evidence: (.evidence // []), related: (.related // []), pr: (.pr // "")} ] as $match
     | [ $match[] | select(.id as $i | $ruled | index($i) | not) ] as $inputs
     | {schema: "island-intake-select/v1", island: $island, source: "dig", ts: $ts,
@@ -263,18 +353,19 @@ cmd_dig() {
   printf '%s' "$sel" | jq -r '.inputs[] | "\(.id)\t\(.verdict)\t\(.alerts | join(", ") | .[0:80])"' >&2
   n="$(printf '%s' "$sel" | jq '.counts.inputs')"; sittings="$(printf '%s' "$sel" | jq '.sittings_today')"
   if [ "$n" -eq 0 ]; then
-    echo "hold: no unruled dig finding names island $ISLAND ($(printf '%s' "$sel" | jq -c .counts))" >&2; exit 1
+    echo "hold: no unruled dig finding is island $ISLAND's ($(printf '%s' "$sel" | jq -c .counts))" >&2; exit 1
   elif [ "$sittings" -ge "$dmax" ]; then
     echo "hold: daily cap — $sittings apply sitting(s) today (INTAKE_DAILY_MAX=$dmax); $n input(s) wait for tomorrow" >&2; exit 1
   fi
   echo "fire: $n unruled dig finding(s) for island $ISLAND" >&2; exit 0
 }
 case "$SOURCE" in
-  issues) ;;
+  issues|pile) ;;
   dig) cmd_dig; exit $?;;
-  *) echo "intake-select: unknown --source $SOURCE (issues|dig)" >&2; exit 2;;
+  *) echo "intake-select: unknown --source $SOURCE (issues|dig|pile)" >&2; exit 2;;
 esac
 
+# ── the issue pile (--source issues, --source pile) ──────────────────────────────────────────────
 island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
 PARSER="$ROOT/agents/issue_body.py"
 [ -f "$PARSER" ] || { echo "intake-select: $PARSER missing (run from a homelab checkout)" >&2; exit 2; }
@@ -284,13 +375,17 @@ if [ -n "${INTAKE_ISSUES_JSON:-}" ]; then
   issues="$(cat "$INTAKE_ISSUES_JSON" 2>/dev/null)" || { echo "intake-select: INTAKE_ISSUES_JSON unreadable" >&2; exit 2; }
 else
   issues="$(gh issue list --repo "$REPO" --state open --limit 500 \
-    --json number,title,body,labels,createdAt,author,comments 2>/dev/null)" || {
+    --json number,title,body,labels,createdAt,updatedAt,author,comments 2>/dev/null)" || {
     echo "intake-select: gh issue list failed for $REPO" >&2; exit 2; }
 fi
 [ -n "$issues" ] || { echo "intake-select: empty answer from gh issue list (not a verdict)" >&2; exit 2; }
 
-now="$(date -u +%s)"
-cands='[]'
+now="${INTAKE_NOW:-$(date -u +%s)}"
+# REREAD=1 (--source pile) also collects the waits: the SAME walk, the same container/Goal and
+# membership predicates — a wait differs from a candidate only in which label/ruling it carries.
+REREAD=0; [ "$SOURCE" = pile ] && REREAD=1
+REREAD_AGE_D="${INTAKE_REREAD_AGE_D:-3}"
+cands='[]'; rereads='[]'
 count="$(printf '%s' "$issues" | jq 'length')"
 i=0
 while [ "$i" -lt "$count" ]; do
@@ -299,9 +394,13 @@ while [ "$i" -lt "$count" ]; do
   title="$(printf '%s' "$row" | jq -r .title)"
   # containers and lifecycle-labelled items are never candidates
   case "$title" in post-launch:*|stint:*) continue;; esac
-  if printf '%s' "$row" | jq -e '[.labels[].name | select(startswith("agent/") or . == "task/goal")] | length > 0' >/dev/null; then
-    continue
-  fi
+  # lifecycle: none | blocked (`agent/blocked` — a wait, the reread's) | other (a Goal, or any other
+  # `agent/*` label: the loop's own state, nobody's input)
+  life="$(printf '%s' "$row" | jq -r '[.labels[].name] as $l
+    | if ($l | index("task/goal")) then "other"
+      elif ($l | index("agent/blocked")) then "blocked"
+      elif ($l | any(startswith("agent/"))) then "other" else "none" end')"
+  case "$life" in other) continue;; blocked) [ "$REREAD" = 1 ] || continue;; esac
   # membership: the island table (island_of_issue — title, else every Touches entry, first row wins)
   touches="$(printf '%s' "$row" | jq -r '.body // ""' | python3 "$PARSER" get Touches --ref "${REPO}#${num}" 2>/dev/null || true)"
   kind=member
@@ -313,8 +412,23 @@ while [ "$i" -lt "$count" ]; do
       kind=attribution;;
     *) continue;;
   esac
-  # a standing ruling: a comment whose first line starts with `intake:`
-  if printf '%s' "$row" | jq -e '[.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | length > 0' >/dev/null; then
+  # a standing ruling: a comment whose first line starts with `intake:` (the LATEST one is the ruling)
+  ruling="$(printf '%s' "$row" | jq -r '[.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | last // ""')"
+  if [ "$life" = blocked ] || [ -n "$ruling" ]; then
+    # ruled or blocked: never a candidate; a reread when it is a member's WAIT, old enough
+    [ "$REREAD" = 1 ] && [ "$kind" = member ] || continue
+    wait_kind=""
+    [ "$(printf '%s' "$ruling" | sed -E 's/^intake:[[:space:]]*//' | awk '{print $1}')" = seat ] && wait_kind=seat
+    [ "$life" = blocked ] && wait_kind=agent/blocked
+    [ -n "$wait_kind" ] || continue
+    since="$(printf '%s' "$row" | jq -r '([.comments[]? | select((.body | split("\n")[0] | startswith("intake:")) or (.body | test("(^|\n)blocked-on:")))
+        | .createdAt | select(. != null)] | max) // .updatedAt // .createdAt')"
+    sts="$(date -u -d "$since" +%s 2>/dev/null || echo "$now")"
+    wait_d=$(( (now - sts) / 86400 ))
+    [ "$wait_d" -ge "$REREAD_AGE_D" ] || continue
+    rereads="$(printf '%s' "$rereads" | jq -c --argjson n "$num" --arg id "${REPO}#${num}" --arg t "$title" \
+      --arg au "$(printf '%s' "$row" | jq -r '.author.login')" --arg w "$wait_kind" --arg s "$since" --argjson d "$wait_d" --arg r "$ruling" \
+      '. + [{id: $id, kind: "reread", number: $n, title: $t, author: $au, wait: $w, since: $s, wait_d: $d, parked_by: $r}]')"
     continue
   fi
   created="$(printf '%s' "$row" | jq -r .createdAt)"
@@ -324,6 +438,36 @@ while [ "$i" -lt "$count" ]; do
     --arg t "$title" --arg au "$(printf '%s' "$row" | jq -r '.author.login')" --arg k "$kind" \
     '. + [{number: $n, age_h: $a, author: $au, title: $t, kind: $k}]')"
 done
+
+if [ "$SOURCE" = pile ]; then
+  dmax="${INTAKE_DAILY_MAX:-2}"; every="${INTAKE_REREAD_EVERY_D:-7}"
+  ts_probe
+  receipts="$(read_receipts "$now" "$every")"
+  sel="$(jq -n --arg island "$ISLAND" --arg repo "$REPO" --arg today "$(date -u -d "@$now" +%Y-%m-%d)" \
+      --argjson now "$now" --argjson every "$every" --argjson age "$REREAD_AGE_D" --argjson dmax "$dmax" \
+      --arg ts "$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)" --argjson cands "$cands" --argjson rereads "$rereads" \
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_SITTINGS"'
+    # re-read in the last $every days: an APPLY receipt lists the id with an outcome other than deferred
+    ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply")
+            | select(((.ts // "") | (try fromdateiso8601 catch 0)) >= ($now - $every * 86400))
+            | .ruled[]? | select(.outcome != "deferred") | .input ] | unique) as $recent
+    | [ $rereads[] | select(.id as $i | $recent | index($i) | not) ] as $rr
+    | ([ $cands[] | {id: ($repo + "#" + (.number | tostring))} + . ] + $rr) as $inputs
+    | {schema: "island-intake-select/v1", island: $island, source: "pile", ts: $ts,
+       counts: {members: ($cands | length), rereads: ($rr | length), reread_recent: (($rereads | length) - ($rr | length)),
+                inputs: ($inputs | length)},
+       reread_age_d: $age, reread_every_d: $every, sittings_today: sittings($r; $today), daily_max: $dmax, inputs: $inputs}')" \
+    || { echo "intake-select: selection jq failed" >&2; exit 2; }
+  if [ -n "$OUT" ]; then printf '%s\n' "$sel" > "$OUT"; else printf '%s\n' "$sel"; fi
+  printf '%s' "$sel" | jq -r '.inputs[] | "\(.id)\t\(.kind)\t\(if .kind == "reread" then "\(.wait) \(.wait_d)d" else "\(.age_h)h" end)\t\(.title | .[0:70])"' >&2
+  n="$(printf '%s' "$sel" | jq '.counts.inputs')"; sittings="$(printf '%s' "$sel" | jq '.sittings_today')"
+  if [ "$n" -eq 0 ]; then
+    echo "hold: nothing in island $ISLAND's pile to rule or re-read ($(printf '%s' "$sel" | jq -c .counts))" >&2; exit 1
+  elif [ "$sittings" -ge "$dmax" ]; then
+    echo "hold: daily cap — $sittings apply sitting(s) today (INTAKE_DAILY_MAX=$dmax); $n input(s) wait for tomorrow" >&2; exit 1
+  fi
+  echo "fire: $n pile input(s) for island $ISLAND ($(printf '%s' "$sel" | jq -c .counts))" >&2; exit 0
+fi
 
 n="$(printf '%s' "$cands" | jq 'length')"
 oldest="$(printf '%s' "$cands" | jq '[.[].age_h] | max // 0')"

@@ -1,19 +1,30 @@
 #!/usr/bin/env bash
 # retro-session — assemble a retro (or cross-review) brief and launch one CELL of it.
 #
-# A retro run (FU-058 run-3 shape) = two cells off the SAME brief, then cross-review swapped:
-#   bash agents/retro-session.sh oracle --cell claude:opus          --ledger /tmp/ledger.json
-#   bash agents/retro-session.sh oracle --cell goose:deepseek/deepseek-v4-pro --ledger /tmp/ledger.json
+# A retro run (FU-058 run-3 shape) = two cells off the SAME brief, then cross-review swapped. A
+# CELL is a harness; the MODEL is the agent-gateway's (operator ruling 2026-11-01, FU-270):
+#   bash agents/retro-session.sh platform --cell claude --ledger /tmp/ledger.json
+#   bash agents/retro-session.sh platform --cell goose  --ledger /tmp/ledger.json
 #   # harvest both reports into docs/agents/retros/, then:
-#   bash agents/retro-session.sh oracle --cell goose:deepseek/deepseek-v4-pro \
-#        --review docs/agents/retros/<date>-{{stack}}-r3-opus.md
+#   bash agents/retro-session.sh platform --cell goose --review docs/agents/retros/<date>-platform-r3-opus.md
+#
+# PLATFORM stack: each cell is ONE `POST /sessions` admission for role `retro` (agent-session.sh
+# under AGENT_GATEWAY=sessions; the harness narrows the walk to its dialect — the brief's --run
+# command is harness-literal), and the ride log carries the model the gateway SERVED (the helper's
+# `→ gateway(sessions): dispatch <model> [...]` line), which is what the harvest names the report
+# after. Two cells = two independent admissions: if the policy serves the same model twice, the
+# report names say so — nothing here forces them apart. The controlled two-model comparison is
+# given up (operator ruling 2026-11-01). Other stacks keep the old proxy: a bare harness rides its
+# transition model below; `<harness>:<model>` still pins one there (and is refused on platform —
+# the gateway owns the model).
 #
 # Templates: docs/agents/retros/BRIEF.md + CROSS-REVIEW.md (committed, versioned — the brief
 # IS the retro's spec; edit it there, never inline). This script only substitutes
 # placeholders and delegates the pod to agents/agent-session.sh (--harness/--model do the
 # axis composition; ADR-094 — the launcher owns dispatch, the LLM never assembles it).
 #
-# Hand-supervised by design (first runs doctrine). Guardrails the OPERATOR still owns:
+# Hand-supervised by design (first runs doctrine). Guardrails the OPERATOR still owns (old-proxy
+# path — a gateway cell holds no key and rides the gateway's admission):
 #   - key: HANDLED HERE since homelab#270 — an OpenRouter cell mints its OWN ephemeral capped
 #     OpenRouterKey below and rides that. Set RETRO_OPENROUTER_SECRET=<secret name> only to pin
 #     a pre-minted key (that is also how you deliberately re-select the fixer's standing key).
@@ -37,7 +48,7 @@ RETROS="$HERE/../docs/agents/retros"
 # so it has one home instead of two copies.
 . "$HERE/retro-project.sh"
 
-STACK="${1:?usage: retro-session <stack> --cell <harness>:<model> (--ledger <json> | --review <report.md>) [--deep-dive-k N]}"
+STACK="${1:?usage: retro-session <stack> --cell <harness>[:<model>] (--ledger <json> | --review <report.md>) [--deep-dive-k N]}"
 shift
 CELL="" LEDGER="" REVIEW="" K=8
 while [ $# -gt 0 ]; do case "$1" in
@@ -45,31 +56,66 @@ while [ $# -gt 0 ]; do case "$1" in
   --ledger)      LEDGER="$2"; shift 2;;
   --review)      REVIEW="$2"; shift 2;;
   --deep-dive-k) K="$2"; shift 2;;
+  --series)      SERIES="$2"; shift 2;;
   *) echo "unknown flag $1" >&2; exit 2;;
 esac; done
-[ -n "$CELL" ] || { echo "FATAL: --cell <harness>:<model> required (e.g. claude:opus, goose:deepseek/deepseek-v4-pro)" >&2; exit 2; }
-HARNESS="${CELL%%:*}"; MODEL="${CELL#*:}"
-# ── ADR-096 override rule: retro cell model = explicit override ──
-# The retro --cell flag is MANDATORY — every retro invocation supplies one.
-# The cell model is passed as BOTH --fallback and --model (explicit override):
-#   --fallback is the resolve-model.sh validation requirement (line 47) and
-#              the fail-OPEN literal when /route is unreachable
-#   --model    makes resolve-model.sh short-circuit before the /route call,
-#              so the cell rides EXACTLY its configured model
-# This ensures the A/B experiment axis is preserved: two cells with different
-# models ride EXACTLY their configured models, and the router cannot collapse
-# them onto one pool pick (G-A #775, fixed for retro in #861).
-# The old --fallback-only semantics (issue #782 wiring) let the router's
-# dispatch verdict override the cell model, silently destroying the experiment
-# axis.  The coordinator-session.sh caller uses the same pattern (line 106).
-# Override-rule home: docs/spikes/model-routing-history.md §M10 (the one stated home of the
-# ADR-096 override rule; cell = explicit override since #861/PR#864).
-MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "$CELL" --fallback "$MODEL" --model "$MODEL")"
+[ -n "$CELL" ] || { echo "FATAL: --cell <harness>[:<model>] required (e.g. claude, goose; off-platform also claude:opus)" >&2; exit 2; }
+# The SERIES (homelab#3140): unset = the stack's own loop retro (series name == stack; BRIEF.md,
+# `<stack>-rN` numbering). A named series rides the stack repo's `.agents/<series>.md` through the
+# SERIES-BRIEF.md pointer and numbers its reports `<series>-rN`. Validated as the pipeline does
+# (retro_pipeline.py --series) — it becomes a filename, a branch and a pushgateway label.
+SERIES="${SERIES:-$STACK}"
+[[ "$SERIES" =~ ^[a-z0-9-]+$ ]] || { echo "FATAL: --series '${SERIES}' must match [a-z0-9-]+" >&2; exit 2; }
+SERIES_BRIEF=""; [ "$SERIES" = "$STACK" ] || SERIES_BRIEF=1
+# A series' brief ends in a PR on the stack repo, so its ride carries `pr-open` on PATH (ADR-157:
+# the one way a ride opens a PR; agent-session.sh renders it for a --run ride on this flag).
+# >>>REPLAY:retro-series-identity>>>
+[ -z "$SERIES_BRIEF" ] || export AGENT_PR_OPEN=1
+# ...and that PR, plus the issues its brief files, need WRITE on the stack repo. The fleet-wide
+# read-only retro token (RETRO_GH_SECRET, retro-git.yaml) exists for the loop retro's cross-stack
+# deep-dives. A series reads only its own stack repo, so it drops that mount and keeps the broker:
+# the stack repo's worker token (agent-git-<repo>: contents/pull_requests/issues write), the same
+# identity the namespace's fixer rides hold (operator ruling 2026-11-07, homelab#3140).
+[ -z "$SERIES_BRIEF" ] || unset RETRO_GH_SECRET
+# <<<REPLAY:retro-series-identity<<<
+# >>>REPLAY:retro-cell-path>>>
+HARNESS="${CELL%%:*}"; MODEL=""
+case "$CELL" in *:*) MODEL="${CELL#*:}";; esac
+# Which path the cell rides: the PLATFORM stack admits through the agent-gateway (FU-270, the
+# platform-only flip — every other stack stays on the old proxy); the gateway owns the model, so a
+# platform cell that names one is a contradiction, refused before anything is assembled.
+RETRO_GW=""
+if [ "$STACK" = "platform" ]; then
+  if [ -n "$MODEL" ]; then
+    echo "FATAL: --cell ${CELL} names a model on the platform stack — the gateway serves the model for role retro (FU-270); pass the harness only (--cell ${HARNESS})" >&2
+    exit 2
+  fi
+  RETRO_GW=1
+fi
+# FU-270: transition fallback — the model a harness-only cell rides on the OLD proxy: an
+# off-platform stack, or a platform cell whose gateway admission was refused (rc 2/3). These are the
+# two cells the retro rode before the gateway (claude:opus, goose:deepseek/deepseek-v4-pro); the
+# table is deleted with the old proxy.
+retro_fallback_model() {
+  case "$1" in
+    claude) echo "opus";;
+    goose)  echo "deepseek/deepseek-v4-pro";;
+    *)      return 1;;
+  esac
+}
+if [ -z "$RETRO_GW" ] && [ -z "$MODEL" ]; then
+  MODEL="$(retro_fallback_model "$HARNESS")" \
+    || { echo "FATAL: harness '${HARNESS}' has no old-proxy transition model — pass --cell ${HARNESS}:<model>" >&2; exit 2; }
+fi
+# <<<REPLAY:retro-cell-path<<<
 retro_project "$STACK" || exit 2
 
-# Next run id from the harvested reports (rN numbering is per-stack).
-LAST=$(ls "$RETROS" 2>/dev/null | grep -oE "${STACK}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
+# Next run id from the harvested reports (rN numbering is per-SERIES; series == stack by default).
+LAST=$(ls "$RETROS" 2>/dev/null | grep -oE "${SERIES}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
 RUN_ID="r$(( ${LAST:-0} + 1 ))"
+# The transcript/task key: `retro-rN` for the stack's own retro (unchanged), `retro-<series>-rN`
+# for a named series, so two series on one stack never share a capture prefix (homelab#3140).
+TASK_KEY="retro-${SERIES_BRIEF:+${SERIES}-}${RUN_ID}"
 # >>>REPLAY:retro-window-run-id>>>
 # Published coverage advances independently of report-PR merge; the frozen run id wins.
 if [ -n "${LEDGER:-}" ]; then
@@ -118,6 +164,21 @@ t = t.replace("{{REPORT}}", open(report).read())
 open(out, "w").write(t)
 PY
   FIRST_MSG="Read /tmp/retro-brief.md and execute it exactly. Your final message must contain the complete review between the markers it specifies."
+elif [ -n "$SERIES_BRIEF" ]; then
+  # A named series (homelab#3140): the brief is the STACK repo's `.agents/<series>.md`, read by the
+  # ride in its own checkout; what travels is SERIES-BRIEF.md — the pointer plus the report
+  # contract the harvest reads. No ledger text, no harness excerpts: the series reads its own data.
+  [ -f "${LEDGER:-}" ] || { echo "FATAL: --ledger <frozen bundle> required (it freezes the run id; retro-argo.yaml's guard writes it)" >&2; exit 2; }
+  python3 - "$RETROS/SERIES-BRIEF.md" "$BRIEF" "$STACK" "$SERIES" "$RUN_ID" "$MAIN_REPO" <<'PY'
+import sys
+tpl, out, stack, series, run_id, repo = sys.argv[1:]
+t = open(tpl).read()
+t = t.split("-->", 1)[1].lstrip()  # strip the template header comment
+for a, b in [("{{STACK}}", stack), ("{{SERIES}}", series), ("{{RUN_ID}}", run_id), ("{{MAIN_REPO}}", repo)]:
+    t = t.replace(a, b)
+open(out, "w").write(t)
+PY
+  FIRST_MSG="Read /tmp/retro-brief.md and execute it exactly. Your final message must contain the complete report between the markers it specifies."
 else
   [ -f "${LEDGER:-}" ] || { echo "FATAL: --ledger <pain-ranked json> required for the retro leg (assemble from the FU-057 ledger)" >&2; exit 2; }
   python3 - "$RETROS/BRIEF.md" "$BRIEF" "$STACK" "$RUN_ID" "$MAIN_REPO" "$LEDGER" "$K" "$HARNESS_SRC" <<'PY'
@@ -160,8 +221,43 @@ if ! argv_guard "the retro --run payload for ${STACK} ${RUN_ID} (brief ${BRIEF})
 fi
 # <<<REPLAY:retro-payload-ceiling<<<
 
+# ── The gateway cell (FU-270, platform only) ─────────────────────────────────────────────────────
+# ONE admission for role `retro` through agent-session.sh's gateway-sessions block (the shared
+# helper agents/gateway-admit.sh — no second copy of admission here): no --model (the gateway's),
+# --harness explicit (the --run above is harness-literal, so the walk is narrowed to its dialect),
+# no key (the gateway holds the credentials). The ride log's `→ gateway(sessions): dispatch <model>`
+# line is the served-model record the harvest names the report after. The caller is THIS pod's
+# projected ServiceAccount token (retro-argo.yaml's gateway-token volume; agent-coordinator).
+# A defer exits like any other failed hand-off (the cell fails, its sibling + harvest still run);
+# FU-270: transition fallback — a refusal before any request or a fail-closed admission comes back
+# as exit 75 (AGENT_GATEWAY_FALLBACK_EXIT; agent-session.sh printed the loud line) and the cell
+# rides the old proxy below on its transition model.
+# >>>REPLAY:retro-gateway-cell>>>
+if [ -n "$RETRO_GW" ]; then
+  echo "→ ${STACK} ${RUN_ID} cell ${HARNESS} (role retro — the gateway serves the model) — brief $BRIEF ($(wc -c <"$BRIEF") bytes)"
+  echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${SERIES}-${RUN_ID}-<served model>.md via PR"
+  _gw_rc=0
+  AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=retro AGENT_GATEWAY_FALLBACK_EXIT=75 \
+    bash "$HERE/agent-session.sh" "$PROJECT" \
+      --harness "$HARNESS" \
+      --task "${TASK_KEY}${REVIEW:+-xrev}" \
+      --run "$RUN" || _gw_rc=$?
+  [ "$_gw_rc" -eq 75 ] || exit "$_gw_rc"
+  MODEL="$(retro_fallback_model "$HARNESS")" \
+    || { echo "FATAL: harness '${HARNESS}' has no old-proxy transition model — the refused gateway cell cannot fall back" >&2; exit 1; }
+fi
+# <<<REPLAY:retro-gateway-cell<<<
+
+# ── The old-proxy cell (off-platform stacks; FU-270: transition fallback on platform) ────────────
+# ADR-096 override rule: retro cell model = explicit override. The cell model is passed as BOTH
+# --fallback and --model: --fallback is resolve-model.sh's validation requirement and the fail-OPEN
+# literal when /route is unreachable; --model makes resolve-model.sh short-circuit before the /route
+# call, so the cell rides EXACTLY its configured model and the router cannot collapse two cells onto
+# one pool pick (G-A #775, fixed for retro in #861). Override-rule home:
+# docs/spikes/model-routing-history.md §M10.
+MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "${HARNESS}:${MODEL}" --fallback "$MODEL" --model "$MODEL")"
 echo "→ ${STACK} ${RUN_ID} cell ${HARNESS}:${MODEL} — brief $BRIEF ($(wc -c <"$BRIEF") bytes)"
-echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${STACK}-${RUN_ID}-<model>.md via PR"
+echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${SERIES}-${RUN_ID}-<model>.md via PR"
 
 # ── The cell's OWN capped key (homelab#270, the second half of #248 finding 1) ──────────────────
 # A retro ride is not a fixer round and must not draw on the fixer's cap. The empty default used to
@@ -297,6 +393,6 @@ EXTRA=()
 [ -n "${RETRO_OPENROUTER_SECRET:-}" ] && EXTRA+=(--openrouter-secret "$RETRO_OPENROUTER_SECRET")
 exec bash "$HERE/agent-session.sh" "$PROJECT" \
   --harness "$HARNESS" --model "$MODEL" \
-  --task "retro-${RUN_ID}${REVIEW:+-xrev}" \
+  --task "${TASK_KEY}${REVIEW:+-xrev}" \
   "${EXTRA[@]}" \
   --run "$RUN"

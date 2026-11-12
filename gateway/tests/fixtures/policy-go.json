@@ -1,5 +1,5 @@
 {
-  "_comment": "The `policy-go` world — `policy-default` plus the Go account headroom (specs/worlds/README.md), for the GW-SESSIONS-ADMIT §Capacity Go headroom rows ONLY. `rails.opencode.headroom` = 120 s freshness, 0.95 ceiling, the three named windows (`rolling` / `weekly` / `monthly`), 30 s poll — fixture values, not production policy (⚖ GW-SESSIONS-ADMIT). The DEPLOYED policy declares no headroom block yet (Goal #3118 post-launch leg), so `policy-default` admits the Go rail as before. The window names are the vendor's (GET /zen/go/v1/usage, probed 2026-11-01). Everything else is `policy-default`.",
+  "_comment": "The `policy-go` world — `policy-default` plus the Go account headroom (specs/worlds/README.md), for the GW-SESSIONS-CAPACITY Go account headroom rows ONLY. `rails.opencode.headroom` = 120 s freshness, 0.95 ceiling, the three named windows (`rolling` / `weekly` / `monthly`), 30 s poll — fixture values, not production policy (⚖ GW-SESSIONS-CAPACITY). The DEPLOYED policy declares no headroom block yet (Goal #3118 post-launch leg), so `policy-default` admits the Go rail as before. The window names are the vendor's (GET /zen/go/v1/usage, probed 2026-11-01). Everything else is `policy-default`.",
   "stacks": {
     "platform": {
       "loop_ns": "platform-agents",

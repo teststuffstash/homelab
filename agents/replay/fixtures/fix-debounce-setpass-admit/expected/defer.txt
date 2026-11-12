@@ -1,0 +1,4 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"coordinator","task":"fix-debounce-set:homelab#11,agent-runtime#12","round":0}
+OUT set-pass DEFERRED — the gateway deferred [subscription-sessions-full]; pending set stays, backstop/next bell retries
+ERR → gateway(sessions): defer — [subscription-sessions-full] retry_after=120s — not dispatching (task=fix-debounce-set:homelab#11,agent-runtime#12, round=0).
+RC 0

@@ -17,6 +17,9 @@ from pathlib import Path
 
 RAILS = ("anthropic", "openrouter", "opencode", "codex")
 TIERS = ("light", "standard", "heavy")
+# GW-SESSIONS-ADMIT §The preferred end of the list: which end of a rail's ordered tier list the walk
+# starts from — the schema's `$defs.prefer` enum; the first is the default.
+PREFERENCES = ("cheapest", "strongest")
 HARNESSES = ("claude", "opencode", "goose", "codex")
 ROLES = ("worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher")
 DIALECTS = ("anthropic", "openai", "responses")
@@ -60,12 +63,13 @@ UPSTREAM_DEFAULTS = {
 # read (models.dev's api.json — the vendor's own registry, public) overlaid by the `config` read
 # (the console's V2 config: the workspace's overrides, the Go key reads it — since 2026-10-20 it
 # carries ONLY the overrides); the `docs` source = the vendor's Go page source on its default
-# branch (unauthenticated; the path moved once, on 2026-10-12 — a move is a fetch failure, and
+# branch (unauthenticated; the path has moved twice — 2026-10-12, and 2026-11-06 when the vendor
+# moved the page to services/site (commit 9ced0469b); a move is a fetch failure, and
 # GoCatalogStale names it).
 GO_CATALOG_URLS = {
     "catalog": "https://models.dev/api.json",
     "config": "https://opencode.ai/console/api/v2/config",
-    "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx",
+    "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx",
 }
 GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start unless the store's snapshot is younger
 
@@ -158,7 +162,7 @@ class WindowDraw:
 
 @dataclass(frozen=True)
 class AdmissionPolicy:
-    """`rails.<rail>.admission` — the ladder's capacity half (GW-SESSIONS-ADMIT). Every value is
+    """`rails.<rail>.admission` — the ladder's capacity half (GW-SESSIONS-CAPACITY). Every value is
     policy data with its ⚖ source in the spec row; an absent key = that check is off for the rail."""
     utilization_thresholds: dict[str, float] = field(default_factory=dict)  # subscription window -> fraction (0 = off)
     reading_stale_s: float | None = None  # a window reading older than this is no reading
@@ -171,7 +175,7 @@ class AdmissionPolicy:
 
 @dataclass(frozen=True)
 class HeadroomPolicy:
-    """An account-headroom admission (GW-CODEX-HEADROOM; the Go rail's twin, GW-SESSIONS-ADMIT §Capacity):
+    """An account-headroom admission (GW-CODEX-HEADROOM; the Go rail's twin, GW-SESSIONS-CAPACITY §Go account headroom):
     an observation older than `max_age_s` is stale; a window at or above `ceiling` (0–1) is limited;
     `windows` is the window profile every observation must carry exactly (the fixture profile, not a
     discovered entitlement), read from each window's `window_key` field — the span in minutes on codex,
@@ -691,7 +695,7 @@ class Policy:
                 raise PolicyError(f"policy: unknown rail {name!r} (known: {', '.join(RAILS)})")
             models: dict[str, tuple[str, ...]] = {}
             for tier, model in (r.get("models") or {}).items():
-                # GW-SESSIONS-ADMIT: a tier names an ORDERED list of models (the walk's fallback order);
+                # GW-SESSIONS-RETRY: a tier names an ORDERED list of models (the walk's fallback order);
                 # a bare string is the one-item list (backward compatible).
                 ids = [model] if isinstance(model, str) else model
                 if (tier not in TIERS or not isinstance(ids, list) or not ids
@@ -784,7 +788,7 @@ class Settings:
     # NO default — like CODEX_UPSTREAM it names a vendor profile (the native backend's usage path);
     # unset = no poll, the rail stays `quota-unknown` (fail closed).
     codex_usage_url: str = ""
-    # GW-SESSIONS-ADMIT §Capacity: the Go account usage endpoint the gateway polls with its own Go key
+    # GW-SESSIONS-CAPACITY §Go account headroom: the Go account usage endpoint the gateway polls with its own Go key
     # (`OPENCODE_GO_API_KEY`). The same rule: NO default — unset = no poll, the Go rail with a headroom block
     # stays `quota-unknown` (fail closed).
     opencode_usage_url: str = ""

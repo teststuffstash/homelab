@@ -1,0 +1,10 @@
+OUT GW_SESSIONS='' MODEL='sonnet' MODEL_RAIL='' GO_SERVED=0
+OUT AGENT_ROUTER='' _router_adopted='' GW_PULL_PRELUDE set: no
+OUT LABEL:
+OUT POD LLM ENV:
+OUT         - name: ANTHROPIC_BASE_URL
+OUT           value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+OUT         - name: ANTHROPIC_AUTH_TOKEN
+OUT           value: "ref:agent-coordinator/coordinator-claude"
+OUT MOUNT:none VOLUME:none
+RC 0

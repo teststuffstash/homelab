@@ -142,6 +142,11 @@ WIN_NODE=""
 CONSEQUENCE_ALERTS="${MAINT_CONSEQUENCE_ALERTS:-NodeRebooted,PodSigkilled,KubeNodeNotReady,CiliumUnreachableNodes,CronJobNotSucceeding}"
 WATCH_TICK="${MAINT_WATCH_TICK:-45}"    # s between watch reads
 WATCH_BLIND="${MAINT_WATCH_BLIND:-3}"   # consecutive failed/empty reads before the watch says BLIND
+# Hard bound (s) on one `kubectl exec` into a cilium agent. An agent on a node whose kubelet
+# accepts the connection but never answers (memory thrash, #3107) holds the exec open forever;
+# `--request-timeout` does not bound a streaming exec, so the bound is `timeout`. A timed-out exec
+# is an exec that did not answer — `unknown`, the existing three-way split's "could not tell".
+EXEC_TO="${MAINT_EXEC_TIMEOUT:-20}"
 
 # EVERY read distinguishes "queried and found nothing" from "the query failed" — and returns
 # non-zero for the latter. Caught in review (#1804): the first cut piped `curl … 2>/dev/null` into
@@ -219,7 +224,7 @@ cilium_backends() {
   for p in $pods; do
     ok=0; out=""
     for _ in 1 2; do
-      if out="$(kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
+      if out="$(timeout -k 5 "$EXEC_TO" kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
          && [ -n "$out" ]; then ok=1; break; fi
       sleep 1
     done

@@ -1,0 +1,15 @@
+# stale-armed-retry/rerun-refused (ADR-162) — GitHub refuses the re-run of #3233's dead `ci`: one REFUSED report
+# line, NO event line (the retry bound counts re-runs that happened, not attempts). #3237 is unaffected.
+name: stale-armed-retry-rerun-refused
+mode: actions
+source: agents/coordinator-scan.sh
+world: homelab-dead-runs-3233-3237
+parts:
+  - file:../bridge.sh
+  - block:stale-armed-retry
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-10T19:15:00Z
+  - STUB_GH_run_rerun_42604863565=fail

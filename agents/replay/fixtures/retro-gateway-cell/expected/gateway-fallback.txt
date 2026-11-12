@@ -1,0 +1,5 @@
+CALL bash agents/agent-session.sh openrouter-operator --harness {{h}} --task retro-r10 --run claude -p 'Read /tmp/retro-brief.md' [AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=retro AGENT_GATEWAY_FALLBACK_EXIT=75]
+OUT → platform r10 cell {{h}} (role retro — the gateway serves the model) — brief $ROOT/agents/replay/fixtures/retro-gateway-cell/brief.md (6 bytes)
+OUT → harvest: report goes to docs/agents/retros/2026-11-02-platform-r10-<served model>.md via PR
+OUT OLD-PROXY PATH: --harness {{h}} --model {{m}} (gateway attempted: 1)
+RC 0

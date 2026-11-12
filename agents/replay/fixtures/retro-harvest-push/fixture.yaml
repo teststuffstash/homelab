@@ -17,6 +17,8 @@ parts:
   - file:post.sh
 env:
   - STACK=platform
+  # the PR title names the SERIES (homelab#3140); == the stack for its own retro
+  - SERIES=platform
   - RUN=r7
   - N=2
   - BR=retro/2026-10-05-platform-r7

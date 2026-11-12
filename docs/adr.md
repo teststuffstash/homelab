@@ -2750,7 +2750,7 @@ nothing, which only a heartbeat sees and only an actor outside Argo can answer. 
 so an app-major is the lens's CHANGES_REQUESTED, never an auto-merge; a CRD-carrying chart sync is a
 control-plane memory event (FU-304, GOMEMLIMIT); the receiver is chart-agnostic but argo-workflows is its
 only consumer until a second chart earns the same evidence. Design: [`designs/fu-1990-workflow-pin-revert.md`](designs/fu-1990-workflow-pin-revert.md)
-§Part 4. Tracked: [`dependency-upgrades.md`](dependency-upgrades.md) §Next steps 9.
+§Part 4. Tracked: [`dependency-upgrades.md`](dependency-upgrades.md) §Last proven end to end (the `chart-revert` row).
 **Amended 2026-10-06 (ADR-150):** the "management box as actor — rejected, no PR-writing credential" line is
 REVERSED for one class: the box becomes the revert actor for ⚓ upgrade LEASES (commit-confirm on a
 deadline), never for alerts — `homelab-sentinel` gains `contents: write` + `pull_requests: write` on homelab
@@ -2917,6 +2917,14 @@ weigh (rows vs intent, evidence at head), on a deliberately small surface. **Con
 every homelab PR now waits ≤ one tick for a second bot approval; the goal/** twin stays at 1;
 a dead specs-review plane stalls homelab merges (the exit contract + a missing-approval alert
 are the belts); adoption by another island = install the App + `required_approvals = 2` there.
+**Amended 2026-11-01 (oracle handoff, goal oracle-fleet#950): the goal/** twin carries the SAME
+count as master.** At 1, every specs-touching child (#967/#968/#973) merged into `goal/950-…`
+1–2 min before its specs verdict — the code approval alone satisfied the twin and auto-merge
+fired — so the assembly PR (#977) absorbed the whole specs gate as one oversized pack (four
+rounds, a partial read). The "serialise the fan-out" reason was written for the human codeowner
+read the 2026-08-06 split kept off the children; this gate is a bot tick (edge-rung after the
+code approval, mechanical on a child with no specs path). `tofu/github/repo_rulesets.tf`
+(`required_approval_goal` reads `required_approvals`); the apply is the operator's (admin token).
 
 ### ADR-156 — One portable spec/evidence process, homed in allure-behavior-snippets; one reviewer runs two briefs (2026-10-16)
 **Status:** Accepted (operator, 2026-10-16: "every repo gets the same tests/evidence/requirements
@@ -2976,3 +2984,104 @@ upgrade cadence to any stack; one minor bounds how much untested-in-prod surface
 **Consequences:** sleep-tracking's equality comment is replaced by a pointer to the rule;
 oracle-fleet's e2e Grafana/Postgres pins (behind prod) are queued for the bump plus Renovate over
 its test manifests.
+
+### ADR-159 — ARC runner memory: a static limit per runner class, no resize controller (2026-11-02)
+**Status:** Accepted (operator, 2026-11-01 the static classes; 2026-11-02 the resize-controller
+question closed on them).
+**Decision:** every ARC runner pod carries a static memory limit set by its class — `normal`
+(runner 3Gi + dind 1Gi) and `large` (12Gi request == limit, nx-01, max 2); self-sizing tools read
+`memory.max` for their budget. No controller budgets nx-01's spare memory onto CI pods, and rides
+get no reserve or PriorityClass until a pending ride is observed. Mechanism, harvest and numbers:
+[`spikes/arc-runner-memory-budget.md`](spikes/arc-runner-memory-budget.md).
+**Considered:** option A, a controller patching `pods/resize` after binding (spiked PR#2185, the
+mechanism holds — rejected: the 20-day CI harvest shows every recurring job but oracle-fleet `ci`
+under 2.7 GiB, and that one grows to fill whatever host it lands on — a speed class, not a need;
+nx-01's 12 free DIMM slots retire the spare-memory question more cheaply than machinery); option
+B, kata runners sized by their limits (rejected: the job sees base + limits so `-n auto` still
+over-sizes, a memory kill reads `Error` not `OOMKilled`, an 8 GB laptop yields ~2.6 GiB); moving
+CI off the 8 GB nodes (the recurring pressure FU-218 existed to refute — the suite fits once
+workers are bounded, oracle-fleet#783).
+**Why:** an unlimited runner thrashed wk-metal-03 NotReady for ~4 h (#3107) without a single OOM
+kill; a limit the job can read is the budget, and overlapping big jobs happen 0.9 % of the time.
+**Consequences:** oracle-fleet `ci` rides `large`; a coincident ride + CI peak leaves a pod Pending
+until capacity frees (visible via `CiDispatchStalled`), accepted as rare; the lever if pending
+rides appear is a PriorityClass ranking rides above retryable CI. FU-218 archived; the spike is
+the record.
+
+### ADR-160 — A stack island's intake facts live in the stack repo; the platform owns only the launch mechanics (2026-11-07)
+**Status:** Accepted (operator, 2026-11-07, on oracle's request to be the second intake island).
+**Decision:** island intake keeps ONE rules home (`gateway/intake.md`). A STACK island's facts, read
+set and unit split (oracle-fleet: its tracks and `docs/process/read-map.yaml`) live in the stack repo
+and are the stack seat's to maintain. Only the general mechanics are platform machinery: when an
+intake sitting launches, its selector source, the outcome grammar. Platform islands keep
+`docs/intake/<island>.md`. Mechanism and open questions:
+[`spikes/island-intake.md`](spikes/island-intake.md) §Open questions 5.
+**Considered:** a homelab `docs/intake/oracle.md` (rejected: oracle's tracks concept predates and
+outruns homelab's island split, so a homelab copy would be the stale one).
+**Why:** one home per fact. The stack owns the knowledge of its own units; the platform owns when a
+sitting starts.
+**Consequences:** the oracle seat writes its facts and read-unit rule in oracle-fleet. Homelab's
+selector and launcher gain a stack-island source when the first stack sitting is wired (FU-320). The
+island/track terms overlap and need rework; that rework is not this ADR.
+
+### ADR-161 — Every rebuildable cache gets oversized storage, an automatic limit, and a sizing signal (2026-11-08)
+**Status:** Accepted (operator, 2026-11-08, after #3216). **Decision:** a rebuildable cache (ADR-080)
+carries all three from the day it exists: **(1)** storage sized to a multiple of its measured working
+set, **(2)** an automatic limit that runs unattended and bounds the cache whatever the workload does,
+and **(3)** a signal when that limit fires regularly. Growing the storage is always the first response;
+a limit that fires regularly means grow again, never tighten it. Application per cache:
+[`storage-ledger.md`](storage-ledger.md) §Rebuildable caches.
+**Considered:** growing alone (rejected: headroom sets how rarely cleanup runs, it does not replace it;
+ci-runner-01's disk went from 33 to 17 GB free baseline in two weeks with nothing to stop it); a tight
+limit on undersized storage (rejected: each cleanup costs a day of slow builds while the cache
+re-warms, homelab#116); replacing long-lived hosts on a schedule instead (rejected: a replace is an
+attended CI-capacity window, FU-306, and it discards the whole warm cache).
+**Why:** the limits that exist were each added after a failure, one surface at a time, and the rule
+was only ever written down for the registry mirrors. Surfaces where the runtime offers no default
+limit (plain dockerd, single-user nix) were left with none.
+**Consequences:** a new cache's PR states all three or says why one does not apply. The `ci-runner`
+VMs and `nix-cache` are brought into line by their own PRs; the remaining gaps are listed in the
+ledger section.
+
+### ADR-162 — A dead workflow run is retried by the scan; a ride that changes nothing ends on a human (2026-11-10)
+**Status:** Accepted (operator, 2026-11-10, after homelab#3233/#3237 sat armed a day with no actor).
+**Decision:** the merge path gets a floor that is keyed on *what did not happen*, under the
+per-state lanes: **(1)** the deterministic scan re-runs a workflow run at an armed PR's head that
+**died rather than failed** — a concluded run in which no step failed — or, for a `startup_failure`
+(which GitHub will not re-run), re-fires its `labeled` event; at most three times per head, one event line each (**CI infra-death retry**); **(2)** an
+`unarmed-major` ride whose dispatch marker is a day old over an unchanged state fingerprint is read
+as "changed nothing" and the PR gets `agent/arbitrate` (**no-op terminal**); **(3)** that unit names
+its class (`bump-class=`) to the session; **(4)** an armed `automerge` bump with no activity for a
+day is **stale** and gets that unit's ride, red or not. Mechanism: [`agents/merge-path.md`](agents/merge-path.md)
+§Dead runs and no-op rides.
+**Considered:** one more state→owner row per stall (rejected: #1896, FU-046, G12b are that series,
+and each new flake shape is a state nobody listed); moving the mechanical approve into the review
+reflex (rejected for now: it fixes one event reader, the retry covers every lost event); blind
+re-runs of every red (rejected: a failed step is a verdict, and a re-run re-arms the `ci-red`
+fingerprint — it buys rides, not merges); a stale ride over EVERY armed PR (rejected for now: a worker's or the seat's
+armed PR already has `ci-red` / `changes-requested` / the reflex / a codeowner park as its owner, and
+a second ride on it is a collision; the mechanical lane has no such owner and no legitimate slow state).
+**Why:** approval and checks are event-fired, so one lost GitHub event parks an armed PR for good,
+and every such park landed on the operator. A death is distinguishable from a red without a model.
+**Consequences:** a run that keeps dying is reported as EXHAUSTED — the runner or the workflow is the
+subject, never the diff. A flaky *step* on a mechanical bump reaches the stale ride after a day, not sooner. A
+stale armed `deps-review`, worker or seat PR is still its own lane's; widen (4) on evidence, per class.
+
+### ADR-163 — Island intake may close and rewrite issues under the operator's login, weighted by age (2026-11-11)
+**Status:** Accepted (operator, 2026-11-11: "if I don't like it I can always push to master").
+**Decision:** an [island intake](glossary.md) sitting may close, fold and rewrite an issue filed
+under the operator's login, weighted by age: old and stale, a free hand on the evidence; recent,
+light editing only, and a would-be close is `seat`. Any other human's issue stays `seat`. Every such
+write is reversible from the comment and edit history. Re-reading the waits an earlier ruling left
+(`agent/blocked`, `intake: seat`) is part of the sitting. Mechanism:
+[`gateway/intake.md`](../gateway/intake.md) §Hard limits and procedure step R; evidence:
+[`spikes/island-intake.md`](spikes/island-intake.md) §Run 3.
+**Considered:** keeping "never close a human-filed issue" (rejected: 18 of 28 gateway issues are
+under the operator's login but nearly all were written by jail sessions, so most of the pile could
+only end as `seat`, and seat rulings then sat for weeks); a separate author marker for
+session-filed issues (rejected for now: a new reader).
+**Why:** the author field does not say who wrote the text, and age is the available signal for how
+much the operator still holds an issue's wording. A wait is a claim about one fact, and nothing
+re-tested it: 3 of 4 rulings a fresh read changed were re-reads of earlier waits.
+**Consequences:** the sitting's token closes and edits issues it previously only commented on. The
+daily cron reads the issue pile and its waits (FU-320). A wrong close is undone by reopening.

@@ -40,7 +40,7 @@
       "models": {
         "light": "claude/haiku",
         "standard": "claude/sonnet",
-        "heavy": ["claude/sonnet", "claude/opus"]
+        "heavy": ["claude/sonnet", "claude/opus", "claude/fable"]
       }
     },
     "opencode": {

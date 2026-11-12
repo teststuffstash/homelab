@@ -1,0 +1,31 @@
+# research-gateway-arms — FU-270: the research fan-out's arms admit through the agent-gateway on
+# the PLATFORM stack (operator ruling 2026-11-01: the researcher stops naming models — the gateway
+# picks per role/tier, the fan-out records the model each admission SERVED; the controlled
+# comparison is given up).
+#
+# THE CONTRACT. STACK=platform: no draw — each arm is ONE agent-session.sh hand-off under
+# `AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=researcher`, task `research-<issue>-arm<slot>`, the
+# recipe, NO --model / --harness / key (the admission itself is agent-session.sh's gateway-sessions
+# block over agents/gateway-admit.sh — pinned there, never re-copied here), the jail's caller SA
+# defaulting to the platform dispatcher (platform-agents/agentstack-loop), and
+# `AGENT_GATEWAY_FALLBACK_EXIT=75`. The closing arm table names each arm's SERVED model from its own
+# log (the helper's `→ gateway(sessions): dispatch <model> [` line) — two arms served one model are
+# both shown, never forced apart. FU-270 transition fallback: an arm exiting 75 re-runs as a ONE-ARM
+# old-path fan-out on its slot (`RESEARCH_GATEWAY=0 … --arms 1 --start-slot <slot>`), and the table
+# names the model that draw rode; a defer (exit 1) is the arm's terminal, named by its reason.
+# --dry-run draws nothing. Any other stack (and the fallback's own re-entry) falls through to the draw.
+#
+# Seams: `bash` (the two hand-offs, recorded with the gateway env they carry; each answers the
+# row's recorded arm output + exit from rows/<id>/vars.sh), `sleep` (= wait for the previous arm, so
+# the concurrent arms record in slot order), `mktemp` (a fixed arm-log dir under the row).
+name: research-gateway-arms
+mode: table
+source: agents/research-fanout.sh
+parts:
+  - file:bridge.sh
+  - block:research-gateway-arms
+  - file:post.sh
+env:
+  - STACK=platform
+  - DRY=0
+rows: rows.psv

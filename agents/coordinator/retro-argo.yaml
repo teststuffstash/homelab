@@ -3,9 +3,12 @@
 # the hand-fired runs proved clean — Mondays 05:00 UTC on its own. Manual fire stays available:
 #   argo -n agent-coordinator submit --from cronworkflow/retro-session
 #
-# Shape (run-3, docs/agents/retros/BRIEF.md is the spec): guard → assemble → cell A (claude+opus,
-# subscription, FU-088 semaphore) → cell B (goose+API model) → harvest→PR. Sequential cells: the
-# claude cell holds a subscription slot and both cells hold the stack's fixer WIP slot (the P3
+# Shape (run-3, docs/agents/retros/BRIEF.md is the spec): guard → assemble → cell A (claude
+# harness) → cell B (goose harness) → harvest→PR. A cell is a HARNESS; on the platform stack each
+# cell is ONE agent-gateway admission for role `retro` and the gateway serves the model (FU-270,
+# operator ruling 2026-11-01 — the controlled two-model comparison is given up); the harvest names
+# each report after the model its session was SERVED. Sequential cells: the claude cell may hold a
+# subscription slot and both cells hold the stack's fixer WIP slot (the P3
 # outside-the-fixer-ns placement is future work) — the guard refuses to run while the fixer queue
 # is busy. Cross-review legs stay MANUAL for v1 (agents/retro-session.sh --review) — run them from
 # the harvested PR. Reports land via PR (human-gated); the workflow never merges its own output.
@@ -19,6 +22,629 @@
 # filter and its findings target platform artifacts, so the lane is fleet-wide despite being
 # born as the oracle retro. oracle/sleep stay selectable via `stack` — the mapping lives in
 # agents/retro-project.sh, sourced by both this guard and agents/retro-session.sh.
+#
+# ONE WorkflowTemplate, N CronWorkflows (homelab#3140, 2026-11-02): the template below is the
+# whole run; each CronWorkflow after it is ONE SERIES — a (stack, series) pair with its own slot
+# and parameters. `series` empty = the stack's own loop retro (ADR-146); a named series rides the
+# same guard → cells → harvest with its own brief, guard and state (`_retro/<series>/`). The first
+# named series is oracle's feedback-triage (#3140). The publication mutex is shared, so two series
+# never harvest at once.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: retro-session
+  namespace: agent-coordinator
+spec:
+  serviceAccountName: agent-coordinator
+  synchronization:
+    mutexes:
+      - { name: retro-session-publication }
+  # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate (coordinate-argo.yaml — was `coordinate`, ADR-120)
+  # (coordinate-argo.yaml). Verbatim copy; keep in sync.
+  # homelab#867 soft Longhorn-disk de-preference — same rationale.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 10
+            preference:
+              matchExpressions:
+                - key: node.longhorn.io/create-default-disk
+                  operator: NotIn
+                  values:
+                    - "true"
+  activeDeadlineSeconds: 7200 # two rides + harvest; a stuck ride dies with the workflow
+  ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 259200 }
+  entrypoint: main
+  arguments:
+    parameters:
+      - { name: stack, value: "platform" }
+      # The two cells' HARNESSES — never models (FU-270, operator ruling 2026-11-01: the gateway
+      # picks the model per role/tier and the report records the one it served). The harness
+      # stays a choice because retro-session.sh's ride command is harness-literal (`claude -p` /
+      # `goose run`), so it narrows each admission to its dialect. Off-platform stacks (and a
+      # refused platform admission — FU-270: transition fallback) ride the old proxy on the
+      # harness's transition model in retro-session.sh (claude → opus, goose → deepseek-v4-pro).
+      - { name: harnessA, value: "claude" }
+      # Empty harnessB = a SINGLE-cell series (homelab#3140): cell-b runs as a no-op and the harvest
+      # reads one leg — for a series whose output is ONE PR (two cells would open two). The default
+      # keeps the two-cell retro.
+      - { name: harnessB, value: "goose" }
+      # The SERIES (homelab#3140). Empty = the stack's own loop retro — series name == stack, every
+      # existing path unchanged. A named series (e.g. feedback-triage) keeps its own state under
+      # `_retro/<series>/`, its own report numbering (`<series>-rN`), its own brief — the stack
+      # repo's `.agents/<series>.md`, pointed at by docs/agents/retros/SERIES-BRIEF.md — and its
+      # own guard (guardExpr below).
+      - { name: series, value: "" }
+      # The series' guard as a PromQL instant query (homelab#3140). Empty = the ledger guard
+      # (minWindowTasks). Set: the guard step queries Prometheus — a result > 0 FIRES the series,
+      # == 0 is a QUIET week (the outcome=quiet push, nothing rides), an EMPTY result or an error
+      # FAILS the run (an absent gauge is a broken exporter, never a quiet week). The ledger is
+      # not read for such a series; retro_pipeline.py prepares a ledger-less bundle.
+      - { name: guardExpr, value: "" }
+      # A basic-auth Secret (keys username/password) in the RIDE namespace, delivered to the cell
+      # as PGUSER/PGPASSWORD (homelab#3140). Empty = nothing rendered. The value never crosses a
+      # namespace: the launcher renders secretKeyRefs the pod resolves in-ns (the RETRO_GH_SECRET
+      # shape, agent-session.sh).
+      - { name: cellPgSecret, value: "" }
+      # A PRE-MINTED OpenRouterKey Secret to pin for the API cell (old-proxy path only). Empty (the default) no longer
+      # means "spend the stack's fixer budget key" — since homelab#270 retro-session.sh mints the
+      # cell its OWN ephemeral xs/$0.50 key (the xs ENFORCED cap since PR#1650) and refuses the ride if it can't. Set this only to
+      # override that (e.g. a hand-minted key with a different cap).
+      - { name: retroKeySecret, value: "" }
+      # Level-trigger per WINDOW (was a ledger-growth count since the newest report FILE): the
+      # guard refuses a window whose ledger holds fewer tasks than this; refused windows are not
+      # published, so their evidence rolls into the next Monday's window.
+      - { name: minWindowTasks, value: "8" }
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: guard
+            template: guard
+          # continueOn (homelab#248): a cell now FAILS itself when it produced no report, and a
+          # dead cell must not take its SIBLING's report down with it — run 3 kept cell-a's
+          # report only because the dead cell-b happened to exit 0. The task node still goes
+          # Failed, cell-b and the harvest still run, and a surviving report still lands via PR.
+          # The DEAD-cell notice in that PR's body is the belt that does not depend on Argo's
+          # continueOn status roll-up: the PR is the surface a human is guaranteed to read.
+          #
+          # BOTH phases, not just failed (homelab#268, harvested from PR#267's review). Argo
+          # splits a dead node in two: a step whose CONTAINER exits non-zero is Failed, while a
+          # step whose POD never got to report one — OOMKilled, evicted, node lost, image pull
+          # gone — is Error. `continueOn` matches them separately, so `failed: true` alone left
+          # the exact silent-loss shape #248 closed, reachable through the other door: an
+          # OOMKilled cell-a still held cell-b and the harvest on this edge, and the surviving
+          # report died with the DAG. These two cells ride ephemeral TAINTED metal nodes
+          # (wk-metal-0*, 8GB, evictable), where Error is not the exotic branch — it is the one
+          # the hardware picks. Widened rather than made unconditional: `dependencies` on a
+          # SKIPPED/omitted node keeps its normal meaning, and the guard's refusal must still
+          # stop the run (it has no continueOn, by design).
+          - name: cell-a
+            when: "{{tasks.guard.outputs.parameters.quiet}} == false"
+            template: retro-cell
+            dependencies: [guard]
+            continueOn: { failed: true, error: true }
+            arguments:
+              parameters:
+                - { name: cell, value: "{{workflow.parameters.harnessA}}" }
+                - { name: subscription, value: "1" }
+              artifacts:
+                - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
+          - name: cell-b
+            when: "{{tasks.guard.outputs.parameters.quiet}} == false"
+            template: retro-cell
+            dependencies: [cell-a]
+            continueOn: { failed: true, error: true }
+            arguments:
+              parameters:
+                - { name: cell, value: "{{workflow.parameters.harnessB}}" }
+                - { name: subscription, value: "0" }
+              artifacts:
+                - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
+          - name: harvest
+            when: "{{tasks.guard.outputs.parameters.quiet}} == false"
+            template: harvest
+            dependencies: [cell-a, cell-b]
+            arguments:
+              # optional (homelab#248): a cell that dies BEFORE the tee never writes its log, and
+              # with continueOn above the harvest now runs anyway — an unresolvable artifact must
+              # not wedge it. The step's own loop already handles a missing/markerless log (WARN,
+              # then the N=0 refusal), which is the honest place for that decision.
+              # An ERRORED cell (homelab#268) is the strongest form of that case: the pod died
+              # before writing anything, so the artifact is not merely markerless — the path is
+              # never staged into this step at all. Pinned by fixtures/retro-harvest-cell-errored.
+              artifacts:
+                - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
+                - { name: log-a, from: "{{tasks.cell-a.outputs.artifacts.ride-log}}", optional: true }
+                - { name: log-b, from: "{{tasks.cell-b.outputs.artifacts.ride-log}}", optional: true }
+
+    # Level-trigger + WIP guard. Exit 1 (fail loudly, per rule #6) when there's nothing to
+    # retro or the fixer is busy — a skipped retro must be VISIBLE in the DAG, not silent.
+    - name: guard
+      outputs:
+        parameters:
+          - { name: quiet, valueFrom: { path: /work/quiet } }
+        artifacts:
+          - { name: evidence, path: /work/bundle.json, archive: { none: {} } }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -e
+            rm -rf /work/homelab
+            # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+            # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
+            # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
+            # old anonymous behavior (degrade, never a new hard dependency).
+            # Preemptive auth (the 2026-09-03 throttle recurrence): the token rides `http.extraHeader` on the
+            # FIRST request. Token-in-URL still made two ANONYMOUS requests per clone (GET refs + POST
+            # upload-pack → 401 → authenticated retry) — ~700 anonymous hits/day on GitHub's per-IP throttle
+            # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            cd /work/homelab
+            STACK="{{workflow.parameters.stack}}"
+            # fixer busy? (both cells hold the RIDE namespace's WIP slot — refuse, don't
+            # contend). homelab#588: this used to iterate EVERY repo in the stack's
+            # agents/stacks.json entry as a namespace — for the platform stack that list is
+            # [agent-runtime, agent-coordinator, homelab, openrouter-operator], all four of
+            # which DO have live namespaces (homelab's own fixer lane runs agent-session pods
+            # in ns `homelab` right now), so this was never the missing-namespace failure it
+            # first looked like. The real defect is WIP-SLOT LOCALITY: the retro pod only ever
+            # rides in — and only ever contends for the WIP slot of — the ONE namespace
+            # agents/retro-project.sh names as PROJECT (openrouter-operator for the platform
+            # series); a busy fixer in a SIBLING platform namespace (homelab, agent-runtime) is
+            # harmless to the retro and must not refuse the weekly fire. With the platform
+            # stack's own issue traffic, an all-repos probe would starve the Monday retro
+            # behind ordinary fixer activity in namespaces the retro never touches.
+            # Per-ns check (the coordinator SA has pod-read in stack namespaces, not -A);
+            # a FAILED check counts as busy, never as idle (rule #6) — the ride namespace
+            # exists, so a failure there is a real signal, not a false "unverifiable" read.
+            # ⚠ stderr must NOT fold into $out: on zero matches kubectl exits 0 and prints
+            # "No resources found in <ns> namespace." to STDERR — a 2>&1 here made every
+            # EMPTY namespace read as busy, so the guard refused every fire since unsuspend
+            # (found 2026-08-11 via the RetroReportOverdue belt, homelab#237).
+            . agents/retro-project.sh
+            retro_project "$STACK" || exit 1
+            BUSY=0
+            if ! out=$(kubectl get pods -n "$PROJECT" -l app=agent-session --no-headers 2>/tmp/guard-err); then
+              echo "GUARD: pod check failed in $PROJECT ($(cat /tmp/guard-err)) — treating as busy"; BUSY=1
+            fi
+            [ -n "$out" ] && BUSY=1
+            [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) in ${PROJECT} — retro would contend for the fixer WIP slot"; exit 1; }
+            # FU-058: one immutable activity bundle, shared by both cells and harvest.
+            # Preparation checks collection coverage; only successful publication advances it.
+            # A QUIET week (1..minWindowTasks-1 ledger tasks, exit 3; ZERO stays exit 1) is a verdict, not a
+            # failure: the window rolls forward unpublished, the cells + harvest are skipped
+            # (`quiet` output), and the RetroReportOverdue belt gets a push under its own
+            # outcome=quiet group — its bare max() reads every group, so a quiet week cannot
+            # page while a real failure still does (2026-10-26: the first quiet week since
+            # #2130 failed the workflow and fired the belt).
+            # The quiet push is the same belt as harvest's (retry once, then a VISIBLE failure — FU-108
+            # class: a belt whose own failure is a TTL'd log line is not a belt). No branch or PR exists
+            # yet, so harvest's PR-body surface has nothing to amend: a quiet push that fails after the
+            # retry FAILS the guard instead — the workflow reads Failed, matching the overdue alert that
+            # will (honestly) fire, rather than Succeeded beside a silent WARN.
+            # WORK is the outputs dir (the replay fixture's seam — retro-quiet-guard points it at a tmpdir).
+            WORK=/work
+            # The series (homelab#3140): empty = the stack's own retro, so every existing path reads
+            # SERIES == STACK. GUARD_EXPR selects the series' guard — see the parameter's comment.
+            SERIES="{{workflow.parameters.series}}"; SERIES="${SERIES:-$STACK}"
+            GUARD_EXPR="{{workflow.parameters.guardExpr}}"
+            # >>>REPLAY:retro-quiet-guard>>>
+            rc=0
+            if [ -n "$GUARD_EXPR" ]; then
+              # A PromQL-guarded series: the verdict is the parser's exit code (0 fire / 3 quiet /
+              # 1 fail — agents/retro_guard_expr.py), read off ONE instant query; the ledger is not
+              # consulted, and the bundle that freezes the run carries no ledger either.
+              body="$(curl -sf --max-time 20 --get "http://prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/query" \
+                --data-urlencode "query=${GUARD_EXPR}")" \
+                || { echo "GUARD FAILED: the guard query did not reach Prometheus (curl rc $?) — a dead Prometheus is a failed run, never a quiet week"; exit 1; }
+              printf '%s' "$body" | python3 agents/retro_guard_expr.py || rc=$?
+              [ "$rc" -ne 0 ] || python3 agents/retro_pipeline.py prepare --series "$SERIES" --output "$WORK/bundle.json" --no-ledger || rc=$?
+            else
+              python3 agents/retro_pipeline.py prepare --series "$SERIES" --output "$WORK/bundle.json" \
+                --min-tasks "{{workflow.parameters.minWindowTasks}}" || rc=$?
+            fi
+            if [ "$rc" -eq 3 ]; then
+              echo '{"quiet": true}' > "$WORK/bundle.json"
+              echo true > "$WORK/quiet"
+              QUIET_URL="http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${SERIES}/outcome/quiet"
+              printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
+                | curl -s --max-time 10 --data-binary @- "$QUIET_URL" \
+                || { sleep 3 \
+                     && printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
+                        | curl -s --max-time 10 --data-binary @- "$QUIET_URL"; } \
+                || { echo "GUARD FAILED: quiet week, but the pushgateway push failed after retry — failing the run so RetroReportOverdue and the workflow phase agree"; exit 1; }
+              exit 0
+            fi
+            [ "$rc" -eq 0 ] || exit "$rc"
+            echo false > "$WORK/quiet"
+            # <<<REPLAY:retro-quiet-guard<<<
+        env: &tsenv
+          - { name: HOME, value: "/home/node" }
+          # optional like its siblings: an absent mirror degrades (anonymous clone, unset env),
+          # never a new CreateContainerConfigError for guard/retro-cell/harvest.
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: retro-git, key: GH_TOKEN, optional: true } }
+          - name: AGENT_TS_WRITER_ID
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id } }
+          - name: AGENT_TS_WRITER_SECRET
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key } }
+          # s5cmd region auto-detect 400s against Garage — every s5cmd caller pins this
+          # (transcripts-sync/-viewer do); latent here until the guard's busy-probe fix
+          # (2026-08-11) let the ledger step run for the first time.
+          - { name: AWS_REGION, value: "garage" }
+          - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+          - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+          - name: AGENT_TS_READER_ID
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
+          - name: AGENT_TS_READER_SECRET
+            valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
+        resources:
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { memory: "512Mi" }
+
+    # One retro cell: consume the frozen evidence, assemble the brief (retro-session.sh), ride, and
+    # capture the streamed ride log as an artifact for harvest. The claude cell declares the
+    # FU-088 subscription semaphore; a goose cell passes straight through.
+    - name: retro-cell
+      inputs:
+        artifacts:
+          - { name: evidence, path: /work/bundle.json, mode: 0444 }
+        parameters:
+          - { name: cell }
+          - { name: subscription }
+      # Template-level semaphore covers BOTH cells (Argo can't condition it on an input):
+      # correct for the claude cell (the step holds a live subscription session); for the
+      # goose cell it briefly holds a slot it doesn't need — accepted, cells run sequentially
+      # and the pool is 3. Split into two templates if this ever queues a goose cell.
+      synchronization:
+        semaphores:
+          - configMapKeyRef: { name: subscription-capacity, key: claude }
+      outputs:
+        artifacts:
+          # optional: the cell can now fail before the tee exists (and its sibling still needs to
+          # run — see continueOn on the DAG tasks). A missing log is a WARN in the harvest, not an
+          # artifact-save error that reports as something else entirely.
+          - { name: ride-log, path: /work/ride.log, archive: { none: {} }, optional: true }
+      # GW-SESSIONS-AUTH (FU-270): the platform cell's admission is authenticated as THIS pod's
+      # ServiceAccount (agent-coordinator) — the gateway policy's `callers` entry grants it role
+      # retro and the bind into the ride namespace (openrouter-operator). The projected token is
+      # read per call by agents/gateway-admit.sh (its default path); kubelet rotates it.
+      volumes:
+        - name: gateway-token
+          projected:
+            sources:
+              - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -eo pipefail
+            # pipefail is load-bearing: retro-session.sh pipes through tee, and without it a
+            # cell whose session DIED (8rvhd: exec E2BIG at 146KB brief) still exited 0 and
+            # the DAG called it Succeeded — the harvest then failed on empty logs.
+            rm -rf /work/homelab
+            # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+            # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
+            # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
+            # old anonymous behavior (degrade, never a new hard dependency).
+            # Preemptive auth (the 2026-09-03 throttle recurrence): the token rides `http.extraHeader` on the
+            # FIRST request. Token-in-URL still made two ANONYMOUS requests per clone (GET refs + POST
+            # upload-pack → 401 → authenticated retry) — ~700 anonymous hits/day on GitHub's per-IP throttle
+            # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            cd /work/homelab
+            # Both models analyse the exact same frozen evidence and source revision.
+            REV=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["source_revision"])')
+            git fetch -q origin "$REV"
+            git checkout -q --detach "$REV"
+            # homelab#587 leg 2 (§B2 The split): the pain-rank is FLEET-WIDE, but the ride pod's own
+            # git identity is the stack's per-repo broker token — without a fleet-wide read, a
+            # deep-dive whose trail lives in a sibling stack's repo is untrailable (run 4:
+            # sleep-tracking dark, 2/8 deep-dives). retro-git.yaml mints a ~1h READ-ONLY fleet
+            # token and MIRRORS it into the ride namespace (the FU-080 (a) pattern — PR#619 r2:
+            # the value must never cross namespaces as manifest text). This step passes only the
+            # Secret NAME; the launcher renders a secretKeyRef and the pod resolves it in-ns.
+            # An absent mirror degrades pod-side (optional secretKeyRef → the env var is simply
+            # unset, and the brief tells the model to name unreachable repos rather than guess).
+            export RETRO_GH_SECRET=retro-git
+            # Only the OVERRIDE is passed through. Unset, the launcher mints this cell's own
+            # capped key (homelab#270) — the empty default used to mean the ride quietly fell
+            # back to the stack fixer's standing key, which is what run 3's dead cell-b spent.
+            if [ -n "{{workflow.parameters.retroKeySecret}}" ]; then
+              export RETRO_OPENROUTER_SECRET="{{workflow.parameters.retroKeySecret}}"
+            fi
+            RIDE_LOG=/work/ride.log   # also this template's output artifact path (above)
+            CELL="{{inputs.parameters.cell}}"
+            # A SINGLE-cell series (homelab#3140) leaves harnessB empty: this leg is a no-op that
+            # writes no log — the harvest skips leg B by the same empty parameter, so the no-op is
+            # never a "dead cell". Exit BEFORE the self-check below (no report is the contract here).
+            if [ -z "$CELL" ]; then
+              echo "cell: not configured (harnessB empty — a single-cell series); nothing rides"
+              exit 0
+            fi
+            # The series' brief + the cell's Postgres credential (homelab#3140): both are NAMES —
+            # retro-session.sh renders the brief pointer, agent-session.sh renders the secretKeyRefs.
+            SERIES="{{workflow.parameters.series}}"
+            if [ -n "{{workflow.parameters.cellPgSecret}}" ]; then
+              export RETRO_PG_SECRET="{{workflow.parameters.cellPgSecret}}"
+            fi
+            bash agents/retro-session.sh "{{workflow.parameters.stack}}" \
+              --cell "$CELL" --ledger /work/bundle.json ${SERIES:+--series "$SERIES"} \
+              2>&1 | tee "$RIDE_LOG"
+            # >>>REPLAY:retro-cell-marker-selfcheck>>>
+            # A cell that produced NO report is a FAILED cell and has to say so ITSELF; leaving
+            # that to the harvest is how run 3's cell-b (kpg42, 2026-08-11) read as Succeeded with
+            # clean stats — its goose session died in 8s on a provider "Please retry", the
+            # in-pod finalize classified `exit_status: "clean"` (the FU-147 / agent-runtime#36
+            # misclassification class), the ride exited 0, and only the harvest's report count
+            # ever knew (homelab#248). pipefail above catches a session that DIED; it cannot catch
+            # one that died CLEAN, because at the exit code those are the same event.
+            # A cell that DID die clean can still pass a bare non-empty check: the 2026-08-17
+            # unattended fire's deepseek cell shipped a 9-line skeleton (the report template's
+            # section headings, never filled in) between valid markers — `-s` was satisfied,
+            # the cell read Succeeded, and a human opened a content-free file (fixes homelab#590).
+            # The test is now the HARVEST'S OWN extraction PLUS its content floor, both via ONE
+            # helper (agents/retro-report-floor.sh) shared with the harvest step below and with
+            # retro-session.sh's --review gate — structurally one home, never three copies that
+            # can drift apart.
+            if bash agents/retro-report-floor.sh "$RIDE_LOG" /tmp/cell-report.md log 2>/tmp/cell-report-reason; then
+              echo "cell self-check: ${CELL} produced a report ($(wc -c < /tmp/cell-report.md) bytes)"
+            else
+              echo "CELL FAILED: no BEGIN/END-RETRO-REPORT block in this cell's OWN ride log (${CELL})." >&2
+              echo "  The ride exited 0, so the session died CLEAN — at the exit code a provider" >&2
+              echo "  error before the first turn is indistinguishable from a finished run." >&2
+              echo "  floor check: $(cat /tmp/cell-report-reason)" >&2
+              echo "  The log is still harvested as an artifact and the sibling cell + harvest" >&2
+              echo "  still run (continueOn), so a surviving report still lands." >&2
+              exit 1
+            fi
+            # <<<REPLAY:retro-cell-marker-selfcheck<<<
+        env: *tsenv
+        volumeMounts:
+          - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
+        resources:
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { memory: "1Gi" }
+
+    # Extract the BEGIN/END-RETRO-REPORT blocks from both ride logs → branch + PR into
+    # docs/agents/retros/ (coordinator-git identity; auto-merge NOT armed — a human reads
+    # retro reports, that's the whole point of the PR gate).
+    - name: harvest
+      inputs:
+        artifacts:
+          - { name: evidence, path: /work/bundle.json, mode: 0444 }
+          # optional HERE too, not only on the DAG args: a single-cell series (harnessB empty)
+          # never writes log-b, and a required template input errors the harvest before it runs
+          # (the script already guards each log with [ -f ]).
+          - { name: log-a, path: /work/log-a, optional: true }
+          - { name: log-b, path: /work/log-b, optional: true }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        # Argo's init container stages input artifacts root-owned; the image's non-root user
+        # then can't read them (xkj88: "sed: can't read /work/log-a: Permission denied" — the
+        # THIRD latent bug in this lane, each one step deeper than the last). Single-pod
+        # clone+sed+gh step; root inside its own container grants nothing beyond it.
+        securityContext: { runAsUser: 0 }
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -e
+            export GH_TOKEN=$(cat /var/run/coordinator-git/GH_TOKEN)
+            rm -rf /work/homelab
+            # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
+            # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
+            # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
+            # old anonymous behavior (degrade, never a new hard dependency).
+            # Preemptive auth (the 2026-09-03 throttle recurrence): the token rides `http.extraHeader` on the
+            # FIRST request. Token-in-URL still made two ANONYMOUS requests per clone (GET refs + POST
+            # upload-pack → 401 → authenticated retry) — ~700 anonymous hits/day on GitHub's per-IP throttle
+            # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
+            _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            cd /work/homelab
+            STACK="{{workflow.parameters.stack}}"
+            # The series names the report, the branch, the PR and the belt's grouping key; empty =
+            # the stack's own retro, so the names read exactly as before (homelab#3140).
+            SERIES="{{workflow.parameters.series}}"; SERIES="${SERIES:-$STACK}"
+            DATE=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["prepared_at"][:10])')
+            RUN=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["run_id"])')
+            # The cell→log pairing, threaded from the workflow's OWN parameters (homelab#248).
+            LOG_A=/work/log-a; HARNESS_A="{{workflow.parameters.harnessA}}"
+            LOG_B=/work/log-b; HARNESS_B="{{workflow.parameters.harnessB}}"
+            # >>>REPLAY:retro-harvest-slug>>>
+            # The SERVED model per leg (FU-270): the cell names only a harness, so the model is
+            # read off the cell's own ride log, from a DISPATCH fact, never the report's prose —
+            # the gateway admission's `→ gateway(sessions): dispatch <model> [` line (printed
+            # by agents/gateway-admit.sh from the admission response), else retro-session.sh's
+            # old-proxy line `→ <stack> <run> cell <harness>:<model> —` (off-platform, or the
+            # FU-270 transition fallback). The scan stops at the report's BEGIN marker, so a
+            # report quoting either line cannot rename itself. No log, or no admission = no
+            # served model: the cell is `<harness>:unserved` (it produced no report either).
+            served_model() {
+              [ -f "$1" ] || return 0
+              sed -n -E '/BEGIN-RETRO-REPORT/q; /^→ gateway\(sessions\): dispatch [^ ]+ \[/{s/^→ gateway\(sessions\): dispatch ([^ ]+) \[.*/\1/p;q}; /^→ [^ ]+ r[0-9]+ cell [a-z0-9]+:[^ ]+ /{s/^→ [^ ]+ r[0-9]+ cell [a-z0-9]+:([^ ]+) .*/\1/p;q}' "$1"
+            }
+            SERVED_A="$(served_model "$LOG_A")"; CELL_A="${HARNESS_A}:${SERVED_A:-unserved}"
+            SERVED_B="$(served_model "$LOG_B")"; CELL_B="${HARNESS_B}:${SERVED_B:-unserved}"
+            if [ -n "$HARNESS_B" ]; then echo "served: cell A ${CELL_A}, cell B ${CELL_B}"; else echo "served: cell A ${CELL_A} (single-cell series)"; fi
+            # Naming is a TWO-PASS over the legs, and it is a function of the DISPATCH FACTS
+            # ONLY (homelab#269) — the harness parameter and the served model, derived identically
+            # whether or not a cell produced a report, so a missing report can never change the
+            # surviving cell's filename.
+            # Pass 1, per leg: <harness>:<vendor>/<model> → <model>: "claude:claude/opus" → opus,
+            # "goose:deepseek/deepseek-v4-pro" → deepseek-v4-pro — the r1/r2 filename convention,
+            # DERIVED from the dispatch instead of sniffed off the report. The last-word-of-the-
+            # title parse this replaces read a model-authored prose heading, so
+            # "# oracle loop retro r3 — Claude Opus 5 (1M context)" filed itself as
+            # docs/agents/retros/2026-08-11-oracle-r3-context.md.
+            SLUG_A="${CELL_A#*:}"; SLUG_A="${SLUG_A##*/}"
+            SLUG_A=$(printf '%s' "$SLUG_A" | tr -cd 'a-zA-Z0-9.-'); SLUG_A="${SLUG_A:-cell-A}"
+            SLUG_B="${CELL_B#*:}"; SLUG_B="${SLUG_B##*/}"
+            SLUG_B=$(printf '%s' "$SLUG_B" | tr -cd 'a-zA-Z0-9.-'); SLUG_B="${SLUG_B:-cell-B}"
+            # Pass 2, the COLLISION GUARD (homelab#269): the derivation drops the harness, so a
+            # harness A/B on one model — "claude:opus" vs "goose:opus", the natural shape of a
+            # harness comparison run — resolves to ONE filename and the second report silently
+            # overwrites the first. Disambiguate with the harness ON COLLISION ONLY: the ordinary
+            # path keeps the r1/r2 convention byte-identical (it is fixture-pinned), and the
+            # comparison run gets claude-opus / goose-opus instead of one file. Not "fail the
+            # harvest": that throws away BOTH good reports of a run that worked, and a landed
+            # report is this lane's only success signal (retro_report_last_success_timestamp).
+            # `tr -cd 'a-zA-Z0-9.-'` strips the ':' and '/', so sanitize the harness before
+            # joining it — same filter, same reason.
+            if [ "$SLUG_A" = "$SLUG_B" ]; then
+              HARNESS_A=$(printf '%s' "${CELL_A%%:*}" | tr -cd 'a-zA-Z0-9.-')
+              HARNESS_B=$(printf '%s' "${CELL_B%%:*}" | tr -cd 'a-zA-Z0-9.-')
+              SLUG_A="${HARNESS_A:+${HARNESS_A}-}${SLUG_A}"
+              SLUG_B="${HARNESS_B:+${HARNESS_B}-}${SLUG_B}"
+            fi
+            # Pass 3, the SAME-HARNESS collision (homelab#292): pass 2 disambiguates by
+            # HARNESS, but a pure A/B repeat — the same harness AND the same model, e.g. a
+            # rerun of "claude:opus" against "claude:opus" to sample variance on one cell —
+            # joins the identical harness onto both slugs and they are STILL equal, so the
+            # second `cp` below silently overwrote the first exactly as pass 2's own bug did.
+            # There is nothing left in the dispatch parameters to disambiguate with except
+            # WHICH leg produced it, so suffix by cell index on collision only — the ordinary
+            # path (and the harness-collision path) stay byte-identical, fixture-pinned by
+            # retro-harvest-slug / retro-harvest-slug-collision; only the doubly-collided case
+            # gets `-a`/`-b`.
+            if [ "$SLUG_A" = "$SLUG_B" ]; then
+              SLUG_A="${SLUG_A}-a"
+              SLUG_B="${SLUG_B}-b"
+            fi
+            N=0; DEAD=""
+            # A single-cell series (homelab#3140: harnessB empty) has no leg B — its no-op cell
+            # wrote no log, and that is the contract, not a dead cell.
+            LEGS="A B"; [ -n "$HARNESS_B" ] || LEGS="A"
+            for leg in $LEGS; do
+              case "$leg" in
+                A) src="$LOG_A"; cell="$CELL_A"; model="$SLUG_A" ;;
+                B) src="$LOG_B"; cell="$CELL_B"; model="$SLUG_B" ;;
+              esac
+              if bash agents/retro-report-floor.sh "$src" /tmp/report.md log 2>/tmp/report-reason; then
+                N=$((N+1))
+                cp /tmp/report.md "docs/agents/retros/${DATE}-${SERIES}-${RUN}-${model}.md"
+              else
+                echo "WARN: no report markers in $src (cell ${cell} died or contract broken) — $(cat /tmp/report-reason)"
+                DEAD="${DEAD:+$DEAD, }${cell}"
+              fi
+            done
+            [ "$N" -gt 0 ] || { echo "HARVEST FAILED: no cell produced a report"; exit 1; }
+            # A PARTIAL harvest must announce itself where a human will see it. The dead cell
+            # already failed its own step (retro-cell's marker self-check) and the DAG node is
+            # Failed — but whether that rolls up to a red WORKFLOW is Argo's continueOn semantics,
+            # not ours, and the PR is the artifact this lane exists to produce. So the missing
+            # cell is named in the body: "2 cells fired, 1 report" is a fact about the run that
+            # the reader of the report needs, and run 3 shipped without it (homelab#248).
+            # Built with printf, not a multi-line assignment: every line of this step is INSIDE a
+            # YAML `|` block scalar, so a continuation line at column 0 (which is what the note's
+            # leading blank line + markdown wants to be) silently ENDS the scalar and breaks the
+            # manifest. The escapes belong to printf; the YAML never sees a newline.
+            DEAD_NOTE=""
+            [ -n "$DEAD" ] && DEAD_NOTE=$(printf '\n\n⚠ **PARTIAL RUN — no report from: %s.** That cell failed its own report-marker self-check and its DAG task is marked Failed; its ride log is still attached as a workflow artifact. Read this report knowing it is one cell%s view, not the cross-checked pair.' "$DEAD" "'s")
+            # <<<REPLAY:retro-harvest-slug<<<
+            export GH_TOKEN=$(cat /var/run/coordinator-git/GH_TOKEN)
+            git config user.name "retro-session"; git config user.email "noreply@teststuff.net"
+            BR="retro/${DATE}-${SERIES}-${RUN}"
+            mkdir -p /tmp/retro-reports
+            cp docs/agents/retros/"${DATE}-${SERIES}-${RUN}-"*.md /tmp/retro-reports/
+            # A retry reuses only an OPEN report PR (never a merged/closed one — new commits on a
+            # recreated branch under a dead PR would never reach a human). A MERGED one whose
+            # reports already match master is the same publication: reuse its URL, push nothing.
+            OPEN_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state open --json url --jq '.[0].url // empty')
+            MERGED_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state merged --json url --jq '.[0].url // empty')
+            if [ -n "$OPEN_PR" ]; then
+              # Remove newly harvested untracked paths before checking out the retry branch.
+              rm docs/agents/retros/"${DATE}-${SERIES}-${RUN}-"*.md
+              git fetch -q origin "refs/pull/${OPEN_PR##*/}/head"
+              git checkout -B "$BR" FETCH_HEAD
+              cp /tmp/retro-reports/*.md docs/agents/retros/
+            else
+              git checkout -b "$BR"
+            fi
+            git add docs/agents/retros/
+            git diff --cached --quiet || git commit -m "retros: ${SERIES} ${RUN} — $N report(s) from the scheduled retro (FU-058)"
+            # >>>REPLAY:retro-harvest-push>>>
+            PR_BODY="FU-058 scheduled retro output — merges on the bot review; the operator reads it after merge (operator ruling 2026-10-15). Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}"
+            if [ -z "$OPEN_PR" ] && [ -n "$MERGED_PR" ] && git diff --quiet origin/master HEAD -- docs/agents/retros/; then
+              REPORT_PR="$MERGED_PR"
+            else
+              # The clone above persisted the auth header (`clone -c`, GH_TOKEN exported first since
+              # #2130) — a second `-c http.extraHeader` here sends it twice and GitHub rejects the push
+              # ("Duplicate header: Authorization"; r7 harvest 2026-10-05 failed exactly so).
+              git push origin "HEAD:$BR"
+              REPORT_PR="$OPEN_PR"
+              [ -n "$REPORT_PR" ] || REPORT_PR=$(gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
+                --title "retros: ${SERIES} ${RUN} ($N report(s), scheduled retro)" --body "$PR_BODY")
+            fi
+            # <<<REPLAY:retro-harvest-push<<<
+            REPORT_ARGS=()
+            for report in docs/agents/retros/"${DATE}-${SERIES}-${RUN}-"*.md; do
+              REPORT_ARGS+=(--report "$(basename "$report")=$report")
+            done
+            python3 agents/retro_pipeline.py publish --series "$SERIES" --bundle /work/bundle.json \
+              --pr "$REPORT_PR" "${REPORT_ARGS[@]}"
+            # The publication checkpoint is independent of whether the human has merged the PR.
+            # ADR-103 rule-3 belt (FU-058, 2026-08-10): a report that LANDED is the only success
+            # signal — the cron trigger counter increments on guard-refused runs too (the 08-10
+            # Monday fired, refused, and nothing said so for 13h). RetroReportOverdue alerts on
+            # this timestamp going stale (argocd/resources/pushgateway/prometheusrule.yaml).
+            # GROUPING renamed to the platform-series naming (homelab#588/#591): job/platform-
+            # retro/series/${STACK}, was job/retro-session/stack/${STACK}. The METRIC NAME is
+            # UNCHANGED — RetroReportOverdue aggregates with a bare `max(...)` across every
+            # label set pushgateway is holding, so an old `job=retro-session` group's stale
+            # sample can never mask a fresher `job=platform-retro` one; the rename only tidies
+            # the grouping key, it does not need a migration step.
+            # FU-176 / #932: retry once and surface final failure as a PR body amendment
+            # instead of a TTL'd log-only WARN — a belt whose own failure is a log
+            # line that expires is not a belt (FU-108 class).
+            # >>>REPLAY:retro-push-belt>>>
+            PUSH_FAILED=0
+            printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
+              | curl -s --max-time 10 --data-binary @- \
+                "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${SERIES}" \
+              || { sleep 3 \
+                   && printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
+                      | curl -s --max-time 10 --data-binary @- \
+                        "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${SERIES}" \
+                   || PUSH_FAILED=1; }
+            if [ "$PUSH_FAILED" = 1 ]; then
+              echo "WARN: pushgateway push failed after retry — the RetroReportOverdue belt goes stale"
+              # Surface the failure in the PR body immediately.
+              # Built with printf, not a literal multi-line string: every line of this step is
+              # INSIDE a YAML `|` block scalar, so a continuation line at column 0 (which is
+              # what the note's leading blank line wants to be) silently ENDS the scalar and
+              # breaks the manifest. The escapes belong to printf; the YAML never sees a newline.
+              PUSH_WARN=$(printf '\n\n⚠ **PUSHGATEWAY PUSH FAILED** — the RetroReportOverdue alert will fire stale until the next successful push. The report itself landed successfully.')
+              gh pr edit "$BR" --repo teststuffstash/homelab \
+                --body "${PR_BODY}${PUSH_WARN}"
+            fi
+            # <<<REPLAY:retro-push-belt<<<
+        env: *tsenv
+        volumeMounts:
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        resources:
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { memory: "512Mi" }
+  volumes:
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+---
+# The PLATFORM series — the stack's own loop retro (FU-058 P3; series empty = name "platform").
+# Born suspended 2026-07; UNSUSPENDED 2026-08-03 (operator, FU-058) after the hand-fired runs
+# proved clean. Manual fire: argo -n agent-coordinator submit --from cronworkflow/retro-session
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
@@ -32,519 +658,44 @@ spec:
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   workflowSpec:
-    serviceAccountName: agent-coordinator
-    synchronization:
-      mutexes:
-        - { name: retro-session-publication }
-    # homelab#103 soft hostname spread — rationale on the `switchboard` WorkflowTemplate (coordinate-argo.yaml — was `coordinate`, ADR-120)
-    # (coordinate-argo.yaml). Verbatim copy; keep in sync.
-    # homelab#867 soft Longhorn-disk de-preference — same rationale.
-    podSpecPatch: |
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
-          labelSelector:
-            matchExpressions:
-              - { key: workflows.argoproj.io/workflow, operator: Exists }
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 10
-              preference:
-                matchExpressions:
-                  - key: node.longhorn.io/create-default-disk
-                    operator: NotIn
-                    values:
-                      - "true"
-    activeDeadlineSeconds: 7200 # two rides + harvest; a stuck ride dies with the workflow
-    ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 259200 }
-    entrypoint: main
+    workflowTemplateRef: { name: retro-session }
     arguments:
       parameters:
         - { name: stack, value: "platform" }
-        - { name: cellA, value: "claude:opus" }
-        - { name: cellB, value: "goose:deepseek/deepseek-v4-pro" }
-        # A PRE-MINTED OpenRouterKey Secret to pin for the API cell. Empty (the default) no longer
-        # means "spend the stack's fixer budget key" — since homelab#270 retro-session.sh mints the
-        # cell its OWN ephemeral xs/$0.50 key (the xs ENFORCED cap since PR#1650) and refuses the ride if it can't. Set this only to
-        # override that (e.g. a hand-minted key with a different cap).
-        - { name: retroKeySecret, value: "" }
-        # Level-trigger per WINDOW (was a ledger-growth count since the newest report FILE): the
-        # guard refuses a window whose ledger holds fewer tasks than this; refused windows are not
-        # published, so their evidence rolls into the next Monday's window.
-        - { name: minWindowTasks, value: "8" }
-    templates:
-      - name: main
-        dag:
-          tasks:
-            - name: guard
-              template: guard
-            # continueOn (homelab#248): a cell now FAILS itself when it produced no report, and a
-            # dead cell must not take its SIBLING's report down with it — run 3 kept cell-a's
-            # report only because the dead cell-b happened to exit 0. The task node still goes
-            # Failed, cell-b and the harvest still run, and a surviving report still lands via PR.
-            # The DEAD-cell notice in that PR's body is the belt that does not depend on Argo's
-            # continueOn status roll-up: the PR is the surface a human is guaranteed to read.
-            #
-            # BOTH phases, not just failed (homelab#268, harvested from PR#267's review). Argo
-            # splits a dead node in two: a step whose CONTAINER exits non-zero is Failed, while a
-            # step whose POD never got to report one — OOMKilled, evicted, node lost, image pull
-            # gone — is Error. `continueOn` matches them separately, so `failed: true` alone left
-            # the exact silent-loss shape #248 closed, reachable through the other door: an
-            # OOMKilled cell-a still held cell-b and the harvest on this edge, and the surviving
-            # report died with the DAG. These two cells ride ephemeral TAINTED metal nodes
-            # (wk-metal-0*, 8GB, evictable), where Error is not the exotic branch — it is the one
-            # the hardware picks. Widened rather than made unconditional: `dependencies` on a
-            # SKIPPED/omitted node keeps its normal meaning, and the guard's refusal must still
-            # stop the run (it has no continueOn, by design).
-            - name: cell-a
-              when: "{{tasks.guard.outputs.parameters.quiet}} == false"
-              template: retro-cell
-              dependencies: [guard]
-              continueOn: { failed: true, error: true }
-              arguments:
-                parameters:
-                  - { name: cell, value: "{{workflow.parameters.cellA}}" }
-                  - { name: subscription, value: "1" }
-                artifacts:
-                  - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
-            - name: cell-b
-              when: "{{tasks.guard.outputs.parameters.quiet}} == false"
-              template: retro-cell
-              dependencies: [cell-a]
-              continueOn: { failed: true, error: true }
-              arguments:
-                parameters:
-                  - { name: cell, value: "{{workflow.parameters.cellB}}" }
-                  - { name: subscription, value: "0" }
-                artifacts:
-                  - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
-            - name: harvest
-              when: "{{tasks.guard.outputs.parameters.quiet}} == false"
-              template: harvest
-              dependencies: [cell-a, cell-b]
-              arguments:
-                # optional (homelab#248): a cell that dies BEFORE the tee never writes its log, and
-                # with continueOn above the harvest now runs anyway — an unresolvable artifact must
-                # not wedge it. The step's own loop already handles a missing/markerless log (WARN,
-                # then the N=0 refusal), which is the honest place for that decision.
-                # An ERRORED cell (homelab#268) is the strongest form of that case: the pod died
-                # before writing anything, so the artifact is not merely markerless — the path is
-                # never staged into this step at all. Pinned by fixtures/retro-harvest-cell-errored.
-                artifacts:
-                  - { name: evidence, from: "{{tasks.guard.outputs.artifacts.evidence}}" }
-                  - { name: log-a, from: "{{tasks.cell-a.outputs.artifacts.ride-log}}", optional: true }
-                  - { name: log-b, from: "{{tasks.cell-b.outputs.artifacts.ride-log}}", optional: true }
-
-      # Level-trigger + WIP guard. Exit 1 (fail loudly, per rule #6) when there's nothing to
-      # retro or the fixer is busy — a skipped retro must be VISIBLE in the DAG, not silent.
-      - name: guard
-        outputs:
-          parameters:
-            - { name: quiet, valueFrom: { path: /work/quiet } }
-          artifacts:
-            - { name: evidence, path: /work/bundle.json, archive: { none: {} } }
-        container:
-          image: ghcr.io/teststuffstash/agent-coordinator
-          command: ["bash", "-lc"]
-          args:
-            - |
-              set -e
-              rm -rf /work/homelab
-              # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
-              # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
-              # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
-              # old anonymous behavior (degrade, never a new hard dependency).
-              # Preemptive auth (the 2026-09-03 throttle recurrence): the token rides `http.extraHeader` on the
-              # FIRST request. Token-in-URL still made two ANONYMOUS requests per clone (GET refs + POST
-              # upload-pack → 401 → authenticated retry) — ~700 anonymous hits/day on GitHub's per-IP throttle
-              # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
-              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
-              cd /work/homelab
-              STACK="{{workflow.parameters.stack}}"
-              # fixer busy? (both cells hold the RIDE namespace's WIP slot — refuse, don't
-              # contend). homelab#588: this used to iterate EVERY repo in the stack's
-              # agents/stacks.json entry as a namespace — for the platform stack that list is
-              # [agent-runtime, agent-coordinator, homelab, openrouter-operator], all four of
-              # which DO have live namespaces (homelab's own fixer lane runs agent-session pods
-              # in ns `homelab` right now), so this was never the missing-namespace failure it
-              # first looked like. The real defect is WIP-SLOT LOCALITY: the retro pod only ever
-              # rides in — and only ever contends for the WIP slot of — the ONE namespace
-              # agents/retro-project.sh names as PROJECT (openrouter-operator for the platform
-              # series); a busy fixer in a SIBLING platform namespace (homelab, agent-runtime) is
-              # harmless to the retro and must not refuse the weekly fire. With the platform
-              # stack's own issue traffic, an all-repos probe would starve the Monday retro
-              # behind ordinary fixer activity in namespaces the retro never touches.
-              # Per-ns check (the coordinator SA has pod-read in stack namespaces, not -A);
-              # a FAILED check counts as busy, never as idle (rule #6) — the ride namespace
-              # exists, so a failure there is a real signal, not a false "unverifiable" read.
-              # ⚠ stderr must NOT fold into $out: on zero matches kubectl exits 0 and prints
-              # "No resources found in <ns> namespace." to STDERR — a 2>&1 here made every
-              # EMPTY namespace read as busy, so the guard refused every fire since unsuspend
-              # (found 2026-08-11 via the RetroReportOverdue belt, homelab#237).
-              . agents/retro-project.sh
-              retro_project "$STACK" || exit 1
-              BUSY=0
-              if ! out=$(kubectl get pods -n "$PROJECT" -l app=agent-session --no-headers 2>/tmp/guard-err); then
-                echo "GUARD: pod check failed in $PROJECT ($(cat /tmp/guard-err)) — treating as busy"; BUSY=1
-              fi
-              [ -n "$out" ] && BUSY=1
-              [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) in ${PROJECT} — retro would contend for the fixer WIP slot"; exit 1; }
-              # FU-058: one immutable activity bundle, shared by both cells and harvest.
-              # Preparation checks collection coverage; only successful publication advances it.
-              # A QUIET week (1..minWindowTasks-1 ledger tasks, exit 3; ZERO stays exit 1) is a verdict, not a
-              # failure: the window rolls forward unpublished, the cells + harvest are skipped
-              # (`quiet` output), and the RetroReportOverdue belt gets a push under its own
-              # outcome=quiet group — its bare max() reads every group, so a quiet week cannot
-              # page while a real failure still does (2026-10-26: the first quiet week since
-              # #2130 failed the workflow and fired the belt).
-              # The quiet push is the same belt as harvest's (retry once, then a VISIBLE failure — FU-108
-              # class: a belt whose own failure is a TTL'd log line is not a belt). No branch or PR exists
-              # yet, so harvest's PR-body surface has nothing to amend: a quiet push that fails after the
-              # retry FAILS the guard instead — the workflow reads Failed, matching the overdue alert that
-              # will (honestly) fire, rather than Succeeded beside a silent WARN.
-              # WORK is the outputs dir (the replay fixture's seam — retro-quiet-guard points it at a tmpdir).
-              WORK=/work
-              # >>>REPLAY:retro-quiet-guard>>>
-              rc=0
-              python3 agents/retro_pipeline.py prepare --series "$STACK" --output "$WORK/bundle.json" \
-                --min-tasks "{{workflow.parameters.minWindowTasks}}" || rc=$?
-              if [ "$rc" -eq 3 ]; then
-                echo '{"quiet": true}' > "$WORK/bundle.json"
-                echo true > "$WORK/quiet"
-                QUIET_URL="http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${STACK}/outcome/quiet"
-                printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
-                  | curl -s --max-time 10 --data-binary @- "$QUIET_URL" \
-                  || { sleep 3 \
-                       && printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
-                          | curl -s --max-time 10 --data-binary @- "$QUIET_URL"; } \
-                  || { echo "GUARD FAILED: quiet week, but the pushgateway push failed after retry — failing the run so RetroReportOverdue and the workflow phase agree"; exit 1; }
-                exit 0
-              fi
-              [ "$rc" -eq 0 ] || exit "$rc"
-              echo false > "$WORK/quiet"
-              # <<<REPLAY:retro-quiet-guard<<<
-          env: &tsenv
-            - { name: HOME, value: "/home/node" }
-            # optional like its siblings: an absent mirror degrades (anonymous clone, unset env),
-            # never a new CreateContainerConfigError for guard/retro-cell/harvest.
-            - name: GH_TOKEN
-              valueFrom: { secretKeyRef: { name: retro-git, key: GH_TOKEN, optional: true } }
-            - name: AGENT_TS_WRITER_ID
-              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id } }
-            - name: AGENT_TS_WRITER_SECRET
-              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key } }
-            # s5cmd region auto-detect 400s against Garage — every s5cmd caller pins this
-            # (transcripts-sync/-viewer do); latent here until the guard's busy-probe fix
-            # (2026-08-11) let the ledger step run for the first time.
-            - { name: AWS_REGION, value: "garage" }
-            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
-            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
-            - name: AGENT_TS_READER_ID
-              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
-            - name: AGENT_TS_READER_SECRET
-              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
-          resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits: { memory: "512Mi" }
-
-      # One retro cell: consume the frozen evidence, assemble the brief (retro-session.sh), ride, and
-      # capture the streamed ride log as an artifact for harvest. The claude cell declares the
-      # FU-088 subscription semaphore; a goose cell passes straight through.
-      - name: retro-cell
-        inputs:
-          artifacts:
-            - { name: evidence, path: /work/bundle.json, mode: 0444 }
-          parameters:
-            - { name: cell }
-            - { name: subscription }
-        # Template-level semaphore covers BOTH cells (Argo can't condition it on an input):
-        # correct for the claude cell (the step holds a live subscription session); for the
-        # goose cell it briefly holds a slot it doesn't need — accepted, cells run sequentially
-        # and the pool is 3. Split into two templates if this ever queues a goose cell.
-        synchronization:
-          semaphores:
-            - configMapKeyRef: { name: subscription-capacity, key: claude }
-        outputs:
-          artifacts:
-            # optional: the cell can now fail before the tee exists (and its sibling still needs to
-            # run — see continueOn on the DAG tasks). A missing log is a WARN in the harvest, not an
-            # artifact-save error that reports as something else entirely.
-            - { name: ride-log, path: /work/ride.log, archive: { none: {} }, optional: true }
-        container:
-          image: ghcr.io/teststuffstash/agent-coordinator
-          command: ["bash", "-lc"]
-          args:
-            - |
-              set -eo pipefail
-              # pipefail is load-bearing: retro-session.sh pipes through tee, and without it a
-              # cell whose session DIED (8rvhd: exec E2BIG at 146KB brief) still exited 0 and
-              # the DAG called it Succeeded — the harvest then failed on empty logs.
-              rm -rf /work/homelab
-              # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
-              # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
-              # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
-              # old anonymous behavior (degrade, never a new hard dependency).
-              # Preemptive auth (the 2026-09-03 throttle recurrence): the token rides `http.extraHeader` on the
-              # FIRST request. Token-in-URL still made two ANONYMOUS requests per clone (GET refs + POST
-              # upload-pack → 401 → authenticated retry) — ~700 anonymous hits/day on GitHub's per-IP throttle
-              # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
-              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
-              cd /work/homelab
-              # Both models analyse the exact same frozen evidence and source revision.
-              REV=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["source_revision"])')
-              git fetch -q origin "$REV"
-              git checkout -q --detach "$REV"
-              # homelab#587 leg 2 (§B2 The split): the pain-rank is FLEET-WIDE, but the ride pod's own
-              # git identity is the stack's per-repo broker token — without a fleet-wide read, a
-              # deep-dive whose trail lives in a sibling stack's repo is untrailable (run 4:
-              # sleep-tracking dark, 2/8 deep-dives). retro-git.yaml mints a ~1h READ-ONLY fleet
-              # token and MIRRORS it into the ride namespace (the FU-080 (a) pattern — PR#619 r2:
-              # the value must never cross namespaces as manifest text). This step passes only the
-              # Secret NAME; the launcher renders a secretKeyRef and the pod resolves it in-ns.
-              # An absent mirror degrades pod-side (optional secretKeyRef → the env var is simply
-              # unset, and the brief tells the model to name unreachable repos rather than guess).
-              export RETRO_GH_SECRET=retro-git
-              # Only the OVERRIDE is passed through. Unset, the launcher mints this cell's own
-              # capped key (homelab#270) — the empty default used to mean the ride quietly fell
-              # back to the stack fixer's standing key, which is what run 3's dead cell-b spent.
-              if [ -n "{{workflow.parameters.retroKeySecret}}" ]; then
-                export RETRO_OPENROUTER_SECRET="{{workflow.parameters.retroKeySecret}}"
-              fi
-              RIDE_LOG=/work/ride.log   # also this template's output artifact path (above)
-              CELL="{{inputs.parameters.cell}}"
-              bash agents/retro-session.sh "{{workflow.parameters.stack}}" \
-                --cell "$CELL" --ledger /work/bundle.json \
-                2>&1 | tee "$RIDE_LOG"
-              # >>>REPLAY:retro-cell-marker-selfcheck>>>
-              # A cell that produced NO report is a FAILED cell and has to say so ITSELF; leaving
-              # that to the harvest is how run 3's cell-b (kpg42, 2026-08-11) read as Succeeded with
-              # clean stats — its goose session died in 8s on a provider "Please retry", the
-              # in-pod finalize classified `exit_status: "clean"` (the FU-147 / agent-runtime#36
-              # misclassification class), the ride exited 0, and only the harvest's report count
-              # ever knew (homelab#248). pipefail above catches a session that DIED; it cannot catch
-              # one that died CLEAN, because at the exit code those are the same event.
-              # A cell that DID die clean can still pass a bare non-empty check: the 2026-08-17
-              # unattended fire's deepseek cell shipped a 9-line skeleton (the report template's
-              # section headings, never filled in) between valid markers — `-s` was satisfied,
-              # the cell read Succeeded, and a human opened a content-free file (fixes homelab#590).
-              # The test is now the HARVEST'S OWN extraction PLUS its content floor, both via ONE
-              # helper (agents/retro-report-floor.sh) shared with the harvest step below and with
-              # retro-session.sh's --review gate — structurally one home, never three copies that
-              # can drift apart.
-              if bash agents/retro-report-floor.sh "$RIDE_LOG" /tmp/cell-report.md log 2>/tmp/cell-report-reason; then
-                echo "cell self-check: ${CELL} produced a report ($(wc -c < /tmp/cell-report.md) bytes)"
-              else
-                echo "CELL FAILED: no BEGIN/END-RETRO-REPORT block in this cell's OWN ride log (${CELL})." >&2
-                echo "  The ride exited 0, so the session died CLEAN — at the exit code a provider" >&2
-                echo "  error before the first turn is indistinguishable from a finished run." >&2
-                echo "  floor check: $(cat /tmp/cell-report-reason)" >&2
-                echo "  The log is still harvested as an artifact and the sibling cell + harvest" >&2
-                echo "  still run (continueOn), so a surviving report still lands." >&2
-                exit 1
-              fi
-              # <<<REPLAY:retro-cell-marker-selfcheck<<<
-          env: *tsenv
-          resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits: { memory: "1Gi" }
-
-      # Extract the BEGIN/END-RETRO-REPORT blocks from both ride logs → branch + PR into
-      # docs/agents/retros/ (coordinator-git identity; auto-merge NOT armed — a human reads
-      # retro reports, that's the whole point of the PR gate).
-      - name: harvest
-        inputs:
-          artifacts:
-            - { name: evidence, path: /work/bundle.json, mode: 0444 }
-            - { name: log-a, path: /work/log-a }
-            - { name: log-b, path: /work/log-b }
-        container:
-          image: ghcr.io/teststuffstash/agent-coordinator
-          # Argo's init container stages input artifacts root-owned; the image's non-root user
-          # then can't read them (xkj88: "sed: can't read /work/log-a: Permission denied" — the
-          # THIRD latent bug in this lane, each one step deeper than the last). Single-pod
-          # clone+sed+gh step; root inside its own container grants nothing beyond it.
-          securityContext: { runAsUser: 0 }
-          command: ["bash", "-lc"]
-          args:
-            - |
-              set -e
-              export GH_TOKEN=$(cat /var/run/coordinator-git/GH_TOKEN)
-              rm -rf /work/homelab
-              # homelab#1136: AUTHENTICATED clone when a token is present — anonymous git from the
-              # cluster NAT IP tripped GitHub throttling under burst (401-challenges on a public
-              # repo + truncated ref listings, 47 failed workflows 2026-08-31); absent token = the
-              # old anonymous behavior (degrade, never a new hard dependency).
-              # Preemptive auth (the 2026-09-03 throttle recurrence): the token rides `http.extraHeader` on the
-              # FIRST request. Token-in-URL still made two ANONYMOUS requests per clone (GET refs + POST
-              # upload-pack → 401 → authenticated retry) — ~700 anonymous hits/day on GitHub's per-IP throttle
-              # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
-              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
-              cd /work/homelab
-              STACK="{{workflow.parameters.stack}}"
-              DATE=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["prepared_at"][:10])')
-              RUN=$(python3 -c 'import json; print(json.load(open("/work/bundle.json"))["run_id"])')
-              # The cell→log pairing, threaded from the workflow's OWN parameters (homelab#248).
-              LOG_A=/work/log-a; CELL_A="{{workflow.parameters.cellA}}"
-              LOG_B=/work/log-b; CELL_B="{{workflow.parameters.cellB}}"
-              # >>>REPLAY:retro-harvest-slug>>>
-              # Naming is a TWO-PASS over the legs, and it is a function of the DISPATCH PARAMETERS
-              # ONLY (homelab#269) — derived identically whether or not a cell produced a report, so
-              # a dead cell can never change the surviving cell's filename.
-              # Pass 1, per leg: <harness>:<vendor>/<model> → <model>: "claude:opus" → opus,
-              # "goose:deepseek/deepseek-v4-pro" → deepseek-v4-pro — the r1/r2 filename convention,
-              # DERIVED from the dispatch instead of sniffed off the report. The last-word-of-the-
-              # title parse this replaces read a model-authored prose heading, so
-              # "# oracle loop retro r3 — Claude Opus 5 (1M context)" filed itself as
-              # docs/agents/retros/2026-08-11-oracle-r3-context.md.
-              SLUG_A="${CELL_A#*:}"; SLUG_A="${SLUG_A##*/}"
-              SLUG_A=$(printf '%s' "$SLUG_A" | tr -cd 'a-zA-Z0-9.-'); SLUG_A="${SLUG_A:-cell-A}"
-              SLUG_B="${CELL_B#*:}"; SLUG_B="${SLUG_B##*/}"
-              SLUG_B=$(printf '%s' "$SLUG_B" | tr -cd 'a-zA-Z0-9.-'); SLUG_B="${SLUG_B:-cell-B}"
-              # Pass 2, the COLLISION GUARD (homelab#269): the derivation drops the harness, so a
-              # harness A/B on one model — "claude:opus" vs "goose:opus", the natural shape of a
-              # harness comparison run — resolves to ONE filename and the second report silently
-              # overwrites the first. Disambiguate with the harness ON COLLISION ONLY: the ordinary
-              # path keeps the r1/r2 convention byte-identical (it is fixture-pinned), and the
-              # comparison run gets claude-opus / goose-opus instead of one file. Not "fail the
-              # harvest": that throws away BOTH good reports of a run that worked, and a landed
-              # report is this lane's only success signal (retro_report_last_success_timestamp).
-              # `tr -cd 'a-zA-Z0-9.-'` strips the ':' and '/', so sanitize the harness before
-              # joining it — same filter, same reason.
-              if [ "$SLUG_A" = "$SLUG_B" ]; then
-                HARNESS_A=$(printf '%s' "${CELL_A%%:*}" | tr -cd 'a-zA-Z0-9.-')
-                HARNESS_B=$(printf '%s' "${CELL_B%%:*}" | tr -cd 'a-zA-Z0-9.-')
-                SLUG_A="${HARNESS_A:+${HARNESS_A}-}${SLUG_A}"
-                SLUG_B="${HARNESS_B:+${HARNESS_B}-}${SLUG_B}"
-              fi
-              # Pass 3, the SAME-HARNESS collision (homelab#292): pass 2 disambiguates by
-              # HARNESS, but a pure A/B repeat — the same harness AND the same model, e.g. a
-              # rerun of "claude:opus" against "claude:opus" to sample variance on one cell —
-              # joins the identical harness onto both slugs and they are STILL equal, so the
-              # second `cp` below silently overwrote the first exactly as pass 2's own bug did.
-              # There is nothing left in the dispatch parameters to disambiguate with except
-              # WHICH leg produced it, so suffix by cell index on collision only — the ordinary
-              # path (and the harness-collision path) stay byte-identical, fixture-pinned by
-              # retro-harvest-slug / retro-harvest-slug-collision; only the doubly-collided case
-              # gets `-a`/`-b`.
-              if [ "$SLUG_A" = "$SLUG_B" ]; then
-                SLUG_A="${SLUG_A}-a"
-                SLUG_B="${SLUG_B}-b"
-              fi
-              N=0; DEAD=""
-              for leg in A B; do
-                case "$leg" in
-                  A) src="$LOG_A"; cell="$CELL_A"; model="$SLUG_A" ;;
-                  B) src="$LOG_B"; cell="$CELL_B"; model="$SLUG_B" ;;
-                esac
-                if bash agents/retro-report-floor.sh "$src" /tmp/report.md log 2>/tmp/report-reason; then
-                  N=$((N+1))
-                  cp /tmp/report.md "docs/agents/retros/${DATE}-${STACK}-${RUN}-${model}.md"
-                else
-                  echo "WARN: no report markers in $src (cell ${cell} died or contract broken) — $(cat /tmp/report-reason)"
-                  DEAD="${DEAD:+$DEAD, }${cell}"
-                fi
-              done
-              [ "$N" -gt 0 ] || { echo "HARVEST FAILED: no cell produced a report"; exit 1; }
-              # A PARTIAL harvest must announce itself where a human will see it. The dead cell
-              # already failed its own step (retro-cell's marker self-check) and the DAG node is
-              # Failed — but whether that rolls up to a red WORKFLOW is Argo's continueOn semantics,
-              # not ours, and the PR is the artifact this lane exists to produce. So the missing
-              # cell is named in the body: "2 cells fired, 1 report" is a fact about the run that
-              # the reader of the report needs, and run 3 shipped without it (homelab#248).
-              # Built with printf, not a multi-line assignment: every line of this step is INSIDE a
-              # YAML `|` block scalar, so a continuation line at column 0 (which is what the note's
-              # leading blank line + markdown wants to be) silently ENDS the scalar and breaks the
-              # manifest. The escapes belong to printf; the YAML never sees a newline.
-              DEAD_NOTE=""
-              [ -n "$DEAD" ] && DEAD_NOTE=$(printf '\n\n⚠ **PARTIAL RUN — no report from: %s.** That cell failed its own report-marker self-check and its DAG task is marked Failed; its ride log is still attached as a workflow artifact. Read this report knowing it is one cell%s view, not the cross-checked pair.' "$DEAD" "'s")
-              # <<<REPLAY:retro-harvest-slug<<<
-              export GH_TOKEN=$(cat /var/run/coordinator-git/GH_TOKEN)
-              git config user.name "retro-session"; git config user.email "noreply@teststuff.net"
-              BR="retro/${DATE}-${STACK}-${RUN}"
-              mkdir -p /tmp/retro-reports
-              cp docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md /tmp/retro-reports/
-              # A retry reuses only an OPEN report PR (never a merged/closed one — new commits on a
-              # recreated branch under a dead PR would never reach a human). A MERGED one whose
-              # reports already match master is the same publication: reuse its URL, push nothing.
-              OPEN_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state open --json url --jq '.[0].url // empty')
-              MERGED_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state merged --json url --jq '.[0].url // empty')
-              if [ -n "$OPEN_PR" ]; then
-                # Remove newly harvested untracked paths before checking out the retry branch.
-                rm docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md
-                git fetch -q origin "refs/pull/${OPEN_PR##*/}/head"
-                git checkout -B "$BR" FETCH_HEAD
-                cp /tmp/retro-reports/*.md docs/agents/retros/
-              else
-                git checkout -b "$BR"
-              fi
-              git add docs/agents/retros/
-              git diff --cached --quiet || git commit -m "retros: ${STACK} ${RUN} — $N report(s) from the scheduled retro (FU-058)"
-              # >>>REPLAY:retro-harvest-push>>>
-              PR_BODY="FU-058 scheduled retro output — merges on the bot review; the operator reads it after merge (operator ruling 2026-10-15). Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}"
-              if [ -z "$OPEN_PR" ] && [ -n "$MERGED_PR" ] && git diff --quiet origin/master HEAD -- docs/agents/retros/; then
-                REPORT_PR="$MERGED_PR"
-              else
-                # The clone above persisted the auth header (`clone -c`, GH_TOKEN exported first since
-                # #2130) — a second `-c http.extraHeader` here sends it twice and GitHub rejects the push
-                # ("Duplicate header: Authorization"; r7 harvest 2026-10-05 failed exactly so).
-                git push origin "HEAD:$BR"
-                REPORT_PR="$OPEN_PR"
-                [ -n "$REPORT_PR" ] || REPORT_PR=$(gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
-                  --title "retros: ${STACK} ${RUN} ($N report(s), scheduled retro)" --body "$PR_BODY")
-              fi
-              # <<<REPLAY:retro-harvest-push<<<
-              REPORT_ARGS=()
-              for report in docs/agents/retros/"${DATE}-${STACK}-${RUN}-"*.md; do
-                REPORT_ARGS+=(--report "$(basename "$report")=$report")
-              done
-              python3 agents/retro_pipeline.py publish --series "$STACK" --bundle /work/bundle.json \
-                --pr "$REPORT_PR" "${REPORT_ARGS[@]}"
-              # The publication checkpoint is independent of whether the human has merged the PR.
-              # ADR-103 rule-3 belt (FU-058, 2026-08-10): a report that LANDED is the only success
-              # signal — the cron trigger counter increments on guard-refused runs too (the 08-10
-              # Monday fired, refused, and nothing said so for 13h). RetroReportOverdue alerts on
-              # this timestamp going stale (argocd/resources/pushgateway/prometheusrule.yaml).
-              # GROUPING renamed to the platform-series naming (homelab#588/#591): job/platform-
-              # retro/series/${STACK}, was job/retro-session/stack/${STACK}. The METRIC NAME is
-              # UNCHANGED — RetroReportOverdue aggregates with a bare `max(...)` across every
-              # label set pushgateway is holding, so an old `job=retro-session` group's stale
-              # sample can never mask a fresher `job=platform-retro` one; the rename only tidies
-              # the grouping key, it does not need a migration step.
-              # FU-176 / #932: retry once and surface final failure as a PR body amendment
-              # instead of a TTL'd log-only WARN — a belt whose own failure is a log
-              # line that expires is not a belt (FU-108 class).
-              # >>>REPLAY:retro-push-belt>>>
-              PUSH_FAILED=0
-              printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
-                | curl -s --max-time 10 --data-binary @- \
-                  "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${STACK}" \
-                || { sleep 3 \
-                     && printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
-                        | curl -s --max-time 10 --data-binary @- \
-                          "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/platform-retro/series/${STACK}" \
-                     || PUSH_FAILED=1; }
-              if [ "$PUSH_FAILED" = 1 ]; then
-                echo "WARN: pushgateway push failed after retry — the RetroReportOverdue belt goes stale"
-                # Surface the failure in the PR body immediately.
-                # Built with printf, not a literal multi-line string: every line of this step is
-                # INSIDE a YAML `|` block scalar, so a continuation line at column 0 (which is
-                # what the note's leading blank line wants to be) silently ENDS the scalar and
-                # breaks the manifest. The escapes belong to printf; the YAML never sees a newline.
-                PUSH_WARN=$(printf '\n\n⚠ **PUSHGATEWAY PUSH FAILED** — the RetroReportOverdue alert will fire stale until the next successful push. The report itself landed successfully.')
-                gh pr edit "$BR" --repo teststuffstash/homelab \
-                  --body "${PR_BODY}${PUSH_WARN}"
-              fi
-              # <<<REPLAY:retro-push-belt<<<
-          env: *tsenv
-          volumeMounts:
-            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
-          resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits: { memory: "512Mi" }
-    volumes:
-      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+---
+# oracle's FEEDBACK-TRIAGE series (homelab#3140, operator ruling 2026-11-02): the batched LLM read
+# of the `give_feedback` rows no FB-RULES rule decides, ending in ONE rules PR on oracle-fleet
+# (`specs/tools/feedback-rules.yaml`) plus the harvested report — so one cell, not two. The brief is
+# oracle-fleet's `.agents/feedback-triage.md` (SERIES-BRIEF.md points the ride at it); the guard is
+# oracle's gauge of the oldest untriaged row's age — the series fires only when a row has waited a
+# week, and an ABSENT gauge fails the run rather than reading as quiet. The cell reads the sink
+# read-only as `feedback_ro` (the basic-auth Secret below, synced into ns oracle-fleet by
+# oracle-iac; the CNP leg to the Postgres pods is oracle-iac's `fixer.egress.ownServices`).
+# BORN SUSPENDED (first-runs doctrine, as the platform series was); UNSUSPENDED 2026-11-07 after the hand-fired run
+# retro-feedback-triage-5q28g landed clean (re-fire by hand: argo -n agent-coordinator submit --from cronworkflow/retro-feedback-triage).
+# The comment column is caller text under 365-day retention: the report carries counts and rule
+# proposals, never row text.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: retro-feedback-triage
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "0 5 * * 3" # Wednesdays 05:00 UTC — its own slot, two days off the platform series' Monday
+  timezone: UTC
+  suspend: false # unsuspended 2026-11-07: hand-fired run retro-feedback-triage-5q28g landed clean (homelab#3140)
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  workflowSpec:
+    workflowTemplateRef: { name: retro-session }
+    arguments:
+      parameters:
+        - { name: stack, value: "oracle" }
+        - { name: series, value: "feedback-triage" }
+        - { name: harnessA, value: "claude" }
+        - { name: harnessB, value: "" }
+        # > 0 when the oldest untriaged feedback row is older than 7 days; 0 when none is; ABSENT
+        # when oracle's exporter is not publishing the gauge (= a failed run, never quiet).
+        - { name: guardExpr, value: "max(oracle_feedback_untriaged_oldest_age_seconds) > bool (7 * 86400)" }
+        - { name: cellPgSecret, value: "oracle-pg-feedback-ro" }

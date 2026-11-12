@@ -1,4 +1,4 @@
-# Tables (fix-debounce, fu088-ladder, go-rail-latch, goal-ancestor, goal-budget-refusal, retro-harvest, scout-canary-filing-gate, summary-comment) stay at depth 1 and are NOT listed.
+# Tables (fix-debounce, fu088-ladder, go-rail-latch, goal-ancestor, goal-budget-refusal, retro-harvest, summary-comment) stay at depth 1 and are NOT listed.
 # fixture-dir -> family  (FU-167 cleanup move 5; agents/replay/README.md §The cleanup contract)
 _selftest-missing-sentinel	_selftest
 _selftest-unrecorded-read	_selftest
@@ -41,6 +41,7 @@ context-prefetch/ci-red	context-prefetch
 context-prefetch/ci-red-unreadable	context-prefetch
 context-prefetch/fix-round	context-prefetch
 context-prefetch/fix-round-unreadable	context-prefetch
+context-prefetch/untrusted-comments	context-prefetch
 coordinator-pick-rail-anthropic	coordinator-pick-rail
 coordinator-pick-rail-both	coordinator-pick-rail
 coordinator-pick-rail-go	coordinator-pick-rail
@@ -64,6 +65,9 @@ env-card-mcp-present/opencode	env-card-mcp-present
 fleet-fault-unlatch-cause-closed-green	fleet-fault-unlatch
 fleet-fault-unlatch-cause-open	fleet-fault-unlatch
 fleet-fault-unlatch-issue-cause-closed-green	fleet-fault-unlatch
+fleet-fault-unlatch-issue-no-pr	fleet-fault-unlatch
+fleet-fault-unlatch-issue-no-pr-cause-open	fleet-fault-unlatch
+fleet-fault-unlatch-issue-no-pr-list-unreadable	fleet-fault-unlatch
 fleet-fault-unlatch-no-marker	fleet-fault-unlatch
 fleet-fault-unlatch-probe-fail	fleet-fault-unlatch
 footprint-conflict-predicate	footprint-conflict-predicate
@@ -127,6 +131,8 @@ retro-key-minted-labels-first	retro-key
 retro-key-pinned	retro-key
 retro-key-subscription	retro-key
 retro-rank-snapshot-exclusion	retro-rank-snapshot-exclusion
+retro-series-identity/loop	retro-series-identity
+retro-series-identity/series	retro-series-identity
 review-flip-belt	review-flip-belt
 review-flip-belt-probe-fail	review-flip-belt
 review-phantom-belt	review-phantom-belt
@@ -149,12 +155,6 @@ run-phase-metric	run-phase-metric
 scan-phase-marker	scan-phase-marker
 scan-touches-footprint-hold	scan-touches-footprint-hold
 scan-wedge-alert	scan-wedge-alert
-scout-bench-mcp-error	scout-bench
-scout-bench-ranked-columns	scout-bench
-scout-bench-unkeyed-unbenched	scout-bench
-scout-intake-stateless	scout-intake-stateless
-scout-variant-batch-rollout	scout-variant
-scout-variant-known-base	scout-variant
 session-atomic-gate	session-atomic-gate
 session-belt-c4c5	session-belt
 session-belt-fast-path	session-belt
