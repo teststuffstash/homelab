@@ -352,7 +352,7 @@ CORRUPT = "a config row that is not JSON, no docs row"
 # (description, stored, restart_at, age_s?, models?, startup_delay?, retry_after_s?)
 RESTART_ROWS = [
     pytest.param(BOTH, "T0 + 600 s", "600 · 600", 5, 21000, 21000, id="a PVC store keeps the snapshot"),
-    pytest.param(CORRUPT, "T0", "none · none", 0, 0, 60, id="a corrupt stored snapshot is ignored"),
+    pytest.param(CORRUPT, "T0", "none · none", 0, 0, 60, id="a corrupt stored snapshot is ignored ⚖"),
     pytest.param(BOTH, "T0 + 3600 s", "3600 · 3600", 5, 18000, 18000, id="a restart inside the interval refreshes nothing at start ⚖"),
     pytest.param(BOTH, "T0 + 21600 s", "21600 · 21600", 5, 0, 60, id="a restart after the interval refreshes at start"),
 ]

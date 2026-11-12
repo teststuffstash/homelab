@@ -201,7 +201,8 @@ Plan table missing `**Go**` or `**Go Plus**` stays a whole-source parse failure 
 price both plans. A refresh whose fetch fails, whose parse fails, or whose model count drops below
 **half** ⚖ of the last good snapshot's (zero models always) keeps the last good snapshot. The
 snapshot is written to the gateway's store (`catalog_snapshots`, one row per source), so a
-restarted gateway starts from it.
+restarted gateway starts from it — ⚖ a stored row that does not parse is ignored, never a refused
+start: the gateway starts as with no snapshot of that source (no age, the first refresh at start).
 
 ⚖ **The rail serving an id is not an allowance** ([#2768's ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677)). *Listed* is the
 vendor's client view — models.dev minus its deprecated rows, under the workspace's overrides —
@@ -209,8 +210,7 @@ never the Go rail's own model list. The leg does not read that list (`/zen/go/v1
 reads are the three under [§What a fetch sends](#what-a-fetch-sends), and the view carries no
 `served` flag and no reference price (unverified — expected, no row). An id the rail serves and the catalog does not list — a
 deprecated row the vendor still serves, a pay-as-you-go model with no Go row, an id with no vendor
-row at all (the kinds: unverified — expected, no row; the row cited next is an id models.dev
-lacks) — is unlisted like any other: an admission naming it defers `not-in-catalog`
+row at all (the kinds: unverified — expected, no row) — is unlisted like any other: an admission naming it defers `not-in-catalog`
 ([GW-SESSIONS-CAPACITY §Not in the catalog](sessions.md#not-in-the-catalog), "a Go model the
 catalog no longer lists defers not-in-catalog"), never priced at a fallback (ruling 4) — a
 pay-as-you-go row is not a Go price.
@@ -371,12 +371,13 @@ Legend: `stored` = what the store holds when gateway #2 starts (`both snapshots 
 refreshed both sources at T0; `a config row that is not JSON, no docs row`); `restart_at` = when #2 starts;
 `age_s?` = the view's `age_s`, config · docs; `startup_delay?` = the seconds the loop waits before
 its first refresh; `retry_after_s?` = a `not-in-catalog` defer's `retry_after_s` on #2 before any
-refresh.
+refresh ([sessions.md §Not in the catalog](sessions.md#not-in-the-catalog): the next scheduled
+refresh, or `defer_retry_s` (60) when none is scheduled yet).
 
 | description | stored | restart_at | age_s? | models? | startup_delay? | retry_after_s? |
 |---|---|---|---|---|---|---|
 | a PVC store keeps the snapshot | both snapshots at T0 | T0 + 600 s | 600 · 600 | 5 | 21000 | 21000 |
-| a corrupt stored snapshot is ignored | a config row that is not JSON, no docs row | T0 | none · none | 0 | 0 | 60 |
+| a corrupt stored snapshot is ignored ⚖ | a config row that is not JSON, no docs row | T0 | none · none | 0 | 0 | 60 |
 | a restart inside the interval refreshes nothing at start ⚖ | both snapshots at T0 | T0 + 3600 s | 3600 · 3600 | 5 | 18000 | 18000 |
 | a restart after the interval refreshes at start | both snapshots at T0 | T0 + 21600 s | 21600 · 21600 | 5 | 0 | 60 |
 
