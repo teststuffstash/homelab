@@ -13,13 +13,14 @@ read-only door, like `/catalog/*`: they take no credential and return none.
 
 ## Interface — the machine half
 
-**[`wire.schema.json`](wire.schema.json)** holds the index's shape, a record's provenance and the one
+**[`wire.schema.json`](wire.schema.json)** holds the index's shape, a record's provenance, the declarations file's shape (`$defs.wire_declarations`) and the one
 error code; the service **imports it**. A member's body is the stored bytes, not JSON of that schema.
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-WIRE-RECORD](#gw-wire-record) | `$defs.provenance` | — | v0 — declared probes and the account class's allowlist are the sibling rule (`GW-WIRE-PROBE`, not yet written) |
+| [GW-WIRE-RECORD](#gw-wire-record) | `$defs.provenance` | — | v0 — the account class's allowlist is in [GW-WIRE-PROBE](#gw-wire-probe) |
 | [GW-WIRE-VIEW](#gw-wire-view) | `index_output`, `member_headers` | `wire-not-recorded` (404) | v0 |
+| [GW-WIRE-PROBE](#gw-wire-probe) | `$defs.wire_declarations` | — | v0 |
 
 ## Flow overview
 
@@ -32,9 +33,13 @@ flowchart LR
   V --> T[("wire_records\nlatest per source")]
   S --> T
   R --> P["the parser (unchanged)"]
+  F[("declarations file\nGATEWAY_WIRE")] --> Q["a declared probe\n(the rail's credential lifecycle)"]
+  Q --> W
+  F -. keep_keys .-> S
   T --> D["GET /wire · GET /wire/‹source›"]
   click W href "#gw-wire-record" "GW-WIRE-RECORD" _self
   click D href "#gw-wire-view" "GW-WIRE-VIEW" _self
+  click Q href "#gw-wire-probe" "GW-WIRE-PROBE" _self
 ```
 
 ## Requirement index
@@ -43,6 +48,7 @@ flowchart LR
 |---|---|---|
 | [GW-WIRE-RECORD](#gw-wire-record) | the recorder | v0 |
 | [GW-WIRE-VIEW](#gw-wire-view) | the door | v0 |
+| [GW-WIRE-PROBE](#gw-wire-probe) | the declared probe | — |
 
 ## GW-WIRE-RECORD
 
@@ -114,6 +120,34 @@ the number of the stored record's fields (body included) that contain the Go key
 | a good answer that echoes the key is withheld whole ⚖ | `go-console-config` | `config-200-echo` | `the Go key as a bearer` | `account` | `withheld` | `0` | `0` |
 | a read that carried a credential is never class public ⚖ | `go-console-config` | `config-ok` | `the Go key as a bearer` | `account` | `none` | `0` | `0` |
 
+#### The account class's allowlist
+
+Legend: `keep_keys` = the source's allowlist in the declarations file; `answer` = what the fake upstream
+answers; `stored?` = the record's bytes; `load?` = whether the declarations load (`—` = no file is read).
+
+| description | keep_keys | answer | stored? | load? |
+|---|---|---|---|---|
+| an allowlisted key keeps its string, every other string its length ⚖ | `[slug]` | `{"slug": "fixture-model", "note": "hello"}` | `"slug": "fixture-model"`, `"note": {"len": 5}` | loads |
+| no allowlist keeps no string | `[]` | `{"slug": "fixture-model", "note": "hello"}` | both strings as lengths | loads |
+| an allowlisted key is kept at any depth and in a list | `[slug]` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": ["q"]}` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}` | loads |
+| no declarations file keeps no string ⚖ | `GATEWAY_WIRE` unset, source `codex-usage` | the observed usage shape | every string as its length | — |
+| an allowlisted value that matches a credential pattern is still withheld ⚖ | `[slug]` | `{"slug": "sk-ant-oat-FAKE…"}` | the value as its length | loads |
+
+#### What an allowlist may not name
+
+Legend: `keep_keys` = the allowlist in the declarations file; `load?` = whether the declarations load. The
+floor is the observed identity fields and anything token-, cookie-, secret-, password-, credential-,
+authorization- or email-named ⚖.
+
+| description | keep_keys | load? |
+|---|---|---|
+| an identity key can never be allowlisted ⚖ | `[email]` | refused, naming email |
+| an account id is an identity key | `[account_id]` | refused, naming account_id |
+| a user id is an identity key | `[user_id]` | refused, naming user_id |
+| a token-named key is never allowlisted | `[access_token]` | refused, naming access_token |
+| a cookie-named key is never allowlisted | `[Set-Cookie]` | refused, naming Set-Cookie |
+| a secret-named key is never allowlisted | `[client_secret]` | refused, naming client_secret |
+
 <details markdown="1"><summary>Evidence — latest run</summary>
 
 --8<-- "GW-WIRE-RECORD.md"
@@ -151,5 +185,92 @@ Legend: `recorded` = the answers on file at T0; `call` = the request made; `answ
 <details markdown="1"><summary>Evidence — latest run</summary>
 
 --8<-- "GW-WIRE-VIEW.md"
+
+</details>
+
+## GW-WIRE-PROBE
+
+A [wire source](../glossary.md#wire-source) the gateway has no call for yet is **declared**, in the
+declarations file the path `GATEWAY_WIRE` names — one file of its own, never the machine-merged
+`policy.json` and never code (the operator's read ⚖: a probe widens what the deployed gateway reads
+upstream, and an allowlisted key widens what a record keeps). A declaration names a source, a declared
+rail, a GET path on that rail's upstream, an optional query and an interval. The read goes through the
+rail's own credential lifecycle — the bearer and the account header the rail's data plane would send,
+never a refresh of its own — and is recorded as an `account` source, so its answer is structure and
+lengths. The bytes are opaque to the probe: it assumes no shape. GET only, never an inference path, never
+a host the rail does not already reach: the loader refuses a rail the policy does not declare, an absolute
+URL, an inference path (`/responses`, `/chat/completions`, `/messages`, …) and any key that is not
+`rail`, `path`, `query` or `interval_s` — a method is not a key ⚖. No file, or an empty one, means no
+probe goes out and no account string is kept ⚖. A probe reads at start unless its record is younger than
+its interval (then at the record's time + the interval), so a restart inside the interval reads nothing; a
+read with no usable credential fetches nothing and counts `no-credential` ⚖. `gateway_wire_probe_total{source, outcome}`
+counts each probe (`ok`, `no-credential`, `fetch-failed`); `source` only takes names the file declares. A
+`wire` key in the policy refuses the load ⚖. A malformed declarations file refuses to start, like a
+malformed policy ⚖. The same file holds the account class's allowlist (`keep_keys`): the string values
+under those keys are kept verbatim ⚖, every other string stays its length, and a value that matches a
+credential pattern ([GW-REDACT](sessions.md#gw-redact)'s) stays a length even under an allowlisted key. An allowlist
+can never name an identity key (`email`, `account_id`, `user_id`, anything token-, cookie-, secret-,
+password-, credential- or authorization-named — the floor ⚖).
+
+Unverified — expected to hold, no row yet: the identity-key set beyond the floor — the usage payload's
+identity fields are the one observed case; whether `chatgpt-account-id` is needed on `/models` (the
+2026-10-29 hand probe went through the data plane's headers, so the probe sends it); a malformed
+declarations file at start refuses it; the real `/models` shape is not asserted here — it is what the
+deployed probe will record. Only the `codex` rail has a credential lifecycle a probe can ride; the loader
+refuses another rail naming it.
+
+**World: [policy-codex](../worlds/README.md#policy-worlds)** with the declarations world
+[wire-codex](../worlds/README.md#policy-worlds) — probe `codex-models` = rail `codex`, path `/models`,
+query `client_version=0.155.0`, interval 21600 s; the fake `/models` answer is an obviously synthetic body.
+
+#### A declared probe is read
+
+Legend: `declarations` = the file `GATEWAY_WIRE` names; `lifecycle` = the rail's credential at the
+read; `at` = the clock when the schedule runs; `request?` = what the fake upstream received;
+`outcome?` = the probe counter's outcome; `recorded_class?` = the class the source is recorded under.
+
+| description | declarations | lifecycle | at | request? | outcome? | recorded_class? |
+|---|---|---|---|---|---|---|
+| a declared probe goes out through the rail's lifecycle | wire-codex | a valid credential | T0 | `GET {CODEX_UPSTREAM}/models?client_version=0.155.0`, `Bearer <the lifecycle's access token>`, `chatgpt-account-id` | ok | account |
+| no file, nothing read ⚖ | `GATEWAY_WIRE` unset | a valid credential | T0 | none | — | — |
+| an empty file, nothing read | `{}` | a valid credential | T0 | none | — | — |
+| no usable credential, no fetch ⚖ | wire-codex | the lifecycle refuses | T0 | none | no-credential | — |
+| an upstream error is counted and recorded as the failure | wire-codex, the fake answers 503 | a valid credential | T0 | as the first row | fetch-failed | account |
+| a restart inside the interval probes nothing at start | wire-codex, a record at T0 | a valid credential | restart at T0 + 3600 s | none | — | account |
+
+#### What a probe may be
+
+Legend: `probe` = the declaration under test; `load?` = whether the declarations load.
+
+| description | probe | load? |
+|---|---|---|
+| a probe is a GET on a declared rail's upstream ⚖ | rail `codex`, path `/models` | loads |
+| a rail the policy does not declare refuses the load | rail `zen`, path `/models` | refused, naming the rail |
+| an absolute URL refuses the load ⚖ | path `https://elsewhere.test/models` | refused, naming path |
+| an inference path refuses the load ⚖ | path `/responses` | refused, naming path |
+| a chat path is an inference path too | path `/chat/completions` | refused, naming path |
+| a method is not a key | `method: POST` | refused, naming method |
+| a query rides `query`, not the path | path `/models?x=1` | refused, naming path |
+| a scheme-relative path is a host | path `//elsewhere.test/models` | refused, naming path |
+| a dot-dot segment is refused | path `/../responses` | refused, naming path |
+| an interval under a minute is refused | `interval_s: 5` | refused, naming interval_s |
+| a query value is a string | `query: {a: 1}` | refused, naming query |
+| a name the gateway already reads is refused | probe named `go-docs` | refused, naming go-docs |
+| an unknown key of the file is refused | top-level `surprise` | refused, naming surprise |
+| a file that is not an object is refused | `[]` | refused, naming object |
+
+#### The declarations have one home
+
+Legend: `declared_in` = where the probe is declared; `load?` = whether the gateway starts.
+
+| description | declared_in | load? |
+|---|---|---|
+| a probe in the declarations file loads | the file `GATEWAY_WIRE` names | loads |
+| a `wire` key in the policy refuses the load ⚖ | `policy.json`, key `wire` | refused, naming wire |
+| a declarations file that is not JSON refuses to start ⚖ | the file `GATEWAY_WIRE` names, not JSON | refused, naming JSON |
+
+<details markdown="1"><summary>Evidence — latest run</summary>
+
+--8<-- "GW-WIRE-PROBE.md"
 
 </details>

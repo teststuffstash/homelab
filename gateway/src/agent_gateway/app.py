@@ -41,7 +41,7 @@ from .sessions import (
 )
 from .store import Store
 from .tiers import tier_evidence_age
-from .wire import WireRecorder, wire_index, wire_member
+from .wire import WireProbe, WireRecorder, load_declarations, wire_index, wire_member
 
 log = logging.getLogger("gateway.app")
 
@@ -126,7 +126,9 @@ def create_app(
     # the schedule the lifespan runs (tests call refresh() themselves — ASGI transports run no lifespan).
     # Admission reads it: the Go window draw's prices, per-model limits and not-in-catalog.
     # GW-WIRE-RECORD: every vendor read's latest answer, kept before its parser reads it.
-    wire = WireRecorder(store, clock, settings.wire_max_bytes, secrets=(settings.opencode_go_api_key or "",))
+    # GW-WIRE-PROBE: the declarations file (its own file, never the policy) — a malformed one refuses to start.
+    declarations = load_declarations(settings.wire_path, policy.rails)
+    wire = WireRecorder(store, clock, settings.wire_max_bytes, secrets=(settings.opencode_go_api_key or "",), declarations=declarations)
     catalog = GoCatalog(policy, store, client, settings.go_catalog_urls, settings.opencode_go_api_key, clock,
                         settings.go_catalog_refresh_s, wire)
     m.bind_extra(catalog.render)
@@ -176,6 +178,8 @@ def create_app(
     if codex is not None and not (codex_poll and codex_poll.enabled):
         log.warning("codex usage poll dark: %s — the rail answers quota-unknown",
                     "CODEX_USAGE_URL unset" if not settings.codex_usage_url else "no credential backend")
+    wire_probe = WireProbe(declarations, {"codex": codex} if codex is not None else {}, settings.upstreams, client, wire, clock)
+    m.bind_extra(wire_probe.render)
     # GW-SESSIONS-CAPACITY §Go account headroom: gated by `rails.opencode.headroom` — a policy without the
     # block admits the Go rail exactly as before, with no poll. The poll uses the gateway's own Go key.
     go_headroom = (Headroom(clock, policy.rails["opencode"].headroom)
@@ -209,10 +213,12 @@ def create_app(
         # The Go usage poll's schedule (GW-SESSIONS-CAPACITY §Go account headroom): the same rule — a poll at start, then every poll_interval_s.
         go_poller = (asyncio.create_task(go_poll.run(), name="go-usage-poll")
                      if go_poll is not None and go_poll.enabled else None)
+        # The declared probes' schedule (GW-WIRE-PROBE): at start only what is older than its interval.
+        prober = asyncio.create_task(wire_probe.run(), name="wire-probe") if wire_probe.enabled else None
         try:
             yield
         finally:
-            for t in (task, reaper, refresher, or_refresher, poller, go_poller):
+            for t in (task, reaper, refresher, or_refresher, poller, go_poller, prober):
                 if t is not None:
                     t.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
@@ -265,6 +271,7 @@ def create_app(
     app.state.codex_poll = codex_poll
     app.state.catalog = catalog
     app.state.wire = wire
+    app.state.wire_probe = wire_probe
     app.state.providers = providers
     app.state.orcatalog = orcatalog
     return app
