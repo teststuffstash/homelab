@@ -282,3 +282,21 @@ apply_ansible:              # ansible play GROUPS the box may apply unattended (
     window_alerts: [OpnsenseConfigUnattributedRevision, RouterPairMasterCount, RouterWanGateSilent, TargetDown]
     health:
       router_node_check: true
+apply_vm_recreate:          # proxmox VMs the box may RECREATE unattended through a verb (docs/management-box.md §"Non-Talos VMs: the runner verb")
+  # mgmt/scripts/mgmt-runner.sh, called from the apply loop. A row maps an address glob to a verb: a VM
+  # matching it that the plan replaces — or whose cloud-init seed file (a file its `initialization` block
+  # references) the plan re-creates while the VM itself plans no change (the FU-306 ignore_changes on the
+  # runner VMs: a template edit is a snippet re-create, no VM diff) — is recreated through the verb
+  # instead of refused, ONE VM per tick, only when everything else in the plan is inside the allowlist.
+  # The box plans `-target=<vm> -replace=<vm>`, checks that scope, and hands the plan id to the verb,
+  # which refuses unless the plan's only VM change is that VM's replace and is the gate (window, drain,
+  # apply, verify). The VM name comes from the plan, never from a list. No stamp until the final
+  # unscoped apply. The allowlist above stays a list of addresses.
+  #   verb   runner-maintenance (scripts/runner-maintenance.sh run <plan-id> <vm>) — the only one
+  #   mode   off = refused to a human apply as before (the attended runbook recipe) · shadow = the scoped
+  #          plan + its scope check in the journal, then refused as before · on = the recreate. The
+  #          OPERATOR flips it.
+  main:
+    - address: "proxmox_virtual_environment_vm.ci_runner*"
+      verb: runner-maintenance
+      mode: "off"           # shipped OFF — operator trial pending (shadow first, then on)

@@ -165,6 +165,7 @@
         "bash mgmt/scripts/mgmt-lease-test.sh",
         "bash mgmt/scripts/mgmt-helm-test.sh",
         "bash mgmt/scripts/mgmt-ansible-test.sh",
+        "bash mgmt/scripts/mgmt-runner-test.sh",
         "bash mgmt/scripts/mgmt-verdict-test.sh"
       ],
       "mgmt-reconcile-test": [
