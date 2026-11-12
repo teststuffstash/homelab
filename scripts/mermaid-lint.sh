@@ -14,7 +14,17 @@ set -eu
 cd "$(dirname "$0")/.."
 d=scripts/mermaid-lint
 
+# Fetch the locked deps FIRST, bounded, through the LAN npm cache (SERVICES.md §npm cache; the NAME —
+# Deno cannot use an IP registry, ADR-143). A fresh ARC runner has no deno cache, and a stalled
+# registry.npmjs.org download inside the pipeline below had no timeout: deno never read stdin, `cat`
+# blocked on the full pipe, and the ci job hung to GitHub's 6 h limit holding a runner (2026-11-12,
+# two runs). Fetching separately keeps that failure loud and short; the integrity hashes in
+# deno.lock still decide what is accepted, whichever registry serves the bytes.
+export NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY:-http://npm-cache.teststuff.net/}"
+fetch() { timeout 180 deno cache --quiet --frozen --config "$d/deno.json" --lock "$d/deno.lock" "$d/mermaid-lint.ts"; }
+fetch || { echo "mermaid-lint: dependency fetch failed or stalled (registry $NPM_CONFIG_REGISTRY) — retrying once" >&2; fetch; }
+
 # newline-separated names (dash has no `read -d ''`; no tracked path contains a newline)
 git ls-files -z -- '*.md' | xargs -0 grep -l '```mermaid' -- 2>/dev/null \
   | while IFS= read -r f; do printf '%s\0' "$f"; cat "$f"; printf '\0'; done \
-  | deno run --quiet --no-prompt --frozen --config "$d/deno.json" --lock "$d/deno.lock" "$d/mermaid-lint.ts"
+  | timeout 300 deno run --quiet --no-prompt --frozen --config "$d/deno.json" --lock "$d/deno.lock" "$d/mermaid-lint.ts"
