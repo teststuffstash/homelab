@@ -738,10 +738,16 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
 #     rides, one decision. `contentId` is the changed files' blob ids at head (the clause's
 #     `pulls/<n>/files` probe); a push that changes what the PR changes moves it, a rebase does not.
 #     No contentId (probe unreadable) → falls back to head=, the pre-#2100 behaviour.
-#   checks= folds only the entries that are NOT passing (SUCCESS/SKIPPED/NEUTRAL dropped). A
-#     flip either way still moves the hash (the entry appears or leaves); a green sentinel posting
+#   checks= folds only the entries that have SETTLED on a non-passing conclusion: passing ones
+#     (SUCCESS/SKIPPED/NEUTRAL) are dropped, and so is every entry still in flight (no conclusion
+#     yet, PENDING, EXPECTED — the settling hold's own in-flight set). A flip is settled-to-settled
+#     and still moves the hash either way (the entry appears or leaves); a green sentinel posting
 #     on a fresh head does not — #2100's 7th ride was `management-sentinel` arriving SUCCESS
-#     minutes after the 6th ride's dispatch, with nothing to decide.
+#     minutes after the 6th ride's dispatch, with nothing to decide. A check that merely goes in
+#     flight and comes back does not either: green → pending → green hashes identically at all
+#     three points, so a re-run (a push, a rebase, an updater master-merge) costs no ride on the
+#     way in and none on the way out. A re-run that settles somewhere else moves the hash when it
+#     settles, which is the only point at which there is something to rule on.
 #   `@startedAt` rides only on a non-passing `management-sentinel`: `mgmt_post_status` is an
 #     unconditional POST, so a re-judge on the same head (same FAILURE, new engine revision, fresh
 #     position lines for the lens) moves only its startedAt. Every other entry keeps name=state —
@@ -754,6 +760,7 @@ STATE_FP_JQ_UNARMED='[ (if ((.contentId // "") != "") then "content=" + .content
   , "checks=" + ([ .statusCheckRollup[]?
                    | ((.name // .context // "?") as $n
                       | (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end) as $s
+                      | select(($s == "PENDING" or $s == "EXPECTED") | not)
                       | select(($s == "SUCCESS" or $s == "SKIPPED" or $s == "NEUTRAL") | not)
                       | $n + "=" + $s
                         + (if $n == "management-sentinel" then "@" + (.startedAt // "") else "" end)) ]
@@ -824,8 +831,9 @@ issue_state_fp_for_clause() {   # $1 clause, $2 comments json (bare array)
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
 # conclusions and narrows head to the newest non-merge commit — homelab#1011; "assembly-cr" too,
 # homelab#1939); "unarmed-major"
-# uses STATE_FP_JQ_UNARMED (content id for head, non-passing checks only, startedAt for a
-# non-passing management-sentinel — homelab#2066, #2100); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# and "goal-checkpoint-b" use STATE_FP_JQ_UNARMED (content id for head, SETTLED non-passing
+# checks only — an in-flight check contributes nothing — startedAt for a
+# non-passing management-sentinel — homelab#2066, #2100, #2477); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
@@ -851,9 +859,11 @@ pr_state_fp_pair() {
   case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
     # unarmed-major (homelab#2066, #2100): a sentinel re-judge re-opens the debounce; a Renovate
-    # rebase with unchanged content, a heartbeat re-post or a green check arriving does not.
+    # rebase with unchanged content, a heartbeat re-post, a green check arriving or a check that
+    # is merely in flight does not.
     # goal-checkpoint-b (homelab#2477) reuses the SAME fold for the same reason: the hold must
-    # release on a verdict, a content change or a check flip, and NOT on a rebase or a master-merge
+    # release on a verdict, a content change or a check flip (one SETTLED conclusion to another),
+    # and NOT on a rebase or a master-merge — nor on the CI re-run either of them starts
     # (the assembly PR's head is a `goal/**` branch the updater merges master into, and #1935 makes
     # that wait long by construction).
     unarmed-major|goal-checkpoint-b)
@@ -3836,7 +3846,8 @@ EOF_GTHEMES_OPEN
           # written at DISPATCH time by the block at the bottom of this script — never at emission,
           # or a unit that lost the priority race would retire the clause without ever riding.
           # The fold is STATE_FP_JQ_UNARMED's (cf. #1939): a verdict, a content change or a check
-          # flip releases the hold; a rebase or a master-merge does not.
+          # flip (settled-to-settled) releases the hold; a rebase or a master-merge does not, and
+          # neither does the re-run they start while it is in flight.
           # rule #6, fail-OPEN: an unreadable PR probe or an unreadable fingerprint leaves (b)
           # firing exactly as it does today — the state-fp idiom's own direction.
           # The probe reads `prsjson` (the per-repo OPEN-PR fetch above), never a second fetch:
@@ -4372,9 +4383,10 @@ EOF_GTHEMES_OPEN
     # fingerprint keys on the diff's content, not the head oid (STATE_FP_JQ_UNARMED + the
     # pr_state_fp_pair probe — a rebase onto a moved master re-creates the head with identical
     # content), and here, before the debounce, a SETTLING hold — a ride dispatched while
-    # the fresh head's rollup is still filling in records a marker the next posted check moves,
-    # which buys a second ride on the same state. Held only while a pending entry is younger than
-    # UM_SETTLE_S, so a wedged check still reaches a ride; a pending entry whose age cannot be read
+    # the fresh head's rollup is still filling in reads a state that is not the one it will be
+    # judged on (the fingerprint ignores an in-flight entry; a check that then settles red moves
+    # it and buys a second ride). Held only while a pending entry is younger than
+    # UM_SETTLE_S, so a wedged check never holds a ride that is otherwise owed; a pending entry whose age cannot be read
     # counts as settling (this file's `fromdateiso8601? // null` → recent idiom — holding is the safe
     # side of this guard). The content probe fails open to the old behaviour.
     UM_SETTLE_S="${UM_SETTLE_S:-1800}"
