@@ -219,6 +219,8 @@ class FakeVendor:
             return self._reply(request, b, JSONResponse({"error": "unavailable"}, status_code=503))
         if b == "config-401-echo":
             return self._reply(request, b, JSONResponse({"error": f"invalid key {GO_KEY}"}, status_code=401))
+        if b == "config-200-echo":
+            return self._reply(request, b, JSONResponse({"note": f"key {GO_KEY}"}))
         return self._reply(request, b, JSONResponse(config_doc(b)))
 
     async def _docs(self, request: Request) -> Response:

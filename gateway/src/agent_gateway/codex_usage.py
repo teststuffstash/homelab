@@ -69,7 +69,8 @@ def translate(doc, now: float) -> dict:
 class UsagePoll:
     """`poll()` = one observation, returning its bounded outcome; `run()` = the schedule."""
 
-    def __init__(self, rail, client: httpx.AsyncClient, url: str, metrics, clock: Callable[[], float]):
+    def __init__(self, rail, client: httpx.AsyncClient, url: str, metrics, clock: Callable[[], float], wire=None):
+        self.wire = wire  # GW-WIRE-RECORD: the answer is recorded before the parser reads it
         self.rail, self.client, self.url, self.metrics, self.clock = rail, client, url, metrics, clock
         self.polls = 0
         self.last_outcome: str | None = None
@@ -95,6 +96,10 @@ class UsagePoll:
         (log.info if outcome == "accepted" else log.warning)("codex usage poll: %s", outcome)
         return outcome
 
+    def _wire(self, status, body, headers, held, content_type: str = "", truncated: bool = False) -> None:
+        if self.wire is not None:
+            self.wire.record("codex-usage", self.url, status, body, headers, content_type, truncated, secrets=held)
+
     async def _poll(self) -> str:
         if not self.enabled:
             raise RuntimeError("the usage poll is dark: no url or no credential backend")
@@ -104,15 +109,20 @@ class UsagePoll:
             return "credential-transient" if f.code is Code.STORE else "credential-unresolved"
         headers = {"authorization": "Bearer " + credential.access_token, "chatgpt-account-id": credential.account_id,
                    "accept": "application/json", "user-agent": USER_AGENT}
+        held = (credential.access_token,)  # the bearer; the account id is echoed by the payload by design (the sanitiser drops it)
         del credential
         try:
             req = self.client.build_request("GET", self.url, headers=headers, timeout=TIMEOUT_S)
             resp = await self.client.send(req, stream=True)
         except httpx.TimeoutException:
+            self._wire(None, None, headers, held)
             return "upstream-timeout"
         except httpx.HTTPError:
+            self._wire(None, None, headers, held)
             return "upstream-unreachable"
         try:
+            if resp.status_code != 200:
+                self._wire(resp.status_code, None, headers, held)
             if resp.status_code in (401, 403):
                 return "upstream-auth"
             if resp.status_code != 200:
@@ -123,13 +133,17 @@ class UsagePoll:
             async for chunk in resp.aiter_bytes():
                 body += chunk
                 if len(body) > MAX_BODY_BYTES:
+                    self._wire(200, bytes(body), headers, held, truncated=True)
                     return "upstream-content-type"
         except httpx.TimeoutException:
+            self._wire(None, None, headers, held)
             return "upstream-timeout"
         except httpx.HTTPError:
+            self._wire(None, None, headers, held)
             return "upstream-unreachable"
         finally:
             await resp.aclose()
+        self._wire(200, bytes(body), headers, held, resp.headers.get("content-type", ""))
         try:
             doc = json.loads(bytes(body))
         except ValueError:
