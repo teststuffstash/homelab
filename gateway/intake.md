@@ -112,6 +112,10 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
 3. **Does it need a human fact?** The body (or meta-state) says "operator-only", "ruling pending",
    "needs a window", "needs the login" → `seat`, naming the fact. Do not reason around a missing
    credential or an unmade ruling; the ruling is theirs.
+   **A ruling already on the page is not a pending one.** Before you ask for a ruling, read the
+   one recorded: when it is executable as written and only the means are missing (a view, a gate
+   a sibling has), the ruling stands and the means are the gap — the parity check below, never a
+   `seat` asking the operator to rule again.
    **An operator `text:` that answers the question an item waits on IS the ruling**, however it
    is phrased — a lean counts. Carry it: quote it in the body you write, mark the rows and pins
    it decides ⚖, and rule the item as if the fact were on the page. What the text leaves open is
@@ -288,5 +292,8 @@ never pad it, never leave it out.
 - The operator's read, pinned into any Goal that touches it: a change that adds an upstream read
   on a subscription credential, or lets an account-bound value reach a committed file — such a
   declaration lives in a file of its own on a codeowner path, never in a machine-merged one.
+- An entry canary is the loop's to launch, on every rail, capped at ONE ride per rail per catalog
+  refresh: the trigger that launches it is island work like any other, and a canary's first use
+  of a rail is no longer a reason to `seat`.
 - Operator-only, not yours to reason around: the Go key mint (FU-313), the codex login (seed), a
-  canary / maintenance window, any ruling the tracker marks "ruling pending" (FU-270 names them).
+  maintenance window, any ruling the tracker marks "ruling pending" (FU-270 names them).
