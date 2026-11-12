@@ -15244,3 +15244,23 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Left for the operator: #3270 (Goal #3118 assembly read), #2768 ruling, #3145 (candidate rule + a `/models`
   fixture), #3231 (where the scheduled re-cut runs, as which identity), #2650 enforced-egress run, the pr-gate class
   (#3262 closed / #3088). Results write-up merged as #3277.
+
+## 2026-11-12 — seat: the #3262 close explained; ride == CI ruled; docs currency pass on updates
+- **#3262 was closed by GitHub, not a person**: #3277's body said "class fix #3262" — "fix #3262" is a closing
+  keyword, so its merge (23:39:57Z) closed the PR one second later (GraphQL `ClosedEvent.closer` = PR #3277), under the
+  login that armed #3277. Left closed on a ruling the same morning: **a ride's gates equal CI's gates** — a
+  pod-unrunnable gate gets the capability, never a ride-side skip. #3088 still holds the chart-fetch half
+  (kyverno-policies 3.9.2 is also on `oci://ghcr.io/kyverno/charts`, which the homelab claim's egress already allows —
+  read from the jail, not from a pod); the docker half (`gateway-specs-site-e2e`) has no owner: `fixer.docker` is one
+  switch per repo and homelab is `false`. Gateway-as-own-repo vs island and the capability are the operator's to think on.
+- **FU-321 minted** + `docs/spikes/deploy-pin-without-git-commits.md`: 141 of 949 master commits in 30 d were image
+  auto-bumps; parked behind oracle's Kargo rollout.
+- **Docs currency pass, four clone subagents → #3281**: dependency-upgrades (new §"What is still manual, and what it
+  waits on"; coverage pair regenerated offline — `dependency-coverage --check` was red on master), renovate.md,
+  management-box.md (ledger gains mode + waiting-on), related docs. **S9 (#1985) is NOT over**: #1988 (the standing
+  base-image-major rule; the class-6 proposer after FU-319) and #1991 (first lens-approved terraform provider major) open.
+- **Found by the pass, verified by the seat**: the box's router BACKUP converge has refused since 2026-10-31 (commit
+  statuses on f50222b1, 5f5f8916) with no alert and no tracker item → FU-297 next (0).
+- Reported, not edited: `agents/jail-seat-card.md` §Safety still carries the pre-amendment ADR-014 nocloud rule;
+  stale headers in `.github/workflows/renovate{,-approve}.yaml`, `devbox-update.yaml`, `renovate-global.json`
+  (operator-direct paths); FU-286/FU-288 want a re-read; 13 stale archive entries; an online coverage regeneration is owed.

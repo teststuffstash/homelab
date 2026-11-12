@@ -188,10 +188,10 @@ six OVERSIZE items pointer-ized into
       VM 9110, box-posted `opnsense-test-vm` on every head since 2026-10-26 (#2930, ADR-152 step 1); a weekly from-nothing rebuild drill on the box scores prod's
       click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score). The pair is COMPLETE
       (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (56; 57 on 10-18 →
-      `MgmtOpnsenseDrillScoreRegressed`). 2026-10-26: the pair had never renewed a cert (no AcmeClient cron) — FIXED
-      end to end the same day: `LanCertExpiringSoon` #2927, cron #2934, `opnsense-cert-carry.sh` #2939 (run live, pve's
-      copies current), BACKUP sign guard, HAProxy rebind on cert drift #2940 (pve's `homelab-gw-frontend` bound).
-      **Next:** (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
+      `MgmtOpnsenseDrillScoreRegressed`). Cert renewal on the pair fixed 2026-10-26 (#2927, #2934, #2939, #2940).
+      **The box's BACKUP converge has REFUSED since 2026-10-31** (`management-apply` failure on f50222b1 and 5f5f8916:
+      `ansible-live-drift … opnsense/kea-dhcp.py:192.168.2.71=2`; read 2026-11-12) — router merges are not reaching the BACKUP.
+      **Next:** (0) read the Kea drift on `opnsense-pve` and converge it by hand so the box resumes, then ask why no alert fired; (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
       nx02 pve`, idempotent) so the BACKUP follows the MASTER's renewals without a session; (2) the 56 click-ops rows
       (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
