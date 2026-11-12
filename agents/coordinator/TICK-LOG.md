@@ -15264,3 +15264,37 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Reported, not edited: `agents/jail-seat-card.md` §Safety still carries the pre-amendment ADR-014 nocloud rule;
   stale headers in `.github/workflows/renovate{,-approve}.yaml`, `devbox-update.yaml`, `renovate-global.json`
   (operator-direct paths); FU-286/FU-288 want a re-read; 13 stale archive entries; an online coverage regeneration is owed.
+
+## 2026-11-12 (evening) — seat: the "waiting on you" walk became an intake build; two Goals filed by intake
+- **Operator direction**: no hand-queueing of gateway issues — hand-run the intake sitting, read its failures, fix the
+  brief. Three brief PRs landed: #3295 (parity check before `seat`), #3299 (a lean is a ruling; Goal ceiling 30;
+  gateway assemblies machine-merged, the Goal verdict is the human point; `blocked-on: issue=<n>`; a missing wire
+  answer is island work), #3318 (a recorded ruling is not a pending one; the loop launches entry canaries, one ride
+  per rail per refresh). Rulings + evidence: `docs/spikes/island-intake.md` §Open questions 2.
+- **Filed by apply-mode sittings (subagents on the branch brief)**: Goal #3300 wire recording (#3301 recorder + `/wire`
+  door, #3302 declared probe + allowlist, #3303 quarry tool; #3304 split to agent-loop) and Goal #3305 runtime tiers
+  (#3306 → #3307 → #3308 → #3309; cold start = defer). #3296 (`/catalog/codex`) waits on #3300; #3310 (codex entry
+  canary) on #3296; #3145 rewritten as the derivation on #3310; #3231 absorbed into #3305. CODEOWNERS entry for
+  `argocd/resources/agent-gateway/wire.json` added by the seat (the operator's read on probe/allowlist changes).
+  **#3145 must be re-read once #3305 lands**: its rewritten deliverable edits the snapshot script #3309 deletes
+  (two sittings ran in parallel). #3310 still says launching is operator-only — re-read under #3318.
+- **#2768 ruled (a)**: the rail serving an id is not an allowance; spec PR #3291 (successor gap issue #3293). #3291 went
+  five specs rounds: its index-row edits are `page-preamble`, so all six rules of catalog.md came into scope and check
+  10 blocks on unchanged rows by the pinned ruling (finding-contract §The verdict, from oracle-fleet #977). Not yet
+  merged at wind-down — updater churn from this session's own merges kept restarting its CI.
+- **#3270 (Goal #3118 assembly) merged on two bot approvals** after the seat merged master into the goal branch and
+  fixed two specs findings — `gateway/**` has no codeowner, so the "assembly read" in the 11-11 handover was never a gate.
+- **DispatchClauseStorm on goal-3118**: 10 opus checkpoint rides in an hour, 8 "no change" — the (b) hold's fingerprint
+  moved on in-flight checks, bot verdicts, pushes. Fixed in #3312 (in-flight checks out of the fold + settling guard)
+  and #3319 (the hold hashes the assembly PR's identity only — operator ruling; `-verdict-rearms` fixture inverted).
+  #3322: a settled red check on a machine-merged assembly emits `goal-checkpoint` with `trigger=assembly-ci-red`.
+- **Rides reach pr-open**: #3290's `dockerPaths` gave gateway rides the daemon but no client; #3317 added
+  `docker-client` to `gateway/devbox.json`; both empty goal branches fast-forwarded to master by the seat. #3301's
+  ride then opened PR #3324 itself; #3306 reached review. **Open class**: a goal branch cut before a platform fix does
+  not get it until someone with push rights merges master in.
+- **infeasible-terminal latch** (#3326): the first `AGENT_INFEASIBLE:` comment ever parked every later round — a
+  re-dispatched round 2 was parked on round 1's verdict two minutes in. Now a marker counts only when newer than the
+  latest dispatch stamp. The two instances were un-wedged by editing the old marker comments.
+- Seen, not fixed: `goal-lint` exits 0 when a GitHub call 401s mid-walk (reported 1 of 3 children); intake children
+  name only new `src` modules in `Touches` (the sitting may not read `src/`); CI flakes — mermaid npm fetch, uv cache
+  lock `Input/output error` on the runner (cleared on re-run, volume not inspected).
