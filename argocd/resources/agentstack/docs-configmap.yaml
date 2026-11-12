@@ -154,6 +154,13 @@ data:
       0–40 % of runc (homelab#1807). Two versions sit on disk around a roll.
     - Max 4 per repo. Worker rides only in v1 — reviewer/coordinator pods do not mount it yet.
 
+    ### Docker for part of a repo (`fixer.dockerPaths`)
+
+    A repo that holds several projects sets `fixer.dockerPaths: ["<dir>/**"]` instead of
+    `docker: true`. A worker ride is then a docker ride only when its issue's `Touches:` reaches
+    one of the paths, or when the issue declares no `Touches:`; every other ride stays a plain
+    pod. Set `storage.scratch` as for `docker: true` (20Gi × concurrent docker rides).
+
     ## The spec process rides with the worker (`repos[].specs`, ADR-156)
 
     A repo that keeps `specs/` pages under the portable spec process (the rules, conventions and

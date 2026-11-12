@@ -583,6 +583,24 @@ spec:
                               egress allowlist because dockerd's `registry-mirrors` is Hub-only
                               (the docker.io/ghcr pull-through mirrors themselves are BASELINE
                               egress for every ride — homelab#520 — not gated by docker=true).
+                          dockerPaths:
+                            type: array
+                            maxItems: 16
+                            items:
+                              type: string
+                              maxLength: 128
+                              pattern: '^[A-Za-z0-9][A-Za-z0-9._*-]*(/[A-Za-z0-9*][A-Za-z0-9._*-]*)*$'
+                            description: >-
+                              The PATH-SCOPED form of `docker`, for a repo that holds several
+                              projects (homelab: the gateway island under `gateway/**`). Each
+                              entry is a `Touches:` footprint path or glob. The worker launcher
+                              (agent-session.sh REPLAY:docker-paths) makes a dispatch a docker
+                              ride when the issue's declared `Touches:` reaches an entry, or
+                              when the issue declares no `Touches:` at all; every other ride
+                              of the repo stays a plain pod. Ignored when `docker` is true.
+                              Two things are per NAMESPACE and switch on with a non-empty
+                              list: the docker egress legs, and the need for a
+                              `storage.scratch` quota (20Gi × concurrent docker rides).
                           rideSize:
                             type: string
                             enum: [standard, large]
