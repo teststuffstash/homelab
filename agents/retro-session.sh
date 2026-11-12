@@ -235,7 +235,7 @@ fi
 # >>>REPLAY:retro-gateway-cell>>>
 if [ -n "$RETRO_GW" ]; then
   echo "→ ${STACK} ${RUN_ID} cell ${HARNESS} (role retro — the gateway serves the model) — brief $BRIEF ($(wc -c <"$BRIEF") bytes)"
-  echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${SERIES}-${RUN_ID}-<served model>.md via PR"
+  echo "→ harvest: report goes to $(date +%F)-${SERIES}-${RUN_ID}-<served model>.md via PR (retro-argo.yaml reportRepo/reportDir)"
   _gw_rc=0
   AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=retro AGENT_GATEWAY_FALLBACK_EXIT=75 \
     bash "$HERE/agent-session.sh" "$PROJECT" \
@@ -257,7 +257,7 @@ fi
 # docs/spikes/model-routing-history.md §M10.
 MODEL="$(bash "$HERE/resolve-model.sh" --role retro --class audit --cell "${HARNESS}:${MODEL}" --fallback "$MODEL" --model "$MODEL")"
 echo "→ ${STACK} ${RUN_ID} cell ${HARNESS}:${MODEL} — brief $BRIEF ($(wc -c <"$BRIEF") bytes)"
-echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${SERIES}-${RUN_ID}-<model>.md via PR"
+echo "→ harvest: report goes to $(date +%F)-${SERIES}-${RUN_ID}-<model>.md via PR (retro-argo.yaml reportRepo/reportDir)"
 
 # ── The cell's OWN capped key (homelab#270, the second half of #248 finding 1) ──────────────────
 # A retro ride is not a fixer round and must not draw on the fixer's cap. The empty default used to
