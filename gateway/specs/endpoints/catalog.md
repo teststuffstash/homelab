@@ -39,7 +39,7 @@ answer 200 (no snapshot = empty rows, never an error) and carry no credential, l
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | `$defs.config_snapshot`, `$defs.docs_snapshot`, `output.sources`; metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread), and listed is not a liveness signal; `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time is unread (the "⚑ gap" rows below) |
+| [GW-CATALOG-GO](#gw-catalog-go) | `$defs.config_snapshot`, `$defs.docs_snapshot`, `output.sources`; metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: listed is not a liveness signal — ⚖ standing, #2768 closed on [its ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677); `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time is unread (the "⚑ gap" rows below) |
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | `output` (the view, its model rows), `$defs.config_snapshot.models[].dialect`, `$defs.docs_snapshot` (`plans`, `plan_fees`, `peak_*`, `window_shares`); the policy's `rails.opencode.plan` and the vendor facts a policy may no longer hold | — (the loader refuses a policy without a plan, or carrying a vendor fact) | v0 — split from GW-CATALOG-GO 2026-11-06 ⚖: what the two reads SAY (the dialect, the limits, the fees, the cost rows, the view's shape) and the policy's plan declaration |
 | [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert) |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | `$defs.canary_block`, `$defs.cell_state`, `openrouter_output.canary`, `openrouter_output.models[].endpoints[].state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — split from GW-CATALOG-OR 2026-11-06 ⚖: the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed) |
@@ -96,7 +96,7 @@ Every requirement of this page, in reading order; the section flowcharts below l
 
 | Requirement | Section | Status |
 |---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | the Go catalog | `⚑ gap (2026-10-20, PR #2766 → work #2768)`: rail-served ids the catalog does not list (`/zen/go/v1/models` is unread), and listed is not a liveness signal (the rail's own `/models` answer is the one source that could be); `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time — this leg reads no Go usage, the headroom Goal reads the account's windows |
+| [GW-CATALOG-GO](#gw-catalog-go) | the Go catalog | `⚑ gap (2026-10-20, PR #2766 → work #2768)`: listed is not a liveness signal — ⚖ standing: #2768 closed on [its ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677), which keeps the rail's own `/models` answer unread and names the shadow cells and the 4xx/5xx belts as the signal; `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time — this leg reads no Go usage, the headroom Goal reads the account's windows |
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | the Go catalog | |
 | [GW-CATALOG-OR](#gw-catalog-or) | the OpenRouter catalog | — |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | the OpenRouter catalog | `⚑ gap` rows below: no in-cluster canary trigger, the Go rail's canary |
@@ -202,6 +202,17 @@ price both plans. A refresh whose fetch fails, whose parse fails, or whose model
 **half** ⚖ of the last good snapshot's (zero models always) keeps the last good snapshot. The
 snapshot is written to the gateway's store (`catalog_snapshots`, one row per source), so a
 restarted gateway starts from it.
+
+⚖ **The rail serving an id is not an allowance** ([#2768's ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677)). *Listed* is the
+vendor's client view — models.dev minus its deprecated rows, under the workspace's overrides —
+never the Go rail's own model list. The leg does not read that list (`/zen/go/v1/models`): its
+reads are the three under [§What a fetch sends](#what-a-fetch-sends), and the view carries no
+`served` flag and no reference price (unverified — expected, no row). An id the rail serves and the catalog does not list — a
+deprecated row the vendor still serves, a pay-as-you-go model with no Go row, an id with no vendor
+row at all — is unlisted like any other: an admission naming it defers `not-in-catalog`
+([GW-SESSIONS-CAPACITY §Not in the catalog](sessions.md#not-in-the-catalog), "a Go model the
+catalog no longer lists defers not-in-catalog"), never priced at a fallback (ruling 4) — a
+pay-as-you-go row is not a Go price.
 
 **World: [`policy-default`](../worlds/README.md#policy-worlds) · the fake vendor**
 ([worlds/README.md §The Go catalog's fakes](../worlds/README.md#the-go-catalogs-fakes)): the
@@ -408,8 +419,7 @@ Legend: `refreshes` = the config source's refreshes before the read, in order; `
 
 | description | input | v0 answer | the gap |
 |---|---|---|---|
-| ⚑ gap: a rail-served id the catalog does not list | `/zen/go/v1/models` naming an id models.dev lacks (37 served against 29 listed, 2026-10-20) | not-in-catalog (ruling 4) | [#2768](https://github.com/teststuffstash/homelab/issues/2768): *listed* is the vendor's client view (models.dev minus deprecated, under the workspace's overrides), never the rail's model list — the rail's own `/models` answer is unread, and no price comes with it |
-| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are; the rail's own `/models` answer ([#2768](https://github.com/teststuffstash/homelab/issues/2768)) is the one source that could be |
+| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are. ⚖ Standing: the rail's own `/models` answer, the one source that could be, stays unread ([#2768's ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677) — the residue record) |
 | ⚑ gap: a vendor reset time | a Go 429 | — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed; the account's windows and their reset are the headroom Goal's read ([#3118](https://github.com/teststuffstash/homelab/issues/3118)) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
