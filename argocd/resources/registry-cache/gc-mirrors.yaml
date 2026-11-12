@@ -62,7 +62,7 @@ spec:
             seccompProfile: { type: RuntimeDefault }
           containers:
             - name: trigger
-              image: ghcr.io/teststuffstash/agent-coordinator:2026.11.11-g0ba770de8d02
+              image: ghcr.io/teststuffstash/agent-coordinator:2026.11.12-g7b51771a868d
               command: ["/bin/sh", "-c"]
               args:
                 - |
