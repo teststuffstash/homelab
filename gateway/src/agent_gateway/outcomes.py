@@ -146,6 +146,12 @@ class Outcomes:
             log.info("outcome: session=%s clean — refuted %d strike(s) on task %s", row.id, refuted, row.task)
             if row.canary_provider and self.judge is not None:  # the canary's clean ride: the cell enters
                 self.judge(row.model, row.canary_provider, True, None, now)
+        elif not judge and not row.canary_provider and self.store.session_last_throttled(row.id):
+            # The gateway owns the 429 first-hand and the cell cooldown / rail latch is its whole answer: a
+            # consumer's outcome after it is stored, counts no strike (GW-SESSIONS-OUTCOME §The store). A
+            # judge's outcome is on the verdict, not the ride, so it still counts; a canary ride keeps its
+            # task strike by its own ruling (GW-CATALOG-OR §The entry canary).
+            log.info("outcome: session=%s %s after a relayed 429 — stored, no strike", row.id, klass)
         else:
             # A consumer's cell-scoped class lands on the provider(s) the ride rode — one strike per cell
             # it touched; a ride that rode none (unpinned, no attribution) strikes the model's own cell.
