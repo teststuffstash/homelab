@@ -1,0 +1,21 @@
+# assembly-ci-red/themed-emits — the v1.3 themed assembly shape (homelab#1229): a goal/** head whose
+# body carries `Fixes #<level-2>` and NO `Assembly-for:` trailer. The Goal is the level-2's
+# ancestor, resolved by the real `goal_resolve_ancestor` walk over the recorded tree (#3120 → parent
+# #3118, a `task/goal`) — the same two forms the assembly-cr trigger routes on.
+#
+# THE CONTRACT: the unit names goal #3118 (the ancestor), not #3120 (the theme).
+name: assembly-ci-red-themed-emits
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:ci-red-select
+  - block:assembly-ci-red
+  - block:ci-red-goal-head-exclusion
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-12T12:00:00Z

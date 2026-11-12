@@ -837,8 +837,10 @@ OPEN `goal/**`-head PR carries this goal's `Assembly-for: #<goal>` trailer the s
 (the `state-fp:goal-checkpoint-b` hold, which hashes the PR's number and nothing else) and
 releases it only when that PR closes or is replaced by another. Nothing that happens ON the PR
 re-summons you through (b) — not a bot approval, a push, or a check result: a
-`CHANGES_REQUESTED` arrives as `trigger=assembly-cr` (below), a red check stays on the scan's
-report surface, and the rest is the human's the PR is waiting on. Triggers (a), (c) and (e) are
+`CHANGES_REQUESTED` arrives as `trigger=assembly-cr` (below), a settled red check on an
+assembly that changes only machine-merged paths arrives as `trigger=assembly-ci-red` (below; on
+any other assembly a red check stays on the scan's report surface, in front of the codeowner the
+PR is waiting on), and the rest is the human's the PR is waiting on. Triggers (a), (c) and (e) are
 not held.
 
 **FIRST, dispose the MEMBERS** (ADR-122 (4) — this is what retires trigger (c); an
@@ -1072,6 +1074,29 @@ Rule exactly one of:
   `Assembly-for: #<n>` trailer) receives a `CHANGES_REQUESTED` verdict. The checkpoint session
   reads this trigger and routes the work as a NEW child on the goal, exactly per the rule above
   — the same decompose rules apply (`Base: goal/**`, narrowed `Touches:`, one deliverable).
+  **`trigger=assembly-ci-red`:** the scan's ci-red clause emits a `goal-checkpoint` unit when an
+  assembly PR has a check that SETTLED red and every file it changes classifies `machine-merge`
+  (`classify_touches`, agents/footprint.sh) — no codeowner is waiting on that PR and no fix round
+  can push to its head, so you are its only mover. You are here by this trigger when the goal's
+  open assembly PR carries a `state-fp:assembly-ci-red:` marker the scan wrote at this dispatch.
+  Re-read the PR's checks first (`gh pr view <pr> --json statusCheckRollup`): green or in flight
+  → the red already moved; say so on the goal and mint nothing. Otherwise read the failing run
+  (`gh run view <run-id> --json jobs,attempt`, `gh run view <run-id> --log-failed`) and rule
+  exactly one of:
+  - **Environmental, and the failing run is still attempt 1** (the §ci-red test: a transient
+    network/vendor blip or infra cold-start, the diff demonstrably not implicated) →
+    `gh run rerun <run-id> --failed`, ONCE, with the diagnosis and its `ci-cause:` line (§ci-cause)
+    in a comment on the assembly PR. Mint nothing: a re-run that goes green leaves nothing behind,
+    and one that settles red again is a new state the scan summons you for.
+  - **Anything else — the diff's own red, or a red on attempt ≥ 2** → ONE new child on the goal,
+    by the rule above (native sub-issue, `Base: goal/<n>-<slug>`, narrowed `Touches:`,
+    `agent/queued`). Its deliverable is that check green on the goal branch: name the assembly PR,
+    the failing `<job>/<step>` and the first failing lines of the log, and make the child's first
+    acceptance line the reproduction — the named check, run on the current goal head. **Never a
+    second child for the same red**: if an open child of this goal already owns this check on this
+    assembly PR, add what is new as a comment there and mint nothing.
+  A child of this kind that is still open once the assembly PR's check is green has its
+  acceptance met: close it with the green run linked, on whichever ride sees it first.
   Any child still open when the acceptance is already met is a scope question, not a
   formality: say so rather than letting it run.
 - **Not yet assembly-complete, and the remaining children cover the gap** → comment what is still
@@ -1462,14 +1487,23 @@ issue.
 | producer | the **worker**, via its repo's `.agents/fix.yaml` | ONE issue comment whose first characters are exactly `AGENT_INFEASIBLE: <path or resource>`, then END the run **without pushing** |
 | consumer | the **deterministic scan** (C4/C5, IL-T26) | park the issue `agent/blocked`, remove `agent/in-progress`, comment the audit quoting the named resource — and take it out of every C4/C5 derivation, so it is never re-queued and never re-dispatched |
 
-Three properties are load-bearing, and each is pinned by
-`agents/replay/fixtures/c4c5-infeasible` (rows parks, quoted-inert, probe-fail):
+Four properties are load-bearing, and each is pinned by
+`agents/replay/fixtures/c4c5-infeasible` (rows parks, quoted-inert, probe-fail, and the four
+`marker-*` rows):
 
 - **The marker is ANCHORED at the start of a comment**, never a substring, and never read from the
   issue BODY. Talking about the terminal is not the terminal — homelab#257's own title contains the
   string, and a human quoting a past exit writes `> AGENT_INFEASIBLE: …`. This is the fix-debounce
   lane's `alert-fp:` lesson (homelab#244) one lane over.
-- **The marker alone suppresses the redispatch**, whether or not the label write lands. A
+- **A marker counts only for the ride that posted it** — the marker comment must be newer than the
+  issue's newest dispatch stamp (the `<!-- agent-event kind=dispatch ts=… -->` line step 2's
+  `machine-comment.sh event --kind dispatch` appends to the summary comment). An earlier ride's
+  marker is history: once the issue is re-queued and dispatched again it rides, and only a marker
+  the NEW ride posts parks it. Without this the terminal was a latch with no release — the park
+  comment says "then remove `agent/blocked` and re-queue", and the scan re-parked the re-dispatched
+  issue on the old marker (homelab#3301/#3306). A thread with no dispatch stamp has no anchor, so
+  its newest marker counts. This is why step 2's stamp is not optional bookkeeping.
+- **A current marker alone suppresses the redispatch**, whether or not the label write lands. A
   failed/half-applied write reports loudly and the issue *still* leaves the unit list: re-riding a
   task a worker already proved impossible spends a paid session to re-derive a known answer, which
   is strictly worse than a report line. An **unreadable** comments probe is the other way round —
@@ -1481,8 +1515,9 @@ Three properties are load-bearing, and each is pinned by
 
 **What YOU do with one.** Nothing automatic — that is the point. The issue sits `agent/blocked` with
 the resource named on the thread. Either re-scope it so the deliverable is inside a fix-class
-worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue. **Re-queueing
-it unchanged reaches the same verdict** — and unlike a strike, this one is free.
+worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue — nothing
+else to type or edit, the next dispatch's stamp is what retires the old marker. **Re-queueing it
+unchanged reaches the same verdict**, at the price of one more ride to re-derive it.
 
 > ⚠ **The producer half is per-repo — installed everywhere** (homelab `566fe38` 2026-08-11;
 > oracle-fleet, sleep-tracking, circles, snore-recorder verified 2026-10-14). A NEW stack repo

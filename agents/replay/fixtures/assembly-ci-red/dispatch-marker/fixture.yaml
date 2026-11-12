@@ -1,0 +1,25 @@
+# assembly-ci-red/dispatch-marker — the dispatch-marker block's arm for trigger=assembly-ci-red: a
+# confirmed `goal-checkpoint` dispatch whose side map carries the assembly PR writes
+# `state-fp:assembly-ci-red:<hash>` on THAT PR, before the spawn.
+#
+# `pr_state_fp_pair` is the REAL one over the `emits` row's PR view, so the hash in the comment is
+# the fold's own: 275c4e614d6a — sha256('head=a55e…b1e|red=ci@2026-11-12T09:00:10Z')[0:12], derived
+# in `debounced/fixture.yaml`. That is the pair this family pins together (README §S7): the marker
+# written here is byte-for-byte the one the `debounced` row reads back and holds on.
+#
+# TWO PASSES (the assembly-cr-dispatch-marker shape): pass 2 empties the side map — an ordinary
+# threshold-fired goal-checkpoint — and must add NO second comment.
+#
+# THE CONTRACT: exactly ONE `gh pr comment 3301` carrying the marker; no WARN.
+name: assembly-ci-red-dispatch-marker
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:bridge.sh
+  - block:dispatch-marker
+  - file:bridge2.sh
+  - block:dispatch-marker
+env:
+  - ORG=teststuffstash
