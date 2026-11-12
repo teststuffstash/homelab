@@ -227,7 +227,9 @@ five + X`); `unlisted?` = ids either read carries that the listing lacks.
 #### Which rows the merged listing holds
 
 Rows run with no last good snapshot. Legend: `config-disables` = `deepseek-v4-pro: {disabled: true}`;
-`config-adds` = a console-only `deepseek-v4-flash` with a cost and both limits; `config-adds-bare` =
+`config-adds` = a console-only `deepseek-v4-flash` whose override carries `family` `deepseek-flash`,
+`capabilities.tools` true, a cost row 0.14 / 0.28 / 0.028 / — (input / output / cache read / cache write),
+`limit.context` 1000000 and `limit.output` 384000; `config-adds-bare` =
 `deepseek-v4-flash: {disabled: false}`; `catalog-google` = models.dev lists `gemini-4-argon` on
 `@ai-sdk/google`; `config-adds-gemini` = a complete console override for that dropped id.
 
@@ -444,7 +446,9 @@ page's fact, the listing the catalog's.
 **The plan.** The policy names the plan (`rails.opencode.plan`: `go` | `go-plus`, required) because
 no vendor API says which plan a key is on (ruling 4). What the policy no longer holds (ruling 5):
 the vendor facts live in the snapshot, so a policy that still carries one refuses to load — a
-stale hand copy can never shadow the catalog. The same rule holds a Go model's harness window:
+stale hand copy can never shadow the catalog. `rails.<rail>.admission.latch_scope` takes `account`
+(the default — a 429 latches the whole rail) or `model` (a 429 cools only that model's cell); any
+other value refuses the load, naming `latch_scope`. The same rule holds a Go model's harness window:
 the dispatch answer's `context_tokens` is the snapshot's `context`, and a policy `context_tokens`
 entry for an `opencode-go/*` model refuses the load — the rows live on
 [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
@@ -616,6 +620,15 @@ good snapshot kept on any failure and persisted in the store, shown on `/metrics
   this refresh (counted, never guessed); an MCP source that fails is `fetch-failed`, one that
   answers a shape the leg cannot read is `parse-failed`; a fresh snapshot with no model, or fewer
   than half the last good one's, is `implausible` — the last good snapshot stands.
+- **The whole benched set is kept** ⚖ (the runtime-tiers Goal, [#3305](https://github.com/teststuffstash/homelab/issues/3305)):
+  the snapshot carries every benched row the answer holds — ranked or not, the candidates' or not —
+  as `benchmarks`, per id its `intelligence`, `coding`, `agentic` (an index the feed does not give
+  stays `null`, never 0), keyed as the candidates are; `GET /catalog/openrouter` serves it. The
+  candidate set (ranked ∩ benched) is unchanged by it. ⚖ On the existing view, not a view of its
+  own (`GET /catalog/benchmarks` rejected): one snapshot, one refresh, one failure rule — the set
+  rides the last good snapshot and survives a restart with it. It is the evidence the tier
+  derivation of the next children reads for all rails (the `anthropic/…` and `openai/…` ids their
+  candidates join).
 
 **The floors' verdict on the view** ⚖ (operator ruling 2026-10-21, homelab#2775 — a bug, not a
 design question: the first canary admission of 2026-10-20 went to `deepseek-v4.1-flash@open-inference`,
@@ -644,7 +657,8 @@ serves `/v1/models/<id>/endpoints` for `deepseek/deepseek-v4.1-flash` (**M**) an
 `z-ai/glm-5.3-flash` (**G**) and 404 for the other six. T0 = the test clock. The account key is
 the fixture Secret `agent-egress/router-account-key`. Legend, every table below: `mcp_answer` = what the
 fake MCP answers (`ok`, `503`, `down` = a connect failure, `malformed` = a tool result that is not
-JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`); `endpoints` = the endpoints route's behaviour per
+JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`, `ranking-without-one` = the
+ranking served without one benched id, `benchmarks-malformed` = a benchmarks answer whose `data` is not a list); `endpoints` = the endpoints route's behaviour per
 model (`ok`; `endpoints-503 for G`; `endpoints-null-uptime for G` = G's first endpoint's
 `uptime_last_1d` null); `last_good` = the models in the snapshot before the refresh (`none`, `2`);
 `models?` = the snapshot's models after it; `cells?` = its candidate cells.
@@ -695,6 +709,33 @@ Legend: **the `other` row** is the rankings' `other` permaslug in both slices' l
 | description | rankings | benchmarks | candidates? | other_read? |
 |---|---|---|---|---|
 | the `other` bucket is never ranked and never a candidate ⚖ | the `other` row in both slices | ok | 8 (13 ranked, 8 benched) | absent |
+
+#### The benched set is kept whole
+
+Legend: `candidates?` = as in §A; `benchmarks?` = the view's `benchmarks` object. The unranked id is
+`xiaomi/mimo-v2.5`, which `ranking-without-one` leaves out of both slices (it has no endpoint
+fixture, so no model row changes). The null row is a recorded one: `deepseek/deepseek-v4.1-flash`
+carries `coding` and `agentic` as null in the fixture.
+
+| description | mcp_answer | candidates? | benchmarks? |
+|---|---|---|---|
+| every benched row is kept, ranked or not ⚖ | ok, the ranking served without one benched id | 7 (12 ranked, 8 benched) | 8 ids, the unranked one among them |
+| a benched row outside the ranking is served with its three indices ⚖ | ok, the ranking served without one benched id | 7 (12 ranked, 8 benched) | the unranked id: its `intelligence`, `coding`, `agentic` as the recorded answer gives them |
+| an index the feed does not give stays null, never 0 ⚖ | ok | 8 (13 ranked, 8 benched) | a recorded row with a null index: that index null, the others as given |
+| a row is keyed as the candidates are — the stamp stripped, a `:variant` under its family ⚖ | ok | 8 (13 ranked, 8 benched) | no dated permaslug and no `:variant` among the keys |
+
+#### A failed read keeps the last good benched set
+
+| description | last_good | mcp_answer | outcome? | benchmarks? |
+|---|---|---|---|---|
+| an MCP error keeps the last good set | fetched T0, 8 ids | 503 | fetch-failed | the 8 ids of T0 |
+| a benchmarks answer the leg cannot read is a parse failure, the set stands | fetched T0, 8 ids | benchmarks-malformed | parse-failed | the 8 ids of T0 |
+
+#### The benched set is kept across a restart
+
+| description | last_good | mcp_answer | benchmarks? |
+|---|---|---|---|
+| the set survives a restart | fetched T0, 8 ids | none (restart at T0 + 3600 s) | the 8 ids of T0 |
 
 #### A failed read keeps the last good (OpenRouter)
 
@@ -747,8 +788,8 @@ Legend: `refreshes` = the refreshes before the read, in order; `read_at` = when 
 
 #### The view's shape (OpenRouter)
 
-Legend: `shape?` = `exactly the schema's required keys` when the view's keys, each model row's,
-each endpoint row's and `canary`'s equal the `required` sets of `openrouter_output`; else the
+Legend: `shape?` = `exactly the schema's required keys` when the view's keys (`benchmarks` among
+them), each model row's, each endpoint row's, each benchmarks row's and `canary`'s equal the `required` sets of `openrouter_output`; else the
 difference.
 
 | description | mcp_answer | shape? |
@@ -807,7 +848,7 @@ None.
 routing, exactly as before this leg — never refused for lack of a canary). A cell becomes
 `eligible` when ONE [canary](../glossary.md#canary) ride completes a tool-call loop through the
 gateway on exactly that cell: a session admitted by `POST /sessions` with **`canary: {model,
-provider}`** (the policy's `canary.role` — `prober` — on rail openrouter, the harness the cell
+provider}`** (the policy's `canary.role` — `prober` — on rail openrouter; a `canary` body from any other role is a `400 malformed-body`, the harness the cell
 serves — `canary.harness`, `opencode` — unless the body names another the rail speaks), pinned to
 that provider with fallbacks off and **no failover**, whose outcome is the verdict: `clean` →
 `eligible`; any strike (the consumer's class, or the gateway's own transport class) → `excluded`
@@ -817,7 +858,9 @@ gateway; its model is the catalog's, not the policy's (⚖
 [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)'s one exception: the catalog is the
 entry gate the policy's lists are derived from). The checks, in order: the cell is in the snapshot
 (`not-in-catalog`, `retry_after_s` = the next refresh), it is a candidate (`canary-not-due` —
-already eligible, or excluded inside its cooldown: `retry_after_s` = the cooldown's end), the
+already eligible, or excluded inside its cooldown: `retry_after_s` = the cooldown's end, and for an
+already-eligible cell, which has no cooldown, the seconds to the next catalog refresh — 21600 at T0
+in the rows below, the refresh interval), the
 budget, then the rail's slot count and credential as any admission.
 
 **Who rides the canaries** is the jail's `gateway/scripts/canary-entrants.sh`: it reads the view,
