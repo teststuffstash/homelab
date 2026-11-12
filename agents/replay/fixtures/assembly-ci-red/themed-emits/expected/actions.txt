@@ -1,0 +1,10 @@
+CALL gh api repos/teststuffstash/homelab/pulls/3301/files --paginate
+CALL gh issue view 3120 --repo teststuffstash/homelab --json labels,body
+CALL gh api repos/teststuffstash/homelab/issues/3120/parent
+CALL gh issue view 3118 --repo teststuffstash/homelab --json labels,body
+CALL gh pr view 3301 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT   [homelab] ASSEMBLY PR #3301 has a settled ci-red on machine-merged paths — emitting goal-checkpoint for goal #3118 (trigger=assembly-ci-red)
+OUT UNIT goal-checkpoint|homelab|issue-3118
+OUT SIDE_MAP homelab:issue-3118:3301
+OUT REACHED: end
+RC 0
