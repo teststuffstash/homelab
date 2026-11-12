@@ -168,6 +168,19 @@
 #                           check flip is settled-to-settled. REDS on a fold that counts a pending
 #                           entry as non-passing (the row emits the unit — two rides per re-run,
 #                           one into PENDING and one back out).
+#                           Its `ci` started at 17:50Z and the family clock reads 19:00Z, so the
+#                           entry is past the settle window and the FINGERPRINT is what holds.
+# goal-checkpoint-b-red-rerun-held
+#                         = the same re-run over a RED assembly PR (a realistic held state: an
+#                           operator-path assembly whose required check is red by design, ADR-100).
+#                           The marker is the hash of the settled-red state
+#                           (content=<files>|review=REVIEW_REQUIRED|checks=ci=FAILURE|verdict= →
+#                           `2fb8ccb372d9`); the view is a new `headRefOid` with `ci` in flight since
+#                           17:50Z, read at 17:55Z (`IN_NOW`). The fold alone cannot hold this one —
+#                           the red entry leaves `checks=` while the re-run is in flight — so the
+#                           clause holds on `pr_rollup_settling` first: no unit, ONE settling line,
+#                           and the files probe is never made. REDS without the settling guard (the
+#                           row emits the unit, and a second one when `ci` settles red again).
 # child-set-complete      = the negative row for "no assembly PR → (b) fires": its world carries
 #                           `prsjson` = [] (the family default), so the probe finds nothing and the
 #                           stream is byte-identical to pre-#2477.
@@ -213,6 +226,7 @@ child-set-complete | open-pre |                                            | IN_
 goal-checkpoint-b-held | open-pre |                                       | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-held
 goal-checkpoint-b-verdict-rearms | open-pre |                             | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-verdict-rearms
 goal-checkpoint-b-inflight-check-held | open-pre |                        | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-inflight-check-held
+goal-checkpoint-b-red-rerun-held | open-pre |                             | IN_SLUG=teststuffstash/circles IN_REPO=circles IN_NOW=2026-10-10T17:55:00Z | goal-checkpoint-b-red-rerun-held
 goal-checkpoint-b-c-armed | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-c-armed
 goal-checkpoint-c-held | open-pre | openall.json @ patches/add-c-members.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-c-held
 goal-checkpoint-c-new-member | open-pre | openall.json @ patches/add-c-members-new.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-c-new-member
